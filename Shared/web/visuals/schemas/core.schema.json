@@ -173,12 +173,34 @@
       "description": "A chart channel: a field name, or the channel object (the subset's and `format`).",
       "oneOf": [{ "$ref": "#/$defs/field" }, { "$ref": "#/$defs/chart_channel" }]
     },
+    "x_levels": {
+      "description": "A nested axis (plan 32 DBR42): the levels of a bar or point chart's `x`, outermost first, at most three; each a field name or `{field, format, sort, title}`, `sort` being the QIS view's `{by, dir}` (sort_key, label, or a measure on the innermost level). A line or an area mark and a `column` channel are refused by the loaders (they need the mark and the other channels).",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/field" },
+          {
+            "type": "object",
+            "required": ["field"],
+            "additionalProperties": false,
+            "properties": {
+              "field": { "$ref": "#/$defs/field" },
+              "format": { "$ref": "#/$defs/format" },
+              "sort": { "$ref": "https://example.internal/qis/view.schema.json#/$defs/sort" },
+              "title": { "type": "string" }
+            }
+          }
+        ]
+      }
+    },
     "chart_encodings": {
       "description": "The channels of the Vega-Lite subset's encoding (the test compares the names).",
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "x": { "$ref": "#/$defs/encoding_channel" },
+        "x": { "oneOf": [{ "$ref": "#/$defs/encoding_channel" }, { "$ref": "#/$defs/x_levels" }] },
         "y": { "$ref": "#/$defs/encoding_channel" },
         "color": { "$ref": "#/$defs/encoding_channel" },
         "column": { "$ref": "#/$defs/encoding_channel" },

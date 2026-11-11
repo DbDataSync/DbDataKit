@@ -118,7 +118,7 @@ internal sealed class AnswerRows(JsonObject result, ResultTable table)
 /// Shapes an answer into the rendered widgets of <c>rendered-widgets</c> (plan 32 DBR04): a metric and a table here, a matrix and a chart through the engine's <see cref="ViewRenderer"/> (the one place they become data).
 /// Nothing is computed that the result does not hold, except the one thing a metric's comparison needs: its change, from the two numbers the server gave.
 /// </summary>
-internal static class ResultShaper
+internal static partial class ResultShaper
 {
     private const string TotalLabel = "Total";
 
@@ -319,8 +319,18 @@ internal static class ResultShaper
         var encoding = new JsonObject();
         // a channel's `format` is not the engine's (its subset is closed): it is taken off here and drawn after the engine has resolved the channel
         var formats = new Dictionary<string, JsonNode>();
+        // a list of one level is the plain channel
+        if (encodings["x"] is JsonArray { Count: 1 } oneLevel) { encodings = (JsonObject)encodings.DeepClone(); encodings["x"] = oneLevel[0]?.DeepClone(); }
+        // a nested `x` (DBR42): the innermost level is the engine's `x`, the outermost its `column`; the levels are drawn after the engine has resolved them
+        var nested = ReadNestedLevels(encodings);
         foreach (var (channel, value) in encodings)
         {
+            if (nested is not null && channel == "x")
+            {
+                encoding["x"] = nested.EngineChannel(nested.Inner, answer.Table);
+                encoding["column"] = nested.EngineChannel(nested.Outer, answer.Table);
+                continue;
+            }
             if (value is JsonValue v && v.TryGetValue<string>(out var field)) encoding[channel] = new JsonObject { ["field"] = field, ["type"] = ScaleType(answer.Table, field) };
             else if (value is JsonObject o)
             {
@@ -350,6 +360,7 @@ internal static class ResultShaper
         }
         else if (encodings["tooltip"] is JsonObject single && single["format"] is { } tf) tipFormats.Add(tf.DeepClone());
         FormatChart(rendered, answer, formats, tipFormats);
+        if (nested is not null) DrawNestedAxis(widget, rendered, answer, nested);
         return rendered;
     }
 

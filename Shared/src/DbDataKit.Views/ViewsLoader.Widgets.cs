@@ -131,6 +131,7 @@ public static partial class ViewsLoader
             }
             else if (markNode is not null) Choice(markNode, J(path, "mark"), "`mark`", Choices["mark"], ViewsCodes.ChartNotInSubset);
 
+            var markType = markNode switch { YamlMapping m2 => (m2.Get("type") as YamlScalar)?.Value, YamlScalar ms => ms.Value, _ => null };
             if (Encodings(widget, path, "chart") is not { } enc) return;
             var ep = J(path, "encodings");
             foreach (var e in enc.Entries.Where(e => Keys["encodings.chart"].Contains(e.Key.Value)))
@@ -140,7 +141,40 @@ public static partial class ViewsLoader
                 {
                     for (var i = 0; i < list.Items.Count; i++) Channel(e.Key.Value, list.Items[i], I(cp, i), fields);
                 }
+                else if (e.Key.Value == "x" && e.Value is YamlSequence levels) NestedAxis(levels, cp, markType, enc, J(ep, "column"), fields);
                 else Channel(e.Key.Value, e.Value, cp, fields);
+            }
+        }
+
+        /// <summary>The most levels a chart's nested <c>x</c> lists (plan 32 section 9g, DBR42).</summary>
+        public const int MaximumAxisLevels = 3;
+
+        /// <summary>
+        /// A chart's <c>x</c> as a list, outermost level first (DBR42): each level is a field name or <c>{field, format, sort, title}</c> (<c>sort</c> is the QIS view's <c>{by, dir}</c>: <c>sort_key</c>, <c>label</c> or a measure).
+        /// Refused: more than three levels, a line or an area mark (a line breaks between the groups), and a <c>column</c> channel (the nested axis is drawn with the facet).
+        /// </summary>
+        private void NestedAxis(YamlSequence levels, string path, string? mark, YamlMapping enc, string columnPath, List<EncodedField> fields)
+        {
+            if (levels.Items.Count == 0) { Bad(ViewsCodes.InvalidValue, levels, path, "A nested `x` lists at least one field."); return; }
+            if (levels.Items.Count > MaximumAxisLevels)
+                Bad(ViewsCodes.InvalidValue, levels, path, $"A nested `x` has at most {MaximumAxisLevels} levels; this one has {levels.Items.Count}.", "Drop the innermost or outermost level, or put one of them in `color`.");
+            if (levels.Items.Count > 1 && mark is "line" or "area")
+                Bad(ViewsCodes.InvalidValue, levels, path, $"A {mark} chart has no nested axis: a line breaks between the groups.", "Use one temporal field with a grain and a format such as `MMM yyyy`, or a bar or point mark.");
+            if (levels.Items.Count > 1 && enc.Get("column") is { } column)
+                Bad(ViewsCodes.InvalidValue, column, columnPath, "A chart with a nested `x` has no `column`: the nested axis is drawn with the facet.", "Move the field into `color` or `row`, or into the axis as one more level.");
+            for (var i = 0; i < levels.Items.Count; i++)
+            {
+                var ip = I(path, i);
+                var level = levels.Items[i];
+                if (level is YamlMapping m)
+                {
+                    CheckKeysAt(m, Keys["x_level"], "a level of the axis", ip);
+                    if (Required(m, "field", ip) is { } fn && Field(fn, J(ip, "field"), "`field`") is { } ff) fields.Add(new("x", ff, J(ip, "field"), fn.Line, fn.Column));
+                    if (m.Get("format") is { } fmt) FormatValue(fmt, J(ip, "format"));
+                    if (m.Get("sort") is { } so) SortKey(so, J(ip, "sort"));
+                    if (m.Get("title") is { } ti && ti is not YamlScalar) Bad(ViewsCodes.InvalidValue, ti, J(ip, "title"), "A level's `title` is text.");
+                }
+                else if (Field(level, ip, "A level of the axis") is { } f) fields.Add(new("x", f, ip, level.Line, level.Column));
             }
         }
 

@@ -115,6 +115,22 @@
     {
       "name": "chart-channel-formats",
       "file": "good/chart-channel-formats.json"
+    },
+    {
+      "name": "chart-nested-axis-year-then-month",
+      "file": "good/chart-nested-axis-year-then-month.json"
+    },
+    {
+      "name": "chart-nested-axis-levels-with-a-sort-and-a-format",
+      "file": "good/chart-nested-axis-levels-with-a-sort-and-a-format.json"
+    },
+    {
+      "name": "chart-nested-axis-innermost-level-by-a-measure",
+      "file": "good/chart-nested-axis-innermost-level-by-a-measure.json"
+    },
+    {
+      "name": "chart-nested-axis-by-a-measure-it-does-not-chart",
+      "file": "good/chart-nested-axis-by-a-measure-it-does-not-chart.json"
     }
   ],
   "refused": [
@@ -161,6 +177,14 @@
     {
       "name": "two-wrong-fields-are-both-reported",
       "file": "refused/two-wrong-fields-are-both-reported.json"
+    },
+    {
+      "name": "chart-nested-axis-outer-level-by-a-measure",
+      "file": "refused/chart-nested-axis-outer-level-by-a-measure.json"
+    },
+    {
+      "name": "chart-nested-axis-with-a-measure-as-a-level",
+      "file": "refused/chart-nested-axis-with-a-measure-as-a-level.json"
     }
   ]
 }

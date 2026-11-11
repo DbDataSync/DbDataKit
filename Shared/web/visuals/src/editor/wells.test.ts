@@ -11,7 +11,7 @@ import { sampleBundle } from '../testing/sampleBundle'
 import { EditError } from './commands'
 import { draftFromOpened, edit, redo, undo } from './draft'
 import { localFileStore } from './store'
-import { bindingIssues, changedFields, convertWidget, derivedQuery, describeDerivation, explicitQuery, parseRequestText, wellFields, wellsOf, WIDGET_TYPES } from './wells'
+import { bindingIssues, changedFields, convertWidget, derivedQuery, describeDerivation, explicitQuery, parseRequestText, wellFields, wellOps, wellsOf, WIDGET_TYPES } from './wells'
 
 const bundle = sampleBundle()
 const TODAY = bundle.documents['dashboard/retail-sales-today']!
@@ -40,9 +40,12 @@ describe('the wells of each widget type', () => {
       const c = read(g.file)
       const widget = c.widgets.w as WidgetDoc
       const inWells = new Set(wellsOf(widget.type).flatMap((spec) => wellFields(widget, spec)))
+      // a table's sort field, or the measure a nested axis's innermost level sorts by (DBR42), is asked for without being in a well
       const sortField = (widget as any).encodings?.sort?.by
+      const xs = (widget as any).encodings?.x
+      const levelSort = Array.isArray(xs) ? xs.map((l: any) => l?.sort?.by) : []
       const q = c.request.query as { measures: string[]; attributes?: string[] }
-      for (const f of [...q.measures, ...(q.attributes ?? [])]) if (f !== sortField && !((widget as any).query?.order ?? []).some((o: unknown[]) => o[0] === f)) expect(inWells.has(f), f).toBe(true)
+      for (const f of [...q.measures, ...(q.attributes ?? [])]) if (f !== sortField && !(levelSort ?? []).includes(f) && !((widget as any).query?.order ?? []).some((o: unknown[]) => o[0] === f)) expect(inWells.has(f), f).toBe(true)
     })
 })
 
@@ -101,6 +104,33 @@ describe('a well change', () => {
     const color = wellsOf('chart')[2]!
     expect(changedFields([], color, { op: 'add', field: 'sales.net_amount' }, roles)).toEqual(['sales.net_amount'])
     expect(() => changedFields([], color, { op: 'add', field: '  ' }, roles)).toThrow('Name a field')
+  })
+
+  it('a chart\'s x takes up to three levels, outermost first, and keeps what a level carries (DBR42)', async () => {
+    let d = await open()
+    d = must(edit(d, { type: 'setWell', widget: 'by_region', well: 'x', change: { op: 'add', field: 'date.year_month' }, roles }))
+    expect((docOf(d).widgets.by_region as any).encodings.x).toEqual(['customers.region', 'date.year_month'])
+    d = must(edit(d, { type: 'setWell', widget: 'by_region', well: 'x', change: { op: 'move', from: 1, to: 0 }, roles }))
+    expect((docOf(d).widgets.by_region as any).encodings.x).toEqual(['date.year_month', 'customers.region'])
+    // back to one level the key is the field again, not a list
+    d = must(edit(d, { type: 'setWell', widget: 'by_region', well: 'x', change: { op: 'remove', index: 0 }, roles }))
+    expect((docOf(d).widgets.by_region as any).encodings.x).toBe('customers.region')
+    const spec = wellsOf('chart')[0]!
+    expect(() => changedFields(['a.b', 'c.d', 'e.f'], spec, { op: 'add', field: 'g.h' })).toThrow('at most 3')
+    // an entry with a format and a sort stays as it is when the list changes
+    const widget = { type: 'chart', mark: 'bar', encodings: { x: [{ field: 'date.year', format: { date: 'year' } }, 'date.month'], y: 'sales.net_amount' }, query: { model: 'retail_sales' } } as unknown as WidgetDoc
+    expect(wellFields(widget, spec)).toEqual(['date.year', 'date.month'])
+  })
+
+  it('refuses a nested x for a line or an area, a column beside it, and a column added to it, in the loaders\' words', () => {
+    const spec = wellsOf('chart')[0]!
+    const line = { type: 'chart', mark: 'line', encodings: { x: 'date.month', y: 'sales.net_amount' }, query: { model: 'retail_sales' } } as unknown as WidgetDoc
+    expect(() => wellOps(line, 'w', spec, { op: 'add', field: 'date.year' })).toThrow('A line chart has no nested axis')
+    const faceted = { type: 'chart', mark: 'bar', encodings: { x: 'date.month', y: 'sales.net_amount', column: 'customers.region' }, query: { model: 'retail_sales' } } as unknown as WidgetDoc
+    expect(() => wellOps(faceted, 'w', spec, { op: 'add', field: 'date.year' })).toThrow('has no `column`')
+    const nested = { type: 'chart', mark: 'bar', encodings: { x: ['date.year', 'date.month'], y: 'sales.net_amount' }, query: { model: 'retail_sales' } } as unknown as WidgetDoc
+    expect(() => wellOps(nested, 'w', wellsOf('chart')[3]!, { op: 'add', field: 'customers.region' })).toThrow('has no `column`')
+    expect(wellOps(nested, 'w', spec, { op: 'remove', index: 0 })).toHaveLength(1)
   })
 
   it('places a field the catalog lacks and flags it unknown_member through the derivation', async () => {

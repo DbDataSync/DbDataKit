@@ -1,0 +1,51 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "chart",
+      "mark": "bar",
+      "encodings": {
+        "x": [
+          "customers.region",
+          {
+            "field": "products.category",
+            "sort": {
+              "by": "orders.order_count",
+              "dir": "desc"
+            }
+          }
+        ],
+        "y": "orders.net_revenue"
+      },
+      "query": {
+        "model": "sales_catalog",
+        "limit": 200
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        "orders.order_count"
+      ],
+      "attributes": [
+        "customers.region",
+        "products.category"
+      ],
+      "order": [
+        [
+          "customers.region",
+          "asc"
+        ],
+        [
+          "orders.order_count",
+          "desc"
+        ]
+      ],
+      "limit": 200
+    }
+  }
+}

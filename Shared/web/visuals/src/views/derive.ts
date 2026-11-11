@@ -118,6 +118,8 @@ export function deriveRequest(widget: DerivableWidget, roles: CatalogRoles): Der
   if (Array.isArray(query.order) && query.order.length > 0) {
     order = structuredClone(query.order)
     order.forEach((_, i) => origins.set(`query.order[${i}]`, `${wp}.query.order[${i}]`))
+  } else if (type === 'chart' && Array.isArray(encodings.x) && encodings.x.length > 1) {
+    order = nestedOrder(encodings.x, join(join(wp, 'encodings'), 'x'), origins, place, issue)
   } else if (type === 'table' && isObject(encodings.sort) && isString(encodings.sort.by)) {
     const sortField = encodings.sort.by
     const direction = typeof encodings.sort.dir === 'string' ? encodings.sort.dir : 'asc'
@@ -173,6 +175,11 @@ function slotsOf(type: string, encodings: Json, path: string): Slot[] {
       for (const c of CHART_CHANNELS) {
         const v = encodings[c]
         if (c === 'tooltip' && Array.isArray(v)) v.forEach((item, i) => channel(item, at(join(path, c), i)))
+        // a nested axis (DBR42): every level is an attribute, outermost first
+        else if (c === 'x' && Array.isArray(v)) v.forEach((level, i) => {
+          if (isString(level)) slots.push({ field: level, path: at(join(path, c), i), well: 'attribute' })
+          else if (isObject(level) && isString(level.field)) slots.push({ field: level.field, path: join(at(join(path, c), i), 'field'), well: 'attribute' })
+        })
         else channel(v, join(path, c))
       }
       break
@@ -191,6 +198,38 @@ function slotsOf(type: string, encodings: Json, path: string): Slot[] {
       break
   }
   return slots
+}
+
+// ---- a nested axis's order (DBR42) ----
+
+/** The widest a nested `x` may be before the shaper cuts the members and says so: 200 member combinations. */
+export const LEAF_LIMIT = 200
+
+/**
+ * The `order` of a nested axis, one entry per level from the outermost (the twin of `DeriveRequest.NestedOrder`): `sort_key` (the default) and `label` ask for the level's attribute in its direction, a measure
+ * (the innermost level only) asks for the measure.
+ */
+function nestedOrder(levels: unknown[], xPath: string, origins: Map<string, string>, place: (field: string, path: string, well: Well) => void, issue: (code: string, path: string, message: string) => void): unknown[] | undefined {
+  const order: unknown[] = []
+  levels.forEach((level, i) => {
+    const field = isObject(level) ? level.field : level
+    if (!isString(field)) return
+    const sort = isObject(level) && isObject(level.sort) ? level.sort : undefined
+    const by = typeof sort?.by === 'string' ? sort.by : 'sort_key'
+    const direction = typeof sort?.dir === 'string' ? sort.dir : 'asc'
+    const sortPath = `${at(xPath, i)}.sort.by`
+    let target: string = field
+    let path = at(xPath, i) + (isObject(level) ? '.field' : '')
+    if (by !== 'sort_key' && by !== 'label') {
+      if (i !== levels.length - 1) { issue('DBD-106', sortPath, 'Only the innermost level of a nested axis sorts by a measure: an outer level would need its own total.'); return }
+      place(by, sortPath, 'measure')
+      target = by
+      path = sortPath
+    }
+    origins.set(`query.order[${order.length}]`, path)
+    order.push([target, direction])
+  })
+  return order.length > 0 ? order : undefined
 }
 
 // ---- a matrix's totals ----

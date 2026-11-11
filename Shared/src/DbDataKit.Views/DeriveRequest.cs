@@ -157,6 +157,8 @@ public static class DeriveRequest
             order = (JsonArray)written.DeepClone();
             for (var i = 0; i < order.Count; i++) origins[$"query.order[{i}]"] = $"{wp}.query.order[{i}]";
         }
+        else if (widget.Type == "chart" && encodings["x"] is JsonArray { Count: > 1 } xLevels)
+            order = NestedOrder(xLevels, $"{wp}.encodings.x", origins, Place, diagnostics, Diag);
         else if (widget.Type == "table" && encodings["sort"] is JsonObject { } sort && sort["by"] is JsonValue by && by.TryGetValue<string>(out var sortField))
         {
             var direction = sort["dir"] is JsonValue d && d.TryGetValue<string>(out var dir) ? dir : "asc";
@@ -229,6 +231,15 @@ public static class DeriveRequest
                 foreach (var c in ChartChannels)
                 {
                     if (c == "tooltip" && encodings[c] is JsonArray list) { for (var i = 0; i < list.Count; i++) Channel(list[i], $"{path}.tooltip[{i}]"); }
+                    // a nested axis (DBR42): every level is an attribute, outermost first
+                    else if (c == "x" && encodings[c] is JsonArray levels)
+                    {
+                        for (var i = 0; i < levels.Count; i++)
+                        {
+                            if (levels[i] is JsonValue lv && lv.TryGetValue<string>(out var lf) && lf.Length > 0) slots.Add(new(lf, $"{path}.x[{i}]", Well.Attribute));
+                            else if (levels[i] is JsonObject lo && lo["field"] is JsonValue lfv && lfv.TryGetValue<string>(out var lname) && lname.Length > 0) slots.Add(new(lname, $"{path}.x[{i}].field", Well.Attribute));
+                        }
+                    }
                     else Channel(encodings[c], $"{path}.{c}");
                 }
                 break;
@@ -251,6 +262,44 @@ public static class DeriveRequest
                 break;
         }
         return slots;
+    }
+
+    // ---- a nested axis's order (DBR42) ----
+
+    /// <summary>The widest a nested <c>x</c> may be before the shaper cuts the members and says so: 200 member combinations.</summary>
+    public const int LeafLimit = 200;
+
+    /// <summary>
+    /// The <c>order</c> of a nested axis, one entry per level from the outermost: a level sorted by <c>sort_key</c> (the default) or <c>label</c> asks for its attribute in its direction (the engine's order is the
+    /// attribute's own, which is chronological for a time grain; the shaper writes the labels in the level's order whatever the rows' arrival order), a level sorted by a measure asks for the measure (the members of
+    /// the level, within the level outside it, in the measure's order). A measure belongs to the innermost level only: an outer level would need its own total.
+    /// </summary>
+    private static JsonArray? NestedOrder(JsonArray levels, string xPath, Dictionary<string, string> origins, Action<string, string, Well> place, List<ConfigDiagnostic> diagnostics,
+        Func<string, string, string, string?, ConfigDiagnostic> diag)
+    {
+        var order = new JsonArray();
+        for (var i = 0; i < levels.Count; i++)
+        {
+            var field = levels[i] is JsonObject o ? o["field"]?.GetValue<string>() : levels[i] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
+            if (string.IsNullOrEmpty(field)) continue;
+            var sort = (levels[i] as JsonObject)?["sort"] as JsonObject;
+            var by = sort?["by"] is JsonValue bv && bv.TryGetValue<string>(out var b) ? b : "sort_key";
+            var direction = sort?["dir"] is JsonValue dv && dv.TryGetValue<string>(out var d) ? d : "asc";
+            var sortPath = $"{xPath}[{i}].sort.by";
+            string target = field;
+            var path = $"{xPath}[{i}]" + (levels[i] is JsonObject ? ".field" : "");
+            if (by is not ("sort_key" or "label"))
+            {
+                if (i != levels.Count - 1)
+                { diagnostics.Add(diag(ViewsCodes.InvalidValue, sortPath, "Only the innermost level of a nested axis sorts by a measure: an outer level would need its own total.", "Sort the outer level by `sort_key` or `label`.")); continue; }
+                place(by, sortPath, Well.Measure);
+                target = by;
+                path = sortPath;
+            }
+            origins[$"query.order[{order.Count}]"] = path;
+            order.Add(new JsonArray(target, direction));
+        }
+        return order.Count > 0 ? order : null;
     }
 
     // ---- a matrix's totals ----

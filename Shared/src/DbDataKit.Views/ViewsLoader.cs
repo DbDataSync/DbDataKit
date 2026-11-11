@@ -42,6 +42,7 @@ public static partial class ViewsLoader
         ["encodings.table"] = ["columns", "sort"],
         ["table_column"] = ["field", "label", "format", "align", "width"],
         ["channel"] = ["field", "type", "sort", "stack", "title", "format"],
+        ["x_level"] = ["field", "format", "sort", "title"],
         ["matrix_axis_entry"] = ["field", "format", "sort"],
         ["mark"] = ["type", "tooltip", "point"],
         ["query.derived"] = ["mode", "model", "filters", "segments", "order", "limit", "totals", "timezone", "params"],

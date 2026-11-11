@@ -43,6 +43,10 @@
     {
       "file": "good/dashboard-axis-formats.json",
       "kind": "dashboard"
+    },
+    {
+      "file": "good/dashboard-nested-axis.json",
+      "kind": "dashboard"
     }
   ],
   "bad": [
@@ -574,6 +578,42 @@
       "path": "widgets.w.encodings.rows[1].sort",
       "line": 18,
       "schema": false
+    },
+    {
+      "name": "nested-axis-line-mark",
+      "file": "bad/nested-axis-line-mark.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.x",
+      "line": 11,
+      "schema": false
+    },
+    {
+      "name": "nested-axis-area-mark",
+      "file": "bad/nested-axis-area-mark.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.x",
+      "line": 11,
+      "schema": false
+    },
+    {
+      "name": "nested-axis-with-column",
+      "file": "bad/nested-axis-with-column.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.column",
+      "line": 16,
+      "schema": false
+    },
+    {
+      "name": "nested-axis-four-levels",
+      "file": "bad/nested-axis-four-levels.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.x",
+      "line": 11,
+      "schema": true
     }
   ],
   "warnings": [

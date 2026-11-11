@@ -1,0 +1,27 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "chart",
+      "mark": "bar",
+      "encodings": {
+        "x": [
+          "customers.region",
+          "orders.order_count"
+        ],
+        "y": "orders.net_revenue"
+      },
+      "query": {
+        "model": "sales_catalog",
+        "limit": 200
+      }
+    }
+  },
+  "refusal": [
+    {
+      "code": "wrong_member_kind",
+      "path": "widgets.w.encodings.x[1]",
+      "message": "orders.order_count is a measure, not a attribute."
+    }
+  ]
+}

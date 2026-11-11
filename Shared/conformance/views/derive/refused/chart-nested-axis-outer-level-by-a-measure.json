@@ -1,0 +1,33 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "chart",
+      "mark": "bar",
+      "encodings": {
+        "x": [
+          {
+            "field": "customers.region",
+            "sort": {
+              "by": "orders.net_revenue",
+              "dir": "desc"
+            }
+          },
+          "products.category"
+        ],
+        "y": "orders.net_revenue"
+      },
+      "query": {
+        "model": "sales_catalog",
+        "limit": 200
+      }
+    }
+  },
+  "refusal": [
+    {
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.x[0].sort.by",
+      "message": "Only the innermost level of a nested axis sorts by a measure: an outer level would need its own total."
+    }
+  ]
+}

@@ -75,6 +75,30 @@ encodings:                     # a matrix
   and writing both is that widget's error). A **matrix value** takes a preset or a mapping; a mapping is applied to the cell's number after the engine has arranged the grid.
 * The data of a chart that is exported (its sheet) holds the label columns beside the raw ones.
 
+#### A nested axis (DBR42)
+
+A bar or point chart's `x` may be a **list of levels, outermost first** (at most three), each a field or `{field, format, sort, title}`:
+
+```yaml
+encodings:
+  x:
+    - {field: orders.ordered_at_year, format: {date: year}}
+    - {field: orders.ordered_at_month, format: {date: MMM}, sort: {by: orders.net_revenue, dir: desc}}
+  y: orders.net_revenue
+```
+
+* **Refused** (`DBD-106`, at the key): a **line or an area** mark (a line breaks between the groups: use one temporal field with a grain and a format such as `MMM yyyy`), a **`column`** channel (the nested axis is drawn
+  with the facet), more than **three** levels. A list of one level is the plain channel. `sort` is the QIS view's `{by, dir}`: `sort_key`, `label`, or a measure, and a measure only on the **innermost** level (an outer level
+  would need its own total: refused in the derivation, `DBD-106` at `x[i].sort.by`).
+* **Asking.** `DeriveRequest` asks for every level as an attribute, outermost first, and adds `order` per level from the outermost (`[[year, asc], [month, asc]]`; a level sorted by a measure orders by that measure, which
+  is added to `measures` if the chart does not show it), unless the query writes its own `order`. The order of the request never depends on how the rows arrive.
+* **Drawing.** `ResultShaper` gives the engine the innermost level as `x` and the outermost as `column` (a facet it writes itself; an author's `facet` stays refused), writes each level's members as its format reads them, and
+  orders them: ascending by value unless the level sorts by `sort_key` (the rows' own order), `label` or a measure (the rows' order, which the request made); `dir: desc` reverses. With three levels the two outer ones are one column
+  of labels joined by ` / `. The rendered chart says `nested_axis: true` and the client (`applyNestedAxis`) draws the facet with zero spacing, the headers below the inner labels, a thin edge between groups and **an independent
+  `x` scale per group**, so each year shows its own months. Member combinations over **200** are cut (the first ones in the request's order are kept) and the chart's `notice` says `Showing the first 200 of N member combinations on the axis.`
+* **Limits, stated:** an inner level sorted by a measure has **one** order for the whole axis (the first group's), not one per group; a third level is joined into the group label, not drawn as a third header row; the
+  PDF is drawn from the same rendered chart by the same client code, so it carries the group headers (not checked here: the exporter's tests need Chromium and fonts).
+
 ### Sorting by a click (DBR45)
 
 A viewer may sort a table or a matrix by clicking a header, **on screen only** (the host sets `sortable` on `DashboardView`; the print and export routes never do): a click sorts ascending, a second click reverses, a third gives the
@@ -117,7 +141,7 @@ attribute that has it).
 | `measures` | a metric's `value` and `compare`; a matrix's `values`; a chart's channel or a table's column that the catalog says is a measure; a table's `sort` field if the table does not show it |
 | `attributes` | a matrix's `rows` then `columns`; every other chart channel and table column; each field **once**, in a fixed order (chart: `x y color column row tooltip`; the order the file wrote the channels in does not matter) |
 | `filters`, `segments`, `timezone` | the query's, as written; `{param: name}` markers stay markers |
-| `order` | the query's `order` when it has one, else a table's `sort` (`{by, dir}` becomes `[by, dir]`, `asc` by default). A chart channel's `sort` and a matrix's `sort` and `column_limit` are the view's and add nothing |
+| `order` | the query's `order` when it has one, else a table's `sort` (`{by, dir}` becomes `[by, dir]`, `asc` by default), else a nested axis's levels in order (DBR42, above). A chart channel's `sort` and a matrix's `sort` and `column_limit` are the view's and add nothing |
 | `limit` | the query's, else the type's default: metric 1, chart 500, table 100, matrix 10,000; never above 10,000 |
 | `totals` | a matrix: `totals.rows` is a total row (the row fields rolled up), `totals.columns` a total column, both is `{subtotal_by: rows + columns, grand_total, cube}`; a sort of an axis by a measure asks for the other axis's total too (the view's `sort_needs_totals`). A table or chart with `totals: {grand_total: true}` and no `subtotal_by` rolls up every attribute it shows |
 

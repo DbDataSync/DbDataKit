@@ -29,6 +29,7 @@ const queryChecks: Record<string, ValidateFunction> = {
   derived: part(defs.query_derived!), semantic: part(defs.query_explicit_semantic!), saved: part(defs.query_explicit_saved!), store: part(defs.query_explicit_store!), ref: part(defs.query_explicit_ref!),
 }
 const channelCheck = ajv.getSchema(`${(coreSchema as { $id: string }).$id}#/$defs/chart_channel`)!
+const levelsCheck = ajv.getSchema(`${(coreSchema as { $id: string }).$id}#/$defs/x_levels`)!
 
 export const RAW_HTML = /<[A-Za-z/!?]/
 export const MARKDOWN_IMAGE = /!\[[^\]]*\]\([^)]*\)/
@@ -148,6 +149,7 @@ function formats(raw: Json, type: string, path: string, issues: Issues): void {
     for (const [channel, value] of Object.entries(encodings)) {
       const items = channel === 'tooltip' && Array.isArray(value) ? value.map((v, i) => [v, at(join(ep, channel), i)] as const) : ([[value, join(ep, channel)]] as const)
       for (const [item, where] of items) if (isObject(item)) one(item.format, join(where, 'format'))
+      if (channel === 'x' && Array.isArray(value)) value.forEach((level, i) => { if (isObject(level)) one(level.format, join(at(join(ep, 'x'), i), 'format')) })
     }
 }
 
@@ -177,6 +179,7 @@ function chart(raw: Json, path: string, fields: Encoded[], issues: Issues): void
       else issues.add('DBD-104', cp, `Unknown key \`${channel}\` in the encodings of a chart.`)
       continue
     }
+    if (channel === 'x' && Array.isArray(value)) { nestedAxis(value, cp, mark, encodings, join(ep, 'column'), fields, issues); continue }
     const items: [unknown, string][] = channel === 'tooltip' && Array.isArray(value) ? value.map((v, i) => [v, at(cp, i)]) : [[value, cp]]
     for (const [item, p] of items) {
       if (typeof item === 'string' && item.length > 0) fields.push({ channel, field: item, path: p })
@@ -186,6 +189,24 @@ function chart(raw: Json, path: string, fields: Encoded[], issues: Issues): void
       } else issues.add('DBD-106', p, 'A channel is a field name, or a mapping with `field`, `type`, `sort`, `stack` and `title`.')
     }
   }
+}
+
+/**
+ * A chart's `x` as a list, outermost level first (plan 32 DBR42), as `ViewsLoader.NestedAxis` reads it: one to three levels, each a field name or `{field, format, sort, title}`; a line or an area mark and a
+ * `column` channel are refused (a line breaks between the groups; the nested axis is drawn with the facet).
+ */
+function nestedAxis(levels: unknown[], path: string, mark: unknown, encodings: Json, columnPath: string, fields: Encoded[], issues: Issues): void {
+  run(levelsCheck, levels, { kind: 'channel' }, path, issues)
+  const markType = isObject(mark) ? mark.type : mark
+  if (levels.length > 1 && (markType === 'line' || markType === 'area'))
+    issues.add('DBD-106', path, `A ${String(markType)} chart has no nested axis: a line breaks between the groups.`)
+  if (levels.length > 1 && encodings.column !== undefined)
+    issues.add('DBD-106', columnPath, 'A chart with a nested `x` has no `column`: the nested axis is drawn with the facet.')
+  levels.forEach((level, i) => {
+    const p = at(path, i)
+    if (typeof level === 'string' && level.length > 0) fields.push({ channel: 'x', field: level, path: p })
+    else if (isObject(level) && typeof level.field === 'string' && level.field.length > 0) fields.push({ channel: 'x', field: level.field, path: join(p, 'field') })
+  })
 }
 
 function text(raw: Json, path: string, context: Context, issues: Issues): void {

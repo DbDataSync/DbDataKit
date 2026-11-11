@@ -20,6 +20,8 @@ export function applyNestedAxis(spec: Record<string, unknown>, nested: RenderedC
   if (column.header === null) return spec
   column.header = { ...(column.header as Json | undefined), orient: 'bottom', labelOrient: 'bottom', titleOrient: 'bottom', labelPadding: 4 }
   copy.spacing = 0
+  // each group draws only its own inner members (months of 2025 beside months of 2026), in the order the renderer gave the whole axis
+  copy.resolve = { ...(copy.resolve as Json | undefined), scale: { ...((copy.resolve as Json | undefined)?.scale as Json | undefined), x: 'independent' } }
   copy.config = { ...(copy.config as Json | undefined), view: { ...((copy.config as Json | undefined)?.view as Json | undefined), stroke: '#8884' } }
   return copy
 }

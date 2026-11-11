@@ -24,10 +24,12 @@ export interface WellSpec {
   /** For an `either` well: the role a field of it usually has (a chart's `x` is an attribute, its `y` a measure): the type chooser fills wells by it. */
   prefer?: 'measure' | 'attribute'
   scalarWhenOne?: boolean
+  /** The most entries a list well takes (a chart's nested `x` has three levels at most). */
+  max?: number
 }
 
 const CHART: WellSpec[] = [
-  { id: 'x', label: 'x', kind: 'either', multiple: false, path: ['encodings', 'x'], shape: 'field', prefer: 'attribute' },
+  { id: 'x', label: 'x (levels, outermost first)', kind: 'either', multiple: true, path: ['encodings', 'x'], shape: 'fields', prefer: 'attribute', scalarWhenOne: true, max: 3 },
   { id: 'y', label: 'y', kind: 'either', multiple: false, path: ['encodings', 'y'], shape: 'field', prefer: 'measure' },
   { id: 'color', label: 'color', kind: 'either', multiple: false, path: ['encodings', 'color'], shape: 'field', prefer: 'attribute' },
   { id: 'column', label: 'column (facet)', kind: 'either', multiple: false, path: ['encodings', 'column'], shape: 'field', prefer: 'attribute' },
@@ -120,6 +122,7 @@ export function changedFields(fields: string[], spec: WellSpec, change: WellChan
       if (problem?.code === 'wrong_member_kind') throw new WellError('wrong_member_kind', problem.message)
       if (!spec.multiple) return [field]
       if (fields.includes(field)) return fields
+      if (spec.max !== undefined && fields.length >= spec.max) throw new WellError('bad_position', `The well \`${spec.id}\` takes at most ${spec.max} fields.`)
       const next = [...fields]
       next.splice(Math.max(0, Math.min(fields.length, change.index ?? fields.length)), 0, field)
       return next
@@ -127,10 +130,28 @@ export function changedFields(fields: string[], spec: WellSpec, change: WellChan
   }
 }
 
+/**
+ * The rules of a nested axis (plan 32 DBR42), in the words of the loaders: more than one level on a chart's `x` needs a bar or a point mark (a line breaks between the groups) and no `column` (the nested axis is
+ * drawn with the facet); and a `column` cannot be added to a chart whose `x` is already nested.
+ */
+function nestedAxisRules(widget: WidgetDoc, spec: WellSpec, after: string[], change: WellChange): void {
+  if (widget.type !== 'chart' || change.op === 'remove' || change.op === 'clear') return
+  const encodings = (widget as unknown as { encodings?: Record<string, unknown> }).encodings ?? {}
+  const mark = (widget as unknown as { mark?: unknown }).mark
+  const markType = isObject(mark) ? mark.type : mark
+  if (spec.id === 'x' && after.length > 1) {
+    if (markType === 'line' || markType === 'area') throw new WellError('bad_field', `A ${String(markType)} chart has no nested axis: a line breaks between the groups. Use one temporal field with a grain and a format such as MMM yyyy, or a bar or point mark.`)
+    if (encodings.column !== undefined) throw new WellError('bad_field', 'A chart with a nested `x` has no `column`: the nested axis is drawn with the facet. Remove the column first.')
+  }
+  if (spec.id === 'column' && change.op === 'add' && wellFields(widget, WELLS.chart[0]!).length > 1)
+    throw new WellError('bad_field', 'A chart with a nested `x` has no `column`: the nested axis is drawn with the facet.')
+}
+
 /** The changes of the text a well change makes (none when nothing changes): the well's value set, or removed when it is empty. */
 export function wellOps(widget: WidgetDoc, id: string, spec: WellSpec, change: WellChange, roles?: CatalogRoles): Op[] {
   const before = wellFields(widget, spec)
   const after = changedFields(before, spec, change, roles)
+  nestedAxisRules(widget, spec, after, change)
   if (JSON.stringify(before) === JSON.stringify(after) && change.op !== 'add') return []
   const value = valueWith(widget, spec, after)
   const path: Path = ['widgets', id, ...spec.path]

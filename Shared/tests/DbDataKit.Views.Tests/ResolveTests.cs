@@ -274,6 +274,83 @@ public class ResolveTests
     }
 
     [Fact]
+    public async Task A_nested_x_is_the_engines_x_and_column_drawn_with_the_levels_in_their_own_order_and_says_nested_axis()
+    {
+        var doc = Doc("""
+              ch:
+                type: chart
+                mark: bar
+                encodings:
+                  x: [{field: customers.region, sort: {by: label, dir: desc}}, products.category]
+                  y: sales.net_amount
+                query: {model: retail_sales, limit: 100}
+            """);
+        var serving = new RetailServing();
+        var r = await Resolver(serving).ResolveAsync(Viewer(), doc, "desk");
+        var ch = Ok(r, "ch");
+        Assert.True(ch["nested_axis"]!.GetValue<bool>());
+        Assert.Null(ch["notice"]);
+        var encoding = ch["vega_lite"]!["encoding"]!;
+        // the outer level is the facet, in the level's order (labels, descending); the inner level is the axis, ascending by value as no sort says otherwise
+        Assert.Equal("customers_region__x_outer", encoding["column"]!["field"]!.GetValue<string>());
+        Assert.Equal(["West", "South", "East", "Central"], encoding["column"]!["sort"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.Equal("products_category__x", encoding["x"]!["field"]!.GetValue<string>());
+        Assert.Equal(["Accessories", "Apparel", "Footwear", "Outdoor"], encoding["x"]!["sort"]!.AsArray().Select(n => n!.GetValue<string>()));
+        // the request asked for both levels in order, whatever order the rows come back in
+        var asked = JsonNode.Parse(((ServingRequest.Semantic)serving.Received.Single().Request).Json)!["query"]!;
+        Assert.Equal(["customers.region", "products.category"], asked["attributes"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.Equal("[[\"customers.region\",\"desc\"],[\"products.category\",\"asc\"]]", asked["order"]!.ToJsonString().Replace(" ", ""));
+        Assert.Empty(Violations(r.ToJson()));
+    }
+
+    [Fact]
+    public async Task A_nested_x_of_one_level_is_the_plain_channel_and_one_of_three_joins_the_outer_two_and_cuts_the_leaves_with_a_notice()
+    {
+        var one = Doc("""
+              ch:
+                type: chart
+                mark: bar
+                encodings: {x: [customers.region], y: sales.net_amount}
+                query: {model: retail_sales}
+            """);
+        var plain = Ok(await Resolver(new RetailServing()).ResolveAsync(Viewer(), one, "desk"), "ch");
+        Assert.Null(plain["nested_axis"]);
+        Assert.Null(plain["vega_lite"]!["encoding"]!["column"]);
+        Assert.Equal("customers_region", plain["vega_lite"]!["encoding"]!["x"]!["field"]!.GetValue<string>());
+
+        var three = Doc("""
+              ch:
+                type: chart
+                mark: bar
+                encodings:
+                  x: [customers.region, products.category, products.product]
+                  y: sales.net_amount
+                query: {model: retail_sales, limit: 1000}
+            """);
+        var r = await Resolver(new RetailServing()).ResolveAsync(Viewer(), three, "desk");
+        var ch = Ok(r, "ch");
+        Assert.True(ch["nested_axis"]!.GetValue<bool>());
+        // 4 regions x 24 products is 96 leaves, under the cap: no notice; the months in the next widget make 960
+        Assert.Null(ch["notice"]);
+        var column = ch["vega_lite"]!["encoding"]!["column"]!["sort"]!.AsArray().Select(n => n!.GetValue<string>()).ToList();
+        Assert.Equal("Central / Accessories", column[0]);
+        Assert.Equal(column.Count, column.Distinct().Count());
+
+        var over = Doc("""
+              ch:
+                type: chart
+                mark: bar
+                encodings:
+                  x: [customers.region, products.product, date.year_month]
+                  y: sales.net_amount
+                query: {model: retail_sales, limit: 1000}
+            """);
+        var cut = Ok(await Resolver(new RetailServing()).ResolveAsync(Viewer(), over, "desk"), "ch");
+        Assert.Equal("Showing the first 200 of 960 member combinations on the axis.", cut["notice"]!.GetValue<string>());
+        Assert.Equal(200, cut["vega_lite"]!["data"]!["values"]!.AsArray().Count);
+    }
+
+    [Fact]
     public async Task A_chart_without_a_format_has_no_formats_and_a_bad_format_is_refused_by_the_loader_before_it_is_drawn()
     {
         var doc = Doc("""
