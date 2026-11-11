@@ -44,7 +44,7 @@ public sealed class AgentStoreTests : IDisposable
     {
         var rule = Assert.Single(AgentsModule.Module.Retention);
         Assert.Equal(("turn_text", "created_at", 30d), (rule.Table, rule.TimeColumn, rule.DefaultDays));
-        Assert.Equal(["approval", "audit_event", "conversation", "turn_record", "turn_text"], StateTableDefinitions.Read(AgentsModule.Module).Select(t => t.Name).Order());
+        Assert.Equal(["agent_token", "approval", "audit_event", "conversation", "turn_record", "turn_text"], StateTableDefinitions.Read(AgentsModule.Module).Select(t => t.Name).Order());
         Assert.All(StateTableDefinitions.Read(AgentsModule.Module), t => Assert.NotEmpty(t.PrimaryKey));
         Assert.Equal(StateScopeKind.Install, AgentsModule.Module.Scope);
         Assert.Equal(StateScopeKind.Group, AgentsModule.GroupModule.Scope);
@@ -55,8 +55,8 @@ public sealed class AgentStoreTests : IDisposable
     {
         var (_, database, _) = Open(engine);
         Assert.Equal("agents", database.Layout!.Namespace(AgentsModule.Name).Module.Name);
-        Assert.Equal(1, Assert.Single(database.RegisteredModules(), m => m.Module == "agents").Version);
-        foreach (var table in new[] { "conversation", "turn_text", "turn_record", "audit_event", "approval" }) Assert.Equal(0, Count(database, table));
+        Assert.Equal(2, Assert.Single(database.RegisteredModules(), m => m.Module == "agents").Version);
+        foreach (var table in new[] { "conversation", "turn_text", "turn_record", "audit_event", "approval", "agent_token" }) Assert.Equal(0, Count(database, table));
     }
 
     [Theory, MemberData(nameof(Engines))]
@@ -204,13 +204,44 @@ public sealed class AgentStoreTests : IDisposable
     {
         var location = _engines.Provision(engine);
         var newer = new StateModule("agents", StateScopeKind.Install, [.. AgentsModule.Module.Migrations, "ALTER TABLE {table:approval} {{addcolumn}} unit {{key}} NULL;"], retention: AgentsModule.Module.Retention);
-        location.Open([newer], appliedBy: "newer-agents 2.0");
+        location.Open([newer], appliedBy: "newer-agents 3.0");
 
         var ex = Assert.Throws<InvalidOperationException>(() => location.Open([AgentsModule.Module]));
 
         Assert.Contains("'agents", ex.Message);
+        Assert.Contains("version 3", ex.Message);
         Assert.Contains("version 2", ex.Message);
-        Assert.Contains("version 1", ex.Message);
-        Assert.Contains("newer-agents 2.0", ex.Message);
+        Assert.Contains("newer-agents 3.0", ex.Message);
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public void An_outside_agents_token_is_the_persons_shown_once_and_ends_when_it_expires_or_is_revoked(string engine)
+    {
+        var (store, database, clock) = Open(engine);
+
+        var (row, secret) = store.CreateToken("ada", "ui mcp", TimeSpan.FromDays(10));
+        Assert.StartsWith("ddka_" + row.Id + "_", secret);
+        Assert.Equal("ada", store.VerifyToken(secret));
+        Assert.NotNull(Assert.Single(store.Tokens("ada")).LastUsedAt);
+        Assert.Empty(store.Tokens("grace"));
+        Assert.Null(store.VerifyToken(secret + "x"));
+        Assert.Null(store.VerifyToken("ddka_nonsense"));
+        Assert.Null(store.VerifyToken("ddk_" + row.Id + "_" + secret));
+        // only a hash is kept: the secret is in no row
+        using (var connection = database.OpenConnection())
+        {
+            using var command = database.Command(AgentsModule.Name, connection, "SELECT secret_hash FROM {table:agent_token};");
+            Assert.DoesNotContain(secret[(secret.LastIndexOf('_') + 1)..], Convert.ToString(command.ExecuteScalar()));
+        }
+        Assert.False(store.RevokeToken(row.Id, "grace"));      // another person's token is not theirs to revoke
+        clock.Advance(TimeSpan.FromDays(11));
+        Assert.Null(store.VerifyToken(secret));                 // expired
+        var (second, secondSecret) = store.CreateToken("ada", "other");
+        Assert.Equal("ada", store.VerifyToken(secondSecret));
+        Assert.True(store.RevokeToken(second.Id, "ada"));
+        Assert.False(store.RevokeToken(second.Id, "ada"));
+        Assert.Null(store.VerifyToken(secondSecret));
+        Assert.Throws<ArgumentException>(() => store.CreateToken("ada", " "));
+        Assert.Throws<ArgumentException>(() => store.CreateToken("ada", "x", TimeSpan.FromDays(400)));
     }
 }

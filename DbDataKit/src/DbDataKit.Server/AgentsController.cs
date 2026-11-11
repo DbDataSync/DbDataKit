@@ -15,6 +15,8 @@ public sealed record StartConversationBody(string Agent, string? Title = null);
 
 public sealed record SendMessageBody(string Text);
 
+public sealed record TokenBody(string? Name, int? Days = null);
+
 public sealed record AnswerBody(bool Approve, string? Note = null);
 
 public sealed record OutsideAskBody(string Agent, string AgentVersion, string Tool, string Preview, string? Arguments, string Traits);
@@ -172,6 +174,34 @@ public sealed class AgentsController(ConsoleAgents agents, IUserAccounts users) 
     [HttpGet("usage")]
     [Authorize(Policies.Admin)]
     public IActionResult Usage() => Named(new { byPerson = agents.Store.Usage("person").Select(u => new { u.Key, u.Turns, u.InputTokens, u.OutputTokens, u.Cost, person = u.Key }), byAgent = agents.Store.Usage("agent"), install = agents.Store.Usage("install").FirstOrDefault() });
+
+    // ---- the tokens an outside agent signs in with (AG29): a person's own, shown once ----
+
+    [HttpGet("tokens")]
+    [Authorize(Policies.Viewer)]
+    public IActionResult Tokens() => Ok(agents.Store.Tokens(PersonId).Select(t => new { t.Id, t.Name, t.CreatedAt, t.ExpiresAt, t.RevokedAt, t.LastUsedAt, active = t.IsActiveAt(DateTimeOffset.UtcNow) }));
+
+    [HttpPost("tokens")]
+    [Authorize(Policies.Viewer)]
+    public IActionResult MakeToken([FromBody] TokenBody body)
+    {
+        try
+        {
+            var (row, secret) = agents.Store.CreateToken(PersonId, body.Name ?? "", body.Days is { } d ? TimeSpan.FromDays(d) : null);
+            agents.Store.RecordAudit(null, null, "token-made", PersonId, "console", "1", "console", null, null, $"a token named '{row.Name}' was made for an outside agent");
+            return Ok(new { token = secret, user = PersonId, record = new { row.Id, row.Name, row.CreatedAt, row.ExpiresAt } });
+        }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpDelete("tokens/{id}")]
+    [Authorize(Policies.Viewer)]
+    public IActionResult RevokeToken(string id)
+    {
+        if (!agents.Store.RevokeToken(id, PersonId)) return NotFound(new { error = "You have no token with that id that is not already revoked." });
+        agents.Store.RecordAudit(null, null, "token-revoked", PersonId, "console", "1", "console", null, null, $"the token {id} was revoked");
+        return NoContent();
+    }
 
     // ---- an outside agent's half (AG29): `ui mcp` posts what it asked and did as the person whose token it holds ----
 

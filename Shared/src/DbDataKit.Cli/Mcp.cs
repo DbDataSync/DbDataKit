@@ -179,7 +179,7 @@ public sealed class McpServer(NounRouter router, McpOptions options, string serv
                 var request = new ApprovalRequest(name, command, givenArgs, traits, _agent);
                 Audit("asked", request.Preview);
                 ApprovalDecision decision;
-                try { decision = await (gate.Approver ?? ElicitAsync)(request, cancellation).ConfigureAwait(false); }
+                try { decision = await (gate.Approver ?? (!_canElicit && gate.FallbackApprover is { } inbox ? inbox : ElicitAsync))(request, cancellation).ConfigureAwait(false); }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex) { decision = new ApprovalDecision(false, $"asking the person failed: {ex.Message}"); }
                 if (!decision.Approved)
@@ -285,16 +285,32 @@ public static class UiNoun
     /// <param name="excluded">Commands this product never offers (see <see cref="McpOptions.Excluded"/>).</param>
     public static Noun Create(Func<NounRouter> router, string serverName, string version, IEnumerable<string> excluded) => new("ui", "The local interfaces",
     [
-        new Verb("mcp", "The Model Context Protocol on standard input and output: the commands that read, as tools (with --ask, the ones that change something too, each after the person approves it)", EffectClass.OfflineOnly, "[--allow-writes] [--ask] [--refuse-data]",
+        new Verb("mcp", "The Model Context Protocol on standard input and output: the commands that read, as tools (with --ask, the ones that change something too, each after the person approves it; with --report-to, the session is recorded in a console and a client that cannot ask the person asks in the console's inbox)", EffectClass.OfflineOnly, "[--allow-writes] [--ask] [--refuse-data] [--report-to <console address>]",
             async (args, context) =>
             {
-                var parsed = CliArgs.Parse(args, new HashSet<string> { "allow-writes", "ask", "refuse-data" }, new HashSet<string>());
+                var parsed = CliArgs.Parse(args, new HashSet<string> { "allow-writes", "ask", "refuse-data" }, new HashSet<string> { "report-to" });
                 if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
                 {
-                    await context.Error.WriteLineAsync("Usage: ui mcp [--allow-writes] [--ask] [--refuse-data]");
+                    await context.Error.WriteLineAsync("Usage: ui mcp [--allow-writes] [--ask] [--refuse-data] [--report-to <console address>]");
                     return CliExit.Usage;
                 }
-                var gate = parsed.Has("ask") ? McpGate.ForCurrentUser(new TextWriterAudit(context.Error)) : null;
+                McpGate? gate = parsed.Has("ask") ? McpGate.ForCurrentUser(new TextWriterAudit(context.Error)) : null;
+                if (parsed.Get("report-to") is { } address)
+                {
+                    if (!Uri.TryCreate(address, UriKind.Absolute, out var console) || console.Scheme is not ("https" or "http"))
+                    {
+                        await context.Error.WriteLineAsync($"--report-to takes the console's address (https://...), not '{address}'.");
+                        return CliExit.Usage;
+                    }
+                    string? user = Environment.GetEnvironmentVariable(ConsoleReporter.UserVariable), token = Environment.GetEnvironmentVariable(ConsoleReporter.TokenVariable);
+                    if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(token))
+                    {
+                        await context.Error.WriteLineAsync($"--report-to signs in as a person with a personal access token: set {ConsoleReporter.UserVariable} (the account's name) and {ConsoleReporter.TokenVariable} (a token made at the identity home).");
+                        return CliExit.Usage;
+                    }
+                    var reporter = ConsoleReporter.Create(console, user, token, context.Error);
+                    gate = (gate ?? McpGate.ForCurrentUser()) with { Audit = new CompositeAudit(new TextWriterAudit(context.Error), reporter), FallbackApprover = reporter.AskInboxAsync };
+                }
                 var server = new McpServer(router(), new McpOptions(new HashSet<string>(excluded, StringComparer.Ordinal), parsed.Has("allow-writes"), gate, parsed.Has("refuse-data")), serverName, version);
                 await server.ServeAsync(context.In, context.Out, context.Cancellation);
                 return CliExit.Ok;

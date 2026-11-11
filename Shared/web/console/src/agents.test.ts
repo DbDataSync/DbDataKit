@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cost, eventWord, percent, promptingMeaning, promptingName, sessions, statusWord, waitingOn, type Approval, type AuditRow } from './agents'
+import { connectCommand, cost, eventWord, percent, promptingMeaning, promptingName, sessions, statusWord, tokenState, waitingOn, type AgentToken, type Approval, type AuditRow } from './agents'
 import { emptyPolicy, policyFromYaml, policyToYaml, settingMeaning } from './policyForm'
 import { contextLine, isPolicyItem, parseInPlay, policyItemId, policyItemText, workActions, workWord, type WorkItem } from './knowledge'
 
@@ -7,6 +7,22 @@ const row = (over: Partial<AuditRow> = {}): AuditRow => ({
   id: 'r', conversationId: 'c1', turn: 1, kind: 'tool-called', person: 'Ada', agent: 'build-helper', agentVersion: 'v3', origin: 'console', tool: 'x', arguments: null, detail: null, occurredAt: '2026-11-11T10:00:00Z', ...over,
 })
 const approval = (status: string): Approval => ({ id: 'a', conversationId: 'c1', person: 'Ada', agent: 'x', agentVersion: 'v', origin: 'console', tool: 't', preview: 'p', arguments: null, traits: 'writes-data', status, requestedAt: 't', answeredAt: null, answeredBy: null, note: null })
+
+describe('connecting an outside agent', () => {
+  it('writes the command and the environment, with a placeholder until the token is made', () => {
+    const before = connectCommand('dbdatakit', 'https://console.example/', 'u1', null)
+    expect(before.command).toBe('dbdatakit ui mcp --ask --report-to https://console.example')
+    expect(before.environment.map((e) => e.name)).toEqual(['DBDATAKIT_CONSOLE_USER', 'DBDATAKIT_CONSOLE_TOKEN'])
+    expect(before.environment[1].value).toContain('shown when it is made')
+    expect(connectCommand('dbdatakit', 'https://c', 'u1', 'ddka_x_y').environment[1].value).toBe('ddka_x_y')
+  })
+  it('names a token active, revoked or expired', () => {
+    const token = (over: Partial<AgentToken>): AgentToken => ({ id: 't', name: 'n', createdAt: '2026-11-01T00:00:00Z', expiresAt: null, revokedAt: null, lastUsedAt: null, active: true, ...over })
+    expect(tokenState(token({}))).toBe('active')
+    expect(tokenState(token({ active: false }))).toBe('expired')
+    expect(tokenState(token({ active: false, revokedAt: '2026-11-02T00:00:00Z' }))).toBe('revoked')
+  })
+})
 
 describe('the words for settings, events and statuses', () => {
   it('spell the setting as the files do and say what it means', () => {

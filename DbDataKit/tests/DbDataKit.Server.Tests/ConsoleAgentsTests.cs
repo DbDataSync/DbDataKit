@@ -307,6 +307,61 @@ public sealed class ConsoleAgentsTests : IAsyncLifetime
         Assert.Empty((await Get("/api/agents/audit?origin=mcp&person=Ada", viewer)).Body!.AsArray());   // a viewer's query is about themselves, whoever they name
     }
 
+    [Fact]
+    public async Task An_outside_server_with_report_to_signs_in_with_a_token_and_its_step_is_answered_in_the_inbox_and_recorded()
+    {
+        var accounts = app.Services.GetRequiredService<IUserAccounts>();
+        var person = accounts.CreateUser("Tess", null, UserRole.Viewer);
+        var session = app.Services.GetRequiredService<ISessionStore>().Create(person.Id).Id;
+        var (_, made) = await Call(HttpMethod.Post, "/api/agents/tokens", session, new TokenBody("ui mcp"));
+        var token = (string)made!["token"]!;
+        Assert.Equal(person.Id, (string)made["user"]!);
+        Assert.StartsWith("ddka_", token);
+        Assert.DoesNotContain(token, (await Get("/api/agents/tokens", session)).Body!.ToJsonString());   // never listed again
+        var log = new StringWriter();
+        var reporter = ConsoleReporter.Create(new Uri(app.Urls.First()), person.Id, token, log, new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true }, TimeSpan.FromMilliseconds(20));
+        var ran = new List<string>();
+        var router = new NounRouter("demo",
+        [
+            new Noun("workspace", "A workspace", [new Verb("edit", "edit", EffectClass.RepoFilesOnly, "<a>", (a, c) => { ran.Add(string.Join(' ', a)); return Task.FromResult(0); }, DataSchemas.None)]),
+        ], "1");
+        var gate = new McpGate(person.Id, null, reporter, null, reporter.AskInboxAsync);
+        var server = new McpServer(router, new McpOptions(new HashSet<string>(), Gate: gate), "demo", "1");
+        string Msg(string json) => json;
+        var input = string.Join('\n',
+            Msg("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","clientInfo":{"name":"outside-agent","version":"1.2"},"capabilities":{}}}"""),
+            Msg("""{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"workspace_edit","arguments":{"args":["draft"]}}}"""));
+        var output = new StringWriter();
+        var serving = server.ServeAsync(new StringReader(input), output);
+
+        // the step waits in the person's inbox; only the person answers it
+        JsonNode? waiting = null;
+        for (var i = 0; i < 100 && (waiting = (await Get("/api/agents/approvals", session)).Body)?.AsArray().Count is null or 0; i++) await Task.Delay(50);
+        Assert.Equal("mcp", (string)waiting![0]!["origin"]!);
+        Assert.Equal("outside-agent", (string)waiting[0]!["agent"]!);
+        Assert.Empty(ran);
+        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Post, $"/api/agents/approvals/{(string)waiting[0]!["id"]!}", session, new AnswerBody(true))).Status);
+        await serving.WaitAsync(TimeSpan.FromSeconds(20));
+
+        Assert.Equal(["draft"], ran);
+        var (_, audit) = await Get("/api/agents/audit?origin=mcp", session);
+        Assert.Equal(["approval-approved", "approval-asked", "tool-called"], audit!.AsArray().Select(a => (string)a!["kind"]!).Order().ToList());
+        Assert.Empty(log.ToString());
+
+        // the token is no way into the rest of the console, another person's name does not go with it, and revoking it ends the way in
+        async Task<HttpStatusCode> With(string user, string path)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, path);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{user}:{token}")));
+            return (await http.SendAsync(request)).StatusCode;
+        }
+        Assert.Equal(HttpStatusCode.Forbidden, await With(person.Id, "/api/agents/definitions"));
+        Assert.Equal(HttpStatusCode.Unauthorized, await With(other, "/api/agents/outside/ask/" + Guid.NewGuid()));
+        Assert.Equal(HttpStatusCode.NotFound, await With(person.Id, "/api/agents/outside/ask/" + Guid.NewGuid()));
+        Assert.Equal(HttpStatusCode.NoContent, (await Call(HttpMethod.Delete, $"/api/agents/tokens/{(string)made["record"]!["id"]!}", session)).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, await With(person.Id, "/api/agents/outside/ask/" + Guid.NewGuid()));
+    }
+
     // ---- knowledge: KN36, KN37, KN38, KN28 ----
 
     private const string Guardrail = "---\nknowledge: 1\ntitle: T\nrole: guardrail\nowner: administrators\nfor: { audience: back-end }\n---\nNever delete a production table.\n";

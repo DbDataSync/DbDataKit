@@ -40,6 +40,8 @@ export interface AuditRow { id: string; conversationId: string | null; turn: num
 export interface Approval { id: string; conversationId: string | null; person: string; personName?: string; answeredByName?: string; agent: string; agentVersion: string; origin: string; tool: string; preview: string; arguments: string | null; traits: string; status: string; requestedAt: string; answeredAt: string | null; answeredBy: string | null; note: string | null }
 export interface ConversationView { conversation: Conversation; text: TurnText[]; turns: TurnRecord[]; audit: AuditRow[]; approvals: Approval[]; running: boolean }
 export interface UsageRow { key: string; personName?: string; turns: number; inputTokens: number; outputTokens: number; cost: number }
+export interface AgentToken { id: string; name: string; createdAt: string; expiresAt: string | null; revokedAt: string | null; lastUsedAt: string | null; active: boolean }
+export interface MadeToken { token: string; user: string; record: { id: string; name: string; createdAt: string; expiresAt: string | null } }
 export interface Usage { byPerson: UsageRow[]; byAgent: UsageRow[]; install: UsageRow | null }
 
 const json = (method: string, body?: unknown): RequestInit => ({ method, body: body === undefined ? undefined : JSON.stringify(body) })
@@ -64,6 +66,9 @@ export const agentsApi = {
     return request<AuditRow[]>(`/api/agents/audit${query ? `?${query}` : ''}`)
   },
   usage: () => request<Usage>('/api/agents/usage'),
+  tokens: () => request<AgentToken[]>('/api/agents/tokens'),
+  makeToken: (name: string, days?: number) => request<MadeToken>('/api/agents/tokens', json('POST', { name, days })),
+  revokeToken: (id: string) => request<void>(`/api/agents/tokens/${encodeURIComponent(id)}`, json('DELETE')),
 }
 
 /** The setting as the files write it. */
@@ -111,3 +116,14 @@ export const statusWord = (status: string): string =>
 
 /** Cost as a short amount; nothing recorded is a dash, not 0. */
 export const cost = (value: number): string => (value === 0 ? '-' : value < 0.01 ? '<0.01' : value.toFixed(2))
+
+/** What a person puts in the outside agent's MCP configuration to have its session recorded here and its steps asked in the inbox (`ui mcp --report-to`). The secret is shown once, when it is made; until then the value is a placeholder. */
+export function connectCommand(product: string, consoleUrl: string, user: string, token: string | null): { command: string; environment: { name: string; value: string }[] } {
+  return {
+    command: `${product} ui mcp --ask --report-to ${consoleUrl.replace(/\/+$/, '')}`,
+    environment: [{ name: 'DBDATAKIT_CONSOLE_USER', value: user }, { name: 'DBDATAKIT_CONSOLE_TOKEN', value: token ?? '<the token, shown when it is made>' }],
+  }
+}
+
+/** A token's state in a word: active, revoked or expired. */
+export const tokenState = (token: AgentToken): string => (token.revokedAt ? 'revoked' : token.active ? 'active' : 'expired')

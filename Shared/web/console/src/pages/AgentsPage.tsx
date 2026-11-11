@@ -4,8 +4,8 @@ import { useSearchParams } from 'react-router-dom'
 import { CodeEditor, ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { ConsoleShell } from '../ConsoleShell'
 import {
-  agentsApi, cost, eventWord, percent, promptingMeaning, promptingName, sessions, statusWord, waitingOn,
-  type AgentDetail, type Approval, type AuditRow, type ConversationView, type Diagnostic, type PolicyChange,
+  agentsApi, connectCommand, cost, eventWord, percent, promptingMeaning, promptingName, sessions, statusWord, tokenState, waitingOn,
+  type AgentDetail, type Approval, type AuditRow, type ConversationView, type Diagnostic, type MadeToken, type PolicyChange,
 } from '../agents'
 import { SETTINGS, TRAITS, emptyPolicy, policyFromYaml, policyToYaml, settingLabel, settingMeaning, type PolicyForm, type Setting } from '../policyForm'
 
@@ -207,7 +207,49 @@ function InboxTab() {
           ))}
         </tbody>
       </table>
+      <OutsideAgents />
     </div>
+  )
+}
+
+/** Connect an outside agent (`ui mcp --report-to`): a token of the person's own, shown once, and the lines to put in the agent's configuration. */
+function OutsideAgents() {
+  const client = useQueryClient()
+  const [name, setName] = useState('')
+  const [made, setMade] = useState<MadeToken | null>(null)
+  const tokens = useQuery({ queryKey: ['agents', 'tokens'], queryFn: agentsApi.tokens })
+  const make = useMutation({ mutationFn: () => agentsApi.makeToken(name.trim()), onSuccess: (m) => { setMade(m); setName(''); client.invalidateQueries({ queryKey: ['agents', 'tokens'] }) } })
+  const revoke = useMutation({ mutationFn: (id: string) => agentsApi.revokeToken(id), onSuccess: () => client.invalidateQueries({ queryKey: ['agents', 'tokens'] }) })
+  const connect = connectCommand('dbdatakit', window.location.origin, made?.user ?? '<your account id>', made?.token ?? null)
+  return (
+    <section data-testid="outside-agents" style={{ marginTop: 24 }}>
+      <h3>Connect an outside agent</h3>
+      <p className="hint">An agent in another tool (Claude Code, an IDE) that uses <span className="mono">ui mcp</span> can have its session recorded here and, when its client cannot ask you, ask you in this inbox. Make a token, give it to the agent&apos;s configuration, and revoke it here when it is no longer wanted. The token is yours: it acts as you, and only for this: it reaches nothing else of the console.</p>
+      <ErrorBanner error={tokens.error ?? make.error ?? revoke.error} />
+      <form onSubmit={(e) => { e.preventDefault(); if (name.trim()) make.mutate() }} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="A name, such as my laptop" maxLength={100} data-testid="token-name" />
+        <button type="submit" className="btn btn-sm btn-primary" disabled={!name.trim() || make.isPending} data-testid="token-make">Make a token</button>
+      </form>
+      {made && (
+        <div className="banner" data-testid="token-made" style={{ margin: '8px 0' }}>
+          <div><strong>The token is shown once.</strong> Copy it now; the console keeps only a fingerprint.</div>
+          <pre className="mono" data-testid="token-secret">{made.token}</pre>
+        </div>
+      )}
+      <div className="hint" style={{ marginTop: 8 }}>In the agent&apos;s MCP configuration:</div>
+      <pre className="mono" data-testid="token-command">{connect.command}{'\n'}{connect.environment.map((e) => `${e.name}=${e.value}`).join('\n')}</pre>
+      <table className="table" data-testid="token-list">
+        <thead><tr><th>Name</th><th>Made</th><th>Expires</th><th>Last used</th><th>State</th><th /></tr></thead>
+        <tbody>
+          {tokens.data?.map((t) => (
+            <tr key={t.id} data-state={tokenState(t)}>
+              <td>{t.name} <span className="hint mono">{t.id}</span></td><td>{t.createdAt.slice(0, 10)}</td><td>{t.expiresAt?.slice(0, 10) ?? ''}</td><td>{t.lastUsedAt?.replace('T', ' ').slice(0, 16) ?? 'never'}</td><td>{tokenState(t)}</td>
+              <td>{t.active && <button type="button" className="btn btn-sm" onClick={() => revoke.mutate(t.id)} data-testid={`token-revoke-${t.id}`}>Revoke</button>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   )
 }
 

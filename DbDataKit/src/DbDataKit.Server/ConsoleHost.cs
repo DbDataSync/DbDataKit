@@ -107,6 +107,8 @@ public static class ConsoleHost
         builder.Services.TryAddSingleton<IAgentToolSource, ConsoleToolSource>();
         builder.Services.AddSingleton<ConsoleKnowledge>();
         builder.Services.AddSingleton<ConsoleAgents>();
+        // an outside agent (`ui mcp --report-to`) signs in as the person with a token made on the Agents page, as Basic credentials, and reaches the outside endpoints only
+        builder.Services.AddSingleton<IPasswordCredentials>(sp => new AgentTokenCredentials(sp.GetRequiredService<ConsoleAgents>().Store, sp.GetRequiredService<IUserAccounts>()));
         builder.Services.AddSingleton<ConsoleQuality>();
         if (settings.Home is { } home)
         {
@@ -174,6 +176,17 @@ public static class ConsoleHost
         // A session that came from the identity home asks the home again for the person's roles when the last answer is old (plan 13a U17); before authentication, so a session the home ended is refused on this very request.
         if (settings.Home is not null) app.UseFederationRefresh();
         app.UseAuthentication();
+        // a request signed in with an outside agent's token is not a person at a screen: it reaches the outside endpoints and nothing else
+        app.Use(async (context, next) =>
+        {
+            if (context.User.HasClaim(PasswordCredentials.MethodClaim, PasswordCredentials.Method) && !AgentTokenCredentials.Allows(context.Request.Path))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await context.Response.WriteAsJsonAsync(new { error = "A token made for an outside agent reaches only what an outside agent needs. Sign in to use the rest of the console." });
+                return;
+            }
+            await next();
+        });
         // maintenance mode (plan 29b, C05): an administrator's session still works, so does the sign-in; the web app's own files are served before this and stay up
         var maintenance = new DbDataKit.State.Api.MaintenanceGate();
         app.UseMaintenance(maintenance, context => context.User.IsInRole(nameof(DbDataKit.State.UserRole.Admin)), ["/api/auth"]);

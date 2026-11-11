@@ -19,6 +19,12 @@ public sealed record AgentAuditRow(Guid Id, string? ConversationId, int? Turn, s
 public sealed record ApprovalRow(Guid Id, string? ConversationId, string Person, string Agent, string AgentVersion, string Origin, string Tool, string Preview, string? Arguments, string Traits, string Status,
     DateTimeOffset RequestedAt, DateTimeOffset? AnsweredAt, string? AnsweredBy, string? Note);
 
+/// <summary>A token an outside agent signs in with, as listed: never the secret.</summary>
+public sealed record AgentTokenRow(string Id, string Person, string Name, DateTimeOffset CreatedAt, DateTimeOffset? ExpiresAt, DateTimeOffset? RevokedAt, DateTimeOffset? LastUsedAt)
+{
+    public bool IsActiveAt(DateTimeOffset now) => RevokedAt is null && (ExpiresAt is null || ExpiresAt > now);
+}
+
 /// <summary>What a person, an agent or the install used: the sum of the recorded turns.</summary>
 public sealed record AgentUsageRow(string Key, int Turns, long InputTokens, long OutputTokens, decimal Cost);
 
@@ -325,4 +331,91 @@ public sealed class AgentStore(StateDatabase database)
             while (reader.Read()) rows.Add(ReadApproval(reader));
             return rows;
         });
+
+    // ---- the tokens of outside agents (AG29) ----
+
+    /// <summary>The prefix of a token, so a leaked one is recognised for what it is.</summary>
+    public const string TokenPrefix = "ddka_";
+
+    /// <summary>The longest a token lasts.</summary>
+    public static readonly TimeSpan TokenCeiling = TimeSpan.FromDays(365);
+
+    /// <summary>Makes a token for a person; the secret (<c>ddka_&lt;id&gt;_&lt;secret&gt;</c>) is in the result and nowhere else, shown once.</summary>
+    public (AgentTokenRow Row, string Secret) CreateToken(string person, string name, TimeSpan? lifetime = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(person);
+        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 100) throw new ArgumentException("A token needs a name of up to 100 characters, to tell it apart from the person's others.", nameof(name));
+        var life = lifetime ?? TimeSpan.FromDays(90);
+        if (life <= TimeSpan.Zero || life > TokenCeiling) throw new ArgumentException($"A token lasts 1 to {TokenCeiling.TotalDays:0} days.", nameof(lifetime));
+        var now = database.Time.GetUtcNow();
+        var id = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(8)).ToLowerInvariant();
+        var secret = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)).Replace('+', '-').Replace('/', '_').TrimEnd('=');
+        var row = new AgentTokenRow(id, person, name.Trim(), now, now + life, null, null);
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var insert = database.Command(Module, connection, "INSERT INTO {table:agent_token} (id, person, name, secret_hash, created_at, expires_at) VALUES ($id, $person, $name, $hash, $at, $expires);");
+            insert.Bind(database, "id", id).Bind(database, "person", person).Bind(database, "name", row.Name).Bind(database, "hash", HashOf(secret)).Bind(database, "at", now).Bind(database, "expires", row.ExpiresAt, System.Data.DbType.DateTimeOffset);
+            insert.ExecuteNonQuery();
+        });
+        return (row, $"{TokenPrefix}{id}_{secret}");
+    }
+
+    private static string HashOf(string secret) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(secret))).ToLowerInvariant();
+
+    /// <summary>A person's tokens, newest first, revoked and expired ones included so they can be told apart.</summary>
+    public IReadOnlyList<AgentTokenRow> Tokens(string person) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var command = database.Command(Module, connection, "SELECT id, person, name, created_at, expires_at, revoked_at, last_used_at FROM {table:agent_token} WHERE person = $person ORDER BY created_at DESC, id;");
+            command.Bind(database, "person", person);
+            using var reader = command.ExecuteReader();
+            var rows = new List<AgentTokenRow>();
+            while (reader.Read()) rows.Add(new(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.Time(3), reader.NullableTime(4), reader.NullableTime(5), reader.NullableTime(6)));
+            return rows;
+        });
+
+    /// <summary>Revokes one of the person's own tokens; false when they have no such token that is not already revoked.</summary>
+    public bool RevokeToken(string id, string person)
+    {
+        var now = database.Time.GetUtcNow();
+        return database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var update = database.Command(Module, connection, "UPDATE {table:agent_token} SET revoked_at = $at WHERE id = $id AND person = $person AND revoked_at IS NULL;");
+            update.Bind(database, "at", now).Bind(database, "id", id).Bind(database, "person", person);
+            return update.ExecuteNonQuery() == 1;
+        });
+    }
+
+    /// <summary>The person a token belongs to when it is well formed, its secret is right and it is neither revoked nor expired (and it records when it was used); otherwise null, whatever the reason.</summary>
+    public string? VerifyToken(string token)
+    {
+        if (!token.StartsWith(TokenPrefix, StringComparison.Ordinal)) return null;
+        var rest = token[TokenPrefix.Length..];
+        var split = rest.IndexOf('_');
+        if (split <= 0 || split == rest.Length - 1) return null;
+        var (id, secret) = (rest[..split], rest[(split + 1)..]);
+        var now = database.Time.GetUtcNow();
+        var row = database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var command = database.Command(Module, connection, "SELECT person, secret_hash, expires_at, revoked_at FROM {table:agent_token} WHERE id = $id;");
+            command.Bind(database, "id", id);
+            using var reader = command.ExecuteReader();
+            return reader.Read() ? (reader.GetString(0), reader.GetString(1), reader.NullableTime(2), reader.NullableTime(3)) : ((string, string, DateTimeOffset?, DateTimeOffset?)?)null;
+        });
+        if (row is not var (person, hash, expires, revoked)) return null;
+        if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(System.Text.Encoding.ASCII.GetBytes(HashOf(secret)), System.Text.Encoding.ASCII.GetBytes(hash))) return null;
+        if (revoked is not null || expires is { } at && at <= now) return null;
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var update = database.Command(Module, connection, "UPDATE {table:agent_token} SET last_used_at = $at WHERE id = $id;");
+            update.Bind(database, "at", now).Bind(database, "id", id);
+            update.ExecuteNonQuery();
+        });
+        return person;
+    }
 }

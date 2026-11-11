@@ -123,6 +123,21 @@ public static class AgentsModule
         CREATE INDEX {index:approval_by_status} ON {table:approval}(status, requested_at);
         CREATE INDEX {index:approval_by_person} ON {table:approval}(person, requested_at);
         """,
+        """
+        -- An outside agent's way in (plan 27a AG29): a token a person makes in the console and gives to `ui mcp --report-to`, which signs in as that person with it to post what the agent asked and did and to ask the person in the inbox.
+        -- Only a hash of the secret is kept; the secret is shown once. A token reaches the outside endpoints only (the console checks the path), and it is the person's: revoking or expiring it ends the agent's way in at once.
+        CREATE TABLE {table:agent_token} (
+            id           {{key}} PRIMARY KEY,
+            person       {{key}} NOT NULL,
+            name         {{key}} NOT NULL,
+            secret_hash  {{key}} NOT NULL,
+            created_at   {{time}} NOT NULL,
+            expires_at   {{time}} NULL,
+            revoked_at   {{time}} NULL,
+            last_used_at {{time}} NULL
+        );
+        CREATE INDEX {index:agent_token_by_person} ON {table:agent_token}(person, created_at);
+        """,
     ];
 
     private static StateModule Make(StateScopeKind scope) => new(Name, scope, Migrations, retention: [new RetentionRule("turn_text", "created_at", TextDays)]);
