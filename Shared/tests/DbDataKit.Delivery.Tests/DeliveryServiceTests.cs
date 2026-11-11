@@ -19,12 +19,12 @@ public sealed class DeliveryServiceTests
     public void The_module_follows_the_conventions_and_declares_its_retention()
     {
         Assert.Empty(StateConventions.Violations(DeliveryModule.Module));
-        var rule = Assert.Single(DeliveryModule.Module.Retention);
+        var rule = Assert.Single(DeliveryModule.Module.Retention, r => r.Table == "message");
         Assert.Equal(("message", "settled_at", 30d), (rule.Table, rule.TimeColumn, rule.DefaultDays));
         Assert.Equal(["attempt"], rule.Children!.Select(c => c.Table));
         Assert.Equal("delivery", DeliveryModule.Module.Name);
         Assert.Equal(StateScopeKind.Install, DeliveryModule.Module.Scope);
-        Assert.Equal(["attempt", "message"], StateTableDefinitions.Read(DeliveryModule.Module).Select(t => t.Name).Order());
+        Assert.Equal(["attempt", "message", "subscription", "subscription_run"], StateTableDefinitions.Read(DeliveryModule.Module).Select(t => t.Name).Order());
     }
 
     [Theory, MemberData(nameof(Engines))]
