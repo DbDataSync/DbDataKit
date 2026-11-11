@@ -38,6 +38,29 @@ delivery:
 
 Read strictly (`DeliverySettings.Read`): an unknown key, an unknown kind, a duplicate name or a secret written out instead of referenced fails naming the file and the key. The channel kinds register with `ChannelKinds` (a kind lists its keys and their types; a `Secret` key takes only a reference).
 
+## The email channel (`kind: email`)
+
+```yaml
+    mail:
+      kind: email
+      host: smtp.example.com               # the certificate must be for this name
+      port: 587                            # default: 587 starttls, 465 implicit, 25 none
+      tls: starttls                        # starttls (default) | implicit | none
+      from: "DbData <noreply@example.com>"
+      username: robot
+      password: secret:dbdata/delivery/mail/password
+      helo: dbdatakit                      # optional
+      timeout_seconds: 30                  # optional
+      trusted_certificate: /etc/dbdatakit/mail-ca.pem   # optional: a private CA's file
+      limit_per_minute: 30
+```
+
+A small SMTP client of the library (`SmtpClientLite`: EHLO, STARTTLS or implicit TLS, AUTH PLAIN or LOGIN, one message per connection) because no mail package is pinned and `System.Net.Mail.SmtpClient` cannot do implicit TLS. The message is multipart (`mixed` with attachments, `alternative` for text and html, UTF-8 in base64; a non-ASCII subject or file name is encoded as the RFCs say; a link is added to both bodies).
+
+- A recipient the server refuses with 5xx parks the message with the server's words and the command it answered; nothing is sent when any recipient is refused (the conversation stops before DATA). 4xx replies, network errors and timeouts are temporary.
+- A certificate for another name, or one that chains to no trusted root, is refused (permanent, and it says which); **the name is always checked and there is no setting that turns the check off**. Credentials are never sent before TLS on a `starttls` channel, even when the server does not offer STARTTLS (that is refused too).
+- An address that is not one, no recipient, or a line break in the subject is the message's own fault: permanent.
+
 ## Where this folds into connections later
 
 A channel's endpoint and its secret references are read here by `DeliverySettings` on purpose, as a small reader of their own. When the `connection` format grows a `kind` for outside systems (plan 22a IX01), a delivery channel becomes a connection of kind `mail` or `webhook` and `ChannelConfig` is built from it: the outbox, the sender and the channels' code do not change, only where `ChannelConfig` comes from.
