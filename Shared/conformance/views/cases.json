@@ -532,7 +532,7 @@
       "as": "dashboard",
       "code": "DBD-106",
       "path": "widgets.w.encodings.columns[1].format",
-      "line": 21,
+      "line": 20,
       "schema": false
     },
     {

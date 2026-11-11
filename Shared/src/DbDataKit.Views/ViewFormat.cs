@@ -70,6 +70,7 @@ public static class ViewFormat
     {
         if (node is not JsonValue v) return null;
         if (v.TryGetValue<long>(out var l)) return l;
+        if (v.TryGetValue<int>(out var i)) return i;
         if (v.TryGetValue<double>(out var d) && d == Math.Floor(d) && Math.Abs(d) < 1e9) return (long)d;
         return null;
     }
