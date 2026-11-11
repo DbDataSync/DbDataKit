@@ -19,7 +19,7 @@ Flags: **OWNER** waits for a decision only the owner can take (the decision is n
 | [33](33-fewer-services.md) SC20e | A Build publish to a Gateway without a login in the Workspace: an offline `project publish --to gateway --out <folder>` that a Build server sends, or another way | Build publishing from the Workspace |
 | [33](33-fewer-services.md) SC21f | Data source adoption at a Store publish (a publish-time adopt, or plan 30's slot bindings) | Store publishing parity |
 | [22a](22a-gap-slices.md) QG2 | The rule language of access rules (our own expression or a DuckDB SQL subset) | GP01, GP02, GP11 to GP15, and with them FQ03 and FQ05 of [23a](23a-first-run-and-quality-slices.md) and the rules half of the serving cache (UC15) |
-| [13c](13c-follow-ups.md) UI06 | Which store Sync's and Build's secrets overview compares their references with | the secrets overview for Sync and Build |
+| [UI06 of the editor-screen gaps](../ui-coverage.md) | Which store Sync's and Build's secrets overview compares their references with (Store and Workspace: whether their stores are listed at all) | the secrets overview for Sync, Build, Store and Workspace |
 | [27](27-knowledge-agents-integrations-work.md) row 61, [27a](27a-knowledge-slices.md) XL01 to XL03 | The Excel add-in: still a proposal | the add-in |
 | [14a](14a-semantic-slices.md) SL25 to SL27 | Ad hoc registrations and the combine in a child process wait until an app or an agent needs them (decided, "not yet"); a request from the owner starts them | nothing else |
 | [28c](28c-engines-on-runner.md) E21 | Interactive writes as manual tasks (optional; the write-login constraint was relaxed on 2026-11-07, to re-evaluate later) | a Build server with no write login at all |
@@ -41,7 +41,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | [28a](28a-runner-slices.md) R25 | Operator screens for in-doubt steps, dead letters and the table of units | PARTLY: checkpoints built |
 | [27a](27a-knowledge-slices.md) AG15, AG18, AG21, AG29, KN28, IX23 | The chat over a real model, providers and usage, fallback lists, the knowledge screens' remainder, the outside-connection form per kind (begun, its row does not say so) | PARTLY |
 | [27a](27a-knowledge-slices.md) AG24, AX14, KN25 to KN27, KN29, KN33, BK03, BK04 | Evaluation, approvals and grants of actions, the knowledge components and app, chunking defaults, the backlog and board, sprints | not built |
-| [13c](13c-follow-ups.md) V1, UI06, UI08 | Windows and Entra sign-in on real hosts; the secrets overview of Sync, Build, Store and Workspace; the connect step of a slot's binding test | V1 needs a domain-joined host; UI06 OWNER |
+| [Identity README](../../Shared/src/DbDataKit.Identity/README.md) "Not yet run on a real host"; [ui-coverage](../ui-coverage.md) "Open gaps" | V1: Windows sign-in on a domain-joined host and Entra sign-in on a tenant (all of it runs with fakes in CI); UI06: the secrets overview of Sync, Build, Store and Workspace; the editor-screen run-time evidence (stories not run, Windows runs, the Store's engine paths) | V1 needs a domain-joined host and an Entra tenant; UI06 OWNER |
 
 ## Gateway (serving layer, semantic layer, views, apps host)
 
@@ -87,7 +87,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | --- | --- | --- |
 | [25](25-surrogate-keys-and-agent-tests.md) K07, K10, K11, K12, K06b | Consumers of inferred relationships, `key_map`, Store ids as `BINARY(16)` and `uuid`, keys in pure SQL, the uniqueness check as a `check/1` | none blocked; K11's drafts exist |
 | [18](18-lineage.md) G06b | Runs on column edges, a job node per load | |
-| [13c](13c-follow-ups.md) K1, D11, T16, F1 | Build's copies of shared code, Build's CLI on the shared router (deferred by the owner), the skipped SQL Server parallel test, Fabric through the Gateway (needs a tenant) | D11 OWNER (deferred) |
+| [Build OPEN-ITEMS](../../DbDataBuild/docs/progress/OPEN-ITEMS.md) section S; [12](12-shared-tls-rollout.md) items 10 and 11; [engine-support](../engine-support.md) Fabric; [windows-test-install](../windows-test-install.md) | K1: Build's `SourceCatalogReader` (needs a schema-wide keys read in the shared readers first) and the ODBC and DuckDB opens; K2: Sync's `service`, `cert` and `secret` verbs on the shared commands (needs a Windows host); D11: Build's CLI on the shared router; F1: Fabric through the Gateway (needs a tenant) | D11 OWNER (deferred); K2 LOW (plan 12) |
 | [14a](14a-semantic-slices.md) SL03, SL10, SL22 | Build reads the registry; metadata documents with semantic models; the `semantic` noun | |
 | [27a](27a-knowledge-slices.md) AG01 | The suite-wide command-spec test with a golden of offered MCP tools | |
 

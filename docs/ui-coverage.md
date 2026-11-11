@@ -93,7 +93,7 @@ All screens are shown by the console (`Shared/web/console`) at `/servers/<server
 
 ## Audit of editing, publishing and monitoring (2026-11-11)
 
-Question: for everything a person authors, publishes by file or command, or has to watch, which screen covers it, and what has none. Method: every format of `docs/formats.json` against [ui-editors.md](ui-editors.md) (editor) and against the screens that show its history or result; every management route a person or an operator uses (runs, publishes, approvals, queues, health, audit, lineage, quality, state databases, upgrades, runners, secrets, certificates, instances, pairing) against `Shared/web/*/src/pages`; read from the code, not from clicking through. The gaps are ids `UI01` to `UI10`: UI01 to UI04 were built in this audit (UI01 the Approvals page, UI02 certificates in Monitoring, UI03 the Runs page, UI04 servers that are down in Monitoring) and UI05 to UI10 are rows of [13c-follow-ups.md](plans/13c-follow-ups.md); a gap another plan already owns is named with that plan's slice and gets no new row.
+Question: for everything a person authors, publishes by file or command, or has to watch, which screen covers it, and what has none. Method: every format of `docs/formats.json` against [ui-editors.md](ui-editors.md) (editor) and against the screens that show its history or result; every management route a person or an operator uses (runs, publishes, approvals, queues, health, audit, lineage, quality, state databases, upgrades, runners, secrets, certificates, instances, pairing) against `Shared/web/*/src/pages`; read from the code, not from clicking through. The gaps are ids `UI01` to `UI10`: UI01 to UI04 were built in this audit (UI01 the Approvals page, UI02 certificates in Monitoring, UI03 the Runs page, UI04 servers that are down in Monitoring) and UI05 to UI10 are in "Open gaps" below; a gap another plan already owns is named with that plan's slice and gets no new row.
 
 ### Formats: editor, and where its history or result is seen
 
@@ -125,9 +125,21 @@ Question: for everything a person authors, publishes by file or command, or has 
 | Certificates | Gateway `TlsPage.tsx`, admin `AdminCertificatePage.tsx` (Sync); **new** Monitoring shows an expired one or one inside its warning window on a Gateway, Sync, Build, Store, Runner or Workspace server and on the console (every one of them answers `GET /api/v1/certificate`, the Gateway's shape; UI10) | Renewing is each server's own command (`cert renew`; the Gateway's screen is the only one with a button). |
 | Instances, pairing | `InstancesPage.tsx`, `PendingServers.tsx` | none |
 
-### Open gaps added to plan 13c
+### Open gaps
 
-`UI06` to `UI10` are in [13c-follow-ups.md](plans/13c-follow-ups.md) with what each needs; each needs a server route first (a screen is never built around a file), so none was built in the audit. UI01 to UI04 were built on routes that exist today; UI05 was built with its route in the next round (the console's own audit).
+Each needs a server route first (a screen is never built around a file). UI01 to UI05 and UI10 were built; what is left:
+
+- **UI06, the secrets overview of Sync, Build, Store and Workspace servers (OWNER).** `GET /api/v1/secrets/overview` (the shape of `SecretsOverview` in `DbDataKit.Secrets.Abstractions`) on each of these servers that keeps a secret store or names references, a relay row where the console limits calls, and `HOLDS_SECRETS` of the console's `secrets.ts` naming the product. Built for the Gateway (its data sources' references against its store) and the runner (the bindings' references against its store). Sync and Build resolve most references against the environment and the runner's store, so their overview is mostly `outside`; the owner decides first which store each is compared with.
+- **UI08, the connect step of a runner slot's binding test.** See the section "Closed" below when it is built.
+
+Run-time evidence of the editor screens (all 18 editor slices were built in batch 20, 2026-11-08; close a line by running it or building it, and delete it):
+
+- **Publish a Build project to a runner:** the story `runner-publish.spec.ts` stops at the staged version shown on the Runner screens; activating a Build package needs the `dbdatabuild-runtime` package on the runner, which is plan 28c E05 (the publish script). When E05 lands, extend the story to activate and see the task due.
+- **A Build plan's scheduler move (Monitoring, `PUT /api/v1/projects/{p}/schedule/{connection}/{plan}/owner`):** proved by `BuildRunnerRoutesTests` with a faked runner only; `runner-schedule.spec.ts` moves the sample package's task on the Runner screens, not a Build plan (same dependency, 28c E05), and Windows was not run. Not built: a filter by owner on Monitoring; a plan's `compare` output for a Build plan.
+- **Stories that need the test PostgreSQL and were built but not run end to end:** `refresh-run.spec.ts` (refresh plan and project tests) and `semantic-models.spec.ts` (publish a model from Build, list and roll back on the Gateway).
+- **Store:** the engine-backed paths of the change-request approval and of storage and migration (`StoreDataTests` on SQL Server and PostgreSQL) were not run where they were built; the three `store-*.spec.ts` stories mock the Store in the page. Not built: a screen to register a model instance; a route for `model publish` (a command only) and a roll back route for entity models on the Gateway (plan 15 owns the Store).
+- **Apps:** the navigation set's shell filter (a person who holds a role on one member sees only that one) is not in a story (it needs a second signed-in person; `AppNavigationTests` cover the filter); approving a bare hash (`--hash --app`) has no control; the Apps screen has no progress bar for a large folder.
+- **Runner:** a hand-set label on a runner that is gone is refused (it has no row); a file larger than the browser can hash whole (hundreds of MB) cannot be published from the Packages list (a streaming hash is needed).
 
 ### Not verified
 

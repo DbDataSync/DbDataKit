@@ -163,4 +163,4 @@ A new screen that needs a runner call adds three things: a row in the route tabl
 - **The glossary.** Held by the owner (2026-11-08): it is business knowledge (plan 27a), and GP05 was dropped. No row until it is decided.
 - **Stored things not in `docs/formats.json`** (see Not in the registry above) have rows with `-` in the Format column; registering one is the change of the slice that touches it.
 
-Work still open that came out of building these screens is in `docs/plans/13c-follow-ups.md` (section 3, "Editor screens: stories and paths not run").
+Work still open that came out of building these screens is in [ui-coverage.md](ui-coverage.md) ("Open gaps").
