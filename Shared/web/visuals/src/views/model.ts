@@ -1,5 +1,6 @@
 import type { RenderedError } from '../types'
 import type { SelectableLayout } from './selectLayout'
+import type { ViewFormatValue } from './format'
 
 /**
  * The shapes of a dashboard or report document as the renderers and layout engines read it (plan 32 sections 2 and 3). They describe a document that has already passed `validateViewsDocument`, so
@@ -24,7 +25,7 @@ export interface ParameterDefinition {
 
 interface WidgetCommon { title?: string }
 type QueryDoc = Record<string, unknown>
-export interface MetricDoc extends WidgetCommon { type: 'metric'; label?: string; format?: string; encodings: { value: string; compare?: string }; query: QueryDoc }
+export interface MetricDoc extends WidgetCommon { type: 'metric'; label?: string; format?: ViewFormatValue; encodings: { value: string; compare?: string }; query: QueryDoc }
 export interface ChartDoc extends WidgetCommon {
   type: 'chart'
   mark: string | { type: string; [key: string]: unknown }
@@ -34,7 +35,7 @@ export interface ChartDoc extends WidgetCommon {
   drill?: unknown
 }
 export interface MatrixDoc extends WidgetCommon { type: 'matrix'; encodings: Record<string, unknown>; query: QueryDoc; on_select?: { set: string; from: string }; drill?: unknown }
-export interface TableColumnDoc { field: string; label?: string; format?: string; align?: 'left' | 'right' | 'center'; width?: number }
+export interface TableColumnDoc { field: string; label?: string; format?: ViewFormatValue; align?: 'left' | 'right' | 'center'; width?: number }
 export interface TableDoc extends WidgetCommon { type: 'table'; encodings: { columns: TableColumnDoc[]; sort?: unknown }; query: QueryDoc; drill?: unknown }
 export interface TextDoc extends WidgetCommon { type: 'text'; text: string }
 export interface ImageDoc extends WidgetCommon { type: 'image'; hash: string; media_type: 'image/png' | 'image/jpeg' | 'image/webp'; alt: string; fit?: 'contain' | 'cover' }

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "kind": "dashboard",
+  "title": "Formats",
+  "widgets": {
+    "w": {
+      "type": "metric",
+      "label": "Revenue",
+      "format": "thousands",
+      "encodings": {
+        "value": "orders.net_revenue"
+      },
+      "query": {
+        "model": "sales"
+      }
+    }
+  },
+  "layouts": [
+    {
+      "name": "desk",
+      "type": "reflow",
+      "default": true,
+      "grid": {
+        "columns": 12
+      },
+      "tiles": [
+        {
+          "widget": "w",
+          "x": 0,
+          "y": 0,
+          "w": 4,
+          "h": 2
+        }
+      ]
+    }
+  ]
+}

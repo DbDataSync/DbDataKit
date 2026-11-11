@@ -6,7 +6,11 @@
   "$defs": {
     "name": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" },
     "field": { "description": "A field by logical name (orders.net_revenue) or by the alias of a query output.", "type": "string", "minLength": 1 },
-    "format": { "description": "A named number preset; catalog takes the catalog's own format of the field.", "enum": ["catalog", "full", "compact", "percent"] },
+    "format": {
+      "description": "How a metric or a table column shows its values (plan 32 section 9g): a named number preset (catalog takes the catalog's own format of the field), a number mapping {style: number | currency | percent | compact, decimals 0 to 10, currency (an ISO 4217 code, with style currency), grouping}, or a date mapping {date: year | quarter | month | month-year | date | datetime, or a pattern of the tokens yyyy yy Q MMMM MMM MM dd HH mm ss and literal text in single quotes}. The keys inside a mapping are checked by the loaders (DbDataKit.Views ViewFormat, src/views/format.ts), each with its own words, so the schema says only the two shapes.",
+      "type": ["string", "object"],
+      "examples": ["catalog", "full", "compact", "percent", { "style": "currency", "currency": "EUR", "decimals": 0 }, { "date": "month-year" }]
+    },
     "title": { "type": "string", "minLength": 1, "maxLength": 200 },
 
     "parameter": {

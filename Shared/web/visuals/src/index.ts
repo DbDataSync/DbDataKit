@@ -11,6 +11,8 @@ export { catalogDiagnostics, catalogFromModel, catalogRoles, retailCatalog } fro
 export type { Catalog, CatalogMember } from './views/catalog'
 export { RUNNING_TOKENS, VIEWS_FORMAT, validateDashboard, validateReport, validateViewsDocument } from './views/document'
 export type { ViewKind, ViewsOptions } from './views/document'
+export { checkFormat, formatDate, formatNumber, formatValue } from './views/format'
+export type { CatalogFormat, FormatProblem, ViewFormatValue } from './views/format'
 export { matches as layoutMatches, selectLayout, specificity as layoutSpecificity } from './views/selectLayout'
 export type { LayoutChoice, LayoutContext, LayoutSelection, Medium, SelectableDocument, SelectableLayout } from './views/selectLayout'
 export type {

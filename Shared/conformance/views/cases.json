@@ -35,6 +35,10 @@
     {
       "file": "samples/reports/retail-sales-monthly.yaml",
       "kind": "report"
+    },
+    {
+      "file": "good/dashboard-formats.json",
+      "kind": "dashboard"
     }
   ],
   "bad": [
@@ -512,6 +516,33 @@
       "path": "theme.font",
       "line": 22,
       "schema": true
+    },
+    {
+      "name": "format-unknown-date-token",
+      "file": "bad/format-unknown-date-token.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.format.date",
+      "line": 10,
+      "schema": false
+    },
+    {
+      "name": "format-currency-without-code",
+      "file": "bad/format-currency-without-code.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.columns[1].format",
+      "line": 20,
+      "schema": false
+    },
+    {
+      "name": "format-unknown-preset",
+      "file": "bad/format-unknown-preset.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.format",
+      "line": 9,
+      "schema": false
     }
   ],
   "warnings": [

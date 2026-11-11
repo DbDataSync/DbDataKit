@@ -65,7 +65,7 @@ public class WidgetSchemaTests
         string[] Enum(JsonNode n) => [.. n["enum"]!.AsArray().Select(v => v!.GetValue<string>())];
         var checks = new Dictionary<string, string[]>
         {
-            ["parameterType"] = Enum(At(core, "$defs/parameter/properties/type")), ["format"] = Enum(At(core, "$defs/format")),
+            ["parameterType"] = Enum(At(core, "$defs/parameter/properties/type")), ["format"] = [.. At(core, "$defs/format")["examples"]!.AsArray().Where(v => v is JsonValue).Select(v => v!.GetValue<string>())],
             ["align"] = Enum(At(core, "$defs/table_column/properties/align")), ["mark"] = Enum(At(subset, "$defs/mark")), ["fieldType"] = Enum(At(subset, "$defs/channel/properties/type")),
             ["control"] = Enum(At(core, "$defs/widget_control/properties/control")), ["mediaType"] = Enum(At(core, "$defs/widget_image/properties/media_type")),
             ["fit"] = Enum(At(core, "$defs/widget_image/properties/fit")),

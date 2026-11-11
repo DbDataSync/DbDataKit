@@ -15,10 +15,10 @@ shares are part of the **query**, run on the server as the viewer.
 
 | Type | Keys | Notes |
 | --- | --- | --- |
-| `metric` | `encodings: {value, compare}`, `label`, `format` (`catalog full compact percent`), `query` | `compare` is a second measure of the same request |
+| `metric` | `encodings: {value, compare}`, `label`, `format` (a preset or a mapping, see Formats), `query` | `compare` is a second measure of the same request |
 | `chart` | `mark`, `encodings` (channels, each a field name or the subset's `{field, type, sort, stack, title}`), `query`, `on_select`, `drill` | the subset is the QIS view's own (`vega-lite-subset.schema.json`) |
 | `matrix` | `encodings` (a QIS matrix view's own: `rows columns values values_on totals sort column_limit`), `query`, `on_select`, `drill` | the encodings are `view.schema.json`'s definitions, referenced and not copied |
-| `table` | `encodings: {columns: [{field, label, format, align, width}], sort}`, `query`, `drill` | a total row is a row of the result |
+| `table` | `encodings: {columns: [{field, label, format (a preset or a mapping), align, width}], sort}`, `query`, `drill` | a total row is a row of the result |
 | `text` | `text` | markdown, **no raw HTML, no image, links only to a path on the host** (`/docs/x`); `{{params.name}}` is substituted as text |
 | `image` | `hash: sha256:<64 hex>`, `media_type` (`image/png image/jpeg image/webp`), `alt`, `fit` | held in the definition's artifacts by hash; **no URL, no SVG** |
 | `control` | `parameter`, `control` (`select multiselect date daterange number toggle text`), `label`, `values: {attribute, limit}` | edits one parameter; no query |
@@ -35,6 +35,22 @@ shares are part of the **query**, run on the server as the viewer.
 
 `on_select: {set: region, from: customers.region}` sets a parameter as a control would. `drill: {to: {report: name}, with: {region: $customers.region, quarter: $params.quarter}}` leads to another document;
 `$params.x` must be declared, and when the loader is given the target's parameters it checks that every required one is given.
+
+### Formats (plan 32 section 9g, DBR40)
+
+A metric's and a table column's `format` is a **preset** (`catalog`, `full`, `compact`, `percent`: the catalog's own format, thousands separators, K/M/B, a fraction as a percentage) or a **mapping**:
+
+```yaml
+format: {style: currency, currency: EUR, decimals: 0}     # style: number | currency | percent | compact; decimals 0 to 10; grouping: false drops the separators
+format: {date: month-year}                                # presets: year quarter month month-year date datetime
+format: {date: "dd/MM/yyyy HH:mm"}                        # or a pattern: yyyy yy Q MMMM MMM MM dd HH mm ss, other characters literal, 'quoted' text literal
+```
+
+A number mapping's `decimals` defaults to the catalog's, a currency's to 2 (0 for JPY and KRW); the minus sign never shows on a value that rounds to zero; rounding is half away from zero on the value as written (its
+15 significant digits). A date reads an ISO date or date-time **as written** (no time zone is applied); text that is not a date is shown as it is. A format that cannot be read is refused with the key inside it
+(`DBD-106`, for example `` `date` pattern has the unknown token `yyy` ``); a pattern is a closed set of tokens, never a free format string. Month names and separators are the invariant (English) ones: locale data is not
+carried yet. **One formatter in two languages**: `ViewFormat` in `DbDataKit.Views` writes a cell's text on the server and `formatValue` in `@dbdatakit/visuals` is its twin, both run against `Shared/conformance/views/format/cases.json`.
+A matrix value still takes the engine's presets (`compact full percent`) until the matrix's own format form lands (DBR41).
 
 ### Diagnostics of widgets
 
