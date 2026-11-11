@@ -12,10 +12,10 @@ Summary (counts of the features below):
 
 | Product | built | partly | missing | not planned | features |
 | --- | --- | --- | --- | --- | --- |
-| Build | 12 | 3 | 5 | 5 | 25 |
+| Build | 15 | 2 | 3 | 5 | 25 |
 | Store | 5 | 1 | 1 | 3 | 10 |
 | Sync | 9 | 4 | 5 | 3 | 21 |
-| All | 26 | 8 | 11 | 11 | 56 |
+| All | 29 | 7 | 9 | 11 | 56 |
 
 ### Build
 
@@ -30,9 +30,9 @@ Summary (counts of the features below):
 | New connection, grants, serving policy (`extensions.gateway`) | `build/src/pages/NewConnectionPanel.tsx`, `ConnectionGrants.tsx`, `ConnectionPolicy.tsx` | `workspace/src/pages/BuildFilePanel.tsx` (`NewBuildConnection`; the grants and policy editors of Build, imported) | built | SC20m |
 | Load graph of the models (layers; choose one to light up what it is built from and what is built from it) | `build/src/pages/ProjectPage.tsx` (`GraphTab`), `graphLayout.ts` | `workspace/src/pages/BuildGraphPanel.tsx`, `buildGraph.ts` (read from `rendered/<connection>/loads.yml`; draws with Build's `GraphView.tsx`) | built | SC20h |
 | Check the project (compiler diagnostics, errors and warnings, file and line) | `build/src/pages/ProjectPage.tsx` (`CheckTab`), `Problems.tsx` | `workspace/src/pages/CheckPanel.tsx` (`dbdatabuild project show metadata`, offline) | built | SC20c |
-| Compile: write the plan into `rendered/` and see what was written or removed | `build/src/pages/CompilePanel.tsx` | none: `rendered/` is read only | missing | SC20l |
-| The lowered SQL of a model (rendered files per model) | `build/src/pages/PreviewPanel.tsx` | `workspace/src/pages/BuildPlanPanel.tsx` opens a rendered file read only | partly | SC20l |
-| Offline sample: a model run on generated rows (Sample tab) | `build/src/pages/DeployTabs.tsx` (`SampleTab`), `PreviewPanel.tsx` | none | missing | SC20l |
+| Compile: write the plan into `rendered/` and see what was written or removed | `build/src/pages/CompilePanel.tsx` | `workspace/src/pages/BuildCompilePanel.tsx` (`POST .../compile` on a copy; the author writes the files into the draft) | built | SC20l |
+| The lowered SQL of a model (rendered files per model) | `build/src/pages/PreviewPanel.tsx` | `workspace/src/pages/BuildCompilePanel.tsx` (`POST .../lowered`, read only) | built | SC20l |
+| Offline sample: a model run on generated rows (Sample tab) | `build/src/pages/DeployTabs.tsx` (`SampleTab`), `PreviewPanel.tsx` | `workspace/src/pages/BuildCompilePanel.tsx` (`POST .../sample`: rows, seed, models) | built | SC20l |
 | Preview of a table or model: its columns and types, with generated values (never the database's rows) | `build/src/pages/PreviewPanel.tsx` | `workspace/src/pages/CatalogPanel.tsx` (from the catalog cache, `catalogCache.ts`) | built | SC20k |
 | Import tables from a database into the project (list what is not mapped yet, write the files) | `build/src/pages/ImportPanel.tsx`, `DefinitionPanel.tsx` | `workspace/src/pages/CatalogPanel.tsx` lists the cached tables; writing model files from them is not built | partly | SC20k |
 | Project tests (metadata rules and model tests, violating rows) | `build/src/pages/TestsPanel.tsx` | none: the tests read the target database | not planned | SC20o |

@@ -123,6 +123,9 @@ public static class ServerProducts
         // plan 33 SC20a: the kinds of project (what a new project can be and where each publishes) and the check of a draft by its kind's validators
         ("GET", "api/v1/project-kinds", ServerRole.Viewer),
         ("GET", "api/v1/projects/{p}/workspaces/{id}/check", ServerRole.Viewer),
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/compile", ServerRole.Viewer),
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/lowered", ServerRole.Viewer),
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/sample", ServerRole.Viewer),
         ("GET", "api/v1/app-build", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/builds", ServerRole.Author),
         ("GET", "api/v1/projects/{p}/workspaces/{id}/builds", ServerRole.Viewer),

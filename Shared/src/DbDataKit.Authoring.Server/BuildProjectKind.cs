@@ -17,7 +17,7 @@ public sealed class BuildTool(string? executable = null, TimeSpan? timeout = nul
 /// <c>dbdatabuild project create</c>, so there is one source of the template), and a draft is checked by <c>dbdatabuild project show metadata</c>, which loads and validates the whole project offline and writes nothing; its diagnostics
 /// (<c>DDB-</c> codes with file and line) are the ones Build's own screens show. It is checked, not built: what it produces is published (SC20d, SC20e).
 /// </summary>
-public sealed class BuildProjectKind(BuildTool tool) : IProjectKind
+public sealed partial class BuildProjectKind(BuildTool tool) : IProjectKind, IDraftCompiler
 {
     public string Name => "build";
     public string Title => "Build project";
@@ -85,17 +85,7 @@ public sealed class BuildProjectKind(BuildTool tool) : IProjectKind
         try
         {
             using var document = JsonDocument.Parse(result.Output);
-            var found = new List<ProjectDiagnostic>();
-            if (document.RootElement.TryGetProperty("diagnostics", out var list) && list.ValueKind == JsonValueKind.Array)
-                foreach (var d in list.EnumerateArray())
-                {
-                    var severity = Text(d, "severity") is "note" ? "info" : Text(d, "severity") ?? "error";
-                    var location = d.TryGetProperty("location", out var l) && l.ValueKind == JsonValueKind.Object ? l : default;
-                    var message = Text(d, "title") is { } title && Text(d, "found") is { Length: > 0 } what ? $"{title}: {what}" : Text(d, "title") ?? Text(d, "found") ?? "A finding without a message.";
-                    if (Text(d, "fix") is { Length: > 0 } fix) message += " " + fix;
-                    found.Add(new ProjectDiagnostic(severity, Text(d, "code") ?? "DDB-000", message, location.ValueKind == JsonValueKind.Object ? Text(location, "file") : null,
-                        location.ValueKind == JsonValueKind.Object && location.TryGetProperty("line", out var line) && line.ValueKind == JsonValueKind.Number ? line.GetInt32() : null));
-                }
+            var found = ReadDiagnostics(document.RootElement);
             // an exit with findings is 1; anything else that is not 0 and left no diagnostic is the tool failing, which is said, never passed over
             if (result.Exit is not (0 or 1) && !found.Any(f => f.IsError))
                 found.Add(new("error", "DBD-WS-BUILD-FAILED", $"dbdatabuild stopped with exit code {result.Exit}: {result.Error.Trim()}"));
@@ -105,7 +95,24 @@ public sealed class BuildProjectKind(BuildTool tool) : IProjectKind
         {
             return [new("error", "DBD-WS-BUILD-FAILED", $"dbdatabuild did not answer with a document (exit code {result.Exit}): {result.Error.Trim()}")];
         }
-
-        static string? Text(JsonElement element, string name) => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
     }
+
+    /// <summary>The findings of a document <c>dbdatabuild --format json</c> printed (<c>diagnostics</c>, each with a code, severity, title, what was found, where and a fix), in the shape every kind answers.</summary>
+    internal static List<ProjectDiagnostic> ReadDiagnostics(JsonElement root)
+    {
+        var found = new List<ProjectDiagnostic>();
+        if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("diagnostics", out var list) && list.ValueKind == JsonValueKind.Array)
+            foreach (var d in list.EnumerateArray())
+            {
+                var severity = Text(d, "severity") is "note" ? "info" : Text(d, "severity") ?? "error";
+                var location = d.TryGetProperty("location", out var l) && l.ValueKind == JsonValueKind.Object ? l : default;
+                var message = Text(d, "title") is { } title && Text(d, "found") is { Length: > 0 } what ? $"{title}: {what}" : Text(d, "title") ?? Text(d, "found") ?? "A finding without a message.";
+                if (Text(d, "fix") is { Length: > 0 } fix) message += " " + fix;
+                found.Add(new ProjectDiagnostic(severity, Text(d, "code") ?? "DDB-000", message, location.ValueKind == JsonValueKind.Object ? Text(location, "file") : null,
+                    location.ValueKind == JsonValueKind.Object && location.TryGetProperty("line", out var line) && line.ValueKind == JsonValueKind.Number ? line.GetInt32() : null));
+            }
+        return found;
+    }
+
+    internal static string? Text(JsonElement element, string name) => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 }
