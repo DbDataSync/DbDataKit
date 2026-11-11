@@ -13,13 +13,14 @@ test('the Audit page lists the administrator\'s own redemption and narrows by wh
   await expect(redeemed.first()).toContainText(name)
   await expect(redeemed.first().getByTestId('audit-outcome-text')).toHaveText('Done')
 
-  await page.getByTestId('audit-verb').selectOption('server.')
-  await expect(page.getByTestId('audit-none')).toBeVisible()
+  await page.getByTestId('audit-verb').selectOption('signin.')
+  // the console is shared with the specs that ran before (servers they paired are in the list), so a filter is proved by what it hides, not by an empty list
+  await expect(redeemed).toHaveCount(0)
   await page.getByTestId('audit-clear').click()
   await expect(redeemed.first()).toBeVisible()
 
   await page.getByTestId('audit-outcome').selectOption('refused')
-  await expect(page.getByTestId('audit-none')).toBeVisible()
+  await expect(redeemed).toHaveCount(0)
   await page.getByTestId('audit-clear').click()
 
   await redeemed.first().getByTestId('audit-actor').click()
