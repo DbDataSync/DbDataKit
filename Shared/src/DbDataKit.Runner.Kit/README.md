@@ -93,3 +93,12 @@ The kit's logic (recovery, units, typed progress, counts) sits above an internal
 ## Not built
 
 An operator's screens and API for what the kit leaves for a person: marking an `Ask` step `happened` or `did not happen`, listing, replaying and discarding dead letters, and the table of units of a run. The stores support all of it (`StepStore.Resolve`, the dead letter states); the runner's API and the console do not call them yet (plan 28a, R25).
+
+## For integrations with outside systems: the companion libraries (plan 27a, lane IX)
+
+The kit stays small. What an integration needs to talk to a system that is not a database is in libraries beside it, each with its own README, none required by a job that does not use it. They share nothing but the kit's rules (a failure is classified, a secret is a reference, nothing shows a secret).
+
+| Library | What a job gets | Row |
+| --- | --- | --- |
+| `DbDataKit.Runner.Kit.Formats` | rows from and to CSV and TSV, fixed width, JSON, JSON Lines, XML, Excel and Parquet; gzip, zip and OpenPGP; a bad row reported with its position and a decision (refuse, skip, collect) | IX08, IX09 |
+| `DbDataKit.Runner.Kit.Http` | an HTTP client on a connection's sign-in: paging (offset, cursor, link header), a per-connection rate limit, `Retry-After`, retries of temporary failures, the connection's failure classification | IX10 |
