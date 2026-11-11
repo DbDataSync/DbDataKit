@@ -15,8 +15,20 @@ public sealed class WorkspacePublishException(string message, int status) : Exce
     public int Status { get; } = status;
 }
 
-/// <summary>A Gateway this server publishes to: where it is, its instance id, the certificate fingerprint every call pins, the roles the pairing allows and the name the client was paired under. Kept in <c>publish-targets.json</c>, never the key.</summary>
-public sealed record PublishTarget(string Name, string Url, string InstanceId, string Fingerprint, IReadOnlyList<string> Roles, string ClientName, DateTimeOffset PairedAt);
+/// <summary>A server this server publishes to (a Gateway, or since plan 33 SC20b a Runner): where it is, its instance id, the certificate fingerprint every call pins, the roles the pairing allows, the name the client was paired under and the product it is (<c>gateway</c> or <c>runner</c>; a file written before the field existed has none, and those targets are Gateways). Kept in <c>publish-targets.json</c>, never the key.</summary>
+public sealed record PublishTarget(string Name, string Url, string InstanceId, string Fingerprint, IReadOnlyList<string> Roles, string ClientName, DateTimeOffset PairedAt, string Product = PublishProducts.Gateway);
+
+/// <summary>The products a publish target can be (plan 33 SC20b) and how a server's own name (<c>GET /version</c>) says which.</summary>
+public static class PublishProducts
+{
+    public const string Gateway = "gateway";
+    public const string Runner = "runner";
+
+    public static IReadOnlyList<string> All { get; } = [Gateway, Runner];
+
+    /// <summary>The product a server name stands for, or null when it is neither (<c>dbdatagateway</c>, <c>dbdatarunner</c>).</summary>
+    public static string? OfServer(string? serverName) => serverName switch { "dbdatagateway" => Gateway, "dbdatarunner" => Runner, _ => null };
+}
 
 /// <summary>
 /// Publishing a built app to a paired Gateway (plan 22a GP35, plan 30): the build's folder is sent as an app version through the Gateway's publish API (<c>POST /api/v1/apps/check</c>, then <c>PUT /api/v1/apps/{name}</c>), signed as the
@@ -58,22 +70,51 @@ public sealed class WorkspacePublishing(string directory, WorkspaceStore store, 
     public static string ReferenceFor(string name) => new SecretName("workspace", "publisher-key", name).ToRef().ToString();
 
     /// <summary>Makes the key for the target <paramref name="name"/>, pairs with the Gateway at <paramref name="url"/> with it (the Gateway then knows its public half) and records the reference and the Gateway. An earlier key of the name is replaced.</summary>
-    public async Task<PublishTarget> PairAsync(string name, Uri url, string code, string? clientName, string by, CancellationToken ct = default)
+    public async Task<PublishTarget> PairAsync(string name, Uri url, string code, string? clientName, string by, CancellationToken ct = default, string? product = null)
     {
+        if (product is not null && !PublishProducts.All.Contains(product)) throw new WorkspacePublishException($"'{product}' is not a product a target can be ({string.Join(", ", PublishProducts.All)}).", 400);
         if (!WorkspaceProjects.IsValidId(name)) throw new WorkspacePublishException($"'{name}' is not a name: lower-case letters, digits, '-' and '_', at most 32.", 400);
         var identity = new ConsoleIdentity("workspace-" + Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(6)).ToLowerInvariant(), ConsoleSigningKey.Generate());
         var label = clientName is { Length: > 0 } ? clientName : $"dbdataworkspace@{Environment.MachineName}";
         PairedServer paired;
         try { paired = await PairingClient.PairAsync(url, code, identity, ClientKind.Server, label, ct); }
         catch (Exception ex) when (ex is PairingFailedException or IncompatibleServerException) { throw new WorkspacePublishException(ex.Message, 409); }
-        // the key is kept only once the Gateway has accepted it
+        var detected = await DetectProductAsync(paired, ct);
+        if (detected is not null && product is not null && detected != product)
+            throw new WorkspacePublishException($"{paired.Url} is a {detected}, not a {product}; pair it without naming a product, or name {detected}.", 409);
+        var resolved = detected ?? product ?? PublishProducts.Gateway;
+        // the key is kept only once the server has accepted it
         var secret = new SecretName("workspace", "publisher-key", name);
         using (var value = SecretValue.From(identity.Id + ":" + Base64Url.EncodeToString(identity.Key.ExportSeed())))
             await keys().SetAsync(secret, value, ct);
-        var target = new PublishTarget(name, paired.Url.ToString().TrimEnd('/'), paired.InstanceId, paired.CertificateFingerprint, ServerRoles.Names(paired.Ceiling), label, DateTimeOffset.UtcNow);
+        var target = new PublishTarget(name, paired.Url.ToString().TrimEnd('/'), paired.InstanceId, paired.CertificateFingerprint, ServerRoles.Names(paired.Ceiling), label, DateTimeOffset.UtcNow, resolved);
         Save(target);
         store.SetPublisherKey(name, secret.ToRef().ToString(), by);
         return target;
+    }
+
+    /// <summary>Which product the paired server is, from its own <c>GET /version</c> (no token; the certificate is the pinned one). Null when it does not say, or says something that is neither a Gateway nor a Runner.</summary>
+    private static async Task<string?> DetectProductAsync(PairedServer paired, CancellationToken ct)
+    {
+        try
+        {
+            using var http = new HttpClient(PairingClient.Pinned(paired.CertificateFingerprint)) { BaseAddress = new Uri(paired.Url.ToString().TrimEnd('/') + "/"), Timeout = TimeSpan.FromSeconds(15) };
+            var text = await http.GetStringAsync("version", ct);
+            return PublishProducts.OfServer((string?)JsonNode.Parse(text)?["product"] ?? (string?)JsonNode.Parse(text)?["Product"]);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException or InvalidOperationException) { return null; }
+    }
+
+    /// <summary>
+    /// Whether a project of <paramref name="kind"/> may be published to <paramref name="target"/> (plan 33 SC20b): the kind's <see cref="IProjectKind.Publishes"/> must list the target's product. Returns the route (what arrives there), or throws a
+    /// <see cref="WorkspacePublishException"/> naming the kind, the target, its product and the products the kind goes to.
+    /// </summary>
+    public static ProjectPublishRoute RouteFor(IProjectKind kind, PublishTarget target, string? what = null)
+    {
+        var routes = kind.Publishes.Where(r => r.Product == target.Product && (what is null || r.What == what)).ToList();
+        if (routes.Count > 0) return routes[0];
+        var goes = kind.Publishes.Count == 0 ? "nowhere" : string.Join(" and ", kind.Publishes.Select(r => $"a {r.Product} ({r.What})").Distinct());
+        throw new WorkspacePublishException($"The {kind.Name} kind of project is published to {goes}, and '{target.Name}' is a {target.Product} ({target.Url}). Publish it to a target of the right product.", 409);
     }
 
     /// <summary>The key a reference names: its identity. Refused, in words, when the reference names nothing or something that is not a key.</summary>

@@ -241,6 +241,8 @@ public static class WorkspaceManagement
             var target1 = $"{hosted.Id}/{id}/{buildId}";
             try
             {
+                // the product the target is must be one the project's kind publishes to (plan 33 SC20b); a target nobody paired falls through to the publisher's own sentence
+                if (publishing.Find(target) is { } paired && projects.Kinds.Find(store.FindProject(hosted.Id)!.Kind) is { } projectKind) WorkspacePublishing.RouteFor(projectKind, paired);
                 var provenance = $"From workspace {id} of project {hosted.Id}, build {buildId:D}" + (found.Row.CommitSha is { } sha ? $", commit {sha[..Math.Min(12, sha.Length)]}" : "") +
                     (found.Result?["uncommitted_changes"]?.GetValue<bool>() == true ? " (with changes not yet committed)" : "") + $", published by {Actor(token)}.";
                 var answer = await publishing.PublishAsync(target, builds.AppFolderOf(hosted.Id, buildId), string.IsNullOrWhiteSpace(note) ? provenance : note.Trim() + " | " + provenance, Actor(token), steps.Add, context.RequestAborted);
@@ -264,7 +266,7 @@ public static class WorkspaceManagement
             return new JsonObject
             {
                 ["name"] = k.Name, ["secret_ref"] = k.SecretRef, ["updated"] = k.UpdatedAt,
-                ["gateway"] = target is null ? null : new JsonObject { ["url"] = target.Url, ["roles"] = new JsonArray([.. target.Roles.Select(x => (JsonNode?)x)]), ["client_name"] = target.ClientName, ["paired"] = target.PairedAt },
+                ["product"] = target?.Product, ["gateway"] = target is null ? null : new JsonObject { ["url"] = target.Url, ["product"] = target.Product, ["roles"] = new JsonArray([.. target.Roles.Select(x => (JsonNode?)x)]), ["client_name"] = target.ClientName, ["paired"] = target.PairedAt },
             };
         }
 
@@ -275,6 +277,13 @@ public static class WorkspaceManagement
         });
 
         // the targets a publish may name (their names and Gateways; no reference): for whoever publishes, who need not be an administrator
+        // with ?project=<id>: whether a project of that kind may be published to the target (its kind's Publishes lists the target's product); without it, null
+        bool? AcceptsFor(HttpContext context, PublishTarget? target)
+        {
+            if (target is null || context.Request.Query["project"].ToString() is not { Length: > 0 } id || store.FindProject(id) is not { } row || projects.Kinds.Find(row.Kind) is not { } kind) return null;
+            return kind.Publishes.Any(r => r.Product == target.Product);
+        }
+
         app.MapGet("/api/v1/publish-targets", (HttpContext context) =>
         {
             var token = context.ManagementToken();
@@ -285,7 +294,8 @@ public static class WorkspaceManagement
                 ["targets"] = new JsonArray([.. store.PublisherKeys().Select(k => (JsonNode?)new JsonObject
                 {
                     ["name"] = k.Name,
-                    ["gateway"] = publishing.Find(k.Name)?.Url,
+                    ["gateway"] = publishing.Find(k.Name)?.Url, ["product"] = publishing.Find(k.Name)?.Product,
+                    ["accepts"] = AcceptsFor(context, publishing.Find(k.Name)),
                     ["can_publish"] = publishing.Find(k.Name) is { } t && ServerRoles.TryParse(t.Roles, out var held) && (ServerRoles.Allows(held, ServerRole.Publisher) || ServerRoles.Allows(held, ServerRole.Admin)),
                 })]),
             });
@@ -319,14 +329,14 @@ public static class WorkspaceManagement
             var token = context.ManagementToken();
             if (ManagementAuthorization.Authorize(token, ServerRole.Admin) is { Allowed: false } refused) return Refused(refused);
             var body = await Body(context);
-            string? url, code, clientName;
-            try { (url, code, clientName) = (body?["url"]?.GetValue<string>(), body?["code"]?.GetValue<string>(), body?["client_name"]?.GetValue<string>()); }
-            catch (InvalidOperationException) { url = code = clientName = null; }
+            string? url, code, clientName, targetProduct;
+            try { (url, code, clientName, targetProduct) = (body?["url"]?.GetValue<string>(), body?["code"]?.GetValue<string>(), body?["client_name"]?.GetValue<string>(), body?["product"]?.GetValue<string>()); }
+            catch (InvalidOperationException) { url = code = clientName = targetProduct = null; }
             if (url is null || code is null || !Uri.TryCreate(url, UriKind.Absolute, out var address))
                 return Results.Json(new { error = "The body is a JSON object with the Gateway's \"url\" (https://...) and the \"code\" its administrator made (server pair --max-role publisher)." }, statusCode: StatusCodes.Status400BadRequest);
             try
             {
-                var made = await publishing.PairAsync(name, address, code, clientName, token.SubjectId, context.RequestAborted);
+                var made = await publishing.PairAsync(name, address, code, clientName, token.SubjectId, context.RequestAborted, targetProduct);
                 Audit(token, "publisher-key.pair", $"{name} -> {made.Url}", "ok");
                 return Results.Json(DescribeKey(store.PublisherKeys().First(k => k.Name == name)), statusCode: StatusCodes.Status201Created);
             }
