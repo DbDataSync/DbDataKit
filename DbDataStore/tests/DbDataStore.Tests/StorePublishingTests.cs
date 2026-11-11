@@ -128,7 +128,7 @@ public sealed class StorePublishingTests : IAsyncLifetime
     private async Task Pair()
     {
         var code = new PairingFiles(Path.Combine(GroupDir, "server.yaml")).Codes().Create(ServerRoles.Close(ServerRole.Publisher)).Code;
-        var added = await Cli("proxy", "add", "edge", "--url", _group.Urls.First(), "--code", code);
+        var added = await Cli("gateway", "add", "edge", "--url", _group.Urls.First(), "--code", code);
         Assert.True(added.Exit == 0, added.Error);
     }
 
