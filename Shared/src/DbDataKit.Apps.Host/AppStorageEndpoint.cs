@@ -13,7 +13,7 @@ public static class AppStorageEndpoint
     private const long Megabyte = 1024 * 1024;
     private const int MaximumBody = 300 * 1024;
 
-    public static async Task HandleAsync(HttpContext context, AppStorage storage, ResolvedInstance resolved, AppSession session)
+    public static async Task HandleAsync(HttpContext context, AppStorage storage, ResolvedInstance resolved, AppSession session, long? capBytes = null)
     {
         JsonObject? request;
         try
@@ -34,7 +34,7 @@ public static class AppStorageEndpoint
 
         var name = resolved.Instance.Name;
         var person = session.Identity.UserId;
-        var limits = new AppStorageLimits(QuotaBytes: Math.Min(use.QuotaMb * Megabyte, new AppStorageLimits().QuotaBytes));
+        var limits = new AppStorageLimits(QuotaBytes: Math.Min(use.QuotaMb * Megabyte, capBytes ?? new AppStorageLimits().QuotaBytes));
         var key = (string?)request["key"] ?? "";
         try
         {

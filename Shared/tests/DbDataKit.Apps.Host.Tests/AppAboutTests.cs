@@ -103,4 +103,21 @@ public sealed class AppAboutTests : IDisposable
         Assert.DoesNotContain("Approval", page);
         Assert.Contains("Data it can reach</h2><p>None.", page);
     }
+
+    [Fact]
+    public void The_page_lists_approved_and_unapproved_origins_apart_and_the_approval_moves_one_to_the_other()
+    {
+        Publish(Trusted, "ada");
+
+        var before = About(store.Resolve("plan")!, []);
+        Assert.Contains("Outside addresses it may use</h2><p>None.", before);
+        Assert.Contains("Asked for and not approved</h2>", before);
+        Assert.Contains("connect: https://api.contoso.com", before.Substring(before.IndexOf("Asked for and not approved", StringComparison.Ordinal)));
+
+        approvals.Approve("planner", 1, "grace", egress: new AppEgress(["https://api.contoso.com"], [], [], [], [], [], [], []));
+        var after = About(store.Resolve("plan")!, approvals.ForApp("planner"));
+
+        Assert.DoesNotContain("Asked for and not approved", after);
+        Assert.Contains("<ul class=\"egress\"><li>connect: https://api.contoso.com", after);
+    }
 }

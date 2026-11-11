@@ -5,3 +5,4 @@ export { draftChange, editable, formatCell, inputKind, keyOf, parseInput, titleO
 export { ErrorNote, FieldView, FormView, GridView, HistoryView, InstancePickerView, ViolationList, sameKey } from './views'
 export { StoreError } from './types'
 export type { ApplyResult, InstanceInfo, InstanceList, InstanceMode, AttributeKind, AttributeSchema, EntitySchema, ModelSchema, RowChange, RowPage, RowValues, StoredRow, Violation } from './types'
+export { applyShellTheme, parseShellTheme, themeProperties, type Scheme, type ShellTheme } from './theme'
