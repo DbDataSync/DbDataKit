@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { ErrorBanner } from '@dbdatakit/shell'
+import { ErrorBanner, Link } from '@dbdatakit/shell'
 import { gatewayApi } from '../api'
 import { GatewayShell } from '../GatewayShell'
 import { ownerLabel, removeWarning, serveBlock, servedLabel, sortModels } from '../models'

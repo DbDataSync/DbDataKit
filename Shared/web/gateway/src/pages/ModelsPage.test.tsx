@@ -22,7 +22,8 @@ function find(node: ReactNode, testId: string): ReactElement<Record<string, unkn
   if (!isValidElement(node)) return undefined
   const element = node as ReactElement<Record<string, unknown>>
   if (element.props['data-testid'] === testId) return element
-  if (typeof element.type === 'function') { const inner = find((element.type as (p: unknown) => ReactNode)(element.props), testId); if (inner) return inner }
+  // a component that reads a hook (the module's Link) cannot be called as a plain function: its children are its props' children
+  if (typeof element.type === 'function' && element.type.name !== 'Link') { const inner = find((element.type as (p: unknown) => ReactNode)(element.props), testId); if (inner) return inner }
   return find(element.props.children as ReactNode, testId)
 }
 

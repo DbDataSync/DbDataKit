@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { ApiError, ErrorBanner } from '@dbdatakit/shell'
+import { ApiError, ErrorBanner, Link } from '@dbdatakit/shell'
 import { gatewayApi } from '../api'
 import { GatewayShell } from '../GatewayShell'
 import type { SavedQueryRow, SavedQueryVersionRow } from '../runTypes'
