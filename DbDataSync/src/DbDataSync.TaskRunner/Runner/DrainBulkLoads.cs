@@ -33,7 +33,13 @@ internal interface IDrainLedger
     /// <summary>The rows read since the mapping's last reconcile sweep was queued (all of them for a mapping never swept).</summary>
     long RowsReadSinceSweep(string mapping);
 
-    /// <summary>A sweep was queued for the mapping: what was read so far is accounted for.</summary>
+    /// <summary>Counts one successful primary pass of the mapping.</summary>
+    void AddPass(string mapping);
+
+    /// <summary>The successful primary passes since the mapping's last reconcile sweep was queued (all of them for a mapping never swept).</summary>
+    long PassesSinceSweep(string mapping);
+
+    /// <summary>A sweep was queued for the mapping: what was read and the passes made so far are accounted for.</summary>
     void MarkSweep(string mapping);
 
     /// <summary>Records that the request of the API with this id was applied; false when it was recorded already (a retried run reads its input again).</summary>

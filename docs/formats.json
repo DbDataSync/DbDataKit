@@ -87,7 +87,7 @@
       "current": 2,
       "previous": 1,
       "status": "open",
-      "note": "gains the checks section (plan 23a FQ04); Sync reads 1 and 2 (a file of 1 loads as it is) and every save writes 2 (plan 33 SC50); open until the first release that holds it (24a D5). CW01 adds no key and no version: `changeProcessing.writer` may be left out (the default for the reader is named when the file is read: ChangeApply behind an incremental reader, DeleteInsert behind a reload reader) and the writer kind `ChangeApply` is a new value of an existing key; an older Sync reads a file that names it and fails the run naming the unknown writer kind, and a file without a writer is not readable by it",
+      "note": "gains the checks section (plan 23a FQ04); Sync reads 1 and 2 (a file of 1 loads as it is) and every save writes 2 (plan 33 SC50); open until the first release that holds it (24a D5). CW02b adds the optional `reconcile.afterEveryPasses` (a number, absent is off) and no version; CW01 adds no key and no version: `changeProcessing.writer` may be left out (the default for the reader is named when the file is read: ChangeApply behind an incremental reader, DeleteInsert behind a reload reader) and the writer kind `ChangeApply` is a new value of an existing key; an older Sync reads a file that names it and fails the run naming the unknown writer kind, and a file without a writer is not readable by it",
       "version_source": { "file": "DbDataSync/src/DbDataSync.Core/Config/ConfigSchema.cs", "pattern": "public const int TaskCurrent = (\\d+);" },
       "files": [ { "path": "DbDataSync/src/DbDataSync.Core/Config/ReplicationTaskConfig.cs", "sha256": null } ]
     },

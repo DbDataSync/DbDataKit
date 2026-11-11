@@ -52,13 +52,23 @@ internal sealed class FakeLedger : IDrainLedger, IDrainCheckpoints
 
     public long RowsReadSinceSweep(string mapping) => Reads.GetValueOrDefault(mapping).Total - Reads.GetValueOrDefault(mapping).AtSweep;
 
+    public Dictionary<string, (long Passes, long AtSweep)> PassCounts { get; } = [];
+
+    public void AddPass(string mapping) => PassCounts[mapping] = (PassCounts.GetValueOrDefault(mapping).Passes + 1, PassCounts.GetValueOrDefault(mapping).AtSweep);
+
+    public long PassesSinceSweep(string mapping) => PassCounts.GetValueOrDefault(mapping).Passes - PassCounts.GetValueOrDefault(mapping).AtSweep;
+
     public HashSet<string> Applied { get; } = [];
 
     public bool TryMarkApplied(string requestId) => Applied.Add(requestId);
 
     public bool WasApplied(string requestId) => Applied.Contains(requestId);
 
-    public void MarkSweep(string mapping) => Reads[mapping] = (Reads.GetValueOrDefault(mapping).Total, Reads.GetValueOrDefault(mapping).Total);
+    public void MarkSweep(string mapping)
+    {
+        Reads[mapping] = (Reads.GetValueOrDefault(mapping).Total, Reads.GetValueOrDefault(mapping).Total);
+        PassCounts[mapping] = (PassCounts.GetValueOrDefault(mapping).Passes, PassCounts.GetValueOrDefault(mapping).Passes);
+    }
 }
 
 /// <summary>Plan 28c E11b: <c>RequestInitialLoad</c> and <c>RequestSegmentedLoad</c> on a drain's own queue, the batch and the promotion of the captured position.</summary>

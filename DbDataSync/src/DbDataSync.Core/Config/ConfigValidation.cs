@@ -370,6 +370,11 @@ public static class ConfigValidation
         if (reconcile.Every is not null)
             ValidateScheduling(reconcile.Every, $"{mapping.Name} (reconcile)");
 
+        if (reconcile.AfterEveryPasses is < 1)
+            throw new ConfigValidationException(
+                $"Table mapping '{mapping.Name}' sets reconcile 'afterEveryPasses' to {reconcile.AfterEveryPasses}. " +
+                "It is a number of change passes, at least 1; leave it out to run the sweep by cadence or by hand only.");
+
         if (reconcile.AfterChange is not NoAfterChangeStrategy && reconcile.Every is null)
             throw new ConfigValidationException(
                 $"Table mapping '{mapping.Name}' enables delete reconciliation with an after-change " +

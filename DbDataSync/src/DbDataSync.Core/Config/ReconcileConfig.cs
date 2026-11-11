@@ -25,6 +25,15 @@ public sealed class ReconcileConfig
     /// asks for a sweep beyond <see cref="Every"/>'s own cadence.</summary>
     public AfterChangeStrategy AfterChange { get; set; } = new NoAfterChangeStrategy();
 
+    /// <summary>
+    /// Runs a sweep after every N successful change (<c>Primary</c>) passes of the mapping since its last sweep was
+    /// queued (plan 28c CW02b). Null, the default, means off. It is the bound for what a reader cannot see: a primary key
+    /// update at the source leaves the old key in the target when the reader is <c>Watermark</c> (a scan sees only rows
+    /// that exist), and the sweep removes it within N passes without a hand-run reload. Unlike <see cref="AfterChange"/>
+    /// it asks for no <see cref="Every"/> cadence (a count of passes is its own floor) and counts passes that read nothing.
+    /// </summary>
+    public int? AfterEveryPasses { get; set; }
+
     /// <summary>The guard a scheduled sweep runs with — <see cref="RatioDeleteGuard"/> (50%) by
     /// default, the same default phase 124's on-demand trigger uses when nothing is configured.</summary>
     public DeleteGuard DeleteGuard { get; set; } = new RatioDeleteGuard();

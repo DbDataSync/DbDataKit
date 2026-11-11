@@ -54,7 +54,9 @@ public static class MySqlProvisioner
         var state = new TriggerAuditState(
             await ObjectExistsAsync(connection, table.Schema, shadowTable, cancellationToken),
             await AllTriggersExistAsync(connection, table.Schema, table.Table, cancellationToken),
-            keyColumns);
+            keyColumns,
+            await MySqlTriggerInstall.InspectAsync(connection, table.Schema, table.Table, cancellationToken)
+                == TriggerAuditInstall.Outdated);
 
         var steps = new List<ProvisioningStep>();
 
@@ -96,6 +98,18 @@ public static class MySqlProvisioner
                 "three — one per event — each with an inline body.",
                 ProvisioningStepScope.Table));
         }
+
+        // The three triggers are each dropped and created again, so the same statements replace an update
+        // trigger of the text that recorded only the new key of an update; the shadow table and the
+        // replication's position are not touched.
+        if (keyColumns.Count > 0 && state.TriggerExists && state.TriggerOutdated)
+            steps.Add(new ProvisioningStep(
+                $"Replace the change triggers on {MySqlDialect.Instance.QualifyTable(table.Schema, table.Table)}",
+                MySqlTriggerAudit.CreateTriggers(table.Schema, table.Table, keyColumns),
+                "The installed update trigger records only the new key of an UPDATE, so a primary key update at " +
+                "the source leaves the old key in the target. The new text records the old key as a delete too. " +
+                "The shadow table and the replication's position are not touched.",
+                ProvisioningStepScope.Table));
 
         return TriggerAuditPlan.Build(
             MySqlDialect.Instance.QualifyTable(table.Schema, table.Table), state, steps);

@@ -40,6 +40,45 @@ public sealed class TaskRunStoreTests : IDisposable
         return runId;
     }
 
+    /// <summary>Plan 28c CW02b: <c>reconcile.afterEveryPasses</c> counts the successful Primary passes of each mapping after its own cutoff, whatever they read; a failed pass, another kind and an older pass do not count.</summary>
+    [Fact]
+    public void GetPassesSincePerMapping_CountsSuccessfulPrimaryPassesAfterTheMappingsCutoff_NotRowsAndNotFailures()
+    {
+        void Pass(string mapping, RunStatus status, long rows, RunKind kind = RunKind.Primary)
+        {
+            // claimed and finished like a worker does, so the next pass of the mapping is a new item and not the one still in flight
+            var id = _queue.Enqueue("crm", kind, mapping);
+            var item = _queue.TryClaimNext("crm", "test-pass", runId: id) ?? throw new InvalidOperationException("not claimed");
+            _store.CompleteRun(id, status, rows, rows, errorSummary: null);
+            _queue.MarkDone(item.Id);
+        }
+
+        Pass("orders", RunStatus.Succeeded, 0);                           // before the cutoff of orders
+        // the state keeps times to the second, so the cutoff sits a whole second clear of the passes on both sides
+        Thread.Sleep(1100);
+        var cutoff = DateTimeOffset.UtcNow;
+        Thread.Sleep(1100);
+        Pass("orders", RunStatus.Succeeded, 0);                           // a pass that read nothing still counts
+        Pass("orders", RunStatus.Succeeded, 500);
+        Pass("orders", RunStatus.Failed, 10);                             // a failed pass does not
+        Pass("orders", RunStatus.Succeeded, 3, RunKind.ReconcileDeletes); // another kind does not
+        Pass("customers", RunStatus.Succeeded, 1);                        // not asked about: the cutoff is for orders only
+        Pass("lines", RunStatus.Succeeded, 1);
+
+        var passes = _store.GetPassesSincePerMapping("crm", new Dictionary<string, DateTimeOffset>
+        {
+            ["orders"] = cutoff,
+            ["lines"] = DateTimeOffset.MinValue,
+        });
+
+        Assert.Equal(2, passes["orders"]);
+        Assert.Equal(1, passes["lines"]);
+        Assert.DoesNotContain("customers", passes.Keys);
+        // the rows read are the other question and are unchanged
+        Assert.Equal(500, _store.GetRowsReadSincePerMapping("crm", new Dictionary<string, DateTimeOffset> { ["orders"] = cutoff })["orders"]);
+        Assert.Empty(_store.GetPassesSincePerMapping("crm", new Dictionary<string, DateTimeOffset>()));
+    }
+
     [Fact]
     public void Enqueue_ThenBeginRun_ThenCompleteRun_RoundTrips()
     {

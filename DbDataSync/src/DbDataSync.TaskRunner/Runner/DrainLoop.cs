@@ -54,7 +54,10 @@ internal sealed class DrainLoop(
             Interlocked.Exchange(ref _lastProductiveTicks, DateTimeOffset.UtcNow.UtcTicks);
         // what an after-change reconcile strategy reacts to: the rows a mapping's successful primary passes read
         if (item.RunKind == RunKind.Primary && outcome.Status == RunStatus.Succeeded)
+        {
             plannerState.NoteRowsRead(item.MappingName, outcome.RowsRead);
+            plannerState.NotePassSucceeded(item.MappingName);   // what reconcile.afterEveryPasses counts
+        }
     }
 
     /// <summary>An item is over, however it ended: its slot is free for the next claim and it is not the drain's to give back.</summary>
