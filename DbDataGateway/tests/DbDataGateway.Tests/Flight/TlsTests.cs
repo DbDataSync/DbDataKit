@@ -89,6 +89,7 @@ public sealed class TlsTests : IDisposable
             ["Gateway:Listen:Port"] = "0",
             ["Gateway:DataDirectory"] = _dir,
             ["Gateway:Tls:Mode"] = "SelfSigned",
+            ["Gateway:Management:Enabled"] = "false",
         };
         await using var app = GatewayHost.Build([], b => b.Configuration.AddInMemoryCollection(settings));
         await app.StartAsync(TestContext.Current.CancellationToken);
@@ -122,6 +123,7 @@ public sealed class TlsTests : IDisposable
             ["Gateway:Listen:Port"] = "0",
             ["Gateway:DataDirectory"] = _dir,
             ["Gateway:Tls:Mode"] = "SelfSigned",
+            ["Gateway:Management:Enabled"] = "false",
         };
         await using var app = GatewayHost.Build([], b => b.Configuration.AddInMemoryCollection(settings));
         await app.StartAsync(TestContext.Current.CancellationToken);

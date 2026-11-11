@@ -335,6 +335,7 @@ How it works now, and what to keep true when you add a job:
 | Signature | Cause | Fix |
 | --- | --- | --- |
 | Gateway tests fail on the Windows job (and only there, where the engine-gated group tests run) with `Now listening on: https://127.0.0.1:8816` in several hosts and `SecondInstanceException` or `address already in use` | the management API is on by default (plan 33 SC40), so every test host that starts and does not say otherwise binds 8816; two hosts in one process, or two tests in parallel, collide | a test host builder that is not about management passes `--Gateway:Management:Enabled=false` (before any argument that enables it), and one that is passes its own free `Management:Port`; never rely on the default port in a test |
+| `UnauthorizedAccessException : Access to the path '<38 hex characters>' is denied` from `Directory.Delete` in a Gateway test's `Dispose` or `DisposeAsync` (`HostingEndpointTests`, `TlsTests`), on the Windows job only | the host the test starts now has the management API on by default (plan 33 SC40), which writes its key files into the data directory with a restricted access list, and `Directory.Delete(path, true)` of the test's folder is then refused on Windows | a test that starts a host for something else passes `["Gateway:Management:Enabled"] = "false"` in its settings, like every builder in that table row |
 
 ### Windows services
 

@@ -25,6 +25,7 @@ public sealed class HostingEndpointTests : IAsyncLifetime
             ["Gateway:Listen:Port"] = "0",
             ["Gateway:DataDirectory"] = _dir,
             ["Gateway:Tls:Mode"] = "SelfSigned",
+            ["Gateway:Management:Enabled"] = "false",
         };
         _app = GatewayHost.Build([], b => b.Configuration.AddInMemoryCollection(settings));
         await _app.StartAsync();
