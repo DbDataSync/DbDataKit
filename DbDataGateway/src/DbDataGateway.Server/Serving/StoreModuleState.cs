@@ -34,9 +34,10 @@ public sealed class GroupChangeRequests(StateDatabase database)
     private const string Module = ServingModule.Name;
     private const string Columns = "id, model, state, proposed_by, proposed_by_name, by_agent, proposed_at, description, changes, decided_by, decided_at, note";
 
+    /// <summary>The proposer is named as the audit names a caller (<see cref="StoreCaller.AuditName"/>), so a request a trusted app proposes carries the app, its version and the approval (plan 26 AP31); the write made when it is approved names it again.</summary>
     public GroupChangeRequest Propose(string model, StoreCaller by, string? description, JsonArray changes)
     {
-        var request = new GroupChangeRequest(Guid.NewGuid().ToString("N"), model, GroupChangeRequest.Pending, by.UserId, by.Name, by.IsAgent, database.Time.GetUtcNow(), description, changes);
+        var request = new GroupChangeRequest(Guid.NewGuid().ToString("N"), model, GroupChangeRequest.Pending, by.UserId, by.AuditName, by.IsAgent, database.Time.GetUtcNow(), description, changes);
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
@@ -45,7 +46,7 @@ public sealed class GroupChangeRequests(StateDatabase database)
                 VALUES ($id, $model, $state, $by, $name, $agent, $at, $description, $changes);
                 """);
             cmd.Bind(database, "id", request.Id).Bind(database, "model", model).Bind(database, "state", request.State).Bind(database, "by", by.UserId)
-                .Bind(database, "name", by.Name, System.Data.DbType.String).Bind(database, "agent", by.IsAgent).Bind(database, "at", request.ProposedAt)
+                .Bind(database, "name", request.ProposedByName, System.Data.DbType.String).Bind(database, "agent", by.IsAgent).Bind(database, "at", request.ProposedAt)
                 .Bind(database, "description", description, System.Data.DbType.String).Bind(database, "changes", changes.ToJsonString());
             cmd.ExecuteNonQuery();
         });

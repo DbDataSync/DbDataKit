@@ -38,13 +38,25 @@ public static class AppAbout
         }
         html.Append("<p>What it may do is also bounded by your own roles.</p>");
 
-        var outside = (manifest.Egress ?? AppEgress.None).Directives().Where(d => d.Origins.Count > 0).ToList();
+        // what the manifest asks for, split by what an administrator approved (plan 26 AP31): only a trusted app with an approval for these bytes has any outside origin in force
+        var asked = manifest.Egress ?? AppEgress.None;
+        var inForce = manifest.Trust == AppTrust.Trusted && standing is not null ? EgressPolicy.Effective(asked, standing.Egress) : AppEgress.None;
+        var approvedOrigins = inForce.Directives().Where(d => d.Origins.Count > 0).ToList();
         html.Append("<h2>Outside addresses it may use</h2>");
-        if (outside.Count == 0) html.Append("<p>None.</p>");
+        if (approvedOrigins.Count == 0) html.Append("<p>None.</p>");
         else
         {
             html.Append("<ul class=\"egress\">");
-            foreach (var (key, _, origins) in outside) html.Append("<li>").Append(WebUtility.HtmlEncode($"{key}: {string.Join(", ", origins)}")).Append("</li>");
+            foreach (var (key, _, origins) in approvedOrigins) html.Append("<li>").Append(WebUtility.HtmlEncode($"{key}: {string.Join(", ", origins)}")).Append("</li>");
+            html.Append("</ul>");
+        }
+        var refused = EgressPolicy.Unapproved(asked, inForce);
+        if (refused.Count > 0)
+        {
+            html.Append("<h2>Asked for and not approved</h2><p>The browser blocks these: ")
+                .Append(manifest.Trust == AppTrust.Trusted ? "an administrator has not approved them for this version." : "a sandboxed app is given no outside address.").Append("</p><ul class=\"egress-refused\">");
+            foreach (var (directive, origin) in refused)
+                html.Append("<li>").Append(WebUtility.HtmlEncode($"{directive.Replace("-src", "").Replace("form-action", "form")}: {origin}")).Append("</li>");
             html.Append("</ul>");
         }
 
