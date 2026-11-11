@@ -149,7 +149,7 @@ public sealed class ConnectionsAcrossServersTests : IAsyncLifetime
         Assert.Equal("dbdata:sync:connection:erp-sync", (string)copy["credentialSecretRef"]!);
         var file = (await AsPerson(HttpMethod.Get, $"/relay/{syncId}/api/connections/erp-sync/file")).Body!;
         Assert.DoesNotContain("typed-for-sync", (string)file["text"]!);
-        Assert.StartsWith("schema: connection/1", (string)file["text"]!);
+        Assert.StartsWith("schema: connection/2", (string)file["text"]!);
         Assert.DoesNotContain("allow_writes", (string)file["text"]!);        // the Gateway's serving policy stays on the Gateway
 
         // without the typed password Sync says what it lacks, naming the reference, and keeps nothing

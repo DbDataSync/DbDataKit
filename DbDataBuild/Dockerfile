@@ -8,7 +8,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY Directory.Build.props Directory.Packages.props global.json ./
-COPY DbDataKit DbDataKit
+COPY Shared Shared
 COPY DbDataBuild DbDataBuild
 COPY duckdb.pin ./
 COPY scripts/fetch-duckdb.sh scripts/fetch-duckdb.sh
