@@ -160,6 +160,10 @@
               "description": "The schema name of the tracking tables on that connection. Default: dbdatabuild.",
               "type": "string",
               "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "runner_copy": {
+              "description": "Whether a runner keeps a copy of this project's tracking tables (the follower step after a refresh task and the `catch-up` task). `false` turns the runner's copy off: both do nothing and say so in the run log. It does not touch the tables on the target or the Build server's own copy. Default: true.",
+              "type": "boolean"
             }
           }
         }
