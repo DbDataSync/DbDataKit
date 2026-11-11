@@ -20,6 +20,7 @@
 | The item, `knowledge/1` (KN01) | a Markdown file with a front matter (role: reference, instruction or guardrail; `about` subjects; `for` audience, agent and channel; `owner`; `chunking`), read strictly with file and line; a file in a project's `knowledge/` folder is about that project; `prompting`, `limits` and `data-rules` are refused with the place they belong (the install policy) | `KnowledgeItemLoader`, `schemas/knowledge.schema.json` |
 | Folder defaults (KN01) | `_knowledge.yml` gives the folders beneath it defaults, nearest wins | `KnowledgeProject.Load` |
 | Subjects and orphans (KN02) | a subject is checked against the catalog when an item is saved (never heard of: refused at its line); an item whose subjects are all gone is orphaned, reaches nobody and is listed | `SubjectResolver`, `ISubjectCatalog` |
+| Scope matching (KN03) | which instructions and guardrails apply to what is in play, broad to narrow, guardrails apart, by audience, agent and channel | `ScopeMatcher` |
 
 [Shared/src/DbDataKit.Knowledge/README.md](../Shared/src/DbDataKit.Knowledge/README.md) describes each piece.
 
