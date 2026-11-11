@@ -79,7 +79,7 @@ jobs:
         with:
           product: DbDataWorkspace
           global-json: DbDataWorkspace/global.json
-          duckdb: 'false'
+          duckdb: 'true'   # dbdatabuild (built below for the Build kind tests) needs the engine
       - name: Start the test engines
         working-directory: .
         run: |
