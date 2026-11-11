@@ -25,8 +25,30 @@ public sealed class BuildProjectKind(BuildTool tool) : IProjectKind
     public bool Buildable => false;
     public string? GitIgnore => null;       // the template carries its own .gitignore
 
-    // SC20d adds the package to a Runner; a route is listed only when it can be used
-    public IReadOnlyList<ProjectPublishRoute> Publishes { get; } = [];
+    // a route is listed only when it can be used: the package of refresh plans goes to a Runner (SC20d); semantic models and data sources to a Gateway are not published from here (a data source carries a login, and the Workspace holds none)
+    public IReadOnlyList<ProjectPublishRoute> Publishes { get; } =
+        [new("runner", "package", "The project's refresh plans (the committed rendered/ files) as a definition package: one task per plan with its schedule and connection slots, staged on a channel of a Runner.")];
+
+    public bool Produces => true;
+
+    /// <summary>
+    /// The package of <c>dbdatabuild project publish --to runner --out</c> (plan 28c E07): the committed files of the project, nothing compiled, nothing sent. A project with no <c>rendered/</c> plan, or one whose plan is refused (a bad cron, a file that
+    /// changed after the plan hashed it) answers with the program's own words, which name the file.
+    /// </summary>
+    public async Task<ProjectArtifact> ProduceAsync(string root, string projectId, string outputFolder, CancellationToken cancellationToken)
+    {
+        var package = PackageArtifacts.NameOf(projectId);
+        (int Exit, string Output, string Error) result;
+        try { result = await tool.RunAsync(["project", "publish", "--to", "runner", "--out", outputFolder, "--package", package, "--project", root], root, cancellationToken); }
+        catch (ProjectKindUnavailableException ex) { return new(false, ex.Message, [new("error", "DBD-WS-BUILD-MISSING", ex.Message)]); }
+        if (result.Exit != 0)
+        {
+            var said = (result.Error.Trim().Length > 0 ? result.Error : result.Output).Trim();
+            var message = said.Length > 0 ? said : $"dbdatabuild stopped with exit code {result.Exit}.";
+            return new(false, message, [new("error", "DBD-WS-BUILD-PUBLISH", message)]);
+        }
+        return PackageArtifacts.FromOutput(package, outputFolder, result.Output, "tasks");
+    }
 
     private static readonly UTF8Encoding Utf8 = new(false, true);
 
