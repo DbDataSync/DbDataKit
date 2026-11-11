@@ -34,6 +34,7 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
     private RunnerControl? _control;
     private RunnerScheduler? _scheduler;
     private volatile bool _silent;
+    private volatile bool _draining;
     private IReadOnlyDictionary<string, string> _capabilities = new Dictionary<string, string>();
     private readonly string _workerId = $"{Environment.MachineName}-{Environment.ProcessId}-{Guid.NewGuid():N}";
 
@@ -62,6 +63,20 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
             if (_scheduler is not null) _scheduler.SuspendHeartbeats = value;
         }
     }
+
+    /// <summary>While true this instance takes no new work (maintenance of the state, plan 29b C05); what is running finishes.</summary>
+    public bool Draining
+    {
+        get => _draining;
+        set
+        {
+            _draining = value;
+            if (_scheduler is not null) _scheduler.Draining = value;
+        }
+    }
+
+    /// <summary>The runs this instance has going now.</summary>
+    public int RunningCount => _scheduler?.RunningCount ?? 0;
 
     /// <summary>The runner group this instance belongs to.</summary>
     public string Group => settings.Group;
@@ -146,6 +161,7 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
             });
         _scheduler = scheduler;
         scheduler.SuspendHeartbeats = _silent;
+        scheduler.Draining = _draining;
         _control = new RunnerControl(state, scheduler, settings.ServiceId);
         _loop = Task.Run(() => scheduler.RunAsync(_stopping.Token));
         _beat = Task.Run(() => HeartbeatAsync(instances, _stopping.Token));
