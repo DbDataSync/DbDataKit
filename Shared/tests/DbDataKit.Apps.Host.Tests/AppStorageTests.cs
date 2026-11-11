@@ -115,12 +115,12 @@ public sealed class AppStorageTests : IDisposable
 
     private static AppSession Person(string id) => new("s", new HomeIdentity(id, id, null, [], new Dictionary<string, IReadOnlyList<string>>()), DateTimeOffset.MaxValue);
 
-    private async Task<(int Status, string Body)> Call(ResolvedInstance resolved, string person, string json)
+    private async Task<(int Status, string Body)> Call(ResolvedInstance resolved, string person, string json, long? capBytes = null)
     {
         var context = new DefaultHttpContext();
         context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(json));
         context.Response.Body = new MemoryStream();
-        await AppStorageEndpoint.HandleAsync(context, storage, resolved, Person(person));
+        await AppStorageEndpoint.HandleAsync(context, storage, resolved, Person(person), capBytes);
         context.Response.Body.Position = 0;
         return (context.Response.StatusCode, new StreamReader(context.Response.Body).ReadToEnd());
     }
@@ -169,5 +169,18 @@ public sealed class AppStorageTests : IDisposable
         var big = new string('x', 200 * 1024);
         for (var i = 0; i < 5; i++) Assert.Equal(200, (await Call(resolved, "ada", $$"""{"op":"set","scope":"instance","key":"k{{i}}","value":"{{big}}"}""")).Status);
         Assert.Equal(413, (await Call(resolved, "ada", $$"""{"op":"set","scope":"instance","key":"k5","value":"{{big}}"}""")).Status);
+    }
+
+    [Fact]
+    public async Task A_cap_set_in_server_yaml_limits_a_quota_the_manifest_asked_for_more_than()
+    {
+        // the manifest asks for 10 MB; the server's apps.storageCapMb is 1 (plan 26 AP29)
+        var resolved = Publish("storage: {instance: true, quota_mb: 10}");
+        var big = new string('x', 200 * 1024);
+        var cap = 1024L * 1024;
+        for (var i = 0; i < 5; i++) Assert.Equal(200, (await Call(resolved, "ada", $$"""{"op":"set","scope":"instance","key":"k{{i}}","value":"{{big}}"}""", cap)).Status);
+        Assert.Equal(413, (await Call(resolved, "ada", $$"""{"op":"set","scope":"instance","key":"k5","value":"{{big}}"}""", cap)).Status);
+        // with the default cap the same write is within the quota
+        Assert.Equal(200, (await Call(resolved, "ada", $$"""{"op":"set","scope":"instance","key":"k5","value":"{{big}}"}""")).Status);
     }
 }

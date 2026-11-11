@@ -286,6 +286,10 @@ public sealed class AppsOptions
     /// </summary>
     public List<string> AllowedPackages { get; set; } = [];
 
+    /// <summary>The most storage one app instance may keep in the host (<c>apps.storageCapMb</c>, plan 26 AP29): a manifest's <c>storage.quota_mb</c> is limited to it. 50 by default.</summary>
+    [ConfigKey(Min = 1, Max = 1024)]
+    public int StorageCapMb { get; set; } = 50;
+
     /// <summary>The vendored package store the app build uses (<c>apps.packageStore</c>): a folder made by <c>Shared/web/app-store/build.mjs</c> (<c>store.json</c> and <c>node_modules</c>). When it is set, <c>apps build</c> builds from it with no network and installs nothing; without it a build installs the app's packages from a registry (a developer's machine).</summary>
     public string? PackageStore { get; set; }
 

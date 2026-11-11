@@ -19,7 +19,7 @@ public static class AppsEndpoints
     public const string CallbackPath = "/apps/-/callback";
     public const string SessionCookie = "dbdata_apps";
 
-    public static IEndpointRouteBuilder MapApps(this IEndpointRouteBuilder app, AppInstanceStore instances, AppSite site, OpenIdClient client, AppSessions sessions, AppTokenBroker broker, AppDataGateway? data = null, AppStorage? storage = null, AppApprovalStore? approvals = null)
+    public static IEndpointRouteBuilder MapApps(this IEndpointRouteBuilder app, AppInstanceStore instances, AppSite site, OpenIdClient client, AppSessions sessions, AppTokenBroker broker, AppDataGateway? data = null, AppStorage? storage = null, AppApprovalStore? approvals = null, Func<long>? storageCapBytes = null)
     {
         app.MapGet("/apps/{instance}/_app/{**path}", async (HttpContext context, string instance, string? path) =>
         {
@@ -67,7 +67,7 @@ public static class AppsEndpoints
                 if (await sessions.FindAsync(context.Request.Cookies[SessionCookie], context.RequestAborted) is not { } session) { await Text(context, 401, "Sign in first."); return; }
                 if (session.RolesOn(instance).Count == 0) { await Text(context, 403, "The identity home gives you no role on this app."); return; }
                 if (Unapproved(approvals, resolved) is { } why) { await Text(context, 403, why); return; }
-                await AppStorageEndpoint.HandleAsync(context, storage, resolved, session);
+                await AppStorageEndpoint.HandleAsync(context, storage, resolved, session, storageCapBytes?.Invoke());
             });
         }
 
