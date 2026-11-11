@@ -18,7 +18,7 @@ public static class SyncCli
     public static readonly IReadOnlySet<string> Legacy = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "tool", "update", "launcher", "internal", "version" };
 
     /// <summary>What <c>ui mcp</c> never offers: nothing that sets a secret or loads an installed library, and nothing that is long-running or interactive (<see cref="McpOptions.Always"/>).</summary>
-    private static readonly string[] NotForAgents = ["secret set", "secret remove", "library validate", "server pair", "server unpair"];
+    private static readonly string[] NotForAgents = ["secret set", "secret remove", "secret send", "library validate", "server pair", "server unpair"];
 
     public static NounRouter Router(string version = "0", Func<string, string?>? environment = null)
     {
@@ -68,6 +68,7 @@ public static class SyncCli
             Forward("set", "Store a secret under a dbdata:sync:... name", EffectClass.RepoFilesOnly, "<ref> <value> [--repo <path>]", a => Task.FromResult(SecretCommand.Run(["set", .. a]))),
             Forward("list", "Whether each given reference is set, never the value", EffectClass.OfflineOnly, "[<ref> ...] [--repo <path>]", a => Task.FromResult(SecretCommand.Run(["list", .. a]))),
             Forward("remove", "Remove a stored secret", EffectClass.RepoFilesOnly, "<ref> [--repo <path>]", a => Task.FromResult(SecretCommand.Run(["remove", .. a]))),
+            Forward("send", "Send a connection's run login to a runner's encrypted store (plan 28c E20d); the value is never printed", EffectClass.RepoFilesOnly, "--to runner <connection> --server <name or https address> [--code <pairing code>] [--repo <path>]", a => SecretCommand.SendAsync(a)),
         ]),
         new Noun("library", "ADO.NET libraries restored into the repository",
         [

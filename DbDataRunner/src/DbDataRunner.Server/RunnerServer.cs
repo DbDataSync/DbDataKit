@@ -43,6 +43,9 @@ public static class RunnerServer
     {
         if (settings.Listen.Scheme != Uri.UriSchemeHttps) throw new ArgumentException("A DbDataRunner server listens on HTTPS only.", nameof(settings));
         var instanceId = InstanceId(state);
+        // the runner's own encrypted store (plan 28c E20d): what a product sends with PUT /api/v1/secrets, the last provider of the chain connection slots resolve against
+        var secretStore = new RunnerSecretStore(settings.Directory);
+        settings = settings with { SecretStore = settings.SecretStore ?? secretStore.Provider };
         var files = new PairingFiles(settings.ServerYaml, Group: state);
         var clients = files.Clients();
         var fingerprint = PairingProof.CertificateFingerprint(certificate);
@@ -82,6 +85,7 @@ public static class RunnerServer
         DbDataKit.Upgrade.UpgradeSetup.MapUpgrade(app, RunnerSettings.Product, Version, RunnerService.RegistrationName, settings.Listen.Port, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), () => [.. clients.All().Select(c => new DbDataKit.Upgrade.PeerGeneration(c.Name, c.Generation))]);
         RunnerApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), instanceId, new RunnerApiOptions("/api/v1", RunnerCallers.TokenResolver, RunnerSettings.Product, Version));
         RunnerPublishApi.Map(app, new RunnerPublishing(state, settings.MaxArtifactBytes, settings.SignatureVerifier, settings.InstanceLease, new DbDataKit.Runner.Staging.ActivationOptions { MaxWait = settings.ActivationMaxWait }));
+        RunnerSecretsApi.Map(app, state, () => secretStore.Open(), "/api/v1", RunnerCallers.TokenResolver);
         RunnerGroupApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);
         RunnerLineageApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);
         return app;
