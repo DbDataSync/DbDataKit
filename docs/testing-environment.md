@@ -129,7 +129,7 @@ A change is checked by the suites it can affect, not by all of them. What exists
 
 ### The slowest groups
 
-Measured on the `DbDataSync` suites under `SkipJdbc` (VSTest `--logger trx`; the run time is what the runner reports, the wall time is longer by the restore and the build):
+Measured on all the `DbDataSync` .NET suites under `SkipJdbc` (VSTest `--logger trx`; the run time is what the runner reports, the wall time is longer by the restore and the build):
 
 | Group | Run time | How to skip it |
 | --- | --- | --- |
@@ -138,8 +138,18 @@ Measured on the `DbDataSync` suites under `SkipJdbc` (VSTest `--logger trx`; the
 | `RunnerOwnedRunsTests.A_line_of_a_run_on_the_runner_reaches_the_hub_within_a_second_of_being_written` | 3.2 s | `-class` |
 | `ScriptTestServiceTests` | 2.3 s in total | `-class` |
 | `DbDataSync.Certificates.Tests` (20 tests) | 4 s | |
+| `TaskRunner.Tests` `RunExecutorTests` (many tests of 15 to 17 s each; `ExecuteWorkerAsync_*` spawn the worker) | 135 s of 150 s | `--filter "FullyQualifiedName!~RunExecutorTests"` |
+| `Cli.Tests` `ReadinessChecksTests` (one test, 19.7 s, installs every built-in library) | 32 s | `-class` of what you changed |
+| `Cli.Tests` `SetupStepsTests` (`ApplyStateDatabase_*` install a library, 15 s) | 30 s | `-class` |
+| `State.Tests` `StateDatabaseFactoryTests` | 29 s | `-class` |
+| `Cli.Tests` `TabWiringTests` | 14.5 s | `-class` |
+| `Cli.Tests` `PackagePublishOnRealRunnerTests` | 9.4 s | `-class` |
+| `TaskRunner.Tests` `DrainLoopTests` | 7 s | `-class` |
+| `Libraries.Tests` `LibraryCompatibilityTests` | 5.5 s | `-class` |
 
-Every other Api test class is under 1.5 s. Tests that shell out (cost is the child process, usually `dotnet publish` of a fixture project, a Bun bundle or a spawned host): `DbDataSync.Libraries.Tests/FixturePublisher.cs` and `Shared/tests/DbDataKit.Runner.Execution.Tests/PackageFixture.cs` (`dotnet publish`; run once per class fixture), `DbDataSync.Cli.Tests` (`LauncherTests`, `PackagePublishOnRealRunnerTests`: spawn the CLI and a runner), `DbDataSync.TaskRunner.Tests` (`RunnerWithoutItsOwnerTests`, `SyncRuntimePackageTests`: spawn the TaskRunner), `DbDataSync.Api.Tests/RunLifecycleIntegrationTests.cs`, `Shared/tests/DbDataKit.Apps.Bundling.Tests` (Bun), `Shared/tests/DbDataKit.Scripting.Tests/CsxCompilerTests.cs`, `DbDataGateway.Tests` (`WorkerFixture`, `WorkerProcessHostTests`: the 32-bit ODBC worker), `DbDataBuild.Tests.Conformance` (engines) and `DbDataRunner.Tests/SamplePackage.cs`. The ones that need an engine or the network already carry `Category=Integration`.
+Whole projects under `SkipJdbc` with `Category!=Integration` (run time): `TaskRunner.Tests` 150 s (125 tests), `Cli.Tests` 103 s (347), `State.Tests` 55 s (227), `Api.Tests` 45 s (619), everything else under 6 s. The two Jdbc projects and `Loader.Tests` have no test outside `Category=Integration` and run nothing.
+
+Every other class of the projects above is under 5 s. Tests that shell out (cost is the child process, usually `dotnet publish` of a fixture project, a Bun bundle or a spawned host): `DbDataSync.Libraries.Tests/FixturePublisher.cs` and `Shared/tests/DbDataKit.Runner.Execution.Tests/PackageFixture.cs` (`dotnet publish`; run once per class fixture), `DbDataSync.Cli.Tests` (`LauncherTests`, `PackagePublishOnRealRunnerTests`: spawn the CLI and a runner), `DbDataSync.TaskRunner.Tests` (`RunnerWithoutItsOwnerTests`, `SyncRuntimePackageTests`: spawn the TaskRunner), `DbDataSync.Api.Tests/RunLifecycleIntegrationTests.cs`, `Shared/tests/DbDataKit.Apps.Bundling.Tests` (Bun), `Shared/tests/DbDataKit.Scripting.Tests/CsxCompilerTests.cs`, `DbDataGateway.Tests` (`WorkerFixture`, `WorkerProcessHostTests`: the 32-bit ODBC worker), `DbDataBuild.Tests.Conformance` (engines) and `DbDataRunner.Tests/SamplePackage.cs`. The ones that need an engine or the network already carry `Category=Integration`.
 
 ## Sharing one machine between builds (agents and verifiers)
 
