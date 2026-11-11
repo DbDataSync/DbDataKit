@@ -33,6 +33,64 @@ public static class ConsoleDeliverySettings
         }
     }
 
+    /// <summary>
+    /// Writes the <c>delivery:</c> section of <c>settings.yaml</c> from settings (the policy as it is, the channels as bound, the limits), replacing the section in the file or adding it; the rest of the file is as it was. The section's own comments are not kept.
+    /// Names are quoted, so a connection called <c>null</c> or <c>on</c> stays a name.
+    /// </summary>
+    public static void Write(string consoleDirectory, DeliverySettings settings)
+    {
+        var path = ConsoleState.SettingsFileIn(consoleDirectory);
+        var block = new List<string> { Section + ":" };
+        var policy = settings.Policy;
+        var defaults = DeliveryPolicy.Default;
+        if (policy.MaxAttempts != defaults.MaxAttempts || !policy.Backoff.SequenceEqual(defaults.Backoff))
+        {
+            block.Add("  retry:");
+            block.Add($"    max_attempts: {policy.MaxAttempts}");
+            block.Add($"    backoff_seconds: [{string.Join(", ", policy.Backoff.Select(b => (int)b.TotalSeconds))}]");
+        }
+
+        if (policy.Lease != defaults.Lease) block.Add($"  lease_seconds: {(int)policy.Lease.TotalSeconds}");
+        block.Add("  channels:");
+        foreach (var c in settings.Channels)
+        {
+            if (c.Connections.Count == 1 && c.Connections.ContainsKey("prod")) block.Add($"    \"{c.Name}\": \"{c.Connections["prod"]}\"");
+            else
+            {
+                block.Add($"    \"{c.Name}\":");
+                foreach (var (release, connection) in c.Connections) block.Add($"      \"{release}\": \"{connection}\"");
+            }
+        }
+
+        if (settings.Channels.Count == 0) block[^1] = "  channels: {}";
+        var limits = settings.Channels.Where(c => c.LimitPerMinute is not null).ToList();
+        if (limits.Count > 0)
+        {
+            block.Add("  limits:");
+            foreach (var c in limits) block.Add($"    \"{c.Name}\": {c.LimitPerMinute}");
+        }
+
+        var lines = File.Exists(path) ? File.ReadAllText(path).Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').ToList() : [];
+        var start = lines.FindIndex(l => l.StartsWith(Section + ":", StringComparison.Ordinal));
+        if (start < 0)
+        {
+            if (lines.Count > 0 && lines[^1].Length == 0) lines.RemoveAt(lines.Count - 1);
+            lines.AddRange(block);
+        }
+        else
+        {
+            var end = start + 1;
+            while (end < lines.Count && (lines[end].Length == 0 || lines[end][0] is ' ' or '\t')) end++;
+            // blank lines after the section belong to what follows it
+            while (end > start + 1 && lines[end - 1].Length == 0) end--;
+            lines.RemoveRange(start, end - start);
+            lines.InsertRange(start, block);
+        }
+
+        Directory.CreateDirectory(consoleDirectory);
+        File.WriteAllText(path, string.Join('\n', lines).TrimEnd('\n') + "\n");
+    }
+
     /// <summary>A YAML node as JSON: an unquoted true or false is a boolean, an unquoted whole number a number, an empty unquoted value or <c>null</c> nothing.</summary>
     public static JsonNode? ToJson(YamlNode node) => node switch
     {
@@ -93,19 +151,24 @@ public sealed class ConsoleNoRenderer : ISubscriptionRenderer
 /// </summary>
 public sealed class ConsoleDelivery
 {
+    private readonly string _directory;
+    private DeliveryChannels _channels = null!;
+    private DeliverySettings _settings = DeliverySettings.Empty;
+    private string? _problem;
+
     public ConsoleDelivery(ConsoleSettings settings, StateDatabase state, ConsoleConnections connections, IUserAccounts users, ISubscriptionRenderer? renderer = null, TimeProvider? time = null)
     {
+        _directory = settings.Directory;
         Kinds = DeliveryKinds.Default();
-        (Settings, Problem) = ConsoleDeliverySettings.Load(settings.Directory);
         Time = time ?? TimeProvider.System;
         Connections = connections;
         Resolver = connections.Secrets;
         Scrubber = new SecretScrubber();
-        Channels = new DeliveryChannels(Settings, new ConsoleDeliveryConnections(connections), Kinds, Resolver, Scrubber, Time);
+        Reload();
 
         Outbox = new DeliveryStore(state);
         Subscriptions = new SubscriptionStore(state);
-        Service = new DeliveryService(Outbox, new PayloadStore(state), Channels, Settings.Policy, Scrubber, Time, null, "console");
+        Service = new DeliveryService(Outbox, new PayloadStore(state), new CurrentChannels(this), Settings.Policy, Scrubber, Time, null, "console");
         CanRender = renderer is not null;
         Runner = new SubscriptionService(Subscriptions, Service, renderer ?? new ConsoleNoRenderer(), new ConsoleSubscriberDirectory(users), Time);
         Users = users;
@@ -113,10 +176,43 @@ public sealed class ConsoleDelivery
 
     public ChannelKinds Kinds { get; }
 
-    public DeliverySettings Settings { get; }
+    public DeliverySettings Settings => _settings;
 
     /// <summary>Why the <c>delivery:</c> section could not be used, or null.</summary>
-    public string? Problem { get; }
+    public string? Problem => _problem;
+
+    /// <summary>Reads <c>settings.yaml</c> again and makes the channels from it: what a saved mapping does, so the sender uses the new bindings at once.</summary>
+    public void Reload()
+    {
+        (_settings, _problem) = ConsoleDeliverySettings.Load(_directory);
+        _channels = new DeliveryChannels(_settings, new ConsoleDeliveryConnections(Connections), Kinds, Resolver, Scrubber, Time);
+    }
+
+    /// <summary>
+    /// Saves which connection each channel name uses in each release channel (and the limits): the section is read strictly as the file is, each connection must exist and be one a message can be sent through, and nothing is written when anything is wrong.
+    /// </summary>
+    public (bool Saved, string? Error) SaveChannels(JsonObject channels, JsonObject? limits)
+    {
+        var section = new JsonObject { ["channels"] = channels.DeepClone() };
+        if (limits is { Count: > 0 }) section["limits"] = limits.DeepClone();
+        DeliverySettings parsed;
+        try { parsed = DeliverySettings.Read(section, "the channels you sent"); }
+        catch (DeliverySettingsException e) { return (false, e.Message); }
+        foreach (var binding in parsed.Channels)
+            foreach (var (release, connection) in binding.Connections)
+            {
+                if (Connections.Find(connection) is not { } definition) return (false, $"{binding.Name} ({release}): the connection '{connection}' does not exist, or its file has errors (open it on the Connections page).");
+                if (DeliveryConnectionRules.KindOf(definition, out var why) is null) return (false, $"{binding.Name} ({release}): {why}");
+            }
+
+        ConsoleDeliverySettings.Write(_directory, new DeliverySettings(Settings.Policy, parsed.Channels));
+        Reload();
+        return (true, null);
+    }
+
+    /// <summary>The connections a message can be sent through, for the screen's choice: name, the channel kind it makes and where it reaches (its template, never the address).</summary>
+    public IReadOnlyList<(string Name, string Kind, string? Target)> Usable() =>
+        [.. Connections.Read().Where(r => r.Result.Definition is not null).Select(r => (r.Name, Kind: DeliveryConnectionRules.KindOf(r.Result.Definition!, out _), Target: ConsoleConnections.TargetOf(r.Result.Definition!))).Where(x => x.Kind is not null).Select(x => (x.Name, x.Kind!, x.Target))];
 
     public TimeProvider Time { get; }
 
@@ -124,7 +220,7 @@ public sealed class ConsoleDelivery
 
     public SecretScrubber Scrubber { get; }
 
-    public DeliveryChannels Channels { get; }
+    public DeliveryChannels Channels => _channels;
 
     public ConsoleConnections Connections { get; }
 
@@ -184,12 +280,21 @@ public sealed class ConsoleDelivery
     }
 }
 
-/// <summary>Runs the console's sender: works through the outbox until the console stops. It starts only when channels are configured (with none a message could not be written).</summary>
+/// <summary>The channels the console has now: the service asks here each time, so a saved mapping is used by the next message.</summary>
+internal sealed class CurrentChannels(ConsoleDelivery delivery) : IDeliveryChannels
+{
+    public IReadOnlyList<string> Names => delivery.Channels.Names;
+
+    public IDeliveryChannel? Find(string name) => delivery.Channels.Find(name);
+
+    public ChannelResolution Resolve(string name, string? releaseChannel) => delivery.Channels.Resolve(name, releaseChannel);
+}
+
+/// <summary>Runs the console's sender: works through the outbox until the console stops. It always runs: channels can be bound while the console is up (the mapping is saved on the Delivery page).</summary>
 public sealed class ConsoleDeliverySender(ConsoleDelivery delivery) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (delivery.Settings.Channels.Count == 0) return;
         await delivery.Service.RunAsync(stoppingToken).ConfigureAwait(false);
     }
 }

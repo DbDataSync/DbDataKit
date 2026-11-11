@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isConnectionName, keptHere, outsideDetail, refusedDiagnostics, secretProblems, testSummary, type OutsideConnection, type OutsideTest } from './outsideConnections'
+import { NEW_CHOICES, isConnectionName, keptHere, secretLabel, splitSummary, webhookChoices, webhookYaml, yamlWebhookFormat, outsideDetail, refusedDiagnostics, secretProblems, testSummary, type OutsideConnection, type OutsideTest } from './outsideConnections'
 import { ApiError } from '@dbdatakit/shell'
 
 const crm: OutsideConnection = {
@@ -42,5 +42,33 @@ describe('outside connections (plan 27a IX01)', () => {
     expect(testSummary({ ...base, ok: false, signIn: 'rejected', kind: 'Login', status: 401 })).toBe('Does not work: reached, sign-in rejected. A retry will not help.')
     expect(testSummary({ ...base, ok: false, reached: false, signIn: 'not checked', kind: 'Network', temporary: true, status: null })).toBe('Does not work: not reached, sign-in not checked. A retry can help.')
     expect(testSummary({ ...base, ok: false, reached: null, signIn: 'not checked', kind: null })).toBe('Does not work: not reached or not tried, sign-in not checked.')
+  })
+
+  it('starts a webhook or a mail server from its own template and labels the secret parts of an address', () => {
+    expect(NEW_CHOICES.map((c) => [c.id, c.kind, c.flavor ?? null])).toEqual([['http', 'http', null], ['model-provider', 'model-provider', null], ['smtp', 'smtp', null], ['slack', 'http', 'slack'], ['teams', 'http', 'teams'], ['signed', 'http', 'signed']])
+    expect(secretLabel('key')).toBe('API key')
+    expect(secretLabel('token', 'endpoint_secrets.token')).toBe('Secret part {token} of the address')
+    expect(secretLabel('endpoint', 'endpoint')).toBe('The whole address (a secret)')
+    expect(keptHere('slack-ops', { field: 'token', path: 'endpoint_secrets.token', reference: 'secret:anything:slack-ops:token', available: true, problem: null, keptHere: true })).toBe(true)
+    expect(keptHere('slack-ops', { field: 'token', path: 'endpoint_secrets.token', reference: 'env:SLACK_TOKEN', available: true, problem: null, keptHere: false })).toBe(false)
+  })
+
+  it('writes the file of a split address with the template and the references, never a part', () => {
+    const split = { detected: true, service: 'Slack', format: 'slack', template: 'https://hooks.slack.com/services/{token}', secrets: { token: 'secret:x:ops-slack:token' } }
+    const yaml = webhookYaml('ops-slack', split)
+    expect(yaml).toBe('schema: connection/2\nkind: http\nname: ops-slack\nendpoint: "https://hooks.slack.com/services/{token}"\nendpoint_secrets:\n  token: secret:x:ops-slack:token\nwebhook:\n  format: slack\n')
+    expect(splitSummary(split)).toBe('Recognised as Slack (format slack). The file keeps https://hooks.slack.com/services/{token}; {token} is kept as secret in the console\'s secret store.')
+    expect(splitSummary({ ...split, format: null, secrets: { seg2: 'a', key: 'b' } })).toContain('{seg2}, {key} are kept as secrets')
+    // an unknown service is a signed webhook, whose key the person adds
+    expect(webhookYaml('gen', { ...split, format: null })).toContain('format: signed\n# a signed webhook is signed with a secret')
+  })
+
+  it('reads the format a file says and what a pasted address offers for marking, without its values', () => {
+    expect(yamlWebhookFormat('kind: http\nwebhook:\n  format: teams\n')).toBe('teams')
+    expect(yamlWebhookFormat('kind: http\nwebhook: { format: slack, allow_private: [] }\n')).toBe('slack')
+    expect(yamlWebhookFormat('kind: http\n')).toBeNull()
+    expect(webhookChoices('https://hooks.example.com/in/abc/x?key=SECRET&page=2')).toEqual({ pathSegments: 3, queryKeys: ['key', 'page'] })
+    expect(webhookChoices('https://hooks.example.com')).toEqual({ pathSegments: 0, queryKeys: [] })
+    expect(webhookChoices('not an address')).toBeNull()
   })
 })

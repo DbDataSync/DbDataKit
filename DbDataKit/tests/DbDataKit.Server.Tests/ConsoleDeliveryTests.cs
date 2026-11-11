@@ -69,6 +69,7 @@ public sealed class ConsoleDeliveryTests : IAsyncLifetime
         File.WriteAllText(Path.Combine(directory, "connections", "hook-sandbox.yml"), $"schema: connection/2\nkind: http\nname: hook-sandbox\nendpoint: \"http://127.0.0.1:{port}/sandbox/{{token}}\"\nendpoint_secrets: {{ token: env:DDK_TEST_HOOK_TOKEN_{tag} }}\nwebhook: {{ format: signed, allow_private: [127.0.0.1] }}\nsign_in: {{ method: signed_webhook, key_secret: env:DDK_TEST_HOOK_SECRET_{tag} }}\n");
         File.WriteAllText(Path.Combine(directory, "connections", "slack-unfinished.yml"), $"schema: connection/2\nkind: http\nname: slack-unfinished\nendpoint: https://hooks.slack.com/services/{{token}}\nendpoint_secrets: {{ token: env:DDK_TEST_NOT_SET_{tag} }}\nwebhook: {{ format: slack }}\n");
         File.WriteAllText(Path.Combine(directory, "settings.yaml"), """
+            # the console's settings: this comment is not part of the delivery section
             delivery:
               retry:
                 max_attempts: 2
@@ -80,6 +81,7 @@ public sealed class ConsoleDeliveryTests : IAsyncLifetime
                   prod: hook-conn
                   test: hook-sandbox
                   dev: hook-sandbox
+            # kept after the section
             """);
         await StartAsync();
     }
@@ -349,5 +351,54 @@ public sealed class ConsoleDeliveryTests : IAsyncLifetime
         Assert.Equal("sales.csv", (string)message["attachments"]![0]!["name"]!);
         var (_, runs) = await Call(HttpMethod.Get, $"/api/delivery/subscriptions/{id}/runs", viewer);
         Assert.Equal("sent", (string)runs!["runs"]![0]!["outcome"]!);
+    }
+
+    [Fact]
+    public async Task The_mapping_is_saved_from_the_screen_through_the_strict_reader_and_the_next_message_uses_it_and_a_wrong_one_writes_nothing()
+    {
+        var file = Path.Combine(directory, "settings.yaml");
+        var before = File.ReadAllText(file);
+        var channels = new JsonObject
+        {
+            ["hook"] = "hook-conn",
+            ["alerts"] = new JsonObject { ["prod"] = "hook-conn", ["test"] = "hook-conn" },     // the sandbox's binding is changed: a test now goes to the connection of /in/
+        };
+        Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Put, "/api/delivery/channels", viewer, new JsonObject { ["channels"] = channels.DeepClone() })).Status);
+
+        // refused, and nothing is written: an unknown connection, a connection that is not a delivery kind, the earlier form of a channel, a release channel that is not a name
+        File.WriteAllText(Path.Combine(directory, "connections", "crm.yml"), "schema: connection/2\nkind: http\nname: crm\nendpoint: https://api.example.com/v1\n");
+        foreach (var (bad, word) in new (JsonObject Channels, string Word)[]
+        {
+            (new JsonObject { ["hook"] = "nowhere" }, "does not exist"),
+            (new JsonObject { ["hook"] = "crm" }, "HTTP API without a `webhook:` section"),
+            (new JsonObject { ["hook"] = new JsonObject { ["kind"] = "webhook", ["url"] = "env:X" } }, "Channels are connections now"),
+            (new JsonObject { ["hook"] = new JsonObject { ["te st"] = "hook-conn" } }, "release channel's name"),
+        })
+        {
+            var (status, error) = await Call(HttpMethod.Put, "/api/delivery/channels", admin, new JsonObject { ["channels"] = bad });
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, status);
+            Assert.Contains(word, (string)error!["error"]!);
+        }
+
+        Assert.Equal(before, File.ReadAllText(file));
+
+        var (saved, body) = await Call(HttpMethod.Put, "/api/delivery/channels", admin, new JsonObject { ["channels"] = channels, ["limits"] = new JsonObject { ["alerts"] = 5 } });
+        Assert.Equal(HttpStatusCode.OK, saved);
+        var alerts = body!["channels"]!.AsArray().Single(c => (string)c!["name"]! == "alerts")!;
+        Assert.Equal(5, (int)alerts["limitPerMinute"]!);
+        Assert.Equal(["hook-conn", "hook-conn"], alerts["bindings"]!.AsArray().Select(b => (string)b!["connection"]!));
+        var written = File.ReadAllText(file);
+        Assert.StartsWith("# the console's settings", written, StringComparison.Ordinal);
+        Assert.Contains("# kept after the section", written, StringComparison.Ordinal);
+        Assert.Contains("\"alerts\":\n      \"prod\": \"hook-conn\"\n      \"test\": \"hook-conn\"", written, StringComparison.Ordinal);
+        Assert.Contains("limits:\n    \"alerts\": 5", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("unfinished", written, StringComparison.Ordinal);
+        Assert.Contains("max_attempts: 2", written, StringComparison.Ordinal);                 // the retry policy is kept as it was
+
+        // the file reads again as the console reads it, and the next message on the test channel goes where the new binding says
+        Assert.Null((await Call(HttpMethod.Get, "/api/delivery", viewer)).Body!["problem"]);
+        var (_, sent) = await Call(HttpMethod.Post, "/api/delivery/channels/alerts/test", admin, new TestSendBody(Channel: "test"));
+        Assert.Equal("hook-conn", (string)sent!["connection"]!);
+        Assert.Equal($"/in/token-{tag}", Assert.Single(hits).Path);
     }
 }

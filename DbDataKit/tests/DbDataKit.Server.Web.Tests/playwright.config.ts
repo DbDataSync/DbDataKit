@@ -15,8 +15,12 @@ const isWorker = process.env.TEST_WORKER_INDEX !== undefined
 if (!isWorker) {
   fs.rmSync(scratchDirectory, { recursive: true, force: true })
   fs.mkdirSync(scratchDirectory, { recursive: true })
-  // the console's delivery channel for subscriptions-delivery.spec.ts: a signed webhook at an address and a secret read from files that story writes (a local listener); a console reads settings.yaml when it starts
-  fs.writeFileSync(path.join(scratchDirectory, 'settings.yaml'), `delivery:\n  channels:\n    e2e-hook:\n      kind: webhook\n      url: file:${path.join(scratchDirectory, 'delivery-hook-url.txt').replace(/\\/g, '/')}\n      secret: file:${path.join(scratchDirectory, 'delivery-hook-secret.txt').replace(/\\/g, '/')}\n      allow_private: [127.0.0.1]\n`)
+  // the console's delivery channel for subscriptions-delivery.spec.ts (plan 22a GP18 fold: a channel is a connection): `e2e-hook` is bound to the connection `e2e-hook-conn`, a signed webhook whose whole address is a secret read from a file that story writes
+  // (a local listener, so its port is not known yet: the address stays a secret reference, shown as "address hidden") and whose signing secret is a file too; a console reads settings.yaml and connections/ when it starts
+  const fileRef = (name: string) => `file:${path.join(scratchDirectory, name).replace(/\\/g, '/')}`
+  fs.mkdirSync(path.join(scratchDirectory, 'connections'), { recursive: true })
+  fs.writeFileSync(path.join(scratchDirectory, 'connections', 'e2e-hook-conn.yml'), `schema: connection/2\nkind: http\nname: e2e-hook-conn\nendpoint: ${fileRef('delivery-hook-url.txt')}\nwebhook:\n  format: signed\n  allow_private: [127.0.0.1]\nsign_in:\n  method: signed_webhook\n  key_secret: ${fileRef('delivery-hook-secret.txt')}\n`)
+  fs.writeFileSync(path.join(scratchDirectory, 'settings.yaml'), 'delivery:\n  channels:\n    e2e-hook: e2e-hook-conn\n')
 }
 
 // A Build server for the console to pair with: a real one, in a directory of its own, with a pairing code made before it starts and written where the test can read it.

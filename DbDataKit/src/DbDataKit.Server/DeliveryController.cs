@@ -54,10 +54,22 @@ public sealed class DeliveryController(ConsoleDelivery delivery) : ControllerBas
             isAdmin = IsAdmin,
             policy = new { maxAttempts = delivery.Settings.Policy.MaxAttempts, backoffSeconds = delivery.Settings.Policy.Backoff.Select(b => (int)b.TotalSeconds), leaseSeconds = (int)delivery.Settings.Policy.Lease.TotalSeconds },
             releaseChannels = delivery.ReleaseChannels,
+            connections = delivery.Usable().Select(c => new { name = c.Name, kind = c.Kind, target = c.Target }),
             connectionKinds = new[] { new { kind = "smtp", description = "A mail server: mail channels send through it." }, new { kind = "http", description = "A webhook (Slack, Teams, a signed webhook): an `http` connection with a `webhook:` section." } },
             channels,
             outbox = delivery.Outbox.Counts(),
         });
+    }
+
+    /// <summary>Saves which connection each delivery channel name uses in each release channel (and the limits), as the strict reader of the settings reads them; a name alone is the production release channel's.</summary>
+    [HttpPut("channels")]
+    [Authorize(Policies.Admin)]
+    public async Task<IActionResult> SaveChannels([FromBody] JsonObject body, CancellationToken ct)
+    {
+        if (body["channels"] is not JsonObject channels) return Refuse(400, "invalid", "Send `channels`: a mapping of channel names to a connection name, or to release channels and their connections.");
+        var (saved, error) = delivery.SaveChannels(channels, body["limits"] as JsonObject);
+        if (!saved) return Refuse(422, "invalid", error ?? "The channels could not be saved.");
+        return Ok(new { saved = true, releaseChannels = delivery.ReleaseChannels, channels = await delivery.ChannelViewsAsync(ct) });
     }
 
     /// <summary>

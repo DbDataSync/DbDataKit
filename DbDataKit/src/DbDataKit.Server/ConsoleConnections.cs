@@ -12,7 +12,7 @@ namespace DbDataKit.Server;
 public sealed record WebhookSplit(string Service, string? Format, string Template, IReadOnlyDictionary<string, string> Secrets);
 
 /// <summary>One secret reference of a connection: where it is written, the reference (never a value) and whether it can be read now.</summary>
-public sealed record ConnectionSecretView(string Field, string Path, string Reference, bool Available, string? Problem);
+public sealed record ConnectionSecretView(string Field, string Path, string Reference, bool Available, string? Problem, bool KeptHere = false);
 
 /// <summary>An outside connection (kind <c>http</c>, <c>model-provider</c> or <c>smtp</c>) as the screen lists it: its file, what the loader says, its kind and address, how it signs in, and whether each secret it names can be read (never a secret).</summary>
 public sealed record OutsideConnectionView(string Name, string File, string Yaml, string? Kind, string? Endpoint, string? SignIn, bool? Cloud, IReadOnlyList<ConnectionSecretView> Secrets, IReadOnlyList<DiagnosticView> Diagnostics);
@@ -144,7 +144,7 @@ public sealed partial class ConsoleConnections
     public OutsideConnectionView ViewOf(string name, string yaml, ConnectionLoadResult result)
     {
         var d = result.Definition;
-        var secrets = d is null ? [] : ReferencesOf(d).Select(r => { var (ok, problem) = Probe(r.Reference); return new ConnectionSecretView(r.Field, r.Path, r.Reference, ok, problem); }).ToList();
+        var secrets = d is null ? [] : ReferencesOf(d).Select(r => { var (ok, problem) = Probe(r.Reference); return new ConnectionSecretView(r.Field, r.Path, r.Reference, ok, problem, r.Reference == ReferenceFor(name, r.Field)); }).ToList();
         var endpoint = d is null ? null : TargetOf(d);          // the template, never the composed address
         return new OutsideConnectionView(name, $"connections/{name}.yml", yaml, d?.Kind, endpoint, d is null ? null : d.SignIn?.Method ?? "none", d?.ModelProvider is { } p ? (p.Locality ?? (p.Provider == "ollama" ? "local" : "cloud")) == "cloud" : null, secrets, [.. result.Diagnostics.Select(DiagnosticView.Of)]);
     }
