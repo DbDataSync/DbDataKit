@@ -85,6 +85,19 @@ internal sealed class AnswerRows(JsonObject result, ResultTable table)
         return new JsonObject { ["descriptor_version"] = "1.0", ["name"] = "answer", ["schema"] = new JsonObject { ["fields"] = fields } };
     }
 
+    /// <summary>
+    /// The first column of the schema whose Arrow type <see cref="Value"/> cannot read (a time of day, a binary, a list, a struct, a half float), as its name and the type's name; null when every column can be read. Asked before the batches are read,
+    /// so a caller that cannot draw the answer can still hand the table over (plan 14a D38): the check and <see cref="Value"/> are the same list.
+    /// </summary>
+    public static (string Name, string Type)? UnreadableColumn(Schema schema)
+    {
+        foreach (var field in schema.FieldsList)
+            if (field.DataType is not (Int8Type or Int16Type or Int32Type or Int64Type or UInt8Type or UInt16Type or UInt32Type or UInt64Type or FloatType or DoubleType or Decimal128Type or Decimal256Type
+                or BooleanType or StringType or LargeStringType or Date32Type or Date64Type or TimestampType))
+                return (field.Name, field.DataType.Name);
+        return null;
+    }
+
     private static JsonNode? Value(IArrowArray array, int i)
     {
         if (array.IsNull(i)) return null;
