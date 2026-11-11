@@ -111,7 +111,17 @@ if ($global) {
   $reverse = @($Members); [array]::Reverse($reverse)
   foreach ($v in $MachineVars) { Set-Item -Path "Env:$($v.Name)" -Value (Join-Path $env:ProgramData $v.Folder) }
   $exeDir = $dir
-  if ($cmd -eq 'uninstall') {
+  # Is Scoop removing the package or replacing this version? Scoop's $cmd says so ('uninstall' or 'update'), but it was never seen from a pre_uninstall script, so when it says
+  # anything else (or nothing) the folder of the app decides: an update has extracted the next version beside this one before it removes this one, a real uninstall has no newer version.
+  function NewerThan([string]$name, [string]$than) {
+    $a = $null; $b = $null
+    if ([version]::TryParse(($name -replace '-.*$', ''), [ref]$a) -and [version]::TryParse(($than -replace '-.*$', ''), [ref]$b) -and $a -ne $b) { return ($a -gt $b) }
+    return ((Get-Item -LiteralPath (Join-Path $appDir $name)).CreationTimeUtc -gt (Get-Item -LiteralPath (Join-Path $appDir $than)).CreationTimeUtc)
+  }
+  $thisVersion = Split-Path $dir -Leaf
+  $newer = @(Get-ChildItem -LiteralPath $appDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'current' -and $_.Name -ne $thisVersion -and (NewerThan $_.Name $thisVersion) })
+  if ($cmd -eq 'uninstall') { $removing = $true } elseif ($cmd -eq 'update') { $removing = $false } else { $removing = ($newer.Count -eq 0) }
+  if ($removing) {
     foreach ($m in $reverse) {
       if (-not $m.Service) { continue }
       $exe = ExeOf $m $exeDir

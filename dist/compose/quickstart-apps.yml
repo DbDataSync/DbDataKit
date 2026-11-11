@@ -13,7 +13,7 @@ services:
       DBDATAKIT_Gateway__Identity__PublicUrl: https://localhost:8817
       DBDATAKIT_Gateway__Apps__PublicUrl: https://localhost:8818
     ports:
-      - "8816:8816"   # the management API, so `apps publish --to https://localhost:8816` can be tried from the host as from another machine (docs/apps-testing.md, step 9a)
+      - "127.0.0.1:8816:8816"   # the management API (on loopback of the host only: it is the admin API), so `apps publish --to https://localhost:8816` can be tried from the host as from another machine (docs/apps-testing.md, step 9a)
       - "8817:8817"
       - "8818:8818"
     volumes:

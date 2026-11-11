@@ -210,7 +210,7 @@ class SuiteManifestTests(unittest.TestCase):
 
     def test_an_uninstall_unpairs_and_unregisters_in_reverse_and_an_update_only_stops(self):
         undo = "\n".join(self.manifest()["pre_uninstall"])
-        real = undo.index("if ($cmd -eq 'uninstall')")
+        real = undo.index("if ($removing)")
         self.assertLess(real, undo.index("'instance', 'remove'"))
         self.assertLess(undo.index("'instance', 'remove'"), undo.index("'server', 'unpair'"))
         self.assertLess(undo.index("'server', 'unpair'"), undo.index("Stopped $m.Service"))
@@ -220,6 +220,51 @@ class SuiteManifestTests(unittest.TestCase):
         for word in ("Unregister", "unpair", "instance"):
             self.assertNotIn(word, update)
         self.assertNotIn("Remove-Item", undo)           # data under %ProgramData% stays
+
+    def test_an_update_is_told_from_an_uninstall_by_scoops_command_and_else_by_a_newer_version_folder(self):
+        undo = "\n".join(self.manifest()["pre_uninstall"])
+        # the command decides when it names one of the two; any other value (or none) falls back to the app's folder
+        self.assertIn("if ($cmd -eq 'uninstall') { $removing = $true } elseif ($cmd -eq 'update') { $removing = $false } else { $removing = ($newer.Count -eq 0) }", undo)
+        self.assertLess(undo.index("$removing ="), undo.index("if ($removing)"))
+        # the folders are the other versions under the app's folder, never the `current` junction and never this one
+        self.assertIn("Get-ChildItem -LiteralPath $appDir -Directory", undo)
+        self.assertIn("$_.Name -ne 'current' -and $_.Name -ne $thisVersion", undo)
+        # newer by the version in the folder name when both parse, else by creation time (a beta, a snapshot or a name that is no version)
+        self.assertIn("[version]::TryParse(", undo)
+        self.assertIn("CreationTimeUtc", undo)
+        # only the real uninstall touches the console's list, the pairings and the registrations
+        before = undo[undo.index("$exeDir = $dir"):undo.index("if ($removing)")]
+        for word in ("Unregister", "unpair", "'instance'", "Stopped $"):
+            self.assertNotIn(word, before)
+
+    @unittest.skipUnless(PWSH, "pwsh not available")
+    def test_the_decision_runs_as_written_for_both_commands_and_for_none(self):
+        undo = "\n".join(self.manifest()["pre_uninstall"])
+        start = undo.index("function NewerThan")
+        decision = undo[start:undo.index("if ($removing)")]
+        cases = [
+            # (command, other version folders, this version, expected `removing`)
+            ("uninstall", [], "2026.2.2.0200", True),
+            ("update", ["2026.3.3.0300"], "2026.2.2.0200", False),
+            ("update", [], "2026.2.2.0200", False),                       # Scoop's own word wins
+            (None, [], "2026.2.2.0200", True),                            # no command, no newer version: a real uninstall
+            (None, ["2026.3.3.0300"], "2026.2.2.0200", False),            # no command, a newer one beside it: an update
+            ("other", ["2026.2.2.0200-beta"], "2026.2.2.0100", False),
+            (None, ["2026.1.1.0100"], "2026.2.2.0200", True),             # an older version Scoop kept does not make this an update
+            (None, ["2026.11.9.0900"], "2026.2.2.0200", False),           # newer by version, not by name order ("11" sorts before "2" as text)
+            (None, ["2026.2.2.0200"], "2026.11.9.0900", True),
+        ]
+        for command, others, this, expected in cases:
+            app = self.tmp / f"scoop-app-{abs(hash((command, tuple(others), this)))}"
+            for name in [this, "current", *others]:
+                (app / name).mkdir(parents=True)
+            script = "$appDir = '%s'\n$dir = '%s'\n%s\n%s\nWrite-Output \"removing=$removing\"\n" % (
+                app, app / this, "$cmd = '%s'" % command if command else "$cmd = $null", decision)
+            f = self.tmp / "decision.ps1"
+            f.write_text(script, encoding="utf-8")
+            r = subprocess.run([PWSH, "-NoProfile", "-File", str(f)], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn(f"removing={expected}", r.stdout, (command, others, this))
 
     def test_the_services_run_from_scoops_current_folder(self):
         post = "\n".join(self.manifest()["post_install"])

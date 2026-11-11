@@ -340,6 +340,56 @@ class BashInstallerTests(DistTestCase):
         self.assertIn("does not announce", r.stderr)
         self.assertNotIn("DBDATAKIT_ANNOUNCE_URL", r.stdout)
 
+    def announcing_install(self, *extra):
+        home = self.fresh()
+        out = self.fresh()
+        bind(out, meta=dict(META, announces=True))
+        env = {**os.environ, "HOME": str(home), "XDG_DATA_HOME": str(home / "data")}
+        r = subprocess.run(["bash", str(out / "install.sh"), "--api-base", self.gh.base, *extra], capture_output=True, text=True, env=env)
+        return home, r
+
+    def test_the_announce_address_becomes_a_systemd_drop_in_for_the_products_unit(self):
+        # a fake systemd directory stands for /etc/systemd/system (the real one needs root and --system); nothing asks systemd to reload
+        systemd = self.fresh() / "etc-systemd-system"
+        home, r = self.announcing_install("--announce-url", "http://console:8481", "--systemd-dir", str(systemd))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        dropin = systemd / "widget.service.d" / "announce.conf"
+        lines = dropin.read_text().splitlines()
+        self.assertEqual(lines[1:], ["[Service]", 'Environment="DBDATAKIT_ANNOUNCE_URL=http://console:8481"'])
+        self.assertTrue(lines[0].startswith("# Written by install.sh --announce-url"))
+        self.assertEqual(dropin.stat().st_mode & 0o777, 0o644)
+        self.assertIn(str(dropin), r.stdout)
+        self.assertNotIn("systemctl", r.stderr)
+        # installing again with another address replaces the file (one line, not two)
+        home, r = self.announcing_install("--announce-url", "https://console.example:8481", "--systemd-dir", str(systemd))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(dropin.read_text().count("DBDATAKIT_ANNOUNCE_URL"), 1)
+        self.assertIn("https://console.example:8481", dropin.read_text())
+
+    def test_without_a_system_install_or_a_directory_nothing_is_written_and_the_line_is_printed(self):
+        systemd = self.fresh() / "etc-systemd-system"
+        home, r = self.announcing_install("--announce-url", "http://console:8481")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("Environment=DBDATAKIT_ANNOUNCE_URL=http://console:8481", r.stdout)
+        self.assertIn("--system", r.stdout)
+        self.assertFalse(systemd.exists())
+
+    def test_a_product_that_does_not_announce_gets_no_drop_in(self):
+        systemd = self.fresh() / "etc-systemd-system"
+        r = self.run_sh(self.fresh(), "--announce-url", "http://console:8481", "--systemd-dir", str(systemd))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("does not announce", r.stderr)
+        self.assertFalse(systemd.exists())
+
+    def test_an_announce_address_that_is_not_plain_http_or_has_unit_syntax_is_refused_before_anything_is_installed(self):
+        for bad in ("console:8481", "ftp://console", "http://", "http://console 8481", 'http://con"sole', "http://console/%n", "http://console/$x", "http://console\\x"):
+            systemd = self.fresh() / "etc-systemd-system"
+            home, r = self.announcing_install("--announce-url", bad, "--systemd-dir", str(systemd))
+            self.assertNotEqual(r.returncode, 0, bad)
+            self.assertIn("--announce-url", r.stderr, bad)
+            self.assertFalse(systemd.exists(), bad)
+            self.assertFalse((home / "data" / "widget").exists(), bad)
+
     def test_latest_is_the_newest_stable_release_of_this_product(self):
         r = self.run_sh(self.fresh(), "--dry-run")
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -386,6 +436,34 @@ class BashInstallerTests(DistTestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("Checksum mismatch", r.stderr)
         self.assertFalse((home / "data" / "widget").exists())
+
+
+class GatewayContainerManagementTests(unittest.TestCase):
+    """The Gateway's management API is the administration API: its container image binds it to loopback, and no compose file publishes it beyond the host's loopback (plan 33 D15)."""
+
+    def test_the_image_binds_management_to_loopback_and_exposes_only_flight(self):
+        text = (REPO_ROOT / "DbDataGateway/Dockerfile").read_text(encoding="utf-8")
+        lines = [line for line in text.splitlines() if not line.lstrip().startswith("#")]
+        code = "\n".join(lines)
+        self.assertIn("DBDATAKIT_Gateway__Management__Address=127.0.0.1", code)
+        self.assertNotIn("Management__Enabled=false", code)         # on by default is the owner's decision (D15)
+        self.assertEqual([line for line in lines if line.startswith("EXPOSE")], ["EXPOSE 8815"])
+
+    def test_no_compose_file_publishes_the_management_port_beyond_loopback(self):
+        import re
+        files = sorted((REPO_ROOT / "dist/compose").glob("*.yml"))
+        self.assertTrue(files)
+        for path in files:
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                entry = re.match(r'\s*-\s*"?([^"#\s]+)"?', line)
+                if line.lstrip().startswith("-") and entry and re.search(r"(^|:)8816(:|$)", entry.group(1)):
+                    self.assertTrue(entry.group(1).startswith("127.0.0.1:"), f"{path.name}:{number} publishes 8816 on every address: {line.strip()}")
+
+    def test_a_compose_file_that_widens_management_does_not_publish_it(self):
+        for path in sorted((REPO_ROOT / "dist/compose").glob("*.yml")):
+            text = path.read_text(encoding="utf-8")
+            if "Management__Address: 0.0.0.0" in text:
+                self.assertNotIn('- "8816:8816"', text, path.name)
 
 
 @unittest.skipIf(os.name == "nt", "install.sh is for Linux and macOS")
