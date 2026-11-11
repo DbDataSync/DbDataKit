@@ -55,6 +55,7 @@
     <Project Path="src/DbDataKit.Metadata/DbDataKit.Metadata.csproj" />
     <Project Path="src/DbDataKit.Knowledge/DbDataKit.Knowledge.csproj" />
     <Project Path="src/DbDataKit.Agents/DbDataKit.Agents.csproj" />
+    <Project Path="src/DbDataKit.Agents.Providers/DbDataKit.Agents.Providers.csproj" />
     <Project Path="src/DbDataKit.Lineage/DbDataKit.Lineage.csproj" />
     <Project Path="src/DbDataKit.Lineage.Cli/DbDataKit.Lineage.Cli.csproj" />
     <Project Path="src/DbDataKit.Quality/DbDataKit.Quality.csproj" />
@@ -157,6 +158,7 @@
     <Project Path="tests/DbDataKit.Metadata.Tests/DbDataKit.Metadata.Tests.csproj" />
     <Project Path="tests/DbDataKit.Knowledge.Tests/DbDataKit.Knowledge.Tests.csproj" />
     <Project Path="tests/DbDataKit.Agents.Tests/DbDataKit.Agents.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Agents.Providers.Tests/DbDataKit.Agents.Providers.Tests.csproj" />
     <Project Path="tests/DbDataKit.Lineage.Tests/DbDataKit.Lineage.Tests.csproj" />
     <Project Path="tests/DbDataKit.Lineage.Cli.Tests/DbDataKit.Lineage.Cli.Tests.csproj" />
     <Project Path="tests/DbDataKit.Quality.Tests/DbDataKit.Quality.Tests.csproj" />

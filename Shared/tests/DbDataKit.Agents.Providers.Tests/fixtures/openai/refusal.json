@@ -1,0 +1,5 @@
+{
+  "id": "chatcmpl-9Zt4", "object": "chat.completion", "created": 1731400003, "model": "gpt-4.1-2025-04-14",
+  "choices": [ { "index": 0, "message": { "role": "assistant", "content": null, "refusal": "I'm sorry, I can't help with that." }, "finish_reason": "stop" } ],
+  "usage": { "prompt_tokens": 12, "completion_tokens": 9, "total_tokens": 21 }
+}

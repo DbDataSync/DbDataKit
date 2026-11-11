@@ -55,7 +55,8 @@ public sealed class TextWriterAudit(TextWriter writer) : IMcpAudit
 /// <param name="Approver">Asks the person. Null means the MCP client is asked (elicitation); tests give their own.</param>
 /// <param name="Audit">Where each ask, answer, run and refusal is recorded.</param>
 /// <param name="PromptingFor">The setting of a step by its traits; null means <see cref="Default"/>.</param>
-public sealed record McpGate(string Person, Func<ApprovalRequest, CancellationToken, Task<ApprovalDecision>>? Approver = null, IMcpAudit? Audit = null, Func<Traits, Prompting>? PromptingFor = null)
+/// <param name="FallbackApprover">Asks the person when the client cannot (no elicitation): the console's inbox for <c>ui mcp --report-to</c>. Null: such a step is refused.</param>
+public sealed record McpGate(string Person, Func<ApprovalRequest, CancellationToken, Task<ApprovalDecision>>? Approver = null, IMcpAudit? Audit = null, Func<Traits, Prompting>? PromptingFor = null, Func<ApprovalRequest, CancellationToken, Task<ApprovalDecision>>? FallbackApprover = null)
 {
     /// <summary>The defaults of plan 27 section 3.3, from traits, the strictest of those a command has: reads definitions and reads data do not ask; writes definitions or files ask once per conversation; writes data, changes structure, deletes, outward and elevated ask every time.</summary>
     public static Prompting Default(Traits traits) =>

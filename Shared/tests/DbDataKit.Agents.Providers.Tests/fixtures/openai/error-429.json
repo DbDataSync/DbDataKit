@@ -1,0 +1,1 @@
+{ "error": { "message": "Rate limit reached for gpt-4.1 in organization org-x on tokens per min.", "type": "tokens", "param": null, "code": "rate_limit_exceeded" } }

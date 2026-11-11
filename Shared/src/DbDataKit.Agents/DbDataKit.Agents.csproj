@@ -13,5 +13,6 @@
     <ProjectReference Include="..\DbDataKit.Cli\DbDataKit.Cli.csproj" />
     <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
     <ProjectReference Include="..\DbDataKit.Knowledge\DbDataKit.Knowledge.csproj" />
+    <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
   </ItemGroup>
 </Project>

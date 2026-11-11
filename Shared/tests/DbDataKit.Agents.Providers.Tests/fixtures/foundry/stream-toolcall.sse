@@ -1,0 +1,14 @@
+data: {"choices":[],"created":0,"id":"","model":"","object":"","prompt_filter_results":[{"prompt_index":0,"content_filter_results":{"hate":{"filtered":false,"severity":"safe"}}}]}
+
+data: {"id":"chatcmpl-AzFo3","object":"chat.completion.chunk","created":1731400022,"model":"gpt-4.1","choices":[{"index":0,"finish_reason":null,"delta":{"role":"assistant","content":"Looking it up."}}]}
+
+data: {"id":"chatcmpl-AzFo3","object":"chat.completion.chunk","created":1731400022,"model":"gpt-4.1","choices":[{"index":0,"finish_reason":null,"delta":{"tool_calls":[{"index":0,"id":"call_Qw8e","type":"function","function":{"name":"thing_show","arguments":""}}]}}]}
+
+data: {"id":"chatcmpl-AzFo3","object":"chat.completion.chunk","created":1731400022,"model":"gpt-4.1","choices":[{"index":0,"finish_reason":null,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"args\":[\"widget\"]}"}}]}}]}
+
+data: {"id":"chatcmpl-AzFo3","object":"chat.completion.chunk","created":1731400022,"model":"gpt-4.1","choices":[{"index":0,"finish_reason":"tool_calls","delta":{}}]}
+
+data: {"id":"chatcmpl-AzFo3","object":"chat.completion.chunk","created":1731400022,"model":"gpt-4.1","choices":[],"usage":{"prompt_tokens":81,"completion_tokens":19,"total_tokens":100}}
+
+data: [DONE]
+

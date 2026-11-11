@@ -1,0 +1,5 @@
+{
+  "id": "chatcmpl-9Zt5", "object": "chat.completion", "created": 1731400004, "model": "gpt-4.1-2025-04-14",
+  "choices": [ { "index": 0, "message": { "role": "assistant", "content": null, "tool_calls": [ { "id": "call_bad", "type": "function", "function": { "name": "thing_show", "arguments": "{\"args\": [\"wid" } } ] }, "finish_reason": "tool_calls" } ],
+  "usage": { "prompt_tokens": 30, "completion_tokens": 8, "total_tokens": 38 }
+}

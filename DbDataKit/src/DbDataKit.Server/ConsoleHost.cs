@@ -104,10 +104,15 @@ public static class ConsoleHost
         builder.Services.AddSingleton<ConsoleRelay>();
         builder.Services.AddSingleton<ConsoleLineage>();
         // the agents the console hosts and the knowledge its screens read (plan 27a AG14 to AG17, AG29 to AG32, KN28, KN36 to KN38); the model an agent's slot is bound to comes from IAgentModels (none until model providers are connections, AG05)
-        builder.Services.TryAddSingleton<IAgentModels, NoAgentModels>();
+        // the model providers and slots of models/ in the console's directory (plan 27a AG05): what an agent's slot is bound to; a test gives its own IAgentModels and ModelHttp
+        builder.Services.TryAddSingleton<ModelHttp>();
+        builder.Services.AddSingleton<ConsoleModels>(sp => new ConsoleModels(settings, sp.GetRequiredService<EncryptedFileSecretStore>(), sp.GetRequiredService<ModelHttp>()));
+        builder.Services.TryAddSingleton<IAgentModels>(sp => sp.GetRequiredService<ConsoleModels>());
         builder.Services.TryAddSingleton<IAgentToolSource, ConsoleToolSource>();
         builder.Services.AddSingleton<ConsoleKnowledge>();
         builder.Services.AddSingleton<ConsoleAgents>();
+        // an outside agent (`ui mcp --report-to`) signs in as the person with a token made on the Agents page, as Basic credentials, and reaches the outside endpoints only
+        builder.Services.AddSingleton<IPasswordCredentials>(sp => new AgentTokenCredentials(sp.GetRequiredService<ConsoleAgents>().Store, sp.GetRequiredService<IUserAccounts>()));
         builder.Services.AddSingleton<ConsoleQuality>();
         if (settings.Home is { } home)
         {
@@ -175,6 +180,17 @@ public static class ConsoleHost
         // A session that came from the identity home asks the home again for the person's roles when the last answer is old (plan 13a U17); before authentication, so a session the home ended is refused on this very request.
         if (settings.Home is not null) app.UseFederationRefresh();
         app.UseAuthentication();
+        // a request signed in with an outside agent's token is not a person at a screen: it reaches the outside endpoints and nothing else
+        app.Use(async (context, next) =>
+        {
+            if (context.User.HasClaim(PasswordCredentials.MethodClaim, PasswordCredentials.Method) && !AgentTokenCredentials.Allows(context.Request.Path))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await context.Response.WriteAsJsonAsync(new { error = "A token made for an outside agent reaches only what an outside agent needs. Sign in to use the rest of the console." });
+                return;
+            }
+            await next();
+        });
         // what the console records (UI05): sign-ins, invitations, servers, its own changes and the writes relayed to a server; after authentication, so the person is known
         app.UseConsoleAuditTrail(Auth);
         // maintenance mode (plan 29b, C05): an administrator's session still works, so does the sign-in; the web app's own files are served before this and stay up

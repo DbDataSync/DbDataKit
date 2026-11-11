@@ -1,0 +1,9 @@
+{
+  "id": "chatcmpl-218",
+  "object": "chat.completion",
+  "created": 1731400010,
+  "model": "llama3.1:8b",
+  "system_fingerprint": "fp_ollama",
+  "choices": [ { "index": 0, "message": { "role": "assistant", "content": "ok" }, "finish_reason": "stop" } ],
+  "usage": { "prompt_tokens": 21, "completion_tokens": 2, "total_tokens": 23 }
+}

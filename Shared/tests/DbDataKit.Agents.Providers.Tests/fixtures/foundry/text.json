@@ -1,0 +1,9 @@
+{
+  "id": "chatcmpl-AzFo1",
+  "object": "chat.completion",
+  "created": 1731400020,
+  "model": "gpt-4.1",
+  "prompt_filter_results": [ { "prompt_index": 0, "content_filter_results": { "hate": { "filtered": false, "severity": "safe" } } } ],
+  "choices": [ { "index": 0, "finish_reason": "stop", "message": { "role": "assistant", "content": "ok" }, "content_filter_results": { "hate": { "filtered": false, "severity": "safe" } } } ],
+  "usage": { "prompt_tokens": 17, "completion_tokens": 2, "total_tokens": 19 }
+}

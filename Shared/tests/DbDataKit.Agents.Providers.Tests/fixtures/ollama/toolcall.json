@@ -1,0 +1,9 @@
+{
+  "id": "chatcmpl-402",
+  "object": "chat.completion",
+  "created": 1731400011,
+  "model": "llama3.1:8b",
+  "system_fingerprint": "fp_ollama",
+  "choices": [ { "index": 0, "message": { "role": "assistant", "content": "", "tool_calls": [ { "id": "call_f1kq8l7x", "index": 0, "type": "function", "function": { "name": "thing_show", "arguments": "{\"args\":[\"widget\"]}" } } ] }, "finish_reason": "tool_calls" } ],
+  "usage": { "prompt_tokens": 90, "completion_tokens": 22, "total_tokens": 112 }
+}

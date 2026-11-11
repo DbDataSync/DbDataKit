@@ -4,14 +4,14 @@ import { useSearchParams } from 'react-router-dom'
 import { CodeEditor, ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { ConsoleShell } from '../ConsoleShell'
 import {
-  agentsApi, cost, eventWord, percent, promptingMeaning, promptingName, sessions, statusWord, waitingOn,
-  type AgentDetail, type Approval, type AuditRow, type ConversationView, type Diagnostic, type PolicyChange,
+  agentsApi, bindingLine, connectCommand, providerTemplate, cost, eventWord, percent, promptingMeaning, promptingName, sessions, statusWord, tokenState, waitingOn,
+  type AgentDetail, type Approval, type AuditRow, type ConversationView, type Diagnostic, type MadeToken, type PolicyChange, type ProviderTest, type ProviderView,
 } from '../agents'
 import { SETTINGS, TRAITS, emptyPolicy, policyFromYaml, policyToYaml, settingLabel, settingMeaning, type PolicyForm, type Setting } from '../policyForm'
 
-type Tab = 'chat' | 'inbox' | 'record' | 'agents' | 'policy'
+type Tab = 'chat' | 'inbox' | 'record' | 'agents' | 'models' | 'policy'
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'chat', label: 'Chat' }, { id: 'inbox', label: 'Approvals' }, { id: 'record', label: 'Record' }, { id: 'agents', label: 'Agents' }, { id: 'policy', label: 'Install policy' },
+  { id: 'chat', label: 'Chat' }, { id: 'inbox', label: 'Approvals' }, { id: 'record', label: 'Record' }, { id: 'agents', label: 'Agents' }, { id: 'models', label: 'Models' }, { id: 'policy', label: 'Install policy' },
 ]
 
 /**
@@ -40,6 +40,7 @@ export function AgentsPage() {
         {tab === 'inbox' && <InboxTab />}
         {tab === 'record' && <RecordTab />}
         {tab === 'agents' && <AgentsTab />}
+        {tab === 'models' && <ModelsTab />}
         {tab === 'policy' && <PolicyTab />}
       </div>
     </ConsoleShell>
@@ -207,6 +208,167 @@ function InboxTab() {
           ))}
         </tbody>
       </table>
+      <OutsideAgents />
+    </div>
+  )
+}
+
+/** Connect an outside agent (`ui mcp --report-to`): a token of the person's own, shown once, and the lines to put in the agent's configuration. */
+function OutsideAgents() {
+  const client = useQueryClient()
+  const [name, setName] = useState('')
+  const [made, setMade] = useState<MadeToken | null>(null)
+  const tokens = useQuery({ queryKey: ['agents', 'tokens'], queryFn: agentsApi.tokens })
+  const make = useMutation({ mutationFn: () => agentsApi.makeToken(name.trim()), onSuccess: (m) => { setMade(m); setName(''); client.invalidateQueries({ queryKey: ['agents', 'tokens'] }) } })
+  const revoke = useMutation({ mutationFn: (id: string) => agentsApi.revokeToken(id), onSuccess: () => client.invalidateQueries({ queryKey: ['agents', 'tokens'] }) })
+  const connect = connectCommand('dbdatakit', window.location.origin, made?.user ?? '<your account id>', made?.token ?? null)
+  return (
+    <section data-testid="outside-agents" style={{ marginTop: 24 }}>
+      <h3>Connect an outside agent</h3>
+      <p className="hint">An agent in another tool (Claude Code, an IDE) that uses <span className="mono">ui mcp</span> can have its session recorded here and, when its client cannot ask you, ask you in this inbox. Make a token, give it to the agent&apos;s configuration, and revoke it here when it is no longer wanted. The token is yours: it acts as you, and only for this: it reaches nothing else of the console.</p>
+      <ErrorBanner error={tokens.error ?? make.error ?? revoke.error} />
+      <form onSubmit={(e) => { e.preventDefault(); if (name.trim()) make.mutate() }} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="A name, such as my laptop" maxLength={100} data-testid="token-name" />
+        <button type="submit" className="btn btn-sm btn-primary" disabled={!name.trim() || make.isPending} data-testid="token-make">Make a token</button>
+      </form>
+      {made && (
+        <div className="banner" data-testid="token-made" style={{ margin: '8px 0' }}>
+          <div><strong>The token is shown once.</strong> Copy it now; the console keeps only a fingerprint.</div>
+          <pre className="mono" data-testid="token-secret">{made.token}</pre>
+        </div>
+      )}
+      <div className="hint" style={{ marginTop: 8 }}>In the agent&apos;s MCP configuration:</div>
+      <pre className="mono" data-testid="token-command">{connect.command}{'\n'}{connect.environment.map((e) => `${e.name}=${e.value}`).join('\n')}</pre>
+      <table className="table" data-testid="token-list">
+        <thead><tr><th>Name</th><th>Made</th><th>Expires</th><th>Last used</th><th>State</th><th /></tr></thead>
+        <tbody>
+          {tokens.data?.map((t) => (
+            <tr key={t.id} data-state={tokenState(t)}>
+              <td>{t.name} <span className="hint mono">{t.id}</span></td><td>{t.createdAt.slice(0, 10)}</td><td>{t.expiresAt?.slice(0, 10) ?? ''}</td><td>{t.lastUsedAt?.replace('T', ' ').slice(0, 16) ?? 'never'}</td><td>{tokenState(t)}</td>
+              <td>{t.active && <button type="button" className="btn btn-sm" onClick={() => revoke.mutate(t.id)} data-testid={`token-revoke-${t.id}`}>Revoke</button>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  )
+}
+
+// ---- AG05: model providers, the key, Test and the slots ----
+
+const KINDS = ['anthropic', 'openai', 'foundry', 'ollama', 'openai-compatible']
+
+function ModelsTab() {
+  const client = useQueryClient()
+  const isAdmin = useIsAdmin()
+  const models = useQuery({ queryKey: ['agents', 'models'], queryFn: agentsApi.models })
+  const [selected, setSelected] = useState<string | null>(null)
+  const [yaml, setYaml] = useState('')
+  const [problems, setProblems] = useState<Diagnostic[]>([])
+  const [newName, setNewName] = useState('')
+  const [newKind, setNewKind] = useState('anthropic')
+  const [key, setKey] = useState('')
+  const [tests, setTests] = useState<Record<string, ProviderTest>>({})
+  const [slotsYaml, setSlotsYaml] = useState<string | null>(null)
+  const [slotProblems, setSlotProblems] = useState<Diagnostic[]>([])
+  const refresh = () => client.invalidateQueries({ queryKey: ['agents'] })
+  const provider: ProviderView | undefined = models.data?.providers.find((p) => p.name === selected)
+  useEffect(() => { if (models.data && slotsYaml === null) setSlotsYaml(models.data.slotsYaml || 'model-slots: 1\nslots:\n  default:\n    "*":\n      - { provider: <provider>, model: <model> }\n') }, [models.data, slotsYaml])
+  useEffect(() => { if (provider) { setYaml(provider.yaml); setProblems(provider.diagnostics) } }, [provider?.name, provider?.yaml]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const save = useMutation({ mutationFn: () => agentsApi.saveProvider(selected!, yaml), onSuccess: (r) => { setProblems(r.diagnostics); refresh() } })
+  const check = useMutation({ mutationFn: () => agentsApi.checkProvider(selected!, yaml), onSuccess: (r) => setProblems(r.diagnostics) })
+  const remove = useMutation({ mutationFn: () => agentsApi.deleteProvider(selected!), onSuccess: () => { setSelected(null); refresh() } })
+  const setTheKey = useMutation({ mutationFn: () => agentsApi.setKey(selected!, key), onSuccess: () => { setKey(''); refresh() } })
+  const test = useMutation({ mutationFn: (model: string) => agentsApi.testProvider(selected!, model).then((r) => [model, r] as const), onSuccess: ([model, r]) => setTests((t) => ({ ...t, [`${selected}/${model}`]: r })) })
+  const saveSlots = useMutation({ mutationFn: () => agentsApi.saveSlots(slotsYaml ?? ''), onSuccess: (r) => { setSlotProblems(r.diagnostics); refresh() } })
+  const checkSlots = useMutation({ mutationFn: () => agentsApi.checkSlots(slotsYaml ?? ''), onSuccess: (r) => setSlotProblems(r.diagnostics) })
+  // a refused save carries the reader's diagnostics in its body: shown as the check shows them
+  const refused = (e: unknown): Diagnostic[] | null => (e as { body?: { diagnostics?: Diagnostic[] } } | null)?.body?.diagnostics ?? null
+  const shownProblems = problems.length > 0 ? problems : refused(save.error) ?? []
+  const shownSlotProblems = slotProblems.length > 0 ? slotProblems : refused(saveSlots.error) ?? []
+  const severityOf = (d: Diagnostic) => (d.severity === 'error' ? 'error' as const : d.severity === 'warning' ? 'warning' as const : 'info' as const)
+
+  const start = () => { if (!/^[a-z][a-z0-9-]{0,63}$/.test(newName)) return; setSelected(newName); setYaml(providerTemplate(newKind, newName)); setProblems([]); setNewName('') }
+
+  return (
+    <div data-testid="agents-models">
+      <p className="hint">Where an agent&apos;s model comes from. A provider is a file (<span className="mono">models/&lt;name&gt;.yml</span>): its kind, address, the models it allows with their prices, and the <em>reference</em> of its key. The key you type here is kept in the console&apos;s secret store, never in the file. A slot (the name an agent asks for) is bound to an ordered list of models: the first is used and the others take over when it is down.</p>
+      <ErrorBanner error={models.error ?? check.error ?? remove.error ?? setTheKey.error ?? test.error ?? checkSlots.error} />
+      {models.data?.agentSlots.map((s) => (
+        <div key={s.slot} data-testid={`slot-state-${s.slot}`} data-bound={s.bound} className={s.bound ? 'hint' : 'banner'}>
+          Slot <span className="mono">{s.slot}</span> (asked for by {s.agents.join(', ')}): {s.bound ? 'bound to a model that can be used.' : 'nothing usable is bound. Add a provider and bind the slot below; an agent on it cannot start a conversation until then.'}
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 220 }}>
+          <strong>Providers</strong>
+          {models.data?.providers.length === 0 && <div className="empty" data-testid="providers-empty">No provider yet.</div>}
+          {models.data?.providers.map((p) => (
+            <div key={p.name}><button type="button" className={`btn btn-sm${selected === p.name ? ' btn-primary' : ''}`} style={{ margin: '2px 0' }} onClick={() => setSelected(p.name)} data-testid={`provider-${p.name}`}>{p.name}</button>{' '}
+              <span className="hint">{p.kind ?? 'not readable'}{p.cloud === null ? '' : p.cloud ? ' · cloud' : ' · local'}{p.diagnostics.length > 0 ? ' · has problems' : p.keyAvailable ? '' : ' · key not set'}</span></div>
+          ))}
+          {isAdmin && (
+            <form onSubmit={(e) => { e.preventDefault(); start() }} style={{ marginTop: 12 }}>
+              <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="a name, such as claude" data-testid="provider-new-name" />{' '}
+              <select value={newKind} onChange={(e) => setNewKind(e.target.value)} data-testid="provider-new-kind">{KINDS.map((k) => <option key={k}>{k}</option>)}</select>{' '}
+              <button type="submit" className="btn btn-sm" disabled={!newName} data-testid="provider-new">Add a provider</button>
+            </form>
+          )}
+        </div>
+        {selected && (
+          <div style={{ flex: 1, minWidth: 360 }} data-testid="provider-editor">
+            <CodeEditor value={yaml} language="yaml" onChange={(v) => { setYaml(v); setProblems([]) }} diagnostics={shownProblems.map((d) => ({ line: d.line, column: d.column, message: d.message, severity: severityOf(d) }))} readOnly={!isAdmin} testId="provider-yaml" />
+            <div data-testid="provider-diagnostics">{shownProblems.map((d, i) => <div key={i} data-testid="provider-diagnostic" data-severity={d.severity}><span className="mono">{d.code}</span> line {d.line}: {d.message}{d.fix ? ` ${d.fix}` : ''}</div>)}</div>
+            {isAdmin && <div style={{ margin: '8px 0' }}>
+              <button type="button" className="btn btn-sm" onClick={() => check.mutate()} data-testid="provider-check">Check</button>{' '}
+              <button type="button" className="btn btn-sm btn-primary" onClick={() => save.mutate()} disabled={save.isPending} data-testid="provider-save">Save</button>{' '}
+              {provider && <button type="button" className="btn btn-sm" onClick={() => remove.mutate()} data-testid="provider-remove">Remove</button>}
+            </div>}
+            {provider && (
+              <>
+                <div data-testid="provider-key" data-available={provider.keyAvailable}>
+                  <strong>Key</strong> <span className="mono">{provider.keyReference ?? '(none)'}</span>: {provider.keyAvailable ? 'it can be read.' : provider.keyProblem ?? 'not set.'}
+                  {isAdmin && provider.keyReference === `secret:dbdata:console:model-provider:${provider.name}:key` && (
+                    <form onSubmit={(e) => { e.preventDefault(); if (key) setTheKey.mutate() }} style={{ marginTop: 4 }}>
+                      <input type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder="paste the key; it is kept in the secret store and not shown again" style={{ minWidth: 320 }} data-testid="provider-key-input" />{' '}
+                      <button type="submit" className="btn btn-sm" disabled={!key} data-testid="provider-key-save">Keep the key</button>
+                    </form>
+                  )}
+                </div>
+                <table className="table" data-testid="provider-models">
+                  <thead><tr><th>Model</th><th>Window</th><th>Price per million (in / out)</th><th>Test</th><th /></tr></thead>
+                  <tbody>
+                    {provider.models.map((m) => {
+                      const t = tests[`${provider.name}/${m.id}`]
+                      return (
+                        <tr key={m.id}>
+                          <td className="mono">{m.id}</td><td>{m.window.toLocaleString()}</td><td>{m.priceInput === null ? 'not priced' : `${m.priceInput} / ${m.priceOutput}`}</td>
+                          <td>{isAdmin && <button type="button" className="btn btn-sm" disabled={test.isPending} onClick={() => test.mutate(m.id)} data-testid={`model-test-${m.id}`}>Test</button>}</td>
+                          <td>{t && <span data-testid={`model-test-result-${m.id}`} data-ok={t.ok}>{t.ok ? `${t.message} It said: ${t.answer} (${t.milliseconds} ms)` : t.message}</span>}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+      <h3>Slots</h3>
+      <p className="hint">Per slot and channel (<span className="mono">&quot;*&quot;</span> for every channel without its own), an ordered list: the primary first, then the fallback.</p>
+      <table className="table" data-testid="slot-bindings">
+        <thead><tr><th>Slot</th><th>Channel</th><th>Bound to</th></tr></thead>
+        <tbody>{models.data?.bindings.map((b) => <tr key={`${b.slot}/${b.channel}`}><td className="mono">{b.slot}</td><td className="mono">{b.channel}</td><td>{bindingLine(b)}</td></tr>)}</tbody>
+      </table>
+      {slotsYaml !== null && (
+        <>
+          <CodeEditor value={slotsYaml} language="yaml" onChange={(v) => { setSlotsYaml(v); setSlotProblems([]) }} diagnostics={shownSlotProblems.map((d) => ({ line: d.line, column: d.column, message: d.message, severity: severityOf(d) }))} readOnly={!isAdmin} testId="slots-yaml" />
+          <div data-testid="slot-diagnostics">{shownSlotProblems.map((d, i) => <div key={i} data-testid="slot-diagnostic" data-severity={d.severity}><span className="mono">{d.code}</span> line {d.line}: {d.message}{d.fix ? ` ${d.fix}` : ''}</div>)}</div>
+          {isAdmin && <div style={{ margin: '8px 0' }}><button type="button" className="btn btn-sm" onClick={() => checkSlots.mutate()} data-testid="slots-check">Check</button>{' '}<button type="button" className="btn btn-sm btn-primary" onClick={() => saveSlots.mutate()} data-testid="slots-save">Save the bindings</button></div>}
+        </>
+      )}
     </div>
   )
 }

@@ -53,7 +53,7 @@ export async function mockAgentHost(page: Page): Promise<AgentHostMock> {
   await page.route('**/api/agents/approvals*', (route) => {
     if (new URL(route.request().url()).pathname.split('/').length > 4) return route.fallback()
     const url = new URL(route.request().url())
-    const all = [...(pending ? [pending] : []), { ...pending, id: 'm1', origin: 'mcp', agent: 'claude-code', agentVersion: '2.1', tool: 'build_model_add', preview: 'command model add orders  [writes-definitions]', traits: 'writes-definitions', conversationId: null }]
+    const all = [...(pending ? [pending] : []), { conversationId: null, person: 'p', personName: 'Agent Tester', arguments: null, status: 'pending', requestedAt: '2026-11-11T10:00:00Z', answeredAt: null, answeredBy: null, note: null, id: 'm1', origin: 'mcp', agent: 'claude-code', agentVersion: '2.1', tool: 'build_model_add', preview: 'command model add orders  [writes-definitions]', traits: 'writes-definitions' }]
     return json(route, url.searchParams.get('pending') === 'true' ? all.filter((a) => a.id) : [])
   })
   await page.route('**/api/agents/approvals/*', (route) => {
