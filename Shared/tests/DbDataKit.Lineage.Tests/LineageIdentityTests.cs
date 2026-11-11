@@ -21,6 +21,22 @@ public class LineageIdentityTests
         Assert.NotEqual(plain, Id(Sql("sqlserver", "sales-db.corp", 14330, "Sales"), "dbo", "Orders"));                                // another port is another server
     }
 
+    // G17: one source of default ports, the engine registry's `default_port` (the table in LineageIdentity is gone)
+    [Fact]
+    public void Every_engine_with_a_default_port_in_the_registry_leaves_it_out_and_keeps_any_other()
+    {
+        var withPort = DbDataKit.Connections.Descriptor.EngineRegistry.Builtin.Engines.Where(e => e.DefaultPort is not null).ToList();
+        Assert.Contains(withPort, e => e.Id == "sqlserver");
+        foreach (var engine in withPort)
+        {
+            var port = engine.DefaultPort!.Value;
+            var bare = Id(Sql(engine.Id, "db.corp", null, "d"), "s", "t");
+            Assert.StartsWith($"{engine.Id}://db.corp/", bare);
+            Assert.Equal(bare, Id(Sql(engine.Id, "db.corp", port, "d"), "s", "t"));
+            Assert.StartsWith($"{engine.Id}://db.corp:{port + 1}/", Id(Sql(engine.Id, "db.corp", port + 1, "d"), "s", "t"));
+        }
+    }
+
     [Theory]
     [InlineData("localhost")]
     [InlineData("LOCALHOST")]

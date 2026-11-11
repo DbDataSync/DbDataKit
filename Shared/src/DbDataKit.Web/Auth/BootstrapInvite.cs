@@ -18,11 +18,12 @@ namespace DbDataKit.Web.Auth;
 /// </para>
 /// </summary>
 /// <param name="Directory">Where <see cref="BootstrapInvite.FileName"/> is written.</param>
-public sealed record BootstrapInviteLocation(string Directory);
+/// <param name="BaseUrl">The address people open the host at, so the link is a whole address (plan 23a FQ19); without one it is the path to open on the host.</param>
+public sealed record BootstrapInviteLocation(string Directory, string? BaseUrl = null);
 
 public sealed class BootstrapInvite(
     IUserAccounts users, IInviteStore invites, AuthOptions authOptions, BootstrapInviteLocation location,
-    ILogger<BootstrapInvite> logger)
+    ILogger<BootstrapInvite> logger, SetupLinkSettings? setup = null)
     : IHostedService
 {
     public const string FileName = "FIRST-RUN.txt";
@@ -48,28 +49,21 @@ public sealed class BootstrapInvite(
         // Replaced rather than reused: a code printed to a console that has since scrolled away is a
         // code nobody has, and one that outlives several restarts is one that has been in more places
         // than it should.
-        invites.DeleteBootstrapInvites();
-        var minted = invites.Create(UserRole.Admin, forUserId: null, createdByUserId: null);
+        var link = SetupLink.Make(invites, setup, location.BaseUrl);
 
         logger.LogWarning(
-            "No users exist yet. Open this once to create the first administrator — it expires in {Hours} hours:\n" +
-            "    /invite#{Code}\n" +
-            "Run `{Command}` to print a fresh one if this scrolls away.",
-            (int)InviteStore.DefaultLifetime.TotalHours,
-            minted.Code,
-            authOptions.Product.InviteCommand);
+            "No users exist yet. Open this link once to create the first administrator. It ends {Ends:u}:\n" +
+            "    {Link}\n" +
+            "Run `{Command}` on this machine to make a new one if this scrolls away.",
+            link.ExpiresAtUtc,
+            link.Url,
+            authOptions.Product.SetupLinkCommand);
 
         // Best effort: a service running as an account with no write access to RepoRoot still has the
         // log line above, so this never blocks startup over a permissions problem it can't fix anyway.
         try
         {
-            File.WriteAllText(
-                filePath,
-                $"No users exist yet. Open this once to create the first administrator — it expires in " +
-                $"{(int)InviteStore.DefaultLifetime.TotalHours} hours:\n\n" +
-                $"    /invite#{minted.Code}\n\n" +
-                $"Run `{authOptions.Product.InviteCommand}` to print a fresh one if this expires. This file is removed once " +
-                "the first administrator signs up.\n");
+            File.WriteAllText(filePath, SetupLink.FileText(link, authOptions.Product.SetupLinkCommand));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

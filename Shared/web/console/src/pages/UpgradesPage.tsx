@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { ConsoleShell } from '../ConsoleShell'
 import { availableKey, upgradeApi } from '../upgradeApi'
 import { ServerUpgrade } from './UpgradeServer'
+import { UpgradePlanPanel } from './UpgradePlanPanel'
 
 /**
  * What is available and the upgrade of one server at a time (plan 24a UC08 and UC09): the versions the release feed offers per product, each paired server's current and newest version with the mark for a release outside N and N-1,
@@ -55,6 +56,7 @@ export function UpgradesPage() {
               ))}
             </div>
             <div style={{ marginTop: 16 }}>
+              {data.servers.some((s) => s.newerAvailable) && <UpgradePlanPanel servers={data.servers} />}
               {data.servers.map((row) => <ServerUpgrade key={row.id} row={row} />)}
             </div>
           </>

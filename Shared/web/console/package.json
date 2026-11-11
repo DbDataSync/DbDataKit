@@ -36,5 +36,12 @@
     "typescript": "~6.0.2",
     "vite": "^8.2.2",
     "vitest": "^5.0.1"
+  },
+  "dbdatakit": {
+    "docs": {
+      "id": "console",
+      "title": "DbDataKit console",
+      "dir": "../../../DbDataKit/docs"
+    }
   }
 }

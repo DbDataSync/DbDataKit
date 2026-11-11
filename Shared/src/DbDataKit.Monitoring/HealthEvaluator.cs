@@ -45,6 +45,32 @@ public sealed class HealthEvaluator(TimeProvider? clock = null)
         return new JobHealth(job, findings.OrderByDescending(f => f.Severity).ThenBy(f => f.Rule).ToList());
     }
 
+    /// <summary>
+    /// The <see cref="HealthRule.CheckFailed"/> findings over the latest results of checks, one <see cref="JobHealth"/> per dataset that has a failing or erroring check (a dataset whose checks all pass has none, so it is not listed): the job id is the
+    /// dataset's identity. A failed check is an <see cref="Severity.Error"/> when it blocks and a <see cref="Severity.Warning"/> when it only warns; a check that could not run is a warning (it did not show the data to be bad, plan 23a QF10) unless it blocks.
+    /// </summary>
+    public IReadOnlyList<JobHealth> EvaluateChecks(IEnumerable<CheckReading> readings)
+    {
+        ArgumentNullException.ThrowIfNull(readings);
+        static string Number(decimal value) => value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var all = new List<JobHealth>();
+        foreach (var group in readings.GroupBy(r => r.Dataset, StringComparer.Ordinal).OrderBy(g => g.Key, StringComparer.Ordinal))
+        {
+            var findings = new List<HealthFinding>();
+            foreach (var r in group.OrderBy(r => r.CheckId, StringComparer.Ordinal))
+            {
+                if (string.Equals(r.Status, "pass", StringComparison.OrdinalIgnoreCase)) continue;
+                var error = string.Equals(r.Status, "error", StringComparison.OrdinalIgnoreCase);
+                var blocks = r.Blocking ? ", and it blocks what depends on the dataset" : "";
+                var numbers = !error && r.Measured is { } m ? $" (measured {Number(m)}{(r.Threshold is { } t ? $", allowed {Number(t)}" : "")})" : "";
+                var message = error ? $"The check {r.CheckId} on {group.Key} could not run{blocks}." : $"The check {r.CheckId} on {group.Key} failed{numbers}{blocks}.";
+                findings.Add(new HealthFinding(group.Key, HealthRule.CheckFailed, r.Blocking ? Severity.Error : Severity.Warning, message));
+            }
+            if (findings.Count > 0) all.Add(new JobHealth(group.Key, findings.OrderByDescending(f => f.Severity).ToList()));
+        }
+        return all;
+    }
+
     /// <summary>Evaluates every job the expectations name, asking the history for each one's last run and lag.</summary>
     public async Task<IReadOnlyList<JobHealth>> EvaluateAsync(IEnumerable<JobExpectation> expectations, IRunHistory history, CancellationToken ct = default)
     {

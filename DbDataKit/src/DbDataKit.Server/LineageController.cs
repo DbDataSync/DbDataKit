@@ -12,7 +12,7 @@ namespace DbDataKit.Server;
 /// </summary>
 [ApiController]
 [Route("api/lineage")]
-public sealed class LineageController(ConsoleLineage lineage) : ControllerBase
+public sealed class LineageController(ConsoleLineage lineage, ConsoleQuality quality) : ControllerBase
 {
     /// <summary>
     /// Where definitions are deployed (plan 28c E24): <c>?definition=&lt;name or kind/name&gt;[&amp;channel=]</c> answers "where is this deployed" (channels with active, previous and staged version, who and when, the runners with their versions and states),
@@ -49,8 +49,16 @@ public sealed class LineageController(ConsoleLineage lineage) : ControllerBase
     {
         if (depth is < 1) return BadRequest(new { error = "depth is a whole number of at least 1." });
         var joined = await lineage.JoinedAsync(refresh, cancellationToken);
-        var document = LineageJson.Write(joined.Graph);
+        // the nodes carry the status of their checks (plan 23a FQ16) and `blocks` says what each block stops; a server that cannot say is named by the quality page, not here, and the graph shows without
+        var graph = joined.Graph.WithChecks(ConsoleQuality.ChecksOf(await quality.OverviewAsync(cancellationToken)));
+        var document = LineageJson.Write(graph);
         document["fingerprint"] = joined.Graph.Fingerprint();
+        document["runs"] = LineageJson.WriteRuns(joined.Runs ?? []);
+        document["blocks"] = new JsonArray(graph.Blocks().Select(b => (JsonNode)new JsonObject
+        {
+            ["node"] = b.Blocked.Id, ["name"] = b.Blocked.Name, ["checks"] = new JsonArray(b.Checks.Select(c => (JsonNode)JsonValue.Create(c)!).ToArray()), ["since"] = b.Since,
+            ["stops"] = new JsonArray(b.Stops.Select(r => (JsonNode)new JsonObject { ["id"] = r.Node.Id, ["name"] = r.Node.Name, ["kind"] = r.Node.Kind.ToString().ToLowerInvariant(), ["depth"] = r.Depth }).ToArray()),
+        }).ToArray());
         document["servers"] = new JsonArray(joined.Servers.Select(s => (JsonNode)new JsonObject
         {
             ["server"] = s.Server, ["product"] = s.Product, ["nodes"] = s.Graph?.Nodes.Count, ["edges"] = s.Graph?.Edges.Count,

@@ -5,7 +5,7 @@ import { ErrorBanner } from '@dbdatakit/shell'
 import { LineageGraphView, projectLineage, reach } from '@dbdatakit/visuals'
 import { consoleApi } from '../api'
 import { ConsoleShell } from '../ConsoleShell'
-import { exactCard, findCards, serverNote, withoutDeployments } from '../lineage'
+import { checkLine, checkStatusOf, exactCard, findCards, serverNote, withoutDeployments } from '../lineage'
 import { panelLine, qualityApi } from '../quality'
 
 /**
@@ -72,6 +72,11 @@ export function LineagePage() {
                 {chosen.unknown_upstream && ' · what feeds it is not known'} · <span className="mono">{chosen.id}</span>
               </div>
             )}
+            {chosen && checkLine(chosen, lineage.data?.blocks) && (
+              <div className="hint" style={{ marginBottom: 8 }} data-testid="lineage-node-checks" data-status={checkStatusOf(chosen)}>
+                Checks on this node: {checkLine(chosen, lineage.data?.blocks)}
+              </div>
+            )}
             {chosen && counts && quality.data && (() => {
               const checks = quality.data.datasets.find((d) => d.dataset === chosen.id)
               return (
@@ -82,7 +87,7 @@ export function LineagePage() {
                 </div>
               )
             })()}
-            <LineageGraphView graph={graph} selected={selected} onSelect={setSelected} height={640} />
+            <LineageGraphView graph={graph} selected={selected} onSelect={setSelected} height={640} runs={lineage.data?.runs} />
           </>
         )}
         {graph && graph.nodes.length === 0 && graph.servers.length > 0 && !graph.error && <div className="empty" data-testid="lineage-empty">The servers that answered have no lineage to show yet.</div>}

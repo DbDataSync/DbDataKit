@@ -1,0 +1,2 @@
+# one "slug: Title" a line, in the order of the index
+first-run: First run and the setup checklist

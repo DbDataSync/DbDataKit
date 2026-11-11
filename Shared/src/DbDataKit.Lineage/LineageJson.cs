@@ -31,6 +31,34 @@ public static class LineageJson
         return new JsonObject { ["nodes"] = nodes, ["edges"] = edges };
     }
 
+    /// <summary>
+    /// The newest run of each edge as the <c>runs</c> list of a lineage document (plan 18, G10b, additive: a document without it has no runs): <c>[{"from", "to", "kind", "at", "outcome": "succeeded"|"failed", "rows"?}]</c>, ordered by the edge's ends.
+    /// </summary>
+    public static JsonArray WriteRuns(IEnumerable<EdgeRun> runs)
+    {
+        ArgumentNullException.ThrowIfNull(runs);
+        var list = new JsonArray();
+        foreach (var r in runs.OrderBy(r => r.From, StringComparer.Ordinal).ThenBy(r => r.To, StringComparer.Ordinal).ThenBy(r => r.Kind))
+            list.Add(new JsonObject { ["from"] = r.From, ["to"] = r.To, ["kind"] = r.Kind.ToString().ToLowerInvariant(), ["at"] = r.At, ["outcome"] = r.Outcome.ToString().ToLowerInvariant(), ["rows"] = r.Rows });
+        return list;
+    }
+
+    /// <summary>The runs of a lineage document: none when it has no <c>runs</c>; a list that is not this shape is a <see cref="LineageGraphException"/> saying where.</summary>
+    public static IReadOnlyList<EdgeRun> ReadRuns(JsonNode? document)
+    {
+        if (document is not JsonObject root || root["runs"] is null) return [];
+        if (root["runs"] is not JsonArray list) throw new LineageGraphException("`runs` is not a list.");
+        var runs = new List<EdgeRun>();
+        for (var i = 0; i < list.Count; i++)
+        {
+            if (list[i] is not JsonObject r) throw new LineageGraphException($"runs[{i}] is not an object.");
+            if (r["at"] is not JsonValue at || !at.TryGetValue<DateTimeOffset>(out var when)) throw new LineageGraphException($"runs[{i}] has no `at` date and time.");
+            long? rows = r["rows"] is JsonValue v && v.TryGetValue<long>(out var n) ? n : null;
+            runs.Add(new EdgeRun(Text(r, "from", $"runs[{i}]"), Text(r, "to", $"runs[{i}]"), Parse<EdgeKind>(Text(r, "kind", $"runs[{i}]"), $"runs[{i}].kind"), when, Parse<RunOutcome>(Text(r, "outcome", $"runs[{i}]"), $"runs[{i}].outcome"), rows));
+        }
+        return runs;
+    }
+
     public static LineageGraph Read(JsonNode? document)
     {
         if (document is not JsonObject root || root["nodes"] is not JsonArray nodeList || root["edges"] is not JsonArray edgeList)

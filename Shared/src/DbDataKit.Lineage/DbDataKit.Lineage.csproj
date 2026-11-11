@@ -9,5 +9,6 @@
     <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
     <ProjectReference Include="..\DbDataKit.Connections.Abstractions\DbDataKit.Connections.Abstractions.csproj" />
     <ProjectReference Include="..\DbDataKit.Dialect\DbDataKit.Dialect.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections.Descriptor\DbDataKit.Connections.Descriptor.csproj" />
   </ItemGroup>
 </Project>

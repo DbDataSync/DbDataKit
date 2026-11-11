@@ -37,14 +37,32 @@ public sealed class ConsoleLineageTests : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         sync = await PairableServer.StartAsync(product: "dbdatasync", instanceId: "sync-1", map: (server, _, _) =>
+        {
+            // what Sync's checks say of the warehouse table (plan 23a FQ16): a block that stops the model Build derives from it
+            server.MapGet("/api/quality", () => Results.Json(new JsonObject
+            {
+                ["datasets"] = new JsonArray(new JsonObject
+                {
+                    ["dataset"] = Warehouse, ["blocking"] = 1,
+                    ["checks"] = new JsonArray(new JsonObject { ["check_id"] = "customers_fresh", ["status"] = "fail", ["blocking"] = true, ["blocked_since"] = "2026-11-08T12:00:00+00:00" }),
+                }),
+                ["can_run"] = true,
+            }));
             server.MapGet("/api/lineage", () =>
             {
                 Interlocked.Increment(ref syncCalls);
                 if (syncFails) return Results.Json(new { error = "the configuration cannot be read" }, statusCode: 500);
                 var document = LineageJson.Write(SyncGraph());
                 document["problems"] = new JsonArray("Replication 'old' is left out: its configuration could not be read (ConfigFileException).");
+                // the newest run of the replication's edge (plan 18, G10b); one of an edge the graph does not have is dropped by the join
+                document["runs"] = LineageJson.WriteRuns(
+                [
+                    new EdgeRun(Crm, Warehouse, EdgeKind.Replicates, new DateTimeOffset(2026, 11, 10, 8, 0, 0, TimeSpan.Zero), RunOutcome.Failed, 12),
+                    new EdgeRun(Crm, Model, EdgeKind.Replicates, new DateTimeOffset(2026, 11, 10, 8, 0, 0, TimeSpan.Zero), RunOutcome.Succeeded),
+                ]);
                 return Results.Json(document);
-            }));
+            });
+        });
         build = await PairableServer.StartAsync(product: "dbdatabuild", instanceId: "build-1", map: (server, _, _) =>
             server.MapGet("/api/v1/lineage", () => { var document = LineageJson.Write(BuildGraph()); document["problems"] = new JsonArray(); return Results.Json(document); }));
         gateway = await PairableServer.StartAsync(product: "dbdatagateway", instanceId: "gateway-1");
@@ -88,6 +106,32 @@ public sealed class ConsoleLineageTests : IAsyncLifetime
         var servers = body["servers"]!.AsArray();
         Assert.Equal(["Build one", "Sync one"], servers.Select(s => (string)s!["server"]!));   // the Gateway keeps no lineage and is not part of it
         Assert.Contains(servers[1]!["problems"]!.AsArray(), p => ((string)p!).Contains("Replication 'old' is left out"));
+    }
+
+    [Fact]
+    public async Task A_node_shows_the_status_of_its_checks_and_the_graph_says_what_each_block_stops()
+    {
+        var (status, body) = await Get("/api/lineage");
+
+        Assert.Equal(HttpStatusCode.OK, status);
+        var graph = LineageJson.Read(body);
+        Assert.Equal("blocked", graph.Node(Warehouse)!.PropertyMap[LineageQuality.StatusProperty]);
+        Assert.Equal("customers_fresh", graph.Node(Warehouse)!.PropertyMap[LineageQuality.BlockingIdsProperty]);
+        Assert.False(graph.Node(Crm)!.PropertyMap.ContainsKey(LineageQuality.StatusProperty));
+        var block = Assert.Single(body["blocks"]!.AsArray())!;
+        Assert.Equal(Warehouse, (string)block["node"]!);
+        Assert.Equal(["customers_fresh"], block["checks"]!.AsArray().Select(c => (string)c!));
+        Assert.Equal([Model], block["stops"]!.AsArray().Select(r => (string)r!["id"]!));
+    }
+
+    [Fact]
+    public async Task The_newest_run_of_each_edge_comes_with_the_graph_and_a_run_of_an_edge_it_does_not_have_is_left_out()
+    {
+        var (_, body) = await Get("/api/lineage");
+
+        var run = Assert.Single(LineageJson.ReadRuns(body));
+        Assert.Equal((Crm, Warehouse, EdgeKind.Replicates, RunOutcome.Failed, 12L), (run.From, run.To, run.Kind, run.Outcome, run.Rows));
+        Assert.Equal(new DateTimeOffset(2026, 11, 10, 8, 0, 0, TimeSpan.Zero), run.At);
     }
 
     [Fact]

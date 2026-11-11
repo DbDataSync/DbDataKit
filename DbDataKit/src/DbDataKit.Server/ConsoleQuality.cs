@@ -15,6 +15,17 @@ public sealed class ConsoleQuality(ConsoleInstances instances, ConsoleRelay rela
     /// <summary>The path of a product's check results on its management API, or null for a product that keeps none (yet).</summary>
     public static string? PathOf(string? product) => product switch { ServerProducts.Build => "/api/v1/quality", ServerProducts.Sync => "/api/quality", _ => null };
 
+    /// <summary>The latest result of every check in an overview as the lineage graph reads it (plan 23a FQ16): one <see cref="DbDataKit.Lineage.NodeCheck"/> per check and server.</summary>
+    public static IReadOnlyList<DbDataKit.Lineage.NodeCheck> ChecksOf(JsonObject overview)
+    {
+        var all = new List<DbDataKit.Lineage.NodeCheck>();
+        foreach (var dataset in overview["datasets"]?.AsArray() ?? [])
+            foreach (var check in dataset?["checks"]?.AsArray() ?? [])
+                if (dataset?["dataset"]?.GetValue<string>() is { } identity && check?["check_id"]?.GetValue<string>() is { } id && check["status"]?.GetValue<string>() is { } status)
+                    all.Add(new DbDataKit.Lineage.NodeCheck(identity, id, status, check["blocking"]?.GetValue<bool>() ?? false, check["blocked_since"]?.GetValue<DateTimeOffset>()));
+        return all;
+    }
+
     public async Task<JsonObject> OverviewAsync(CancellationToken ct)
     {
         var statuses = await instances.StatusOfAllAsync(ct);
