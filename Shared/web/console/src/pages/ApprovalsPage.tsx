@@ -1,18 +1,43 @@
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { consoleApi } from '../api'
 import { ConsoleShell } from '../ConsoleShell'
-import { loadApprovals, waited, type ApprovalRow } from '../approvals'
+import { decideRequest, decisionProblem, loadApprovals, waited, type ApprovalRow } from '../approvals'
 
 const kindText: Record<ApprovalRow['kind'], string> = { 'change-request': 'Change request', 'app-trust': 'App to approve' }
 
+/** A change request's decision: a note and the two buttons, each off with its reason; the Store decides and its sentence comes back when it refuses (SC21c). */
+function Decision({ row, onDecided }: { row: ApprovalRow; onDecided: () => void }) {
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [refusal, setRefusal] = useState<string | null>(null)
+  const send = async (approve: boolean) => {
+    setBusy(true); setRefusal(null)
+    try { await decideRequest(row, approve, note); setNote(''); onDecided() } catch (e) { setRefusal(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
+  }
+  const approveWhy = busy ? 'Sending...' : decisionProblem(row, true, note)
+  const rejectWhy = busy ? 'Sending...' : decisionProblem(row, false, note)
+  return (
+    <div style={{ gridColumn: '1 / -1' }} data-testid="approvals-decision">
+      <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input className="input" style={{ flex: 1, minWidth: 200 }} aria-label="Note" placeholder="Note (needed to reject)" value={note} onChange={(e) => setNote(e.target.value)} data-testid="approvals-note" />
+        <button type="button" className="btn btn-primary" disabled={approveWhy !== null} title={approveWhy ?? undefined} data-testid="approvals-approve" onClick={() => send(true)}>Approve</button>
+        <button type="button" className="btn" disabled={rejectWhy !== null} title={rejectWhy ?? undefined} data-testid="approvals-reject" onClick={() => send(false)}>Reject</button>
+        {rejectWhy && !busy && note.trim() === '' && <span className="hint" data-testid="approvals-why">{rejectWhy}</span>}
+      </div>
+      {refusal && <div className="banner error" role="alert" style={{ marginTop: 6 }} data-testid="approvals-refusal"><span className="mark">!</span><span>{refusal}</span></div>}
+    </div>
+  )
+}
+
 /**
  * What waits for a decision on the servers of the suite, in one list: the change requests of the Store's models (an agent's write, or a model that asks for approval) and the app versions of a Gateway that ask to be trusted and
- * have no approval for their exact files. The longest wait is first, and an agent's write comes before a person's. A row says whether you may decide it and opens the screen where it is read and decided; nothing is decided here,
- * since the proposed rows and the files are on those screens. Asked of each server through the relay every thirty seconds; a server that does not answer is named above the list, and the others still show.
+ * have no approval for their exact files. The longest wait is first, and an agent's write comes before a person's. A row says whether you may decide it and opens the screen where it is read and decided; a change request is approved or rejected here (SC21c: the note, then the Store's own rules decide), and the proposed rows are read on the Store's screen the row opens; an app version is decided on the Gateway's screen. Asked of each server through the relay every thirty seconds; a server that does not answer is named above the list, and the others still show.
  */
 export function ApprovalsPage() {
+  const client = useQueryClient()
   const instances = useQuery({ queryKey: ['instances'], queryFn: consoleApi.instances.list })
   const servers = instances.data ?? []
   const view = useQuery({
@@ -54,6 +79,7 @@ export function ApprovalsPage() {
                     <Link className="btn" to={row.link} data-testid="approvals-open">{row.canDecide ? 'Review' : 'Read'}</Link>
                     {!row.canDecide && <span className="hint" data-testid="approvals-cannot">You may not decide it</span>}
                   </span>
+                  {row.request && row.canDecide && <Decision row={row} onDecided={() => client.invalidateQueries({ queryKey: ['approvals'] })} />}
                 </div>
               ))}
             </div>

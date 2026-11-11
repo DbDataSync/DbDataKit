@@ -13,9 +13,9 @@ Summary (counts of the features below):
 | Product | built | partly | missing | not planned | features |
 | --- | --- | --- | --- | --- | --- |
 | Build | 7 | 1 | 12 | 5 | 25 |
-| Store | 4 | 2 | 1 | 3 | 10 |
+| Store | 5 | 1 | 1 | 3 | 10 |
 | Sync | 6 | 6 | 6 | 3 | 21 |
-| All | 17 | 9 | 19 | 11 | 56 |
+| All | 18 | 8 | 19 | 11 | 56 |
 
 ### Build
 
@@ -54,7 +54,7 @@ Summary (counts of the features below):
 | The models of a server and their entities | `store/src/pages/ModelsPage.tsx` | `workspace/src/pages/WorkspacePage.tsx` (the `models/` files of a `store` project) | built | SC21d |
 | Model editor: a form from the model schema and YAML, the check as you type | `store/src/pages/ModelEditor.tsx`, `views/ModelEditorView.tsx` | `workspace/src/pages/StoreModelPanel.tsx`, `StructuredPanel.tsx` | built | SC21d |
 | New model from a starting text, name checked | `store/src/pages/NewModelPage.tsx` | `workspace/src/pages/StoreModelPanel.tsx` (`NewStoreModel`) | built | SC21d |
-| Change requests: read the proposed rows against the rows now, approve, reject with a reason | `store/src/pages/ChangesTab.tsx`, `views/ChangesView.tsx` | see the state: partly | partly | SC21c |
+| Change requests: read the proposed rows against the rows now, approve, reject with a reason | `store/src/pages/ChangesTab.tsx`, `views/ChangesView.tsx` | `console/src/pages/ApprovalsPage.tsx` decides in place (change requests are a Store server's data, not a draft's) | built | SC21c |
 | History of a model's text: earlier texts with who and when, diff against now, restore | `store/src/pages/HistoryTab.tsx`, `views/HistoryView.tsx` | `workspace/src/pages/WorkspacePage.tsx` (git history and changes of the draft; no restore button) | partly | SC21e |
 | Publish a model to the Gateway (the entity-model route) | `dbdatastore model publish` (the Store has no screen for it) | `workspace/src/pages/PublishForm.tsx` | built | SC21b |
 | Publish with the approval path (`approval: steward|owner` opens a change request) | Store server | none: the Workspace's merge is the author's review (SC21b) | not planned | SC21b |

@@ -34,3 +34,23 @@ test('the Approvals page lists a waiting change request, opens the screen that d
   await page.goto('/approvals')        // a Store model's page has the Store's rail, not the console's, so the page is opened by its address
   await expect(page.getByTestId('approvals-none')).toBeVisible()
 })
+
+// SC21c: the same page decides in place. A rejection needs the reason written (its button is off until then), an approval applies the rows, and the page says nothing waits once the list is empty. Written, not run (it needs the console built).
+test('the Approvals page approves and rejects a change request without opening the Store\'s screen', async ({ page, context, baseURL }) => {
+  await signInNewAdmin(page, context, baseURL!, 'Approvals Decider', `approvals-decide-${Date.now()}@example.com`)
+  const store = await mockStore(page, { role: 'admin', models: { budgets }, created: ['budgets'] })
+  store.propose('budgets', [{ action: 'insert', entity: 'budget', values: { code: 'B1', amount: 5 } }], 'Add budget B1')
+  store.propose('budgets', [{ action: 'insert', entity: 'budget', values: { code: 'B2', amount: 7 } }], 'Add budget B2')
+
+  await page.goto('/approvals')
+  await expect(page.getByTestId('approvals-row')).toHaveCount(2)
+  const first = page.getByTestId('approvals-row').first()
+  await expect(first.getByTestId('approvals-reject')).toBeDisabled()
+  await first.getByTestId('approvals-note').fill('Not this quarter')
+  await expect(first.getByTestId('approvals-reject')).toBeEnabled()
+  await first.getByTestId('approvals-reject').click()
+  await expect(page.getByTestId('approvals-row')).toHaveCount(1)
+
+  await page.getByTestId('approvals-approve').click()
+  await expect(page.getByTestId('approvals-none')).toBeVisible()
+})
