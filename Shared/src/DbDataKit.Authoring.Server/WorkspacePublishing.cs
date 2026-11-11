@@ -4,11 +4,10 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using DbDataKit.Apps;
 using DbDataKit.Secrets;
-using DbDataKit.Secrets.Store;
 using DbDataKit.State;
 using DbDataKit.Web.Trust;
 
-namespace DbDataWorkspace.Server;
+namespace DbDataKit.Authoring.Server;
 
 /// <summary>A publish was refused or could not be done; <see cref="Status"/> is the HTTP status the route answers with, and the message is a sentence a person can act on (the Gateway's own words when it refused).</summary>
 public sealed class WorkspacePublishException(string message, int status) : Exception(message)
@@ -25,12 +24,12 @@ public sealed record PublishTarget(string Name, string Url, string InstanceId, s
 /// through the server's secret resolver at the moment of publishing and never returned by any call. A target is made by <see cref="PairAsync"/> (a single-use pairing code made on the Gateway with <c>server pair --max-role publisher</c>):
 /// it makes the key, pairs with the Gateway so it knows the key's public half, and records the reference and the Gateway's address and certificate fingerprint.
 /// </summary>
-public sealed class WorkspacePublishing(string directory, WorkspaceStore store, Func<ISecretResolver>? secrets = null)
+public sealed class WorkspacePublishing(string directory, WorkspaceStore store, Func<ISecretStore> keys, Func<ISecretResolver> secrets)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private readonly object gate = new();
 
-    private ISecretResolver Resolver => (secrets ?? (() => WorkspaceState.Secrets(directory)))();
+    private ISecretResolver Resolver => secrets();
 
     private string TargetsFile => Path.Combine(directory, "publish-targets.json");
 
@@ -70,7 +69,7 @@ public sealed class WorkspacePublishing(string directory, WorkspaceStore store, 
         // the key is kept only once the Gateway has accepted it
         var secret = new SecretName("workspace", "publisher-key", name);
         using (var value = SecretValue.From(identity.Id + ":" + Base64Url.EncodeToString(identity.Key.ExportSeed())))
-            await WorkspaceSecrets.Open(directory).SetAsync(secret, value, ct);
+            await keys().SetAsync(secret, value, ct);
         var target = new PublishTarget(name, paired.Url.ToString().TrimEnd('/'), paired.InstanceId, paired.CertificateFingerprint, ServerRoles.Names(paired.Ceiling), label, DateTimeOffset.UtcNow);
         Save(target);
         store.SetPublisherKey(name, secret.ToRef().ToString(), by);

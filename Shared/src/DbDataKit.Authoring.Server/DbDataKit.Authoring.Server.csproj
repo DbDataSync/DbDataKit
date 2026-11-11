@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbDataKit.Authoring.Server</PackageId>
+    <RootNamespace>DbDataKit.Authoring.Server</RootNamespace>
+    <Description>The Workspace's engine, hosted by the DbDataKit console and by the standalone Workspace server (plan 33 SC05): the projects people author in git workspaces, the builds of an app from a vendored package store in a child process with no network and no environment of the host's, the read-only preview, publishing to a paired Gateway with a key kept as a reference, and the management API over them.</Description>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\DbDataKit.Authoring\DbDataKit.Authoring.csproj" />
+    <ProjectReference Include="..\DbDataKit.Apps.Build\DbDataKit.Apps.Build.csproj" />
+    <ProjectReference Include="..\DbDataKit.Apps.Instances\DbDataKit.Apps.Instances.csproj" />
+    <ProjectReference Include="..\DbDataKit.Apps.Manifest\DbDataKit.Apps.Manifest.csproj" />
+    <ProjectReference Include="..\DbDataKit.Apps.Bundling\DbDataKit.Apps.Bundling.csproj" />
+    <ProjectReference Include="..\DbDataKit.Config.Git\DbDataKit.Config.Git.csproj" />
+    <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
+    <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+    <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Secrets\DbDataKit.Secrets.csproj" />
+    <ProjectReference Include="..\DbDataKit.Web\DbDataKit.Web.csproj" />
+  </ItemGroup>
+</Project>

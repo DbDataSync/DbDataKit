@@ -352,6 +352,12 @@ public static class ConsoleCli
         catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException) { return ConsoleRunnerSettings.Disabled; }
     }
 
+    private static ConsoleWorkspaceSettings DefaultWorkspace(Func<string, string?>? environment)
+    {
+        try { return ConsoleWorkspaceSettings.Load(Path.GetFullPath(ConsoleSettings.DefaultDirectory(environment))); }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException) { return ConsoleWorkspaceSettings.Disabled; }
+    }
+
     /// <summary>The shared <c>state</c> verbs over the console's state: its settings come from the flags, the environment and <c>settings.yaml</c> in its directory (<see cref="ConsoleState.Resolve"/>; <c>state move</c> and <c>state init</c> write that file), its file is <c>state.db</c> in its directory, and a password that is a secret reference is looked up in its store, then the environment.</summary>
     private static Noun StateNoun(Func<string, string?>? environment, Func<DbDataKit.State.Engines.Snapshots.MoveOptions, DbDataKit.State.Engines.Snapshots.MoveOptions>? configureMove = null) => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(
         Program, "the console",
@@ -364,7 +370,7 @@ public static class ConsoleCli
                 () => new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]),
                 ConsoleState.SettingsFileIn(directory));
         },
-        ConsoleState.ModulesFor(DefaultRunner(environment)), ConsoleState.ScopeFor(DefaultRunner(environment)), ["engine", "repo"], "[--engine mssql|postgres] [--repo <console directory>]") { ConfigureMove = configureMove });
+        ConsoleState.ModulesFor(DefaultRunner(environment), DefaultWorkspace(environment)), ConsoleState.ScopeFor(DefaultRunner(environment), DefaultWorkspace(environment)), ["engine", "repo"], "[--engine mssql|postgres] [--repo <console directory>]") { ConfigureMove = configureMove });
 
     // ---- user ----
 

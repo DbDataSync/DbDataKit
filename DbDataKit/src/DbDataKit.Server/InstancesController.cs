@@ -54,6 +54,10 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
         if (services.GetService(typeof(ConsoleRunner)) is ConsoleRunner runner)
             list.Insert(0, new InstanceSummary(ConsoleRunnerSettings.ServerId, "Console runner", $"{Request.Scheme}://{Request.Host}/", ServerProducts.Runner, runner.Version, null,
                 runner.Host is not null, runner.Host is not null, runner.Host is null ? "the embedded runner is not running" : null, null, Embedded: true));
+        // and the Workspace it hosts
+        if (services.GetService(typeof(ConsoleWorkspace)) is ConsoleWorkspace workspace)
+            list.Insert(list.Count > 0 && list[0].Id == ConsoleRunnerSettings.ServerId ? 1 : 0, new InstanceSummary(ConsoleWorkspaceSettings.ServerId, "Console workspace", $"{Request.Scheme}://{Request.Host}/", ServerProducts.Workspace, workspace.Version, null,
+                true, true, null, null, Embedded: true));
         return Ok(list);
     }
 
@@ -109,7 +113,7 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
     }
 
     [HttpDelete("{id}")]
-    public IActionResult Forget(string id) => id == ConsoleRunnerSettings.ServerId ? BadRequest(new { error = "The console's embedded runner is part of the console and cannot be forgotten; turn it off with runner.enabled in settings.yaml." }) : instances.Remove(id) ? NoContent() : NotFound(new { error = "No such server is registered." });
+    public IActionResult Forget(string id) => id == ConsoleWorkspaceSettings.ServerId ? BadRequest(new { error = "The Workspace is part of the console and cannot be forgotten; turn it off with workspace.enabled in settings.yaml." }) : id == ConsoleRunnerSettings.ServerId ? BadRequest(new { error = "The console's embedded runner is part of the console and cannot be forgotten; turn it off with runner.enabled in settings.yaml." }) : instances.Remove(id) ? NoContent() : NotFound(new { error = "No such server is registered." });
 
     private static InstanceSummary Summarise(InstanceStatus s) => new(
         s.Instance.InstanceId, s.Instance.Name, s.Instance.Url.AbsoluteUri, s.Product, s.Version, s.ApiVersion ?? s.Instance.ApiVersion, s.Reachable, s.Ready, s.Problem, s.Instance.PairedAt, Generation: s.KnownGeneration, OutsideSupport: s.OutsideSupport);

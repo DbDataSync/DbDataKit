@@ -40,6 +40,7 @@
     <Project Path="Shared/src/DbDataKit.Apps.Host/DbDataKit.Apps.Host.csproj" />
     <Project Path="Shared/src/DbDataKit.Apps.Manifest/DbDataKit.Apps.Manifest.csproj" />
     <Project Path="Shared/src/DbDataKit.Authoring/DbDataKit.Authoring.csproj" />
+    <Project Path="Shared/src/DbDataKit.Authoring.Server/DbDataKit.Authoring.Server.csproj" />
     <Project Path="Shared/src/DbDataKit.Config.Git/DbDataKit.Config.Git.csproj" />
     <Project Path="Shared/src/DbDataKit.Config.Hosting/DbDataKit.Config.Hosting.csproj" />
     <Project Path="Shared/src/DbDataKit.Config.Testing/DbDataKit.Config.Testing.csproj" />

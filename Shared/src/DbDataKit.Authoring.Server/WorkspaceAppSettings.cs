@@ -1,7 +1,7 @@
 using DbDataKit.Apps.Bundling;
 using DbDataKit.Config.Yaml;
 
-namespace DbDataWorkspace.Server;
+namespace DbDataKit.Authoring.Server;
 
 /// <summary>
 /// How a Workspace server builds an app (plan 22a GP35): the <c>apps:</c> section of its <c>server.yaml</c>, the same keys the Gateway reads for <c>apps build</c>. A build always runs from a vendored package store (plan 22a GP33, QG12): the
@@ -22,9 +22,11 @@ public sealed record WorkspaceAppSettings(string? PackageStore = null, IReadOnly
     public IReadOnlyList<string> Allowed => AllowedPackages ?? [];
 
     /// <summary>The settings of <c>server.yaml</c> in <paramref name="directory"/>; the defaults when the file or the section is absent. A key that is not a setting, or a value that is not one, is refused naming the file and the line.</summary>
-    public static WorkspaceAppSettings Load(string directory)
+    public static WorkspaceAppSettings Load(string directory) => LoadFrom(Path.Combine(directory, "server.yaml"));
+
+    /// <summary>The <c>apps:</c> section of the settings file <paramref name="path"/> (the console's <c>settings.yaml</c> when the console hosts the Workspace); the defaults when the file or the section is absent.</summary>
+    public static WorkspaceAppSettings LoadFrom(string path)
     {
-        var path = Path.Combine(directory, "server.yaml");
         if (!File.Exists(path)) return new();
         var diagnostics = new List<ConfigDiagnostic>();
         var root = StrictYamlReader.Read(File.ReadAllText(path), path, diagnostics);

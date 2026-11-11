@@ -112,6 +112,14 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
                 allowed ? "The embedded runner has no such call." : "The console's embedded runner is a runner: the console serves only its management calls (status, instances, runs, tasks, packages and their life cycle).");
             return;
         }
+        if (server == ConsoleWorkspaceSettings.ServerId)
+        {
+            // the hosted Workspace is answered in this process by its own routes (ConsoleWorkspaceApi); what those do not answer is not a call there is anything to forward to
+            var allowed = ServerProducts.Relayable(ServerProducts.Workspace, context.Request.Method, path);
+            await Refuse(context, allowed ? StatusCodes.Status404NotFound : StatusCodes.Status403Forbidden,
+                allowed ? "The console's Workspace has no such call." : ServerProducts.RefusalFor(ServerProducts.Workspace, "The console's Workspace"));
+            return;
+        }
         if (instances.Registry.Find(server) is not { } instance)
         {
             await Refuse(context, StatusCodes.Status404NotFound, "No such server is registered.");

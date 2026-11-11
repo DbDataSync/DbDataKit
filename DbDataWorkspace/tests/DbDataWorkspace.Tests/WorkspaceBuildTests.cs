@@ -1,3 +1,4 @@
+using DbDataKit.Authoring.Server;
 using System.Net;
 using System.Text.Json.Nodes;
 using DbDataGateway.Tests.Support;
