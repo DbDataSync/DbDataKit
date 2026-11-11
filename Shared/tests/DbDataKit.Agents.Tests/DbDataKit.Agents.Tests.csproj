@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <PackageReference Include="JsonSchema.Net" />
+    <ProjectReference Include="..\..\src\DbDataKit.Agents\DbDataKit.Agents.csproj" />
+  </ItemGroup>
+</Project>

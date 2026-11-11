@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dbdatakit:schemas:knowledge:1",
+  "title": "knowledge/1: the front matter of a knowledge item",
+  "description": "The YAML block at the top of a Markdown knowledge item (plan 27 section 3.5c). The reader (KnowledgeItemLoader) is the authority; a test keeps this file's keys equal to the reader's. A folder file _knowledge.yml has `knowledge: 1` and `defaults:` with the keys of $defs.defaults.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["knowledge"],
+  "properties": {
+    "knowledge": { "const": 1, "description": "The format number." },
+    "title": { "type": "string", "minLength": 1, "maxLength": 200, "description": "One line. Left out, the first `# ` heading of the text is the title." },
+    "role": { "enum": ["reference", "instruction", "guardrail"], "description": "Found by search (reference), always given where its scope applies (instruction), or an instruction marked as policy (guardrail). Required unless a _knowledge.yml above gives it." },
+    "about": { "$ref": "#/$defs/about" },
+    "for": { "$ref": "#/$defs/for" },
+    "owner": { "type": "string", "minLength": 1, "maxLength": 200, "description": "A group of the identity home; approves changes to the item." },
+    "kind": { "enum": ["item"], "description": "Verified queries are a kind of this format, read from plan 27a KN21 on." },
+    "chunking": { "$ref": "#/$defs/chunking" }
+  },
+  "$defs": {
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role": { "$ref": "#/properties/role" },
+        "about": { "$ref": "#/$defs/about" },
+        "for": { "$ref": "#/$defs/for" },
+        "owner": { "$ref": "#/properties/owner" },
+        "chunking": { "$ref": "#/$defs/chunking" }
+      }
+    },
+    "about": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "description": "What the item is about; any one entry puts it in scope. An entry names one subject and may narrow it.",
+      "items": {
+        "type": "object",
+        "minProperties": 1,
+        "oneOf": [
+          { "required": ["build-project"], "properties": { "build-project": { "type": "string" }, "folder": { "type": "string" }, "model": { "type": "string" } }, "additionalProperties": false },
+          { "required": ["semantic-model"], "properties": { "semantic-model": { "type": "string" }, "measure": { "type": "string" }, "dimension": { "type": "string" } }, "additionalProperties": false },
+          { "required": ["store-model"], "properties": { "store-model": { "type": "string" }, "field": { "type": "string" } }, "additionalProperties": false },
+          { "required": ["connection"], "properties": { "connection": { "type": "string" } }, "additionalProperties": false },
+          { "required": ["app"], "properties": { "app": { "type": "string" } }, "additionalProperties": false },
+          { "required": ["integration"], "properties": { "integration": { "type": "string" } }, "additionalProperties": false },
+          { "required": ["tag"], "properties": { "tag": { "type": "string" } }, "additionalProperties": false },
+          { "required": ["property"], "properties": { "property": { "type": "string", "pattern": "^[^=\\s]+=\\S.*$" } }, "additionalProperties": false },
+          { "required": ["product"], "properties": { "product": { "oneOf": [ { "enum": ["build", "sync", "store", "integration", "apps", "serving", "runner", "console"] }, { "type": "array", "minItems": 1, "items": { "enum": ["build", "sync", "store", "integration", "apps", "serving", "runner", "console"] } } ] } }, "additionalProperties": false },
+          { "required": ["install"], "properties": { "install": { "const": true } }, "additionalProperties": false }
+        ]
+      }
+    },
+    "for": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Who the item is for: each key narrows; a key left out means all.",
+      "properties": {
+        "audience": { "oneOf": [ { "enum": ["front-end", "back-end"] }, { "type": "array", "items": { "enum": ["front-end", "back-end"] } } ] },
+        "agent": { "oneOf": [ { "type": "string" }, { "type": "array", "items": { "type": "string" } } ] },
+        "channel": { "oneOf": [ { "type": "string" }, { "type": "array", "items": { "type": "string" } } ] }
+      }
+    },
+    "chunking": {
+      "oneOf": [
+        { "const": "none", "description": "Keep the item whole." },
+        { "type": "object", "additionalProperties": false, "required": ["split"], "properties": { "split": { "enum": ["heading-level-1", "heading-level-2", "heading-level-3", "heading-level-4", "heading-level-5", "heading-level-6"] } } }
+      ]
+    }
+  }
+}

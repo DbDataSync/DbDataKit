@@ -1,6 +1,6 @@
 # Knowledge and search: what exists today
 
-**DbDataKnowledge is not built.** There is no `knowledge` library, no index, no embedding connection, no `knowledge` command and no knowledge app. [Plan 27](plans/27-knowledge-agents-integrations-work.md) section 2 is the decided design; [plan 27a](plans/27a-knowledge-slices.md) slices it. This page lists the pieces that are built and that the design stands on, so a reader does not mistake the design for a feature.
+**DbDataKnowledge is partly built: the library, not the product.** `DbDataKit.Knowledge` reads the item format; there is no index, no embedding connection, no `knowledge` command and no knowledge app. [Plan 27](plans/27-knowledge-agents-integrations-work.md) section 2 is the decided design; [plan 27a](plans/27a-knowledge-slices.md) slices it. This page lists the pieces that are built and that the design stands on, so a reader does not mistake the design for a feature.
 
 ## What a person or an agent can use now
 
@@ -13,11 +13,25 @@
 | An engine that can hold vectors | the state engines declare a **feature** (`EngineFeature.Vector`: SQL Server 2025's vector type, PostgreSQL's `pgvector`); a module that needs it refuses to be created where it is missing and says how to fix it; the test environment runs SQL Server 2025 and PostgreSQL with `pgvector` | [DbDataKit.State.Engines README](../Shared/src/DbDataKit.State.Engines/README.md), `testenv/docker-compose.yml` |
 | Descriptions of what Build builds | Build's metadata documents (one per model of any kind: title, description, tags, properties, columns, what it reads and what reads it), shown by `dbdatabuild project show metadata` and stored in the target's tracking tables on `connection publish` | [DbDataBuild/docs/concepts.md](../DbDataBuild/docs/concepts.md) |
 
+## What the library does (`DbDataKit.Knowledge`, plan 27a)
+
+| Piece | What it does | Where |
+| --- | --- | --- |
+| The item, `knowledge/1` (KN01) | a Markdown file with a front matter (role: reference, instruction or guardrail; `about` subjects; `for` audience, agent and channel; `owner`; `chunking`), read strictly with file and line; a file in a project's `knowledge/` folder is about that project; `prompting`, `limits` and `data-rules` are refused with the place they belong (the install policy) | `KnowledgeItemLoader`, `schemas/knowledge.schema.json` |
+| Folder defaults (KN01) | `_knowledge.yml` gives the folders beneath it defaults, nearest wins | `KnowledgeProject.Load` |
+| Subjects and orphans (KN02) | a subject is checked against the catalog when an item is saved (never heard of: refused at its line); an item whose subjects are all gone is orphaned, reaches nobody and is listed | `SubjectResolver`, `ISubjectCatalog` |
+| Scope matching (KN03) | which instructions and guardrails apply to what is in play, broad to narrow, guardrails apart, by audience, agent and channel | `ScopeMatcher` |
+| The install knowledge project (KN35) | a template with `shared/`, `build/`, `sync-and-build/` and the administrators' `policy/` folder; `policy/` holds only guardrails owned by `administrators` | `InstallKnowledge` |
+| Chunking (KN04) | long references split at headings, then paragraphs, then sentences; tables and code are never cut; the chunk's hash is of what is embedded, so only a changed chunk is embedded again | `Chunker` |
+| Search and the access filter (KN09, with the fake of KN05) | a question is embedded and the nearest chunks are found among those the caller may see (a role on the subject; fail closed on a gone or unknown subject; an item with no subject follows its `for`), at most three chunks per item, adjacent ones joined | `KnowledgeSearch`, `KnowledgeAccess`, `InMemoryKnowledgeIndex`, `FakeEmbeddingGenerator` |
+
+[Shared/src/DbDataKit.Knowledge/README.md](../Shared/src/DbDataKit.Knowledge/README.md) describes each piece.
+
 ## What does not exist
 
 | Designed in plan 27 section 2 | State today |
 | --- | --- |
-| The `knowledge/1` item format (role, scope, owner), `_knowledge.yml` defaults, knowledge projects in git | not started |
+| The `knowledge/1` item format (role, scope, owner), `_knowledge.yml` defaults, knowledge projects in git | **built as a library** (above); not published, not served, no editor screen yet |
 | Generated knowledge from published definitions; the `build-metadata` kind (Build publishing its metadata to the serving group) | not started; the published kinds it would read are `semantic-model`, `entity-model`, `data-source`, `app` |
 | Chunking, embedding models (built in, Ollama, OpenAI-compatible), the vector index per channel, `sqlite-vec` | not started; only the engine feature check exists |
 | `knowledge search`, `show`, `about`, `check`, `context`, `suggest`, `index` commands | not started |

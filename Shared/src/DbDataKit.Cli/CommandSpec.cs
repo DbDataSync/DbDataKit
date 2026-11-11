@@ -31,6 +31,9 @@ public static class EffectClasses
 /// </summary>
 public sealed record CommandSpec(string Name, EffectClass Effect, string Purpose, bool Implemented, string Lane = "", string Disposition = "")
 {
+    /// <summary>What the command does, as flags (plan 27a AG02). Defaults to what the effect class maps to.</summary>
+    public Traits Traits { get; init; } = TraitTable.For(Effect);
+
     /// <summary>The words of the path: `connection deploy` is [connection, deploy].</summary>
     public string[] Path => Name.Split(' ');
 
