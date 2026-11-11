@@ -45,6 +45,21 @@ export async function editorAxisStory(page: Page) {
   await expect(by(page, 'ed-status')).toContainText('has no `column`')
   await expect(by(page, 'ed-well-chart-column-entry-0')).toHaveCount(0)
 
+  // 4a. (DBR44) A format and a sort per level: the structured format shows a sample from the shared formatter; a measure is offered to the innermost level only; the request follows the sort.
+  await by(page, 'ed-level-chart-x-2-format-editor').locator('summary').click()
+  await by(page, 'ed-level-chart-x-2-format-kind').selectOption('date')
+  await by(page, 'ed-level-chart-x-2-format-date').fill('MMM')
+  await expect(by(page, 'ed-level-chart-x-2-format-sample')).toContainText('reads Mar')
+  await by(page, 'ed-level-chart-x-2-format-date').fill('yyy')
+  await expect(by(page, 'ed-level-chart-x-2-format-problem')).toContainText('yyy')
+  await by(page, 'ed-level-chart-x-2-format-date').fill('MMM')
+  expect(await by(page, 'ed-level-chart-x-0-sort-by').locator('option[value="sales.net_amount"]').count()).toBe(0)
+  expect(await by(page, 'ed-level-chart-x-2-sort-by').locator('option[value="sales.net_amount"]').count()).toBe(1)
+  await by(page, 'ed-level-chart-x-2-sort-by').selectOption('sales.net_amount')
+  await by(page, 'ed-level-chart-x-2-sort-dir').selectOption('desc')
+  await expect(by(page, 'ed-derived-request-chart')).toContainText('"sales.net_amount",\n        "desc"')
+  await by(page, 'ed-level-chart-x-0-sort-by').selectOption('label')
+
   // 5. Removing levels back to one gives the plain channel again; each step is one undo step.
   await by(page, 'ed-well-chart-x-remove-2').click()
   await by(page, 'ed-well-chart-x-remove-1').click()
