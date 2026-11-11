@@ -162,22 +162,12 @@
       "files": [ { "path": "Shared/src/DbDataKit.Agents/AgentPolicy.cs", "sha256": null } ]
     },
     {
-      "id": "model-provider",
-      "title": "Model provider (models/<name>.yml, model-provider: N)",
-      "current": 1,
-      "previous": 1,
-      "status": "open",
-      "note": "new with plan 27a AG05: kind (anthropic, openai, foundry, ollama, openai-compatible), endpoint, locality (cloud or local), purpose (chat or embeddings), auth, the key as a secret reference (a key written as itself is refused without being echoed), the models it allows with window, largest answer and price; the model half of the connection kinds of IX01, a file of its own until that slice gives connection a kind",
-      "version_source": { "file": "Shared/src/DbDataKit.Agents/ModelProviders.cs", "pattern": "public const int Version = (\\d+);" },
-      "files": [ { "path": "Shared/src/DbDataKit.Agents/ModelProviders.cs", "sha256": null } ]
-    },
-    {
       "id": "model-slots",
       "title": "Model slot bindings (models/_slots.yml, model-slots: N)",
       "current": 1,
       "previous": 1,
       "status": "open",
-      "note": "new with plan 27a AG05: per slot and per channel (or * for every channel) an ordered list of provider and model, the primary first and the fallback after it",
+      "note": "new with plan 27a AG05: per slot and per channel (or * for every channel) an ordered list of provider and model, the primary first and the fallback after it; a provider is the name of a connection of kind model-provider (plan 27a IX01; the earlier model-provider/1 files were never released and are gone)",
       "version_source": { "file": "Shared/src/DbDataKit.Agents/ModelSlots.cs", "pattern": "public const int Version = (\\d+);" },
       "files": [ { "path": "Shared/src/DbDataKit.Agents/ModelSlots.cs", "sha256": null } ]
     }

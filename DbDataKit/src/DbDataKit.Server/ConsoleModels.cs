@@ -1,8 +1,8 @@
 using DbDataKit.Agents;
 using DbDataKit.Agents.Providers;
+using DbDataKit.Connections;
 using DbDataKit.Knowledge;
 using DbDataKit.Secrets;
-using DbDataKit.Secrets.Store;
 using Microsoft.Extensions.AI;
 
 namespace DbDataKit.Server;
@@ -16,7 +16,7 @@ public sealed class ModelHttp(HttpMessageHandler? handler = null)
 public sealed record ModelView(string Id, int Window, int MaxOutput, decimal? PriceInput, decimal? PriceOutput);
 
 /// <summary>A provider as the screen lists it: its file, what the reader says, and whether its key can be read (never the key).</summary>
-public sealed record ProviderView(string Name, string File, string Yaml, string? Title, string? Kind, string? Endpoint, bool? Cloud, string? Purpose, string? KeyReference, bool KeyAvailable, string? KeyProblem,
+public sealed record ProviderView(string Name, string File, string Yaml, string? Kind, string? Endpoint, bool? Cloud, string? Purpose, string? KeyReference, bool KeyAvailable, string? KeyProblem,
     IReadOnlyList<ModelView> Models, IReadOnlyList<DiagnosticView> Diagnostics);
 
 /// <summary>What a slot is bound to in one channel, in order, and whether each choice can be used now.</summary>
@@ -30,25 +30,25 @@ public sealed record ModelsView(IReadOnlyList<ProviderView> Providers, string Sl
 public sealed record AgentSlotView(string Slot, IReadOnlyList<string> Agents, bool Bound);
 
 /// <summary>
-/// The model providers and slots of the console (plan 27a AG05): <c>models/&lt;name&gt;.yml</c> (<c>model-provider/1</c>) and <c>models/_slots.yml</c> (<c>model-slots/1</c>) in the console's directory, and the <see cref="IAgentModels"/> the agents use, built from them. A provider's
-/// key is a secret reference; the key itself is kept in the console's secret store (<see cref="SecretNameFor"/>) when a person types it here, and is never in a file, a view, an audit row or a message. <b>Fallback:</b> a slot bound to several
+/// The model providers and slots of the console (plan 27a AG05): a provider is a <b>connection of kind <c>model-provider</c></b> (<c>connections/&lt;name&gt;.yml</c>, kept by <see cref="ConsoleConnections"/>, plan 27a IX01) and the slots are <c>models/_slots.yml</c> (<c>model-slots/1</c>)
+/// in the console's directory; this builds the <see cref="IAgentModels"/> the agents use from them. A provider's key is a secret reference; the key itself is kept in the console's secret store (<see cref="ConsoleConnections.SecretNameFor"/>) when a person types it, and is never in a file, a view, an audit row or a message. <b>Fallback:</b> a slot bound to several
 /// models is tried in order with back-off (<see cref="FallbackChatClient"/>); the install policy's say on falling to a cloud provider (plan 27a AG21) is not read yet, so every choice may be used.
 /// </summary>
 public sealed class ConsoleModels : IAgentModels
 {
     private readonly string _directory;
-    private readonly EncryptedFileSecretStore _store;
-    private readonly ISecretResolver _secrets;
+    private readonly ConsoleConnections _connections;
     private readonly HttpClient _http;
     private readonly object _lock = new();
     private Dictionary<(string Slot, string? Channel), BoundModel?> _cache = [];
     private string _stamp = "";
 
-    public ConsoleModels(ConsoleSettings settings, EncryptedFileSecretStore store, ModelHttp? http = null)
+    public ConsoleModels(ConsoleSettings settings, ConsoleConnections connections, ModelHttp? http = null)
     {
         _directory = settings.Directory;
-        _store = store;
-        _secrets = new SecretResolverChain([store, new EnvSecretProvider()]);
+        _connections = connections;
+        // a change to a connection, or a secret typed for one, is seen by the next call
+        connections.Changed += () => { lock (_lock) { _cache = []; } };
         _http = new HttpClient(http?.Handler ?? new HttpClientHandler()) { Timeout = TimeSpan.FromSeconds(120) };
     }
 
@@ -56,32 +56,20 @@ public sealed class ConsoleModels : IAgentModels
 
     public string SlotsFile => Path.Combine(Folder, "_slots.yml");
 
-    /// <summary>Where a person's pasted key for a provider is kept.</summary>
-    public static SecretName SecretNameFor(string provider) => new("console", "model-provider", provider, "key");
-
-    /// <summary>The reference to write in a provider's file for the key kept here.</summary>
-    public static string ReferenceFor(string provider) => "secret:" + SecretNameFor(provider);
-
-    private string FileOf(string name) => Path.Combine(Folder, name + ".yml");
-
     private string Stamp() =>
-        !Directory.Exists(Folder) ? "" : string.Join('|', Directory.EnumerateFiles(Folder, "*.yml").Order(StringComparer.Ordinal).Select(f => $"{Path.GetFileName(f)}:{File.GetLastWriteTimeUtc(f).Ticks}:{new FileInfo(f).Length}"));
+        _connections.Stamp() + "#" + (!Directory.Exists(Folder) ? "" : string.Join('|', Directory.EnumerateFiles(Folder, "*.yml").Order(StringComparer.Ordinal).Select(f => $"{Path.GetFileName(f)}:{File.GetLastWriteTimeUtc(f).Ticks}:{new FileInfo(f).Length}")));
 
     // ---- reading ----
 
-    /// <summary>Every provider file, read; a file that does not read is listed with its diagnostics and has no definition.</summary>
+    /// <summary>Every connection file of kind <c>model-provider</c>, read; a file that does not read is listed with its diagnostics and has no definition. Other kinds are not providers and are left out.</summary>
     public IReadOnlyList<(string Name, string Yaml, ModelProviderResult Result)> ReadProviders()
     {
-        if (!Directory.Exists(Folder)) return [];
         var list = new List<(string, string, ModelProviderResult)>();
-        foreach (var file in Directory.EnumerateFiles(Folder, "*.yml").Where(f => !Path.GetFileName(f).StartsWith('_')).Order(StringComparer.Ordinal))
+        foreach (var (name, yaml, result) in _connections.Read())
         {
-            var yaml = File.ReadAllText(file);
-            var name = Path.GetFileNameWithoutExtension(file);
-            var result = ModelProviderLoader.Load(yaml, $"models/{name}.yml");
-            if (result.Definition is { } d && d.Name != name)
-                result = new ModelProviderResult(null, [.. result.Diagnostics, DbDataKit.Config.Yaml.DefaultDiagnosticCatalog.Instance.Create(ModelProviderLoader.BadProvider, $"models/{name}.yml", 1, 1, $"The file is named {name}.yml but the provider is `{d.Name}`.", "A provider's file is named after it.")]);
-            list.Add((name, yaml, result));
+            // a file that reads and is of another kind is not a provider; one that does not read is shown, with its faults, if it says it is one
+            if (result.Definition is { } d) { if (d.KindName == ConnectionKinds.ModelProvider) list.Add((name, yaml, new ModelProviderResult(ModelProviderConnection.From(d), result.Diagnostics))); }
+            else if (yaml.Contains("kind: model-provider", StringComparison.Ordinal)) list.Add((name, yaml, new ModelProviderResult(null, result.Diagnostics)));
         }
         return list;
     }
@@ -98,10 +86,10 @@ public sealed class ConsoleModels : IAgentModels
     /// <summary>The key a provider's reference resolves to; null for a provider that takes none; a problem in words when it cannot be read.</summary>
     private (string? Key, string? Problem) Key(ModelProviderDefinition provider)
     {
-        if (provider.ApiKeySecret is null) return (null, provider.AuthStyle == "none" ? null : $"{provider.Name} has no `api-key-secret`.");
+        if (provider.ApiKeySecret is null) return (null, provider.AuthStyle == "none" ? null : $"{provider.Name} has no key (`sign_in.key_secret`).");
         try
         {
-            using var value = _secrets.ResolveAsync(SecretRef.Parse(provider.ApiKeySecret)).AsTask().GetAwaiter().GetResult();
+            using var value = _connections.Secrets.ResolveAsync(SecretRef.Parse(provider.ApiKeySecret)).AsTask().GetAwaiter().GetResult();
             return (value.RevealString(), null);
         }
         catch (SecretNotFoundException) { return (null, $"The key `{provider.ApiKeySecret}` is not set. Type the key on the Models screen (it is kept in the console's secret store), or set the secret or variable that names."); }
@@ -151,7 +139,7 @@ public sealed class ConsoleModels : IAgentModels
         {
             var d = result.Definition;
             var (keyOk, keyProblem) = d is null ? (false, null) : KeyState(d);
-            providers.Add(new ProviderView(name, $"models/{name}.yml", yaml, d?.Title, d?.Kind, d?.Endpoint, d?.Cloud, d?.Purpose, d?.ApiKeySecret, keyOk, keyProblem,
+            providers.Add(new ProviderView(name, $"connections/{name}.yml", yaml, d?.Kind, d?.Endpoint, d?.Cloud, d?.Purpose, d?.ApiKeySecret, keyOk, keyProblem,
                 [.. (d?.Models ?? []).Select(m => new ModelView(m.Id, m.WindowTokens, m.MaxOutputTokens, m.Price?.InputPerMillion, m.Price?.OutputPerMillion))], [.. result.Diagnostics.Select(DiagnosticView.Of)]));
         }
         var (slotsYaml, slots) = ReadSlots();
@@ -167,7 +155,7 @@ public sealed class ConsoleModels : IAgentModels
         }
         var agentView = agentSlots.GroupBy(a => a.Slot, StringComparer.Ordinal).OrderBy(g => g.Key, StringComparer.Ordinal)
             .Select(g => new AgentSlotView(g.Key, [.. g.Select(a => a.Agent).Distinct().Order(StringComparer.Ordinal)], For(g.Key, null) is not null)).ToList();
-        return new ModelsView(providers, slotsYaml, slotDiagnostics, views, agentView, "secret:dbdata:console:model-provider:<name>:key");
+        return new ModelsView(providers, slotsYaml, slotDiagnostics, views, agentView, "secret:dbdata:console:connection:<name>:key");
     }
 
     private (bool Ok, string? Problem) KeyState(ModelProviderDefinition provider)
@@ -184,41 +172,7 @@ public sealed class ConsoleModels : IAgentModels
         return new SlotChoiceView(choice.Provider, choice.Model, problem is null, problem);
     }
 
-    // ---- writing ----
-
-    /// <summary>What a provider file says before it is saved: the diagnostics of the reader.</summary>
-    public (ModelProviderResult Result, IReadOnlyList<DiagnosticView> Diagnostics) CheckProvider(string name, string yaml)
-    {
-        var result = ModelProviderLoader.Load(yaml, $"models/{name}.yml");
-        var diagnostics = result.Diagnostics.Select(DiagnosticView.Of).ToList();
-        if (result.Definition is { } d && d.Name != name)
-            diagnostics.Add(new DiagnosticView(ModelProviderLoader.BadProvider, "error", $"models/{name}.yml", 1, 1, $"The file is named {name}.yml but the provider is `{d.Name}`.", "A provider's file is named after it."));
-        return (result, diagnostics);
-    }
-
-    public (bool Saved, IReadOnlyList<DiagnosticView> Diagnostics) SaveProvider(string name, string yaml)
-    {
-        var (_, diagnostics) = CheckProvider(name, yaml);
-        if (diagnostics.Any(d => d.Severity == "error")) return (false, diagnostics);
-        Directory.CreateDirectory(Folder);
-        File.WriteAllText(FileOf(name), yaml);
-        return (true, diagnostics);
-    }
-
-    public bool DeleteProvider(string name)
-    {
-        var file = FileOf(name);
-        if (!ModelProviderLoader.IsName(name) || !File.Exists(file)) return false;
-        File.Delete(file);
-        return true;
-    }
-
-    public async Task StoreKeyAsync(string provider, string key, CancellationToken cancellation = default)
-    {
-        using var value = SecretValue.From(key);
-        await _store.SetAsync(SecretNameFor(provider), value, cancellation).ConfigureAwait(false);
-        lock (_lock) { _cache = []; }
-    }
+    // ---- writing: a provider is a connection (ConsoleConnections); the slots are here ----
 
     public (SlotBindingsResult Result, IReadOnlyList<DiagnosticView> Diagnostics) CheckSlots(string yaml)
     {

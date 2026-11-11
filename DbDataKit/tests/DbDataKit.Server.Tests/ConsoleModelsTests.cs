@@ -22,7 +22,7 @@ public sealed class ConsoleModelsTests : IAsyncLifetime
 
     private const string Text = """{"id":"msg_2","type":"message","role":"assistant","model":"claude-sonnet-4-5","content":[{"type":"text","text":"It is a widget."}],"stop_reason":"end_turn","usage":{"input_tokens":120,"output_tokens":6}}""";
 
-    private const string Provider = "model-provider: 1\nname: claude\nkind: anthropic\napi-key-secret: secret:dbdata:console:model-provider:claude:key\nmodels:\n  - { id: claude-sonnet-4-5, window: 200000, max-output: 8192, price: { input: 3, output: 15 } }\n";
+    private const string Provider = "schema: connection/2\nkind: model-provider\nname: claude\nsign_in: { method: api_key, key_secret: secret:dbdata:console:connection:claude:key }\nmodel_provider:\n  provider: anthropic\n  models:\n    - { id: claude-sonnet-4-5, window: 200000, max_output: 8192, price: { input: 3, output: 15 } }\n";
 
     private const string Slots = "model-slots: 1\nslots:\n  default:\n    \"*\":\n      - { provider: claude, model: claude-sonnet-4-5 }\n";
 
@@ -110,13 +110,13 @@ public sealed class ConsoleModelsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Conflict, (await Call(HttpMethod.Post, "/api/agents/conversations", admin, new StartConversationBody("helper"))).Status);
 
         // a provider whose key is written as itself is refused, and the refusal does not repeat it
-        var (refused, bad) = await Call(HttpMethod.Put, "/api/agents/models/providers/claude", admin, new YamlBody(Provider.Replace("secret:dbdata:console:model-provider:claude:key", Canary)));
+        var (refused, bad) = await Call(HttpMethod.Put, "/api/outside-connections/claude", admin, new YamlBody(Provider.Replace("secret:dbdata:console:connection:claude:key", Canary)));
         Assert.Equal(HttpStatusCode.UnprocessableEntity, refused);
         Assert.Contains("secret reference", (string)bad!["diagnostics"]![0]!["message"]!);
         Assert.DoesNotContain(Canary, bad.ToJsonString());
 
         // the provider is saved, and its key is not yet there
-        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, "/api/agents/models/providers/claude", admin, new YamlBody(Provider))).Status);
+        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, "/api/outside-connections/claude", admin, new YamlBody(Provider))).Status);
         var (_, before) = await Get("/api/agents/models", admin);
         Assert.False((bool)before!["providers"]![0]!["keyAvailable"]!);
         Assert.Contains("is not set", (string)before["providers"]![0]!["keyProblem"]!);
@@ -124,11 +124,11 @@ public sealed class ConsoleModelsTests : IAsyncLifetime
         Assert.False((bool)untested.Body!["ok"]!);
 
         // the key is kept in the secret store; only an administrator may set it
-        Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Put, "/api/agents/models/providers/claude/key", viewer, new KeyBody(Canary))).Status);
-        var (stored, keyAnswer) = await Call(HttpMethod.Put, "/api/agents/models/providers/claude/key", admin, new KeyBody(Canary));
+        Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Put, "/api/outside-connections/claude/secrets/key", viewer, new SecretBody(Canary))).Status);
+        var (stored, keyAnswer) = await Call(HttpMethod.Put, "/api/outside-connections/claude/secrets/key", admin, new SecretBody(Canary));
         Assert.Equal(HttpStatusCode.OK, stored);
-        Assert.Equal("secret:dbdata:console:model-provider:claude:key", (string)keyAnswer!["reference"]!);
-        Assert.DoesNotContain(Canary, File.ReadAllText(Path.Combine(directory, "models", "claude.yml")));
+        Assert.Equal("secret:dbdata:console:connection:claude:key", (string)keyAnswer!["reference"]!);
+        Assert.DoesNotContain(Canary, File.ReadAllText(Path.Combine(directory, "connections", "claude.yml")));
 
         // Test calls the provider with the key and says what the model answered
         answers.Queue.Enqueue((HttpStatusCode.OK, """{"id":"msg_0","type":"message","role":"assistant","model":"claude-sonnet-4-5","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":14,"output_tokens":4}}"""));
@@ -181,16 +181,16 @@ public sealed class ConsoleModelsTests : IAsyncLifetime
         Assert.DoesNotContain(Canary, string.Join('\n', bodies));
         foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).Where(f => !f.EndsWith("secrets.yaml", StringComparison.Ordinal) && !f.Contains("keys") && !f.EndsWith(".db", StringComparison.Ordinal) && !f.Contains(".db-")))
             Assert.DoesNotContain(Canary, await File.ReadAllTextAsync(file));
-        Assert.Contains(audit.AsArray(), a => (string)a!["kind"]! == "model-key-set");
+        Assert.Contains(audit.AsArray(), a => (string)a!["kind"]! == "connection-secret-set");
     }
 
     [Fact]
     public async Task A_slot_bound_to_two_models_falls_to_the_second_when_the_first_is_down_and_a_channel_binds_differently()
     {
-        Directory.CreateDirectory(Path.Combine(directory, "models"));
-        File.WriteAllText(Path.Combine(directory, "models", "claude.yml"), Provider);
-        File.WriteAllText(Path.Combine(directory, "models", "local.yml"), "model-provider: 1\nname: local\nkind: ollama\nmodels:\n  - { id: llama3.1:8b, window: 8000 }\n");
-        await Call(HttpMethod.Put, "/api/agents/models/providers/claude/key", admin, new KeyBody(Canary));
+        Directory.CreateDirectory(Path.Combine(directory, "connections"));
+        File.WriteAllText(Path.Combine(directory, "connections", "claude.yml"), Provider);
+        File.WriteAllText(Path.Combine(directory, "connections", "local.yml"), "schema: connection/2\nkind: model-provider\nname: local\nmodel_provider:\n  provider: ollama\n  models:\n    - { id: llama3.1:8b, window: 8000 }\n");
+        await Call(HttpMethod.Put, "/api/outside-connections/claude/secrets/key", admin, new SecretBody(Canary));
         var slots = "model-slots: 1\nslots:\n  default:\n    \"*\":\n      - { provider: claude, model: claude-sonnet-4-5 }\n      - { provider: local, model: \"llama3.1:8b\" }\n    test:\n      - { provider: local, model: \"llama3.1:8b\" }\n";
         Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, "/api/agents/models/slots", admin, new YamlBody(slots))).Status);
 
