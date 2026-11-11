@@ -220,6 +220,46 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_proposal_is_checked_when_it_is_made_a_broken_one_is_refused_and_kept_nowhere_and_a_proposal_that_cannot_be_checked_says_so()
+    {
+        var send = await Client();
+        await send(HttpMethod.Put, "/api/v1/models/territories", Model, ServerRole.Author);
+
+        // before the tables exist the check cannot be made: the request is kept, and says it was not checked
+        subject = "agent:helper";
+        var early = await send(HttpMethod.Post, "/api/v1/models/territories/changes", Insert("NA", "North", "1"), ServerRole.Author);
+        Assert.Equal(HttpStatusCode.Accepted, early.StatusCode);
+        var earlyBody = await Json(early);
+        Assert.False((bool)earlyBody["checked"]!);
+        Assert.NotNull((string?)earlyBody["check_problem"]);
+        subject = "ada";
+        await send(HttpMethod.Post, "/api/v1/models/territories/storage/create", null, ServerRole.Admin);
+
+        // with the tables there, a rule broken at proposal time is refused as a direct write would be, with each violation, and no request is kept
+        subject = "agent:helper";
+        var before = (await Json(await send(HttpMethod.Get, "/api/v1/models/territories/requests", null, ServerRole.Viewer)))["requests"]!.AsArray().Count;
+        var broken = await send(HttpMethod.Post, "/api/v1/models/territories/changes", Insert("EU", "Europe", "-5"), ServerRole.Author);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, broken.StatusCode);
+        Assert.NotEmpty((await Json(broken))["violations"]!.AsArray());
+        Assert.Equal(before, (await Json(await send(HttpMethod.Get, "/api/v1/models/territories/requests", null, ServerRole.Viewer)))["requests"]!.AsArray().Count);
+
+        // a good proposal is checked and kept, and writes nothing; one that names a row that is not there is refused too
+        var good = await send(HttpMethod.Post, "/api/v1/models/territories/changes", Insert("AS", "Asia", "3"), ServerRole.Author);
+        Assert.Equal(HttpStatusCode.Accepted, good.StatusCode);
+        Assert.True((bool)(await Json(good))["checked"]!);
+        Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Get, "/api/v1/models/territories/entities/territory/row?key.code=AS", null, ServerRole.Viewer)).StatusCode);
+        var missing = """{"changes":[{"action":"update","entity":"territory","key":{"code":"ZZ"},"expected_version":1,"values":{"name":"x"}}]}""";
+        Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Post, "/api/v1/models/territories/changes", missing, ServerRole.Author)).StatusCode);
+
+        // a version that has moved on since the proposer read the row is a conflict at proposal, not at approval
+        subject = "ada";
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, "/api/v1/models/territories/changes", Insert("NA", "North", "1"), ServerRole.Author)).StatusCode);
+        subject = "agent:helper";
+        var stale = """{"changes":[{"action":"update","entity":"territory","key":{"code":"NA"},"expected_version":9,"values":{"name":"x"}}]}""";
+        Assert.Equal(HttpStatusCode.Conflict, (await send(HttpMethod.Post, "/api/v1/models/territories/changes", stale, ServerRole.Author)).StatusCode);
+    }
+
+    [Fact]
     public async Task An_apps_token_reaches_only_the_entities_its_scope_names_and_nothing_else()
     {
         var send = await Client();

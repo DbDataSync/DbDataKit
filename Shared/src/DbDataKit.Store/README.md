@@ -2,7 +2,7 @@
 
 The write path of master data models (Z04, plan 15 section 5), on the tables `DbDataKit.DataModel.Storage` creates (SQL Server and PostgreSQL).
 
-`ModelWriter` applies a batch of `RowChange`s (insert, update, delete) in one transaction:
+`ModelWriter` applies a batch of `RowChange`s (insert, update, delete) in one transaction (`ValidateAsync` runs the same checks and always rolls back, to answer what `ApplyAsync` would: a change request is checked with it when it is proposed):
 
 - **Values** are read the way the attribute's type holds them (a number, text, a date, a UUID, a JSON element); one that does not fit is a `type`, `length` or `precision` violation.
 - **Rules of a value**: `required`, `pattern`, `min`, `max`, `allowed`, `unique`, and a `reference` that must exist in the entity it points at (inside the model; a reference to another model is not checked here). A `default` fills an insert.

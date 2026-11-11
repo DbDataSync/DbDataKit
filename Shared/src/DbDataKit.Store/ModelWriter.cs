@@ -135,7 +135,15 @@ public sealed class ModelWriter
         ApplyAsync([RowChange.Delete(entity, key, expectedVersion)], actor, cancellationToken);
 
     /// <summary>Applies the changes in order in one transaction. Throws <see cref="WriteRefusedException"/> (with every broken rule), <see cref="VersionConflictException"/> or <see cref="RowNotFoundException"/>, and then nothing was written.</summary>
-    public async Task ApplyAsync(IReadOnlyList<RowChange> changes, WriteActor actor, CancellationToken cancellationToken = default)
+    public Task ApplyAsync(IReadOnlyList<RowChange> changes, WriteActor actor, CancellationToken cancellationToken = default) => ApplyCoreAsync(changes, actor, commit: true, cancellationToken);
+
+    /// <summary>
+    /// What <see cref="ApplyAsync"/> would say about these changes now, with nothing written (plan 15 ST02): the same transaction, every rule and version check, then always rolled back. It throws the same exceptions, and returns normally when
+    /// the changes would be applied. It is a statement about the rows as they are now: another write can still change the answer before the changes are applied.
+    /// </summary>
+    public Task ValidateAsync(IReadOnlyList<RowChange> changes, WriteActor actor, CancellationToken cancellationToken = default) => ApplyCoreAsync(changes, actor, commit: false, cancellationToken);
+
+    private async Task ApplyCoreAsync(IReadOnlyList<RowChange> changes, WriteActor actor, bool commit, CancellationToken cancellationToken)
     {
         var violations = new List<RuleViolation>();
         await using var transaction = await _connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
@@ -154,7 +162,8 @@ public sealed class ModelWriter
             }
             if (violations.Count == 0) await CheckRulesAsync(transaction, touched, violations, cancellationToken).ConfigureAwait(false);
             if (violations.Count > 0) throw new WriteRefusedException(violations);
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if (commit) await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            else await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
         }
         catch
         {

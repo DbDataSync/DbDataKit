@@ -356,8 +356,22 @@ public static class StoreData
             if (OutsideScope(token, name, changes!) is { } outside) return Results.Json(new { error = $"This token's scope does not include writing '{outside}'." }, statusCode: StatusCodes.Status403Forbidden);
             if (StoreChangeRequests.Needs(model!, token))
             {
+                // the rules run now, as they will at approval (plan 15 ST02): a proposal that breaks one, names a row that is gone or quotes a stale version is refused with the answer a direct write would get, and nothing is kept.
+                // When the database cannot be reached or has no tables yet, the check cannot be made: the request is kept and the answer says it was not checked (approval checks again either way)
+                string? notChecked = null;
+                try
+                {
+                    await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
+                    await new ModelWriter(model!, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId).ValidateAsync(changes!, new WriteActor(token.SubjectId, token.SubjectName), context.RequestAborted);
+                }
+                catch (StoreConnectionException ex) { notChecked = ex.Message; }
+                catch (System.Data.Common.DbException ex) { notChecked = $"The model's tables could not be read ({ex.GetType().Name}); create them from the Storage tab."; }
+                catch (Exception ex) when (Known(ex)) { return Fail(ex); }
                 var request = StoreChangeRequests.Propose(directory, name, InstanceName(context), token, (string?)body["description"], (JsonArray)JsonNode.Parse(list.ToJsonString())!, DateTimeOffset.UtcNow);
-                return Results.Json(request.ToJson(withChanges: false), statusCode: StatusCodes.Status202Accepted);
+                var answer = request.ToJson(withChanges: false);
+                answer["checked"] = notChecked is null;
+                answer["check_problem"] = notChecked;
+                return Results.Json(answer, statusCode: StatusCodes.Status202Accepted);
             }
             try
             {
