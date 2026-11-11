@@ -16,6 +16,12 @@ internal static class RunnerTrackingCopy
     public static async Task<IReadOnlyList<string>> CopyAsync(IRemoteTrackingCopy copy, string projectRoot, string? connection, Func<string, string?> env, TimeSpan budget, CancellationToken ct)
     {
         var lines = new List<string>();
+        if (BuildTrackedConnections.RunnerCopyOff(projectRoot))
+        {
+            lines.Add("the runner keeps no copy of this project's tracking tables (`tracking: { runner_copy: false }` in the project file), so nothing is copied");
+            return lines;
+        }
+
         var started = DateTime.UtcNow;
         try
         {

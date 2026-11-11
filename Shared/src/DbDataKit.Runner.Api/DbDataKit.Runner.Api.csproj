@@ -13,5 +13,6 @@
     <ProjectReference Include="..\DbDataKit.Connections.Abstractions\DbDataKit.Connections.Abstractions.csproj" />
     <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
     <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
+    <ProjectReference Include="..\DbDataKit.Tracking.Build\DbDataKit.Tracking.Build.csproj" />
   </ItemGroup>
 </Project>

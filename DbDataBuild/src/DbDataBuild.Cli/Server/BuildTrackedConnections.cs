@@ -7,6 +7,14 @@ namespace DbDataBuild.Cli.Server;
 /// <summary>The connections of a project whose tracking is on a target and whose read login is set: what a copy of the tracking tables (the Build server's, or a runner task's) goes through (plan 28c E16).</summary>
 internal static class BuildTrackedConnections
 {
+    /// <summary>True when the project says `tracking: { runner_copy: false }` (plan 28c E16, owner 2026-11-11): the runner keeps no copy, so its follower step and the `catch-up` task do nothing. A project that cannot be read is not switched off.</summary>
+    public static bool RunnerCopyOff(string root)
+    {
+        if (!Directory.Exists(root)) return false;
+        try { return ProjectConfigLoader.LoadFromProject(root, new List<DbDataBuild.Core.Diagnostic>()) is { Tracking.RunnerCopy: false }; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+    }
+
     public static IEnumerable<(string Connection, TrackingScope Scope, LoginSettings Read)> Of(string root, string? only, Func<string, string?> env)
     {
         if (!Directory.Exists(root)) yield break;
