@@ -20,7 +20,7 @@ public sealed class TableMappingsController(
     ParameterCheck parameterCheck, ReaderLagService lag,
     MappingMetadataService mappingMetadata, MappingColumnReader columnReader,
     ChangeWatermarkStore watermarks, RunLockStore runLocks, DriverRegistry driverRegistry,
-    TaskRunStore taskRunStore) : ControllerBase
+    TaskRunStore taskRunStore, DbDataSync.Api.Runner.RunnerAccess runnerAccess) : ControllerBase
 {
     [Authorize(Policies.Viewer)]
     [HttpGet]
@@ -200,6 +200,77 @@ public sealed class TableMappingsController(
 
         var stored = watermarks.GetReadState(replicationName, mappingName, sourceTable)!;
         return Ok(new MappingReadStateDto(stored.Intent, stored.Hold, stored.Watermark, stored.WatermarkTimeUtc));
+    }
+
+    /// <summary>
+    /// The changes to this mapping's position, intent and hold, newest first, each naming who made it (a run, or a person's rewind): what "rewind to before this" is chosen from (plan 28c E15b). The history is the
+    /// progress store's, kept 30 days. A replication the runner owns keeps its position on the runner, where its checkpoints screen shows the same history; this answers 409 naming the runner then.
+    /// </summary>
+    [Authorize(Policies.Viewer)]
+    [HttpGet("{mappingName}/position-history")]
+    public ActionResult<IReadOnlyList<PositionChangeDto>> GetPositionHistory(string replicationName, string mappingName, [FromQuery] int limit = 100)
+    {
+        if (Resolve(replicationName, mappingName, out var sourceTable) is { } refusal) return refusal;
+        var changes = watermarks.History(replicationName, mappingName, sourceTable, Math.Clamp(limit, 1, 500));
+        return Ok(changes.Select(c => new PositionChangeDto(c.Id, c.HeadVersion, c.Part, c.Old, c.New, c.Actor, c.RunId, c.At)).ToList());
+    }
+
+    /// <summary>
+    /// Moves the mapping back to what it was before the change <c>historyId</c> (and so before every later one): the next pass reads from the earlier position again and writes what it reads idempotently, so it
+    /// ends where it would have ended. An administrator's act; the rewind is a new version in the history with the administrator's name (so it can itself be undone). Refused while a pass of the mapping runs, for a
+    /// change that is not this mapping's, and for a replication the runner owns.
+    /// </summary>
+    [Authorize(Policies.Admin)]
+    [HttpPost("{mappingName}/position-rewind")]
+    public ActionResult<MappingReadStateDto> RewindPosition(string replicationName, string mappingName, [FromBody] RewindPositionRequest request)
+    {
+        if (Resolve(replicationName, mappingName, out var sourceTable) is { } refusal) return refusal;
+        if (runLocks.IsLocked(replicationName, RunKind.Primary, mappingName) || runLocks.IsLocked(replicationName, RunKind.BulkLoad, mappingName))
+            return Conflict(new { error = $"Table mapping '{mappingName}' has a run in progress; its position cannot be rewound until that pass finishes." });
+        if (!watermarks.History(replicationName, mappingName, sourceTable, 1000).Any(c => c.Id == request.HistoryId))
+            return NotFound(new { error = $"There is no change {request.HistoryId} in the position history of '{mappingName}' (the history is kept 30 days)." });
+        bool done;
+        try
+        {
+            done = watermarks.Rewind(replicationName, mappingName, sourceTable, request.HistoryId, currentUser.Author.Name);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
+
+        if (!done) return Conflict(new { error = $"Another writer moved the position of '{mappingName}' while it was being rewound; nothing was changed. Read the history again." });
+        var stored = watermarks.GetReadState(replicationName, mappingName, sourceTable)!;
+        return Ok(new MappingReadStateDto(stored.Intent, stored.Hold, stored.Watermark, stored.WatermarkTimeUtc));
+    }
+
+    private ActionResult? Resolve(string replicationName, string mappingName, out string sourceTable)
+    {
+        sourceTable = "";
+        ReplicationTaskConfig task;
+        TableMappingConfig mapping;
+        try
+        {
+            task = configRepository.LoadReplicationTask(replicationName);
+            mapping = configRepository.LoadTableMapping(replicationName, mappingName);
+        }
+        catch (FileNotFoundException)
+        {
+            return NotFound();
+        }
+
+        if (runnerAccess.File.OwnerOf(replicationName) == DbDataKit.State.TaskOwners.Runner)
+            return Conflict(new { error = $"'{replicationName}' is scheduled by the runner, which keeps its positions: read and rewind them on the runner's Checkpoints screen (task '{DbDataSync.Api.Runner.RunnerAccess.TaskOf(replicationName)}'). Nothing was changed." });
+        try
+        {
+            sourceTable = ResolveWatermarkKey(task, mapping);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = DriverFailures.Describe(ex) });
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -590,6 +661,12 @@ public sealed record MappingLag(
 /// resolved value being visible before a first pass, not only after one.
 /// </para>
 /// </summary>
+/// <summary>One change to a mapping's position, intent or hold as the progress store's history keeps it (one row per part that changed in a version).</summary>
+public sealed record PositionChangeDto(long Id, long Version, string Part, string? Old, string? New, string? Actor, string? RunId, DateTimeOffset At);
+
+/// <summary>Rewind to before the change <see cref="HistoryId"/> of the mapping's position history.</summary>
+public sealed record RewindPositionRequest(long HistoryId);
+
 public sealed record MappingReadStateDto(ReadIntent Intent, ReadHold Hold, string? Watermark, DateTimeOffset? WatermarkTimeUtc);
 
 /// <summary>Intent and hold are both required, deliberately: the one call this backs exists so an

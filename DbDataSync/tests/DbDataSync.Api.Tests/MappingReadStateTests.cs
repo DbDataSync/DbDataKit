@@ -271,4 +271,70 @@ public sealed class MappingReadStateTests(TestApiFactory factory) : IClassFixtur
     }
 
     private sealed record MappingReadStateDto(ReadIntent Intent, ReadHold Hold, string? Watermark, DateTimeOffset? WatermarkTimeUtc);
+
+    // ---- plan 28c E15b: the position history and the rewind
+
+    private sealed record PositionChange(long Id, long Version, string Part, string? Old, string? New, string? Actor, string? RunId, DateTimeOffset At);
+
+    private async Task<(string Replication, string Mapping, ChangeWatermarkStore Store, string Key)> WithThreePositionsAsync()
+    {
+        var (replication, mapping) = await SetUpAsync();
+        var store = factory.Services.GetRequiredService<ChangeWatermarkStore>();
+        var key = WatermarkKey.Build(new SourceTableRef { ConnectionName = "src", Database = "App", Schema = "dbo", Table = "Orders" }, DbDataSync.Core.Sql.MsSqlDialect.Instance);
+        foreach (var position in new[] { "100", "200", "300" }) store.SetWatermark(replication, mapping, key, position);
+        return (replication, mapping, store, key);
+    }
+
+    [Fact]
+    public async Task The_position_history_lists_the_changes_newest_first_and_a_rewind_moves_the_mapping_back_under_the_administrators_name()
+    {
+        var (replication, mapping, store, key) = await WithThreePositionsAsync();
+        var url = $"/api/replications/{replication}/table-mappings/{mapping}";
+
+        var history = (await _client.GetFromJsonAsync<List<PositionChange>>($"{url}/position-history", JsonOptions))!;
+        var toThreeHundred = history.First(c => c is { Part: "position", New: "300" });
+        Assert.Equal("200", toThreeHundred.Old);
+
+        var rewound = await _client.PostAsJsonAsync($"{url}/position-rewind", new { historyId = toThreeHundred.Id }, JsonOptions);
+        rewound.EnsureSuccessStatusCode();
+        var state = (await rewound.Content.ReadFromJsonAsync<MappingReadStateDto>(JsonOptions))!;
+        Assert.Equal("200", state.Watermark);
+        Assert.Equal("200", store.GetWatermark(replication, mapping, key));
+
+        var after = (await _client.GetFromJsonAsync<List<PositionChange>>($"{url}/position-history", JsonOptions))!;
+        Assert.NotNull(after.First().Actor);
+        Assert.NotEqual("dbdatasync", after.First().Actor);       // a person's rewind names the person, not the engine
+
+        // the next pass returns to the same final position
+        store.SetWatermark(replication, mapping, key, "300");
+        Assert.Equal("300", store.GetWatermark(replication, mapping, key));
+    }
+
+    [Fact]
+    public async Task A_rewind_to_a_change_that_is_not_in_the_history_changes_nothing()
+    {
+        var (replication, mapping, store, key) = await WithThreePositionsAsync();
+
+        var response = await _client.PostAsJsonAsync($"/api/replications/{replication}/table-mappings/{mapping}/position-rewind", new { historyId = 987654321L }, JsonOptions);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("300", store.GetWatermark(replication, mapping, key));
+    }
+
+    [Fact]
+    public async Task A_replication_the_runner_owns_answers_409_naming_the_runners_checkpoints_and_changes_nothing()
+    {
+        var (replication, mapping, store, key) = await WithThreePositionsAsync();
+        var access = factory.Services.GetRequiredService<DbDataSync.Api.Runner.RunnerAccess>();
+        access.File.SetOwner(replication, DbDataKit.State.TaskOwners.Runner);
+        var url = $"/api/replications/{replication}/table-mappings/{mapping}";
+
+        var history = await _client.GetAsync($"{url}/position-history");
+        var rewind = await _client.PostAsJsonAsync($"{url}/position-rewind", new { historyId = 1 }, JsonOptions);
+
+        Assert.Equal(HttpStatusCode.Conflict, history.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, rewind.StatusCode);
+        Assert.Contains("Checkpoints", await rewind.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Equal("300", store.GetWatermark(replication, mapping, key));
+    }
 }
