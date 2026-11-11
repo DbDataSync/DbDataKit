@@ -104,6 +104,18 @@ What it runs: the tasks of packages published to a channel it serves, each **in 
 
 In the web app the runner is the first entry of the Servers page (id `console-runner`, flagged `embedded`, never paired and not forgettable) and opens the same runner screens as a `dbdatarunner`: the calls are the runner's own management API, served in the console at `/api/embedded-runner/...` and at `/relay/console-runner/api/v1/...` for people signed in (a viewer reads, an administrator runs, pauses, resumes, activates, switches, rolls back and retires); every other call under that id is 403. Stopping the console stops the runner: running tasks are cancelled, given their grace period, and no run is left running. The task host is published beside the console (`taskhost/`) as it is beside `dbdatarunner`.
 
+## The embedded Workspace
+
+With `workspace: {enabled: true}` in `settings.yaml` the console hosts the Workspace (plan 33 section 3): projects people author in git workspaces, builds of an app in a child process with no network and no environment of the console's, a read-only preview, and publishing to a paired Gateway. Its folder (`projects/`, `workspaces/`, `builds/`) is its own: `DBDATAKIT_DATA_WORKSPACE`, else `workspace` under `DBDATAKIT_DATA`, else `workspace` in the console's directory; `apps:` in `settings.yaml` says how apps are built (the keys of the standalone server's `apps:` section). Its state is the module `workspace` in the console's database, the publisher key is a secret of the console's store named `workspace:publisher-key:<target>`, and what is done is in the console's audit as `workspace.<noun>.<verb>`. The Workspace's roles are its own: **a console role grants none of them**, so a console administrator is refused every Workspace call until someone with the Workspace admin role, or the command line, grants one (`viewer`, `author`, `publisher`, `admin`; publishing needs `publisher`).
+
+```
+dbdatakit workspace roles [--repo <console directory>]
+dbdatakit workspace grant --user <id> --roles <viewer,author,publisher,admin> [--project <id>] [--repo <console directory>]
+dbdatakit workspace revoke --user <id> [--project <id>] [--repo <console directory>]
+```
+
+The calls are the Workspace server's, at `/relay/console-workspace/api/v1/...` (the address the Workspaces screens use for a server of id `console-workspace`) and `/api/embedded-workspace/api/v1/...`; the grants are `GET|PUT|DELETE /api/embedded-workspace/roles/{user}` and `GET /api/embedded-workspace/roles/me`.
+
 ## What is served
 
 `/api/auth`, `/api/invites` and `/api/users` are the shared sign-in controllers of `DbDataKit.Web` (the same ones Sync serves), `/health` and `/version` answer without signing in, and everything else under `/api` is closed
