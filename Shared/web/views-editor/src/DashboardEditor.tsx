@@ -39,7 +39,7 @@ export interface EditorHost {
   extra?: (state: { kind: ViewKind; name: string; saved: boolean; dirty: boolean; valid: boolean }) => ReactNode
 }
 
-const PALETTE: WidgetType[] = ['metric', 'chart', 'matrix', 'table', 'text', 'image', 'control']
+const PALETTE: WidgetType[] = ['metric', 'chart', 'matrix', 'table', 'text', 'image', 'control', 'embed']
 const where = (d: ClientDiagnostic) => (d.line !== undefined ? `line ${d.line}${d.column !== undefined ? `:${d.column}` : ''}` : d.path)
 
 function Problems({ diagnostics, testId }: { diagnostics: ClientDiagnostic[]; testId: string }) {
@@ -221,7 +221,7 @@ export function DashboardEditor({ kind, name, host }: { kind: ViewKind; name: st
             </table>
             <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }} data-testid="ed-palette">
               <span className="hint">Add:</span>
-              {PALETTE.map((type) => (
+              {PALETTE.filter((type) => !(type === 'embed' && doc.kind === 'report')).map((type) => (
                 <button key={type} type="button" className="btn btn-sm" data-testid={`ed-add-${type}`} onClick={() => {
                   let id: string = type, n = 1
                   while (widgets[id]) id = `${type}${++n}`

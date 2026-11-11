@@ -13,6 +13,7 @@ describe('applyNestedAxis (DBR42, client half)', () => {
     const input = spec()
     const out = applyNestedAxis(input, true) as any
     expect(out.spacing).toBe(0)
+    expect(out.resolve).toEqual({ scale: { x: 'independent' } })
     expect(out.encoding.column.header).toMatchObject({ orient: 'bottom', labelOrient: 'bottom', titleOrient: 'bottom' })
     expect(out.encoding.x).toEqual(input.encoding.x)
     expect(input).toEqual(spec())

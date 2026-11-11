@@ -221,18 +221,6 @@
       "schema": true
     },
     {
-      "name": "widget-embed",
-      "file": "bad/widget-embed.json",
-      "parameters": [
-        "region",
-        "quarter"
-      ],
-      "code": "DBD-VIEW-006",
-      "path": "widgets.frame.type",
-      "line": 157,
-      "schema": true
-    },
-    {
       "name": "widget-type-unknown",
       "file": "bad/widget-type-unknown.json",
       "parameters": [
@@ -354,6 +342,30 @@
       "code": "DBD-VIEW-008",
       "path": "widgets.by_region.drill.with.quarter",
       "line": 85,
+      "schema": false
+    },
+    {
+      "name": "embed-url-not-https",
+      "file": "bad/embed-url-not-https.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-106",
+      "path": "widgets.frame.url",
+      "line": 158,
+      "schema": true
+    },
+    {
+      "name": "embed-undeclared-parameter",
+      "file": "bad/embed-undeclared-parameter.json",
+      "parameters": [
+        "region",
+        "quarter"
+      ],
+      "code": "DBD-VIEW-008",
+      "path": "widgets.frame.with.Region",
+      "line": 160,
       "schema": false
     }
   ]

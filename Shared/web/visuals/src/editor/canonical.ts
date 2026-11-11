@@ -7,7 +7,7 @@ import { Document, isMap, isScalar, isSeq, YAMLMap, YAMLSeq, type Node } from 'y
  */
 
 const ROOT = ['schemaVersion', 'kind', 'title', 'description', 'parameters', 'refresh', 'kiosk', 'theme', 'strict', 'limits', 'cover', 'widgets', 'layouts']
-const WIDGET = ['type', 'title', 'label', 'format', 'parameter', 'control', 'values', 'mark', 'encodings', 'query', 'on_select', 'drill', 'text', 'hash', 'media_type', 'alt', 'fit']
+const WIDGET = ['type', 'title', 'label', 'format', 'parameter', 'control', 'values', 'mark', 'encodings', 'query', 'on_select', 'drill', 'text', 'hash', 'media_type', 'alt', 'fit', 'url', 'with', 'link_text']
 const LAYOUT = ['name', 'type', 'default', 'when', 'grid', 'canvas', 'overflow', 'min_scale', 'max_scale', 'page', 'header', 'footer', 'cover', 'widget_options', 'tiles', 'sections']
 const TILE = ['widget', 'x', 'y', 'w', 'h', 'min', 'layer']
 const PAGE = ['size', 'orientation', 'margins']

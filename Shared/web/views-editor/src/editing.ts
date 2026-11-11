@@ -20,6 +20,7 @@ export function newWidget(type: WidgetType, doc: ViewsDoc, fallbackModel?: strin
     case 'text': return { type, text: 'Write a note.' }
     // an image is held by the hash of its bytes: until the publish slice uploads one this is the placeholder, and the editor says no bytes are recorded
     case 'image': return { type, hash: `sha256:${'0'.repeat(64)}`, media_type: 'image/png', alt: 'Describe the image' }
+    case 'embed': return { type, title: 'Embedded report', url: 'https://reports.example.com/' }
     case 'control': {
       const parameter = doc.parameters?.[0]
       if (!parameter) throw new Error('A control edits a parameter of the document: add a parameter first.')

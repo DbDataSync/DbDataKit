@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "kind": "report",
+  "title": "Report with a frame",
+  "widgets": {
+    "note": {
+      "type": "text",
+      "text": "Nothing but words."
+    },
+    "frame": {
+      "type": "embed",
+      "url": "https://reports.example.com/x"
+    }
+  },
+  "layouts": [
+    {
+      "name": "print",
+      "type": "flow",
+      "default": true,
+      "sections": [
+        {
+          "blocks": [
+            {
+              "widget": "note"
+            },
+            {
+              "widget": "frame"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

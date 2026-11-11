@@ -72,7 +72,7 @@ internal static class ProjectViews
         return diagnostics;
     }
 
-    private static Diagnostic Convert(ConfigDiagnostic d, string file) =>
+    internal static Diagnostic Convert(ConfigDiagnostic d, string file) =>
         new(DiagnosticCatalog.InvalidValue, new(file, d.Line, d.Column), $"{d.Code}: {d.Message}{(d.KeyPath is null ? "" : $" [{d.KeyPath}]")}", Fix: d.Fix,
             SeverityOverride: d.Severity switch { ConfigSeverity.Error => Severity.Error, ConfigSeverity.Warning => Severity.Warning, _ => Severity.Note });
 

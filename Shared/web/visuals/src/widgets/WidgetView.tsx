@@ -4,6 +4,7 @@ import type { RenderedChart, RenderedMatrix } from '../types'
 import type { Box, ParameterDefinition, ParameterValue, ParameterValues, WidgetDoc, WidgetOptionsDoc } from '../views/model'
 import type { RenderedWidget } from '../views/rendered'
 import { ChartWidget } from './ChartWidget'
+import { EmbedBlock } from './EmbedBlock'
 import { ImageBlock } from './ImageBlock'
 import { MatrixWidget } from './MatrixWidget'
 import { MetricTile } from './MetricTile'
@@ -92,6 +93,7 @@ export function WidgetView({ id, widget, result, loading = false, box, theme = '
     // text and a control draw from the document alone, so they have a body while the others wait
     if (widget.type === 'text') content = <TextBlock widget={widget} parameters={parameters} />
     else if (widget.type === 'control') content = control()
+    else if (widget.type === 'embed') content = <EmbedBlock widget={widget} />
     else content = loading ? <LoadingTile what={widget.title} /> : <EmptyTile message="Nothing to show yet." />
   }
   else if (result.type === 'error') content = <ErrorTile code={result.code} message={result.message} path={result.path} suggestions={result.suggestions} />
@@ -106,6 +108,7 @@ export function WidgetView({ id, widget, result, loading = false, box, theme = '
       case 'text': content = <TextBlock widget={widget} parameters={parameters} />; break
       case 'image': content = <ImageBlock widget={widget} result={result as never} />; break
       case 'control': content = control(result); break
+      case 'embed': content = <EmbedBlock widget={widget} result={result as never} />; break
     }
   }
 

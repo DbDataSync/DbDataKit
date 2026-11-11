@@ -24,7 +24,7 @@
     "widget": {
       "oneOf": [
         { "$ref": "#/$defs/metric" }, { "$ref": "#/$defs/table" }, { "$ref": "#/$defs/matrix" }, { "$ref": "#/$defs/chart" },
-        { "$ref": "#/$defs/text" }, { "$ref": "#/$defs/image" }, { "$ref": "#/$defs/control" }, { "$ref": "#/$defs/error" }
+        { "$ref": "#/$defs/text" }, { "$ref": "#/$defs/image" }, { "$ref": "#/$defs/control" }, { "$ref": "#/$defs/embed" }, { "$ref": "#/$defs/error" }
       ]
     },
     "metric": {
@@ -171,6 +171,18 @@
       "required": ["type", "src"],
       "additionalProperties": false,
       "properties": { "type": { "const": "image" }, "src": { "type": "string", "pattern": "^data:image/(png|jpeg|webp);base64,", "description": "The bytes of a raster as a data: URI. Never an address, never an SVG." } }
+    },
+    "embed": {
+      "type": "object",
+      "required": ["type", "url", "framed"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "embed" },
+        "url": { "type": "string", "pattern": "^https://", "description": "The report server's address with the widget's pairs filled in." },
+        "origin": { "type": ["string", "null"], "description": "Scheme, host and port of the address." },
+        "framed": { "type": "boolean", "description": "True when the host approves the origin to be framed; otherwise the widget is a link." },
+        "link_text": { "type": "string" }
+      }
     },
     "control": {
       "type": "object",

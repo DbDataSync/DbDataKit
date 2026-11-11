@@ -1,0 +1,63 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "chart",
+      "mark": "bar",
+      "encodings": {
+        "x": [
+          {
+            "field": "orders.ordered_at_year",
+            "format": {
+              "date": "year"
+            },
+            "sort": {
+              "by": "sort_key",
+              "dir": "desc"
+            }
+          },
+          {
+            "field": "orders.ordered_at_month",
+            "format": {
+              "date": "MMM"
+            },
+            "sort": {
+              "by": "label"
+            }
+          }
+        ],
+        "y": "orders.net_revenue",
+        "color": "orders.status"
+      },
+      "query": {
+        "model": "sales_catalog",
+        "limit": 200
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "attributes": [
+        "orders.ordered_at_year",
+        "orders.ordered_at_month",
+        "orders.status"
+      ],
+      "order": [
+        [
+          "orders.ordered_at_year",
+          "desc"
+        ],
+        [
+          "orders.ordered_at_month",
+          "asc"
+        ]
+      ],
+      "limit": 200
+    }
+  }
+}

@@ -105,7 +105,7 @@ public class DeriveTests
         Assert.Equal(["chart", "matrix", "metric", "table"], widgets.Select(w => w["type"]!.GetValue<string>()).Distinct().Order());
         foreach (var channel in new[] { "x", "y", "color", "column", "tooltip" }) Assert.Contains(widgets, w => w["encodings"]?[channel] is not null);
         foreach (var key in new[] { "compare", "totals", "column_limit", "sort" }) Assert.Contains(widgets, w => w["encodings"]?[key] is not null);
-        Assert.Equal(["DBD-VIEW-040", "DBD-VIEW-041", "DBD-VIEW-042", "unknown_member", "wrong_member_kind"],
+        Assert.Equal(["DBD-106", "DBD-VIEW-040", "DBD-VIEW-041", "DBD-VIEW-042", "unknown_member", "wrong_member_kind"],
             Conformance.Cases("derive/cases.json")["refused"]!.AsArray().SelectMany(r => Case(r!["file"]!.GetValue<string>())["refusal"]!.AsArray().Select(d => d!["code"]!.GetValue<string>())).Distinct().Order());
     }
 

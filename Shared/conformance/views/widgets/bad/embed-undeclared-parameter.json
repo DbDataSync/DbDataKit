@@ -155,6 +155,9 @@
   },
   "frame": {
     "type": "embed",
-    "url": "https://reports.example.com/x"
+    "url": "https://reports.example.com/x",
+    "with": {
+      "Region": "$params.nowhere"
+    }
   }
 }

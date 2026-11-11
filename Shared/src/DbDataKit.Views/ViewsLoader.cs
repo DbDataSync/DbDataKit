@@ -36,12 +36,14 @@ public static partial class ViewsLoader
         ["widget.text"] = ["type", "title", "text"],
         ["widget.image"] = ["type", "title", "hash", "media_type", "alt", "fit"],
         ["widget.control"] = ["type", "title", "parameter", "control", "label", "values"],
+        ["widget.embed"] = ["type", "title", "url", "with", "link_text"],
         ["encodings.metric"] = ["value", "compare"],
         ["encodings.chart"] = ["x", "y", "color", "column", "row", "tooltip"],
         ["encodings.matrix"] = ["rows", "columns", "values", "values_on", "totals", "sort", "column_limit"],
         ["encodings.table"] = ["columns", "sort"],
         ["table_column"] = ["field", "label", "format", "align", "width"],
         ["channel"] = ["field", "type", "sort", "stack", "title", "format"],
+        ["x_level"] = ["field", "format", "sort", "title"],
         ["matrix_axis_entry"] = ["field", "format", "sort"],
         ["mark"] = ["type", "tooltip", "point"],
         ["query.derived"] = ["mode", "model", "filters", "segments", "order", "limit", "totals", "timezone", "params"],
@@ -87,7 +89,7 @@ public static partial class ViewsLoader
         ["kind"] = ["dashboard", "report"],
         ["parameterType"] = ["string", "integer", "number", "boolean"],
         ["font"] = ["sans", "serif", "mono"],
-        ["widgetType"] = ["metric", "chart", "matrix", "table", "text", "image", "control"],
+        ["widgetType"] = ["metric", "chart", "matrix", "table", "text", "image", "control", "embed"],
         ["format"] = ["catalog", "full", "compact", "percent"],
         ["align"] = ["left", "right", "center"],
         ["mark"] = ["bar", "line", "area", "point", "rule", "text"],
@@ -109,14 +111,14 @@ public static partial class ViewsLoader
     /// <summary>The smallest a tile of a widget type may be at scale 1, in CSS pixels (plan 32 section 3.3); a type that is not listed has none.</summary>
     public static readonly IReadOnlyDictionary<string, (int W, int H)> Minimums = new Dictionary<string, (int, int)>
     {
-        ["metric"] = (160, 88), ["text"] = (160, 56), ["control"] = (180, 56), ["chart"] = (280, 180), ["table"] = (320, 200), ["matrix"] = (360, 220),
+        ["metric"] = (160, 88), ["text"] = (160, 56), ["control"] = (180, 56), ["chart"] = (280, 180), ["table"] = (320, 200), ["matrix"] = (360, 220), ["embed"] = (280, 180),
     };
 
     /// <summary>The names a header or footer may put in braces, besides <c>params.name</c>.</summary>
     public static readonly string[] RunningTokens = ["title", "page", "pages", "asof", "viewer"];
 
     /// <summary>Keys of a widget that a layout may never set: it restyles a widget and never changes what it shows.</summary>
-    internal static readonly string[] WidgetOwnKeys = ["type", "title", "encodings", "query", "format", "formats", "parameter", "parameters", "mark", "columns", "text", "hash", "label", "values", "control"];
+    internal static readonly string[] WidgetOwnKeys = ["type", "title", "encodings", "query", "format", "formats", "parameter", "parameters", "mark", "columns", "text", "hash", "label", "values", "control", "link_text"];
 
     /// <summary>Keys that fetch data or compute a value: a chart spec has none of them, wherever they appear. The list of the Vega-Lite subset check of <c>@dbdatakit/visuals</c>, plus the expression carriers.</summary>
     public static readonly string[] ComputingKeys =

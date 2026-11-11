@@ -632,7 +632,7 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
         return new ResolverOptions
         {
             MaxWidgets = b.MaxWidgets, MaxRows = b.MaxRows, MaxParallelism = b.MaxParallelism, WidgetTimeout = b.WidgetTimeout, Time = options.Time, MaxImageBytes = b.MaxImageBytes,
-            ModelSourcePrefix = b.ModelSourcePrefix, Cache = cached ? cache : null,
+            ModelSourcePrefix = b.ModelSourcePrefix, FrameOrigins = b.FrameOrigins, Cache = cached ? cache : null,
             OnUnexpected = (id, e) =>
             {
                 b.OnUnexpected?.Invoke(id, e);

@@ -233,6 +233,37 @@ public class SemanticFilesTests : IDisposable
     }
 
     [Fact]
+    public void Dashboard_validate_and_report_validate_check_the_template_files_and_name_the_other_kind()
+    {
+        var dir = Retail();
+        var (exit, output, err) = Run("dashboard", "validate", "--project", dir);
+        Assert.Equal(0, exit);
+        Assert.Contains("dashboards/retail-sales-today.yaml: ok", output);
+        Assert.Contains("1 dashboard(s) checked: 0 error(s)", output);
+        Assert.Equal("", err);
+        var (rexit, routput, _) = Run("report", "validate", "--project", dir);
+        Assert.Equal(0, rexit);
+        Assert.Contains("reports/retail-sales-monthly.yaml: ok", routput);
+
+        // a report file read as a dashboard is a report, at its line
+        var (wrong, _, wrongErr) = Run("dashboard", "validate", "reports/retail-sales-monthly.yaml", "--project", dir);
+        Assert.Equal(CliApp.ExitFindings, wrong);
+        Assert.Contains("DBD-VIEW-001", wrongErr);
+        Assert.Contains("reports/retail-sales-monthly.yaml", wrongErr);
+
+        // a bad field is the catalog check's, with the file and a line
+        Edit(Path.Combine(dir, "dashboards", "retail-sales-today.yaml"), "sales.net_amount", "sales.net_amunt");
+        var (bad, _, badErr) = Run("dashboard", "validate", "--project", dir);
+        Assert.Equal(CliApp.ExitFindings, bad);
+        Assert.Contains("dashboards/retail-sales-today.yaml:", badErr);
+        Assert.Contains("unknown_member", badErr);
+
+        var (missing, _, missingErr) = Run("dashboard", "validate", "dashboards/nope.yaml", "--project", dir);
+        Assert.Equal(CliApp.ExitUsage, missing);
+        Assert.Contains("No file `dashboards/nope.yaml`", missingErr);
+    }
+
+    [Fact]
     public void A_project_without_semantic_files_is_not_asked_anything()
     {
         var dir = Retail();

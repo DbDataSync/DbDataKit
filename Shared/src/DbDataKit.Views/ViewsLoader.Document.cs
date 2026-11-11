@@ -91,6 +91,10 @@ public static partial class ViewsLoader
 
             var widgets = map.Get("widgets") is { } w ? ReadWidgets(w) : MissingList<ViewWidget>(map, "widgets");
             var layouts = map.Get("layouts") is { } ls ? ReadLayouts(ls, widgets) : MissingList<ViewLayout>(map, "layouts");
+            if (kind == ViewKind.Report && widgets is not null)
+                foreach (var embed in widgets.Where(w => w.Type == "embed"))
+                    Diagnostics.Add(DefaultDiagnosticCatalog.Instance.Create(ViewsCodes.EmbedInReport, File, embed.Line, embed.Column,
+                        "A report has no `embed` widget: a report is paged and exported, and a frame is neither.", "Put the embed in a dashboard, or link to the report server's report from a text widget.", J(J("widgets", embed.Id), "type")));
             if (title is null || widgets is null || layouts is null || Diagnostics.HasErrors()) return null;
 
             CheckDocument(map, widgets, layouts, kioskLayout, kioskNode);

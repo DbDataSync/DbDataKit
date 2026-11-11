@@ -46,7 +46,7 @@ public class WidgetTests
     public void The_encoded_fields_of_a_widget_are_listed_in_the_order_they_are_written_each_with_its_place()
     {
         var widgets = Load("good/dashboard-widgets.json", ["region", "quarter"]).Widgets!;
-        Assert.Equal(["regions", "note", "logo", "revenue", "by_region", "pivot", "orders_table"], widgets.Select(w => w.Id));
+        Assert.Equal(["regions", "note", "logo", "revenue", "by_region", "pivot", "orders_table", "frame"], widgets.Select(w => w.Id));
         var by = (string id) => widgets.Single(w => w.Id == id);
         Assert.Equal(["x:customers.region", "y:orders.net_revenue", "color:products.category"], by("by_region").Fields.Select(f => $"{f.Channel}:{f.Field}"));
         Assert.Equal(["widgets.by_region.encodings.x", "widgets.by_region.encodings.y.field", "widgets.by_region.encodings.color"], by("by_region").Fields.Select(f => f.Path));
@@ -98,11 +98,13 @@ public class WidgetTests
     }
 
     [Fact]
-    public void The_reserved_embed_widget_is_refused_by_name_and_an_unknown_type_by_the_shared_code()
+    public void An_embed_widget_is_read_with_an_https_address_and_a_declared_parameter_and_an_unknown_type_is_refused_by_the_shared_code()
     {
-        var embed = Assert.Single(Load("bad/widget-embed.json", ["region", "quarter"]).Diagnostics);
-        Assert.Equal(ViewsCodes.ReservedWidget, embed.Code);
-        Assert.Contains("reserved", embed.Message);
+        var plain = Assert.Single(Load("bad/embed-url-not-https.json", ["region", "quarter"]).Diagnostics);
+        Assert.Equal(ViewsCodes.InvalidValue, plain.Code);
+        Assert.Equal("widgets.frame.url", plain.KeyPath);
+        var undeclared = Assert.Single(Load("bad/embed-undeclared-parameter.json", ["region", "quarter"]).Diagnostics);
+        Assert.Equal(ViewsCodes.UndeclaredParameter, undeclared.Code);
         Assert.Equal("DBD-107", Assert.Single(Load("bad/widget-type-unknown.json", ["region", "quarter"]).Diagnostics).Code);
     }
 

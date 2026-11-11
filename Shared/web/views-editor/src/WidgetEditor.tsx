@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   WIDGET_TYPES, WellError, WidgetView, bindingIssues, catalogRoles, defaultLimit, derivedQuery, describeDerivation, explicitQuery, filterEntry, filterProblems, memberProblem, operatorsFor, orderEntry, orderProblems,
   parameterValue, parseRequestText, parseValues, sortAt, wellFields, wellsOf,
-  type Catalog, type CatalogMember, type ClientDiagnostic, type EditCommand, type RenderedWidget, type ViewsDoc, type WellChange, type WellSpec, type WidgetDoc, type WidgetOptionsDoc,
+  DATE_PRESETS, NUMBER_STYLES, draftOf, draftProblem, formatOf, formatSample, levelCommand, levelsOf, sortValue,
+  type AxisChannel, type FormatDraft, type Catalog, type CatalogMember, type ClientDiagnostic, type EditCommand, type RenderedWidget, type ViewsDoc, type WellChange, type WellSpec, type WidgetDoc, type WidgetOptionsDoc,
 } from '@dbdatakit/visuals'
 import { CUSTOM_FORMAT, FORMAT_PRESETS, formatChoice } from './editing'
 
@@ -21,6 +22,92 @@ function FormatSelect({ format, onPick, testid, label }: { format: unknown; onPi
     </select>
   )
 }
+/**
+ * A format with its structured form and a live sample (plan 32 DBR44): the preset select stays as it was, and under it the controls of a number mapping (style, decimals, currency, grouping) or a date mapping (a preset
+ * or a pattern), a sample written by the formatter the page and the PDF use, and the loaders' words when what is typed is refused. What cannot be stored is not applied: the controls keep what was typed until it can.
+ */
+function FormatEditor({ format, onChange, testid, label }: { format: unknown; onChange: (value: unknown) => void; testid: string; label?: string }) {
+  const stored = JSON.stringify(format ?? null)
+  const [draft, setDraft] = useState<FormatDraft>(() => draftOf(format))
+  useEffect(() => setDraft(draftOf(JSON.parse(stored) as unknown)), [stored])
+  const problem = draftProblem(draft)
+  const update = (patch: Partial<FormatDraft>) => {
+    const next = { ...draft, ...patch }
+    setDraft(next)
+    if (draftProblem(next) === null) onChange(formatOf(next))
+  }
+  const sample = problem === null ? formatSample(formatOf(draft)) : ''
+  return (
+    <span data-testid={`${testid}-editor`}>
+      <FormatSelect label={label} testid={testid} format={format} onPick={(v) => onChange(v === '' ? undefined : v)} />
+      <details style={{ display: 'inline-block', marginLeft: 6 }}>
+        <summary className="hint">structured</summary>
+        <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select aria-label="Kind of format" data-testid={`${testid}-kind`} value={draft.kind} onChange={(e) => update({ kind: e.target.value as FormatDraft['kind'] })}>
+            <option value="default">(default)</option><option value="preset">a preset</option><option value="number">number mapping</option><option value="date">date mapping</option>
+          </select>
+          {draft.kind === 'number' && (
+            <>
+              <select aria-label="Number style" data-testid={`${testid}-style`} value={draft.style} onChange={(e) => update({ style: e.target.value })}>{NUMBER_STYLES.map((s) => <option key={s} value={s}>{s}</option>)}</select>
+              <input aria-label="Decimals" data-testid={`${testid}-decimals`} type="text" inputMode="numeric" placeholder="decimals" style={{ width: 70 }} value={draft.decimals} onChange={(e) => update({ decimals: e.target.value })} />
+              <input aria-label="Currency code" data-testid={`${testid}-currency`} placeholder="USD" style={{ width: 56 }} value={draft.currency} onChange={(e) => update({ currency: e.target.value })} />
+              <label className="hint"><input type="checkbox" data-testid={`${testid}-grouping`} checked={draft.grouping} onChange={(e) => update({ grouping: e.target.checked })} /> thousands separator</label>
+            </>
+          )}
+          {draft.kind === 'date' && (
+            <>
+              <input aria-label="Date preset or pattern" data-testid={`${testid}-date`} list={`${testid}-date-presets`} style={{ width: 150 }} value={draft.date} onChange={(e) => update({ date: e.target.value })} />
+              <datalist id={`${testid}-date-presets`}>{DATE_PRESETS.map((p) => <option key={p} value={p} />)}</datalist>
+            </>
+          )}
+          <span className="hint" data-testid={`${testid}-sample`}>{sample === '' ? '' : `reads ${sample}`}</span>
+          {problem !== null && <span className="hint" role="alert" data-testid={`${testid}-problem`}>{problem}</span>}
+        </div>
+      </details>
+    </span>
+  )
+}
+
+/** The levels of an axis well (a chart's `x`, a matrix's rows and columns): each level's format and, for a chart's nested `x`, its sort and title. A change is the edit command `setPath` of that level's entry. */
+function AxisLevels({ id, widget, channel, catalog, apply }: { id: string; widget: WidgetDoc; channel: AxisChannel; catalog: Catalog | null; apply: Apply }) {
+  const levels = levelsOf(widget, channel)
+  if (levels.length === 0) return null
+  const nested = channel === 'x' && levels.length > 1
+  const lev = (index: number, key: 'format' | 'sort' | 'title', value: unknown) => {
+    const c = levelCommand(id, widget, channel, index, key, value)
+    apply({ type: 'setPath', path: c.path, value: c.value }, `${id}:${channel}${index}:${key}`)
+  }
+  return (
+    <div data-testid={`ed-levels-${id}-${channel}`} style={{ margin: '4px 0' }}>
+      <span className="hint">{channel === 'x' ? 'x levels' : `${channel} levels`}, outermost first</span>
+      {levels.map((level, i) => {
+        const innermost = i === levels.length - 1
+        const base = `ed-level-${id}-${channel}-${i}`
+        return (
+          <div key={`${level.field}-${i}`} className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', padding: '2px 0' }} data-testid={base}>
+            <code>{level.field}</code>
+            <FormatEditor label={`Format of ${level.field}`} testid={`${base}-format`} format={level.format} onChange={(v) => lev(i, 'format', v)} />
+            {nested && (
+              <>
+                <label className="hint">sort{' '}
+                  <select aria-label={`Sort of ${level.field}`} data-testid={`${base}-sort-by`} value={level.sort?.by ?? ''} onChange={(e) => lev(i, 'sort', sortValue(e.target.value, level.sort?.dir))}>
+                    <option value="">(ascending by value)</option><option value="sort_key">sort_key (the rows&apos; order)</option><option value="label">label</option>
+                    {innermost && (catalog?.measures ?? []).map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+                  </select>
+                </label>
+                <select aria-label={`Direction of ${level.field}`} data-testid={`${base}-sort-dir`} disabled={!level.sort} value={level.sort?.dir ?? 'asc'} onChange={(e) => level.sort && lev(i, 'sort', sortValue(level.sort.by, e.target.value))}>
+                  <option value="asc">asc</option><option value="desc">desc</option>
+                </select>
+              </>
+            )}
+            {channel === 'x' && <input aria-label={`Title of ${level.field}`} data-testid={`${base}-title`} placeholder="title" style={{ width: 110 }} value={level.title ?? ''} onChange={(e) => lev(i, 'title', e.target.value === '' ? undefined : e.target.value)} />}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 const KIND_WORD = { measure: 'a measure', attribute: 'an attribute', either: 'a measure or an attribute' } as const
 
 /** One field well: its entries (each with a flag when the catalog lacks it), a pick list of the catalog's fields the well takes, a box to type a name, and a drop target for a field dragged from the catalog list. */
@@ -242,7 +329,7 @@ function QuerySections({ id, widget, doc, catalog, apply }: { id: string; widget
             </div>
           )
         })}
-        {widget.type === 'chart' && (['x', 'y', 'color'] as const).filter((c) => (widget.encodings as Record<string, unknown>)[c] !== undefined && c !== 'y').map((channel) => {
+        {widget.type === 'chart' && (['x', 'y', 'color'] as const).filter((c) => (widget.encodings as Record<string, unknown>)[c] !== undefined && c !== 'y' && !Array.isArray((widget.encodings as Record<string, unknown>)[c])).map((channel) => {
           const current = sortAt(widget, { kind: 'channel', channel })
           const value = current === undefined ? '' : current.by === 'sort_key' ? 'sort_key' : current.dir === 'desc' ? 'descending' : 'ascending'
           return (
@@ -345,7 +432,7 @@ export function WidgetEditor({ id, widget, doc, catalog, catalogNote, apply, dia
       <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap', margin: '6px 0' }} data-testid={`ed-widget-fields-${id}`}>
         {widget.type === 'metric' && (
           <label className="hint">format{' '}
-            <FormatSelect testid={`ed-format-${id}`} format={w.format} onPick={(v) => setOrClear(['format'], v, 'format')} />
+            <FormatEditor testid={`ed-format-${id}`} format={w.format} onChange={(v) => setOrClear(['format'], v, 'format')} />
           </label>
         )}
         {widget.type === 'matrix' && (
@@ -380,6 +467,15 @@ export function WidgetEditor({ id, widget, doc, catalog, catalogNote, apply, dia
             <label className="hint">values limit <input type="number" min={1} style={{ width: 70 }} data-testid={`ed-values-limit-${id}`} value={widget.values?.limit ?? ''} onChange={(e) => { if (widget.values?.attribute) setOrClear(['values', 'limit'], e.target.value === '' ? undefined : Number(e.target.value), 'values_limit') }} /></label>
           </>
         )}
+        {widget.type === 'embed' && (
+          <>
+            <label className="hint">address <input data-testid={`ed-embed-url-${id}`} style={{ width: 360 }} value={widget.url} onChange={(e) => set(['url'], e.target.value, 'url')} /></label>
+            <label className="hint">link text <input data-testid={`ed-embed-link-${id}`} style={{ width: 200 }} value={widget.link_text ?? ''} onChange={(e) => setOrClear(['link_text'], e.target.value, 'link_text')} /></label>
+            <label className="hint">query pairs <input data-testid={`ed-embed-with-${id}`} style={{ width: 280 }} placeholder="Name=$params.region, Other=literal" value={Object.entries(widget.with ?? {}).map(([k, v]) => `${k}=${v}`).join(', ')}
+              onChange={(e) => { const pairs = e.target.value.split(',').map((p) => p.trim()).filter((p) => p.includes('=')).map((p) => [p.slice(0, p.indexOf('=')).trim(), p.slice(p.indexOf('=') + 1).trim()] as const); setOrClear(['with'], pairs.length === 0 ? undefined : Object.fromEntries(pairs), 'with') }} /></label>
+            <span className="hint" data-testid={`ed-embed-note-${id}`}>framed only when the host approves the address&apos;s origin; otherwise a link</span>
+          </>
+        )}
         {widget.type === 'image' && (
           <>
             <label className="hint">alt text <input data-testid={`ed-alt-${id}`} style={{ width: 240 }} value={widget.alt} onChange={(e) => set(['alt'], e.target.value, 'alt')} /></label>
@@ -393,16 +489,19 @@ export function WidgetEditor({ id, widget, doc, catalog, catalogNote, apply, dia
         )}
       </div>
 
+      {widget.type === 'chart' && <AxisLevels id={id} widget={widget} channel="x" catalog={catalog} apply={apply} />}
+      {widget.type === 'matrix' && (['rows', 'columns'] as const).map((axis) => <AxisLevels key={axis} id={id} widget={widget} channel={axis} catalog={catalog} apply={apply} />)}
       {widget.type === 'table' && columns.length > 0 && (
         <table className="table" data-testid={`ed-columns-${id}`}>
-          <thead><tr><th>Column</th><th>Label</th><th>Format</th><th>Align</th></tr></thead>
+          <thead><tr><th>Column</th><th>Label</th><th>Format</th><th>Align</th><th>Width</th></tr></thead>
           <tbody>
             {columns.map((c, i) => (
               <tr key={`${c.field}-${i}`}>
                 <td><code>{c.field}</code></td>
                 <td><input aria-label={`Label of ${c.field}`} data-testid={`ed-column-label-${id}-${i}`} value={c.label ?? ''} onChange={(e) => setOrClear(['encodings', 'columns', i, 'label'], e.target.value, `col${i}:label`)} /></td>
-                <td><FormatSelect label={`Format of ${c.field}`} testid={`ed-column-format-${id}-${i}`} format={c.format} onPick={(v) => setOrClear(['encodings', 'columns', i, 'format'], v, `col${i}:format`)} /></td>
+                <td><FormatEditor label={`Format of ${c.field}`} testid={`ed-column-format-${id}-${i}`} format={c.format} onChange={(v) => setOrClear(['encodings', 'columns', i, 'format'], v, `col${i}:format`)} /></td>
                 <td><select aria-label={`Align of ${c.field}`} data-testid={`ed-column-align-${id}-${i}`} value={c.align ?? ''} onChange={(e) => setOrClear(['encodings', 'columns', i, 'align'], e.target.value, `col${i}:align`)}><option value="">(default)</option>{['left', 'right', 'center'].map((a) => <option key={a} value={a}>{a}</option>)}</select></td>
+                <td><input type="number" min={20} max={2000} style={{ width: 70 }} aria-label={`Width of ${c.field}`} data-testid={`ed-column-width-${id}-${i}`} placeholder="auto" value={c.width ?? ''} onChange={(e) => setOrClear(['encodings', 'columns', i, 'width'], e.target.value === '' ? undefined : Number(e.target.value), `col${i}:width`)} /></td>
               </tr>
             ))}
           </tbody>

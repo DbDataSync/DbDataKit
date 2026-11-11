@@ -24,10 +24,12 @@ export interface WellSpec {
   /** For an `either` well: the role a field of it usually has (a chart's `x` is an attribute, its `y` a measure): the type chooser fills wells by it. */
   prefer?: 'measure' | 'attribute'
   scalarWhenOne?: boolean
+  /** The most entries a list well takes (a chart's nested `x` has three levels at most). */
+  max?: number
 }
 
 const CHART: WellSpec[] = [
-  { id: 'x', label: 'x', kind: 'either', multiple: false, path: ['encodings', 'x'], shape: 'field', prefer: 'attribute' },
+  { id: 'x', label: 'x (levels, outermost first)', kind: 'either', multiple: true, path: ['encodings', 'x'], shape: 'fields', prefer: 'attribute', scalarWhenOne: true, max: 3 },
   { id: 'y', label: 'y', kind: 'either', multiple: false, path: ['encodings', 'y'], shape: 'field', prefer: 'measure' },
   { id: 'color', label: 'color', kind: 'either', multiple: false, path: ['encodings', 'color'], shape: 'field', prefer: 'attribute' },
   { id: 'column', label: 'column (facet)', kind: 'either', multiple: false, path: ['encodings', 'column'], shape: 'field', prefer: 'attribute' },
@@ -49,9 +51,10 @@ const WELLS: Record<WidgetType, WellSpec[]> = {
   control: [{ id: 'attribute', label: 'list its values from', kind: 'attribute', multiple: false, path: ['values', 'attribute'], shape: 'field' }],
   text: [],
   image: [],
+  embed: [],
 }
 
-export const WIDGET_TYPES: readonly WidgetType[] = ['metric', 'chart', 'matrix', 'table', 'text', 'image', 'control']
+export const WIDGET_TYPES: readonly WidgetType[] = ['metric', 'chart', 'matrix', 'table', 'text', 'image', 'control', 'embed']
 
 /** The wells of a widget type, in the order the derivation reads them. */
 export const wellsOf = (type: WidgetType): readonly WellSpec[] => WELLS[type] ?? []
@@ -120,6 +123,7 @@ export function changedFields(fields: string[], spec: WellSpec, change: WellChan
       if (problem?.code === 'wrong_member_kind') throw new WellError('wrong_member_kind', problem.message)
       if (!spec.multiple) return [field]
       if (fields.includes(field)) return fields
+      if (spec.max !== undefined && fields.length >= spec.max) throw new WellError('bad_position', `The well \`${spec.id}\` takes at most ${spec.max} fields.`)
       const next = [...fields]
       next.splice(Math.max(0, Math.min(fields.length, change.index ?? fields.length)), 0, field)
       return next
@@ -127,10 +131,28 @@ export function changedFields(fields: string[], spec: WellSpec, change: WellChan
   }
 }
 
+/**
+ * The rules of a nested axis (plan 32 DBR42), in the words of the loaders: more than one level on a chart's `x` needs a bar or a point mark (a line breaks between the groups) and no `column` (the nested axis is
+ * drawn with the facet); and a `column` cannot be added to a chart whose `x` is already nested.
+ */
+function nestedAxisRules(widget: WidgetDoc, spec: WellSpec, after: string[], change: WellChange): void {
+  if (widget.type !== 'chart' || change.op === 'remove' || change.op === 'clear') return
+  const encodings = (widget as unknown as { encodings?: Record<string, unknown> }).encodings ?? {}
+  const mark = (widget as unknown as { mark?: unknown }).mark
+  const markType = isObject(mark) ? mark.type : mark
+  if (spec.id === 'x' && after.length > 1) {
+    if (markType === 'line' || markType === 'area') throw new WellError('bad_field', `A ${String(markType)} chart has no nested axis: a line breaks between the groups. Use one temporal field with a grain and a format such as MMM yyyy, or a bar or point mark.`)
+    if (encodings.column !== undefined) throw new WellError('bad_field', 'A chart with a nested `x` has no `column`: the nested axis is drawn with the facet. Remove the column first.')
+  }
+  if (spec.id === 'column' && change.op === 'add' && wellFields(widget, WELLS.chart[0]!).length > 1)
+    throw new WellError('bad_field', 'A chart with a nested `x` has no `column`: the nested axis is drawn with the facet.')
+}
+
 /** The changes of the text a well change makes (none when nothing changes): the well's value set, or removed when it is empty. */
 export function wellOps(widget: WidgetDoc, id: string, spec: WellSpec, change: WellChange, roles?: CatalogRoles): Op[] {
   const before = wellFields(widget, spec)
   const after = changedFields(before, spec, change, roles)
+  nestedAxisRules(widget, spec, after, change)
   if (JSON.stringify(before) === JSON.stringify(after) && change.op !== 'add') return []
   const value = valueWith(widget, spec, after)
   const path: Path = ['widgets', id, ...spec.path]
@@ -170,6 +192,7 @@ function shell(to: WidgetType, from: WidgetDoc, model: string, parameter: string
     case 'text': return { type: to, ...named('title'), text: 'Write a note.' }
     case 'image': return { type: to, ...named('title'), hash: IMAGE_PLACEHOLDER, media_type: 'image/png', alt: 'Describe the image' }
     case 'control': return { type: to, ...named('title'), parameter: parameter ?? '', control: 'select', ...(label ? { label } : {}) }
+    case 'embed': return { type: to, ...named('title'), url: 'https://reports.example.com/' }
   }
 }
 
@@ -234,7 +257,7 @@ export function describeDerivation(id: string, widget: WidgetDoc, roles: Catalog
   const query = (widget as { query?: unknown }).query
   if (!derived.request) {
     const nothing = issues.length === 1 && issues[0]!.code === 'DBD-VIEW-040'
-    if (nothing && ['text', 'image', 'control'].includes(widget.type)) return { state: 'none', bindings: [], issues: [], sources: [] }
+    if (nothing && ['text', 'image', 'control', 'embed'].includes(widget.type)) return { state: 'none', bindings: [], issues: [], sources: [] }
     if (nothing && isObject(query) && (query.mode === 'explicit' || ['semantic', 'saved', 'store', 'ref'].some((k) => query[k] !== undefined))) return { state: 'explicit', bindings: [], issues: [], sources: [] }
     return { state: 'refused', bindings: [], issues, sources: [] }
   }

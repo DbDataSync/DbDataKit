@@ -152,5 +152,15 @@
       "model": "sales",
       "limit": 100
     }
+  },
+  "frame": {
+    "type": "embed",
+    "title": "Sales report",
+    "url": "https://reports.example.com/Reports/report/Sales?rs:Embed=true",
+    "with": {
+      "Region": "$params.region",
+      "Fiscal": "2026"
+    },
+    "link_text": "Open the sales report"
   }
 }

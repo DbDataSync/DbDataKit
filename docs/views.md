@@ -22,7 +22,25 @@ shares are part of the **query**, run on the server as the viewer.
 | `text` | `text` | markdown, **no raw HTML, no image, links only to a path on the host** (`/docs/x`); `{{params.name}}` is substituted as text |
 | `image` | `hash: sha256:<64 hex>`, `media_type` (`image/png image/jpeg image/webp`), `alt`, `fit` | held in the definition's artifacts by hash; **no URL, no SVG** |
 | `control` | `parameter`, `control` (`select multiselect date daterange number toggle text`), `label`, `values: {attribute, limit}` | edits one parameter; no query |
-| `embed` | | **reserved**: refused until DBR19 |
+| `embed` | `url` (an absolute https address, no credentials), `with` (query-string pairs: a name to `$params.name` or a literal), `link_text` | an external report server's report (plan 32 DBR19, plan 26 AP17), **dashboards only**: a report refuses it (`DBD-VIEW-038`). See [An embedded report](#an-embedded-report-dbr19) |
+
+### An embedded report (DBR19)
+
+```yaml
+widgets:
+  sales_server:
+    type: embed
+    title: Sales report
+    url: https://reports.example.com/Reports/report/Sales?rs:Embed=true
+    with: {Region: $params.region, Fiscal: "2026"}       # added to the address's query string; a pair whose parameter has no value is left out
+    link_text: Open the sales report                     # the words of the link when the address is not framed
+```
+
+The resolver gives `{type: embed, url, origin, framed, link_text}`: the address with the pairs filled in (escaped), its origin (scheme, host and port), and **`framed`, true only when the host approves that origin**: `ResolverOptions.FrameOrigins`
+(the views module passes its `Resolver.FrameOrigins`; an app instance's `frame` exception, plan 26 AP17, is where a host takes the list from). `EmbedBlock` draws a `framed` result as an `iframe` with `sandbox="allow-scripts allow-same-origin allow-forms allow-popups"`
+and `referrerpolicy="no-referrer"` (the person's own browser signs in to the report server; this page sends it nothing), and anything else as a link that opens in a new tab with no opener. An address that is not plain https draws as an error tile.
+Dashboards only: a **report** with an `embed` is refused (`DBD-VIEW-038`), because a report is paged and exported and a frame is neither. The widget has no query, so it is never cached and the editor shows no derived request. **Not built:** the page's
+Content-Security-Policy `frame-src` for an approved origin is the host's (the console and the apps host set their own), and the Windows sign-in of AP17.
 
 ### The query
 
@@ -75,6 +93,30 @@ encodings:                     # a matrix
   and writing both is that widget's error). A **matrix value** takes a preset or a mapping; a mapping is applied to the cell's number after the engine has arranged the grid.
 * The data of a chart that is exported (its sheet) holds the label columns beside the raw ones.
 
+#### A nested axis (DBR42)
+
+A bar or point chart's `x` may be a **list of levels, outermost first** (at most three), each a field or `{field, format, sort, title}`:
+
+```yaml
+encodings:
+  x:
+    - {field: orders.ordered_at_year, format: {date: year}}
+    - {field: orders.ordered_at_month, format: {date: MMM}, sort: {by: orders.net_revenue, dir: desc}}
+  y: orders.net_revenue
+```
+
+* **Refused** (`DBD-106`, at the key): a **line or an area** mark (a line breaks between the groups: use one temporal field with a grain and a format such as `MMM yyyy`), a **`column`** channel (the nested axis is drawn
+  with the facet), more than **three** levels. A list of one level is the plain channel. `sort` is the QIS view's `{by, dir}`: `sort_key`, `label`, or a measure, and a measure only on the **innermost** level (an outer level
+  would need its own total: refused in the derivation, `DBD-106` at `x[i].sort.by`).
+* **Asking.** `DeriveRequest` asks for every level as an attribute, outermost first, and adds `order` per level from the outermost (`[[year, asc], [month, asc]]`; a level sorted by a measure orders by that measure, which
+  is added to `measures` if the chart does not show it), unless the query writes its own `order`. The order of the request never depends on how the rows arrive.
+* **Drawing.** `ResultShaper` gives the engine the innermost level as `x` and the outermost as `column` (a facet it writes itself; an author's `facet` stays refused), writes each level's members as its format reads them, and
+  orders them: ascending by value unless the level sorts by `sort_key` (the rows' own order), `label` or a measure (the rows' order, which the request made); `dir: desc` reverses. With three levels the two outer ones are one column
+  of labels joined by ` / `. The rendered chart says `nested_axis: true` and the client (`applyNestedAxis`) draws the facet with zero spacing, the headers below the inner labels, a thin edge between groups and **an independent
+  `x` scale per group**, so each year shows its own months. Member combinations over **200** are cut (the first ones in the request's order are kept) and the chart's `notice` says `Showing the first 200 of N member combinations on the axis.`
+* **Limits, stated:** an inner level sorted by a measure has **one** order for the whole axis (the first group's), not one per group; a third level is joined into the group label, not drawn as a third header row; the
+  PDF is drawn from the same rendered chart by the same client code, so it carries the group headers (not checked here: the exporter's tests need Chromium and fonts).
+
 ### Sorting by a click (DBR45)
 
 A viewer may sort a table or a matrix by clicking a header, **on screen only** (the host sets `sortable` on `DashboardView`; the print and export routes never do): a click sorts ascending, a second click reverses, a third gives the
@@ -96,7 +138,8 @@ and sorts the rows loaded. The console's board sets `sortable`.
 | `DBD-VIEW-003` | an image by URL, an SVG, or anything but a raster held by hash |
 | `DBD-VIEW-004` | a chart outside the subset: data, a transform, an aggregate, a bin, an expression, a mark or type that is not listed |
 | `DBD-VIEW-005` | an encoded field that is not an output of the explicit query |
-| `DBD-VIEW-006` | the reserved `embed` widget |
+| `DBD-VIEW-006` | a widget type the resolver does not run |
+| `DBD-VIEW-038` | an `embed` widget in a report |
 | `DBD-VIEW-007` | a query that is not one of the forms, or a mode that does not fit it |
 | `DBD-VIEW-008` | a parameter that is not declared (a marker, a `params` entry, a control, `on_select`, a drill, `{{params.x}}`) |
 | `DBD-VIEW-037` | a drill that does not give a required parameter of its target |
@@ -117,7 +160,7 @@ attribute that has it).
 | `measures` | a metric's `value` and `compare`; a matrix's `values`; a chart's channel or a table's column that the catalog says is a measure; a table's `sort` field if the table does not show it |
 | `attributes` | a matrix's `rows` then `columns`; every other chart channel and table column; each field **once**, in a fixed order (chart: `x y color column row tooltip`; the order the file wrote the channels in does not matter) |
 | `filters`, `segments`, `timezone` | the query's, as written; `{param: name}` markers stay markers |
-| `order` | the query's `order` when it has one, else a table's `sort` (`{by, dir}` becomes `[by, dir]`, `asc` by default). A chart channel's `sort` and a matrix's `sort` and `column_limit` are the view's and add nothing |
+| `order` | the query's `order` when it has one, else a table's `sort` (`{by, dir}` becomes `[by, dir]`, `asc` by default), else a nested axis's levels in order (DBR42, above). A chart channel's `sort` and a matrix's `sort` and `column_limit` are the view's and add nothing |
 | `limit` | the query's, else the type's default: metric 1, chart 500, table 100, matrix 10,000; never above 10,000 |
 | `totals` | a matrix: `totals.rows` is a total row (the row fields rolled up), `totals.columns` a total column, both is `{subtotal_by: rows + columns, grand_total, cube}`; a sort of an axis by a measure asks for the other axis's total too (the view's `sort_needs_totals`). A table or chart with `totals: {grand_total: true}` and no `subtotal_by` rolls up every attribute it shows |
 
@@ -467,7 +510,7 @@ kind, never its words), a provider's `denied` or `not_found` to a browse is sile
 from any other origin is handed on as a `link`, and an address that is not `http` or `https` is refused.
 **Our own provider** is `ViewsCatalog` (`DbDataKit.Views.Hosting`, name `views`): the served documents under `/Dashboards` and `/Reports` (ids `dashboard/<name>`, `report/<name>`, folders `folder/dashboards`, `folder/reports`), narrowed by an app's models as the routes are, opened as
 `{mode: document, kind, name, version, layouts, layout}` (the layout and the parameters are checked against the document's own; the render, export and print are the module's, as the person), the formats of `ViewsApi.Formats` with `pdf` and `svg` unavailable and saying why when the host has no
-browser, and permissions stated as unknown (who may see a document is decided when it renders). Its browse and open are audited (`view.list`, `view.open` with `catalog` in the detail; never a search text or a parameter's value). The owner is empty. Not built yet: the `embed` widget,
+browser, and permissions stated as unknown (who may see a document is decided when it renders). Its browse and open are audited (`view.list`, `view.open` with `catalog` in the detail; never a search text or a parameter's value). The owner is empty. The `embed` widget is built (above). Not built yet:
 the routes that serve the catalog (`GET /api/v1/catalog...`), and RC01's external provider.
 
 ### In a Build project (plan 32 DBR29)

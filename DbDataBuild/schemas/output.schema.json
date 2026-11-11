@@ -699,6 +699,44 @@
       "if": {
         "properties": {
           "command": {
+            "const": "dashboard validate"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_view_validate"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "report validate"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_view_validate"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "project show semantic"
           }
         },
@@ -5372,6 +5410,29 @@
             "allow_destructive"
           ]
         }
+      }
+    },
+    "data_view_validate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "path": { "type": "string" },
+              "name": { "type": "string" },
+              "kind": { "enum": ["dashboard", "report"] },
+              "ok": { "type": "boolean" },
+              "errors": { "type": "integer" },
+              "warnings": { "type": "integer" }
+            }
+          }
+        },
+        "errors": { "type": "integer" },
+        "warnings": { "type": "integer" }
       }
     },
     "data_project_show_semantic": {

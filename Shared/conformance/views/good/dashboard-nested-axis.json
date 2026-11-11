@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "kind": "dashboard",
+  "title": "Nested axis",
+  "widgets": {
+    "w": {
+      "type": "chart",
+      "title": "Revenue by year and month",
+      "mark": "bar",
+      "encodings": {
+        "x": [
+          {
+            "field": "date.year",
+            "format": {
+              "date": "year"
+            },
+            "sort": {
+              "by": "sort_key",
+              "dir": "asc"
+            }
+          },
+          {
+            "field": "date.month",
+            "format": {
+              "date": "MMM"
+            },
+            "sort": {
+              "by": "orders.net_revenue",
+              "dir": "desc"
+            },
+            "title": "Month"
+          }
+        ],
+        "y": "orders.net_revenue",
+        "color": "customers.region"
+      },
+      "query": {
+        "model": "sales"
+      }
+    }
+  },
+  "layouts": [
+    {
+      "name": "desk",
+      "type": "reflow",
+      "default": true,
+      "grid": {
+        "columns": 12
+      },
+      "tiles": [
+        {
+          "widget": "w",
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 6
+        }
+      ]
+    }
+  ]
+}

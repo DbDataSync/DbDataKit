@@ -45,8 +45,6 @@ public static partial class ViewsLoader
             if (Map(node, path, $"The widget `{id}`", node) is not { } map) return null;
             var typeNode = map.Get("type");
             if (typeNode is null) { Add(ViewsCodes.MissingKey, map, $"Required key `type` is missing.", $"Add `type:` with one of: {string.Join(", ", Choices["widgetType"])}.", J(path, "type")); return null; }
-            if (typeNode is YamlScalar { Value: "embed" })
-            { Bad(ViewsCodes.ReservedWidget, typeNode, J(path, "type"), "The widget type `embed` is reserved: this format does not read it yet.", $"Use one of: {string.Join(", ", Choices["widgetType"])}."); return null; }
             if (typeNode is not YamlScalar ts || !Choices["widgetType"].Contains(ts.Value))
             { Bad(SharedCodes.UnknownUnionKind, typeNode, J(path, "type"), $"`{(typeNode as YamlScalar)?.Value}` is not a widget type.", $"Use one of: {string.Join(", ", Choices["widgetType"])}."); return null; }
             var type = ts.Value;
@@ -76,6 +74,7 @@ public static partial class ViewsLoader
                 case "text": TextBody(map, path); break;
                 case "image": ImageBody(map, path); break;
                 case "control": ControlBody(map, path); break;
+                case "embed": EmbedBody(map, path); break;
             }
             if (type is "metric" or "chart" or "matrix" or "table")
             {
@@ -131,6 +130,7 @@ public static partial class ViewsLoader
             }
             else if (markNode is not null) Choice(markNode, J(path, "mark"), "`mark`", Choices["mark"], ViewsCodes.ChartNotInSubset);
 
+            var markType = markNode switch { YamlMapping m2 => (m2.Get("type") as YamlScalar)?.Value, YamlScalar ms => ms.Value, _ => null };
             if (Encodings(widget, path, "chart") is not { } enc) return;
             var ep = J(path, "encodings");
             foreach (var e in enc.Entries.Where(e => Keys["encodings.chart"].Contains(e.Key.Value)))
@@ -140,7 +140,40 @@ public static partial class ViewsLoader
                 {
                     for (var i = 0; i < list.Items.Count; i++) Channel(e.Key.Value, list.Items[i], I(cp, i), fields);
                 }
+                else if (e.Key.Value == "x" && e.Value is YamlSequence levels) NestedAxis(levels, cp, markType, enc, J(ep, "column"), fields);
                 else Channel(e.Key.Value, e.Value, cp, fields);
+            }
+        }
+
+        /// <summary>The most levels a chart's nested <c>x</c> lists (plan 32 section 9g, DBR42).</summary>
+        public const int MaximumAxisLevels = 3;
+
+        /// <summary>
+        /// A chart's <c>x</c> as a list, outermost level first (DBR42): each level is a field name or <c>{field, format, sort, title}</c> (<c>sort</c> is the QIS view's <c>{by, dir}</c>: <c>sort_key</c>, <c>label</c> or a measure).
+        /// Refused: more than three levels, a line or an area mark (a line breaks between the groups), and a <c>column</c> channel (the nested axis is drawn with the facet).
+        /// </summary>
+        private void NestedAxis(YamlSequence levels, string path, string? mark, YamlMapping enc, string columnPath, List<EncodedField> fields)
+        {
+            if (levels.Items.Count == 0) { Bad(ViewsCodes.InvalidValue, levels, path, "A nested `x` lists at least one field."); return; }
+            if (levels.Items.Count > MaximumAxisLevels)
+                Bad(ViewsCodes.InvalidValue, levels, path, $"A nested `x` has at most {MaximumAxisLevels} levels; this one has {levels.Items.Count}.", "Drop the innermost or outermost level, or put one of them in `color`.");
+            if (levels.Items.Count > 1 && mark is "line" or "area")
+                Bad(ViewsCodes.InvalidValue, levels, path, $"A {mark} chart has no nested axis: a line breaks between the groups.", "Use one temporal field with a grain and a format such as `MMM yyyy`, or a bar or point mark.");
+            if (levels.Items.Count > 1 && enc.Get("column") is { } column)
+                Bad(ViewsCodes.InvalidValue, column, columnPath, "A chart with a nested `x` has no `column`: the nested axis is drawn with the facet.", "Move the field into `color` or `row`, or into the axis as one more level.");
+            for (var i = 0; i < levels.Items.Count; i++)
+            {
+                var ip = I(path, i);
+                var level = levels.Items[i];
+                if (level is YamlMapping m)
+                {
+                    CheckKeysAt(m, Keys["x_level"], "a level of the axis", ip);
+                    if (Required(m, "field", ip) is { } fn && Field(fn, J(ip, "field"), "`field`") is { } ff) fields.Add(new("x", ff, J(ip, "field"), fn.Line, fn.Column));
+                    if (m.Get("format") is { } fmt) FormatValue(fmt, J(ip, "format"));
+                    if (m.Get("sort") is { } so) SortKey(so, J(ip, "sort"));
+                    if (m.Get("title") is { } ti && ti is not YamlScalar) Bad(ViewsCodes.InvalidValue, ti, J(ip, "title"), "A level's `title` is text.");
+                }
+                else if (Field(level, ip, "A level of the axis") is { } f) fields.Add(new("x", f, ip, level.Line, level.Column));
             }
         }
 
@@ -283,6 +316,35 @@ public static partial class ViewsLoader
             if (Required(widget, "alt", path) is { } a) Text(a, J(path, "alt"), "`alt`", 500);
             if (widget.Get("fit") is { } f) Choice(f, J(path, "fit"), "`fit`", Choices["fit"]);
         }
+
+        /// <summary>The longest address an <c>embed</c> widget holds.</summary>
+        public const int MaximumEmbedUrl = 2000;
+
+        /// <summary>
+        /// An <c>embed</c> widget (plan 32 DBR19): an external report server's report. <c>url</c> is an absolute <c>https</c> address with no credentials; <c>with</c> maps a query-string name of that address to
+        /// <c>$params.name</c> (a declared parameter) or a literal; <c>link_text</c> is the words of the link the widget shows when the address's origin is not one the host approves to frame.
+        /// </summary>
+        private void EmbedBody(YamlMapping widget, string path)
+        {
+            if (Required(widget, "url", path) is { } u)
+            {
+                if (u is not YamlScalar { Value: var url } || url.Length is 0 or > MaximumEmbedUrl || url.Any(char.IsControl) || url.Any(char.IsWhiteSpace)
+                    || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps || uri.UserInfo.Length > 0 || uri.Host.Length == 0)
+                    Bad(ViewsCodes.InvalidValue, u, J(path, "url"), "An embed's `url` is an absolute https address with no credentials, no spaces and at most 2000 characters.", "Write the report server's address, `https://host/path?name=value`.");
+            }
+            if (widget.Get("with") is { } w && Map(w, J(path, "with"), "`with`", widget) is { } wm)
+                foreach (var e in wm.Entries)
+                {
+                    var wp = J(J(path, "with"), e.Key.Value);
+                    if (!EmbedName.IsMatch(e.Key.Value)) Bad(ViewsCodes.InvalidValue, e.Key, wp, "A query-string name is letters, digits and `_ . : -`, starting with a letter.");
+                    if (e.Value is not YamlScalar v) { Bad(ViewsCodes.InvalidValue, e.Value, wp, "A value is `$params.name` or a literal."); continue; }
+                    if (v.Value.StartsWith("$params.", StringComparison.Ordinal) && !IsDeclared(v.Value[8..]))
+                        Bad(ViewsCodes.UndeclaredParameter, v, wp, $"`{v.Value}` names a parameter the document does not declare.", "Declare it under `parameters`.");
+                }
+            if (widget.Get("link_text") is { } lt) Text(lt, J(path, "link_text"), "`link_text`", 200);
+        }
+
+        private static readonly Regex EmbedName = new("^[A-Za-z][A-Za-z0-9_.:-]{0,63}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         private void ControlBody(YamlMapping widget, string path)
         {

@@ -23,7 +23,7 @@ public static class ViewsCodes
     public const string ChartNotInSubset = "DBD-VIEW-004";
     /// <summary>An encoded field that is not an output of the widget's explicit query.</summary>
     public const string FieldNotInQuery = "DBD-VIEW-005";
-    /// <summary>A widget type that is reserved (<c>embed</c>) or unknown.</summary>
+    /// <summary>A widget type the resolver does not run (it has no resolution of its own).</summary>
     public const string ReservedWidget = "DBD-VIEW-006";
     /// <summary>A query that is not one of the forms, or a mode that does not fit it.</summary>
     public const string BadQuery = "DBD-VIEW-007";
@@ -63,6 +63,8 @@ public static class ViewsCodes
     public const string KeyOfOtherKind = "DBD-VIEW-035";
     /// <summary>A drill that does not give a required parameter of its target.</summary>
     public const string DrillMissingParameter = "DBD-VIEW-037";
+    /// <summary>An <c>embed</c> widget in a report: a report is paged and exported, and a frame is neither (plan 32 DBR19: dashboards only).</summary>
+    public const string EmbedInReport = "DBD-VIEW-038";
     /// <summary>A widget with no request to derive: a type without a query (text, image, control) or a query that is explicit (its encodings do not drive it).</summary>
     public const string NothingToDerive = "DBD-VIEW-040";
     /// <summary>A derived query that asks for no measure: a request needs at least one.</summary>
