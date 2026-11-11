@@ -2,6 +2,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="Npgsql" />
+    <PackageReference Include="JsonSchema.Net" />
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\DbDataKit.Delivery\DbDataKit.Delivery.csproj" />
     <ProjectReference Include="..\..\src\DbDataKit.State.Engines\DbDataKit.State.Engines.csproj" />

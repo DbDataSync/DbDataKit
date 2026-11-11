@@ -61,6 +61,29 @@ A small SMTP client of the library (`SmtpClientLite`: EHLO, STARTTLS or implicit
 - A certificate for another name, or one that chains to no trusted root, is refused (permanent, and it says which); **the name is always checked and there is no setting that turns the check off**. Credentials are never sent before TLS on a `starttls` channel, even when the server does not offer STARTTLS (that is refused too).
 - An address that is not one, no recipient, or a line break in the subject is the message's own fault: permanent.
 
+## Teams, Slack and the signed webhook (`kind: teams | slack | webhook`)
+
+```yaml
+    ops-teams:
+      kind: teams                          # an Adaptive Card in the envelope an incoming webhook takes
+      url: secret:dbdata/delivery/ops-teams/url       # the address carries a token: always a reference
+    ops-slack:
+      kind: slack                          # Block Kit: header, section (mrkdwn, escaped), a button for the link
+      url: secret:dbdata/delivery/ops-slack/url
+    erp-hook:
+      kind: webhook                        # a JSON document signed with HMAC-SHA256 and a timestamp
+      url: env:ERP_HOOK_URL
+      secret: secret:dbdata/delivery/erp-hook/signing
+      allow_private: [erp.internal.example, 10.1.0.0/16]   # optional, every webhook kind
+      timeout_seconds: 20
+```
+
+- **A private address is refused** (loopback, 10/8, 172.16/12, 192.168/16, 169.254/16, fc00::/7, fe80::/10, 100.64/10 and the other special ranges) unless `allow_private` lists the host name, the address or its CIDR range. It is checked on the address the connection really goes to, so a name that resolves to a private address, or is changed to one between a check and the connect, is refused as well. A plain `http` address is used only for a listed host.
+- **No redirect is followed** (it could lead past the check): a 3xx is a permanent failure that says so. The address is never in a message's words (it carries a token); a failure names the host.
+- **Answers:** 2xx is sent; 408, 425, 429 and 5xx are temporary (a 429's `Retry-After` is in the words); a **410 is permanent** and says the webhook was removed; any other 4xx and 3xx is permanent; a network error or a timeout is temporary.
+- **Files:** a webhook cannot carry one, so Teams and Slack name the attachments and the link opens what they came from; the signed webhook lists each (name, type, size, SHA-256) and inlines its bytes (`content_base64`) up to 2 MiB.
+- **The signature** (`WebhookSignature`): `X-DbData-Signature: t=<unix seconds>,v1=<hex>`, `v1` = HMAC-SHA256 of `"<t>.<body>"` with the shared secret, the body exactly as sent. A receiver calls `WebhookSignature.Verify(secret, header, body, now, window)`: constant-time comparison, `Mismatch` after one changed byte or another secret, `OutsideWindow` when `t` is more than the window (default five minutes) from its clock (this is what stops a replay), `Malformed`. `X-DbData-Delivery` is the message id (the receiver's idempotency key: a retry carries the same id) and `X-DbData-Attempt` the try.
+
 ## Where this folds into connections later
 
 A channel's endpoint and its secret references are read here by `DeliverySettings` on purpose, as a small reader of their own. When the `connection` format grows a `kind` for outside systems (plan 22a IX01), a delivery channel becomes a connection of kind `mail` or `webhook` and `ChannelConfig` is built from it: the outbox, the sender and the channels' code do not change, only where `ChannelConfig` comes from.
