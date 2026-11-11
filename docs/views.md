@@ -500,6 +500,16 @@ A refusal is `{code, message}`: 400 `invalid` (or the resolver's own code, `DBD-
 - **Following.** `ViewsPublications` holds the two `PublishedViews`; the module follows the group's definitions itself (`ViewsOptions.Follow`, every `PollInterval`, or `Refresh()`), or a host that runs one follower adds `Subscribers` to it.
   `ViewsPublications.Register(kinds, store, payloads)` registers `dashboard` and `report` in the registry of the publisher that validates a publish.
 
+### Scheduled and subscribed delivery (plan 32 DBR18, plan 22a GP17)
+
+A person subscribes to a dashboard or a report (`DbDataKit.Delivery`: `SubscriptionSpec`, `SubscriptionStore`, the console's subscriptions page) with the document's parameters, a layout, a format (`pdf`, `csv` of one widget, `xlsx`), a delivery channel and a schedule (a cron in a time zone; at most hourly). The runner's task `subscriptions` of the system package `views-export` (`DbDataKit.Delivery.Runner`) takes what is due and, for each, calls `SubscriptionRenderer` (here, `DbDataKit.Views.Hosting`), which is `ViewsApi.ExportAsync` **under the subscriber's own principal** (`ISubscriberPrincipals`: their roles and attributes, never the runner's), then hands the file to the delivery service as an attachment.
+
+- **As the subscriber.** The export is resolved, cached and audited as that person (`view.export` names them), so two subscribers of one document get their own rows and the audit shows both.
+- **The layout.** A subscription's `layout` is a named layout and wins; with none, the export rule of the layout selection (the print medium) applies, as for a person pressing Export.
+- **A failed widget** is in the PDF as its error block and the message names it (`X-DbData-Export-Widgets-Failed` of the export, `id=code`). A subscriber for whom **every** widget of the layout is denied, a document the module refuses (403, 404) and an identity the host cannot act as lose access: nothing is sent, the subscription stops, and the subscriber and the owner are told.
+- **No exporter or no browser** is `RenderResult.Failed("unavailable")` in the module's own words (they name `views.export`); the task then fails and the subscription shows the same problem.
+- **Where it runs:** in the process that has this module and the install's state (the Gateway, or a single-server console); a runner on another machine calling the module over HTTP for a subscriber is not built (plan 22a, open).
+
 ### The report catalog (plan 32 DBR19, section 9e)
 
 One interface answers what a source of reports has, the same for our own documents and for an external report server: `IReportCatalogProvider` (`DbDataKit.Views`) with **browse** (the items under a folder, or a search by name, path or description, narrowed by item type),

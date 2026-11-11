@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Delivery</RootNamespace>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <PackageId>DbDataKit.Delivery.Runner</PackageId>
+    <Description>The runner side of delivery (plan 32 DBR18, plan 22a GP17): the system package views-export whose task runs the due subscriptions as their subscribers and hands the PDF, CSV or xlsx to the delivery service, on a schedule or on request, with the run recorded.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Delivery\DbDataKit.Delivery.csproj" />
+    <ProjectReference Include="..\DbDataKit.Runner\DbDataKit.Runner.csproj" />
+  </ItemGroup>
+</Project>

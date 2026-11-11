@@ -26,5 +26,6 @@
     <PackageVersion Include="DbDataKit.Runner.Api" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Monitoring" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Scheduling" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Delivery" Version="$(DbDataKitVersion)" />
   </ItemGroup>
 </Project>

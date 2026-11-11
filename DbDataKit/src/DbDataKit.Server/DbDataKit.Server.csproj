@@ -38,6 +38,7 @@
     <DbDataKitReference Include="Knowledge.Index" />   <!-- the catalog of subjects read from the lineage graph; plan 27a KN02 -->
     <DbDataKitReference Include="Monitoring" />
     <DbDataKitReference Include="Scheduling" />
+    <DbDataKitReference Include="Delivery" />   <!-- the outbox, channels and subscriptions behind the Delivery screens; plan 22a GP07 to GP09, GP17, GP18 -->
     <DbDataKitReference Include="Secrets.Abstractions" />   <!-- the key the console signs for its servers with -->
     <DbDataKitReference Include="Secrets" />
     <DbDataKitReference Include="Secrets.Store" />
