@@ -231,7 +231,7 @@ public sealed class WebhookChannelTests : IDisposable
     [InlineData(408, DeliveryOutcome.Temporary)]
     public async Task The_answers_are_classified_as_the_plan_says(int status, DeliveryOutcome expected)
     {
-        var http = Http(_ => (status, status == 410 ? "gone" : "words from the far side", status == 429 ? new() { ["Retry-After"] = "30" } : null));
+        var http = Http(_ => (status, status == 410 ? "gone" : status == 204 ? "" : "words from the far side", status == 429 ? new() { ["Retry-After"] = "30" } : null));
         var result = await Channel("slack", http.Url(), ["127.0.0.1"]).SendAsync(Payload(), default);
         Assert.Equal(expected, result.Outcome);
         Assert.Contains($"{status}", result.Detail);
