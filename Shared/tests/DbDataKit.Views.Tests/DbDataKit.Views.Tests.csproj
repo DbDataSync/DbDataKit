@@ -14,6 +14,8 @@
   <ItemGroup>
     <!-- the documents and goldens the TypeScript tests of @dbdatakit/visuals read too -->
     <None Include="..\..\conformance\views\**\*" LinkBase="conformance\views" CopyToOutputDirectory="PreserveNewest" />
+    <!-- the CLDR snapshot, its pin and the allowed deviations of the locale data (LocaleDataTests; the TypeScript tests read them too) -->
+    <None Include="..\..\conformance\locale\**\*" LinkBase="conformance\locale" CopyToOutputDirectory="PreserveNewest" />
     <!-- the two sample documents of the retail template (plan 32 section 9a): loaded as good documents, and derived against their model's roles -->
     <None Include="..\..\..\DbDataBuild\templates\retail\dashboards\*.yaml" LinkBase="conformance\views\samples\dashboards" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\..\DbDataBuild\templates\retail\reports\*.yaml" LinkBase="conformance\views\samples\reports" CopyToOutputDirectory="PreserveNewest" />

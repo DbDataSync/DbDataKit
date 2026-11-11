@@ -1,0 +1,13 @@
+{
+  "about": "The deliberate differences between the hand-written locale data of the view formatter and its references. Read by LocaleDataTests (.NET) and localeData.test.ts (vitest), the same file. `against` is `cldr` (cldr-snapshot.json) or `icu` (.NET's CultureInfo); `field` is `<locale>.decimal`, `<locale>.group`, `<locale>.months[i]`, `<locale>.short[i]` (i from 0), `currency.<ISO code>` or `compact.thousand|million|billion`. A row needs a reason and the two values it allows: when either side changes, the row no longer matches and the test fails, so a row never hides a new difference. A row that matches nothing fails too (delete it).",
+  "deviations": [
+    {
+      "against": "cldr",
+      "locale": "en",
+      "field": "currency.CNY",
+      "ours": "¥",
+      "reference": "CN¥",
+      "reason": "docs/semantic/presentation.md lists CNY with the yen sign (the symbol the Chinese yuan has used in its own country since the 1990s and what Excel, Power BI and most chart tools write); CLDR's English data writes CN¥ only to tell it from the Japanese yen in the same text. A dashboard has one currency per field, so the ambiguity CLDR guards against does not arise. A default kept, not yet judged by a person (see docs/locale-data.md); change the formatter, the goldens and presentation.md together if it is ever decided otherwise."
+    }
+  ]
+}
