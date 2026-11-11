@@ -43,6 +43,35 @@ public static class EngineSupportTable
         return sb.ToString();
     }
 
+
+    /// <summary>The products that carry a generated section in their README (plan 14a SL05), each with the roles that product reads.</summary>
+    public static IReadOnlyDictionary<string, string[]> Products { get; } = new Dictionary<string, string[]>(StringComparer.Ordinal)
+    {
+        ["sync"] = [EngineRoles.SyncSource, EngineRoles.SyncTarget],
+        ["gateway"] = [EngineRoles.GatewaySource, EngineRoles.SemanticEmitter],
+        ["build"] = [EngineRoles.BuildTarget, EngineRoles.BuildOrigin],
+    };
+
+    /// <summary>The marker lines a product's README puts around its generated section.</summary>
+    public static (string Begin, string End) Markers(string product) => ($"<!-- engine-support:begin {product} -->", "<!-- engine-support:end -->");
+
+    /// <summary>The generated section of a product's README: its roles as a table, from the registry, linking to <c>docs/engine-support.md</c> (the markers included).</summary>
+    public static string ProductSection(EngineRegistry registry, string product, string linkToDoc)
+    {
+        var roles = Products[product];
+        var engines = registry.Engines.Where(e => roles.Any(r => e.Role(r).Status != EngineSupport.No)).OrderBy(e => e.DisplayName, StringComparer.Ordinal).ToList();
+        var (begin, end) = Markers(product);
+        var sb = new StringBuilder();
+        sb.Append(begin).Append("\n");
+        sb.Append("| Engine | ").Append(string.Join(" | ", roles.Select(EngineRoles.Title))).Append(" |\n");
+        sb.Append("| --- |").Append(string.Concat(roles.Select(_ => " --- |"))).Append('\n');
+        foreach (var e in engines)
+            sb.Append("| ").Append(e.DisplayName).Append(" | ").Append(string.Join(" | ", roles.Select(r => Cell(e.Role(r).Status)))).Append(" |\n");
+        sb.Append("\n**yes** built and run against a real engine, **unverified** built and never run against one, **planned** not built. Generated from the engine registry; the notes behind each cell are in [engine-support.md](").Append(linkToDoc).Append(").\n");
+        sb.Append(end);
+        return sb.ToString();
+    }
+
     private static string Cell(EngineSupport status) => status switch
     {
         EngineSupport.Supported => "yes",

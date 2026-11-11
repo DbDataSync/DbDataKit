@@ -12,13 +12,21 @@ namespace DbDataGateway.Server.Hosting;
 /// </summary>
 internal sealed class GatewaySemanticSession(GatewayFlightClient client) : ISemanticSession
 {
-    public const string Usage = "[--address URL] --user U [--insecure]   (the password is DBDATAKIT_GATEWAY_PASSWORD)";
+    public const string Usage = "[--address URL] [--user U] [--insecure]   (a token is DBDATAKIT_GATEWAY_TOKEN; with --user, the password is DBDATAKIT_GATEWAY_PASSWORD)";
+    public const string TokenVariable = "DBDATAKIT_GATEWAY_TOKEN";
     public static readonly string[] Options = ["address", "user", "password"];
     public static readonly string[] Flags = ["insecure"];
 
     public static async Task<ISemanticSession> ConnectAsync(CliArgs arguments, CliContext context)
     {
-        var user = arguments.Get("user") ?? throw new InvalidOperationException("--user names the gateway account to run as.");
+        // a personal access token or an access token of the identity home (plan 14a SL21, D24): read from the environment, never a flag, sent as the bearer credential of the session; --user names an account that signs in with a password instead
+        if (arguments.Get("user") is null)
+        {
+            var token = Environment.GetEnvironmentVariable(TokenVariable);
+            if (string.IsNullOrWhiteSpace(token)) throw new InvalidOperationException($"Name the person to run as: the token in the {TokenVariable} environment variable, or --user and the password in DBDATAKIT_GATEWAY_PASSWORD.");
+            return ForToken(arguments.Get("address") ?? "https://localhost:8815", token.Trim(), arguments.Has("insecure"));
+        }
+        var user = arguments.Get("user")!;
         var password = arguments.Get("password") ?? Environment.GetEnvironmentVariable("DBDATAKIT_GATEWAY_PASSWORD") ?? throw new InvalidOperationException("The password is the DBDATAKIT_GATEWAY_PASSWORD environment variable.");
         var handler = new SocketsHttpHandler();
         if (arguments.Has("insecure")) handler.SslOptions.RemoteCertificateValidationCallback = (_, _, _, _) => true;
@@ -26,6 +34,14 @@ internal sealed class GatewaySemanticSession(GatewayFlightClient client) : ISema
         try { await client.AuthenticateAsync(user, password, context.Cancellation); }
         catch { client.Dispose(); throw; }
         return new GatewaySemanticSession(client);
+    }
+
+    /// <summary>A session that sends <paramref name="token"/> as <c>Authorization: Bearer</c> on every call: no handshake, so a token revoked on the Gateway is refused at the next statement with the Gateway's own message.</summary>
+    internal static ISemanticSession ForToken(string address, string token, bool insecure)
+    {
+        var handler = new SocketsHttpHandler();
+        if (insecure) handler.SslOptions.RemoteCertificateValidationCallback = (_, _, _, _) => true;
+        return new GatewaySemanticSession(new GatewayFlightClient(address, new GrpcChannelOptions { HttpHandler = handler }) { Authorization = "Bearer " + token });
     }
 
     public async Task<SemanticTable> RunAsync(string model, string statement, int maxRows, CancellationToken cancellationToken)

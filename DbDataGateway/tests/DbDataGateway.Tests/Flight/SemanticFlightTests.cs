@@ -194,6 +194,32 @@ public sealed class SemanticFlightTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ATokenSessionOfTheSemanticNounDescribesAndQueriesAsThePersonAndARevokedTokenIsRefused()
+    {
+        // plan 14a SL21 (D24): the access token of the identity home, as the bearer credential, with no handshake and no password
+        await using (var session = DbDataGateway.Server.Hosting.GatewaySemanticSession.ForToken(_address, _tokens["alice"], insecure: false))
+        {
+            var described = await session.RunAsync("sales_catalog", """{"kind": "describe"}""", 1000, CancellationToken.None);
+            Assert.Contains(described.Rows, r => r.Any(v => Equals(v, "orders.net_revenue") || Equals(v, "net_revenue")));
+            var answered = await session.RunAsync("sales_catalog", Request, 100, CancellationToken.None);
+            Assert.Equal("complete", answered.Notes["qis.status"]);
+            Assert.Equal(2, answered.Rows.Count);
+        }
+
+        // bob's token reads another source: the same session kind is refused for him as for any caller, in the Gateway's words
+        await using (var asBob = DbDataGateway.Server.Hosting.GatewaySemanticSession.ForToken(_address, _tokens["bob"], insecure: false))
+            Assert.Equal(StatusCode.PermissionDenied, (await Rpc.ExpectAsync(() => asBob.RunAsync("sales_catalog", Request, 100, CancellationToken.None))).StatusCode);
+
+        // revoked: refused at the next statement
+        var state = _app!.Services.GetRequiredService<DbDataKit.State.StateDatabase>();
+        var tokens = new DbDataKit.Identity.AccessTokens(state, new DbDataKit.State.IdentityUserStore(state));
+        var alice = new DbDataKit.State.IdentityUserStore(state).List().First(u => u.DisplayName == "alice");
+        foreach (var t in tokens.List(alice.Id)) tokens.Revoke(t.Id);
+        await using var revoked = DbDataGateway.Server.Hosting.GatewaySemanticSession.ForToken(_address, _tokens["alice"], insecure: false);
+        Assert.Equal(StatusCode.Unauthenticated, (await Rpc.ExpectAsync(() => revoked.RunAsync("sales_catalog", Request, 100, CancellationToken.None))).StatusCode);
+    }
+
+    [Fact]
     public async Task TheSemanticCommandsDescribeQueryExplainAndListMembersAsTheUser()
     {
         var described = await SemanticCli("describe", "sales_catalog");

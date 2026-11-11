@@ -1,5 +1,6 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@dbdatakit/shell'
 import { EntityModelsView, SemanticModelsView, type EntityModelsViewProps, type SemanticModelsViewProps } from './ModelsPage'
@@ -14,7 +15,7 @@ function sem(over: Partial<SemanticModelsViewProps> = {}): SemanticModelsViewPro
 function ent(over: Partial<EntityModelsViewProps> = {}): EntityModelsViewProps {
   return { rows: [{ name: 'customers', current_version: 3, data_source: 'erp', managed_by: null, served_version: 3, failed_version: null, failure: null, entities: ['customer', 'address'] }], loading: false, listError: null, opened: null, detail: undefined, detailError: null, confirming: null, busy: false, onOpen: () => {}, onAskRemove: () => {}, onRemove: () => {}, ...over }
 }
-const html = (node: ReactNode) => renderToStaticMarkup(<>{node}</>)
+const html = (node: ReactNode) => renderToStaticMarkup(<MemoryRouter>{node}</MemoryRouter>)
 
 function find(node: ReactNode, testId: string): ReactElement<Record<string, unknown>> | undefined {
   if (Array.isArray(node)) { for (const child of node) { const found = find(child, testId); if (found) return found } return undefined }
@@ -32,6 +33,7 @@ describe('semantic models', () => {
     expect(text).toContain('serving version 2')
     expect(text).toContain('published by a paired server (build-1)')
     expect(text).toContain('2 kept')
+    expect(text).toContain('href="/models/sales"')
   })
   it('says when nothing is published, while loading, and when the list is refused', () => {
     expect(html(SemanticModelsView(sem({ rows: [] })))).toContain('data-testid="models-semantic-empty"')

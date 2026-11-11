@@ -126,6 +126,8 @@ public static class GatewayManagementHost
                 : null,
             stateApi: stateApi,
             views: new GatewayViewsManagement(app.Services.GetRequiredService<Serving.GatewayViewsPublishing>(), GatewayModules.Has(options, GatewayModules.Views) ? app.Services.GetRequiredService<Serving.GatewayViews>() : null, audit),
+            userQueries: new GatewayUserQueries(app.Services.GetRequiredService<DbDataGateway.Server.State.SavedQueryStore>(), app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(),
+                GatewayModules.Has(options, GatewayModules.Views) ? app.Services.GetRequiredService<Serving.GatewayViews>() : null, audit),
             audit: audit,
             serverSettings: new GatewayServerSettings(configDirectory, management, provider.ReloadNow, audit, git),
             entityModels: new GatewayEntityModels(app.Services.GetRequiredService<Serving.PublishedEntityModels>(),

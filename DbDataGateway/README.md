@@ -16,6 +16,19 @@ Flight SQL client ──gRPC/TLS──▶ DbDataGateway (x64) ──▶ SQL Serv
   IIS is not used: gRPC over IIS needs HTTP/2 response trailers, which Windows Server 2016 IIS lacks.
 * Standalone: a self-contained single-file `dbdatagateway.exe` that generates its own self-signed TLS certificate.
 
+## Engines
+
+<!-- engine-support:begin gateway -->
+| Engine | Gateway source | Semantic emitter |
+| --- | --- | --- |
+| DuckDB | yes | yes |
+| Microsoft SQL Server | yes | yes |
+| ODBC | yes | no |
+| PostgreSQL | yes | yes |
+
+**yes** built and run against a real engine, **unverified** built and never run against one, **planned** not built. Generated from the engine registry; the notes behind each cell are in [engine-support.md](../docs/engine-support.md).
+<!-- engine-support:end -->
+
 ## Quick start
 
 ```powershell
@@ -363,6 +376,14 @@ Every scan the engine plans is run as the signed-in client against the mapped da
 #### Publishing a model
 
 A model can also be published to a running server (plan 19, J13), by an administrator or a paired Build server (a publishing client): `PUT /api/v1/semantic-models/<name>` with `{"catalog": "<the catalog's yaml>", "sources": {"<catalog source>": "<data source>"}, "ssas": {"<catalog source>": "secret:..."}, "expected_version": <n>}` (`expected_version` is absent to create). Nothing is written unless the catalog loads and has the name of the call, every source maps to a data source of this server that answers a test query and can read every table the source's facts and joins name (an empty `SELECT ... WHERE 1 = 0` on each), and a publishing client's sources are data sources that client made (a model never reaches data its publisher could not) and its Analysis Services connection is a secret reference. The version is a published definition of the group (plan 20 O03), kept in the state: stored and made current in one step, so a failed publish leaves the serving version alone, and every version is kept. Publishing the catalog and mapping the group already serves makes no new version: the answer names the version served and says `"unchanged": true` (the audit says `unchanged`), so a retried publish is safe. The instance the call reached serves it at once; every other instance sharing the state serves it when it next looks (`definitionPollSeconds`, 5 by default), and one started later, even with the publisher stopped, serves it as it starts. Each instance loads a version before it serves it, so one it cannot load leaves the version it served (logged, and in the listing as `failed_version` and `failure` beside `served_version`). Models kept in `semantic-models/` of the data directory by an older version are read into the state once, and the folder is renamed `semantic-models.imported`. `POST .../<name>/rollback` (`{"to_version": n}`, or the version before) makes an earlier one current at once; `GET` lists, reads (with the versions) and `DELETE` stops it being served (its versions are kept). Each instance still needs the data sources a model maps to in its own configuration. A publishing client sees and changes only its own models. **On the command line** (plan 19, J15): `dbdatagateway semantic describe|query|explain|members <model> ... --address URL --user U` (the password is the `DBDATAKIT_GATEWAY_PASSWORD` environment variable) runs one statement on a model as that user and prints the answer, or with `--format json` one document (`model`, `columns`, `rows`, `row_count`, `truncated`, `notes`); `ui mcp` offers the same to an agent. **Saved queries** (plan 19, J26, J27): a model's catalog may carry `queries` (published with it), and people may keep saved queries of their own on a model in the Gateway's state database (the store, with history and sharing by user, group or everyone, exists; the API that lets a person save, edit and share one comes with the apps). Both are called by selecting from them on the model's source, `SELECT * FROM name(args)`, and run as the caller, so sharing a query shares no data; the model's own names win over a person's. A name set up in `server.yaml` is not replaced by a publish.
+
+#### Reading a model's content, saving queries, a token for the command line
+
+`GET /api/v1/semantic-models/<name>/catalog` answers what a model's catalog says (dimensions with their attributes, types, synonyms and the column each is bound to by source, measures, hierarchies, calendars, segments, the model's saved queries, the published version) to anyone with the viewer role (plan 14a SL12): no data source, connection string or secret is in it, and the management read of the model itself stays the publisher's and the administrator's. The Models screen links each model to its browser page.
+
+A person's own saved queries (plan 14a SL17) are `GET /api/v1/my/queries[?model=]` and `GET|PUT|DELETE /api/v1/my/queries/<model>/<name>`, with `/history`, `POST /restore` (`{"version": n}`) and `GET|PUT /shares` (`{"grantees": ["user:<name>", "group:<name>", "*"]}`, the whole set), as the person the console's token names; the viewer role is enough and the `views` module must be on (it tells who a person is). A body is `{"sql": ...}` or `{"request": {...}}` with optional `description`, `parameters` and `expected_version` (absent to create); a member the model does not have is a 400 that names it, a stale version is a 409 with `current_version`. A saved query is called like a view (`SELECT * FROM name(args)`) and always runs as its caller, so sharing shows the text and shares no data.
+
+The `semantic` command takes a personal access token or an access token of the identity home from the `DBDATAKIT_GATEWAY_TOKEN` environment variable (plan 14a SL21; never a flag): with no `--user` it is sent as the bearer credential of the session, and a revoked token is refused at the next statement. `--user` with `DBDATAKIT_GATEWAY_PASSWORD` still signs in as an account.
 
 #### Other statements on a model, parameters, and the Models screen
 

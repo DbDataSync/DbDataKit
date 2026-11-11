@@ -37,6 +37,7 @@ public sealed class GatewaySemanticModels(
         var name = Uri.UnescapeDataString(rest[0]);
         if (!PublishedSemanticModels.ValidName(name)) return ManagementResult.Problem(400, "A model name is a letter followed by letters, digits, '.', '_' or '-' (up to 64).");
 
+        if (rest.Length == 2 && rest[1] == "catalog") return method == "GET" ? Catalog(name) : ManagementResult.Problem(405, "A catalog is read with GET.");
         if (rest.Length == 2 && rest[1] == "rollback") return method == "POST" ? await RollbackAsync(name, body, caller) : ManagementResult.Problem(405, "A model is rolled back with POST.");
         if (rest.Length != 1) return ManagementResult.Problem(404, "There is no such call.");
         return method switch
@@ -46,6 +47,19 @@ public sealed class GatewaySemanticModels(
             "DELETE" => await DeleteAsync(name, caller),
             _ => ManagementResult.Problem(405, "A model is read with GET, published with PUT, removed with DELETE."),
         };
+    }
+
+    /// <summary>What the catalog of a model says (plan 14a SL12), for anyone who may query it: a published model or one set up in <c>server.yaml</c>; no data source mapping, no connection.</summary>
+    public ManagementResult Catalog(string name)
+    {
+        if (!PublishedSemanticModels.ValidName(name)) return ManagementResult.Problem(400, "A model name is a letter followed by letters, digits, '.', '_' or '-' (up to 64).");
+        if (store.Current(name) is { } current && store.CatalogText(name, current) is { } text)
+        {
+            try { return ManagementResult.Ok(SemanticCatalogView.Build(CatalogLoader.LoadText(text), name, current, published: true)); }
+            catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException) { return ManagementResult.Problem(409, $"The catalog of '{name}' does not load: {ex.Message}"); }
+        }
+        if (models.Find(name) is { } handSet) return ManagementResult.Ok(SemanticCatalogView.Build(handSet.Catalog, handSet.Name, null, published: false));
+        return ManagementResult.Problem(404, $"There is no model '{name}'.");
     }
 
     private static bool IsAdministrator(ManagementCaller caller) => caller.Holds(ServerRole.Admin);

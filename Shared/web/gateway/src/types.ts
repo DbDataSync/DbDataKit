@@ -161,3 +161,24 @@ export interface SettingsFields { modules?: string[]; 'views.cacheSeconds'?: num
 export interface SettingsCheck { valid: boolean; diagnostics: Diagnostic[]; fields: SettingsFields; changed: string[]; restart_keys: string[]; problems: string[] }
 export interface SettingsEdit { set?: Record<string, string | number | boolean>; remove?: string[]; list?: Record<string, string[]> }
 export interface SettingsWritten { version: string; changed: string[]; restart_keys: string[]; restart_needed: boolean; commit: string | null }
+
+/** What a model's catalog says (`GET /api/v1/semantic-models/{name}/catalog`, plan 14a SL12): no data source and no connection. */
+export interface CatalogBinding { source: string; join: string | null; column: string; dax: string | null }
+export interface CatalogAttribute { name: string; type: string; synonyms: string[]; bindings: CatalogBinding[]; sort_key: string | null; time?: boolean }
+export interface CatalogDimension { name: string; label: string | null; default_role: string | null; attributes: CatalogAttribute[] }
+export interface CatalogMeasure { name: string; type: string; source: string | null; aggregation: string | null; column: string | null; derived: string | null; format: Record<string, unknown> | null; synonyms: string[]; roles: Record<string, string>; filtered?: boolean }
+export interface CatalogQuery { name: string; description: string | null; sql: string | null; request: Record<string, unknown> | null; parameters: Record<string, unknown> }
+export interface SemanticCatalogView {
+  name: string
+  /** The published version this is, null for a model set up in `server.yaml`. */
+  version: number | null
+  published: boolean
+  timezone: string
+  dimensions: CatalogDimension[]
+  measures: CatalogMeasure[]
+  hierarchies: { name: string; levels: string[] }[]
+  calendars: { name: string; date: string; implicit?: boolean; levels: Record<string, string> }[]
+  segments: string[]
+  queries: CatalogQuery[]
+  sources: { name: string; kind: string; fact_table: string; joins: string[] }[]
+}

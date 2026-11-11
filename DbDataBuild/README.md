@@ -68,6 +68,21 @@ scripts/publish.sh linux-x64  # one self-contained executable
 
 The real-engine suite uses throwaway SQL Server and PostgreSQL containers (`testenv/testenv.sh up mssql postgres`; see `CLAUDE.md`). linux-x64 is built and tested; win-x64 builds from Linux and has been run under Wine only (the Windows unit job in CI loads the library on real Windows); the SQL library and why it is the published build: `docs/native-library.md`.
 
+## Engines
+
+<!-- engine-support:begin build -->
+| Engine | Build target | Build origin |
+| --- | --- | --- |
+| Arrow Flight SQL | no | yes |
+| DuckDB | no | yes |
+| Microsoft Fabric warehouse | unverified | unverified |
+| Microsoft SQL Server | yes | yes |
+| ODBC | no | yes |
+| PostgreSQL | yes | yes |
+
+**yes** built and run against a real engine, **unverified** built and never run against one, **planned** not built. Generated from the engine registry; the notes behind each cell are in [engine-support.md](../docs/engine-support.md).
+<!-- engine-support:end -->
+
 ## Documentation
 
 - `DESIGN.md`: the design. Sections marked "as built" describe what exists.

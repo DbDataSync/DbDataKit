@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { gatewayApi } from '../api'
 import { GatewayShell } from '../GatewayShell'
@@ -68,7 +69,7 @@ export function SemanticModelsView(p: SemanticModelsViewProps) {
             return (
               <div key={r.name} data-testid={`semantic-row-${r.name}`}>
                 <div className="grid-row auto" style={{ gridTemplateColumns: '1.3fr 0.7fr 3fr 2fr 1.6fr', gap: 14, alignItems: 'start' }}>
-                  <span className="mono" data-testid="semantic-name">{r.name}</span>
+                  <span className="mono" data-testid="semantic-name"><Link to={`/models/${encodeURIComponent(r.name)}`} data-testid={`semantic-browse-${r.name}`}>{r.name}</Link></span>
                   <span data-testid="semantic-version">{r.current_version ?? '-'}<div className="hint">{r.versions} kept</div></span>
                   <span style={wrap} data-testid="semantic-served" data-tone={served.tone}>{served.text}</span>
                   <span style={wrap} className="hint">{ownerLabel(r.managed_by)}</span>
