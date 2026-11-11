@@ -61,6 +61,8 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         server.MapGet("/api/v1/status", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { product = "dbdatarunner", group = "main", tasks = new[] { new { package = "sample", channel = "dev", task = "ok", paused = false } } })));
         server.MapGet("/api/v1/instances", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { all = c.Request.Query["all"].ToString(), instances = Array.Empty<object>() })));
         server.MapGet("/api/v1/runs", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { query = c.Request.QueryString.Value, runs = Array.Empty<object>() })));
+        server.MapGet("/api/v1/runs/{id}", (HttpContext c, string id) => Needs(c, ServerRole.Viewer, () => Results.Json(new { id })));
+        server.MapGet("/api/v1/runs/{id}/logs", (HttpContext c, string id) => Needs(c, ServerRole.Viewer, () => Results.Json(new { run = id, lines = Array.Empty<object>() })));
         server.MapGet("/api/v1/definitions/integration", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { kind = "integration", definitions = Array.Empty<object>() })));
         server.MapGet("/api/v1/definitions/integration/{name}", (HttpContext c, string name) => Needs(c, ServerRole.Viewer, () => Results.Json(new { name })));
         server.MapPost("/api/v1/tasks/{package}/{channel}/{task}/{act}", (HttpContext c, string act) => Needs(c, ServerRole.Operator, () => Results.Json(new { act }, statusCode: act == "run" ? 202 : 200)));
@@ -73,6 +75,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         server.MapGet("/api/v1/connections", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { connections = Array.Empty<object>() })));
         server.MapGet("/api/v1/settings", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { require_signatures = false })));
         server.MapGet("/api/v1/lineage", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { edges = Array.Empty<object>() })));
+        server.MapGet("/api/v1/certificate", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { present = true })));
         // a server upgrades itself when the console says so (plan 24a UC09): the status is a viewer's, prepare and apply an administrator's
         server.MapGet("/api/v1/upgrade", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { state = "none" })));
         server.MapPost("/api/v1/upgrade", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { state = "prepared" })));
@@ -219,8 +222,9 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
     public static readonly (string Method, string Pattern, ServerRole Role, ServerRole Or)[] Expected =
     [
         ("GET", "api/v1/status", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/instances", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/connections", ServerRole.Viewer, ServerRole.None),
-        ("GET", "api/v1/runs", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/settings", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/lineage", ServerRole.Viewer, ServerRole.None),
+        ("GET", "api/v1/runs", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}/logs", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/settings", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/lineage", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/upgrade", ServerRole.Viewer, ServerRole.None),
+        ("GET", "api/v1/certificate", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/definitions/integration", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/definitions/integration/{name}", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/instances/{id}/labels", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/tasks/{name}/{name}/{name}/schedule", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/tasks/{name}/{name}/{name}/decisions", ServerRole.Viewer, ServerRole.None),

@@ -5,6 +5,7 @@ import { OUTCOMES, runnerApi, type RunFilters, type RunRecord } from '../api'
 import { isBad, outcomeText } from '../model'
 import { RunnerShell } from '../RunnerShell'
 import { took, when } from './format'
+import { RunLog } from './RunLog'
 
 function RunDetail({ run, onClose }: { run: RunRecord; onClose: () => void }) {
   const rows: [string, string][] = [
@@ -21,6 +22,7 @@ function RunDetail({ run, onClose }: { run: RunRecord; onClose: () => void }) {
             <div key={name} className="row" style={{ gap: 12 }}><span style={{ minWidth: 130 }} className="hint">{name}</span><span className="mono" data-testid={`runner-run-${name.toLowerCase().replace(/ /g, '-')}`}>{value}</span></div>
           ))}
           {run.failure && <div className="banner error" data-testid="runner-run-failure"><span>{run.failure.kind}: {run.failure.message}</span></div>}
+          <RunLog runId={run.id} live={run.outcome.toLowerCase() === 'running'} />
           <div className="row" style={{ justifyContent: 'flex-end' }}><button type="button" className="btn" onClick={onClose} data-testid="runner-run-close">Close</button></div>
         </div>
       </div>

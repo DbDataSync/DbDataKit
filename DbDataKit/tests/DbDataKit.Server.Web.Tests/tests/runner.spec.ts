@@ -113,6 +113,7 @@ test('the console pairs with a runner, runs, pauses and resumes a task, shows a 
   await page.getByTestId('runner-run').first().click()
   await expect(page.getByTestId('runner-run-detail')).toContainText('Succeeded')
   await expect(page.getByTestId('runner-run-package')).toContainText('sample v1')
+  await expect(page.getByTestId('runner-run-log-section')).toBeVisible()   // UI08: the run's output (or that it wrote none) is read through the relay
   await page.getByTestId('runner-run-close').click()
 
   // ---- the console's Monitoring page lists the runner's tasks and the runner that is gone

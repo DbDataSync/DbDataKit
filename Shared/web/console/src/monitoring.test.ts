@@ -193,3 +193,39 @@ describe('who schedules a plan (plan 33, UE06)', () => {
     expect(moveBlock({ ...row, kind: 'replication' }, move())).toContain('Only a Build plan')
   })
 })
+
+describe('the certificate of every kind of server and of the console (UI10)', () => {
+  const near = { present: true, subject: 'CN=build.example', days_left: 9, needs_renewal: true, renew_before_days: 30 }
+  const answering = (certificate: object | null) => async (url: string) => {
+    if (String(url).endsWith('/api/v1/certificate')) return certificate === null ? new Response('{}', { status: 404 }) : new Response(JSON.stringify(certificate), { status: 200, headers: { 'content-type': 'application/json' } })
+    return new Response(JSON.stringify({ projects: [], tasks: [], instances: [] }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }
+
+  it('shows a Build, Store and Runner server near the end of its certificate, with the product it is, and the subject without CN=', () => {
+    for (const product of ['dbdatabuild', 'dbdatastore', 'dbdatarunner', 'dbdataworkspace'] as const)
+      expect(certificateRow(server('x1', 'S', product), near)).toMatchObject({ product, state: 'expiring', kind: 'certificate', detail: 'The certificate for build.example ends in 9 days' })
+  })
+
+  it('reads the route of each server and of the console, and shows a row only for a certificate that is near its end', async () => {
+    const asked: string[] = []
+    const real = globalThis.fetch
+    globalThis.fetch = (async (url: string) => { asked.push(String(url)); return answering(near)(url) }) as typeof fetch
+    try {
+      const servers = [server('b1', 'Build', 'dbdatabuild'), server('s1', 'Store', 'dbdatastore'), server('r1', 'Runner', 'dbdatarunner')]
+      const { rows } = await loadRows(servers, Date.now(), true)
+      expect(asked.filter((u) => u.endsWith('/api/v1/certificate')).sort()).toEqual(['/api/v1/certificate', '/relay/b1/api/v1/certificate', '/relay/r1/api/v1/certificate', '/relay/s1/api/v1/certificate'])
+      expect(rows.filter((r) => r.kind === 'certificate').map((r) => r.serverName).sort()).toEqual(['Build', 'Runner', 'Store', 'This console'])
+      expect(rows.find((r) => r.server === 'console')).toMatchObject({ product: 'dbdatakit', key: 'console/certificate' })
+    } finally { globalThis.fetch = real }
+  })
+
+  it('shows nothing for a server or console that has no such route, and never reports a problem for it', async () => {
+    const real = globalThis.fetch
+    globalThis.fetch = answering(null) as unknown as typeof fetch
+    try {
+      const { rows, problems } = await loadRows([server('s1', 'Store', 'dbdatastore')], Date.now(), true)
+      expect(rows).toEqual([])
+      expect(problems).toEqual([])
+    } finally { globalThis.fetch = real }
+  })
+})

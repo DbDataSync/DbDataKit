@@ -16,6 +16,8 @@ export interface RunRecord {
   failure: { kind: string; message: string } | null
 }
 
+import type { RunLogLine } from './logs'
+
 export interface TaskStatus {
   package: string
   channel: string
@@ -175,6 +177,8 @@ export const runnerApi = {
   instances: () => request<{ group: string; this: string | null; instances: RunnerInstance[] }>('/api/v1/instances?all=true').then((r) => r.instances),
   connections: () => request<{ connections: RunnerConnection[] }>('/api/v1/connections').then((r) => r.connections),
   runs: (filters: RunFilters) => request<{ runs: RunRecord[] }>(`/api/v1/runs${runsQuery(filters)}`).then((r) => r.runs),
+  /** A run's output, the lines after the one with id `after` (from the start when none), at most `limit`; read again with the last id to follow a run that is going. */
+  runLog: (id: string, after?: number, limit = 200) => request<{ run: string; lines: RunLogLine[] }>(`/api/v1/runs/${enc(id)}/logs?limit=${limit}${after === undefined ? '' : `&after=${after}`}`),
   /** Starts a run now; the inputs are the task's own (`name=value` of `tasks run`), as text. */
   run: (task: TaskKey, inputs: Record<string, string> = {}) => post<{ run_id: string }>(`${taskPath(task)}/run`, Object.keys(inputs).length > 0 ? { inputs } : {}),
   schedule: (task: TaskKey) => request<TaskSchedule>(`${taskPath(task)}/schedule`),

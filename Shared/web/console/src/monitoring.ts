@@ -7,7 +7,7 @@ export interface MonitorRow {
   serverName: string
   /** Unique among the rows: the server and what the row is about (for a notice, its number). */
   key: string
-  product: 'dbdatasync' | 'dbdatabuild' | 'dbdatagateway' | 'dbdatarunner' | 'dbdatastore' | 'dbdataworkspace' | 'unknown'
+  product: 'dbdatasync' | 'dbdatabuild' | 'dbdatagateway' | 'dbdatarunner' | 'dbdatastore' | 'dbdataworkspace' | 'dbdatakit' | 'unknown'
   kind: 'replication' | 'plan' | 'event' | 'task' | 'instance' | 'certificate' | 'server'
   subject: string
   /** What to look at first: a failed last run, a lag past the limit, a notice from a Gateway, a hold, a run going, or nothing. */
@@ -109,12 +109,18 @@ function certificateLine(subject: string, days: number): { state: 'failed' | 'ex
   return { state: 'expiring', detail: `The certificate for ${subject} ends in ${days} day${days === 1 ? '' : 's'}` }
 }
 
+const products = ['dbdatasync', 'dbdatabuild', 'dbdatagateway', 'dbdatarunner', 'dbdatastore', 'dbdataworkspace', 'dbdatakit'] as const
+const productOf = (product: string | null): MonitorRow['product'] => products.find((k) => k === product) ?? 'unknown'
+
+/** The console's own certificate as a server of its own for the rows: `GET /api/v1/certificate` of the console, not through the relay (UI10). */
+export const consoleServer: InstanceSummary = { id: 'console', name: 'This console', url: '', product: 'dbdatakit', version: null, apiVersion: null, reachable: true, ready: true, problem: null, pairedAt: null }
+
 /** A certificate of a server that is expired (a failure) or within its warning window (expiring); null when it is fine, when the server has none, or when it cannot say. A valid certificate is no row. It has no buttons: renewing is on the server's own certificate screen. */
 export function certificateRow(server: InstanceSummary, cert: GatewayCertificate | SyncCertificate): MonitorRow | null {
   let subject: string, days: number, window: number
   if ('present' in cert) {
     if (!cert.present || cert.days_left === undefined) return null
-    subject = cert.subject ?? server.name; days = cert.days_left; window = cert.renew_before_days
+    subject = (cert.subject ?? server.name).replace(/^CN=/i, ''); days = cert.days_left; window = cert.renew_before_days
     if (cert.needs_renewal !== true && days > window) return null
   } else {
     if (!cert.available || cert.certificate === null) return null
@@ -122,7 +128,7 @@ export function certificateRow(server: InstanceSummary, cert: GatewayCertificate
     if (days > window) return null
   }
   const { state, detail } = certificateLine(subject, days)
-  return { key: `${server.id}/certificate`, server: server.id, serverName: server.name, product: server.product === 'dbdatasync' ? 'dbdatasync' : 'dbdatagateway', kind: 'certificate', subject: 'Certificate', state, detail, held: false, target: null }
+  return { key: `${server.id}/certificate`, server: server.id, serverName: server.name, product: productOf(server.product), kind: 'certificate', subject: 'Certificate', state, detail, held: false, target: null }
 }
 
 /** What a runner says in `GET /api/v1/status` about a task, and in `GET /api/v1/instances?all=true` about an instance. */
@@ -168,10 +174,21 @@ export function serverRow(server: InstanceSummary): MonitorRow | null {
 const relay = (server: InstanceSummary, path: string) => `/relay/${server.id}${path}`
 const enc = encodeURIComponent
 
+/** A server's certificate row, from the route every server has (`GET /api/v1/certificate`, UI10); a server that has no such route (an older one) or cannot say shows none, and its other rows still show. */
+async function certificateOf(server: InstanceSummary, rows: MonitorRow[]) {
+  const row = await request<GatewayCertificate>(relay(server, '/api/v1/certificate')).then((c) => certificateRow(server, c), () => null)
+  if (row) rows.push(row)
+}
+
 /** Everything the view shows, from every reachable server of a kind it knows. A server that does not answer is reported beside the rows, never as a row, and never stops the others. */
-export async function loadRows(servers: InstanceSummary[], now: number = Date.now()): Promise<{ rows: MonitorRow[]; problems: { server: string; message: string }[] }> {
+export async function loadRows(servers: InstanceSummary[], now: number = Date.now(), withConsole = false): Promise<{ rows: MonitorRow[]; problems: { server: string; message: string }[] }> {
   const rows: MonitorRow[] = []
   const problems: { server: string; message: string }[] = []
+  // the certificate of the console itself (UI10): a console that cannot say shows no row for it
+  if (withConsole) {
+    const own = await request<GatewayCertificate>('/api/v1/certificate').then((c) => certificateRow(consoleServer, c), () => null)
+    if (own) rows.push(own)
+  }
   rows.push(...servers.map(serverRow).filter((r): r is MonitorRow => r !== null))
   await Promise.all(servers.filter((s) => s.reachable).map(async (server) => {
     try {
@@ -190,6 +207,7 @@ export async function loadRows(servers: InstanceSummary[], now: number = Date.no
         }))
         rows.push(...found)
       } else if (server.product === 'dbdatabuild') {
+        await certificateOf(server, rows)
         const { projects } = await request<{ projects: { id: string }[] }>(relay(server, '/api/v1/projects'))
         for (const project of projects) {
           const { jobs } = await request<{ jobs: BuildJob[] }>(relay(server, `/api/v1/projects/${enc(project.id)}/schedule`))
@@ -202,11 +220,14 @@ export async function loadRows(servers: InstanceSummary[], now: number = Date.no
         // the feed lists the oldest first; the newest are what matters here
         rows.push(...notifications.filter((n) => now - Date.parse(n.created) <= NOTICE_WINDOW_MS).reverse().slice(0, 20).map((n) => gatewayRow(server, n)))
       } else if (server.product === 'dbdatarunner') {
+        await certificateOf(server, rows)
         const [status, group] = await Promise.all([
           request<{ tasks: RunnerTask[] }>(relay(server, '/api/v1/status')),
           request<{ instances: RunnerInstanceRow[] }>(relay(server, '/api/v1/instances?all=true')),
         ])
         rows.push(...status.tasks.map((t) => runnerTaskRow(server, t)), ...group.instances.filter((i) => i.live === false).map((i) => runnerGoneRow(server, i)))
+      } else if (server.product === 'dbdatastore' || server.product === 'dbdataworkspace') {
+        await certificateOf(server, rows)
       }
     } catch (error) {
       problems.push({ server: server.name, message: error instanceof Error ? error.message : 'No answer' })

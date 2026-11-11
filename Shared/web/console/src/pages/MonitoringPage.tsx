@@ -17,7 +17,7 @@ export function MonitoringPage() {
   const servers = instances.data ?? []
   const view = useQuery({
     queryKey: ['monitoring', servers.map((s) => `${s.id}:${s.reachable}`).join(',')],
-    queryFn: () => loadRows(servers),
+    queryFn: () => loadRows(servers, Date.now(), true),
     enabled: instances.isSuccess,
     refetchInterval: 30_000,
   })
