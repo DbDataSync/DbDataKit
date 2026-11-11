@@ -85,6 +85,9 @@ export interface DefinitionEvent { id: number; action: string; channel: string |
 /** A connection slot a channel's served or staged version declares (`slots` of the definition detail): its kind, the tasks that use it and the versions that declare it. */
 export interface SlotRequirement { channel: string; slot: string; kind: string; tasks: string[]; versions: number[] }
 
+/** What `POST /api/v1/bindings/{channel}/integration/{name}/test` answers: the step that failed or, when `ok`, the last one tried (`binding`, `connection`, `login`, `connect`), in words, and whether a connection was really opened. */
+export interface SlotTestAnswer { slot: string; bound_to: string | null; ok: boolean; step: 'binding' | 'connection' | 'login' | 'connect'; message: string; connected: boolean }
+
 export interface DefinitionBinding { channel: string; slot: string; bound_to: string; revision: number }
 
 /** `GET /api/v1/settings`: the publishing settings of the runner. */
@@ -201,6 +204,9 @@ export const runnerApi = {
   setRequireSignatures: (value: boolean) => request<{ require_signatures: boolean }>('/api/v1/settings/require_signatures', { method: 'PUT', body: JSON.stringify({ value }) }),
   bind: (name: string, channel: string, body: BindRequest) =>
     request<{ name: string; channel: string; bindings: DefinitionBinding[] }>(`/api/v1/bindings/${enc(channel)}/integration/${enc(name)}`, { method: 'PUT', body: JSON.stringify(body) }),
+  /** Tries one slot's binding as a run would (UI08): how far it got and, when it did not get through, why. Never a value. */
+  tryBinding: (name: string, channel: string, slot: string) =>
+    request<SlotTestAnswer>(`/api/v1/bindings/${enc(channel)}/integration/${enc(name)}/test`, { method: 'POST', body: JSON.stringify({ slot }) }),
   activate: (name: string, body: ActivateRequest) => post<ActivationAnswer>(`/api/v1/definitions/integration/${enc(name)}/activate`, body),
   switchTo: (name: string, body: ActivateRequest & { version: number }) => post<ActivationAnswer>(`/api/v1/definitions/integration/${enc(name)}/switch`, body),
   rollback: (name: string, body: ActivateRequest) => post<ActivationAnswer>(`/api/v1/definitions/integration/${enc(name)}/rollback`, body),

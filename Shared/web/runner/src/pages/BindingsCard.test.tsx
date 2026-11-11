@@ -63,6 +63,20 @@ describe('the connections of a channel', () => {
     ;(find(view, 'runner-bindings-save')!.props.onClick as () => void)()
     expect(typed).toEqual(['source=erp2']); expect(saved).toBe(1)
   })
+  it('offers to try a bound slot (not an unbound one, not a viewer) and shows how far the runner got, in its words (UI08)', () => {
+    const tried: string[] = []
+    const answer = { slot: 'source', bound_to: 'erp', ok: false, step: 'login' as const, message: "The connection 'erp' bound to the slot 'source' needs env:ERP_PASSWORD, which nothing answers.", connected: false }
+    const view = BindingsCardView(props({ onTry: (s) => tried.push(s), tested: { source: answer } }))
+    const text = renderToStaticMarkup(view)
+    expect(text.match(/runner-binding-try/g)).toHaveLength(1)   // source is bound, target is not
+    expect(text).toContain('data-step="login"')
+    expect(text).toContain('needs env:ERP_PASSWORD')
+    ;(find(view, 'runner-binding-try')!.props.onClick as () => void)()
+    expect(tried).toEqual(['source'])
+    expect(html({ onTry: () => {}, canEdit: false })).not.toContain('runner-binding-try')
+    expect(html({ onTry: () => {}, edits: { source: 'other' } })).not.toContain('runner-binding-try')   // a typed change is tried after it is saved
+    expect(find(BindingsCardView(props({ onTry: () => {}, trying: 'source' })), 'runner-binding-try')!.props.disabled).toBe(true)
+  })
   it('shows what was saved and the runner\'s refusal', () => {
     expect(html({ saved: ['target'] })).toContain('Bound in prod: target.')
     expect(html({ failure: new ApiError(403, 'This needs the publisher role, and for an existing package it must be one this client created, or the admin role.', null) })).toContain('must be one this client created')

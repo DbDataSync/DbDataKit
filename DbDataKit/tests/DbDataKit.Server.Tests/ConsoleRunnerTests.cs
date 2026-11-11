@@ -88,6 +88,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         server.MapPut("/api/v1/instances/{id}/labels", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { added = Array.Empty<string>() })));
         server.MapPut("/api/v1/artifacts/{sha}", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Ok()));
         server.MapPut("/api/v1/definitions/integration/{name}", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Ok()));
+        server.MapPost("/api/v1/bindings/{channel}/integration/{name}/test", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { ok = true })));
         server.MapPut("/api/v1/bindings/{channel}/integration/{name}", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Ok()));
         server.MapPut("/api/v1/settings/require_signatures", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Ok()));
         // what a product reports and the serving layer calls: a console never reaches these, whoever is signed in
@@ -236,7 +237,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         ("POST", "api/v1/definitions/integration/{name}/activate", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/definitions/integration/{name}/switch", ServerRole.Admin, ServerRole.None),
         ("POST", "api/v1/definitions/integration/{name}/rollback", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/definitions/integration/{name}/retire", ServerRole.Admin, ServerRole.None),
         ("PUT", "api/v1/artifacts/{sha}", ServerRole.Admin, ServerRole.Publisher), ("PUT", "api/v1/definitions/integration/{name}", ServerRole.Admin, ServerRole.Publisher),
-        ("PUT", "api/v1/bindings/{name}/integration/{name}", ServerRole.Admin, ServerRole.Publisher), ("PUT", "api/v1/settings/require_signatures", ServerRole.Admin, ServerRole.None),
+        ("PUT", "api/v1/bindings/{name}/integration/{name}", ServerRole.Admin, ServerRole.Publisher), ("POST", "api/v1/bindings/{name}/integration/{name}/test", ServerRole.Admin, ServerRole.None), ("PUT", "api/v1/settings/require_signatures", ServerRole.Admin, ServerRole.None),
         ("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/upgrade", ServerRole.Admin, ServerRole.None),
     ];
 

@@ -76,6 +76,7 @@ public static class ServerProducts
         new("PUT", "api/v1/artifacts/{sha}", ServerRole.Admin, ServerRole.Publisher),                      // UE10
         new("PUT", "api/v1/definitions/integration/{name}", ServerRole.Admin, ServerRole.Publisher),       // UE10
         new("PUT", "api/v1/bindings/{name}/integration/{name}", ServerRole.Admin, ServerRole.Publisher),   // UE08
+        new("POST", "api/v1/bindings/{name}/integration/{name}/test", ServerRole.Admin),                    // UI08: try a slot's binding (never a value in the answer)
         new("PUT", "api/v1/settings/require_signatures", ServerRole.Admin),                                // UE08
         new("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin),                                      // UE11
         new("POST", "api/v1/upgrade", ServerRole.Admin),                                                   // UC09: prepare and apply its own upgrade

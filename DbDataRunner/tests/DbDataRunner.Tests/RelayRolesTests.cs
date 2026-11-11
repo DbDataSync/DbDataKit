@@ -28,7 +28,7 @@ public sealed class RelayRolesTests
         { "POST", "/api/v1/definitions/integration/orders/activate", ServerRole.Admin }, { "POST", "/api/v1/definitions/integration/orders/switch", ServerRole.Admin },
         { "POST", "/api/v1/definitions/integration/orders/rollback", ServerRole.Admin }, { "POST", "/api/v1/definitions/integration/orders/retire", ServerRole.Admin },
         { "PUT", "/api/v1/artifacts/" + "a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1", ServerRole.Admin },
-        { "PUT", "/api/v1/definitions/integration/orders", ServerRole.Admin }, { "PUT", "/api/v1/bindings/dev/integration/orders", ServerRole.Admin },
+        { "PUT", "/api/v1/definitions/integration/orders", ServerRole.Admin }, { "PUT", "/api/v1/bindings/dev/integration/orders", ServerRole.Admin }, { "POST", "/api/v1/bindings/dev/integration/orders/test", ServerRole.Admin },
         { "PUT", "/api/v1/settings/require_signatures", ServerRole.Admin }, { "PUT", $"/api/v1/instances/{Instance}/labels", ServerRole.Admin },
     };
 

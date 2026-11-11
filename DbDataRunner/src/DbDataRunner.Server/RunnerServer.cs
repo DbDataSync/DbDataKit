@@ -89,6 +89,7 @@ public static class RunnerServer
         RunnerSecretsApi.Map(app, state, () => secretStore.Open(), "/api/v1", RunnerCallers.TokenResolver,
             connections: () => RunnerConnections.Inventory(state, app.Services.GetRequiredService<RunnerEngine>().Group, RunnerSettings.Product),
             listHeld: async (opened, ct) => opened is DbDataKit.Secrets.Store.ISecretAdmin admin ? [.. (await admin.ListInfoAsync("", ct)).Select(i => new DbDataKit.Secrets.SecretHeld(i.Name, i.Updated == default ? null : i.Updated))] : await RunnerSecretsApi.NamesOnly(opened, ct));   // UI06: the overview
+        RunnerBindingTestApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>().Slots, "/api/v1", RunnerCallers.TokenResolver);   // UI08: try a slot's binding
         RunnerGroupApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);
         RunnerLineageApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);
         return app;
