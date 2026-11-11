@@ -1,5 +1,6 @@
 using DbDataKit.Scheduling;
 using DbDataKit.State;
+using DbDataKit.State.Tracking;
 
 namespace DbDataKit.Runner;
 
@@ -22,5 +23,7 @@ public static class RunnerNames
     [
         RunnerModule.Module, RunsModule.Module, ProgressModule.Module, SchedulingModule.Module, DefinitionsModule.Module,
         PayloadStore.Module, AuditModule.Module, NotificationsModule.Module,
+        // Build's tracking copy: the runner hosts it for the tasks that read a target's tracking tables (plan 28c E16)
+        DbDataKit.Tracking.Build.BuildTrackingModule.Module, TrackingModule.Module,
     ];
 }

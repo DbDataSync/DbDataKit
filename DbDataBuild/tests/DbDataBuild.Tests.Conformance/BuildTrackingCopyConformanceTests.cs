@@ -130,6 +130,78 @@ public class BuildTrackingCopyConformanceTests
         Assert.False(again.SnapshotsRebuilt);
     }
 
+    /// <summary>The state the runner's protocol host keeps, reached in process: the same statements as the runner's calls (plan 28c E16), so the remote copier can be run against real tracking tables without a runner.</summary>
+    private sealed class InProcessRunnerCopy(StateDatabase state) : IRemoteTrackingCopy
+    {
+        private readonly BuildTrackingStore _store = new(state);
+        private readonly ProgressStore _progress = new(state, BuildTrackingState.ProgressKey);
+        private readonly StateTrackingDivergences _divergences = new(state);
+
+        public Task<TrackingCopyState> StateAsync(string identity, string stream, CancellationToken ct)
+        {
+            var c = _progress.GetCheckpoint(TrackingFollower.CheckpointNameOf(stream), identity);
+            TrackingPosition? position = c is not null ? new TrackingPosition(c.Parts[TrackingFollower.OrderPartName].AsInt, c.Parts[TrackingFollower.KeyPartName].AsText) : null;
+            return Task.FromResult(new TrackingCopyState(position, c?.Version ?? 0, _divergences.Open(identity, stream)));
+        }
+
+        public Task<bool> WriteAdvanceAsync(string identity, TrackingStream stream, IReadOnlyList<TrackingRow> rows, long expectedVersion, CancellationToken ct)
+        {
+            var last = rows[^1];
+            var parts = new Dictionary<string, ProgressValue> { [TrackingFollower.OrderPartName] = ProgressValue.OfInt(last.Order), [TrackingFollower.KeyPartName] = ProgressValue.OfText(last.Key) };
+            return Task.FromResult(_progress.Advance(TrackingFollower.CheckpointNameOf(stream.Name), parts, expectedVersion, itemKey: identity, alsoWrite: (c, t) => _store.Write(c, t, identity, stream, rows)));
+        }
+
+        public Task<IReadOnlyList<TrackingPosition>> TailAsync(string identity, TrackingStream stream, int count, CancellationToken ct) => _store.TailAsync(identity, stream, count, ct);
+
+        public Task<TrackingDivergence> MarkDivergenceAsync(string identity, string stream, string reason, TrackingPosition? common, TrackingPosition? primaryHigh, TrackingPosition? copyHigh, CancellationToken ct) =>
+            Task.FromResult(_divergences.Mark(identity, stream, reason, common, primaryHigh, copyHigh));
+
+        public Task RewriteAsync(string identity, string stream, IReadOnlyList<TrackingRow> rows, CancellationToken ct) => _store.WriteAsync(identity, BuildStreams.Get(stream).Stream, rows, ct);
+
+        public Task<IReadOnlyList<TrackingRow>> ReadAsync(string identity, string stream, TrackingPosition? after, int limit, CancellationToken ct) => _store.ReadAfterAsync(identity, BuildStreams.Get(stream).Stream, after, limit, ct);
+
+        public Task<IReadOnlyList<(string Key, string Hash)>> UnsettledAsync(string identity, string stream, int limit, CancellationToken ct) => Task.FromResult(_store.Unsettled(identity, stream, limit));
+
+        public Task<int> ReplaceSnapshotAsync(string identity, string table, IReadOnlyList<TrackingRow> rows, CancellationToken ct)
+        {
+            _store.ReplaceSnapshot(identity, table, [.. rows.Select(r => (r.Key, r.Order, r.Document))]);
+            return Task.FromResult(rows.Count);
+        }
+    }
+
+    [SkippableTheory, MemberData(nameof(Engines))]
+    public async Task The_remote_copier_of_the_runners_task_makes_the_same_copy_as_the_local_one(string name)
+    {
+        await using var engine = EngineEnv.Require(name);
+        await engine.StartAsync();
+        var scope = new TrackingScope(name, SchemaName, "sales");
+        await using (var gate = await GateAsync(engine)) { await TrackingStore.InitAsync(gate, name, SchemaName); await SeedAsync(gate, scope); }
+        var localState = OpenState(engine);
+        await using var read = await ReadSession.OpenAsync(Login(engine, DbDataBuild.Execution.Login.Read));
+        var local = CopierFor(read, engine, scope, localState);
+        Assert.True((await local.RunAsync(TimeSpan.FromSeconds(60))).Ok);
+
+        // the same target copied the runner's way: into a state that is only reached through IRemoteTrackingCopy
+        var runnerState = StateOpener.Open(new StateSettings(name == "sqlserver" ? StateEngineIds.MsSql : StateEngineIds.Postgres, engine.ConnectionString), "unused.db", BuildTrackingState.Modules, new StateScope("runner-main", "dbdatarunner"));
+        var identity = local.Identity;
+        var remote = new RemoteBuildTrackingCopier(identity, new BuildTrackingSource(read, scope, identity, TimeSpan.Zero), new InProcessRunnerCopy(runnerState), (kind, json) => MetadataInfoRows.HasRows(kind) ? MetadataInfoRows.From(kind, json) : null);
+        var result = await remote.RunAsync(TimeSpan.FromSeconds(60));
+
+        Assert.True(result.Ok, string.Join("; ", result.Problems));
+        Assert.True(result.CaughtUp);
+        Assert.True(result.SnapshotsRebuilt);
+        var a = new BuildTrackingStore(localState);
+        var b = new BuildTrackingStore(runnerState);
+        foreach (var table in BuildStreams.Tables)
+        {
+            Assert.True(a.Count(identity, table) > 0);
+            Assert.Equal(a.Count(identity, table), b.Count(identity, table));
+            Assert.Equal(KeysHash(a.Rows(identity, table).Select(r => r.Key)), KeysHash(b.Rows(identity, table).Select(r => r.Key)));
+        }
+
+        Assert.Equal(0, (await remote.RunAsync(TimeSpan.FromSeconds(60))).Copied);
+    }
+
     [SkippableTheory, MemberData(nameof(Engines))]
     public async Task An_updated_row_reaches_the_copy_with_its_final_status(string name)
     {

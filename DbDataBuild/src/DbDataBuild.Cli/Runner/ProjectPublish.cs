@@ -148,7 +148,13 @@ internal static class RunnerProject
             diagnostics.Add(new Diagnostic(DiagnosticCatalog.RefreshPlanMissing, new(RenderCommand.RenderedDir, 0, 0), "The project has no compiled refresh plan to publish: no `rendered/<connection>/refresh/<plan>.yml`.", Fix: $"Declare plans with `refresh:` in a model, run `{ProductInfo.Cli} project compile` and commit `rendered/`."));
         if (diagnostics.Count > before) return null;
 
-        var manifest = new PackageManifest(package, $"The dbdatabuild project {package}: {tasks.Count} refresh plan(s)",
+        // the follower on its own (plan 28c E16): one more task that copies the tracking of every connection the plans use into the runner's state; on demand, a schedule is the operator's to give it
+        var refreshPlans = plans.Count;
+        if (named.TryGetValue(CatchUpJob.TaskName, out var clash)) { diagnostics.Add(Invalid(RenderCommand.RenderedDir, $"The plan `{clash}` makes the task `{CatchUpJob.TaskName}`, which is the name of the task that copies the tracking tables; rename the plan.")); return null; }
+        var catchUpSlots = tasks.SelectMany(t => t.Connections).GroupBy(c => c.Name, StringComparer.Ordinal).Select(g => g.First()).OrderBy(c => c.Name, StringComparer.Ordinal).ToList();
+        tasks.Add(new PackageTask(CatchUpJob.TaskName, new TaskEntry(), new Schedule(), [], [new TaskInput("connection", ProgressType.Text, Default: "")], catchUpSlots, ProgressDeclaration.Empty, new TaskLimits(Timeout: TimeSpan.FromMinutes(10), Concurrency: 1), [], []));
+
+        var manifest = new PackageManifest(package, $"The dbdatabuild project {package}: {refreshPlans} refresh plan(s)",
             new PackageLaunch(LaunchKind.Executable, Runtime: new RuntimeReference(RuntimeName, runtimeRange)),
             new BuiltAgainst($"{Environment.Version.Major}.{Environment.Version.Minor}", null, RunnerProtocol.V1), tasks);
         var text = PackageManifestWriter.Write(manifest);

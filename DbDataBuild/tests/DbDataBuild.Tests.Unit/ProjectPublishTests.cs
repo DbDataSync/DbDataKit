@@ -47,7 +47,10 @@ public class ProjectPublishTests
         var dir = CompiledProject();
         var built = Built(dir);
 
-        Assert.Equal(["sqlserver-hourly", "sqlserver-quiet"], built.Manifest.Tasks.Select(t => t.Name));
+        Assert.Equal(["sqlserver-hourly", "sqlserver-quiet", "catch-up"], built.Manifest.Tasks.Select(t => t.Name));       // the last is the follower on its own (plan 28c E16): on demand, holding the connections of the plans
+        var catchUp = built.Manifest.Tasks[2];
+        Assert.False(catchUp.Schedule.HasSchedule);
+        Assert.Equal(built.Manifest.Tasks[0].Connections.Select(c => c.Name).Union(built.Manifest.Tasks[1].Connections.Select(c => c.Name)).Order(StringComparer.Ordinal), catchUp.Connections.Select(c => c.Name));
         var hourly = built.Manifest.Tasks[0];
         Assert.Equal("15 * * * *", hourly.Schedule.Cron);
         Assert.Equal("Europe/Berlin", hourly.Schedule.TimeZoneId);

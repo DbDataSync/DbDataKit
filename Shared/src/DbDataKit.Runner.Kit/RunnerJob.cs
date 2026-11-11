@@ -54,6 +54,9 @@ public abstract class RunnerJob<TInput, TProgress, TSlots> : RunnerJobBase
     /// <summary>The runner's durable queue of this task's own items (plan 28c E11): claims, marks and releases bound to the run, for work that outlives a process.</summary>
     protected EngineWork Work => new(Context);
 
+    /// <summary>The runner's copy of Build's tracking for the connections this run holds (plan 28c E16).</summary>
+    protected EngineTracking Tracking => new(Context);
+
     private RunContext Context => _context ?? throw new InvalidOperationException("The job is not running: start it with JobRunner.RunAsync.");
 
     protected abstract Task RunAsync(CancellationToken ct);

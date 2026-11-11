@@ -114,6 +114,22 @@ public sealed class BuildTrackingCopier(string identity, BuildTrackingSource sou
             if (batch.Count < 500) break;
         }
 
+        var (info, dependencies) = BuildTrackingSnapshots.Compute(latest, infoRows);
+        store.ReplaceSnapshot(identity, "object_info", info);
+        store.ReplaceSnapshot(identity, "metadata_dependency", dependencies);
+    }
+}
+
+/// <summary>
+/// What the two snapshot tables are made of: the newest document of each subject says its <c>object_info</c> rows, and the documents together say <c>metadata_dependency</c>. A pure function of the copy's documents, so the copier
+/// that has the state at hand (<see cref="BuildTrackingCopier"/>) and the one that writes it through the runner protocol (<see cref="RemoteBuildTrackingCopier"/>) make the same rows.
+/// </summary>
+public static class BuildTrackingSnapshots
+{
+    /// <summary>The rows of both snapshots (key, ordering value, document), each in key order, from the newest document of every (subject kind, subject).</summary>
+    public static (IReadOnlyList<(string Key, long Order, string Document)> Info, IReadOnlyList<(string Key, long Order, string Document)> Dependencies) Compute(
+        IReadOnlyDictionary<(string Kind, string Subject), (long Order, string Json)> latest, Func<string, string, IReadOnlyList<InfoRow>?> infoRows)
+    {
         var info = new List<(string, long, string)>();
         foreach (var ((kind, subject), (order, json)) in latest.OrderBy(l => l.Key.Kind, StringComparer.Ordinal).ThenBy(l => l.Key.Subject, StringComparer.Ordinal))
         {
@@ -136,7 +152,6 @@ public sealed class BuildTrackingCopier(string identity, BuildTrackingSource sou
                 ["subject"] = d.Subject, ["depends_on"] = d.DependsOn, ["depends_on_category"] = d.DependsOnCategory, ["depends_on_kind"] = d.DependsOnKind, ["depth"] = d.Depth,
             }))).ToList();
 
-        store.ReplaceSnapshot(identity, "object_info", [.. info.OrderBy(r => r.Item1, StringComparer.Ordinal)]);
-        store.ReplaceSnapshot(identity, "metadata_dependency", [.. dependencies.OrderBy(r => r.Item1, StringComparer.Ordinal)]);
+        return ([.. info.OrderBy(r => r.Item1, StringComparer.Ordinal)], [.. dependencies.OrderBy(r => r.Item1, StringComparer.Ordinal)]);
     }
 }

@@ -1,4 +1,5 @@
 using DbDataKit.State;
+using DbDataKit.State.Tracking;
 
 namespace DbDataKit.Runner.Kit;
 
@@ -197,6 +198,24 @@ internal sealed class InProcessRun : IRunBackend
     public Task<bool> IsWorkCancelRequestedAsync(Guid itemRunId, CancellationToken ct) => throw NoWork();
 
     public Task<WorkSnapshot> WorkStateAsync(IReadOnlyList<string> kinds, CancellationToken ct) => throw NoWork();
+
+    // ---- Build's tracking copy: the runner's state (the protocol host holds the module and the checks bound to a run's token), so an in-process run has none
+
+    private static NotSupportedException NoTracking() => new("Build's tracking copy is the runner's (the build_tracking module behind the run's token): a run in this process (the in-process kit) has none. Run the job through a runner.");
+
+    public Task<TrackingCopyState> TrackingStateAsync(string identity, string stream, CancellationToken ct) => throw NoTracking();
+
+    public Task<bool> TrackingWriteAsync(string identity, string stream, IReadOnlyList<TrackingRow> rows, bool advance, long expectedVersion, CancellationToken ct) => throw NoTracking();
+
+    public Task<IReadOnlyList<TrackingPosition>> TrackingTailAsync(string identity, string stream, int count, CancellationToken ct) => throw NoTracking();
+
+    public Task<IReadOnlyList<TrackingRow>> TrackingReadAsync(string identity, string stream, TrackingPosition? after, int limit, CancellationToken ct) => throw NoTracking();
+
+    public Task<IReadOnlyList<(string Key, string Hash)>> TrackingUnsettledAsync(string identity, string stream, int limit, CancellationToken ct) => throw NoTracking();
+
+    public Task<TrackingDivergence> TrackingDivergenceAsync(string identity, string stream, string reason, TrackingPosition? common, TrackingPosition? primaryHigh, TrackingPosition? copyHigh, CancellationToken ct) => throw NoTracking();
+
+    public Task<int> TrackingSnapshotAsync(string identity, string table, IReadOnlyList<TrackingRow> rows, CancellationToken ct) => throw NoTracking();
 
     // counts, the status line and lineage have no place in the state database yet (the lineage slice gives them one); the protocol server keeps them in memory for the runner
     public void Count(string name, long n)

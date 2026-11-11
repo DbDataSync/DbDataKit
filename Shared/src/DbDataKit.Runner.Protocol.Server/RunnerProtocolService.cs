@@ -1,6 +1,7 @@
 using DbDataKit.Runner.Kit;
 using DbDataKit.Runner.Protocol.V1;
 using DbDataKit.State;
+using DbDataKit.State.Tracking;
 using Google.Protobuf;
 using Grpc.Core;
 
@@ -39,6 +40,10 @@ internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.Ru
             throw;
         }
         catch (WorkNotOwnedException ex)
+        {
+            throw Refuse(StatusCode.PermissionDenied, ex.Message);
+        }
+        catch (TrackingNotGrantedException ex)
         {
             throw Refuse(StatusCode.PermissionDenied, ex.Message);
         }
@@ -633,4 +638,63 @@ internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.Ru
             await responseStream.WriteAsync(new CancelNotice { Reason = session.CancelSignal.Task.Result, GraceMs = (long)session.Grant.Start.CancellationGrace.TotalMilliseconds }).ConfigureAwait(false);
         await Task.WhenAny(session.EndSignal.Task, gone.Task).ConfigureAwait(false);
     }
+
+    // ---- Build's tracking copy (plan 28c E16): the runner's build_tracking module, for the identities of the connections this run holds
+
+    private static TrackingPositionMessage? ToWire(TrackingPosition? p) => p is null ? null : new TrackingPositionMessage { Order = p.Order, Key = p.Key };
+
+    private static TrackingPosition? FromWire(TrackingPositionMessage? p) => p is null ? null : new TrackingPosition(p.Order, p.Key);
+
+    private static TrackingDivergenceMessage ToWire(TrackingDivergence d)
+    {
+        var message = new TrackingDivergenceMessage { Id = d.Id, Identity = d.Identity, Stream = d.Stream, Status = d.Status, Reason = d.Reason, DivergedAtUnixMs = d.DivergedAt.ToUnixTimeMilliseconds() };
+        if (d.Common is not null) message.Common = ToWire(d.Common);
+        if (d.PrimaryHigh is not null) message.PrimaryHigh = ToWire(d.PrimaryHigh);
+        if (d.CopyHigh is not null) message.CopyHigh = ToWire(d.CopyHigh);
+        return message;
+    }
+
+    private static IReadOnlyList<TrackingRow> Rows(IEnumerable<TrackingRowMessage> rows) => [.. rows.Select(r => new TrackingRow(r.Key, r.Order, r.Document))];
+
+    public override Task<TrackingStateReply> TrackingState(TrackingStreamRef request, ServerCallContext context) => Guard(() =>
+    {
+        var state = Started(context).Tracking.State(request.Identity, request.Stream);
+        var reply = new TrackingStateReply { Version = state.Version };
+        if (state.Position is not null) reply.Position = ToWire(state.Position);
+        if (state.Open is not null) reply.Open = ToWire(state.Open);
+        return Task.FromResult(reply);
+    });
+
+    public override Task<TrackingWriteReply> TrackingWrite(TrackingWriteRequest request, ServerCallContext context) => Guard(() =>
+        Task.FromResult(new TrackingWriteReply { Applied = Started(context).Tracking.Write(request.Identity, request.Stream, Rows(request.Rows), request.Advance, request.ExpectedVersion) }));
+
+    public override Task<TrackingTailReply> TrackingTail(TrackingTailRequest request, ServerCallContext context) => Guard(() =>
+    {
+        var reply = new TrackingTailReply();
+        reply.Positions.AddRange(Started(context).Tracking.Tail(request.Identity, request.Stream, request.Count).Select(p => ToWire(p)!));
+        return Task.FromResult(reply);
+    });
+
+    public override Task<TrackingReadReply> TrackingRead(TrackingReadRequest request, ServerCallContext context) => Guard(() =>
+    {
+        var reply = new TrackingReadReply();
+        reply.Rows.AddRange(Started(context).Tracking.Read(request.Identity, request.Stream, FromWire(request.After), request.Limit).Select(r => new TrackingRowMessage { Key = r.Key, Order = r.Order, Document = r.Document }));
+        return Task.FromResult(reply);
+    });
+
+    public override Task<TrackingUnsettledReply> TrackingUnsettled(TrackingUnsettledRequest request, ServerCallContext context) => Guard(() =>
+    {
+        var reply = new TrackingUnsettledReply();
+        reply.Rows.AddRange(Started(context).Tracking.Unsettled(request.Identity, request.Stream, request.Limit).Select(r => new TrackingUnsettledRow { Key = r.Key, Hash = r.Hash }));
+        return Task.FromResult(reply);
+    });
+
+    public override Task<TrackingDivergenceReply> TrackingDivergence(TrackingDivergenceRequest request, ServerCallContext context) => Guard(() =>
+        Task.FromResult(new TrackingDivergenceReply
+        {
+            Divergence = ToWire(Started(context).Tracking.Mark(request.Identity, request.Stream, request.Reason, FromWire(request.Common), FromWire(request.PrimaryHigh), FromWire(request.CopyHigh))),
+        }));
+
+    public override Task<TrackingSnapshotReply> TrackingSnapshot(TrackingSnapshotRequest request, ServerCallContext context) => Guard(() =>
+        Task.FromResult(new TrackingSnapshotReply { Rows = Started(context).Tracking.ReplaceSnapshot(request.Identity, request.Table, Rows(request.Rows)) }));
 }

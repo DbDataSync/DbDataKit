@@ -1,6 +1,7 @@
 using DbDataKit.Runner.Protocol;
 using DbDataKit.Runner.Protocol.V1;
 using DbDataKit.State;
+using DbDataKit.State.Tracking;
 using Google.Protobuf;
 using Grpc.Core;
 
@@ -257,6 +258,67 @@ internal sealed class GrpcRunBackend : IRunBackend, IAsyncDisposable
         foreach (var kind in reply.Kinds)
             result[kind.Kind] = kind.Subjects.ToDictionary(s => s.Subject, s => new WorkSubject(DateTimeOffset.FromUnixTimeMilliseconds(s.LastEnqueuedUnixMs), s.InFlight), StringComparer.Ordinal);
         return new WorkSnapshot(reply.Outstanding, result, reply.Paused);
+    }
+
+    // ---- Build's tracking copy (plan 28c E16)
+
+    private static TrackingPositionMessage Wire(TrackingPosition p) => new() { Order = p.Order, Key = p.Key };
+
+    private static TrackingPosition? FromWire(TrackingPositionMessage? p) => p is null ? null : new TrackingPosition(p.Order, p.Key);
+
+    private static TrackingRowMessage Wire(TrackingRow row) => new() { Key = row.Key, Order = row.Order, Document = row.Document };
+
+    private static TrackingDivergence FromWire(TrackingDivergenceMessage d) => new(d.Id, d.Identity, d.Stream, d.Status, d.Reason, FromWire(d.Common), FromWire(d.PrimaryHigh), FromWire(d.CopyHigh),
+        DateTimeOffset.FromUnixTimeMilliseconds(d.DivergedAtUnixMs), null, null);
+
+    public async Task<TrackingCopyState> TrackingStateAsync(string identity, string stream, CancellationToken ct)
+    {
+        var reply = await CallAsync(h => _client.TrackingStateAsync(new TrackingStreamRef { Identity = identity, Stream = stream }, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false);
+        return new TrackingCopyState(FromWire(reply.Position), reply.Version, reply.Open is null ? null : FromWire(reply.Open));
+    }
+
+    public async Task<bool> TrackingWriteAsync(string identity, string stream, IReadOnlyList<TrackingRow> rows, bool advance, long expectedVersion, CancellationToken ct)
+    {
+        var request = new TrackingWriteRequest { Identity = identity, Stream = stream, Advance = advance, ExpectedVersion = expectedVersion };
+        request.Rows.AddRange(rows.Select(Wire));
+        return (await CallAsync(h => _client.TrackingWriteAsync(request, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false)).Applied;
+    }
+
+    public async Task<IReadOnlyList<TrackingPosition>> TrackingTailAsync(string identity, string stream, int count, CancellationToken ct)
+    {
+        var reply = await CallAsync(h => _client.TrackingTailAsync(new TrackingTailRequest { Identity = identity, Stream = stream, Count = count }, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false);
+        return [.. reply.Positions.Select(p => new TrackingPosition(p.Order, p.Key))];
+    }
+
+    public async Task<IReadOnlyList<TrackingRow>> TrackingReadAsync(string identity, string stream, TrackingPosition? after, int limit, CancellationToken ct)
+    {
+        var request = new TrackingReadRequest { Identity = identity, Stream = stream, Limit = limit };
+        if (after is not null) request.After = Wire(after);
+        var reply = await CallAsync(h => _client.TrackingReadAsync(request, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false);
+        return [.. reply.Rows.Select(r => new TrackingRow(r.Key, r.Order, r.Document))];
+    }
+
+    public async Task<IReadOnlyList<(string Key, string Hash)>> TrackingUnsettledAsync(string identity, string stream, int limit, CancellationToken ct)
+    {
+        var reply = await CallAsync(h => _client.TrackingUnsettledAsync(new TrackingUnsettledRequest { Identity = identity, Stream = stream, Limit = limit }, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false);
+        return [.. reply.Rows.Select(r => (r.Key, r.Hash))];
+    }
+
+    public async Task<TrackingDivergence> TrackingDivergenceAsync(string identity, string stream, string reason, TrackingPosition? common, TrackingPosition? primaryHigh, TrackingPosition? copyHigh, CancellationToken ct)
+    {
+        var request = new TrackingDivergenceRequest { Identity = identity, Stream = stream, Reason = reason };
+        if (common is not null) request.Common = Wire(common);
+        if (primaryHigh is not null) request.PrimaryHigh = Wire(primaryHigh);
+        if (copyHigh is not null) request.CopyHigh = Wire(copyHigh);
+        var reply = await CallAsync(h => _client.TrackingDivergenceAsync(request, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false);
+        return FromWire(reply.Divergence);
+    }
+
+    public async Task<int> TrackingSnapshotAsync(string identity, string table, IReadOnlyList<TrackingRow> rows, CancellationToken ct)
+    {
+        var request = new TrackingSnapshotRequest { Identity = identity, Table = table };
+        request.Rows.AddRange(rows.Select(Wire));
+        return (await CallAsync(h => _client.TrackingSnapshotAsync(request, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false)).Rows;
     }
 
     // ---- files, inbox, dead letters

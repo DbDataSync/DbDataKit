@@ -52,24 +52,8 @@ internal sealed class BuildTrackingHost(ProjectsFile projects, StateDatabase dat
         return results;
     }
 
-    private IEnumerable<(string Connection, TrackingScope Scope, LoginSettings Read)> Tracked(HostedProject hosted, string? only, Func<string, string?> env)
-    {
-        var root = projects.RootOf(hosted);
-        if (!Directory.Exists(root)) yield break;
-        var diagnostics = new List<DbDataBuild.Core.Diagnostic>();
-        ProjectConfig? config;
-        try { config = ProjectConfigLoader.LoadFromProject(root, diagnostics); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { yield break; }
-        if (config is null) yield break;
-        foreach (var connection in config.Connections.Values.OrderBy(c => c.Name, StringComparer.Ordinal))
-        {
-            if (only is not null && connection.Name != only) continue;
-            if (config.TrackingOf(connection.Name).Target is not { } target) continue;
-            var (read, _) = LoginSettings.FromEnvironment(target.Connection, target.Engine, Login.Read, env);
-            if (read is null) continue;
-            yield return (connection.Name, new TrackingScope(target.Engine, target.SchemaName, connection.Name), read);
-        }
-    }
+    private IEnumerable<(string Connection, TrackingScope Scope, LoginSettings Read)> Tracked(HostedProject hosted, string? only, Func<string, string?> env) =>
+        BuildTrackedConnections.Of(projects.RootOf(hosted), only, env);
 
     private async Task<BuildTrackingResult> CopyOneAsync(HostedProject hosted, string connection, TrackingScope scope, LoginSettings login, TimeSpan budget, CancellationToken cancellationToken)
     {

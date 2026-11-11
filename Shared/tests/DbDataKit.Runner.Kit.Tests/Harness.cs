@@ -33,6 +33,9 @@ public sealed class Harness : IDisposable
 
     public bool Remote => _host is not null;
 
+    /// <summary>The connection handles (slot to connection) the next grants carry; none by default.</summary>
+    public IReadOnlyDictionary<string, string>? Handles { get; set; }
+
     /// <summary>What the last remote run reported one way (counts, status, lineage, chunk statistics), read before its token was forgotten.</summary>
     public RunTelemetry? LastTelemetry { get; private set; }
 
@@ -68,9 +71,9 @@ public sealed class Harness : IDisposable
     public string? LastToken { get; private set; }
 
     /// <summary>What the runner does before a task starts: grants a token for a run of the task <paramref name="task"/> of this harness's package and channel.</summary>
-    public string Grant(string task, object? input = null, int attempt = 1, string chain = Chain, StepOptions? steps = null, TimeSpan? grace = null, Guid? runId = null, RunnerProtocolHost? host = null)
+    public string Grant(string task, object? input = null, int attempt = 1, string chain = Chain, StepOptions? steps = null, TimeSpan? grace = null, Guid? runId = null, RunnerProtocolHost? host = null, IReadOnlyDictionary<string, string>? handles = null)
     {
-        var start = new TaskStart(new TaskRef(Package, Channel, task), runId ?? Database.NewId(), attempt, "1.0.0", InputBinder.ToStrings(input), new Dictionary<string, string>(), null, grace ?? TimeSpan.FromSeconds(30));
+        var start = new TaskStart(new TaskRef(Package, Channel, task), runId ?? Database.NewId(), attempt, "1.0.0", InputBinder.ToStrings(input), handles ?? Handles ?? new Dictionary<string, string>(), null, grace ?? TimeSpan.FromSeconds(30));
         var token = (host ?? Host).Register(new RunGrant(start, chain, Environment(null, steps: steps)));
         lock (_chains) _chains[token] = chain;
         return LastToken = token;
