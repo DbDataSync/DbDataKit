@@ -327,6 +327,12 @@ public sealed class ViewsModuleOptions
     [ConfigKey(Min = 1, Max = 10_000_000)]
     public int MaxExportRows { get; set; } = 100_000;
 
+    /// <summary>
+    /// The origins the host approves to be framed by an <c>embed</c> widget of a dashboard (plan 32 DBR19, plan 26 AP17): the report servers whose reports are drawn in a frame; any other address is a link. Each is an origin
+    /// (<c>https://reports.example.com</c>); read on every request, so a change needs no restart. The console's and the apps host's Content-Security-Policy <c>frame-src</c> is their own (an app instance's approved <c>frame</c> exception).
+    /// </summary>
+    public List<string> FrameOrigins { get; set; } = [];
+
     /// <summary>PDF export (plan 32 DBR15, <c>views.export</c>): off unless <c>Mode</c> is set; the module's health says "export unavailable" otherwise and screens keep working.</summary>
     public ViewsExportOptions Export { get; set; } = new();
 }

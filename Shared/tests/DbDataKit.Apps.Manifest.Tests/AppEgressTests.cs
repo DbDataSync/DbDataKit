@@ -89,6 +89,20 @@ public sealed class AppEgressTests : IDisposable
     }
 
     [Fact]
+    public void A_report_servers_origin_is_framed_only_when_it_is_asked_and_approved()
+    {
+        // plan 26 AP17: the report server's origin is a `frame` exception; a report server nobody approved is blocked by frame-src
+        var asked = new AppEgress([], [], [], [], [], [], ["https://reports.contoso.com", "https://other.contoso.com"], []);
+        var approved = new AppEgress([], [], [], [], [], [], ["https://reports.contoso.com"], []);
+        var policy = EgressPolicy.Build(EgressPolicy.Effective(asked, approved), sandboxed: false);
+        Assert.Contains("frame-src https://reports.contoso.com;", policy);
+        Assert.DoesNotContain("other.contoso.com", policy);
+        Assert.Equal([("frame-src", "https://other.contoso.com")], EgressPolicy.Unapproved(asked, EgressPolicy.Effective(asked, approved)));
+        // nothing approved: nothing is framed
+        Assert.Contains("frame-src 'none'", EgressPolicy.Build(EgressPolicy.Effective(asked, AppEgress.None), sandboxed: false));
+    }
+
+    [Fact]
     public void The_policy_starts_from_self_and_allows_only_what_is_in_force()
     {
         var plain = EgressPolicy.Build(AppEgress.None, sandboxed: false);
