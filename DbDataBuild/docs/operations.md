@@ -180,6 +180,14 @@ dbdatabuild project publish --to runner --out ./package                     # wr
 - **Bindings are the channel's own.** A version that declares a slot is refused in a channel where the slot is not bound, and that includes the first version of a package, so `--bind slot=connection` binds first (the runner lets a publisher bind a name that has no version yet, and that publisher then owns it). `--promote-from <channel>` publishes nothing: it points `--channel` at the version the other channel serves (the runner's `switch`, which needs an administrator pairing), after binding the new channel's slots.
 - **What it does not do**: it does not create the connections or their secrets on the runner (E19 sends a login; the connection files are the runner's catalog), does not activate by itself (a staged version activates when every runner of the group has it ready), does not move a plan's schedule from the Build server to the runner (section 11), and has no release of several products (plan 21's releases).
 
+### Sending a login to the runner (plan 28c E19)
+
+```
+dbdatabuild secret send --to runner warehouse --server <runner> [--role write|read] [--delete-local] [--code <pairing code>]
+```
+
+A scheduled refresh on the runner writes with the runner's own login. The verb streams the server's stored login `dbdata:build:connection:<connection>:<role>` (write unless `--role read`) over the paired HTTPS to the runner's secret API (the pairing needs the admin role: `dbdatarunner server pair --max-role admin`) and the runner keeps it in its encrypted store under the same name; the runner's `connection/1` file for the connection refers to it as `secret:dbdata:build:connection:<connection>:write`. The value is in the request body only (no argument, log, error or audit line; the server audits the name in `management-audit.log` as `secret.send`). `--delete-local` removes the **write** login from the server's store after the runner lists the name; a read login is never deleted, the server keeps those to plan, preview and report. The verb runs no check task: it verifies that the runner holds the name, and a run whose secret was removed on the runner fails naming the slot, never falling back to the read login.
+
 ## 11. Moving a plan's schedule from the Build server to a runner
 
 A plan has exactly one scheduling owner at a time (plan 28c E09, decisions ED6 and ED7): `old` (this server's scheduler, started with `server run --scheduler`; the default), `observe` (this server schedules it and the runner only records what it would have queued) or `runner`. The owner is recorded twice: in the `schedule:` section of the server's `server.yaml`, and on the runner (`task_owner`), whose word is the one that counts. Nothing is moved by a flag; one plan at a time is moved by `dbdatabuild server schedule`, which works on the server's directory (`--repo`) and takes effect on a running server at its next tick.

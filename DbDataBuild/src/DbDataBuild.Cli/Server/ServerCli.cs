@@ -62,9 +62,12 @@ internal static class ServerCli
     {
         var store = ServerSecrets.Open(DirectoryOf(invocation));
         var cli = new SecretCli(new SecretResolverChain([store]), store, store, () => []);
-        return new Noun("secret", "The server's secrets: the logins its commands use (dbdata:build:connection:<connection>:<read|write>)",
-            SecretNoun.Create(cli, context => SecretNoun.Captured(context, new InputConsole(context.In))).Verbs
-                .Select(v => v with { Run = (args, context) => v.Run(WithoutRepo(args), context) }).ToList());
+        var verbs = SecretNoun.Create(cli, context => SecretNoun.Captured(context, new InputConsole(context.In))).Verbs
+            .Select(v => v with { Run = (args, context) => v.Run(WithoutRepo(args), context) }).ToList();
+        // plan 28c E19: a stored login to the runner (the shared verbs have no such destination, so this one is Build's)
+        verbs.Add(new Verb("send", "Send a stored login to a runner's encrypted store (secret send --to runner <connection> --server <runner>)", EffectClass.RepoFilesOnly, SecretSendVerb.Usage,
+            (args, context) => SecretSendVerb.RunAsync(WithoutRepo(args), context, store, null, null, new FileAuditLog(Path.Combine(DirectoryOf(args), "management-audit.log"))), DataSchemas.None));
+        return new Noun("secret", "The server's secrets: the logins its commands use (dbdata:build:connection:<connection>:<read|write>)", verbs);
     }
 
     /// <summary>Where <c>health check</c> asks by default: the server's own address, as a container sees it.</summary>
