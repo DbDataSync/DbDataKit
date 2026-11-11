@@ -82,26 +82,42 @@ public sealed class GatewaySemanticRuns(SemanticRunStore store, SemanticModels m
                 answer = await semantic.Queries.RunAsync(context, new ServingRequest.Semantic(source, request.ToJsonString(), new ServingLimits(MaxRows: limit)), cancellationToken);
             }
             await using var _ = answer;
-            JsonObject result;
-            if ((run.View is not null || run.Keep == true) && run.Explain != true && SemanticRest.StatusOf(answer) == "complete")
-            {
-                // a result that will be drawn is read once, the way a dashboard widget's answer is, and kept for a while so another view of it is not another run
-                JsonObject document;
-                try { document = await AnswerViews.ReadAsync(answer, limit, cancellationToken); }
-                catch (ViewsAnswerException ex) { return new ManagementResult(400, new JsonObject { ["error"] = ex.Message, ["code"] = ex.Code }); }
-                result = SemanticRest.ResultFrom(answer, document);
-                result["result_id"] = Hold(SemanticCallers.KeyOf(who), document);
-                if (run.View is not null) result["rendered_view"] = AnswerViews.Render(run.View.DeepClone().AsObject(), document);
-            }
-            else result = await SemanticRest.ResultAsync(answer, cancellationToken);
+            var result = await ShapeAsync(answer, limit, (run.View is not null || run.Keep == true) && run.Explain != true, run.View, who, cancellationToken);
             result["model_version"] = model.Version;
             return ManagementResult.Ok(result);
         }
+        catch (ViewsAnswerException ex) { return new ManagementResult(400, new JsonObject { ["error"] = ex.Message, ["code"] = ex.Code }); }
         catch (ServingException ex)
         {
             var status = ex switch { ServingNotFoundException => 404, ServingDeniedException or ServingUnauthenticatedException => 403, ServingBackendException => 502, _ => 400 };
             return new ManagementResult(status, new JsonObject { ["error"] = ex.Message, ["code"] = ex is ServingLimitException l ? l.Limit : SemanticRest.CodeOf(ex.Message) });
         }
+    }
+
+    /// <summary>
+    /// The one place an answer becomes the JSON the explorer reads, for a run and for a replay (plan 14a D37, D38). Without <paramref name="draw"/> (no <c>keep</c>, no <c>view</c>) it is the REST answer. A complete answer that will be drawn is read once, the way a
+    /// dashboard widget's answer is, kept for a while (<c>result_id</c>) and drawn as the view says (<c>rendered_view</c>). An answer with a column the views cannot read (a time of day, a binary, a list...) is not failed: it is answered through the REST path
+    /// as a table, nothing kept and nothing drawn, with a <c>notices</c> entry that names the column and its type, so the person sees the table and why there is no matrix or chart.
+    /// </summary>
+    internal async Task<JsonObject> ShapeAsync(IServingAnswer answer, int limit, bool draw, JsonObject? view, ServingCaller who, CancellationToken cancellationToken)
+    {
+        if (!draw || SemanticRest.StatusOf(answer) != "complete") return await SemanticRest.ResultAsync(answer, cancellationToken);
+        if (AnswerViews.UnreadableColumn(answer) is { } unreadable)
+        {
+            var table = await SemanticRest.ResultAsync(answer, cancellationToken);
+            table["notices"] = new JsonArray(new JsonObject
+            {
+                ["code"] = "view_unavailable", ["column"] = unreadable.Name, ["type"] = unreadable.Type,
+                ["message"] = $"matrix and chart are unavailable: column {unreadable.Name} has type {unreadable.Type}, which a view cannot read. The table shows what the REST answer holds of it (a value of that type is empty).",
+            });
+            return table;
+        }
+        // a result that will be drawn is read once, the way a dashboard widget's answer is, and kept for a while so another view of it is not another run
+        var document = await AnswerViews.ReadAsync(answer, limit, cancellationToken);
+        var result = SemanticRest.ResultFrom(answer, document);
+        result["result_id"] = Hold(SemanticCallers.KeyOf(who), document);
+        if (view is not null) result["rendered_view"] = AnswerViews.Render(view.DeepClone().AsObject(), document);
+        return result;
     }
 
     // ---- results kept for rendering (D37) ----

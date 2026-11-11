@@ -71,6 +71,18 @@ describe('the explorer', () => {
     expect(broken).toContain('data-testid="view-error"')
     expect(broken).toContain('could not be reached')
   })
+  it('shows the table and the Gateway\'s note, and no matrix or chart, when a column type cannot be drawn (D38)', () => {
+    const notice = { code: 'view_unavailable', column: 'logo', type: 'binary', message: 'matrix and chart are unavailable: column logo has type binary, which a view cannot read.' }
+    const text = html({ result: { ...result, notices: [notice] }, shape: 'matrix' })
+    expect(text).toContain('data-testid="run-notice-view_unavailable"')
+    expect(text).toContain('matrix and chart are unavailable: column logo has type binary')
+    expect(text).toContain('data-testid="result-table"')
+    expect((text.match(/data-testid="result-row"/g) ?? []).length).toBe(2)
+    expect(text).not.toContain('data-testid="view-choice"')
+    expect(text).not.toContain('data-testid="shape-matrix"')
+    expect(html({ result })).toContain('data-testid="view-choice"')
+    expect(html({ result })).not.toContain('run-notices')
+  })
   it('offers to pin what it ran to a dashboard of the person', () => {
     expect(html({ result, text: '{"query": {"measures": ["revenue"], "attributes": ["customer.region"], "limit": 5}}' })).toContain('href="/views?pin_model=shop_sales')
     expect(html({ result, text: 'SELECT 1' })).not.toContain('pin-result')

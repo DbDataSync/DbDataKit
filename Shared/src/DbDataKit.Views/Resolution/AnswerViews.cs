@@ -18,6 +18,9 @@ public static class AnswerViews
         catch (WidgetProblem problem) { throw new ViewsAnswerException(problem.Code, problem.Message); }
     }
 
+    /// <summary>The first column of the answer a view cannot read (its name and Arrow type), or null (plan 14a D38): a caller that draws checks first and answers the table without a view when this says a column cannot be read.</summary>
+    public static (string Name, string Type)? UnreadableColumn(IServingAnswer answer) => AnswerRows.UnreadableColumn(answer.Schema);
+
     /// <summary>The renderer's answer for a view document and a result document: <c>{kind: rendered_view, status: complete, views}</c> or <c>{status: failed, errors}</c> in the engine's words.</summary>
     public static JsonObject Render(JsonObject viewDocument, JsonObject result) => new ViewRenderer().Render(viewDocument, result);
 }

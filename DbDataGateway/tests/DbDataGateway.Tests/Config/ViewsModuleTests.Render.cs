@@ -1,7 +1,11 @@
 using System.Net;
 using System.Text.Json.Nodes;
+using DbDataKit.Serving.Semantic;
 using DbDataKit.State;
 using DbDataKit.Web.Trust;
+using DbDataGateway.Server.Management;
+using DbDataGateway.Server.Serving;
+using DbDataGateway.Server.State;
 using DbDataGateway.Tests.Support;
 
 namespace DbDataGateway.Tests.Config;
@@ -146,5 +150,57 @@ public sealed partial class ViewsModuleTests
         var plain = await ManagementAsync(HttpMethod.Post, runs, ada.Id, ServerRole.Viewer, new JsonObject { ["model"] = Model, ["request"] = MatrixRequest(false) });
         Assert.Null(plain.Body!["result_id"]);
         Assert.Null(plain.Body["rendered_view"]);
+    }
+
+    /// <summary>An answer of a string column and a binary one, the kind of table the views cannot read; the semantic engine's own answers are text, numbers and booleans, so a source of another kind is stood in for.</summary>
+    private sealed class BinaryAnswer : DbDataKit.Serving.IServingAnswer
+    {
+        private readonly Apache.Arrow.RecordBatch batch;
+
+        public BinaryAnswer()
+        {
+            Schema = new Apache.Arrow.Schema([new Apache.Arrow.Field("region", Apache.Arrow.Types.StringType.Default, true), new Apache.Arrow.Field("logo", Apache.Arrow.Types.BinaryType.Default, true)], null);
+            batch = new Apache.Arrow.RecordBatch(Schema, [new Apache.Arrow.StringArray.Builder().Append("West").Append("East").Build(), new Apache.Arrow.BinaryArray.Builder().Append((byte)1).Append((byte)2).Build()], 2);
+        }
+
+        public Apache.Arrow.Schema Schema { get; }
+        public DbDataKit.Serving.ServingProvenance Provenance { get; } = new("x", null, "test");
+
+        public async IAsyncEnumerable<Apache.Arrow.RecordBatch> ReadBatchesAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            yield return batch;
+            await Task.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            batch.Dispose();
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    [Fact]
+    public async Task A_column_a_view_cannot_read_gives_the_table_and_a_notice_that_names_its_column_and_type_and_nothing_is_kept_or_drawn()
+    {
+        var runs = new GatewaySemanticRuns(null!, null!, null!, null!, null!, null, null!);
+        var who = new DbDataKit.Serving.ServingCaller("ada", "Ada", new HashSet<string>(), new Dictionary<string, string> { ["email"] = "ada@example.invalid" });
+        foreach (var (draw, view) in new[] { (true, (JsonObject?)MatrixView(false)), (true, null) })
+        {
+            await using var answer = new BinaryAnswer();
+            var result = await runs.ShapeAsync(answer, 100, draw, view, who, CancellationToken.None);
+            Assert.Equal("ok", (string)result["status"]!);
+            Assert.Equal(2, result["rows"]!.AsArray().Count);
+            Assert.Null(result["result_id"]);
+            Assert.Null(result["rendered_view"]);
+            var notice = Assert.Single(result["notices"]!.AsArray())!;
+            Assert.Equal(("view_unavailable", "logo", "binary"), ((string)notice["code"]!, (string)notice["column"]!, (string)notice["type"]!));
+            Assert.Equal("matrix and chart are unavailable: column logo has type binary, which a view cannot read. The table shows what the REST answer holds of it (a value of that type is empty).", (string)notice["message"]!);
+        }
+
+        // a plain run (nothing to draw) is the old answer, without a notice
+        await using var plain = new BinaryAnswer();
+        var table = await runs.ShapeAsync(plain, 100, draw: false, null, who, CancellationToken.None);
+        Assert.Null(table["notices"]);
+        Assert.Equal(2, table["rows"]!.AsArray().Count);
     }
 }

@@ -51,6 +51,9 @@ export interface ExplorerViewProps {
 
 const SHAPES: Array<[ViewShape, string]> = [['table', 'Table'], ['matrix', 'Matrix'], ['bar', 'Bar chart'], ['line', 'Line chart']]
 
+/** A result the Gateway could draw: one that came with no `view_unavailable` notice (a column of a type the renderer cannot read, D38) shows as the table only. */
+const drawable = (result: RunResult) => !result.notices?.some((n) => n.code === 'view_unavailable')
+
 function Result(p: ExplorerViewProps) {
   const result = p.result!
   if (result.status === 'explained') {
@@ -79,12 +82,13 @@ function Result(p: ExplorerViewProps) {
         {result.model_version != null && <> · model version {result.model_version}</>}
       </div>
       {result.warnings.length > 0 && <ul data-testid="run-warnings">{result.warnings.map((w, i) => <li key={i} className="hint">{w}</li>)}</ul>}
+      {result.notices && result.notices.length > 0 && <ul data-testid="run-notices">{result.notices.map((n, i) => <li key={i} className="hint" style={wrap} data-testid={`run-notice-${n.code}`}>{n.message}</li>)}</ul>}
       {result.status === 'unsupported' && (
         <div role="alert" data-testid="run-unsupported">{result.reason}{result.remaining != null && <pre className="mono" style={wrap} data-testid="run-remaining">{JSON.stringify(result.remaining, null, 2)}</pre>}</div>
       )}
       {result.status === 'ok' && (
         <>
-          <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0' }} data-testid="view-choice">
+          {drawable(result) && <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0' }} data-testid="view-choice">
             {SHAPES.map(([id, label]) => (
               <button key={id} type="button" className={`btn btn-sm${p.shape === id ? ' btn-primary' : ''}`} aria-pressed={p.shape === id} data-testid={`shape-${id}`} onClick={() => p.onShape(id)}>{label}</button>
             ))}
@@ -99,7 +103,7 @@ function Result(p: ExplorerViewProps) {
               </>
             )}
             {r.hasTotals && <span className="hint" data-testid="has-totals">The result carries totals.</span>}
-          </div>
+          </div>}
           {p.renderError && <div role="alert" className="hint" style={wrap} data-testid="view-error">{p.renderError}</div>}
           {p.shape !== 'table' && p.rendering && !p.rendered && <div className="hint" data-testid="view-rendering">Drawing…</div>}
           {p.shape !== 'table' && p.rendered && (
@@ -107,7 +111,7 @@ function Result(p: ExplorerViewProps) {
               <RenderedViews document={p.rendered} />
             </div>
           )}
-          {p.shape === 'table' && (
+          {(p.shape === 'table' || !drawable(result)) && (
             <div className="card flush" style={{ overflowX: 'auto' }}>
               <table className="mono" data-testid="result-table" style={{ width: '100%' }}>
                 <thead><tr>{result.columns.map((c) => <th key={c.name} style={{ textAlign: 'left' }}>{c.name}</th>)}</tr></thead>
@@ -252,7 +256,7 @@ export function ExplorerPage() {
   // the matrix or chart chosen is the Gateway's renderer's: ask it for the result kept, or, when that is gone, run the statement again with the view
   useEffect(() => {
     const ticket = ++drawn.current
-    const spec = result?.status === 'ok' ? viewSpecFor(result, shape, encoding) : null
+    const spec = result?.status === 'ok' && drawable(result) ? viewSpecFor(result, shape, encoding) : null
     setRenderError(null)
     if (!spec) { setRendered(undefined); setRendering(false); return }
     setRendering(true)
