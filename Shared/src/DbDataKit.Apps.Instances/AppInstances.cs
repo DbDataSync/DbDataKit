@@ -13,6 +13,9 @@ public sealed record AppInstance(string Name, string App, int? Pin = null, strin
     public IReadOnlyDictionary<string, string> Settings { get; init; } = Settings ?? new Dictionary<string, string>();
 
     public IReadOnlyDictionary<string, string> Bindings { get; init; } = Bindings ?? new Dictionary<string, string>();
+
+    /// <summary>The names and paths the instance is served at besides <c>/apps/&lt;instance&gt;/</c> (plan 26 AP08); stored in format 2 of the definition when there are any.</summary>
+    public IReadOnlyList<AppAddress> Addresses { get; init; } = [];
 }
 
 /// <summary>One member of a navigation set: an instance, with the label and icon the menu shows (the instance's title and none when absent).</summary>
@@ -112,14 +115,18 @@ public sealed class AppInstanceStore(DefinitionStore definitions)
             if (value.Length > MaximumSettingLength) throw new AppInstanceException($"The setting '{key}' is longer than {MaximumSettingLength} characters.");
         }
         if (instance.Settings.TryGetValue(EmbedSetting, out var embed) && EmbedOrigins(embed, out var problem) is null) throw new AppInstanceException(problem!);
-        return definitions.Publish(InstanceKind, instance.Name, Write(instance), by, [$"{AppKind}:{instance.App}"], note, channel);
+        // addresses (AP08): a name and path is one instance's; only the production instance is served at them, and `origin: own` needs one
+        if (channel != DefinitionStore.Production && instance.Addresses.Count > 0) throw new AppInstanceException($"A {channel} instance is served at its subpath only; addresses are the production instance's.");
+        if (channel == DefinitionStore.Production) instance = instance with { Addresses = AppAddresses.Check(instance, List(channel)) };
+        AppAddresses.RequireForOrigin(instance, manifest, channel);
+        return definitions.Publish(InstanceKind, instance.Name, Write(instance), by, [$"{AppKind}:{instance.App}"], note, channel, format: instance.Addresses.Count > 0 ? AppAddresses.InstanceFormat : DefinitionFormat.First);
     }
 
     public AppInstance? Get(string name, string channel = DefinitionStore.Production) =>
-        definitions.Current(InstanceKind, name, channel) is { } version ? Read(name, version.Content) : null;
+        definitions.Current(InstanceKind, name, channel) is { } version ? Read(version) : null;
 
     public IReadOnlyList<AppInstance> List(string channel = DefinitionStore.Production) =>
-        [.. definitions.CurrentOfKind(InstanceKind, channel).Select(v => Read(v.Name, v.Content))];
+        [.. definitions.CurrentOfKind(InstanceKind, channel).Select(Read)];
 
     /// <summary>The instance with the app version it runs (its pin, or the channel's current) and that version's manifest; null when there is no such instance or its app has gone.</summary>
     public ResolvedInstance? Resolve(string name, string channel = DefinitionStore.Production)
@@ -127,7 +134,7 @@ public sealed class AppInstanceStore(DefinitionStore definitions)
         // `acme~preview` is the instance as the preview channel has it
         (name, channel) = AppInstanceName.Split(name, channel);
         if (definitions.Current(InstanceKind, name, channel) is not { } stored) return null;
-        var instance = Read(name, stored.Content);
+        var instance = Read(stored);
         var app = instance.Pin is { } pin ? definitions.Get(AppKind, instance.App, pin) : definitions.Current(AppKind, instance.App, channel);
         if (app is null) return null;
         var package = AppPackage.Parse(app.Content);
@@ -232,13 +239,23 @@ public sealed class AppInstanceStore(DefinitionStore definitions)
         var node = new JsonObject { ["app"] = instance.App, ["pin"] = instance.Pin, ["title"] = instance.Title };
         node["settings"] = new JsonObject(instance.Settings.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => KeyValuePair.Create(p.Key, (JsonNode?)p.Value)));
         node["bindings"] = new JsonObject(instance.Bindings.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => KeyValuePair.Create(p.Key, (JsonNode?)p.Value)));
+        if (instance.Addresses.Count > 0)
+            node["addresses"] = new JsonArray([.. instance.Addresses.Select(a => (JsonNode)new JsonObject
+            {
+                ["host"] = a.Host, ["kind"] = a.Kind == AppAddressKind.Subdomain ? "subdomain" : "custom", ["path"] = a.Path, ["certificate"] = a.Certificate, ["certificate_password"] = a.CertificatePassword, ["primary"] = a.Primary,
+            })]);
         return node.ToJsonString();
     }
 
-    private static AppInstance Read(string name, string content)
+    private static AppInstance Read(DefinitionVersion version)
     {
-        var node = JsonNode.Parse(content)!;
+        if (version.Format > AppAddresses.InstanceFormat)
+            throw new AppInstanceException($"The instance '{version.Name}' is in format {version.Format}, and this program reads format {AppAddresses.InstanceFormat} of app-instance. Upgrade this program; the definition was written by a newer version.");
+        var node = JsonNode.Parse(version.Content)!;
         static Dictionary<string, string> Map(JsonNode? n) => n is JsonObject o ? o.ToDictionary(p => p.Key, p => (string)p.Value!) : [];
-        return new AppInstance(name, (string)node["app"]!, node["pin"] is { } pin ? (int)pin : null, (string?)node["title"], Map(node["settings"]), Map(node["bindings"]));
+        var addresses = node["addresses"] is JsonArray list
+            ? [.. list.Select(a => new AppAddress((string)a!["host"]!, (string?)a["kind"] == "subdomain" ? AppAddressKind.Subdomain : AppAddressKind.Custom, (string?)a["path"] ?? "/", (string?)a["certificate"], (string?)a["certificate_password"], (bool?)a["primary"] ?? false))]
+            : (IReadOnlyList<AppAddress>)[];
+        return new AppInstance(version.Name, (string)node["app"]!, node["pin"] is { } pin ? (int)pin : null, (string?)node["title"], Map(node["settings"]), Map(node["bindings"])) { Addresses = addresses };
     }
 }

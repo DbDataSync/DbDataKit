@@ -20,7 +20,7 @@ public sealed record OpenIdClientOptions(string Authority, string ClientId, stri
 public sealed record HomeGrant(string? RefreshToken, string? IdToken);
 
 /// <summary>A sign-in that has been started: what the browser's return is checked against (the PKCE verifier and the nonce), until when, and where the person was going.</summary>
-public sealed record OpenIdAttempt(string Verifier, string Nonce, DateTimeOffset Expires, string? ReturnUrl);
+public sealed record OpenIdAttempt(string Verifier, string Nonce, DateTimeOffset Expires, string? ReturnUrl, string? RedirectUri = null);
 
 /// <summary>Where an <see cref="OpenIdClient"/> remembers the sign-ins it has started, by their <c>state</c>. Each is taken once.</summary>
 public interface IOpenIdAttempts
@@ -95,18 +95,22 @@ public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, T
     private readonly string _authority = options.Authority.TrimEnd('/');
 
     /// <summary>Where to send the browser, and the state to remember until it comes back (<paramref name="returnUrl"/> is handed back by <see cref="CompleteAsync"/>).</summary>
-    public async Task<Uri> BeginAsync(string? returnUrl, CancellationToken ct)
+    /// <param name="returnUrl">Where the person was going.</param>
+    /// <param name="ct">Cancellation.</param>
+    /// <param name="redirectUri">The callback to return to when it is not the registered one (an app host reached at a name bound to an instance, plan 26 AP08): it must be registered at the home for this client. It is remembered with the attempt and used again to trade the code.</param>
+    public async Task<Uri> BeginAsync(string? returnUrl, CancellationToken ct, string? redirectUri = null)
     {
+        redirectUri ??= options.RedirectUri;
         var discovery = await DiscoveryAsync(ct);
         var now = _clock.GetUtcNow();
         var verifier = Random(48);
         var state = Random(24);
         var nonce = Random(24);
-        _attempts.Hold(state, new OpenIdAttempt(verifier, nonce, now + AttemptLifetime, returnUrl));
+        _attempts.Hold(state, new OpenIdAttempt(verifier, nonce, now + AttemptLifetime, returnUrl, redirectUri == options.RedirectUri ? null : redirectUri));
         var challenge = Base64Url.EncodeToString(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
         var query = string.Join('&', new (string, string)[]
         {
-            ("response_type", "code"), ("client_id", options.ClientId), ("redirect_uri", options.RedirectUri), ("scope", "openid profile email offline_access"),
+            ("response_type", "code"), ("client_id", options.ClientId), ("redirect_uri", redirectUri), ("scope", "openid profile email offline_access"),
             ("state", state), ("nonce", nonce), ("code_challenge", challenge), ("code_challenge_method", "S256"),
         }.Select(p => $"{p.Item1}={Uri.EscapeDataString(p.Item2)}"));
         return new Uri(discovery.AuthorizationEndpoint + (discovery.AuthorizationEndpoint.Contains('?') ? "&" : "?") + query);
@@ -122,7 +126,7 @@ public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, T
         var discovery = await DiscoveryAsync(ct);
         var form = new Dictionary<string, string>
         {
-            ["grant_type"] = "authorization_code", ["code"] = code, ["redirect_uri"] = options.RedirectUri, ["client_id"] = options.ClientId, ["code_verifier"] = attempt.Verifier,
+            ["grant_type"] = "authorization_code", ["code"] = code, ["redirect_uri"] = attempt.RedirectUri ?? options.RedirectUri, ["client_id"] = options.ClientId, ["code_verifier"] = attempt.Verifier,
         };
         if (options.ClientSecret is not null) form["client_secret"] = options.ClientSecret;
         using var response = await http.PostAsync(discovery.TokenEndpoint, new FormUrlEncodedContent(form), ct);

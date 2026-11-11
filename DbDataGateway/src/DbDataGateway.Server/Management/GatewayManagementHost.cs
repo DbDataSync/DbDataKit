@@ -145,7 +145,9 @@ public static class GatewayManagementHost
                 }, audit),
             apps: new GatewayApps(new DbDataKit.State.DefinitionStore(state), () => HomeApprovers.Open(state, app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue), audit,
                 appsAddress: () => { var current = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue; return GatewayModules.Has(current, GatewayModules.Apps) ? GatewayAppsModule.PublicUrlOf(current) : null; },
-                instanceSaved: name => AppClient(app, state, name, remove: false), instanceRemoved: name => AppClient(app, state, name, remove: true)));
+                instanceSaved: name => AppClient(app, state, name, remove: false), instanceRemoved: name => AppClient(app, state, name, remove: true),
+                addressVerifier: new Serving.AppAddressVerifier(() => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue,
+                    reference => app.Services.GetRequiredService<Secrets.SecretsRuntime>().ResolveSecret("Gateway:Apps:Addresses", reference))));
         if (audit.ImportFile(dataDirectory) is > 0 and var imported)
             app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataGateway.Management").LogInformation("Read {Count} entries of {File} into the state's audit; the file is now {File}.imported.", imported, DbDataGateway.Server.State.StateAuditLog.LegacyFileName, DbDataGateway.Server.State.StateAuditLog.LegacyFileName);
         // a token one instance of a group accepted is refused by every other (plan 20 O02b): the used ids are in the state they share
@@ -194,6 +196,8 @@ public static class GatewayManagementHost
             if (!GatewayModules.Has(current, GatewayModules.Apps)) return;
             var clients = new DbDataKit.Identity.OidcClients(state);
             if (remove) Serving.AppInstanceClients.Remove(clients, instance);
+            else if (new DbDataKit.Apps.AppInstanceStore(new DbDataKit.State.DefinitionStore(state)) is var store && store.Get(instance) is { } saved)
+                Serving.AppInstanceClients.SyncRedirects(clients, saved, GatewayAppsModule.PublicUrlOf(current), current.Apps.Home.ClientId, store.List());
             else Serving.AppInstanceClients.Ensure(clients, instance, Serving.AppInstanceClients.CallbackOf(GatewayAppsModule.PublicUrlOf(current)));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

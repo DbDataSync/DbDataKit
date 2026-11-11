@@ -102,7 +102,18 @@ public sealed class GatewayViews
             MaxExportRows = options.CurrentValue.Views.MaxExportRows,
             Exporter = ExporterOf(options.CurrentValue.Views.Export, loggers),
             PageAssets = options.CurrentValue.Views.Export.PageAssets,
+            Resolver = new ResolverOptions { FrameOrigins = new LiveOrigins(() => options.CurrentValue.Views.FrameOrigins) },
         }, Publications, new Callers(this), new StateViewsAudit(new AuditLog(state, DbDataGateway.Server.State.GatewayState.ServiceId)), loggers);
+    }
+
+    /// <summary>The origins of <c>views.frameOrigins</c> as the file says now: the resolver asks on every request, so an edit of <c>server.yaml</c> applies without a restart.</summary>
+    private sealed class LiveOrigins(Func<IReadOnlyCollection<string>> read) : IReadOnlyCollection<string>
+    {
+        public int Count => read().Count;
+
+        public IEnumerator<string> GetEnumerator() => read().GetEnumerator();
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     /// <summary>The PDF exporter of <c>views.export</c> (plan 32 DBR15), or null when the section gives no <c>Mode</c>: export is off unless a host turns it on.</summary>

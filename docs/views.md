@@ -38,10 +38,11 @@ widgets:
 ```
 
 The resolver gives `{type: embed, url, origin, framed, link_text}`: the address with the pairs filled in (escaped), its origin (scheme, host and port), and **`framed`, true only when the host approves that origin**: `ResolverOptions.FrameOrigins`
-(the views module passes its `Resolver.FrameOrigins`; an app instance's `frame` exception, plan 26 AP17, is where a host takes the list from). `EmbedBlock` draws a `framed` result as an `iframe` with `sandbox="allow-scripts allow-same-origin allow-forms allow-popups"`
-and `referrerpolicy="no-referrer"` (the person's own browser signs in to the report server; this page sends it nothing), and anything else as a link that opens in a new tab with no opener. An address that is not plain https draws as an error tile.
-Dashboards only: a **report** with an `embed` is refused (`DBD-VIEW-038`), because a report is paged and exported and a frame is neither. The widget has no query, so it is never cached and the editor shows no derived request. **Not built:** the page's
-Content-Security-Policy `frame-src` for an approved origin is the host's (the console and the apps host set their own), and the Windows sign-in of AP17.
+(the Gateway's views module passes the list `views.frameOrigins` of `server.yaml`, read on every request, so a change applies without a restart; a host that sets none shows every embed as a link). `EmbedBlock` draws a `framed` result as an `iframe` with `sandbox="allow-scripts allow-same-origin allow-forms allow-popups"`
+and `referrerpolicy="no-referrer"` (the person's own browser signs in to the report server; this page sends it nothing), always with the report's link under the frame, and anything else as a link that opens in a new tab with no opener. An address that is not plain https draws as an error tile.
+**A sign-in that fails cannot be seen from the page.** A browser tells a page nothing about a cross-origin frame that was refused or challenged (no event, no status, no content): the frame's `load` event is the only sign. So a frame that has not loaded after `EMBED_FRAME_TIMEOUT_MS` (15 s) is replaced by the link and the line "Cannot show this report here", and a frame that loaded a sign-in failure page looks like a report, which is why the link is always beside it. Windows sign-in
+(Kerberos or NTLM) in a frame works only on a domain-joined machine whose browser trusts the report server's zone; off the domain the person uses the link.
+Dashboards only: a **report** with an `embed` is refused (`DBD-VIEW-038`), because a report is paged and exported and a frame is neither. The widget has no query, so it is never cached and the editor shows no derived request. An app's own documents frame a report server through the instance's approved `frame` exception (plan 26 AP17: a trusted app whose manifest asks for `egress.frame` and whose approval covers it; its `Content-Security-Policy` `frame-src` lists the approved origins and nothing else, a sandboxed app has none); the console's own policy is the console's.
 
 ### The query
 

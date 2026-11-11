@@ -273,6 +273,18 @@ public sealed class AppsOptions
     /// <summary>The https address people reach the apps host at, without a path. Empty: <c>https://&lt;the first TLS host name, or localhost&gt;:&lt;Port&gt;</c>. The home's redirect URI for it is this plus <c>/apps/-/callback</c>.</summary>
     public string? PublicUrl { get; set; }
 
+    /// <summary>
+    /// The domain whose subdomains serve instances (<c>apps.domain</c>, plan 26 AP08), such as <c>apps.example.com</c>: an instance <c>acme</c> may be bound at <c>acme.apps.example.com</c>, with this host's own certificate (it should hold
+    /// <c>*.apps.example.com</c>) and a wildcard DNS name. Empty: no subdomain can be bound; a custom domain can.
+    /// </summary>
+    public string? Domain { get; set; }
+
+    /// <summary>The addresses a custom domain may resolve to besides this machine's own (<c>apps.addresses</c>): a balancer's or a public address in front of it. A name is verified before it is bound.</summary>
+    public List<string> Addresses { get; set; } = [];
+
+    /// <summary>The reverse proxies whose <c>X-Forwarded-Host</c> and <c>X-Forwarded-Prefix</c> say which name and path the browser used (<c>apps.trustedProxies</c>): IP addresses or CIDR ranges. The headers of anyone else are ignored.</summary>
+    public List<string> TrustedProxies { get; set; } = [];
+
     /// <summary>How old, in seconds, the identity home's last answer about a person may be before the host asks again: a role taken away at the home stops working here within this time.</summary>
     [ConfigKey(Min = 1, Max = 3600)]
     public int RolesRefreshSeconds { get; set; } = 300;
@@ -326,6 +338,12 @@ public sealed class ViewsModuleOptions
     /// <summary>The most rows a CSV or xlsx export holds in all (plan 32 DBR17, <c>ViewsOptions.MaxExportRows</c>): a larger one is refused with 413 in words. Not a browser's limit, so it is not part of <c>Export</c>.</summary>
     [ConfigKey(Min = 1, Max = 10_000_000)]
     public int MaxExportRows { get; set; } = 100_000;
+
+    /// <summary>
+    /// The origins the host approves to be framed by an <c>embed</c> widget of a dashboard (plan 32 DBR19, plan 26 AP17): the report servers whose reports are drawn in a frame; any other address is a link. Each is an origin
+    /// (<c>https://reports.example.com</c>); read on every request, so a change needs no restart. The console's and the apps host's Content-Security-Policy <c>frame-src</c> is their own (an app instance's approved <c>frame</c> exception).
+    /// </summary>
+    public List<string> FrameOrigins { get; set; } = [];
 
     /// <summary>PDF export (plan 32 DBR15, <c>views.export</c>): off unless <c>Mode</c> is set; the module's health says "export unavailable" otherwise and screens keep working.</summary>
     public ViewsExportOptions Export { get; set; } = new();

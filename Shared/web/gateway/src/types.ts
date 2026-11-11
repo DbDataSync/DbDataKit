@@ -93,9 +93,16 @@ export interface AppDetail { name: string; serving: number | null; versions: App
 export interface AppInstanceRow {
   name: string; app: string; title: string | null; pin: number | null; follows: boolean; instance_version: number; published_by: string; published_at: string
   path: string; address: string | null; bindings: Record<string, string>; settings: Record<string, string>; navigation: string[]; mounted_by: string[]
+  /** The names and paths the instance is also served at (plan 26 AP08); absent from a Gateway that has none. */
+  addresses?: AppAddressRow[]
   /** The version of the app the instance runs, and what the app serves now; absent when the instance's app is gone (then `problem` says so). */
   app_version?: number; serving_version?: number | null; manifest_version?: string; kind?: 'app' | 'portal'; trust?: 'sandbox' | 'trusted'
   runs_as_asked?: boolean; approval_id?: string | null; mounts?: { instance: string; path: string }[]; problem?: string
+}
+/** One address of an instance (plan 26 AP08): `url` is what people open, `redirect_uri` what the identity home must hold for the sign-in at that name. The certificate fields are secret references, never a certificate. */
+export interface AppAddressRow {
+  host: string; kind: 'subdomain' | 'custom'; path: string; primary: boolean
+  certificate: string | null; certificate_password: string | null; url?: string | null; redirect_uri?: string | null
 }
 export interface AppInstances { instances: AppInstanceRow[]; apps_address: string | null; caller: AppsCaller }
 export interface NavigationSetRow { name: string; title: string; entries: { instance: string; label: string | null; icon: string | null }[] }
