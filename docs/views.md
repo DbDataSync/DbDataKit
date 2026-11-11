@@ -22,7 +22,25 @@ shares are part of the **query**, run on the server as the viewer.
 | `text` | `text` | markdown, **no raw HTML, no image, links only to a path on the host** (`/docs/x`); `{{params.name}}` is substituted as text |
 | `image` | `hash: sha256:<64 hex>`, `media_type` (`image/png image/jpeg image/webp`), `alt`, `fit` | held in the definition's artifacts by hash; **no URL, no SVG** |
 | `control` | `parameter`, `control` (`select multiselect date daterange number toggle text`), `label`, `values: {attribute, limit}` | edits one parameter; no query |
-| `embed` | | **reserved**: refused until DBR19 |
+| `embed` | `url` (an absolute https address, no credentials), `with` (query-string pairs: a name to `$params.name` or a literal), `link_text` | an external report server's report (plan 32 DBR19, plan 26 AP17), **dashboards only**: a report refuses it (`DBD-VIEW-038`). See [An embedded report](#an-embedded-report-dbr19) |
+
+### An embedded report (DBR19)
+
+```yaml
+widgets:
+  sales_server:
+    type: embed
+    title: Sales report
+    url: https://reports.example.com/Reports/report/Sales?rs:Embed=true
+    with: {Region: $params.region, Fiscal: "2026"}       # added to the address's query string; a pair whose parameter has no value is left out
+    link_text: Open the sales report                     # the words of the link when the address is not framed
+```
+
+The resolver gives `{type: embed, url, origin, framed, link_text}`: the address with the pairs filled in (escaped), its origin (scheme, host and port), and **`framed`, true only when the host approves that origin**: `ResolverOptions.FrameOrigins`
+(the views module passes its `Resolver.FrameOrigins`; an app instance's `frame` exception, plan 26 AP17, is where a host takes the list from). `EmbedBlock` draws a `framed` result as an `iframe` with `sandbox="allow-scripts allow-same-origin allow-forms allow-popups"`
+and `referrerpolicy="no-referrer"` (the person's own browser signs in to the report server; this page sends it nothing), and anything else as a link that opens in a new tab with no opener. An address that is not plain https draws as an error tile.
+Dashboards only: a **report** with an `embed` is refused (`DBD-VIEW-038`), because a report is paged and exported and a frame is neither. The widget has no query, so it is never cached and the editor shows no derived request. **Not built:** the page's
+Content-Security-Policy `frame-src` for an approved origin is the host's (the console and the apps host set their own), and the Windows sign-in of AP17.
 
 ### The query
 
@@ -120,7 +138,8 @@ and sorts the rows loaded. The console's board sets `sortable`.
 | `DBD-VIEW-003` | an image by URL, an SVG, or anything but a raster held by hash |
 | `DBD-VIEW-004` | a chart outside the subset: data, a transform, an aggregate, a bin, an expression, a mark or type that is not listed |
 | `DBD-VIEW-005` | an encoded field that is not an output of the explicit query |
-| `DBD-VIEW-006` | the reserved `embed` widget |
+| `DBD-VIEW-006` | a widget type the resolver does not run |
+| `DBD-VIEW-038` | an `embed` widget in a report |
 | `DBD-VIEW-007` | a query that is not one of the forms, or a mode that does not fit it |
 | `DBD-VIEW-008` | a parameter that is not declared (a marker, a `params` entry, a control, `on_select`, a drill, `{{params.x}}`) |
 | `DBD-VIEW-037` | a drill that does not give a required parameter of its target |
@@ -491,7 +510,7 @@ kind, never its words), a provider's `denied` or `not_found` to a browse is sile
 from any other origin is handed on as a `link`, and an address that is not `http` or `https` is refused.
 **Our own provider** is `ViewsCatalog` (`DbDataKit.Views.Hosting`, name `views`): the served documents under `/Dashboards` and `/Reports` (ids `dashboard/<name>`, `report/<name>`, folders `folder/dashboards`, `folder/reports`), narrowed by an app's models as the routes are, opened as
 `{mode: document, kind, name, version, layouts, layout}` (the layout and the parameters are checked against the document's own; the render, export and print are the module's, as the person), the formats of `ViewsApi.Formats` with `pdf` and `svg` unavailable and saying why when the host has no
-browser, and permissions stated as unknown (who may see a document is decided when it renders). Its browse and open are audited (`view.list`, `view.open` with `catalog` in the detail; never a search text or a parameter's value). The owner is empty. Not built yet: the `embed` widget,
+browser, and permissions stated as unknown (who may see a document is decided when it renders). Its browse and open are audited (`view.list`, `view.open` with `catalog` in the detail; never a search text or a parameter's value). The owner is empty. The `embed` widget is built (above). Not built yet:
 the routes that serve the catalog (`GET /api/v1/catalog...`), and RC01's external provider.
 
 ### In a Build project (plan 32 DBR29)

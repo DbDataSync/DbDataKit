@@ -127,6 +127,9 @@ internal sealed partial class ParameterValues
         var raw = widget.Raw;
         if (raw["parameter"] is JsonValue pv && pv.TryGetValue<string>(out var control)) used.Add(control);
         if (raw["text"] is JsonValue tv && tv.TryGetValue<string>(out var text)) foreach (Match m in Placeholder().Matches(text)) used.Add(m.Groups[1].Value);
+        // an embed's `with` values: `$params.name` reads a parameter
+        if (raw["with"] is JsonObject embedWith && raw["url"] is not null)
+            foreach (var (_, v) in embedWith) if (v is JsonValue ev && ev.TryGetValue<string>(out var et) && et.StartsWith("$params.", StringComparison.Ordinal)) used.Add(et[8..]);
         if (raw["query"] is JsonObject query)
         {
             var map = query["params"] as JsonObject;

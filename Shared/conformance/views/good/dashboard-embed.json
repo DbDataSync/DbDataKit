@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "kind": "dashboard",
+  "title": "Embedded report",
+  "parameters": [
+    {
+      "name": "region",
+      "type": "string"
+    }
+  ],
+  "widgets": {
+    "w": {
+      "type": "embed",
+      "title": "Sales report",
+      "url": "https://reports.example.com/Reports/report/Sales?rs:Embed=true",
+      "with": {
+        "Region": "$params.region"
+      },
+      "link_text": "Open the sales report"
+    }
+  },
+  "layouts": [
+    {
+      "name": "desk",
+      "type": "reflow",
+      "default": true,
+      "grid": {
+        "columns": 12
+      },
+      "tiles": [
+        {
+          "widget": "w",
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 6
+        }
+      ]
+    }
+  ]
+}

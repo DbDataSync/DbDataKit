@@ -304,6 +304,36 @@ public class ResolveTests
     }
 
     [Fact]
+    public async Task An_embed_is_a_frame_only_on_an_approved_origin_and_fills_its_pairs_from_the_parameters()
+    {
+        var doc = Doc("""
+              rs:
+                type: embed
+                title: Sales report
+                url: https://Reports.Example.com/Reports/report/Sales?rs:Embed=true
+                with: {Region: $params.region, Fiscal: "2026", Gone: $params.later}
+                link_text: Open it
+              other:
+                type: embed
+                url: https://elsewhere.example.org/r
+            """, "[{name: region, type: string}, {name: later, type: string}]");
+        var options = new ResolverOptions { Time = new ManualTimeProvider(Fixed), FrameOrigins = ["https://reports.example.com"] };
+        var r = await Resolver(new RetailServing(), options).ResolveAsync(Viewer(), doc, "desk", Values(Params(("region", JsonValue.Create("West & East")))));
+        var rs = Ok(r, "rs");
+        Assert.Equal("embed", rs["type"]!.GetValue<string>());
+        Assert.True(rs["framed"]!.GetValue<bool>());
+        Assert.Equal("https://reports.example.com", rs["origin"]!.GetValue<string>());
+        // the existing query stays, the parameter is escaped, the literal is added, a pair whose parameter has no value is left out
+        Assert.Equal("https://reports.example.com/Reports/report/Sales?rs:Embed=true&Region=West%20%26%20East&Fiscal=2026", rs["url"]!.GetValue<string>());
+        Assert.Equal("Open it", rs["link_text"]!.GetValue<string>());
+        // an origin the host does not approve is a link, and with no approved origins at all every embed is
+        Assert.False(Ok(r, "other")["framed"]!.GetValue<bool>());
+        var none = await Resolver(new RetailServing()).ResolveAsync(Viewer(), doc, "desk");
+        Assert.False(Ok(none, "rs")["framed"]!.GetValue<bool>());
+        Assert.Empty(Violations(r.ToJson()));
+    }
+
+    [Fact]
     public async Task A_nested_x_of_one_level_is_the_plain_channel_and_one_of_three_joins_the_outer_two_and_cuts_the_leaves_with_a_notice()
     {
         var one = Doc("""

@@ -36,10 +36,13 @@ export interface RenderedImage { type: 'image'; src: string }
 /** What a control's list holds (a select's values under the viewer's access); a date, number or text control has none. */
 export interface RenderedControl { type: 'control'; values?: Array<{ value: string | number | boolean; label?: string }> }
 
+/** An embed widget as the server resolved it: the address with its pairs filled, its origin, and whether the host approves that origin to be framed (a frame) or not (a link). */
+export interface RenderedEmbed { type: 'embed'; url: string; origin?: string | null; framed: boolean; link_text?: string }
+
 /** One widget that failed (denied, timed out, refused by the engine, no recorded result): it draws as an error tile, the rest of the page draws. */
 export interface RenderedWidgetError { type: 'error'; code: string; message: string; path?: string | null; suggestions?: string[] | null }
 
-export type RenderedWidget = RenderedMetric | RenderedTable | RenderedMatrix | RenderedChart | RenderedText | RenderedImage | RenderedControl | RenderedWidgetError
+export type RenderedWidget = RenderedMetric | RenderedTable | RenderedMatrix | RenderedChart | RenderedText | RenderedImage | RenderedControl | RenderedEmbed | RenderedWidgetError
 
 /** What one resolution of a layout gives: the widgets it placed (those asked for, when `only` narrowed it), by id. */
 export interface RenderedWidgets {

@@ -26,7 +26,7 @@ const cases = read('cases.json') as { catalogs: Record<string, CatalogRoles>; go
 
 describe('the wells of each widget type', () => {
   it('has a well list for every type, and the wells the derivation reads', () => {
-    expect(WIDGET_TYPES).toHaveLength(7)
+    expect(WIDGET_TYPES).toHaveLength(8)
     expect(wellsOf('metric').map((w) => w.id)).toEqual(['value', 'compare'])
     expect(wellsOf('chart').map((w) => w.id)).toEqual(['x', 'y', 'color', 'column', 'row', 'tooltip'])
     expect(wellsOf('matrix').map((w) => [w.id, w.kind])).toEqual([['rows', 'attribute'], ['columns', 'attribute'], ['values', 'measure']])

@@ -45,8 +45,6 @@ public static partial class ViewsLoader
             if (Map(node, path, $"The widget `{id}`", node) is not { } map) return null;
             var typeNode = map.Get("type");
             if (typeNode is null) { Add(ViewsCodes.MissingKey, map, $"Required key `type` is missing.", $"Add `type:` with one of: {string.Join(", ", Choices["widgetType"])}.", J(path, "type")); return null; }
-            if (typeNode is YamlScalar { Value: "embed" })
-            { Bad(ViewsCodes.ReservedWidget, typeNode, J(path, "type"), "The widget type `embed` is reserved: this format does not read it yet.", $"Use one of: {string.Join(", ", Choices["widgetType"])}."); return null; }
             if (typeNode is not YamlScalar ts || !Choices["widgetType"].Contains(ts.Value))
             { Bad(SharedCodes.UnknownUnionKind, typeNode, J(path, "type"), $"`{(typeNode as YamlScalar)?.Value}` is not a widget type.", $"Use one of: {string.Join(", ", Choices["widgetType"])}."); return null; }
             var type = ts.Value;
@@ -76,6 +74,7 @@ public static partial class ViewsLoader
                 case "text": TextBody(map, path); break;
                 case "image": ImageBody(map, path); break;
                 case "control": ControlBody(map, path); break;
+                case "embed": EmbedBody(map, path); break;
             }
             if (type is "metric" or "chart" or "matrix" or "table")
             {
@@ -317,6 +316,35 @@ public static partial class ViewsLoader
             if (Required(widget, "alt", path) is { } a) Text(a, J(path, "alt"), "`alt`", 500);
             if (widget.Get("fit") is { } f) Choice(f, J(path, "fit"), "`fit`", Choices["fit"]);
         }
+
+        /// <summary>The longest address an <c>embed</c> widget holds.</summary>
+        public const int MaximumEmbedUrl = 2000;
+
+        /// <summary>
+        /// An <c>embed</c> widget (plan 32 DBR19): an external report server's report. <c>url</c> is an absolute <c>https</c> address with no credentials; <c>with</c> maps a query-string name of that address to
+        /// <c>$params.name</c> (a declared parameter) or a literal; <c>link_text</c> is the words of the link the widget shows when the address's origin is not one the host approves to frame.
+        /// </summary>
+        private void EmbedBody(YamlMapping widget, string path)
+        {
+            if (Required(widget, "url", path) is { } u)
+            {
+                if (u is not YamlScalar { Value: var url } || url.Length is 0 or > MaximumEmbedUrl || url.Any(char.IsControl) || url.Any(char.IsWhiteSpace)
+                    || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps || uri.UserInfo.Length > 0 || uri.Host.Length == 0)
+                    Bad(ViewsCodes.InvalidValue, u, J(path, "url"), "An embed's `url` is an absolute https address with no credentials, no spaces and at most 2000 characters.", "Write the report server's address, `https://host/path?name=value`.");
+            }
+            if (widget.Get("with") is { } w && Map(w, J(path, "with"), "`with`", widget) is { } wm)
+                foreach (var e in wm.Entries)
+                {
+                    var wp = J(J(path, "with"), e.Key.Value);
+                    if (!EmbedName.IsMatch(e.Key.Value)) Bad(ViewsCodes.InvalidValue, e.Key, wp, "A query-string name is letters, digits and `_ . : -`, starting with a letter.");
+                    if (e.Value is not YamlScalar v) { Bad(ViewsCodes.InvalidValue, e.Value, wp, "A value is `$params.name` or a literal."); continue; }
+                    if (v.Value.StartsWith("$params.", StringComparison.Ordinal) && !IsDeclared(v.Value[8..]))
+                        Bad(ViewsCodes.UndeclaredParameter, v, wp, $"`{v.Value}` names a parameter the document does not declare.", "Declare it under `parameters`.");
+                }
+            if (widget.Get("link_text") is { } lt) Text(lt, J(path, "link_text"), "`link_text`", 200);
+        }
+
+        private static readonly Regex EmbedName = new("^[A-Za-z][A-Za-z0-9_.:-]{0,63}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         private void ControlBody(YamlMapping widget, string path)
         {

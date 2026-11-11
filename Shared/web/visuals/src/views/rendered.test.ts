@@ -21,7 +21,7 @@ const problems = (v: ValidateFunction) => (v.errors ?? []).map((e) => `${e.insta
 const bundle = sampleBundle()
 
 // the union of the TypeScript types, written so that adding a type to one place and not the other fails to compile or fails the test
-const TYPES = ['metric', 'table', 'matrix', 'chart', 'text', 'image', 'control', 'error'] as const satisfies ReadonlyArray<RenderedWidget['type']>
+const TYPES = ['metric', 'table', 'matrix', 'chart', 'text', 'image', 'control', 'embed', 'error'] as const satisfies ReadonlyArray<RenderedWidget['type']>
 type Covered = (typeof TYPES)[number]
 const everyTypeIsListed: Exclude<RenderedWidget['type'], Covered> extends never ? true : false = true
 

@@ -467,6 +467,15 @@ export function WidgetEditor({ id, widget, doc, catalog, catalogNote, apply, dia
             <label className="hint">values limit <input type="number" min={1} style={{ width: 70 }} data-testid={`ed-values-limit-${id}`} value={widget.values?.limit ?? ''} onChange={(e) => { if (widget.values?.attribute) setOrClear(['values', 'limit'], e.target.value === '' ? undefined : Number(e.target.value), 'values_limit') }} /></label>
           </>
         )}
+        {widget.type === 'embed' && (
+          <>
+            <label className="hint">address <input data-testid={`ed-embed-url-${id}`} style={{ width: 360 }} value={widget.url} onChange={(e) => set(['url'], e.target.value, 'url')} /></label>
+            <label className="hint">link text <input data-testid={`ed-embed-link-${id}`} style={{ width: 200 }} value={widget.link_text ?? ''} onChange={(e) => setOrClear(['link_text'], e.target.value, 'link_text')} /></label>
+            <label className="hint">query pairs <input data-testid={`ed-embed-with-${id}`} style={{ width: 280 }} placeholder="Name=$params.region, Other=literal" value={Object.entries(widget.with ?? {}).map(([k, v]) => `${k}=${v}`).join(', ')}
+              onChange={(e) => { const pairs = e.target.value.split(',').map((p) => p.trim()).filter((p) => p.includes('=')).map((p) => [p.slice(0, p.indexOf('=')).trim(), p.slice(p.indexOf('=') + 1).trim()] as const); setOrClear(['with'], pairs.length === 0 ? undefined : Object.fromEntries(pairs), 'with') }} /></label>
+            <span className="hint" data-testid={`ed-embed-note-${id}`}>framed only when the host approves the address&apos;s origin; otherwise a link</span>
+          </>
+        )}
         {widget.type === 'image' && (
           <>
             <label className="hint">alt text <input data-testid={`ed-alt-${id}`} style={{ width: 240 }} value={widget.alt} onChange={(e) => set(['alt'], e.target.value, 'alt')} /></label>

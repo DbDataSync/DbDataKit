@@ -51,9 +51,10 @@ const WELLS: Record<WidgetType, WellSpec[]> = {
   control: [{ id: 'attribute', label: 'list its values from', kind: 'attribute', multiple: false, path: ['values', 'attribute'], shape: 'field' }],
   text: [],
   image: [],
+  embed: [],
 }
 
-export const WIDGET_TYPES: readonly WidgetType[] = ['metric', 'chart', 'matrix', 'table', 'text', 'image', 'control']
+export const WIDGET_TYPES: readonly WidgetType[] = ['metric', 'chart', 'matrix', 'table', 'text', 'image', 'control', 'embed']
 
 /** The wells of a widget type, in the order the derivation reads them. */
 export const wellsOf = (type: WidgetType): readonly WellSpec[] => WELLS[type] ?? []
@@ -191,6 +192,7 @@ function shell(to: WidgetType, from: WidgetDoc, model: string, parameter: string
     case 'text': return { type: to, ...named('title'), text: 'Write a note.' }
     case 'image': return { type: to, ...named('title'), hash: IMAGE_PLACEHOLDER, media_type: 'image/png', alt: 'Describe the image' }
     case 'control': return { type: to, ...named('title'), parameter: parameter ?? '', control: 'select', ...(label ? { label } : {}) }
+    case 'embed': return { type: to, ...named('title'), url: 'https://reports.example.com/' }
   }
 }
 
@@ -255,7 +257,7 @@ export function describeDerivation(id: string, widget: WidgetDoc, roles: Catalog
   const query = (widget as { query?: unknown }).query
   if (!derived.request) {
     const nothing = issues.length === 1 && issues[0]!.code === 'DBD-VIEW-040'
-    if (nothing && ['text', 'image', 'control'].includes(widget.type)) return { state: 'none', bindings: [], issues: [], sources: [] }
+    if (nothing && ['text', 'image', 'control', 'embed'].includes(widget.type)) return { state: 'none', bindings: [], issues: [], sources: [] }
     if (nothing && isObject(query) && (query.mode === 'explicit' || ['semantic', 'saved', 'store', 'ref'].some((k) => query[k] !== undefined))) return { state: 'explicit', bindings: [], issues: [], sources: [] }
     return { state: 'refused', bindings: [], issues, sources: [] }
   }

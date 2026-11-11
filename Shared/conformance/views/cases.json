@@ -47,6 +47,10 @@
     {
       "file": "good/dashboard-nested-axis.json",
       "kind": "dashboard"
+    },
+    {
+      "file": "good/dashboard-embed.json",
+      "kind": "dashboard"
     }
   ],
   "bad": [
@@ -614,6 +618,15 @@
       "path": "widgets.w.encodings.x",
       "line": 11,
       "schema": true
+    },
+    {
+      "name": "report-with-embed",
+      "file": "bad/report-with-embed.json",
+      "as": "report",
+      "code": "DBD-VIEW-038",
+      "path": "widgets.frame.type",
+      "line": 10,
+      "schema": false
     }
   ],
   "warnings": [

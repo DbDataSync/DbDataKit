@@ -71,6 +71,12 @@ public sealed class ResolverOptions
     /// <summary>Told of a widget that failed in a way nobody classified (its exception, for the host's log). The entry shows only the kind: the exception's words can name tables, servers and files.</summary>
     public Action<string, Exception>? OnUnexpected { get; init; }
 
+    /// <summary>
+    /// The origins (<c>https://reports.example.com</c>: scheme, host and port) an <c>embed</c> widget may frame (the app instance's <c>frame</c> exception, plan 26 AP17, is where a host takes them from). An embed whose address is on
+    /// none of them is shown as a link; none at all: every embed is a link. Compared as <see cref="ReportCatalogs.OriginOf"/> writes an origin.
+    /// </summary>
+    public IReadOnlyCollection<string> FrameOrigins { get; init; } = [];
+
     /// <summary>The bytes of an image by hash (<c>sha256:...</c>), from the published definition's artifacts; null when it has none.</summary>
     public Func<string, byte[]?>? ImageBytes { get; init; }
 

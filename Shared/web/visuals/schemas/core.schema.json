@@ -376,8 +376,26 @@
         }
       }
     },
+    "widget_embed": {
+      "description": "An external report server's report (plan 32 DBR19, dashboards only: a report is paged and exported and refuses it, which the loaders say). Framed when the host approves the address's origin (an app instance's `frame` exception, plan 26 AP17), a link when it does not.",
+      "type": "object",
+      "required": ["type", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "embed" },
+        "title": { "$ref": "#/$defs/title" },
+        "url": { "description": "An absolute https address, no credentials, no spaces, at most 2000 characters.", "type": "string", "pattern": "^https://[^\\s@/]+([/?#]\\S*)?$", "maxLength": 2000 },
+        "with": {
+          "description": "Query-string pairs added to the address: a name to `$params.name` (a declared parameter, left out when it has no value) or a literal.",
+          "type": "object",
+          "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$" },
+          "additionalProperties": { "type": "string" }
+        },
+        "link_text": { "description": "The words of the link shown when the address is not framed.", "type": "string", "maxLength": 200 }
+      }
+    },
     "widget": {
-      "description": "A widget by its type. `embed` is reserved and refused by the /1 loaders until DBR19.",
+      "description": "A widget by its type.",
       "oneOf": [
         { "$ref": "#/$defs/widget_metric" },
         { "$ref": "#/$defs/widget_chart" },
@@ -385,7 +403,8 @@
         { "$ref": "#/$defs/widget_table" },
         { "$ref": "#/$defs/widget_text" },
         { "$ref": "#/$defs/widget_image" },
-        { "$ref": "#/$defs/widget_control" }
+        { "$ref": "#/$defs/widget_control" },
+        { "$ref": "#/$defs/widget_embed" }
       ]
     },
     "widgets": { "type": "object", "minProperties": 1, "propertyNames": { "$ref": "#/$defs/name" }, "additionalProperties": { "$ref": "#/$defs/widget" } },

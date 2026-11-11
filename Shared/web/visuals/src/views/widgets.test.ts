@@ -37,7 +37,7 @@ describe('the widget vocabulary', () => {
   const params = ['region', 'quarter']
   const refuse = (change: (w: Record<string, any>) => void) => { const copy = structuredClone(widgets); change(copy); return summary(validateWidgets(copy, params)) }
 
-  it('refuses an image by URL and an SVG, raw HTML in text, a Vega expression, a transform and an aggregate, an unknown key and embed', () => {
+  it('refuses an image by URL and an SVG, raw HTML in text, a Vega expression, a transform and an aggregate, an unknown key and an embed with no address', () => {
     expect(refuse((w) => { w.logo.url = 'https://example.com/a.png' })).toEqual(['DBD-VIEW-003 widgets.logo.url'])
     expect(refuse((w) => { w.logo.media_type = 'image/svg+xml' })).toEqual(['DBD-VIEW-003 widgets.logo.media_type'])
     expect(refuse((w) => { w.note.text = '<img src=x onerror=alert(1)>' })).toEqual(['DBD-VIEW-002 widgets.note.text'])
@@ -45,7 +45,7 @@ describe('the widget vocabulary', () => {
     expect(refuse((w) => { w.by_region.transform = [] })).toEqual(['DBD-VIEW-004 widgets.by_region.transform'])
     expect(refuse((w) => { w.by_region.encodings.y.aggregate = 'sum' })).toEqual(['DBD-VIEW-004 widgets.by_region.encodings.y.aggregate'])
     expect(refuse((w) => { w.by_region.colour = 'red' })).toEqual(['DBD-104 widgets.by_region.colour'])
-    expect(refuse((w) => { w.x = { type: 'embed' } })).toEqual(['DBD-VIEW-006 widgets.x.type'])
+    expect(refuse((w) => { w.x = { type: 'embed' } })).toEqual(['DBD-105 widgets.x.url'])
   })
   it('refuses a missing required key by the shared code', () => {
     expect(refuse((w) => { delete w.logo.alt })).toEqual(['DBD-105 widgets.logo.alt'])

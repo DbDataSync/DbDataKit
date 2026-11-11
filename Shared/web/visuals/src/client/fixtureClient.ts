@@ -83,6 +83,7 @@ export function fixtureClient(bundle: FixtureBundle, options: FixtureClientOptio
     const recorded = bundle.results?.[key(kind, name)]?.[id]
     switch (widget.type) {
       case 'text': return { type: 'text' }
+      case 'embed': return { type: 'embed', url: widget.url, framed: false, ...(widget.link_text ? { link_text: widget.link_text } : {}) }
       case 'image': {
         const src = bundle.images?.[widget.hash] ?? (recorded?.type === 'image' ? recorded.src : undefined)
         return src ? { type: 'image', src } : error(NO_RECORDED_IMAGE, `The fixture source has no bytes for the image ${widget.hash}.`)

@@ -42,7 +42,7 @@ const topChecks: Record<ViewKind, ValidateFunction> = { dashboard: top(dashboard
 const KEYS: Record<ViewKind, string[]> = { dashboard: props(dashboardSchema as Json), report: props(reportSchema as Json) }
 const LAYOUT_KEYS: Record<string, string[]> = { reflow: props(defs.layout_reflow!), canvas: props(defs.layout_canvas!), flow: props(defs.layout_flow!) }
 const LAYOUT_COMMON = LAYOUT_KEYS.reflow!.filter((k) => LAYOUT_KEYS.canvas!.includes(k) && LAYOUT_KEYS.flow!.includes(k))
-const WIDGET_OWN_KEYS = ['type', 'title', 'encodings', 'query', 'format', 'formats', 'parameter', 'parameters', 'mark', 'columns', 'text', 'hash', 'label', 'values', 'control']
+const WIDGET_OWN_KEYS = ['type', 'title', 'encodings', 'query', 'format', 'formats', 'parameter', 'parameters', 'mark', 'columns', 'text', 'hash', 'label', 'values', 'control', 'link_text']
 /** The tokens header and footer text may hold (plus `{params.name}` of a declared parameter). */
 export const RUNNING_TOKENS = ['title', 'page', 'pages', 'asof', 'viewer']
 export { MINIMUMS }
@@ -109,7 +109,7 @@ export function validateViewsDocument(document: unknown, options: ViewsOptions =
 
   run(topChecks[fileKind], document, { kind: 'top', of: fileKind }, '', issues)
   const declared = parameters(document.parameters, issues)
-  const context: Context = { declared, targets: options.targets, widgetIds: null }
+  const context: Context = { kind: fileKind, declared, targets: options.targets, widgetIds: null }
   const widgets = document.widgets === undefined ? null : checkWidgets(document.widgets, context, issues)
   if (widgets) context.widgetIds = new Set(widgets.map((w) => w.id))
   const layouts = document.layouts === undefined ? null : checkLayouts(document.layouts, widgets, context, issues)

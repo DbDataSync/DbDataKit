@@ -98,6 +98,8 @@ public sealed class WidgetResolver
                     return (new JsonObject { ["type"] = "text", ["text"] = values.Substitute(widget.Raw["text"]?.GetValue<string>() ?? "") }, null);
                 case "image":
                     return (Image(widget), null);
+                case "embed":
+                    return (Embed(widget, values), null);
                 case "control":
                     // a control is how a required parameter gets its value, so it never fails for the lack of one
                     return await ControlAsync(context, document, widget, linked.Token).WaitAsync(linked.Token).ConfigureAwait(false);
@@ -279,7 +281,38 @@ public sealed class WidgetResolver
         return await AnswerRows.ReadAsync(answer, options.MaxRows, cancellationToken).ConfigureAwait(false);
     }
 
-    // ---- image and control ----
+    // ---- embed, image and control ----
+
+    /// <summary>
+    /// An <c>embed</c> widget (plan 32 DBR19): the address with the query-string pairs of <c>with</c> filled from the viewer's parameters (a pair whose parameter has no value is left out), the address's origin, and whether
+    /// the host approves it to be framed (<see cref="ResolverOptions.FrameOrigins"/>): a frame when it does, a link when it does not.
+    /// </summary>
+    private JsonObject Embed(ViewWidget widget, ParameterValues values)
+    {
+        var url = widget.Raw["url"]?.GetValue<string>() ?? "";
+        var builder = new UriBuilder(url);
+        var pairs = new List<string>();
+        if (builder.Query.Length > 1) pairs.Add(builder.Query[1..]);
+        if (widget.Raw["with"] is JsonObject with)
+            foreach (var (name, node) in with)
+            {
+                var text = node is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
+                if (text is null) continue;
+                if (text.StartsWith("$params.", StringComparison.Ordinal))
+                {
+                    if (!values.IsSet(text[8..])) continue;
+                    text = values.Text(text[8..]);
+                }
+                pairs.Add($"{Uri.EscapeDataString(name)}={Uri.EscapeDataString(text)}");
+            }
+        builder.Query = string.Join("&", pairs);
+        var address = builder.Uri.AbsoluteUri;
+        var origin = ReportCatalogs.OriginOf(address);
+        var approved = options.FrameOrigins.Select(o => ReportCatalogs.OriginOf(o)).Where(o => o is not null).ToHashSet(StringComparer.Ordinal);
+        var entry = new JsonObject { ["type"] = "embed", ["url"] = address, ["origin"] = origin, ["framed"] = origin is not null && approved.Contains(origin) };
+        if (widget.Raw["link_text"] is JsonValue lt && lt.TryGetValue<string>(out var linkText)) entry["link_text"] = linkText;
+        return entry;
+    }
 
     private JsonObject Image(ViewWidget widget)
     {

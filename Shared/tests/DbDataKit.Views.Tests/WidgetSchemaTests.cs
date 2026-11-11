@@ -69,12 +69,11 @@ public class WidgetSchemaTests
             ["align"] = Enum(At(core, "$defs/table_column/properties/align")), ["mark"] = Enum(At(subset, "$defs/mark")), ["fieldType"] = Enum(At(subset, "$defs/channel/properties/type")),
             ["control"] = Enum(At(core, "$defs/widget_control/properties/control")), ["mediaType"] = Enum(At(core, "$defs/widget_image/properties/media_type")),
             ["fit"] = Enum(At(core, "$defs/widget_image/properties/fit")),
-            ["widgetType"] = [.. new[] { "metric", "chart", "matrix", "table", "text", "image", "control" }.Where(t => At(core, $"$defs/widget_{t}/properties/type")["const"]!.GetValue<string>() == t)],
+            ["widgetType"] = [.. new[] { "metric", "chart", "matrix", "table", "text", "image", "control", "embed" }.Where(t => At(core, $"$defs/widget_{t}/properties/type")["const"]!.GetValue<string>() == t)],
         };
         foreach (var (name, values) in checks) Assert.True(ViewsLoader.Choices[name].Order().SequenceEqual(values.Order()), $"{name}: loader {string.Join(",", ViewsLoader.Choices[name])} / schema {string.Join(",", values)}");
         Assert.Equal(ViewsLoader.MaximumQueryLimit, At(core, "$defs/query_derived/properties/limit")["maximum"]!.GetValue<int>());
-        Assert.Equal(["metric", "chart", "matrix", "table", "text", "image", "control"], ViewsLoader.Choices["widgetType"]);
-        Assert.DoesNotContain("embed", ViewsLoader.Choices["widgetType"]);
+        Assert.Equal(["metric", "chart", "matrix", "table", "text", "image", "control", "embed"], ViewsLoader.Choices["widgetType"]);
     }
 
     [Fact]

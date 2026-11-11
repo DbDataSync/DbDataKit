@@ -37,7 +37,7 @@
       "current": 1,
       "previous": 1,
       "status": "open",
-      "note": "new with plan 32 (DBR02); one number, ViewsFormat.Current, for dashboard and report and the widget vocabulary of the shared core: a new widget type, query form, layout type or selector condition bumps both; a newer one is refused naming kind, file and both numbers. Open until the first release that holds either (24a D5)",
+      "note": "new with plan 32 (DBR02); one number, ViewsFormat.Current, for dashboard and report and the widget vocabulary of the shared core: a new widget type, query form, layout type or selector condition bumps both; a newer one is refused naming kind, file and both numbers. Open until the first release that holds either (24a D5). DBR19 added the widget type `embed` in place (dashboards only; a report refuses it, DBD-VIEW-038): allowed while the format is open, said in its commit",
       "version_source": { "file": "Shared/src/DbDataKit.Views/ViewsFormat.cs", "pattern": "public const int Current = (\\d+);" },
       "files": [ { "path": "Shared/web/visuals/schemas/core.schema.json", "sha256": null }, { "path": "Shared/web/visuals/schemas/dashboard.schema.json", "sha256": null } ]
     },
@@ -47,7 +47,7 @@
       "current": 1,
       "previous": 1,
       "status": "open",
-      "note": "new with plan 32 (DBR02); one number, ViewsFormat.Current, for dashboard and report and the widget vocabulary of the shared core: a new widget type, query form, layout type or selector condition bumps both; a newer one is refused naming kind, file and both numbers. Open until the first release that holds either (24a D5)",
+      "note": "new with plan 32 (DBR02); one number, ViewsFormat.Current, for dashboard and report and the widget vocabulary of the shared core: a new widget type, query form, layout type or selector condition bumps both; a newer one is refused naming kind, file and both numbers. Open until the first release that holds either (24a D5). DBR19 added the widget type `embed` in place (dashboards only; a report refuses it, DBD-VIEW-038): allowed while the format is open, said in its commit",
       "version_source": { "file": "Shared/src/DbDataKit.Views/ViewsFormat.cs", "pattern": "public const int Current = (\\d+);" },
       "files": [ { "path": "Shared/web/visuals/schemas/core.schema.json", "sha256": null }, { "path": "Shared/web/visuals/schemas/report.schema.json", "sha256": null } ]
     },
