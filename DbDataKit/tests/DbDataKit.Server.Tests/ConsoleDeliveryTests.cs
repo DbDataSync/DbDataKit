@@ -61,23 +61,25 @@ public sealed class ConsoleDeliveryTests : IAsyncLifetime
             }
         });
 
-        Environment.SetEnvironmentVariable($"DDK_TEST_HOOK_URL_{tag}", $"http://127.0.0.1:{port}/in/token-{tag}");
+        Environment.SetEnvironmentVariable($"DDK_TEST_HOOK_TOKEN_{tag}", $"token-{tag}");
         Environment.SetEnvironmentVariable($"DDK_TEST_HOOK_SECRET_{tag}", "shared-signing-secret-" + tag);
-        Directory.CreateDirectory(directory);
-        File.WriteAllText(Path.Combine(directory, "settings.yaml"), $"""
+        Directory.CreateDirectory(Path.Combine(directory, "connections"));
+        // a signed webhook (production's), a sandbox of it (another path), and a Slack webhook whose secret is not set
+        File.WriteAllText(Path.Combine(directory, "connections", "hook-conn.yml"), $"schema: connection/2\nkind: http\nname: hook-conn\nendpoint: \"http://127.0.0.1:{port}/in/{{token}}\"\nendpoint_secrets: {{ token: env:DDK_TEST_HOOK_TOKEN_{tag} }}\nwebhook: {{ format: signed, allow_private: [127.0.0.1] }}\nsign_in: {{ method: signed_webhook, key_secret: env:DDK_TEST_HOOK_SECRET_{tag} }}\n");
+        File.WriteAllText(Path.Combine(directory, "connections", "hook-sandbox.yml"), $"schema: connection/2\nkind: http\nname: hook-sandbox\nendpoint: \"http://127.0.0.1:{port}/sandbox/{{token}}\"\nendpoint_secrets: {{ token: env:DDK_TEST_HOOK_TOKEN_{tag} }}\nwebhook: {{ format: signed, allow_private: [127.0.0.1] }}\nsign_in: {{ method: signed_webhook, key_secret: env:DDK_TEST_HOOK_SECRET_{tag} }}\n");
+        File.WriteAllText(Path.Combine(directory, "connections", "slack-unfinished.yml"), $"schema: connection/2\nkind: http\nname: slack-unfinished\nendpoint: https://hooks.slack.com/services/{{token}}\nendpoint_secrets: {{ token: env:DDK_TEST_NOT_SET_{tag} }}\nwebhook: {{ format: slack }}\n");
+        File.WriteAllText(Path.Combine(directory, "settings.yaml"), """
             delivery:
               retry:
                 max_attempts: 2
                 backoff_seconds: [60]
               channels:
-                hook:
-                  kind: webhook
-                  url: env:DDK_TEST_HOOK_URL_{tag}
-                  secret: env:DDK_TEST_HOOK_SECRET_{tag}
-                  allow_private: [127.0.0.1]
-                unfinished:
-                  kind: slack
-                  url: env:DDK_TEST_NOT_SET_{tag}
+                hook: hook-conn
+                unfinished: slack-unfinished
+                alerts:
+                  prod: hook-conn
+                  test: hook-sandbox
+                  dev: hook-sandbox
             """);
         await StartAsync();
     }
@@ -103,7 +105,7 @@ public sealed class ConsoleDeliveryTests : IAsyncLifetime
         await app.DisposeAsync();
         listener.Stop();
         listener.Close();
-        Environment.SetEnvironmentVariable($"DDK_TEST_HOOK_URL_{tag}", null);
+        Environment.SetEnvironmentVariable($"DDK_TEST_HOOK_TOKEN_{tag}", null);
         Environment.SetEnvironmentVariable($"DDK_TEST_HOOK_SECRET_{tag}", null);
         try { Directory.Delete(directory, true); } catch (IOException) { }
     }
@@ -132,22 +134,33 @@ public sealed class ConsoleDeliveryTests : IAsyncLifetime
     };
 
     [Fact]
-    public async Task The_overview_lists_the_channels_with_their_readiness_and_never_a_secret()
+    public async Task The_overview_lists_the_channels_with_the_connection_each_release_channel_uses_and_never_a_secret_or_an_address()
     {
         var (status, body) = await Call(HttpMethod.Get, "/api/delivery", viewer);
         Assert.Equal(HttpStatusCode.OK, status);
         Assert.Null(body!["problem"]);
         var channels = body["channels"]!.AsArray().ToDictionary(c => (string)c!["name"]!, c => c!);
-        Assert.Equal(["hook", "unfinished"], channels.Keys.Order());
+        Assert.Equal(["alerts", "hook", "unfinished"], channels.Keys.Order());
         Assert.Equal(("webhook", true), (((string)channels["hook"]["kind"]!), (bool)channels["hook"]["ready"]!));
         Assert.False((bool)channels["unfinished"]["ready"]!);
-        Assert.Contains($"url: env:DDK_TEST_NOT_SET_{tag} cannot be read", (string)channels["unfinished"]["missing"]![0]!);
-        Assert.Equal($"env:DDK_TEST_HOOK_URL_{tag}", (string)channels["hook"]["settings"]!["url"]!);                      // the reference, not the address
+        Assert.Contains($"endpoint_secrets.token: env:DDK_TEST_NOT_SET_{tag} cannot be read", (string)channels["unfinished"]["missing"]![0]!);
+
+        // a name alone is bound in prod; alerts is bound in prod, test and dev, each to its own connection, and the screen says which
+        var alerts = channels["alerts"]["bindings"]!.AsArray().ToDictionary(x => (string)x!["release"]!, x => x!);
+        Assert.Equal(["dev", "prod", "test"], alerts.Keys.Order());
+        Assert.Equal("hook-conn", (string)alerts["prod"]["connection"]!);
+        Assert.Equal("hook-sandbox", (string)alerts["test"]["connection"]!);
+        var only = Assert.Single(channels["hook"]["bindings"]!.AsArray())!;
+        Assert.Equal(("prod", "hook-conn", true), ((string)only["release"]!, (string)only["connection"]!, (bool)only["own"]!));
+        Assert.Equal(["prod", "test", "dev"], body["releaseChannels"]!.AsArray().Select(r => (string)r!));
+
+        // the connection is shown by its template, never the composed address or a secret
+        Assert.Equal($"http://127.0.0.1:{port}/in/{{token}}", (string)only["target"]!);
         Assert.DoesNotContain("shared-signing-secret", body.ToJsonString());
         Assert.DoesNotContain($"token-{tag}", body.ToJsonString());
         Assert.False((bool)body["canRender"]!);
         Assert.Equal(2, (int)body["policy"]!["maxAttempts"]!);
-        Assert.Contains(body["kinds"]!.AsArray(), k => (string)k!["kind"]! == "email");
+        Assert.Contains(body["connectionKinds"]!.AsArray(), k => (string)k!["kind"]! == "smtp");
     }
 
     [Fact]
@@ -160,7 +173,8 @@ public sealed class ConsoleDeliveryTests : IAsyncLifetime
         var hit = Assert.Single(hits);
         Assert.Equal(($"/in/token-{tag}", "POST"), (hit.Path, hit.Method));
         Assert.StartsWith("t=", hit.Signature);
-        Assert.Contains("DbData test message", hit.Body);
+        Assert.Contains("[TEST, prod] DbData test message", hit.Body);
+        Assert.Contains("THIS IS A TEST MESSAGE", hit.Body);
         var verified = DbDataKit.Delivery.Webhooks.WebhookSignature.Verify("shared-signing-secret-" + tag, hit.Signature, hit.Body, DateTimeOffset.UtcNow);
         Assert.Equal(DbDataKit.Delivery.Webhooks.SignatureCheck.Valid, verified);
 
@@ -169,6 +183,27 @@ public sealed class ConsoleDeliveryTests : IAsyncLifetime
         var id = (string)body["id"]!;
         var (_, detail) = await Call(HttpMethod.Get, $"/api/delivery/messages/{id}", admin);
         Assert.Equal("hook", (string)detail!["message"]!["channel"]!);
+    }
+
+    [Fact]
+    public async Task A_test_send_goes_through_the_connection_of_the_release_channel_and_a_test_channel_never_reaches_the_prod_connection()
+    {
+        var (status, body) = await Call(HttpMethod.Post, "/api/delivery/channels/alerts/test", admin, new TestSendBody(Channel: "test"));
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal(("test", "hook-sandbox"), (((string)body!["releaseChannel"]!), (string)body["connection"]!));
+        Assert.Equal("test", (string)body["message"]!["releaseChannel"]!);
+        Assert.Equal("sent", (string)body["message"]!["status"]!);
+        var hit = Assert.Single(hits);
+        Assert.Equal($"/sandbox/token-{tag}", hit.Path);                                      // the sandbox's address, not production's
+        Assert.Contains("[TEST, test] DbData test message", hit.Body);
+        Assert.DoesNotContain(hits, h => h.Path.StartsWith("/in/", StringComparison.Ordinal));
+
+        // a release channel the name is not bound in is refused naming where it is bound, and nothing is sent: `hook` is bound in prod only
+        var (refused, error) = await Call(HttpMethod.Post, "/api/delivery/channels/hook/test", admin, new TestSendBody(Channel: "test"));
+        Assert.Equal(HttpStatusCode.Conflict, refused);
+        Assert.Equal("not_bound", (string)error!["code"]!);
+        Assert.Contains("not bound in the release channel 'test' (it is bound in: prod)", (string)error["error"]!);
+        Assert.Single(hits);
     }
 
     [Fact]

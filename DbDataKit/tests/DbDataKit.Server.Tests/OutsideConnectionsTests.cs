@@ -83,7 +83,7 @@ public sealed class OutsideConnectionsTests : IAsyncLifetime
 
         // the typed secret is kept in the store; the file still holds only the reference
         Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Put, "/api/outside-connections/crm/secrets/key", viewer, new SecretBody(Canary))).Status);
-        Assert.Equal(HttpStatusCode.BadRequest, (await Call(HttpMethod.Put, "/api/outside-connections/crm/secrets/nope", admin, new SecretBody(Canary))).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Call(HttpMethod.Put, "/api/outside-connections/crm/secrets/9bad", admin, new SecretBody(Canary))).Status);
         var (stored, answer) = await Call(HttpMethod.Put, "/api/outside-connections/crm/secrets/key", admin, new SecretBody(Canary));
         Assert.Equal(HttpStatusCode.OK, stored);
         Assert.Equal("secret:dbdata:console:connection:crm:key", (string)answer!["reference"]!);
@@ -125,7 +125,7 @@ public sealed class OutsideConnectionsTests : IAsyncLifetime
         var (_, listed) = await Call(HttpMethod.Get, "/api/outside-connections", admin);
         var row = listed!["connections"]!.AsArray().Single(c => (string)c!["name"]! == "hand")!;
         Assert.Null(row["kind"]);
-        Assert.Contains("no user name, password or query", (string)row["diagnostics"]![0]!["message"]!);
+        Assert.Contains("user name or password", (string)row["diagnostics"]![0]!["message"]!);
 
         Assert.Equal(HttpStatusCode.BadRequest, (await Call(HttpMethod.Put, "/api/outside-connections/..%2Fx", admin, new YamlBody(Crm))).Status);
     }
@@ -206,5 +206,91 @@ public sealed class OutsideConnectionsTests : IAsyncLifetime
         Assert.Contains(audit!.AsArray(), a => (string)a!["kind"]! == "connection-tested");
         Assert.DoesNotContain(Canary, audit.ToJsonString());
         Assert.DoesNotContain("a-wrong-key-canary", audit.ToJsonString());
+    }
+
+    // ---- webhooks and mail servers: the delivery channels as connections (plan 22a GP18 fold) ----
+
+    private const string SlackUrl = "https://hooks.slack.com/services/T000/B000/CANARYslackTOKEN";
+
+    [Fact]
+    public async Task A_pasted_slack_address_is_split_into_a_template_and_secret_parts_that_are_kept_in_the_store_and_only_the_template_is_shown()
+    {
+        var (forbidden, _) = await Call(HttpMethod.Post, "/api/outside-connections/ops-slack/webhook", viewer, new WebhookBody(SlackUrl));
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden);
+
+        var (status, split) = await Call(HttpMethod.Post, "/api/outside-connections/ops-slack/webhook", admin, new WebhookBody(SlackUrl));
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal(("Slack", "slack", "https://hooks.slack.com/services/{token}"), (((string)split!["service"]!), (string)split["format"]!, (string)split["template"]!));
+        var reference = (string)split["secrets"]!["token"]!;
+        Assert.StartsWith("secret:", reference, StringComparison.Ordinal);
+        Assert.DoesNotContain("CANARYslackTOKEN", split.ToJsonString());                                       // the part is in no answer
+
+        // the file the editor writes holds the template and the reference; the list shows the template, never the composed address
+        var yaml = $"schema: connection/2\nkind: http\nname: ops-slack\nendpoint: https://hooks.slack.com/services/{{token}}\nendpoint_secrets:\n  token: {reference}\nwebhook:\n  format: slack\n";
+        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, "/api/outside-connections/ops-slack", admin, new YamlBody(yaml))).Status);
+        var (_, listed) = await Call(HttpMethod.Get, "/api/outside-connections", admin);
+        var row = listed!["connections"]!.AsArray().Single(c => (string)c!["name"]! == "ops-slack")!;
+        Assert.Equal("https://hooks.slack.com/services/{token}", (string)row["endpoint"]!);
+        Assert.True((bool)row["secrets"]![0]!["available"]!);
+        Assert.Equal("token", (string)row["secrets"]![0]!["field"]!);
+        Assert.DoesNotContain("CANARYslackTOKEN", string.Join('\n', bodies));
+        Assert.DoesNotContain("CANARYslackTOKEN", await File.ReadAllTextAsync(Path.Combine(directory, "connections", "ops-slack.yml")));
+
+        // Test says where to test it, and does not call the address
+        var (_, test) = await Call(HttpMethod.Post, "/api/outside-connections/ops-slack/test", admin);
+        Assert.False((bool)test!["ok"]!);
+        Assert.Contains("Delivery page", (string)test["message"]!);
+
+        // rotation: only the secret part is typed again; the file (the template) is untouched
+        var before = await File.ReadAllTextAsync(Path.Combine(directory, "connections", "ops-slack.yml"));
+        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, "/api/outside-connections/ops-slack/secrets/token", admin, new SecretBody("T000/B000/ROTATEDtokenNEW"))).Status);
+        Assert.Equal(before, await File.ReadAllTextAsync(Path.Combine(directory, "connections", "ops-slack.yml")));
+        var audit = (await Call(HttpMethod.Get, "/api/agents/audit?limit=1000", admin)).Body!.ToJsonString();
+        Assert.Contains("connection-webhook-split", audit);
+        Assert.DoesNotContain("CANARYslackTOKEN", audit);
+        Assert.DoesNotContain("ROTATEDtokenNEW", audit);
+    }
+
+    [Fact]
+    public async Task An_address_the_editor_does_not_know_is_split_by_the_segments_and_query_values_the_person_marks()
+    {
+        const string url = "https://hooks.example.com/in/CANARYgenericPART/x?key=CANARYquery&page=2";
+        var (unknown, ask) = await Call(HttpMethod.Post, "/api/outside-connections/gen/webhook", admin, new WebhookBody(url));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, unknown);
+        Assert.False((bool)ask!["detected"]!);
+        Assert.Equal(3, (int)ask["pathSegments"]!);
+        Assert.Equal(["key", "page"], ask["queryKeys"]!.AsArray().Select(k => (string)k!));
+        Assert.DoesNotContain("CANARY", ask.ToJsonString());
+
+        var (status, split) = await Call(HttpMethod.Post, "/api/outside-connections/gen/webhook", admin, new WebhookBody(url, [1], ["key"]));
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal("https://hooks.example.com/in/{seg2}/x?key={key}&page=2", (string)split!["template"]!);
+        Assert.Equal(["key", "seg2"], split["secrets"]!.AsObject().Select(p => p.Key).Order());
+        Assert.DoesNotContain("CANARY", split.ToJsonString());
+        Assert.Equal(HttpStatusCode.BadRequest, (await Call(HttpMethod.Post, "/api/outside-connections/gen/webhook", admin, new WebhookBody("ftp://x"))).Status);
+    }
+
+    [Fact]
+    public async Task A_webhook_file_with_its_secret_in_plain_sight_is_refused_naming_the_part_and_the_templates_for_each_kind_save()
+    {
+        var (status, refused) = await Call(HttpMethod.Put, "/api/outside-connections/leak", admin, new YamlBody($"schema: connection/2\nkind: http\nname: leak\nendpoint: {SlackUrl}\nwebhook: {{ format: slack }}\n"));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, status);
+        Assert.Contains("part of the path after `/services/` is its secret", string.Join(" ", refused!["diagnostics"]!.AsArray().Select(d => (string)d!["message"]!)));
+        Assert.DoesNotContain("CANARYslackTOKEN", refused.ToJsonString());
+        Assert.False(File.Exists(Path.Combine(directory, "connections", "leak.yml")));
+
+        foreach (var (kind, flavor) in new[] { ("smtp", (string?)null), ("http", "slack"), ("http", "teams"), ("http", "signed") })
+        {
+            var (ok, template) = await Call(HttpMethod.Get, $"/api/outside-connections/template?kind={kind}&name=t-{flavor ?? kind}" + (flavor is null ? "" : "&flavor=" + flavor), admin);
+            Assert.Equal(HttpStatusCode.OK, ok);
+            var yaml = (string)template!["yaml"]!;
+            var (saved, result) = await Call(HttpMethod.Put, $"/api/outside-connections/t-{flavor ?? kind}", admin, new YamlBody(yaml));
+            Assert.True(saved == HttpStatusCode.OK, yaml + "\n" + result);
+        }
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await Call(HttpMethod.Get, "/api/outside-connections/template?kind=smtp&name=x&flavor=slack", admin)).Status);
+        var (_, all) = await Call(HttpMethod.Get, "/api/outside-connections", admin);
+        var smtp = all!["connections"]!.AsArray().Single(c => (string)c!["name"]! == "t-smtp")!;
+        Assert.Equal(("smtp", "smtp.example.com:587 (starttls)"), (((string)smtp["kind"]!), (string)smtp["endpoint"]!));
     }
 }

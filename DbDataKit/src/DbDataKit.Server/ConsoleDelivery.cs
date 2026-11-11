@@ -3,19 +3,18 @@ using System.Text.Json.Nodes;
 using DbDataKit.Config.Yaml;
 using DbDataKit.Delivery;
 using DbDataKit.Secrets;
-using DbDataKit.Secrets.Store;
 using DbDataKit.State;
 using Microsoft.Extensions.Hosting;
 
 namespace DbDataKit.Server;
 
-/// <summary>The <c>delivery:</c> section of <c>settings.yaml</c> in the console's directory (plan 22a GP07), read strictly by <see cref="DeliverySettings"/>. A file with no section is no channels; a section that is wrong is a <see cref="Problem"/> the screen shows (the console keeps starting).</summary>
+/// <summary>The <c>delivery:</c> section of <c>settings.yaml</c> in the console's directory (plan 22a GP07, reduced by the GP18 fold to which connection each channel name uses in each release channel), read strictly by <see cref="DeliverySettings"/>. A file with no section is no channels; a section that is wrong is a <see cref="Problem"/> the screen shows (the console keeps starting).</summary>
 public static class ConsoleDeliverySettings
 {
     public const string Section = "delivery";
 
     /// <summary>The settings, or the reason they could not be read (empty settings then).</summary>
-    public static (DeliverySettings Settings, string? Problem) Load(string consoleDirectory, ChannelKinds kinds)
+    public static (DeliverySettings Settings, string? Problem) Load(string consoleDirectory)
     {
         var path = ConsoleState.SettingsFileIn(consoleDirectory);
         if (!File.Exists(path)) return (DeliverySettings.Empty, null);
@@ -26,7 +25,7 @@ public static class ConsoleDeliverySettings
             if (diagnostics.FirstOrDefault(d => d.Severity == ConfigSeverity.Error) is { } error) return (DeliverySettings.Empty, $"{path}: the file is not valid YAML ({error.Message}, line {error.Line}).");
             if (root is not YamlMapping mapping || mapping.GetEntry(Section) is not { } entry) return (DeliverySettings.Empty, null);
             if (entry.Value is YamlScalar { Value.Length: 0 }) return (DeliverySettings.Empty, null);
-            return (DeliverySettings.Read(ToJson(entry.Value) as JsonObject ?? throw new DeliverySettingsException($"{path}: delivery is a set of settings (retry, lease_seconds, channels)."), path, kinds), null);
+            return (DeliverySettings.Read(ToJson(entry.Value) as JsonObject ?? throw new DeliverySettingsException($"{path}: delivery is a set of settings (retry, lease_seconds, channels)."), path), null);
         }
         catch (DeliverySettingsException e)
         {
@@ -48,8 +47,29 @@ public static class ConsoleDeliverySettings
     };
 }
 
-/// <summary>A channel as the screen shows it: no secret, only whether every reference it holds can be read now.</summary>
-public sealed record ChannelView(string Name, string Kind, int? LimitPerMinute, bool Ready, IReadOnlyList<string> Missing, IReadOnlyDictionary<string, string> Settings, IReadOnlyDictionary<string, int> Outbox);
+/// <summary>
+/// What one release channel of a delivery channel is bound to, as the screen shows it: the connection (never an address: the template of its endpoint, or "address hidden"), whether it was bound for this release channel or by <c>*</c>, whether every secret reference it holds can be read
+/// now, and the problem when it cannot be used as a channel.
+/// </summary>
+public sealed record ChannelBindingView(string Release, string Connection, bool Own, string? Kind, string? Target, bool Ready, IReadOnlyList<string> Missing, string? Problem);
+
+/// <summary>A delivery channel as the screen shows it: its bindings per release channel, the limit, and what the outbox holds for it. No secret and no address.</summary>
+public sealed record ChannelView(string Name, string Kind, int? LimitPerMinute, bool Ready, IReadOnlyList<string> Missing, IReadOnlyList<ChannelBindingView> Bindings, IReadOnlyDictionary<string, int> Outbox);
+
+/// <summary>The connections of the console as the delivery channels find them (plan 22a GP18 fold): the files of <see cref="ConsoleConnections"/>, a version that changes when a file does.</summary>
+public sealed class ConsoleDeliveryConnections(ConsoleConnections connections) : IDeliveryConnections
+{
+    public ConnectionLookup Find(string name)
+    {
+        if (!ConsoleConnections.IsName(name) || !File.Exists(connections.FileOf(name))) return ConnectionLookup.Missing(name);
+        var file = new FileInfo(connections.FileOf(name));
+        var read = ConsoleConnections.Check(name, File.ReadAllText(file.FullName));
+        var version = $"{file.LastWriteTimeUtc.Ticks}:{file.Length}";
+        if (read.Definition is { } d) return new ConnectionLookup(d, version);
+        var first = read.Diagnostics.FirstOrDefault(x => x.Severity == ConfigSeverity.Error);
+        return new ConnectionLookup(null, version, $"its file has errors ({first?.Message ?? "it does not read"})");
+    }
+}
 
 /// <summary>Who the console's users are to the subscriptions: their address is the one the account has.</summary>
 public sealed class ConsoleSubscriberDirectory(IUserAccounts users) : ISubscriberDirectory
@@ -73,23 +93,15 @@ public sealed class ConsoleNoRenderer : ISubscriptionRenderer
 /// </summary>
 public sealed class ConsoleDelivery
 {
-    public ConsoleDelivery(ConsoleSettings settings, StateDatabase state, EncryptedFileSecretStore secrets, IUserAccounts users, ISubscriptionRenderer? renderer = null, TimeProvider? time = null)
+    public ConsoleDelivery(ConsoleSettings settings, StateDatabase state, ConsoleConnections connections, IUserAccounts users, ISubscriptionRenderer? renderer = null, TimeProvider? time = null)
     {
         Kinds = DeliveryKinds.Default();
-        (Settings, Problem) = ConsoleDeliverySettings.Load(settings.Directory, Kinds);
+        (Settings, Problem) = ConsoleDeliverySettings.Load(settings.Directory);
         Time = time ?? TimeProvider.System;
-        Resolver = new SecretResolverChain([secrets, new EnvSecretProvider()]);
+        Connections = connections;
+        Resolver = connections.Secrets;
         Scrubber = new SecretScrubber();
-        try
-        {
-            Channels = new DeliveryChannels(Settings, Kinds, Resolver, Scrubber, Time);
-        }
-        catch (DeliverySettingsException e)
-        {
-            Problem = e.Message;
-            Settings = DeliverySettings.Empty;
-            Channels = new DeliveryChannels(Settings, Kinds, Resolver, Scrubber, Time);
-        }
+        Channels = new DeliveryChannels(Settings, new ConsoleDeliveryConnections(connections), Kinds, Resolver, Scrubber, Time);
 
         Outbox = new DeliveryStore(state);
         Subscriptions = new SubscriptionStore(state);
@@ -112,7 +124,9 @@ public sealed class ConsoleDelivery
 
     public SecretScrubber Scrubber { get; }
 
-    public IDeliveryChannels Channels { get; }
+    public DeliveryChannels Channels { get; }
+
+    public ConsoleConnections Connections { get; }
 
     public DeliveryStore Outbox { get; }
 
@@ -127,23 +141,43 @@ public sealed class ConsoleDelivery
     /// <summary>Whether this process can draw a subscription's document (it has a renderer of the views module).</summary>
     public bool CanRender { get; }
 
-    /// <summary>The channels with their readiness (every secret reference resolves now) and what the outbox holds for each.</summary>
+    /// <summary>The release channels that any channel is bound in, in order of first use (<c>prod</c> first).</summary>
+    public IReadOnlyList<string> ReleaseChannels => [.. Settings.Channels.SelectMany(c => c.Connections.Keys).Where(k => k != ChannelBinding.AnyReleaseChannel).Prepend(State.DefinitionStore.Production).Distinct(StringComparer.Ordinal)];
+
+    /// <summary>The delivery channels with, per release channel, the connection each uses, whether every secret reference it holds can be read now, and what the outbox holds for each name.</summary>
     public async Task<IReadOnlyList<ChannelView>> ChannelViewsAsync(CancellationToken cancellationToken)
     {
         var counts = Outbox.List(limit: 1000).GroupBy(m => m.Channel, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.GroupBy(m => m.Status).ToDictionary(s => s.Key, s => s.Count()), StringComparer.OrdinalIgnoreCase);
         var views = new List<ChannelView>();
-        foreach (var channel in Settings.Channels)
+        foreach (var binding in Settings.Channels)
         {
-            var missing = new List<string>();
-            foreach (var (key, reference) in channel.Secrets)
+            var bindings = new List<ChannelBindingView>();
+            foreach (var (release, connection) in binding.Connections.OrderBy(c => c.Key == State.DefinitionStore.Production ? "" : c.Key, StringComparer.Ordinal))
             {
-                try { using var value = await Resolver.ResolveAsync(reference, cancellationToken); }
-                catch (Exception e) when (e is not OperationCanceledException) { missing.Add($"{key}: {reference.ToAuditString()} cannot be read"); }
+                var missing = new List<string>();
+                string? kind = null, target = null, problem = null;
+                var definition = Connections.Find(connection);
+                if (definition is null)
+                {
+                    problem = File.Exists(Connections.FileOf(connection)) ? $"The file of the connection '{connection}' has errors; open it on the Connections page." : $"There is no connection named '{connection}'.";
+                }
+                else
+                {
+                    kind = DeliveryConnectionRules.KindOf(definition, out var why);
+                    problem = why;
+                    target = ConsoleConnections.TargetOf(definition);
+                    foreach (var (field, path, reference) in ConsoleConnections.ReferencesOf(definition))
+                    {
+                        try { using var value = await Resolver.ResolveAsync(SecretRef.Parse(reference), cancellationToken); }
+                        catch (Exception e) when (e is not OperationCanceledException) { missing.Add($"{path}: {SecretRef.Parse(reference).ToAuditString()} cannot be read"); }
+                    }
+                }
+
+                bindings.Add(new ChannelBindingView(release, connection, release == ChannelBinding.AnyReleaseChannel || binding.IsOwn(release), kind, target, problem is null && missing.Count == 0, missing, problem));
             }
 
-            var shown = channel.Values.ToDictionary(p => p.Key, p => p.Value is JsonArray a ? string.Join(", ", a.Select(x => x?.ToString())) : p.Value?.ToString() ?? "");
-            foreach (var key in channel.Secrets.Keys) shown[key] = channel.Secrets[key].ToAuditString();
-            views.Add(new ChannelView(channel.Name, channel.Kind, channel.LimitPerMinute, missing.Count == 0, missing, shown, counts.GetValueOrDefault(channel.Name) ?? []));
+            var prod = bindings.FirstOrDefault(b => b.Release == State.DefinitionStore.Production) ?? bindings.FirstOrDefault(b => b.Release == ChannelBinding.AnyReleaseChannel);
+            views.Add(new ChannelView(binding.Name, prod?.Kind ?? "", binding.LimitPerMinute, prod is { Ready: true }, prod?.Missing ?? [], bindings, counts.GetValueOrDefault(binding.Name) ?? []));
         }
 
         return views;

@@ -7,11 +7,11 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DbDataKit.Server;
 
-/// <summary>A test message: where it goes (the signed-in person's address when empty; a webhook channel ignores it).</summary>
-public sealed record TestSendBody(string? Recipient = null);
+/// <summary>A test message: where it goes (the signed-in person's address when empty; a webhook channel ignores it) and through which release channel's connection (default <c>prod</c>).</summary>
+public sealed record TestSendBody(string? Recipient = null, string? Channel = null);
 
 /// <summary>
-/// Delivery in the console (plan 22a GP18): the channels of the install's <c>delivery:</c> section with whether each can be used and a test send; the outbox with its tries and what failed; and subscriptions (a person's own, or everyone's for an administrator).
+/// Delivery in the console (plan 22a GP18, folded into connections): the channels of the install's <c>delivery:</c> section with, per release channel, the connection each uses and whether it can be used, and a test send through a chosen release channel's connection; the outbox with its tries and what failed; and subscriptions (a person's own, or everyone's for an administrator).
 /// <b>Nobody reads a message's words but who it is for or an administrator</b>; the outbox rows a person sees are their own.
 /// </summary>
 [ApiController]
@@ -26,7 +26,7 @@ public sealed class DeliveryController(ConsoleDelivery delivery) : ControllerBas
 
     private static object View(MessageRow m) => new
     {
-        id = m.Id, channel = m.Channel, subject = m.Subject, recipients = m.Recipients, source = m.Source, ownerPerson = m.OwnerPerson, status = m.Status, attempts = m.Attempts, nextAttemptAt = m.NextAttemptAt,
+        id = m.Id, channel = m.Channel, releaseChannel = m.Release, subject = m.Subject, recipients = m.Recipients, source = m.Source, ownerPerson = m.OwnerPerson, status = m.Status, attempts = m.Attempts, nextAttemptAt = m.NextAttemptAt,
         lastOutcome = m.LastOutcome, lastDetail = m.LastDetail, createdAt = m.CreatedAt, settledAt = m.SettledAt, attachments = m.Attachments.Select(a => new { a.Name, a.MediaType, a.Size }),
     };
 
@@ -53,24 +53,31 @@ public sealed class DeliveryController(ConsoleDelivery delivery) : ControllerBas
             renderNote = delivery.CanRender ? null : ConsoleNoRenderer.Words,
             isAdmin = IsAdmin,
             policy = new { maxAttempts = delivery.Settings.Policy.MaxAttempts, backoffSeconds = delivery.Settings.Policy.Backoff.Select(b => (int)b.TotalSeconds), leaseSeconds = (int)delivery.Settings.Policy.Lease.TotalSeconds },
-            kinds = delivery.Kinds.All.OrderBy(k => k.Kind, StringComparer.Ordinal).Select(k => new { k.Kind, k.Description, keys = k.Keys.Select(x => new { x.Key, type = x.Type.ToString().ToLowerInvariant(), x.Required, x.Description }) }),
+            releaseChannels = delivery.ReleaseChannels,
+            connectionKinds = new[] { new { kind = "smtp", description = "A mail server: mail channels send through it." }, new { kind = "http", description = "A webhook (Slack, Teams, a signed webhook): an `http` connection with a `webhook:` section." } },
             channels,
             outbox = delivery.Outbox.Counts(),
         });
     }
 
-    /// <summary>Sends a test message through a channel and works the outbox once, so the answer says what the far side said.</summary>
+    /// <summary>
+    /// Sends a clearly marked test message through the connection a channel is bound to in a release channel (<c>channel</c>, default <c>prod</c>) and works the outbox once, so the answer says what the far side said. A release channel the name is not bound in is refused
+    /// naming where it is bound: a test never falls back to another release channel's connection.
+    /// </summary>
     [HttpPost("channels/{name}/test")]
     [Authorize(Policies.Admin)]
     public async Task<IActionResult> Test(string name, [FromBody] TestSendBody? body, CancellationToken ct)
     {
-        if (delivery.Channels.Find(name) is not { } channel) return Refuse(404, "not_found", $"There is no channel '{name}' in the delivery: section ({(delivery.Channels.Names.Count == 0 ? "it has no channels" : string.Join(", ", delivery.Channels.Names))}).");
+        if (!delivery.Channels.Names.Contains(name, StringComparer.OrdinalIgnoreCase)) return Refuse(404, "not_found", $"There is no channel '{name}' in the delivery: section ({(delivery.Channels.Names.Count == 0 ? "it has no channels" : string.Join(", ", delivery.Channels.Names))}).");
+        var release = string.IsNullOrWhiteSpace(body?.Channel) ? DefinitionStore.Production : body!.Channel!.Trim();
+        var resolution = delivery.Channels.Resolve(name, release);
+        if (resolution.Channel is not { } channel) return Refuse(409, resolution.Retryable ? "connection_unusable" : "not_bound", resolution.Problem ?? "The channel cannot be used.");
         var recipient = string.IsNullOrWhiteSpace(body?.Recipient) ? delivery.Users.Get(PersonId)?.Email : body!.Recipient!.Trim();
         if (channel.Kind == "email" && recipient is null) return Refuse(400, "invalid", "An email test needs an address: type one, or give your own account an email address.");
-        var text = $"This is a test message from the DbData console, sent by {User.Identity?.Name ?? PersonId} through the channel '{channel.Name}'. If you can read it, the channel works.";
-        var id = await delivery.Service.SendAsync(new DeliveryRequest(channel.Name, "DbData test message", recipient is null ? null : [recipient], text, $"<p>{System.Net.WebUtility.HtmlEncode(text)}</p>", Source: "test", OwnerPerson: PersonId), ct);
+        var text = $"THIS IS A TEST MESSAGE from the DbData console, sent by {User.Identity?.Name ?? PersonId} through the channel '{channel.Name}' in the release channel '{release}' (the connection '{resolution.Connection}'). It is not an alert and nothing needs doing. If you can read it, the channel works.";
+        var id = await delivery.Service.SendAsync(new DeliveryRequest(channel.Name, $"[TEST, {release}] DbData test message", recipient is null ? null : [recipient], text, $"<p><b>THIS IS A TEST MESSAGE</b></p><p>{System.Net.WebUtility.HtmlEncode(text)}</p>", Source: "test", OwnerPerson: PersonId, ReleaseChannel: release), ct);
         await delivery.Service.RunOnceAsync(ct);
-        return Ok(new { id, message = View(delivery.Outbox.Find(id)!), attempts = delivery.Outbox.Attempts(id).Select(View) });
+        return Ok(new { id, releaseChannel = release, connection = resolution.Connection, message = View(delivery.Outbox.Find(id)!), attempts = delivery.Outbox.Attempts(id).Select(View) });
     }
 
     /// <summary>The outbox, newest first: an administrator sees every message, a person their own. The words of a message are never in the list.</summary>
