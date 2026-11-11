@@ -1,6 +1,6 @@
 # Plan 28a: what is left of the runner
 
-Status: **in progress, what is left** (audited 2026-11-09 against the code and the tests; the built slices R01 to R20 are deleted from this plan, and what is still true of them is documentation beside the code). The runner exists: a package model (`package/1`), a protocol with both ends, the typed kit and its simulator, the executor with limits, retries, triggers, labels and posture choices, the scheduler loop, groups, publishing and staging with activation that waits for runs in flight, the console's screens and the embedded runner. This plan holds only the open work; the engines moving onto the runner (Sync and Build) are [plan 28c](28c-engines-on-runner.md).
+Status: **in progress, what is left** (audited 2026-11-09 against the code and the tests, re-audited 2026-11-11: every row below is still open as written, R25 has its checkpoint half built; the built slices R01 to R20 are deleted from this plan, and what is still true of them is documentation beside the code). The runner exists: a package model (`package/1`), a protocol with both ends, the typed kit and its simulator, the executor with limits, retries, triggers, labels and posture choices, the scheduler loop, groups, publishing and staging with activation that waits for runs in flight, the console's screens and the embedded runner. This plan holds only the open work; the engines moving onto the runner (Sync and Build) are [plan 28c](28c-engines-on-runner.md).
 
 Where the built part is described:
 
