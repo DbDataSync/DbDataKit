@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Delivery</RootNamespace>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <Description>The delivery service of the suite (plan 22a GP07 to GP09, GP17): messages with attachments written to an outbox (the state module delivery), channels (email over SMTP, Teams and Slack incoming webhooks, a signed generic webhook) with retries classified as temporary or permanent and a recorded outcome per try, the strict delivery: settings section, and subscriptions of a person to a dashboard or report on a schedule.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+    <ProjectReference Include="..\DbDataKit.Scheduling\DbDataKit.Scheduling.csproj" />
+    <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
+  </ItemGroup>
+</Project>
