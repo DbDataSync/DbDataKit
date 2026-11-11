@@ -62,7 +62,7 @@ public sealed class CredentialRolesTests : IDisposable
 
         var text = File.ReadAllText(FileOf("orders"));
         Assert.Contains("run_user: runner", text);
-        Assert.Contains("run_password_secret: secret:dbdata:sync:connection:orders:run", text);
+        Assert.Contains("run_password_secret: secret:dbdatakit:sync:connection:orders:run", text);
         Assert.DoesNotContain("read-pw-1", text);
         Assert.DoesNotContain("run-pw-2", text);
         // the copy for a role carries no second login: nothing downstream can pick the other role's secret from it
@@ -85,7 +85,7 @@ public sealed class CredentialRolesTests : IDisposable
     public void A_second_login_with_no_password_anywhere_is_refused_naming_the_reference_and_nothing_is_written()
     {
         var ex = Assert.Throws<ConfigValidationException>(() => _repository.SaveConnection(Input("orders", new RunLoginInput { UserId = "runner" }), Author));
-        Assert.Contains("dbdata:sync:connection:orders:run", ex.Message);
+        Assert.Contains("dbdatakit:sync:connection:orders:run", ex.Message);
         Assert.Empty(Directory.GetFiles(_configRoot, "orders.yaml", SearchOption.AllDirectories));
     }
 
@@ -153,7 +153,7 @@ public sealed class CredentialRolesTests : IDisposable
         File.WriteAllText(path, System.Text.RegularExpressions.Regex.Replace(original, @"^[ \t]*run_password_secret:.*\r?\n", "", System.Text.RegularExpressions.RegexOptions.Multiline));
         Assert.Contains("run_user", Assert.Throws<ConfigFileException>(() => _repository.LoadConnection("orders")).Message);
 
-        File.WriteAllText(path, original.Replace("secret:dbdata:sync:connection:orders:run", "hunter2"));
+        File.WriteAllText(path, original.Replace("secret:dbdatakit:sync:connection:orders:run", "hunter2"));
         Assert.Contains("run_password_secret", Assert.Throws<ConfigFileException>(() => _repository.LoadConnection("orders")).Message);
     }
 
@@ -164,7 +164,7 @@ public sealed class CredentialRolesTests : IDisposable
         var text = File.ReadAllText(FileOf("orders")).Replace("connection:orders:run", "connection:billing:run");
 
         var ex = Assert.Throws<ConfigValidationException>(() => _repository.ConnectionInputFromFile(text, "orders", null));
-        Assert.Contains("dbdata:sync:connection:orders:run", ex.Message);
+        Assert.Contains("dbdatakit:sync:connection:orders:run", ex.Message);
     }
 
     [Fact]
@@ -188,7 +188,7 @@ public sealed class CredentialRolesTests : IDisposable
         var inventory = SyncConnectionInventory.Build([one, two], []);
         var json = ConnectionInventoryJson.Write("sync", inventory).ToJsonString();
 
-        Assert.Contains("secret:dbdata:sync:connection:billing:run", json);
+        Assert.Contains("secret:dbdatakit:sync:connection:billing:run", json);
         Assert.Contains("\"run_secret_ref\"", json);
         Assert.Equal(1, json.Split("run_secret_ref").Length - 1);
         Assert.DoesNotContain("read-pw-1", json);

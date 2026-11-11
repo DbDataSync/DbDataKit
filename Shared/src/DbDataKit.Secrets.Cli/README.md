@@ -11,7 +11,7 @@ The shared `secret` commands, framework-free. A product mounts them under its ow
 | Command | Behaviour |
 |---|---|
 | `set <name> [--stdin]` | the value from stdin (when redirected, or `--stdin`) or a hidden, confirmed prompt; a value in argv is a usage error (exit 2) |
-| `list [prefix]` | names with when each was written and the key it uses (default prefix `dbdata:`) |
+| `list [prefix]` | names with when each was written and the key it uses (default prefix `dbdatakit:`) |
 | `delete <name>` (`rm`) | delete |
 | `check [ref...]` | resolves each reference given, or every one in the configuration; prints `ok` or `not found`, never a value; exits 1 if any does not resolve; DPAPI blobs are elided |
 | `rotate-key` | a new data key, every value encrypted again under it, the old key deleted; an interrupted rotation is finished |

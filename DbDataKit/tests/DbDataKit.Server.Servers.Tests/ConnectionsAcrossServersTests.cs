@@ -122,7 +122,7 @@ public sealed class ConnectionsAcrossServersTests : IAsyncLifetime
         Assert.Contains("name: orders-edge", written);
         Assert.DoesNotContain("test_query", written);                         // extensions.sync is Sync's
         Assert.DoesNotContain("sync-typed-pw", written);
-        Assert.Equal("secret:dbdata:gateway:connection:orders-edge", DbDataKit.Connections.ConnectionDefinitionLoader.Load(written, "orders-edge.yaml").Require().Auth!.PasswordSecret);
+        Assert.Equal("secret:dbdatakit:gateway:connection:orders-edge", DbDataKit.Connections.ConnectionDefinitionLoader.Load(written, "orders-edge.yaml").Require().Auth!.PasswordSecret);
         var listed = (await AsPerson(HttpMethod.Get, $"/relay/{gatewayId}/api/v1/data-sources")).Body!["data_sources"]!.AsArray().Single(d => (string)d!["name"]! == "orders-edge")!;
         Assert.True((bool)listed["valid"]!);
 
@@ -146,7 +146,7 @@ public sealed class ConnectionsAcrossServersTests : IAsyncLifetime
         var copy = (await AsPerson(HttpMethod.Get, $"/relay/{syncId}/api/connections/erp-sync")).Body!;
         Assert.Equal("localhost", (string)copy["host"]!);
         Assert.Equal("reader", (string)copy["userId"]!);
-        Assert.Equal("dbdata:sync:connection:erp-sync", (string)copy["credentialSecretRef"]!);
+        Assert.Equal("dbdatakit:sync:connection:erp-sync", (string)copy["credentialSecretRef"]!);
         var file = (await AsPerson(HttpMethod.Get, $"/relay/{syncId}/api/connections/erp-sync/file")).Body!;
         Assert.DoesNotContain("typed-for-sync", (string)file["text"]!);
         Assert.StartsWith("schema: connection/2", (string)file["text"]!);
@@ -155,7 +155,7 @@ public sealed class ConnectionsAcrossServersTests : IAsyncLifetime
         // without the typed password Sync says what it lacks, naming the reference, and keeps nothing
         var noPassword = await AsPerson(HttpMethod.Post, "/api/connections/copy", new { from = gatewayId, name = "erp", to = syncId, newName = "erp-no-password" });
         Assert.Equal(HttpStatusCode.BadRequest, noPassword.Status);
-        Assert.Contains("dbdata:sync:connection:erp-no-password", (string)noPassword.Body!["error"]!);
+        Assert.Contains("dbdatakit:sync:connection:erp-no-password", (string)noPassword.Body!["error"]!);
         Assert.Equal(HttpStatusCode.NotFound, (await AsPerson(HttpMethod.Get, $"/relay/{syncId}/api/connections/erp-no-password")).Status);
     }
 }

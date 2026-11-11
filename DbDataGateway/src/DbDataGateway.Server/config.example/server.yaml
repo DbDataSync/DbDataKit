@@ -6,7 +6,7 @@
 # (check a folder with: dbdatagateway config check --file <this folder>).
 schemaVersion: 2
 
-# Secrets are references, not literals: env:NAME, file:PATH, secret:dbdata:gateway:..., dpapi:<base64> (see README, "Secrets").
+# Secrets are references, not literals: env:NAME, file:PATH, secret:dbdatakit:gateway:..., dpapi:<base64> (see README, "Secrets").
 # A literal still works but logs a warning naming the key; true refuses to start with literal secrets.
 requireReferencedSecrets: false
 
@@ -51,7 +51,7 @@ compression: { mode: arrow, codec: zstd, level: 3, allowClientOverride: true }
 #   home: { clientId: <id from identity client-add> }   # signs people in through the identity home (this instance's, or home.authority); redirect URI <public url>/apps/-/callback
 # identity: { enabled: true, address: 0.0.0.0, port: 8817, publicUrl: https://identity.example.com }
 # People may also sign in at the home through an Entra ID tenant (an app registered there with the redirect URI <publicUrl>/identity/upstream/entra/callback and the groups claim), and with Windows (Negotiate):
-#   entra: { authority: https://login.microsoftonline.com/<tenant id>/v2.0, clientId: <app id>, clientSecret: secret:dbdata:gateway:identity:entra }
+#   entra: { authority: https://login.microsoftonline.com/<tenant id>/v2.0, clientId: <app id>, clientSecret: secret:dbdatakit:gateway:identity:entra }
 #   windows: { enabled: true }
 # A person's personal access tokens last at most accessTokenMaxDays (1 to 365; 365 unless lowered here):
 #   accessTokenMaxDays: 90

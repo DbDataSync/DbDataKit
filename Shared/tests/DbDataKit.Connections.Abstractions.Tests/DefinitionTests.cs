@@ -11,7 +11,7 @@ public class DefinitionTests
         dialect: sqlserver
         access: readwrite
         address: { host: db1, port: 1433, database: dw }
-        auth: { mode: sql, user: svc_dw, password_secret: "secret:dbdata:build:connection:warehouse:write" }
+        auth: { mode: sql, user: svc_dw, password_secret: "secret:dbdatakit:build:connection:warehouse:write" }
         read_login: { mode: sql, user: ro_dw, password_secret: "env:DW_RO" }
         tls: { encrypt: true, verify: true }
         timeouts: { connect_s: 20, command_s: 120 }

@@ -22,7 +22,7 @@ public static class SyncConnectionInventory
         })];
     }
 
-    /// <summary>The credential as the file keeps it is a secret name (<c>dbdata:sync:connection:erp</c>); as a reference it is <c>secret:</c> and that name. Anything else is passed on to be checked as a reference.</summary>
+    /// <summary>The credential as the file keeps it is a secret name (<c>dbdatakit:sync:connection:erp</c>); as a reference it is <c>secret:</c> and that name. Anything else is passed on to be checked as a reference.</summary>
     private static string? ReferenceOf(string? stored) =>
         stored is not null && !DbDataKit.Secrets.SecretRef.LooksLikeRef(stored) && DbDataKit.Secrets.SecretName.TryParse(stored, out var name) ? name.ToRef().ToString() : stored;
 

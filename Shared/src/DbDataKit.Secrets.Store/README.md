@@ -4,7 +4,7 @@ The shared secret store (plan 13, W13): secrets encrypted in a file, with the ke
 
 ## The store
 
-`EncryptedFileSecretStore` is `<data>/secrets/secrets.yaml`: `name -> { v: 1, key: <key id>, value: <base64 of a 96-bit nonce, the ciphertext and the 128-bit tag>, updated }`. It is outside the git-tracked configuration directory (or ignored by it), so no secret, even encrypted, is in a history; configuration files hold only references (`secret:dbdata:gateway:datasource:erp:password`).
+`EncryptedFileSecretStore` is `<data>/secrets/secrets.yaml`: `name -> { v: 1, key: <key id>, value: <base64 of a 96-bit nonce, the ciphertext and the 128-bit tag>, updated }`. It is outside the git-tracked configuration directory (or ignored by it), so no secret, even encrypted, is in a history; configuration files hold only references (`secret:dbdatakit:gateway:datasource:erp:password`).
 
 - **Cipher**: AES-256-GCM, a fresh random nonce per write, the secret's **name as associated data**, so a value copied to another name fails to decrypt.
 - **Writes** are atomic (a restricted temporary file replaces the store) under a lock that holds across processes; the file is restricted before content is written.

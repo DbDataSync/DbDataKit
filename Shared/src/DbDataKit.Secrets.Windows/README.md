@@ -5,7 +5,7 @@ DPAPI store. `AclHelper` now lives in `DbDataKit.Security.Acl` (namespace `DbDat
 ## Public contract
 - `DpapiProtector.Protect/Unprotect/ToInlineRef` (Windows only, `[SupportedOSPlatform("windows")]`).
 - `DpapiSecretStore(directory, entropy, scope, allowedIdentities?)`: `ISecretStore` + `ISecretProvider`.
-  One `<name with ':' -> '~'>.secret` file per secret; handles `secret:dbdata:...` names and inline `dpapi:<base64>`.
+  One `<name with ':' -> '~'>.secret` file per secret; handles `secret:dbdatakit:...` names and inline `dpapi:<base64>`.
   Throws `PlatformNotSupportedException` off Windows. With `allowedIdentities` the directory and each file are ACL-restricted.
 - `AclHelper.Restrict(path, identities, unixMode?)`, `EnsureRestrictedDirectory`, `WriteAllBytesRestricted`
   (create + restrict before writing content), `Verify(path, identities, recurse, unixMode?)` -> `AclReport`

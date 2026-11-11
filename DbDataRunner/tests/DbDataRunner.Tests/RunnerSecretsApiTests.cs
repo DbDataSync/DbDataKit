@@ -14,7 +14,7 @@ namespace DbDataRunner.Tests;
 /// </summary>
 public sealed class RunnerSecretsApiTests
 {
-    private const string Name = "dbdata:sync:connection:crm-src:run";
+    private const string Name = "dbdatakit:sync:connection:crm-src:run";
     private const string Value = "p4ss-w0rd-that-must-not-leak";
 
     private static SecretRef Ref => new(SecretRefKind.Secret, Name);
@@ -26,7 +26,7 @@ public sealed class RunnerSecretsApiTests
         await h.StartAsync();
 
         var (status, body) = await h.CallAsync(HttpMethod.Put, $"/api/v1/secrets/{Uri.EscapeDataString(Name)}", ServerRole.Admin, new { value = Value });
-        var (listStatus, list) = await h.GetAsync("/api/v1/secrets?prefix=dbdata:sync", ServerRole.Admin);
+        var (listStatus, list) = await h.GetAsync("/api/v1/secrets?prefix=dbdatakit:sync", ServerRole.Admin);
 
         Assert.Equal(HttpStatusCode.OK, status);
         Assert.Equal(Name, (string)body!["name"]!);

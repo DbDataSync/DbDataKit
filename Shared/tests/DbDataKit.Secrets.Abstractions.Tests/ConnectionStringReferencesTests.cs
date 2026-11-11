@@ -17,7 +17,7 @@ public class ConnectionStringReferencesTests
         ["env:PW"] = "s3cret",
         ["env:ODD"] = "a;b=c}d",
         ["env:DQ"] = "x\"y;z",
-        ["secret:dbdata:proxy:datasource:erp"] = "Server=a;Password=whole",
+        ["secret:dbdatakit:gateway:datasource:erp"] = "Server=a;Password=whole",
     });
 
     [Fact]
@@ -31,7 +31,7 @@ public class ConnectionStringReferencesTests
     public async Task WholeStringReferenceIsResolved()
     {
         Assert.Equal("Server=a;Password=whole",
-            await ConnectionStringReferences.ResolveAsync("secret:dbdata:proxy:datasource:erp", Resolver));
+            await ConnectionStringReferences.ResolveAsync("secret:dbdatakit:gateway:datasource:erp", Resolver));
     }
 
     [Theory]

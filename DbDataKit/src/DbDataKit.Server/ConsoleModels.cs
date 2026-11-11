@@ -57,7 +57,7 @@ public sealed class ConsoleModels : IAgentModels
     public string SlotsFile => Path.Combine(Folder, "_slots.yml");
 
     /// <summary>Where a person's pasted key for a provider is kept.</summary>
-    public static SecretName SecretNameFor(string provider) => new("console", "model-provider", provider, "key");
+    public static SecretName SecretNameFor(string provider) => new("server", "model-provider", provider, "key");
 
     /// <summary>The reference to write in a provider's file for the key kept here.</summary>
     public static string ReferenceFor(string provider) => "secret:" + SecretNameFor(provider);
@@ -167,7 +167,7 @@ public sealed class ConsoleModels : IAgentModels
         }
         var agentView = agentSlots.GroupBy(a => a.Slot, StringComparer.Ordinal).OrderBy(g => g.Key, StringComparer.Ordinal)
             .Select(g => new AgentSlotView(g.Key, [.. g.Select(a => a.Agent).Distinct().Order(StringComparer.Ordinal)], For(g.Key, null) is not null)).ToList();
-        return new ModelsView(providers, slotsYaml, slotDiagnostics, views, agentView, "secret:dbdata:console:model-provider:<name>:key");
+        return new ModelsView(providers, slotsYaml, slotDiagnostics, views, agentView, "secret:dbdatakit:server:model-provider:<name>:key");
     }
 
     private (bool Ok, string? Problem) KeyState(ModelProviderDefinition provider)

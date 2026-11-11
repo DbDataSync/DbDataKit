@@ -329,7 +329,7 @@ function ModelsTab() {
               <>
                 <div data-testid="provider-key" data-available={provider.keyAvailable}>
                   <strong>Key</strong> <span className="mono">{provider.keyReference ?? '(none)'}</span>: {provider.keyAvailable ? 'it can be read.' : provider.keyProblem ?? 'not set.'}
-                  {isAdmin && provider.keyReference === `secret:dbdata:console:model-provider:${provider.name}:key` && (
+                  {isAdmin && provider.keyReference === `secret:dbdatakit:server:model-provider:${provider.name}:key` && (
                     <form onSubmit={(e) => { e.preventDefault(); if (key) setTheKey.mutate() }} style={{ marginTop: 4 }}>
                       <input type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder="paste the key; it is kept in the secret store and not shown again" style={{ minWidth: 320 }} data-testid="provider-key-input" />{' '}
                       <button type="submit" className="btn btn-sm" disabled={!key} data-testid="provider-key-save">Keep the key</button>

@@ -52,7 +52,7 @@ public static class TrustModule
                 check_value  {{text}} NOT NULL
             );
 
-            -- A secret a client of the group keeps on it, by its full name (dbdata:gateway:managed-<client>:<name>); the value encrypted with the group's key, never in the clear.
+            -- A secret a client of the group keeps on it, by its full name (dbdatakit:gateway:managed-<client>:<name>); the value encrypted with the group's key, never in the clear.
             CREATE TABLE {table:group_secret} (
                 name   {{key}} PRIMARY KEY,
                 value  {{text}} NOT NULL

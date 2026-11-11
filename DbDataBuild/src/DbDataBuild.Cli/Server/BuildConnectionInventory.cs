@@ -5,7 +5,7 @@ namespace DbDataBuild.Cli.Server;
 
 /// <summary>
 /// The connections of a Build server and who uses them (plan 28c ED17, E23). A project's connections are its <c>connections/&lt;name&gt;.yaml</c> files; they hold no address, so only the engine is reported, and the logins are the server's secrets
-/// <c>dbdata:build:connection:&lt;name&gt;:read</c> and <c>...:write</c> (the reference of the read login is reported; the write one is named by the flow that needs it, never a value). The users:
+/// <c>dbdatakit:build:connection:&lt;name&gt;:read</c> and <c>...:write</c> (the reference of the read login is reported; the write one is named by the flow that needs it, never a value). The users:
 /// <list type="bullet">
 /// <item>the server itself, with the <c>read</c> login (plans, previews, reports, history);</item>
 /// <item>each scheduled refresh plan, with the <c>write</c> login (a refresh changes the target), unless the connection is read-only;</item>

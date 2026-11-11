@@ -113,7 +113,7 @@ Do these against a **copy** of your old folder, never the live one. The full lis
 2. **Every config file needs a `schemaVersion`**, and unknown keys are errors. Run `dbdatasync config check --repo <copy>` and fix
    what it names.
 3. **Passwords are not carried over.** Connection and state-database passwords moved to an encrypted store (`secrets\` in the folder,
-   `dbdata:sync:...` names). Set each again with `dbdatasync secret set dbdata:sync:connection:<name> <value>`.
+   `dbdatakit:sync:...` names). Set each again with `dbdatasync secret set dbdatakit:sync:connection:<name> <value>`.
 4. **Scripts are `.csx`.** `config\scripts\<name>.cs` files with an `entryType` are no longer read; rename them, drop `entryType`,
    and end the script with an expression with no semicolon.
 5. **Users start fresh.** Nothing is read from Sync's old users, sessions or invitations; the console's first administrator is the

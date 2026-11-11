@@ -13,11 +13,11 @@ namespace DbDataKit.Runner.Api;
 /// <summary>
 /// The calls through which a product hands a runner a login it will run with (plan 28c E20d, E19), on the management API of <c>dbdatarunner</c>:
 /// <list type="bullet">
-/// <item><c>PUT /api/v1/secrets/{name}</c>, body <c>{"value": "..."}</c>: stores the value under the name (<c>dbdata:&lt;product&gt;:&lt;kind&gt;:&lt;name&gt;[:&lt;part&gt;]</c>) in the runner's encrypted store. Administrator.</item>
+/// <item><c>PUT /api/v1/secrets/{name}</c>, body <c>{"value": "..."}</c>: stores the value under the name (<c>dbdatakit:&lt;service&gt;:&lt;kind&gt;:&lt;name&gt;[:&lt;part&gt;]</c>) in the runner's encrypted store. Administrator.</item>
 /// <item><c>GET /api/v1/secrets[?prefix=]</c>: the names the store holds, never a value. Administrator. <c>DELETE /api/v1/secrets/{name}</c>: removes one. Administrator.</item>
 /// </list>
 /// A value is read from the body, handed to the store and nowhere else: it is not in the audit, a log line, an answer or an error. The audit says who stored or removed which name and, for a refused call, why. A runner that cannot open
-/// its store (no key it may create, a file it may not write) answers 503 saying so, and stores nothing. The names are the product's own references (<c>dbdata:sync:connection:&lt;name&gt;:run</c>), which a connection of the runner
+/// its store (no key it may create, a file it may not write) answers 503 saying so, and stores nothing. The names are the product's own references (<c>dbdatakit:sync:connection:&lt;name&gt;:run</c>), which a connection of the runner
 /// names in its <c>auth</c>, so a runner holding the value runs the replication with no step on its machine.
 /// </summary>
 public static class RunnerSecretsApi
@@ -61,7 +61,7 @@ public static class RunnerSecretsApi
         app.MapPut($"{root}/secrets/{{name}}", async (string name, HttpContext context) =>
         {
             if (Deny(context, SetVerb, name) is { } denied) return denied;
-            if (!SecretName.TryParse(name, out var parsed)) return Error(400, $"'{name}' is not a secret name; expected 'dbdata:<product>:<kind>:<name>[:<part>]'.");
+            if (!SecretName.TryParse(name, out var parsed)) return Error(400, $"'{name}' is not a secret name; expected 'dbdatakit:<service>:<kind>:<name>[:<part>]'.");
             JsonObject? body;
             try
             {
@@ -133,7 +133,7 @@ public static class RunnerSecretsApi
         app.MapDelete($"{root}/secrets/{{name}}", async (string name, HttpContext context) =>
         {
             if (Deny(context, DeleteVerb, name) is { } denied) return denied;
-            if (!SecretName.TryParse(name, out var parsed)) return Error(400, $"'{name}' is not a secret name; expected 'dbdata:<product>:<kind>:<name>[:<part>]'.");
+            if (!SecretName.TryParse(name, out var parsed)) return Error(400, $"'{name}' is not a secret name; expected 'dbdatakit:<service>:<kind>:<name>[:<part>]'.");
             ISecretStore opened;
             try { opened = store(); }
             catch (Exception ex) when (ex is not OperationCanceledException) { return Error(503, $"This runner cannot store a secret: {ex.Message}"); }

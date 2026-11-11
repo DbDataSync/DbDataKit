@@ -10,7 +10,7 @@
     "Auth": { "SessionIdleMinutes": 10, "AllowPassThrough": false, "Windows": true, "Jwt": { "Authority": "https://login.microsoftonline.com/t/v2.0", "Audience": "api://x", "Mappings": [ { "Claim": "groups", "Value": "g1", "DataSources": [ "*" ] } ] } },
     "Worker": { "StartupTimeoutSeconds": 60 },
     "DataSources": {
-      "legacy": { "Provider": "odbc", "Bitness": "x86", "ConnectionString": "secret:dbdata:gateway:legacy", "BatchSize": 1000, "CommandTimeoutSeconds": 30, "Metadata": "odbc", "Groups": [ "finance", "analysts" ], "Compression": { "Mode": "Arrow", "Codec": "lz4", "Level": 3 } },
+      "legacy": { "Provider": "odbc", "Bitness": "x86", "ConnectionString": "secret:dbdatakit:gateway:legacy", "BatchSize": 1000, "CommandTimeoutSeconds": 30, "Metadata": "odbc", "Groups": [ "finance", "analysts" ], "Compression": { "Mode": "Arrow", "Codec": "lz4", "Level": 3 } },
       "pt": { "Provider": "sqlserver", "PassThrough": true, "ConnectionString": "Server=a", "Classifier": "off" },
       "scratch": { "Provider": "duckdb", "AllowWrites": true, "ConnectionString": "Data Source=:memory:", "Everyone": true, "Default": true }
     }

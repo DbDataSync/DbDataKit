@@ -50,8 +50,8 @@ public sealed class ConnectionFormatTests
             Assert.Single(LoadOne("o", Conn.Yaml("o", "odbc", "Driver={X}", "auth: { mode: integrated }")).Value!.DataSources).Value.ConnectionString);
         Assert.Equal("Server=s;Integrated Security=True",
             Assert.Single(LoadOne("s", Conn.Yaml("s", "sqlserver", "Server=s", "auth: { mode: integrated }")).Value!.DataSources).Value.ConnectionString);
-        Assert.Equal("secret:dbdata:gateway:erp",
-            Assert.Single(LoadOne("e", Conn.Yaml("e", connectionString: null, extra: "connection_string_secret: 'secret:dbdata:gateway:erp'")).Value!.DataSources).Value.ConnectionString);
+        Assert.Equal("secret:dbdatakit:gateway:erp",
+            Assert.Single(LoadOne("e", Conn.Yaml("e", connectionString: null, extra: "connection_string_secret: 'secret:dbdatakit:gateway:erp'")).Value!.DataSources).Value.ConnectionString);
     }
 
     [Fact]

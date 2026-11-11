@@ -49,8 +49,8 @@ function check(kind: Kind, files: Map<string, string>): Finding[] {
 const template = (id: string, kind: Kind): Map<string, string> => {
   if (kind === 'store') return new Map([[`models/${id}.yaml`, ['schemaVersion: 2', `name: ${id}`, 'title: Sales', 'storage: {connection: mdm_sql}', 'entities:', '  item:', '    key: [code]', '    attributes:', '      code: {type: VARCHAR(20), required: true}', '      name: {type: VARCHAR(100), required: true}', ''].join('\n')]])
   if (kind === 'sync') return new Map([
-    ['config/connections/source-db.yaml', 'schema: connection/1\nname: source-db\nengine: sqlserver\naddress:\n  host: source.example.com\n  database: App\nauth:\n  mode: sql\n  user: sync\n  password_secret: secret:dbdata:sync:connection:source-db\n'],
-    ['config/connections/target-db.yaml', 'schema: connection/1\nname: target-db\nengine: postgres\naddress:\n  host: target.example.com\n  database: dw\nauth:\n  mode: sql\n  user: sync\n  password_secret: secret:dbdata:sync:connection:target-db\n'],
+    ['config/connections/source-db.yaml', 'schema: connection/1\nname: source-db\nengine: sqlserver\naddress:\n  host: source.example.com\n  database: App\nauth:\n  mode: sql\n  user: sync\n  password_secret: secret:dbdatakit:sync:connection:source-db\n'],
+    ['config/connections/target-db.yaml', 'schema: connection/1\nname: target-db\nengine: postgres\naddress:\n  host: target.example.com\n  database: dw\nauth:\n  mode: sql\n  user: sync\n  password_secret: secret:dbdatakit:sync:connection:target-db\n'],
     ['config/replications/orders/task.yaml', 'schemaVersion: 1\nname: orders\nscheduling:\n  mode: Periodic\n  cronExpression: "*/15 * * * *"\nchangeProcessing:\n  reader: {kind: MsSqlChangeTracking, options: {}}\n  cache: {kind: MsSqlStagingTable, options: {}}\n  writer: {kind: PostgresMerge, options: {}}\n'],
     ['config/replications/orders/table-mappings/orders.yaml', 'schemaVersion: 1\nname: orders\nsources:\n- connectionName: source-db\n  schema: dbo\n  table: Orders\ntargets:\n- connectionName: target-db\n  schema: public\n  table: orders\n'],
   ])

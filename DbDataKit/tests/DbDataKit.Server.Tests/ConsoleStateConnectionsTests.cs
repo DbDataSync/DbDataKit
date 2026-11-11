@@ -115,15 +115,15 @@ public sealed class ConsoleStateConnectionsTests : IAsyncLifetime
         // the file has the reference, the secret store has the password, and no response shows it
         var file = File.ReadAllText(Path.Combine(directory, "state-connections.json"));
         Assert.DoesNotContain(password, file);
-        Assert.Contains("secret:dbdata:console:state:new-state", file);
+        Assert.Contains("secret:dbdatakit:server:state:new-state", file);
         var (_, list, listText) = await Call(HttpMethod.Get, "/api/state-connections");
         Assert.DoesNotContain(password, listText);
         var row = Assert.Single(list!.AsArray())!;
         Assert.Equal("new-state", (string?)row["name"]);
-        Assert.Contains("secret:dbdata:console:state:new-state", (string?)row["connection"]);
+        Assert.Contains("secret:dbdatakit:server:state:new-state", (string?)row["connection"]);
         Assert.True((bool)row["reachable"]!);
         Assert.True((bool)row["empty"]!);
-        Assert.Equal("dbdata:console:state:new-state", (string?)row["secret"]);
+        Assert.Equal("dbdatakit:server:state:new-state", (string?)row["secret"]);
 
         // test: the shared checks, one sentence
         var (testStatus, test, testText) = await Call(HttpMethod.Post, "/api/state-connections/new-state/test");
@@ -138,7 +138,7 @@ public sealed class ConsoleStateConnectionsTests : IAsyncLifetime
         var (connection, _) = Parts(scratch);
         var (editStatus, _, _) = await Call(HttpMethod.Put, "/api/state-connections/new-state", new { engine = scratch.Engine, connection, note = "edited" });
         Assert.Equal(HttpStatusCode.OK, editStatus);
-        Assert.Contains("secret:dbdata:console:state:new-state", File.ReadAllText(Path.Combine(directory, "state-connections.json")));
+        Assert.Contains("secret:dbdatakit:server:state:new-state", File.ReadAllText(Path.Combine(directory, "state-connections.json")));
         Assert.True((bool)(await Call(HttpMethod.Post, "/api/state-connections/new-state/test")).Body!["ok"]!);
 
         // a viewer may not use any of it
@@ -217,7 +217,7 @@ public sealed class ConsoleStateConnectionsTests : IAsyncLifetime
         dryRunReason = "secretmissing";
         var missing = (await Call(HttpMethod.Post, "/api/state-moves/preflight", new { server = "Store one", connection = "target" })).Body!;
         Assert.False((bool)missing["ok"]!);
-        Assert.Contains(missing["checks"]!.AsArray(), c => (string?)c!["name"] == "server has the secret" && ((string?)c["sentence"])!.Contains("dbdatastore secret set dbdata:console:state:target"));
+        Assert.Contains(missing["checks"]!.AsArray(), c => (string?)c!["name"] == "server has the secret" && ((string?)c["sentence"])!.Contains("dbdatastore secret set dbdatakit:server:state:target"));
 
         // a server too old for the call: the command line way
         offersMove = false;
@@ -258,7 +258,7 @@ public sealed class ConsoleStateConnectionsTests : IAsyncLifetime
         var sent = moveCalls.Last();
         Assert.Equal("postgres", (string?)sent["engine"]);
         Assert.False(sent["dry_run"]!.GetValue<bool>());
-        Assert.Contains("Password=secret:dbdata:console:state:target", (string?)sent["connection"]);
+        Assert.Contains("Password=secret:dbdatakit:server:state:target", (string?)sent["connection"]);
         Assert.DoesNotContain(scratch.Environment(scratch.PasswordVariable)!, sent.ToJsonString() + text);
 
         var (_, progress, _) = await Call(HttpMethod.Get, "/api/state-moves/" + Uri.EscapeDataString("store-1"));

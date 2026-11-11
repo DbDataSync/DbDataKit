@@ -10,7 +10,7 @@ const approval = (status: string): Approval => ({ id: 'a', conversationId: 'c1',
 
 describe('model providers and slots', () => {
   it('starts a provider file of each kind with the reference the console keeps a typed key under, and none for a local server', () => {
-    expect(providerTemplate('anthropic', 'claude')).toContain('api-key-secret: secret:dbdata:console:model-provider:claude:key')
+    expect(providerTemplate('anthropic', 'claude')).toContain('api-key-secret: secret:dbdatakit:server:model-provider:claude:key')
     expect(providerTemplate('anthropic', 'claude')).toContain('kind: anthropic\n')
     expect(providerTemplate('ollama', 'local')).not.toContain('api-key-secret')
     expect(providerTemplate('openai-compatible', 'lab')).toContain('locality: local')

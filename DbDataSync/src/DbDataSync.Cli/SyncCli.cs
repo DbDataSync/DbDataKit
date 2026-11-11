@@ -65,7 +65,7 @@ public static class SyncCli
         ]),
         new Noun("secret", "The encrypted secret store",
         [
-            Forward("set", "Store a secret under a dbdata:sync:... name", EffectClass.RepoFilesOnly, "<ref> <value> [--repo <path>]", a => Task.FromResult(SecretCommand.Run(["set", .. a]))),
+            Forward("set", "Store a secret under a dbdatakit:sync:... name", EffectClass.RepoFilesOnly, "<ref> <value> [--repo <path>]", a => Task.FromResult(SecretCommand.Run(["set", .. a]))),
             Forward("list", "Whether each given reference is set, never the value", EffectClass.OfflineOnly, "[<ref> ...] [--repo <path>]", a => Task.FromResult(SecretCommand.Run(["list", .. a]))),
             Forward("remove", "Remove a stored secret", EffectClass.RepoFilesOnly, "<ref> [--repo <path>]", a => Task.FromResult(SecretCommand.Run(["remove", .. a]))),
             Forward("send", "Send a connection's run login to a runner's encrypted store (plan 28c E20d); the value is never printed", EffectClass.RepoFilesOnly, "--to runner <connection> --server <name or https address> [--code <pairing code>] [--repo <path>]", a => SecretCommand.SendAsync(a)),

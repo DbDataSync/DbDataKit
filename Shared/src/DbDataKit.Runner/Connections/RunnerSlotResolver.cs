@@ -20,9 +20,9 @@ namespace DbDataKit.Runner.Connections;
 /// </summary>
 public sealed class RunnerSlotResolver(DefinitionPublisher publisher, IConnectionCatalog catalog, ISecretResolver secrets, IRedactor? redactor = null) : ISlotResolver
 {
-    public const string SyncSecretPrefix = "dbdata:sync:connection:";
+    public const string SyncSecretPrefix = "dbdatakit:sync:connection:";
 
-    /// <summary>The part of Sync's secret name for the run login of a connection that has a second one (<c>dbdata:sync:connection:&lt;name&gt;:run</c>, plan 28c E20).</summary>
+    /// <summary>The part of Sync's secret name for the run login of a connection that has a second one (<c>dbdatakit:sync:connection:&lt;name&gt;:run</c>, plan 28c E20).</summary>
     public const string SyncRunPart = "run";
 
     public IReadOnlyDictionary<string, string> Handles(TaskRef task, IReadOnlyList<ConnectionSlot> slots)

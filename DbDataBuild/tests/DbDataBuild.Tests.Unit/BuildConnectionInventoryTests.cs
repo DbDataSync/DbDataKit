@@ -25,7 +25,7 @@ public sealed class BuildConnectionInventoryTests : IDisposable
         var connection = Assert.Single(BuildConnectionInventory.Of([("sales", project)]), c => c.Name == "sqlserver");
 
         Assert.Equal("sqlserver", connection.Engine);
-        Assert.Equal("secret:dbdata:build:connection:sqlserver:read", connection.SecretRef);
+        Assert.Equal("secret:dbdatakit:build:connection:sqlserver:read", connection.SecretRef);
         Assert.Contains(connection.UsedBy, u => u is { Process: "server", Role: "read" });
         Assert.Contains(connection.UsedBy, u => u is { Process: "plan", Name: "sales/sqlserver/hourly", Role: "write" });
         Assert.Contains(connection.UsedBy, u => u is { Process: "flow", Name: "sales: deploy --apply", Role: "write" });
@@ -47,7 +47,7 @@ public sealed class BuildConnectionInventoryTests : IDisposable
     {
         var text = ConnectionInventoryJson.Write("dbdatabuild", BuildConnectionInventory.Of([("sales", project)])).ToJsonString();
 
-        Assert.Contains("secret:dbdata:build:connection:sqlserver:read", text);
+        Assert.Contains("secret:dbdatakit:build:connection:sqlserver:read", text);
         Assert.DoesNotContain("Password", text, StringComparison.OrdinalIgnoreCase);
     }
 }

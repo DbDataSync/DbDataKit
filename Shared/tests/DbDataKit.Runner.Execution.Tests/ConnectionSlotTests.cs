@@ -112,12 +112,12 @@ public sealed class ConnectionSlotTests : IDisposable
 
         var environ = (await File.ReadAllTextAsync($"/proc/{pid}/environ")).Split('\0', StringSplitOptions.RemoveEmptyEntries)
             .Select(e => e.Split('=', 2)).ToDictionary(p => p[0], p => p.Length > 1 ? p[1] : "");
-        Assert.Equal(SrcSecret, environ["DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_SRC_DB"]);
+        Assert.Equal(SrcSecret, environ["DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_SRC_DB"]);
         Assert.Equal(DstRead, environ["DBDATAKIT_BUILD_DST_DB_READ"]);
         Assert.Equal(DstWrite, environ["DBDATAKIT_BUILD_DST_DB_WRITE"]);
         // Sync's second login (plan 28c E20): the runner's one login for the connection is given under the plain name and under the run name, and nothing else
-        Assert.Equal(SrcSecret, environ["DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_SRC_DB_RUN"]);
-        Assert.Equal(["DBDATAKIT_BUILD_DST_DB_READ", "DBDATAKIT_BUILD_DST_DB_WRITE", "DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_SRC_DB", "DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_SRC_DB_RUN"], environ.Keys.Where(k => k.StartsWith("DBDATAKIT_SECRET_", StringComparison.Ordinal) || k.StartsWith("DBDATAKIT_BUILD_", StringComparison.Ordinal)).Order(StringComparer.Ordinal));
+        Assert.Equal(SrcSecret, environ["DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_SRC_DB_RUN"]);
+        Assert.Equal(["DBDATAKIT_BUILD_DST_DB_READ", "DBDATAKIT_BUILD_DST_DB_WRITE", "DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_SRC_DB", "DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_SRC_DB_RUN"], environ.Keys.Where(k => k.StartsWith("DBDATAKIT_SECRET_", StringComparison.Ordinal) || k.StartsWith("DBDATAKIT_BUILD_", StringComparison.Ordinal)).Order(StringComparer.Ordinal));
 
         // not in argv, not in any file of the scratch directory or the package
         var cmdline = await File.ReadAllTextAsync($"/proc/{pid}/cmdline");
@@ -255,8 +255,8 @@ public sealed class ConnectionSlotTests : IDisposable
             return [.. h.Log(run.Id).Where(l => l.Message.StartsWith("var: ", StringComparison.Ordinal)).Select(l => l.Message[5..])];
         }
 
-        Assert.Equal(["DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_A_DB", "DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_A_DB_RUN"], Vars("prod").Order(StringComparer.Ordinal));
-        Assert.Equal(["DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_B_DB", "DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_B_DB_RUN"], Vars("staging").Order(StringComparer.Ordinal));
+        Assert.Equal(["DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_A_DB", "DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_A_DB_RUN"], Vars("prod").Order(StringComparer.Ordinal));
+        Assert.Equal(["DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_B_DB", "DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_B_DB_RUN"], Vars("staging").Order(StringComparer.Ordinal));
     }
 
     [Theory, MemberData(nameof(Engines))]

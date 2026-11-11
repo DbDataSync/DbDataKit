@@ -41,7 +41,7 @@ public sealed class ManagementAuditTests : IDisposable
     {
         var log = new FileAuditLog(Path.Combine(_root, "management.jsonl"));
 
-        Parallel.For(0, 50, i => log.Append(ManagementIdentity.Entry(Token(), "secret set", $"dbdata:sync:connection:c{i}", "applied", DateTimeOffset.UnixEpoch)));
+        Parallel.For(0, 50, i => log.Append(ManagementIdentity.Entry(Token(), "secret set", $"dbdatakit:sync:connection:c{i}", "applied", DateTimeOffset.UnixEpoch)));
 
         var entries = log.Read(limit: 1000);
         Assert.Equal(50, entries.Count);

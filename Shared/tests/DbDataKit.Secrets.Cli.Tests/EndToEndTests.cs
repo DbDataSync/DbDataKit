@@ -7,7 +7,7 @@ namespace DbDataKit.Secrets.Cli.Tests;
 /// <summary>The commands over the real encrypted store (plan 13, V05), the way a product mounts them.</summary>
 public class EndToEndTests : IDisposable
 {
-    private const string Name = "dbdata:proxy:datasource:erp:password";
+    private const string Name = "dbdatakit:gateway:datasource:erp:password";
     private const string Sentinel = "S3NT1NEL-end-to-end";
     private readonly string _root = Directory.CreateTempSubdirectory("dbdata-secret-cli-").FullName;
 

@@ -22,7 +22,7 @@ public sealed class ConsoleModelsTests : IAsyncLifetime
 
     private const string Text = """{"id":"msg_2","type":"message","role":"assistant","model":"claude-sonnet-4-5","content":[{"type":"text","text":"It is a widget."}],"stop_reason":"end_turn","usage":{"input_tokens":120,"output_tokens":6}}""";
 
-    private const string Provider = "model-provider: 1\nname: claude\nkind: anthropic\napi-key-secret: secret:dbdata:console:model-provider:claude:key\nmodels:\n  - { id: claude-sonnet-4-5, window: 200000, max-output: 8192, price: { input: 3, output: 15 } }\n";
+    private const string Provider = "model-provider: 1\nname: claude\nkind: anthropic\napi-key-secret: secret:dbdatakit:server:model-provider:claude:key\nmodels:\n  - { id: claude-sonnet-4-5, window: 200000, max-output: 8192, price: { input: 3, output: 15 } }\n";
 
     private const string Slots = "model-slots: 1\nslots:\n  default:\n    \"*\":\n      - { provider: claude, model: claude-sonnet-4-5 }\n";
 
@@ -110,7 +110,7 @@ public sealed class ConsoleModelsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Conflict, (await Call(HttpMethod.Post, "/api/agents/conversations", admin, new StartConversationBody("helper"))).Status);
 
         // a provider whose key is written as itself is refused, and the refusal does not repeat it
-        var (refused, bad) = await Call(HttpMethod.Put, "/api/agents/models/providers/claude", admin, new YamlBody(Provider.Replace("secret:dbdata:console:model-provider:claude:key", Canary)));
+        var (refused, bad) = await Call(HttpMethod.Put, "/api/agents/models/providers/claude", admin, new YamlBody(Provider.Replace("secret:dbdatakit:server:model-provider:claude:key", Canary)));
         Assert.Equal(HttpStatusCode.UnprocessableEntity, refused);
         Assert.Contains("secret reference", (string)bad!["diagnostics"]![0]!["message"]!);
         Assert.DoesNotContain(Canary, bad.ToJsonString());
@@ -127,7 +127,7 @@ public sealed class ConsoleModelsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Put, "/api/agents/models/providers/claude/key", viewer, new KeyBody(Canary))).Status);
         var (stored, keyAnswer) = await Call(HttpMethod.Put, "/api/agents/models/providers/claude/key", admin, new KeyBody(Canary));
         Assert.Equal(HttpStatusCode.OK, stored);
-        Assert.Equal("secret:dbdata:console:model-provider:claude:key", (string)keyAnswer!["reference"]!);
+        Assert.Equal("secret:dbdatakit:server:model-provider:claude:key", (string)keyAnswer!["reference"]!);
         Assert.DoesNotContain(Canary, File.ReadAllText(Path.Combine(directory, "models", "claude.yml")));
 
         // Test calls the provider with the key and says what the model answered

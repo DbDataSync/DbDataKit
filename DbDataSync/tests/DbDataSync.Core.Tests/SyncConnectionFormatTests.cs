@@ -35,7 +35,7 @@ public sealed class SyncConnectionFormatTests : IDisposable
         port: 1433
         authMode: SqlAuth
         userId: sync
-        credentialSecretRef: dbdata:sync:connection:orders
+        credentialSecretRef: dbdatakit:sync:connection:orders
         """;
 
     // ---- the new format ----
@@ -53,7 +53,7 @@ public sealed class SyncConnectionFormatTests : IDisposable
         Assert.StartsWith("schema: connection/2", text, StringComparison.Ordinal);
         Assert.Contains("engine: sqlserver", text);
         Assert.Contains("host: sql01", text);
-        Assert.Contains("password_secret: secret:dbdata:sync:connection:orders", text);
+        Assert.Contains("password_secret: secret:dbdatakit:sync:connection:orders", text);
         Assert.Contains("connect_s: 20", text);
         Assert.Contains("command_s: 600", text);
         Assert.DoesNotContain("p4ss-sentinel", text);
@@ -65,7 +65,7 @@ public sealed class SyncConnectionFormatTests : IDisposable
         Assert.Equal("sqlserver", shared.Engine);
         Assert.Equal("sql01", shared.Address!.Host);
         Assert.Equal("sync", shared.Auth!.User);
-        Assert.Equal("secret:dbdata:sync:connection:orders", shared.Auth.PasswordSecret);
+        Assert.Equal("secret:dbdatakit:sync:connection:orders", shared.Auth.PasswordSecret);
         Assert.Equal(20, shared.Timeouts.ConnectS);
     }
 
@@ -198,7 +198,7 @@ public sealed class SyncConnectionFormatTests : IDisposable
             name: erp
             engine: sqlserver
             address: { host: SQL01, database: Erp }
-            auth: { mode: sql, user: reader, password_secret: 'secret:dbdata:sync:connection:erp' }
+            auth: { mode: sql, user: reader, password_secret: 'secret:dbdatakit:sync:connection:erp' }
             timeouts: { command_s: 300 }
             extensions:
               proxy:
@@ -248,7 +248,7 @@ public sealed class SyncConnectionFormatTests : IDisposable
     [Fact]
     public void An_old_form_connection_can_still_be_deleted_and_takes_its_password_with_it_and_a_save_rewrites_it()
     {
-        _secrets.Store("dbdata:sync:connection:orders", "pw");
+        _secrets.Store("dbdatakit:sync:connection:orders", "pw");
         File.WriteAllText(FileOf("orders"), OldForm);
         File.WriteAllText(FileOf("crm"), OldForm.Replace("name: orders", "name: crm"));
         _repository.SaveConnection(new ConnectionInput { Name = "crm", DriverType = DriverIds.MsSql, Host = "h", AuthMode = AuthMode.IntegratedAuth }, Author);
@@ -256,6 +256,6 @@ public sealed class SyncConnectionFormatTests : IDisposable
 
         _repository.DeleteConnection("orders", Author);
         Assert.False(File.Exists(FileOf("orders")));
-        Assert.False(_secrets.TryResolve("dbdata:sync:connection:orders", out _));
+        Assert.False(_secrets.TryResolve("dbdatakit:sync:connection:orders", out _));
     }
 }

@@ -140,7 +140,7 @@ public class DpapiTests
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only");
         using var t = new TempDir();
         var store = new DpapiSecretStore(t.Path, Entropy, DataProtectionScope.CurrentUser, ["CurrentUser"]);
-        var name = SecretName.Parse("dbdata:proxy:datasource:erp");
+        var name = SecretName.Parse("dbdatakit:gateway:datasource:erp");
         using (var v = SecretValue.From("s3cr3t-value"))
             await store.SetAsync(name, v);
 
@@ -151,9 +151,9 @@ public class DpapiTests
         using var got = await store.TryResolveAsync(name.ToRef());
         Assert.Equal("s3cr3t-value", got!.RevealString());
 
-        await store.SetAsync(SecretName.Parse("dbdata:build:connection:wh:write"), SecretValue.From("b"));
+        await store.SetAsync(SecretName.Parse("dbdatakit:build:connection:wh:write"), SecretValue.From("b"));
         var all = new List<SecretName>();
-        await foreach (var n in store.ListAsync("dbdata:proxy:")) all.Add(n);
+        await foreach (var n in store.ListAsync("dbdatakit:gateway:")) all.Add(n);
         Assert.Equal([name], all);
 
         await store.DeleteAsync(name);
@@ -189,7 +189,7 @@ public class DpapiTests
 
         var store = new DpapiSecretStore(Path.GetTempPath(), Entropy);
         Assert.True(store.CanHandle(SecretRef.Parse("dpapi:AAAA")));
-        Assert.True(store.CanHandle(SecretRef.Parse("secret:dbdata:a:b:c")));
+        Assert.True(store.CanHandle(SecretRef.Parse("secret:dbdatakit:a:b:c")));
         Assert.False(store.CanHandle(SecretRef.Parse("secret:not-a-name")));
         Assert.False(store.CanHandle(SecretRef.Parse("env:X")));
     }

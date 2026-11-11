@@ -4,7 +4,7 @@ using DbDataKit.Secrets.Store;
 
 namespace DbDataWorkspace.Server;
 
-/// <summary>The server's own encrypted secret store, in its directory: what a state connection's password and the publisher's key refer to (<c>secret:dbdata:workspace:...</c>). Never read through the management API.</summary>
+/// <summary>The server's own encrypted secret store, in its directory: what a state connection's password and the publisher's key refer to (<c>secret:dbdatakit:workspace:...</c>). Never read through the management API.</summary>
 public static class WorkspaceSecrets
 {
     public static EncryptedFileSecretStore Open(string directory)

@@ -4,7 +4,7 @@
 # Pair a console, add a project, set a login (the commands run inside the container, as the server's own user):
 #   docker exec <container> dbdatabuild server pair
 #   docker exec <container> dbdatabuild server project add sales --git https://host/sales.git
-#   docker exec -i <container> dbdatabuild secret set dbdata:build:connection:warehouse:read --stdin
+#   docker exec -i <container> dbdatabuild secret set dbdatakit:build:connection:warehouse:read --stdin
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY Directory.Build.props Directory.Packages.props global.json ./

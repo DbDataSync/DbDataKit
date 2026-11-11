@@ -150,7 +150,7 @@ export const tokenState = (token: AgentToken): string => (token.revokedAt ? 'rev
 
 /** A starting file for a provider of a kind, with the key reference this console keeps a typed key under. */
 export function providerTemplate(kind: string, name: string): string {
-  const key = `secret:dbdata:console:model-provider:${name}:key`
+  const key = `secret:dbdatakit:server:model-provider:${name}:key`
   const models: Record<string, string> = {
     anthropic: '  - { id: claude-sonnet-4-5, window: 200000, max-output: 8192, price: { input: 3, output: 15 } }',
     openai: '  - { id: gpt-4.1, window: 1000000, max-output: 16384, price: { input: 2, output: 8 } }',

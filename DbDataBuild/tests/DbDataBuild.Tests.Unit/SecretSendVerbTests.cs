@@ -54,14 +54,14 @@ public sealed class SecretSendVerbTests : IDisposable
         var audit = new FileAuditLog(Path.Combine(root, "management-audit.log"));
         var result = await Run(store, runner, audit, "send", "--to", "runner", "warehouse", "--server", "r");
         Assert.True(result.Exit == 0, result.Err);
-        Assert.Equal(Write, runner.Held["dbdata:build:connection:warehouse:write"]);
+        Assert.Equal(Write, runner.Held["dbdatakit:build:connection:warehouse:write"]);
         Assert.Single(runner.Held);                        // the read login stayed
         Assert.Equal(false, result.Data["local_deleted"]);
         Assert.True(await store.ExistsAsync(ServerSecrets.NameOf("warehouse", LoginRole.Write)));
         Assert.DoesNotContain("WRITE-pw", result.Out + result.Err);
         var line = Assert.Single(audit.Read());
         Assert.Equal("secret.send", line.Command);
-        Assert.Equal("dbdata:build:connection:warehouse:write", line.Target);
+        Assert.Equal("dbdatakit:build:connection:warehouse:write", line.Target);
         Assert.DoesNotContain("WRITE-pw", File.ReadAllText(Path.Combine(root, "management-audit.log")));
     }
 

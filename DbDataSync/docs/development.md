@@ -98,7 +98,7 @@ keep it elsewhere. This is one of several ways to start DbDataSync — see
 container image) and everything each one can be configured with, including authentication.
 
 Secrets (connection passwords) are in the encrypted store under the repository root (`secrets/`, see "Secrets" in
-[Configuration](configuration.md)); the environment variables `DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_<NAME>` (the connection name in capitals)
+[Configuration](configuration.md)); the environment variables `DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_<NAME>` (the connection name in capitals)
 answer for a connection the store has no password for — set these before triggering a run if you would rather not store one locally.
 
 ## 4. Run the screens
