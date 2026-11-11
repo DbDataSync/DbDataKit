@@ -351,7 +351,7 @@ How it works now, and what to keep true when you add a job:
 
 | Signature | What it is |
 | --- | --- |
-| `testenv.sh up ...` ends with `container dbkit-test-mssql exited (1)` before any test | the SQL Server container failed to start on that runner; re-run the job |
+| `testenv.sh up ...` ends with `container dbkit-test-mssql exited (1)` before any test | the SQL Server container failed to start on that runner; `testenv.sh up` now logs the containers and tries once more (down, up); if the second try fails too, re-run the job and read the logged SQL Server error |
 | tests all pass (`failed: 0`) but the job fails with `rm: cannot remove '/tmp/tmp.XXXX': Directory not empty` | cleanup race of the e2e job; re-run |
 | one Windows unit test fails in `DisposeAsync` with `UnauthorizedAccessException : Access to the path ... is denied` at `Directory.Delete` (all assertions passed) | Windows refuses to delete a folder whose file a stopping server still holds, and says "access denied" rather than IOException; test cleanup catches `IOException or UnauthorizedAccessException` (a cleanup that fails is not a test that failed) |
 | `429 Too Many Requests` pulling an image | Docker Hub rate limit; pull through `mirror.gcr.io` and re-tag (CLAUDE.md) |

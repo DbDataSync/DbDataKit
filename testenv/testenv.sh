@@ -225,7 +225,14 @@ case "$cmd" in
     if [ "$#" -eq 0 ]; then set -- "${engines_default[@]}"; elif [ "$1" = all ]; then set -- "${engines_all[@]}"; fi
     profiles_for "$@"
     # --build: postgres-logical is built from testenv/postgres-logical (a no-op for the engines that are pulled).
-    "${compose[@]}" "${PROFILES[@]}" up -d --build --wait --wait-timeout 240
+    # One retry: a container that exits at start before answering (SQL Server 2025 in CI, docs/ci-lessons.md) is removed and started again.
+    if ! "${compose[@]}" "${PROFILES[@]}" up -d --build --wait --wait-timeout 240; then
+      echo "testenv: an engine did not start; the failed containers' logs, then one more try" >&2
+      "${compose[@]}" "${PROFILES[@]}" ps -a >&2 || true
+      "${compose[@]}" "${PROFILES[@]}" logs --tail 40 >&2 || true
+      "${compose[@]}" "${PROFILES[@]}" down --remove-orphans >&2 || true
+      "${compose[@]}" "${PROFILES[@]}" up -d --build --wait --wait-timeout 240
+    fi
     # The slow engines have no healthcheck in their (minimal) images: wait for them from here.
     for e in "$@"; do wait_ready "$e"; done
     ;;
