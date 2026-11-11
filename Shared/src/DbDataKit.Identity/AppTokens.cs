@@ -75,6 +75,9 @@ public sealed class AppTokenValidator(Func<string, IReadOnlyDictionary<string, o
 {
     public AppTokenValidator(OpenIdProvider provider) : this(jwt => provider.Verify(jwt, "at+jwt")) { }
 
+    /// <summary>For a host that does not run the home: the keys are the ones the home publishes (<see cref="JwksTokenVerifier.PrepareAsync"/> reads them before a token is checked).</summary>
+    public AppTokenValidator(JwksTokenVerifier verifier) : this(jwt => verifier.Verify(jwt, "at+jwt")) { }
+
     /// <summary>Checks a bearer token (without the word <c>Bearer</c>) for <paramref name="instance"/>.</summary>
     public AppTokenResult Validate(string? bearer, string instance)
     {

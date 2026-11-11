@@ -170,4 +170,96 @@ public sealed class AppTokenTests : IDisposable
         var result = bare.Authorize(new AuthorizeRequest(acme.ClientId, Redirect, "code", "openid", "s", "n", new string('a', 43), "S256"), _ada.Id);
         Assert.Contains("error=access_denied", result.RedirectTo);
     }
+
+    private sealed class JwksHandler(Func<object> body) : HttpMessageHandler
+    {
+        public int Asked { get; private set; }
+
+        public string? LastUri { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Asked++;
+            LastUri = request.RequestUri!.AbsoluteUri;
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = System.Net.Http.Json.JsonContent.Create(body()) });
+        }
+    }
+
+    private sealed class Clock : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = DateTimeOffset.UtcNow;
+
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    [Fact]
+    public async Task A_host_that_does_not_run_the_home_validates_its_tokens_from_the_keys_the_home_publishes()
+    {
+        var (access, _) = SignIn(App("acme"), _ada);
+        App("globex");
+        var handler = new JwksHandler(() => _home.Keys.Jwks());
+        var verifier = new JwksTokenVerifier("https://home.example.invalid/", new HttpClient(handler));
+        var validator = new AppTokenValidator(verifier);
+
+        // the host has no keys until it asks; then it reads what the home itself reads
+        Assert.False(validator.Validate(access, "acme").Ok);
+        await verifier.PrepareAsync(access, default);
+        var result = validator.Validate(access, "acme");
+        Assert.True(result.Ok);
+        Assert.Equal((_ada.Id, "acme"), (result.Token!.SubjectId, result.Token.Instance));
+        Assert.True(result.Token.Allows("sales", "order", write: true));
+        Assert.Equal(_provider.Verify(access, "at+jwt")!["sub"], verifier.Verify(access, "at+jwt")!["sub"]);
+        Assert.Equal(1, handler.Asked);
+        Assert.Equal("https://home.example.invalid/identity/jwks", handler.LastUri);   // the home's published keys, whatever trailing slash the address had
+        await verifier.PrepareAsync(access, default);
+        Assert.Equal(1, handler.Asked);   // a key it holds is not asked for again
+
+        // instance B's validator refuses instance A's token, a token of another type is no access token, and a changed token fails its signature
+        Assert.Equal(AppTokenFailure.WrongAudience, validator.Validate(access, "globex").Failure);
+        Assert.Null(verifier.Verify(access, "JWT"));
+        var parts = access.Split('.');
+        var tampered = parts[0] + "." + parts[1] + "." + parts[2][..^2] + (parts[2][^1] == 'A' ? "BB" : "AA");
+        Assert.Null(verifier.Verify(tampered, "at+jwt"));
+        Assert.Null(verifier.Verify(null, "at+jwt"));
+        Assert.Null(verifier.Verify("not.a.token", "at+jwt"));
+
+        // another home's token (the same key id would not matter: the issuer is checked) is refused
+        var elsewhere = new JwksTokenVerifier("https://other-home.example.invalid", new HttpClient(new JwksHandler(() => _home.Keys.Jwks())));
+        await elsewhere.RefreshAsync(default);
+        Assert.Null(elsewhere.Verify(access, "at+jwt"));
+    }
+
+    [Fact]
+    public async Task A_key_the_home_made_since_is_fetched_once_and_a_flood_of_invented_key_ids_is_not_asked_for()
+    {
+        var clock = new Clock();
+        var handler = new JwksHandler(() => _home.Keys.Jwks());
+        var verifier = new JwksTokenVerifier("https://home.example.invalid", new HttpClient(handler), clock);
+        var acme = App("acme");
+        var (first, _) = SignIn(acme, _ada);
+        await verifier.PrepareAsync(first, default);
+        Assert.NotNull(verifier.Verify(first, "at+jwt"));
+
+        _home.Keys.Rotate();   // the home signs with a new key from now on
+        var (second, _) = SignIn(acme, _ada);
+        Assert.Null(verifier.Verify(second, "at+jwt"));   // not trusted before the home published it to this host
+        clock.Now += JwksTokenVerifier.Retry + TimeSpan.FromSeconds(1);
+        await verifier.PrepareAsync(second, default);
+        Assert.NotNull(verifier.Verify(second, "at+jwt"));
+        Assert.NotNull(verifier.Verify(first, "at+jwt"));   // the older key is still published
+        var asked = handler.Asked;
+
+        // a token with a key id nobody published makes the host look once, then not again within the wait
+        string Invented(string kid)
+        {
+            var header = Convert.ToBase64String(Encoding.UTF8.GetBytes("{\"alg\":\"ES256\",\"typ\":\"at+jwt\",\"kid\":\"" + kid + "\"}")).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            return header + "." + second.Split('.')[1] + "." + second.Split('.')[2];
+        }
+        clock.Now += JwksTokenVerifier.Retry + TimeSpan.FromSeconds(1);
+        await verifier.PrepareAsync(Invented("aaaa"), default);
+        await verifier.PrepareAsync(Invented("bbbb"), default);
+        await verifier.PrepareAsync(Invented("cccc"), default);
+        Assert.Equal(asked + 1, handler.Asked);
+        Assert.Null(verifier.Verify(Invented("aaaa"), "at+jwt"));
+    }
 }
