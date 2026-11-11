@@ -1,5 +1,7 @@
 using DbDataKit.Agents;
 using DbDataKit.Knowledge;
+using DbDataKit.State;
+using System.Text.Json.Nodes;
 using DbDataKit.Web.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,19 +18,34 @@ public sealed record ScopePreviewBody(IReadOnlyList<string>? InPlay, string? Aud
 
 public sealed record ContextBody(string Agent, IReadOnlyList<string>? InPlay);
 
+public sealed record SearchBody(string Question, string? Mode = null, string? Audience = null);
+
+public sealed record EmbeddingBody(string? Provider, string? Model);
+
 public sealed record SubjectBody(string Type, string Name, string Status, string? NarrowingKind = null, string? NarrowingName = null);
 
 /// <summary>
 /// The console's knowledge screens (plan 27a KN28, KN36, KN37, KN38): the two projects it reads, an item to read and save (the strict reader decides), the owners' worklists, previews of how an item is split and of what would be given for what is in play, and the context an agent
-/// would be given. An administrator edits; a signed-in person reads. There is no search here: the index is not built.
+/// would be given. An administrator edits; a signed-in person reads. The index over the two projects (plan 27a KN07, KN08, KN28) is built on request: words on every engine, meaning where the state engine has the vector feature and an embedding model is bound.
 /// </summary>
 [ApiController]
 [Route("api/knowledge")]
-public sealed class KnowledgeController(ConsoleKnowledge knowledge, ConsoleAgents agents, ConsoleLineage lineage) : ControllerBase
+public sealed class KnowledgeController(ConsoleKnowledge knowledge, ConsoleAgents agents, ConsoleLineage lineage, ConsoleKnowledgeIndex index, ConsoleModels models) : ControllerBase
 {
+    private bool IsAdmin => User.IsInRole(nameof(UserRole.Admin));
+
+    /// <summary>The overview of the files with the index's state in it (the first line of the screen).</summary>
+    private JsonObject Overview()
+    {
+        var overview = knowledge.Overview();
+        var view = index.View();
+        overview["index"] = new JsonObject { ["built"] = view.Opened, ["message"] = view.Opened ? $"The index is built: {view.Message}" : overview["index"]!["message"]!.GetValue<string>() };
+        return overview;
+    }
+
     [HttpGet("overview")]
     [Authorize(Policies.Viewer)]
-    public IActionResult Overview() => Ok(knowledge.Overview());
+    public IActionResult GetOverview() => Ok(Overview());
 
     [HttpPost("install")]
     [Authorize(Policies.Admin)]
@@ -36,7 +53,7 @@ public sealed class KnowledgeController(ConsoleKnowledge knowledge, ConsoleAgent
     {
         try { knowledge.CreateInstallProject(); }
         catch (InvalidOperationException ex) { return Conflict(new { error = ex.Message }); }
-        return Ok(knowledge.Overview());
+        return Ok(Overview());
     }
 
     [HttpGet("items/{project}/{**id}")]
@@ -50,19 +67,26 @@ public sealed class KnowledgeController(ConsoleKnowledge knowledge, ConsoleAgent
     {
         var (saved, diagnostics, problem) = knowledge.SaveItem(project, id, body.Text);
         if (problem is not null) return BadRequest(new { error = problem });
+        if (saved) index.Refresh();      // the index follows in the background: saving never waits for it or for a model
         return saved ? Ok(new { saved, diagnostics }) : UnprocessableEntity(new { saved, diagnostics });
     }
 
     [HttpDelete("items/{project}/{**id}")]
     [Authorize(Policies.Admin)]
-    public IActionResult Retire(string project, string id) => knowledge.Retire(project, id) ? NoContent() : NotFound();
+    public IActionResult Retire(string project, string id)
+    {
+        if (!knowledge.Retire(project, id)) return NotFound();
+        index.Refresh();
+        return NoContent();
+    }
 
     [HttpPost("repoint/{project}/{**id}")]
     [Authorize(Policies.Admin)]
     public IActionResult Repoint(string project, string id, [FromBody] RepointBody body)
     {
         var (done, problem) = knowledge.Repoint(project, id, body.Subject, body.NewName);
-        return done ? Ok(knowledge.Overview()) : Conflict(new { error = problem });
+        if (done) index.Refresh();
+        return done ? Ok(Overview()) : Conflict(new { error = problem });
     }
 
     [HttpPut("subjects")]
@@ -72,7 +96,7 @@ public sealed class KnowledgeController(ConsoleKnowledge knowledge, ConsoleAgent
         if (!KnowledgeItemLoader.SubjectTypes.ContainsKey(body.Type) || string.IsNullOrWhiteSpace(body.Name)) return BadRequest(new { error = $"A subject has a type ({string.Join(", ", KnowledgeItemLoader.SubjectTypes.Keys)}) and a name." });
         if (body.Status is not ("exists" or "gone")) return BadRequest(new { error = "A subject exists or is gone." });
         knowledge.SetSubject(body.Type, body.Name, body.Status, body.NarrowingKind ?? "", body.NarrowingName ?? "");
-        return Ok(knowledge.Overview());
+        return Ok(Overview());
     }
 
     /// <summary>Reads what exists to be about from the joined lineage graph of the servers, as the person who asks (plan 27a KN02): what it shows exists, what it showed before and no longer does is gone (only when every server answered).</summary>
@@ -113,6 +137,65 @@ public sealed class KnowledgeController(ConsoleKnowledge knowledge, ConsoleAgent
     [Authorize(Policies.Viewer)]
     public IActionResult Scope([FromBody] ScopePreviewBody body) =>
         Ok(new { preview = knowledge.PreviewScope(body.InPlay ?? [], body.Audience, body.Agent, body.Channel), scopes = KnowledgeInsight.ScopeNames });
+
+    // ---- the index (KN07, KN08, KN28) ----
+
+    /// <summary>The state of the index: whether it is built, its words and vectors, the embedding model bound, the progress, the failures and the last run.</summary>
+    [HttpGet("index")]
+    [Authorize(Policies.Viewer)]
+    public IActionResult IndexState() => Ok(index.View());
+
+    /// <summary>Builds the index over the files (words, now) and starts the background step that gives chunks their vectors. Safe to press again: what did not change is not written or embedded again.</summary>
+    [HttpPost("index/build")]
+    [Authorize(Policies.Admin)]
+    public IActionResult Build()
+    {
+        IndexSyncResult sync;
+        try { sync = index.Sync(); }
+        catch (Exception ex) when (ex is InvalidOperationException or System.Data.Common.DbException or IOException) { return Conflict(new { error = $"The index could not be built: {ex.Message}" }); }
+        index.Refresh();
+        return Ok(new { sync, view = index.View() });
+    }
+
+    /// <summary>Tries again the chunks the model refused.</summary>
+    [HttpPost("index/retry")]
+    [Authorize(Policies.Admin)]
+    public IActionResult Retry()
+    {
+        index.RetryFailures();
+        return Ok(index.View());
+    }
+
+    /// <summary>Throws the vectors away and makes them again from the chunks (words stay).</summary>
+    [HttpPost("index/rebuild")]
+    [Authorize(Policies.Admin)]
+    public IActionResult Rebuild()
+    {
+        index.Rebuild();
+        return Ok(index.View());
+    }
+
+    /// <summary>Binds the embedding model of the index (the <c>embeddings</c> slot): one model per index. Binding another builds a second index beside the first, which keeps answering until the new one is complete. A null provider unbinds.</summary>
+    [HttpPut("index/embedding")]
+    [Authorize(Policies.Admin)]
+    public IActionResult Embedding([FromBody] EmbeddingBody body)
+    {
+        var (saved, diagnostics) = models.BindEmbedding(string.IsNullOrWhiteSpace(body.Provider) ? null : body.Provider, string.IsNullOrWhiteSpace(body.Model) ? null : body.Model);
+        if (!saved) return UnprocessableEntity(new { saved, diagnostics });
+        index.Refresh();
+        return Ok(index.View());
+    }
+
+    /// <summary>Searches the index by words, by vectors or by both, as the person who asks (an administrator reads every subject; anyone else only what is about the install itself).</summary>
+    [HttpPost("search")]
+    [Authorize(Policies.Viewer)]
+    public async Task<IActionResult> Search([FromBody] SearchBody body, CancellationToken cancellation)
+    {
+        if (string.IsNullOrWhiteSpace(body.Question)) return BadRequest(new { error = "Ask a question: a few words about what you want to know." });
+        var mode = body.Mode?.ToLowerInvariant() switch { "vectors" => KnowledgeSearchMode.Vectors, "words" => KnowledgeSearchMode.Words, _ => KnowledgeSearchMode.Both };
+        var result = await index.SearchAsync(body.Question, mode, string.IsNullOrWhiteSpace(body.Audience) ? "back-end" : body.Audience, IsAdmin, cancellation);
+        return Ok(new { hits = result.Hits, used = result.Used.ToString().ToLowerInvariant(), note = result.Note });
+    }
 
     [HttpPost("context")]
     [Authorize(Policies.Viewer)]

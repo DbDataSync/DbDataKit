@@ -11,7 +11,7 @@ namespace DbDataKit.State;
 public static class StateTemplates
 {
     public static string Render(string template, StateDialect dialect) => DropIndexToken.Replace(
-        IdentityToken.Replace(template, match => dialect.IdentityKey(match.Groups["column"].Value))
+        FeatureToken.Replace(IdentityToken.Replace(template, match => dialect.IdentityKey(match.Groups["column"].Value)), match => dialect.EnableFeature(match.Groups["feature"].Value))
             .Replace("{{text}}", dialect.Text)
             .Replace("{{key}}", dialect.KeyText)
             .Replace("{{int}}", dialect.Integer)
@@ -30,6 +30,12 @@ public static class StateTemplates
 
     /// <summary><c>{{identity:column}}</c>: an auto-assigned integer key under any column name (the modules write lower-case ones).</summary>
     private static readonly Regex IdentityToken = new(@"\{\{identity:(?<column>\w+)\}\}");
+
+    /// <summary>
+    /// <c>{{feature:vector}}</c>: the statement that turns an engine feature on where it needs one (PostgreSQL: <c>CREATE EXTENSION IF NOT EXISTS vector</c>), and a comment where it needs nothing, so a module that requires the feature
+    /// (<see cref="StateModule.RequiresFeatures"/>) says it once in its first migration and every engine renders what it needs (plan 29b U01: the feature status <c>Creatable</c> is made <c>Enabled</c> by this statement).
+    /// </summary>
+    private static readonly Regex FeatureToken = new(@"\{\{feature:(?<feature>\w+)\}\}");
 
     /// <summary><c>{{dropindex:IndexName:TableName}}</c> — the table is part of the token because SQL
     /// Server needs it and the other two do not, so the schema has to state it either way.</summary>

@@ -85,6 +85,9 @@ public sealed class PostgresStateDialect : StateDialect
 
     public override string Blob => "BYTEA";
 
+    /// <summary>The <c>vector</c> feature is the <c>pgvector</c> extension: switched on in the database by the migration that needs it (a login that cannot is refused before any DDL by the feature check).</summary>
+    public override string EnableFeature(string feature) => feature == "vector" ? "CREATE EXTENSION IF NOT EXISTS vector" : base.EnableFeature(feature);
+
     public override int GetSchemaVersion(DbConnection connection)
     {
         using var ensure = connection.CreateCommand();

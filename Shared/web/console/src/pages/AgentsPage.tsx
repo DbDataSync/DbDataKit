@@ -300,6 +300,7 @@ function ModelsTab() {
   const [problems, setProblems] = useState<Diagnostic[]>([])
   const [newName, setNewName] = useState('')
   const [newKind, setNewKind] = useState('anthropic')
+  const [newPurpose, setNewPurpose] = useState<'chat' | 'embeddings'>('chat')
   const [key, setKey] = useState('')
   const [tests, setTests] = useState<Record<string, ProviderTest>>({})
   const [slotsYaml, setSlotsYaml] = useState<string | null>(null)
@@ -322,7 +323,7 @@ function ModelsTab() {
   const shownSlotProblems = slotProblems.length > 0 ? slotProblems : refused(saveSlots.error) ?? []
   const severityOf = (d: Diagnostic) => (d.severity === 'error' ? 'error' as const : d.severity === 'warning' ? 'warning' as const : 'info' as const)
 
-  const start = () => { if (!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(newName)) return; setSelected(newName); setYaml(providerTemplate(newKind, newName)); setProblems([]); setNewName('') }
+  const start = () => { if (!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(newName)) return; setSelected(newName); setYaml(providerTemplate(newKind, newName, newPurpose)); setProblems([]); setNewName('') }
 
   return (
     <div data-testid="agents-models">
@@ -345,6 +346,7 @@ function ModelsTab() {
             <form onSubmit={(e) => { e.preventDefault(); start() }} style={{ marginTop: 12 }}>
               <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="a name, such as claude" data-testid="provider-new-name" />{' '}
               <select value={newKind} onChange={(e) => setNewKind(e.target.value)} data-testid="provider-new-kind">{KINDS.map((k) => <option key={k}>{k}</option>)}</select>{' '}
+              <select value={newPurpose} onChange={(e) => setNewPurpose(e.target.value as 'chat' | 'embeddings')} data-testid="provider-new-purpose" title="What the provider is for: chat for agents, embeddings for the knowledge index"><option value="chat">chat</option><option value="embeddings">embeddings</option></select>{' '}
               <button type="submit" className="btn btn-sm" disabled={!newName} data-testid="provider-new">Add a provider</button>
             </form>
           )}
@@ -378,7 +380,7 @@ function ModelsTab() {
                         <tr key={m.id}>
                           <td className="mono">{m.id}</td><td>{m.window.toLocaleString()}</td><td>{m.priceInput === null ? 'not priced' : `${m.priceInput} / ${m.priceOutput}`}</td>
                           <td>{isAdmin && <button type="button" className="btn btn-sm" disabled={test.isPending} onClick={() => test.mutate(m.id)} data-testid={`model-test-${m.id}`}>Test</button>}</td>
-                          <td>{t && <span data-testid={`model-test-result-${m.id}`} data-ok={t.ok}>{t.ok ? `${t.message} It said: ${t.answer} (${t.milliseconds} ms)` : t.message}</span>}</td>
+                          <td>{t && <span data-testid={`model-test-result-${m.id}`} data-ok={t.ok}>{t.ok ? (t.dimensions ? `${t.message} (${t.milliseconds} ms)` : `${t.message} It said: ${t.answer} (${t.milliseconds} ms)`) : t.message}</span>}</td>
                         </tr>
                       )
                     })}

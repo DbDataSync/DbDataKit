@@ -49,6 +49,12 @@ public static class SlotBindingsLoader
     public const int Version = 1;
     public const string Kind = "model-slots";
 
+    /// <summary>The slot that binds a channel's knowledge index to an embedding model (plan 27a KN05, KN08): a provider with <c>purpose: embeddings</c>. Every other slot is for chat.</summary>
+    public const string EmbeddingsSlot = "embeddings";
+
+    /// <summary>What a slot's providers are for: <c>embeddings</c> for <see cref="EmbeddingsSlot"/>, <c>chat</c> for every other.</summary>
+    public static string PurposeOf(string slot) => slot == EmbeddingsSlot ? "embeddings" : "chat";
+
     public static string Refusal(string file, int format) => format > Version
         ? $"the {Kind} definition '{file}' is in format {format}, and this program reads format {Version} of {Kind}. Upgrade this program; the file was written by a newer version."
         : $"the {Kind} definition '{file}' is in format {format}, which this program does not read (it reads format {Version} of {Kind}).";
@@ -73,7 +79,7 @@ public static class SlotBindingsLoader
                 {
                     string? message = null, fix = null;
                     if (!providers.TryGetValue(c.Provider, out var provider)) { message = $"Slot `{slot}` ({channel}) names the provider `{c.Provider}`, which does not exist."; fix = providers.Count > 0 ? $"Providers: {string.Join(", ", providers.Keys.Order())}." : "Add a provider first."; }
-                    else if (provider.Purpose != "chat") { message = $"Slot `{slot}` ({channel}) names `{c.Provider}`, which is for {provider.Purpose}, not chat."; }
+                    else if (provider.Purpose != PurposeOf(slot)) { message = $"Slot `{slot}` ({channel}) names `{c.Provider}`, which is for {provider.Purpose}, not {PurposeOf(slot)}."; }
                     else if (provider.Model(c.Model) is null) { message = $"Slot `{slot}` ({channel}) names the model `{c.Model}`, which `{c.Provider}` does not allow."; fix = $"It allows: {string.Join(", ", provider.Models.Select(m => m.Id))}."; }
                     if (message is not null) problems.Add(DefaultDiagnosticCatalog.Instance.Create(UnknownChoice, file, c.Line, c.Column, message, fix));
                 }

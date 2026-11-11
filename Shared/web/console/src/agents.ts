@@ -52,7 +52,7 @@ export interface SlotBindingView { slot: string; channel: string; choices: SlotC
 export interface ModelsView {
   providers: ProviderView[]; slotsYaml: string; slotDiagnostics: Diagnostic[]; bindings: SlotBindingView[]; agentSlots: { slot: string; agents: string[]; bound: boolean }[]; secretPrefix: string
 }
-export interface ProviderTest { ok: boolean; message: string; answer: string | null; inputTokens: number | null; outputTokens: number | null; milliseconds: number; temporary: boolean }
+export interface ProviderTest { ok: boolean; message: string; answer: string | null; inputTokens: number | null; outputTokens: number | null; milliseconds: number; temporary: boolean; dimensions?: number | null }
 
 export interface MemoryItem { id: string; kind: 'person' | 'work'; agent: string | null; text: string; createdAt: string; updatedAt: string }
 
@@ -175,7 +175,7 @@ export const tokenState = (token: AgentToken): string => (token.revokedAt ? 'rev
 export const keyReferenceFor = (name: string): string => `secret:dbdatakit:server:connection:${name}:key`
 
 /** A starting file for a provider of a kind: a connection of kind `model-provider` (plan 27a IX01), with the key reference this console keeps a typed key under. */
-export function providerTemplate(kind: string, name: string): string {
+export function providerTemplate(kind: string, name: string, purpose: 'chat' | 'embeddings' = 'chat'): string {
   const models: Record<string, string> = {
     anthropic: '    - { id: claude-sonnet-4-5, window: 200000, max_output: 8192, price: { input: 3, output: 15 } }',
     openai: '    - { id: gpt-4.1, window: 1000000, max_output: 16384, price: { input: 2, output: 8 } }',
@@ -183,11 +183,19 @@ export function providerTemplate(kind: string, name: string): string {
     ollama: '    - { id: "llama3.1:8b", window: 128000 }',
     'openai-compatible': '    - { id: my-model, window: 32000 }',
   }
+  const embeddingModels: Record<string, string> = {
+    openai: '    - { id: text-embedding-3-small, window: 8191 }',
+    foundry: '    - { id: text-embedding-3-small, window: 8191 }',
+    ollama: '    - { id: nomic-embed-text, window: 8192 }',
+    'openai-compatible': '    - { id: my-embedding-model, window: 512 }',
+  }
   const head = `schema: connection/2\nkind: model-provider\nname: ${name}\n`
   const endpoint = kind === 'foundry' ? 'endpoint: https://<resource>.openai.azure.com/openai/v1\n' : kind === 'openai-compatible' ? 'endpoint: http://localhost:8080/v1\n' : ''
   const signIn = kind === 'ollama' || kind === 'openai-compatible' ? '' : `sign_in:\n  method: api_key\n  key_secret: ${keyReferenceFor(name)}\n`
   const locality = kind === 'openai-compatible' ? '  locality: local\n' : ''
-  return `${head}${endpoint}${signIn}model_provider:\n  provider: ${kind}\n${locality}  models:\n${models[kind] ?? models['openai-compatible']}\n`
+  const forEmbeddings = purpose === 'embeddings'
+  const entry = forEmbeddings ? embeddingModels[kind] ?? embeddingModels['openai-compatible'] : models[kind] ?? models['openai-compatible']
+  return `${head}${endpoint}${signIn}model_provider:\n  provider: ${kind}\n${forEmbeddings ? '  purpose: embeddings\n' : ''}${locality}  models:\n${entry}\n`
 }
 
 /** What a slot's binding says in a line: the primary and the fallback in order. */

@@ -3,8 +3,8 @@ using Microsoft.Extensions.AI;
 
 namespace DbDataKit.Agents.Providers;
 
-/// <summary>What a Test of a provider found, in words a person reads: it worked and what the model answered, or why it did not.</summary>
-public sealed record ProviderTestResult(bool Ok, string Message, string? Answer, long? InputTokens, long? OutputTokens, long Milliseconds, bool Temporary);
+/// <summary>What a Test of a provider found, in words a person reads: it worked and what the model answered (for an embedding model, how many <see cref="Dimensions"/> it gives), or why it did not.</summary>
+public sealed record ProviderTestResult(bool Ok, string Message, string? Answer, long? InputTokens, long? OutputTokens, long Milliseconds, bool Temporary, int? Dimensions = null);
 
 /// <summary>Makes the client for a provider's model (plan 27a AG04, AG05) and tests it.</summary>
 public static class ProviderClients

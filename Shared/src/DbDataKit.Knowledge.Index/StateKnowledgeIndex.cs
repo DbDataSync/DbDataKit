@@ -1,31 +1,55 @@
 using System.Text.Json;
 using DbDataKit.State;
+using Microsoft.Extensions.AI;
 
 namespace DbDataKit.Knowledge;
 
-/// <summary>What the index of a channel holds and how it is searched (for the console's knowledge screens).</summary>
-public sealed record KnowledgeIndexStatus(string Channel, int Items, int Chunks, TextSearchMode Mode);
+/// <summary>What the index of a channel holds and how it is searched (for the console's knowledge screens). <see cref="Vectors"/> is null when the database has no vector module (the engine cannot hold vectors, or the host did not create it).</summary>
+public sealed record KnowledgeIndexStatus(string Channel, int Items, int Chunks, TextSearchMode Mode, VectorProgress? Vectors = null);
+
+/// <summary>How a question is searched: by its words, by its meaning (vectors), or both with the two rankings fused.</summary>
+public enum KnowledgeSearchMode
+{
+    Words,
+    Vectors,
+    Both,
+}
+
+/// <summary>What a search found and how it was found: <see cref="Used"/> can be less than what was asked for (no vector index yet, the question could not be embedded), and <see cref="Note"/> says why.</summary>
+public sealed record KnowledgeSearchResult(IReadOnlyList<SearchHit> Hits, KnowledgeSearchMode Used, string? Note);
+
+/// <summary>Finds the generator that embeds a question for a model id recorded in the vector index (the model the index was built with, which can be an earlier one than the model now bound); null when it is not available.</summary>
+public delegate IEmbeddingGenerator<string, Embedding<float>>? EmbeddingResolver(string modelId);
 
 /// <summary>
-/// The knowledge index of one channel on a state database (plan 27a KN07, the text-search half): <see cref="Put"/> chunks an item's rows into the <c>knowledge</c> module, <see cref="SearchAsync"/> finds chunks by their words and applies the
+/// The knowledge index of one channel on a state database (plan 27a KN07, KN08): <see cref="Put"/> chunks an item's rows into the <c>knowledge</c> module, <see cref="SearchAsync"/> finds chunks by their words and applies the
 /// same access filter as the in-memory index (<see cref="KnowledgeAccess"/>, decision SD9) to each item at the time of the question, then assembles the hits as <see cref="KnowledgeSearch"/> does. An item that has not changed is not written again.
 /// The ranking is the engine's (bm25 on SQLite, <c>ts_rank_cd</c> on PostgreSQL, a count of matched words elsewhere): the order of a few chunks is reproducible on every engine, the numbers are not comparable between them.
+/// <para>
+/// Where the database also has the <c>knowledge_vectors</c> module (<see cref="KnowledgeVectorStore"/>), <see cref="FindAsync"/> searches by meaning or by both, fusing the two rankings; the vectors are made by <see cref="KnowledgeEmbedder"/>, never by <see cref="Put"/>.
+/// </para>
 /// </summary>
-public sealed class StateKnowledgeIndex(KnowledgeStore store, string channel)
+public sealed class StateKnowledgeIndex(KnowledgeStore store, string channel, KnowledgeVectorStore? vectors = null)
 {
+    /// <summary>The constant of reciprocal rank fusion: a chunk at rank r in a list scores 1/(K + r) there, and the lists' scores are added.</summary>
+    public const int FusionConstant = 60;
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     public string Channel { get; } = channel;
 
     public KnowledgeStore Store { get; } = store;
 
+    /// <summary>The vector side (the <c>knowledge_vectors</c> module), or null when the database has none: the index then answers by words only.</summary>
+    public KnowledgeVectorStore? Vectors { get; } = vectors;
+
     public KnowledgeIndexStatus Status()
     {
         var (items, chunks) = Store.Counts(Channel);
-        return new KnowledgeIndexStatus(Channel, items, chunks, Store.Mode);
+        return new KnowledgeIndexStatus(Channel, items, chunks, Store.Mode, Vectors?.Progress(Channel));
     }
 
-    /// <summary>Indexes an item with the chunks it was split into. False when the item was already there with the same hash (nothing is written).</summary>
+    /// <summary>Indexes an item with the chunks it was split into. False when the item was already there with the same hash (nothing is written). It never calls an embedding model: vectors are made later, by <see cref="KnowledgeEmbedder"/>.</summary>
     /// <param name="item">The item.</param>
     /// <param name="chunks">The pieces <see cref="Chunker"/> split it into.</param>
     /// <param name="time">The clock the indexing time is read from (the system's by default).</param>
@@ -59,7 +83,66 @@ public sealed class StateKnowledgeIndex(KnowledgeStore store, string channel)
     public Task<IReadOnlyList<SearchHit>> SearchAsync(string question, IKnowledgeCaller caller, ISubjectCatalog catalog, int items = 5, CancellationToken cancellation = default)
     {
         cancellation.ThrowIfCancellationRequested();
-        var found = Store.Search(Channel, question, items * KnowledgeSearch.MaximumChunksPerItem * 4);
+        return Task.FromResult(Widen(items, limit => Store.Search(Channel, question, limit), caller, catalog));
+    }
+
+    /// <summary>
+    /// Searches by words, by meaning or by both, under the same access filter as the search by words. <b>Both</b> fuses the two rankings by reciprocal rank (a chunk found by both is placed above one found by either alone). An index with no vector module, no ready
+    /// vector index yet, or no way to embed the question (<c>embeddings</c> finds the generator for the model the ready index was made with) still answers, by words, and says so in <see cref="KnowledgeSearchResult.Note"/>: meaning is added where it is available and never required.
+    /// </summary>
+    public async Task<KnowledgeSearchResult> FindAsync(string question, IKnowledgeCaller caller, ISubjectCatalog catalog, KnowledgeSearchMode mode, EmbeddingResolver? embeddings, int items = 5, CancellationToken cancellation = default)
+    {
+        cancellation.ThrowIfCancellationRequested();
+        if (mode == KnowledgeSearchMode.Words) return new(await SearchAsync(question, caller, catalog, items, cancellation).ConfigureAwait(false), KnowledgeSearchMode.Words, null);
+
+        string? note = null;
+        float[]? query = null;
+        if (Vectors is null) note = "This database has no vector module (the engine cannot hold vectors), so the question is searched by its words.";
+        else if (Vectors.ReadyIndex(Channel) is not { } ready) note = Vectors.Indexes(Channel).Count == 0 ? "No vector index is built for this channel yet, so the question is searched by its words." : "The vector index is still being built, so the question is searched by its words.";
+        else if (embeddings?.Invoke(ready.ModelId) is not { } generator) note = $"The embedding model '{ready.ModelId}' of the vector index is not available now, so the question is searched by its words.";
+        else
+        {
+            try { query = (await generator.GenerateAsync([question], cancellationToken: cancellation).ConfigureAwait(false))[0].Vector.ToArray(); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { note = $"The question could not be embedded ({ex.Message}), so it is searched by its words."; }
+            if (query is not null && query.Length != ready.Dimension) { note = KnowledgeVectorStore.DimensionMismatch(Channel, ready.ModelId, ready.Dimension, query.Length) + " The question is searched by its words."; query = null; }
+        }
+        if (query is null) return new(await SearchAsync(question, caller, catalog, items, cancellation).ConfigureAwait(false), KnowledgeSearchMode.Words, note);
+
+        if (mode == KnowledgeSearchMode.Vectors)
+            return new(Widen(items, limit => Vectors!.Nearest(Channel, query, limit), caller, catalog), KnowledgeSearchMode.Vectors, null);
+        return new(Widen(items, limit => Fuse(Store.Search(Channel, question, limit), Vectors!.Nearest(Channel, query, limit), limit), caller, catalog), KnowledgeSearchMode.Both, null);
+    }
+
+    /// <summary>Reciprocal rank fusion of two rankings of chunks: each chunk scores the sum of 1/(<see cref="FusionConstant"/> + rank) over the lists that have it; best first, ties by item and place.</summary>
+    public static IReadOnlyList<TextMatch> Fuse(IReadOnlyList<TextMatch> words, IReadOnlyList<TextMatch> vectors, int limit)
+    {
+        var scores = new Dictionary<(string Item, int Seq), double>();
+        foreach (var list in new[] { words, vectors })
+            for (var rank = 0; rank < list.Count; rank++)
+            {
+                var key = (list[rank].ItemId, list[rank].Seq);
+                scores[key] = scores.GetValueOrDefault(key) + 1.0 / (FusionConstant + rank + 1);
+            }
+        return [.. scores.OrderByDescending(p => p.Value).ThenBy(p => p.Key.Item, StringComparer.Ordinal).ThenBy(p => p.Key.Seq).Take(limit).Select(p => new TextMatch(p.Key.Item, p.Key.Seq, p.Value))];
+    }
+
+    /// <summary>
+    /// The candidates are taken before the access filter, so a caller who may see little could be left with too few: the number asked for is widened (four times, then sixteen) while the candidates were all used and the visible hits do not yet fill the answer.
+    /// </summary>
+    private IReadOnlyList<SearchHit> Widen(int items, Func<int, IReadOnlyList<TextMatch>> candidates, IKnowledgeCaller caller, ISubjectCatalog catalog)
+    {
+        var limit = items * KnowledgeSearch.MaximumChunksPerItem * 4;
+        for (var round = 0; ; round++)
+        {
+            var found = candidates(limit);
+            var hits = Resolve(found, caller, catalog, items);
+            if (hits.Count >= items || found.Count < limit || round == 2) return hits;
+            limit *= 4;
+        }
+    }
+
+    private IReadOnlyList<SearchHit> Resolve(IReadOnlyList<TextMatch> found, IKnowledgeCaller caller, ISubjectCatalog catalog, int items)
+    {
         var visible = new Dictionary<string, (KnowledgeItem Item, string Version)?>(StringComparer.Ordinal);
         (KnowledgeItem Item, string Version)? Visible(string id)
         {
@@ -82,6 +165,6 @@ public sealed class StateKnowledgeIndex(KnowledgeStore store, string channel)
             // the item carries the version as its hash, which is what a hit cites; the index's own version of the item is the published one
             matches.Add(new ChunkMatch(new IndexedChunk(chunk, allowed.Item with { Hash = allowed.Version.PadRight(12, '0') }, []), match.Score));
         }
-        return Task.FromResult(KnowledgeSearch.Assemble(matches, items));
+        return KnowledgeSearch.Assemble(matches, items);
     }
 }

@@ -118,6 +118,9 @@ public abstract class StateDialect
     /// <summary>Bytes: <c>VARBINARY(MAX)</c>, <c>BYTEA</c>, <c>BLOB</c>. Large values do not belong in an ordinary table at all (the payloads module, plan 29 section 3.6).</summary>
     public virtual string Blob => throw NoModules();
 
+    /// <summary>The statement <c>{{feature:name}}</c> renders to: nothing is needed on most engines (a comment, which a script splits away); PostgreSQL creates the extension.</summary>
+    public virtual string EnableFeature(string feature) => $"-- {feature}: the engine needs nothing turned on";
+
     /// <summary>An expression that reads a UUID column as the lower-case text the state layer stores references to rows as (<see cref="StateValues"/>).</summary>
     public virtual string UuidAsText(string column) => column;
 
