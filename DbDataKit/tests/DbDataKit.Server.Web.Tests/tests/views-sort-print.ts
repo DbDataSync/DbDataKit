@@ -4,7 +4,7 @@ const by = (page: Page, id: string) => page.getByTestId(id)
 
 /**
  * Click-to-sort for viewers (plan 32 DBR45): on the sample dashboard a click on a table header sorts ascending, a second click descending, a third gives the document's order back; the header's cell carries `aria-sort` and the
- * keyboard works (the header is a button). Nothing is stored: a reload shows the document's order. Written without a browser to run it: a verifier runs it once. The server-run sort of a table the limit cut needs a Gateway
+ * keyboard works (the header is a button). Nothing is stored: a reload shows the document's order. The server-run sort of a table the limit cut needs a Gateway
  * with rows over the limit (`ViewsApiTests` and `clickSort.test.tsx` check it).
  */
 export async function clickSortStory(page: Page) {
