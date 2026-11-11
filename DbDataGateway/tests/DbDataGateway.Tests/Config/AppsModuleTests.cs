@@ -125,6 +125,41 @@ public sealed class AppsModuleTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_preview_instance_is_served_at_its_own_address_to_the_people_who_may_open_the_instance_and_says_it_is_a_preview()
+    {
+        appsPort = FreePort();
+        var (clientId, ada, bob, database) = Prepare();
+        var store = new AppInstanceStore(new DefinitionStore(database));
+        store.PublishApp(new AppPackage(Manifest, new Dictionary<string, byte[]>
+        {
+            ["index.html"] = Encoding.UTF8.GetBytes("<html><head></head><body>preview notes</body></html>"), ["app.js"] = "2"u8.ToArray(),
+        }), "ada", "preview");
+        store.Save(new AppInstance("acme", "notes"), "ada", "preview");
+        var (apps, home) = await StartAsync(clientId);
+
+        var session = await SignInAsync(apps, home, database, ada, "/apps/acme~preview/");
+        var shell = await GetAsync(apps, "/apps/acme~preview/", session);
+        Assert.Equal(HttpStatusCode.OK, shell.StatusCode);
+        var body = await shell.Content.ReadAsStringAsync();
+        Assert.Contains("src=\"/apps/acme~preview/_app/\"", body);                    // the frame is the preview's, never production's
+        Assert.Contains("data-instance=\"acme~preview\"", body);
+        Assert.Contains("Preview of acme", body);
+        Assert.Contains("preview notes", await (await GetAsync(apps, "/apps/acme~preview/_app/")).Content.ReadAsStringAsync());
+        Assert.Contains("hello notes", await (await GetAsync(apps, "/apps/acme/_app/")).Content.ReadAsStringAsync());   // production serves what it served
+
+        // the token the shell asks for is the preview's own; Bob has no role on acme, so he has none on its preview
+        var token = new HttpRequestMessage(HttpMethod.Post, "/apps/acme~preview/_token");
+        token.Headers.Add("Cookie", $"{AppsEndpoints.SessionCookie}={session}");
+        token.Headers.Add("X-DbData-Shell", "1");
+        var issued = await apps.SendAsync(token);
+        Assert.Equal(HttpStatusCode.OK, issued.StatusCode);
+        Assert.Equal("app:acme~preview", (string?)JsonNode.Parse(await issued.Content.ReadAsStringAsync())!["audience"]);
+        var bobSession = await SignInAsync(apps, home, database, bob, "/apps/acme~preview/");
+        Assert.Equal(HttpStatusCode.Forbidden, (await GetAsync(apps, "/apps/acme~preview/", bobSession)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await GetAsync(apps, "/apps/acme~test/", session)).StatusCode);
+    }
+
+    [Fact]
     public async Task Starting_the_apps_module_gives_each_instance_a_client_at_the_home_and_a_second_start_adds_none()
     {
         appsPort = FreePort();

@@ -30,7 +30,7 @@ public sealed class AppSession(string id, HomeIdentity identity, DateTimeOffset 
     internal DateTimeOffset CheckedAtUtc { get; set; }
 
     /// <summary>The roles the home gave the person on one instance (<c>app:&lt;instance&gt;</c>), none when it gave none.</summary>
-    public IReadOnlyList<string> RolesOn(string instance) => Identity.Roles.GetValueOrDefault(AppInstanceAudience.Of(instance)) ?? [];
+    public IReadOnlyList<string> RolesOn(string instance) => Identity.Roles.GetValueOrDefault(AppInstanceAudience.Of(AppInstanceName.Split(instance).Name)) ?? [];   // a preview (`acme~preview`) is opened by the roles of `acme`
 }
 
 /// <summary>A session as a store keeps it (plan 26 AP29): the identity the home gave as a document, the home's refresh token (the store protects it; it is a credential), when the session ends and when the home last answered.</summary>

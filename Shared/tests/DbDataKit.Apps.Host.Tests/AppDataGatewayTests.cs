@@ -94,6 +94,35 @@ public sealed class AppDataGatewayTests : IDisposable
     }
 
     [Fact]
+    public async Task A_preview_of_an_instance_reads_what_it_reads_for_the_roles_of_the_instance_and_never_writes_and_its_token_is_its_own()
+    {
+        const string manifest = "schemaVersion: 1\nname: notes\nversion: 1.1.0\nentry: index.html\nroles: [viewer]\nmodels:\n  - model: territories\n    entities: {territory: [read, write], region: [read]}\n";
+        instances.PublishApp(manifest, "ada", "preview");
+        instances.Save(new AppInstance("acme", "notes", Bindings: new Dictionary<string, string> { ["territories"] = "acme-data" }), "ada", "preview");
+        Assert.Equal(("acme", "preview"), AppInstanceName.Split("acme~preview"));
+        Assert.Equal(("acme", DbDataKit.State.DefinitionStore.Production), AppInstanceName.Split("acme"));
+        Assert.Equal("1.1.0", instances.Resolve("acme~preview")!.Manifest.Version);   // the preview channel's version
+        Assert.Equal("1.0.0", instances.Resolve("acme")!.Manifest.Version);           // production's is untouched
+        Assert.Null(instances.Resolve("acme~test"));
+        Assert.Equal(["author"], session.RolesOn("acme~preview"));                  // the roles on `acme` open its preview
+        var preview = new AppTokenBroker(host.Issuer()).Issue(session, "acme~preview");
+        Assert.Equal("app:acme~preview", preview.Audience);
+
+        Assert.Equal(200, (await Call("api/v1/models/territories/entities/territory/rows", preview.Token, instance: "acme~preview")).Status);
+        var call = Assert.Single(data.Seen);
+        Assert.Equal(("acme~preview", "acme-data"), (call.App, call.Copy));   // it reads the copy the instance is bound to: production's data
+        var write = await Call("api/v1/models/territories/changes", preview.Token, "POST", body: "{\"changes\":[]}", instance: "acme~preview");
+        Assert.Equal(403, write.Status);
+        Assert.Contains("preview", Encoding.UTF8.GetString(write.Body));
+        Assert.Single(data.Seen);                                                // the write never reached the data
+
+        // a token for the preview is no good for production, and production's is no good for the preview
+        Assert.Equal(401, (await Call("api/v1/models/territories/entities/territory/rows", preview.Token)).Status);
+        Assert.Equal(401, (await Call("api/v1/models/territories/entities/territory/rows", AppToken(), instance: "acme~preview")).Status);
+        Assert.Equal(200, (await Call("api/v1/models/territories/changes", AppToken(), "POST", body: "{\"changes\":[]}")).Status);   // production still writes
+    }
+
+    [Fact]
     public async Task An_app_with_change_request_may_read_and_propose_but_the_scope_never_says_write()
     {
         instances.PublishApp("schemaVersion: 1\nname: ask\nversion: 1.0.0\nentry: index.html\nroles: [viewer]\nmodels:\n  - model: territories\n    entities: {territory: [change request], region: [read]}\n", "ada");
