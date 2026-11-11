@@ -52,6 +52,7 @@ public sealed class QualityEndpointTests(TestApiFactory factory) : IClassFixture
     }
 
     [Fact]
+    [Trait("Category", "Slow")]   // 16 s: waits out an unreachable target (docs/testing-environment.md, "Fast verifier runs")
     public async Task A_run_evaluates_the_replications_checks_and_records_a_result_even_when_the_target_cannot_be_reached()
     {
         var suffix = Guid.NewGuid().ToString("N")[..10];
