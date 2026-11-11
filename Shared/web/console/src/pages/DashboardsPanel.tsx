@@ -195,6 +195,7 @@ function Board({ kind, name, document, source, keep, personal }: { kind: ViewKin
       onParameterChange={(parameter, value) => setSearch(writeParameters(search, document.parameters, { ...parameters, [parameter]: value }), { replace: true })}
       onSelect={(selection) => setShown(selection.layout.name)}
       onDrill={(d) => void drill(d)}
+      sortable   // headers sort on screen, and on the server when it cut a table (DBR45); print and export use the document's own order
     />
   )
   if (kiosk)

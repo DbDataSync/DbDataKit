@@ -369,6 +369,62 @@ describe('moduleClient', () => {
     const client = moduleClient({ baseUrl: 'https://x', fetch: fetcher })
     await expect(client.resolve(dashboard, 'desk', {}, { signal: controller.signal })).rejects.toBe(abort)
   })
+
+  it('resolve sends the viewer\'s sort as `order` by widget id (DBR45) and says it sorts on the server; an empty one is not sent', async () => {
+    const { calls, client } = fake([{ body: rendered }, { body: rendered }])
+    expect(client.sortsOnServer).toBe(true)
+    expect(fixtureClient(bundle).sortsOnServer).toBeUndefined()
+    await client.resolve(dashboard, 'desk', {}, { only: ['top_products'], order: { top_products: { by: 'sales.units', dir: 'desc' } } })
+    await client.resolve(dashboard, 'desk', {}, { order: {} })
+    expect(calls[0]!.body).toEqual({ parameters: {}, layout: 'desk', only: ['top_products'], order: { top_products: { by: 'sales.units', dir: 'desc' } } })
+    expect(calls[1]!.body).toEqual({ parameters: {}, layout: 'desk' })
+  })
+
+  describe('exportPdf (DBR27)', () => {
+    const bytes = new TextEncoder().encode('%PDF-1.7 body')
+    function exporter(answers: Array<Response | Error>) {
+      const urls: string[] = []
+      const heads: Array<Record<string, string>> = []
+      const fetcher = (async (input: string, init: RequestInit) => { urls.push(input); heads.push(init.headers as Record<string, string>); const a = answers.shift()!; if (a instanceof Error) throw a; return a }) as unknown as typeof fetch
+      return { urls, heads, client: moduleClient({ baseUrl: 'https://views.example', fetch: fetcher, headers: () => ({ authorization: 'Bearer t' }) }) }
+    }
+
+    it('asks GET .../export?format=pdf with the layout and the parameters as p.name (a list repeats, an empty value is left out) and reads the bytes, the page count and the file name', async () => {
+      const { urls, heads, client } = exporter([new Response(bytes, { status: 200, headers: { 'content-type': 'application/pdf', 'content-disposition': 'attachment; filename="retail-sales-monthly.pdf"', 'X-DbData-Export-Pages': '4', 'X-DbData-Export-Browser': 'Chrome/131' } })])
+      const file = await client.exportPdf!(report, { layout: 'paged', parameters: { region: ['West', 'East'], year: 2026, none: null, blank: '' } })
+      expect(urls[0]).toBe('https://views.example/api/v1/reports/retail-sales-monthly/export?format=pdf&layout=paged&p.region=West&p.region=East&p.year=2026')
+      expect(heads[0]!.authorization).toBe('Bearer t')
+      expect(file).toMatchObject({ fileName: 'retail-sales-monthly.pdf', contentType: 'application/pdf', pages: 4, browser: 'Chrome/131' })
+      expect(Array.from(file.bytes)).toEqual(Array.from(bytes))
+    })
+
+    it('through the console\'s relay the file is JSON: base64 content and the module\'s headers', async () => {
+      const base64 = btoa(String.fromCharCode(...bytes))
+      const { client } = exporter([new Response(JSON.stringify({ file_name: 'r.pdf', content_type: 'application/pdf', size: bytes.length, content_base64: base64, headers: { 'X-DbData-Export-Pages': '2' } }), { status: 200, headers: { 'content-type': 'application/json' } })])
+      const file = await client.exportPdf!(report)
+      expect(file).toMatchObject({ fileName: 'r.pdf', pages: 2, browser: null })
+      expect(Array.from(file.bytes)).toEqual(Array.from(bytes))
+    })
+
+    it('a refusal keeps the module\'s words (501 export_unavailable names the setting) and maps to the code of its status; a missing page count is null', async () => {
+      const { client } = exporter([
+        new Response(JSON.stringify({ code: 'export_unavailable', message: 'Export of the report is unavailable: it is off on this host (the views.export setting is not set).' }), { status: 501, headers: { 'content-type': 'application/json' } }),
+        new Response(JSON.stringify({ message: 'No report.' }), { status: 404, headers: { 'content-type': 'application/json' } }),
+        new Response(bytes, { status: 200, headers: { 'content-type': 'application/pdf' } }),
+        new Error('connection refused'),
+      ])
+      const refused = (await client.exportPdf!(report).catch((x: unknown) => x)) as ViewsClientError
+      expect([refused.code, refused.status]).toEqual(['unavailable', 501])
+      expect(refused.message).toContain('views.export setting')
+      expect(((await client.exportPdf!(report).catch((x: unknown) => x)) as ViewsClientError).code).toBe('not_found')
+      expect((await client.exportPdf!(report)).pages).toBeNull()
+      expect(((await client.exportPdf!(report).catch((x: unknown) => x)) as ViewsClientError).code).toBe('unavailable')
+    })
+
+    it('the fixture source has no exporter', () => {
+      expect(fixtureClient(bundle).exportPdf).toBeUndefined()
+    })
+  })
 })
 
 describe('diagnosticsFromRefusal', () => {

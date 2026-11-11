@@ -2,7 +2,7 @@ import type { ViewKind } from '../views/document'
 import type { RenderedWidgets } from '../views/rendered'
 import { validateText } from './text'
 import { ViewsClientError } from './types'
-import type { ClientDiagnostic, DocumentSummary, DocumentVersions, LifecycleResult, OpenedDocument, ViewsClient, ViewsClientErrorCode } from './types'
+import type { ClientDiagnostic, DocumentSummary, DocumentVersions, ExportedFile, LifecycleResult, OpenedDocument, ViewsClient, ViewsClientErrorCode } from './types'
 import { diagnosticsFromRefusal } from './refusal'
 
 /**
@@ -12,7 +12,8 @@ import { diagnosticsFromRefusal } from './refusal'
  * | Call | Route | Source |
  * | --- | --- | --- |
  * | `open` | `GET /api/v1/dashboards/{name}`, `GET /api/v1/reports/{name}` giving `{kind, name, title, version, as_of, text, document, layouts: [{name, type, default}]}` (`version` is the registry's number as text, `text` the file as published) | DBR11 |
- * | `resolve` | `POST /api/v1/dashboards/{name}/render`, `POST /api/v1/reports/{name}/render` with `{parameters, layout, only?}` giving `rendered-widgets` (`only` narrows the request to the dependent widgets; a body key the module does not know is refused) | DBR11 |
+ * | `resolve` | `POST /api/v1/dashboards/{name}/render`, `POST /api/v1/reports/{name}/render` with `{parameters, layout, only?, order?}` giving `rendered-widgets` (`only` narrows the request to the dependent widgets; `order` is a viewer's sort of tables by widget id, `{sales: {by, dir}}`, DBR45; a body key the module does not know is refused) | DBR11 |
+ * | `exportPdf` | `GET /api/v1/dashboards/{name}/export?format=pdf&layout=&p.name=value`, the PDF as bytes (the module's own listener) or, through the console's relay, `{file_name, content_type, size, content_base64, headers}` (DBR27); the page count is the header `X-DbData-Export-Pages` | DBR15, DBR27 |
  * | `preview` | `POST /api/v1/views/preview` with `{kind, widget, widget_id, document?: {kind, parameters}, parameters}` giving `rendered-widgets` with the one entry; `previewDocument` posts `{kind, text, layout?, only?, parameters}` and gives the layout's rendered widgets; both resolve as the caller and store nothing | DBR28 |
  * | `list` | `GET /api/v1/dashboards`, `GET /api/v1/reports` giving `{items: [{name, title, version}]}` | DBR11 |
  * | `save` | `PUT /api/v1/dashboards/{name}`, `PUT /api/v1/reports/{name}` with `{text, expected_version?}` giving `{name, version}` | PROVISIONAL (DBR10 and DBR12 own what is behind it; the module does not take it yet) |
@@ -86,8 +87,47 @@ export function moduleClient(options: ModuleClientOptions): ViewsClient {
       return { name, kind, text: body.text, version: body.version, document: result.document, diagnostics: result.diagnostics }
     },
 
+    sortsOnServer: true,
+
     resolve(ref, layout, parameters, resolveOptions = {}) {
-      return call<RenderedWidgets>('POST', `/api/v1/${collection(ref.kind)}/${segment(ref.name)}/render`, { parameters, layout, ...(resolveOptions.only ? { only: resolveOptions.only } : {}) }, resolveOptions.signal)
+      const order = resolveOptions.order && Object.keys(resolveOptions.order).length > 0 ? { order: resolveOptions.order } : {}
+      return call<RenderedWidgets>('POST', `/api/v1/${collection(ref.kind)}/${segment(ref.name)}/render`, { parameters, layout, ...(resolveOptions.only ? { only: resolveOptions.only } : {}), ...order }, resolveOptions.signal)
+    },
+
+    async exportPdf(ref, exportOptions = {}): Promise<ExportedFile> {
+      const query = new URLSearchParams({ format: 'pdf' })
+      if (exportOptions.layout) query.set('layout', exportOptions.layout)
+      for (const [name, value] of Object.entries(exportOptions.parameters ?? {}))
+        for (const one of Array.isArray(value) ? value : [value])
+          if (one !== null && one !== undefined && one !== '') query.append(`p.${name}`, String(one))
+      const extra = options.headers ? await options.headers() : {}
+      let response: Response
+      try {
+        response = await doFetch(`${base}/api/v1/${collection(ref.kind)}/${segment(ref.name)}/export?${query.toString()}`, { method: 'GET', headers: { accept: 'application/pdf, application/json', ...extra }, signal: exportOptions.signal })
+      } catch (e) {
+        if (exportOptions.signal?.aborted) throw e
+        throw new ViewsClientError('unavailable', `The views module could not be reached: ${e instanceof Error ? e.message : String(e)}`)
+      }
+      const type = response.headers.get('content-type') ?? ''
+      if (!response.ok) {
+        let problem: { message?: string; diagnostics?: ClientDiagnostic[] } = {}
+        try { problem = JSON.parse(await response.text()) as typeof problem } catch { /* a body that is not JSON: the status speaks */ }
+        throw new ViewsClientError(fromStatus(response.status), problem.message ?? `The views module answered ${response.status}.`, { status: response.status, diagnostics: problem.diagnostics })
+      }
+      const pagesOf = (value: string | null | undefined) => { const n = Number(value); return value !== null && value !== undefined && Number.isInteger(n) && n > 0 ? n : null }
+      if (type.includes('json')) {
+        // the console's relay carries JSON only: the file travels as base64 beside the module's headers
+        let body: { file_name?: string; content_type?: string; content_base64?: string; headers?: Record<string, string> }
+        try { body = JSON.parse(await response.text()) as typeof body } catch { throw new ViewsClientError('bad_response', 'The views module answered an export with a body that is not JSON.', { status: response.status }) }
+        if (typeof body.content_base64 !== 'string') throw new ViewsClientError('bad_response', 'The views module answered an export with no `content_base64`.', { status: response.status })
+        const binary = atob(body.content_base64)
+        const bytes = new Uint8Array(binary.length)
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+        return { fileName: body.file_name ?? `${ref.name}.pdf`, contentType: body.content_type ?? 'application/pdf', bytes, pages: pagesOf(body.headers?.['X-DbData-Export-Pages']), browser: body.headers?.['X-DbData-Export-Browser'] ?? null }
+      }
+      const disposition = response.headers.get('content-disposition') ?? ''
+      const named = /filename="?([^";]+)"?/i.exec(disposition)?.[1]
+      return { fileName: named ?? `${ref.name}.pdf`, contentType: type || 'application/pdf', bytes: new Uint8Array(await response.arrayBuffer()), pages: pagesOf(response.headers.get('X-DbData-Export-Pages')), browser: response.headers.get('X-DbData-Export-Browser') }
     },
 
     async validate(text, validateOptions) {

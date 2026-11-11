@@ -98,7 +98,7 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
     /// <param name="clientAddress">Where the call came from, carried to the serving core.</param>
     /// <param name="traceId">The trace the call belongs to, carried to the serving core and the audit.</param>
     /// <param name="cancellationToken">Stops the resolution (a client that went away).</param>
-    /// <param name="body">The request: <c>parameters</c> (by document parameter name), <c>layout</c> (omitted: chosen for <c>viewport</c> and <c>medium</c>, else the default), <c>only</c> (widget ids to resolve: the ones a changed parameter touches).</param>
+    /// <param name="body">The request: <c>parameters</c> (by document parameter name), <c>layout</c> (omitted: chosen for <c>viewport</c> and <c>medium</c>, else the default), <c>only</c> (widget ids to resolve: the ones a changed parameter touches), <c>order</c> (a viewer's sort of a table the row limit cut, by widget id: <c>{"sales": {"by": "orders.revenue", "dir": "desc"}}</c>, DBR45).</param>
     public async Task<ViewsAnswer> RenderAsync(ViewsPrincipal who, string kind, string name, JsonObject? body, string? clientAddress = null, string? traceId = null, CancellationToken cancellationToken = default)
     {
         if (Enter() is not { } work) return Draining();
@@ -110,18 +110,35 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
         }
     }
 
+    /// <summary>A render request's <c>order</c>: an object of widget id to <c>{by, dir}</c> (<c>dir</c> is <c>asc</c> or <c>desc</c>, default <c>asc</c>).</summary>
+    private static Dictionary<string, WidgetOrder> ReadOrders(JsonNode node)
+    {
+        const string Shape = "`order` must be an object of widget ids to `{\"by\": field, \"dir\": \"asc\" | \"desc\"}`.";
+        var result = new Dictionary<string, WidgetOrder>(StringComparer.Ordinal);
+        foreach (var (id, value) in node as JsonObject ?? throw new ArgumentException(Shape))
+        {
+            if (value is not JsonObject o || o["by"] is not JsonValue by || !by.TryGetValue<string>(out var field) || field.Length == 0) throw new ArgumentException(Shape);
+            var dir = o["dir"] is JsonValue d && d.TryGetValue<string>(out var text) ? text : "asc";
+            if (dir is not ("asc" or "desc")) throw new ArgumentException(Shape);
+            result[id] = new WidgetOrder(field, dir == "desc");
+        }
+        return result;
+    }
+
     /// <summary>The render of a document already found: a published one (the module's cache, the definition header) or a person's own (<paramref name="isPublished"/> false: no cache, no header, the audit says whose it is).</summary>
     private async Task<ViewsAnswer> RenderViewAsync(ViewsPrincipal who, string kind, PublishedView view, JsonObject? body, string verb, string? clientAddress, string? traceId, CancellationToken cancellationToken, bool isPublished)
     {
         Dictionary<string, JsonNode?>? parameters = null;
         List<string>? only = null;
         string? layout = null;
+        Dictionary<string, WidgetOrder>? orders = null;
         LayoutContext viewport = new();
         try
         {
             foreach (var key in body?.Select(p => p.Key) ?? [])
-                if (key is not ("parameters" or "layout" or "only" or "viewport" or "medium"))
-                    throw new ArgumentException($"Unknown key `{key}`: a render request has `parameters`, `layout`, `only`, `viewport` and `medium`.");
+                if (key is not ("parameters" or "layout" or "only" or "viewport" or "medium" or "order"))
+                    throw new ArgumentException($"Unknown key `{key}`: a render request has `parameters`, `layout`, `only`, `order`, `viewport` and `medium`.");
+            if (body?["order"] is { } ord) orders = ReadOrders(ord);
             if (body?["parameters"] is { } p) parameters = (p as JsonObject ?? throw new ArgumentException("`parameters` must be an object of values by parameter name.")).ToDictionary(x => x.Key, x => x.Value?.DeepClone());
             if (body?["only"] is { } o) only = (o as JsonArray ?? throw new ArgumentException("`only` must be a list of widget ids.")).Select(x => x is JsonValue v && v.TryGetValue<string>(out var s) ? s : throw new ArgumentException("`only` must be a list of widget ids.")).ToList();
             if (body?["layout"] is { } l) layout = l is JsonValue lv && lv.TryGetValue<string>(out var ls) ? ls : throw new ArgumentException("`layout` must be a layout's name.");
@@ -142,7 +159,7 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
         try
         {
             var resolver = view.Resolver(services.Queries, Basis(cached: isPublished), services.Entities);
-            var rendered = await resolver.ResolveAsync(context, view.Document, picked.Name, parameters, only, cancellationToken).ConfigureAwait(false);
+            var rendered = await resolver.ResolveAsync(context, view.Document, picked.Name, parameters, only, cancellationToken, orders).ConfigureAwait(false);
             var errors = rendered.Widgets.Where(w => rendered.Failed(w.Key)).Select(w => (w.Value["code"]?.GetValue<string>() ?? "error")).ToList();
             var detail = Detail(traceId, ("layout", picked.Name), ("widgets", rendered.Widgets.Count), ("errors", errors.Count), ("error_codes", errors.Distinct().Order(StringComparer.Ordinal).ToList()),
                 ("parameters", parameters?.Keys.Order(StringComparer.Ordinal).ToList()), ("only", only));

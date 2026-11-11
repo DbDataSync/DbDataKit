@@ -179,3 +179,7 @@ tr.vz-pointable:hover td, th.vz-pointable:hover, td.vz-pointable:hover { backgro
 /* DBR45: a header that sorts is a button that looks like its text */
 .vz-sort { background: none; border: 0; padding: 0; font: inherit; font-weight: inherit; color: inherit; cursor: pointer; text-align: inherit; }
 .vz-sort:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.vz-print-preview { position: fixed; inset: 4vh 4vw; z-index: 50; display: flex; flex-direction: column; background: Canvas; color: CanvasText; border: 1px solid #8884; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35); }
+.vz-print-preview-bar { flex: none; display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid #8884; }
+.vz-print-preview-frame { flex: 1; min-height: 0; width: 100%; border: 0; }
+@media print { .vz-print-preview { display: none !important; } }

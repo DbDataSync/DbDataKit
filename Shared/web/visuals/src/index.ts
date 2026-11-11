@@ -29,7 +29,7 @@ export {
   FIXTURE_AS_OF, NO_RECORDED_IMAGE, NO_RECORDED_RESULT, ViewsClientError, diagnosticsFromRefusal, fixtureClient, moduleClient, placedWidgets, textVersion, validateText,
 } from './client'
 export type {
-  ClientDiagnostic, DocumentMap, DocumentPreviewRequest, DocumentSummary, DocumentVersion, DocumentVersions, LifecycleResult, FixtureBundle, FixtureClientOptions, ModuleClientOptions, OpenedDocument, PreviewRequest, ResolveOptions, SaveResult, ValidationResult, ViewsClient, ViewsClientErrorCode,
+  ClientDiagnostic, DocumentMap, DocumentPreviewRequest, ExportOptions, ExportedFile, ServerSort, DocumentSummary, DocumentVersion, DocumentVersions, LifecycleResult, FixtureBundle, FixtureClientOptions, ModuleClientOptions, OpenedDocument, PreviewRequest, ResolveOptions, SaveResult, ValidationResult, ViewsClient, ViewsClientErrorCode,
 } from './client'
 export { MetricTile } from './widgets/MetricTile'
 export { FitNotice, TableWidget } from './widgets/TableWidget'
@@ -82,8 +82,8 @@ export type { LineageGraphDoc, LineageNodeDoc, LineageEdgeDoc, LineageCard, Line
 export { reach } from './lineage/reach'
 export type { Reach } from './lineage/reach'
 export type { CardState } from './lineage/LineageGraphView'
-export { PagedFrame, ReportView, FLOW_FONT_STACK, flowCss, layoutFlow, pageGeometry, paginate, expandTokens } from './report'
-export type { FlowPlan, PagedFrameProps, PageGeometry, Pagination, PaginationItem } from './report'
+export { PagedFrame, PrintPreviewDialog, usePrintPreview, ReportView, FLOW_FONT_STACK, flowCss, layoutFlow, pageGeometry, paginate, expandTokens } from './report'
+export type { PrintPreview, FlowPlan, PagedFrameProps, PageGeometry, Pagination, PaginationItem } from './report'
 export {
   EditError, NAME_PATTERN, YamlEditError, applyOps, canRedo, canUndo, canonicalText, canonicalValue, clientStore, commandOps, diagnosticsFor, draftFromOpened, edit, editAll, editText, errorsOf, format, formTarget, isDirty,
   localFileStore, markSaved, markersOf, newDocumentText, newDraft, redo, reloadDraft, saveDraft, storedDocuments, styleNode, toMarker, undo,

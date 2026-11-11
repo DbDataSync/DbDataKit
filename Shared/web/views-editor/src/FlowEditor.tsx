@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  PagedFrame, defaultParameters, diagnosticsFor, pageGeometry, placedWidgets, runningTokens, unknownTokens, useTheme,
-  type ClientDiagnostic, type DocumentPreviewRequest, type EditCommand, type FlowBlockDoc, type FlowLayoutDoc, type FlowSectionDoc, type RenderedWidget, type RenderedWidgets, type ViewsDoc, type WidgetDoc,
+  PagedFrame, defaultParameters, diagnosticsFor, pageGeometry, placedWidgets, runningTokens, unknownTokens, usePrintPreview, useTheme,
+  type ClientDiagnostic, type DocumentPreviewRequest, type EditCommand, type FlowBlockDoc, type FlowLayoutDoc, type FlowSectionDoc, type RenderedWidget, type RenderedWidgets, type ViewKind, type ViewsClient, type ViewsDoc, type WidgetDoc,
 } from '@dbdatakit/visuals'
 
 type Apply = (command: EditCommand, group?: string) => void
@@ -33,8 +33,13 @@ const describe = (block: FlowBlockDoc, widgets: ViewsDoc['widgets']) =>
  * The form of one flow layout (plan 32 DBR27): page setup (size, orientation, margins, with the printable area the guides are drawn from), header and footer text with their tokens, the cover, and the
  * sections with their blocks (a widget, a row of spans, a page break; keep, repeat the header, height). Every change is an edit command, one undo step, and the validator's answer is shown at the field it is about.
  */
-export function FlowEditor({ layout, index, doc, diagnostics, apply, name, text, preview, previewDocument }: {
+export function FlowEditor({ layout, index, doc, diagnostics, apply, name, text, client, kind, printBlocked, preview, previewDocument }: {
   layout: FlowLayoutDoc; index: number; doc: ViewsDoc; diagnostics: ClientDiagnostic[]; apply: Apply; name: string
+  /** The source of the document: its exporter (when it has one) gives the print preview of the **saved** report (DBR27). */
+  client: ViewsClient
+  kind: ViewKind
+  /** Why the print preview cannot be asked for now (the report is not saved, or has unsaved changes): the exporter draws the saved report. */
+  printBlocked?: string
   /** The draft's text, which `previewDocument` sends. */
   text: string
   preview: (widget: WidgetDoc, id: string) => Promise<RenderedWidget>
@@ -198,7 +203,7 @@ export function FlowEditor({ layout, index, doc, diagnostics, apply, name, text,
         {Object.keys(widgets).filter((w) => !placed.has(w)).length > 0 && <span className="hint" data-testid={id('unplaced')}>Not placed in this layout: {Object.keys(widgets).filter((w) => !placed.has(w)).join(', ')}</span>}
       </div>
 
-      <FlowPreview layout={layout} doc={doc} name={name} text={text} preview={preview} previewDocument={previewDocument} testId={id('preview')} />
+      <FlowPreview layout={layout} doc={doc} name={name} text={text} client={client} kind={kind} printBlocked={printBlocked} preview={preview} previewDocument={previewDocument} testId={id('preview')} />
     </div>
   )
 }
@@ -207,8 +212,8 @@ export function FlowEditor({ layout, index, doc, diagnostics, apply, name, text,
  * The paged preview of the draft's flow layout (DBR14's `PagedFrame`: the guides where a page starts, the running text with its tokens, the cover), drawn from the draft as it stands, saved or not. With a source that previews a document
  * (the module, DBR28) the whole draft is sent in one call and resolved as the person; otherwise each widget the layout places is asked of `preview`. A draft the source refuses (what a publish would refuse) is said, not drawn.
  */
-function FlowPreview({ layout, doc, name, text, preview, previewDocument, testId }: {
-  layout: FlowLayoutDoc; doc: ViewsDoc; name: string; text: string; testId: string
+function FlowPreview({ layout, doc, name, text, client, kind, printBlocked, preview, previewDocument, testId }: {
+  layout: FlowLayoutDoc; doc: ViewsDoc; name: string; text: string; testId: string; client: ViewsClient; kind: ViewKind; printBlocked?: string
   preview: (widget: WidgetDoc, id: string) => Promise<RenderedWidget>
   previewDocument?: (request: Pick<DocumentPreviewRequest, 'text' | 'layout'>) => Promise<RenderedWidgets>
 }) {
@@ -237,13 +242,17 @@ function FlowPreview({ layout, doc, name, text, preview, previewDocument, testId
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is the draft (the text, or the widgets it places); the functions are the page's and change with it
   }, [key, name])
   const parameters = useMemo(() => defaultParameters(doc), [doc])
+  // the exporter draws the published report as the caller: the print preview is of what is saved, so it is off while the draft differs
+  const printing = usePrintPreview({ client, kind, name, layout: layout.name, parameters })
   return (
     <div style={{ marginTop: 8 }} data-testid={testId} data-widgets={ids.join(' ')} data-via={previewDocument ? 'document' : 'widgets'} data-ready={String(ids.every((id) => results[id] !== undefined))}>
       <strong>Preview</strong> <span className="hint">of what is written here, saved or not</span>
       {refused && <p className="hint" role="alert" data-testid={`${testId}-refused`}>{refused}</p>}
       <div style={{ width: 'min(100%, 820px)', height: 560, marginTop: 4, border: '1px solid var(--border, #ddd)', overflow: 'auto' }}>
-        <PagedFrame document={doc} layout={layout} box={{ width: 820, height: 560 }} theme={theme} results={results} parameters={parameters} />
+        <PagedFrame document={doc} layout={layout} box={{ width: 820, height: 560 }} theme={theme} results={results} parameters={parameters}
+          onPrintPreview={printBlocked ? undefined : printing.onPrintPreview} previewUnavailable={printBlocked ?? printing.unavailable} />
       </div>
+      {printing.element}
     </div>
   )
 }

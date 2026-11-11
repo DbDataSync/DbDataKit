@@ -44,8 +44,9 @@ public sealed class WidgetResolver
     /// <param name="parameters">What the viewer chose, by document parameter name (JSON values; text is read as the parameter's type).</param>
     /// <param name="only">Resolve only these widgets (those of them the layout places); null is every widget the layout places.</param>
     /// <param name="cancellationToken">Stops the whole resolution (a widget's own timeout is an error entry, not this).</param>
+    /// <param name="orders">A viewer's sort by widget id (a table the viewer sorted by a click, DBR45): replaces that table's <c>order</c> for this run (derived and semantic queries only; another form, or a column the table does not show, is that widget's error entry).</param>
     /// <exception cref="ViewResolutionException">The layout does not exist, or a parameter value is not one.</exception>
-    public async Task<RenderedWidgets> ResolveAsync(ServingContext context, ViewDocument document, string layout, IReadOnlyDictionary<string, JsonNode?>? parameters = null, IReadOnlyCollection<string>? only = null, CancellationToken cancellationToken = default)
+    public async Task<RenderedWidgets> ResolveAsync(ServingContext context, ViewDocument document, string layout, IReadOnlyDictionary<string, JsonNode?>? parameters = null, IReadOnlyCollection<string>? only = null, CancellationToken cancellationToken = default, IReadOnlyDictionary<string, WidgetOrder>? orders = null)
     {
         var chosen = document.Layouts.FirstOrDefault(l => l.Name == layout)
             ?? throw new ViewResolutionException(ResolveCodes.UnknownLayout, $"The document has no layout `{layout}` (it has {string.Join(", ", document.Layouts.Select(l => $"`{l.Name}`"))}).");
@@ -67,7 +68,7 @@ public sealed class WidgetResolver
             await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                (entries[index], keys[index]) = await ResolveWidgetAsync(context, document, widget, values, cancellationToken).ConfigureAwait(false);
+                (entries[index], keys[index]) = await ResolveWidgetAsync(context, document, widget, values, orders is not null && orders.TryGetValue(id, out var asked) ? asked : null, cancellationToken).ConfigureAwait(false);
             }
             finally { gate.Release(); }
         })).ConfigureAwait(false);
@@ -84,7 +85,7 @@ public sealed class WidgetResolver
 
     // ---- one widget ----
 
-    private async Task<(JsonObject Entry, string? Key)> ResolveWidgetAsync(ServingContext context, ViewDocument document, ViewWidget widget, ParameterValues values, CancellationToken cancellationToken)
+    private async Task<(JsonObject Entry, string? Key)> ResolveWidgetAsync(ServingContext context, ViewDocument document, ViewWidget widget, ParameterValues values, WidgetOrder? order, CancellationToken cancellationToken)
     {
         using var timeout = new CancellationTokenSource(options.WidgetTimeout, options.Time);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
@@ -106,7 +107,7 @@ public sealed class WidgetResolver
                 if (values.Definition(name) is { Required: true } && !values.IsSet(name))
                     throw new WidgetProblem(ResolveCodes.RequiredParameter, $"The parameter `{name}` is required and has no value, and this widget uses it.", $"parameters.{name}");
 
-            var run = await PrepareAsync(widget, values, linked.Token).ConfigureAwait(false);
+            var run = await PrepareAsync(widget, values, order, linked.Token).ConfigureAwait(false);
             key = WidgetCacheKey.Of(context, run.Source, run.Canonical);
             // a source that ignores its token is not waited for past the widget's time
             var rows = await RunOrRecallAsync(context, key, run, linked.Token).ConfigureAwait(false);
@@ -178,8 +179,10 @@ public sealed class WidgetResolver
     /// <summary>A prepared widget request: the source it goes to, the request as it runs (what the cache key is made of) and how to run it and read the answer.</summary>
     private sealed record Prepared(string Source, string Canonical, Func<ServingContext, CancellationToken, Task<AnswerRows>> Run);
 
-    private Task<Prepared> PrepareAsync(ViewWidget widget, ParameterValues values, CancellationToken cancellationToken)
+    private Task<Prepared> PrepareAsync(ViewWidget widget, ParameterValues values, WidgetOrder? order, CancellationToken cancellationToken)
     {
+        if (order is not null && widget.Type != "table")
+            throw new WidgetProblem(ResolveCodes.NotRunHere, $"A sort by the viewer is run for a table; this widget is a {widget.Type}.", $"widgets.{widget.Id}");
         var query = widget.Query ?? throw new WidgetProblem(ViewsCodes.BadQuery, "The widget has no query.", $"widgets.{widget.Id}.query");
         var map = query.Raw["params"] as JsonObject;
         var asked = new ServingLimits(MaxRows: options.MaxRows, Timeout: options.WidgetTimeout);
@@ -197,14 +200,16 @@ public sealed class WidgetResolver
                     var d = derived.Diagnostics.First();
                     throw new WidgetProblem(d.Code, d.Message, d.KeyPath ?? wp);
                 }
-                return Task.FromResult(Semantic(model, RequestBinding.Bind(derived.Request, map, values), asked));
+                return Task.FromResult(Semantic(model, Ordered(RequestBinding.Bind(derived.Request, map, values), order, widget), asked));
             }
             case "semantic" when query.Raw["semantic"] is JsonObject semantic && semantic["request"] is JsonObject written:
             {
                 var model = semantic["model"]!.GetValue<string>();
                 var envelope = (JsonObject)JsonNode.Parse(new JsonObject { ["spec_version"] = DeriveRequest.SpecVersion, ["kind"] = "query", ["query"] = written.DeepClone() }.ToJsonString())!;
-                return Task.FromResult(Semantic(model, RequestBinding.Bind(envelope, map, values), asked));
+                return Task.FromResult(Semantic(model, Ordered(RequestBinding.Bind(envelope, map, values), order, widget), asked));
             }
+            case string when order is not null && query.Form is not ("derived" or "semantic"):
+                throw new WidgetProblem(ResolveCodes.NotRunHere, $"A sort by the viewer is run for a derived or a semantic query; this widget's query is `{query.Form}`, so its rows are sorted on screen only.", wp);
             case "semantic_sql" when query.Raw["semantic"] is JsonObject semantic && semantic["sql"] is JsonValue sql && sql.TryGetValue<string>(out var text):
             {
                 var model = semantic["model"]!.GetValue<string>();
@@ -244,6 +249,21 @@ public sealed class WidgetResolver
                     ? $"The result `{query.Raw["ref"]}` is not run here: a held result belongs to the session that made it (an assistant's answer), and this host does not hold it."
                     : $"The query form `{query.Form}` is not run here.", wp);
         }
+    }
+
+    /// <summary>
+    /// The request with the viewer's sort in place of its <c>order</c> (DBR45): the column must be one the request asks for (an attribute or a measure), so a sort never adds a field to what the viewer may read; the engine's own `order` form is
+    /// <c>[field, "asc"|"desc"]</c>. With no sort the request is as it was.
+    /// </summary>
+    private static JsonObject Ordered(JsonObject request, WidgetOrder? order, ViewWidget widget)
+    {
+        if (order is null) return request;
+        var query = request["query"] as JsonObject ?? throw new WidgetProblem(ViewsCodes.BadQuery, "The request has no query to order.", $"widgets.{widget.Id}.query");
+        bool Has(string list) => query[list] is JsonArray a && a.Any(x => x is JsonValue v && v.TryGetValue<string>(out var s) && s == order.By);
+        if (!Has("attributes") && !Has("measures"))
+            throw new WidgetProblem(ResolveCodes.AnswerMismatch, $"The table does not show `{order.By}`, so it cannot be sorted by it.", $"widgets.{widget.Id}.query");
+        query["order"] = new JsonArray(new JsonArray(order.By, order.Descending ? "desc" : "asc"));
+        return request;
     }
 
     private Prepared Semantic(string model, JsonObject request, ServingLimits asked)

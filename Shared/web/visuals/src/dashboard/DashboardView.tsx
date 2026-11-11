@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { placedWidgets } from '../client/fixtureClient'
-import type { ViewsClient } from '../client/types'
+import type { ServerSort, ViewsClient } from '../client/types'
 import { useTheme, type ThemeChoice } from '../theme'
 import type { ViewKind } from '../views/document'
 import type { Box, LayoutDoc, ParameterValue, ParameterValues, ViewsDoc } from '../views/model'
 import type { RenderedWidget } from '../views/rendered'
 import { selectLayout, type LayoutSelection, type Medium } from '../views/selectLayout'
 import { PagedFrame } from '../report/PagedFrame'
+import { usePrintPreview } from '../report/PrintPreview'
 import { ErrorTile } from '../widgets/states'
 import { DashboardFrame } from './DashboardFrame'
 import { drillOf, onSelectOf, resolveDrill, rowOf, selectFrom, type Hit, type HitHow, type ResolvedDrill } from './interaction'
@@ -34,7 +35,7 @@ export interface DashboardViewProps {
   onSelect?: (selection: Extract<LayoutSelection<LayoutDoc>, { ok: true }>) => void
   /** Who is looking: the `{viewer}` of a flow layout's header, footer and cover. */
   viewer?: string
-  /** The exact PDF in the viewer (a flow layout's Print preview, DBR15); without it that button says why it is disabled. */
+  /** The exact PDF in the viewer (a flow layout's Print preview, DBR15); without it the view asks the client's `exportPdf` itself (the published report's PDF, DBR27), and without that the button says why it is disabled. */
   onPrintPreview?: () => void
   /**
    * A drill was followed (plan 32 section 3.5 item 3): where it goes and the parameters it gives, read from the clicked row. The host navigates (and checks the parameters against the target with `checkDrill`);
@@ -114,6 +115,8 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
   }, [chosenName])
 
   const [resolution, setResolution] = useState<Resolution | null>(null)
+  // the viewer's sorts of tables the server cut (DBR45): kept for every later request of this view, never stored
+  const sortsRef = useRef<Record<string, ServerSort>>({})
   const [failure, setFailure] = useState<string | null>(null)
   const latest = useRef<Resolution | null>(null)
   useEffect(() => {
@@ -121,7 +124,7 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
     const controller = new AbortController()
     let current = true
     setFailure(null)
-    resolveLayout({ client, ref: { kind, name }, layout: chosenName, placed, parameters: values, previous: latest.current, document, signal: controller.signal }).then(
+    resolveLayout({ client, ref: { kind, name }, layout: chosenName, placed, parameters: values, previous: latest.current, document, order: sortsRef.current, signal: controller.signal }).then(
       (next) => {
         if (!current) return
         latest.current = next
@@ -160,7 +163,7 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
       run: async () => {
         const l = live.current
         if (!l.chosenName) return
-        const next = await resolveLayout({ client: l.client, ref: { kind: l.kind, name: l.name }, layout: l.chosenName, placed: l.placed, parameters: l.values, previous: latest.current, document: l.document, force: true })
+        const next = await resolveLayout({ client: l.client, ref: { kind: l.kind, name: l.name }, layout: l.chosenName, placed: l.placed, parameters: l.values, previous: latest.current, document: l.document, force: true, order: sortsRef.current })
         latest.current = next
         setResolution(next)
       },
@@ -173,6 +176,28 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
     }
     // a new layout or document starts the interval again; the clock, the source and the floor are the host's and fixed for a view
   }, [client, kind, name, document, chosenName, refreshing, every])
+
+  // a click on a header of a table the server cut: the widget runs again with the column as `order` (the module's), the others keep what they show
+  const serverSort = (widget: string, field: string | null, dir: 'asc' | 'desc' | null) => {
+    onServerSort?.(widget, field, dir)
+    const next = { ...sortsRef.current }
+    if (field === null || dir === null) delete next[widget]
+    else next[widget] = { by: field, dir }
+    sortsRef.current = next
+    const l = live.current
+    if (!l.chosenName) return
+    l.client.resolve({ kind: l.kind, name: l.name }, l.chosenName, l.values, { only: [widget], order: next }).then(
+      (fresh) => {
+        const base = latest.current
+        if (!base) return
+        const merged: Resolution = { ...base, results: { ...base.results, ...fresh.widgets }, asOfBy: { ...base.asOfBy, ...Object.fromEntries(Object.keys(fresh.widgets).map((id) => [id, fresh.as_of])) } }
+        latest.current = merged
+        setResolution(merged)
+      },
+      (e: unknown) => setNotice(`The table could not be sorted by the server: ${e instanceof Error ? e.message : String(e)}`),
+    )
+  }
+  const serverSorting = client.sortsOnServer ? serverSort : onServerSort
 
   // pointing at a widget: a selection sets the parameter it names (the same change a control makes, so the dependents resolve again); a drill goes to the host
   const [notice, setNotice] = useState<string | null>(null)
@@ -201,6 +226,7 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
     return shown
   }, [refreshing, resolution, document, timeZone])
 
+  const preview = usePrintPreview({ client, kind, name, layout: chosenName, parameters: values })
   const [maximized, setMaximized] = useState<string | null>(null)
   useEffect(() => setMaximized(null), [chosenName])
 
@@ -216,7 +242,7 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
   if (!box) body = null
   else if (selection && !selection.ok) body = <ErrorTile code="no_layout" message={selection.refusal} />
   else if (chosen?.type === 'flow')
-    body = <PagedFrame document={document} layout={chosen} box={box} theme={resolvedTheme} results={results} loading={loading} parameters={values} onParameterChange={change} asOf={resolution?.asOf} viewer={viewer} onPrintPreview={onPrintPreview} />
+    body = <PagedFrame document={document} layout={chosen} box={box} theme={resolvedTheme} results={results} loading={loading} parameters={values} onParameterChange={change} asOf={resolution?.asOf} viewer={viewer} onPrintPreview={onPrintPreview ?? preview.onPrintPreview} previewUnavailable={onPrintPreview ? undefined : preview.unavailable} />
   else if (chosen)
     body = (
       <DashboardFrame
@@ -235,13 +261,14 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
         stale={refreshState?.stale}
         canDrill={onDrill !== undefined}
         sortable={sortable}
-        onServerSort={onServerSort}
+        onServerSort={serverSorting}
       />
     )
   return (
     <div ref={ref} className="vz-dashboard-host" data-testid="vz-dashboard-host" data-measuring={box ? undefined : ''} data-kiosk={kiosk ? '' : undefined} data-refresh={refreshing ? (refreshState?.paused ? 'paused' : refreshState?.stale ? 'stale' : 'on') : undefined} data-refresh-runs={refreshState?.runs} style={given ? { width: given.width, height: given.height } : { width: '100%', height: '100%' }}>
       {failure ? <ErrorTile code="resolve_failed" message={failure} /> : null}
       {body}
+      {preview.element}
       {notice ? (
         <p className="vz-interaction-notice" role="alert" data-testid="vz-interaction-notice">
           {notice} <button type="button" className="vz-button" onClick={() => setNotice(null)}>Dismiss</button>
