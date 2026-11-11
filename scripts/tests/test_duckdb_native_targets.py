@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-TARGETS = os.path.join(ROOT, "DbDataKit", "build", "DuckDb.Native.targets")
+TARGETS = os.path.join(ROOT, "Shared", "build", "DuckDb.Native.targets")
 
 PROJECT = """<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>

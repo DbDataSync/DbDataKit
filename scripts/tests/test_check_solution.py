@@ -42,11 +42,11 @@ class CheckSolution(unittest.TestCase):
 
     def test_a_shared_library_missing_from_the_shared_solution_fails(self):
         root = tree({
-            "DbDataKit.slnx": slnx("DbDataKit/src/A/A.csproj", "DbDataKit/tests/A.Tests/A.Tests.csproj"),
-            "DbDataKit/src/A/A.csproj": "<Project />", "DbDataKit/tests/A.Tests/A.Tests.csproj": "<Project />",
-            "DbDataKit/DbDataKit.Shared.slnx": slnx("src/A/A.csproj"),
+            "DbDataKit.slnx": slnx("Shared/src/A/A.csproj", "Shared/tests/A.Tests/A.Tests.csproj"),
+            "Shared/src/A/A.csproj": "<Project />", "Shared/tests/A.Tests/A.Tests.csproj": "<Project />",
+            "Shared/DbDataKit.Shared.slnx": slnx("src/A/A.csproj"),
         })
-        self.assertEqual(["DbDataKit/DbDataKit.Shared.slnx: tests/A.Tests/A.Tests.csproj is not listed, so the shared libraries' CI job never builds or tests it"], check.check(root))
+        self.assertEqual(["Shared/DbDataKit.Shared.slnx: tests/A.Tests/A.Tests.csproj is not listed, so the shared libraries' CI job never builds or tests it"], check.check(root))
 
     def test_the_repository_passes(self):
         here = os.path.dirname(os.path.abspath(__file__))

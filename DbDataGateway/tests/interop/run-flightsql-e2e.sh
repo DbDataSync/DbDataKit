@@ -64,5 +64,5 @@ export DBDATAKIT_TEST_E2E_ADDRESS="https://127.0.0.1:$port"
 export DBDATAKIT_TEST_E2E_USER="$user"
 export DBDATAKIT_TEST_E2E_PASSWORD="$password"
 export DBDATAKIT_TEST_E2E_REQUIRED=true
-cd "$root/DbDataKit"
+cd "$root/Shared"
 dotnet test --project tests/DbDataKit.Connections.FlightSql.Tests -c "$config" "$@"

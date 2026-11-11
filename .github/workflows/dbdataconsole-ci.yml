@@ -1,7 +1,7 @@
 name: DbDataConsole CI
 
 # The dbdatakit console on the trunk model (docs/releases.md): a pull request into `main` runs this.
-# A `changes` job skips the suites when nothing of the console's, of the shared DbDataKit/ code it builds against, or of the build
+# A `changes` job skips the suites when nothing of the console's, of the Shared/ code it builds against, or of the build
 # settings changed; the run then still reports success. The shared libraries' own suite is dbdatakit-ci.yml, run once, not per product.
 
 on:
@@ -23,13 +23,13 @@ permissions:
 
 defaults:
   run:
-    working-directory: DbDataConsole
+    working-directory: DbDataKit
 
 jobs:
   changes:
     uses: ./.github/workflows/_changes.yml
     with:
-      paths: '^(DbDataConsole/|DbDataKit/|DbDataBuild/|DbDataSync/|DbDataGateway/|DbDataStore/|DbDataWorkspace/|dist/compose/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataconsole-|_)|actions/setup-product))'
+      paths: '^(DbDataKit/|Shared/|DbDataBuild/|DbDataSync/|DbDataGateway/|DbDataStore/|DbDataWorkspace/|dist/compose/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdataconsole-|_)|actions/setup-product))'
 
   # The host, its sign-in and its command line run on both systems; the Windows service registration is only exercised here against fakes.
   test:
@@ -45,10 +45,10 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-product
         with:
-          product: DbDataConsole
-          global-json: DbDataConsole/global.json
-      - run: dotnet build DbDataConsole.slnf -c Release
-      - run: dotnet test --project tests/DbDataConsole.Tests -c Release --no-build --minimum-expected-tests 10
+          product: DbDataKit
+          global-json: DbDataKit/global.json
+      - run: dotnet build DbDataKit.slnf -c Release
+      - run: dotnet test --project tests/DbDataKit.Server.Tests -c Release --no-build --minimum-expected-tests 10
 
   # The real programs in one run (plan 13a, T12; E05 adds a Sync server): a Build server and a Gateway started from their built output, a console in the test between them. A Build server publishes and updates its own data source on the Gateway, is refused on
   # one made by hand and on extensions.gateway, cannot adopt for itself, and the Gateway's audit names the person and the Build server. The second test (J12) publishes a project's semantic model and queries it, so a SQL Server from testenv/ is up for that job.
@@ -63,8 +63,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-product
         with:
-          product: DbDataConsole
-          global-json: DbDataConsole/global.json
+          product: DbDataKit
+          global-json: DbDataKit/global.json
       - uses: ./.github/actions/native-cache
       - name: Build a Build server
         working-directory: DbDataBuild
@@ -80,13 +80,13 @@ jobs:
       - name: Build a runner
         working-directory: DbDataRunner
         run: dotnet build src/DbDataRunner.Server -c Debug
-      - run: dotnet build tests/DbDataConsole.Servers.Tests -c Debug
+      - run: dotnet build tests/DbDataKit.Server.Servers.Tests -c Debug
       - name: Start the test SQL Server and PostgreSQL
         working-directory: .
         run: |
           testenv/testenv.sh up mssql postgres
           testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
-      - run: dotnet test --project tests/DbDataConsole.Servers.Tests -c Debug --no-build --minimum-expected-tests 4
+      - run: dotnet test --project tests/DbDataKit.Server.Servers.Tests -c Debug --no-build --minimum-expected-tests 4
 
   # The web app in a real browser against a real console: the first-run invitation, a passkey made in a virtual authenticator, signing out and back in with it, the users list,
   # pairing a real Build server, and (M12) the Monitoring page across a Build server that runs a failing schedule, a Sync replication that lags and a Gateway that locked a user out.
@@ -110,45 +110,45 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-product
         with:
-          product: DbDataConsole
-          global-json: DbDataConsole/global.json
+          product: DbDataKit
+          global-json: DbDataKit/global.json
           # the Build server the browser test pairs with links the pinned DuckDB engine
       - uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: Build the web app
-        working-directory: DbDataKit/web
+        working-directory: Shared/web
         run: |
           npm ci
           npm run build -w @dbdatakit/console
       # The shared visuals (plan 19, Y01-Y02): the view schema's validator and the renderer's component tests, on the semantic library's view fixtures. Plain Node, no browser.
       - name: Test the shared visuals
-        working-directory: DbDataKit/web
+        working-directory: Shared/web
         run: npm test -w @dbdatakit/visuals
       # The Workspace screen's model: names, the create and abandon rules, the history line (plan 22a, GP31). Plain Node.
       - name: Test the Workspace screens
-        working-directory: DbDataKit/web
+        working-directory: Shared/web
         run: npm test -w @dbdatakit/workspace
       # The Store's reusable controls (plan 19, Z06): field parsing, the client against a fake server, the views as markup. Plain Node.
       - name: Test the Store controls
-        working-directory: DbDataKit/web
+        working-directory: Shared/web
         run: |
           npm run typecheck -w @dbdatakit/store-ui
           npm test -w @dbdatakit/store-ui
       # The typed client for semantic queries that apps use (plan 22a GP32), against a fake host. Plain Node.
       - name: Test the semantic client
-        working-directory: DbDataKit/web
+        working-directory: Shared/web
         run: |
           npm run typecheck -w @dbdatakit/semantic-client
           npm test -w @dbdatakit/semantic-client
       # The runtime that draws an app of views only (plan 26, AP25): its logic and parts in plain Node, and the one-script build the Gateway ships (`apps-views`).
       - name: Test and build the views runtime
-        working-directory: DbDataKit/web
+        working-directory: Shared/web
         run: |
           npm run typecheck -w @dbdatakit/view-app
           npm test -w @dbdatakit/view-app
           npm run build -w @dbdatakit/view-app
-      - run: dotnet build DbDataConsole.slnf -c Debug
+      - run: dotnet build DbDataKit.slnf -c Debug
       # A real Build server for the console to pair with (the pairing, the version and the health the console shows are its own).
       - uses: ./.github/actions/native-cache
       - name: Build a Build server
@@ -186,12 +186,12 @@ jobs:
           echo "$GITHUB_WORKSPACE/.bun/linux-x64" >> "$GITHUB_PATH"
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - name: Install the browser
-        working-directory: DbDataConsole/tests/DbDataConsole.Web.Tests
+        working-directory: DbDataKit/tests/DbDataKit.Server.Web.Tests
         run: |
           npm ci
           npx playwright install --with-deps chromium
       - name: Run the browser tests
-        working-directory: DbDataConsole/tests/DbDataConsole.Web.Tests
+        working-directory: DbDataKit/tests/DbDataKit.Server.Web.Tests
         run: npx playwright test
         env:
           DBDATAKIT_TEST_E2E_PG: Host=127.0.0.1;Port=5432;Username=postgres;Password=e2e;Database=warehouse
@@ -208,7 +208,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Build the image
-        run: docker build -f DbDataConsole/Dockerfile -t dbdatakit:ci .
+        run: docker build -f DbDataKit/Dockerfile -t dbdatakit:ci .
       - name: Start it and wait for its health check
         run: |
           docker run -d --name ddk -p 8480:8480 dbdatakit:ci

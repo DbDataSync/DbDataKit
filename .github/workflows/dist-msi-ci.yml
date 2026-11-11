@@ -8,7 +8,7 @@ on:
     paths:
       - 'dist/msi.py'
       - 'dist/tests/**'
-      - 'DbDataConsole/scripts/**'
+      - 'DbDataKit/scripts/**'
       - 'DbDataRunner/scripts/**'
       - '**/dist.json'
       - '.github/workflows/dist-msi-ci.yml'
@@ -32,17 +32,17 @@ jobs:
       - run: sudo apt-get update -y && sudo apt-get install -y wixl msitools
       - uses: actions/setup-dotnet@v6
         with:
-          global-json-file: DbDataConsole/global.json
+          global-json-file: DbDataKit/global.json
       - uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: Build two MSIs per product from the newest published package
         run: |
           set -euo pipefail
-          declare -A META=( [dbdatagateway]=DbDataGateway [dbdatasync]=DbDataSync [dbdatabuild]=DbDataBuild [dbdatakit]=DbDataConsole [dbdatarunner]=DbDataRunner )
+          declare -A META=( [dbdatagateway]=DbDataGateway [dbdatasync]=DbDataSync [dbdatabuild]=DbDataBuild [dbdatakit]=DbDataKit [dbdatarunner]=DbDataRunner )
           # The console and the runner have no published release before their first one, so their packages are built here from this commit.
           mkdir -p work/dbdatakit out/dbdatakit work/dbdatarunner out/dbdatarunner
-          DbDataConsole/scripts/package.sh win-x64 2026.1.1.0 "$PWD/work/dbdatakit"
+          DbDataKit/scripts/package.sh win-x64 2026.1.1.0 "$PWD/work/dbdatakit"
           DbDataRunner/scripts/package.sh win-x64 2026.1.1.0 "$PWD/work/dbdatarunner"
           for product in dbdatagateway dbdatasync dbdatabuild dbdatakit dbdatarunner; do
             work="work/$product"; mkdir -p "$work" "out/$product"

@@ -37,7 +37,7 @@ def c(**kw):
 
 class CheckUiEditors(unittest.TestCase):
     def test_a_full_row_for_the_format_passes(self):
-        self.assertEqual([], check.problems(tree(["| A | x | `alpha` | `F.tsx` | full | |"], counts=c(full=1), extra={"DbDataKit/web/m/src/pages/F.tsx": ""})))
+        self.assertEqual([], check.problems(tree(["| A | x | `alpha` | `F.tsx` | full | |"], counts=c(full=1), extra={"Shared/web/m/src/pages/F.tsx": ""})))
 
     def test_a_format_without_a_row_fails_naming_it(self):
         found = check.problems(tree(["| A | x | - | none | none (no editor wanted) | |"], ids=("alpha", "beta"), counts=c(none=1)))

@@ -66,11 +66,11 @@
     <EmbeddedResource Include="..\..\templates\apps\territory-views\**\*" LogicalName="apps-templates/territory-views/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
   <!--
-    The runtime that draws an app of views only (plan 26, AP25) is the web build of DbDataKit/web/view-app. A build copies it next to the program when it exists (so a developer who built it sees it run); publish builds it, unless
+    The runtime that draws an app of views only (plan 26, AP25) is the web build of Shared/web/view-app. A build copies it next to the program when it exists (so a developer who built it sees it run); publish builds it, unless
     SkipWebBuild is true, as the console does. Without it the host answers an app of views with a 503 that says how to build it.
   -->
   <PropertyGroup>
-    <ViewsWebDir>$(MSBuildProjectDirectory)/../../../DbDataKit/web</ViewsWebDir>
+    <ViewsWebDir>$(MSBuildProjectDirectory)/../../../Shared/web</ViewsWebDir>
   </PropertyGroup>
   <ItemGroup>
     <None Include="$(ViewsWebDir)/view-app/dist/**" Link="apps-views/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

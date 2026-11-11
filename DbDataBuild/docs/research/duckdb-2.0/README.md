@@ -176,7 +176,7 @@ The calls are made through DuckDB.NET.Bindings (`NativeMethods.ScalarFunction`, 
 ## Storage format and the places a product opens DuckDB (K03, 2026-10-21)
 
 Plan 13 asked, before the first product moves to 2.0.0, what 2.0 does to a database file that 1.x wrote, and which products open DuckDB
-files read-write. The tests are `DbDataKit/tests/DbDataKit.DuckDb.Native.Tests/StorageFormatTests.cs`, on a file the 1.5.6 engine wrote
+files read-write. The tests are `Shared/tests/DbDataKit.DuckDb.Native.Tests/StorageFormatTests.cs`, on a file the 1.5.6 engine wrote
 (`fixtures/duckdb-1.5.6.duckdb`: a table with a primary key, decimal, date and list columns, and a view).
 
 What the 2.0.0 engine does:

@@ -1,7 +1,7 @@
 name: DbDataKit CI
 
-# The shared libraries' own suite (DbDataKit/), run once on Linux and Windows against the shared engines from testenv/, on a pull request
-# into `main` and on every push to it that touches the shared code or the test environment. Each product's CI also runs when DbDataKit/
+# The shared libraries' own suite (Shared/), run once on Linux and Windows against the shared engines from testenv/, on a pull request
+# into `main` and on every push to it that touches the shared code or the test environment. Each product's CI also runs when Shared/
 # changes, so a shared change is proven against every product; this is the libraries' own tests, which used to run once per product.
 # The job itself is _dbdatakit.yml, which can also be dispatched on its own.
 
@@ -9,7 +9,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "DbDataKit/**"
+      - "Shared/**"
       - "testenv/**"
       - "duckdb.pin"
       - "scripts/fetch-duckdb.*"
@@ -25,7 +25,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "DbDataKit/**"
+      - "Shared/**"
       - "testenv/**"
       - "duckdb.pin"
       - "scripts/fetch-duckdb.*"
@@ -53,7 +53,7 @@ on:
         type: boolean
         default: false
       ssas_record:
-        description: With ssas, also record a session through the XMLA forwarder (DbDataKit/tools/DbDataKit.Tools.XmlaForwarder) and upload the recording as the artifact xmla-recording.
+        description: With ssas, also record a session through the XMLA forwarder (Shared/tools/DbDataKit.Tools.XmlaForwarder) and upload the recording as the artifact xmla-recording.
         type: boolean
         default: false
 
@@ -88,7 +88,7 @@ jobs:
         with:
           dotnet-version: "10.0.x"
           cache: true
-          cache-dependency-path: "DbDataKit/**/*.csproj"
+          cache-dependency-path: "Shared/**/*.csproj"
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
@@ -108,7 +108,7 @@ jobs:
           ./scripts/fetch-duckdb.ps1
       - name: Build the print page
         shell: bash
-        working-directory: DbDataKit/web
+        working-directory: Shared/web
         run: |
           npm ci --workspace @dbdatakit/visuals --include-workspace-root --ignore-scripts
           npm run build:print --workspace @dbdatakit/visuals
@@ -117,15 +117,15 @@ jobs:
         run: |
           rid=linux-x64; [ "$RUNNER_OS" = "Windows" ] && rid=win-x64
           echo "DBDATAKIT_TEST_CHROMIUM=$GITHUB_WORKSPACE/.chromium/$rid" >> "$GITHUB_ENV"
-          echo "DBDATAKIT_TEST_PRINT_ASSETS=$GITHUB_WORKSPACE/DbDataKit/web/visuals/dist/print" >> "$GITHUB_ENV"
+          echo "DBDATAKIT_TEST_PRINT_ASSETS=$GITHUB_WORKSPACE/Shared/web/visuals/dist/print" >> "$GITHUB_ENV"
           echo "DBDATAKIT_TEST_REQUIRE_CHROMIUM=true" >> "$GITHUB_ENV"
           # the runner's kernel may forbid the user namespaces Chromium's sandbox needs
           [ "$RUNNER_OS" = "Linux" ] && echo "DBDATAKIT_TEST_NOSANDBOX=true" >> "$GITHUB_ENV" || true
       - name: Exporter tests
-        working-directory: DbDataKit
+        working-directory: Shared
         run: dotnet test --project tests/DbDataKit.Views.Export.Tests
       - name: Module export tests
-        working-directory: DbDataKit
+        working-directory: Shared
         run: dotnet test --project tests/DbDataKit.Views.Hosting.Tests --filter-class "*ViewsExportTests"
 
   # The semantic layer's conformance fixtures (plan 19, J02) on the shared engines, as a check of their own: the engine seeds a scratch
@@ -141,7 +141,7 @@ jobs:
         with:
           dotnet-version: "10.0.x"
           cache: true
-          cache-dependency-path: "DbDataKit/**/*.csproj"
+          cache-dependency-path: "Shared/**/*.csproj"
       - name: Start the shared engines (SQL Server, PostgreSQL)
         run: testenv/testenv.sh up mssql postgres
       - name: Point the suite at the engines
@@ -153,7 +153,7 @@ jobs:
       - name: Fetch the pinned DuckDB engine
         run: scripts/fetch-duckdb.sh
       - name: Test
-        working-directory: DbDataKit
+        working-directory: Shared
         run: dotnet test --project tests/DbDataKit.Semantic.Tests
       - name: Stop the shared engines
         if: always()
@@ -173,22 +173,22 @@ jobs:
         with:
           dotnet-version: "10.0.x"
           cache: true
-          cache-dependency-path: "DbDataKit/**/*.csproj"
+          cache-dependency-path: "Shared/**/*.csproj"
       - name: Start the previous engines (SQL Server 2022, PostgreSQL 16)
         run: testenv/testenv.sh up mssql2022 postgres16
       - name: Point the suites at the previous engines
         run: testenv/testenv.sh env dbdatakit-older --dotenv >> "$GITHUB_ENV"
       - name: Test State
-        working-directory: DbDataKit
+        working-directory: Shared
         run: dotnet test --project tests/DbDataKit.State.Tests
       - name: Test State.Engines
-        working-directory: DbDataKit
+        working-directory: Shared
         run: dotnet test --project tests/DbDataKit.State.Engines.Tests
       - name: Test State.Cli
-        working-directory: DbDataKit
+        working-directory: Shared
         run: dotnet test --project tests/DbDataKit.State.Cli.Tests
       - name: Test Scheduling
-        working-directory: DbDataKit
+        working-directory: Shared
         run: dotnet test --project tests/DbDataKit.Scheduling.Tests
       - name: Stop the previous engines
         if: always()
@@ -208,7 +208,7 @@ jobs:
       - id: diff
         run: |
           if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" \
-            | grep -E '^DbDataKit/src/DbDataKit\.Semantic/Emit/DaxEmitter\.cs$|^DbDataKit/tests/DbDataKit\.Semantic\.Tests/conformance/ssas/|^DbDataKit/src/DbDataKit\.Semantic\.Ssas/'; then
+            | grep -E '^Shared/src/DbDataKit\.Semantic/Emit/DaxEmitter\.cs$|^Shared/tests/DbDataKit\.Semantic\.Tests/conformance/ssas/|^Shared/src/DbDataKit\.Semantic\.Ssas/'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -216,7 +216,7 @@ jobs:
 
   # The semantic layer's DAX path against a real SQL Server Analysis Services (Tabular), the one thing the Linux jobs cannot run (the ADOMD.NET client
   # is Windows-only). On a pull request that touches the DAX emitter, the model or the SSAS executor (ssas-changes), or by hand: it installs Analysis Services with Chocolatey (about 3 minutes), deploys
-  # DbDataKit/tests/DbDataKit.Semantic.Tests/conformance/ssas/model.tmsl.json, and runs the semantic suite with DBDATAKIT_TEST_SSAS set so the SSAS source of every fixture runs
+  # Shared/tests/DbDataKit.Semantic.Tests/conformance/ssas/model.tmsl.json, and runs the semantic suite with DBDATAKIT_TEST_SSAS set so the SSAS source of every fixture runs
   # as real DAX. Run it after a change to the DAX emitter, the catalog's DAX bindings, the model or SsasExecutor (docs/semantic/ssas-ci.md).
   semantic-ssas:
     name: Semantic DAX on Analysis Services (Windows)
@@ -265,7 +265,7 @@ jobs:
           "DBDATAKIT_TEST_REQUIRE_SSAS=true" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
       - name: DAX probe (what does the server accept?)
         if: inputs.ssas_probe
-        working-directory: DbDataKit
+        working-directory: Shared
         env:
           DBDATAKIT_TEST_SSAS_PROBE: "1"
         run: dotnet test --project tests/DbDataKit.Semantic.Tests --filter-class "*SsasProbe"
@@ -275,11 +275,11 @@ jobs:
         run: Get-ChildItem -Recurse -Filter ssas-probe.txt | ForEach-Object { Get-Content $_.FullName }
       - name: Semantic suite against Analysis Services
         if: ${{ !inputs.ssas_probe }}
-        working-directory: DbDataKit
+        working-directory: Shared
         run: dotnet test --project tests/DbDataKit.Semantic.Tests --report-xunit-trx --report-xunit-trx-filename ssas.trx
       - name: Record a session through the XMLA forwarder
         if: ${{ inputs.ssas_record && !inputs.ssas_probe }}
-        working-directory: DbDataKit
+        working-directory: Shared
         env:
           DBDATAKIT_TEST_SSAS_RECORD: "1"
           DBDATAKIT_TEST_XMLA_RECORDING_DIR: ${{ runner.temp }}\xmla-recording

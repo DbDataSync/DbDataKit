@@ -39,7 +39,7 @@ jobs:
   changes:
     uses: ./.github/workflows/_changes.yml
     with:
-      paths: '^(DbDataBuild/|DbDataKit/|testenv/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatabuild-|_)|actions/setup-product))'
+      paths: '^(DbDataBuild/|Shared/|testenv/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatabuild-|_)|actions/setup-product))'
 
   # The server's container image (plan 13, L02): it builds, starts, goes healthy through its own health check, and the commands the README tells a person to run inside it work.
   image:

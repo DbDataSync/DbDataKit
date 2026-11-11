@@ -29,7 +29,7 @@ public class GateInvariantTests
     [Fact]
     public void Commands_are_created_and_executed_only_in_the_gate_and_the_read_session()
     {
-        // the scan is the shared one (DbDataKit.Transfer.SourceInvariants), which the shared suite also runs on this source (DbDataKit/tests/DbDataKit.Transfer.Tests/GateInvariantTests.cs): one rule, two suites
+        // the scan is the shared one (DbDataKit.Transfer.SourceInvariants), which the shared suite also runs on this source (Shared/tests/DbDataKit.Transfer.Tests/GateInvariantTests.cs): one rule, two suites
         var offenders = SourceInvariants.FindOffenders(Path.Combine(Root(), "src"), SourceInvariants.DriverCalls,
             [.. DriverFiles, "DbDataBuild.Targets.DuckDb/", "DbDataBuild.Sample/"]);       // the in-memory DuckDB describer and sample runner have no target connection
         Assert.True(offenders.Count == 0, "Statements must go through the write gate (MutationGate, the front of DbDataKit.Transfer.WriteGate) or ReadSession. Found driver calls in: " + string.Join(", ", offenders));

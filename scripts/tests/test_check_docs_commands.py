@@ -69,7 +69,7 @@ class CheckSyncWebApp(unittest.TestCase):
         self.assertEqual([], check.check_web_app(root))
 
     def test_other_products_and_history_are_not_read(self):
-        root = tree({"DbDataConsole/README.md": "The console serves the web app from wwwroot/docs. Open http://localhost:8080.\n",
+        root = tree({"DbDataKit/README.md": "The console serves the web app from wwwroot/docs. Open http://localhost:8080.\n",
                      "DbDataSync/architecture/implementation/p.md": "open http://localhost:5080\n"})
         self.assertEqual([], check.check_web_app(root))
 
@@ -79,7 +79,7 @@ class CheckSyncWebApp(unittest.TestCase):
 
 
 SHARED = {
-    "DbDataKit/src/DbDataKit.Cli/Nouns/ServerNoun.cs": """
+    "Shared/src/DbDataKit.Cli/Nouns/ServerNoun.cs": """
 public static class ServerNoun {
     public static Noun Create(Func<string[], CliContext, Task<int>> run) => new("server", "The long-running process",
     [
@@ -87,7 +87,7 @@ public static class ServerNoun {
     ]);
 }
 """,
-    "DbDataKit/src/DbDataKit.Web/PairingVerbs.cs": """
+    "Shared/src/DbDataKit.Web/PairingVerbs.cs": """
 public static class PairingVerbs {
     public static Verb[] Create(Func<string[], PairingFiles> files) =>
     [
@@ -96,7 +96,7 @@ public static class PairingVerbs {
     ];
 }
 """,
-    "DbDataConsole/src/DbDataConsole.Server/ConsoleCli.cs": """
+    "DbDataKit/src/DbDataKit.Server/ConsoleCli.cs": """
 public static class ConsoleCli {
     static NounRouter Router() => new("dbdatakit", [ ServerNoun.Create(Run).With([.. PairingVerbs.Create(f)]), InstanceNoun(), UserNoun() ]);
     private static Noun InstanceNoun() => new("instance", "The servers this console manages",
@@ -119,7 +119,7 @@ class CommandsThatExist(unittest.TestCase):
     def tree(self, extra):
         return tree({**SHARED, **extra})
 
-    def problems(self, text, path="DbDataConsole/README.md"):
+    def problems(self, text, path="DbDataKit/README.md"):
         return check.check_exist(self.tree({path: text}))
 
     def test_the_commands_are_read_from_the_sources(self):
@@ -130,7 +130,7 @@ class CommandsThatExist(unittest.TestCase):
 
     def test_shared_verbs_join_the_noun_a_product_lists_them_under(self):
         root = self.tree({
-            "DbDataKit/src/DbDataKit.Identity/IdentityVerbs.cs": """
+            "Shared/src/DbDataKit.Identity/IdentityVerbs.cs": """
 public static class IdentityVerbs {
     public static Verb[] Admin(IdentityAdminLocation where) =>
     [
@@ -157,7 +157,7 @@ public static class IdentityCommand {
     def test_a_verb_that_does_not_exist_fails_and_names_the_ones_that_do(self):
         problems = self.problems("`dbdatakit user remove bob`\n")
         self.assertEqual(1, len(problems))
-        self.assertIn("DbDataConsole/README.md:1", problems[0])
+        self.assertIn("DbDataKit/README.md:1", problems[0])
         self.assertIn("dbdatakit user remove", problems[0])
         self.assertIn("invite", problems[0])
 
@@ -174,7 +174,7 @@ public static class IdentityCommand {
         self.assertEqual([], self.problems("<!-- retired-name-ok -->\n`dbdatakit console start`\n"))
 
     def test_history_and_fixtures_are_skipped(self):
-        files = {"docs/plans/13-x.md": "`dbdatakit console start`\n", "DbDataConsole/tests/Fixture/a.md": "`dbdatakit nope`\n", "DbDataConsole/architecture/p.md": "`dbdatakit nope`\n"}
+        files = {"docs/plans/13-x.md": "`dbdatakit console start`\n", "DbDataKit/tests/Fixture/a.md": "`dbdatakit nope`\n", "DbDataKit/architecture/p.md": "`dbdatakit nope`\n"}
         self.assertEqual([], check.check_exist(self.tree(files)))
 
     def test_a_product_without_sources_is_not_audited(self):
@@ -186,9 +186,9 @@ public static class IdentityCommand {
         self.assertIn("DbDataStore", problems[0])
 
     def test_the_consoles_readme_must_show_every_noun(self):
-        problems = check.check_readmes(self.tree({"DbDataConsole/README.md": "`dbdatakit server run`\n`dbdatakit user invite`\n"}))
-        self.assertEqual(["DbDataConsole/README.md: the command line has `dbdatakit instance` and the README does not show it"], problems)
-        self.assertEqual([], check.check_readmes(self.tree({"DbDataConsole/README.md": "dbdatakit server run\ndbdatakit user invite\ndbdatakit instance add\n"})))
+        problems = check.check_readmes(self.tree({"DbDataKit/README.md": "`dbdatakit server run`\n`dbdatakit user invite`\n"}))
+        self.assertEqual(["DbDataKit/README.md: the command line has `dbdatakit instance` and the README does not show it"], problems)
+        self.assertEqual([], check.check_readmes(self.tree({"DbDataKit/README.md": "dbdatakit server run\ndbdatakit user invite\ndbdatakit instance add\n"})))
 
     def test_the_repository_itself_passes(self):
         self.assertEqual([], check.check(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))))

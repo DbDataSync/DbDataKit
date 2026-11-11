@@ -1,5 +1,5 @@
 # The Build server for Linux containers.
-#   docker build -f DbDataBuild/Dockerfile -t dbdatabuild .        (run from the repository root: the build needs DbDataKit/ too)
+#   docker build -f DbDataBuild/Dockerfile -t dbdatabuild .        (run from the repository root: the build needs Shared/ too)
 #   docker run -p 8470:8470 -v ./build-data:/data dbdatabuild        (/data holds the server's identity, paired clients, projects, secrets and certificate)
 # Pair a console, add a project, set a login (the commands run inside the container, as the server's own user):
 #   docker exec <container> dbdatabuild server pair

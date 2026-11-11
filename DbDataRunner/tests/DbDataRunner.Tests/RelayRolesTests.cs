@@ -5,7 +5,7 @@ using DbDataKit.Web.Trust;
 namespace DbDataRunner.Tests;
 
 /// <summary>
-/// The roles the console's relay checks before it forwards a call (<c>ServerProducts.RunnerRoutes</c> in DbDataConsole.Server, owner decision of 2026-11-08) are the roles this runner asks for: a call made as a person who holds the role is not refused
+/// The roles the console's relay checks before it forwards a call (<c>ServerProducts.RunnerRoutes</c> in DbDataKit.Server, owner decision of 2026-11-08) are the roles this runner asks for: a call made as a person who holds the role is not refused
 /// for its role, and one made as a person who holds the role below it is refused with 403 by the runner itself (defence in depth, the relay's check is not the only one). The rows are the console's table, copied; the console's tests fail when its table
 /// and the list there differ, and these when the runner's answer differs from a row.
 /// </summary>

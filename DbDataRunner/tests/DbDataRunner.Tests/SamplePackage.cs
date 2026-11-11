@@ -85,7 +85,7 @@ internal static class SamplePackage
     private static string FindProject()
     {
         var root = typeof(SamplePackage).Assembly.GetCustomAttributes<System.Reflection.AssemblyMetadataAttribute>().FirstOrDefault(m => m.Key == "RepoRoot")?.Value ?? "";
-        var candidate = Path.Combine(root, "DbDataKit", "tests", "DbDataKit.Runner.TestPackage", "DbDataKit.Runner.TestPackage.csproj");
+        var candidate = Path.Combine(root, "Shared", "tests", "DbDataKit.Runner.TestPackage", "DbDataKit.Runner.TestPackage.csproj");
         return File.Exists(candidate) ? candidate : throw new InvalidOperationException($"The test package's project was not found at {candidate}.");
     }
 }

@@ -7,8 +7,8 @@ Imported on 2026-10-27 from `DbDataSync/QueryIntentSpec` at `cddca24` (`qis/docs
 | QIS | Here |
 | --- | --- |
 | `qis/docs/*.md` (11 documents) | `docs/semantic/`, identical; `ssas-ci.md` is new |
-| `qis/spec/schemas/*.schema.json` (13) | `DbDataKit/src/DbDataKit.Semantic/schemas/`, identical, embedded in the assembly |
-| `qis/spec/third_party/ossie/` | `DbDataKit/tests/DbDataKit.Semantic.Tests/conformance/third_party/ossie/`, identical |
+| `qis/spec/schemas/*.schema.json` (13) | `Shared/src/DbDataKit.Semantic/schemas/`, identical, embedded in the assembly |
+| `qis/spec/third_party/ossie/` | `Shared/tests/DbDataKit.Semantic.Tests/conformance/third_party/ossie/`, identical |
 | `qis/dotnet/src/Qis.Contracts` | `DbDataKit.Semantic.Abstractions`; `ISourceExecutor`, `CompiledQuery`, `QueryRows` come from `Qis.Engine/Sources.cs` |
 | `qis/dotnet/src/Qis.Engine` (all but the three below) | `DbDataKit.Semantic` |
 | `Qis.Engine/Sources.cs` (`DuckDbStandInExecutor`) | the interface to `Semantic.Abstractions`, the row reader to `QueryRowReader`, the stand-in to the tests |
@@ -23,7 +23,7 @@ Imported on 2026-10-27 from `DbDataSync/QueryIntentSpec` at `cddca24` (`qis/docs
 | `.github/workflows/ssas.yml` | the `semantic-ssas` job in `dbdatakit-ci.yml`, by hand ([ssas-ci.md](ssas-ci.md)) |
 | `qis/docker/docker-compose.yml` | **not imported**: `testenv/` (SQL Server 2022 and PostgreSQL) replaces it |
 | `README.md`, `qis/README.md` | **not imported**: layout and how-to-run text of the old repository; `docs/README.md` is the index of the specs and the layout is in each package's README |
-| `.gitattributes` (`eol=lf`) | **not imported**: `DbDataKit/**` is already `eol=lf` here |
+| `.gitattributes` (`eol=lf`) | **not imported**: `Shared/**` is already `eol=lf` here |
 | `refengine/`, `run_conformance.py` | **removed upstream** (the Python reference engine and its runner were eliminated in the QIS repository; a local checkout that still has them is out of date). Not imported |
 
 Nothing is shared with the `Qis.*` names any more, so QIS's own CI and ours do not meet.

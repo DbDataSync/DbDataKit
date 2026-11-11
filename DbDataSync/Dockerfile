@@ -6,15 +6,15 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY Directory.Build.props Directory.Packages.props global.json ./
 COPY duckdb.pin ./
-COPY DbDataKit/Directory.Build.props DbDataKit/global.json DbDataKit/
-COPY DbDataKit/src/ DbDataKit/src/
+COPY Shared/Directory.Build.props Shared/global.json Shared/
+COPY Shared/src/ Shared/src/
 WORKDIR /src/DbDataSync
 COPY DbDataSync/DbDataSync.slnf DbDataSync/Directory.Build.props DbDataSync/Directory.Build.targets DbDataSync/Directory.Packages.props DbDataSync/dbdatasync.runsettings ./
 COPY DbDataSync/src/ ./src/
 COPY DbDataSync/tests/ ./tests/
 COPY DbDataSync/tools/ ./tools/
 
-# The image carries no web app (plan 13, U11): the screens are the console's, which has its own image (DbDataConsole/Dockerfile).
+# The image carries no web app (plan 13, U11): the screens are the console's, which has its own image (DbDataKit/Dockerfile).
 #
 # VERSION is the release this image is built for (phase 163). Left empty — a local `docker build -f DbDataSync/Dockerfile .` from the repository root — the csproj's own
 # development default applies, which is what an image built by hand should say. Set, it is the version `dbdatasync version`

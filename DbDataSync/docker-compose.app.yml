@@ -14,7 +14,7 @@
 services:
   dbdatasync:
     build:
-      # The repository root: the image build needs the sibling DbDataKit/ folder as well as this one.
+      # The repository root: the image build needs the sibling Shared/ folder as well as this one.
       context: ..
       dockerfile: DbDataSync/Dockerfile
     container_name: dbdatasync

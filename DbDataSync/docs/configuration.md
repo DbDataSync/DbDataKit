@@ -658,14 +658,14 @@ When the store has no value, the environment answers: the name upper-cased, ever
 prefixed `DBDATAKIT_SECRET_`. A connection named `orders-db` resolves to `DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_ORDERS_DB`. A file named after the secret in
 the directory `CREDENTIALS_DIRECTORY` names (systemd `LoadCredential=`, a container secret mount) is the last place looked.
 
-## Sync screens' dev server (`DbDataKit/web/sync`)
+## Sync screens' dev server (`Shared/web/sync`)
 
 | env var | default | meaning |
 | --- | --- | --- |
 | `DBDATAKIT_SYNC_API_URL` | `http://localhost:5183` | target for Vite's `/api` and `/hubs` dev-server proxy |
 
 No `.env` files ship with the project — this is the only variable Vite itself reads. The server serves no web app, so this dev server is a developer's way to work on the
-Sync screens against a running API; the product's screens are the console's (`DbDataKit/web/console`, whose own dev server proxies to a console).
+Sync screens against a running API; the product's screens are the console's (`Shared/web/console`, whose own dev server proxies to a console).
 
 The docs are not served by either: the console's build generates them from this folder (`order.txt` lists the pages in order) into `/docs/sync`, and its dev server
 does the same from memory, so edits to a page appear on the next load of the console's dev server.
@@ -681,7 +681,7 @@ see [Installing → Running in a container](install.md#running-in-a-container) f
 
 - `EXPOSE 8443`; entrypoint is `dbdatasync server run --url https://0.0.0.0:8443` (the server makes a self-signed certificate in the volume on its first start, unless one is configured; earlier images served plain http on 8080) — no trailing `--repo` argument; override at `docker run` time (`docker run ... <image> --repo /some/other/path`) to pass different `dbdatasync server run` flags.
 - `HEALTHCHECK` runs `dbdatasync health check --url https://127.0.0.1:8443` (it accepts the image's self-signed certificate).
-- The image carries no web app and no docs: the screens, and these docs, are the dbdatakit console's (its own image, `DbDataConsole/Dockerfile`) — see
+- The image carries no web app and no docs: the screens, and these docs, are the dbdatakit console's (its own image, `DbDataKit/Dockerfile`) — see
   [Getting started](getting-started.md#reading-these-docs-in-the-console) and [Installing → Connecting a console](install.md#connecting-a-console).
 - `VOLUME ["/var/lib/dbdatasync"]` — one mount is a complete deployment: the config repository and the state database live together, so a backup of this directory is a backup of everything that isn't the image itself.
 - `ENV DBDATAKIT_DATA_SYNC=/var/lib/dbdatasync` — the suite's variable for Sync's folder, honoured by the same repo-root resolver every command uses (above). The volume keeps its path; only the variable's name changed.

@@ -17,7 +17,7 @@ def tree(files):
     return root
 
 
-PAGES = "DbDataKit/web/sync/src/pages/"
+PAGES = "Shared/web/sync/src/pages/"
 
 
 class CheckUiCoverage(unittest.TestCase):

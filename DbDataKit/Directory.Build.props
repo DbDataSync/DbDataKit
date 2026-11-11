@@ -6,14 +6,11 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Deterministic>true</Deterministic>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
-    <Version>0.1.0</Version>
-    <Authors>DbDataKit</Authors>
-    <RepositoryType>git</RepositoryType>
-    <PublishRepositoryUrl>true</PublishRepositoryUrl>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+  <PropertyGroup>
+    <!-- Monorepo layout: DbDataKit/ and Shared/ (the shared libraries) are sibling folders at the repository root. -->
+    <DbDataKitRoot Condition="'$(DbDataKitRoot)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', 'Shared'))</DbDataKitRoot>
+    <DbDataKitRoot>$([MSBuild]::EnsureTrailingSlash('$(DbDataKitRoot)'))</DbDataKitRoot>
+    <UseLocalDbDataKit Condition="'$(UseLocalDbDataKit)' == '' and Exists('$(DbDataKitRoot)src')">true</UseLocalDbDataKit>
   </PropertyGroup>
 </Project>

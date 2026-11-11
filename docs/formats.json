@@ -8,8 +8,8 @@
       "previous": 1,
       "status": "open",
       "note": "gains cache and checks; open until the first release that holds either (24a D5)",
-      "version_source": { "file": "DbDataKit/src/DbDataKit.DataModel/DataModelLoader.cs", "pattern": "public const int Version = (\\d+);" },
-      "files": [ { "path": "DbDataKit/src/DbDataKit.DataModel/DataModelLoader.cs", "sha256": null } ]
+      "version_source": { "file": "Shared/src/DbDataKit.DataModel/DataModelLoader.cs", "pattern": "public const int Version = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.DataModel/DataModelLoader.cs", "sha256": null } ]
     },
     {
       "id": "connection",
@@ -18,8 +18,8 @@
       "previous": 1,
       "status": "open",
       "note": "gains cache and checks, and grants (22a GP03: who may read the data source, part of the published definition; the serving policy a definition carries is the existing `extensions.gateway`, so plan 13c D19 adds no key and no version); open until the first release that holds any of them (24a D5). Sync's second login (plan 28c E20: `extensions.sync.run_user`, `extensions.sync.run_password_secret`) is two optional keys of Sync's own extension block, additive: a file from before loads as it did, a misspelled key is refused with file and line, and no version number moves",
-      "version_source": { "file": "DbDataKit/src/DbDataKit.Connections.Abstractions/ConnectionDefinition.cs", "pattern": "public const int CurrentVersion = (\\d+);" },
-      "files": [ { "path": "DbDataKit/src/DbDataKit.Connections.Abstractions/ConnectionDefinitionLoader.cs", "sha256": null } ]
+      "version_source": { "file": "Shared/src/DbDataKit.Connections.Abstractions/ConnectionDefinition.cs", "pattern": "public const int CurrentVersion = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.Connections.Abstractions/ConnectionDefinitionLoader.cs", "sha256": null } ]
     },
     {
       "id": "view-spec",
@@ -28,8 +28,8 @@
       "previous": 1,
       "status": "open",
       "note": "new with GP06; a newer one is refused naming kind, file, app and both numbers",
-      "version_source": { "file": "DbDataKit/src/DbDataKit.Apps.Manifest/ViewSpecLoader.cs", "pattern": "public const int Version = (\\d+);" },
-      "files": [ { "path": "DbDataKit/src/DbDataKit.Apps.Manifest/schemas/view-spec.schema.json", "sha256": null } ]
+      "version_source": { "file": "Shared/src/DbDataKit.Apps.Manifest/ViewSpecLoader.cs", "pattern": "public const int Version = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.Apps.Manifest/schemas/view-spec.schema.json", "sha256": null } ]
     },
     {
       "id": "dashboard",
@@ -38,8 +38,8 @@
       "previous": 1,
       "status": "open",
       "note": "new with plan 32 (DBR02); one number, ViewsFormat.Current, for dashboard and report and the widget vocabulary of the shared core: a new widget type, query form, layout type or selector condition bumps both; a newer one is refused naming kind, file and both numbers. Open until the first release that holds either (24a D5)",
-      "version_source": { "file": "DbDataKit/src/DbDataKit.Views/ViewsFormat.cs", "pattern": "public const int Current = (\\d+);" },
-      "files": [ { "path": "DbDataKit/web/visuals/schemas/core.schema.json", "sha256": null }, { "path": "DbDataKit/web/visuals/schemas/dashboard.schema.json", "sha256": null } ]
+      "version_source": { "file": "Shared/src/DbDataKit.Views/ViewsFormat.cs", "pattern": "public const int Current = (\\d+);" },
+      "files": [ { "path": "Shared/web/visuals/schemas/core.schema.json", "sha256": null }, { "path": "Shared/web/visuals/schemas/dashboard.schema.json", "sha256": null } ]
     },
     {
       "id": "report",
@@ -48,8 +48,8 @@
       "previous": 1,
       "status": "open",
       "note": "new with plan 32 (DBR02); one number, ViewsFormat.Current, for dashboard and report and the widget vocabulary of the shared core: a new widget type, query form, layout type or selector condition bumps both; a newer one is refused naming kind, file and both numbers. Open until the first release that holds either (24a D5)",
-      "version_source": { "file": "DbDataKit/src/DbDataKit.Views/ViewsFormat.cs", "pattern": "public const int Current = (\\d+);" },
-      "files": [ { "path": "DbDataKit/web/visuals/schemas/core.schema.json", "sha256": null }, { "path": "DbDataKit/web/visuals/schemas/report.schema.json", "sha256": null } ]
+      "version_source": { "file": "Shared/src/DbDataKit.Views/ViewsFormat.cs", "pattern": "public const int Current = (\\d+);" },
+      "files": [ { "path": "Shared/web/visuals/schemas/core.schema.json", "sha256": null }, { "path": "Shared/web/visuals/schemas/report.schema.json", "sha256": null } ]
     },
     {
       "id": "semantic-package",
@@ -58,8 +58,8 @@
       "previous": 1,
       "status": "open",
       "note": "gains cache and checks; open until the first release that holds either (24a D5)",
-      "version_source": { "file": "DbDataKit/src/DbDataKit.Semantic/Catalog.cs", "pattern": "Source\\[\"checks\"\\] is not null \\? (\\d+) : 1;" },
-      "files": [ { "path": "DbDataKit/src/DbDataKit.Semantic/schemas/catalog.schema.json", "sha256": null } ]
+      "version_source": { "file": "Shared/src/DbDataKit.Semantic/Catalog.cs", "pattern": "Source\\[\"checks\"\\] is not null \\? (\\d+) : 1;" },
+      "files": [ { "path": "Shared/src/DbDataKit.Semantic/schemas/catalog.schema.json", "sha256": null } ]
     },
     {
       "id": "build-model",
@@ -108,8 +108,8 @@
       "previous": 1,
       "status": "frozen",
       "note": "frozen by its release; the strict reader is its definition",
-      "version_source": { "file": "DbDataKit/src/DbDataKit.Runner.Abstractions/PackageManifest.cs", "pattern": "public const int FormatVersion = (\\d+);" },
-      "files": [ { "path": "DbDataKit/src/DbDataKit.Runner.Abstractions/PackageManifestReader.cs", "sha256": "8b3716b715005e42c8dc0d62953c5f5db4136e262941f46501c34fc0a4ce1b3f" } ]
+      "version_source": { "file": "Shared/src/DbDataKit.Runner.Abstractions/PackageManifest.cs", "pattern": "public const int FormatVersion = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.Runner.Abstractions/PackageManifestReader.cs", "sha256": "8b3716b715005e42c8dc0d62953c5f5db4136e262941f46501c34fc0a4ce1b3f" } ]
     },
     {
       "id": "release",
@@ -118,8 +118,8 @@
       "previous": 1,
       "status": "open",
       "note": "plan 24a UC09: the server stages the release it checked as a release/1 manifest, signed with its own key, and the helper that swaps the program checks it again (the shelved updater's format, used as code); its schemaVersions carry the compatibility generation",
-      "version_source": { "file": "DbDataKit/src/DbDataKit.Update.Abstractions/ReleaseManifest.cs", "pattern": "public const string SchemaId = \"release/(\\d+)\";" },
-      "files": [ { "path": "DbDataKit/src/DbDataKit.Update.Abstractions/ReleaseManifest.cs", "sha256": null } ]
+      "version_source": { "file": "Shared/src/DbDataKit.Update.Abstractions/ReleaseManifest.cs", "pattern": "public const string SchemaId = \"release/(\\d+)\";" },
+      "files": [ { "path": "Shared/src/DbDataKit.Update.Abstractions/ReleaseManifest.cs", "sha256": null } ]
     },
     {
       "id": "update-plan",
@@ -128,8 +128,8 @@
       "previous": 1,
       "status": "open",
       "note": "plan 24a UC09: the journal of one upgrade, written by the server and moved on by the helper, read by the status endpoint; a journal of another schema is refused with its file named (PlanStore.Load)",
-      "version_source": { "file": "DbDataKit/src/DbDataKit.Update.Service/UpdatePlan.cs", "pattern": "public const string SchemaId = \"update-plan/(\\d+)\";" },
-      "files": [ { "path": "DbDataKit/src/DbDataKit.Update.Service/UpdatePlan.cs", "sha256": null } ]
+      "version_source": { "file": "Shared/src/DbDataKit.Update.Service/UpdatePlan.cs", "pattern": "public const string SchemaId = \"update-plan/(\\d+)\";" },
+      "files": [ { "path": "Shared/src/DbDataKit.Update.Service/UpdatePlan.cs", "sha256": null } ]
     }
   ]
 }

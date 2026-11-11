@@ -1,5 +1,5 @@
 # A report over the semantic model `retail_sales`: plan 32, the sample of the first testable cut (9a). The default layout is a paged flow (a summary row, a trend, a long table that splits over pages);
-# `wall` is a fit canvas of the summary for a big screen. Recorded results: `DbDataKit/conformance/views/widget-results/report/retail-sales-monthly`.
+# `wall` is a fit canvas of the summary for a big screen. Recorded results: `Shared/conformance/views/widget-results/report/retail-sales-monthly`.
 schemaVersion: 1
 kind: report
 title: Retail sales by month

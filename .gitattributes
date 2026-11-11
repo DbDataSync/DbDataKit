@@ -1,2 +1,2 @@
 # Shared libraries: source contains line-ending-sensitive test literals
-DbDataKit/** text eol=lf
+Shared/** text eol=lf

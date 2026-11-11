@@ -4,7 +4,7 @@
 Three checks over the same files:
   1. the retired forms, listed in RETIRED with what replaced them;
   2. every `dbdatasync|dbdatagateway|dbdatakit|dbdatastore|dbdatarunner|dbdataworkspace|dbdatabuild <words>` that is typed must be a command that exists. The commands are read from the
-     sources, not listed by hand: the nouns and verbs of each product's command line (the shared ones in DbDataKit/src, the product's own under its src) and,
+     sources, not listed by hand: the nouns and verbs of each product's command line (the shared ones in Shared/src, the product's own under its src) and,
      for Build, its generated command reference (DbDataBuild/docs/commands.md, which a test keeps current);
   3. no DbDataSync document says its server serves a web app at its own address (SYNC_WEB_APP): since U11 the screens are the dbdatakit console's.
 
@@ -40,14 +40,14 @@ SYNC_WEB_APP = [
     (r"(?i)\bopen\b[^.\n]{0,24}https?://(?:localhost|127\.0\.0\.1)(?::\d+)?:(?:5080|8080)\b", "the server's address serves no web app: open the server in the console (`/servers/<id>`)"),
     (r"(?i)\b(?:dbdatasync|the server|the api)\b[^.\n]{0,40}\bserves?\s+(?!\W*no\b)[^.\n]{0,30}\b(?:web\s+(?:ui|app|console)|spa|its console|the console)\b", "the server serves no web app; its screens are the dbdatakit console's"),
     (r"/app/wwwroot|\bwwwroot/docs\b", "the image and the packages carry no wwwroot; the docs are the console's (`/docs/sync`)"),
-    (r"\bsrc/DbDataSync\.Web\b", "the screens are `DbDataKit/web/sync`"),
+    (r"\bsrc/DbDataSync\.Web\b", "the screens are `Shared/web/sync`"),
 ]
 
 # The program each product's command line is called by, and the folder whose sources define it (the console is `dbdatakit`).
 PRODUCTS = {
     "dbdatasync": "DbDataSync",
     "dbdatagateway": "DbDataGateway",
-    "dbdatakit": "DbDataConsole",
+    "dbdatakit": "DbDataKit",
     "dbdatastore": "DbDataStore",
     "dbdatarunner": "DbDataRunner",
     "dbdataworkspace": "DbDataWorkspace",
@@ -89,10 +89,10 @@ def cs_files(folder):
 
 
 def shared_nouns(root):
-    """'Class.Method' -> (noun, verbs) for every shared factory in DbDataKit/src that makes a noun, or makes verbs (noun None) that a product lists under a noun of its own
+    """'Class.Method' -> (noun, verbs) for every shared factory in Shared/src that makes a noun, or makes verbs (noun None) that a product lists under a noun of its own
     (the pairing verbs under `server`, the identity home's under `identity`)."""
     index = {}
-    for path in cs_files(os.path.join(root, "DbDataKit", "src")):
+    for path in cs_files(os.path.join(root, "Shared", "src")):
         text = read(path)
         for cls in re.finditer(r"static\s+class\s+(\w+)", text):
             for chunk in re.split(r"(?=public\s+static\s)", text[cls.end():]):

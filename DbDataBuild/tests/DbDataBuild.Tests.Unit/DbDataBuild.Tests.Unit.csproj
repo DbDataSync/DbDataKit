@@ -32,7 +32,7 @@
 
   <ItemGroup>
     <!-- the stand-in git server that requires a login, shared with the library's tests; plan 13, W12 -->
-    <Compile Include="..\..\..\DbDataKit\tests\DbDataKit.Config.Git.Tests\AuthenticatedGitServer.cs" Link="AuthenticatedGitServer.cs" />
+    <Compile Include="..\..\..\Shared\tests\DbDataKit.Config.Git.Tests\AuthenticatedGitServer.cs" Link="AuthenticatedGitServer.cs" />
   </ItemGroup>
 
   <ItemGroup>

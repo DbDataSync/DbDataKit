@@ -296,7 +296,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
     [Fact]
     public async Task An_app_of_views_only_is_served_its_generated_page_its_specs_and_the_runtime_the_build_put_next_to_the_program()
     {
-        // the build copies the web build of DbDataKit/web/view-app to `apps-views` beside the program; a developer who has not built it gets a stand-in for the test, removed again
+        // the build copies the web build of Shared/web/view-app to `apps-views` beside the program; a developer who has not built it gets a stand-in for the test, removed again
         var runtime = Path.Combine(AppContext.BaseDirectory, GatewayAppsModule.ViewsRuntimeFolder);
         var standIn = !Directory.Exists(runtime);
         if (standIn)

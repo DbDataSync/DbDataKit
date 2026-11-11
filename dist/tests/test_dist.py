@@ -156,7 +156,7 @@ class ShippedGlobalEnvTests(unittest.TestCase):
 
     SHARED = [{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}]
     # product folder -> the service name its folder has under the root
-    SERVICES = {"DbDataConsole": "server", "DbDataRunner": "runner", "DbDataStore": "store", "DbDataWorkspace": "workspace", "DbDataSync": "sync"}
+    SERVICES = {"DbDataKit": "server", "DbDataRunner": "runner", "DbDataStore": "store", "DbDataWorkspace": "workspace", "DbDataSync": "sync"}
 
     def meta(self, path):
         return json.loads((REPO_ROOT / path).read_text(encoding="utf-8"))
@@ -166,7 +166,7 @@ class ShippedGlobalEnvTests(unittest.TestCase):
             self.assertEqual(self.meta(f"{folder}/dist.json")["globalEnv"], self.SHARED, folder)
 
     def test_the_root_and_the_services_folder_are_what_the_source_reads_and_registers(self):
-        engines = (REPO_ROOT / "DbDataKit/src/DbDataKit.State.Engines/SuiteEnvironment.cs").read_text(encoding="utf-8")
+        engines = (REPO_ROOT / "Shared/src/DbDataKit.State.Engines/SuiteEnvironment.cs").read_text(encoding="utf-8")
         self.assertIn('DataRootVariable = "DBDATAKIT_DATA"', engines)
         # the machine folder is <ProgramData>\DbDataKit\<service>: the same text the manifests' programData names
         self.assertIn('Environment.SpecialFolder.CommonApplicationData, Environment.SpecialFolderOption.Create), "DbDataKit", name)', engines)
@@ -176,10 +176,10 @@ class ShippedGlobalEnvTests(unittest.TestCase):
             self.assertIn(f'"{service}"', listed)
 
     def test_each_service_registers_the_folder_the_shared_reader_gives_it(self):
-        for folder, service in (("DbDataConsole", "server"), ("DbDataRunner", "runner"), ("DbDataStore", "store"), ("DbDataWorkspace", "workspace"), ("DbDataBuild", "build")):
+        for folder, service in (("DbDataKit", "server"), ("DbDataRunner", "runner"), ("DbDataStore", "store"), ("DbDataWorkspace", "workspace"), ("DbDataBuild", "build")):
             program = folder[6:]
-            if folder == "DbDataConsole":
-                path, settings, home = f"{folder}/src/DbDataConsole.Server/ConsoleService.cs", "ConsoleSettings", f"{folder}/src/DbDataConsole.Server/ConsoleSettings.cs"
+            if folder == "DbDataKit":
+                path, settings, home = f"{folder}/src/DbDataKit.Server/ConsoleService.cs", "ConsoleSettings", f"{folder}/src/DbDataKit.Server/ConsoleSettings.cs"
             elif folder == "DbDataBuild":
                 path, settings, home = f"{folder}/src/DbDataBuild.Cli/Server/BuildService.cs", "BuildServerSettings", f"{folder}/src/DbDataBuild.Cli/Server/BuildServer.cs"
             else:

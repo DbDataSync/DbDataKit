@@ -1,6 +1,6 @@
 # Engine support
 
-Generated from the engine registry (`DbDataKit/src/DbDataKit.Connections.Descriptor/engines/*.engine.yaml`, plan 14 R5) by `EngineSupportTableTests`; do not edit it by hand. Change the descriptor and run the test with `UPDATE_GOLDEN=1`.
+Generated from the engine registry (`Shared/src/DbDataKit.Connections.Descriptor/engines/*.engine.yaml`, plan 14 R5) by `EngineSupportTableTests`; do not edit it by hand. Change the descriptor and run the test with `UPDATE_GOLDEN=1`.
 
 **yes** built and run against a real engine, **unverified** built and never run against one, **planned** not built (the note names the slice or plan), **no** not supported.
 

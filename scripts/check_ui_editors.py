@@ -10,7 +10,7 @@ The table is written by hand (read the code, do not guess); this check keeps it 
      reason in parentheses in the State cell (`none (reason)`, the documented exemption);
   5. a planned row names a slice that is a row of a plan in docs/plans (every slice id of its Gap cell that has the shape of one, so a plan
      that is deleted or renamed cannot leave a row pointing at nothing); no cell names a `UEnn`, the slices of the plan that was removed;
-  6. every `Name.tsx` named in the Editor column exists under DbDataKit/web/*/src;
+  6. every `Name.tsx` named in the Editor column exists under Shared/web/*/src;
   7. the `Counts:` line equals the count of the rows' states.
 Run from anywhere: python3 scripts/check_ui_editors.py [root]
 """
@@ -69,7 +69,7 @@ def plan_slices(root):
 
 def screen_files(root):
     names = set()
-    web = os.path.join(root, "DbDataKit", "web")
+    web = os.path.join(root, "Shared", "web")
     if not os.path.isdir(web):
         return names
     for module in os.listdir(web):
@@ -118,7 +118,7 @@ def problems(root):
                     out.append(f"{DOC}: '{feature}' is planned and names {ident}, which is not a slice (a table row) of any plan in {PLANS}")
         for name in TSX.findall(editor):
             if name not in existing:
-                out.append(f"{DOC}: '{feature}' names {name}, which is not a file under DbDataKit/web/*/src")
+                out.append(f"{DOC}: '{feature}' names {name}, which is not a file under Shared/web/*/src")
     for ident in registered:
         if ident not in named_formats:
             out.append(f"{DOC} has no row for the stored format `{ident}` (docs/formats.json): add a row with it in the Format column and a state, "

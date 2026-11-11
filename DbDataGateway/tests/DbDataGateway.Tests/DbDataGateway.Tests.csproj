@@ -18,7 +18,7 @@
     <DbDataKitReference Include="Serving.Conformance" />
     <None Include="Config\Golden\*" CopyToOutputDirectory="PreserveNewest" />
     <!-- the sample semantic model and its data, as the semantic engine's own conformance suite runs on them -->
-    <None Include="..\..\..\DbDataKit\tests\DbDataKit.Semantic.Tests\conformance\catalog\**;..\..\..\DbDataKit\tests\DbDataKit.Semantic.Tests\conformance\data\**" Link="semantic\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\Shared\tests\DbDataKit.Semantic.Tests\conformance\catalog\**;..\..\..\Shared\tests\DbDataKit.Semantic.Tests\conformance\data\**" Link="semantic\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="PdfPig" />
     <ProjectReference Include="..\..\src\DbDataGateway.Server\DbDataGateway.Server.csproj" />
     <ProjectReference Include="..\..\src\DbDataGateway.Worker\DbDataGateway.Worker.csproj" />

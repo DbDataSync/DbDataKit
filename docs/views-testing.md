@@ -74,13 +74,13 @@ Needs a Build server paired with the console and hosting a project made from the
 ## 6. Get a PDF (plan 32 DBR15)
 
 Export is off until the host is told which browser to use.
-1. Get the pieces once, from the repository root: `scripts/fetch-chromium.sh` (the pinned Chrome for Testing, about 200 MB, under `.chromium/linux-x64/`; `.ps1` on Windows), `scripts/fetch-fonts.sh` (the bundled Noto fonts, 1.5 MB, under `.fonts/`), and the print page: `cd DbDataKit/web && npm ci --workspace @dbdatakit/visuals --include-workspace-root && npm run build:print -w @dbdatakit/visuals` (writes `visuals/dist/print/print.js` and `print.css`).
+1. Get the pieces once, from the repository root: `scripts/fetch-chromium.sh` (the pinned Chrome for Testing, about 200 MB, under `.chromium/linux-x64/`; `.ps1` on Windows), `scripts/fetch-fonts.sh` (the bundled Noto fonts, 1.5 MB, under `.fonts/`), and the print page: `cd Shared/web && npm ci --workspace @dbdatakit/visuals --include-workspace-root && npm run build:print -w @dbdatakit/visuals` (writes `visuals/dist/print/print.js` and `print.css`).
 2. In the Gateway's `server.yaml` (the `views` module is on, as in section 1) add
    ```yaml
    views:
      export:
        mode: pinned                      # or: system, with path: /usr/bin/google-chrome (an installed Chrome or Edge; its version is recorded)
-       pageAssets: /path/to/DbDataKit/web/visuals/dist/print
+       pageAssets: /path/to/Shared/web/visuals/dist/print
        # noSandbox: true                 # only as root or in a container
    ```
    (`--Gateway:Views:Export:Mode=pinned --Gateway:Views:Export:PageAssets=...` on the command line.) Restart. `curl -k https://<gateway>:8820/health` says `export: {available: true, browser: "HeadlessChrome/156...."}`; if not, `reason` says which setting or file.

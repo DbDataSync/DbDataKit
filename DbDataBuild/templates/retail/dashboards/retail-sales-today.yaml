@@ -1,6 +1,6 @@
 # A dashboard over the semantic model `retail_sales` (semantic/sales.yml): plan 32, the sample of the first testable cut (9a).
 # One widget map, four layouts over it: `desk` (the reflowing grid, the default), `wall` (a fixed 1920 x 1080 canvas for a big screen), `phone` (a canvas that shows five of the seven widgets) and `print` (a paged form).
-# The console shows it from recorded results until a serving module answers the queries (`DbDataKit/conformance/views/widget-results/dashboard/retail-sales-today`).
+# The console shows it from recorded results until a serving module answers the queries (`Shared/conformance/views/widget-results/dashboard/retail-sales-today`).
 schemaVersion: 1
 kind: dashboard
 title: Retail sales today

@@ -5,7 +5,7 @@ A file is YAML or JSON, strict (an unknown key is an error), and every problem i
 ([32](plans/32-dashboards-and-reports.md)). The resolver (below) turns a layout into rendered widgets; the renderers, the layout engines and the module that serves documents are other slices.
 
 Where the files live: in an app's source under `views/` (the apps validator dispatches on `kind`) and in a Build project under `dashboards/` and `reports/` (both come with the slices that wire them in).
-The loaders are in `DbDataKit.Views` (.NET) and `@dbdatakit/visuals` (TypeScript); the JSON Schemas for editors are in `DbDataKit/web/visuals/schemas`.
+The loaders are in `DbDataKit.Views` (.NET) and `@dbdatakit/visuals` (TypeScript); the JSON Schemas for editors are in `Shared/web/visuals/schemas`.
 
 ## A widget
 
@@ -53,12 +53,12 @@ shares are part of the **query**, run on the server as the viewer.
 | `DBD-VIEW-040` to `-043` | the derivation and the catalog check, [below](#deriving-the-request) (`-040` nothing to derive, `-041` no measure, `-042` totals twice or with nothing to roll up, `-043` a model the document does not depend on) |
 
 `ViewsLoader.LoadWidgets` (.NET) and `validateWidgets` (TypeScript) check a widgets map alone, as an assistant's answer, a portal block or a pin holds it. The shared documents and the expected code and path of each
-refusal are in `DbDataKit/conformance/views/widgets`; both suites run them.
+refusal are in `Shared/conformance/views/widgets`; both suites run them.
 
 ## Deriving the request
 
 `DeriveRequest.Derive(widget, roles)` (.NET, `DbDataKit.Views`) and `deriveRequest(widget, roles)` (TypeScript, `@dbdatakit/visuals`, for the editor's field wells) turn a **derived** widget into the semantic request of
-[`docs/semantic/query.md`](semantic/query.md): the envelope `{spec_version: "0.3", kind: "query", query: {...}}`. Both are pure and give the same request, key for key (`DbDataKit/conformance/views/derive`).
+[`docs/semantic/query.md`](semantic/query.md): the envelope `{spec_version: "0.3", kind: "query", query: {...}}`. Both are pure and give the same request, key for key (`Shared/conformance/views/derive`).
 `roles` is all they need of the catalog: which names are measures and which are attributes (a dimension's attribute, a calendar level, a datetime bucket such as `orders.ordered_at_month`, so a grain is just the
 attribute that has it).
 
@@ -100,7 +100,7 @@ The **filter operators** are the engine's: `equals`, `not_equals`, `contains`, `
 
 ## The widget editor's field wells
 
-The console's editor (`?edit=1` on a dashboard, form view; `DbDataKit/web/views-editor/src/WidgetEditor.tsx`) edits a widget through **wells**, the places of its encodings: a metric's `value` and `compare`; a chart's `x`, `y`, `color`,
+The console's editor (`?edit=1` on a dashboard, form view; `Shared/web/views-editor/src/WidgetEditor.tsx`) edits a widget through **wells**, the places of its encodings: a metric's `value` and `compare`; a chart's `x`, `y`, `color`,
 `column`, `row` and `tooltip`; a matrix's `rows`, `columns` and `values`; a table's `columns`; a control's `values.attribute`. The pure logic is in `@dbdatakit/visuals` (`src/editor/wells.ts`, `src/views/catalog.ts`) and is the same
 `deriveRequest` the server runs, so the panel "The request this asks for" shows what will be asked, each part with the place of the document it comes from (`documentPath`) and the parameter bindings.
 
@@ -118,7 +118,7 @@ The console's editor (`?edit=1` on a dashboard, form view; `DbDataKit/web/views-
 
 ## The report editor
 
-A report opens in the same editor as a dashboard (`?edit=1`, form view). Its **flow layout** has its own form (`DbDataKit/web/views-editor/src/FlowEditor.tsx`, the commands in `@dbdatakit/visuals` `src/editor/flow.ts`); the YAML view
+A report opens in the same editor as a dashboard (`?edit=1`, form view). Its **flow layout** has its own form (`Shared/web/views-editor/src/FlowEditor.tsx`, the commands in `@dbdatakit/visuals` `src/editor/flow.ts`); the YAML view
 is the same text. A new report starts with one flow layout (A4 portrait, 15 mm margins) and one empty section, which the loader does not accept until it has a block.
 
 - **Page**: size (a named one, or a custom width and height in millimetres), orientation and the four margins; the form says the printable area in millimetres and CSS pixels, the same numbers the guides are drawn from. An empty
@@ -283,7 +283,7 @@ read is refused naming the kind, the file and both numbers (`DBD-110`).
 | `DBD-VIEW-035` | a key of the other kind |
 | `DBD-VIEW-080` / `-081` | **warnings**: two layouts with equal selectors (the later is never reached by selection); a range with its minimum above its maximum |
 
-The documents are in `DbDataKit/conformance/views` (`good`, `bad`, `warnings` and `cases.json`, which says the code, path and line of each refusal); the .NET (`DbDataKit.Views.Tests`) and TypeScript
+The documents are in `Shared/conformance/views` (`good`, `bad`, `warnings` and `cases.json`, which says the code, path and line of each refusal); the .NET (`DbDataKit.Views.Tests`) and TypeScript
 (`@dbdatakit/visuals`) suites run the same files. The TypeScript validators report the **path** of a problem (`layouts[1].tiles[0].x`), not a line: `JSON.parse` has no positions. The .NET loaders give both.
 What needs the catalog (an encoded field the model does not have, an invalid request) is `CatalogCheck`, at publish, through the engine's validator, not the loaders.
 
@@ -411,7 +411,7 @@ A refusal is `{code, message}`: 400 `invalid` (or the resolver's own code, `DBD-
 A dashboard or report can live as a **file of a Build project**: `dashboards/<name>.yaml` and `reports/<name>.yaml` (also `.yml` and `.json`; the folder is the kind, the file's name the document's name, which the Gateway takes as the registry name). They travel with the semantic model they depend on, are versioned by the project's git, and are exactly what an agent writes.
 
 - **Check.** `project validate` (so `project compile --check`, the Edit tab and the Views tab's **Check the project**) reads each file with the views loader and checks its widgets against the project's own compiled semantic models (`ProjectViews`): the loader's findings and the engine's (`unknown_member`, `wrong_member_kind`, a filter the model cannot take) come back as DDB-106 at the file, line and column. Saved queries, images and the model versions a Gateway pins are the Gateway's to check at publish.
-- **Edit.** The Views tab of a project (`DbDataKit/web/build/src/pages/ViewsTab.tsx`) opens the shared editor (`@dbdatakit/views-editor`, the same screens as the console's Views page) on the files of a **workspace**: `workspaceViewsClient` is a `ViewsClient` over Build's file commands, with the file's hash as the version (a stale save is a `version_conflict` naming the stored hash, as in the other stores), the wells' catalog from `GET .../workspaces/{id}/models/{model}/catalog`, and rows from a paired Gateway through the console's relay (none chosen: the preview says how to get rows). The Edit tab lists the files and links to the editor. Not done: opening them in the Edit tab's form (a `FileSchema` association with the editor as a `FormOverride`); the Edit tab shows the YAML and the loader's markers instead.
+- **Edit.** The Views tab of a project (`Shared/web/build/src/pages/ViewsTab.tsx`) opens the shared editor (`@dbdatakit/views-editor`, the same screens as the console's Views page) on the files of a **workspace**: `workspaceViewsClient` is a `ViewsClient` over Build's file commands, with the file's hash as the version (a stale save is a `version_conflict` naming the stored hash, as in the other stores), the wells' catalog from `GET .../workspaces/{id}/models/{model}/catalog`, and rows from a paired Gateway through the console's relay (none chosen: the preview says how to get rows). The Edit tab lists the files and links to the editor. Not done: opening them in the Edit tab's form (a `FileSchema` association with the editor as a `FormOverride`); the Edit tab shows the YAML and the loader's markers instead.
 - **Publish.** `POST /api/v1/projects/{p}/proxies/{proxy}/publish-view` (`{kind, name, expected_version?, note?}`, approver) reads the file of the project **as merged**, refuses it with the findings when it has errors (nothing is sent), and otherwise `PUT`s it to the Gateway's `/api/v1/dashboards|reports/{name}` with the Publisher role and the person. The Gateway pins the models the document queries to the versions it serves, so publish the model first (`publish-model`).
 
 ### In the Gateway (plan 32 DBR11b)
@@ -459,8 +459,8 @@ option or a subscription.
 
 ## Showing a document
 
-The renderers are in `@dbdatakit/visuals` (`DbDataKit/web/visuals`, its README has the calls). A document's widgets are resolved **through a `ViewsClient`** (`open`, `resolve`, `validate`, `save`, `preview`): the console runs
-on `fixtureClient` (the sample documents of the retail template, `DbDataBuild/templates/retail/dashboards` and `reports`, with recorded results in `DbDataKit/conformance/views/widget-results`) until the `views` module
+The renderers are in `@dbdatakit/visuals` (`Shared/web/visuals`, its README has the calls). A document's widgets are resolved **through a `ViewsClient`** (`open`, `resolve`, `validate`, `save`, `preview`): the console runs
+on `fixtureClient` (the sample documents of the retail template, `DbDataBuild/templates/retail/dashboards` and `reports`, with recorded results in `Shared/conformance/views/widget-results`) until the `views` module
 answers, and `moduleClient` is the same interface over its REST (the routes above; `save` is the Gateway's `PUT` on the management API, which the console's relay reaches; `preview` is not in the module yet). The console's Views page uses both: `?source=` names the fixtures or a Gateway that runs the module, and with no choice the first such Gateway is used.
 
 **The reflow layout fills its container.** `layoutReflow` lays the grid out in whole pixels so the cells fill the box with no gap and no overlap; a tile is never drawn below the smallest box of its type

@@ -9,7 +9,7 @@ This walks through setting up your first replication. If you haven't installed D
 
 DbDataSync serves no web app of its own; its screens are the console's, which manages every DbData server (Sync, Build, Proxy) from one place.
 
-1. **Start the console.** `dbdatakit server run` (see `DbDataConsole/README.md` in the repository) writes a first-run invitation to `FIRST-RUN.txt` in its directory and its log.
+1. **Start the console.** `dbdatakit server run` (see `DbDataKit/README.md` in the repository) writes a first-run invitation to `FIRST-RUN.txt` in its directory and its log.
    Open `https://localhost:8480/invite#<code>` once and make a passkey: you are the first administrator.
 2. **Make a pairing code on the server.** `dbdatasync server pair` prints a single-use code. The console must reach the server over HTTPS
    (see [Install](install.md#connecting-a-console)).

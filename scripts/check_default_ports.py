@@ -13,8 +13,8 @@ import sys
 
 # (service and listener, file, pattern with the port as group 1; the Nth match counts when `nth` is given)
 LISTENERS = [
-    ("DbDataKit (the console)", "DbDataConsole/src/DbDataConsole.Server/ConsoleSettings.cs", r'DefaultListen = "https://[^":]+:(\d+)"', 1),
-    ("DbDataKit identity home on its own", "DbDataConsole/src/DbDataConsole.Server/IdentityHost.cs", r'DefaultListen = "https://[^":]+:(\d+)"', 1),
+    ("DbDataKit (the console)", "DbDataKit/src/DbDataKit.Server/ConsoleSettings.cs", r'DefaultListen = "https://[^":]+:(\d+)"', 1),
+    ("DbDataKit identity home on its own", "DbDataKit/src/DbDataKit.Server/IdentityHost.cs", r'DefaultListen = "https://[^":]+:(\d+)"', 1),
     ("DbDataBuild", "DbDataBuild/src/DbDataBuild.Cli/Server/BuildServer.cs", r'DefaultListen = "https://[^":]+:(\d+)"', 1),
     ("DbDataWorkspace", "DbDataWorkspace/src/DbDataWorkspace.Server/WorkspaceSettings.cs", r'DefaultListen = "https://[^":]+:(\d+)"', 1),
     ("DbDataStore", "DbDataStore/src/DbDataStore.Server/StoreSettings.cs", r'DefaultListen = "https://[^":]+:(\d+)"', 1),

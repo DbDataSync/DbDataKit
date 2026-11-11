@@ -5,7 +5,7 @@ DbDataStore/artifacts/
 .vs/
 DbDataSync/
 DbDataBuild/
-DbDataConsole/
+DbDataKit/
 DbDataGateway/
 **/node_modules/
 .duckdb-archives/

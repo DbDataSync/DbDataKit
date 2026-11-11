@@ -1,4 +1,4 @@
-# The build context is the repository root (DbDataSync needs the sibling DbDataKit/ folder); BuildKit reads this file, named after the
+# The build context is the repository root (DbDataSync needs the sibling Shared/ folder); BuildKit reads this file, named after the
 # Dockerfile, in preference to a .dockerignore at the root.
 **/bin/
 **/obj/

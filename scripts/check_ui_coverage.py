@@ -2,7 +2,7 @@
 """docs/ui-coverage.md names every screen file of the web modules, and only files that exist.
 
 The matrix itself (which actions each screen offers) is written by hand; this check only keeps its Screens column from drifting from the code:
-  1. every page, tab or panel file under DbDataKit/web/<module>/src/pages (not tests) is named in the document;
+  1. every page, tab or panel file under Shared/web/<module>/src/pages (not tests) is named in the document;
   2. every `Something.tsx` the document names exists in one of those folders.
 Run from anywhere: python3 scripts/check_ui_coverage.py [root]
 """
@@ -17,7 +17,7 @@ SCREEN = re.compile(r"(Page|Pages|Tab|Panel)\.tsx$|^PendingServers\.tsx$|^Server
 def screens(root):
     found = {}
     for module in MODULES:
-        folder = os.path.join(root, "DbDataKit", "web", module, "src", "pages")
+        folder = os.path.join(root, "Shared", "web", module, "src", "pages")
         if not os.path.isdir(folder):
             continue
         for name in os.listdir(folder):
@@ -36,7 +36,7 @@ def problems(root):
     existing = screens(root)
     every_tsx = set()
     for module in MODULES:
-        folder = os.path.join(root, "DbDataKit", "web", module, "src", "pages")
+        folder = os.path.join(root, "Shared", "web", module, "src", "pages")
         if os.path.isdir(folder):
             every_tsx.update(n for n in os.listdir(folder) if n.endswith(".tsx"))
     out = [f"docs/ui-coverage.md does not name {name} ({module})" for name, module in sorted(existing.items()) if name not in named]

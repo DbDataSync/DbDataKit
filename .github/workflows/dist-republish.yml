@@ -43,7 +43,7 @@ jobs:
         id: release
         run: |
           case "$PRODUCT" in
-            dbdatakit)   meta=DbDataConsole/dist.json ;;
+            dbdatakit)   meta=DbDataKit/dist.json ;;
             dbdatabuild) meta=DbDataBuild/dist.json ;;
             dbdatasync)  meta=DbDataSync/dist.json ;;
             dbdatagateway) meta=DbDataGateway/dist.json ;;

@@ -8,7 +8,7 @@ namespace DbDataWorkspace.Server;
 /// store must exist on this machine, and a server without one refuses to build and says what to set.
 /// <code>
 /// apps:
-///   packageStore: /var/lib/dbdataworkspace/package-store   # made by `node DbDataKit/web/app-store/build.mjs --out ...` on a machine with a network
+///   packageStore: /var/lib/dbdataworkspace/package-store   # made by `node Shared/web/app-store/build.mjs --out ...` on a machine with a network
 ///   allowedPackages: [left-pad]                             # further packages an app may import; they must be in the store
 ///   packageStoreSha256: 3f2a...                              # optional: the digest `apps store-verify` prints
 ///   isolation: required                                      # required (default): no network namespace, no build; auto: build anyway and say so
@@ -60,11 +60,11 @@ public sealed record WorkspaceAppSettings(string? PackageStore = null, IReadOnly
         var problems = new List<string>();
         VendoredPackageStore? store = null;
         if (PackageStore is not { Length: > 0 })
-            problems.Add("No package store is set. A Workspace server builds an app only from a vendored package store (it installs nothing and reaches no network): make one on a machine with a network with `node DbDataKit/web/app-store/build.mjs --out <folder>`, copy it to this machine and set apps.packageStore in server.yaml to its folder.");
+            problems.Add("No package store is set. A Workspace server builds an app only from a vendored package store (it installs nothing and reaches no network): make one on a machine with a network with `node Shared/web/app-store/build.mjs --out <folder>`, copy it to this machine and set apps.packageStore in server.yaml to its folder.");
         else
         {
             var folder = Path.GetFullPath(PackageStore);
-            if (!Directory.Exists(folder)) problems.Add($"The package store {folder} (apps.packageStore in server.yaml) does not exist on this machine. Make it with `node DbDataKit/web/app-store/build.mjs --out <folder>` and copy it here.");
+            if (!Directory.Exists(folder)) problems.Add($"The package store {folder} (apps.packageStore in server.yaml) does not exist on this machine. Make it with `node Shared/web/app-store/build.mjs --out <folder>` and copy it here.");
             else
             {
                 try { store = VendoredPackageStore.Load(folder, PackageStoreSha256); }

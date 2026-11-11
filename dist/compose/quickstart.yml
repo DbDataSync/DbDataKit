@@ -9,7 +9,7 @@ services:
   console:
     build:
       context: ../..
-      dockerfile: DbDataConsole/Dockerfile
+      dockerfile: DbDataKit/Dockerfile
     environment: *announce
     ports:
       - "8480:8480"

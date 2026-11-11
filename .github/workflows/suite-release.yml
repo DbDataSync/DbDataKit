@@ -125,19 +125,19 @@ jobs:
           [ "$green" -ge 1 ] || { echo "::error::No successful DbDataConsole CI run for $SHA."; exit 1; }
       - uses: actions/setup-dotnet@v6
         with:
-          global-json-file: DbDataConsole/global.json
+          global-json-file: DbDataKit/global.json
       - uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: Build the web app
-        working-directory: DbDataKit/web
+        working-directory: Shared/web
         run: |
           npm ci
           npm run build -w @dbdatakit/console
       - name: Package win-x64 and linux-x64
         run: |
           for rid in win-x64 linux-x64; do
-            SKIP_WEB=1 DbDataConsole/scripts/package.sh "$rid" "$VERSION" "$PWD/assets"
+            SKIP_WEB=1 DbDataKit/scripts/package.sh "$rid" "$VERSION" "$PWD/assets"
           done
       - name: Smoke test the linux-x64 zip
         run: |
@@ -148,7 +148,7 @@ jobs:
       - uses: ./.github/actions/build-msi
         with:
           product: dbdatakit
-          meta: DbDataConsole/dist.json
+          meta: DbDataKit/dist.json
           version: ${{ env.VERSION }}
           zip: assets/dbdatakit-v${{ env.VERSION }}-win-x64.zip
           out: assets
@@ -182,7 +182,7 @@ jobs:
         if: ${{ !inputs.dry_run }}
         with:
           product: dbdatakit
-          meta: DbDataConsole/dist.json
+          meta: DbDataKit/dist.json
           version: ${{ env.VERSION }}
           prerelease: ${{ env.PRERELEASE }}
           sums: assets/SHA256SUMS
@@ -275,7 +275,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { image: dbdatakit,   dockerfile: DbDataConsole/Dockerfile, health: true,  push: true }
+          - { image: dbdatakit,   dockerfile: DbDataKit/Dockerfile, health: true,  push: true }
           - { image: dbdatabuild, dockerfile: DbDataBuild/Dockerfile,   health: true,  push: true }
           - { image: dbdatagateway, dockerfile: DbDataGateway/Dockerfile,   health: false, push: true }
           - { image: dbdatasync,  dockerfile: DbDataSync/Dockerfile,    health: false, push: false }

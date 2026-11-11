@@ -103,11 +103,11 @@ answer for a connection the store has no password for — set these before trigg
 
 ## 4. Run the screens
 
-The server serves no web app: the product's screens are the web app of the dbdatakit console (`DbDataKit/web/console`), which shows Sync's at `/servers/<id>/...`
+The server serves no web app: the product's screens are the web app of the dbdatakit console (`Shared/web/console`), which shows Sync's at `/servers/<id>/...`
 once the server is paired with it ([Getting started](getting-started.md#open-the-server-in-the-console)). To work on the Sync screens themselves, run them on their own dev server against the API:
 
 ```sh
-cd ../DbDataKit/web
+cd ../Shared/web
 npm install
 npm run dev -w @dbdatakit/sync
 ```
@@ -137,8 +137,8 @@ the API, the worker, the CLI and the console server, and the console's web app (
 
 ```sh
 dotnet build src/DbDataSync.Api && dotnet build src/DbDataSync.TaskRunner && dotnet build src/DbDataSync.Cli
-(cd ../DbDataConsole && dotnet build src/DbDataConsole.Server)
-(cd ../DbDataKit/web && npm ci && npm run build -w @dbdatakit/console)
+(cd ../DbDataKit && dotnet build src/DbDataKit.Server)
+(cd ../Shared/web && npm ci && npm run build -w @dbdatakit/console)
 cd tests/DbDataSync.Web.Tests
 npm install
 npx playwright install chromium
@@ -152,7 +152,7 @@ The screens are shown inside the console's frame, so a run writes its pictures t
 
 - `src/DbDataSync.Api` — ASP.NET Core orchestrator: REST API, scheduler, process supervisor, SignalR
   live-run hub.
-- `../DbDataKit/web/sync` — the React/TypeScript Sync screens (`@dbdatakit/sync`), shown by the console (`../DbDataKit/web/console`), which also serves these docs (generated from this folder).
+- `../Shared/web/sync` — the React/TypeScript Sync screens (`@dbdatakit/sync`), shown by the console (`../Shared/web/console`), which also serves these docs (generated from this folder).
 - `src/DbDataSync.Core` — config models, git-backed config store, secrets.
 - `src/DbDataSync.State` — shared SQLite state store (runs, logs, watermarks, locks).
 - `src/DbDataSync.Drivers.Abstractions` — the driver interfaces and capability discovery.

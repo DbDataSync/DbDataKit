@@ -26,8 +26,8 @@ OLD_NAME = re.compile(rf"(?<![A-Za-z0-9_])(?:DBDATA(?:{PRODUCTS})_|DBGATEWAY_|DB
 
 # Files that name old variables on purpose: path (relative, '/') -> why.
 EXEMPT_FILES = {
-    "DbDataKit/src/DbDataKit.State.Engines/SuiteEnvironment.cs": "the refusal list (OldNames, OldPrefixes)",
-    "DbDataKit/tests/DbDataKit.State.Engines.Tests/SuiteEnvironmentTests.cs": "the tests of the refusal list",
+    "Shared/src/DbDataKit.State.Engines/SuiteEnvironment.cs": "the refusal list (OldNames, OldPrefixes)",
+    "Shared/tests/DbDataKit.State.Engines.Tests/SuiteEnvironmentTests.cs": "the tests of the refusal list",
     "dist/tests/test_dist.py": "asserts that the machine variables of earlier releases are not set any more",
     "docs/plans/RELEASE-NOTES-PENDING.md": "release notes: old and new names, on purpose",
     "docs/plans/33-fewer-services.md": "the plan of the rename: the old-name column",

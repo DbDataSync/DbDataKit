@@ -28,7 +28,7 @@ public class SchemaConformanceTests
         if (name is "config" or "folder") LoadSchema("model");   // the `defaults:` of the project and folder files are the model's own settings
         if (name == "semantic")
         {
-            SchemaRegistry.Global.Register(JsonSchema.FromFile(Path.Combine(RepoRoot(), "..", "DbDataKit", "src", "DbDataKit.Semantic", "schemas", "semantic_request.schema.json")));   // its filters are the semantic request's
+            SchemaRegistry.Global.Register(JsonSchema.FromFile(Path.Combine(RepoRoot(), "..", "Shared", "src", "DbDataKit.Semantic", "schemas", "semantic_request.schema.json")));   // its filters are the semantic request's
             SchemaRegistry.Global.Register(JsonSchema.FromText(DbDataKit.Quality.CheckSchema.Text()));   // its `checks` are the check model's: another test registering it first made this one pass, so it is registered here, not by luck of order
         }
         return schema;

@@ -43,7 +43,7 @@ Studio" and not "DbDataStudio".
 | --- | --- | --- |
 | Sync | `DbDataSync/`, `DbDataSync.*`, service `DbDataSync` | `dbdatasync` |
 | Studio | `DbDataKit.Studio/`, `DbDataKit.Studio.*`, service `DbDataKit.Studio` | `dbdatakit-studio` |
-| the admin tool | `DbDataKit/src/DbDataKit.Admin.Cli`, package `DbDataKit.Admin.Cli` | `dbdatakit` |
+| the admin tool | `Shared/src/DbDataKit.Admin.Cli`, package `DbDataKit.Admin.Cli` | `dbdatakit` |
 
 The hyphen in `dbdatakit-studio` is only there because the command `dbdatakit` is taken by the admin tool.
 
@@ -79,7 +79,7 @@ Nothing is migrated. Each old form fails with a message that names the file or v
 | What | Old | New | How the old form fails |
 | --- | --- | --- | --- |
 | Executable, service, release | `dbdatakit`, service `DbDataKitConsole`, tags `dbdatakit/v…`, image and installers `dbdatakit`, stable URLs `…/dbdatakit/dist/…` | `dbdatakit-studio`, service `DbDataKit.Studio`, tags `dbdatakit-studio/v…`, and so on | The docs checker (`scripts/check_docs_commands.py`) rejects every old command form in docs, scripts and workflows. An installed old service is untouched; uninstall it first (release note). |
-| Folders and projects | `DbDataConsole/`, `DbDataConsole.Server`, `DbDataKit/web/console`, `@dbdatakit/console` | `DbDataKit.Studio/`, `DbDataKit.Studio.Server`, `DbDataKit/web/studio`, `@dbdatakit/studio` | Does not build against the old names. |
+| Folders and projects | `DbDataKit/`, `DbDataKit.Server`, `Shared/web/console`, `@dbdatakit/console` | `DbDataKit.Studio/`, `DbDataKit.Studio.Server`, `Shared/web/studio`, `@dbdatakit/studio` | Does not build against the old names. |
 | Data directory and environment | `DBDATAKIT_CONSOLE_*`, default directory `…/DbDataKit/console` | `DBDATAKIT_STUDIO_*`, default `…/DbDataKit/studio` | Studio starts with an **empty** directory (no users, no certificate, a new first-run invitation). It refuses to start when an old-named variable is set, and names it. |
 | Wire values | `ClientKind.Console` (the lower-case word is inside the pairing proof), proof labels `dbdata-pair-v1-*`, management API version 1 | `ClientKind.Studio`, labels `v2`, management API version 2 with the supported floor raised to 2 for this step (the usual rule also accepts the version before) | A version-1 server is reported as "Upgrade this server". A `server.yaml` listing a client of kind `console` is refused, naming the file. |
 | Signing key | secret `kit/console/signing-key` | `kit/studio/signing-key`, a new key | The old key is not read. With the wire change every server is paired again anyway. |
@@ -128,7 +128,7 @@ already does this for the identity home. It can be added later as another kind o
 
 ### 6.1 Packaging
 
-- Project `DbDataKit/src/DbDataKit.Admin.Cli`, `PackAsTool`, `ToolCommandName` `dbdatakit`, package id `DbDataKit.Admin.Cli`
+- Project `Shared/src/DbDataKit.Admin.Cli`, `PackAsTool`, `ToolCommandName` `dbdatakit`, package id `DbDataKit.Admin.Cli`
   (`dotnet tool install -g DbDataKit.Admin.Cli`), the same pattern as `DbDataKit.Update.Tools`. The existing `DbDataKit.Cli` (the shared
   command framework) is left alone. One build for Windows and Linux.
 - Built on `DbDataKit.Cli` (nouns and verbs, `--format json`, a data schema per verb). The docs checker reads its nouns from the source.

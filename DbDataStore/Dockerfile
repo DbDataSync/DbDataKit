@@ -1,5 +1,5 @@
 # The DbDataStore server for Linux containers.
-#   docker build -f DbDataStore/Dockerfile -t dbdatastore .        (run from the repository root: the build needs DbDataKit/ too)
+#   docker build -f DbDataStore/Dockerfile -t dbdatastore .        (run from the repository root: the build needs Shared/ too)
 #   docker run -p 8490:8490 -v ./store-data:/data dbdatastore        (/data holds the server's identity, paired clients and certificate)
 # Pair a console (the commands run inside the container, as the server's own user):
 #   docker exec <container> dbdatastore server pair --max-role admin

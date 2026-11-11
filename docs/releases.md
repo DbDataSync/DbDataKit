@@ -9,7 +9,7 @@ truth; their header comments say how to dispatch them. What a release contains a
   pull request, one commit per slice. The merge style (rebase, merge commit or squash) is free; rebase keeps `main` readable and is preferred.
 - **No branch protection and no ruleset.** The committers follow the batch model by convention. Revisit if more people commit.
 - **CI is change-based.** Each product has one CI workflow that runs on pull requests into `main` and on pushes to `main`. A first `changes`
-  job diffs the pull request (or the push) and the suites run only when the product's folder, `DbDataKit/`, `testenv/` or the product's
+  job diffs the pull request (or the push) and the suites run only when the product's folder, `Shared/`, `testenv/` or the product's
   workflow files changed. A skipped suite still lets the run report success. A newer push to a pull request cancels the older run; runs on
   `main` always complete.
 - **A release is a tag, not a branch move.** A release workflow pushes no branch and merges nothing; it tags a commit that is already on `main`
@@ -27,9 +27,9 @@ truth; their header comments say how to dispatch them. What a release contains a
 
 ## Shared code
 
-`DbDataKit/` is consumed by the products at the same commit through project references, so a shared change must be proven against every consumer.
+`Shared/` is consumed by the products at the same commit through project references, so a shared change must be proven against every consumer.
 
-1. **Each product's CI runs when `DbDataKit/` changes** (its `changes` job includes the path).
+1. **Each product's CI runs when `Shared/` changes** (its `changes` job includes the path).
 2. **The shared libraries' own suite runs once**, in `dbdatakit-ci.yml` (it calls `_dbdatakit.yml`: Linux and Windows, against the engines of
    `testenv/`), not once per product.
 3. Conflicts are ordinary merge or rebase conflicts on the batch branch, resolved before the pull request is merged.

@@ -31,7 +31,7 @@ on:
       - 'docs/ui-editors.md'
       - 'docs/formats.json'
       - 'docs/plans/**'
-      - 'DbDataKit/web/*/src/pages/**'
+      - 'Shared/web/*/src/pages/**'
       - '.github/workflows/**'
       - '.github/actions/**'
       - '**/Dockerfile'

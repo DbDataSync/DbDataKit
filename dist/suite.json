@@ -1,6 +1,6 @@
 {
   "members": [
-    { "product": "dbdatakit", "meta": "DbDataConsole/dist.json", "folder": "console" },
+    { "product": "dbdatakit", "meta": "DbDataKit/dist.json", "folder": "console" },
     { "product": "dbdatagateway", "meta": "DbDataGateway/dist.json", "folder": "gateway" },
     { "product": "dbdatarunner", "meta": "DbDataRunner/dist.json", "folder": "runner" },
     { "product": "dbdatasync", "meta": "DbDataSync/dist.json", "folder": "sync" },

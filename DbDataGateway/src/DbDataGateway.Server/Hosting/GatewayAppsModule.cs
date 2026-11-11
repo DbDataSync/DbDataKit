@@ -23,7 +23,7 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
     /// <summary>The secret that holds the seed of the key the apps host signs its app tokens with: made on the first start, and copied to every other instance of a group.</summary>
     public const string SigningKeySecret = "dbdata:gateway:apps:signing-key";
 
-    /// <summary>The folder next to the program that holds the runtime for apps of views only (<c>views-app.js</c>, <c>views-app.css</c>; plan 26, AP25), copied there by the build from <c>DbDataKit/web/view-app/dist</c>.</summary>
+    /// <summary>The folder next to the program that holds the runtime for apps of views only (<c>views-app.js</c>, <c>views-app.css</c>; plan 26, AP25), copied there by the build from <c>Shared/web/view-app/dist</c>.</summary>
     public const string ViewsRuntimeFolder = "apps-views";
 
     /// <summary>The issuer name in the tokens; a server that accepts them pairs this issuer's public key.</summary>

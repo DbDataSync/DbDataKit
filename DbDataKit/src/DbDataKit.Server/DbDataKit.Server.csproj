@@ -1,0 +1,81 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <AssemblyName>dbdatakit</AssemblyName>
+    <Description>The dbdatakit console: the one web interface for the DbData servers (plan 13, U07).</Description>
+    <!-- The reference only orders the build (ReferenceOutputAssembly=false) and the task host is always published framework-dependent below. Under PublishSingleFile=true this program is self-contained
+         while the task host, reached with other global properties, may not be (NETSDK1150/NETSDK1151 depending on the order MSBuild evaluates them; seen on Windows CI), so the SDK's check is off. -->
+    <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
+    <DbDataKitReference Include="Cli" />   <!-- the shared noun-verb grammar -->
+    <DbDataKitReference Include="Config.Git" />
+    <DbDataKitReference Include="Config.Yaml" />
+    <DbDataKitReference Include="Connections.Abstractions" />   <!-- the connection/1 file the Connections view copies between servers; plan 13a, E05 -->
+    <DbDataKitReference Include="Lineage" />   <!-- the servers' lineage graphs, joined by identity; plan 18, G09 -->
+    <DbDataKitReference Include="Identity" />   <!-- sign-in through the identity home, for a console that keeps no users of its own; plan 13a, U14 -->
+    <DbDataKitReference Include="Hosting.Abstractions" />   <!-- the shared host: service and systemd modes, drain, /health and /version -->
+    <DbDataKitReference Include="Hosting" />
+    <DbDataKitReference Include="Hosting.Cli" />
+    <DbDataKitReference Include="Hosting.WindowsService" />
+    <DbDataKitReference Include="Hosting.Systemd" />
+    <DbDataKitReference Include="Hosting.Certificates" />
+    <DbDataKitReference Include="Security.Acl" />
+    <DbDataKitReference Include="State" />   <!-- the users, sessions and invitations -->
+    <DbDataKitReference Include="State.Api" />   <!-- GET /api/v1/state and the maintenance mode; plan 29b, C05 -->
+    <DbDataKitReference Include="State.Cli" />   <!-- state show, test and grants; plan 29b, C01 -->
+    <DbDataKitReference Include="State.Engines" />   <!-- SQLite, SQL Server or PostgreSQL for them, as the operator names; plan 13a, P11 -->
+    <DbDataKitReference Include="Web" />
+    <DbDataKitReference Include="Upgrade" />   <!-- the release feed the console shows what is available from; plan 24a UC08 -->
+    <DbDataKitReference Include="Runner.Abstractions" />   <!-- package/1 manifests: the console's system package; plan 28a R20 -->
+    <DbDataKitReference Include="Runner" />   <!-- the engine the console hosts a copy of as its embedded runner; plan 28 section 6a -->
+    <DbDataKitReference Include="Runner.Api" />   <!-- the runner's management API, served for the people signed in to the console -->
+    <DbDataKitReference Include="Monitoring" />
+    <DbDataKitReference Include="Scheduling" />
+    <DbDataKitReference Include="Secrets.Abstractions" />   <!-- the key the console signs for its servers with -->
+    <DbDataKitReference Include="Secrets" />
+    <DbDataKitReference Include="Secrets.Store" />
+    <DbDataKitReference Include="Secrets.Windows" />   <!-- sign-in, passkeys, invitations, users: the controllers the console serves -->
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseLocalDbDataKit)' == 'true'">
+    <!-- the task host an embedded runner starts for a .NET package: published beside the program, as dbdatarunner does (its own dependencies and runtime configuration) -->
+    <ProjectReference Include="$(DbDataKitRoot)src\DbDataKit.Runner.TaskHost\DbDataKit.Runner.TaskHost.csproj" ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+  <Target Name="CopyTaskHost" AfterTargets="Build" Condition="'$(UseLocalDbDataKit)' == 'true'">
+    <PropertyGroup>
+      <_TaskHostDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(OutDir)', 'taskhost'))</_TaskHostDir>
+    </PropertyGroup>
+    <MSBuild Projects="$(DbDataKitRoot)src\DbDataKit.Runner.TaskHost\DbDataKit.Runner.TaskHost.csproj" Targets="Publish" Properties="NoBuild=true;PublishDir=$(_TaskHostDir);SelfContained=false" />
+  </Target>
+  <!-- AFTER the list is computed: added before it, the SDK's file-conflict resolution saw two Microsoft.Data.Sqlite.dll (the console's and the task host's) and dropped the console's, so the image failed at start -->
+  <Target Name="TaskHostIntoPublish" AfterTargets="ComputeResolvedFilesToPublishList" DependsOnTargets="CopyTaskHost" Condition="'$(UseLocalDbDataKit)' == 'true'">
+    <ItemGroup>
+      <_TaskHostFile Include="$(_TaskHostDir)**\*" />
+      <ResolvedFileToPublish Include="@(_TaskHostFile)" RelativePath="taskhost\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+
+  <!--
+    The web app is built into wwwroot on publish, which makes the console one artifact. Publish only, and skippable: the test suites run the built app from
+    Shared/web/console/dist, and making `dotnet build` shell out to npm would put a node install between a developer and a unit test.
+  -->
+  <PropertyGroup>
+    <SkipWebBuild Condition="'$(SkipWebBuild)' == ''">false</SkipWebBuild>
+    <WebProjectDir>$(MSBuildProjectDirectory)/../../../Shared/web</WebProjectDir>
+  </PropertyGroup>
+
+  <Target Name="BuildWebApp" BeforeTargets="PrepareForPublish" Condition="'$(SkipWebBuild)' != 'true'">
+    <Message Importance="high" Text="Building the web app in $(WebProjectDir)" />
+    <Exec Command="npm ci" WorkingDirectory="$(WebProjectDir)" />
+    <Exec Command="npm run build -w @dbdatakit/console" WorkingDirectory="$(WebProjectDir)" />
+    <ItemGroup>
+      <WebAppOutput Include="$(WebProjectDir)/console/dist/**/*" />
+      <ResolvedFileToPublish Include="@(WebAppOutput)">
+        <RelativePath>wwwroot/%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
+</Project>

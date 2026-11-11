@@ -1,12 +1,12 @@
 # Arrow Flight SQL gateway for Linux containers.
-#   docker build -f DbDataGateway/Dockerfile -t dbdatagateway .      (run from the repository root: the build needs DbDataKit/ too)
+#   docker build -f DbDataGateway/Dockerfile -t dbdatagateway .      (run from the repository root: the build needs Shared/ too)
 #   docker run -p 8815:8815 -v ./dbgateway-data:/data dbdatagateway     (/data holds config/ and the generated certificate)
 # ODBC sources need drivers installed in the image (see the commented example below); the 32-bit worker is
 # Windows-only, so "Bitness": "x86" data sources are not available in containers.
-# The runtime that draws an app of views only (plan 26, AP25): the web build of DbDataKit/web/view-app, copied to /app/apps-views below.
+# The runtime that draws an app of views only (plan 26, AP25): the web build of Shared/web/view-app, copied to /app/apps-views below.
 FROM node:22 AS views
 WORKDIR /web
-COPY DbDataKit/web .
+COPY Shared/web .
 RUN npm ci && npm run build -w @dbdatakit/view-app
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build

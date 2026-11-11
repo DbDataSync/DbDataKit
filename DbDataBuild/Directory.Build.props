@@ -11,8 +11,8 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <!-- Monorepo layout: DbDataBuild/ and DbDataKit/ (the shared libraries) are sibling folders at the repository root. -->
-    <DbDataKitRoot Condition="'$(DbDataKitRoot)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', 'DbDataKit'))</DbDataKitRoot>
+    <!-- Monorepo layout: DbDataBuild/ and Shared/ (the shared libraries) are sibling folders at the repository root. -->
+    <DbDataKitRoot Condition="'$(DbDataKitRoot)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', 'Shared'))</DbDataKitRoot>
     <DbDataKitRoot>$([MSBuild]::EnsureTrailingSlash('$(DbDataKitRoot)'))</DbDataKitRoot>
     <UseLocalDbDataKit Condition="'$(UseLocalDbDataKit)' == '' and Exists('$(DbDataKitRoot)src')">true</UseLocalDbDataKit>
     <DbDataKitVersion Condition="'$(DbDataKitVersion)' == ''">0.1.0</DbDataKitVersion>

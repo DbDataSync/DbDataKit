@@ -286,7 +286,7 @@ public sealed class AppsOptions
     /// </summary>
     public List<string> AllowedPackages { get; set; } = [];
 
-    /// <summary>The vendored package store the app build uses (<c>apps.packageStore</c>): a folder made by <c>DbDataKit/web/app-store/build.mjs</c> (<c>store.json</c> and <c>node_modules</c>). When it is set, <c>apps build</c> builds from it with no network and installs nothing; without it a build installs the app's packages from a registry (a developer's machine).</summary>
+    /// <summary>The vendored package store the app build uses (<c>apps.packageStore</c>): a folder made by <c>Shared/web/app-store/build.mjs</c> (<c>store.json</c> and <c>node_modules</c>). When it is set, <c>apps build</c> builds from it with no network and installs nothing; without it a build installs the app's packages from a registry (a developer's machine).</summary>
     public string? PackageStore { get; set; }
 
     /// <summary>The SHA-256 of the store's <c>store.json</c> (<c>apps.packageStoreSha256</c>), so that a replaced manifest is refused too; empty: the manifest is trusted as the file system keeps it. <c>apps store-verify</c> prints it.</summary>

@@ -2,9 +2,9 @@
 
 A matrix of service, object and action: what a person can do from the console's screens today, and what is only an API or a command line. Keep it current in the same change that adds, removes or widens a screen (`scripts/check_ui_coverage.py` fails when a page file is missing from the **Screens** column, or a file named there is gone).
 
-Read as of 2026-11-08 (updated after Z07, O01, O03, AP04, AP24, FQ17 and the replication checks tab), from the routes and API clients of `DbDataKit/web/*`, not by clicking through every screen. A cell is **Yes**, **Partial** (say what is missing under Notes), or **–** (no screen). **Other actions** are the verbs that are not create, edit or delete.
+Read as of 2026-11-08 (updated after Z07, O01, O03, AP04, AP24, FQ17 and the replication checks tab), from the routes and API clients of `Shared/web/*`, not by clicking through every screen. A cell is **Yes**, **Partial** (say what is missing under Notes), or **–** (no screen). **Other actions** are the verbs that are not create, edit or delete.
 
-All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<server>/...`; the products have no web app of their own. Roles gate each action (Viewer, Operator, Author, Approver, Admin); the table says what exists, not who may.
+All screens are shown by the console (`Shared/web/console`) at `/servers/<server>/...`; the products have no web app of their own. Roles gate each action (Viewer, Operator, Author, Approver, Admin); the table says what exists, not who may.
 
 | Service | Object | Create | Edit | Delete | Other actions | Screens |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -75,6 +75,6 @@ All screens are shown by the console (`DbDataKit/web/console`) at `/servers/<ser
 
 ## Keeping it current
 
-Run `python3 -I scripts/check_ui_coverage.py`. It reads `DbDataKit/web/{console,sync,gateway,build,admin,store,runner}/src/pages`, and fails for any page or tab file (`*Page.tsx`, `*Tab.tsx`, `*Panel.tsx`, `*Pages.tsx`) that this file does not name, and for any `.tsx` file named here that does not exist. It cannot tell whether a cell is right: when a screen gains an action, change the cell too.
+Run `python3 -I scripts/check_ui_coverage.py`. It reads `Shared/web/{console,sync,gateway,build,admin,store,runner}/src/pages`, and fails for any page or tab file (`*Page.tsx`, `*Tab.tsx`, `*Panel.tsx`, `*Pages.tsx`) that this file does not name, and for any `.tsx` file named here that does not exist. It cannot tell whether a cell is right: when a screen gains an action, change the cell too.
 
 Whether a screen is an *editor* for what a person authors or publishes (and what has none) is [ui-editors.md](ui-editors.md), checked by `scripts/check_ui_editors.py`.

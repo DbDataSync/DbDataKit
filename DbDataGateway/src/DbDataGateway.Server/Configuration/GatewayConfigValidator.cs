@@ -154,7 +154,7 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
             if (!System.Text.RegularExpressions.Regex.IsMatch(o.Apps.AllowedPackages[i] ?? "", @"^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$"))
                 cx.Error($"Apps.AllowedPackages[{i}]", $"`{o.Apps.AllowedPackages[i]}` is not a package name.", "Use an npm package name such as `left-pad` or `@scope/name`, lower case, with no version and no path.");
         if (o.Apps.AllowedPackages.Count > 0 && string.IsNullOrWhiteSpace(o.Apps.PackageStore))
-            cx.Warning("Apps.AllowedPackages", "`allowedPackages` lists packages and no `packageStore` says where they are vendored, so no build can use them.", "Set `Apps.PackageStore` to the folder `DbDataKit/web/app-store/build.mjs` made.");
+            cx.Warning("Apps.AllowedPackages", "`allowedPackages` lists packages and no `packageStore` says where they are vendored, so no build can use them.", "Set `Apps.PackageStore` to the folder `Shared/web/app-store/build.mjs` made.");
         if (!GatewayModules.Has(o, GatewayModules.Apps)) return;
         if (!IPAddress.TryParse(o.Apps.Address, out _))
             cx.Error("Apps.Address", $"`Address` is `{o.Apps.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");

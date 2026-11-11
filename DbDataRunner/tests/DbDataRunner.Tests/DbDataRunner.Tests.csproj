@@ -12,7 +12,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\..\src\DbDataRunner.Server\DbDataRunner.Server.csproj" />
     <!-- built, then published by the tests to a directory like a real package -->
-    <ProjectReference Include="..\..\..\DbDataKit\tests\DbDataKit.Runner.TestPackage\DbDataKit.Runner.TestPackage.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\Shared\tests\DbDataKit.Runner.TestPackage\DbDataKit.Runner.TestPackage.csproj" ReferenceOutputAssembly="false" />
     <None Include="help.snapshot.txt" CopyToOutputDirectory="PreserveNewest" />
     <!-- where the repository is, for the test that publishes the sample package (the output may be elsewhere: an artifacts path) -->
     <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">

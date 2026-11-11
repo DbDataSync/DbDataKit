@@ -1,7 +1,7 @@
 # Architecture of the suite
 
 The shape of the suite and the decisions behind it (they were made in plan 13, which this document replaces; its decision numbers D1 to D20 are kept
-because source comments cite them). Where each part is described in detail: the product READMEs, the package READMEs under `DbDataKit/src/`, and
+because source comments cite them). Where each part is described in detail: the product READMEs, the package READMEs under `Shared/src/`, and
 `docs/suite-listeners-and-auth.md` (what listens where) and `docs/suite-data-flow.md` (data and control).
 
 ## Target shape
@@ -22,13 +22,13 @@ because source comments cite them). Where each part is described in detail: the 
            each product: its own server with a management API on its own listener, its own state database, its own config directory;
            no web UI of its own. The console reaches a server only through that API, and a server never calls a console.
                                                    │
-   DbDataKit/ (shared libraries): Config · Secrets · Dialect · Connections (+ FlightSql) · Metadata · Transfer · Hosting · Scheduling ·
+   Shared/ (shared libraries): Config · Secrets · Dialect · Connections (+ FlightSql) · Metadata · Transfer · Hosting · Scheduling ·
                                   Monitoring · Scripting (Roslyn + NuGet) · Cli (command surface, MCP) · Web (trust, sign-in) · State · Identity
 ```
 
 - **The console and the products are separate** (D1). A product is a server (an operating-system service with its own config directory, state store and
   management API, and no UI of its own) plus a command line that works with or without the console. The console is the one UI, a host built from the
-  shared web packages (`DbDataKit/web`). It holds the list of registered servers and each product's screens. A product keeps running (schedules,
+  shared web packages (`Shared/web`). It holds the list of registered servers and each product's screens. A product keeps running (schedules,
   replication, queries) while the console is down; only the screens are unavailable. One console manages several servers of each product, and one server
   can be paired with several consoles.
 - **A standalone install** is one product plus the console with that product registered. Each product ships on its own (its image, MSI and zips); the
@@ -87,14 +87,14 @@ Decided by the owner after the table above was closed. The numbers are the ones 
 | 13c D12 | Relationships between built models are written as `foreign_keys:` on the model; semantic relationships are read from them. | One spelling for a foreign key in both formats. Whether models and semantic models become one format is a proposal (plan 19 J30). | `docs/semantic/models-and-semantic-models.md` |
 | 13c D20 | Sync has no sign-in of its own: it accepts a console's token and its task runner's token and answers `/api/health`. A `server.yaml` that sets `Auth:Windows` or `Auth:Network` is refused with a message naming the file. | One place to sign in (the console, or the identity home behind it); nothing to secure twice. | `DbDataSync/docs` |
 | 13c D22 | Installing a library adds `libraries/*/lib/` to the config repository's `.gitignore` (`LibraryPaths.EnsureStoreGitignored`). | The extracted packages are a local store; their DLLs must not be committed beside `library.lock`. | `DbDataSync/docs/drivers-and-libraries.md` |
-| 13c D24 | A person's external (Entra, Windows) groups count until their next sign-in through that source: no expiry, and signing out does not clear them. | The home records what the last sign-in carried; a person removed from a group at the provider loses the role at the next sign-in. A lifetime can be added if a tenant needs one. | `DbDataKit/src/DbDataKit.Identity/README.md` |
-| 13c D25 | Entra's group overage (more than 200 groups, no `groups` claim) is left to the tenant: its administrator limits the groups with `groupMembershipClaims`; the home calls no Microsoft Graph. | Graph needs a credential and a permission of its own. Revisit if a tenant cannot limit its groups. | `DbDataKit/src/DbDataKit.Identity/README.md` |
-| 13c D26 | An Entra sign-in links to an existing account on the token's UPN (preferred) or email, trusted (`trustEmail`); other OpenID sources link only on a verified address. | An Entra id token has no `email_verified`; a tenant that lets people set their own mail attribute must not be trusted, so it is a setting. | `DbDataKit/src/DbDataKit.Identity/README.md` |
-| 13c D27 | Copying a connection to another server never copies a secret value: the copy names the reference the target must hold (for a Sync target the person types the password, sent to that server only). | The console never reads a secret. | `DbDataConsole/README.md` |
+| 13c D24 | A person's external (Entra, Windows) groups count until their next sign-in through that source: no expiry, and signing out does not clear them. | The home records what the last sign-in carried; a person removed from a group at the provider loses the role at the next sign-in. A lifetime can be added if a tenant needs one. | `Shared/src/DbDataKit.Identity/README.md` |
+| 13c D25 | Entra's group overage (more than 200 groups, no `groups` claim) is left to the tenant: its administrator limits the groups with `groupMembershipClaims`; the home calls no Microsoft Graph. | Graph needs a credential and a permission of its own. Revisit if a tenant cannot limit its groups. | `Shared/src/DbDataKit.Identity/README.md` |
+| 13c D26 | An Entra sign-in links to an existing account on the token's UPN (preferred) or email, trusted (`trustEmail`); other OpenID sources link only on a verified address. | An Entra id token has no `email_verified`; a tenant that lets people set their own mail attribute must not be trusted, so it is a setting. | `Shared/src/DbDataKit.Identity/README.md` |
+| 13c D27 | Copying a connection to another server never copies a secret value: the copy names the reference the target must hold (for a Sync target the person types the password, sent to that server only). | The console never reads a secret. | `DbDataKit/README.md` |
 | 13c D28 | Sync's `extensions.sync` keys use the shared snake_case names (`segment_order`, `test_query`, `connect_timeout_seconds`, `command_timeout_seconds`), and its connection file API takes `{text, expected_version, password}` and answers a conflict with `current_version`, as the Gateway's data-source API does. | One spelling and one shape for the pair of file APIs the console copies between. | `DbDataSync/docs/configuration.md` |
 | 13c D29 | The slow test engines' images (BigQuery emulator, sqlflite, SQL Server 2025, Spark) are pinned by digest in `testenv/docker-compose.yml`; the file says how to move one. | A moving tag can turn the nightly run red without a change of ours. | `testenv/docker-compose.yml` |
-| 13c D30 | The identity home's admin API is the management API of whatever hosts the home; the console's screens use it through its relay and the commands stay. | One admin surface per host, no screens of the home's own. | `DbDataKit/src/DbDataKit.Identity/README.md` |
-| 13c D31 | A home that runs on its own keeps the framework key ring in its `dataprotection/` directory (a backup holds the state and that directory); the serving layer's home protects its signing keys with `KeySigningKeyProtector` and a key in its secret store. | Simple for one home; a group of homes on one shared state needs the same key everywhere. | `DbDataConsole/README.md`, `DbDataKit/src/DbDataKit.Identity/README.md` |
+| 13c D30 | The identity home's admin API is the management API of whatever hosts the home; the console's screens use it through its relay and the commands stay. | One admin surface per host, no screens of the home's own. | `Shared/src/DbDataKit.Identity/README.md` |
+| 13c D31 | A home that runs on its own keeps the framework key ring in its `dataprotection/` directory (a backup holds the state and that directory); the serving layer's home protects its signing keys with `KeySigningKeyProtector` and a key in its secret store. | Simple for one home; a group of homes on one shared state needs the same key everywhere. | `DbDataKit/README.md`, `Shared/src/DbDataKit.Identity/README.md` |
 
 ## Why the design is safe
 
@@ -114,12 +114,12 @@ Decided by the owner after the table above was closed. The numbers are the ones 
 
 | Convention | Documented in |
 | --- | --- |
-| Command grammar, effect classes, JSON output, exit codes, MCP | `DbDataKit/src/DbDataKit.Cli/README.md` |
-| Pairing, tokens, ceilings, roles, audit, version rules | `DbDataKit/src/DbDataKit.Web/README.md`, `DbDataKit/src/DbDataKit.Hosting.Local/README.md` |
-| Browser relay, instances, connections across servers | `DbDataConsole/README.md` |
-| Identity home, OpenID Connect, tokens | `DbDataKit/src/DbDataKit.Identity/README.md` |
-| Schedules and the work queue; run model and health rules | `DbDataKit/src/DbDataKit.Scheduling/README.md`, `DbDataKit/src/DbDataKit.Monitoring/README.md` |
-| Secret store | `DbDataKit/src/DbDataKit.Secrets.Store/README.md`, `DbDataKit/src/DbDataKit.Secrets.Cli/README.md` |
-| Config layout, connection format | `DbDataKit/src/DbDataKit.Config.Git/README.md`, `DbDataKit/src/DbDataKit.Connections.Abstractions/README.md` |
-| Scripting, libraries, drivers | `DbDataKit/src/DbDataKit.Scripting/README.md` |
+| Command grammar, effect classes, JSON output, exit codes, MCP | `Shared/src/DbDataKit.Cli/README.md` |
+| Pairing, tokens, ceilings, roles, audit, version rules | `Shared/src/DbDataKit.Web/README.md`, `Shared/src/DbDataKit.Hosting.Local/README.md` |
+| Browser relay, instances, connections across servers | `DbDataKit/README.md` |
+| Identity home, OpenID Connect, tokens | `Shared/src/DbDataKit.Identity/README.md` |
+| Schedules and the work queue; run model and health rules | `Shared/src/DbDataKit.Scheduling/README.md`, `Shared/src/DbDataKit.Monitoring/README.md` |
+| Secret store | `Shared/src/DbDataKit.Secrets.Store/README.md`, `Shared/src/DbDataKit.Secrets.Cli/README.md` |
+| Config layout, connection format | `Shared/src/DbDataKit.Config.Git/README.md`, `Shared/src/DbDataKit.Connections.Abstractions/README.md` |
+| Scripting, libraries, drivers | `Shared/src/DbDataKit.Scripting/README.md` |
 | Releases and distribution | `docs/releases.md`, `dist/README.md` |

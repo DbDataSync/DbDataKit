@@ -1,7 +1,7 @@
 name: DbDataRunner CI
 
 # DbDataRunner on the trunk model (docs/releases.md): a pull request into `main` runs this.
-# A `changes` job skips the suite when nothing of the store's, of the shared DbDataKit/ code it builds against, or of the build
+# A `changes` job skips the suite when nothing of the store's, of the Shared/ code it builds against, or of the build
 # settings changed; the run then still reports success. The shared libraries' own suite is dbdatakit-ci.yml, run once, not per product.
 
 on:
@@ -29,7 +29,7 @@ jobs:
   changes:
     uses: ./.github/workflows/_changes.yml
     with:
-      paths: '^(DbDataRunner/|DbDataKit/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatarunner-|_)|actions/setup-product))'
+      paths: '^(DbDataRunner/|Shared/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatarunner-|_)|actions/setup-product))'
 
   # The server, its management API, the scheduler and real task processes, on SQLite (the engines job adds PostgreSQL and SQL Server). The `windows` job below runs the same on Windows.
   test:
@@ -99,15 +99,15 @@ jobs:
       # The shared libraries have their own global.json (the Microsoft Testing Platform runner), so these run from their folder, one project per step so a failure names its suite.
       - name: Engine tests (artifact cache and hard-link views, scheduler, runtimes)
         if: ${{ !cancelled() }}
-        working-directory: DbDataKit
+        working-directory: Shared
         run: dotnet test --project tests/DbDataKit.Runner.Tests -c Release --minimum-expected-tests 50
       - name: Executor tests (the task host, real processes)
         if: ${{ !cancelled() }}
-        working-directory: DbDataKit
+        working-directory: Shared
         run: dotnet test --project tests/DbDataKit.Runner.Execution.Tests -c Release --minimum-expected-tests 15
       - name: Limit tests (job object, watchdog)
         if: ${{ !cancelled() }}
-        working-directory: DbDataKit
+        working-directory: Shared
         run: dotnet test --project tests/DbDataKit.Runner.Limits.Tests -c Release --minimum-expected-tests 10
       - name: Publish the program as it ships (framework-dependent, win-x64)
         if: ${{ !cancelled() }}

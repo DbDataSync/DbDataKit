@@ -1189,7 +1189,7 @@ Others considered: DbDataIntegrate, DbDataIntegrations, DbDataBridge, DbDataExch
 **connection**, **integration** (a package), **task**, **action**, **script**.
 
 Its progress (checkpoints, processed files, idempotency keys, refused records) is kept in a state database, the runner's progress store
-([the progress store](../../DbDataKit/src/DbDataKit.State/README.md), plan 29's design as built).
+([the progress store](../../Shared/src/DbDataKit.State/README.md), plan 29's design as built).
 
 ## 5. DbDataBacklog: work management
 
@@ -1370,7 +1370,7 @@ one branch `suite/<id>-<short-name>`, a "Done when" test, as in 13a):
 | Plan | Area | New slice letter (not yet used) |
 | --- | --- | --- |
 | [28](28-runner.md) | The runner (written at high level, 2026-11-04) | to choose when sliced (13a and plans 20 to 26 and the deleted plan 19 already use A B C D E F G H J K L M N O P Q R S T U V W X Y Z and AP; D and Q are decision and step numbers, the rest slices) |
-| [29](../../DbDataKit/src/DbDataKit.State/README.md) | One structure for the suite's state databases (built; now the State README, what is left is plan 29a) | |
+| [29](../../Shared/src/DbDataKit.State/README.md) | One structure for the suite's state databases (built; now the State README, what is left is plan 29a) | |
 | [30](30-publishing.md) | One way to publish, to the serving layer and the runner (direction decided, 2026-11-04) | |
 | 31 | Report catalogs, external (SSRS, PBIRS) and our own, in one place (folded into plan 32 section 9e, 2026-11-09) | |
 | [27a](27a-knowledge-slices.md) | This plan in slices: the audit of what is built and 120 slices (written 2026-11-09) | lanes AG, KN, AX, IX, BK, EA, XL (chosen: the single letters are all taken) |

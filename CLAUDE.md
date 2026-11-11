@@ -5,10 +5,10 @@ lists rules its tests enforce.
 
 | Folder | What it is | Owns |
 | --- | --- | --- |
-| `DbDataKit/` | the shared libraries (`DbDataKit.*`, packages under `src/`, tests under `tests/`) | what two or more products need: config, connections, dialects, metadata, secrets, hosting, transfer |
-| `DbDataSync/` | replication tool: ASP.NET API (no web app of its own), its screens (`DbDataKit/web/sync`, an npm workspace, shown by the console), per-run TaskRunner | the replication engine, its drivers, its UI |
+| `Shared/` | the shared libraries (`DbDataKit.*`, packages under `src/`, tests under `tests/`) | what two or more products need: config, connections, dialects, metadata, secrets, hosting, transfer |
+| `DbDataSync/` | replication tool: ASP.NET API (no web app of its own), its screens (`Shared/web/sync`, an npm workspace, shown by the console), per-run TaskRunner | the replication engine, its drivers, its UI |
 | `DbDataGateway/` | Arrow Flight SQL gateway for relational databases | the Flight SQL server, its authentication, the 32-bit ODBC worker |
-| `DbDataConsole/` | the `dbdatakit` console host: the web app (`DbDataKit/web/console`): sign-in, users, invitations, the servers it manages and their screens, every module's docs (more arrive slice by slice) | the console's host and its command line |
+| `DbDataKit/` | the product, the `dbdatakit` host (projects `DbDataKit.Server*`; "the console" is the web app of it): the web app (`Shared/web/console`): sign-in, users, invitations, the servers it manages and their screens, every module's docs (more arrive slice by slice) | the console's host and its command line |
 | `DbDataStore/` | master data models in your own databases (`model/1`, validated writes, history, audit; plan 15): a server of the suite's shape (`docs/architecture.md`), the skeleton so far | the store's server and its command line |
 | `DbDataRunner/` | scheduled and batch work: the runner host (`dbdatarunner`; the engine is the library `DbDataKit.Runner`; plan 28 and 28a): a server of the suite's shape (`docs/architecture.md`) that runs the tasks of published packages, each in a process of its own | the host and its command line |
 | `DbDataWorkspace/` | the Workspace server (`dbdataworkspace`; plan 22a GP31, decision D8; the workspace calls are the library `DbDataKit.Authoring`): the projects people and agents author in git workspaces (an app today, plan 27 adds more kinds) and a record of what was done, a server of the suite's shape (`docs/architecture.md`); no builds yet | the host and its command line |
@@ -28,7 +28,7 @@ project reference in this repository, a package reference otherwise). Do not cop
   and `global.json` (SDK) apply to everything; each product's props imports the root one and adds its own.
 - Versions live only in the root `Directory.Packages.props`. A `PackageReference` has no `Version`; the one allowed `VersionOverride`
   is listed in `scripts/check_package_versions.py`.
-- `global.json` is read from the nearest folder only. `DbDataKit/` and `DbDataGateway/` have their own copy that adds the Microsoft Testing
+- `global.json` is read from the nearest folder only. `Shared/` and `DbDataGateway/` have their own copy that adds the Microsoft Testing
   Platform runner (xunit v3); Sync and Build test on VSTest (xunit v2) and use the root one.
 - `DbDataKit.slnx` lists every project (`scripts/check_solution.py` keeps it complete); `<Product>.slnf` is each product's filter of it.
 - Warnings are errors in every product.
@@ -43,7 +43,7 @@ python3 -I scripts/check_package_versions.py && python3 -I scripts/check_solutio
 
 Per product, from its folder: `dotnet build`, then the suites below. Run the suites a change can affect; CI runs the rest on the pull request.
 
-- **DbDataKit, DbDataGateway, DbDataConsole, DbDataStore, DbDataRunner, DbDataWorkspace** (xunit v3, MTP): `dotnet test --project tests/<Name>`. If the test host cannot start (`Handshake failures`),
+- **Shared, DbDataGateway, DbDataKit, DbDataStore, DbDataRunner, DbDataWorkspace** (xunit v3, MTP): `dotnet test --project tests/<Name>`. If the test host cannot start (`Handshake failures`),
   run the built executable: `tests/<Name>/bin/Debug/net10.0/<Name>`; `-class` and `-method` select tests.
 - **DbDataSync**: `dotnet test --filter "Category!=Integration"` (add `DbDataSync.slnf`); `Category=Integration` needs the engines.
 - **DbDataBuild**: `scripts/fetch-native.sh` once, then `dotnet test tests/DbDataBuild.Tests.Unit`. The conformance suite needs engines.

@@ -4,7 +4,7 @@ name: DbDataGateway CI
 # into `main` that runs this, and a rebase merge. There is no dev/test lane and nothing here moves a branch. A rebase merge makes new
 # commits, so the run on `main` is the one that validates what landed, and it is what dbdatagateway-release.yml looks for.
 #
-# A `changes` job skips the suites when nothing of DbDataGateway's, of the shared DbDataKit/ code it builds against, or of the test
+# A `changes` job skips the suites when nothing of DbDataGateway's, of the Shared/ code it builds against, or of the test
 # environment changed; the run then still reports success. The shared libraries' own suite is dbdatakit-ci.yml, run once, not per product.
 
 on:
@@ -32,7 +32,7 @@ jobs:
   changes:
     uses: ./.github/workflows/_changes.yml
     with:
-      paths: '^(DbDataGateway/|DbDataKit/|testenv/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatagateway-|_)|actions/setup-product))'
+      paths: '^(DbDataGateway/|Shared/|testenv/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatagateway-|_)|actions/setup-product))'
 
   # The Windows service, DPAPI, ACLs, the 32-bit worker and the text ODBC driver only exist here, so this is the only job that
   # exercises them; it also packages the release zip as a smoke test.
@@ -101,7 +101,7 @@ jobs:
         run: |
           scripts/fetch-bun.sh
           echo "$GITHUB_WORKSPACE/.bun/linux-x64" >> "$GITHUB_PATH"
-          (cd DbDataKit/web && npm ci --ignore-scripts)
+          (cd Shared/web && npm ci --ignore-scripts)
           echo "DBDATAKIT_TEST_REQUIRE_BUN=true" >> "$GITHUB_ENV"
           echo "DBDATAKIT_TEST_REQUIRE_APP_STORE=true" >> "$GITHUB_ENV"
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true

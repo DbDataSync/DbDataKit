@@ -8,8 +8,8 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <PropertyGroup>
-    <!-- Monorepo layout: DbDataGateway/ and DbDataKit/ (the shared libraries) are sibling folders at the repository root. -->
-    <DbDataKitRoot Condition="'$(DbDataKitRoot)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', 'DbDataKit'))</DbDataKitRoot>
+    <!-- Monorepo layout: DbDataGateway/ and Shared/ (the shared libraries) are sibling folders at the repository root. -->
+    <DbDataKitRoot Condition="'$(DbDataKitRoot)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', 'Shared'))</DbDataKitRoot>
     <DbDataKitRoot>$([MSBuild]::EnsureTrailingSlash('$(DbDataKitRoot)'))</DbDataKitRoot>
     <UseLocalDbDataKit Condition="'$(UseLocalDbDataKit)' == '' and Exists('$(DbDataKitRoot)src')">true</UseLocalDbDataKit>
   </PropertyGroup>

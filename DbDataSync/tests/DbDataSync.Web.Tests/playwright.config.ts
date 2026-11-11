@@ -9,7 +9,7 @@ import { SA_PASSWORD } from './test-db'
 
 // Sync's Playwright suite (plan 13a, U08 and U11). Sync's server serves no web app any more: its screens are the console's, so the suite runs through it. The browser opens a console, signed in as an administrator,
 // which has a real `dbdatasync server run` paired; the specs are written in the server's own addresses and `fixtures.ts` translates them to `/servers/<id>/...` and the console's relay.
-// Run: `npx playwright test` (the engines from testenv, the builds of the API, the worker, the CLI and the console server, and the console's web app: `npm run build -w @dbdatakit/console` in DbDataKit/web).
+// Run: `npx playwright test` (the engines from testenv, the builds of the API, the worker, the CLI and the console server, and the console's web app: `npm run build -w @dbdatakit/console` in Shared/web).
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '../..')
 const kitRoot = path.resolve(repoRoot, '..')
@@ -24,7 +24,7 @@ const consolePort = 8491
 const origin = `https://localhost:${consolePort}`
 export const syncUrl = 'https://localhost:8493'
 const syncDll = path.join(repoRoot, 'src/DbDataSync.Cli/bin/Debug/net10.0/DbDataSync.Cli.dll')
-const consoleDll = path.join(kitRoot, 'DbDataConsole/src/DbDataConsole.Server/bin/Debug/net10.0/dbdatakit.dll')
+const consoleDll = path.join(kitRoot, 'DbDataKit/src/DbDataKit.Server/bin/Debug/net10.0/dbdatakit.dll')
 const certificate = path.join(os.tmpdir(), 'dbdatasync-console-e2e.pfx')
 const certificatePassword = 'console-e2e'
 
@@ -115,7 +115,7 @@ export default defineConfig({
     {
       // `dotnet exec` on the built DLL, not `dotnet run`: killing a wrapper does not reliably kill its child.
       command: ['dotnet', 'exec', JSON.stringify(consoleDll), 'server', 'run', '--repo', JSON.stringify(consoleDirectory), '--listen', origin,
-        '--web-root', JSON.stringify(path.join(kitRoot, 'DbDataKit/web/console/dist'))].join(' '),
+        '--web-root', JSON.stringify(path.join(kitRoot, 'Shared/web/console/dist'))].join(' '),
       url: `${origin}/health/live`,
       ignoreHTTPSErrors: true,
       reuseExistingServer: false,

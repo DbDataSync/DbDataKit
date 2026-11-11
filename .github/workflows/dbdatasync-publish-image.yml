@@ -4,7 +4,7 @@ name: DbDataSync image
 #   * Dispatch-only for now: dbdatasync-release.yml no longer calls it (the first push of the image needs package access
 #     granted to this repository, below). Run it by hand against an existing dbdatasync/v<version> tag.
 #   * The `run` steps are in DbDataSync/; the docker build context is the repository root (DbDataSync/Dockerfile), because the
-#     image needs the sibling DbDataKit/ folder. A tag created before that layout (it has no DbDataKit reference) builds with the
+#     image needs the sibling Shared/ folder. A tag created before that layout (it has no DbDataKit reference) builds with the
 #     Dockerfile it carries, which expects the old context, so rebuild such a tag by hand. The version is checked out from this
 #     repository's tag dbdatasync/v<version>.
 #   * The image keeps one name per product (ghcr.io/<owner>/dbdatasync), not per repository. A package created by the old

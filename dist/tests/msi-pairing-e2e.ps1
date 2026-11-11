@@ -3,7 +3,7 @@
   Installs the console's MSI, pairs it with a product server using the pairing code the product prints, and checks the console lists the product as
   ready and keeps its API closed to anyone not signed in. Run by .github/workflows/dist-msi-ci.yml (plan 13a, L04: separate MSIs, pairing is a step
   after both are installed). The product is given as an executable, built from this commit: the newest published package can predate the `server`
-  command, and the product's own MSI is tested by the install, upgrade and removal jobs. Pass -ProductMsi to install it first once a release has it. The passkey sign-in itself needs a browser: DbDataConsole's Playwright suite does that.
+  command, and the product's own MSI is tested by the install, upgrade and removal jobs. Pass -ProductMsi to install it first once a release has it. The passkey sign-in itself needs a browser: DbDataKit's Playwright suite does that.
 #>
 param(
   [Parameter(Mandatory)][string]$ConsoleMsi,

@@ -1,7 +1,7 @@
 name: DbDataStore CI
 
 # DbDataStore on the trunk model (docs/releases.md): a pull request into `main` runs this.
-# A `changes` job skips the suite when nothing of the store's, of the shared DbDataKit/ code it builds against, or of the build
+# A `changes` job skips the suite when nothing of the store's, of the Shared/ code it builds against, or of the build
 # settings changed; the run then still reports success. The shared libraries' own suite is dbdatakit-ci.yml, run once, not per product.
 
 on:
@@ -29,7 +29,7 @@ jobs:
   changes:
     uses: ./.github/workflows/_changes.yml
     with:
-      paths: '^(DbDataStore/|DbDataKit/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatastore-|_)|actions/setup-product))'
+      paths: '^(DbDataStore/|Shared/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatastore-|_)|actions/setup-product))'
 
   # The server, its pairing and its command line run on both systems; the Windows service registration is only exercised here against fakes.
   test:

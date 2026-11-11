@@ -1,0 +1,10 @@
+{
+  "solution": {
+    "path": "../DbDataKit.slnx",
+    "projects": [
+      "DbDataKit/src/DbDataKit.Server/DbDataKit.Server.csproj",
+      "DbDataKit/tests/DbDataKit.Server.Servers.Tests/DbDataKit.Server.Servers.Tests.csproj",
+      "DbDataKit/tests/DbDataKit.Server.Tests/DbDataKit.Server.Tests.csproj"
+    ]
+  }
+}

@@ -62,8 +62,8 @@ class CheckEnvNames(unittest.TestCase):
     def test_the_files_that_hold_the_refusal_list_and_the_notes_are_exempt(self):
         text = "DBGATEWAY_PASSWORD DBDATA_SECRET_X\n"
         files = {path: text for path in (
-            "DbDataKit/src/DbDataKit.State.Engines/SuiteEnvironment.cs",
-            "DbDataKit/tests/DbDataKit.State.Engines.Tests/SuiteEnvironmentTests.cs",
+            "Shared/src/DbDataKit.State.Engines/SuiteEnvironment.cs",
+            "Shared/tests/DbDataKit.State.Engines.Tests/SuiteEnvironmentTests.cs",
             "DbDataRunner/tests/DbDataRunner.Tests/SuiteEnvironmentRefusalTests.cs",
             "docs/plans/RELEASE-NOTES-PENDING.md", "docs/plans/33-fewer-services.md", "docs/ci-lessons.md", "docs/testing-environment.md")}
         self.assertEqual([], self.problems(files))

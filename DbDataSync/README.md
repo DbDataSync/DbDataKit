@@ -5,7 +5,7 @@
 **DbDataSync** · [Install](docs/install.md) · [Configuration](docs/configuration.md) · [Getting started](docs/getting-started.md) · [Replication concepts](docs/replication-concepts.md) · [Drivers and libraries](docs/drivers-and-libraries.md) · [State database](docs/state-database.md) · [Building from source](docs/development.md)
 
 DbDataSync is a cross-database replication tool. You define a replication in the web app of the
-[dbdatakit console](https://github.com/DbDataSync/DbDataKit/blob/main/DbDataConsole/README.md) — the source table, the target table, column mappings,
+[dbdatakit console](https://github.com/DbDataSync/DbDataKit/blob/main/DbDataKit/README.md) — the source table, the target table, column mappings,
 a schedule, and how changes are processed — and DbDataSync keeps the target in sync. It does a full initial load, then applies incremental changes on a schedule
 or on demand.
 

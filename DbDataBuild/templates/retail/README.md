@@ -32,7 +32,7 @@ dbdatabuild project tests run                           # metadata rules and mod
 ## Dashboards and reports
 
 `dashboards/retail-sales-today.yaml` and `reports/retail-sales-monthly.yaml` are sample documents of plan 32 over the semantic model (`semantic/sales.yml`): one set of widgets, several layouts. The console shows them from recorded
-results (`DbDataKit/conformance/views/widget-results`) until a serving module answers their queries; they are the starting points of the editor's templates.
+results (`Shared/conformance/views/widget-results`) until a serving module answers their queries; they are the starting points of the editor's templates.
 
 ## Tests
 

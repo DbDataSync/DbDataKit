@@ -30,4 +30,4 @@ The Workspace server (`dbdataworkspace`): plan 22a GP31 and decision D8, with pl
 From this folder: `dotnet build`, then `dotnet test --project tests/DbDataWorkspace.Tests` (xunit v3; if the test host cannot start, run the built executable: `tests/DbDataWorkspace.Tests/bin/Debug/net10.0/DbDataWorkspace.Tests`; `-class` and `-method` select tests).
 
 - The tests start real servers. They run on SQLite always, and on PostgreSQL and SQL Server when `DBDATAKIT_TEST_POSTGRES` and `DBDATAKIT_TEST_SQLSERVER` are set (`testenv/testenv.sh up mssql postgres`, then `eval "$(testenv/testenv.sh env dbdatakit)"`); `DBDATAKIT_TEST_REQUIRE_POSTGRES=true` makes a missing engine a failure, not a skip.
-- The module's convention, layout and retention tests are `WorkspaceStoreTests` in `DbDataKit/tests/DbDataKit.State.Tests` (on the three engines); the library's are `DbDataKit.Authoring.Tests`.
+- The module's convention, layout and retention tests are `WorkspaceStoreTests` in `Shared/tests/DbDataKit.State.Tests` (on the three engines); the library's are `DbDataKit.Authoring.Tests`.
