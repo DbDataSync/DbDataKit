@@ -70,9 +70,16 @@ public sealed class KnowledgeVectorTests : IDisposable
 
     private sealed record Opened(StateKnowledgeIndex Index, StateDatabase Database, KnowledgeVectorStore Vectors, KnowledgeEmbedder Embedder);
 
+    /// <summary>The module needs SQL Server 2025's vector type: the previous release (the N-1 job runs SQL Server 2022) refuses it by design, so its rows skip there.</summary>
+    private static StateDatabase OpenVectors(StateEngines.Location location)
+    {
+        try { return location.Open([KnowledgeModule.Module, KnowledgeVectorsModule.Module], time: new StateTestClock(Start)); }
+        catch (InvalidOperationException e) when (e.Message.Contains("engine feature 'vector'")) { Assert.Skip(e.Message); throw; }
+    }
+
     private Opened Open(string engine, string channel = "main", StateEngines.Location? location = null, StateDatabase? existing = null)
     {
-        var database = existing ?? (location ?? _engines.Provision(engine)).Open([KnowledgeModule.Module, KnowledgeVectorsModule.Module], time: new StateTestClock(Start));
+        var database = existing ?? OpenVectors(location ?? _engines.Provision(engine));
         var vectors = new KnowledgeVectorStore(database);
         return new Opened(new StateKnowledgeIndex(new KnowledgeStore(database), channel, vectors), database, vectors, new KnowledgeEmbedder(vectors, channel));
     }
@@ -380,7 +387,7 @@ public sealed class KnowledgeVectorTests : IDisposable
     [Theory, MemberData(nameof(VectorEngines))]
     public async Task Channels_have_indexes_of_their_own(string engine)
     {
-        var database = _engines.Provision(engine).Open([KnowledgeModule.Module, KnowledgeVectorsModule.Module], time: new StateTestClock(Start));
+        var database = OpenVectors(_engines.Provision(engine));
         var main = Open(engine, "main", existing: database);
         var test = Open(engine, "test", existing: database);
         var generator = new Concepts();
