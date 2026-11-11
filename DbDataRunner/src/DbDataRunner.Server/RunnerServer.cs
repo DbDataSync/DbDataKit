@@ -90,6 +90,7 @@ public static class RunnerServer
             connections: () => RunnerConnections.Inventory(state, app.Services.GetRequiredService<RunnerEngine>().Group, RunnerSettings.Product),
             listHeld: async (opened, ct) => opened is DbDataKit.Secrets.Store.ISecretAdmin admin ? [.. (await admin.ListInfoAsync("", ct)).Select(i => new DbDataKit.Secrets.SecretHeld(i.Name, i.Updated == default ? null : i.Updated))] : await RunnerSecretsApi.NamesOnly(opened, ct));   // UI06: the overview
         RunnerBindingTestApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>().Slots, "/api/v1", RunnerCallers.TokenResolver);   // UI08: try a slot's binding
+        RunnerConnectionCopyApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);   // plan 27a IX23: the connections the console handed over (definition and secret references, never a value)
         RunnerGroupApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);
         RunnerLineageApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);
         RunnerTrackingApi.Map(app, state, "/api/v1", RunnerCallers.TokenResolver);   // plan 28c E18: the runner's own copy of Build's tracking, and the resolve of its divergences

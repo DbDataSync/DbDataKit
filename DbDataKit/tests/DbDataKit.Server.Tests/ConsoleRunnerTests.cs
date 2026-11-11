@@ -73,6 +73,8 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         });
         // the rest of the table (RunnerRoutes), each with the role the real runner asks for (RunnerRoleTests pins them to the real runner)
         server.MapGet("/api/v1/connections", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { connections = Array.Empty<object>() })));
+        server.MapGet("/api/v1/connection-copies", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { copies = Array.Empty<object>() })));
+        server.MapPut("/api/v1/connection-copies/{name}", (HttpContext c, string name) => Needs(c, ServerRole.Admin, () => Results.Json(new { name })));
         server.MapGet("/api/v1/settings", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { require_signatures = false })));
         server.MapGet("/api/v1/lineage", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { edges = Array.Empty<object>() })));
         server.MapGet("/api/v1/tracking", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { holder = "runner", copies = Array.Empty<object>(), divergences = Array.Empty<object>() })));
@@ -225,7 +227,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
     /// <summary>The table, as the owner decision of 2026-11-08 fixed it: the routes UE06 and the screens before it use, and what UE08, UE10 and UE11 add, with the runner's own role for each. A route added or a role changed fails here until this list says so.</summary>
     public static readonly (string Method, string Pattern, ServerRole Role, ServerRole Or)[] Expected =
     [
-        ("GET", "api/v1/status", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/instances", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/connections", ServerRole.Viewer, ServerRole.None),
+        ("GET", "api/v1/status", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/instances", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/connections", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/connection-copies", ServerRole.Viewer, ServerRole.None), ("PUT", "api/v1/connection-copies/{name}", ServerRole.Admin, ServerRole.None),
         ("GET", "api/v1/runs", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}/logs", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/settings", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/lineage", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/tracking", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/upgrade", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/certificate", ServerRole.Viewer, ServerRole.None),

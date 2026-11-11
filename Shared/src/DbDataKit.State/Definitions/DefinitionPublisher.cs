@@ -416,6 +416,32 @@ public sealed partial class DefinitionPublisher
             return (IReadOnlyList<DefinitionBinding>)found;
         });
 
+    /// <summary>Every binding of a kind, of every definition in every channel, including definitions that have no version yet (slots are bound before a first publish).</summary>
+    public IReadOnlyList<DefinitionBinding> BindingsOfKind(string kind) =>
+        _database.Retry(() =>
+        {
+            using var connection = _database.OpenConnection();
+            using var command = _database.Command(Module, connection, "SELECT channel, kind, name, slot, bound_to, revision, bound_by, bound_at FROM {table:definition_binding} WHERE kind = $kind ORDER BY name, channel, slot;");
+            command.Bind(_database, "kind", kind);
+            using var reader = command.ExecuteReader();
+            var found = new List<DefinitionBinding>();
+            while (reader.Read()) found.Add(ReadBindingRow(reader));
+            return (IReadOnlyList<DefinitionBinding>)found;
+        });
+
+    /// <summary>Every binding of a definition in every channel (the posture check of plan 27a IX17 compares a channel's connection with production's).</summary>
+    public IReadOnlyList<DefinitionBinding> BindingsOf(string kind, string name) =>
+        _database.Retry(() =>
+        {
+            using var connection = _database.OpenConnection();
+            using var command = _database.Command(Module, connection, "SELECT channel, kind, name, slot, bound_to, revision, bound_by, bound_at FROM {table:definition_binding} WHERE kind = $kind AND name = $name ORDER BY channel, slot;");
+            command.Bind(_database, "kind", kind).Bind(_database, "name", name);
+            using var reader = command.ExecuteReader();
+            var found = new List<DefinitionBinding>();
+            while (reader.Read()) found.Add(ReadBindingRow(reader));
+            return (IReadOnlyList<DefinitionBinding>)found;
+        });
+
     // ---- reading
 
     /// <summary>What a channel has of a definition, or null when it has nothing (neither active nor staged).</summary>

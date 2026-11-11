@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { connectionsFor, draftOf, draftProblem, isReleaseName, isSlotName, maxChoices, moveChoice, needsConfirmation, needsModel, orderedReleases, rowLine, runnerSlots, sameDraft, scopeOf, slotBody, unboundWords, type BindingConnection, type BindingRow, type BindingSlot } from './bindings'
+import { connectionsFor, copyInfo, copyWords, draftOf, draftProblem, isReleaseName, isSlotName, maxChoices, moveChoice, needsConfirmation, needsModel, orderedReleases, rowLine, runnerReleaseOk, runnerSlotBody, runnerSlots, sameDraft, scopeOf, slotBody, unboundWords, type BindingConnection, type BindingRow, type BindingSlot, type RunnerCopy } from './bindings'
 
 const entry = (connection: string, model: string | null = null, usable = true) => ({ connection, model, usable, problem: usable ? null : 'no key', kind: null, target: null })
 const row = (release: string, ...entries: ReturnType<typeof entry>[]): BindingRow => ({ release, wildcard: release === '*', entries, needsConfirmation: false, confirmed: false, effect: null })
@@ -81,5 +81,51 @@ describe('IX23: bindings, one shape for every slot', () => {
     expect(source.rows.find((r) => r.release === 'dev')?.entries.map((e) => e.connection)).toEqual(['erp'])
     expect(source.rows.find((r) => r.release === 'prod')?.entries).toEqual([])        // prod is not bound: it does not take dev's
     expect(slots[1].rows[0].entries).toEqual([])
+  })
+
+  describe('the runner\'s copy of a console connection (IX23)', () => {
+    const conn = (name: string, version: string | null): BindingConnection => ({ name, kind: 'http', purpose: null, models: [], canSend: false, target: null, cloud: null, version })
+    const copy = (name: string, version: string, extra: Partial<RunnerCopy> = {}): RunnerCopy => ({ name, version, kind: 'http', sent_by: 'ada', sent_at: '2026-11-11T10:00:00Z', shadowed_by_file: false, secrets: [], unresolved: 0, problem: null, used_by: [], ...extra })
+
+    it('compares the version of the runner\'s copy with the console\'s file: current, stale, missing, a copy the console lost, and a name the runner knows itself', () => {
+      const mine = [conn('crm', 'sha256:aaaa'), conn('mail', 'sha256:bbbb')]
+      expect(copyInfo('crm', mine, [copy('crm', 'sha256:aaaa')]).state).toBe('current')
+      expect(copyInfo('crm', mine, [copy('crm', 'sha256:old0')]).state).toBe('stale')
+      expect(copyInfo('mail', mine, [copy('crm', 'sha256:aaaa')]).state).toBe('missing')
+      expect(copyInfo('gone', mine, [copy('gone', 'sha256:cccc')]).state).toBe('copy-only')
+      expect(copyInfo('erp', mine, []).state).toBe('not-console')                       // the runner's own connection: nothing to send
+    })
+
+    it('lists the references the runner cannot resolve, and says the shadowing file and the stale copy in words', () => {
+      const secrets = [{ path: 'sign_in.key_secret', reference: 'secret:dbdatakit:server:connection:crm:key', resolves: false, problem: 'not in the runner' }, { path: 'endpoint_secrets.token', reference: 'env:X', resolves: true, problem: null }]
+      const info = copyInfo('crm', [conn('crm', 'sha256:aaaa')], [copy('crm', 'sha256:old0', { secrets, shadowed_by_file: true })])
+      expect(info.unresolved.map((u) => u.reference)).toEqual(['secret:dbdatakit:server:connection:crm:key'])
+      expect(info.shadowed).toBe(true)
+      expect(copyWords(info)).toContain('older than the console')
+      expect(copyWords({ ...info, state: 'current' })).toContain("is the console's")
+      expect(copyWords({ ...info, state: 'missing' })).toContain('no copy')
+    })
+
+    it('puts the state of each connection on the runner slot\'s rows, and the confirmation state the runner reports', () => {
+      const detail = {
+        slots: [{ channel: 'prod', slot: 'api', kind: 'http', tasks: ['pull'], versions: [1] }, { channel: 'dev', slot: 'api', kind: 'http', tasks: ['pull'], versions: [1] }],
+        bindings: [{ channel: 'prod', slot: 'api', bound_to: 'crm', revision: 1 }, { channel: 'dev', slot: 'api', bound_to: 'crm', revision: 1, shares_production: true, confirmed: false }],
+      }
+      const [api] = runnerSlots('console-runner', 'orders', detail, [conn('crm', 'sha256:aaaa')], [copy('crm', 'sha256:aaaa')])
+      const dev = api.rows.find((r) => r.release === 'dev')!
+      expect(dev.entries[0].copy?.state).toBe('current')
+      expect([dev.needsConfirmation, dev.confirmed]).toEqual([true, false])
+      expect(api.rows.find((r) => r.release === 'prod')!.needsConfirmation).toBe(false)
+    })
+
+    it('sends one connection per channel to the runner, never `*`, and asks the confirmation the way a delivery channel does', () => {
+      expect(runnerSlotBody({ prod: [{ connection: 'crm', model: '' }], dev: [{ connection: '', model: '' }], test: [] }, ['bindings/runner/orders/api/dev'], 'why'))
+        .toEqual({ channels: { prod: 'crm' }, confirm: ['bindings/runner/orders/api/dev'], note: 'why' })
+      expect(draftProblem('runner', { '*': [{ connection: 'crm', model: '' }] })).toContain('no `*`')
+      expect(runnerReleaseOk('*')).toBe(false)
+      expect(runnerReleaseOk('dev')).toBe(true)
+      const orders = { ...slot('runner', 'orders/api'), section: 'runner' }
+      expect(needsConfirmation(orders, { prod: [{ connection: 'crm', model: '' }], dev: [{ connection: 'crm', model: '' }] })).toEqual([{ scope: 'bindings/runner/orders/api/dev', release: 'dev', connection: 'crm' }])
+    })
   })
 })

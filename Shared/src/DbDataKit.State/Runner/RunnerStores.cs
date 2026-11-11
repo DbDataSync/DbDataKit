@@ -252,11 +252,12 @@ public sealed record PostureChoice(string Scope, string Setting, string ChosenBy
 /// The recorded choices that loosen a default (plan 28 section 5). A choice is for one package or for every package (<see cref="RunnerModule.AllPackages"/>); choosing again replaces the earlier
 /// one (who and when are the latest; the audit log keeps the sequence). A default needs no row.
 /// </summary>
-public sealed class PostureChoices(StateDatabase database)
+public sealed class PostureChoices(StateDatabase database, string module = RunnerModule.Name)
 {
-    private const string Module = RunnerModule.Name;
+    private readonly string Module = module;
 
-    public void Record(string scope, string setting, string chosenBy, string? note = null)
+    /// <param name="at">When it was chosen; null is now (a choice moved from an earlier place keeps its own date).</param>
+    public void Record(string scope, string setting, string chosenBy, string? note = null, DateTimeOffset? at = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(scope);
         ArgumentException.ThrowIfNullOrWhiteSpace(setting);
@@ -264,14 +265,14 @@ public sealed class PostureChoices(StateDatabase database)
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
-            Record(connection, null, scope, setting, chosenBy, note);
+            Record(connection, null, scope, setting, chosenBy, note, at);
         });
     }
 
     /// <summary>Records on a connection (and transaction) the caller owns, so a caller can write the audit entry with it.</summary>
-    internal void Record(DbConnection connection, DbTransaction? transaction, string scope, string setting, string chosenBy, string? note)
+    internal void Record(DbConnection connection, DbTransaction? transaction, string scope, string setting, string chosenBy, string? note, DateTimeOffset? at = null)
     {
-        var now = database.Time.GetUtcNow();
+        var now = at ?? database.Time.GetUtcNow();
         using var cmd = database.Command(Module, connection, transaction, database.Dialect.Upsert("{table:posture_choice}", "scope, setting, chosen_by, chosen_at, note", "$scope, $setting, $by, $at, $note", "scope, setting",
             "chosen_by = EXCLUDED.chosen_by, chosen_at = EXCLUDED.chosen_at, note = EXCLUDED.note"));
         cmd.Bind(database, "scope", scope).Bind(database, "setting", setting).Bind(database, "by", chosenBy).Bind(database, "at", now).Bind(database, "note", note, System.Data.DbType.String);
