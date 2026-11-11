@@ -1,6 +1,6 @@
 # Agents and the suite: what exists today
 
-An AI agent can drive the suite today **from the outside**, through the commands each product already has. There is **no agent inside the suite yet**: no agent runtime, no agent definition, no chat in the console, no `mcp` module in the serving layer. [Plan 27](plans/27-knowledge-agents-integrations-work.md) decides what the embedded agents will be; [plan 27a](plans/27a-knowledge-slices.md) slices it and says, row by row, what is built. This page is the built half: what an agent can use now, and where each piece is described.
+An AI agent can drive the suite today **from the outside**, through the commands each product already has. There is **a first agent inside the suite**: the console runs back-end agents (below); there is no model provider yet, no front-end agent and no `mcp` module in the serving layer. [Plan 27](plans/27-knowledge-agents-integrations-work.md) decides what the embedded agents will be; [plan 27a](plans/27a-knowledge-slices.md) slices it and says, row by row, what is built. This page is the built half: what an agent can use now, and where each piece is described.
 
 ## The commands are the tools
 
@@ -33,16 +33,27 @@ Two guardrails already hold **outside the model**, as the design wants: a Build 
 
 `Shared/src/DbDataKit.Agents` is the agent loop on `Microsoft.Extensions.AI` with no provider, host or screen (its README describes each piece). Built: the loop and the tools bound to command specs (AG03), prompting per action (AG07), limits and cost (AG08), the `agent/1` and `agent-policy/1` readers and `agent check` (AG09), context assembly, bound knowledge, the model's space, skills and model fallback (see the rows of plan 27a). Tested with a scripted fake model; nothing here calls a provider, and no host runs it yet (the back-end agent, AG14, waits for its host and the `agents` module).
 
+## The console hosts back-end agents (plan 27a AG14 to AG17, AG29 to AG32)
+
+The console runs `DbDataKit.Agents` for back-end agents (`ConsoleAgents`, `AgentsController`, the page `Agents` of the console). What a person can do there today:
+
+- **Define an agent** as files in the console's directory: `agents/<name>/agent.yml` (read strictly, with `agent check` as you type) and the instruction files beside it, `skills/<name>/SKILL.md` for skills, `agent-policy.yml` for the install policy. The agent's page says what each tool will ask and from which layer (the strictest of the tool's own default, the install policy and the agent), the model's space (what is always given against its budget, the largest part named when it is over) and each skill (description, body size against the room left, an export as `.claude/skills/<name>/SKILL.md`).
+- **Edit the install policy** with a form: minimums per trait, limits per scope, the data rule for cloud providers. A change that makes the install less strict is listed with its effect in a sentence and is saved only after a confirmation; every change is in the record, naming who made it.
+- **Talk to an agent** (an administrator): the conversation, the step that waits for you with the command's own preview and traits, what each turn was given and what it used. The tools are the console's own commands **that only read**, run in this process, so they hold the console's authority and not the person's: writes are not offered, and `user`, `identity`, `instance`, `server`, `state`, `runner`, `secret` and `health` are left out. A step is answered only by the person it is for.
+- **See the record**: per session who (the person), which agent and version, and each step asked, approved, denied, refused or run; usage per person, agent and install. The words of a conversation are kept 30 days; the audit rows stay (the `agents` state module).
+- **Approvals of outside agents**: `POST /api/agents/outside/ask` puts a step an outside client could not ask its own person about in the inbox, `GET /api/agents/outside/ask/{id}` is polled for the answer, and `POST /api/agents/outside/events` adds what ran to the record.
+
 ## What is not built
 
 | Designed in plan 27 | State today |
 | --- | --- |
-| `DbDataKit.Agents` provider adapters and recordings (AG04), model providers as connections (AG05) | not started (the runtime and the scripted fake are built, above) |
-| `agent/1` definitions, install policy, skills as a published kind | not started |
-| Prompting per action (the three settings, the three layers) | not started; `--allow-writes` is the one gate |
-| Traits printed in `--help`, the run header and the JSON document | not started (traits exist on every verb and in the MCP tool list, below) |
-| The back-end agent in the console's chat; front-end agents in a serving-layer `mcp` module; an app's assistant panel | not started ([serving-layer.md](serving-layer.md) lists `mcp` as not built) |
-| Memories, subagents, evaluation sets, transcripts (`agents` state module), limits and cost | not started |
+| Model providers as connections, bound per channel; the provider adapters and recordings (AG04, AG05, AG18) | not started: **no model is bound, so no conversation can start** in a real install; the tests use the scripted fake. The Agents page says so |
+| The `build-helper` agent, a workspace of the Workspace server, the relay to a server as the person (AG14) | not started; the console's agents use its own read-only commands |
+| `ui mcp` posting to the console's inbox and record (the client side of AG29) | not started; the console's half exists |
+| The agent project editor in a workspace, the form view of `agent.yml`, scripted conversations (AG16) | not started; the definition is edited as text in the console's folder |
+| Traits printed in `--help`, the run header and the JSON document | not started (traits exist on every verb and in the MCP tool list) |
+| Front-end agents in a serving-layer `mcp` module; an app's assistant panel | not started ([serving-layer.md](serving-layer.md) lists `mcp` as not built) |
+| Memories, subagents, evaluation sets | not started |
 | Actions (scripts as tools) and elevated actions | not started |
 
 The pages [agents/context.md](agents/context.md) and [agents/context-window.md](agents/context-window.md) explain the design of an agent's context and say so at the top; they become the agents' help when agents exist.

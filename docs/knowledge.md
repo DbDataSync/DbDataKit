@@ -40,3 +40,12 @@
 | Access-filtered search | not started; the identity home maps directory groups to attributes (plan 22a GP04, built), but the row and column rules a search would apply are not (GP01 and GP11 to GP15 wait for the rule language, QG2) |
 | `catalog search` and `catalog show` (were plan 22a GP25) | dropped (owner, 2026-11-09): the `knowledge` commands of [27a](plans/27a-knowledge-slices.md) KN16 are the search over generated knowledge |
 | Workspace search (exact text in a project's files) | not started; needs the Workspace server (plan 22a GP31) |
+
+## The console's knowledge screens (plan 27a KN28, KN36, KN37, KN38)
+
+The console reads two knowledge projects in its directory, `install-knowledge/` (the template of KN35: the install's guardrails in `policy/`, owned by the administrators) and `knowledge/` (items about the install's objects), and `knowledge-subjects.json` (what exists to be about and what is gone: a stand-in until the lineage graph is the catalog). The page `Knowledge` shows:
+
+- **Index and context**: items, chunks and failures per project, orphans, and what an agent would be given for what is in play, each part with its tokens and share of the budget. The page says that **no index is built**: there is no search here.
+- **Worklists**: per owner, the items whose subject is gone, with the actions: point it at another object (only that line of the file changes) or retire it.
+- **Items and preview**: an item edited as text with the strict reader's diagnostics, split chunk by chunk with the heading path and tokens, the chunks that changed against the saved text, the agents it reaches and whether it would push one over its budget, and what would be given for a set of subjects in play (in order, with what is left out and why).
+- **Install knowledge**: make the project from the template, add a guardrail through a form that fixes its role and owner; a `prompting`, `limits` or `data-rules` key in any item is refused and names the install policy.
