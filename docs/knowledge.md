@@ -23,6 +23,7 @@
 | Scope matching (KN03) | which instructions and guardrails apply to what is in play, broad to narrow, guardrails apart, by audience, agent and channel | `ScopeMatcher` |
 | The install knowledge project (KN35) | a template with `shared/`, `build/`, `sync-and-build/` and the administrators' `policy/` folder; `policy/` holds only guardrails owned by `administrators` | `InstallKnowledge` |
 | Chunking (KN04) | long references split at headings, then paragraphs, then sentences; tables and code are never cut; the chunk's hash is of what is embedded, so only a changed chunk is embedded again | `Chunker` |
+| Search and the access filter (KN09, with the fake of KN05) | a question is embedded and the nearest chunks are found among those the caller may see (a role on the subject; fail closed on a gone or unknown subject; an item with no subject follows its `for`), at most three chunks per item, adjacent ones joined | `KnowledgeSearch`, `KnowledgeAccess`, `InMemoryKnowledgeIndex`, `FakeEmbeddingGenerator` |
 
 [Shared/src/DbDataKit.Knowledge/README.md](../Shared/src/DbDataKit.Knowledge/README.md) describes each piece.
 
