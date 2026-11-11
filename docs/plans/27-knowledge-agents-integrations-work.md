@@ -1,6 +1,6 @@
 # Plan 27: knowledge, agents, integrations and work management
 
-Status: **decided design, not built, sliced in [plan 27a](27a-knowledge-slices.md)** (2026-11-09). Proposed 2026-11-03; integrations and actions reworked on
+Status: **decided design, partly built, sliced in [plan 27a](27a-knowledge-slices.md)** (2026-11-09; audited against the code 2026-11-11: built are the agent runtime, providers and model slots, the back-end agents' first screens, the build-helper, the knowledge subjects, index, search by words and by vectors, and outside-system connections with HTTP sign-in; not built are actions (AX), the backlog (BK), custom attributes' remainder (EA03, EA04), most of integrations beyond IX01 and IX02, the front-end agents and the Excel add-in). Proposed 2026-11-03; integrations and actions reworked on
 2026-11-04 after the owner's decisions, with the runner in [plan 28](28-runner.md); every question of section 8 was answered by the owner between 2026-11-03 and
 2026-11-06 except row 61 (the Excel add-in), which is still proposed. Four new areas the owner asked for. This page decides their shape and how they fit together
 and with plans 16, 20, 22, 25 and 26, and it is the record of the decisions. **What is built** is the audit in 27a, item by item with its evidence: of the four areas

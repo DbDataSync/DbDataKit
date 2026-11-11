@@ -1,6 +1,6 @@
 # 13c. Open follow-ups of the suite
 
-Status: **open.** What is left of the suite's early work (the old suite slices, 13a, and their follow-up list) and that no other plan owns: checks that need a real
+Status: **open** (re-audited 2026-11-11: V1, F1, D11, K1, K2 and T16 unchanged; UI06 and UI08 are partly built and say so). What is left of the suite's early work (the old suite slices, 13a, and their follow-up list) and that no other plan owns: checks that need a real
 environment, deferred work, and one skipped test. Everything else those lists held was built, decided or dropped; the rules and decisions that stay true
 are in [`docs/architecture.md`](../architecture.md) ("Decisions recorded after plan 13") and the READMEs it points to. Close an item by deleting its row in the
 change that settles it. Timing-sensitive tests that failed once are in [`docs/ci-lessons.md`](../ci-lessons.md) ("Timing").
