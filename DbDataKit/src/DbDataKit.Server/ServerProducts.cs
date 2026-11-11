@@ -49,6 +49,8 @@ public static class ServerProducts
         new("GET", "api/v1/instances", ServerRole.Viewer),
         new("GET", "api/v1/connections", ServerRole.Viewer),
         new("GET", "api/v1/runs", ServerRole.Viewer),
+        new("GET", "api/v1/runs/{id}", ServerRole.Viewer),                                                  // UI08: one run
+        new("GET", "api/v1/runs/{id}/logs", ServerRole.Viewer),                                             // UI08: its output, a page at a time
         new("GET", "api/v1/settings", ServerRole.Viewer),
         new("GET", "api/v1/lineage", ServerRole.Viewer),
         new("GET", "api/v1/upgrade", ServerRole.Viewer),                                                    // UC09: the status of its own upgrade
