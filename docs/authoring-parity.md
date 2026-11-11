@@ -12,10 +12,10 @@ Summary (counts of the features below):
 
 | Product | built | partly | missing | not planned | features |
 | --- | --- | --- | --- | --- | --- |
-| Build | 9 | 3 | 8 | 5 | 25 |
+| Build | 12 | 3 | 5 | 5 | 25 |
 | Store | 5 | 1 | 1 | 3 | 10 |
 | Sync | 9 | 4 | 5 | 3 | 21 |
-| All | 23 | 8 | 14 | 11 | 56 |
+| All | 26 | 8 | 11 | 11 | 56 |
 
 ### Build
 
@@ -25,9 +25,9 @@ Summary (counts of the features below):
 | A draft of a project: make, abandon, commit, push, merge, diff, history | `build/src/pages/GitPanel.tsx`, `build/src/views/workspaceStore.ts` | `workspace/src/pages/WorkspacePage.tsx`, `WorkspacesPage.tsx` | built | plan 22a GP35a |
 | Models by folder with the errors per model | `build/src/pages/ProjectPage.tsx` (`ModelsTab`) | `workspace/src/pages/BuildPlanPanel.tsx` (`ModelsView`) | built | SC20f |
 | Edit a model's `.sql` and `.yml` and the other files of a project (tree, new, move, delete, diagnostics marked in the text) | `build/src/pages/EditTab.tsx`, `FileTools.tsx` | `workspace/src/pages/WorkspacePage.tsx` (the file editor: Save, Move, Delete) | built | SC20f |
-| Schema forms for a model's `.yml` and a semantic file's `.yml` | `build/src/pages/EditTab.tsx` (form from `semantic.schema.json`) | none: YAML text only | missing | SC20m |
-| New model by kind (`project model create`) | `build/src/pages/NewModelPanel.tsx` | none: a new file is made by path | missing | SC20m |
-| New connection, grants, serving policy (`extensions.gateway`) | `build/src/pages/NewConnectionPanel.tsx`, `ConnectionGrants.tsx`, `ConnectionPolicy.tsx` | none: `connections/*.yaml` as text | missing | SC20m |
+| Schema forms for a model's `.yml` and a semantic file's `.yml` | `build/src/pages/EditTab.tsx` (form from `semantic.schema.json`) | `workspace/src/pages/BuildFilePanel.tsx`, `buildSchemas.ts` (Build's own schemas, imported) | built | SC20m |
+| New model by kind (`project model create`) | `build/src/pages/NewModelPanel.tsx` | `workspace/src/pages/BuildFilePanel.tsx` (`NewBuildModel`: the two files the command writes) | built | SC20m |
+| New connection, grants, serving policy (`extensions.gateway`) | `build/src/pages/NewConnectionPanel.tsx`, `ConnectionGrants.tsx`, `ConnectionPolicy.tsx` | `workspace/src/pages/BuildFilePanel.tsx` (`NewBuildConnection`; the grants and policy editors of Build, imported) | built | SC20m |
 | Load graph of the models (layers; choose one to light up what it is built from and what is built from it) | `build/src/pages/ProjectPage.tsx` (`GraphTab`), `graphLayout.ts` | `workspace/src/pages/BuildGraphPanel.tsx`, `buildGraph.ts` (read from `rendered/<connection>/loads.yml`; draws with Build's `GraphView.tsx`) | built | SC20h |
 | Check the project (compiler diagnostics, errors and warnings, file and line) | `build/src/pages/ProjectPage.tsx` (`CheckTab`), `Problems.tsx` | `workspace/src/pages/CheckPanel.tsx` (`dbdatabuild project show metadata`, offline) | built | SC20c |
 | Compile: write the plan into `rendered/` and see what was written or removed | `build/src/pages/CompilePanel.tsx` | none: `rendered/` is read only | missing | SC20l |

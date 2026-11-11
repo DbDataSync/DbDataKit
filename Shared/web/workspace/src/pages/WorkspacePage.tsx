@@ -9,6 +9,7 @@ import { BuildsPanel } from './BuildsPanel'
 import { CheckPanel } from './CheckPanel'
 import { NewStoreModel, StoreModelEditor } from './StoreModelPanel'
 import { BuildPlanPanel } from './BuildPlanPanel'
+import { BuildFileEditor, NewBuildConnection, NewBuildModel } from './BuildFilePanel'
 import { CatalogPanel, useCatalogRead } from './CatalogPanel'
 import { SyncFileEditor, SyncSetOverview, findingsKey } from './SyncSetPanel'
 import { editorKindOf } from '../editors'
@@ -99,7 +100,10 @@ function FileEditor({ project, id, kind, path, editable, canWrite, onGone, onRen
       {!loaded.error && !loaded.isLoading && editorKind === 'store-model' && (
         <StoreModelEditor path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} />
       )}
-      {!loaded.error && !loaded.isLoading && editorKind !== null && editorKind !== 'store-model' && (
+      {!loaded.error && !loaded.isLoading && editorKind === 'build-file' && (
+        <BuildFileEditor path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} />
+      )}
+      {!loaded.error && !loaded.isLoading && editorKind !== null && editorKind !== 'store-model' && editorKind !== 'build-file' && (
         <SyncFileEditor kind={editorKind} path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} catalog={catalog.read} />
       )}
       {!loaded.error && !loaded.isLoading && editorKind === null && (
@@ -275,6 +279,12 @@ export function WorkspacePage() {
                   )}
                   {kind === 'store' && editable && canWrite && (
                     <NewStoreModel taken={(files.data?.files ?? []).map((f) => f.path)} busy={make.isPending} onCreate={(path, text) => make.mutate([{ path, text }])} />
+                  )}
+                  {kind === 'build' && editable && canWrite && (
+                    <>
+                      <NewBuildModel paths={(files.data?.files ?? []).map((f) => f.path)} busy={make.isPending} onCreate={(made) => make.mutate(made)} />
+                      <NewBuildConnection paths={(files.data?.files ?? []).map((f) => f.path)} busy={make.isPending} onCreate={(path, text) => make.mutate([{ path, text }])} />
+                    </>
                   )}
                   <ErrorBanner error={create.error ?? make.error} />
                 </div>
