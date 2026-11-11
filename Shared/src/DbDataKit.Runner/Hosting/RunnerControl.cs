@@ -37,6 +37,7 @@ public sealed class RunnerControl
     public const string PauseVerb = "runner.task.pause";
     public const string ResumeVerb = "runner.task.resume";
     public const string OwnerVerb = "runner.task.owner";
+    public const string RewindVerb = "runner.checkpoint.rewind";
     public const string TargetKind = "task";
 
     private readonly RunnerScheduler _scheduler;
@@ -91,6 +92,23 @@ public sealed class RunnerControl
         var before = Translate(() => _scheduler.OwnerOfTask(task).Owner);
         Translate(() => { _scheduler.SetOwner(task, owner, actor.Display, reason, seed); return 0; });
         Record(OwnerVerb, task, actor, new { from = before, to = owner, reason, handled_up_to = seed?.HandledUpTo.UtcDateTime.ToString("O"), paused_by = seed?.PausedBy });
+    }
+
+    /// <summary>
+    /// Rewinds a checkpoint of the task to what it was before the change <paramref name="historyId"/> of its history (plan 29a Q20, plan 28a R25): a new version under the actor's name, written to the audit as <c>runner.checkpoint.rewind</c>
+    /// (what it was, what it became, the change it went back past). False, and a failure on record, when the checkpoint moved meanwhile (a run advanced it) or the change is not that checkpoint's. Throws
+    /// <see cref="InvalidOperationException"/> when going back would leave it with no part.
+    /// </summary>
+    public bool RewindCheckpoint(TaskRef task, string name, string itemKey, long historyId, RunnerActor actor)
+    {
+        var store = new ProgressStore(State, new ProgressKey(task.Package, task.Channel, task.Task));
+        var before = store.GetCheckpoint(name, itemKey);
+        var rewound = store.Rewind(name, historyId, actor.Display, itemKey);
+        var after = rewound ? store.GetCheckpoint(name, itemKey) : null;
+        static object? Parts(Checkpoint? c) => c?.Parts.ToDictionary(p => p.Key, p => p.Value.Canonical());
+        Record(RewindVerb, task, actor, new { checkpoint = name, key = itemKey, history_id = historyId, from_version = before?.Version, to_version = after?.Version, from = Parts(before), to = Parts(after) },
+            rewound ? AuditEvent.Ok : AuditEvent.Failed);
+        return rewound;
     }
 
     /// <summary>Who schedules the task, and who set that and why (null: nobody set it, the runner schedules it).</summary>

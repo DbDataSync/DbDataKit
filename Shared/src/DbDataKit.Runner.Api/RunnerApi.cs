@@ -20,6 +20,7 @@ namespace DbDataKit.Runner.Api;
 /// <item><c>GET /api/v1/runs/{id}</c> and <c>.../runs/{id}/logs[?after=&amp;limit=]</c>: one run and its log in order, a page at a time by line id (plan 28c E13); <c>.../tasks/{package}/{channel}/{task}/steps/{name}[?limit=&amp;before=&amp;key=]</c>: the completed steps of that name across the task's runs, newest first. A viewer reads all three.</item>
 /// <item><c>.../tasks/{package}/{channel}/{task}/steps/{name}/payloads/{id}</c>: the file a completed step of that name kept as its streamed result (plan 28c E06e); 404 when it is not one of that task's or the retention removed it. A viewer reads it.</item>
 /// <item><c>.../tasks/{package}/{channel}/{task}/schedule</c>, <c>.../owner</c> and <c>.../decisions</c>: who schedules a task while a product's own scheduler is still in the picture (plan 28c E09), see <c>MapOwnership</c>.</item>
+/// <item><c>.../tasks/{package}/{channel}/{task}/checkpoints</c> (every checkpoint with its items), <c>.../checkpoints/{name}</c> (one, as a product reads it), <c>.../checkpoints/{name}/history[?key=&amp;limit=]</c> (its changes, newest first) and <c>POST .../checkpoints/{name}/rewind</c> with <c>{"history_id": n, "key": ""}</c>: back to what it was before that change, as a new version under the operator's name, audited as <c>runner.checkpoint.rewind</c> (409 when a run moved it meanwhile). An operator, for the reads too.</item>
 /// <item><c>POST /api/v1/tasks/{package}/{channel}/{task}/run</c> with an optional <c>{"inputs": {"name": "value"}}</c>: queues a run now (202 with its run id; 409 when one is queued or running already). <c>.../pause</c> and <c>.../resume</c>.</item>
 /// </list>
 /// </summary>
@@ -56,6 +57,78 @@ public static class RunnerApi
             }
 
             return Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["name"] = name, ["items"] = items });
+        });
+
+        // every checkpoint of a task with its items, and the history of one (plan 29a Q20, plan 28a R25): what the console's checkpoint screen reads. Operator, as the single read above is.
+        app.MapGet($"{root}/tasks/{{package}}/{{channel}}/{{task}}/checkpoints", (string package, string channel, string task, HttpContext context) =>
+        {
+            if (!ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
+            if (Deny(context, ServerRole.Operator) is { } denied) return denied;
+            var store = new ProgressStore(state, new ProgressKey(package, channel, task));
+            var checkpoints = new JsonArray();
+            foreach (var name in store.CheckpointNames())
+            {
+                var items = new JsonArray();
+                foreach (var key in store.ItemKeys(name))
+                {
+                    if (store.GetCheckpoint(name, key) is not { } checkpoint) continue;
+                    var parts = new JsonObject();
+                    foreach (var (part, value) in checkpoint.Parts) parts[part] = new JsonObject { ["type"] = value.Type.ToString().ToLowerInvariant(), ["value"] = PartText(value) };
+                    items.Add(new JsonObject { ["key"] = key, ["version"] = checkpoint.Version, ["updated"] = checkpoint.UpdatedAt.UtcDateTime.ToString("O"), ["updated_by"] = checkpoint.UpdatedBy, ["parts"] = parts });
+                }
+
+                checkpoints.Add(new JsonObject { ["name"] = name, ["items"] = items });
+            }
+
+            return Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["checkpoints"] = checkpoints });
+        });
+
+        app.MapGet($"{root}/tasks/{{package}}/{{channel}}/{{task}}/checkpoints/{{name}}/history", (string package, string channel, string task, string name, HttpContext context) =>
+        {
+            if (!ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
+            if (Deny(context, ServerRole.Operator) is { } denied) return denied;
+            if (!PackageManifestValidator.NameRule.IsMatch(name)) return Results.BadRequest(new { error = $"'{name}' is not a checkpoint name." });
+            var limit = 100;
+            if (Text(context.Request.Query["limit"]) is { } limitText && (!int.TryParse(limitText, NumberStyles.None, CultureInfo.InvariantCulture, out limit) || limit is < 1 or > 1000))
+                return Results.BadRequest(new { error = "limit is a whole number from 1 to 1000." });
+            var key = Text(context.Request.Query["key"]) ?? "";
+            var changes = new ProgressStore(state, new ProgressKey(package, channel, task)).History(name, key, limit);
+            return Results.Json(new JsonObject
+            {
+                ["task"] = reference!.ToString(), ["name"] = name, ["key"] = key,
+                ["changes"] = new JsonArray(changes.Select(c => (JsonNode)new JsonObject
+                {
+                    ["id"] = c.Id, ["part"] = c.Part, ["type"] = c.Type.ToString().ToLowerInvariant(), ["old"] = c.Old, ["new"] = c.New, ["version"] = c.HeadVersion,
+                    ["run_id"] = c.RunId, ["actor"] = c.Actor, ["at"] = c.At.UtcDateTime.ToString("O"),
+                }).ToArray()),
+            });
+        });
+
+        // the rewind: back to what the checkpoint was before one change of its history, as a new version under the operator's name, audited. 409 when a run moved the checkpoint meanwhile.
+        app.MapPost($"{root}/tasks/{{package}}/{{channel}}/{{task}}/checkpoints/{{name}}/rewind", async (string package, string channel, string task, string name, HttpContext context) =>
+        {
+            if (!ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
+            if (Deny(context, ServerRole.Operator, RunnerControl.RewindVerb, engine(), reference!) is { } denied) return denied;
+            if (!PackageManifestValidator.NameRule.IsMatch(name)) return Results.BadRequest(new { error = $"'{name}' is not a checkpoint name." });
+            using var reader = new StreamReader(context.Request.Body);
+            var text = await reader.ReadToEndAsync(context.RequestAborted);
+            JsonObject? body;
+            try { body = JsonNode.Parse(text) as JsonObject; }
+            catch (System.Text.Json.JsonException) { return Results.BadRequest(new { error = "The body is not JSON." }); }
+            if (body?["history_id"] is not JsonValue idValue || !idValue.TryGetValue<long>(out var historyId))
+                return Results.BadRequest(new { error = "The body is {\"history_id\": <id of the change to go back before>, \"key\": \"\"}." });
+            var key = body["key"] is JsonValue keyValue && keyValue.TryGetValue<string>(out var keyText) ? keyText : "";
+            return Control(engine(), control =>
+            {
+                try
+                {
+                    if (!control.RewindCheckpoint(reference!, name, key, historyId, ActorOf(context)))
+                        return Results.Json(new { error = $"The checkpoint '{name}' of {reference} moved while it was being rewound, or that change is not one of its own. Read its history again." }, statusCode: StatusCodes.Status409Conflict);
+                }
+                catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
+                var now = new ProgressStore(state, new ProgressKey(package, channel, task)).GetCheckpoint(name, key);
+                return Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["name"] = name, ["key"] = key, ["version"] = now?.Version });
+            });
         });
 
         // an item for the task's own queue, the one a run of the task claims from (plan 28c E12c): how a product hands work to a run that is up already, since a task runs one at a time and a second start is refused. Operator.
@@ -421,6 +494,8 @@ public static class RunnerApi
             ["failure"] = run.Run.Failure is null ? null : new JsonObject { ["kind"] = run.Run.Failure.Kind, ["message"] = run.Run.Failure.Message },
         };
     }
+
+    private static string PartText(ProgressValue value) => value.Value switch { DateTimeOffset at => at.UtcDateTime.ToString("O"), IFormattable f => f.ToString(null, CultureInfo.InvariantCulture), var other => other.ToString() ?? "" };
 
     private static string? Text(Microsoft.Extensions.Primitives.StringValues values) => values.Count == 0 || string.IsNullOrWhiteSpace(values[0]) ? null : values[0];
 
