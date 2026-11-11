@@ -7,6 +7,9 @@ import { commitState, conflictsOf, describeEvent, fileTree, languageOf, mergeSta
 import { WorkspaceShell } from '../WorkspaceShell'
 import { BuildsPanel } from './BuildsPanel'
 import { CheckPanel } from './CheckPanel'
+import { NewStoreModel, StoreModelEditor } from './StoreModelPanel'
+import { editorKindOf } from '../editors'
+import { useLiveCheck } from '../useLiveCheck'
 
 const when = (iso: string) => (iso ? new Date(iso).toLocaleString() : '')
 
@@ -28,7 +31,7 @@ function Tree({ nodes, selected, onOpen, depth = 0 }: { nodes: TreeNode[]; selec
 }
 
 /** One file in the editor: what is on the server, what has been typed, and Save, Move and Delete for the owner. */
-function FileEditor({ project, id, path, editable, canWrite, onGone, onRenamed }: { project: string; id: string; path: string; editable: boolean; canWrite: boolean; onGone: () => void; onRenamed: (to: string) => void }) {
+function FileEditor({ project, id, kind, path, editable, canWrite, onGone, onRenamed, onOpen }: { project: string; id: string; kind?: string; path: string; editable: boolean; canWrite: boolean; onGone: () => void; onRenamed: (to: string) => void; onOpen: (path: string) => void }) {
   const client = useQueryClient()
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [target, setTarget] = useState('')
@@ -43,7 +46,8 @@ function FileEditor({ project, id, path, editable, canWrite, onGone, onRenamed }
     onSuccess: async (sent) => {
       // what the server holds is what was sent: set it before the draft goes, or the editor shows the old text for a moment and its change event makes that the draft again
       client.setQueryData(['workspace', 'file', project, id, path], sent)
-      setDrafts(({ [path]: _gone, ...rest }) => rest)
+      // a person who typed on while the save ran keeps what they typed (the live check saves as they type)
+      setDrafts((d) => (d[path] === sent ? (({ [path]: _gone, ...rest }) => rest)(d) : d))
       await client.invalidateQueries({ queryKey: ['workspace', 'files', project, id] })
       await refresh()
     },
@@ -58,6 +62,9 @@ function FileEditor({ project, id, path, editable, canWrite, onGone, onRenamed }
   })
   const state = saveState({ mine: editable, canWrite, dirty, busy: save.isPending })
   const problem = pathProblem(target.trim())
+  const editorKind = editorKindOf(kind, path)
+  const live = useLiveCheck({ project, id, text, enabled: editorKind === 'store-model' && editable && canWrite && !loaded.isLoading && !loaded.error, flush: async () => { if (dirty) await save.mutateAsync() } })
+  const onText = (value: string) => setDrafts((d) => ({ ...d, [path]: value }))
   return (
     <div data-testid="wsp-editor" data-path={path}>
       <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
@@ -85,9 +92,12 @@ function FileEditor({ project, id, path, editable, canWrite, onGone, onRenamed }
       )}
       <ErrorBanner error={loaded.error ?? save.error ?? move.error ?? remove.error} />
       {loaded.isLoading && <div className="empty">Loading...</div>}
-      {!loaded.error && !loaded.isLoading && (
+      {!loaded.error && !loaded.isLoading && editorKind === 'store-model' && (
+        <StoreModelEditor path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} />
+      )}
+      {!loaded.error && !loaded.isLoading && editorKind !== 'store-model' && (
         <CodeEditor value={text} language={languageOf(path)} readOnly={!editable || !canWrite} minLines={14} maxLines={30} testId="wsp-code"
-          onChange={(value) => setDrafts((d) => ({ ...d, [path]: value }))} />
+          onChange={onText} />
       )}
     </div>
   )
@@ -178,6 +188,8 @@ export function WorkspacePage() {
   const workspaces = useQuery({ queryKey: ['workspace', 'list', project], queryFn: () => workspaceApi.workspaces(project) })
   const files = useQuery({ queryKey: ['workspace', 'files', project, id], queryFn: () => workspaceApi.files(project, id), enabled: merged === null })
   const mine = workspaces.data?.find((w) => w.id === id)
+  const projects = useQuery({ queryKey: ['workspace', 'projects'], queryFn: () => workspaceApi.projects() })
+  const kind = projects.data?.find((p) => p.id === project)?.kind
   const create = useMutation({
     mutationFn: () => workspaceApi.writeFile(project, id, newPath.trim(), ''),
     onSuccess: async (r) => {
@@ -242,13 +254,17 @@ export function WorkspacePage() {
                       {problem && <span className="hint" data-testid="wsp-new-why">{problem}</span>}
                     </form>
                   )}
+                  {kind === 'store' && editable && canWrite && (
+                    <NewStoreModel taken={(files.data?.files ?? []).map((f) => f.path)} busy={create.isPending}
+                      onCreate={(path, text) => workspaceApi.writeFile(project, id, path, text).then(async (r) => { setSelected(r.path); await client.invalidateQueries({ queryKey: ['workspace', 'files', project, id] }); await client.invalidateQueries({ queryKey: ['workspace', 'changes', project, id] }) })} />
+                  )}
                   <ErrorBanner error={create.error} />
                 </div>
               </div>
               <div style={{ flex: 1, minWidth: 320 }}>
                 {selected === null
                   ? <div className="empty" data-testid="wsp-pick">Pick a file to read{editable ? ' or edit' : ''} it.</div>
-                  : <FileEditor key={selected} project={project} id={id} path={selected} editable={editable} canWrite={canWrite} onGone={() => setSelected(null)} onRenamed={setSelected} />}
+                  : <FileEditor key={selected} project={project} id={id} kind={kind} path={selected} editable={editable} canWrite={canWrite} onGone={() => setSelected(null)} onRenamed={setSelected} onOpen={setSelected} />}
                 <div className="row" style={{ gap: 8, margin: '18px 0 8px' }} role="tablist">
                   <button type="button" role="tab" aria-selected={tab === 'changes'} className={`btn ${tab === 'changes' ? 'btn-primary' : ''}`} data-testid="wsp-tab-changes" onClick={() => setTab('changes')}>Changes</button>
                   <button type="button" role="tab" aria-selected={tab === 'check'} className={`btn ${tab === 'check' ? 'btn-primary' : ''}`} data-testid="wsp-tab-check" onClick={() => setTab('check')}>Check</button>
