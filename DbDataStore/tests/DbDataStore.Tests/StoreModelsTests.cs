@@ -88,7 +88,7 @@ public sealed class StoreModelsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Created, (await send(HttpMethod.Put, "/api/v1/models/territories", Territories, ServerRole.Author)).StatusCode);
         var text = File.ReadAllText(StoreModels.FileOf(directory, "territories"));
         Assert.StartsWith("schemaVersion: 2\n", text);
-        Assert.Equal(Territories.Replace("schemaVersion: 1", "schemaVersion: 2"), text);
+        Assert.Equal(Territories.ReplaceLineEndings("\n").Replace("schemaVersion: 1", "schemaVersion: 2"), text);   // the source file may be checked out with CRLF; the store writes LF
 
         var tooNew = await send(HttpMethod.Put, "/api/v1/models/robots", Territories.Replace("schemaVersion: 1", "schemaVersion: 3").Replace("name: territories", "name: robots"), ServerRole.Author);
         Assert.Equal(HttpStatusCode.UnprocessableEntity, tooNew.StatusCode);
