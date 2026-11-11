@@ -23,13 +23,15 @@ export interface Merged { merged: boolean; sha: string | null; fast_forward: boo
 /** A build of a draft (`GET .../builds`): who asked, the commit it was made from, where it is and a sentence (why it failed, or what it made). */
 export interface BuildSummary { id: string; workspace: string; status: string; commit: string | null; requested_by: string; message: string | null; requested: string; started: string | null; finished: string | null }
 /** One line the bundler said: a file and a line when it names a place (a refused import), else only the reason. */
-export interface BuildDiagnostic { file?: string; line?: number; message: string }
+export interface BuildDiagnostic { file?: string | null; line?: number | null; message: string; code?: string; severity?: string }
 export interface BuildResult {
-  status: string; message: string; app: string | null; version: string | null; entry: string | null; files: number; bundled: string[]; notes: string[]; diagnostics: BuildDiagnostic[]
-  isolated: boolean; isolation_setting: string; uncommitted_changes: boolean; commit: string | null; seconds: number
+  status: string; message: string; app?: string | null; version?: string | null; entry?: string | null; files?: number; bundled?: string[]; notes?: string[]; diagnostics: BuildDiagnostic[]
+  isolated?: boolean; isolation_setting?: string; uncommitted_changes: boolean; commit: string | null; seconds: number
+  /** A kind that makes something to publish (plan 33): its name, and what it made (`package`, `tasks`, `files`; `models`, `data_sources`). */
+  kind?: string; info?: Record<string, string>
 }
 /** What was published from a build: when, by whom, to which target, whether it worked and what the Gateway said. */
-export interface PublishRecord { at: string; by: string; target: string; ok: boolean; error?: string; answer?: { app?: string; version?: number; hash?: string; gateway?: string } }
+export interface PublishRecord { at: string; by: string; target: string; ok: boolean; error?: string; answer?: PublishedAnswer }
 export interface BuildDetail { build: BuildSummary; result: BuildResult | null; publishes: PublishRecord[] }
 /** Whether the server can build, and what it lacks (`GET /api/v1/app-build`): each problem is a sentence that says what to set. */
 export interface BuildReadiness {
@@ -41,11 +43,19 @@ export interface BuildReadiness {
 export interface PublishTarget { name: string; gateway: string | null; product?: string | null; accepts?: boolean | null; can_publish: boolean }
 
 /** A kind of project the server hosts (`GET /api/v1/project-kinds`) and what it publishes as, to which product (plan 33 SC20). */
-export interface ProjectKindInfo { name: string; title: string; description: string; buildable: boolean; publishes: { product: string; what: string; description: string }[] }
+export interface ProjectKindInfo { name: string; title: string; description: string; buildable: boolean; produces?: boolean; publishes: { product: string; what: string; description: string }[] }
 /** One finding of a kind's check of a draft: a code, a severity, and the file and line when the validator names a place. */
 export interface CheckDiagnostic { severity: 'error' | 'warning' | 'info'; code: string; message: string; file: string | null; line: number | null }
 export interface CheckResult { kind: string; ok: boolean; diagnostics: CheckDiagnostic[] }
-export interface PublishAnswer { steps: string[]; published: { app?: string; version?: number; hash?: string; target?: string; gateway?: string } }
+/** What a Gateway or a Runner answered a publish with: an app's version, a package's version on a channel, or the models published. */
+export interface PublishedAnswer {
+  app?: string; version?: number; hash?: string; target?: string; gateway?: string
+  package?: string; channel?: string; mode?: string; changed?: boolean; uploaded?: number; skipped?: number; tasks?: string[]; runner?: string
+  models?: { model: string; data_source: string; version?: number | null; created?: boolean | null; unchanged?: boolean | null }[]
+}
+export interface PublishAnswer { steps: string[]; published: PublishedAnswer }
+/** What a publish says besides the target and the note: for a Runner the channel (and whether it serves at once, the slots to bind), for a Gateway the data source of the models. */
+export interface PublishOptions { channel?: string; serve?: boolean; bind?: Record<string, string>; data_source?: string }
 /** A target's publisher key as a person may see it: the reference to the secret, never the key, and the Gateway it is paired with. */
 export interface PublisherKey { name: string; secret_ref: string; updated: string; gateway: { url: string; roles: string[]; client_name: string; paired: string } | null }
 
@@ -81,8 +91,8 @@ export const workspaceApi = {
   requestBuild: (project: string, id: string) => request<BuildSummary>(builds(project, id), { method: 'POST' }),
   /** Where a build's preview is served from (through the relay): a page for a frame, with no network and no data. */
   previewUrl: (project: string, id: string, build: string) => apiUrl(`${builds(project, id)}/${enc(build)}/preview/`),
-  publishTargets: () => request<{ targets: PublishTarget[] }>('/api/v1/publish-targets').then((r) => r.targets),
-  publish: (project: string, id: string, build: string, target: string, note: string) => request<PublishAnswer>(`${builds(project, id)}/${enc(build)}/publish`, json(note ? { target, note } : { target })),
+  publishTargets: (project?: string) => request<{ targets: PublishTarget[] }>(project ? `/api/v1/publish-targets?project=${enc(project)}` : '/api/v1/publish-targets').then((r) => r.targets),
+  publish: (project: string, id: string, build: string, target: string, note: string, options: PublishOptions = {}) => request<PublishAnswer>(`${builds(project, id)}/${enc(build)}/publish`, json({ target, ...(note ? { note } : {}), ...options })),
   publisherKeys: () => request<{ keys: PublisherKey[] }>('/api/v1/publisher-keys').then((r) => r.keys),
   pairKey: (name: string, url: string, code: string) => request<PublisherKey>(`/api/v1/publisher-keys/${enc(name)}/pair`, json({ url, code })),
   setKey: (name: string, secretRef: string) => request<PublisherKey>(`/api/v1/publisher-keys/${enc(name)}`, { method: 'PUT', body: JSON.stringify({ secret_ref: secretRef }), headers: { 'Content-Type': 'application/json' } }),

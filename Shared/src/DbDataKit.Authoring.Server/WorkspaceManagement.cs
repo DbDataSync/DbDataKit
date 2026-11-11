@@ -160,6 +160,7 @@ public static class WorkspaceManagement
                     ["title"] = k.Title,
                     ["description"] = k.Description,
                     ["buildable"] = k.Buildable,
+                    ["produces"] = k.Produces,
                     ["publishes"] = new JsonArray([.. k.Publishes.Select(r => (JsonNode?)new JsonObject { ["product"] = r.Product, ["what"] = r.What, ["description"] = r.Description })]),
                 })]),
             });
