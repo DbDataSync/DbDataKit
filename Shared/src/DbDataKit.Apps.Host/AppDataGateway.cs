@@ -1,15 +1,10 @@
 using System.Text.RegularExpressions;
+using DbDataKit.Identity;
 using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.WebUtilities;
 
 namespace DbDataKit.Apps;
-
-/// <summary>A replay cache that accepts every token: an app's token is a bearer token for five minutes and is used for many calls, which the one-use rule of a console's tokens would refuse.</summary>
-internal sealed class ReusableTokens : IReplayCache
-{
-    public bool TryAdd(string consoleId, string tokenId, DateTimeOffset forgetAfter) => true;
-}
 
 /// <summary>Which of the data calls an app may make: one row, a page of rows, a batch of changes, or a model's schema (the entities its manifest lists; AP25).</summary>
 public enum AppDataRoute { Row, Rows, Changes, Schema }
@@ -52,11 +47,11 @@ public interface IAppData
 
 /// <summary>
 /// The way a sandboxed app reaches master data (plan 26 section 3; plan 20 O08c): <c>/apps/&lt;instance&gt;/_data/api/v1/models/&lt;model&gt;/...</c> on the apps host. The app sends the token the shell brokered (audience
-/// <c>app:&lt;instance&gt;</c>); the host checks it and hands the call, with the person, the app and the scope of the manifest's <c>models</c>, to <see cref="IAppData"/>: the models published to the group, so an app goes on
+/// <c>app:&lt;instance&gt;</c>, made by the identity home); the host checks it and hands the call, with the person, the app and the scope of the manifest's <c>models</c>, to <see cref="IAppData"/>: the models published to the group, so an app goes on
 /// with the store's server stopped and a model in development is never what an app sees. The browser reaches nothing else, needs no CORS but this route's, and the app never holds a token anything else accepts. Only row reads
 /// and the changes endpoint are answered.
 /// </summary>
-public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, ConsoleIdentity self, TimeProvider? clock = null, AppApprovalStore? approvals = null, IAppSemantic? semantic = null)
+public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, AppTokenValidator tokens, JwksTokenVerifier? keys = null, AppApprovalStore? approvals = null, IAppSemantic? semantic = null)
 {
     private static readonly Regex SemanticPath = new(@"^api/v1/semantic/models(/(?<model>[^/]+)/(?<kind>catalog|query))?$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
@@ -67,13 +62,6 @@ public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, Co
 
     /// <summary>The instance setting of a preview that turns its writes on: they are kept in the preview's draft (plan 21 CH01).</summary>
     public const string PreviewWritesSetting = "preview.writes";
-
-    private readonly IPairedClients _self = new Self(new PairedClient(self.Id, "apps host", self.Key.PublicKey, ServerRole.Viewer | ServerRole.Operator | ServerRole.Author | ServerRole.Approver | ServerRole.Admin, ClientKind.Server));
-
-    private sealed class Self(PairedClient client) : IPairedClients
-    {
-        public PairedClient? Find(string clientId) => clientId == client.Id ? client : null;
-    }
 
     /// <summary>Checks one call and returns the answer of <see cref="IAppData"/>, or the host's own refusal.</summary>
     public async Task<AppResponse> ForwardAsync(string instance, string path, string method, string query, string? authorization, byte[] body, CancellationToken ct)
@@ -88,8 +76,11 @@ public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, Co
             if (gate is not { Allowed: true, Approval: { } standing }) return Refuse(403, $"'{resolved.Manifest.Name}' asks to be trusted and no approval stands for this version.");
             via = standing.AuditLabel;
         }
-        var validated = new ConsoleTokenValidator(AppInstanceAudience.Of(instance), _self, new ReusableTokens(), clock).Validate(authorization is { } h && h.StartsWith("Bearer ", StringComparison.Ordinal) ? h[7..] : null);
-        if (validated.Token is not { } token) return Refuse(401, "A token for this app is needed.");
+        // the identity home's access token for this instance: its signature, issuer and expiry are the home's, its audience must be this instance (instance B refuses instance A's token), and what it allows is already the approved manifest's scope
+        // narrowed by the roles the home gave the person on the instance (AppScope.Narrow)
+        var bearer = authorization is { } h && h.StartsWith("Bearer ", StringComparison.Ordinal) ? h[7..] : null;
+        if (keys is not null) await keys.PrepareAsync(bearer, ct);
+        if (tokens.Validate(bearer, instance).Token is not { } token) return Refuse(401, "A token for this app is needed.");
 
         var trimmed = path.Trim('/');
         if (trimmed.StartsWith("api/v1/semantic/", StringComparison.Ordinal) || trimmed == "api/v1/semantic")
@@ -117,7 +108,7 @@ public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, Co
         var model = Uri.UnescapeDataString(match.Groups["model"].Value);
         var copy = match.Groups["copy"].Success ? Uri.UnescapeDataString(match.Groups["copy"].Value) : resolved.Instance.Bindings.TryGetValue(model, out var bound) ? bound : null;
         var parameters = QueryHelpers.ParseQuery(query).ToDictionary(p => p.Key, p => p.Value.ToString(), StringComparer.Ordinal);
-        var call = new AppDataCall(instance, token.SubjectId, token.SubjectName, token.Roles, AppTokenBroker.ScopeOf(resolved.Manifest), route, model,
+        var call = new AppDataCall(instance, token.SubjectId, token.SubjectName, RolesOf(token), token.Scope, route, model,
             match.Groups["entity"].Success ? Uri.UnescapeDataString(match.Groups["entity"].Value) : null, copy, parameters, body, via, draft);
         var answer = await data.SendAsync(call, ct);
         return answer with { Headers = Cors };
@@ -125,7 +116,7 @@ public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, Co
 
     // The semantic route (plan 22a GP35c): the models the manifest's `semantic:` lists, a model's catalog and a query, as the person the token names. The scope is asked before the host, so nothing says whether a model the manifest
     // does not list exists.
-    private async Task<AppResponse> ForwardSemanticAsync(ResolvedInstance resolved, string instance, string trimmed, string method, byte[] body, ValidatedToken token, string? via, CancellationToken ct)
+    private async Task<AppResponse> ForwardSemanticAsync(ResolvedInstance resolved, string instance, string trimmed, string method, byte[] body, AppAccessToken token, string? via, CancellationToken ct)
     {
         var match = SemanticPath.Match(trimmed);
         if (!match.Success) return Refuse(403, "Apps reach the semantic models, a model's catalog and its queries only: api/v1/semantic/models[/<model>/catalog|query].");
@@ -137,8 +128,17 @@ public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, Co
         var listed = resolved.Manifest.SemanticModels;
         if (route != AppSemanticRoute.Models && !listed.Contains(model, StringComparer.OrdinalIgnoreCase))
             return Refuse(403, $"This app may not use the semantic model '{model}': its manifest does not list it under `semantic`.");
-        var call = new AppSemanticCall(instance, token.SubjectId, token.SubjectName, token.Roles, listed, route, model, body, via);
+        var call = new AppSemanticCall(instance, token.SubjectId, token.SubjectName, RolesOf(token), listed, route, model, body, via);
         return (await semantic.SendAsync(call, ct)) with { Headers = Cors };
+    }
+
+    /// <summary>The roles the token names (the home's role names on the instance) as the flags the servers' checks use.</summary>
+    private static ServerRole RolesOf(AppAccessToken token)
+    {
+        var roles = ServerRole.None;
+        foreach (var name in token.Roles)
+            if (Enum.TryParse<ServerRole>(name, ignoreCase: true, out var role) && role != ServerRole.None) roles |= role;
+        return roles;
     }
 
     public static readonly IReadOnlyDictionary<string, string> Cors = new Dictionary<string, string>

@@ -44,7 +44,9 @@ public static class OpenIdEndpoints
             }
             try
             {
-                var t = provider.Exchange(new TokenRequest(f["grant_type"], f["code"], f["redirect_uri"], id, secret, f["code_verifier"], f["refresh_token"]));
+                var t = provider.Exchange(new TokenRequest(f["grant_type"], f["code"], f["redirect_uri"], id, secret, f["code_verifier"], f["refresh_token"], f["subject_token"], f["audience"].FirstOrDefault() ?? f["resource"].FirstOrDefault(), f["subject_token_type"]));
+                if (f["grant_type"] == OpenIdProvider.TokenExchangeGrant)
+                    return Results.Json(new { access_token = t.AccessToken, issued_token_type = OpenIdProvider.AccessTokenType, token_type = "Bearer", expires_in = t.ExpiresIn, scope = t.Scope });
                 return Results.Json(new { access_token = t.AccessToken, token_type = "Bearer", expires_in = t.ExpiresIn, id_token = t.IdToken, scope = t.Scope, refresh_token = t.RefreshToken });
             }
             catch (OAuthException e) { return Results.Json(new { error = e.Error, error_description = e.Message }, statusCode: e.Status); }

@@ -21,35 +21,13 @@ namespace DbDataGateway.Server.Hosting;
 /// </summary>
 public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, PublishedEntityModels models, DbDataKit.Serving.IServingServices serving, DbDataKit.Serving.Semantic.SemanticModels semanticModels, HomeCallers homeCallers, GroupSessionKey sessionKey, ILoggerFactory loggers, GroupCertificate? group = null) : IHostedService, IAsyncDisposable
 {
-    /// <summary>The secret that holds the seed of the key the apps host signs its app tokens with: made on the first start, and copied to every other instance of a group.</summary>
-    public const string SigningKeySecret = "dbdatakit:gateway:apps:signing-key";
-
     /// <summary>The folder next to the program that holds the runtime for apps of views only (<c>views-app.js</c>, <c>views-app.css</c>; plan 26, AP25), copied there by the build from <c>Shared/web/view-app/dist</c>.</summary>
     public const string ViewsRuntimeFolder = "apps-views";
-
-    /// <summary>The issuer name in the tokens; a server that accepts them pairs this issuer's public key.</summary>
-    public const string TokenIssuer = "dbdatagateway-apps";
 
     private WebApplication? _app;
 
     /// <summary>The certificate chooser the listener asks at each handshake; set before the listener starts.</summary>
     private AppCertificates? Certificates { get; set; }
-
-    public static async Task<ConsoleSigningKey> SigningKeyAsync(GatewayOptions current, CancellationToken cancellationToken)
-    {
-        var store = SecretsRuntime.OpenStore(current);
-        using var held = await store.TryResolveAsync(SecretRef.Parse("secret:" + SigningKeySecret), cancellationToken);
-        if (held is not null)
-        {
-            try { return ConsoleSigningKey.FromSeed(Convert.FromBase64String(held.RevealString())); }
-            catch (Exception ex) when (ex is FormatException or ArgumentException)
-            { throw new SecretConfigurationException(SigningKeySecret, $"The secret {SigningKeySecret} is not a key seed: {ex.Message} Remove it to have one made."); }
-        }
-        var key = ConsoleSigningKey.Generate();
-        using var value = SecretValue.From(Convert.ToBase64String(key.ExportSeed()));
-        await store.SetAsync(SecretName.Parse(SigningKeySecret), value, cancellationToken);
-        return key;
-    }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -88,7 +66,10 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
         var client = new OpenIdClient(
             new OpenIdClientOptions(home.AbsoluteUri, current.Apps.Home.ClientId!, secret, new Uri(PublicUrlOf(current), AppsEndpoints.CallbackPath).AbsoluteUri),
             new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) });
-        var key = await SigningKeyAsync(current, cancellationToken);
+        // the tokens of an app are the identity home's: the host trades a person's refresh token for one at the home (the home's client for this host must be one the home lets exchange, plan 26 AP19) and checks the home's signature
+        // against the keys the home publishes; it holds no signing key of its own
+        var homeHttp = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
+        var jwks = new JwksTokenVerifier(home.AbsoluteUri, homeHttp);
         // an instance the home has no client for yet (saved with the offline command, or at another instance of the group) gets one now
         try
         {
@@ -97,15 +78,15 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            loggers.CreateLogger("Apps").LogWarning(ex, "The app instances' OpenID clients could not be registered; the host's own tokens serve until they are.");
+            loggers.CreateLogger("Apps").LogWarning(ex, "The app instances' OpenID clients could not be registered; apps get no token until they are.");
         }
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy"));
         // a name bound to an instance is routed to it by Host and path, before the routes see the request (plan 26 AP08)
         app.UseAppAddresses(bindings, instances, new TrustedProxies(current.Apps.TrustedProxies));
         app.UseRouting();
-        app.MapApps(instances, new AppSite(instances, name => instances.Resolve(name) is { } r ? approvals.ApprovedEgress(r) : AppEgress.None, views: ViewsRuntime.FromDirectory(Path.Combine(AppContext.BaseDirectory, ViewsRuntimeFolder))), client, new AppSessions(refresh: client.RefreshAsync, refreshAfter: TimeSpan.FromSeconds(current.Apps.RolesRefreshSeconds), store: new AppSessionStore(state, sessionKey)),
-            new AppTokenBroker(new ConsoleTokenIssuer(TokenIssuer, key)), new AppDataGateway(instances, new GroupAppData(GatewayStoreModule.ApiOf(options, state, secrets, models)), new ConsoleIdentity(TokenIssuer, key), approvals: approvals, semantic: new GroupAppSemantic(serving, semanticModels, homeCallers, options)), new AppStorage(state), approvals, () => options.CurrentValue.Apps.StorageCapMb * 1024L * 1024L);
+        app.MapApps(instances, new AppSite(instances, name => instances.Resolve(name) is { } r ? approvals.ApprovedEgress(r) : AppEgress.None, views: ViewsRuntime.FromDirectory(Path.Combine(AppContext.BaseDirectory, ViewsRuntimeFolder))), client, new AppSessions(refresh: client.RefreshAsync, refreshAfter: TimeSpan.FromSeconds(current.Apps.RolesRefreshSeconds), store: new AppSessionStore(state, sessionKey), exchange: client.ExchangeForAppAsync),
+            new AppDataGateway(instances, new GroupAppData(GatewayStoreModule.ApiOf(options, state, secrets, models)), new AppTokenValidator(jwks), jwks, approvals: approvals, semantic: new GroupAppSemantic(serving, semanticModels, homeCallers, options)), new AppStorage(state), approvals, () => options.CurrentValue.Apps.StorageCapMb * 1024L * 1024L);
         app.MapFallback(() => Results.Text("The apps host of this DbDataGateway. An app is at /apps/<instance>/.", "text/plain"));
         await app.StartAsync(cancellationToken);
         _app = app;
