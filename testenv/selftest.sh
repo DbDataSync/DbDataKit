@@ -16,6 +16,7 @@ check "the ODBC string names the driver" '[[ "$(t mssql --dotenv)" == *"DBDATAKI
 out="$(t mssql dbdatagateway --dotenv)"
 check "gateway: server, user, password" '[[ "$out" == *"DBDATAKIT_TEST_MSSQL_SERVER=127.0.0.1,14330"* && "$out" == *"DBDATAKIT_TEST_MSSQL_USER=sa"* && "$out" == *"DBDATAKIT_TEST_MSSQL_PASSWORD=DbKit_Test_Pw1"* ]]'
 check "gateway: SQL Server is required when it was started" '[[ "$out" == *"DBDATAKIT_TEST_REQUIRE_SQLSERVER=true"* ]]'
+check "gateway: the State suites' name for the SQL Server connection is mapped (they skipped silently without it)" '[[ "$out" == *"DBDATAKIT_TEST_SQLSERVER=Server=127.0.0.1,14330;"* ]]'
 out="$(t postgres dbdatagateway --dotenv)"
 check "gateway: nothing about SQL Server mapped without it" '[[ "$out" != *DBDATAKIT_TEST_MSSQL_SERVER* && "$out" != *DBDATAKIT_TEST_REQUIRE_SQLSERVER* ]]'
 check "gateway: the PostgreSQL string, and it is required when it was started" '[[ "$out" == *"DBDATAKIT_TEST_POSTGRES=Host=127.0.0.1;Port=15432;"* && "$out" == *"DBDATAKIT_TEST_REQUIRE_POSTGRES=true"* ]]'

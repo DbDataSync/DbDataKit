@@ -1,3 +1,5 @@
 # DbDataGateway's suite reads DBDATAKIT_TEST_MSSQL_SERVER / _USER / _PASSWORD and DBDATAKIT_TEST_POSTGRES (all printed by `env`); each engine has a switch that makes a missing server a failure instead of a skip.
+# The state tests (ScratchStateDatabase, StateVerbDatabases) read DBDATAKIT_TEST_SQLSERVER, as the shared libraries' suite does (dbdatakit.map); without it they skipped on SQL Server in silence.
+DBDATAKIT_TEST_SQLSERVER           <- DBDATAKIT_TEST_MSSQL
 DBDATAKIT_TEST_REQUIRE_SQLSERVER = true if DBDATAKIT_TEST_MSSQL
 DBDATAKIT_TEST_REQUIRE_POSTGRES = true if DBDATAKIT_TEST_POSTGRES
