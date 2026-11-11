@@ -140,7 +140,14 @@ public sealed class ViewsDataExportTests : IDisposable
         Assert.StartsWith("PK", Encoding.ASCII.GetString(bytes, 0, 2));
 
         using var workbook = new XLWorkbook(new MemoryStream(bytes));
-        Assert.Equal(["by_region", "by_category", "grid", "trend"], workbook.Worksheets.Select(w => w.Name));   // the layout's order; the metric has no rows
+        Assert.Equal(["Metrics", "by_region", "by_category", "grid", "trend"], workbook.Worksheets.Select(w => w.Name));   // the metrics first, then the layout's order
+
+        var metrics = workbook.Worksheet("Metrics");
+        Assert.Equal(["Widget", "Label", "Value", "Compare", "Change"], Enumerable.Range(1, 5).Select(c => metrics.Cell(1, c).GetString()));
+        Assert.Equal(("revenue", "Revenue"), (metrics.Cell(2, 1).GetString(), metrics.Cell(2, 2).GetString()));
+        Assert.Equal(XLDataType.Number, metrics.Cell(2, 3).DataType);
+        Assert.Equal(900, metrics.Cell(2, 3).GetDouble());                    // the West caller's figure, as the render shows it
+        Assert.True(metrics.Cell(2, 4).IsEmpty() && metrics.Cell(3, 1).IsEmpty());   // no comparison, one metric
 
         var table = workbook.Worksheet("by_region");
         Assert.Equal("=HYPERLINK(\"http://example.invalid\",\"Region\")", table.Cell(1, 1).GetString());
@@ -164,7 +171,7 @@ public sealed class ViewsDataExportTests : IDisposable
         Assert.Equal("rows-grid.xlsx", one.Response.Content.Headers.ContentDisposition!.FileName);
 
         var detail = JsonNode.Parse(Audited(h)[0].Entry.Detail!)!;
-        Assert.Equal(("xlsx", 4, 1), (detail["format"]!.GetValue<string>(), detail["sheets"]!.GetValue<int>(), detail["errors"]!.GetValue<int>()));
+        Assert.Equal(("xlsx", 5, 1), (detail["format"]!.GetValue<string>(), detail["sheets"]!.GetValue<int>(), detail["errors"]!.GetValue<int>()));
     }
 
     [Fact]
@@ -199,7 +206,7 @@ public sealed class ViewsDataExportTests : IDisposable
         Assert.Contains("'kpi'", elsewhere.Object["message"]!.GetValue<string>());
         var metric = await h.GetAsync("/api/v1/dashboards/rows/export?format=xlsx&widget=revenue", "all");
         Assert.Equal((400, "widget_not_tabular"), (metric.Status, Code(metric)));
-        var none = await h.GetAsync("/api/v1/dashboards/rows/export?format=xlsx&layout=kpi", "all");
+        var none = await h.GetAsync("/api/v1/dashboards/rows/export?format=xlsx&layout=notes", "all");
         Assert.Equal((400, "nothing_tabular"), (none.Status, Code(none)));
         var format = await h.GetAsync("/api/v1/dashboards/rows/export?format=docx", "all");
         Assert.Equal((400, "invalid"), (format.Status, Code(format)));
