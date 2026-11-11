@@ -5,7 +5,11 @@ using Microsoft.Extensions.AI;
 namespace DbDataKit.Agents;
 
 /// <summary>Who runs and what: the person the agent acts as, the agent and the version it runs, the conversation. The record of everything that happens names them.</summary>
-public sealed record AgentRunContext(string Person, string Agent, string AgentVersion, string ConversationId = "c1");
+public sealed record AgentRunContext(string Person, string Agent, string AgentVersion, string ConversationId = "c1", string? ParentAgent = null, int Depth = 0)
+{
+    /// <summary>The context of a subagent's run (plan 27a AG20): the same person and conversation, its own name and version, and the agent that called it, so the record nests.</summary>
+    public AgentRunContext ForSubagent(string agent, string version) => this with { Agent = agent, AgentVersion = version, ParentAgent = Agent, Depth = Depth + 1 };
+}
 
 /// <summary>One thing that happened in a run, for the record of a turn and the audit (plan 27a AG06 keeps them in the <c>agents</c> module). <see cref="Kind"/> is one of <see cref="AgentEventKinds"/>.</summary>
 public sealed record AgentEvent(DateTimeOffset At, string Kind, AgentRunContext Context, int Turn, string? Tool = null, string? Detail = null);
@@ -180,6 +184,7 @@ public sealed class AgentRunner(IChatClient client, IReadOnlyList<AgentTool> too
                 }
                 var (outcome, endsRun) = await HandleAsync(call, context, options, turn, Record, cancellation).ConfigureAwait(false);
                 if (outcome.Counted) usage = usage with { ToolCalls = usage.ToolCalls + 1 };
+                if (outcome.Spent is { } spent) usage = usage with { ModelTurns = usage.ModelTurns + spent.ModelTurns, ToolCalls = usage.ToolCalls + spent.ToolCalls, InputTokens = usage.InputTokens + spent.InputTokens, OutputTokens = usage.OutputTokens + spent.OutputTokens };
                 if (outcome.Call is { } ran) options.AfterCall?.Invoke(ran, new ToolOutcome(outcome.Text, outcome.IsError));
                 results.Add(new FunctionResultContent(call.CallId, outcome.Skill is { } skill && !outcome.IsError ? ToolResults.AsSkill(skill.Name, skill.Version, outcome.Text) : ToolResults.AsData(outcome.Tool, outcome.Source, outcome.Text, outcome.IsError)));
                 if (endsRun)
@@ -192,7 +197,7 @@ public sealed class AgentRunner(IChatClient client, IReadOnlyList<AgentTool> too
         }
     }
 
-    private sealed record Handled(string Tool, string Source, string Text, bool IsError, bool Counted, (string Name, string Version)? Skill = null, ToolCall? Call = null);
+    private sealed record Handled(string Tool, string Source, string Text, bool IsError, bool Counted, (string Name, string Version)? Skill = null, ToolCall? Call = null, RunUsage? Spent = null);
 
     private async Task<(Handled, bool)> HandleAsync(FunctionCallContent call, AgentRunContext context, AgentRunOptions options, int turn, Action<string, int, string?, string?> record, CancellationToken cancellation)
     {
@@ -238,7 +243,7 @@ public sealed class AgentRunner(IChatClient client, IReadOnlyList<AgentTool> too
         {
             var outcome = await tool.InvokeAsync(arguments, cancellation).ConfigureAwait(false);
             record(outcome.IsError ? AgentEventKinds.ToolFailed : AgentEventKinds.ToolCalled, turn, tool.Name, arguments.ToJsonString());
-            return (new Handled(tool.Name, tool.Source, outcome.Text, outcome.IsError, true, tool.ResultKind == ToolResultKind.Skill ? (outcome.Name ?? tool.Name, outcome.Version ?? "") : null, toolCall), false);
+            return (new Handled(tool.Name, tool.Source, outcome.Text, outcome.IsError, true, tool.ResultKind == ToolResultKind.Skill ? (outcome.Name ?? tool.Name, outcome.Version ?? "") : null, toolCall, outcome.Spent), false);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)

@@ -5,8 +5,7 @@ import { CodeEditor, ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { ConsoleShell } from '../ConsoleShell'
 import {
   agentsApi, buildTarget, targetLine, bindingLine, connectCommand, keyReferenceFor, providerTemplate, cost, eventWord, percent, promptingMeaning, promptingName, sessions, statusWord, tokenState, waitingOn,
-  type AgentDetail, type Approval, type AuditRow, type ConversationView, type Diagnostic, type MadeToken, type PolicyChange, type ProviderTest, type ProviderView,
-} from '../agents'
+  type AgentDetail, type Approval, type AuditRow, type ConversationView, type Diagnostic, type MadeToken, type PolicyChange, type ProviderTest, type ProviderView, type ModelsView, type MemoryItem, type SlotPlan, moveChoice, planOf, slotsToYaml, againstLimit } from '../agents'
 import { outsideApi } from '../outsideConnections'
 import { SETTINGS, TRAITS, emptyPolicy, policyFromYaml, policyToYaml, settingLabel, settingMeaning, type PolicyForm, type Setting } from '../policyForm'
 
@@ -146,6 +145,7 @@ function ChatTab() {
               </button>
             </div>
           ))}
+          <MemoriesPanel work={where.server && where.project && where.workspace ? `${where.server}/${where.project}/${where.workspace}` : undefined} />
         </div>
       </div>
       <div className="card" style={{ flex: '1 1 480px' }}>
@@ -395,6 +395,8 @@ function ModelsTab() {
         <thead><tr><th>Slot</th><th>Channel</th><th>Bound to</th></tr></thead>
         <tbody>{models.data?.bindings.map((b) => <tr key={`${b.slot}/${b.channel}`}><td className="mono">{b.slot}</td><td className="mono">{b.channel}</td><td>{bindingLine(b)}</td></tr>)}</tbody>
       </table>
+      {models.data && <SlotEditor models={models.data} />}
+      <UsageAgainstLimits />
       {slotsYaml !== null && (
         <>
           <CodeEditor value={slotsYaml} language="yaml" onChange={(v) => { setSlotsYaml(v); setSlotProblems([]) }} diagnostics={shownSlotProblems.map((d) => ({ line: d.line, column: d.column, message: d.message, severity: severityOf(d) }))} readOnly={!isAdmin} testId="slots-yaml" />
@@ -403,6 +405,129 @@ function ModelsTab() {
         </>
       )}
     </div>
+  )
+}
+
+// ---- AG19: what agents remember, listed, edited and deleted by the person it is about ----
+
+function MemoriesPanel({ work }: { work?: string }) {
+  const client = useQueryClient()
+  const [editing, setEditing] = useState<string | null>(null)
+  const [text, setText] = useState('')
+  const memories = useQuery({ queryKey: ['agents', 'memories', work ?? ''], queryFn: () => agentsApi.memories(work) })
+  const refresh = () => client.invalidateQueries({ queryKey: ['agents', 'memories'] })
+  const edit = useMutation({ mutationFn: (m: MemoryItem) => agentsApi.editMemory(m.id, text, m.kind === 'work' ? work : undefined), onSuccess: () => { setEditing(null); refresh() } })
+  const forget = useMutation({ mutationFn: (m: MemoryItem) => agentsApi.forgetMemory(m.id, m.kind === 'work' ? work : undefined), onSuccess: refresh })
+  return (
+    <details style={{ marginTop: 16 }} data-testid="memories" open>
+      <summary><strong>What agents remember</strong> ({memories.data?.length ?? 0})</summary>
+      <p className="hint">Only you see what is kept about you. A memory about the work is seen by whoever opens that workspace. Deleting one removes it from the next turn. A memory never holds a secret.</p>
+      <ErrorBanner error={memories.error ?? edit.error ?? forget.error} />
+      {memories.data?.length === 0 && <div className="hint" data-testid="memories-none">Nothing is remembered.</div>}
+      {memories.data?.map((m) => (
+        <div key={m.id} data-testid="memory" data-kind={m.kind} style={{ margin: '6px 0' }}>
+          <span className="hint">{m.kind === 'person' ? 'about you' : 'about this work'}{m.agent ? ` · ${m.agent}` : ''}</span>
+          {editing === m.id ? (
+            <form onSubmit={(e) => { e.preventDefault(); if (text.trim()) edit.mutate(m) }}>
+              <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={500} style={{ width: '100%' }} data-testid="memory-input" aria-label="Memory" />
+              <button type="submit" className="btn btn-sm btn-primary" disabled={!text.trim() || edit.isPending} data-testid="memory-save">Save</button>{' '}
+              <button type="button" className="btn btn-sm" onClick={() => setEditing(null)}>Cancel</button>
+            </form>
+          ) : (
+            <div>
+              <span data-testid="memory-text">{m.text}</span>{' '}
+              <button type="button" className="btn btn-sm" onClick={() => { setEditing(m.id); setText(m.text) }} data-testid={`memory-edit-${m.id}`}>Edit</button>{' '}
+              <button type="button" className="btn btn-sm" onClick={() => forget.mutate(m)} data-testid={`memory-forget-${m.id}`}>Delete</button>
+            </div>
+          )}
+        </div>
+      ))}
+    </details>
+  )
+}
+
+// ---- AG18: bind a slot per channel as a list; usage against the limits ----
+
+function SlotEditor({ models }: { models: ModelsView }) {
+  const client = useQueryClient()
+  const isAdmin = useIsAdmin()
+  const [plan, setPlan] = useState<SlotPlan | null>(null)
+  const [problems, setProblems] = useState<Diagnostic[]>([])
+  const [slot, setSlot] = useState('default')
+  const [channel, setChannel] = useState('*')
+  const [saved, setSaved] = useState(false)
+  useEffect(() => { setPlan(planOf(models.bindings)) }, [models.bindings])
+  const usable = models.providers.filter((p) => p.diagnostics.length === 0 && p.purpose === 'chat')
+  const save = useMutation({ mutationFn: () => agentsApi.saveSlots(slotsToYaml(plan ?? {})), onSuccess: (r) => { setProblems(r.diagnostics); setSaved(true); client.invalidateQueries({ queryKey: ['agents'] }) } })
+  const refused = (save.error as { body?: { diagnostics?: Diagnostic[] } } | null)?.body?.diagnostics ?? []
+  if (!plan) return null
+  const change = (next: SlotPlan) => { setPlan(next); setSaved(false); setProblems([]) }
+  const list = (sl: string, ch: string) => plan[sl]?.[ch] ?? []
+  const setList = (sl: string, ch: string, items: { provider: string; model: string }[]) => {
+    const copy: SlotPlan = JSON.parse(JSON.stringify(plan))
+    ;(copy[sl] ??= {})[ch] = items
+    if (items.length === 0) delete copy[sl][ch]
+    if (Object.keys(copy[sl]).length === 0) delete copy[sl]
+    change(copy)
+  }
+  return (
+    <div className="card" style={{ margin: '12px 0' }} data-testid="slot-editor"><div className="card-body">
+      <strong>Bind a slot</strong>
+      <p className="hint">Choose a slot and a channel (<span className="mono">*</span> is every channel without its own binding), then order the models: the first is used, the next ones take over when it is down. The channels bind differently, so a test channel can use a local model while production uses a cloud one.</p>
+      <div>
+        <input value={slot} onChange={(e) => setSlot(e.target.value)} aria-label="Slot" data-testid="bind-slot" style={{ width: 140 }} />{' '}
+        <input value={channel} onChange={(e) => setChannel(e.target.value)} aria-label="Channel" data-testid="bind-channel" style={{ width: 120 }} />
+      </div>
+      <ol data-testid="bind-list" style={{ margin: '8px 0' }}>
+        {list(slot, channel).map((c, i, all) => (
+          <li key={`${c.provider}/${c.model}/${i}`} data-testid="bind-choice">
+            <span className="mono">{c.provider}/{c.model}</span>{' '}
+            {isAdmin && <>
+              <button type="button" className="btn btn-sm" disabled={i === 0} onClick={() => setList(slot, channel, moveChoice(all, i, -1))} data-testid={`bind-up-${i}`} aria-label="Move up">Up</button>{' '}
+              <button type="button" className="btn btn-sm" disabled={i === all.length - 1} onClick={() => setList(slot, channel, moveChoice(all, i, 1))} data-testid={`bind-down-${i}`} aria-label="Move down">Down</button>{' '}
+              <button type="button" className="btn btn-sm" onClick={() => setList(slot, channel, all.filter((_, j) => j !== i))} data-testid={`bind-remove-${i}`}>Remove</button>
+            </>}
+          </li>
+        ))}
+        {list(slot, channel).length === 0 && <li className="hint" data-testid="bind-empty">Nothing is bound for {slot} in {channel}.</li>}
+      </ol>
+      {isAdmin && (
+        <div>
+          <select aria-label="Model to add" data-testid="bind-add" value="" onChange={(e) => {
+            const [provider, ...rest] = e.target.value.split('/')
+            if (provider) setList(slot, channel, [...list(slot, channel), { provider, model: rest.join('/') }])
+          }}>
+            <option value="">Add a model…</option>
+            {usable.flatMap((p) => p.models.map((m) => <option key={`${p.name}/${m.id}`} value={`${p.name}/${m.id}`}>{p.name}/{m.id}{p.cloud ? ' (cloud)' : ' (local)'}</option>))}
+          </select>{' '}
+          <button type="button" className="btn btn-sm btn-primary" disabled={save.isPending} onClick={() => save.mutate()} data-testid="bind-save">Save the bindings</button>
+        </div>
+      )}
+      {saved && problems.length === 0 && <div className="hint" data-testid="bind-saved">Saved.</div>}
+      {[...problems, ...refused].map((d, i) => <div key={i} className="banner error" data-testid="bind-diagnostic">line {d.line}: {d.message}</div>)}
+    </div></div>
+  )
+}
+
+function UsageAgainstLimits() {
+  const usage = useQuery({ queryKey: ['agents', 'usage'], queryFn: agentsApi.usage })
+  const policy = useQuery({ queryKey: ['agents', 'policy'], queryFn: agentsApi.policy })
+  const limits = useMemo(() => (policy.data ? policyFromYaml(policy.data.yaml).form : null), [policy.data])
+  const num = (v: string | undefined) => (v && v.trim() !== '' ? Number(v) : null)
+  if (!usage.data) return null
+  return (
+    <div className="card" style={{ margin: '12px 0' }}><div className="card-body" data-testid="usage-limits">
+      <strong>Usage and cost</strong>
+      {usage.data.install && <div data-testid="usage-install">{againstLimit(usage.data.install.cost, num(limits?.install.cost), 'The install, cost')} · {againstLimit(usage.data.install.inputTokens + usage.data.install.outputTokens, num(limits?.install.tokens), 'tokens')}</div>}
+      <table className="table" data-testid="usage-by-agent">
+        <thead><tr><th>Agent</th><th>Turns</th><th>Tokens</th><th>Cost</th></tr></thead>
+        <tbody>{usage.data.byAgent.map((u) => <tr key={u.key}><td>{u.key}</td><td>{u.turns}</td><td>{(u.inputTokens + u.outputTokens).toLocaleString()}</td><td>{cost(u.cost)}</td></tr>)}</tbody>
+      </table>
+      <table className="table" data-testid="usage-by-person">
+        <thead><tr><th>Person</th><th>Cost against the person's limit</th></tr></thead>
+        <tbody>{usage.data.byPerson.map((u) => <tr key={u.key}><td>{u.personName ?? u.key}</td><td>{againstLimit(u.cost, num(limits?.person.cost), 'cost')}</td></tr>)}</tbody>
+      </table>
+    </div></div>
   )
 }
 
@@ -668,6 +793,16 @@ function PolicyTab() {
           </select>
           <div className="hint">Rows and values reach the provider when its agent reads data; a local model keeps them here.</div>
         </div>
+        <label style={{ display: 'block', marginTop: 8 }}>
+          <input type="checkbox" checked={form.tenantOnly} disabled={!isAdmin} onChange={(e) => set({ tenantOnly: e.target.checked })} data-testid="policy-tenant-only" /> Tenant only: a slot never falls through to a cloud provider
+        </label>
+        <div className="hint">When the model an agent is bound to is down, the next one in its list is used only if it is not a cloud provider; with none left the conversation stops with a message.</div>
+      </div></div>
+      <div className="card" style={{ marginBottom: 12 }}><div className="card-body">
+        <strong>Memories</strong>
+        <label style={{ display: 'block' }}><input type="checkbox" checked={form.memoryPerson} disabled={!isAdmin} onChange={(e) => set({ memoryPerson: e.target.checked })} data-testid="policy-memory-person" /> Agents may remember things about a person</label>
+        <label style={{ display: 'block' }}><input type="checkbox" checked={form.memoryWork} disabled={!isAdmin} onChange={(e) => set({ memoryWork: e.target.checked })} data-testid="policy-memory-work" /> Agents may remember things about the work in a workspace</label>
+        <div className="hint">Off means nothing of that kind is written or given to a model; an agent&apos;s own file can turn a kind off too. Shared learning goes through suggestions to the knowledge owner, never memory.</div>
       </div></div>
       {isAdmin && <button type="button" className="btn btn-sm btn-primary" disabled={preview.isPending} onClick={() => preview.mutate()} data-testid="policy-review">Review the change</button>}
       {problems.map((d, i) => <div key={i} className="banner error" data-testid="policy-diagnostic">line {d.line}: {d.message}</div>)}

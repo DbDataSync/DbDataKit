@@ -25,6 +25,9 @@ public sealed record AgentTokenRow(string Id, string Person, string Name, DateTi
     public bool IsActiveAt(DateTimeOffset now) => RevokedAt is null && (ExpiresAt is null || ExpiresAt > now);
 }
 
+/// <summary>A memory (plan 27a AG19): <see cref="Kind"/> is <c>person</c> or <c>work</c>.</summary>
+public sealed record MemoryRow(string Id, string Kind, string Person, string? WorkRef, string? Agent, string Content, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
+
 /// <summary>What a person, an agent or the install used: the sum of the recorded turns.</summary>
 public sealed record AgentUsageRow(string Key, int Turns, long InputTokens, long OutputTokens, decimal Cost);
 
@@ -418,4 +421,59 @@ public sealed class AgentStore(StateDatabase database)
         });
         return person;
     }
+
+    // ---- memories (AG19) ----
+
+    /// <summary>Memories, oldest first; filtered by the person they are about or wrote, and by the work they belong to.</summary>
+    public IReadOnlyList<MemoryRow> Memories(string? person = null, string? workRef = null) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            var where = new List<string>();
+            if (person is not null) where.Add("person = $person");
+            if (workRef is not null) where.Add("work_ref = $work");
+            using var command = database.Command(Module, connection, "SELECT id, kind, person, work_ref, agent, content, created_at, updated_at FROM {table:memory}" + (where.Count > 0 ? " WHERE " + string.Join(" AND ", where) : "") + " ORDER BY created_at, id;");
+            if (person is not null) command.Bind(database, "person", person);
+            if (workRef is not null) command.Bind(database, "work", workRef);
+            using var reader = command.ExecuteReader();
+            var rows = new List<MemoryRow>();
+            while (reader.Read()) rows.Add(ReadMemory(reader));
+            return rows;
+        });
+
+    public MemoryRow? Memory(string id) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var command = database.Command(Module, connection, "SELECT id, kind, person, work_ref, agent, content, created_at, updated_at FROM {table:memory} WHERE id = $id;");
+            command.Bind(database, "id", id);
+            using var reader = command.ExecuteReader();
+            return reader.Read() ? ReadMemory(reader) : null;
+        });
+
+    /// <summary>Writes a memory: a new one, or the text of one that exists.</summary>
+    public void SaveMemory(MemoryRow row) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var update = database.Command(Module, connection, "UPDATE {table:memory} SET content = $content, updated_at = $updated WHERE id = $id;");
+            update.Bind(database, "content", row.Content).Bind(database, "updated", row.UpdatedAt).Bind(database, "id", row.Id);
+            if (update.ExecuteNonQuery() > 0) return;
+            using var insert = database.Command(Module, connection, "INSERT INTO {table:memory} (id, kind, person, work_ref, agent, content, created_at, updated_at) VALUES ($id, $kind, $person, $work, $agent, $content, $created, $updated);");
+            insert.Bind(database, "id", row.Id).Bind(database, "kind", row.Kind).Bind(database, "person", row.Person).Bind(database, "work", row.WorkRef, System.Data.DbType.String)
+                .Bind(database, "agent", row.Agent, System.Data.DbType.String).Bind(database, "content", row.Content).Bind(database, "created", row.CreatedAt).Bind(database, "updated", row.UpdatedAt);
+            insert.ExecuteNonQuery();
+        });
+
+    public bool DeleteMemory(string id) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var delete = database.Command(Module, connection, "DELETE FROM {table:memory} WHERE id = $id;");
+            delete.Bind(database, "id", id);
+            return delete.ExecuteNonQuery() == 1;
+        });
+
+    private static MemoryRow ReadMemory(DbDataReader reader) =>
+        new(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.IsDBNull(3) ? null : reader.GetString(3), reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetString(5), reader.Time(6), reader.Time(7));
 }

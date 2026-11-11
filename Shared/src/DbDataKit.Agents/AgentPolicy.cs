@@ -21,9 +21,12 @@ public sealed record PolicyLimits(LimitSet Conversation, LimitSet Person, LimitS
 /// <summary>
 /// The install policy, <c>agent-policy/1</c> (plan 27a AG09, plan 27 section 3.5): the settings that are not text. Policy <i>text</i> is a guardrail item of the install knowledge project, not part of this.
 /// </summary>
-public sealed record AgentPolicy(PromptingPolicy Prompting, PolicyLimits Limits, DataRule CloudReadsData)
+public sealed record AgentPolicy(PromptingPolicy Prompting, PolicyLimits Limits, DataRule CloudReadsData, bool CloudFallback = true, bool PersonMemory = true, bool WorkMemory = true)
 {
     public static readonly AgentPolicy None = new(PromptingPolicy.None, PolicyLimits.None, DataRule.Allow);
+
+    /// <summary>Whether a slot's list may fall through to a cloud provider after its first model (plan 27a AG21): a tenant-only install says <c>fallback: refuse</c> and a failing local model never sends the conversation to a cloud one.</summary>
+    public bool AllowsFallbackTo(bool cloud) => !cloud || CloudFallback;
 }
 
 public sealed class AgentPolicyResult(AgentPolicy? policy, IReadOnlyList<ConfigDiagnostic> diagnostics)
@@ -48,7 +51,9 @@ public static class AgentPolicyLoader
 
     public const string Kind = "agent-policy";
 
-    public static readonly string[] Keys = ["agent-policy", "prompting", "limits", "data-rules"];
+    public static readonly string[] Keys = ["agent-policy", "prompting", "limits", "data-rules", "memory"];
+
+    public static readonly string[] MemoryKeys = ["person", "work"];
 
     public static readonly string[] PromptingKeys = ["minimums", "tools"];
 
@@ -56,7 +61,7 @@ public static class AgentPolicyLoader
 
     public static readonly string[] DataRuleKeys = ["cloud-providers"];
 
-    public static readonly string[] CloudKeys = ["reads-data"];
+    public static readonly string[] CloudKeys = ["reads-data", "fallback"];
 
     public static readonly string[] DataRuleNames = ["allow", "ask", "refuse"];
 
@@ -88,7 +93,9 @@ public static class AgentPolicyLoader
             if (root is not YamlMapping map) { Bad(root, "A policy is a mapping with `agent-policy: 1`."); return null; }
             if (!CheckFormat(map)) return null;
             CheckKeys(map, Keys, "the install policy");
-            return new AgentPolicy(PromptingPart(map), Limits(map), CloudRule(map));
+            var rule = CloudRule(map, out var fallback);
+            var (person, work) = MemoryPart(map);
+            return new AgentPolicy(PromptingPart(map), Limits(map), rule, fallback, person, work);
         }
 
         private bool CheckFormat(YamlMapping map)
@@ -158,14 +165,37 @@ public static class AgentPolicyLoader
             return new PolicyLimits(Scope("conversation"), Scope("person"), Scope("install"), notify);
         }
 
-        private DataRule CloudRule(YamlMapping map)
+        private (bool Person, bool Work) MemoryPart(YamlMapping map)
         {
+            if (map.Get("memory") is not { } node) return (true, true);
+            if (node is not YamlMapping m) { Bad(node, "`memory` is a mapping: `{ person: off, work: on }`."); return (true, true); }
+            CheckKeys(m, MemoryKeys, "`memory`");
+            bool Kind(string key)
+            {
+                if (m.Get(key) is not { } n) return true;
+                if (n is YamlScalar { Value: "on" }) return true;
+                if (n is YamlScalar { Value: "off" }) return false;
+                Bad(n, $"`{(n as YamlScalar)?.Value}` is not a memory setting.", "Use `on` or `off`: `off` turns that kind of memory off for every agent of the install.");
+                return true;
+            }
+            return (Kind("person"), Kind("work"));
+        }
+
+        private DataRule CloudRule(YamlMapping map, out bool fallback)
+        {
+            fallback = true;
             if (map.Get("data-rules") is not { } node) return DataRule.Allow;
             if (node is not YamlMapping m) { Bad(node, "`data-rules` is a mapping: `cloud-providers: { reads-data: refuse }`."); return DataRule.Allow; }
             CheckKeys(m, DataRuleKeys, "`data-rules`");
             if (m.Get("cloud-providers") is not { } cloud) return DataRule.Allow;
             if (cloud is not YamlMapping c) { Bad(cloud, "`cloud-providers` is a mapping: `{ reads-data: refuse }`."); return DataRule.Allow; }
             CheckKeys(c, CloudKeys, "`cloud-providers`");
+            if (c.Get("fallback") is { } fb)
+            {
+                if (fb is YamlScalar { Value: "allow" }) fallback = true;
+                else if (fb is YamlScalar { Value: "refuse" }) fallback = false;
+                else Bad(fb, $"`{(fb as YamlScalar)?.Value}` is not a fallback rule.", "Use `allow` or `refuse`: `refuse` is a tenant-only install, a slot never falls through to a cloud provider.");
+            }
             if (c.Get("reads-data") is not { } rule) return DataRule.Allow;
             if (rule is YamlScalar s && Array.IndexOf(DataRuleNames, s.Value) is var i and >= 0) return (DataRule)i;
             Bad(rule, $"`{(rule as YamlScalar)?.Value}` is not a data rule.", $"Use one of: {string.Join(", ", DataRuleNames)}.");
