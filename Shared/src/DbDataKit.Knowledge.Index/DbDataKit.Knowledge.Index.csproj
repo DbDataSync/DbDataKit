@@ -9,5 +9,6 @@
     <None Include="README.md" Pack="true" PackagePath="/" />
     <ProjectReference Include="..\DbDataKit.Knowledge\DbDataKit.Knowledge.csproj" />
     <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+    <ProjectReference Include="..\DbDataKit.Lineage\DbDataKit.Lineage.csproj" />   <!-- the catalog of subjects read from the lineage graph (KN02) -->
   </ItemGroup>
 </Project>

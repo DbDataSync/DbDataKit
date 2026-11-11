@@ -19,7 +19,7 @@
 | --- | --- | --- |
 | The item, `knowledge/1` (KN01) | a Markdown file with a front matter (role: reference, instruction or guardrail; `about` subjects; `for` audience, agent and channel; `owner`; `chunking`), read strictly with file and line; a file in a project's `knowledge/` folder is about that project; `prompting`, `limits` and `data-rules` are refused with the place they belong (the install policy) | `KnowledgeItemLoader`, `schemas/knowledge.schema.json` |
 | Folder defaults (KN01) | `_knowledge.yml` gives the folders beneath it defaults, nearest wins | `KnowledgeProject.Load` |
-| Subjects and orphans (KN02) | a subject is checked against the catalog when an item is saved (never heard of: refused at its line); an item whose subjects are all gone is orphaned, reaches nobody and is listed | `SubjectResolver`, `ISubjectCatalog` |
+| Subjects and orphans (KN02) | a subject is checked against the catalog when an item is saved (never heard of: refused at its line); an item whose subjects are all gone is orphaned, reaches nobody and is listed; the catalog is read from the lineage graph (semantic models and their measures and dimensions, apps, integrations, Store models, connections) beside what an administrator says | `SubjectResolver`, `ISubjectCatalog`, `LineageSubjectCatalog`, `CompositeSubjectCatalog` |
 | Scope matching (KN03) | which instructions and guardrails apply to what is in play, broad to narrow, guardrails apart, by audience, agent and channel | `ScopeMatcher` |
 | The install knowledge project (KN35) | a template with `shared/`, `build/`, `sync-and-build/` and the administrators' `policy/` folder; `policy/` holds only guardrails owned by `administrators` | `InstallKnowledge` |
 | Chunking (KN04) | long references split at headings, then paragraphs, then sentences; tables and code are never cut; the chunk's hash is of what is embedded, so only a changed chunk is embedded again | `Chunker` |
@@ -44,7 +44,7 @@
 
 ## The console's knowledge screens (plan 27a KN28, KN36, KN37, KN38)
 
-The console reads two knowledge projects in its directory, `install-knowledge/` (the template of KN35: the install's guardrails in `policy/`, owned by the administrators) and `knowledge/` (items about the install's objects), and `knowledge-subjects.json` (what exists to be about and what is gone: a stand-in until the lineage graph is the catalog). The page `Knowledge` shows:
+The console reads two knowledge projects in its directory, `install-knowledge/` (the template of KN35: the install's guardrails in `policy/`, owned by the administrators) and `knowledge/` (items about the install's objects), and `knowledge-subjects.json` (what exists to be about and what is gone: read from the joined lineage graph by the button "Read from the lineage graph" on the worklists tab, which marks an object gone only when every server answered, plus what an administrator says by hand, which the reading never changes). The page `Knowledge` shows:
 
 - **Index and context**: items, chunks and failures per project, orphans, and what an agent would be given for what is in play, each part with its tokens and share of the budget. The page says that **no index is built**: there is no search here.
 - **Worklists**: per owner, the items whose subject is gone, with the actions: point it at another object (only that line of the file changes) or retire it.
