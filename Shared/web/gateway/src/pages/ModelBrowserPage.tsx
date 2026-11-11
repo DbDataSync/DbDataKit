@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link, useParams } from 'react-router-dom'
-import { ErrorBanner } from '@dbdatakit/shell'
+import { Link as ConsoleLink, useParams } from 'react-router-dom'
+import { ErrorBanner, Link } from '@dbdatakit/shell'
 import { gatewayApi } from '../api'
 import { GatewayShell } from '../GatewayShell'
 import { bindingLine, filterCatalog, lineageLink, measureLine } from '../modelBrowser'
@@ -46,7 +46,7 @@ export function ModelBrowserView(p: ModelBrowserViewProps) {
                 <span className="mono">{m.name}{m.synonyms.length > 0 && <div className="hint">also: {m.synonyms.join(', ')}</div>}</span>
                 <span>{m.type}</span>
                 <span style={wrap}>{measureLine(m)}{m.filtered && <div className="hint">with filters of its own</div>}</span>
-                <span><Link to={lineageLink(view.name, m.name)} data-testid={`lineage-${m.name}`}>Follow to the Build column</Link></span>
+                <span><ConsoleLink to={lineageLink(view.name, m.name)} data-testid={`lineage-${m.name}`}>Follow to the Build column</ConsoleLink></span>
               </div>
             ))}
           </div>
@@ -61,7 +61,7 @@ export function ModelBrowserView(p: ModelBrowserViewProps) {
                   <span className="mono">{a.name}{a.synonyms.length > 0 && <div className="hint">also: {a.synonyms.join(', ')}</div>}</span>
                   <span>{a.type}</span>
                   <span style={wrap} className="mono">{bindingLine(a)}</span>
-                  <span>{a.bindings.length > 0 && <Link to={lineageLink(view.name, a.name)} data-testid={`lineage-${a.name}`}>Follow to the Build column</Link>}</span>
+                  <span>{a.bindings.length > 0 && <ConsoleLink to={lineageLink(view.name, a.name)} data-testid={`lineage-${a.name}`}>Follow to the Build column</ConsoleLink>}</span>
                 </div>
               ))}
             </div>
