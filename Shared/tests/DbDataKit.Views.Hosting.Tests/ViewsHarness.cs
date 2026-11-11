@@ -192,13 +192,14 @@ internal sealed class ViewsHarness : IAsyncDisposable
           - name: desk
             type: reflow
             default: true
-            grid: {columns: 12, rows: 12}
+            grid: {columns: 12, rows: 13}
             tiles:
               - {widget: revenue, x: 0, y: 0, w: 4, h: 3}
               - {widget: by_region, x: 4, y: 0, w: 8, h: 6}
               - {widget: by_category, x: 0, y: 3, w: 4, h: 6}
               - {widget: grid, x: 4, y: 6, w: 8, h: 6}
               - {widget: trend, x: 0, y: 9, w: 4, h: 3}
+              - {widget: note, x: 0, y: 12, w: 12, h: 1}
           - name: kpi
             type: reflow
             when: {width: {max: 600} }
@@ -207,7 +208,7 @@ internal sealed class ViewsHarness : IAsyncDisposable
               - {widget: revenue, x: 0, y: 0, w: 12, h: 3}
           - name: notes
             type: reflow
-            when: {width: {max: 100}}
+            when: {width: {max: 100} }
             grid: {columns: 12, rows: 1}
             tiles:
               - {widget: note, x: 0, y: 0, w: 12, h: 1}

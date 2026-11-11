@@ -59,7 +59,7 @@ carried yet. **One formatter in two languages**: `ViewFormat` in `DbDataKit.View
 encodings:                     # a chart
   x: {field: orders.month, format: {date: MMM}}                       # January to December, in calendar order
   y: {field: orders.net_revenue, format: {style: currency, currency: USD, decimals: 0}}
-  tooltip: [{field: orders.month, format: month-year}, {field: orders.net_revenue, format: compact}]
+  tooltip: [{field: orders.month, format: {date: month-year}}, {field: orders.net_revenue, format: compact}]
 encodings:                     # a matrix
   rows: [{field: orders.year, format: {date: year}, sort: {by: sort_key, dir: desc}}, {field: orders.month, format: {date: MMM}}]
   columns: [customers.region]

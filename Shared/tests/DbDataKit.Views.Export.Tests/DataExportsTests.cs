@@ -115,7 +115,7 @@ public sealed class DataExportsTests
         Assert.Equal(new object?[] { "revenue", "Net revenue", 1200.0, null, null }, sheet.Rows[0].Cells);
         Assert.Equal(new object?[] { "orders", "orders", 110.0, 100.0, "+10%" }, sheet.Rows[1].Cells);     // no label: the id
         Assert.Equal(new object?[] { "blank", "=evil", null, null, null }, sheet.Rows[2].Cells);
-        Assert.StartsWith("Widget,Label,Value,Compare,Change\r\nrevenue,Net revenue,1200,,\r\norders,orders,110,100,+10%\r\nblank,'=evil,,,\r\n", Decode(DataExports.Csv(sheet)));
+        Assert.StartsWith("Widget,Label,Value,Compare,Change\r\nrevenue,Net revenue,1200,,\r\norders,orders,110,100,'+10%\r\nblank,'=evil,,,\r\n", Decode(DataExports.Csv(sheet)));
         Assert.Null(DataExports.Metrics([]));
 
         using var workbook = new XLWorkbook(new MemoryStream(DataExports.Xlsx([sheet])));

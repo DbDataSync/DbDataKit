@@ -4,10 +4,23 @@ import {
   parameterValue, parseRequestText, parseValues, sortAt, wellFields, wellsOf,
   type Catalog, type CatalogMember, type ClientDiagnostic, type EditCommand, type RenderedWidget, type ViewsDoc, type WellChange, type WellSpec, type WidgetDoc, type WidgetOptionsDoc,
 } from '@dbdatakit/visuals'
+import { CUSTOM_FORMAT, FORMAT_PRESETS, formatChoice } from './editing'
 
 type Apply = (command: EditCommand, group?: string) => void
 
-const FORMATS = ['catalog', 'full', 'compact', 'percent']
+const FORMATS = FORMAT_PRESETS
+
+/** A format select: the presets, and for a format written as a mapping one read-only choice that keeps it (choosing it changes nothing). */
+function FormatSelect({ format, onPick, testid, label }: { format: unknown; onPick: (value: string) => void; testid: string; label?: string }) {
+  const value = formatChoice(format)
+  return (
+    <select aria-label={label} data-testid={testid} value={value} onChange={(e) => { if (e.target.value !== CUSTOM_FORMAT) onPick(e.target.value) }}>
+      <option value="">(default)</option>
+      {value === CUSTOM_FORMAT && <option value={CUSTOM_FORMAT}>{CUSTOM_FORMAT}</option>}
+      {FORMATS.map((f) => <option key={f} value={f}>{f}</option>)}
+    </select>
+  )
+}
 const KIND_WORD = { measure: 'a measure', attribute: 'an attribute', either: 'a measure or an attribute' } as const
 
 /** One field well: its entries (each with a flag when the catalog lacks it), a pick list of the catalog's fields the well takes, a box to type a name, and a drop target for a field dragged from the catalog list. */
@@ -332,10 +345,7 @@ export function WidgetEditor({ id, widget, doc, catalog, catalogNote, apply, dia
       <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap', margin: '6px 0' }} data-testid={`ed-widget-fields-${id}`}>
         {widget.type === 'metric' && (
           <label className="hint">format{' '}
-            <select data-testid={`ed-format-${id}`} value={w.format ?? ''} onChange={(e) => setOrClear(['format'], e.target.value, 'format')}>
-              <option value="">(default)</option>
-              {FORMATS.map((f) => <option key={f} value={f}>{f}</option>)}
-            </select>
+            <FormatSelect testid={`ed-format-${id}`} format={w.format} onPick={(v) => setOrClear(['format'], v, 'format')} />
           </label>
         )}
         {widget.type === 'matrix' && (
@@ -391,7 +401,7 @@ export function WidgetEditor({ id, widget, doc, catalog, catalogNote, apply, dia
               <tr key={`${c.field}-${i}`}>
                 <td><code>{c.field}</code></td>
                 <td><input aria-label={`Label of ${c.field}`} data-testid={`ed-column-label-${id}-${i}`} value={c.label ?? ''} onChange={(e) => setOrClear(['encodings', 'columns', i, 'label'], e.target.value, `col${i}:label`)} /></td>
-                <td><select aria-label={`Format of ${c.field}`} data-testid={`ed-column-format-${id}-${i}`} value={c.format ?? ''} onChange={(e) => setOrClear(['encodings', 'columns', i, 'format'], e.target.value, `col${i}:format`)}><option value="">(default)</option>{FORMATS.map((f) => <option key={f} value={f}>{f}</option>)}</select></td>
+                <td><FormatSelect label={`Format of ${c.field}`} testid={`ed-column-format-${id}-${i}`} format={c.format} onPick={(v) => setOrClear(['encodings', 'columns', i, 'format'], v, `col${i}:format`)} /></td>
                 <td><select aria-label={`Align of ${c.field}`} data-testid={`ed-column-align-${id}-${i}`} value={c.align ?? ''} onChange={(e) => setOrClear(['encodings', 'columns', i, 'align'], e.target.value, `col${i}:align`)}><option value="">(default)</option>{['left', 'right', 'center'].map((a) => <option key={a} value={a}>{a}</option>)}</select></td>
               </tr>
             ))}

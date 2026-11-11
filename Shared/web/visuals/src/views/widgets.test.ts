@@ -73,6 +73,10 @@ describe('the schema of the widgets', () => {
     const matrix = (viewSchema as any).$defs.matrix
     const encodings = (coreSchema as any).$defs.matrix_encodings
     expect(props(encodings)).toEqual(props(matrix).filter((p) => p !== 'type' && p !== 'id'))
-    for (const p of props(encodings)) expect(encodings.properties[p].$ref).toBe(`${viewSchema.$id}#/$defs/matrix/properties/${p}`)
+    // the axes and the values carry a format (DBR41), so they are the core's own definitions; the rest is the view's, referenced
+    for (const p of props(encodings).filter((k) => !['rows', 'columns', 'values'].includes(k))) expect(encodings.properties[p].$ref).toBe(`${viewSchema.$id}#/$defs/matrix/properties/${p}`)
+    expect(encodings.properties.rows.$ref).toBe('#/$defs/matrix_axis')
+    expect(encodings.properties.columns.$ref).toBe('#/$defs/matrix_axis')
+    expect(encodings.properties.values.$ref).toBe('#/$defs/matrix_values')
   })
 })

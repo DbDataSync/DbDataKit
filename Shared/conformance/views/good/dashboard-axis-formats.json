@@ -28,7 +28,7 @@
         "tooltip": [
           {
             "field": "date.month",
-            "format": "month-year"
+            "format": { "date": "month-year" }
           },
           {
             "field": "orders.net_revenue",

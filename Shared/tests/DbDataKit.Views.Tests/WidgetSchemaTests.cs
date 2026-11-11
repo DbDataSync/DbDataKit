@@ -100,7 +100,7 @@ public class WidgetSchemaTests
         Assert.Equal($"{subsetId}#/$defs/spec/properties/mark", At(core, "$defs/widget_chart/properties/mark")["$ref"]!.GetValue<string>());
         Assert.Equal("#/$defs/chart_channel", At(core, "$defs/encoding_channel/oneOf/1")["$ref"]!.GetValue<string>());
         // the channel object is the subset's, field, type, sort, stack and title by reference, plus the format
-        Assert.Equal(new[] { "field", "format", "sort", "stack", "title", "type" }, [.. Props(At(core, "$defs/chart_channel"))]);
+        Assert.Equal(new[] { "field", "format", "sort", "stack", "title", "type" }, Props(At(core, "$defs/chart_channel")).ToArray());
         foreach (var p in Props(At(subset, "$defs/channel"))) Assert.Equal($"{subsetId}#/$defs/channel/properties/{p}", At(core, "$defs/chart_channel")["properties"]![p]!["$ref"]!.GetValue<string>());
         Assert.Equal($"{viewId}#/$defs/sort", At(core, "$defs/widget_table/properties/encodings/properties/sort")["$ref"]!.GetValue<string>());
     }

@@ -23,7 +23,7 @@ export function applyChartFormats(spec: Record<string, unknown>, formats: ChartF
     if (typeof def !== 'object' || def === null) return
     const d = def as Json
     if (d[key] === null) return // an axis or a legend that is off stays off
-    d[key] = { ...(d[key] ?? {}), format: f }
+    d[key] = { ...(d[key] as Json | undefined), format: f }
   }
   for (const channel of ['x', 'y'] as const) {
     const f = formats[channel]
