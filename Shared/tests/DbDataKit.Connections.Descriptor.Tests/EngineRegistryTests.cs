@@ -87,8 +87,8 @@ public class EngineRegistryTests
         Assert.Equal(["duckdb", "flightsql", "mysql", "oracle", "postgres", "sqlserver"], Registry.Supporting(EngineRoles.SyncSource).Select(e => e.Id).Order());
         Assert.Equal(["mysql", "oracle", "postgres", "sqlserver"], Registry.Supporting(EngineRoles.SyncTarget).Select(e => e.Id).Order());
         Assert.Equal(["fabric", "postgres", "sqlserver"], Registry.Supporting(EngineRoles.BuildTarget).Select(e => e.Id).Order());
-        Assert.Equal(["duckdb", "odbc", "sqlserver"], Registry.Supporting(EngineRoles.GatewaySource).Select(e => e.Id).Order());
-        Assert.Equal(["duckdb", "sqlserver"], Registry.Supporting(EngineRoles.SemanticEmitter).Select(e => e.Id).Order());
+        Assert.Equal(["duckdb", "odbc", "postgres", "sqlserver"], Registry.Supporting(EngineRoles.GatewaySource).Select(e => e.Id).Order());
+        Assert.Equal(["duckdb", "postgres", "sqlserver"], Registry.Supporting(EngineRoles.SemanticEmitter).Select(e => e.Id).Order());
         Assert.Equal(["fabric"], Registry.Supporting(EngineRoles.BuildTarget, EngineSupport.Unverified).Where(e => e.Role(EngineRoles.BuildTarget).Status == EngineSupport.Unverified).Select(e => e.Id));
     }
 
