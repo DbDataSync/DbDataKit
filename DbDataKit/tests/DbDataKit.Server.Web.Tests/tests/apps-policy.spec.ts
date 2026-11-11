@@ -119,11 +119,10 @@ test.afterAll(async () => {
 test('the browser blocks an outside origin a sandboxed or an unapproved app asks for and lets an approved one through, and the about page says which is which', async ({ page, context }) => {
   await addAuthenticator(context, page)
 
-  // Ada enrols at the home with the first-run invitation and is given a role on each instance
-  const firstRun = fs.readFileSync(path.join(gatewayDirectory, 'identity', 'FIRST-RUN.txt'), 'utf8')
-  await page.goto(`${homeUrl}/invite#${firstRun.split('/invite#')[1].split(/\s/)[0]}`)
+  // Ada enrols at the home with an invitation and is given a role on each instance (the home has an account already, the approver's service account, so it writes no FIRST-RUN.txt)
+  const invitation = run(['identity', 'invite', '--email', 'ada@example.com', '--role', 'admin', '--url', homeUrl])
+  await page.goto(invitation.url)
   await page.getByTestId('identity-invite-name').fill('Ada Lovelace')
-  await page.getByTestId('identity-invite-email').fill('ada@example.com')
   await page.getByTestId('identity-invite-enrol').click()
   await expect(page.getByTestId('identity-invite-done')).toHaveText('Signed in as Ada Lovelace.')
   const ada = run(['identity', 'user-list']).users.find((u: any) => u.name === 'Ada Lovelace')
