@@ -115,7 +115,7 @@ Question: for everything a person authors, publishes by file or command, or has 
 
 ### Not verified
 
-The vitest tests of the new screens run (`approvals.test.ts`, `runs.test.ts`, `monitoring.test.ts`). The Playwright story `approvals.spec.ts` was written against the Store mock of `store-fake.ts` and was not run (the console build is the cost). `RunsPage.tsx`, the certificate rows and the server rows of Monitoring have no story of their own; `monitoring.spec.ts` (real servers) was not run and, with a freshly made certificate and servers that answer, should be unaffected.
+The vitest tests of the new screens run (`approvals.test.ts`, `runs.test.ts`, `monitoring.test.ts`). The Playwright story `store-approvals.spec.ts` was written against the Store mock of `store-fake.ts` and was not run (the console build is the cost). `RunsPage.tsx`, the certificate rows and the server rows of Monitoring have no story of their own; `monitoring.spec.ts` (real servers) was not run and, with a freshly made certificate and servers that answer, should be unaffected.
 
 ## Keeping it current
 
