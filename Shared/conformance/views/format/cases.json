@@ -1,0 +1,621 @@
+{
+ "_note": "Goldens of the format vocabulary and its formatter (plan 32 DBR40); run by ViewFormatTests (.NET) and format.test.ts (TypeScript). `text` is what formatting `value` under `format` (and the catalog's own format) gives.",
+ "formats": [
+  {
+   "name": "full groups and rounds to two places",
+   "value": 1234.567,
+   "format": "full",
+   "text": "1,234.57"
+  },
+  {
+   "name": "full reads 1.005 as written",
+   "value": 1.005,
+   "format": "full",
+   "text": "1.01"
+  },
+  {
+   "name": "full reads 2.675 as written",
+   "value": 2.675,
+   "format": "full",
+   "text": "2.68"
+  },
+  {
+   "name": "full has no format default",
+   "value": 1234.5,
+   "text": "1,234.5"
+  },
+  {
+   "name": "full zero",
+   "value": 0,
+   "format": "full",
+   "text": "0"
+  },
+  {
+   "name": "full negative that rounds to zero has no sign",
+   "value": -0.001,
+   "format": "full",
+   "text": "0"
+  },
+  {
+   "name": "full negative",
+   "value": -1234.5,
+   "format": "full",
+   "text": "-1,234.5"
+  },
+  {
+   "name": "full with a currency catalog format",
+   "value": 1234.5,
+   "format": "full",
+   "catalog": {
+    "style": "currency",
+    "currency": "USD",
+    "decimals": 2
+   },
+   "text": "$1,234.50"
+  },
+  {
+   "name": "full with an unlisted currency",
+   "value": 12,
+   "format": "full",
+   "catalog": {
+    "style": "currency",
+    "currency": "CHF"
+   },
+   "text": "CHF 12"
+  },
+  {
+   "name": "catalog preset reads the catalog decimals",
+   "value": 1234.5,
+   "format": "catalog",
+   "catalog": {
+    "decimals": 1
+   },
+   "text": "1,234.5"
+  },
+  {
+   "name": "catalog percent style under full",
+   "value": 0.5,
+   "format": "full",
+   "catalog": {
+    "style": "percent"
+   },
+   "text": "50%"
+  },
+  {
+   "name": "compact thousands",
+   "value": 1234,
+   "format": "compact",
+   "text": "1.2K"
+  },
+  {
+   "name": "compact millions",
+   "value": 1500000,
+   "format": "compact",
+   "text": "1.5M"
+  },
+  {
+   "name": "compact billions",
+   "value": 2500000000,
+   "format": "compact",
+   "text": "2.5B"
+  },
+  {
+   "name": "compact below a thousand",
+   "value": 999,
+   "format": "compact",
+   "text": "999"
+  },
+  {
+   "name": "compact small",
+   "value": 12.345,
+   "format": "compact",
+   "text": "12.35"
+  },
+  {
+   "name": "compact negative",
+   "value": -1234,
+   "format": "compact",
+   "text": "-1.2K"
+  },
+  {
+   "name": "compact with a currency catalog format",
+   "value": 1234,
+   "format": "compact",
+   "catalog": {
+    "style": "currency",
+    "currency": "USD",
+    "decimals": 2
+   },
+   "text": "$1.2K"
+  },
+  {
+   "name": "percent preset",
+   "value": 0.1234,
+   "format": "percent",
+   "text": "12%"
+  },
+  {
+   "name": "percent preset with catalog decimals",
+   "value": 0.1234,
+   "format": "percent",
+   "catalog": {
+    "decimals": 1
+   },
+   "text": "12.3%"
+  },
+  {
+   "name": "number mapping",
+   "value": 1234567.891,
+   "format": {
+    "style": "number"
+   },
+   "text": "1,234,567.89"
+  },
+  {
+   "name": "number mapping no decimals",
+   "value": 1234567.891,
+   "format": {
+    "style": "number",
+    "decimals": 0
+   },
+   "text": "1,234,568"
+  },
+  {
+   "name": "number mapping without grouping",
+   "value": 1234567.891,
+   "format": {
+    "style": "number",
+    "decimals": 1,
+    "grouping": false
+   },
+   "text": "1234567.9"
+  },
+  {
+   "name": "number mapping takes the catalog decimals",
+   "value": 1.5,
+   "format": {
+    "style": "number"
+   },
+   "catalog": {
+    "decimals": 3
+   },
+   "text": "1.500"
+  },
+  {
+   "name": "number mapping decimals win over the catalog",
+   "value": 1.5,
+   "format": {
+    "style": "number",
+    "decimals": 0
+   },
+   "catalog": {
+    "decimals": 3
+   },
+   "text": "2"
+  },
+  {
+   "name": "number mapping of a large number",
+   "value": 1000000000000000.0,
+   "format": {
+    "style": "number"
+   },
+   "text": "1,000,000,000,000,000"
+  },
+  {
+   "name": "currency euro",
+   "value": 1234.5,
+   "format": {
+    "style": "currency",
+    "currency": "EUR"
+   },
+   "text": "€1,234.50"
+  },
+  {
+   "name": "currency yen has no decimals",
+   "value": 1234.5,
+   "format": {
+    "style": "currency",
+    "currency": "JPY"
+   },
+   "text": "¥1,235"
+  },
+  {
+   "name": "currency negative",
+   "value": -5,
+   "format": {
+    "style": "currency",
+    "currency": "USD"
+   },
+   "text": "-$5.00"
+  },
+  {
+   "name": "currency code without a symbol",
+   "value": 5,
+   "format": {
+    "style": "currency",
+    "currency": "CHF"
+   },
+   "text": "CHF 5.00"
+  },
+  {
+   "name": "currency negative rounding to zero has no sign",
+   "value": -0.4,
+   "format": {
+    "style": "currency",
+    "currency": "USD",
+    "decimals": 0
+   },
+   "text": "$0"
+  },
+  {
+   "name": "percent mapping default",
+   "value": 0.256,
+   "format": {
+    "style": "percent"
+   },
+   "text": "26%"
+  },
+  {
+   "name": "percent mapping with decimals",
+   "value": 0.256,
+   "format": {
+    "style": "percent",
+    "decimals": 1
+   },
+   "text": "25.6%"
+  },
+  {
+   "name": "percent mapping groups",
+   "value": 12.5,
+   "format": {
+    "style": "percent"
+   },
+   "text": "1,250%"
+  },
+  {
+   "name": "percent mapping without grouping",
+   "value": 12.5,
+   "format": {
+    "style": "percent",
+    "grouping": false
+   },
+   "text": "1250%"
+  },
+  {
+   "name": "compact mapping with decimals",
+   "value": 1234567,
+   "format": {
+    "style": "compact",
+    "decimals": 2
+   },
+   "text": "1.23M"
+  },
+  {
+   "name": "date year",
+   "value": "2026-03-05",
+   "format": {
+    "date": "year"
+   },
+   "text": "2026"
+  },
+  {
+   "name": "date quarter",
+   "value": "2026-03-05",
+   "format": {
+    "date": "quarter"
+   },
+   "text": "Q1 2026"
+  },
+  {
+   "name": "date quarter four",
+   "value": "2026-12-31",
+   "format": {
+    "date": "quarter"
+   },
+   "text": "Q4 2026"
+  },
+  {
+   "name": "date month",
+   "value": "2026-03-05",
+   "format": {
+    "date": "month"
+   },
+   "text": "Mar"
+  },
+  {
+   "name": "date month-year",
+   "value": "2026-03-05",
+   "format": {
+    "date": "month-year"
+   },
+   "text": "Mar 2026"
+  },
+  {
+   "name": "date date",
+   "value": "2026-03-05",
+   "format": {
+    "date": "date"
+   },
+   "text": "2026-03-05"
+  },
+  {
+   "name": "date datetime of a date",
+   "value": "2026-03-05",
+   "format": {
+    "date": "datetime"
+   },
+   "text": "2026-03-05 00:00"
+  },
+  {
+   "name": "date datetime",
+   "value": "2026-03-05T14:07:09Z",
+   "format": {
+    "date": "datetime"
+   },
+   "text": "2026-03-05 14:07"
+  },
+  {
+   "name": "date pattern with every time token",
+   "value": "2026-03-05T14:07:09Z",
+   "format": {
+    "date": "dd/MM/yyyy HH:mm:ss"
+   },
+   "text": "05/03/2026 14:07:09"
+  },
+  {
+   "name": "date pattern month name and two-digit year",
+   "value": "2026-03-05",
+   "format": {
+    "date": "MMMM yy"
+   },
+   "text": "March 26"
+  },
+  {
+   "name": "date pattern with quoted text",
+   "value": "2026-03-05",
+   "format": {
+    "date": "'Week of' MMM dd"
+   },
+   "text": "Week of Mar 05"
+  },
+  {
+   "name": "date pattern quarter after the year",
+   "value": "2026-03-05",
+   "format": {
+    "date": "yyyy 'Q'Q"
+   },
+   "text": "2026 Q1"
+  },
+  {
+   "name": "date pattern with an apostrophe",
+   "value": "2026-03-05",
+   "format": {
+    "date": "yyyy''MM"
+   },
+   "text": "2026'03"
+  },
+  {
+   "name": "date of a month",
+   "value": "2026-11",
+   "format": {
+    "date": "month-year"
+   },
+   "text": "Nov 2026"
+  },
+  {
+   "name": "date of a year",
+   "value": "2026",
+   "format": {
+    "date": "year"
+   },
+   "text": "2026"
+  },
+  {
+   "name": "date is read as written, no time zone",
+   "value": "2026-03-05T23:30:00+02:00",
+   "format": {
+    "date": "date"
+   },
+   "text": "2026-03-05"
+  },
+  {
+   "name": "text that is not a date stays",
+   "value": "Widget",
+   "format": {
+    "date": "year"
+   },
+   "text": "Widget"
+  },
+  {
+   "name": "a month out of range stays",
+   "value": "2026-13-01",
+   "format": {
+    "date": "year"
+   },
+   "text": "2026-13-01"
+  },
+  {
+   "name": "a number under a date mapping reads as full",
+   "value": 5,
+   "format": {
+    "date": "year"
+   },
+   "text": "5"
+  },
+  {
+   "name": "text under a number format stays",
+   "value": "abc",
+   "format": {
+    "style": "number"
+   },
+   "text": "abc"
+  }
+ ],
+ "bad": [
+  {
+   "format": "bogus",
+   "key": "",
+   "message": "`format` is one of: catalog, full, compact, percent, or a mapping with `style` or `date`."
+  },
+  {
+   "format": 5,
+   "key": "",
+   "message": "`format` is a preset (catalog, full, compact, percent) or a mapping with `style` or `date`."
+  },
+  {
+   "format": {},
+   "key": "",
+   "message": "A format mapping has `style` (a number format) or `date` (a date format), not both and not neither."
+  },
+  {
+   "format": {
+    "style": "number",
+    "date": "year"
+   },
+   "key": "",
+   "message": "A format mapping has `style` (a number format) or `date` (a date format), not both and not neither."
+  },
+  {
+   "format": {
+    "style": "money"
+   },
+   "key": "style",
+   "message": "`style` is one of: number, currency, percent, compact."
+  },
+  {
+   "format": {
+    "style": "number",
+    "decimals": 11
+   },
+   "key": "decimals",
+   "message": "`decimals` is a whole number from 0 to 10."
+  },
+  {
+   "format": {
+    "style": "number",
+    "decimals": 1.5
+   },
+   "key": "decimals",
+   "message": "`decimals` is a whole number from 0 to 10."
+  },
+  {
+   "format": {
+    "style": "number",
+    "decimals": "2"
+   },
+   "key": "decimals",
+   "message": "`decimals` is a whole number from 0 to 10."
+  },
+  {
+   "format": {
+    "style": "number",
+    "grouping": "yes"
+   },
+   "key": "grouping",
+   "message": "`grouping` is true or false."
+  },
+  {
+   "format": {
+    "style": "number",
+    "extra": 1
+   },
+   "key": "extra",
+   "message": "`extra` is not a key of a number format (style, decimals, currency, grouping)."
+  },
+  {
+   "format": {
+    "style": "currency"
+   },
+   "key": "",
+   "message": "A currency format needs `currency` (an ISO 4217 code such as USD)."
+  },
+  {
+   "format": {
+    "style": "currency",
+    "currency": "usd"
+   },
+   "key": "currency",
+   "message": "`currency` is an ISO 4217 code of three capital letters (USD)."
+  },
+  {
+   "format": {
+    "style": "currency",
+    "currency": "USDD"
+   },
+   "key": "currency",
+   "message": "`currency` is an ISO 4217 code of three capital letters (USD)."
+  },
+  {
+   "format": {
+    "style": "number",
+    "currency": "USD"
+   },
+   "key": "currency",
+   "message": "`currency` belongs to the style `currency`."
+  },
+  {
+   "format": {
+    "date": "yyy"
+   },
+   "key": "date",
+   "message": "`date` pattern has the unknown token `yyy` (tokens: yyyy, yy, Q, MMMM, MMM, MM, dd, HH, mm, ss; put literal letters in single quotes)."
+  },
+  {
+   "format": {
+    "date": "M"
+   },
+   "key": "date",
+   "message": "`date` pattern has the unknown token `M` (tokens: yyyy, yy, Q, MMMM, MMM, MM, dd, HH, mm, ss; put literal letters in single quotes)."
+  },
+  {
+   "format": {
+    "date": "Hello"
+   },
+   "key": "date",
+   "message": "`date` pattern has the unknown token `H` (tokens: yyyy, yy, Q, MMMM, MMM, MM, dd, HH, mm, ss; put literal letters in single quotes)."
+  },
+  {
+   "format": {
+    "date": "yyyy-MM-dd'"
+   },
+   "key": "date",
+   "message": "`date` pattern has a quote that is never closed ('...' holds literal text)."
+  },
+  {
+   "format": {
+    "date": "'abc'"
+   },
+   "key": "date",
+   "message": "`date` pattern has no token (tokens: yyyy, yy, Q, MMMM, MMM, MM, dd, HH, mm, ss)."
+  },
+  {
+   "format": {
+    "date": ""
+   },
+   "key": "date",
+   "message": "`date` is a preset (year, quarter, month, month-year, date, datetime) or a pattern of 1 to 40 characters."
+  },
+  {
+   "format": {
+    "date": "-----------------------------------------"
+   },
+   "key": "date",
+   "message": "`date` is a preset (year, quarter, month, month-year, date, datetime) or a pattern of 1 to 40 characters."
+  },
+  {
+   "format": {
+    "date": 5
+   },
+   "key": "date",
+   "message": "`date` is a preset (year, quarter, month, month-year, date, datetime) or a pattern of the tokens yyyy, yy, Q, MMMM, MMM, MM, dd, HH, mm, ss and literal text."
+  },
+  {
+   "format": {
+    "date": "yyyy",
+    "extra": 1
+   },
+   "key": "extra",
+   "message": "`extra` is not a key of a date format (date)."
+  }
+ ]
+}

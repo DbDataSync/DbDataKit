@@ -127,7 +127,7 @@ internal static class ResultShaper
     public static JsonObject Metric(ViewWidget widget, AnswerRows answer)
     {
         var encodings = widget.Raw["encodings"] as JsonObject ?? [];
-        var preset = Preset(widget.Raw["format"]);
+        var preset = widget.Raw["format"];
         var row = answer.Table.Rows.FirstOrDefault(answer.Table.IsDetail);
         var value = Number(widget, answer, encodings["value"]?.GetValue<string>(), "encodings.value", row, preset);
         var result = new JsonObject { ["type"] = "metric", ["value"] = value?.Node };
@@ -153,12 +153,12 @@ internal static class ResultShaper
 
     private sealed record Num(JsonObject Node, double? V);
 
-    private static Num? Number(ViewWidget widget, AnswerRows answer, string? field, string where, JsonObject? row, string preset)
+    private static Num? Number(ViewWidget widget, AnswerRows answer, string? field, string where, JsonObject? row, JsonNode? preset)
     {
         if (field is null) return null;
         var resolved = answer.Table.Resolve(field) ?? throw Missing(widget, answer, field, where);
         if (row is null || ResultTable.Number(row[resolved.Name]) is not { } n) return null;
-        return new Num(new JsonObject { ["v"] = row[resolved.Name]!.DeepClone(), ["text"] = MatrixView.Format(n, preset, resolved.Format) }, n);
+        return new Num(new JsonObject { ["v"] = row[resolved.Name]!.DeepClone(), ["text"] = Text(n, preset, resolved.Format) }, n);
     }
 
     // ---- table ----
@@ -167,12 +167,12 @@ internal static class ResultShaper
     {
         var columns = (widget.Raw["encodings"]?["columns"] as JsonArray ?? []).OfType<JsonObject>().ToList();
         var table = answer.Table;
-        var resolved = new List<(JsonObject Spec, ResultField Field, string Preset)>();
+        var resolved = new List<(JsonObject Spec, ResultField Field, JsonNode? Preset)>();
         for (var i = 0; i < columns.Count; i++)
         {
             var name = columns[i]["field"]!.GetValue<string>();
             var field = table.Resolve(name) ?? throw Missing(widget, answer, name, $"encodings.columns[{i}].field");
-            resolved.Add((columns[i], field, Preset(columns[i]["format"])));
+            resolved.Add((columns[i], field, columns[i]["format"]));
         }
 
         var header = new JsonArray();
@@ -210,12 +210,12 @@ internal static class ResultShaper
         return new JsonObject { ["type"] = "table", ["columns"] = header, ["rows"] = rows };
     }
 
-    private static JsonObject Cell(JsonNode? node, ResultField field, string preset)
+    private static JsonObject Cell(JsonNode? node, ResultField field, JsonNode? preset)
     {
         if (node is null) return new JsonObject { ["v"] = null, ["text"] = "" };
         var v = node.DeepClone();
-        if (ResultTable.Number(node) is { } n) return new JsonObject { ["v"] = v, ["text"] = MatrixView.Format(n, preset, field.Format) };
-        return new JsonObject { ["v"] = v, ["text"] = node is JsonValue s && s.TryGetValue<string>(out var text) ? text : node.ToJsonString() };
+        if (ResultTable.Number(node) is { } n) return new JsonObject { ["v"] = v, ["text"] = Text(n, preset, field.Format) };
+        return new JsonObject { ["v"] = v, ["text"] = node is JsonValue s && s.TryGetValue<string>(out _) ? ViewFormat.Text(node, preset) : node.ToJsonString() };
     }
 
     // ---- matrix and chart: the engine's renderer ----
@@ -306,6 +306,10 @@ internal static class ResultShaper
 
     private static WidgetProblem Missing(ViewWidget widget, AnswerRows answer, string field, string where) =>
         new(ResolveCodes.AnswerMismatch, $"{field} is not a column of the answer.", $"widgets.{widget.Id}.{where}", answer.Table.Suggest(field));
+
+    /// <summary>A number as text: a mapping is the shared formatter's (<see cref="ViewFormat"/>), a preset is the engine's, as before.</summary>
+    private static string Text(double n, JsonNode? format, JsonObject? catalog) =>
+        format is JsonObject ? ViewFormat.Number(n, format, catalog) : MatrixView.Format(n, Preset(format), catalog);
 
     /// <summary>The number preset a widget names (<c>catalog</c>, <c>full</c>, <c>compact</c>, <c>percent</c>); the catalog's own format is the default and is what <c>full</c> reads.</summary>
     private static string Preset(JsonNode? format) => format is JsonValue v && v.TryGetValue<string>(out var s) && s is "compact" or "percent" ? s : "full";

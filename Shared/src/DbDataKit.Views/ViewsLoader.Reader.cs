@@ -99,6 +99,21 @@ public static partial class ViewsLoader
             return null;
         }
 
+        /// <summary>A <c>format</c>: a preset, a number mapping or a date mapping (<see cref="ViewFormat"/>); a refusal names the key inside it.</summary>
+        private void FormatValue(YamlNode node, string path)
+        {
+            if (ViewFormat.Check(ToJson(node)) is not { } problem) return;
+            var at = node;
+            var where = path;
+            if (problem.Key.Length > 0 && node is YamlMapping m && m.Entries.FirstOrDefault(e => e.Key.Value == problem.Key) is { } entry)
+            {
+                // an unknown key is pointed at by its name, any other fault by its value
+                at = problem.Message.Contains("is not a key") ? entry.Key : entry.Value;
+                where = J(path, problem.Key);
+            }
+            Bad(ViewsCodes.InvalidValue, at, where, problem.Message);
+        }
+
         private string? Field(YamlNode? node, string path, string what)
         {
             if (node is YamlScalar { Value.Length: > 0 } s && s.Value.Length <= 300 && !s.Value.Any(char.IsControl)) return s.Value;

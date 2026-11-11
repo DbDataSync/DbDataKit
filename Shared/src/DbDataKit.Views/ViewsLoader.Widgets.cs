@@ -67,7 +67,7 @@ public static partial class ViewsLoader
             {
                 case "metric":
                     if (map.Get("label") is { } lb) Text(lb, J(path, "label"), "`label`");
-                    if (map.Get("format") is { } fm) Choice(fm, J(path, "format"), "`format`", Choices["format"]);
+                    if (map.Get("format") is { } fm) FormatValue(fm, J(path, "format"));
                     MetricEncodings(map, path, fields);
                     break;
                 case "chart": ChartEncodings(map, path, fields); break;
@@ -180,7 +180,7 @@ public static partial class ViewsLoader
                     CheckKeysAt(vm, ["field", "empty", "format", "label"], "a matrix value", vp);
                     if (Required(vm, "field", vp) is { } fn && Field(fn, J(vp, "field"), "`field`") is { } f) fields.Add(new("values", f, J(vp, "field"), fn.Line, fn.Column));
                     if (vm.Get("empty") is { } em) Choice(em, J(vp, "empty"), "`empty`", ["blank", "zero"]);
-                    if (vm.Get("format") is { } fmt) Choice(fmt, J(vp, "format"), "`format`", ["compact", "full", "percent"]);
+                    if (vm.Get("format") is { } fmt) Choice(fmt, J(vp, "format"), "`format`", ["compact", "full", "percent"]); // the matrix reads the engine's view: presets until DBR41
                     if (vm.Get("label") is { } lb && lb is not YamlScalar) Bad(ViewsCodes.InvalidValue, lb, J(vp, "label"), "`label` is text.");
                 }
             if (enc.Get("values_on") is { } vo) Choice(vo, J(ep, "values_on"), "`values_on`", ["columns", "rows"]);
@@ -222,7 +222,7 @@ public static partial class ViewsLoader
                     CheckKeysAt(cm, Keys["table_column"], "a table column", cp);
                     if (Required(cm, "field", cp) is { } fn && Field(fn, J(cp, "field"), "`field`") is { } f) fields.Add(new("columns", f, J(cp, "field"), fn.Line, fn.Column));
                     if (cm.Get("label") is { } lb && lb is not YamlScalar) Bad(ViewsCodes.InvalidValue, lb, J(cp, "label"), "`label` is text.");
-                    if (cm.Get("format") is { } fmt) Choice(fmt, J(cp, "format"), "`format`", Choices["format"]);
+                    if (cm.Get("format") is { } fmt) FormatValue(fmt, J(cp, "format"));
                     if (cm.Get("align") is { } al) Choice(al, J(cp, "align"), "`align`", Choices["align"]);
                     if (cm.Get("width") is { } wd) Whole(wd, J(cp, "width"), "`width` (a hint in CSS pixels)", 20, 2000);
                 }
