@@ -155,7 +155,7 @@ The delete runs first, so a unique value that moves from a deleted row to an ins
 `MsSqlCdc`, `Watermark`, `TriggerAudit`, `PgLogicalSlot`, `OracleFlashback`), `DeleteInsert` behind any other reader, as the Add replication screen always started. A table mapping that overrides the reader
 gets the default for its own reader while the replication's writer is unnamed, and a Bulk Load of an unnamed writer reloads with `DeleteInsert`. **A writer that is named is never changed**: every
 existing `MsSqlMerge` (or any other) configuration keeps running as written. Choosing an incremental reader on the Pipeline screen offers `ChangeApply` for the writer when the writer was a reconciling one.
-Saving a replication writes the writer into the file. This default is in the [release notes](../../docs/release-notes/sync-change-apply.md).
+Saving a replication writes the writer into the file. This default is in the release notes of the repository (`docs/release-notes/sync-change-apply.md`; a page of the console's docs cannot link outside its folder).
 
 #### Loading straight into the target
 
