@@ -330,7 +330,7 @@ def bind_sh(template, meta, repo):
         f"DEFAULT_REPO={_sh(repo)}",
         f"PLATFORMS={_sh(' '.join(f'{rid}={p['exe']}' for rid, p in unix.items()))}",
         f"PRESERVE={_sh(' '.join(meta.get('preserve', [])))}",
-        f"REQUIRES_DOTNET={_sh(meta.get('requiresDotnet', ''))}",
+        f"REQUIRES_DOTNET={_sh(meta.get('requiresDotnet') or next((p['requiresDotnet'] for p in unix.values() if p.get('requiresDotnet')), ''))}",
         f"NOTES={_sh(meta.get('notes', ''))}",
     ])
     return _replace_block(template, BEGIN, body)

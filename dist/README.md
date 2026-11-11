@@ -121,7 +121,7 @@ Edit `<Product>/dist.json`:
 | `windowsScope` | `user` or `machine` |
 | `preserve` | files an upgrade never overwrites |
 | `service` | `{ "name", "register" }`: the Windows service, and the arguments that register it (`{name}` is substituted) |
-| `requiresDotnet` | warns after install when that runtime is missing |
+| `requiresDotnet` | warns after install when that runtime is missing. A platform may carry its own (`"linux-x64": { "exe": "...", "requiresDotnet": "10.0" }`) for a product whose Windows zip is self-contained and whose Linux zip is not (the Gateway); `install.sh` reads it, the product-level one wins, and install.ps1, Scoop and the MSI read only the product-level one |
 | `msi.upgradeCode` | the installer's fixed GUID, **never changed** (it is how a newer version finds the older one) |
 | `msi.addToPath` | the installer puts its folder on the machine PATH |
 | `service.unregister` | the command the installer runs on removal (with `register`, `{name}` is substituted) |

@@ -6,8 +6,9 @@ name: DbDataGateway release
 #   gh workflow run dbdatagateway-release.yml --ref main -f sha=<an older commit on main>
 #
 # It releases the newest commit on main, or `sha` (which must be on main), and only if that exact commit has a green "DbDataGateway CI" run.
-# It packages the Windows zip (a Windows job), builds the Windows installer from it (dbdatagateway-v<version>-win-x64.msi, dist/msi.py, on Ubuntu),
-# tags the commit dbdatagateway/v<version> and publishes a GitHub Release in THIS repository (zip, msi, SHA256SUMS, and the standard install.ps1 /
+# It packages the Windows zip (a Windows job: self-contained, with the 32-bit ODBC worker) and the linux-x64 zip (an Ubuntu job, DbDataGateway/scripts/package.sh:
+# framework-dependent like the Runner's, no worker), builds the Windows installer from the Windows zip (dbdatagateway-v<version>-win-x64.msi, dist/msi.py, on Ubuntu),
+# tags the commit dbdatagateway/v<version> and publishes a GitHub Release in THIS repository (both zips, msi, one SHA256SUMS, and the standard install.ps1 /
 # Scoop manifest, bound by .github/actions/publish-dist from DbDataGateway/dist.json). No branch is pushed or merged: a release is a tag and its
 # assets. Built-in GITHUB_TOKEN only.
 #
@@ -181,10 +182,51 @@ jobs:
           path: DbDataGateway/artifacts/release/dbdatagateway-v*.zip
           if-no-files-found: error
 
+  # The Linux zip: one Ubuntu job, framework-dependent, the program files at the zip root, and no 32-bit worker (plan 33 SC01). It takes the commit and the version
+  # the Windows job picked, so both zips of a release are the same commit and version; the release job joins them under one SHA256SUMS.
+  package-linux:
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.package.outputs.sha }}
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: DbDataGateway/global.json
+
+      # The views runtime (apps-views/) is built from the web workspace by the publish.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Package linux-x64
+        env:
+          VERSION: ${{ needs.package.outputs.version }}
+        run: scripts/package.sh linux-x64 "$VERSION" "$PWD/artifacts/release"
+
+      - name: Smoke test the linux-x64 zip
+        env:
+          VERSION: ${{ needs.package.outputs.version }}
+        run: |
+          mkdir "$RUNNER_TEMP/zip-smoke"
+          unzip -q "artifacts/release/dbdatagateway-v$VERSION-linux-x64.zip" -d "$RUNNER_TEMP/zip-smoke"
+          test -f "$RUNNER_TEMP/zip-smoke/libduckdb.so"
+          test ! -e "$RUNNER_TEMP/zip-smoke/worker"
+          "$RUNNER_TEMP/zip-smoke/dbdatagateway" help | grep -q 'dbdatagateway'
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dbdatagateway-package-linux
+          path: DbDataGateway/artifacts/release/dbdatagateway-v*.zip
+          if-no-files-found: error
+
   # Ubuntu, because the installer is built with wixl (apt) and the rest is shell. Nothing is tagged or published until the package and the
   # installer both exist: a tag is a claim that this version shipped, so a failed run leaves nothing to clean up.
   release:
-    needs: package
+    needs: [package, package-linux]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -197,9 +239,11 @@ jobs:
         with:
           ref: ${{ needs.package.outputs.sha }}
 
+      # Both zips, side by side in assets/: the Checksums step below covers them with one SHA256SUMS.
       - uses: actions/download-artifact@v8
         with:
-          name: dbdatagateway-package
+          pattern: dbdatagateway-package*
+          merge-multiple: true
           path: assets
 
       - uses: ./.github/actions/build-msi

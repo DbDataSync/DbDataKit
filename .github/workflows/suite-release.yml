@@ -369,5 +369,11 @@ jobs:
               ls "$dir"/*"$want" > /dev/null || { echo "::error::$product has no *$want"; exit 1; }
               grep -q -- "$want" "$sums" || { echo "::error::$product's SHA256SUMS does not list *$want"; exit 1; }
             done
+            # the products that also ship a Linux zip (plan 33 SC01)
+            case "$product" in
+              dbdatagateway)
+                ls "$dir"/*-linux-x64.zip > /dev/null || { echo "::error::$product has no *-linux-x64.zip"; exit 1; }
+                grep -q -- '-linux-x64.zip' "$sums" || { echo "::error::$product's SHA256SUMS does not list *-linux-x64.zip"; exit 1; } ;;
+            esac
             echo "== $product"; ls -l "$dir"
           done

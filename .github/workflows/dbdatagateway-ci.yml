@@ -116,6 +116,13 @@ jobs:
           echo '--- failed tests ---'
           grep -A6 -E 'failed.*DbDataGateway\.Tests' gateway-tests.log || true
           exit $code
+      - name: Package linux-x64 (smoke test)
+        run: |
+          scripts/package.sh linux-x64 0.0.0-ci "$RUNNER_TEMP/package"
+          mkdir "$RUNNER_TEMP/zip-smoke"
+          unzip -q "$RUNNER_TEMP/package/dbdatagateway-v0.0.0-ci-linux-x64.zip" -d "$RUNNER_TEMP/zip-smoke"
+          test ! -e "$RUNNER_TEMP/zip-smoke/worker"
+          "$RUNNER_TEMP/zip-smoke/dbdatagateway" help | grep -q 'dbdatagateway'
       - name: Stop the shared engines
         if: always()
         working-directory: .

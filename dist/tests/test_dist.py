@@ -89,11 +89,11 @@ class FakeGitHub:
         self.server.shutdown()
         self.server.server_close()
 
-    def add_release(self, product, version, *, prerelease=False, draft=False, exe_payload=b"v", corrupt=False, crlf=False, rids=("win-x64", "linux-x64")):
+    def add_release(self, product, version, *, prerelease=False, draft=False, exe_payload=b"v", corrupt=False, crlf=False, rids=("win-x64", "linux-x64"), platforms=None):
         tag = f"{product}/v{version}"
         assets, sums = [], []
         for rid in rids:
-            exe = META["platforms"][rid]["exe"]
+            exe = (platforms or META["platforms"])[rid]["exe"]
             data = make_zip({exe: exe_payload, "settings.json": b'{"shipped": true}', "lib/a.txt": b"a"})
             name = f"{product}-v{version}-{rid}.zip"
             sums.append(f"{hashlib.sha256(data).hexdigest()}  {name}")
@@ -356,6 +356,70 @@ class BashInstallerTests(DistTestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("Checksum mismatch", r.stderr)
         self.assertFalse((home / "data" / "widget").exists())
+
+
+@unittest.skipIf(os.name == "nt", "install.sh is for Linux and macOS")
+class ShippedGatewayTests(unittest.TestCase):
+    """The Gateway ships a win-x64 zip (self-contained, MSI and Scoop) and a linux-x64 zip (framework-dependent, install.sh; plan 33 SC01, SC02): its real
+    dist.json is bound and installed from a fake release that has both zips, the way a two-platform dist.json is."""
+
+    PRODUCT = "dbdatagateway"
+    VERSION = "2026.11.11.1200"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.meta = json.loads((REPO_ROOT / "DbDataGateway" / "dist.json").read_text(encoding="utf-8"))
+        cls.tmp = pathlib.Path(tempfile.mkdtemp(prefix="dist-gateway-"))
+        cls.gh = FakeGitHub()
+        cls.gh.add_release(cls.PRODUCT, cls.VERSION, exe_payload=b"#!/bin/sh\n", platforms=cls.meta["platforms"])
+        cls.bound = cls.tmp / "bound"
+        cls.bound.mkdir()
+        sums = "".join(f"{'ab' * 32}  {cls.PRODUCT}-v{cls.VERSION}-{rid}.zip\n" for rid in cls.meta["platforms"])
+        bind(cls.bound, meta=cls.meta, version=cls.VERSION, sums=sums)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.gh.close()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def test_it_lists_both_platforms_and_the_linux_zip_needs_the_runtime(self):
+        self.assertEqual(sorted(self.meta["platforms"]), ["linux-x64", "win-x64"])
+        self.assertEqual(self.meta["platforms"]["linux-x64"]["exe"], "dbdatagateway")
+        self.assertNotIn("requiresDotnet", self.meta)   # the Windows zip is self-contained: no .NET check in its MSI or install.ps1
+        self.assertEqual(self.meta["platforms"]["linux-x64"]["requiresDotnet"], "10.0")
+
+    def test_scoop_and_the_powershell_installer_stay_windows(self):
+        manifest = json.loads((self.bound / f"{self.PRODUCT}.json").read_text())
+        url = manifest["architecture"]["64bit"]["url"]
+        self.assertTrue(url.endswith(f"{self.PRODUCT}-v{self.VERSION}-win-x64.zip"), url)
+        self.assertEqual(manifest["bin"], "dbdatagateway.exe")
+        self.assertNotIn("linux", json.dumps(manifest))
+        ps1 = (self.bound / "install.ps1").read_text().replace('"', "'")
+        self.assertIn("Exe = 'dbdatagateway.exe'", ps1)
+        self.assertIn("RequiresDotnet = ''", ps1)
+
+    def test_the_shell_installer_takes_only_the_linux_zip(self):
+        sh = (self.bound / "install.sh").read_text()
+        self.assertIn("PLATFORMS='linux-x64=dbdatagateway'", sh)
+        self.assertIn("REQUIRES_DOTNET='10.0'", sh)
+
+    def test_install_sh_installs_the_linux_zip_and_not_the_windows_one(self):
+        home = pathlib.Path(tempfile.mkdtemp(prefix="home-", dir=self.tmp))
+        out = pathlib.Path(tempfile.mkdtemp(prefix="bound-", dir=self.tmp))
+        bind(out, meta=self.meta)
+        env = {**os.environ, "HOME": str(home), "XDG_DATA_HOME": str(home / "data")}
+        r = subprocess.run(["bash", str(out / "install.sh"), "--api-base", self.gh.base, "--dry-run"], capture_output=True, text=True, env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(f"{self.PRODUCT}-v{self.VERSION}-linux-x64.zip", r.stdout)
+        self.assertNotIn("win-x64", r.stdout)
+        r = subprocess.run(["bash", str(out / "install.sh"), "--api-base", self.gh.base], capture_output=True, text=True, env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        target = home / "data" / self.PRODUCT
+        self.assertTrue(os.access(target / "dbdatagateway", os.X_OK))
+        self.assertEqual(os.readlink(home / ".local" / "bin" / "dbdatagateway"), str(target / "dbdatagateway"))
+        self.assertFalse((target / "dbdatagateway.exe").exists())
+        self.assertIn("/var/lib/dbdatakit/gateway", r.stdout)             # the notes: where the data lives on Linux, and the unit
+        self.assertIn("service unit", r.stdout)
 
 
 @unittest.skipUnless(PWSH, "pwsh not available")
