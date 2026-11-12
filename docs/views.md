@@ -295,6 +295,7 @@ and sorts the rows loaded. The console's board sets `sortable`.
 | `DBD-VIEW-039` | a link to a dashboard, report, view, page or form the app does not have |
 | `DBD-VIEW-044` / `-045` | a name in a link's `with`, `new`, `edit` or `lock` that the target lacks; a value of the wrong type for it |
 | `DBD-VIEW-046` | `print: link` on a link shown in a dialog or panel (no address of its own) |
+| `DBD-VIEW-064` / `-065` | an action names `ask.x` for a field it does not ask for; an action changes an entity the app's manifest does not list with `write` or `change request` (DBR53) |
 | `DBD-VIEW-047` / `-048` | a field group the document does not declare; a field in a group and also in another place of the widget (DBR52) |
 | `DBD-VIEW-040` to `-043` | the derivation and the catalog check, [below](#deriving-the-request) (`-040` nothing to derive, `-041` no measure, `-042` totals twice or with nothing to roll up, `-043` a model the document does not depend on) |
 
@@ -803,6 +804,42 @@ widgets:
 **Publish checks.** Everything above is checked where the document is read. What needs the app is checked when the loader is given the `targets` of the app (`dashboard:name`, `report:name`, `view:name`, `page:name`, `form:name`, each with its parameters or, for a form, its fields and its key as required; `app validate` makes them, DBR13): the target exists in the app (`DBD-VIEW-039`), every name in `with`, `new`, `edit` and `lock` is the target's own (`DBD-VIEW-044`), each value fits the type of the parameter or field (`DBD-VIEW-045`: the same type, an integer for a number, a string for a date, a list only for a list; a `$field` of the row is not checked, its type is the catalog's), a required parameter (an edit form's key) that is not given is an error naming the link (`DBD-VIEW-037`), and `print: link` where the target has no address of its own (`as` is `dialog` or `panel`) is refused (`DBD-VIEW-046`). A widget names only links the document declares (`DBD-VIEW-036`).
 
 In TypeScript the same checks are `checkLinks` of `@dbdatakit/visuals`, with the pure parts a host and the exporter use: `describeLink`, `linkValues(link, row, params)` (what a click carries; a value that has nothing is left out, never the text `undefined`), `linkQuery` (the values as the route's query string) and `printTreatment(link, meaning, medium)`. The refusals are cases of `conformance/views`, run by both languages. A report's links are read the same way; what the viewer's shell does with `as` and `then` is [below](#the-shells-dialog-and-panel-dbr36), and what the exporter draws for `print` is DBR37.
+
+## Actions: a change or a task from a click (plan 32 section 9h part 4, DBR53)
+
+Two more targets of the link vocabulary: **`change`** (an insert, an edit or a delete of a Store row, made as the viewer) and **`task`** (run a runner task now, under the viewer's role). The shell shows a **confirmation popup in the declaration's words** and only the person's confirmation sends anything.
+
+```yaml
+links:
+  close-order:
+    change: {model: sales, entity: orders, edit: {key: $orders.id, version: $orders.version}, set: {status: Closed}}
+    confirm: {title: "Close order {{orders.number}}", show: [orders.number, orders.customer], button: Close order}
+    then: refresh
+    print: hidden
+  set-status:
+    change: {model: sales, entity: orders, edit: {key: {order_id: $orders.id}}, set: {status: $ask.status, note: $ask.note}}
+    ask: {status: {label: New status, choices: [Open, Held, Closed]}, note: {label: Note, required: false}}
+    confirm: {title: "Change {{orders.number}} to {{ask.status}}", show: [orders.number, ask.note]}
+  rerun-load:
+    task: {package: nightly, task: load, inputs: {region: $customers.region}}
+    confirm: {title: "Run the {{customers.region}} load now"}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `change` | `{model, entity}` and **one** of `insert` (the values of a new row), `edit` (`{key, version}`, with `set`: the fields it writes) or `delete` (`{key, version}`). `key` is one value (a one-field key) or the key's fields by name; `version` is the row's version the change is made over (`$orders.version`): without it the change is made over the version at the moment of the call (a stale `version` is a conflict the popup shows) |
+| `task` | `{package, task, inputs}`: run the task now (`RunNow`); the viewer's role on the runner decides, the relay and the runner each check |
+| values | `$field` of the clicked row, `$params.name`, `$ask.name` (what the person types or picks in the popup) or a literal |
+| `ask` | fields the person fills before confirming, by name: `{label, type (string, number, integer, boolean, date), choices, required (default true), default}`; at most 20 |
+| `confirm` | the popup's words, **the declaration's, never the widget's**: `title` (`{{orders.number}}` is a field of the row, `{{ask.name}}` an answer, both substituted as plain text), `show` (row fields listed beside the values), `button`. The values to be written are always listed **verbatim**; without `confirm` the words are `Change a row of orders`, `Run nightly.load` and the like |
+| `then` | `refresh` (the default), `none` or a list of widgets of the document |
+| `print`, `image`, `label` | as a link's; `print: link` is refused (an action has no address), and the default for an action's element is `hidden` |
+
+`as`, `lock`, `with`, `new` and `edit` (at the link's top level) are refused: the popup is the shell's. A link has one target, so `change` and `form` together are refused.
+
+**Checks.** Where the document is read: the shape, `$ask.x` and `{{ask.x}}` for a field `ask` declares (`DBD-VIEW-064`), a declared `$params.name` (`DBD-VIEW-008`), `then` naming widgets (`DBD-VIEW-025`), `print: link` (`DBD-VIEW-046`). Where the app is known (`AppViewDocuments`): the manifest lists `model.entity` with `write` or `change request` (`DBD-VIEW-065`). **Not checked yet:** that a `set` field exists in the entity and fits its type, that `key` names the entity's key, and that a `task` names a package and task the app depends on: the manifest has no runner packages, and the Store's model is not given to the loader; the Store refuses a field it does not have when the change is made.
+
+**What the popup says.** `resolveAction` (`@dbdatakit/visuals`) and `ActionResolution.Resolve` (`DbDataKit.Views`) derive, for a clicked row, the title and button, the `show` lines, every value written (name and value as text, in the declaration's order), the key and version, and **what the row did not give** (`missing`: a popup with a missing value says so and cannot confirm). The two give the same answer for the cases of `conformance/views/actions.json`. A destructive action (a delete) is marked. `checkAnswers` checks what the person typed against its `ask` field.
 
 ## Interaction: cross-filter, drill, refresh and kiosk
 

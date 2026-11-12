@@ -68,6 +68,156 @@
     }
   },
   "$defs": {
+    "core__action_ask": {
+      "description": "Fields the person fills in the popup before confirming; referenced as `$ask.name` in the action's values.",
+      "type": "object",
+      "maxProperties": 20,
+      "propertyNames": {
+        "$ref": "#/$defs/core__link_value_name"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "type": {
+            "enum": [
+              "string",
+              "number",
+              "integer",
+              "boolean",
+              "date"
+            ]
+          },
+          "choices": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "default": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
+        }
+      }
+    },
+    "core__action_change": {
+      "description": "An action (plan 32 section 9h, DBR53): an insert, an edit or a delete of a Store row, made as the viewer after the shell's confirmation popup. The Store decides whether it applies or waits for approval. `edit` and `delete` name the row (`key`: one value, or the key's fields by name) and, optionally, the `version` it was read at; `set` is what an edit writes, `insert` the values of a new row. A value is `$field` of the clicked row, `$params.name`, `$ask.name` (what the person fills in) or a literal.",
+      "type": "object",
+      "required": [
+        "model",
+        "entity"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,127}$"
+        },
+        "entity": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+        },
+        "insert": {
+          "$ref": "#/$defs/core__link_values"
+        },
+        "edit": {
+          "$ref": "#/$defs/core__action_row"
+        },
+        "delete": {
+          "$ref": "#/$defs/core__action_row"
+        },
+        "set": {
+          "$ref": "#/$defs/core__link_values"
+        }
+      }
+    },
+    "core__action_confirm": {
+      "description": "The words of the shell's confirmation popup: the declaration's, never the widget's. `title` has {{field}} placeholders over the clicked row (or {{ask.name}}); `show` lists row fields shown beside the values to be written.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "show": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$"
+          }
+        },
+        "button": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        }
+      }
+    },
+    "core__action_row": {
+      "type": "object",
+      "required": [
+        "key"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "description": "One value (a one-field key) or the key's fields by name.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/core__link_value"
+            },
+            {
+              "$ref": "#/$defs/core__link_values"
+            }
+          ]
+        },
+        "version": {
+          "$ref": "#/$defs/core__link_value"
+        }
+      }
+    },
+    "core__action_task": {
+      "description": "Run a runner task now, under the viewer's role on the runner, with `inputs`.",
+      "type": "object",
+      "required": [
+        "package",
+        "task"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "package": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,127}$"
+        },
+        "task": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,127}$"
+        },
+        "inputs": {
+          "$ref": "#/$defs/core__link_values"
+        }
+      }
+    },
     "core__alias": {
       "description": "A new snake_case name for a measure's output (the engine's `as`): the same measure put in a visual twice, or a filtered one, is told apart by it (plan 32 DBR50).",
       "type": "string",
@@ -676,6 +826,16 @@
           "required": [
             "form"
           ]
+        },
+        {
+          "required": [
+            "change"
+          ]
+        },
+        {
+          "required": [
+            "task"
+          ]
         }
       ],
       "properties": {
@@ -693,6 +853,18 @@
         },
         "form": {
           "$ref": "#/$defs/core__name"
+        },
+        "change": {
+          "$ref": "#/$defs/core__action_change"
+        },
+        "task": {
+          "$ref": "#/$defs/core__action_task"
+        },
+        "confirm": {
+          "$ref": "#/$defs/core__action_confirm"
+        },
+        "ask": {
+          "$ref": "#/$defs/core__action_ask"
         },
         "with": {
           "description": "Parameters of a dashboard, report, view or page.",

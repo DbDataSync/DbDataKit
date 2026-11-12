@@ -44,11 +44,18 @@ public static partial class ViewsLoader
             if (Map(node, path, $"The link `{name}`", node) is not { } m) return null;
             CheckKeysAt(m, Keys["link"], "a link", path);
 
+            var actionTargets = Choices["linkAction"].Where(k => m.Get(k) is not null).ToList();
+            if (actionTargets.Count > 0)
+            {
+                actionWidgets = widgets?.Select(w => w.Id).ToHashSet() ?? [];
+                var others = actionTargets.Skip(1).Concat(Choices["linkTarget"].Where(k => m.Get(k) is not null)).ToList();
+                return ReadAction(name, m, path, actionTargets[0], others);
+            }
             var targets = Choices["linkTarget"].Where(k => m.Get(k) is not null).ToList();
             if (targets.Count != 1)
             {
                 Bad(ViewsCodes.InvalidValue, m, path, targets.Count == 0
-                    ? "A link names its target: one of `dashboard`, `report`, `view`, `page` or `form`."
+                    ? "A link names its target: one of `dashboard`, `report`, `view`, `page`, `form`, `change` or `task`."
                     : $"A link has one target: {string.Join(", ", targets.Select(t => $"`{t}`"))} are written together.");
                 return null;
             }
@@ -122,35 +129,38 @@ public static partial class ViewsLoader
             {
                 var vp = J(path, e.Key.Value);
                 if (!LinkValueName.IsMatch(e.Key.Value)) { Bad(ViewsCodes.InvalidValue, e.Key, vp, "A name is a parameter or field of the target: letters, digits, '-' and '_', starting with a letter."); continue; }
-                if (e.Value is not YamlScalar s) { Bad(ViewsCodes.InvalidValue, e.Value, vp, "A value is `$field` of the clicked row, `$params.name`, or a literal."); continue; }
-                if (s.Value.StartsWith("$params.", StringComparison.Ordinal))
-                {
-                    var p = s.Value[8..];
-                    if (!IsDeclared(p)) { Bad(ViewsCodes.UndeclaredParameter, s, vp, $"`{s.Value}` names a parameter the document does not declare.", "Declare it under `parameters`."); continue; }
-                    values[e.Key.Value] = new LinkValue(LinkValueKind.Param, p, "", s.Line, s.Column);
-                }
-                else if (s.Value.StartsWith('$'))
-                {
-                    if (!RowField.IsMatch(s.Value)) { Bad(ViewsCodes.InvalidValue, s, vp, "`$` starts a field of the clicked row (`$orders.id`) or a parameter (`$params.name`)."); continue; }
-                    values[e.Key.Value] = new LinkValue(LinkValueKind.Field, s.Value[1..], "", s.Line, s.Column);
-                }
-                else
-                {
-                    var type = ToJson(s)?.GetValueKind() switch
-                    {
-                        System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False => "boolean",
-                        System.Text.Json.JsonValueKind.Number => long.TryParse(s.Value, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out _) ? "integer" : "number",
-                        _ => "string",
-                    };
-                    values[e.Key.Value] = new LinkValue(LinkValueKind.Literal, s.Value, type, s.Line, s.Column);
-                }
+                if (ReadLinkValue(e.Value, vp) is { } v) values[e.Key.Value] = v;
             }
+        }
+
+        /// <summary>One value: <c>$field</c> of the clicked row, <c>$params.name</c>, or a literal; null (and a refusal) when it is none of them.</summary>
+        private LinkValue? ReadLinkValue(YamlNode node, string vp)
+        {
+            if (node is not YamlScalar s) { Bad(ViewsCodes.InvalidValue, node, vp, "A value is `$field` of the clicked row, `$params.name`, or a literal."); return null; }
+            if (s.Value.StartsWith("$params.", StringComparison.Ordinal))
+            {
+                var p = s.Value[8..];
+                if (!IsDeclared(p)) { Bad(ViewsCodes.UndeclaredParameter, s, vp, $"`{s.Value}` names a parameter the document does not declare.", "Declare it under `parameters`."); return null; }
+                return new LinkValue(LinkValueKind.Param, p, "", s.Line, s.Column);
+            }
+            if (s.Value.StartsWith('$'))
+            {
+                if (!RowField.IsMatch(s.Value)) { Bad(ViewsCodes.InvalidValue, s, vp, "`$` starts a field of the clicked row (`$orders.id`) or a parameter (`$params.name`)."); return null; }
+                return new LinkValue(LinkValueKind.Field, s.Value[1..], "", s.Line, s.Column);
+            }
+            var type = ToJson(s)?.GetValueKind() switch
+            {
+                System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False => "boolean",
+                System.Text.Json.JsonValueKind.Number => long.TryParse(s.Value, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out _) ? "integer" : "number",
+                _ => "string",
+            };
+            return new LinkValue(LinkValueKind.Literal, s.Value, type, s.Line, s.Column);
         }
 
         /// <summary>The checks that need the app: the target exists, every name is the target's, each value fits its type, a required parameter is given.</summary>
         private void CheckLinkTarget(ViewLink link, YamlMapping at, string path)
         {
-            if (targets is null) return;
+            if (targets is null || link.Action is not null) return;
             var targetPath = J(path, link.TargetKind);
             if (!targets.TryGetValue(link.TargetKey, out var theirs))
             {

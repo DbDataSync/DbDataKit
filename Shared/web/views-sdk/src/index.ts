@@ -19,7 +19,7 @@ export type ViewData = Record<string, { columns?: string[]; rows: Row[]; error?:
 export interface HostLinkInfo {
   route: string | null
   as: 'navigate' | 'dialog' | 'panel'
-  values: Record<string, { kind: 'literal' | 'field' | 'param'; text: string; value?: Scalar }>
+  values: Record<string, { kind: 'literal' | 'field' | 'param' | 'ask'; text: string; value?: Scalar }>
   /** What the exporter draws: `hidden`, `normal` or `link`, or absent for the element's meaning to decide. */
   print?: 'hidden' | 'normal' | 'link'
   label?: string

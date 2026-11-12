@@ -62,7 +62,7 @@ public static partial class ViewsLoader
         ["on_select"] = ["set", "from"],
         ["drill"] = ["to", "with"],
         ["drill.to"] = ["dashboard", "report", "view"],
-        ["link"] = ["dashboard", "report", "view", "page", "form", "with", "new", "edit", "as", "then", "lock", "print", "image", "label"],
+        ["link"] = ["dashboard", "report", "view", "page", "form", "change", "task", "confirm", "ask", "with", "new", "edit", "as", "then", "lock", "print", "image", "label"],
         ["control.values"] = ["attribute", "limit"],
         ["layout.common"] = ["name", "type", "default", "when", "widget_options"],
         ["layout.reflow"] = ["grid", "tiles"],
@@ -122,6 +122,8 @@ public static partial class ViewsLoader
         ["linkThen"] = ["refresh", "none"],
         ["linkPrint"] = ["hidden", "normal", "link"],
         ["linkTarget"] = ["dashboard", "report", "view", "page", "form"],
+        ["linkAction"] = ["change", "task"],
+        ["askType"] = ["string", "number", "integer", "boolean", "date"],
     };
 
     /// <summary>The smallest a tile of a widget type may be at scale 1, in CSS pixels (plan 32 section 3.3); a type that is not listed has none.</summary>

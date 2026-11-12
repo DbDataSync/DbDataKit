@@ -1,0 +1,86 @@
+{
+  "note": "What the confirmation popup of an action link says and the request it sends, for one clicked row (plan 32 DBR53): run by DbDataKit.Views.Tests (ActionResolution.Resolve) and @dbdatakit/visuals (resolveAction). The links are those of good/dashboard-actions.json; `expect` is written by hand from the declaration, not from either implementation.",
+  "document": "good/dashboard-actions.json",
+  "cases": [
+    {
+      "name": "close an order from a status icon",
+      "link": "close-order",
+      "row": { "orders.id": 42, "orders.version": 7, "orders.number": "SO-1042", "orders.customer": "Acme" },
+      "expect": {
+        "link": "close-order", "kind": "change", "operation": "edit", "title": "Close order SO-1042", "button": "Close order", "destructive": false, "target": "sales.orders",
+        "shows": [{ "field": "orders.number", "value": "SO-1042" }, { "field": "orders.customer", "value": "Acme" }],
+        "writes": [{ "name": "status", "value": "Closed" }],
+        "key": [{ "name": "key", "value": "42" }], "version": "7", "missing": [], "asks": []
+      }
+    },
+    {
+      "name": "a row that is shown by the last part of the field name (a query's alias)",
+      "link": "close-order",
+      "row": { "id": 5, "version": 1, "number": "SO-5", "customer": "Initech" },
+      "expect": {
+        "link": "close-order", "kind": "change", "operation": "edit", "title": "Close order SO-5", "button": "Close order", "destructive": false, "target": "sales.orders",
+        "shows": [{ "field": "orders.number", "value": "SO-5" }, { "field": "orders.customer", "value": "Initech" }],
+        "writes": [{ "name": "status", "value": "Closed" }],
+        "key": [{ "name": "key", "value": "5" }], "version": "1", "missing": [], "asks": []
+      }
+    },
+    {
+      "name": "a row without its key cannot be sent",
+      "link": "close-order",
+      "row": { "orders.number": "SO-9" },
+      "expect": {
+        "link": "close-order", "kind": "change", "operation": "edit", "title": "Close order SO-9", "button": "Close order", "destructive": false, "target": "sales.orders",
+        "shows": [{ "field": "orders.number", "value": "SO-9" }, { "field": "orders.customer", "value": "" }],
+        "writes": [{ "name": "status", "value": "Closed" }],
+        "key": [], "version": null, "missing": ["the row key"], "asks": []
+      }
+    },
+    {
+      "name": "what the person types is listed as typed, in the title and the writes",
+      "link": "set-status",
+      "row": { "orders.id": 3, "orders.number": "SO-3" },
+      "answers": { "status": "Held", "note": "<b>call back</b>" },
+      "expect": {
+        "link": "set-status", "kind": "change", "operation": "edit", "title": "Change SO-3 to Held", "button": "Apply the change", "destructive": false, "target": "sales.orders",
+        "shows": [{ "field": "orders.number", "value": "SO-3" }, { "field": "ask.note", "value": "<b>call back</b>" }],
+        "writes": [{ "name": "status", "value": "Held" }, { "name": "note", "value": "<b>call back</b>" }],
+        "key": [{ "name": "order_id", "value": "3" }], "version": null, "missing": [],
+        "asks": [
+          { "name": "status", "label": "New status", "type": "string", "choices": ["Open", "Held", "Closed"], "required": true },
+          { "name": "note", "label": "Note", "type": "string", "choices": [], "required": false }
+        ]
+      }
+    },
+    {
+      "name": "an insert fills its fields from the row, the parameters and literals",
+      "link": "new-order",
+      "row": { "customers.id": 9 },
+      "params": { "region": "EMEA" },
+      "expect": {
+        "link": "new-order", "kind": "change", "operation": "insert", "title": "Add an order", "button": "Add the row", "destructive": false, "target": "sales.orders",
+        "shows": [],
+        "writes": [{ "name": "customer_id", "value": "9" }, { "name": "status", "value": "Open" }, { "name": "region", "value": "EMEA" }],
+        "key": [], "version": null, "missing": [], "asks": []
+      }
+    },
+    {
+      "name": "a delete is destructive",
+      "link": "drop-order",
+      "row": { "orders.id": 11, "orders.number": "SO-11" },
+      "expect": {
+        "link": "drop-order", "kind": "change", "operation": "delete", "title": "Delete order SO-11", "button": "Delete the row", "destructive": true, "target": "sales.orders",
+        "shows": [], "writes": [], "key": [{ "name": "key", "value": "11" }], "version": null, "missing": [], "asks": []
+      }
+    },
+    {
+      "name": "a task takes inputs of every type",
+      "link": "rerun-load",
+      "row": { "customers.region": "APAC" },
+      "expect": {
+        "link": "rerun-load", "kind": "task", "operation": "run", "title": "Run the APAC load now", "button": "Run the task", "destructive": false, "target": "nightly.load",
+        "shows": [], "writes": [{ "name": "region", "value": "APAC" }, { "name": "full", "value": "false" }, { "name": "days", "value": "7" }],
+        "key": [], "version": null, "missing": [], "asks": []
+      }
+    }
+  ]
+}

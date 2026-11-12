@@ -44,7 +44,22 @@ public sealed class AppViewDocuments : IViewDocumentChecker
                         Problem(ViewsCodes.LinkTargetUnknown, widget.Line, widget.Column, $"The drill of `{widget.Id}` leads to the {kind} `{name}`, which this app does not have: a drill stays in the app instance.", "Name a view of the app, or add it first.");
             if (widget.Type == "custom") CheckCustom(manifest, document, widget, Problem);
         }
+        foreach (var link in document.Links.Values.Where(l => l.Action is { Kind: "change" }))
+            CheckChange(manifest, link, Problem);
         return found;
+    }
+
+    /// <summary>
+    /// An action's <c>change</c> is made as the viewer through the Store, so the manifest must list the entity with <c>write</c> (the change applies, or waits for approval as the model says) or with <c>change request</c>
+    /// (it only ever proposes): <c>DBD-VIEW-065</c>. A <c>task</c> is checked by the runner's own tables (the manifest lists no runner packages yet).
+    /// </summary>
+    private static void CheckChange(AppManifest manifest, ViewLink link, Action<string, int, int, string, string?> problem)
+    {
+        var action = link.Action!;
+        var use = manifest.Models.FirstOrDefault(m => m.Model == action.Model);
+        if (use is null || action.Entity is null || !use.Entities.TryGetValue(action.Entity, out var allowed) || !(allowed.HasFlag(DataOperations.Write) || allowed.HasFlag(DataOperations.ChangeRequest)))
+            problem(ViewsCodes.ActionNotAllowed, link.Line, link.Column, $"The action `{link.Name}` changes `{action.Model}.{action.Entity}`, which the manifest does not list with `write` or `change request` under `models`.",
+                "Add the model and `write` (or `change request`) for the entity to the manifest.");
     }
 
     private static void CheckQuery(AppManifest manifest, ViewWidget widget, WidgetQuery query, Action<string, int, int, string, string?> problem)

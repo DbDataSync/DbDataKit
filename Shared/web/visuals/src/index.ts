@@ -10,6 +10,8 @@ export type { CatalogRole, CatalogRoles, DerivableWidget, DerivedRequest, Parame
 export { catalogDiagnostics, catalogFromModel, catalogRoles, retailCatalog } from './views/catalog'
 export type { Catalog, CatalogMember } from './views/catalog'
 export { LINK_AS, LINK_PRINT, LINK_TARGETS, checkLinks, describeLink, describeValue, linkQuery, linkTypeFits, linkValues, printTreatment } from './views/links'
+export { ACTION_TARGETS, ASK_TYPES, checkAnswers, defaultButton, defaultTitle, resolveAction } from './views/actions'
+export type { ActionAnswers, ActionAsk, ActionInfo, ActionKind, ActionOperation, AskType, ResolvedAction } from './views/actions'
 export type { ElementMeaning, LinkAs, LinkDoc, LinkInfo, LinkParams, LinkPrint, LinkRow, LinkScalar, LinkTargetKind, LinkTargetParam, LinkValue, PrintMedium } from './views/links'
 export { RUNNING_TOKENS, VIEWS_FORMAT, validateDashboard, validateReport, validateViewsDocument } from './views/document'
 export type { ViewKind, ViewsOptions } from './views/document'

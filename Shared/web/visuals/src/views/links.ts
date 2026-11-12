@@ -1,4 +1,5 @@
 import { Issues, NAME, VIEW, at, isObject, join } from './common'
+import { ACTION_TARGETS, checkAction, describeActionDoc, type ActionInfo, type ActionKind } from './actions'
 
 /**
  * The link vocabulary of plan 32 section 9f (DBR35), one for standard and custom widgets: a document's `links` map names each link, a widget's `on_click` (or a custom widget's `links` list) names the one it follows.
@@ -13,18 +14,20 @@ export const LINK_AS = ['navigate', 'dialog', 'panel'] as const
 export type LinkAs = (typeof LINK_AS)[number]
 export const LINK_PRINT = ['hidden', 'normal', 'link'] as const
 export type LinkPrint = (typeof LINK_PRINT)[number]
-export const LINK_KEYS = ['dashboard', 'report', 'view', 'page', 'form', 'with', 'new', 'edit', 'as', 'then', 'lock', 'print', 'image', 'label']
+export const LINK_KEYS = ['dashboard', 'report', 'view', 'page', 'form', 'change', 'task', 'confirm', 'ask', 'with', 'new', 'edit', 'as', 'then', 'lock', 'print', 'image', 'label']
 export const MAX_LINKS = 100
 
 /** A parameter or field of a link's target, as an app check tells it: a type (the core's names, plus `date`), whether it is a list, and whether the link must give it. */
 export interface LinkTargetParam { name: string; type?: string; many?: boolean; required?: boolean; default?: unknown }
 
 /** A value a link gives its target: a literal, `$field` of the clicked row, or `$params.name` of the document. */
-export interface LinkValue { kind: 'literal' | 'field' | 'param'; text: string; literalType: string; value?: string | number | boolean }
+export interface LinkValue { kind: 'literal' | 'field' | 'param' | 'ask'; text: string; literalType: string; value?: string | number | boolean }
 
 /** A link as written: the closed set of its keys. */
 export interface LinkDoc {
   dashboard?: string; report?: string; view?: string; page?: string; form?: string
+  /** An action (DBR53): an insert, edit or delete of a Store row, or a runner task, with the popup's `confirm` words and the `ask` fields (`views/actions.ts`). */
+  change?: unknown; task?: unknown; confirm?: unknown; ask?: unknown
   with?: Record<string, string | number | boolean>; new?: Record<string, string | number | boolean>; edit?: Record<string, string | number | boolean>
   as?: LinkAs; then?: 'refresh' | 'none' | string[]; lock?: string[]; print?: LinkPrint; image?: LinkPrint; label?: string
 }
@@ -32,8 +35,10 @@ export interface LinkDoc {
 /** A link read: its target, the values it gives and every default applied. */
 export interface LinkInfo {
   name: string
-  targetKind: LinkTargetKind
+  /** `change` or `task` for an action link (then `action` is set). */
+  targetKind: LinkTargetKind | ActionKind
   target: string
+  action?: ActionInfo
   valuesKey: 'with' | 'new' | 'edit'
   values: Record<string, LinkValue>
   as: LinkAs
@@ -74,6 +79,11 @@ export function describeValue(raw: string | number | boolean): LinkValue {
 
 /** Reads a link that passed `checkLinks` (or any object of the right shape). The target is the one of the five keys that is present. */
 export function describeLink(name: string, doc: LinkDoc): LinkInfo {
+  const actionKind = ACTION_TARGETS.find((k) => doc[k] !== undefined)
+  if (actionKind) {
+    const read = describeActionDoc(doc as Record<string, unknown>, actionKind)
+    return actionLinkInfo(name, read.action, read)
+  }
   const targetKind = LINK_TARGETS.find((k) => typeof doc[k] === 'string')!
   const isForm = targetKind === 'form'
   const valuesKey = isForm ? (doc.edit !== undefined && doc.new === undefined ? 'edit' : 'new') : 'with'
@@ -87,6 +97,15 @@ export function describeLink(name: string, doc: LinkDoc): LinkInfo {
     thenWidgets: list ? [...(doc.then as string[])] : [], lock: [...(doc.lock ?? [])],
     print: doc.print, image: doc.image, label: doc.label,
     hasAddress: as === 'navigate', targetKey: `${targetKind}:${doc[targetKind]}`,
+  }
+}
+
+/** The link of an action read: its target is `model.entity` or `package.task`; `as` is the shell's popup, which has no address. */
+function actionLinkInfo(name: string, action: ActionInfo, read: { thenKind: 'refresh' | 'none' | 'widgets'; thenWidgets: string[]; print?: LinkPrint; image?: LinkPrint; label?: string }): LinkInfo {
+  const target = action.kind === 'change' ? `${action.model}.${action.entity}` : `${action.package}.${action.task}`
+  return {
+    name, targetKind: action.kind, target, action, valuesKey: action.kind === 'change' ? 'edit' : 'with', values: action.set, as: 'dialog',
+    thenKind: read.thenKind, thenWidgets: read.thenWidgets, lock: [], print: read.print, image: read.image, label: read.label, hasAddress: false, targetKey: `${action.kind}:${target}`,
   }
 }
 
@@ -121,10 +140,16 @@ export function checkLinks(raw: unknown, context: LinkContext, issues: Issues, b
 function checkLink(name: string, raw: unknown, path: string, context: LinkContext, issues: Issues): LinkInfo | null {
   if (!isObject(raw)) { issues.add('DBD-106', path, `The link \`${name}\` must be a mapping.`); return null }
   for (const key of Object.keys(raw)) if (!LINK_KEYS.includes(key)) issues.add('DBD-104', join(path, key), `Unknown key \`${key}\` in a link.`)
+  const actionTargets = ACTION_TARGETS.filter((k) => raw[k] !== undefined)
+  if (actionTargets.length > 0) {
+    const others = [...actionTargets.slice(1), ...LINK_TARGETS.filter((k) => raw[k] !== undefined)]
+    const read = checkAction(raw, actionTargets[0]!, others, path, { declared: context.declared, widgetIds: context.widgetIds }, issues)
+    return read ? actionLinkInfo(name, read.action, read) : null
+  }
   const targets = LINK_TARGETS.filter((k) => raw[k] !== undefined)
   if (targets.length !== 1) {
     issues.add('DBD-106', path, targets.length === 0
-      ? 'A link names its target: one of `dashboard`, `report`, `view`, `page` or `form`.'
+      ? 'A link names its target: one of `dashboard`, `report`, `view`, `page`, `form`, `change` or `task`.'
       : `A link has one target: ${targets.map((t) => `\`${t}\``).join(', ')} are written together.`)
     return null
   }
@@ -218,7 +243,7 @@ export function readLinkValues(raw: unknown, path: string, context: Pick<LinkCon
 }
 
 function checkTarget(link: LinkInfo, path: string, context: LinkContext, issues: Issues): void {
-  if (!context.targets) return
+  if (!context.targets || link.action) return
   const theirs = context.targets[link.targetKey]
   if (!theirs) {
     issues.add(VIEW('039'), join(path, link.targetKind), `The link \`${link.name}\` leads to the ${link.targetKind} \`${link.target}\`, which this app does not have: a link stays in the app instance.`)

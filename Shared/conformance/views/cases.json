@@ -75,6 +75,10 @@
     {
       "file": "good/dashboard-drill-details.json",
       "kind": "dashboard"
+    },
+    {
+      "file": "good/dashboard-actions.json",
+      "kind": "dashboard"
     }
   ],
   "bad": [
@@ -1474,6 +1478,150 @@
       "path": "widgets.w.encodings.rows[1].show",
       "line": 32,
       "schema": false
+    },
+    {
+      "name": "action-two-operations",
+      "file": "bad/action-two-operations.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "links.close-order.change",
+      "line": 18,
+      "schema": false
+    },
+    {
+      "name": "action-edit-without-set",
+      "file": "bad/action-edit-without-set.json",
+      "as": "dashboard",
+      "code": "DBD-105",
+      "path": "links.close-order.change.set",
+      "line": 18,
+      "schema": false
+    },
+    {
+      "name": "action-edit-without-key",
+      "file": "bad/action-edit-without-key.json",
+      "as": "dashboard",
+      "code": "DBD-105",
+      "path": "links.close-order.change.edit.key",
+      "line": 21,
+      "schema": true
+    },
+    {
+      "name": "action-delete-sets",
+      "file": "bad/action-delete-sets.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "links.drop-order.change.set",
+      "line": 101,
+      "schema": false
+    },
+    {
+      "name": "action-insert-with-set",
+      "file": "bad/action-insert-with-set.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "links.new-order.change.set",
+      "line": 89,
+      "schema": false
+    },
+    {
+      "name": "action-ask-not-declared",
+      "file": "bad/action-ask-not-declared.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-064",
+      "path": "links.set-status.change.set.status",
+      "line": 50,
+      "schema": false
+    },
+    {
+      "name": "action-title-asks-for-an-undeclared-field",
+      "file": "bad/action-title-asks-for-an-undeclared-field.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-064",
+      "path": "links.set-status.confirm.title",
+      "line": 69,
+      "schema": false
+    },
+    {
+      "name": "action-show-asks-for-an-undeclared-field",
+      "file": "bad/action-show-asks-for-an-undeclared-field.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-064",
+      "path": "links.set-status.confirm.show[0]",
+      "line": 71,
+      "schema": false
+    },
+    {
+      "name": "action-with-an-as",
+      "file": "bad/action-with-an-as.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "links.close-order.as",
+      "line": 39,
+      "schema": false
+    },
+    {
+      "name": "action-and-a-form",
+      "file": "bad/action-and-a-form.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "links.close-order",
+      "line": 17,
+      "schema": true
+    },
+    {
+      "name": "action-print-link",
+      "file": "bad/action-print-link.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-046",
+      "path": "links.close-order.print",
+      "line": 38,
+      "schema": false
+    },
+    {
+      "name": "action-undeclared-parameter",
+      "file": "bad/action-undeclared-parameter.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-008",
+      "path": "links.new-order.change.insert.region",
+      "line": 87,
+      "schema": false
+    },
+    {
+      "name": "action-then-names-a-widget-that-is-not-there",
+      "file": "bad/action-then-names-a-widget-that-is-not-there.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-025",
+      "path": "links.set-status.then[0]",
+      "line": 76,
+      "schema": false
+    },
+    {
+      "name": "action-choices-default-not-offered",
+      "file": "bad/action-choices-default-not-offered.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "links.set-status.ask.status.default",
+      "line": 62,
+      "schema": false
+    },
+    {
+      "name": "action-task-without-a-task",
+      "file": "bad/action-task-without-a-task.json",
+      "as": "dashboard",
+      "code": "DBD-105",
+      "path": "links.rerun-load.task.task",
+      "line": 108,
+      "schema": true
+    },
+    {
+      "name": "action-unknown-key-in-a-change",
+      "file": "bad/action-unknown-key-in-a-change.json",
+      "as": "dashboard",
+      "code": "DBD-104",
+      "path": "links.close-order.change.where",
+      "line": 28,
+      "schema": true
     }
   ],
   "warnings": [

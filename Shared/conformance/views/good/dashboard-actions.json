@@ -1,0 +1,213 @@
+{
+  "schemaVersion": 1,
+  "kind": "dashboard",
+  "title": "Sales with actions",
+  "parameters": [
+    {
+      "name": "region",
+      "type": "string",
+      "for": "customers.region"
+    },
+    {
+      "name": "year",
+      "type": "integer"
+    }
+  ],
+  "links": {
+    "close-order": {
+      "change": {
+        "model": "sales",
+        "entity": "orders",
+        "edit": {
+          "key": "$orders.id",
+          "version": "$orders.version"
+        },
+        "set": {
+          "status": "Closed"
+        }
+      },
+      "confirm": {
+        "title": "Close order {{orders.number}}",
+        "show": [
+          "orders.number",
+          "orders.customer"
+        ],
+        "button": "Close order"
+      },
+      "then": "refresh",
+      "print": "hidden"
+    },
+    "set-status": {
+      "change": {
+        "model": "sales",
+        "entity": "orders",
+        "edit": {
+          "key": {
+            "order_id": "$orders.id"
+          }
+        },
+        "set": {
+          "status": "$ask.status",
+          "note": "$ask.note"
+        }
+      },
+      "ask": {
+        "status": {
+          "label": "New status",
+          "choices": [
+            "Open",
+            "Held",
+            "Closed"
+          ]
+        },
+        "note": {
+          "label": "Note",
+          "required": false
+        }
+      },
+      "confirm": {
+        "title": "Change {{orders.number}} to {{ask.status}}",
+        "show": [
+          "orders.number",
+          "ask.note"
+        ]
+      },
+      "then": [
+        "orders_table"
+      ],
+      "label": "Set the status"
+    },
+    "new-order": {
+      "change": {
+        "model": "sales",
+        "entity": "orders",
+        "insert": {
+          "customer_id": "$customers.id",
+          "status": "Open",
+          "region": "$params.region"
+        }
+      },
+      "confirm": {
+        "title": "Add an order"
+      }
+    },
+    "drop-order": {
+      "change": {
+        "model": "sales",
+        "entity": "orders",
+        "delete": {
+          "key": "$orders.id"
+        }
+      },
+      "confirm": {
+        "title": "Delete order {{orders.number}}"
+      },
+      "print": "hidden"
+    },
+    "rerun-load": {
+      "task": {
+        "package": "nightly",
+        "task": "load",
+        "inputs": {
+          "region": "$customers.region",
+          "full": false,
+          "days": 7
+        }
+      },
+      "confirm": {
+        "title": "Run the {{customers.region}} load now"
+      },
+      "print": "hidden"
+    }
+  },
+  "widgets": {
+    "by_region": {
+      "type": "chart",
+      "title": "Revenue by region",
+      "mark": "bar",
+      "encodings": {
+        "x": "customers.region",
+        "y": "orders.net_revenue"
+      },
+      "query": {
+        "model": "sales",
+        "limit": 20
+      },
+      "on_click": "new-order"
+    },
+    "pivot": {
+      "type": "matrix",
+      "title": "Region and quarter",
+      "encodings": {
+        "rows": [
+          "customers.region"
+        ],
+        "columns": [
+          "date.fiscal_quarter"
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenue"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales",
+        "limit": 1000
+      },
+      "on_click": "rerun-load"
+    },
+    "orders_table": {
+      "type": "table",
+      "title": "Orders",
+      "encodings": {
+        "columns": [
+          {
+            "field": "orders.order_id"
+          },
+          {
+            "field": "customers.region"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales",
+        "limit": 100
+      },
+      "on_click": "close-order"
+    }
+  },
+  "layouts": [
+    {
+      "name": "desk",
+      "type": "reflow",
+      "default": true,
+      "grid": {
+        "columns": 12
+      },
+      "tiles": [
+        {
+          "widget": "by_region",
+          "x": 0,
+          "y": 0,
+          "w": 6,
+          "h": 6
+        },
+        {
+          "widget": "pivot",
+          "x": 6,
+          "y": 0,
+          "w": 6,
+          "h": 6
+        },
+        {
+          "widget": "orders_table",
+          "x": 0,
+          "y": 6,
+          "w": 12,
+          "h": 6
+        }
+      ]
+    }
+  ]
+}
