@@ -41,6 +41,7 @@ A push to `main` starts a run set and **cancels** the one still running. So:
 - `gh api "repos/<owner>/<repo>/actions/runs?branch=main&per_page=14" --jq '.workflow_runs[]|select(.status!="completed")|"\(.name) \(.status) \(.head_sha[0:8])"'`;
   push only when it prints nothing. Manually dispatched workflows (a suite dry run) have no concurrency group and are not cancelled by a push.
 - Fast-forward only. If the push is refused, the CI agent pushed in between: `git fetch`, `git merge origin/main`, check again.
+- **The coordinator works on the local branch `backup/main`**, not on `main`: it tracks `origin/backup/main`, `scripts/backup_branches.py push` keeps it backed up under its own name, and local `main` only follows `origin/main` (`git branch -f main origin/main` after a fetch). Merge finished agent branches into `backup/main`, and publish with `git fetch origin main && git merge origin/main && git push origin backup/main:main` only when no run is in progress. Agents merge `backup/main` (not `main`) to get the integrated work that is not published yet. A stop hook that counts unpushed commits of `main` then has nothing to report, because `main` is never ahead.
 - One push per completed run set. The CI agent does it on its own cadence; the coordinator pushes when a stop hook demands it and nothing runs.
 - A big merge that was never built together is pushed anyway **after** the checks pass; CI is its first real build, which is why the CI agent is told to watch that run set hardest.
 
