@@ -21,6 +21,9 @@ public sealed class PostgresStateDialect : StateDialect
     public override bool ShouldRetry(Exception exception) =>
         exception is System.Data.Common.DbException { SqlState: "40P01" or "40001" };
 
+    public override bool IsUniqueViolation(Exception exception) =>
+        exception is System.Data.Common.DbException { SqlState: "23505" };
+
     /// <summary>The library catalog id this dialect resolves its connection
     /// through.</summary>
     public const string LibraryId = "npgsql";
