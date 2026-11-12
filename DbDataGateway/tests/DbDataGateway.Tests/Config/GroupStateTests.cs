@@ -378,11 +378,10 @@ public sealed class GroupStateTests : IAsyncLifetime
             using (var duck = new DuckDB.NET.Data.DuckDBConnection("Data Source=" + data))
             {
                 duck.Open();
-                foreach (var table in DbDataKit.Semantic.CatalogLoader.LoadText(catalog).Doc.Sources.Where(s => DbDataKit.Serving.Semantic.SemanticModel.BaseSource(s.Key) == "sqlserver_sales")
-                    .SelectMany(s => s.Value.Joins.Values.Select(j => j.Table).Append(s.Value.Fact.Table)).Distinct())
+                foreach (var ddl in SalesSchema.Tables(catalog))
                 {
                     using var create = duck.CreateCommand();
-                    create.CommandText = $"CREATE TABLE IF NOT EXISTS {table} (x INTEGER)";
+                    create.CommandText = ddl;
                     create.ExecuteNonQuery();
                 }
             }
@@ -544,11 +543,10 @@ public sealed class GroupStateTests : IAsyncLifetime
             using (System.Data.Common.DbConnection db = engine == "mssql" ? new SqlConnection(database) : new Npgsql.NpgsqlConnection(database))
             {
                 db.Open();
-                foreach (var table in DbDataKit.Semantic.CatalogLoader.LoadText(catalog).Doc.Sources.Where(s => DbDataKit.Serving.Semantic.SemanticModel.BaseSource(s.Key) == "sqlserver_sales")
-                    .SelectMany(s => s.Value.Joins.Values.Select(j => j.Table).Append(s.Value.Fact.Table)).Distinct())
+                foreach (var ddl in SalesSchema.Tables(catalog, "CREATE TABLE"))
                 {
                     using var create = db.CreateCommand();
-                    create.CommandText = $"CREATE TABLE {table} (x INTEGER)";
+                    create.CommandText = ddl;
                     create.ExecuteNonQuery();
                 }
             }

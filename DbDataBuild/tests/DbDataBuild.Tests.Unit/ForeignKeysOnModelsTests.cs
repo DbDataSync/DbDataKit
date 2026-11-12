@@ -119,4 +119,39 @@ public class ForeignKeysOnModelsTests : IDisposable
         Assert.True(exit == 0, output + err);
         Assert.Contains("model.marts.fct_sales_lines.foreign_key.sales_to_customer.grain@sqlserver", output);
     }
+
+    [Fact]
+    public void Project_show_semantic_tells_a_relationship_of_the_file_from_one_a_key_made()
+    {
+        // plan 14a SL10
+        var dir = Retail();
+        var (_, fileOnly, _) = Run("project", "show", "semantic", "--project", dir, "--format", "json");
+        var written = System.Text.Json.Nodes.JsonNode.Parse(fileOnly)!["data"]!["models"]![0]!["relationships"]!.AsArray();
+        Assert.All(written, r => Assert.Equal("file", (string)r!["origin"]!));
+
+        DropAuthoredRelationship(dir);
+        DeclareKey(dir);
+        var (exit, derived, err) = Run("project", "show", "semantic", "--project", dir, "--format", "json");
+        Assert.True(exit == 0, derived + err);
+        var relationship = Assert.Single(System.Text.Json.Nodes.JsonNode.Parse(derived)!["data"]!["models"]![0]!["relationships"]!.AsArray(), r => (string)r!["name"]! == "sales_to_customer");
+        Assert.Equal("foreign_key", (string)relationship!["origin"]!);
+        Assert.EndsWith("fct_sales_lines.yml", ((string)relationship["declared_at"]!["file"]!).Replace('\\', '/'));
+        Assert.True((int)relationship["declared_at"]!["line"]! > 0);
+    }
+
+    [Fact]
+    public void The_project_document_carries_the_semantic_models_and_validates_against_its_schema_and_a_project_without_them_has_no_such_key()
+    {
+        var dir = Retail();
+        var document = System.Text.Json.Nodes.JsonNode.Parse(MetadataBuilder.ToStoredJson(MetadataBuilder.Project(ProjectContext.Load(dir))))!;
+        var model = Assert.Single(document["semantic"]!.AsArray());
+        Assert.Equal("semantic/sales.yml", ((string)model!["file"]!).Replace('\\', '/'));
+        Assert.NotEmpty(model["tables"]!.AsArray());
+        Assert.All(model["tables"]!.AsArray(), t => Assert.False(string.IsNullOrEmpty((string?)t!["physical"])));
+        Assert.True(SchemaConformanceTests.LoadSchema("metadata").Evaluate(document, new Json.Schema.EvaluationOptions { OutputFormat = Json.Schema.OutputFormat.List }).IsValid);
+
+        File.Delete(Semantic(dir));
+        var without = System.Text.Json.Nodes.JsonNode.Parse(MetadataBuilder.ToStoredJson(MetadataBuilder.Project(ProjectContext.Load(dir))))!;
+        Assert.Null(without["semantic"]);
+    }
 }

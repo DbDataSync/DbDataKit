@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, Link, useIsAdmin } from '@dbdatakit/shell'
 import { gatewayApi } from '../api'
 import { GatewayShell } from '../GatewayShell'
-import { MODULES, cacheSeconds, editFor, groupDiagnostics, placeOf, restartText, saveState, shown, toggleModule, type FieldKey } from '../settings'
+import { MODULES, SEMANTIC_NUMBERS, cacheSeconds, editFor, groupDiagnostics, placeOf, restartText, saveState, semanticNumber, shown, toggleModule, type FieldKey, type SemanticNumber } from '../settings'
 import type { Diagnostic, SettingsCheck, SettingsWritten } from '../types'
 
 export interface SettingsViewProps {
@@ -26,6 +26,9 @@ export interface SettingsViewProps {
   /** The file changed since it was read. */
   stale: boolean
   cacheText: string | null
+  /** What is typed in a semantic number field that is not a valid number yet, by field. */
+  semanticText?: Record<string, string>
+  onSemanticText?: (field: string, text: string) => void
   onTab: (tab: 'form' | 'yaml') => void
   onText: (text: string) => void
   onField: (field: FieldKey, value: string | number | boolean | string[]) => void
@@ -33,6 +36,22 @@ export interface SettingsViewProps {
   onNote: (note: string) => void
   onSave: () => void
   onReload: () => void
+}
+
+/** One whole-number field of the `semantic:` section: what is typed is kept (by the page) until it is a number in range, and the Gateway is asked only then. Stateless, as the other fields are. */
+function SemanticNumberField({ field, value, typed, disabled, items, onField, onTyped }: { field: SemanticNumber; value: number; typed: string | undefined; disabled: boolean; items: Diagnostic[] | undefined; onField: (field: FieldKey, value: number) => void; onTyped: (key: string, text: string) => void }) {
+  const problem = typed !== undefined && semanticNumber(field, typed) === null ? `A whole number from ${field.min} to ${field.max}.` : null
+  const id = `settings-${field.key.replace(/\./g, '-')}`
+  return (
+    <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+      <label htmlFor={id}>{field.label}</label>
+      <input id={id} className="input" style={{ width: 130 }} inputMode="numeric" disabled={disabled} value={typed ?? String(value)} aria-invalid={problem ? true : undefined} data-testid={id}
+        onChange={(e) => { onTyped(field.key, e.target.value); const n = semanticNumber(field, e.target.value); if (n !== null) onField(field.key, n) }} />
+      <span className="hint">{field.hint}</span>
+      {problem && <p className="hint" role="alert" data-testid={`${id}-problem`}>{problem}</p>}
+      <FieldErrors field={field.key} items={items} />
+    </div>
+  )
 }
 
 function FieldErrors({ field, items }: { field: FieldKey; items: Diagnostic[] | undefined }) {
@@ -97,6 +116,11 @@ export function SettingsView(p: SettingsViewProps) {
                 </div>
                 <FieldErrors field="views.export.mode" items={grouped.byField['views.export.mode']} />
                 <FieldErrors field="views.export.path" items={grouped.byField['views.export.path']} />
+                <fieldset style={{ border: 0, padding: 0, margin: '12px 0' }} data-testid="settings-semantic">
+                  <legend className="card-title">Semantic models</legend>
+                  {SEMANTIC_NUMBERS.map((f) => <SemanticNumberField key={f.key} field={f} value={values.semantic[f.key]} disabled={!p.allowed || !p.check} items={grouped.byField[f.key]} typed={p.semanticText?.[f.key]} onField={p.onField} onTyped={(k, t) => p.onSemanticText?.(k, t)} />)}
+                  <p className="hint" data-testid="settings-semantic-text">The models set up by hand (catalog file and the data source of each source) and the Analysis Services connections (a secret reference, never a password) are edited in the server.yaml tab, under <span className="mono">semantic:</span>.</p>
+                </fieldset>
                 <label className="row" style={{ gap: 6 }}>
                   <input type="checkbox" checked={values.logSql} disabled={!p.allowed || !p.check} onChange={(e) => p.onField('logSql', e.target.checked)} data-testid="settings-log-sql" /> Log the SQL text of queries
                 </label>
@@ -154,6 +178,7 @@ export function SettingsPage() {
   const [tab, setTab] = useState<'form' | 'yaml'>('form')
   const [note, setNote] = useState('')
   const [cacheText, setCacheText] = useState<string | null>(null)
+  const [semanticText, setSemanticText] = useState<Record<string, string>>({})
   const [saved, setSaved] = useState<SettingsViewProps['saved']>(null)
   const [refusal, setRefusal] = useState<SettingsViewProps['refusal']>(null)
   const [stale, setStale] = useState(false)
@@ -171,7 +196,7 @@ export function SettingsPage() {
     mutationFn: () => gatewayApi.settings.write(text, file.data?.version ?? null, note),
     onSuccess: async (written) => {
       setSaved({ written, text })
-      setRefusal(null); setStale(false); setDraft(null); setNote(''); setCacheText(null)
+      setRefusal(null); setStale(false); setDraft(null); setNote(''); setCacheText(null); setSemanticText({})
       await queryClient.invalidateQueries({ queryKey: ['gateway', 'settings'] })
       await queryClient.invalidateQueries({ queryKey: ['gateway', 'history'] })
     },
@@ -191,9 +216,9 @@ export function SettingsPage() {
         loading={file.isPending} loadError={file.error ? (file.error instanceof Error ? file.error.message : String(file.error)) : null}
         text={text} dirty={dirty} masked={file.data?.masked ?? false} tab={tab}
         check={check.data} checking={checking} checkFailed={check.isError && settled === text} allowed={isAdmin} busy={write.isPending} note={note}
-        saved={saved} refusal={refusal} stale={stale} cacheText={cacheText}
+        saved={saved} refusal={refusal} stale={stale} cacheText={cacheText} semanticText={semanticText} onSemanticText={(k, t) => setSemanticText((m) => ({ ...m, [k]: t }))}
         onTab={setTab}
-        onText={(t) => { setDraft(t); setSaved(null); setCacheText(null) }}
+        onText={(t) => { setDraft(t); setSaved(null); setCacheText(null); setSemanticText({}) }}
         onField={(field, value) => edit.mutate(editFor(field, value))}
         onCacheText={setCacheText}
         onNote={setNote}

@@ -21,13 +21,12 @@ public sealed partial class ManagementTests
     private string SalesData(string name)
     {
         var file = Path.Combine(dataDirectory, name + ".duckdb");
-        var sales = CatalogLoader.LoadText(CatalogText).Doc.Sources.Where(s => DbDataKit.Serving.Semantic.SemanticModel.BaseSource(s.Key) == "sqlserver_sales").Select(s => s.Value);
         using var connection = new DuckDB.NET.Data.DuckDBConnection("Data Source=" + file);
         connection.Open();
-        foreach (var table in sales.SelectMany(s => s.Joins.Values.Select(j => j.Table).Append(s.Fact.Table)).Distinct())
+        foreach (var ddl in SalesSchema.Tables(CatalogText))
         {
             using var command = connection.CreateCommand();
-            command.CommandText = $"CREATE TABLE IF NOT EXISTS {table} (x INTEGER)";
+            command.CommandText = ddl;
             command.ExecuteNonQuery();
         }
         return Conn.Yaml(name, "duckdb", "Data Source=" + file);
@@ -169,6 +168,32 @@ public sealed partial class ManagementTests
 
         Assert.Equal(1, app.Services.GetRequiredService<DbDataGateway.Server.Serving.PublishedSemanticModels>().Current("sales_catalog"));
         Assert.Equal("sales-ro", models.Find("sales_catalog")!.ServingSource("sqlserver_sales"));
+    }
+
+    [Fact]
+    public async Task A_publish_that_maps_a_column_the_data_source_lacks_is_refused_naming_the_table_and_the_column_and_the_serving_version_stays()
+    {
+        // plan 14a SL06: besides the empty SELECT on each table, one SELECT of the columns the catalog names
+        await StartAsync();
+        var publisher = await PairPublisherAsync(build1);
+        await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/data-sources/sales-ro", ServerRole.Publisher, Put(SalesData("sales-ro"), null));
+        var bad = SalesData("sales-bad");
+        using (var duck = new DuckDB.NET.Data.DuckDBConnection("Data Source=" + Path.Combine(dataDirectory, "sales-bad.duckdb")))
+        {
+            duck.Open();
+            using var drop = duck.CreateCommand();
+            drop.CommandText = "ALTER TABLE dim_customer DROP COLUMN region";
+            drop.ExecuteNonQuery();
+        }
+        await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/data-sources/sales-bad", ServerRole.Publisher, Put(bad, null));
+        await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/semantic-models/sales_catalog", ServerRole.Publisher, Publish(CatalogText, "sales-ro"));
+
+        var refused = await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/semantic-models/sales_catalog", ServerRole.Publisher, Publish(CatalogText, "sales-bad", 1));
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        var message = (string)(await BodyAsync(refused))["error"]!;
+        Assert.Contains("dim_customer.region", message);
+        Assert.Equal(1, app.Services.GetRequiredService<DbDataGateway.Server.Serving.PublishedSemanticModels>().Current("sales_catalog"));
+        Assert.Equal("sales-ro", app.Services.GetRequiredService<SemanticModels>().Find("sales_catalog")!.ServingSource("sqlserver_sales"));
     }
 
     [Fact]

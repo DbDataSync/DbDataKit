@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Diagnostic, SettingsCheck } from './types'
-import { cacheSeconds, editFor, fieldOf, groupDiagnostics, placeOf, restartText, saveState, shown, toggleModule } from './settings'
+import { SEMANTIC_NUMBERS, cacheSeconds, editFor, fieldOf, groupDiagnostics, placeOf, restartText, saveState, semanticNumber, shown, toggleModule } from './settings'
 
 const diag = (key: string | null, severity = 'error', line = 3): Diagnostic => ({ code: 'DBP-1', severity, key, file: '/x/config/server.yaml', line, column: 1, message: 'wrong', fix: null })
 const check = (over: Partial<SettingsCheck> = {}): SettingsCheck => ({ valid: true, diagnostics: [], fields: {}, changed: ['logSql'], restart_keys: [], problems: [], ...over })
@@ -81,7 +81,31 @@ describe('the form', () => {
   })
 
   it('shows the values the draft sets, with the defaults when the check has not answered', () => {
-    expect(shown(undefined)).toEqual({ modules: [], cacheSeconds: 30, exportMode: '', exportPath: '', logSql: true })
-    expect(shown({ modules: ['flightsql'], 'views.cacheSeconds': 5, 'views.export.mode': 'system', 'views.export.path': '/opt/chrome', logSql: false })).toEqual({ modules: ['flightsql'], cacheSeconds: 5, exportMode: 'system', exportPath: '/opt/chrome', logSql: false })
+    const { semantic: defaults, ...rest } = shown(undefined)
+    expect(rest).toEqual({ modules: [], cacheSeconds: 30, exportMode: '', exportPath: '', logSql: true })
+    expect(defaults['semantic.level']).toBe(5)
+    expect(shown({ modules: ['flightsql'], 'views.cacheSeconds': 5, 'views.export.mode': 'system', 'views.export.path': '/opt/chrome', logSql: false })).toMatchObject({ modules: ['flightsql'], cacheSeconds: 5, exportMode: 'system', exportPath: '/opt/chrome', logSql: false })
+  })
+})
+
+describe('the semantic section', () => {
+  const level = SEMANTIC_NUMBERS[0]
+  const memory = SEMANTIC_NUMBERS[1]
+  it('finds the field a diagnostic of the section belongs to', () => {
+    expect(fieldOf(diag('Semantic.Combine.MemoryMb'))).toBe('semantic.combine.memoryMb')
+    expect(fieldOf(diag('Semantic.Level'))).toBe('semantic.level')
+    expect(fieldOf(diag('Semantic.Models[0].Catalog'))).toBeNull()
+  })
+  it('reads a whole number in the range of the field and nothing else', () => {
+    expect(semanticNumber(level, '3')).toBe(3)
+    expect(semanticNumber(level, '6')).toBeNull()
+    expect(semanticNumber(memory, '15')).toBeNull()
+    expect(semanticNumber(memory, ' 512 ')).toBe(512)
+    expect(semanticNumber(memory, '5e2')).toBeNull()
+  })
+  it('edits the number by its path and shows the draft values with the Gateway defaults beneath', () => {
+    expect(editFor('semantic.combine.timeoutSeconds', 30)).toEqual({ set: { 'semantic.combine.timeoutSeconds': 30 } })
+    expect(shown(undefined).semantic).toEqual({ 'semantic.level': 5, 'semantic.combine.memoryMb': 1024, 'semantic.combine.timeoutSeconds': 60, 'semantic.combine.maxInputRows': 5000000 })
+    expect(shown({ 'semantic.level': 2 }).semantic['semantic.level']).toBe(2)
   })
 })

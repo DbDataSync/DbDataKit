@@ -58,13 +58,13 @@ public class EngineWitnessTests
     [Fact]
     public void GatewaySourceIsSupportedExactlyWhereTheGatewayRegistersAProvider()
     {
-        var host = FindUp("DbDataGateway/src/DbDataGateway.Server/Hosting/GatewayHost.cs");
+        var host = FindUp("DbDataGateway/src/DbDataGateway.Server/Data/GatewaySources.cs");
         if (host is null) return;   // a source package without the repository around it
         var kinds = Regex.Matches(File.ReadAllText(host), @"new DbDataKit\.Connections\.(\w+)\.\1Provider\(").Select(m => m.Groups[1].Value.ToLowerInvariant()).ToHashSet();
         // FlightSql is a provider too, but a gateway reaching another gateway is not what the role means (descriptor note)
         kinds.Remove("flightsql");
         Assert.NotEmpty(kinds);
-        Matches(EngineRoles.GatewaySource, kinds.Select(k => Registry.Engines.Single(e => e.Provider == k || e.Id == k).Id), "a provider registered by GatewayHost");
+        Matches(EngineRoles.GatewaySource, kinds.Select(k => Registry.Engines.Single(e => e.Provider == k || e.Id == k).Id), "a provider registered by GatewaySources");
     }
 
     private static string? FindUp(string relative)

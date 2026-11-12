@@ -96,6 +96,28 @@ public sealed partial class ManagementTests
     }
 
     [Fact]
+    public async Task The_semantic_level_and_combine_limits_are_edited_as_fields_and_a_limit_out_of_range_is_refused_with_its_key()
+    {
+        // plan 14a SL11: the scalar part of semantic:, edited through the same set path as the other fields
+        await StartAsync();
+        var admin = await PairAsync();
+        var text = ((string)(await SettingsAsync(admin, HttpMethod.Get, "")).Body["text"]!).TrimEnd();
+
+        var edited = await SettingsAsync(admin, HttpMethod.Post, "/edit", new { text, set = new Dictionary<string, object> { ["semantic.level"] = 3, ["semantic.combine.memoryMb"] = 512, ["semantic.combine.timeoutSeconds"] = 30, ["semantic.combine.maxInputRows"] = 1000 } });
+        Assert.Equal(HttpStatusCode.OK, edited.Status);
+        var draft = (string)edited.Body["text"]!;
+        var good = await SettingsAsync(admin, HttpMethod.Post, "/check", new { text = draft });
+        Assert.True((bool)good.Body["valid"]!, good.Body.ToJsonString());
+        var fields = good.Body["fields"]!;
+        Assert.Equal((3, 512, 30, 1000), ((int)fields["semantic.level"]!, (int)fields["semantic.combine.memoryMb"]!, (int)fields["semantic.combine.timeoutSeconds"]!, (int)fields["semantic.combine.maxInputRows"]!));
+
+        var tooFew = await SettingsAsync(admin, HttpMethod.Post, "/edit", new { text, set = new Dictionary<string, object> { ["semantic.combine.memoryMb"] = 4 } });
+        var bad = await SettingsAsync(admin, HttpMethod.Post, "/check", new { text = (string)tooFew.Body["text"]! });
+        Assert.False((bool)bad.Body["valid"]!);
+        Assert.Contains(bad.Body["diagnostics"]!.AsArray(), d => ((string?)d!["key"])?.EndsWith("MemoryMb", StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    [Fact]
     public async Task A_draft_is_checked_by_the_shared_validator_with_the_field_that_is_wrong_and_nothing_is_written_when_it_is_not_valid()
     {
         await StartAsync();

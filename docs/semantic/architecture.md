@@ -69,7 +69,7 @@ A subset of DuckDB SQL with `MEASURE()`, translated to and from the JSON request
 
 ## Rules that hold
 
-- A package is validated against the live catalog before it serves; a mismatch is refused with the table named. (Today the check is a test query per data source and an empty `SELECT` on every table a source's facts and joins name; a check of the mapped columns is not built: plan 14a SL06.)
+- A package is validated against the live catalog before it serves; a mismatch is refused with the table, or the table and column, named (a test query per data source, an empty `SELECT` on every table a source's facts and joins name, and one empty `SELECT` of the plain columns its bindings and measures name; plan 14a SL06).
 - Identity is part of every cache and saved-result key, or one user's numbers reach another. (No semantic result cache exists today; the rule binds the first one.)
 - Build keeps three query compilers apart: Build writes table SQL, the semantic engine writes aggregate-query SQL over Build's tables, the serving layer writes none.
 - The federated combine must not take the service down: limits today, a child process if they prove too soft.

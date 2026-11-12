@@ -297,6 +297,7 @@ internal sealed class SemanticCatalog(IServingCatalog inner, SemanticModels mode
         {
             var properties = new Dictionary<string, string> { ["saved_query"] = "true", ["call"] = $"SELECT * FROM {queryName}({string.Join(", ", saved.Parameters.Select(p => p.Key))})" };
             if (saved.Parameters.Count > 0) properties["parameters"] = saved.Parameters.ToJsonString();
+            if (OutputColumns(model.Catalog, saved, name) is { } columns) properties["columns"] = columns;
             yield return new ServingObject(ServingObjectKind.View, [name, queryName], saved.Description, Properties: properties);
         }
         // and the ones this caller keeps or has been given (J27), with who owns each; the model's own names win
@@ -305,6 +306,7 @@ internal sealed class SemanticCatalog(IServingCatalog inner, SemanticModels mode
             if (doc.Queries.ContainsKey(kept.Name)) continue;
             var properties = new Dictionary<string, string> { ["saved_query"] = "true", ["owner"] = kept.Owner, ["call"] = $"SELECT * FROM {kept.Name}({string.Join(", ", kept.Query.Parameters.Select(p => p.Key))})" };
             if (kept.Query.Parameters.Count > 0) properties["parameters"] = kept.Query.Parameters.ToJsonString();
+            if (OutputColumns(model.Catalog, kept.Query, name) is { } keptColumns) properties["columns"] = keptColumns;
             yield return new ServingObject(ServingObjectKind.View, [name, kept.Name], kept.Query.Description, Properties: properties);
         }
         foreach (var (dimension, def) in doc.Dimensions)
@@ -324,5 +326,37 @@ internal sealed class SemanticCatalog(IServingCatalog inner, SemanticModels mode
             yield return new ServingObject(ServingObjectKind.Hierarchy, [name, hierarchy]);
             foreach (var level in def.Levels) yield return new ServingObject(ServingObjectKind.Level, [name, hierarchy, level]);
         }
+    }
+
+    /// <summary>
+    /// The columns a saved query answers and their logical types (plan 14a SL08), read from its request without running it: the attributes, then the measures, under the names the answer gives them
+    /// (<see cref="Catalog.ColName"/>), as a JSON array of <c>{name, type}</c>. An entry the catalog does not name (an override, an ad hoc aggregate) is listed with the type <c>number</c> under its alias when it has one and left out
+    /// when it has none. Null when the text of the query does not translate: <c>describe</c> never fails for it.
+    /// </summary>
+    private static string? OutputColumns(Catalog catalog, SavedQueryDef saved, string model)
+    {
+        JsonObject? request = saved.Request;
+        if (request is null && saved.Sql is { } sql)
+        {
+            var translation = SemanticSqlTranslator.Translate(sql, model);
+            if (!translation.Ok) return null;
+            request = translation.Request;
+        }
+        if (request is null) return null;
+        // a request is the query itself, or the document that wraps it (spec_version, kind, query)
+        request = request["query"] as JsonObject ?? request;
+
+        var columns = new JsonArray();
+        foreach (var key in new[] { "attributes", "measures" })
+            foreach (var entry in request[key] as JsonArray ?? new JsonArray())
+            {
+                if (entry is JsonValue v && v.TryGetValue<string>(out var member))
+                {
+                    if (catalog.Exists(member)) columns.Add(new JsonObject { ["name"] = Catalog.ColName(member), ["type"] = catalog.TypeOf(member) });
+                }
+                else if (entry is JsonObject o && (o["as"] ?? o["alias"] ?? o["name"]) is JsonValue named && named.TryGetValue<string>(out var alias) && alias.Length > 0)
+                    columns.Add(new JsonObject { ["name"] = alias, ["type"] = "number" });
+            }
+        return columns.ToJsonString();
     }
 }

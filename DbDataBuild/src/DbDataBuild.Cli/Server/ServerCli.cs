@@ -17,7 +17,7 @@ namespace DbDataBuild.Cli.Server;
 /// </summary>
 internal static class ServerCli
 {
-    public static bool Handles(string[] args) => args.Length > 0 && args[0] is "server" or "secret" or "service" or "health" or "lineage" or "state";
+    public static bool Handles(string[] args) => args.Length > 0 && args[0] is "server" or "secret" or "service" or "health" or "lineage" or "state" or "semantic";
 
     public static Task<int> RunAsync(string[] args, TextWriter output, TextWriter error, TextReader input) => RunAsync(args, output, error, input, null);
 
@@ -44,6 +44,7 @@ internal static class ServerCli
         .. invocation is ["health", ..] ? new[] { HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl) } : Array.Empty<Noun>(),
         .. invocation is ["lineage", ..] ? new[] { ServerLineage.Create(invocation) } : Array.Empty<Noun>(),
         .. invocation is ["state", ..] ? new[] { StateNoun(environment) } : Array.Empty<Noun>(),
+        .. invocation is ["semantic", ..] ? new[] { BuildSemantic.Noun() } : Array.Empty<Noun>(),
         .. invocation is ["service", ..] ? new[] { BuildService.Noun(BuildServiceEnvironment.Real()) } : Array.Empty<Noun>(),
     ], ProductInfo.Version, () => DbDataKit.State.SuiteEnvironment.OldNameProblem(environment));
 
