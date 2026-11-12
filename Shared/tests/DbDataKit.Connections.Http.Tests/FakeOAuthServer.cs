@@ -41,6 +41,9 @@ public sealed class FakeOAuthServer : IAsyncDisposable
 
     public int RefreshCalls { get; private set; }
 
+    /// <summary>How many times the client signed in with client credentials (no person, no refresh token).</summary>
+    public int ClientCredentialCalls { get; private set; }
+
     public ConcurrentQueue<string> Revoked { get; } = new();
 
     public ConcurrentQueue<string> Authorizations { get; } = new();
@@ -118,6 +121,9 @@ public sealed class FakeOAuthServer : IAsyncDisposable
                 var given = form.GetValueOrDefault("refresh_token") ?? "";
                 if (!RefreshTokens.TryGetValue(given, out var good) || !good) { await Error(400, "invalid_grant"); return; }
                 if (Rotate) { RefreshTokens[given] = false; refresh = "refresh-" + Interlocked.Increment(ref _counter); RefreshTokens[refresh] = true; }
+                break;
+            case "client_credentials":
+                ClientCredentialCalls++;
                 break;
             default: await Error(400, "unsupported_grant_type"); return;
         }

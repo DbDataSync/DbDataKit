@@ -32,6 +32,7 @@ public static class ConnectionSecretReferences
             Add("sign_in.client_secret_secret", s.ClientSecretSecret);
             Add("sign_in.certificate_secret", s.CertificateSecret);
             Add("sign_in.certificate_password_secret", s.CertificatePasswordSecret);
+            Add("sign_in.refresh_token_secret", s.RefreshTokenSecret);
         }
 
         return list;

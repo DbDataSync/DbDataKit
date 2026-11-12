@@ -66,6 +66,28 @@ public sealed class ConnectionSlotProtocolTests
 
     [Theory]
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
+    public async Task An_http_grant_carries_the_definition_and_the_secrets_the_runner_resolved_and_a_dry_run_reaches_the_task(string engine)
+    {
+        // plan 27a IX10: additive fields of ResolveConnectionReply; the values travel for this run only and ToString never shows them
+        using var h = new Harness(engine, remote: true);
+        const string definition = "schema: connection/2\nname: crm\nkind: http\nendpoint: https://crm.example\nsign_in:\n  method: api_key\n  key_secret: 'secret:crm-key'\n";
+        var resolver = new FakeResolver { Answer = (slot, connection, role) => new ConnectionGrant { Slot = slot, Connection = connection, Engine = "http", Role = role, AuthMode = "api_key", HttpDefinition = definition, HttpSecrets = new Dictionary<string, string> { ["secret:crm-key"] = "k-123" } } };
+        var token = Grant(h, resolver, new Dictionary<string, string> { ["source"] = "crm" });
+        GrantReader.Last = null;
+
+        var result = await RemoteJobHost.RunAsync<GrantReader>(h.Host.Endpoint, token, CancellationToken.None, new RemoteRunOptions { HeartbeatInterval = TimeSpan.Zero });
+
+        Assert.Equal(TaskEndState.Succeeded, result.End.State);
+        var grant = GrantReader.Last!;
+        Assert.Equal(definition, grant.HttpDefinition);
+        Assert.Equal("k-123", grant.HttpSecrets["secret:crm-key"]);
+        Assert.False(grant.DryRun);
+        Assert.DoesNotContain("k-123", grant.ToString(), StringComparison.Ordinal);
+        h.Host.Unregister(token);
+    }
+
+    [Theory]
+    [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_run_for_another_task_than_the_jobs_is_refused_unless_the_host_says_one_job_serves_many_tasks(string engine)
     {
         // plan 28c E07: a published Build project has one task per refresh plan, named for it, and one job runs them all

@@ -8,6 +8,9 @@ public interface IConnectionCatalog
 {
     /// <summary>The definition named <paramref name="name"/>; null when the runner has none. A document that exists and does not load throws <see cref="InvalidDataException"/> naming the file.</summary>
     ConnectionDefinition? Find(string name);
+
+    /// <summary>The text the definition was loaded from (secret references, never a value), for a task that makes its own client from it (an <c>http</c> slot, plan 27a IX10); null when the catalog keeps none.</summary>
+    string? Text(string name) => null;
 }
 
 /// <summary>
@@ -26,6 +29,8 @@ public sealed class StoredConnectionCatalog(ConnectionCopies copies) : IConnecti
             throw new InvalidDataException($"The copy of the connection '{name}' names the connection '{load.Definition.Name}'.");
         return load.Definition;
     }
+
+    public string? Text(string name) => copies.Get(name)?.Definition;
 }
 
 /// <summary>The first catalog that has the name: an operator's own file in the runner's connections directory wins over a copy the console sent (a file on this machine is the stronger statement), and a name in neither is unknown.</summary>
@@ -35,6 +40,13 @@ public sealed class LayeredConnectionCatalog(params IConnectionCatalog[] layers)
     {
         foreach (var layer in layers)
             if (layer.Find(name) is { } found) return found;
+        return null;
+    }
+
+    public string? Text(string name)
+    {
+        foreach (var layer in layers)
+            if (layer.Find(name) is not null) return layer.Text(name);
         return null;
     }
 }

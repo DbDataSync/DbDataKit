@@ -488,6 +488,9 @@ message ResolveConnectionReply {
   optional string password = 11;
   optional string connection_string_secret = 12;
   optional string token = 13;
+  // an http connection (plan 27a IX10, second half; additive): the definition text as the runner keeps it (secret references, never a value) and every reference of it resolved on the runner, by the reference as written.
+  optional string http_definition = 14;
+  map<string, string> http_secrets = 15;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
