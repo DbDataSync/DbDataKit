@@ -22,10 +22,10 @@ export { matches as layoutMatches, selectLayout, specificity as layoutSpecificit
 export type { LayoutChoice, LayoutContext, LayoutSelection, Medium, SelectableDocument, SelectableLayout } from './views/selectLayout'
 export type {
   Box, ChartDoc, ControlDoc, ControlKind, ImageDoc, LayoutDoc, MatrixDoc, MetricDoc, ParameterDefinition, ParameterValue, ParameterValues, ReflowLayoutDoc, CanvasLayoutDoc, FlowLayoutDoc, TableColumnDoc, TableDoc, TextDoc,
-  TileDoc, ViewsDoc, WidgetDoc, WidgetOptionsDoc, WidgetType, FlowBlockDoc, FlowCellDoc, FlowSectionDoc,
+  CustomDoc, TileDoc, ViewsDoc, WidgetDoc, WidgetOptionsDoc, WidgetType, FlowBlockDoc, FlowCellDoc, FlowSectionDoc,
 } from './views/model'
 export type {
-  RenderedControl, RenderedImage, RenderedMetric, RenderedNumber, RenderedTable, RenderedText, RenderedWidget, RenderedWidgetError, RenderedWidgets,
+  RenderedControl, RenderedCustom, RenderedImage, RenderedMetric, RenderedNumber, RenderedTable, RenderedText, RenderedWidget, RenderedWidgetError, RenderedWidgets,
 } from './views/rendered'
 export {
   FIXTURE_AS_OF, NO_RECORDED_IMAGE, NO_RECORDED_RESULT, ViewsClientError, diagnosticsFromRefusal, fixtureClient, moduleClient, placedWidgets, textVersion, validateText,
@@ -46,6 +46,8 @@ export type { ControlChange, ControlWidgetProps, ParameterControlsProps } from '
 export { WidgetView } from './widgets/WidgetView'
 export type { WidgetViewProps } from './widgets/WidgetView'
 export { EmptyTile, ErrorTile, LoadingTile } from './widgets/states'
+export { CustomViewsContext, CustomWidgetFrame, checkSetParam, createFrameHost, hostLinkInfo, readToHost, themeTokens } from './custom'
+export type { CustomViewsContextValue, CustomViewsHost, CustomWidgetFrameProps, FrameHost, FrameHostOptions, FrameState, FromHost, HostLinkInfo, SetParamOutcome, ToHost, ViewData, ViewMode, ViewProps } from './custom'
 export { renderMarkdown, substituteParameters, unsafeTextReasons } from './widgets/markdown'
 export { DashboardFrame } from './dashboard/DashboardFrame'
 export type { DashboardFrameProps } from './dashboard/DashboardFrame'
@@ -54,12 +56,16 @@ export type { CanvasFrameProps } from './dashboard/CanvasFrame'
 export { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, PIXELS_PER_UNIT, layoutCanvas } from './dashboard/canvas'
 export type { CanvasPlacement, CanvasResult, CanvasViolation } from './dashboard/canvas'
 export { DashboardView } from './dashboard/DashboardView'
-export type { DashboardViewProps } from './dashboard/DashboardView'
+export type { DashboardViewProps, LinkEvent, LinkHost } from './dashboard/DashboardView'
+export { LinkSurface } from './links/LinkSurface'
+export type { OpenSurface } from './links/LinkSurface'
+export { LOCK_PARAMETER, readFromTarget, surfaceAddress, thenWidgets } from './links/surface'
+export type { FromTarget } from './links/surface'
 export { DEFAULT_CHECK_SIZES, TILE_GUTTER, checkReflowSizes, layoutReflow, sizesFor } from './dashboard/reflow'
 export type { ReflowPlacement, ReflowResult, ReflowViolation } from './dashboard/reflow'
 export { changedParameters, defaultParameters, dependentWidgets, parametersKey, resolveLayout, widgetParameters } from './dashboard/resolution'
 export type { Resolution } from './dashboard/resolution'
-export { chartClick, checkDrill, chosenValues, clearedValue, coerceValue, datumFromItem, datumKey, drillOf, howOf, onSelectOf, parameterDefault, resolveDrill, rowOf, selectFrom, selectedOf, valueOf } from './dashboard/interaction'
+export { chartClick, checkDrill, clickOf, chosenValues, clearedValue, coerceValue, datumFromItem, datumKey, drillOf, howOf, onSelectOf, parameterDefault, resolveDrill, rowOf, selectFrom, selectedOf, valueOf } from './dashboard/interaction'
 export type { DrillCheck, DrillDoc, DrillOutcome, Hit, HitHow, OnSelect, ResolvedDrill, Row, Scalar, SelectOutcome } from './dashboard/interaction'
 export { REFRESH_FLOOR_MS, REFRESH_JITTER, browserVisibility, createRefresher, formatAsOf, parseEvery, refreshDelay, systemClock } from './dashboard/refresh'
 export type { Clock, RefreshState, Refresher, RefresherOptions, Visibility } from './dashboard/refresh'

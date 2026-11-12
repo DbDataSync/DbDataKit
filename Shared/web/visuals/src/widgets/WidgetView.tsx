@@ -2,8 +2,9 @@ import type { ReactNode } from 'react'
 import { useTheme, type ThemeChoice } from '../theme'
 import type { RenderedChart, RenderedMatrix } from '../types'
 import type { Box, ParameterDefinition, ParameterValue, ParameterValues, WidgetDoc, WidgetOptionsDoc } from '../views/model'
-import type { RenderedWidget } from '../views/rendered'
+import type { RenderedCustom, RenderedWidget } from '../views/rendered'
 import { ChartWidget } from './ChartWidget'
+import { CustomWidgetFrame } from '../custom/CustomWidgetFrame'
 import { EmbedBlock } from './EmbedBlock'
 import { ImageBlock } from './ImageBlock'
 import { MatrixWidget } from './MatrixWidget'
@@ -13,7 +14,7 @@ import { TableWidget } from './TableWidget'
 import { TextBlock } from './TextBlock'
 import { EmptyTile, ErrorTile, LoadingTile } from './states'
 import { bodyBox, densityClass, type DensityClass } from './density'
-import { drillOf, howOf, onSelectOf, selectedOf, parameterDefault, type Hit, type HitHow } from '../dashboard/interaction'
+import { clickOf, drillOf, howOf, onSelectOf, selectedOf, parameterDefault, type Hit, type HitHow } from '../dashboard/interaction'
 
 export interface WidgetViewProps {
   /** The widget's id in its document. */
@@ -40,6 +41,8 @@ export interface WidgetViewProps {
   stale?: boolean
   /** Whether the host follows a `drill` (default yes): without it a widget with only a `drill` is not pointable. */
   canDrill?: boolean
+  /** Whether the host follows an `on_click` link (default no): without it a widget with only an `on_click` is not pointable. */
+  canFollow?: boolean
   /** Viewers sort a table or a matrix by clicking a header (plan 32 DBR45), on screen only; off by default so print, export and a host that does not say so are unchanged. */
   sortable?: boolean
   /** A table the server cut at its limit: the host runs it again with `order` (column field, direction; null, null for the document's order). */
@@ -60,7 +63,7 @@ function isEmpty(result: RenderedWidget): boolean {
  * One widget in its tile: a title bar (a metric carries its label instead), the body its type draws from its resolved result, and the three states besides drawn: **loading**, **empty** ("No data."), and
  * **error** (the server's code and words: one failing widget never fails the page). Light and dark by the theme; `density` is chosen from the box (a layout's `widget_options` can pin it).
  */
-export function WidgetView({ id, widget, result, loading = false, box, theme = 'auto', options, parameters = {}, definitions = [], onParameterChange, maximized = false, onMaximize, onHit, asOf, stale = false, canDrill = true, sortable = false, onServerSort }: WidgetViewProps) {
+export function WidgetView({ id, widget, result, loading = false, box, theme = 'auto', options, parameters = {}, definitions = [], onParameterChange, maximized = false, onMaximize, onHit, asOf, stale = false, canDrill = true, canFollow = false, sortable = false, onServerSort }: WidgetViewProps) {
   const resolved = useTheme(theme)
   const density: DensityClass = box ? densityClass(widget.type, box, options?.density) : options?.density === 'compact' ? 's' : 'l'
   const titled = widget.title !== undefined && widget.type !== 'metric' && options?.show_title !== false
@@ -70,7 +73,7 @@ export function WidgetView({ id, widget, result, loading = false, box, theme = '
 
   // pointing: only a widget that says what it does when selected or drilled is pointable
   const on = onSelectOf(widget)
-  const pointable = onHit !== undefined && (on !== null || (canDrill && drillOf(widget) !== null)) && (widget.type === 'chart' || widget.type === 'table' || widget.type === 'matrix')
+  const pointable = onHit !== undefined && (on !== null || (canDrill && drillOf(widget) !== null) || (canFollow && clickOf(widget) !== null)) && (widget.type === 'chart' || widget.type === 'table' || widget.type === 'matrix')
   const chosen = selectedOf(widget, parameters)
   const clear = () => {
     if (!on) return
@@ -94,7 +97,7 @@ export function WidgetView({ id, widget, result, loading = false, box, theme = '
     if (widget.type === 'text') content = <TextBlock widget={widget} parameters={parameters} />
     else if (widget.type === 'control') content = control()
     else if (widget.type === 'embed') content = <EmbedBlock widget={widget} />
-    else if (widget.type === 'custom') content = <EmptyTile message={`Drawn by the app that owns it (${widget.component}).`} />
+    else if (widget.type === 'custom') content = loading ? <LoadingTile what={widget.title ?? widget.component} /> : <EmptyTile message={`Drawn by the app that owns it (${widget.component}).`} />
     else content = loading ? <LoadingTile what={widget.title} /> : <EmptyTile message="Nothing to show yet." />
   }
   else if (result.type === 'error') content = <ErrorTile code={result.code} message={result.message} path={result.path} suggestions={result.suggestions} />
@@ -110,6 +113,7 @@ export function WidgetView({ id, widget, result, loading = false, box, theme = '
       case 'image': content = <ImageBlock widget={widget} result={result as never} />; break
       case 'control': content = control(result); break
       case 'embed': content = <EmbedBlock widget={widget} result={result as never} />; break
+      case 'custom': content = <CustomWidgetFrame id={id} widget={widget} result={result as RenderedCustom} box={body} />; break
     }
   }
 

@@ -130,6 +130,9 @@ internal sealed partial class ParameterValues
         // an embed's `with` values: `$params.name` reads a parameter
         if (raw["with"] is JsonObject embedWith && raw["url"] is not null)
             foreach (var (_, v) in embedWith) if (v is JsonValue ev && ev.TryGetValue<string>(out var et) && et.StartsWith("$params.", StringComparison.Ordinal)) used.Add(et[8..]);
+        // a custom widget's `params`: `$params.name` reads a document parameter
+        if (raw["component"] is not null && raw["params"] is JsonObject customParams)
+            foreach (var (_, v) in customParams) if (v is JsonValue cv && cv.TryGetValue<string>(out var ct) && ct.StartsWith("$params.", StringComparison.Ordinal)) used.Add(ct[8..]);
         if (raw["query"] is JsonObject query)
         {
             var map = query["params"] as JsonObject;

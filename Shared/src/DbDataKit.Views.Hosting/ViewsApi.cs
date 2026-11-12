@@ -385,8 +385,12 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
             if (prepared.Refusal is not null) return prepared.Refusal;
             var p = prepared.Page!;
             var asOf = p.Rendered["as_of"]?.GetValue<string>();
-            var page = PrintPages.Html(view, p.Layout, p.Paper, p.Rendered, p.Parameters, who.Caller.Id, exporter!.Fonts, "");
-            var job = new PrintJob(view.Document.Title, page, pageAssets!,
+            // custom widgets (DBR32): the app files that draw them are served to the page from the exporter's own origin
+            var jobAssets = new Dictionary<string, PrintAsset>(pageAssets!, StringComparer.Ordinal);
+            var components = ((p.Rendered["widgets"] as JsonObject)?.Select(w => w.Value as JsonObject).Where(n => n?["type"]?.GetValue<string>() == "custom").Select(n => n!["component"]!.GetValue<string>()).ToList()) ?? [];
+            var frames = options.CustomApps is { } customApps && components.Count > 0 ? CustomViewPrint.Frames(components, customApps, jobAssets) : null;
+            var page = PrintPages.Html(view, p.Layout, p.Paper, p.Rendered, p.Parameters, who.Caller.Id, exporter!.Fonts, "", frames);
+            var job = new PrintJob(view.Document.Title, page, jobAssets,
                 new PdfLayout(p.Paper.WidthMm, p.Paper.HeightMm, p.Paper.Margins,
                     PrintPages.RunningTemplate(p.Paper.Header, p.Paper, view.Document.Title, asOf, who.Caller.Id, p.Parameters),
                     PrintPages.RunningTemplate(p.Paper.Footer, p.Paper, view.Document.Title, asOf, who.Caller.Id, p.Parameters), PreferCssPage: true));
@@ -663,7 +667,7 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
         return new ResolverOptions
         {
             MaxWidgets = b.MaxWidgets, MaxRows = b.MaxRows, MaxParallelism = b.MaxParallelism, WidgetTimeout = b.WidgetTimeout, Time = options.Time, MaxImageBytes = b.MaxImageBytes,
-            ModelSourcePrefix = b.ModelSourcePrefix, FrameOrigins = b.FrameOrigins, Cache = cached ? cache : null,
+            ModelSourcePrefix = b.ModelSourcePrefix, FrameOrigins = b.FrameOrigins, Cache = cached ? cache : null, CustomViews = options.CustomApps is { } apps ? apps.Find : b.CustomViews,
             OnUnexpected = (id, e) =>
             {
                 b.OnUnexpected?.Invoke(id, e);

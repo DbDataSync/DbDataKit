@@ -16,7 +16,7 @@ namespace DbDataKit.Views;
 /// the assistant's session's, DBR12 and plan 16). A filter on a parameter the viewer left unset is dropped; a required parameter with no value is an error entry of the widgets that use it.
 /// </para>
 /// </summary>
-public sealed class WidgetResolver
+public sealed partial class WidgetResolver
 {
     private readonly IServingQueries queries;
     private readonly IServingEntities? entities;
@@ -103,8 +103,8 @@ public sealed class WidgetResolver
                 case "embed":
                     return (Embed(widget, values), null);
                 case "custom":
-                    // code of an app: only the app's own host can draw it, and this module has no app (DBR31)
-                    throw new WidgetProblem(ViewsCodes.ReservedWidget, "A custom widget is drawn by the app that owns it; this host has no app to draw it.");
+                    // code of an app: the host draws it in a frame; what this resolver gives it is the rows of the queries the app's manifest declares for it, run as the viewer (DBR31)
+                    return (await CustomAsync(context, widget, values, linked.Token).WaitAsync(linked.Token).ConfigureAwait(false), null);
                 case "control":
                     // a control is how a required parameter gets its value, so it never fails for the lack of one
                     return await ControlAsync(context, document, widget, linked.Token).WaitAsync(linked.Token).ConfigureAwait(false);

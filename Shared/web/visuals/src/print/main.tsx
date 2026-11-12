@@ -1,10 +1,13 @@
 import { createRoot } from 'react-dom/client'
 import { DashboardView } from '../dashboard/DashboardView'
 import type { ViewsClient } from '../client/types'
+import type { CustomViewsHost } from '../custom/CustomWidgetFrame'
+import type { FrameState } from '../custom/controller'
 import type { ViewKind } from '../views/document'
 import type { ParameterValues, ViewsDoc } from '../views/model'
 import type { RenderedWidgets } from '../views/rendered'
 import './print.css'
+import { customProblem } from './custom'
 import { whenDrawn } from './ready'
 
 /**
@@ -22,6 +25,8 @@ interface PrintPayload {
   paper: { width_mm: number; height_mm: number; margins_mm: { top: number; right: number; bottom: number; left: number } }
   document: ViewsDoc
   rendered: RenderedWidgets
+  /** The app files that draw custom widgets (DBR32): each component's page, relative to this page's origin; the app's files are served from the same one-shot origin. */
+  custom?: { frames: Record<string, string> }
 }
 
 declare global {
@@ -54,11 +59,25 @@ async function main() {
     height: Math.floor(px(paper.height_mm - paper.margins_mm.top - paper.margins_mm.bottom)),
   }
   const parameters = payload.parameters && Object.keys(payload.parameters).length > 0 ? payload.parameters : undefined
+
+  // custom widgets (DBR32): the code of the app draws them in frames loaded from the app's own files, given the rows embedded in this page; the page is drawn when every frame is ready, and a frame that failed or whose content is taller than a page fails the export
+  const frames = payload.custom?.frames ?? {}
+  const customIds = Object.keys(rendered.widgets).filter((id) => payload.document.widgets[id]?.type === 'custom')
+  const states: Record<string, FrameState> = {}
+  const sizes: Record<string, number> = {}
+  const customViews: CustomViewsHost | undefined = customIds.length === 0 ? undefined : {
+    frameSrc: (component) => frames[component] ?? null,
+    onFrameState: (widget, state) => { states[widget] = state },
+    onFrameSize: (widget, height) => { sizes[widget] = height },
+  }
+
   const root = document.getElementById('root')!
   createRoot(root).render(
-    <DashboardView kind={payload.kind} name={payload.name} document={payload.document} client={client} layout={payload.layout} medium="print" box={box} theme="light" parameters={parameters} viewer={payload.viewer ?? undefined} />,
+    <DashboardView kind={payload.kind} name={payload.name} document={payload.document} client={client} layout={payload.layout} medium="print" box={box} theme="light" parameters={parameters} viewer={payload.viewer ?? undefined} customViews={customViews} />,
   )
   await whenDrawn(root, { widgets: Object.keys(rendered.widgets).length })
+  const problem = customProblem(payload.document, rendered, customIds, states, sizes, box.height)
+  if (problem) return fail(problem)
   window.__reportReady = true
 }
 

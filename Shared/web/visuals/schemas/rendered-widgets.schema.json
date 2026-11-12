@@ -24,7 +24,7 @@
     "widget": {
       "oneOf": [
         { "$ref": "#/$defs/metric" }, { "$ref": "#/$defs/table" }, { "$ref": "#/$defs/matrix" }, { "$ref": "#/$defs/chart" },
-        { "$ref": "#/$defs/text" }, { "$ref": "#/$defs/image" }, { "$ref": "#/$defs/control" }, { "$ref": "#/$defs/embed" }, { "$ref": "#/$defs/error" }
+        { "$ref": "#/$defs/text" }, { "$ref": "#/$defs/image" }, { "$ref": "#/$defs/control" }, { "$ref": "#/$defs/embed" }, { "$ref": "#/$defs/custom" }, { "$ref": "#/$defs/error" }
       ]
     },
     "metric": {
@@ -182,6 +182,26 @@
         "origin": { "type": ["string", "null"], "description": "Scheme, host and port of the address." },
         "framed": { "type": "boolean", "description": "True when the host approves the origin to be framed; otherwise the widget is a link." },
         "link_text": { "type": "string" }
+      }
+    },
+    "custom": {
+      "type": "object",
+      "required": ["type", "component", "data"],
+      "additionalProperties": false,
+      "description": "A custom widget (DBR31): the rows of the queries its manifest entry declares, run as the viewer, by the query's name. The code draws them in a frame; it never fetches.",
+      "properties": {
+        "type": { "const": "custom" },
+        "component": { "type": "string", "description": "<app>/<Export>, as the document names it." },
+        "params": { "type": "object", "description": "The values the widget's parameters have now (a literal or a document parameter's value); those with no value are left out." },
+        "data": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["columns", "rows"],
+            "additionalProperties": false,
+            "properties": { "columns": { "type": "array", "items": { "type": "string" } }, "rows": { "type": "array", "items": { "type": "object" } } }
+          }
+        }
       }
     },
     "control": {

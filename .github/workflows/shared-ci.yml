@@ -112,12 +112,14 @@ jobs:
         run: |
           npm ci --workspace @dbdatakit/visuals --include-workspace-root --ignore-scripts
           npm run build:print --workspace @dbdatakit/visuals
+          npm run build:fixture-app --workspace @dbdatakit/visuals
       - name: Point the tests at them
         shell: bash
         run: |
           rid=linux-x64; [ "$RUNNER_OS" = "Windows" ] && rid=win-x64
           echo "DBDATAKIT_TEST_CHROMIUM=$GITHUB_WORKSPACE/.chromium/$rid" >> "$GITHUB_ENV"
           echo "DBDATAKIT_TEST_PRINT_ASSETS=$GITHUB_WORKSPACE/Shared/web/visuals/dist/print" >> "$GITHUB_ENV"
+          echo "DBDATAKIT_TEST_FIXTURE_APP=$GITHUB_WORKSPACE/Shared/web/visuals/dist/fixture-app" >> "$GITHUB_ENV"
           echo "DBDATAKIT_TEST_REQUIRE_CHROMIUM=true" >> "$GITHUB_ENV"
           # the runner's kernel may forbid the user namespaces Chromium's sandbox needs
           [ "$RUNNER_OS" = "Linux" ] && echo "DBDATAKIT_TEST_NOSANDBOX=true" >> "$GITHUB_ENV" || true
@@ -126,7 +128,7 @@ jobs:
         run: dotnet test --project tests/DbDataKit.Views.Export.Tests
       - name: Module export tests
         working-directory: Shared
-        run: dotnet test --project tests/DbDataKit.Views.Hosting.Tests --filter-class "*ViewsExportTests"
+        run: dotnet test --project tests/DbDataKit.Views.Hosting.Tests --filter-class "*ViewsExportTests" --filter-class "*CustomViewExportTests"
 
   # The semantic layer's conformance fixtures (plan 19, J02) on the shared engines, as a check of their own: the engine seeds a scratch
   # database on SQL Server and PostgreSQL and runs every fixture through it. The tests also run in the job above whenever the engines

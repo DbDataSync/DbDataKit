@@ -66,7 +66,7 @@ public sealed class SubscriptionTests
         static string Refused(string json) => Assert.Throws<SubscriptionSpecException>(() => SubscriptionSpec.Read(JsonNode.Parse(json)!.AsObject(), "request")).Message;
         const string Ok = "\"name\": \"n\", \"kind\": \"report\", \"view\": \"v\", \"channel\": \"mail\", \"schedule\": {\"cron\": \"0 7 * * *\"}";
         Assert.Contains("a subscription has no key `when`", Refused("{" + Ok + ", \"when\": \"now\"}"));
-        Assert.Contains("kind is `dashboard` or `report`, not `chart`", Refused("""{"name": "n", "kind": "chart", "view": "v", "channel": "mail", "schedule": {"cron": "0 7 * * *"}}"""));
+        Assert.Contains("kind is `dashboard`, `report` or `page` (a custom page of an app), not `chart`", Refused("""{"name": "n", "kind": "chart", "view": "v", "channel": "mail", "schedule": {"cron": "0 7 * * *"}}"""));
         Assert.Contains("format `csv` is one widget's rows: name it with `widget`", Refused("{" + Ok + ", \"format\": \"csv\"}"));
         Assert.Contains("`widget` is for `csv` and `xlsx`", Refused("{" + Ok + ", \"widget\": \"w\"}"));
         Assert.Contains("format is `pdf`, `csv` or `xlsx`, not `docx`", Refused("{" + Ok + ", \"format\": \"docx\"}"));
