@@ -584,7 +584,7 @@ public static class PackageManifestReader
                 var at = $"{path}.connections[{i}]";
                 positions[at] = list.Items[i];
                 if (Map(list.Items[i], at, "{name: source, kind: sqlserver}") is not { } map) continue;
-                Keys(map, at, "name", "kind", "env");
+                Keys(map, at, "name", "kind", "env", "access");
                 var name = Text(map, "name", at, true);
                 var kind = Text(map, "kind", at, true);
                 var env = Text(map, "env", at, false);
@@ -594,7 +594,14 @@ public static class PackageManifestReader
                     env = null;
                 }
 
-                if (name is not null && kind is not null) found.Add(new ConnectionSlot(name, kind, env));
+                var access = SlotAccess.Write;
+                if (Text(map, "access", at, false) is { } accessText && !DefinitionSlot.TryParseAccess(accessText, out access))
+                {
+                    Bad(Join(at, "access"), map.Get("access")!, $"`{accessText}` is not an access. The accesses: read, write.", "Write `access: read` for a connection the task only reads (a test channel then reads production's), or leave it out: a connection is written to unless it says read.");
+                    access = SlotAccess.Write;
+                }
+
+                if (name is not null && kind is not null) found.Add(new ConnectionSlot(name, kind, env, access));
             }
 
             return found;

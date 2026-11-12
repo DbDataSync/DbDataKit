@@ -659,14 +659,16 @@ public sealed partial class RunnerPublishing
         var rows = new JsonArray();
         foreach (var head in heads)
         {
-            var found = new SortedDictionary<string, (string Kind, SortedSet<string> Tasks, SortedSet<int> Versions)>(StringComparer.Ordinal);
+            var found = new SortedDictionary<string, (string Kind, bool Read, SortedSet<string> Tasks, SortedSet<int> Versions)>(StringComparer.Ordinal);
             foreach (var version in new[] { head.Active, head.Staged }.OfType<int>().Distinct())
             {
                 if (_store.Get(Kind, name, version) is not { } stored || PackageManifestReader.Load(stored.Content, $"{name}@{version}") is not { Ok: true, Manifest: { } manifest }) continue;
                 foreach (var task in manifest.Tasks)
                     foreach (var slot in task.Connections)
                     {
-                        if (!found.TryGetValue(slot.Name, out var entry)) found[slot.Name] = entry = (slot.Kind, [], []);
+                        if (!found.TryGetValue(slot.Name, out var entry)) found[slot.Name] = entry = (slot.Kind, true, [], []);
+                        // read only when every task of every version that declares the slot says so (the same rule as the kind's slots)
+                        if (slot.Access != SlotAccess.Read && entry.Read) found[slot.Name] = entry = entry with { Read = false };
                         entry.Tasks.Add(task.Name);
                         entry.Versions.Add(version);
                     }
@@ -675,7 +677,7 @@ public sealed partial class RunnerPublishing
             foreach (var (slot, entry) in found)
                 rows.Add(new JsonObject
                 {
-                    ["channel"] = head.Channel, ["slot"] = slot, ["kind"] = entry.Kind,
+                    ["channel"] = head.Channel, ["slot"] = slot, ["kind"] = entry.Kind, ["access"] = entry.Read ? "read" : "write",
                     ["tasks"] = new JsonArray([.. entry.Tasks.Select(t => (JsonNode)JsonValue.Create(t)!)]),
                     ["versions"] = new JsonArray([.. entry.Versions.Select(v => (JsonNode)JsonValue.Create(v)!)]),
                 });

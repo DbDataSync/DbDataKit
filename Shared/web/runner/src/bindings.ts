@@ -8,6 +8,10 @@ export interface SlotRow {
   tasks: string[]
   versions: number[]
   boundTo: string | null
+  /** The slot's access as the manifests declare it; a binding with no declaring version is write. */
+  access: 'read' | 'write'
+  /** The connection production binds, when this channel binds nothing and the slot is a read slot: what it reads (inherited, plan 21 CH03); null otherwise. */
+  inheritedFrom: string | null
   /** The revision of the binding, which the runner checks when one slot is changed. */
   revision: number | null
   declared: boolean
@@ -16,20 +20,26 @@ export interface SlotRow {
 /** What the person typed, by slot: only the slots they touched. */
 export type BindingEdits = Record<string, string>
 
+/** Production's binding of a read slot this channel leaves unbound (plan 21 CH03); null for a write slot, for production itself, and when production binds nothing either. */
+function inheritedRead(detail: Pick<DefinitionDetail, 'bindings'>, channel: string, s: SlotRequirement): string | null {
+  if (s.access !== 'read' || channel === 'prod' || detail.bindings.some((b) => b.channel === channel && b.slot === s.slot)) return null
+  return detail.bindings.find((b) => b.channel === 'prod' && b.slot === s.slot)?.bound_to ?? null
+}
+
 /** The slots of a channel: every slot a served or staged version declares, with what it is bound to, then the bindings no version declares (kept, shown last). */
 export function slotRows(detail: Pick<DefinitionDetail, 'slots' | 'bindings'>, channel: string): SlotRow[] {
   const declared: SlotRequirement[] = (detail.slots ?? []).filter((s) => s.channel === channel)
   const bound = new Map(detail.bindings.filter((b) => b.channel === channel).map((b) => [b.slot, b]))
-  const rows: SlotRow[] = declared.map((s) => ({ slot: s.slot, kind: s.kind, tasks: s.tasks, versions: s.versions, boundTo: bound.get(s.slot)?.bound_to ?? null, revision: bound.get(s.slot)?.revision ?? null, declared: true }))
+  const rows: SlotRow[] = declared.map((s) => ({ slot: s.slot, kind: s.kind, tasks: s.tasks, versions: s.versions, boundTo: bound.get(s.slot)?.bound_to ?? null, access: s.access ?? 'write', inheritedFrom: inheritedRead(detail, channel, s), revision: bound.get(s.slot)?.revision ?? null, declared: true }))
   const known = new Set(declared.map((s) => s.slot))
   for (const [slot, b] of [...bound].sort(([a], [z]) => a.localeCompare(z))) {
-    if (!known.has(slot)) rows.push({ slot, kind: null, tasks: [], versions: [], boundTo: b.bound_to, revision: b.revision, declared: false })
+    if (!known.has(slot)) rows.push({ slot, kind: null, tasks: [], versions: [], boundTo: b.bound_to, access: 'write', inheritedFrom: null, revision: b.revision, declared: false })
   }
   return rows
 }
 
 /** The declared slots with nothing bound: a version that declares one cannot run in the channel until it is bound. */
-export const unboundSlots = (rows: SlotRow[]) => rows.filter((r) => r.declared && r.boundTo === null).map((r) => r.slot)
+export const unboundSlots = (rows: SlotRow[]) => rows.filter((r) => r.declared && r.boundTo === null && r.inheritedFrom === null).map((r) => r.slot)
 
 /** The slots whose typed value differs from what is bound now (text is trimmed; a slot typed back to its current value is not a change). */
 export function changedSlots(rows: SlotRow[], edits: BindingEdits): { slot: string; value: string; revision: number | null }[] {
