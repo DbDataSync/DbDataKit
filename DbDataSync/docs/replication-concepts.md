@@ -379,6 +379,17 @@ target's *current* rows rather than its full history. It's operator-triggered on
 a schedule today — and its result is written as a parquet file rather than as rows anywhere, indexed so
 it can be found and paged back through the API.
 
+## Where the tracking state lives
+
+A replication's positions and the record of what each unit moved are its **tracking state**. The optional `tracking:` section of `task.yaml` says where it is kept: `mode: state` (the runner's
+state only), `mode: target` (a state table on the target, written in the unit's transaction) or `mode: both` with `primary: target|state`. A file without the section gets the suite's default,
+`both` with the target primary.
+
+Today no writer keeps a state table on the target, so every replication runs in `state` mode: the default resolves to it, the Overview tab's **Tracking** card and
+`GET /api/replications/{name}/tracking` say which mode applies, which was asked for and why they differ, and a file that asks for `target` or `both` is refused at save naming the replication and the
+reason (a clear refusal instead of a setting that is accepted and ignored). A Flight SQL or DuckDB target can never hold the table and will stay in `state` mode. Plan 28c E17 builds the writers (SQL Server,
+PostgreSQL, MySQL/MariaDB, Oracle); the setting, its words and the status are in place so that a file written now keeps its meaning.
+
 ## Next: Drivers and libraries
 
 Which readers, writers, and staging providers are actually offered depends on the mapping's driver — see
