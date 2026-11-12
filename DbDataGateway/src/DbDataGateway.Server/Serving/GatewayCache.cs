@@ -16,10 +16,10 @@ namespace DbDataGateway.Server.Serving;
 /// </summary>
 public sealed class GatewayCache
 {
-    public GatewayCache(DataSourceCatalog sources, Func<GatewayOptions> options, Func<SemanticModels> models, IServingCacheEpochs? epochs = null, TimeProvider? time = null, MemoryServingCacheOptions? sizes = null)
+    public GatewayCache(DataSourceCatalog sources, Func<GatewayOptions> options, Func<SemanticModels> models, IServingCacheEpochs? epochs = null, TimeProvider? time = null, MemoryServingCacheOptions? sizes = null, GatewayAccess? access = null)
     {
         Store = new MemoryServingCache(sizes, time);
-        Policy = new GatewayCachePolicy(sources, options, models);
+        Policy = new GatewayCachePolicy(sources, options, models, access);
         Invalidator = new ServingCacheInvalidator(Store, dataset => Resolve?.Invoke(dataset), epochs, time);
     }
 
@@ -38,7 +38,7 @@ public sealed class GatewayCache
 /// (<see cref="ServingCacheable"/>); it is no preview; every data source it reads answers with the Gateway's own login (a pass-through source answers with the caller's database login and is never shared, a writable one can change under a cache
 /// that only hears of changes by message) and the <em>caller may use each of them</em>, so an entry another caller made can never be a way round a grant (the inner service would have refused this caller, and the cache asks the same question first).
 /// </summary>
-public sealed class GatewayCachePolicy(DataSourceCatalog sources, Func<GatewayOptions> options, Func<SemanticModels> models) : IServingCachePolicy, IServingCacheSettings
+public sealed class GatewayCachePolicy(DataSourceCatalog sources, Func<GatewayOptions> options, Func<SemanticModels> models, GatewayAccess? access = null) : IServingCachePolicy, IServingCacheSettings
 {
     public const string DataSourcePrefix = "data-source/";
     public const string ModelPrefix = "semantic-model/";
@@ -54,8 +54,21 @@ public sealed class GatewayCachePolicy(DataSourceCatalog sources, Func<GatewayOp
             if (!setting.Enabled || setting.Note is not null) return null;
             foreach (var used in UsedBy(model))
                 if (!Usable(principal, used)) return null;
-            // the caller's column rules are part of the key (plan 22a GP13): a caller who sees a column masked never shares an entry with one who sees it as it is
-            return new ServingCachePlan(setting.Ttl, setting.Scope, setting.Version, setting.Datasets, SemanticColumnAccess.Fingerprint(model, caller));
+            // a model with no rules is read as it always was
+            if (model.Catalog.Access is not { IsEmpty: false }) return new ServingCachePlan(setting.Ttl, setting.Scope, setting.Version, setting.Datasets);
+            if (!GatewayAccess.HasRowRules(model))
+            {
+                // column rules only (plan 22a GP13): keyed by what the caller sees; the resolver's fingerprint when the host has it (one value for both kinds of rule), else the column treatments alone
+                var columns = access is null ? SemanticColumnAccess.Fingerprint(model, caller) : access.DecisionFor(caller, model).Fingerprint;
+                return new ServingCachePlan(setting.Ttl, setting.Scope, setting.Version, setting.Datasets, columns);
+            }
+
+            // a model with row rules (plan 22a GP11): never cached without the host that resolves them, never for a caller one of whose rules tables is expired (the request goes on and is refused), never in scope shared, and keyed by the caller's
+            // resolved rules, row and column (the resolver's fingerprint, GP10)
+            if (access is null) return null;
+            var decision = access.DecisionFor(caller, model);
+            if (decision.AnyRefusal is not null) return null;
+            return new ServingCachePlan(setting.Ttl, setting.Scope == ServingCacheScope.Shared ? ServingCacheScope.Caller : setting.Scope, setting.Version, setting.Datasets, decision.Fingerprint);
         }
 
         var name = request.Source.Trim();

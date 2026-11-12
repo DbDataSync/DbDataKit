@@ -16,3 +16,7 @@ The write path of master data models (Z04, plan 15 section 5), on the tables `Db
 `RowJson` is the JSON of rows, changes and refusals on the wire, and `ChangeApproval` says whose writes wait and who decides: a DbDataStore server and the serving layer's `store` module (plan 20 O08) both use them, so a client of either is written once.
 
 **Drafts** (plan 21 CH01): `new ModelWriter(..., draft: "<id>")` works in a draft layer, the writes of a preview or channel kept apart from the data. A write is checked by every rule on top of the draft and kept in the table `_draft` (made on first use, `DraftStorage`; never in the entity tables or `_audit`). Reads replay the draft in a transaction that is rolled back, so they show the draft on top of the data and nothing is touched; a write the data moved away from is marked `applies: false` with its reason and left out. `DiscardDraftAsync`, `DraftsAsync`, `DraftEntriesAsync`; submitting (the server's part) proposes every write as one change request and removes the draft. Over HTTP: `?draft=<id>` on rows and changes, `GET/DELETE /drafts/{id}`, `POST /drafts/{id}/submit`, on a DbDataStore server and on the Gateway's store module.
+
+## Row rules limit reads only
+
+A model with an `access` section (plan 22a) has its row rules applied to reads. Writes keep the Store's own roles and approvals: a person may still change a row they cannot read. The publish answer carries this as a warning.

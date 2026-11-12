@@ -19,7 +19,7 @@ namespace DbDataGateway.Server.Management;
 /// </list>
 /// A dataset the Gateway cannot map to what it serves (the lineage graph does not know it) clears the whole cache: a cold cache is never wrong, a stale one can be.
 /// </summary>
-public sealed class GatewayCacheManagement(GatewayCache cache, Func<LineageGraph?> graph, string instanceId, IAuditLog? audit = null, ServingCacheEpochStore? epochs = null, TimeProvider? time = null)
+public sealed class GatewayCacheManagement(GatewayCache cache, Func<LineageGraph?> graph, string instanceId, IAuditLog? audit = null, ServingCacheEpochStore? epochs = null, TimeProvider? time = null, GatewayAccess? access = null)
 {
     public const string Route = GatewayManagement.Prefix + "/cache";
 
@@ -31,11 +31,13 @@ public sealed class GatewayCacheManagement(GatewayCache cache, Func<LineageGraph
     public IReadOnlyList<string>? Resolve(string dataset)
     {
         LineageGraph? built;
+        // the models whose access rules read the table: a rules table is read by no dimension or measure, so the graph does not reach them from it (plan 22a GP11)
+        var rules = access?.DependentsOf(dataset) ?? [];
         try { built = graph(); }
         catch (LineageGraphException) { return null; }
-        if (built?.Node(dataset) is not { } start) return null;
+        if (built?.Node(dataset) is not { } start) return rules.Count > 0 ? rules : null;
         var reached = built.Impact(dataset).Reached.Select(r => r.Node).Prepend(start).Where(n => n.Kind == NodeKind.Serving);
-        return [.. reached.Select(n => CacheNameOf(n.Id)).Where(n => n is not null).Select(n => n!).Distinct(StringComparer.OrdinalIgnoreCase)];
+        return [.. reached.Select(n => CacheNameOf(n.Id)).Where(n => n is not null).Select(n => n!).Concat(rules).Distinct(StringComparer.OrdinalIgnoreCase)];
     }
 
     /// <summary><c>suite://&lt;instance&gt;/data-source/&lt;name&gt;</c> is the cache dataset <c>data-source/&lt;name&gt;</c> (and the same for a semantic model); any other node is not one the cache keys entries by.</summary>
@@ -72,6 +74,7 @@ public sealed class GatewayCacheManagement(GatewayCache cache, Func<LineageGraph
     private ManagementResult Changed(string? body, ManagementCaller caller)
     {
         if (!DataChangedMessage.TryRead(body, _time.GetUtcNow(), out var notice, out var problem)) return ManagementResult.Problem(400, problem);
+        access?.Changed(notice);   // the rules table's age starts again before the entries that used it go
         var outcome = cache.Invalidator.Apply(notice);
         audit?.Append(caller.Audit("cache changed", notice.Dataset, outcome.Ignored ? "not served here, nothing cleared" : outcome.Everything ? $"everything cleared ({outcome.Removed} entries)" : $"{outcome.Removed} entries cleared", _time.GetUtcNow()));
         return ManagementResult.Ok(new JsonObject
