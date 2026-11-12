@@ -113,7 +113,7 @@ The fixed releases are `dbdatakit-full/dist`, `dbdatakit-full/dist-beta` and `db
 2. each member's `service install` (registered stopped, the same as the MSI), in the order of `dist/suite.json`; the services are registered from Scoop's `current` folder, so an update needs no new registration;
 3. the console is started and its health check awaited;
 4. for each other member: `<program> server pair --max-role <roles>` prints a single-use code, the member's service is started, `dbdatakit instance add <default address> --code <code> --name <product>` uses the code, and nothing else sees it: it is read into a variable, never written to a file, the log or the notes, and scrubbed from an error message. This is not auto-approval: the person who runs `scoop install -g` is the elevated administrator who would have typed those commands. A member with no default address (`_MANAGEMENT_ADDRESS` in `dist.py`) is registered and left unpaired;
-5. it says where the console is and where `FIRST-RUN.txt` is (`%ProgramData%\DbDataKit\server`). No state settings are written.
+5. it says where the console is and **prints the setup link** for the first administrator (read from `FIRST-RUN.txt` in `%ProgramData%\DbDataKit\server`, where the console wrote it whole; plan 23a FQ19), and names `dbdatakit setup link` for a new one; a console that has a user already made no link and the script says so. No state settings are written.
 
 It is idempotent: a registered service is not registered again, a member the console already lists (`instance list --offline`) is not paired again, and a service that runs is not started again, so a repeat after a failure converges. A failure at one member is collected, the rest go on, and the install ends with an error naming each member and the reason; the notes of the manifest list the commands by hand for every step.
 
@@ -133,7 +133,7 @@ In an elevated PowerShell, with [Scoop](https://scoop.sh) installed:
 scoop install -g https://github.com/<owner>/DbDataKit/releases/download/dbdatakit-full/dist/dbdatakit-full.json
 ```
 
-That is all: when it returns, every member's service is registered, running and paired with the console, and the console's address and the first-run invitation (`%ProgramData%\DbDataKit\server\FIRST-RUN.txt`) are printed. Open the console, sign in with the invitation and the members' screens are there. The install is idempotent, so running it again after a failure (or `scoop update dbdatakit-full`) finishes what is missing.
+That is all: when it returns, every member's service is registered, running and paired with the console, and the console's address and the setup link for the first administrator are printed (the link is also in `%ProgramData%\DbDataKit\server\FIRST-RUN.txt`; `dbdatakit setup link` makes a new one). Open the link once, register a passkey and the members' screens are there. The install is idempotent, so running it again after a failure (or `scoop update dbdatakit-full`) finishes what is missing.
 
 **What it changes on the machine:**
 
