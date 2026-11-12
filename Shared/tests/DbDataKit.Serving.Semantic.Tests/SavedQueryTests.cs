@@ -115,6 +115,56 @@ public sealed class SavedQueryTests : IDisposable
     }
 
     [Fact]
+    public async Task The_entry_the_console_writes_when_a_saved_query_is_promoted_loads_as_the_models_own_query_and_gives_the_same_rows()
+    {
+        // plan 14a SL19: this is the text of savedQueries.test.ts (promotedEntry), pasted under the model's queries:
+        const string promoted = "queries:\n  promoted_by_region:\n    description: \"Net revenue by region\"\n    sql: |-\n      SELECT customers.region, MEASURE(orders.net_revenue)\n      FROM sales_catalog\n      WHERE date.fiscal_quarter = :quarter GROUP BY ALL LIMIT 100\n    parameters: {\"quarter\":{\"for\":\"date.fiscal_quarter\",\"type\":\"string\",\"default\":\"FY27-Q1\"}}\n";
+        var text = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "conformance", "catalog.yaml")) + "\n" + promoted;
+        var catalog = CatalogLoader.LoadText(text);
+        Assert.Equal("Net revenue by region", catalog.Doc.Queries["promoted_by_region"].Description);
+        Assert.Equal("date.fiscal_quarter", (string)catalog.Doc.Queries["promoted_by_region"].Parameters["quarter"]!["for"]!);
+
+        using var host = new DuckDbHost();
+        var services = new TestServices(host).WithSemantic(new SemanticModels().Add(catalog, new Dictionary<string, string> { ["sqlserver_sales"] = "warehouse" }));
+        async Task<List<string>> Rows(string sql)
+        {
+            var rows = new List<string>();
+            await using var answer = await services.Queries.RunAsync(Alice, new ServingRequest.Sql("semantic:sales_catalog", sql, null));
+            await foreach (var batch in answer.ReadBatchesAsync())
+                for (int r = 0; r < batch.Length; r++)
+                    rows.Add(string.Join("|", Enumerable.Range(0, batch.ColumnCount).Select(c => batch.Column(c) switch
+                    {
+                        Apache.Arrow.StringArray a => a.GetString(r),
+                        Apache.Arrow.DoubleArray a => a.GetValue(r)!.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture),
+                        var other => other.GetType().Name,
+                    })));
+            return rows;
+        }
+        var viaPromoted = await Rows("SELECT * FROM promoted_by_region");
+        var literal = await Rows("SELECT customers.region, MEASURE(orders.net_revenue) FROM sales_catalog WHERE date.fiscal_quarter = 'FY27-Q1' GROUP BY ALL LIMIT 100");
+        Assert.NotEmpty(viaPromoted);
+        Assert.Equal(literal, viaPromoted);
+    }
+
+    [Fact]
+    public async Task A_saved_query_lists_the_columns_and_types_it_answers_without_being_run()
+    {
+        // plan 14a SL08: attributes first, then measures, under the names the answer gives them, with the catalog's logical types
+        var objects = new List<ServingObject>();
+        await foreach (var o in _services.Catalog.DescribeAsync(Alice, [], source: "semantic:sales_catalog")) objects.Add(o);
+
+        foreach (var (name, expected) in new[] { ("revenue_by_region", new[] { "customers_region", "orders_net_revenue", "orders_order_count" }), ("regions_request", ["customers_region", "orders_net_revenue"]) })
+        {
+            var view = Assert.Single(objects, o => o.Kind == ServingObjectKind.View && o.Name == name);
+            var columns = System.Text.Json.Nodes.JsonNode.Parse(view.Properties!["columns"])!.AsArray();
+            Assert.Equal(expected.Order(), columns.Select(c => (string)c!["name"]!).Order());
+            Assert.All(columns, c => Assert.False(string.IsNullOrEmpty((string?)c!["type"])));
+        }
+        var region = System.Text.Json.Nodes.JsonNode.Parse(objects.Single(o => o.Name == "regions_request").Properties!["columns"])!.AsArray().First(c => (string)c!["name"]! == "customers_region");
+        Assert.Equal("string", (string)region!["type"]!);
+    }
+
+    [Fact]
     public void A_catalog_whose_saved_query_does_not_translate_is_refused_naming_the_query()
     {
         var text = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "conformance", "catalog.yaml")) + "\nqueries:\n  broken:\n    sql: SELECT nonsense FROM\n";
