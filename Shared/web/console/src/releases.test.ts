@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { actionsFor, draftBlock, draftBody, emptyItem, itemLine, type ReleaseItemView } from './releases'
+import { actionsFor, draftBlock, draftBody, emptyItem, gatewayKinds, itemLine, productOfKind, serverProductOfKind, type ReleaseItemView } from './releases'
 
 const item = { ...emptyItem, target: 'runner-prod', source: 'runner-test', name: 'orders', version: '4', fromChannel: 'test', toChannel: 'prod' }
 
@@ -17,7 +17,8 @@ describe('the draft', () => {
   it('says what is missing, naming the item', () => {
     expect(draftBlock('', [item])).toBe('Name the release.')
     expect(draftBlock('r', [])).toBe('Add at least one item.')
-    expect(draftBlock('r', [{ ...item, target: '' }])).toBe('Item 1: choose the runner it goes to.')
+    expect(draftBlock('r', [{ ...item, target: '' }])).toBe('Item 1: choose the server it goes to.')
+    expect(draftBlock('r', [{ ...item, kind: 'dashboard', name: ' ' }])).toBe('Item 1: name the definition.')
     expect(draftBlock('r', [item, { ...item, version: '0' }])).toBe('Item 2: the version is a whole number.')
     expect(draftBlock('r', [{ ...item, toChannel: ' ' }])).toBe('Item 1: name both channels.')
     expect(draftBlock('r', [item])).toBeNull()
@@ -25,8 +26,18 @@ describe('the draft', () => {
   it('sends the source only when one is chosen', () => {
     expect(draftBody(' r ', [item, { ...item, source: '' }])).toEqual({
       name: 'r',
-      items: [{ target: 'runner-prod', source: 'runner-test', name: 'orders', version: 4, fromChannel: 'test', toChannel: 'prod' }, { target: 'runner-prod', name: 'orders', version: 4, fromChannel: 'test', toChannel: 'prod' }],
+      items: [{ product: 'runner', kind: 'integration', target: 'runner-prod', source: 'runner-test', name: 'orders', version: 4, fromChannel: 'test', toChannel: 'prod' }, { product: 'runner', kind: 'integration', target: 'runner-prod', name: 'orders', version: 4, fromChannel: 'test', toChannel: 'prod' }],
     })
+  })
+})
+
+describe('the kinds of an item', () => {
+  it('sends a Gateway kind with the gateway product and offers the Gateway servers for it', () => {
+    expect(productOfKind('integration')).toBe('runner')
+    expect(gatewayKinds.every((k) => productOfKind(k) === 'gateway')).toBe(true)
+    expect(serverProductOfKind('integration')).toBe('dbdatarunner')
+    expect(serverProductOfKind('dashboard')).toBe('dbdatagateway')
+    expect(draftBody('r', [{ ...item, kind: 'dashboard', target: 'gateway-prod', source: 'gateway-test', name: 'sales' }]).items[0]).toMatchObject({ product: 'gateway', kind: 'dashboard', target: 'gateway-prod' })
   })
 })
 
@@ -36,5 +47,6 @@ describe('an item in words', () => {
   it('names both servers and the channels', () => {
     expect(itemLine(view, names)).toBe('orders v4 from Test runner to Prod runner: test to prod')
     expect(itemLine({ ...view, source: null }, names)).toBe('orders v4 to Prod runner: test to prod')
+    expect(itemLine({ ...view, product: 'gateway', kind: 'dashboard', name: 'sales' }, names)).toBe('dashboard sales v4 from Test runner to Prod runner: test to prod')
   })
 })

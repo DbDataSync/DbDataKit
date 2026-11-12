@@ -108,6 +108,40 @@ public static class ServerProducts
         new("POST", "api/v1/upgrade", ServerRole.Admin),                                                  // UC09: prepare and apply its own upgrade
     ];
 
+    /// <summary>
+    /// The calls of a Gateway's shared publish API that a console makes when it promotes a definition or a release moves one (plan 21 CH02, plan 30 PB06): each with the role the Gateway itself asks (<c>DefinitionsApi</c>: a viewer reads, a publisher uploads and
+    /// publishes its own, an administrator does the rest). The rest of a Gateway's API is relayed as before (its screens' calls); these rows are the ones the relay judges against what the signed-in person holds before it forwards, and
+    /// <c>GatewayRolesTests</c> pins each row to what a real Gateway answers. <c>{name}</c> is a kind or a definition name.
+    /// </summary>
+    public static readonly IReadOnlyList<RunnerRoute> GatewayRoutes =
+    [
+        new("GET", "api/v1/definitions/{name}", ServerRole.Viewer),
+        new("GET", "api/v1/definitions/{name}/{name}", ServerRole.Viewer),
+        new("GET", "api/v1/definitions/{name}/{name}/versions/{name}", ServerRole.Viewer),                  // what a promotion reads: one version whole
+        new("PUT", "api/v1/definitions/{name}/{name}", ServerRole.Admin, ServerRole.Publisher),             // what a promotion publishes in the target group
+        new("POST", "api/v1/definitions/{name}/{name}/activate", ServerRole.Admin),
+        new("POST", "api/v1/definitions/{name}/{name}/switch", ServerRole.Admin),
+        new("POST", "api/v1/definitions/{name}/{name}/rollback", ServerRole.Admin),
+        new("POST", "api/v1/definitions/{name}/{name}/retire", ServerRole.Admin),
+        new("POST", "api/v1/definitions/{name}/{name}/prune", ServerRole.Admin),
+        new("HEAD", "api/v1/artifacts/{sha}", ServerRole.Viewer, ServerRole.Publisher),                    // does the Gateway have this file
+        new("GET", "api/v1/artifacts/{sha}", ServerRole.Viewer, ServerRole.Publisher),                     // a file by hash, read from one group to send to another
+        new("PUT", "api/v1/artifacts/{sha}", ServerRole.Admin, ServerRole.Publisher),
+        new("PUT", "api/v1/bindings/{name}/{name}/{name}", ServerRole.Admin, ServerRole.Publisher),         // a channel's own bindings, written before a promoted version is published
+        new("DELETE", "api/v1/bindings/{name}/{name}/{name}/{name}", ServerRole.Admin, ServerRole.Publisher),
+    ];
+
+    /// <summary>The row of <see cref="GatewayRoutes"/> that a call matches, or null (a call of a Gateway's screens that is not a publish call).</summary>
+    public static RunnerRoute? GatewayRouteOf(string method, string path)
+    {
+        var route = path.Split('?', 2)[0];
+        return GatewayRoutes.FirstOrDefault(r => r.Method.Equals(method, StringComparison.OrdinalIgnoreCase) && r.Route.IsMatch(route));
+    }
+
+    /// <summary>The row of the product's table that a call matches, for the products whose relay judges a call by the person's roles route by route: a runner's and, for its publish calls, a Gateway's.</summary>
+    public static RunnerRoute? RouteOf(string? product, string method, string path) =>
+        product == Runner ? RunnerRouteOf(method, path) : product == Gateway ? GatewayRouteOf(method, path) : null;
+
     /// <summary>The row of <see cref="RunnerRoutes"/> that a call matches, or null when a console does not relay that call to a runner.</summary>
     public static RunnerRoute? RunnerRouteOf(string method, string path)
     {

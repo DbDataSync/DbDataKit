@@ -33,25 +33,29 @@ internal sealed class FakeRunnerGroup
     /// <summary>When set, a publish is refused with this words and status 409 (an unbound slot, a dependency that is not active).</summary>
     public string? Refuse { get; set; }
 
+    /// <summary>The kinds it was asked for (a Gateway's group serves many; a runner's one), in the order of the calls.</summary>
+    public ConcurrentQueue<string> Kinds { get; } = new();
+
     public static string Sha(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
 
     public void Map(WebApplication server, PairingCodes codes, PairedClientsFile clients)
     {
         IResult Needs(HttpContext c, ServerRole role, Func<IResult> then)
         {
+            if (c.Request.RouteValues["kind"] is string asked) Kinds.Enqueue(asked);
             Calls.Enqueue($"{c.Request.Method} {c.Request.Path.Value!["/api/v1/".Length..]} by {c.ManagementToken().SubjectName}");
             return ManagementAuthorization.Authorize(c.ManagementToken(), role).Allowed ? then() : Results.Json(new { error = $"This needs the {role.ToString().ToLowerInvariant()} role." }, statusCode: 403);
         }
 
-        server.MapGet("/api/v1/definitions/integration/{name}", (HttpContext c, string name) => Needs(c, ServerRole.Viewer, () => Results.Json(new
+        server.MapGet("/api/v1/definitions/{kind}/{name}", (HttpContext c, string kind, string name) => Needs(c, ServerRole.Viewer, () => Results.Json(new
         {
             name, channels = Active.Select(a => new { channel = a.Key, active = a.Value, staged = (int?)null }),
         })));
-        server.MapGet("/api/v1/definitions/integration/{name}/versions/{n:int}", (HttpContext c, string name, int n) => Needs(c, ServerRole.Viewer, () =>
+        server.MapGet("/api/v1/definitions/{kind}/{name}/versions/{n:int}", (HttpContext c, string kind, string name, int n) => Needs(c, ServerRole.Viewer, () =>
             Versions.TryGetValue(n, out var v)
                 ? Results.Json(new
                 {
-                    kind = "integration", name, version = n, format = 1, manifest = v.Manifest, signature = v.Signature, depends_on = Array.Empty<string>(),
+                    kind, name, version = n, format = 1, manifest = v.Manifest, signature = v.Signature, depends_on = Array.Empty<string>(),
                     artifacts = v.Files.Select(f => new { path = f.Path, sha256 = Sha(f.Bytes), size = f.Bytes.Length, media_type = "application/octet-stream" }),
                 })
                 : Results.Json(new { error = $"There is no version {n}." }, statusCode: 404)));
@@ -70,12 +74,12 @@ internal sealed class FakeRunnerGroup
                 return Results.Json(new { sha256 = sha, size = body.Length, already_stored = false });
             });
         });
-        server.MapPut("/api/v1/bindings/{channel}/integration/{name}", async (HttpContext c, string channel, string name) =>
+        server.MapPut("/api/v1/bindings/{channel}/{kind}/{name}", async (HttpContext c, string channel, string kind, string name) =>
         {
             var body = JsonNode.Parse(await new StreamReader(c.Request.Body).ReadToEndAsync())!.AsObject();
             return Needs(c, ServerRole.Admin, () => { Bindings[channel] = body; return Results.Json(new { name, channel }); });
         });
-        server.MapPut("/api/v1/definitions/integration/{name}", async (HttpContext c, string name) =>
+        server.MapPut("/api/v1/definitions/{kind}/{name}", async (HttpContext c, string kind, string name) =>
         {
             var body = JsonNode.Parse(await new StreamReader(c.Request.Body).ReadToEndAsync())!.AsObject();
             return Needs(c, ServerRole.Admin, () =>
@@ -86,7 +90,7 @@ internal sealed class FakeRunnerGroup
                 var same = Published.TryGetValue(channel, out var before) && before.Manifest == manifest;
                 var version = same ? before.Version : Published.Count + 1;
                 Published[channel] = (version, manifest, (string?)body["signature"], [.. body["artifacts"]!.AsArray().Select(a => (string)a!["path"]!)]);
-                return Results.Json(new { kind = "integration", name, channel, version, changed = !same, mode = (string?)body["mode"] ?? "stage", signature = (string?)body["signature"] ?? "none", tasks = Array.Empty<string>() });
+                return Results.Json(new { kind, name, channel, version, changed = !same, mode = (string?)body["mode"] ?? "stage", signature = (string?)body["signature"] ?? "none", tasks = Array.Empty<string>() });
             });
         });
     }
