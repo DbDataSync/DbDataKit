@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DbDataKit hello</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script src="config.js"></script>
+  <script src="taskpane.js" defer></script>
+  <style>
+    body { font-family: "Segoe UI", system-ui, sans-serif; margin: 16px; }
+    button { padding: 6px 12px; }
+    #who { margin-top: 12px; font-weight: 600; }
+    #problem { margin-top: 12px; color: #a4262c; }
+  </style>
+</head>
+<body>
+  <h1>DbDataKit hello</h1>
+  <p>Signs you in through the identity home in a dialog and shows who you are.</p>
+  <button id="sign-in" disabled>Sign in</button>
+  <button id="sign-out" hidden>Forget the sign-in</button>
+  <div id="who" data-testid="hello-who"></div>
+  <div id="problem" role="alert"></div>
+</body>
+</html>
