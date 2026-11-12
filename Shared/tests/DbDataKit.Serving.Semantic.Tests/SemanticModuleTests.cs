@@ -27,6 +27,41 @@ public sealed class SemanticModuleTests : IDisposable
 
     public void Dispose() => _host.Dispose();
 
+    /// <summary>Plan 22a GP11 (D2): a model whose catalog has row rules is never served by a host that cannot apply them; with the host's resolver its plan is used.</summary>
+    [Fact]
+    public async Task A_model_with_row_rules_is_refused_on_a_host_that_cannot_apply_them_and_gets_the_plan_of_one_that_can()
+    {
+        const string rulesTable = """
+              - name: region_access
+                x_source: sqlserver_sales
+                source: region_access
+                columns:
+                  - {name: who, datatype: String, expression: {dialects: [{dialect: ANSI_SQL, expression: who}]}}
+                  - {name: region_code, datatype: String, expression: {dialects: [{dialect: ANSI_SQL, expression: region_code}]}}
+            """;
+        var text = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "conformance", "catalog.yaml")).Replace("\ntables:\n", "\ntables:\n" + rulesTable.Replace("\r\n", "\n").TrimStart('\n').TrimEnd() + "\n", StringComparison.Ordinal).TrimEnd()
+            + "\naccess:\n  row:\n    - dataset: dim_customer\n      groups:\n        - id: g\n          rules:\n            - { id: r, effect: include, table: region_access, subject: who, columns: { region: region_code } }\n";
+        var catalog = CatalogLoader.LoadText(text, "sales.catalog.yaml");
+        var models = new SemanticModels().Add(catalog, new Dictionary<string, string> { ["sqlserver_sales"] = "warehouse" });
+        var refused = await Assert.ThrowsAsync<ServingDeniedException>(() => new TestServices(_host).WithSemantic(models).Queries.RunAsync(Alice, new ServingRequest.Semantic("semantic:sales_catalog", Request)));
+        Assert.Contains("cannot apply them", refused.Message);
+        Assert.Empty(_host.Received);   // nothing reached the database
+
+        var asked = new List<string>();
+        models.Access = new Plans(asked);
+        await new TestServices(_host).WithSemantic(models).Queries.RunAsync(Alice, new ServingRequest.Semantic("semantic:sales_catalog", Request));
+        Assert.Equal(["sales_catalog"], asked);
+    }
+
+    private sealed class Plans(List<string> asked) : ISemanticAccess
+    {
+        public RowAccessPlan PlanFor(ServingContext context, SemanticModel model)
+        {
+            asked.Add(model.Name);
+            return new RowAccessPlan();
+        }
+    }
+
     private static async Task<List<string>> RowsAsync(IServingAnswer answer)
     {
         await using var _ = answer;

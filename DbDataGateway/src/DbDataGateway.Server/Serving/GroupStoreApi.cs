@@ -37,6 +37,14 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
         return (served, null);
     }
 
+    /// <summary>
+    /// An entity with row rules (plan 22a GP11, QG2) is not read through this API yet: the filter on the Store's own reads needs the caller's groups, which a <see cref="StoreCaller"/> does not carry, so the read is refused (D2) and never served unfiltered.
+    /// Writes keep the Store's roles and approval (QR6).
+    /// </summary>
+    private static StoreAnswer? RowRulesRefusal(ServedEntityModel served, string entity) =>
+        served.Model.Access?.RowRulesOf(entity) is null ? null
+            : StoreAnswer.Error(403, $"`{entity}` of the model '{served.Model.Name}' has row rules, and this server does not apply them to a read of an entity yet, so the rows are not served (plan 22a GP11).");
+
     /// <summary>The key attributes of an entity of a published model, or the problem (an action's single `key` value needs a one-field key).</summary>
     public (IReadOnlyList<string>? Key, StoreAnswer? Problem) KeyOf(string name, string entity)
     {
@@ -92,6 +100,7 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
         if (Needs(caller, ServerRole.Viewer) is { } denied) return denied;
         var (served, missing) = Served(name, entity);
         if (missing is not null) return missing;
+        if (RowRulesRefusal(served!, entity) is { } ruled) return ruled;
         var key = query.Where(q => q.Key.StartsWith("key.", StringComparison.Ordinal)).ToDictionary(q => q.Key[4..], q => (object?)q.Value);
         return await WithWriter(served!, async writer =>
         {
@@ -114,6 +123,7 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
         if (Needs(caller, ServerRole.Viewer) is { } denied) return denied;
         var (served, missing) = Served(name, entity);
         if (missing is not null) return missing;
+        if (RowRulesRefusal(served!, entity) is { } ruled) return ruled;
         if (!int.TryParse(query.GetValueOrDefault("limit") is { Length: > 0 } l ? l : "100", out var limit) || !int.TryParse(query.GetValueOrDefault("offset") is { Length: > 0 } o ? o : "0", out var offset))
             return StoreAnswer.Error(400, "limit and offset are whole numbers.");
         return await WithWriter(served!, async writer =>

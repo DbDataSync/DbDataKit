@@ -213,7 +213,7 @@ public sealed partial class QisEngine
             var level = cat.Binding(levelAttr, source);
             var date = cat.Binding(cal.Date, source);
             if (level is null || date is null || level.Join != date.Join || level.Join is null) continue;
-            if (!CanReadDimension(def, level, date)) continue;
+            if (!CanReadDimension(source, level, date)) continue;
             var rows = ReadDimension(source, Emit.SqlEmitter.BuildLevelRanges(cat, source, levelAttr, cal.Date), () => Emit.DaxEmitter.BuildLevelRanges(cat, source, levelAttr, cal.Date));
             var members = rows.Select(r => (Member: r["lvl"]!.ToString()!, Start: ParseDate(r["lo"]!.ToString()!), End: ParseDate(r["hi"]!.ToString()!)))
                 .OrderBy(m => m.Start).ToList();

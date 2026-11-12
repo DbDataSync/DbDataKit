@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DbDataKit.Access;
 using DbDataKit.Dialect;
 using DbDataKit.Semantic.Abstractions;
 
@@ -303,6 +304,36 @@ public static class SqlEmitter
         return $"SELECT DISTINCT {table.Alias}.{ba.Column} AS {Catalog.ColName(a)}, {table.Alias}.{bb.Column} AS {Catalog.ColName(b)}\nFROM {table.Table} {table.Alias};";
     }
 
+    /// <summary>
+    /// The row rules of the caller as a condition on a table (plan 22a GP11): each rule is a semi-join to its rules table (<c>EXISTS</c>, so several matching rows of the rules table never multiply the rows) over the caller's names, which travel as parameters,
+    /// and the mapped columns match <c>IS NOT DISTINCT FROM</c> (SQL Server before 2022 has no such operator, so it gets the same test written out). A rule that has no row for the caller is already false in the predicate.
+    /// </summary>
+    private static string AccessSql(TableRowAccess access, string alias, Params p)
+    {
+        var counter = 0;
+        string Render(RowPredicate predicate) => predicate switch
+        {
+            RowPredicate.Always => "(1 = 1)",
+            RowPredicate.Never => "(1 = 0)",
+            RowPredicate.And and => "(" + string.Join(" AND ", and.Items.Select(Render)) + ")",
+            RowPredicate.Or or => "(" + string.Join(" OR ", or.Items.Select(Render)) + ")",
+            RowPredicate.Not not => "(NOT " + Render(not.Item) + ")",
+            RowPredicate.Rule rule => RuleSql(access.Physical(rule.Resolution), alias, p, ++counter),
+            _ => throw new NotSupportedException(predicate.GetType().Name),
+        };
+        return Render(access.Predicate);
+    }
+
+    private static string RuleSql(PhysicalRule rule, string alias, Params p, int number)
+    {
+        var rules = "ra" + number.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var names = string.Join(", ", rule.Names.Select(p.AddText));
+        var tests = rule.Pairs.Select(pair => TSql(p.Dialect)
+            ? $"({alias}.{pair.Column} = {rules}.{pair.RulesColumn} OR ({alias}.{pair.Column} IS NULL AND {rules}.{pair.RulesColumn} IS NULL))"
+            : $"{alias}.{pair.Column} IS NOT DISTINCT FROM {rules}.{pair.RulesColumn}");
+        return $"EXISTS (SELECT 1 FROM {rule.Table} {rules} WHERE {rules}.{rule.SubjectColumn} IN ({names}) AND {string.Join(" AND ", tests)})";
+    }
+
     public static (string Text, List<object?> Parameters) BuildSelect(
         Catalog cat, string source, List<string> attrs, List<string> measures,
         List<Filter> filters, List<(string Member, string Direction)> order, int? limit, ISqlDialect dialect,
@@ -325,6 +356,14 @@ public static class SqlEmitter
             AddJoin(src.Joins[key].Parent);
             usedJoins.Add(key);
         }
+        // a table the caller's rules filter is joined even when the request names none of its columns (the rules apply to the fact rows through it), and a refused one stops the request
+        var baseSource = source;
+        var access = cat.RowAccess;
+        TableRowAccess? FactAccess() => access?.For(baseSource, src.Fact.Table);
+        FactAccess()?.ThrowIfRefused();
+        if (access is not null)
+            foreach (var (key, join) in src.Joins)
+                if (access.For(baseSource, join.Table) is { } joined) { joined.ThrowIfRefused(); AddJoin(key); }
         attrs.ForEach(Need);
         foreach (var f in filters)
             foreach (var m in f.Names().OrderBy(x => x, StringComparer.Ordinal)) Need(m);
@@ -359,8 +398,12 @@ public static class SqlEmitter
             lines.Add(js.LocalDateOf is null ? $"JOIN {js.Table} {js.Alias} ON {js.Condition}"
                 : $"LEFT JOIN {js.Table} {js.Alias} ON {js.Alias}.{js.DateColumn} = {LocalDate(cat, source, js.LocalDateOf, dialect)}");
         }
-        if (filters.Count > 0)
-            lines.Add("WHERE " + string.Join("\n  AND ", filters.Select(f => FilterSql(cat, source, f, p))));
+        var conditions = filters.Select(f => FilterSql(cat, source, f, p)).ToList();
+        if (FactAccess() is { } factRules) conditions.Add(AccessSql(factRules, src.Fact.Alias, p));
+        foreach (var j in usedJoins)
+            if (access?.For(baseSource, src.Joins[j].Table) is { } joinRules) conditions.Add(AccessSql(joinRules, src.Joins[j].Alias, p));
+        if (conditions.Count > 0)
+            lines.Add("WHERE " + string.Join("\n  AND ", conditions));
         if (rollup is not null)
             lines.Add("GROUP BY " + string.Join(", ", attrs.Where(d => !rollup.Contains(d)).Select(d => ColumnExpr(cat, source, d, dialect))
                 .Append($"{(cube ? "CUBE" : "ROLLUP")}({string.Join(", ", rollup.Select(d => ColumnExpr(cat, source, d, dialect)))})")));

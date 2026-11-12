@@ -28,7 +28,7 @@ public sealed partial class QisEngine
 
                 var (pb, cb) = (cat.Binding(parent, source)!, cat.Binding(child, source)!);
                 List<Dictionary<string, object?>> rows;
-                if (pb.Join is not null && pb.Join == cb.Join && CanReadDimension(cat.Doc.Sources[source], pb, cb))
+                if (pb.Join is not null && pb.Join == cb.Join && CanReadDimension(source, pb, cb))
                 {
                     rows = ReadDimension(source, SqlEmitter.BuildPairs(cat, source, parent, child), () => DaxEmitter.BuildPairs(cat, source, parent, child))
                         .Select(r => new Dictionary<string, object?> { ["p"] = r[Catalog.ColName(parent)], ["c"] = r[Catalog.ColName(child)] }).ToList();

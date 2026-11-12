@@ -191,6 +191,13 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | `DBD-CONN-009` ``grants` is a section of format 2`, or a Build connection file refused with `DDB-620` naming `connections/<name>.yaml` | the file says `schema: connection/1` and has `grants` | write `schema: connection/2` (Build's editor does it when it adds the first group and goes back to `connection/1` when the last is removed) |
 | a Gateway refuses a data source file: ``grants` and `extensions.gateway.groups` both say who may use the data source` | the definition names the people in two places | keep `grants`; a hand-made file uses one place or the other, never both |
 
+### Access rules (plan 22a GP11)
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| a semantic request with a filter or a rule on a **PostgreSQL** data source fails with `The database operation failed. [postgres 08P01]` (SQL Server answers) | the semantic module writes PostgreSQL's own `$1` markers and sends the values with names (`@p1`); Npgsql then binds by name and the statement finds no positional parameter | `ParameterBinder` counts the numbered markers (`ParameterMarkers.CountNumbered`) and binds those parameters by position, with no name |
+| a test of a model with `access` rules fails with `The rules table ... cannot be read (ConnectionFailureException)` on PostgreSQL only | the Gateway reads a rules table with its own login and the test data source's connection string had no `SSL Mode=Disable` (the testenv PostgreSQL has no TLS) | add `;SSL Mode=Disable` to the test's data source, as the other Gateway tests on PostgreSQL do |
+
 ### Dashboards and reports (plan 32 goldens)
 
 | Signature | Cause | Fix |
