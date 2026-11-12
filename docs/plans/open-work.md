@@ -14,7 +14,6 @@ Flags: **OWNER** waits for a decision only the owner can take (the decision is n
 
 | Plan | Decision | Blocks |
 | --- | --- | --- |
-| [27](27-knowledge-agents-integrations-work.md) row 61, [27a](27a-knowledge-slices.md) XL01 to XL03 | The Excel add-in: still a proposal | the add-in |
 | [14a](14a-semantic-slices.md) SL25 to SL27 | Ad hoc registrations and the combine in a child process wait until an app or an agent needs them (decided, "not yet"); a request from the owner starts them | nothing else |
 
 Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without a version bump ([26](26-app-publishing.md), 2026-11-11); the other defaults taken by delegation on 2026-11-09 are in each plan's decisions.
