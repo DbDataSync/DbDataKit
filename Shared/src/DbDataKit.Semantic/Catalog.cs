@@ -160,6 +160,9 @@ public sealed class MeasureDef
     public string Column { get; set; } = "";
     public string? Dax { get; set; }
 
+    /// <summary>The scale of the decimal source column the measure aggregates, when the catalog declares one (<c>scale</c> of the column; plan 14a SL09): the answer is then a decimal of this scale. Null: the engine's default (a double).</summary>
+    public int? Scale { get; set; }
+
     /// <summary>The DAX name of the model table (or table expression) tested with NOT ISEMPTY to keep a group that has fact rows: <c>nonempty.DAX</c> when the catalog gives it, otherwise the table in the DAX expression of the field the measure aggregates.</summary>
     public string? DaxFact { get; set; }
     public List<string> Synonyms { get; set; } = new();

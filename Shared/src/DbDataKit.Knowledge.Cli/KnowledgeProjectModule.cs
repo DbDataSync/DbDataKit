@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using DbDataKit.Config.Yaml;
 using DbDataKit.State;
 
@@ -63,6 +64,12 @@ public sealed class KnowledgeProjectModule : IDefinitionSubscriber
 
     public string Release { get; }
 
+    /// <summary>Told when a verified query no longer holds for a new version of its model (KN22): the host delivers it to the query's owner.</summary>
+    public Action<VerifiedNotice>? VerifiedNotifier { get; init; }
+
+    /// <summary>How a request is validated against a catalog (the semantic engine's, KN22); null checks the members and the shape only.</summary>
+    public RequestValidator? RequestValidator { get; init; }
+
     public string Kind => KnowledgeDefinitions.Kind;
 
     public DefinitionFormats Formats => new(KnowledgeDefinitions.Version, KnowledgeDefinitions.Version);
@@ -94,6 +101,10 @@ public sealed class KnowledgeProjectModule : IDefinitionSubscriber
         {
             if (served is not null && _store.Item(served, item.Id)?.Hash == item.Hash) unchanged++;
             index.Put(item, Chunker.Split(item), project, $"v{version}", _time);
+            // a verified query that needs another look still does in the next version of the project, unless it was written again (its text changed)
+            if (served is not null && item.Verified is not null && _store.Item(served, item.Id) is { } before && before.Hash == item.Hash
+                && _store.Verified(served, item.Id) is { Status: VerifiedStatus.NeedsReverification } marked)
+                _store.SetVerifiedStatus(channel, item.Id, marked.Status, marked.StatusNote);
         }
         // an item the version no longer has is not in this channel at all (it was never written there): a channel is a whole version
         foreach (var gone in _store.Items(channel).Where(i => parsed.Items.All(p => p.Id != i.Id)).Select(i => i.Id).ToList()) _store.Remove(channel, gone);
@@ -212,6 +223,48 @@ public sealed class KnowledgeProjectModule : IDefinitionSubscriber
     /// <summary>The reading commands over every project the release serves, under the caller's rules. The version a project is read at is the head's, looked up at each question.</summary>
     public IKnowledgeReader Reader(IKnowledgeCaller caller, ISubjectCatalog catalog, EmbeddingResolver? embeddings = null, KnowledgeSearchMode mode = KnowledgeSearchMode.Both) =>
         new ServedReader(this, caller, catalog, embeddings, mode);
+
+    // ---- verified queries when a model changes (KN22) ----
+
+    private readonly Dictionary<string, JsonNode> _lastCatalog = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Checks every verified query about a model, in every index this release keeps, against the new version of the model (<paramref name="catalog"/> is null when the model is no longer served): a query that fails is marked
+    /// needs re-verification (still found, no longer given as verified) and its owner told through <see cref="VerifiedNotifier"/>; one marked by an earlier check that holds again is restored. It never throws and never holds the model up.
+    /// </summary>
+    public RecheckResult RecheckModel(string model, JsonNode? catalog, JsonNode? previous = null)
+    {
+        int count = 0, marked = 0, restored = 0;
+        foreach (var channel in _store.Channels(Release + "/").Where(c => c != GeneratedChannel))
+        {
+            var result = VerifiedRechecker.Run(new StateKnowledgeIndex(_store, channel, _vectors), model, catalog, previous, RequestValidator, VerifiedNotifier);
+            count += result.Checked;
+            marked += result.Marked;
+            restored += result.Restored;
+        }
+        return new RecheckResult(count, marked, restored);
+    }
+
+    /// <summary>What follows the kind <c>semantic-model</c> for this module (KN22): a model that is staged or activated (or dropped) re-checks the verified queries about it. The model itself is never held up by the check.</summary>
+    public IDefinitionSubscriber SemanticModels => new SemanticModelSubscriber(this);
+
+    private sealed class SemanticModelSubscriber(KnowledgeProjectModule module) : IDefinitionSubscriber
+    {
+        public string Kind => "semantic-model";
+
+        public void Apply(string name, DefinitionVersion? current)
+        {
+            try
+            {
+                JsonNode? catalog = null;
+                if (current is not null) catalog = JsonNode.Parse(current.Content);
+                module._lastCatalog.TryGetValue(name, out var previous);
+                module.RecheckModel(name, catalog, previous);
+                if (catalog is not null) module._lastCatalog[name] = catalog; else module._lastCatalog.Remove(name);
+            }
+            catch (Exception ex) when (ex is System.Text.Json.JsonException or InvalidOperationException) { /* a model this cannot read is the model's own business: nothing is checked, nothing is held up */ }
+        }
+    }
 
     /// <summary>The module's health: per project the version served, the counts, the model and how much of it is embedded.</summary>
     public IReadOnlyList<ProjectHealth> Health() =>

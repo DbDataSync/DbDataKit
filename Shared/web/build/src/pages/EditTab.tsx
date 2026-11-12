@@ -13,6 +13,7 @@ import { NewConnectionPanel } from './NewConnectionPanel'
 import { NewFilePanel, OpenFileTools } from './FileTools'
 import { NewModelPanel } from './NewModelPanel'
 import { PreviewPanel, isModelQuery } from './PreviewPanel'
+import { QueriesEditor, isSemanticFile } from './QueriesEditor'
 import type { Diagnostic, ProjectFile, Workspace } from '../types'
 import { viewFileOf } from '../views/workspaceStore'
 
@@ -52,6 +53,8 @@ export function EditTab() {
   const [newName, setNewName] = useState('')
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([])
   const [refused, setRefused] = useState<string | null>(null)
+  // what the translation check of the saved queries found in the open file (QueriesEditor), drawn on the YAML tab's lines
+  const [queryMarkers, setQueryMarkers] = useState<EditorDiagnostic[]>([])
   // the panel above the files: a new model, or an import from a connection
   const [panel, setPanel] = useState<'model' | 'import' | 'connection' | 'file' | null>(null)
   // a file with a schema can be edited as a form or as its YAML; both change the same text
@@ -94,6 +97,7 @@ export function EditTab() {
       const file = answer.document?.data
       if (!file) return
       setOpen(file.path)
+      setQueryMarkers([])
       setText(file.content)
       setSaved(file.content)
       setHash(file.hash)
@@ -223,9 +227,10 @@ export function EditTab() {
                 {isConnectionFile(open) && <ConnectionPolicyEditor key={`policy-${open}`} text={text} onText={setText} readOnly={!canAuthor} />}
                 {association && schemaSet && mode === 'form'
                   ? <SchemaForm schemas={schemaSet} schema={association.schema} text={text} onText={setText} />
-                  : <CodeEditor value={text} language={languageOf(open)} onChange={setText} diagnostics={markersFor(open, diagnostics)} minLines={12} maxLines={32} testId="build-edit-editor" />}
+                  : <CodeEditor value={text} language={languageOf(open)} onChange={setText} diagnostics={[...markersFor(open, diagnostics), ...queryMarkers]} minLines={12} maxLines={32} testId="build-edit-editor" />}
               </>
             )}
+            {open !== null && workspace !== null && isSemanticFile(open) && <QueriesEditor key={open} project={project} workspace={workspace} path={open} text={text} onText={setText} readOnly={!canAuthor} onMarkers={setQueryMarkers} />}
             {open !== null && workspace !== null && canAuthor && isModelQuery(open) && <DefinitionPanel project={project} workspace={workspace} path={open} dirty={dirty} onWritten={() => void wrote()} />}
             {open !== null && workspace !== null && isModelQuery(open) && <PreviewPanel project={project} workspace={workspace} path={open} version={hash} />}
             <ErrorBanner error={read.error ?? save.error ?? check.error} />

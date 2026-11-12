@@ -427,6 +427,11 @@ class SuiteInstallTestPlumbingTests(unittest.TestCase):
         script = (DIST / "suite-scripts.ps1").read_text(encoding="utf-8")
         self.assertIn("is registered already", script)
         self.assertIn("is listed by the console already", script)
+        # plan 23a FQ19: the install prints the setup link, and says what to do when it ended
+        self.assertIn("/invite#", script)
+        self.assertIn("dbdatakit setup link", script)
+        self.assertNotIn("The first-run invitation is in", script)
+        check_balanced(script)
 
     def test_the_announce_script_is_balanced_and_wired_into_the_msi_job(self):
         check_balanced((DIST / "tests" / "msi-announce-e2e.ps1").read_text(encoding="utf-8"))

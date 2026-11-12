@@ -134,7 +134,17 @@ if (Test-Path -LiteralPath $binRoot) {
   }
 }
 Say 'every service is registered, running and paired with the console.'
-Say "The console is on $($consoleMember.Address). The first-run invitation is in $(Join-Path $env:ProgramData 'DbDataKit\server\FIRST-RUN.txt')."
+Say "The console is on $($consoleMember.Address)."
+# plan 23a FQ19: the installer prints the setup link itself (the console wrote it to FIRST-RUN.txt, whole, with its end); a console that has a user already made none
+$firstRun = Join-Path $env:ProgramData 'DbDataKit\server\FIRST-RUN.txt'
+$setupLink = $null
+if (Test-Path $firstRun) { $found = Select-String -Path $firstRun -Pattern 'https://\S+/invite#\S+' | Select-Object -First 1; if ($found) { $setupLink = $found.Matches[0].Value } }
+if ($setupLink) {
+  Say "Open this link once to create the first administrator. It works once and ends after 24 hours: $setupLink"
+  Say "If it ended or was lost, make a new one on this machine with: dbdatakit setup link --url $($consoleMember.Address) (it is also in $firstRun)."
+} else {
+  Say "The console has a user already, so it made no setup link. To let someone in: dbdatakit user invite --email <address>."
+}
 Say 'Settings and data stay under %ProgramData%\DbDataKit when the package is uninstalled.'
 #endregion
 

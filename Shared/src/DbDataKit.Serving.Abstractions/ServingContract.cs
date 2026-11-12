@@ -44,7 +44,8 @@ public abstract record ServingRequest(string Source, ServingLimits? Asked = null
 /// <param name="DefinitionVersion">The published definition version the request was pinned to; null for a source with no published definition.</param>
 /// <param name="Channel">The channel it was answered from.</param>
 /// <param name="Source">The source it ran against, by name, when the request left the choice to the core (an empty name is the caller's default); null when the core does not say.</param>
-public sealed record ServingProvenance(string Canonical, string? DefinitionVersion, string Channel, string? Source = null);
+/// <param name="Cache"><c>hit</c> when the answer came from the result cache (plan 24a QU10: the version and the channel are those of the entry's query, nothing else changes); null when the cache was not used or missed.</param>
+public sealed record ServingProvenance(string Canonical, string? DefinitionVersion, string Channel, string? Source = null, string? Cache = null);
 
 /// <summary>A query's answer: an Arrow result and where it came from.</summary>
 public interface IServingAnswer : IServingResult

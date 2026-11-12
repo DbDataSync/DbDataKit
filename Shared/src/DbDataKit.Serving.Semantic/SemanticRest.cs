@@ -190,6 +190,7 @@ public static class SemanticRest
             Int32Array a => a.GetValue(row),
             Int16Array a => a.GetValue(row),
             DoubleArray a => a.GetValue(row) is { } d && double.IsFinite(d) ? d : null,
+            Decimal128Array a => a.GetValue(row) is { } exact ? JsonValue.Create(exact) : null,
             FloatArray a => a.GetValue(row) is { } f && float.IsFinite(f) ? (double)f : null,
             BooleanArray a => a.GetValue(row),
             _ => null,

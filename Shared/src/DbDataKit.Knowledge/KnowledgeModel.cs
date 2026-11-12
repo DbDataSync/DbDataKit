@@ -86,6 +86,7 @@ public sealed record KnowledgeAudience(IReadOnlyList<string> Audience, IReadOnly
 /// <param name="Body">The text after the front matter.</param>
 /// <param name="BodyLine">The line of the file where the text starts, so a section can be cited.</param>
 /// <param name="Hash">sha256 of the file's text: the item's version for the record of a turn and for refresh.</param>
+/// <param name="Verified">What a verified query adds to an item (KN21); null for every other kind.</param>
 public sealed record KnowledgeItem(
     string Id,
     string File,
@@ -98,4 +99,5 @@ public sealed record KnowledgeItem(
     ChunkingSetting Chunking,
     string Body,
     int BodyLine,
-    string Hash);
+    string Hash,
+    VerifiedQuery? Verified = null);

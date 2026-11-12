@@ -92,4 +92,56 @@ public class BuildSemanticNounTests : IDisposable
         Assert.Equal("https://other:1/", BuildSemantic.AddressOf(Parse("--address", "https://other:1"), root).ToString());
         Assert.Throws<InvalidOperationException>(() => BuildSemantic.AddressOf(Parse("--flight-port", "9000"), root));
     }
+
+    [Fact]
+    public void The_four_verbs_are_commands_of_the_tree_with_a_document_that_satisfies_the_output_schema()
+    {
+        var session = new FakeSession();
+        BuildSemantic.Connect = (_, _) => Task.FromResult<ISemanticSession>(session);
+        var schema = SchemaConformanceTests.LoadSchema("output");
+
+        (int Exit, JsonNode Doc) Command(params string[] args)
+        {
+            var (o, e) = (new StringWriter(), new StringWriter());
+            var exit = DbDataBuild.Cli.CliApp.Run([.. args, "--gateway", "any", "--format", "json"], o, e, environment: _ => null);
+            var doc = JsonNode.Parse(o.ToString())!;
+            Assert.True(schema.Evaluate(System.Text.Json.JsonSerializer.SerializeToNode(doc), new Json.Schema.EvaluationOptions { OutputFormat = Json.Schema.OutputFormat.List }).IsValid, o.ToString());
+            return (exit, doc);
+        }
+
+        var query = Command("semantic", "query", "shop", "--sql", "SELECT region, net FROM shop", "--max-rows", "50");
+        Assert.Equal(0, query.Exit);
+        Assert.Equal("semantic query", (string)query.Doc["command"]!);
+        Assert.Equal(2, (int)query.Doc["data"]!["row_count"]!);
+        Assert.Equal("complete", (string)query.Doc["data"]!["notes"]!["qis.status"]!);
+        Assert.Equal(0, Command("semantic", "describe", "shop").Exit);
+        Assert.Equal(0, Command("semantic", "explain", "shop", "--sql", "SELECT 1").Exit);
+        Assert.Equal(0, Command("semantic", "members", "shop", "customer.region", "--limit", "5", "--search", "no").Exit);
+        Assert.Equal([("shop", "SELECT region, net FROM shop"), ("shop", """{"kind": "describe"}"""), ("shop", "EXPLAIN SELECT 1"), ("shop", """{"kind":"members","attribute":"customer.region","search":"no","limit":5}""")], session.Asked);
+
+        // a usage error and a refusal are documents too
+        Assert.Equal(DbDataBuild.Cli.CliApp.ExitUsage, Command("semantic", "query", "shop").Exit);
+        BuildSemantic.Connect = (_, _) => throw new InvalidOperationException("The Gateway refused the token.");
+        var refused = Command("semantic", "describe", "shop");
+        Assert.Equal(DbDataBuild.Cli.CliApp.ExitFindings, refused.Exit);
+        Assert.Contains("refused the token", refused.Doc.ToJsonString());
+    }
+
+    [Fact]
+    public void An_agent_is_offered_the_verbs_without_a_way_to_send_the_token_anywhere_but_to_a_paired_gateway_and_the_management_api_does_not_offer_them_at_all()
+    {
+        var catalog = DbDataBuild.Cli.TuiCommand.CliHost.Catalog();
+        var agent = new DbDataBuild.Cli.Mcp.ToolSurface(root, catalog.Where(c => c.Name is not ("ui terminal" or "ui mcp")));
+        Assert.All(new[] { "semantic_describe", "semantic_query", "semantic_explain", "semantic_members" }, name => Assert.Contains(name, agent.Tools.Keys));
+        var properties = agent.Describe(agent.Tools["semantic_query"])["inputSchema"]!["properties"]!.AsObject().Select(p => p.Key).ToList();
+        Assert.Contains("gateway", properties);
+        Assert.Contains("sql", properties);
+        Assert.DoesNotContain("address", properties);
+        Assert.DoesNotContain("insecure", properties);
+        Assert.DoesNotContain("ca_file", properties);
+        Assert.DoesNotContain("server_dir", properties);
+
+        Assert.DoesNotContain(DbDataBuild.Cli.Server.BuildManagementApi.FullSurface(root, catalog).Tools.Keys, k => k.StartsWith("semantic_"));
+        Assert.DoesNotContain(DbDataBuild.Cli.Server.BuildManagementApi.ReadOnlySurface(root, catalog).Tools.Keys, k => k.StartsWith("semantic_"));
+    }
 }
