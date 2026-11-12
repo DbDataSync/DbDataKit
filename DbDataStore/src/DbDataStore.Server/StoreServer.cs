@@ -86,7 +86,7 @@ public static class StoreServer
         StoreModels.Map(app, settings.Directory);
         StoreModelHistory.Map(app, settings.Directory);
         StoreEvents.Map(app, settings.Directory);
-        StoreData.Map(app, settings.Directory, storeConnections, dataChanges);
+        StoreData.Map(app, settings.Directory, storeConnections, dataChanges, StoreContractGuard.Create(settings.Directory, storeConnections, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log"))));
         StoreQuality.Map(app, settings.Directory, storeConnections, state);
         return app;
     }

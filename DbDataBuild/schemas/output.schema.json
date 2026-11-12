@@ -2605,6 +2605,12 @@
                 ]
               }
             },
+            "consumers_allowed": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
             "metadata_stored": {
               "type": "array",
               "items": {

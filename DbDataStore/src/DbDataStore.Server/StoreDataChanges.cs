@@ -16,17 +16,18 @@ public sealed class StoreDataChanges(IDataChangeNotifier notifier, StoreConnecti
 
     public IDataChangeNotifier Notifier => notifier;
 
-    private sealed class FromProxies(StoreProxies proxies) : IGatewayPairings
+    /// <summary>The pairings of <c>proxies.json</c> as a notifier or the lineage client reads them.</summary>
+    internal sealed class FromProxies(StoreProxies proxies) : IGatewayPairings
     {
         public IReadOnlyList<GatewayPairing> All() => [.. proxies.All().Select(p => new GatewayPairing(p.Name, p.Url, p.InstanceId, p.Fingerprint, p.PairedAt))];
     }
 
-    /// <summary>The notifier of a server whose directory is <paramref name="directory"/>: its own key is opened from the server's secret store only when there is something to send to a pairing.</summary>
-    public static StoreDataChanges Create(string directory, StoreConnections connections, Action<string>? line = null, DataChangeNotifierOptions? options = null)
+    /// <summary>The server's own identity, opened from its secret store only when something is sent to a pairing.</summary>
+    internal static Func<CancellationToken, Task<ConsoleIdentity>> IdentityOf(string directory)
     {
         ConsoleKeyStore? keys = null;
         var gate = new object();
-        Task<ConsoleIdentity> Identity(CancellationToken ct)
+        return ct =>
         {
             lock (gate)
             {
@@ -38,10 +39,11 @@ public sealed class StoreDataChanges(IDataChangeNotifier notifier, StoreConnecti
             }
 
             return keys.GetOrCreateAsync(ct);
-        }
-
-        return new StoreDataChanges(new DataChangeNotifier(Product, new FromProxies(new StoreProxies(directory)), Identity, line is null ? null : new LineLogger(line), options), connections, line);
+        };
     }
+
+    public static StoreDataChanges Create(string directory, StoreConnections connections, Action<string>? line = null, DataChangeNotifierOptions? options = null) =>
+        new(new DataChangeNotifier(Product, new FromProxies(new StoreProxies(directory)), IdentityOf(directory), line is null ? null : new LineLogger(line), options), connections, line);
 
     /// <summary>Rows of <paramref name="entities"/> were applied to the model's copy in <paramref name="connection"/>, schema <paramref name="schema"/>. Never throws and never waits for the network.</summary>
     public async Task AppliedAsync(string connection, string schema, IEnumerable<string> entities, string? run = null, CancellationToken ct = default)

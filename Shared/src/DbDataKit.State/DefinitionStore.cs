@@ -95,6 +95,19 @@ public sealed partial class DefinitionStore(StateDatabase database) : IDefinitio
             return (IReadOnlyList<DefinitionVersion>)found;
         });
 
+    /// <summary>The channels something of <paramref name="kind"/> is served in (production first, the rest by name): what a question about every channel (the contract guard, plan 21 CH06) iterates.</summary>
+    public IReadOnlyList<string> ChannelsOfKind(string kind) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var command = database.Command(Module, connection, "SELECT DISTINCT channel FROM {table:definition_serving} WHERE kind = $kind;");
+            command.Bind(database, "kind", kind);
+            using var reader = command.ExecuteReader();
+            var found = new List<string>();
+            while (reader.Read()) found.Add(reader.GetString(0));
+            return (IReadOnlyList<string>)[.. found.OrderBy(c => c == Production ? 0 : 1).ThenBy(c => c, StringComparer.Ordinal)];
+        });
+
     public DefinitionVersion? Get(string kind, string name, int version) =>
         database.Retry(() => { using var connection = database.OpenConnection(); return ReadVersion(connection, null, kind, name, version); });
 

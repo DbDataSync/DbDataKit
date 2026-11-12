@@ -284,6 +284,7 @@ public static class CliApp
                     var deployReason = new Option<string?>("--reason") { Description = "With --ack: why the change is accepted (required; recorded with your login)" };
                     var deployRisky = new Option<bool>("--allow-risky") { Description = "Allow the plan's risky steps" };
                     var deployDestructive = new Option<string[]>("--allow-destructive") { Description = "Object (marts.fct) whose destructive steps are allowed; repeat for several objects", DefaultValueFactory = _ => [] };
+                    var deployConsumers = new Option<string[]>("--allow-consumer") { Description = "A published consumer (name, or name@channel) that reads a column the plan drops or retypes, allowed to lose it anyway; recorded. `gateway:<pairing>` allows a paired Gateway whose lineage could not be read", DefaultValueFactory = _ => [] };
                     var deployDirty = new Option<bool>("--allow-dirty") { Description = "Apply from a working tree with uncommitted changes (recorded)" };
                     var deployDry = new Option<bool>("--dry-run") { Description = "Apply: run every check and print every statement; execute nothing" };
                     var deployYes = new Option<bool>("--yes") { Description = "Apply the plan without asking (for a script; risky and destructive steps still need their allowances, and it does not approve computed inputs that moved since the plan: `--input` does)" };
@@ -291,10 +292,10 @@ public static class CliApp
                     cmd.Options.Add(planOp); cmd.Options.Add(planBackfill); cmd.Options.Add(planParam);
                     cmd.Arguments.Add(planTarget); cmd.Arguments.Add(planModels);
                     cmd.Options.Add(planProject); cmd.Options.Add(planAnswers); cmd.Options.Add(planAccept); cmd.Options.Add(planOut);
-                    cmd.Options.Add(deployInput); cmd.Options.Add(deployWritePlan); cmd.Options.Add(deployApplyPlan); cmd.Options.Add(deployAck); cmd.Options.Add(deployReason); cmd.Options.Add(deployRisky); cmd.Options.Add(deployDestructive); cmd.Options.Add(deployDirty); cmd.Options.Add(deployDry); cmd.Options.Add(deployYes);
+                    cmd.Options.Add(deployInput); cmd.Options.Add(deployWritePlan); cmd.Options.Add(deployApplyPlan); cmd.Options.Add(deployAck); cmd.Options.Add(deployReason); cmd.Options.Add(deployRisky); cmd.Options.Add(deployDestructive); cmd.Options.Add(deployConsumers); cmd.Options.Add(deployDirty); cmd.Options.Add(deployDry); cmd.Options.Add(deployYes);
                     cmd.SetAction(pr => { var (planConn, planRest) = SplitConnection(pr.GetValue(planProject)!.FullName, pr.GetValue(planTarget), pr.GetValue(planModels) ?? []); return Reported(pr, spec, (o, e) => DeployCommand.Run(spec, pr.GetValue(planProject)!.FullName, planConn, planRest, pr.GetValue(planAnswers), pr.GetValue(planAccept), pr.GetValue(planOut), pr.GetValue(planOp) ?? [], pr.GetValue(planBackfill) ?? [], pr.GetValue(planParam) ?? [],
                         pr.GetValue(deployWritePlan), pr.GetValue(deployApplyPlan), pr.GetValue(deployAck), pr.GetValue(deployReason), pr.GetValue(deployRisky), pr.GetValue(deployDestructive) ?? [], pr.GetValue(deployDirty), pr.GetValue(deployDry), pr.GetValue(deployYes), pr.GetValue(deployInput) ?? [],
-                        o, e, input, interactive && !o.IsJson(), environment ?? Environment.GetEnvironmentVariable)); });
+                        o, e, input, interactive && !o.IsJson(), environment ?? Environment.GetEnvironmentVariable, pr.GetValue(deployConsumers) ?? [])); });
                     break;
                 case "connection status":
                     var checkModels = new Argument<string[]>("models") { Description = "A refresh plan first, to see only that plan's line (named as `connection refresh` names it), then model selectors: names, files, directories, `+model`, `model+`, `@model`, `kind:`, `tag:`, `property:key=value`, `changed:<git ref>`, `exclude:...` (default: every model that declares the connection)", Arity = ArgumentArity.ZeroOrMore };

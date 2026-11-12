@@ -30,7 +30,7 @@ public sealed record ExpandPlan(string Schema, IReadOnlyList<StorageStatement> S
 }
 
 /// <summary>One step of the contract of an instance's tables: <paramref name="Description"/> (<c>drop column territory.note</c>, <c>make territory.region required</c>), the text to run, and for a column that becomes required the count of rows that have no value (<paramref name="NullCheck"/>), which must be zero.</summary>
-public sealed record ContractStep(string Object, string Description, string Text, string? NullCheck = null);
+public sealed record ContractStep(string Object, string Description, string Text, string? NullCheck = null, string? Table = null, string? DroppedColumn = null);
 
 /// <summary>
 /// What the contract step of expand-then-contract does to an instance's tables (plan 26 Z13b; plan 21 decision 4): the columns the model no longer has are dropped, the columns it requires and the table keeps nullable are made required.
@@ -293,7 +293,7 @@ public static class ModelStorage
             foreach (var extra in have.Keys.Where(c => !wanted.ContainsKey(c)).Order(StringComparer.Ordinal))
             {
                 if (structural.Contains(extra)) { blocked.Add($"`{table}.{extra}` is how the table keeps its rows (history or instances) and the model does not use it now. That changes the keys of a table that holds rows: a planned change of its own, not a contract step."); continue; }
-                steps.Add(new($"{schema}.{table}", $"drop column {table}.{extra}", ddl.DropColumn(schema, table, extra)));
+                steps.Add(new($"{schema}.{table}", $"drop column {table}.{extra}", ddl.DropColumn(schema, table, extra), Table: table, DroppedColumn: extra));
             }
             foreach (var column in columns.Where(c => !c.Nullable && have.TryGetValue(c.Name, out var nullable) && nullable && !structural.Contains(c.Name)))
                 steps.Add(new($"{schema}.{table}", $"make {table}.{column.Name} required", ddl.AlterColumn(schema, table, column),

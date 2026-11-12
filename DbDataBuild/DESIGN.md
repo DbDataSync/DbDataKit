@@ -1240,6 +1240,8 @@ Noticed but NOT done:
 | risky | add NOT NULL column, collation change, size-of-data operations on large tables | `--allow-risky`; plan shows estimated rows from catalog metadata only |
 | destructive | drop column/table, narrow type, truncate | `--allow-destructive <object list>`; objects must be named explicitly |
 
+A plan that drops, renames away or retypes a column is also asked about published consumers (plan 21 CH06, as built): `connection deploy --apply-plan` (a dry run too), run by a Build server that is paired with a Gateway, reads the lineage of every paired serving group and refuses with DDB-444, naming each dashboard, report, app or semantic-model member that reads the column and the channel it is published in. The way out is publishing the consumers without the column, or `--allow-consumer <name>@<channel>` (`gateway:<pairing>` for a Gateway that could not be asked, which also refuses); the allowance is written in the server's management audit and the document's `consumers_allowed`. A run with no server directory (`DBDATAKIT_BUILD_SERVER_DIRECTORY`) has no pairing to ask and says so.
+
 Renames are never inferred. An undeclared rename plans as a destructive drop plus an add, and raises a question.
 
 ### 10.4.1 Planning and applying as built

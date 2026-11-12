@@ -109,6 +109,21 @@ public sealed class DefinitionStoreTests : IDisposable
         Assert.Equal(["crm"], other.CurrentOfKind("app").Select(d => d.Name));
     }
 
+    /// <summary>Plan 21 CH06: a question about every channel (the contract guard) lists the channels a kind is served in, production first.</summary>
+    [Fact]
+    public void The_channels_a_kind_is_served_in_are_listed_production_first_and_a_retired_one_is_gone()
+    {
+        var store = Open(StateEngineIds.Sqlite, out _);
+        Assert.Empty(store.ChannelsOfKind("dashboard"));
+        store.Publish("dashboard", "sales", "one", "ada", channel: "test");
+        store.Publish("dashboard", "sales", "one", "ada");
+        store.Publish("dashboard", "ops", "one", "ada", channel: "preview");
+        store.Publish("report", "other", "one", "ada", channel: "zzz");
+        Assert.Equal(["prod", "preview", "test"], store.ChannelsOfKind("dashboard"));
+        Assert.True(store.Retire("dashboard", "ops", "ada", "preview"));
+        Assert.Equal(["prod", "test"], store.ChannelsOfKind("dashboard"));
+    }
+
     [Fact]
     public void Names_are_plain()
     {
