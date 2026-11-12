@@ -34,7 +34,7 @@ public static class RunnerLabelVerbs
     private static StateDatabase Open(CliArgs parsed, Func<string, string?>? environment)
     {
         var directory = Path.GetFullPath(parsed.Get("repo") ?? RunnerSettings.DefaultDirectory(environment));
-        return RunnerState.Open(directory, RunnerSettings.StateFrom(environment), environment, RunnerSettings.GroupFrom(environment, parsed.Get("group")));
+        return RunnerState.Open(directory, RunnerSettings.StateFrom(directory, environment), environment, RunnerSettings.GroupFrom(environment, parsed.Get("group")));
     }
 
     private static async Task<int> ChangeAsync(bool add, string[] args, CliContext context, Func<string, string?>? environment)

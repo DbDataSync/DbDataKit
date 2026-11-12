@@ -21,8 +21,28 @@ public static class IdentityCli
         // a console pairs with the home like any server and administers it through its screens (13a U21): pair, clients, unpair
         .. PairingVerbs.Create(args => new PairingFiles(Path.Combine(DirectoryOf(CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" }), environment), "server.yaml"))),
         // the rest are the shared administration verbs (the serving layer's home has the same ones, as dbdatagateway identity)
+        // the shared state verbs over the home's state, as identity state-show, state-test, state-move ... (plan 29b C07): the home is a server of its own with its own directory and settings
+        .. StateVerbs(environment),
         .. IdentityVerbs.Admin(new IdentityAdminLocation("[--repo <identity directory>]", parsed => OpenState(parsed, environment), _ => IdentityHostSettings.DefaultListen)),
     ]);
+
+    /// <summary>The shared <c>state</c> verbs over the home's state, named <c>state-&lt;verb&gt;</c> under this noun: the settings come from <c>--engine</c>, the environment and the <c>state:</c> section of <c>server.yaml</c> in the home's directory; the file is <c>state.db</c> there; a signing key a move carries is decrypted with the key ring in <c>dataprotection/</c>.</summary>
+    private static IEnumerable<Verb> StateVerbs(Func<string, string?>? environment)
+    {
+        var context = new DbDataKit.State.Cli.StateVerbContext(
+            "dbdatakit", "the identity home",
+            args =>
+            {
+                var directory = DirectoryOf(args, environment);
+                return DbDataKit.State.Cli.StateTarget.From(IdentityHostSettings.ResolveState(directory, environment, args.Get("engine")), Path.Combine(directory, "state.db"), () => IdentityHostState.Secrets(directory, environment), IdentityHostSettings.SettingsFileIn(directory));
+            },
+            IdentityHomeState.Modules, StateScope.Install, ["engine", "repo"], "[--engine mssql|postgres] [--repo <identity directory>]")
+        {
+            CommandOf = verb => $"dbdatakit identity state-{verb}",
+            SecretSamplesFor = args => IdentityHostSecrets.Samples(DirectoryOf(args, environment)),
+        };
+        return DbDataKit.State.Cli.StateVerbs.Create(context).Verbs.Select(v => v with { Name = "state-" + v.Name });
+    }
 
     private static string DirectoryOf(CliArgs parsed, Func<string, string?>? environment) =>
         Path.GetFullPath(parsed.Get("repo") ?? IdentityHostSettings.DefaultDirectory(environment));

@@ -79,6 +79,12 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         server.MapGet("/api/v1/settings", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { require_signatures = false })));
         server.MapGet("/api/v1/lineage", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { edges = Array.Empty<object>() })));
         server.MapGet("/api/v1/tracking", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { holder = "runner", copies = Array.Empty<object>(), divergences = Array.Empty<object>() })));
+        // the state endpoints every server has (plan 29b C05, C06)
+        server.MapGet("/api/v1/state", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { product = "dbdatarunner" })));
+        server.MapGet("/api/v1/state/maintenance", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { enabled = false })));
+        server.MapGet("/api/v1/state/move", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { state = "none" })));
+        server.MapPost("/api/v1/state/maintenance", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { enabled = true })));
+        server.MapPost("/api/v1/state/move", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { state = "running" })));
         server.MapPost("/api/v1/tracking/divergences/{id}/resolve", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { resolved = true })));
         server.MapGet("/api/v1/secrets/overview", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { secrets = Array.Empty<object>() })));
         server.MapGet("/api/v1/certificate", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { present = true })));
@@ -230,6 +236,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
     [
         ("GET", "api/v1/status", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/instances", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/connections", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/connection-copies", ServerRole.Viewer, ServerRole.None), ("PUT", "api/v1/connection-copies/{name}", ServerRole.Admin, ServerRole.None),
         ("GET", "api/v1/runs", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}/logs", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/settings", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/lineage", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/tracking", ServerRole.Viewer, ServerRole.None),
+        ("GET", "api/v1/state", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/state/maintenance", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/state/move", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/upgrade", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/certificate", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/secrets/overview", ServerRole.Admin, ServerRole.None),
@@ -244,6 +251,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         ("PUT", "api/v1/artifacts/{sha}", ServerRole.Admin, ServerRole.Publisher), ("PUT", "api/v1/definitions/integration/{name}", ServerRole.Admin, ServerRole.Publisher),
         ("PUT", "api/v1/bindings/{name}/integration/{name}", ServerRole.Admin, ServerRole.Publisher), ("DELETE", "api/v1/bindings/{name}/integration/{name}/{name}", ServerRole.Admin, ServerRole.Publisher), ("POST", "api/v1/bindings/{name}/integration/{name}/test", ServerRole.Admin, ServerRole.None), ("PUT", "api/v1/settings/require_signatures", ServerRole.Admin, ServerRole.None),
         ("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/tracking/divergences/{id}/resolve", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/upgrade", ServerRole.Admin, ServerRole.None),
+        ("POST", "api/v1/state/maintenance", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/state/move", ServerRole.Admin, ServerRole.None),
     ];
 
     public static TheoryData<string> Rows => [.. ServerProducts.RunnerRoutes.Select(r => $"{r.Method} {r.Pattern}")];

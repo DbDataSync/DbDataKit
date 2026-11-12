@@ -6,8 +6,10 @@ using DbDataKit.Hosting;
 using DbDataKit.Runner.Api;
 using DbDataKit.Hosting.Certificates;
 using DbDataKit.State;
+using DbDataKit.State.Api;
 using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -34,6 +36,16 @@ public static class RunnerServer
     {
         return InstanceId(RunnerState.Open(directory, settings, environment));
     }
+
+    /// <summary><c>GET /api/v1/state</c> and the maintenance and move calls over this runner's state (plan 29b C05, C06): the audit is the runner's own (<c>audit</c> module), the instances are the group's live runners.</summary>
+    private static DbDataKit.State.Api.StateManagement StateApi(RunnerSettings settings, string instanceId, DbDataKit.State.Api.IMaintenanceGate gate, StateDatabase state) => new(new DbDataKit.State.Api.StateManagementOptions(
+        RunnerSettings.Product, RunnerSettings.Product, "the runner",
+        () =>
+        {
+            var resolved = RunnerState.Resolve(settings.Directory);
+            return new DbDataKit.State.Cli.StateTarget(settings.State, RunnerState.PathIn(settings.Directory), () => RunnerState.Secrets(null), RunnerState.SettingsFile(settings.Directory), settings.StateSources ?? resolved.Sources);
+        },
+        RunnerState.Modules, RunnerState.ScopeOf(settings.Group), gate, new DbDataKit.State.Api.StateAuditSink(state, RunnerState.ServiceId), instanceId, Version, Move: true));
 
     /// <summary>The connections the binding test and the slots both see: the runner's own folder, then the copies the console handed over (plan 27a IX23).</summary>
     private static DbDataKit.Runner.Connections.IConnectionCatalog CatalogOf(RunnerSettings settings, StateDatabase state)
@@ -88,6 +100,13 @@ public static class RunnerServer
         var tokens = new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache());
         RunnerWebhooks.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), tokens, settings.Secrets ?? RunnerState.Secrets(null));   // before the token check: a signed webhook has no token
         app.UseManagementAuthentication(tokens, refused => log($"A call was refused ({refused.Failure}): {refused.Detail}"));
+        // maintenance mode and the state endpoints (plan 29b C05): while on, the runner claims and schedules nothing new, finishes what runs, and reports idle when the last run is over
+        var maintenance = new DbDataKit.State.Api.MaintenanceGate(
+            onEnter: _ => app.Services.GetRequiredService<RunnerEngine>().Draining = true,
+            onLeave: () => app.Services.GetRequiredService<RunnerEngine>().Draining = false,
+            work: () => app.Services.GetRequiredService<RunnerEngine>().RunningCount);
+        app.UseMaintenance(maintenance, context => context.ManagementTokenOrNull() is { } token && ManagementAuthorization.Authorize(token, ServerRole.Admin).Allowed);
+        app.MapState(StateApi(settings, instanceId, maintenance, state));
         app.MapCertificateStatus(() => certificate);   // days left and subject, for the console's Monitoring (UI10)
         // the server upgrades itself when the console says so (plan 24a UC09)
         DbDataKit.Upgrade.UpgradeSetup.MapUpgrade(app, RunnerSettings.Product, Version, RunnerService.RegistrationName, settings.Listen.Port, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), () => [.. clients.All().Select(c => new DbDataKit.Upgrade.PeerGeneration(c.Name, c.Generation))]);
