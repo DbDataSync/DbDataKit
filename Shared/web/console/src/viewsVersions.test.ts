@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DocumentVersions } from '@dbdatakit/visuals'
-import { lifecycleMessage, rollbackState, versionRows, whenText } from './viewsVersions'
+import { lifecycleMessage, pruneCandidates, rollbackState, versionRows, whenText } from './viewsVersions'
 
 const versions = (over: Partial<DocumentVersions> = {}): DocumentVersions => ({
   kind: 'dashboard', name: 'sales', active: 2, previous: 1,
@@ -42,5 +42,17 @@ describe('the versions of a published document', () => {
     expect(lifecycleMessage('dashboard', 'sales', 'rollback', 1, ['semantic-model:retail@1', 'dashboard:sales@1'])).toContain('Rolled back: version 1')
     expect(lifecycleMessage('dashboard', 'sales', 'rollback', 1, ['semantic-model:retail@1', 'dashboard:sales@1'])).toContain('semantic-model:retail@1')
     expect(lifecycleMessage('report', 'monthly', 'retire', null, [])).toContain('no longer served')
+  })
+})
+
+describe('pruneCandidates', () => {
+  const versions = (active: number | null, previous: number | null, n: number) => ({
+    kind: 'dashboard' as const, name: 'd', active, previous,
+    versions: Array.from({ length: n }, (_, i) => ({ version: i + 1, publishedBy: 'a', publishedAt: '2026-01-01T00:00:00Z', note: null, active: active === i + 1, dependsOn: [] })),
+  })
+  it('preselects all but the served, the previous and the three newest', () => {
+    expect(pruneCandidates(versions(5, 4, 8))).toEqual([1, 2, 3])
+    expect(pruneCandidates(versions(2, 1, 3))).toEqual([])
+    expect(pruneCandidates(versions(null, null, 5))).toEqual([1, 2])
   })
 })

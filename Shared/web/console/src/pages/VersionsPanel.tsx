@@ -6,6 +6,7 @@ import type { DocumentVersions, ViewKind, ViewsClient } from '@dbdatakit/visuals
 import { lifecycleMessage, rollbackState, versionRows } from '../viewsVersions'
 import { viewsClient } from '../viewsSource'
 import { withSource } from '../viewsUrl'
+import { PruneSection } from './PruneSection'
 
 type Action = 'switch' | 'rollback' | 'retire'
 
@@ -117,6 +118,7 @@ export function VersionsPanel({ kind, name, source, keep, listPath }: { kind: Vi
   if (versions.isError) return <div className="empty" data-testid="views-versions-error" role="alert">The versions of {name} could not be read: {versions.error instanceof Error ? versions.error.message : String(versions.error)}</div>
   const seen = versions.data.active
   return (
+    <>
     <VersionsView
       kind={kind} name={name} versions={versions.data} allowed={allowed} busy={busy} confirming={confirming} result={result}
       onSwitch={(v) => void run('switch', () => client.switchTo(kind, name, v, seen))}
@@ -125,5 +127,10 @@ export function VersionsPanel({ kind, name, source, keep, listPath }: { kind: Vi
       onRetire={() => void run('retire', async () => { await client.retire(kind, name, seen); return { version: null, moved: [] } })}
       onKeep={() => setConfirming(false)}
     />
+    {allowed && client.prune && (
+      <PruneSection key={`${kind}:${name}:${versions.data.versions.length}`} kind={kind} name={name} versions={versions.data} client={client}
+        onDone={(removed) => { setResult({ tone: 'ok', text: `Pruned ${name}: removed ${removed.length === 0 ? 'nothing' : removed.map((v) => `v${v}`).join(', ')}.` }); void queryClient.invalidateQueries({ queryKey: key }) }} />
+    )}
+    </>
   )
 }

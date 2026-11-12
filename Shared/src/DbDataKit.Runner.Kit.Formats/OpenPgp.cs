@@ -168,7 +168,7 @@ public static class OpenPgp
         var bundle = new PgpPublicKeyRingBundle(input);
         foreach (PgpPublicKeyRing ring in bundle.GetKeyRings())
             foreach (PgpPublicKey k in ring.GetPublicKeys())
-                if (k.IsEncryptionKey && !k.IsRevoked()) return k;
+                if (k.IsEncryptionKey && !k.HasRevocation()) return k;
         throw new ArgumentException("The public key given has no key that can encrypt.", nameof(armored));
     }
 
