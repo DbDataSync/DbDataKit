@@ -318,7 +318,8 @@ test('a person signs in and the sandboxed app reads and writes the published mod
   await expect(inner.locator('header')).toHaveCount(0)
   const refused = await context.newPage()
   await refused.goto(`${otherOrigin}/portal`)
-  await expect.poll(() => refused.frames().some((f) => f.url().startsWith('chrome-error:'))).toBe(true)
+  // a frame the browser refuses has no address (an empty one in this Chromium, `chrome-error:` in others), never the app's
+  await expect.poll(() => refused.frames().filter((f) => f !== refused.mainFrame()).some((f) => f.url() === '' || f.url().startsWith('chrome-error:'))).toBe(true)
   expect(refused.frames().some((f) => f.url().startsWith(appsUrl))).toBe(false)
   for (const server of portals) server.close()
 
