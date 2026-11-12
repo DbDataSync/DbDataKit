@@ -296,6 +296,27 @@ public sealed class ConsoleDeliveryTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_subscription_stores_its_channels_kind_for_the_gateway_and_the_consoles_sync_follows_it()
+    {
+        // plan 32 DBR18: the Gateway has no channels and enqueues by this kind; the console's sender then sends the row through its own channel
+        var (_, body) = await Call(HttpMethod.Post, "/api/delivery/subscriptions", viewer, Sub());
+        var id = Guid.Parse((string)body!["subscription"]!["id"]!);
+        var delivery = app.Services.GetRequiredService<ConsoleDelivery>();
+        var kind = delivery.Channels.Find("hook")!.Kind;
+        Assert.Equal(kind, (string)body["subscription"]!["channelKind"]!);
+        Assert.Equal(kind, delivery.Subscriptions.Find(id)!.Fields.ChannelKind);
+        Assert.Equal(kind, delivery.Subscriptions.ChannelKinds()["hook"]);
+
+        // a row from before the column, or a channel bound to another kind of connection since: the sync writes the current kind and leaves the version alone
+        delivery.Subscriptions.SetChannelKind("hook", "old-kind");
+        var version = delivery.Subscriptions.Find(id)!.Version;
+        Assert.Equal(1, delivery.SyncSubscriptionChannelKinds());
+        Assert.Equal(kind, delivery.Subscriptions.Find(id)!.Fields.ChannelKind);
+        Assert.Equal(version, delivery.Subscriptions.Find(id)!.Version);
+        Assert.Equal(0, delivery.SyncSubscriptionChannelKinds());
+    }
+
+    [Fact]
     public async Task A_subscription_is_edited_paused_resumed_and_removed_by_its_person_and_nobody_else_can_see_it()
     {
         var (_, created) = await Call(HttpMethod.Post, "/api/delivery/subscriptions", viewer, Sub());
