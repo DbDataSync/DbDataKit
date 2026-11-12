@@ -240,6 +240,16 @@
       "note": "new with plan 27a IX15: the exchanges an outside API gave, as JSON with the entries in the order they are asked (request method, address and optionally body; response status, headers and body, written as text, inline JSON or base64), replayed by RecordedHttp in DbDataKit.Runner.Kit.Testing so a job is tested with no network; a request with no entry fails the test naming it; a credential (a response header such as Set-Cookie or Authorization, a user name or a credential-named parameter in an address) makes the file unreadable, naming the entry",
       "version_source": { "file": "Shared/src/DbDataKit.Runner.Kit.Testing/RecordedHttp.cs", "pattern": "Schema = \"http-recording/(\\d+)\";" },
       "files": [ { "path": "Shared/src/DbDataKit.Runner.Kit.Testing/RecordedHttp.cs", "sha256": null } ]
+    },
+    {
+      "id": "bundle",
+      "title": "The single-machine bundle (bundle.json beside the console's data, schema: bundle/N)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 23a FQ18 (D8, QF6): which products the console pairs with by itself when they announce from this machine with the bundle token, and where the token file is (relative to the console's directory); no secret in it; written by `dbdatakit bundle init`, read by the console at each announcement (a file that cannot be used is a warning in the log and no automatic pairing); the token file is the account's own (mode 600, refused otherwise)",
+      "version_source": { "file": "DbDataKit/src/DbDataKit.Server/ConsoleBundle.cs", "pattern": "Schema = \"bundle/(\\d+)\";" },
+      "files": [ { "path": "DbDataKit/src/DbDataKit.Server/ConsoleBundle.cs", "sha256": null } ]
     }
   ]
 }

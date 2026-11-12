@@ -60,3 +60,15 @@ quality:
 ```
 
 The Quality page says what is set, whether the channel exists and what is wrong with the file. The message names the check, the dataset, the measure and the keys of a few failing rows, and says whether what depends on the dataset waits.
+
+## The single-machine bundle
+
+When the console and its back-ends (Sync, Build, the Gateway, the Store, a runner) are installed on **one machine**, nobody has to confirm each server. `dbdatakit bundle init` makes a **bundle token** (a file only your account can read, `bundle.token` in the console's directory) and `bundle.json` (which products the bundle holds; none named means any). A server that is given the token file as `DBDATAKIT_BUNDLE_TOKEN_FILE` puts the token in its announcement, and the console pairs with it when it announces, as if an administrator had pressed Confirm, and records `pairing.auto` in the audit (never the token):
+
+```
+dbdatakit bundle init --members dbdatasync,dbdatabuild
+./install.sh --system --announce-url http://127.0.0.1:8481 --bundle-token-file /var/lib/dbdatakit/server/bundle.token   # each server on this machine
+dbdatakit bundle show
+```
+
+The rules that keep it from being a way in: the token is accepted **only from this machine** (a loopback address); a server on another machine, or one that holds no token or another, still announces and waits in the pending list for a person; a token file that other accounts can read is not used (the console says so in the log) and `dbdatakit bundle init --rotate` makes a new one; a server that cannot read the file simply waits. Scaling out later is not a reinstall: move state with `state move`, add servers on other machines and pair them as before.
