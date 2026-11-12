@@ -69,10 +69,11 @@ public static class StoreQuality
     public static void Map(IEndpointRouteBuilder app, string directory, StoreConnections connections, StateDatabase state)
     {
         var store = new QualityStore(state);
+        var audit = new FileAuditLog(Path.Combine(directory, "management-audit.log"));
         app.MapGet("/api/v1/quality", (HttpContext context) =>
         {
             var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
-            return !decision.Allowed ? Denied(decision) : Results.Json(QualityDocuments.Overview(store, canRun: true));
+            return !decision.Allowed ? Denied(decision) : Results.Json(QualityDocuments.Overview(store, canRun: true, canRelease: true));
         });
         app.MapGet("/api/v1/quality/history", (HttpContext context, string? dataset, string? check, int? limit) =>
         {
@@ -80,6 +81,17 @@ public static class StoreQuality
             if (!decision.Allowed) return Denied(decision);
             if (string.IsNullOrWhiteSpace(dataset) || string.IsNullOrWhiteSpace(check)) return Results.Json(new { error = "Say which check: `dataset` and `check`." }, statusCode: StatusCodes.Status400BadRequest);
             return Results.Json(QualityDocuments.History(store, dataset, check, limit ?? QualityDocuments.HistoryLimit));
+        });
+        // an administrator's release of a block (plan 23a FQ17): the check keeps failing and is still recorded, what depends on the entity goes on; a pass ends it. Audited: who, which check, never a value
+        app.MapPost("/api/v1/quality/release", (HttpContext context, QualityReleaseRequest request) =>
+        {
+            var token = context.ManagementToken();
+            var decision = ManagementAuthorization.Authorize(token, ServerRole.Admin);
+            if (!decision.Allowed) return Denied(decision);
+            if (string.IsNullOrWhiteSpace(request.Dataset) || string.IsNullOrWhiteSpace(request.Check)) return Results.Json(new { error = "Say which check: `dataset` and `check`." }, statusCode: StatusCodes.Status400BadRequest);
+            var released = store.Release(request.Dataset, request.Check, token.SubjectId, TimeProvider.System.GetUtcNow());
+            audit.Append(new AuditEntry(TimeProvider.System.GetUtcNow(), "command", "dbdatastore server", token.SubjectId, token.SubjectName ?? token.SubjectId, false, "quality.release", $"{request.Dataset}/{request.Check}", released ? "ok" : "not blocking", ""));
+            return released ? Results.Json(new { released = true }) : Results.Json(new { error = $"The check '{request.Check}' does not block '{request.Dataset}' now, so there is nothing to release." }, statusCode: StatusCodes.Status409Conflict);
         });
         // an evaluation on request changes no data but writes results and may set a block: an administrator's call
         app.MapPost("/api/v1/quality/run", async (HttpContext context, QualityRunRequest request) =>
@@ -103,3 +115,6 @@ public static class StoreQuality
 
 /// <summary>The body of an evaluation on request: a dataset's identity or entity name; empty is every dataset with checks.</summary>
 public sealed record QualityRunRequest(string? Dataset);
+
+/// <summary>The body of a release: the check's dataset (an identity as the overview lists it) and the check's id.</summary>
+public sealed record QualityReleaseRequest(string? Dataset, string? Check);

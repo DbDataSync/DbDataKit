@@ -67,7 +67,7 @@ public sealed class ConsoleQuality(ConsoleInstances instances, ConsoleRelay rela
             {
                 ["server"] = a.Server, ["server_id"] = a.InstanceId, ["product"] = a.Product, ["error"] = a.Error,
                 ["checks"] = a.Overview?["datasets"]?.AsArray().Sum(d => d!["checks"]!.AsArray().Count),
-                ["can_run"] = a.Overview is not null && (bool?)a.Overview["can_run"] == true, ["run_note"] = (string?)a.Overview?["run_note"],
+                ["can_run"] = a.Overview is not null && (bool?)a.Overview["can_run"] == true, ["run_note"] = (string?)a.Overview?["run_note"], ["can_release"] = a.Overview is not null && (bool?)a.Overview["can_release"] == true,
             }).ToArray()),
         };
     }

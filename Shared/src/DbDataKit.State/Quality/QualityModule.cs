@@ -79,6 +79,11 @@ public static class QualityModule
             PRIMARY KEY (dataset_hash, check_id, evaluator)
         );
         """,
+        """
+        -- An administrator's release of a block (plan 23a FQ17): the block is lifted while the check still fails, and stays lifted until the check passes (which clears the release); released_by is the person's id, never a secret.
+        ALTER TABLE {table:check_status} {{addcolumn}} released_at {{time}} NULL;
+        ALTER TABLE {table:check_status} {{addcolumn}} released_by {{key}} NULL;
+        """,
     ];
 
     private static StateModule Make(StateScopeKind scope) => new(Name, scope, Migrations, retention: [new RetentionRule("check_result", "evaluated_at", HistoryDays)]);

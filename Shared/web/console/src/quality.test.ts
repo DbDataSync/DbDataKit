@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { alertsLine, runPath, blockLine, datasetState, historyPath, measureLine, panelLine, runBlockedReason, sortDatasets, stateWord, type QualityCheck, type QualityDataset, type QualityServer } from './quality'
+import { alertsLine, releaseBlockedReason, releasePath, runPath, blockLine, datasetState, historyPath, measureLine, panelLine, runBlockedReason, sortDatasets, stateWord, type QualityCheck, type QualityDataset, type QualityServer } from './quality'
 
 const check = (over: Partial<QualityCheck> = {}): QualityCheck => ({
   check_id: 'c', severity: 'block', on_error: 'alert', status: 'pass', status_since: 't', measured: 0, threshold: 0, evaluated_at: 't', blocking: false, blocked_since: null, server: 'Sync one', server_id: 'sync-1', product: 'dbdatasync', ...over,
@@ -78,5 +78,23 @@ describe('alertsLine (plan 23a FQ13)', () => {
     expect(alertsLine(state)).toBe('A failed check is sent through the channel ops to a@example.com, once when it fails and once when it passes again.')
     expect(alertsLine({ ...state, channelKnown: false })).toContain('nothing is sent')
     expect(alertsLine({ ...state, problem: 'settings.yaml, line 4: bad' })).toBe('The alert settings cannot be used: settings.yaml, line 4: bad')
+  })
+})
+
+describe('the release of a block (plan 23a FQ17)', () => {
+  const server = { server: 'Store', server_id: 's1', product: 'dbdatastore', error: null, checks: 1, can_run: true, run_note: null, can_release: true }
+  it('is offered by the server and needs the admin role', () => {
+    expect(releaseBlockedReason(server, true)).toBeNull()
+    expect(releaseBlockedReason(server, false)).toContain('admin role')
+    expect(releaseBlockedReason({ ...server, can_release: false }, true)).toContain('has no release of a block')
+    expect(releaseBlockedReason({ ...server, error: 'down' }, true)).toContain('did not answer: down')
+    expect(releaseBlockedReason(undefined, true)).toContain('not paired any more')
+  })
+  it("goes to the server's own route and says so when a block was released and the check still fails", () => {
+    expect(releasePath('dbdatastore')).toBe('/api/v1/quality/release')
+    expect(releasePath('dbdatabuild')).toBe('/api/v1/quality/release')
+    expect(releasePath('dbdatasync')).toBe('/api/quality/release')
+    expect(blockLine({ blocking: false, blocked_since: null, released_since: '2026-11-12T10:00:00Z', released_by: 'ada' })).toContain('Released by ada on 2026-11-12T10:00:00Z')
+    expect(blockLine({ blocking: false, blocked_since: null })).toBeNull()
   })
 })

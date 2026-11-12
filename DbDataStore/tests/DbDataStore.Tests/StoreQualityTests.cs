@@ -156,6 +156,22 @@ public abstract class StoreQualityTests(string engine) : IAsyncLifetime
         var cityHistory = await Json(await send(HttpMethod.Get, $"/api/v1/quality/history?dataset={Uri.EscapeDataString(city["dataset"]!.GetValue<string>())}&check=city_has_territory", null, ServerRole.Viewer));
         Assert.Equal(["id=2"], cityHistory["results"]![0]!["sample_keys"]!.AsArray().Select(k => (string)k!).ToArray());        // the row's key
 
+        // an administrator releases the block (an author cannot): the check still fails, what depends on the entity is no longer held for it, and a further failing evaluation does not set it again
+        var territoryId = territory["dataset"]!.GetValue<string>();
+        var release = $$$"""{"dataset":"{{{territoryId}}}","check":"territory_name_unique"}""";
+        Assert.Equal(HttpStatusCode.Forbidden, (await send(HttpMethod.Post, "/api/v1/quality/release", release, ServerRole.Author)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, "/api/v1/quality/release", release, ServerRole.Admin)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await send(HttpMethod.Post, "/api/v1/quality/release", release, ServerRole.Admin)).StatusCode);        // nothing left to release
+        Assert.Equal(HttpStatusCode.BadRequest, (await send(HttpMethod.Post, "/api/v1/quality/release", """{"dataset":"x"}""", ServerRole.Admin)).StatusCode);
+        var releasedOverview = await Json(await send(HttpMethod.Get, "/api/v1/quality", null, ServerRole.Viewer));
+        var releasedCheck = releasedOverview["datasets"]!.AsArray().Single(d => (string)d!["dataset"]! == territoryId)!["checks"]!.AsArray().Single(c => (string)c!["check_id"]! == "territory_name_unique")!;
+        Assert.Equal(("fail", false, "ada"), ((string)releasedCheck["status"]!, (bool)releasedCheck["blocking"]!, (string)releasedCheck["released_by"]!));
+        Assert.True((bool)releasedOverview["can_release"]!);
+        await send(HttpMethod.Post, "/api/v1/quality/run", """{"dataset":"territory"}""", ServerRole.Admin);
+        var stillReleased = await Json(await send(HttpMethod.Get, "/api/v1/quality", null, ServerRole.Viewer));
+        Assert.Equal(0, (int)stillReleased["datasets"]!.AsArray().Single(d => (string)d!["dataset"]! == territoryId)!["blocking"]!);
+        Assert.Contains("quality.release", File.ReadAllText(Path.Combine(directory, "management-audit.log")));
+
         // fixed outside the writer too: the next evaluation passes and the block clears
         await RunAsync(database, "UPDATE territories.territory SET name = 'Europe' WHERE code = 'EU'");
         await RunAsync(database, "UPDATE territories.city SET territory_code = 'EU' WHERE id = 2");

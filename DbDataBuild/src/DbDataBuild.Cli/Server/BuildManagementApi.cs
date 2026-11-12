@@ -97,7 +97,18 @@ internal static class BuildManagementApi
                 var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
                 if (!decision.Allowed) return Results.Json(new { error = $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
                 return Results.Json(QualityDocuments.Overview(new QualityStore(qualityState.Value), canRun: false,
-                    runNote: "Build evaluates a model's checks after a refresh: run the refresh with `connection refresh <connection> <plan> --check-results <server directory>`."));
+                    runNote: "Build evaluates a model's checks after a refresh: run the refresh with `connection refresh <connection> <plan> --check-results <server directory>`.", canRelease: true));
+            });
+            // an administrator's release of a block (plan 23a FQ17): the models that read the dataset are no longer held back for it while the check keeps failing; a pass ends it. Audited.
+            app.MapPost("/api/v1/quality/release", (HttpContext context, QualityReleaseBody body) =>
+            {
+                var token = context.ManagementToken();
+                var decision = ManagementAuthorization.Authorize(token, ServerRole.Admin);
+                if (!decision.Allowed) return Results.Json(new { error = $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
+                if (string.IsNullOrWhiteSpace(body.Dataset) || string.IsNullOrWhiteSpace(body.Check)) return Results.Json(new { error = "Say which check: `dataset` and `check`." }, statusCode: StatusCodes.Status400BadRequest);
+                var released = new QualityStore(qualityState.Value).Release(body.Dataset, body.Check, token.SubjectId, TimeProvider.System.GetUtcNow());
+                audit?.Append(new AuditEntry(TimeProvider.System.GetUtcNow(), "command", "dbdatabuild server", token.SubjectId, token.SubjectName ?? token.SubjectId, false, "quality.release", $"{body.Dataset}/{body.Check}", released ? "ok" : "not blocking", ""));
+                return released ? Results.Json(new { released = true }) : Results.Json(new { error = $"The check '{body.Check}' does not block '{body.Dataset}' now, so there is nothing to release." }, statusCode: StatusCodes.Status409Conflict);
             });
             app.MapGet("/api/v1/quality/history", (HttpContext context, string? dataset, string? check, int? limit) =>
             {
@@ -591,3 +602,6 @@ internal static class BuildManagementApi
         });
     }
 }
+
+/// <summary>The body of a release of a block (plan 23a FQ17): the check's dataset, as the overview lists it, and the check's id.</summary>
+internal sealed record QualityReleaseBody(string? Dataset, string? Check);

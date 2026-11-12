@@ -12,6 +12,9 @@ export interface QualityCheck {
   evaluated_at: string
   blocking: boolean
   blocked_since: string | null
+  /** An administrator released the block this check set (plan 23a FQ17); the check still fails. */
+  released_since?: string | null
+  released_by?: string | null
   server: string
   server_id: string
   product: string | null
@@ -20,7 +23,7 @@ export interface QualityCheck {
 export interface QualityDataset { dataset: string; blocking: number; checks: QualityCheck[] }
 
 /** What one server said when asked: whether it can evaluate on request, and when it cannot, how its checks are evaluated. */
-export interface QualityServer { server: string; server_id: string; product: string | null; error: string | null; checks: number | null; can_run: boolean; run_note: string | null }
+export interface QualityServer { server: string; server_id: string; product: string | null; error: string | null; checks: number | null; can_run: boolean; run_note: string | null; can_release?: boolean }
 
 export interface QualityAnswer { datasets: QualityDataset[]; servers: QualityServer[] }
 
@@ -55,9 +58,19 @@ export function measureLine(check: Pick<QualityCheck, 'status' | 'measured' | 't
 }
 
 /** What a block is and how it ends. There is no release by hand yet for a block of Build or Sync: it ends when the check passes; the serving layer's administrator release is plan 23a FQ15. */
-export function blockLine(check: Pick<QualityCheck, 'blocking' | 'blocked_since'>): string | null {
+export function blockLine(check: Pick<QualityCheck, 'blocking' | 'blocked_since'> & Partial<Pick<QualityCheck, 'released_since' | 'released_by'>>): string | null {
+  if (!check.blocking && check.released_since) return `Released by ${check.released_by ?? 'an administrator'} on ${check.released_since}: the check still fails, but what depends on the dataset is not held for it. The release ends when the check passes.`
   if (!check.blocking) return null
   return `Blocking dependents since ${check.blocked_since ?? 'an unknown time'}. It clears when the check passes; fix the data, then evaluate again.`
+}
+
+/** Why a block cannot be released from here, or null when it can: the server must offer it, and only an administrator releases. */
+export function releaseBlockedReason(server: QualityServer | undefined, isAdmin: boolean): string | null {
+  if (!server) return 'The server that evaluates this check is not paired any more.'
+  if (server.error) return `${server.server} did not answer: ${server.error}`
+  if (!server.can_release) return `${server.server} has no release of a block: it ends when the check passes.`
+  if (!isAdmin) return 'Releasing a block lets what depends on the dataset run on data that fails the check, so it needs the admin role.'
+  return null
 }
 
 /** Why a check cannot be evaluated from here, or null when it can. */
@@ -86,6 +99,9 @@ const relay = (serverId: string, path: string) => `/relay/${encodeURIComponent(s
 /** The history of a check is the evaluating server's own route; the path is the one its product serves. */
 export const historyPath = (product: string | null) => (product === 'dbdatabuild' || product === 'dbdatastore' ? '/api/v1/quality/history' : '/api/quality/history')
 
+/** The server's own route that releases a block (an administrator; audited there). */
+export const releasePath = (product: string | null) => (product === 'dbdatabuild' || product === 'dbdatastore' ? '/api/v1/quality/release' : '/api/quality/release')
+
 /** The server's own route that evaluates a dataset's checks on request: a Sync server's is under `/api`, the Store's under `/api/v1`. */
 export const runPath = (product: string | null) => (product === 'dbdatastore' ? '/api/v1/quality/run' : '/api/quality/run')
 
@@ -105,6 +121,8 @@ export const qualityApi = {
   alerts: () => request<QualityAlertsState>('/api/quality/alerts'),
   history: (check: Pick<QualityCheck, 'server_id' | 'product' | 'check_id'>, dataset: string) =>
     request<{ results: QualityResult[] }>(relay(check.server_id, `${historyPath(check.product)}?dataset=${encodeURIComponent(dataset)}&check=${encodeURIComponent(check.check_id)}`)),
+  /** Releases the block a check set, on the server that owns the check (an administrator; the server audits it). */
+  release: (serverId: string, dataset: string, check: string, product: string | null) => request<{ released: boolean }>(relay(serverId, releasePath(product)), { method: 'POST', body: JSON.stringify({ dataset, check }) }),
   /** Evaluates the dataset's checks now, on the server that owns them (a Sync server or a Store; the server answers 403 for anyone but an administrator). */
   run: (serverId: string, dataset: string, product: string | null = null) => request<QualityRunAnswer>(relay(serverId, runPath(product)), { method: 'POST', body: JSON.stringify({ dataset }) }),
 }
