@@ -68,11 +68,23 @@ public static class ServerProducts
         new("GET", "api/v1/tasks/{name}/{name}/{name}/schedule", ServerRole.Viewer),                       // UE06
         new("GET", "api/v1/tasks/{name}/{name}/{name}/decisions", ServerRole.Viewer),                      // UE06
         new("HEAD", "api/v1/artifacts/{sha}", ServerRole.Viewer, ServerRole.Publisher),                    // UE10: does the runner have this file
+        new("GET", "api/v1/posture-choices", ServerRole.Viewer),                                                    // R19: the loosened defaults with their effect and the recorded choices
+        new("GET", "api/v1/runs/{id}/units", ServerRole.Viewer),                                            // R25: the table of units of a run
+        new("GET", "api/v1/runs/{id}/steps", ServerRole.Viewer),                                            // R25: the steps of its attempt chain
+        // what the kit leaves to a person and the checkpoints (operator: they name what a task refused or where it got to)
+        new("GET", "api/v1/tasks/{name}/{name}/{name}/in-doubt", ServerRole.Operator),                      // R25
+        new("GET", "api/v1/tasks/{name}/{name}/{name}/dead-letters", ServerRole.Operator),                  // R25
+        new("GET", "api/v1/tasks/{name}/{name}/{name}/checkpoints", ServerRole.Operator),                   // 29a Q20
+        new("GET", "api/v1/tasks/{name}/{name}/{name}/checkpoints/{name}/history", ServerRole.Operator),    // 29a Q20
         // run now, pause, resume, and who schedules a task (operator)
         new("POST", "api/v1/tasks/{name}/{name}/{name}/run", ServerRole.Operator),
         new("POST", "api/v1/tasks/{name}/{name}/{name}/pause", ServerRole.Operator),
         new("POST", "api/v1/tasks/{name}/{name}/{name}/resume", ServerRole.Operator),
         new("PUT", "api/v1/tasks/{name}/{name}/{name}/owner", ServerRole.Operator),                        // UE06
+        new("POST", "api/v1/tasks/{name}/{name}/{name}/steps/{name}/resolve", ServerRole.Operator),         // R25: say whether an in-doubt step happened (audited by the runner)
+        new("POST", "api/v1/tasks/{name}/{name}/{name}/dead-letters/{name}/replay", ServerRole.Operator),   // R25
+        new("POST", "api/v1/tasks/{name}/{name}/{name}/dead-letters/{name}/discard", ServerRole.Operator),  // R25
+        new("POST", "api/v1/tasks/{name}/{name}/{name}/checkpoints/{name}/rewind", ServerRole.Operator),    // 29a Q20
         // a package's life cycle (admin)
         new("POST", "api/v1/definitions/integration/{name}/activate", ServerRole.Admin),
         new("POST", "api/v1/definitions/integration/{name}/switch", ServerRole.Admin),
@@ -86,6 +98,7 @@ public static class ServerProducts
         new("POST", "api/v1/bindings/{name}/integration/{name}/test", ServerRole.Admin),                    // UI08: try a slot's binding (never a value in the answer)
         new("PUT", "api/v1/settings/require_signatures", ServerRole.Admin),                                // UE08
         new("PUT", "api/v1/settings/require_sandbox_run", ServerRole.Admin),                               // IX16
+        new("PUT", "api/v1/posture-choices", ServerRole.Admin),                                                    // R19: choose a loosened default (confirmed) or take it back; audited by the runner
         new("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin),                                      // UE11
         new("POST", "api/v1/tracking/divergences/{id}/resolve", ServerRole.Admin),                         // E18: archive or reset the runner's copy from the common point (audited by the runner)
         new("POST", "api/v1/state/maintenance", ServerRole.Admin),                                         // 29b C05: put it into maintenance (it claims nothing new and reports idle) or out of it; audited by the runner

@@ -95,26 +95,28 @@ internal static class RunnerOperatorApi
             });
         });
 
-        app.MapPost($"{root}/tasks/{{package}}/{{channel}}/{{task}}/dead-letters/{{id:guid}}/replay", (string package, string channel, string task, Guid id, HttpContext context) =>
+        app.MapPost($"{root}/tasks/{{package}}/{{channel}}/{{task}}/dead-letters/{{id}}/replay", (string package, string channel, string task, string id, HttpContext context) =>
         {
             if (!RunnerApi.ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
             if (deny(context, ServerRole.Operator, RunnerControl.ReplayVerb, reference) is { } denied) return denied;
+            if (!Guid.TryParse(id, out var letter)) return Results.BadRequest(new { error = $"'{id}' is not a dead letter id." });
             return Control(engine(), control =>
             {
-                var replay = control.ReplayDeadLetter(reference!, id, actorOf(context));
+                var replay = control.ReplayDeadLetter(reference!, letter, actorOf(context));
                 return replay.Replayed
-                    ? Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["id"] = id.ToString(), ["replayed"] = true, ["inbox_item"] = replay.InboxItem?.ToString(), ["run_queued"] = replay.Queued }, statusCode: StatusCodes.Status202Accepted)
-                    : Results.Json(new { error = $"The dead letter {id} of {reference} is not open (it was replayed or discarded already)." }, statusCode: StatusCodes.Status409Conflict);
+                    ? Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["id"] = letter.ToString(), ["replayed"] = true, ["inbox_item"] = replay.InboxItem?.ToString(), ["run_queued"] = replay.Queued }, statusCode: StatusCodes.Status202Accepted)
+                    : Results.Json(new { error = $"The dead letter {letter} of {reference} is not open (it was replayed or discarded already)." }, statusCode: StatusCodes.Status409Conflict);
             });
         });
 
-        app.MapPost($"{root}/tasks/{{package}}/{{channel}}/{{task}}/dead-letters/{{id:guid}}/discard", (string package, string channel, string task, Guid id, HttpContext context) =>
+        app.MapPost($"{root}/tasks/{{package}}/{{channel}}/{{task}}/dead-letters/{{id}}/discard", (string package, string channel, string task, string id, HttpContext context) =>
         {
             if (!RunnerApi.ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
             if (deny(context, ServerRole.Operator, RunnerControl.DiscardVerb, reference) is { } denied) return denied;
-            return Control(engine(), control => control.DiscardDeadLetter(reference!, id, actorOf(context))
-                ? Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["id"] = id.ToString(), ["discarded"] = true })
-                : Results.Json(new { error = $"The dead letter {id} of {reference} is not open." }, statusCode: StatusCodes.Status409Conflict));
+            if (!Guid.TryParse(id, out var letter)) return Results.BadRequest(new { error = $"'{id}' is not a dead letter id." });
+            return Control(engine(), control => control.DiscardDeadLetter(reference!, letter, actorOf(context))
+                ? Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["id"] = letter.ToString(), ["discarded"] = true })
+                : Results.Json(new { error = $"The dead letter {letter} of {reference} is not open." }, statusCode: StatusCodes.Status409Conflict));
         });
 
         app.MapGet($"{root}/runs/{{id:guid}}/units", (Guid id, HttpContext context) =>

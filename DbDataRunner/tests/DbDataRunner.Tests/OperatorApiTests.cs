@@ -146,35 +146,35 @@ public sealed class OperatorApiTests
         await using var h = new RunnerHarness(StateEngineIds.Sqlite);
         await h.StartAsync();
 
-        var (status, posture) = await h.GetAsync("/api/v1/posture");
+        var (status, posture) = await h.GetAsync("/api/v1/posture-choices");
         Assert.Equal(HttpStatusCode.OK, status);
         var longer = posture!["settings"]!.AsArray().Single(s => (string)s!["name"]! == "longer_limits")!;
         Assert.Contains("more time and memory", (string)longer["effect"]!);
         Assert.Empty(posture["choices"]!.AsArray());
 
         // not confirmed: nothing changes and the answer names the effect
-        var (refused, text) = await h.CallAsync(HttpMethod.Put, "/api/v1/posture", ServerRole.Admin, new { setting = "longer_limits", scope = "sample" });
+        var (refused, text) = await h.CallAsync(HttpMethod.Put, "/api/v1/posture-choices", ServerRole.Admin, new { setting = "longer_limits", scope = "sample" });
         Assert.Equal(HttpStatusCode.Conflict, refused);
         Assert.Contains("not confirmed", (string)text!["error"]!);
-        Assert.Empty((await h.GetAsync("/api/v1/posture")).Body!["choices"]!.AsArray());
+        Assert.Empty((await h.GetAsync("/api/v1/posture-choices")).Body!["choices"]!.AsArray());
 
         // a viewer and an operator cannot choose; a bad setting and a bad scope are refused
-        Assert.Equal(HttpStatusCode.Forbidden, (await h.CallAsync(HttpMethod.Put, "/api/v1/posture", ServerRole.Operator, new { setting = "longer_limits", scope = "sample", confirm = true })).Status);
-        Assert.Equal(HttpStatusCode.BadRequest, (await h.CallAsync(HttpMethod.Put, "/api/v1/posture", ServerRole.Admin, new { setting = "nothing", scope = "sample", confirm = true })).Status);
-        Assert.Equal(HttpStatusCode.BadRequest, (await h.CallAsync(HttpMethod.Put, "/api/v1/posture", ServerRole.Admin, new { setting = "longer_limits", scope = "Bad Scope", confirm = true })).Status);
-        Assert.Equal(HttpStatusCode.BadRequest, (await h.CallAsync(HttpMethod.Put, "/api/v1/posture", ServerRole.Admin, new { setting = "production_binding_on_non_production", scope = "sample", confirm = true })).Status);
+        Assert.Equal(HttpStatusCode.Forbidden, (await h.CallAsync(HttpMethod.Put, "/api/v1/posture-choices", ServerRole.Operator, new { setting = "longer_limits", scope = "sample", confirm = true })).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await h.CallAsync(HttpMethod.Put, "/api/v1/posture-choices", ServerRole.Admin, new { setting = "nothing", scope = "sample", confirm = true })).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await h.CallAsync(HttpMethod.Put, "/api/v1/posture-choices", ServerRole.Admin, new { setting = "longer_limits", scope = "Bad Scope", confirm = true })).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await h.CallAsync(HttpMethod.Put, "/api/v1/posture-choices", ServerRole.Admin, new { setting = "production_binding_on_non_production", scope = "sample", confirm = true })).Status);
 
-        var (chosen, choice) = await h.CallAsync(HttpMethod.Put, "/api/v1/posture", ServerRole.Admin, new { setting = "longer_limits", scope = "sample", confirm = true, note = "nightly load" }, subject: "grace");
+        var (chosen, choice) = await h.CallAsync(HttpMethod.Put, "/api/v1/posture-choices", ServerRole.Admin, new { setting = "longer_limits", scope = "sample", confirm = true, note = "nightly load" }, subject: "grace");
         Assert.Equal(HttpStatusCode.OK, chosen);
         Assert.Equal(("grace", "nightly load"), ((string)choice!["chosen_by"]!, (string)choice["note"]!));
-        var listed = Assert.Single((await h.GetAsync("/api/v1/posture")).Body!["choices"]!.AsArray())!;
+        var listed = Assert.Single((await h.GetAsync("/api/v1/posture-choices")).Body!["choices"]!.AsArray())!;
         Assert.Equal(("longer_limits", "sample"), ((string)listed["setting"]!, (string)listed["scope"]!));
         Assert.Contains(h.Audit.Read(new AuditQuery(Verb: PostureGuard.ChooseVerb, Limit: 20)), r => r.Entry.ActorId == "grace" && r.Entry.TargetId == "longer_limits");
 
         // revoke: the default applies again; a second revoke finds nothing
-        Assert.Equal(HttpStatusCode.OK, (await h.CallAsync(HttpMethod.Put, "/api/v1/posture", ServerRole.Admin, new { setting = "longer_limits", scope = "sample", revoke = true })).Status);
-        Assert.Equal(HttpStatusCode.NotFound, (await h.CallAsync(HttpMethod.Put, "/api/v1/posture", ServerRole.Admin, new { setting = "longer_limits", scope = "sample", revoke = true })).Status);
-        Assert.Empty((await h.GetAsync("/api/v1/posture")).Body!["choices"]!.AsArray());
+        Assert.Equal(HttpStatusCode.OK, (await h.CallAsync(HttpMethod.Put, "/api/v1/posture-choices", ServerRole.Admin, new { setting = "longer_limits", scope = "sample", revoke = true })).Status);
+        Assert.Equal(HttpStatusCode.NotFound, (await h.CallAsync(HttpMethod.Put, "/api/v1/posture-choices", ServerRole.Admin, new { setting = "longer_limits", scope = "sample", revoke = true })).Status);
+        Assert.Empty((await h.GetAsync("/api/v1/posture-choices")).Body!["choices"]!.AsArray());
         Assert.Contains(h.Audit.Read(new AuditQuery(Verb: PostureGuard.RevokeVerb, Limit: 20)), r => r.Entry.TargetId == "longer_limits");
     }
 }

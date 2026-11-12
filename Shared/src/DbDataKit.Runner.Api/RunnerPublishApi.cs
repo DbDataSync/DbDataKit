@@ -16,7 +16,7 @@ namespace DbDataKit.Runner.Api;
 /// <item><c>PUT /api/v1/definitions/integration/{name}</c>: publish. Body: <c>manifest</c> (package/1 YAML), <c>artifacts</c> (<c>path</c>, <c>sha256</c>, <c>size</c>, <c>media_type</c>), <c>depends_on</c>, <c>channel</c>, <c>mode</c> (<c>serve</c> or <c>stage</c>), <c>expected_version</c>, <c>note</c>, <c>signature</c>.</item>
 /// <item><c>POST /api/v1/definitions/integration/{name}/activate|switch|rollback|retire</c>: body <c>channel</c> and <c>expected_version</c> (switch also <c>version</c>).</item>
 /// <item><c>PUT /api/v1/bindings/{channel}/integration/{name}</c>: body <c>slots</c> (slot to what it is bound to), optional <c>expected_revision</c>.</item>
-/// <item><c>GET /api/v1/definitions/integration[/{name}]</c>; <c>GET</c> and <c>PUT /api/v1/settings[/require_signatures]</c>; <c>GET /api/v1/posture</c> (the loosened defaults with their effect and the recorded choices) and <c>PUT /api/v1/posture</c> (an administrator chooses with <c>confirm</c> or revokes, plan 28a R19).</item>
+/// <item><c>GET /api/v1/definitions/integration[/{name}]</c>; <c>GET</c> and <c>PUT /api/v1/settings[/require_signatures]</c>; <c>GET /api/v1/posture-choices</c> (the loosened defaults with their effect and the recorded choices) and <c>PUT /api/v1/posture-choices</c> (an administrator chooses with <c>confirm</c> or revokes, plan 28a R19).</item>
 /// </list>
 /// <b>Who.</b> A publisher (the role Publisher of a paired server client, with the owner rules of <see cref="OwnerScope"/>) uploads, publishes, stages and binds packages it created; it cannot change one another client or an administrator
 /// made. A viewer reads. An administrator does everything and activates, switches, rolls back and retires. A refused call is audited (<see cref="RunnerPublishing.AuditRefused"/>) and answers 403.
@@ -178,7 +178,7 @@ public static class RunnerPublishApi
         });
 
         // the posture (plan 28a R19): a default loosened on purpose is a recorded choice with the effect shown. PUT {"setting", "scope" (a package or "*"), "confirm": true, "note"} chooses; {"setting", "scope", "revoke": true} takes it back. Administrator, audited by the guard (runner.posture.choose / .revoke).
-        app.MapPut($"{root}/posture", async (HttpContext context) =>
+        app.MapPut($"{root}/posture-choices", async (HttpContext context) =>
         {
             var caller = callerOf(context);
             if (Deny(caller, ServerRole.Admin, publishing, PostureGuard.ChooseVerb, PostureGuard.SettingKind, "-") is { } denied) return denied;
@@ -266,7 +266,7 @@ public static class RunnerPublishApi
             catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
         });
 
-        app.MapGet($"{root}/posture", (HttpContext context) =>
+        app.MapGet($"{root}/posture-choices", (HttpContext context) =>
         {
             if (Deny(caller(context), ServerRole.Viewer) is { } denied) return denied;
             return Results.Json(new JsonObject
