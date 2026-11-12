@@ -66,7 +66,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 
 | Plan and row | What remains | Flag |
 | --- | --- | --- |
-| [28a](28a-runner-slices.md) R07, R13, R16, R20, R26, R27, R27c, R27d | Limits per connection, the process tree and the cgroup path in CI; the serving layer's webhook end, the Store change source, a file connection kind; signatures; the embedded runner's account; a per-package account; the executable bit and scratch limit; a task and a replication under a real Windows service | R13 PARTLY |
+| [28a](28a-runner-slices.md) R07, R13, R16, R20, R26, R27, R27c, R27d | Limits per connection, the process tree and the cgroup path in CI; the serving layer's webhook end, the Store change source, a file connection kind; signatures; the embedded runner's account; a per-package account; the manifest generated in a build step, a release cut and installed; a task and a replication under a real Windows service | R13 PARTLY |
 | [28c](28c-engines-on-runner.md) E06f, E17, E21, E22 | Splitting the Sync integration CI job (recorded only); Sync's state on the target; interactive writes as manual tasks; retiring the old paths (`ProcessSupervisor`, `BuildScheduler`, the loopback state) | E21 OWNER (optional) |
 | [28c](28c-engines-on-runner.md) E14, E16, CW02 | The rest of Sync on modules; Build tracking's remainder; the primary-key-update remainder | PARTLY |
 | [29a](29a-state-slices.md) Q20, Q22, Q25 | The migration function (a `package/2`); Sync's processes on the runner-owned state; deleting the old state path | Q20 PARTLY |

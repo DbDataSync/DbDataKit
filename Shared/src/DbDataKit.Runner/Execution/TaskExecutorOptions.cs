@@ -31,8 +31,11 @@ public sealed class TaskExecutorOptions
     /// <summary>The memory limit, in MiB, of a task whose manifest names none. Default 2048; null: no limit.</summary>
     public int? DefaultMemoryMb { get; init; } = 2048;
 
-    /// <summary>How big a scratch directory may be at the end of a run. Default 1 GiB (plan 28a QR1). Checked after the run: a bigger one is a warning in the log and in the result, not a failure.</summary>
+    /// <summary>How big a scratch directory may be. Default 1 GiB (plan 28a QR1). Watched while the task runs (<see cref="ScratchSampleInterval"/>: a task over it is killed and the run ends as a limit exceeded) and checked after the run (a bigger one is a warning in the log and in the result).</summary>
     public long MaxScratchBytes { get; init; } = 1024L * 1024 * 1024;
+
+    /// <summary>How often the size of the scratch directory is read while the task runs (plan 28a R27). Default 2 seconds; null or zero: only the check after the run.</summary>
+    public TimeSpan? ScratchSampleInterval { get; init; } = TimeSpan.FromSeconds(2);
 
     /// <summary>The longest log line kept, in characters; a longer one is cut and says by how much. Default 4096.</summary>
     public int MaxLogLineChars { get; init; } = 4096;
