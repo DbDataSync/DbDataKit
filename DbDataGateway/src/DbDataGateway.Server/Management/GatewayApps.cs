@@ -42,6 +42,8 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
     private sealed record AddressRequest(string? Host, string? Kind, string? Path, string? Certificate,
         [property: System.Text.Json.Serialization.JsonPropertyName("certificate_password")] string? CertificatePassword, bool? Primary);
 
+    private sealed record VerifyAddressRequest(string? Host);
+
     private sealed record NavigationEntryRequest(string? Instance, string? Label, string? Icon);
 
     private sealed record NavigationRequest(string? Title, List<NavigationEntryRequest>? Entries, [property: System.Text.Json.Serialization.JsonPropertyName("rename_from")] string? RenameFrom);
@@ -107,6 +109,7 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
                 if (await VerifyAddressesAsync(name, body, cancellationToken) is { } unverified) return Refused(caller, "app instance-save", name, 400, unverified);
                 return await WriteAsync(() => SaveInstance(name, body, caller));
             }
+            case ("app-instances", "POST", 2) when rest[1] == "verify-address": return await VerifyAddressAsync(Uri.UnescapeDataString(rest[0]), body, cancellationToken);
             case ("app-navigation", "PUT", 1): return await WriteAsync(() => SaveNavigationSet(Uri.UnescapeDataString(rest[0]), body, caller));
             case ("app-navigation", "DELETE", 1): return await WriteAsync(() => RemoveNavigationSet(Uri.UnescapeDataString(rest[0]), caller));
             default: return ManagementResult.Problem(404, "There is no such call.");
@@ -215,7 +218,7 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
                 ["instance_version"] = current[instance.Name].Version, ["published_by"] = current[instance.Name].PublishedBy, ["published_at"] = current[instance.Name].PublishedAt,
                 ["path"] = $"/apps/{instance.Name}/", ["address"] = address is null ? null : new Uri(address, $"/apps/{instance.Name}/").AbsoluteUri,
                 ["bindings"] = new JsonObject(instance.Bindings.OrderBy(b => b.Key, StringComparer.Ordinal).Select(b => KeyValuePair.Create(b.Key, (JsonNode?)b.Value))),
-                ["addresses"] = Addresses(instance.Addresses),
+                ["addresses"] = Addresses(instance.Name, instance.Addresses),
                 ["settings"] = new JsonObject(instance.Settings.OrderBy(b => b.Key, StringComparer.Ordinal).Select(b => KeyValuePair.Create(b.Key, (JsonNode?)b.Value))),
                 ["navigation"] = new JsonArray([.. sets.Where(s => s.Entries.Any(e => e.Instance == instance.Name)).Select(s => (JsonNode)s.Name)]),
                 ["mounted_by"] = new JsonArray([.. resolved.Values.Where(r => r is not null && r.Instance.Name != instance.Name && r.Manifest.Portal?.Mounts.Any(m => m.App == instance.Name) == true).Select(r => (JsonNode)r!.Instance.Name)]),
@@ -235,7 +238,7 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
     }
 
     /// <summary>An instance's addresses as the API shows them: the name, kind and path, the certificate's secret references (never the certificate), the address people open (on the apps host's public port) and the redirect URI the home needs.</summary>
-    private JsonArray Addresses(IReadOnlyList<AppAddress> addresses)
+    private JsonArray Addresses(string instance, IReadOnlyList<AppAddress> addresses)
     {
         var home = appsAddress?.Invoke();
         return new JsonArray([.. addresses.Select(a => (JsonNode)new JsonObject
@@ -244,7 +247,25 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
             ["certificate"] = a.Certificate, ["certificate_password"] = a.CertificatePassword,
             ["url"] = home is null ? null : new UriBuilder(Uri.UriSchemeHttps, a.Host, home.IsDefaultPort ? -1 : home.Port, a.Path == "/" ? "/" : a.Path + "/").Uri.AbsoluteUri,
             ["redirect_uri"] = home is null ? null : Serving.AppInstanceClients.CallbackOfName(a.Host, home),
+            ["challenge"] = a.Kind == AppAddressKind.Custom && addressVerifier is not null ? Challenge(addressVerifier.Challenge(instance, a.Host)) : null,
         })]);
+    }
+
+    private static JsonObject Challenge(Serving.AppDomainRecord record) => new() { ["name"] = record.Name, ["type"] = record.Type, ["value"] = record.Value };
+
+    /// <summary>
+    /// Verify of the instance editor (AP08): does the TXT record that proves a custom domain exist, or does the name already resolve to this host? The answer carries the record to create either way. It changes nothing; the save runs the same checks.
+    /// </summary>
+    private async Task<ManagementResult> VerifyAddressAsync(string name, string? body, CancellationToken cancellationToken)
+    {
+        if (addressVerifier is null) return ManagementResult.Problem(404, "This gateway does not serve apps.");
+        if (!AppManifestLoader.NameRule.IsMatch(name)) return ManagementResult.Problem(400, $"'{name}' is not an instance name.");
+        var host = Read<VerifyAddressRequest>(body)?.Host;
+        if (string.IsNullOrWhiteSpace(host)) return ManagementResult.Problem(400, "The body is a JSON object: {\"host\": \"<the custom domain>\"}.");
+        var normal = AppAddresses.NormalizeHost(host);
+        if (!AppAddresses.IsHostName(normal)) return ManagementResult.Problem(400, $"'{host}' is not a host name.");
+        var check = await addressVerifier.CheckAsync(name, normal, cancellationToken);
+        return ManagementResult.Ok(new JsonObject { ["host"] = check.Host, ["verified"] = check.Verified, ["via"] = check.Via, ["reason"] = check.Reason, ["record"] = Challenge(check.Record) });
     }
 
     private ManagementResult Navigation(ManagementCaller caller) =>
@@ -424,7 +445,7 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
             if (channel == DefinitionStore.Production) instanceSaved?.Invoke(name);
             var result = new JsonObject { ["name"] = name, ["app"] = app, ["version"] = saved.Version, ["channel"] = channel };
             if (channel == DefinitionStore.Production && addresses.Count > 0)
-                result["addresses"] = Addresses(store.Get(name)?.Addresses ?? addresses);
+                result["addresses"] = Addresses(name, store.Get(name)?.Addresses ?? addresses);
             if (channel != DefinitionStore.Production)
             {
                 var address = AppInstanceName.Of(name, channel);

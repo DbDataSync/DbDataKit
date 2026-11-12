@@ -103,7 +103,13 @@ export interface AppInstanceRow {
 export interface AppAddressRow {
   host: string; kind: 'subdomain' | 'custom'; path: string; primary: boolean
   certificate: string | null; certificate_password: string | null; url?: string | null; redirect_uri?: string | null
+  /** A custom domain's DNS challenge: the TXT record that proves the name is the administrator's (plan 26 AP08). */
+  challenge?: AppDomainRecord | null
 }
+/** A DNS record to create. */
+export interface AppDomainRecord { name: string; type: string; value: string }
+/** What `POST /api/v1/app-instances/{name}/verify-address` answers: accepted by `challenge` (the TXT record holds the value) or `address` (the name resolves to this host), or `reason` why not; `record` is the one to create. */
+export interface AppDomainCheck { host: string; verified: boolean; via: 'challenge' | 'address' | null; reason: string | null; record: AppDomainRecord }
 export interface AppInstances { instances: AppInstanceRow[]; apps_address: string | null; caller: AppsCaller }
 export interface NavigationSetRow { name: string; title: string; entries: { instance: string; label: string | null; icon: string | null }[] }
 export interface AppApprovalRow {

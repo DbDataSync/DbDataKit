@@ -747,4 +747,31 @@ public sealed class AppsScreenTests : IAsyncLifetime
         Assert.Equal("https://apps.example.test:8818/apps/acme/", (string?)acme["address"]);
         Assert.Equal("https://apps.example.test:8818/", (string?)result.Body["apps_address"]);
     }
+
+    [Fact]
+    public async Task Verify_of_a_custom_domain_answers_with_the_record_to_create_and_a_saved_custom_address_carries_it()
+    {
+        Seed();
+        var txt = new Dictionary<string, string[]>();
+        var verifier = new DbDataGateway.Server.Serving.AppAddressVerifier(() => new DbDataGateway.Server.Configuration.GatewayOptions { InstanceId = "gw-1" }, _ => null,
+            (_, _) => throw new System.Net.Sockets.SocketException(11001), () => [], resolveTxt: (name, _) => Task.FromResult<IReadOnlyList<string>>(txt.GetValueOrDefault(name) ?? []));
+        var routes = new GatewayApps(Definitions, () => new InMemoryApprovers(), new StateAuditLog(State), appsAddress: () => new Uri("https://apps.example.test:8818/"), addressVerifier: verifier);
+        var publisher = ManagementCaller.Local("publisher");
+
+        var before = await routes.HandleAsync("POST", "app-instances", ["acme", "verify-address"], "{\"host\": \"Sales.Contoso.Test\"}", publisher, CancellationToken.None);
+        Assert.Equal(200, before.Status);
+        Assert.False((bool)before.Body["verified"]!);
+        Assert.Equal("_dbdatakit-challenge.sales.contoso.test", (string?)before.Body["record"]!["name"]);
+        Assert.Equal("TXT", (string?)before.Body["record"]!["type"]);
+        var value = (string)before.Body["record"]!["value"]!;
+        Assert.Contains(value, (string)before.Body["reason"]!);
+
+        txt["_dbdatakit-challenge.sales.contoso.test"] = [value];
+        var after = await routes.HandleAsync("POST", "app-instances", ["acme", "verify-address"], "{\"host\": \"sales.contoso.test\"}", publisher, CancellationToken.None);
+        Assert.True((bool)after.Body["verified"]!);
+        Assert.Equal("challenge", (string?)after.Body["via"]);
+
+        Assert.Equal(400, (await routes.HandleAsync("POST", "app-instances", ["acme", "verify-address"], "{}", publisher, CancellationToken.None)).Status);
+        Assert.Equal(400, (await routes.HandleAsync("POST", "app-instances", ["acme", "verify-address"], "{\"host\": \"10.0.0.1\"}", publisher, CancellationToken.None)).Status);
+    }
 }

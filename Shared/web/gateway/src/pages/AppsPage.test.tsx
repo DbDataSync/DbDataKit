@@ -1,10 +1,10 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { InstanceEditorView, instanceSaveBlock, NavigationEditorView, navSaveBlock, PublishView, type InstanceEditorProps, type NavigationEditorProps, type PublishViewProps } from './AppEditors'
+import { AddressVerify, DomainCheckView, InstanceEditorView, instanceSaveBlock, NavigationEditorView, navSaveBlock, PublishView, type InstanceEditorProps, type NavigationEditorProps, type PublishViewProps } from './AppEditors'
 import { emptyInstanceForm, emptyNavForm, formFromRow, navFormFromSet, prepareManifest, type InstanceForm } from '../appEditors'
 import { ApprovalsView, AppsView, AboutView, InstancesView, NavigationView, VersionsView, type ApprovalsViewProps, type InstancesViewProps, type NavigationViewProps, type VersionsViewProps } from './AppsPage'
-import type { AppAbout, AppApprovalRow, AppCheck, NavigationSetRow, AppDetail, AppInstanceRow, AppsCaller, AppSummary, AppVersionRow } from '../types'
+import type { AppAbout, AppApprovalRow, AppCheck, AppDomainCheck, NavigationSetRow, AppDetail, AppInstanceRow, AppsCaller, AppSummary, AppVersionRow } from '../types'
 
 const viewer: AppsCaller = { can_publish: false, can_approve: false, you: 'Ada' }
 const admin: AppsCaller = { can_publish: true, can_approve: false, you: 'Ada' }
@@ -303,6 +303,37 @@ describe('the addresses section of the instance form (plan 26 AP08)', () => {
     expect(html(view)).toContain('needs its certificate')
     const filled = InstanceEditorView(editorProps({ form: { ...form, addresses: [{ ...custom, certificate: 'secret:cert-sales' }] } }))
     expect(find(filled, 'instance-editor-save')!.props.disabled).toBe(false)
+  })
+
+  it('offers Verify for a custom domain only when the screen can ask, and draws what the Gateway answered with the record to create (AP08, DNS challenge)', () => {
+    const custom = { host: 'sales.contoso.com', kind: 'custom' as const, path: '/', primary: false, certificate: 'secret:c', certificatePassword: '' }
+    const form = { ...emptyInstanceForm('notes'), name: 'sales', addresses: [custom, { ...custom, host: 'sales.apps.example.com', kind: 'subdomain' as const }] }
+    const verify = vi.fn(() => Promise.reject(new Error('no')))
+    const view = InstanceEditorView(editorProps({ form, verifyAddress: verify }))
+    const rendered = JSON.stringify(view, (_, v) => (typeof v === 'function' ? 'fn' : v))
+    expect(rendered).toContain('"index":0')                       // one AddressVerify, for the custom domain
+    expect(rendered).not.toContain('"index":1')
+    expect(html(InstanceEditorView(editorProps({ form })))).not.toContain('instance-editor-address-verify-0')   // no asking: no button
+
+    const idle = renderToStaticMarkup(<AddressVerify index={0} host="sales.contoso.com" canPublish verify={verify} />)
+    expect(idle).toContain('data-testid="instance-editor-address-verify-0"')
+    expect(idle).not.toContain('disabled')
+    expect(renderToStaticMarkup(<AddressVerify index={0} host=" " canPublish verify={verify} />)).toContain('disabled')           // nothing typed yet
+    expect(renderToStaticMarkup(<AddressVerify index={0} host="x.test" canPublish={false} verify={verify} />)).toContain('disabled')   // the role is the Gateway's
+    expect(verify).not.toHaveBeenCalled()
+
+    const record = { name: '_dbdatakit-challenge.sales.contoso.com', type: 'TXT', value: 'dbdatakit-domain-verification=abc123' }
+    const no: AppDomainCheck = { host: 'sales.contoso.com', verified: false, via: null, reason: 'The name does not resolve.', record }
+    const unverified = renderToStaticMarkup(<DomainCheckView index={0} check={no} />)
+    expect(unverified).toContain('data-verified="false"')
+    expect(unverified).toContain('The name does not resolve.')
+    expect(unverified).toContain('_dbdatakit-challenge.sales.contoso.com')
+    expect(unverified).toContain('dbdatakit-domain-verification=abc123')
+    const yes = renderToStaticMarkup(<DomainCheckView index={0} check={{ ...no, verified: true, via: 'challenge', reason: null }} />)
+    expect(yes).toContain('data-verified="true"')
+    expect(yes).toContain('the TXT record holds the value')
+    expect(renderToStaticMarkup(<DomainCheckView index={0} check={{ ...no, verified: true, via: 'address', reason: null }} />)).toContain('resolves to this host')
+    expect(renderToStaticMarkup(<DomainCheckView index={0} check="The Gateway said no." />)).toContain('data-verified="error"')
   })
 
   it('makes one address the primary one at a time and removes a row', () => {

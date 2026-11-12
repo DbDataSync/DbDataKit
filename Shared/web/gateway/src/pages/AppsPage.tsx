@@ -497,6 +497,7 @@ export function AppsPage() {
               <InstanceEditorView
                 form={editing.form} isNew={editing.isNew} apps={appList} versionsOf={(app) => appList.find((a) => a.name === app)?.versions ?? []}
                 models={editing.form.app === '' ? [] : modelsOf(editDetail.data, editing.form.pin)} existing={rows.map((r) => r.name)} caller={caller} busy={busy}
+                verifyAddress={(host) => gatewayApi.apps.verifyAddress(editing.form.name.trim() || 'instance', host)}
                 onChange={(form) => setEditing({ ...editing, form })} onCancel={() => setEditing(null)}
                 onSave={() => saveInstance.mutate({ form: editing.form, models: modelsOf(editDetail.data, editing.form.pin) ?? [] })}
               />
