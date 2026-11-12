@@ -11,7 +11,7 @@ namespace DbDataKit.State;
 /// <b>Retention.</b> A settled message (<c>sent</c> or <c>dead</c>) and its attempts go after the state default of 30 days (<see cref="HistoryDays"/>), and the payloads that belonged to it with them (the retention job's orphan rule);
 /// a message that is still <c>pending</c> or <c>sending</c> is current work and is never removed by age.
 /// </para>
-/// <para>Scope: one copy per install. Migrations are appended, never edited. Migration 2 (plan 22a GP17) adds <c>subscription</c> and <c>subscription_run</c>; migration 3 (the GP18 fold of the channels into connections) adds <c>message.release_channel</c>; migration 4 (GP16) adds <c>alert_rule</c> and <c>alert_state</c>; migration 5 (plan 32 DBR18) adds <c>subscription.inline_preview</c>.</para>
+/// <para>Scope: one copy per install. Migrations are appended, never edited. Migration 2 (plan 22a GP17) adds <c>subscription</c> and <c>subscription_run</c>; migration 3 (the GP18 fold of the channels into connections) adds <c>message.release_channel</c>; migration 4 (GP16) adds <c>alert_rule</c> and <c>alert_state</c>; migration 5 (plan 32 DBR18) adds <c>subscription.inline_preview</c>; migration 6 (plan 32 DBR18) adds <c>subscription.channel_kind</c>.</para>
 /// </summary>
 public static class DeliveryModule
 {
@@ -164,6 +164,11 @@ public static class DeliveryModule
         """
         -- Whether a subscription's email carries a picture of the first page inline beside the PDF (plan 32 DBR18): 1 or 0, NULL (a row from before this column) is 0. Teams, Slack and the webhook get the link to the live view only.
         ALTER TABLE {table:subscription} {{addcolumn}} inline_preview {{int}} NULL;
+        """,
+        """
+        -- The kind of the channel the subscription names (email, teams, slack, webhook), written by the console when the subscription is saved and kept current by its sender (plan 32 DBR18): the process that draws the document (the Gateway) has no channels of its own,
+        -- knows the channel by this kind, and writes the message to the shared outbox for the console's sender to send. NULL: not known (a row from before this column, or a channel the console did not have).
+        ALTER TABLE {table:subscription} {{addcolumn}} channel_kind {{text}} NULL;
         """,
     ];
 

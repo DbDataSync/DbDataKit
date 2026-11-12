@@ -34,7 +34,9 @@ export async function editorQueryStory(page: Page) {
   await expect(by(page, 'ed-derived-request-chart')).toContainText('"desc"')
   await expect(by(page, 'ed-derived-sources-chart')).toContainText('widgets.chart.query.order[0]')
   // the preview is of the filtered, ordered widget
-  await expect(by(page, 'ed-preview-chart')).toHaveAttribute('data-result', /chart|loading/)
+  // the console-only story reads the fixture source, which has recorded results only for the widgets of its own documents: a new chart says so in its own words
+  await expect(by(page, 'ed-preview-chart')).toHaveAttribute('data-result', 'error')
+  await expect(by(page, 'ed-preview-chart')).toContainText('no recorded result')
 
   // 3. The operators offered are the field's type's: a date offers the relative ones, a region does not.
   await by(page, 'ed-filter-attribute-chart').selectOption('date.calendar_date')

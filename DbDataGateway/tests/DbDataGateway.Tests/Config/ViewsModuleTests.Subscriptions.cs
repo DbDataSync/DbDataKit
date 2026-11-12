@@ -53,8 +53,8 @@ public sealed partial class ViewsModuleTests
         }
     }
 
-    private static SubscriptionFields SalesSubscription(string name, bool preview = false) =>
-        new(name, "dashboard", "sales", null, null, "pdf", null, "mail", null, "0 7 * * *", "UTC", preview);
+    private static SubscriptionFields SalesSubscription(string name, bool preview = false, string? channelKind = null) =>
+        new(name, "dashboard", "sales", null, null, "pdf", null, "mail", null, "0 7 * * *", "UTC", preview, channelKind);
 
     [Fact]
     public async Task A_subscription_that_is_due_is_drawn_by_the_gateway_as_its_subscriber_and_handed_to_delivery_with_the_exporter_faked()
@@ -132,7 +132,7 @@ public sealed partial class ViewsModuleTests
     }
 
     [Fact]
-    public async Task An_instance_without_an_exporter_or_without_channels_claims_no_subscription()
+    public async Task An_instance_without_an_exporter_claims_no_subscription()
     {
         overrides = null;
         await StartAsync();
@@ -148,19 +148,35 @@ public sealed partial class ViewsModuleTests
     }
 
     [Fact]
-    public async Task An_instance_with_an_exporter_and_no_channels_claims_no_subscription_either()
+    public async Task A_gateway_with_no_delivery_channels_enqueues_by_the_kind_the_console_stored_and_sends_nothing_itself()
     {
         overrides = services => services.AddSingleton<IReportExporter>(new PageAsPdfExporter());
-        await StartAsync();
+        var assets = Path.Combine(dataDirectory, "print");
+        Directory.CreateDirectory(assets);
+        File.WriteAllText(Path.Combine(assets, "print.css"), "body { }");
+        File.WriteAllText(Path.Combine(assets, "print.js"), "window.__reportReady = true;");
+        await StartAsync(true, $"--Gateway:Views:Export:PageAssets={assets}");
         var state = Get<StateDatabase>();
         var (ada, _) = HomeSeed.Person(state, "Ada", "ada@example.invalid", Analysts);
+        PublishModel();
+        Assert.Equal(200, Get<GatewayViewsPublishing>().Publish("dashboard", "sales", Dashboard(), "test").Status);
+        Poll();
         var subscriptions = Get<GatewaySubscriptions>();
-        var id = subscriptions.Subscriptions.Create(SalesSubscription("Sales for Ada"), ada.Id, ada.DisplayName, ada.Id, DateTimeOffset.UtcNow.AddMinutes(-1));
-
         Assert.True(Get<GatewayViews>().CanExport);
         Assert.False(subscriptions.HasChannels);
-        Assert.Null(await subscriptions.RunPassAsync(default));
-        Assert.Null(subscriptions.Subscriptions.Find(id)!.LastRunAt);
+
+        var due = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var known = subscriptions.Subscriptions.Create(SalesSubscription("Sales for Ada", channelKind: "email"), ada.Id, ada.DisplayName, ada.Id, due);
+        var unknown = subscriptions.Subscriptions.Create(SalesSubscription("Saved before the kind was stored") with { Channel = "other" }, ada.Id, ada.DisplayName, ada.Id, due);
+        var result = await subscriptions.RunPassAsync(default);
+
+        Assert.NotNull(result);
+        Assert.Equal(SubscriptionOutcomes.Sent, subscriptions.Subscriptions.Find(known)!.LastOutcome);
+        var message = Assert.Single(new DeliveryStore(state).List(source: $"subscription:{known:D}"));
+        Assert.Equal(("mail", "pending"), (message.Channel, message.Status));        // written for the console's sender; this process holds no channel and sends nothing
+        Assert.Equal(["ada@example.invalid"], message.Recipients);
+        Assert.Equal(SubscriptionOutcomes.Failed, subscriptions.Subscriptions.Find(unknown)!.LastOutcome);   // no stored kind: not enqueued, and it says why
+        Assert.Empty(new DeliveryStore(state).List(source: $"subscription:{unknown:D}"));
     }
 
     [Fact]
