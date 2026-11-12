@@ -15,6 +15,19 @@ public sealed record RetryOptions(int Retries = 2, Func<int, TimeSpan>? Backoff 
 }
 
 /// <summary>
+/// Where a request says which model answered it (plan 27a AG21): the caller puts one in <see cref="FallbackChatClient.Holder"/> before the request and reads <see cref="Name"/> after it. A client shared by many conversations (the one a slot is bound to is) cannot say it itself
+/// without telling one conversation the answer of another; each request's own holder can.
+/// </summary>
+public sealed class AnswerHolder
+{
+    /// <summary>The name of the model that answered, or null until one has.</summary>
+    public string? Name { get; set; }
+
+    /// <summary>Whether it was not the first model of the slot.</summary>
+    public bool Fallback { get; set; }
+}
+
+/// <summary>
 /// A slot bound to an ordered list of models (plan 27a AG21): the first is tried, retried with back-off when it fails with an error that is worth retrying, and then the next one the install policy allows for this agent. The turn records which model answered.
 /// A tenant-only install never falls back to a cloud provider: <paramref name="allowedAsFallback"/> says which bindings may be used after the first.
 /// </summary>
@@ -22,8 +35,13 @@ public sealed class FallbackChatClient(IReadOnlyList<ModelBinding> bindings, Age
 {
     private readonly RetryOptions _retry = retry ?? new RetryOptions();
 
-    /// <summary>The name of the model that answered the last request.</summary>
+    /// <summary>The name of the model that answered the last request (of whichever conversation: the answer of a request is in its <see cref="Holder"/>).</summary>
     public string? LastAnswered { get; private set; }
+
+    private static readonly AsyncLocal<AnswerHolder?> CurrentHolder = new();
+
+    /// <summary>The holder the request being made now reports to; set around a request by its caller, in the flow of that request only.</summary>
+    public static AnswerHolder? Holder { get => CurrentHolder.Value; set => CurrentHolder.Value = value; }
 
     /// <summary>Whether a failure is worth retrying and then falling through: by default anything but a cancellation or a refusal of the call itself (an argument exception).</summary>
     private bool Transient(Exception ex) => (worthRetrying ?? (e => e is not (OperationCanceledException or ArgumentException)))(ex);
@@ -65,6 +83,7 @@ public sealed class FallbackChatClient(IReadOnlyList<ModelBinding> bindings, Age
     private void Answered(ModelBinding binding, bool afterFailure)
     {
         LastAnswered = binding.Name;
+        if (Holder is { } holder) { holder.Name = binding.Name; holder.Fallback = afterFailure || !ReferenceEquals(binding, bindings[0]); }
         recorder?.Record(new AgentEvent(DateTimeOffset.UtcNow, "model-answered-by", context, 0, Detail: binding.Name + (afterFailure ? " (fallback)" : "")));
     }
 

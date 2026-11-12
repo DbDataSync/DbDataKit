@@ -33,6 +33,47 @@ public sealed class FallbackTests
     private static RetryOptions NoWait(List<TimeSpan> waited) => new(Retries: 2, Delay: (time, _) => { waited.Add(time); return Task.CompletedTask; });
 
     [Fact]
+    public async Task A_turn_the_fallback_answered_is_recorded_under_its_own_model_and_costed_at_its_own_price_and_two_conversations_on_one_client_do_not_mix()
+    {
+        var definition = AgentDefinitionLoader.Load("agent: 1\nname: helper\naudience: back-end\nmodel: { slot: default }\n", "agent.yml").Definition!;
+        var noWait = new RetryOptions(Retries: 0, Delay: (_, _) => Task.CompletedTask);
+
+        // one client for the slot, shared by two conversations; the first model is down for the first conversation only (its reply is scripted by call count)
+        var primary = new SwitchedClient();
+        var secondary = new ScriptedChatClient(ScriptStep.Say("from the secondary").WithUsage(1_000_000, 0));
+        var shared = new FallbackChatClient([new ModelBinding("local/small", primary), new ModelBinding("cloud/big", secondary)], new AgentRunContext("console", "default", "1"), null, retry: noWait);
+        ModelPrice? PriceOf(string name) => name == "cloud/big" ? new ModelPrice(10m, 0m) : new ModelPrice(0m, 0m);
+        AgentSession Open(InMemoryConversationLog log, string id) => new(new AgentRunContext("ada", "helper", "v7", id), definition, shared, [], new AgentSessionOptions { Log = log, Price = PriceOf("local/small"), PriceOf = PriceOf, Model = "local/small" });
+
+        var down = new InMemoryConversationLog();
+        await Open(down, "c1").SendAsync("hi");
+        Assert.Equal("cloud/big", down.Turns.Single().Model);                         // the model that answered, not the first of the slot
+        Assert.Equal(10m, down.Turns.Single().Cost);                                    // at the fallback's own price: 1,000,000 tokens at 10 per million
+
+        primary.Up = new ScriptedChatClient(ScriptStep.Say("from the primary").WithUsage(1_000_000, 0));
+        var up = new InMemoryConversationLog();
+        await Open(up, "c2").SendAsync("hi");
+        Assert.Equal(("local/small", 0m), (up.Turns.Single().Model, up.Turns.Single().Cost));   // the first model answered this one, at its own (free) price
+        Assert.Equal("cloud/big", down.Turns.Single().Model);                                  // and the first conversation's record was not changed by it
+    }
+
+    private sealed class SwitchedClient : IChatClient
+    {
+        public IChatClient? Up { get; set; }
+
+        public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) =>
+            Up is null ? throw new HttpRequestException("503 overloaded") : Up.GetResponseAsync(messages, options, cancellationToken);
+
+        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+        public void Dispose()
+        {
+        }
+    }
+
+    [Fact]
     public async Task A_failing_primary_is_retried_with_back_off_then_falls_to_the_secondary_and_the_turn_records_it()
     {
         var primary = new FailingClient(new HttpRequestException("503 overloaded"));

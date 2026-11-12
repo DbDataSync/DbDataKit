@@ -12,7 +12,7 @@ using Microsoft.Extensions.AI;
 namespace DbDataKit.Server;
 
 /// <summary>The model bound to an agent's slot for a channel: the client, its name, its price and its window.</summary>
-public sealed record BoundModel(IChatClient Client, string Model, ModelPrice? Price, int WindowTokens);
+public sealed record BoundModel(IChatClient Client, string Model, ModelPrice? Price, int WindowTokens, IReadOnlyDictionary<string, ModelPrice?>? Prices = null);
 
 /// <summary>Which model an agent's slot is bound to (plan 27a AG05: model providers are connections, bound per channel; not built, so by default none is).</summary>
 public interface IAgentModels
@@ -413,6 +413,7 @@ public sealed class ConsoleAgents
             Log = log,
             Approver = _desk.ApproverFor(id),
             Price = model.Price,
+            PriceOf = name => model.Prices is { } prices && prices.TryGetValue(name, out var price) ? price : model.Price,
             Model = model.Model,
             Ledger = new StateUsageLedger(_store),
             AfterCall = tracker.Observe,
