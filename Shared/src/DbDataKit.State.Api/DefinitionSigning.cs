@@ -24,8 +24,8 @@ public static class DefinitionSigning
         $"{Scheme}:{key.Fingerprint}:{Url.Encode(key.Sign(Message(kind, name, manifest, artifacts)))}";
 }
 
-/// <summary>Verifies a version's signature against the group's trust store: the key must be one the kind trusts and has not revoked, and the signature must hold over the message.</summary>
-public sealed class TrustStoreVerifier(DefinitionTrustStore trust) : IVersionSignatureVerifier
+/// <summary>Verifies a version's signature against the group's trust store: the key must be one the kind trusts and has not revoked, and the signature must hold over the message. <paramref name="allowRevoked"/> is for a version already stored (an instance preparing it): a revoked key refuses new versions, and versions it signed stay.</summary>
+public sealed class TrustStoreVerifier(DefinitionTrustStore trust, bool allowRevoked = false) : IVersionSignatureVerifier
 {
     public SignatureVerdict Verify(VersionSignatureRequest request)
     {
@@ -34,7 +34,7 @@ public sealed class TrustStoreVerifier(DefinitionTrustStore trust) : IVersionSig
         if (parts.Length != 3 || parts[0] != DefinitionSigning.Scheme) return new SignatureVerdict(SignatureState.Invalid, null, $"the signature is not written ed25519:<key id>:<signature>");
         var key = trust.Find(request.Kind, parts[1]);
         if (key is null) return new SignatureVerdict(SignatureState.Invalid, parts[1], $"the key {parts[1]} is not one the group trusts for {request.Kind}");
-        if (key.Revoked) return new SignatureVerdict(SignatureState.Invalid, parts[1], $"the key {parts[1]} was revoked for {request.Kind}");
+        if (key.Revoked && !allowRevoked) return new SignatureVerdict(SignatureState.Invalid, parts[1], $"the key {parts[1]} was revoked for {request.Kind}");
         var publicKey = Url.Decode(key.PublicKey);
         var signature = Url.Decode(parts[2]);
         if (publicKey is null || signature is null || !ConsoleSigningKey.Verify(publicKey, DefinitionSigning.Message(request.Kind, request.Name, request.Manifest, request.Artifacts), signature))
@@ -50,6 +50,9 @@ public sealed class TrustStoreVerifier(DefinitionTrustStore trust) : IVersionSig
 public sealed class SignaturePolicy(IGroupSettings settings)
 {
     public bool Required(string kind) => settings.Get($"signatures/{kind}") switch { "required" => true, "optional" => false, _ => !IsTestGroup };
+
+    /// <summary>True only when an administrator set the kind to <c>required</c> (not the default for a kind nobody set): what an instance holds a stored unsigned version to, because the per-kind routes that predate the shared API publish unsigned versions in a group that never asked for signatures.</summary>
+    public bool RequiredByAdministrator(string kind) => settings.Get($"signatures/{kind}") == "required";
 
     public bool IsTestGroup => settings.Get("group/mode") == "test";
 

@@ -1,4 +1,4 @@
-import { ApiError, request } from '@dbdatakit/shell'
+import { ApiError, request, type TrustApi, type TrustState } from '@dbdatakit/shell'
 
 /** One run as `GET /api/v1/runs` and a task's `last_run` give it. */
 export interface RunRecord {
@@ -262,6 +262,12 @@ export const runnerApi = {
   setLabels: (id: string, labels: string[]) =>
     request<{ instance: string; host: string; labels: InstanceLabel[]; added: string[]; removed: string[] }>(`/api/v1/instances/${enc(id)}/labels`, { method: 'PUT', body: JSON.stringify({ labels }) }),
   settings: () => request<PublishSettings>('/api/v1/settings'),
+  /** The publisher keys the runner trusts for integrations (plan 30 PB03); whether signatures are required is `setRequireSignatures`, not a per-kind switch. */
+  trust: {
+    get: (kind: string) => request<TrustState>(`/api/v1/trust/${encodeURIComponent(kind)}`),
+    addKey: (kind: string, publicKey: string, label: string) => request<{ key_id: string }>(`/api/v1/trust/${encodeURIComponent(kind)}/keys`, { method: 'PUT', body: JSON.stringify({ public_key: publicKey, label: label || null }) }),
+    revoke: (kind: string, keyId: string) => request<{ revoked: boolean }>(`/api/v1/trust/${encodeURIComponent(kind)}/${encodeURIComponent(keyId)}/revoke`, { method: 'POST' }),
+  } satisfies TrustApi,
   setRequireSignatures: (value: boolean) => request<{ require_signatures: boolean }>('/api/v1/settings/require_signatures', { method: 'PUT', body: JSON.stringify({ value }) }),
   bind: (name: string, channel: string, body: BindRequest) =>
     request<{ name: string; channel: string; bindings: DefinitionBinding[] }>(`/api/v1/bindings/${enc(channel)}/integration/${enc(name)}`, { method: 'PUT', body: JSON.stringify(body) }),

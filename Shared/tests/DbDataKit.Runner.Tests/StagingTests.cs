@@ -51,10 +51,10 @@ public sealed class StagingTests
         public ProgressStore Store(string task = "orders") => new(Database, new ProgressKey(Name, Prod, task));
 
         /// <summary>An instance of the group (live: its heartbeat is now) and the staging follower of it.</summary>
-        public (Guid Id, StagingFollower Follower) Instance(Func<PackageManifest, string?>? contracts = null)
+        public (Guid Id, StagingFollower Follower) Instance(Func<PackageManifest, string?>? contracts = null, Func<DefinitionVersion, string?>? gate = null)
         {
             var id = Instances.Register("dbdatarunner", "host-" + Guid.NewGuid().ToString("N")[..4], "1.0");
-            return (id, new StagingFollower(Database, Publisher, Cache, Activator, new StagingOptions { Instance = () => id, Contracts = contracts }));
+            return (id, new StagingFollower(Database, Publisher, Cache, Activator, new StagingOptions { Instance = () => id, Contracts = contracts, Gate = gate }));
         }
 
         public int Publish(PackageManifest manifest, PublishMode mode) =>
@@ -111,6 +111,24 @@ public sealed class StagingTests
     }
 
     // ---- R17: staging
+
+    [Theory, MemberData(nameof(Engines))]
+    public async Task A_staged_version_the_signature_gate_refuses_fails_on_the_instance_with_its_words_and_does_not_activate_and_the_one_serving_stays(string engine)
+    {
+        using var rig = new Rig(engine);
+        var (id, follower) = rig.Instance(gate: version => version.Version == 2 ? $"version {version.Version} of the {version.Kind} '{version.Name}' is unsigned and signatures are required for {version.Kind}" : null);
+        var one = rig.Publish(Package(Version2Keeps), PublishMode.Serve);
+        var two = rig.Publish(Package(Version1), PublishMode.Stage);
+
+        var pass = await follower.PassAsync();
+
+        Assert.Equal([$"{Name}/{Prod}@{two}"], pass.Failed);
+        Assert.Empty(pass.Activated);
+        var status = StatusOf(rig, id);
+        Assert.Equal(InstanceStates.Failed, status.State);
+        Assert.Contains("is unsigned and signatures are required", status.Error);
+        Assert.Equal(one, rig.Publisher.Head(PackageActivator.Kind, Name, Prod)!.Active);   // the version that serves keeps serving
+    }
 
     [Theory, MemberData(nameof(Engines))]
     public async Task A_version_that_loses_a_value_stages_with_the_losses_in_the_status_and_does_not_activate_on_its_own_and_confirming_activates_and_migrates(string engine)

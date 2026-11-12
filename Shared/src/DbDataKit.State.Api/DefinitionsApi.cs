@@ -8,7 +8,11 @@ using DbDataKit.Web.Trust;
 namespace DbDataKit.State.Api;
 
 /// <summary>Who calls the shared publish API: the id the audit and the version's publisher record, the roles, and for a paired client its id (the owner rules read it; null for a person signed in to a console).</summary>
-public sealed record DefinitionsCaller(string Actor, bool Admin, bool Publisher, bool Viewer, string? ClientId = null);
+public sealed record DefinitionsCaller(string Actor, bool Admin, bool Publisher, bool Viewer, string? ClientId = null)
+{
+    /// <summary>What the host knows of the caller beyond this (the runner's actor, for its audit); the API does not read it.</summary>
+    public object? Context { get; init; }
+}
 
 /// <summary>An answer: the HTTP status and the JSON body (an error is <c>{error, code, message}</c>).</summary>
 public sealed record DefinitionsResult(int Status, JsonObject Body);
@@ -30,9 +34,13 @@ public delegate void DefinitionsAuditor(string verb, DefinitionsCaller caller, s
 /// through <paramref name="changed"/> so it applies it at once. Framework-free: the host maps the routes and hands over the body text.
 /// </summary>
 public sealed partial class DefinitionsApi(DefinitionPublisher publisher, DefinitionStore store, DefinitionKinds kinds, PayloadStore payloads, IGroupSettings settings, string targetType, DefinitionsAuditor? audit = null, Action<string, string, string>? changed = null,
-    long maxArtifactBytes = 512L * 1024 * 1024, IVersionSignatureVerifier? verifier = null, SignaturePolicy? policy = null, DefinitionTrustStore? trust = null)
+    long maxArtifactBytes = 512L * 1024 * 1024, IVersionSignatureVerifier? verifier = null, SignaturePolicy? policy = null, DefinitionTrustStore? trust = null, IEnumerable<IDefinitionKindHook>? hooks = null, string payloadOwner = DefinitionsApi.PayloadOwner)
 {
     public const string PayloadOwner = "publish";
+
+    private readonly Dictionary<string, IDefinitionKindHook> _hooks = (hooks ?? []).ToDictionary(h => h.Kind, StringComparer.Ordinal);
+
+    private IDefinitionKindHook? HookOf(string kind) => _hooks.GetValueOrDefault(kind);
 
     [GeneratedRegex("^[0-9a-f]{64}$")]
     private static partial Regex Sha256Rule();
@@ -49,7 +57,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
 
     // ---- artifacts
 
-    private Guid? Find(string sha) => publisher.FindArtifact(sha) ?? payloads.FindComplete(sha, PayloadOwner);
+    private Guid? Find(string sha) => publisher.FindArtifact(sha) ?? payloads.FindComplete(sha, payloadOwner);
 
     public bool HasArtifact(string sha256) => Sha256Rule().IsMatch(sha256.ToLowerInvariant()) && Find(sha256.ToLowerInvariant()) is not null;
 
@@ -59,8 +67,8 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
         if (!caller.Admin && !caller.Publisher) return Refuse("definition.upload", caller, "artifact", sha256, "-", "uploading needs the publisher role");
         var sha = sha256.ToLowerInvariant();
         if (!Sha256Rule().IsMatch(sha)) return Error(400, $"'{sha256}' is not a SHA-256: write 64 hexadecimal digits.");
-        if (Find(sha) is { } existing) return new(200, new JsonObject { ["sha256"] = sha, ["size"] = payloads.Get(existing)?.Size ?? 0, ["already"] = true });
-        var writer = payloads.OpenWrite(new PayloadOptions(mediaType, PayloadOwner, $"upload/{sha}", caller.Actor, MaxBytes: maxArtifactBytes, Label: $"the upload {sha}"));
+        if (Find(sha) is { } existing) return new(200, new JsonObject { ["sha256"] = sha, ["size"] = payloads.Get(existing)?.Size ?? 0, ["already"] = true, ["already_stored"] = true });
+        var writer = payloads.OpenWrite(new PayloadOptions(mediaType, payloadOwner, $"upload/{sha}", caller.Actor, MaxBytes: maxArtifactBytes, Label: $"the upload {sha}"));
         var id = writer.Id;
         string? actual = null;
         long size;
@@ -102,21 +110,25 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
         }
 
         audit?.Invoke("definition.upload", caller, "artifact", sha, "-", "ok", new { size });
-        return new(200, new JsonObject { ["sha256"] = sha, ["size"] = size, ["already"] = false });
+        return new(200, new JsonObject { ["sha256"] = sha, ["size"] = size, ["already"] = false, ["already_stored"] = false });
     }
 
     // ---- the JSON calls
 
     /// <summary>Handles a call whose <paramref name="route"/> is relative to <c>/api/v1/</c> (no leading slash) and <see cref="Handles"/> says is this API's.</summary>
-    public DefinitionsResult Handle(string method, string route, string? body, DefinitionsCaller caller)
+    public DefinitionsResult Handle(string method, string route, string? body, DefinitionsCaller caller) => HandleAsync(method, route, body, caller).GetAwaiter().GetResult();
+
+    /// <summary>The same as <see cref="Handle"/> for a host that awaits: a kind's hook may take the life-cycle calls asynchronously (the runner waits for the runs in flight).</summary>
+    public async Task<DefinitionsResult> HandleAsync(string method, string route, string? body, DefinitionsCaller caller, CancellationToken ct = default)
     {
         var parts = route.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.UnescapeDataString).ToArray();
+        var hookOfCall = parts is ["definitions", var hk, ..] ? HookOf(hk) : parts is ["bindings", _, var hk2, ..] ? HookOf(hk2) : null;
         try
         {
             if (parts is ["definitions", var kind] && method == "GET") return List(kind, caller);
             if (parts is ["definitions", var k, var name] && method == "GET") return Describe(k, name, caller);
             if (parts is ["definitions", var k2, var n2] && method == "PUT") return Publish(k2, n2, body, caller);
-            if (parts is ["definitions", var k3, var n3, var act] && method == "POST") return Act(k3, n3, act, body, caller);
+            if (parts is ["definitions", var k3, var n3, var act] && method == "POST") return await Act(k3, n3, act, body, caller, ct).ConfigureAwait(false);
             if (parts is ["trust", var tk] && method == "GET") return Trust(tk, caller);
             if (parts is ["trust", var tk2, "keys"] && method == "PUT") return AddKey(tk2, body, caller);
             if (parts is ["trust", var tk3, var keyId, "revoke"] && method == "POST") return RevokeKey(tk3, keyId, caller);
@@ -126,9 +138,13 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
             if (parts is ["bindings", var channel2, var k5, var n5, var slot] && method == "DELETE") return Unbind(channel2, k5, n5, slot, caller);
             return Error(404, "There is no such call.");
         }
+        catch (DefinitionsRefusalException ex)
+        {
+            return ex.Body is { } custom ? new(ex.Status, custom) : Error(ex.Status, ex.Message);
+        }
         catch (PublishRefusedException ex)
         {
-            var status = ex.Reason switch { PublishRefusal.UnknownKind => 404, PublishRefusal.WrongTarget or PublishRefusal.Invalid or PublishRefusal.Artifact => 400, _ => 409 };
+            var status = hookOfCall?.StatusOf(ex.Reason) ?? ex.Reason switch { PublishRefusal.UnknownKind => 404, PublishRefusal.WrongTarget or PublishRefusal.Invalid or PublishRefusal.Artifact => 400, _ => 409 };
             return Error(status, ex.Message, ex.Reason.ToString().ToLowerInvariant());
         }
         catch (DefinitionConflictException ex)
@@ -153,6 +169,8 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
         return Error(403, $"This call is refused: {reason}.");
     }
 
+    private bool SignaturesRequired(string kind) => HookOf(kind)?.SignaturesRequired ?? policy?.Required(kind) ?? false;
+
     private string? Owner(string kind, string name) => settings.Get(OwnerKey(kind, name));
 
     /// <summary>The owner rules: an administrator may do anything; a publisher creates, and changes only what it created.</summary>
@@ -161,13 +179,17 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
         if (caller.Admin) return null;
         if (!caller.Publisher) return Refuse(verb, caller, kind, name, channel, "this needs the publisher role");
         if (store.Versions(kind, name).Count == 0 && Owner(kind, name) is null) return null;
-        return caller.ClientId is not null && Owner(kind, name) == caller.ClientId ? null : Refuse(verb, caller, kind, name, channel, "a publisher changes only the definitions it created");
+        return caller.ClientId is not null && Owner(kind, name) == caller.ClientId ? null : Refuse(verb, caller, kind, name, channel, "the publisher role changes only the definitions its client created (this one belongs to another publisher or to an administrator), or the admin role does");
     }
+
+    private DefinitionsResult? CanRead(string kind, DefinitionsCaller caller) =>
+        caller.Admin || caller.Viewer || (caller.Publisher && (HookOf(kind)?.PublisherMayRead ?? true)) ? null : Error(403, "This needs the viewer role.");
 
     private DefinitionsResult List(string kind, DefinitionsCaller caller)
     {
         if (CheckKind(kind) is { } bad) return bad;
-        if (!caller.Admin && !caller.Viewer && !caller.Publisher) return Error(403, "This needs the viewer role.");
+        if (CanRead(kind, caller) is { } denied) return denied;
+        if (HookOf(kind)?.List() is { } listed) return new(200, listed);
         var rows = new JsonArray();
         foreach (var name in publisher.Names(kind))
             rows.Add(new JsonObject { ["name"] = name, ["owner"] = Owner(kind, name), ["channels"] = Heads(kind, name) });
@@ -180,7 +202,8 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
     private DefinitionsResult Describe(string kind, string name, DefinitionsCaller caller)
     {
         if (CheckKind(kind) is { } bad) return bad;
-        if (!caller.Admin && !caller.Viewer && !caller.Publisher) return Error(403, "This needs the viewer role.");
+        if (CanRead(kind, caller) is { } denied) return denied;
+        if (HookOf(kind)?.Describe(name) is { } described) return new(200, described);
         var versions = store.Versions(kind, name);
         if (versions.Count == 0) return Error(404, $"There is no {kind} '{name}'.");
         return new(200, new JsonObject
@@ -242,10 +265,24 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
                 files.Add(new ArtifactRef(path, sha.ToLowerInvariant(), bytes, Text(f, "media_type"), Sha256Rule().IsMatch(sha.ToLowerInvariant()) ? Find(sha.ToLowerInvariant()) : null));
             }
 
+        var hook = HookOf(kind);
+        var hookContext = new PublishHookContext(kind, name, channel, manifest, files, caller);
+        if (hook is not null)
+            try
+            {
+                hook.CheckChannel(channel);
+                hook.BeforePublish(hookContext);
+            }
+            catch (DefinitionsRefusalException ex)
+            {
+                audit?.Invoke("definition.publish", caller, kind, name, channel, "refused", new { status = ex.Status, reason = ex.Message });
+                throw;
+            }
+
         var verdict = (verifier ?? new NoSignatureVerifier()).Verify(new VersionSignatureRequest(kind, name, manifest, files, Text(json, "signature")));
-        if (verdict.State == SignatureState.Invalid || (verdict.State != SignatureState.Verified && policy?.Required(kind) == true))
+        if (verdict.State == SignatureState.Invalid || (verdict.State != SignatureState.Verified && SignaturesRequired(kind)))
         {
-            var why = verdict.State == SignatureState.Invalid ? $"the signature is refused: {verdict.Message}" : $"this group requires signed versions of {kind} and the {kind} '{name}' has no signature (publish it signed with a key an administrator trusts for {kind}, or have an administrator turn signatures off for {kind})";
+            var why = verdict.State == SignatureState.Invalid ? $"the signature is refused: {verdict.Message}" : hook?.UnsignedRefusal(name, verdict) ?? $"this group requires signed versions of {kind} and the {kind} '{name}' has no signature (publish it signed with a key an administrator trusts for {kind}, or have an administrator turn signatures off for {kind})";
             audit?.Invoke("definition.publish", caller, kind, name, channel, "refused", new { reason = why, signature = verdict.Word });
             return Error(403, why.Length > 0 ? char.ToUpperInvariant(why[0]) + why[1..] + "." : why, "signature_" + verdict.Word);
         }
@@ -258,7 +295,9 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
             if (!existed && !caller.Admin && caller.ClientId is not null) settings.Put(OwnerKey(kind, name), caller.ClientId);
             audit?.Invoke("definition.publish", caller, kind, name, channel, "ok", new { version = result.Version.Version, mode = result.Mode.ToString().ToLowerInvariant(), changed = result.Changed, files = files.Count, signature = verdict.Word, signer = verdict.Signer });
             changed?.Invoke(kind, name, channel);
-            return new(200, new JsonObject { ["kind"] = kind, ["name"] = name, ["channel"] = channel, ["version"] = result.Version.Version, ["changed"] = result.Changed, ["signature"] = verdict.Word, ["mode"] = result.Mode.ToString().ToLowerInvariant(), ["depends_on"] = new JsonArray([.. depends.Select(x => (JsonNode)JsonValue.Create(x)!)]) });
+            var answer = new JsonObject { ["kind"] = kind, ["name"] = name, ["channel"] = channel, ["version"] = result.Version.Version, ["changed"] = result.Changed, ["signature"] = verdict.Word, ["mode"] = result.Mode.ToString().ToLowerInvariant(), ["depends_on"] = new JsonArray([.. depends.Select(x => (JsonNode)JsonValue.Create(x)!)]) };
+            hook?.AfterPublish(hookContext, result, answer);
+            return new(200, answer);
         }
         catch (Exception ex) when (ex is PublishRefusedException or DefinitionRejectedException or DefinitionConflictException)
         {
@@ -267,7 +306,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
         }
     }
 
-    private DefinitionsResult Act(string kind, string name, string act, string? body, DefinitionsCaller caller)
+    private async Task<DefinitionsResult> Act(string kind, string name, string act, string? body, DefinitionsCaller caller, CancellationToken ct)
     {
         if (CheckKind(kind) is { } badKind) return badKind;
         if (act is not ("activate" or "switch" or "rollback" or "retire" or "prune")) return Error(404, $"There is no call '{act}'; the life cycle is activate, switch, rollback, retire and prune.");
@@ -278,6 +317,21 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
         if (!caller.Admin) return Refuse("definition." + act, caller, kind, name, channel, "this needs the admin role");
         if (!Int(json, "expected_version", out var expected) || !Int(json, "version", out var version) || !Int(json, "keep", out var keep)) return Error(400, "expected_version, version and keep are numbers.");
         var by = caller.Actor;
+        if (act != "prune" && HookOf(kind) is { } hook)
+        {
+            var context = new LifecycleHookContext(kind, name, channel, act, expected, version, json, caller);
+            try
+            {
+                hook.CheckChannel(channel);
+                if (await hook.ActAsync(context, ct).ConfigureAwait(false) is { } done) return done;
+            }
+            catch (DefinitionsRefusalException ex)
+            {
+                audit?.Invoke("definition." + act, caller, kind, name, channel, "refused", new { status = ex.Status, reason = ex.Message });
+                throw;
+            }
+        }
+
         object detail;
         switch (act)
         {
@@ -342,7 +396,24 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
         if (!Int(json, "expected_revision", out var revision)) return Error(400, "expected_revision is a number.");
         foreach (var (slot, value) in slots)
             if (value is not JsonValue v || !v.TryGetValue<string>(out var text) || string.IsNullOrWhiteSpace(text)) return Error(400, $"The slot '{slot}' must be bound to a name.");
-        foreach (var (slot, value) in slots) publisher.Bind(channel, kind, name, slot, value!.GetValue<string>(), caller.Actor, revision);
+        // the slots of a definition's first version are bound before it exists: the binder then owns the name, as its first publisher would
+        if (!caller.Admin && caller.ClientId is not null && store.Versions(kind, name).Count == 0 && settings.Put(OwnerKey(kind, name), caller.ClientId) != caller.ClientId)
+            return Refuse("definition.bind", caller, kind, name, channel, $"the {kind} '{name}' belongs to another publisher");
+        var hook = HookOf(kind);
+        var context = new BindingHookContext(kind, name, channel, slots.ToDictionary(s => s.Key, s => s.Value!.GetValue<string>(), StringComparer.Ordinal), revision, json, caller);
+        try
+        {
+            hook?.CheckChannel(channel);
+            hook?.BeforeBind(context);
+        }
+        catch (DefinitionsRefusalException ex)
+        {
+            audit?.Invoke("definition.bind", caller, kind, name, channel, "refused", new { status = ex.Status, reason = ex.Message });
+            throw;
+        }
+
+        foreach (var (slot, value) in context.Slots.OrderBy(s => s.Key, StringComparer.Ordinal)) publisher.Bind(channel, kind, name, slot, value, caller.Actor, revision);
+        hook?.AfterBind(context);
         // names, never values, are audited
         audit?.Invoke("definition.bind", caller, kind, name, channel, "ok", new { slots = slots.Select(s => s.Key).Order(StringComparer.Ordinal).ToArray() });
         changed?.Invoke(kind, name, channel);
@@ -357,9 +428,19 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
     {
         if (CheckKind(kind) is { } badKind) return badKind;
         if (Authorize("definition.unbind", caller, kind, name, channel) is { } denied) return denied;
+        var hook = HookOf(kind);
+        var context = new BindingHookContext(kind, name, channel, new Dictionary<string, string> { [slot] = "" }, null, [], caller);
+        try { hook?.BeforeUnbind(context); }
+        catch (DefinitionsRefusalException ex)
+        {
+            audit?.Invoke("definition.unbind", caller, kind, name, channel, "refused", new { slot, status = ex.Status, reason = ex.Message });
+            throw;
+        }
+
         var removed = publisher.Unbind(channel, kind, name, slot, caller.Actor);
         audit?.Invoke("definition.unbind", caller, kind, name, channel, "ok", new { slot, removed });
         if (removed) changed?.Invoke(kind, name, channel);
+        if (hook?.AfterUnbind(context, removed) is { } replaced) return replaced;
         return new(200, new JsonObject { ["kind"] = kind, ["name"] = name, ["channel"] = channel, ["slot"] = slot, ["removed"] = removed });
     }
 
@@ -370,10 +451,10 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
     private DefinitionsResult Trust(string kind, DefinitionsCaller caller)
     {
         if (CheckKind(kind) is { } bad) return bad;
-        if (!caller.Admin && !caller.Viewer && !caller.Publisher) return Error(403, "This needs the viewer role.");
+        if (CanRead(kind, caller) is { } denied) return denied;
         return new(200, new JsonObject
         {
-            ["kind"] = kind, ["required"] = policy?.Required(kind) ?? false, ["test_group"] = policy?.IsTestGroup ?? false,
+            ["kind"] = kind, ["required"] = SignaturesRequired(kind), ["test_group"] = policy?.IsTestGroup ?? false,
             ["keys"] = new JsonArray([.. (trust?.List(kind) ?? []).Select(k => (JsonNode)new JsonObject { ["key_id"] = k.KeyId, ["label"] = k.Label, ["added_by"] = k.AddedBy, ["added_at"] = k.AddedAt.UtcDateTime.ToString("O"), ["revoked"] = k.Revoked, ["revoked_by"] = k.RevokedBy })]),
         });
     }

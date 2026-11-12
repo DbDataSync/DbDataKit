@@ -204,7 +204,8 @@ public static class GatewayHost
                 {
                     sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataGateway.Definitions").LogWarning("The published {Kind} '{Name}' version {Version} is not served here: {Message}", kind, name, version, ex.Message);
                     views?.Module.OnProblem(kind, name, version, ex);
-                });
+                },
+                gate: GatewayVersionGate.Create(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
         });
         services.AddHostedService<DbDataGateway.Server.State.DefinitionFollowerService>();
         services.AddSingleton<IServingServices>(sp => sp.GetRequiredService<GatewayServing>().WithSemantic(sp.GetRequiredService<SemanticModels>()));
