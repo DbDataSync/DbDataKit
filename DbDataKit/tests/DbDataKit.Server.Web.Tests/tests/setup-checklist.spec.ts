@@ -8,25 +8,26 @@ test('the checklist is finished by what the install has, a skipped step leaves t
   await signInNewAdmin(page, context, baseURL!, 'Setup Tester', `setup-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`)
   await page.route('**/api/instances', (route) => (route.request().method() === 'GET' ? route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }) : route.fallback()))
 
-  // the banner on Home counts what is left: the servers, the connections and the Build project (sign-in is finished: a person has a passkey)
+  // the banner on Home counts what is left: the servers, the connections, the alerts of failed checks and the Build project (sign-in is finished: a person has a passkey; the test console has a delivery channel, so that step is finished too)
   await page.goto('/')
   const banner = page.getByTestId('setup-banner')
-  await expect(banner).toHaveAttribute('data-left', '3')
+  await expect(banner).toHaveAttribute('data-left', '4')
   await banner.getByTestId('setup-banner-open').click()
 
   await expect(page.getByTestId('setup-page')).toBeVisible()
   await expect(page.getByTestId('setup-item-sign-in')).toHaveAttribute('data-status', 'done')
   await expect(page.getByTestId('setup-item-servers')).toHaveAttribute('data-status', 'todo')
   await expect(page.getByTestId('setup-item-git-remotes')).toHaveAttribute('data-status', 'unavailable')
-  await expect(page.getByTestId('setup-unavailable-delivery-channels')).toContainText('GP18')
+  await expect(page.getByTestId('setup-item-delivery-channels')).toHaveAttribute('data-status', 'done')
+  await expect(page.getByTestId('setup-item-quality-alerts')).toHaveAttribute('data-status', 'todo')
   await expect(page.getByTestId('setup-skip-sign-in')).toHaveCount(0)             // a finished step is not skipped
 
   // skipping hides it from the banner and keeps it in the list
   await page.getByTestId('setup-skip-connections').click()
   await expect(page.getByTestId('setup-item-connections')).toHaveAttribute('data-status', 'skipped')
-  await expect(page.getByTestId('setup-summary')).toContainText('2 steps left')
+  await expect(page.getByTestId('setup-summary')).toContainText('3 steps left')
   await page.goto('/')
-  await expect(page.getByTestId('setup-banner')).toHaveAttribute('data-left', '2')
+  await expect(page.getByTestId('setup-banner')).toHaveAttribute('data-left', '3')
 
   // an item opens its page
   await page.goto('/setup')

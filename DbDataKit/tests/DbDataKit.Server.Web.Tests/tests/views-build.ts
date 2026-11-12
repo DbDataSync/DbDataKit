@@ -52,8 +52,13 @@ export async function buildViewsStory(page: Page, context: BrowserContext, proje
 
   // 4. A field the model does not have: the browser's validator cannot know it, so the file is saved, and the project check names it at the file and line.
   await page.getByTestId('ed-widget-edit-chart').click()      // the editor opened again on the saved file (a new document moves to its own address), with the widget closed
-  await page.getByTestId('ed-well-chart-color-type').fill('products.colour')
-  await page.getByTestId('ed-well-chart-color-type').press('Enter')
+  // the pick list of the well is there once the project's catalog is known; the editor is drawn again when it arrives (and may close the widget), so the name is typed after it, and once more if the box went with the redraw
+  await expect(page.getByTestId('ed-well-chart-color-pick')).toBeVisible({ timeout: 60_000 })
+  await expect(async () => {
+    if (!(await page.getByTestId('ed-well-chart-color-type').isVisible())) await page.getByTestId('ed-widget-edit-chart').click()
+    await page.getByTestId('ed-well-chart-color-type').fill('products.colour', { timeout: 3_000 })
+    await page.getByTestId('ed-well-chart-color-type').press('Enter', { timeout: 3_000 })
+  }).toPass({ timeout: 60_000 })
   await page.getByTestId('ed-save').click()
   await expect(page.getByTestId('ed-status')).toContainText('Saved my-sales')
   await page.getByTestId('ed-back').click()
