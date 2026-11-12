@@ -27,6 +27,8 @@ SYSTEM=0
 NO_LINK=0
 ANNOUNCE_URL=
 BUNDLE_TOKEN_FILE=
+WITH_PDF_EXPORT=0
+EXPORT_SOURCE=''
 SYSTEMD_DIR=''
 INSTALL_DIR=''
 REPO="$DEFAULT_REPO"
@@ -47,6 +49,9 @@ Usage: install.sh [options]
                       unit named for the product (/etc/systemd/system/<product>.service.d/announce.conf); otherwise it prints the line the service needs
   --bundle-token-file <f>  with --announce-url, for a console on this machine: the bundle token file (made by `dbdatakit bundle init`); the drop-in also sets
                       DBDATAKIT_BUNDLE_TOKEN_FILE, and the console pairs with this server by itself when it announces. Give the service's account read access to the file (it is mode 600)
+  --with-pdf-export   also install the PDF export component (the pinned Chromium, fonts and print page, about 420 MB, a release asset of its own; only for a product that has
+                      one): runs '<program> export install' for this release after the install. Without it, run that command later, or use the console's button
+  --export-source <s> with --with-pdf-export: where the release's files are, a folder (an offline copy) or an https address, instead of the release on GitHub
   --systemd-dir <d>   where the drop-in goes instead of /etc/systemd/system (writes it without --system; systemd is not asked to reload)
   --repo <owner/repo> --api-base <url>
 USAGE
@@ -62,6 +67,8 @@ while [ $# -gt 0 ]; do
     --no-link) NO_LINK=1; shift ;;
     --announce-url) [ $# -ge 2 ] || die "--announce-url needs a value"; ANNOUNCE_URL="$2"; shift 2 ;;
     --bundle-token-file) [ $# -ge 2 ] || die "--bundle-token-file needs a value"; BUNDLE_TOKEN_FILE="$2"; shift 2 ;;
+    --with-pdf-export) WITH_PDF_EXPORT=1; shift ;;
+    --export-source) [ $# -ge 2 ] || die "--export-source needs a value"; EXPORT_SOURCE="$2"; shift 2 ;;
     --systemd-dir) [ $# -ge 2 ] || die "--systemd-dir needs a value"; SYSTEMD_DIR="$2"; shift 2 ;;
     --repo) [ $# -ge 2 ] || die "--repo needs a value"; REPO="$2"; shift 2 ;;
     --api-base) [ $# -ge 2 ] || die "--api-base needs a value"; API_BASE="$2"; shift 2 ;;
@@ -69,6 +76,8 @@ while [ $# -gt 0 ]; do
     *) usage >&2; die "unknown option $1" ;;
   esac
 done
+
+[ -z "$EXPORT_SOURCE" ] || [ "$WITH_PDF_EXPORT" = 1 ] || die "--export-source goes with --with-pdf-export."
 
 if [ -n "$ANNOUNCE_URL" ]; then
   # the address goes into a unit file: an http(s) address with nothing that systemd would read as syntax (white space, quotes, backslash, % and $)
@@ -161,6 +170,7 @@ if [ "$DRY_RUN" = 1 ]; then
   echo "$DISPLAY_NAME $RELEASE_VERSION ($RELEASE_TAG)$suffix"
   echo "  package   $ZIP_URL"
   echo "  checksums $SUMS_URL"
+  [ "$WITH_PDF_EXPORT" = 1 ] && [ "$EXPORT_COMPONENT" = 1 ] && echo "  then      $EXE export install --version $RELEASE_VERSION${EXPORT_SOURCE:+ --source $EXPORT_SOURCE}"
   exit 0
 fi
 
@@ -220,6 +230,17 @@ if [ -n "$REQUIRES_DOTNET" ]; then
   fi
 fi
 [ -z "$NOTES" ] || echo "$NOTES"
+if [ "$WITH_PDF_EXPORT" = 1 ]; then
+  if [ "$EXPORT_COMPONENT" != 1 ]; then
+    echo "Note: $DISPLAY_NAME has no PDF export component; --with-pdf-export is ignored." >&2
+  else
+    # The product installs its own component: it downloads the release's asset for this platform, checks it against SHA256SUMS and its pins, and sets views.export.
+    echo "Adding PDF export (the pinned Chromium, fonts and print page, about 420 MB) ..."
+    export_args=(export install --version "$RELEASE_VERSION")
+    [ -z "$EXPORT_SOURCE" ] || export_args+=(--source "$EXPORT_SOURCE")
+    "$INSTALL_DIR/$EXE" "${export_args[@]}" || die "$DISPLAY_NAME is installed, but its PDF export was not (see the message above). Run '$EXE ${export_args[*]}' again when it can be reached, or use the console's Server settings."
+  fi
+fi
 if [ -n "$ANNOUNCE_URL" ]; then
   if [ "$ANNOUNCES" != 1 ]; then
     echo "Note: $DISPLAY_NAME does not announce itself to a console; --announce-url is ignored." >&2

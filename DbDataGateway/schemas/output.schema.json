@@ -1340,6 +1340,98 @@
       "if": {
         "properties": {
           "command": {
+            "const": "export install"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_export_install"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "export install"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_export_install_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "export status"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_export_status"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "export status"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_export_status_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "health check"
           },
           "ok": {
@@ -4604,6 +4696,175 @@
         },
         "previous_owner": {
           "type": "string"
+        }
+      }
+    },
+    "data_export_install": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "release": {
+          "type": "string"
+        },
+        "rid": {
+          "type": "string"
+        },
+        "chromium": {
+          "type": "string"
+        },
+        "fonts": {
+          "type": "string"
+        },
+        "already_installed": {
+          "type": "boolean"
+        },
+        "downloaded_bytes": {
+          "type": "integer"
+        },
+        "settings_changed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "restart_needed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "directory",
+        "release",
+        "rid",
+        "chromium",
+        "fonts",
+        "already_installed",
+        "downloaded_bytes",
+        "settings_changed",
+        "restart_needed"
+      ]
+    },
+    "data_export_install_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "release": {
+          "type": "string"
+        },
+        "rid": {
+          "type": "string"
+        },
+        "chromium": {
+          "type": "string"
+        },
+        "fonts": {
+          "type": "string"
+        },
+        "already_installed": {
+          "type": "boolean"
+        },
+        "downloaded_bytes": {
+          "type": "integer"
+        },
+        "settings_changed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "restart_needed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "data_export_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "installed": {
+          "type": "boolean"
+        },
+        "whole": {
+          "type": "boolean"
+        },
+        "configured": {
+          "type": "boolean"
+        },
+        "directory": {
+          "type": "string"
+        },
+        "release": {
+          "type": "string"
+        },
+        "chromium": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "problems": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "installed",
+        "whole",
+        "configured",
+        "directory",
+        "summary",
+        "problems"
+      ]
+    },
+    "data_export_status_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "installed": {
+          "type": "boolean"
+        },
+        "whole": {
+          "type": "boolean"
+        },
+        "configured": {
+          "type": "boolean"
+        },
+        "directory": {
+          "type": "string"
+        },
+        "release": {
+          "type": "string"
+        },
+        "chromium": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "problems": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },

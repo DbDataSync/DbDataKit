@@ -137,6 +137,7 @@ public static class GatewayManagementHost
         var servingCache = app.Services.GetRequiredService<DbDataGateway.Server.Serving.GatewayCache>();
         var cacheApi = new GatewayCacheManagement(servingCache, () => management.BuildLineage(), instanceId, audit, app.Services.GetService<DbDataGateway.Server.State.ServingCacheEpochStore>());
         servingCache.Resolve = cacheApi.Resolve;
+        var serverSettings = new GatewayServerSettings(configDirectory, management, provider.ReloadNow, audit, git);
         management = new GatewayManagement(configuration, configDirectory, instanceId, GatewayHost.Version, dataSources, identities, activity, certificate, git,
             new GatewaySecrets(app.Services.GetRequiredService<GroupSecretStore>() is { Enabled: true } group ? group : SecretsRuntime.OpenStore(options), audit, references: dataSources.References), files.Codes(),
             semanticModels,
@@ -166,7 +167,9 @@ public static class GatewayManagementHost
             audit: audit,
             cache: cacheApi,
             definitions: new GatewayDefinitionsManagement(state, audit, hooks: GatewayDefinitionsManagement.HooksOf(state, semanticModels, app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), dataSources, entityModels)),
-            serverSettings: new GatewayServerSettings(configDirectory, management, provider.ReloadNow, audit, git),
+            serverSettings: serverSettings,
+            export: new GatewayExportManagement(new Export.ExportInstaller(Export.ExportInstaller.DefaultFetcher(), dataDirectory, GatewayHost.Version),
+                () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue, dataDirectory, serverSettings, audit),
             entityModels: entityModels,
             apps: new GatewayApps(DbDataGateway.Server.Serving.ServingKinds.StoreOf(state), () => HomeApprovers.Open(state, app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue), audit,
                 appsAddress: () => { var current = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue; return GatewayModules.Has(current, GatewayModules.Apps) ? GatewayAppsModule.PublicUrlOf(current) : null; },

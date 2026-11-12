@@ -170,6 +170,19 @@ public sealed partial class GatewayServerSettings(string configDirectory, Gatewa
 
     private static bool ValidPath(string path) => Regex.IsMatch(path, @"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)*$");
 
+    /// <summary>
+    /// Sets settings by path (<c>views.export.mode</c>) in the file as it is now and writes it exactly as <c>PUT</c> does: checked by the validator, a commit of the configuration as the caller, atomic, audited, the running Gateway told to reread.
+    /// For what a Gateway does to its own settings (installing the export component, plan 32 DBR16), so the screen and the command line leave the same trace as an edit in the settings screen. The answer is the PUT's.
+    /// </summary>
+    public async Task<ManagementResult> SetAsync(IReadOnlyDictionary<string, string> settings, ManagementCaller caller, string note, CancellationToken cancellationToken)
+    {
+        if (!caller.Holds(ServerRole.Admin)) return Denied();
+        var current = CurrentText() ?? "";
+        var (text, _) = DbDataGateway.Server.Export.ExportSettingsEdit.Apply(current, settings, File_);
+        var body = new JsonObject { ["text"] = text, ["expected_version"] = CurrentText() is { } now ? Sha(now) : null, ["note"] = note };
+        return await WriteAsync(body.ToJsonString(), caller, cancellationToken);
+    }
+
     // ---- write ----
 
     private async Task<ManagementResult> WriteAsync(string? body, ManagementCaller caller, CancellationToken cancellationToken)

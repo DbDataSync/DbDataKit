@@ -62,6 +62,17 @@ Every command takes `--format json` and writes one document instead of text: `{ 
 (its shape is the command's own, listed in `schemas/output.schema.json`), `messages` and `errors` are the lines the text form writes to standard output and standard error, and `exit_code` is the code text mode
 exits with (0 done, 1 the answer is no or it failed, 2 used wrongly). The schema is generated from the commands and a test fails when it is out of date (`UPDATE_GOLDEN=1` rewrites it).
 
+## PDF export component
+
+Exporting a dashboard or report to PDF needs a pinned Chromium, the bundled fonts and the print page (about 420 MB installed). They are a release asset of their own, `dbdatagateway-export-v<version>-<rid>.zip`, not part of the product zips or the MSI:
+
+```
+dbdatagateway export install [--version <release>] [--source <folder or https address>] [--dir <folder>] [--rid linux-x64|win-x64] [--force] [--repo <data directory>]
+dbdatagateway export status [--repo <data directory>]
+```
+
+`install` downloads the zip for this platform from this release (or `--source`, a folder or an https address that holds the release's files, for a host with no internet; `DBDATAKIT_EXPORT_RELEASE_BASE` does the same), checks it against the release's `SHA256SUMS` and the pins inside it, installs it in the data directory's `export-component` folder and sets `views.export` in `server.yaml`; a changed byte is refused naming the file and nothing is installed. Restart the gateway afterwards. The console's **Server settings** screen has the same as a button ("PDF export component", administrators only, audited). See `docs/views.md`, "The export component".
+
 ## Service, containers and health
 
 ```
