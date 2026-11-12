@@ -1,0 +1,33 @@
+{
+  "parameters": [],
+  "groups": {
+    "mixed": {
+      "fields": [
+        "customers.region",
+        "orders.net_revenue"
+      ]
+    }
+  },
+  "widgets": {
+    "w": {
+      "type": "chart",
+      "mark": "bar",
+      "encodings": {
+        "x": {
+          "group": "mixed"
+        },
+        "y": "orders.order_count"
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "refusal": [
+    {
+      "code": "wrong_member_kind",
+      "path": "widgets.w.encodings.x.group",
+      "message": "orders.net_revenue is a measure, not a attribute."
+    }
+  ]
+}

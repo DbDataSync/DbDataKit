@@ -131,6 +131,70 @@
     {
       "name": "chart-nested-axis-by-a-measure-it-does-not-chart",
       "file": "good/chart-nested-axis-by-a-measure-it-does-not-chart.json"
+    },
+    {
+      "name": "table-the-same-measure-twice-with-two-filter-sets",
+      "file": "good/table-the-same-measure-twice-with-two-filter-sets.json"
+    },
+    {
+      "name": "chart-y-list-two-series-of-one-measure",
+      "file": "good/chart-y-list-two-series-of-one-measure.json"
+    },
+    {
+      "name": "matrix-unfiltered-and-filtered-in-one-matrix",
+      "file": "good/matrix-unfiltered-and-filtered-in-one-matrix.json"
+    },
+    {
+      "name": "matrix-sort-by-an-alias-asks-for-the-total",
+      "file": "good/matrix-sort-by-an-alias-asks-for-the-total.json"
+    },
+    {
+      "name": "metric-filtered-by-a-parameter-beside-a-plain-measure",
+      "file": "good/metric-filtered-by-a-parameter-beside-a-plain-measure.json"
+    },
+    {
+      "name": "table-sort-by-an-alias-adds-no-column",
+      "file": "good/table-sort-by-an-alias-adds-no-column.json"
+    },
+    {
+      "name": "matrix-attribute-in-the-cell-area",
+      "file": "good/matrix-attribute-in-the-cell-area.json"
+    },
+    {
+      "name": "matrix-attribute-in-the-cell-area-with-totals",
+      "file": "good/matrix-attribute-in-the-cell-area-with-totals.json"
+    },
+    {
+      "name": "matrix-attribute-already-on-an-axis-adds-nothing",
+      "file": "good/matrix-attribute-already-on-an-axis-adds-nothing.json"
+    },
+    {
+      "name": "table-attribute-column-with-icons-and-a-link",
+      "file": "good/table-attribute-column-with-icons-and-a-link.json"
+    },
+    {
+      "name": "chart-line-over-a-group",
+      "file": "good/chart-line-over-a-group.json"
+    },
+    {
+      "name": "chart-group-as-the-color",
+      "file": "good/chart-group-as-the-color.json"
+    },
+    {
+      "name": "matrix-combined-group-on-the-columns",
+      "file": "good/matrix-combined-group-on-the-columns.json"
+    },
+    {
+      "name": "matrix-combined-group-with-a-total-row",
+      "file": "good/matrix-combined-group-with-a-total-row.json"
+    },
+    {
+      "name": "matrix-detail-group-always",
+      "file": "good/matrix-detail-group-always.json"
+    },
+    {
+      "name": "matrix-drill-group-is-not-asked-for-until-a-row-is-expanded",
+      "file": "good/matrix-drill-group-is-not-asked-for-until-a-row-is-expanded.json"
     }
   ],
   "refused": [
@@ -185,6 +249,30 @@
     {
       "name": "chart-nested-axis-with-a-measure-as-a-level",
       "file": "refused/chart-nested-axis-with-a-measure-as-a-level.json"
+    },
+    {
+      "name": "filtered-measure-without-an-alias",
+      "file": "refused/filtered-measure-without-an-alias.json"
+    },
+    {
+      "name": "one-name-twice-with-different-filters",
+      "file": "refused/one-name-twice-with-different-filters.json"
+    },
+    {
+      "name": "the-same-measure-twice-unaliased-with-filters",
+      "file": "refused/the-same-measure-twice-unaliased-with-filters.json"
+    },
+    {
+      "name": "alias-and-filters-on-an-attribute",
+      "file": "refused/alias-and-filters-on-an-attribute.json"
+    },
+    {
+      "name": "group-and-an-axis-name-the-same-field",
+      "file": "refused/group-and-an-axis-name-the-same-field.json"
+    },
+    {
+      "name": "group-with-a-measure-level",
+      "file": "refused/group-with-a-measure-level.json"
     }
   ]
 }

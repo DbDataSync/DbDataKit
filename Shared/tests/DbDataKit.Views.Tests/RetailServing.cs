@@ -107,9 +107,16 @@ internal sealed class RetailServing : IServingQueries
         var query = document["query"] as JsonObject ?? throw new ServingInvalidException("schema_invalid: a query has a `query`.");
         var parameters = document["parameters"] as JsonObject;
         var attributes = (query["attributes"] as JsonArray ?? []).Select(a => a!.GetValue<string>()).ToList();
-        var measures = (query["measures"] as JsonArray ?? []).Select(m => m!.GetValue<string>()).ToList();
+        // a measure is a name, or `{measure, as, filters}` (a filtered or repeated measure: its output is the alias, its own filters narrow the lines it adds up)
+        var measureEntries = (query["measures"] as JsonArray ?? []).Select(m => m is JsonObject o
+            ? (Output: o["as"]?.GetValue<string>() ?? o["measure"]!.GetValue<string>(), Base: o["measure"]!.GetValue<string>(), Filters: o["filters"] as JsonArray)
+            : (Output: m!.GetValue<string>(), Base: m.GetValue<string>(), Filters: (JsonArray?)null)).ToList();
+        var measures = measureEntries.Select(m => m.Output).ToList();
         foreach (var a in attributes) if (!Attributes.ContainsKey(a)) throw new ServingInvalidException($"unknown_member: {a} is not a catalog member.");
-        foreach (var m in measures) if (!Measures.ContainsKey(m)) throw new ServingInvalidException($"unknown_member: {m} is not a catalog member.");
+        foreach (var m in measureEntries) if (!Measures.ContainsKey(m.Base)) throw new ServingInvalidException($"unknown_member: {m.Base} is not a catalog member.");
+        if (measures.Count != measures.Distinct().Count()) throw new ServingInvalidException("duplicate_measure: A measure is listed more than once.");
+        foreach (var m in measureEntries.Where(m => m.Filters is { Count: > 0 } && m.Output == m.Base)) throw new ServingInvalidException($"alias_required: {m.Base} has its own filters and needs an 'as' alias.");
+        var measureOf = measureEntries.ToDictionary(m => m.Output);
 
         // filters
         var lines = visible;
@@ -158,7 +165,20 @@ internal sealed class RetailServing : IServingQueries
                     key.Add(v ?? "");
                 }
                 if (totals is not null) row["_rollup_level"] = (long)level;
-                foreach (var m in measures) row[ColName(m)] = Measures[m].Type == "integer" ? JsonValue.Create((long)Measures[m].Of(g)) : JsonValue.Create(Math.Round(Measures[m].Of(g), 4));
+                foreach (var m in measures)
+                {
+                    var entry = measureOf[m];
+                    var measure = Measures[entry.Base];
+                    var own = g;
+                    foreach (var filter in (entry.Filters ?? []).OfType<JsonObject>())
+                    {
+                        var attribute = Attributes.GetValueOrDefault(filter["attribute"]!.GetValue<string>()) ?? throw new ServingInvalidException($"unknown_member: {filter["attribute"]} is not a catalog member.");
+                        var op = filter["operator"]!.GetValue<string>();
+                        var values = Values(filter["values"], parameters);
+                        own = own.Where(l => Matches(attribute.Of(l), op, values)).ToList();
+                    }
+                    row[ColName(m)] = measure.Type == "integer" ? JsonValue.Create((long)measure.Of(own)) : JsonValue.Create(Math.Round(measure.Of(own), 4));
+                }
                 levelRows.Add((row, key));
             }
             rows.AddRange(Order(levelRows, query["order"] as JsonArray, parameters));
@@ -168,11 +188,14 @@ internal sealed class RetailServing : IServingQueries
         var fields = new JsonArray();
         foreach (var a in attributes) fields.Add(new JsonObject { ["name"] = ColName(a), ["type"] = Attributes[a].Type, ["x_kind"] = "attribute", ["x_binding"] = a });
         foreach (var m in measures)
+        {
+            var measure = Measures[measureOf[m].Base];
             fields.Add(new JsonObject
             {
-                ["name"] = ColName(m), ["type"] = Measures[m].Type, ["x_kind"] = "measure", ["x_binding"] = m, ["x_additivity"] = Measures[m].Additivity,
-                ["x_semantics"] = new JsonObject { ["rollup"] = new JsonObject { ["default"] = Measures[m].Additivity == "additive" ? "sum" : "none" } },
+                ["name"] = ColName(m), ["type"] = measure.Type, ["x_kind"] = "measure", ["x_binding"] = measureOf[m].Base, ["x_additivity"] = measure.Additivity,
+                ["x_semantics"] = new JsonObject { ["rollup"] = new JsonObject { ["default"] = measure.Additivity == "additive" ? "sum" : "none" } },
             });
+        }
         JsonObject? x_totals = null;
         if (totals is not null)
         {

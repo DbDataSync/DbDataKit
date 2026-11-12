@@ -57,6 +57,9 @@
     "links": {
       "$ref": "#/$defs/core__links"
     },
+    "groups": {
+      "$ref": "#/$defs/core__groups"
+    },
     "widgets": {
       "$ref": "#/$defs/core__widgets"
     },
@@ -65,8 +68,40 @@
     }
   },
   "$defs": {
+    "core__alias": {
+      "description": "A new snake_case name for a measure's output (the engine's `as`): the same measure put in a visual twice, or a filtered one, is told apart by it (plan 32 DBR50).",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
+    "core__attribute_display": {
+      "description": "How an attribute reads in a cell: text, an icon chosen by the value, or a badge.",
+      "enum": [
+        "text",
+        "icon",
+        "badge"
+      ]
+    },
+    "core__attribute_icons": {
+      "description": "The icon each value of the attribute shows as (display: icon); a value the map does not list shows as text.",
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 100,
+      "additionalProperties": {
+        "$ref": "#/$defs/core__icon"
+      }
+    },
+    "core__attribute_many": {
+      "description": "What a matrix cell with several rows shows: mixed (a marker, the values in a tooltip; the default), first, last, count (the number of distinct values) or list (comma-joined, capped).",
+      "enum": [
+        "mixed",
+        "first",
+        "last",
+        "count",
+        "list"
+      ]
+    },
     "core__chart_channel": {
-      "description": "The Vega-Lite subset's channel object (its own definitions of field, type, sort, stack and title, referenced and not copied) and `format` (plan 32 DBR41): how the channel's values read on an axis, in a legend and in a tooltip. The subset and the QIS view (0.3) are unchanged: the format belongs to the widget vocabulary and the renderer maps it.",
+      "description": "The Vega-Lite subset's channel object (its own definitions of field, type, sort, stack and title, referenced and not copied), `format` (plan 32 DBR41: how the channel's values read on an axis, in a legend and in a tooltip) and, on a measure, `alias` and `filters` (DBR50). The subset and the QIS view (0.3) are unchanged: the format belongs to the widget vocabulary and the renderer maps it.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -87,6 +122,16 @@
         },
         "format": {
           "$ref": "#/$defs/core__format"
+        },
+        "alias": {
+          "$ref": "#/$defs/core__alias"
+        },
+        "filters": {
+          "$ref": "#/$defs/core__measure_filters"
+        },
+        "group": {
+          "description": "A field group of the document (`groups`) used as this channel's one field, in place of `field` (plan 32 DBR52); `title` and `sort` (ascending, descending, sort_key) go with it, nothing else.",
+          "$ref": "#/$defs/core__name"
         }
       }
     },
@@ -106,7 +151,20 @@
           ]
         },
         "y": {
-          "$ref": "#/$defs/core__encoding_channel"
+          "description": "One measure, or a list of them (plan 32 DBR50): each is one series, told apart by its `alias` when one measure is there twice.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/core__encoding_channel"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "$ref": "#/$defs/core__encoding_channel"
+              }
+            }
+          ]
         },
         "color": {
           "$ref": "#/$defs/core__encoding_channel"
@@ -309,6 +367,87 @@
         {
           "date": "month-year"
         }
+      ]
+    },
+    "core__group": {
+      "description": "A group of fields used as one (plan 32 section 9h, DBR52): two to four attributes, outermost first, each a field name or `{field, format}`; as a chart channel or a matrix axis it is one field with one member per combination of the levels, ordered by the levels in turn and labelled by `template` (`{1}` is the first level's text; the levels joined by a space when it is left out).",
+      "type": "object",
+      "required": [
+        "fields"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 4,
+          "items": {
+            "type": [
+              "string",
+              "object"
+            ],
+            "minLength": 1,
+            "required": [
+              "field"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "field": {
+                "$ref": "#/$defs/core__field"
+              },
+              "format": {
+                "$ref": "#/$defs/core__format"
+              }
+            }
+          }
+        },
+        "label": {
+          "$ref": "#/$defs/core__title"
+        },
+        "template": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "core__groups": {
+      "type": "object",
+      "maxProperties": 50,
+      "propertyNames": {
+        "$ref": "#/$defs/core__name"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/core__group"
+      }
+    },
+    "core__icon": {
+      "description": "An icon of the closed vocabulary an attribute's value may show as (plan 32 DBR51): drawn from the bundled icon set, never by name from the page.",
+      "enum": [
+        "circle",
+        "dot",
+        "check",
+        "cross",
+        "warning",
+        "info",
+        "clock",
+        "flag",
+        "star",
+        "pause",
+        "play",
+        "stop",
+        "lock",
+        "unlock",
+        "arrow-up",
+        "arrow-down",
+        "arrow-right",
+        "plus",
+        "minus",
+        "pin",
+        "bell",
+        "eye",
+        "user",
+        "tag"
       ]
     },
     "core__layout": {
@@ -674,32 +813,48 @@
       "maximum": 100
     },
     "core__matrix_axis": {
-      "description": "The attributes of a matrix axis, outermost first (plan 32 DBR41): each a field name, or `{field, format, sort}`: the format of the member labels at that level and the sort of the axis (the QIS view's own sort object, by sort_key, label or a measure). Only one level of an axis may carry a sort, which is the axis's sort.",
+      "description": "The attributes of a matrix axis, outermost first (plan 32 DBR41): each a field name, or `{field, format, sort}`: the format of the member labels at that level and the sort of the axis (the QIS view's own sort object, by sort_key, label or a measure). Only one level of an axis may carry a sort, which is the axis's sort. An entry may instead be a field group of the document (DBR52): `{group: name}` is the same combined field, `{group: name, show: always}` (rows only) the group's attributes shown as extra columns of every row.",
       "type": "array",
       "items": {
-        "oneOf": [
+        "type": [
+          "string",
+          "object"
+        ],
+        "minLength": 1,
+        "anyOf": [
           {
-            "$ref": "#/$defs/core__field"
-          },
-          {
-            "type": "object",
             "required": [
               "field"
-            ],
-            "additionalProperties": false,
-            "properties": {
-              "field": {
-                "$ref": "#/$defs/core__field"
-              },
-              "format": {
-                "$ref": "#/$defs/core__format"
-              },
-              "sort": {
-                "$ref": "#/$defs/view__sort"
-              }
-            }
+            ]
+          },
+          {
+            "required": [
+              "group"
+            ]
           }
-        ]
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "$ref": "#/$defs/core__field"
+          },
+          "format": {
+            "$ref": "#/$defs/core__format"
+          },
+          "sort": {
+            "$ref": "#/$defs/view__sort"
+          },
+          "group": {
+            "$ref": "#/$defs/core__name"
+          },
+          "show": {
+            "description": "always: the group's attributes are extra header columns of every row; drill: a row expands to its detail rows on request (plan 32 DBR55).",
+            "enum": [
+              "always",
+              "drill"
+            ]
+          }
+        }
       }
     },
     "core__matrix_encodings": {
@@ -734,17 +889,29 @@
       }
     },
     "core__matrix_values": {
-      "description": "The measures of a matrix: the QIS view's own `field`, `empty` and `label`, and a `format` that is a preset or a mapping (the view's own takes the presets only).",
+      "description": "The values of a matrix: a measure (the QIS view's own `field`, `empty` and `label`, a `format` that is a preset or a mapping, and `alias` and `filters`, DBR50) or an attribute in the cell area (`attribute` with `display`, `icons`, `many`, `link`; plan 32 DBR51). An entry is one or the other.",
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": [
-          "field"
+        "anyOf": [
+          {
+            "required": [
+              "field"
+            ]
+          },
+          {
+            "required": [
+              "attribute"
+            ]
+          }
         ],
         "additionalProperties": false,
         "properties": {
           "field": {
+            "$ref": "#/$defs/core__field"
+          },
+          "attribute": {
             "$ref": "#/$defs/core__field"
           },
           "empty": {
@@ -755,8 +922,64 @@
           },
           "label": {
             "$ref": "#/$defs/view__matrix/properties/values/items/properties/label"
+          },
+          "alias": {
+            "$ref": "#/$defs/core__alias"
+          },
+          "filters": {
+            "$ref": "#/$defs/core__measure_filters"
+          },
+          "display": {
+            "$ref": "#/$defs/core__attribute_display"
+          },
+          "icons": {
+            "$ref": "#/$defs/core__attribute_icons"
+          },
+          "many": {
+            "$ref": "#/$defs/core__attribute_many"
+          },
+          "link": {
+            "$ref": "#/$defs/core__name"
           }
         }
+      }
+    },
+    "core__measure_field": {
+      "description": "A measure's entry in a measure well (a metric's `value` and `compare`): a field name, or the object form (plan 32 section 9h, DBR50) `{field, alias, label, filters, format}`.",
+      "type": [
+        "string",
+        "object"
+      ],
+      "minLength": 1,
+      "required": [
+        "field"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "$ref": "#/$defs/core__field"
+        },
+        "alias": {
+          "$ref": "#/$defs/core__alias"
+        },
+        "label": {
+          "type": "string"
+        },
+        "filters": {
+          "$ref": "#/$defs/core__measure_filters"
+        },
+        "format": {
+          "$ref": "#/$defs/core__format"
+        }
+      }
+    },
+    "core__measure_filters": {
+      "description": "A filtered measure's own filters (the semantic request's filter grammar, `docs/semantic/query.md`, checked by the engine at publish): they intersect with the query's and never replace them. A filter value may be {param: name}. Needs an `alias` (the engine's `alias_required`, said by the derivation).",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": {
+        "type": "object"
       }
     },
     "core__medium": {
@@ -1211,6 +1434,22 @@
           "type": "integer",
           "minimum": 20,
           "maximum": 2000
+        },
+        "alias": {
+          "$ref": "#/$defs/core__alias"
+        },
+        "filters": {
+          "$ref": "#/$defs/core__measure_filters"
+        },
+        "display": {
+          "$ref": "#/$defs/core__attribute_display"
+        },
+        "icons": {
+          "$ref": "#/$defs/core__attribute_icons"
+        },
+        "link": {
+          "description": "The name of a link of the document that a click on the cell follows (plan 32 DBR51).",
+          "$ref": "#/$defs/core__name"
         }
       }
     },
@@ -1570,6 +1809,23 @@
         "on_click": {
           "description": "The name of a link of the document that a click on a mark or cell follows (instead of `drill`, which is the same thing written in place).",
           "$ref": "#/$defs/core__name"
+        },
+        "expanded": {
+          "description": "The rows shown expanded where the rows have an entry `{group, show: drill}` (plan 32 DBR55): each the member values of the row's own fields, outermost first. A viewer's expansion is the viewer's; print and export show these.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
+            }
+          }
         }
       }
     },
@@ -1603,10 +1859,10 @@
           "additionalProperties": false,
           "properties": {
             "value": {
-              "$ref": "#/$defs/core__field"
+              "$ref": "#/$defs/core__measure_field"
             },
             "compare": {
-              "$ref": "#/$defs/core__field"
+              "$ref": "#/$defs/core__measure_field"
             }
           }
         },

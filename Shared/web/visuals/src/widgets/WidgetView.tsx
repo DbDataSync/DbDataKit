@@ -16,6 +16,12 @@ import { EmptyTile, ErrorTile, LoadingTile } from './states'
 import { bodyBox, densityClass, type DensityClass } from './density'
 import { clickOf, drillOf, howOf, onSelectOf, selectedOf, parameterDefault, type Hit, type HitHow } from '../dashboard/interaction'
 
+/** A click on a cell that names a link: the link's name, the widget and the cell's place in its result (a table's row; a matrix's row and column). */
+export interface CellLink { name: string; widget: string; row: number; column?: number }
+
+/** A row of a matrix that can expand was toggled (plan 32 DBR55): the widget, the row's index in the result, its typed `key` and whether it is to be expanded. */
+export interface RowExpand { widget: string; row: number; key: Array<string | number | boolean | null>; expanded: boolean }
+
 export interface WidgetViewProps {
   /** The widget's id in its document. */
   id: string
@@ -47,6 +53,10 @@ export interface WidgetViewProps {
   sortable?: boolean
   /** A table the server cut at its limit: the host runs it again with `order` (column field, direction; null, null for the document's order). */
   onServerSort?: (widget: string, field: string | null, dir: 'asc' | 'desc' | null) => void
+  /** A cell that names a link of the document was clicked (an attribute's cell, plan 32 DBR51): the link's name and the cell's place in the result. The host decides what the link does; without it such a cell is plain text. */
+  onLink?: (link: CellLink) => void
+  /** A row that can expand was toggled (DBR55). The host reads its details (the server, as the viewer) and gives the matrix its `children` back; without a handler the toggle is not drawn. */
+  onExpand?: (expand: RowExpand) => void
 }
 
 function isEmpty(result: RenderedWidget): boolean {
@@ -63,7 +73,7 @@ function isEmpty(result: RenderedWidget): boolean {
  * One widget in its tile: a title bar (a metric carries its label instead), the body its type draws from its resolved result, and the three states besides drawn: **loading**, **empty** ("No data."), and
  * **error** (the server's code and words: one failing widget never fails the page). Light and dark by the theme; `density` is chosen from the box (a layout's `widget_options` can pin it).
  */
-export function WidgetView({ id, widget, result, loading = false, box, theme = 'auto', options, parameters = {}, definitions = [], onParameterChange, maximized = false, onMaximize, onHit, asOf, stale = false, canDrill = true, canFollow = false, sortable = false, onServerSort }: WidgetViewProps) {
+export function WidgetView({ id, widget, result, loading = false, box, theme = 'auto', options, parameters = {}, definitions = [], onParameterChange, maximized = false, onMaximize, onHit, asOf, stale = false, canDrill = true, canFollow = false, sortable = false, onServerSort, onLink, onExpand }: WidgetViewProps) {
   const resolved = useTheme(theme)
   const density: DensityClass = box ? densityClass(widget.type, box, options?.density) : options?.density === 'compact' ? 's' : 'l'
   const titled = widget.title !== undefined && widget.type !== 'metric' && options?.show_title !== false
@@ -106,8 +116,8 @@ export function WidgetView({ id, widget, result, loading = false, box, theme = '
   else {
     switch (widget.type) {
       case 'metric': content = <MetricTile widget={widget} result={result as never} density={density} />; break
-      case 'table': content = <TableWidget id={id} widget={widget} result={result as never} box={body} maximized={maximized} onMaximize={onMaximize} sortable={sortable} onServerSort={onServerSort ? (field, dir) => onServerSort(id, field, dir) : undefined} onRow={pointable ? (index, m) => onHit!({ kind: 'row', index }, howOf(m)) : undefined} />; break
-      case 'matrix': content = <MatrixWidget view={result as RenderedMatrix} box={body} maximized={maximized} onMaximize={onMaximize} title={widget.title} sortable={sortable} onCell={pointable ? (row, column, m) => onHit!({ kind: 'matrix', row, ...(column === undefined ? {} : { column }) }, howOf(m)) : undefined} />; break
+      case 'table': content = <TableWidget id={id} widget={widget} result={result as never} box={body} maximized={maximized} onMaximize={onMaximize} sortable={sortable} onServerSort={onServerSort ? (field, dir) => onServerSort(id, field, dir) : undefined} onLink={onLink ? (name, row) => onLink({ name, widget: id, row }) : undefined} onRow={pointable ? (index, m) => onHit!({ kind: 'row', index }, howOf(m)) : undefined} />; break
+      case 'matrix': content = <MatrixWidget view={result as RenderedMatrix} box={body} maximized={maximized} onMaximize={onMaximize} title={widget.title} sortable={sortable} onLink={onLink ? (name, row, column) => onLink({ name, widget: id, row, column }) : undefined} onExpand={onExpand ? (row, expanded) => { const k = (result as RenderedMatrix).rows[row]?.key; if (k) onExpand({ widget: id, row, key: k, expanded }) } : undefined} onCell={pointable ? (row, column, m) => onHit!({ kind: 'matrix', row, ...(column === undefined ? {} : { column }) }, howOf(m)) : undefined} />; break
       case 'chart': content = <ChartWidget view={result as RenderedChart} theme={resolved} box={body} density={density} options={options} onHit={pointable ? onHit : undefined} />; break
       case 'text': content = <TextBlock widget={widget} parameters={parameters} />; break
       case 'image': content = <ImageBlock widget={widget} result={result as never} />; break

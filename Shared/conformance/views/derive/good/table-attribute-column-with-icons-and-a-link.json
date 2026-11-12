@@ -1,0 +1,44 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "table",
+      "encodings": {
+        "columns": [
+          {
+            "field": "customers.region"
+          },
+          {
+            "field": "orders.status",
+            "display": "icon",
+            "icons": {
+              "Open": "circle",
+              "Completed": "check"
+            },
+            "link": "set-status"
+          },
+          {
+            "field": "orders.net_revenue"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "attributes": [
+        "customers.region",
+        "orders.status"
+      ],
+      "limit": 100
+    }
+  }
+}

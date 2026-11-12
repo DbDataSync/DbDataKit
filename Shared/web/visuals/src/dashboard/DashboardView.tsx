@@ -4,7 +4,8 @@ import { LinkSurface, type OpenSurface } from '../links/LinkSurface'
 import { surfaceAddress, thenWidgets } from '../links/surface'
 import { describeLink, linkValues, type LinkInfo, type LinkScalar } from '../views/links'
 import { placedWidgets } from '../client/fixtureClient'
-import type { ServerSort, ViewsClient } from '../client/types'
+import type { ResolveOptions, ServerSort, ViewsClient } from '../client/types'
+import type { RenderedMatrix } from '../types'
 import { useTheme, type ThemeChoice } from '../theme'
 import type { ViewKind } from '../views/document'
 import type { Box, LayoutDoc, ParameterDefinition, ParameterValue, ParameterValues, ViewsDoc } from '../views/model'
@@ -12,6 +13,7 @@ import type { RenderedWidget } from '../views/rendered'
 import { selectLayout, type LayoutSelection, type Medium } from '../views/selectLayout'
 import { PagedFrame } from '../report/PagedFrame'
 import { usePrintPreview } from '../report/PrintPreview'
+import type { CellLink, RowExpand } from '../widgets/WidgetView'
 import { ErrorTile } from '../widgets/states'
 import { DashboardFrame } from './DashboardFrame'
 import { clickOf, drillOf, onSelectOf, resolveDrill, rowOf, selectFrom, type Hit, type HitHow, type ResolvedDrill, type Row } from './interaction'
@@ -70,6 +72,8 @@ export interface DashboardViewProps {
   sortable?: boolean
   /** A table the server cut at its limit: run the widget again with `order` for this column. Without it the loaded rows are sorted and the notice says so. */
   onServerSort?: (widget: string, field: string | null, dir: 'asc' | 'desc' | null) => void
+  /** A cell that names a link of the document was clicked (an attribute's cell in a table or a matrix, plan 32 DBR51): the link's name, the widget and the cell's place in its result. The host opens the link's target (DBR36) or asks for the action (DBR53); without a handler such a cell is plain text. */
+  onCellLink?: (link: CellLink) => void
   /**
    * Kiosk mode (`?mode=kiosk`, plan 32 section 3.5 item 5): the layout the document's `kiosk.layout` names is shown unless `layout` names another, and the tiles have no maximize action. The host's chrome is the host's to hide.
    */
@@ -128,7 +132,7 @@ function useBox(given: Box | undefined) {
  * the widgets both layouts place. A widget that fails shows its own error; a failure of the call itself shows once, for the page. A canvas layout is drawn by `layoutCanvas` (DBR07), scaled or scrolled in the same container; a flow layout is the work of its own engine (DBR14):
  * until then a note says so.
  */
-export function DashboardView({ kind = 'dashboard', name, document, client, layout: requested, medium, box: given, theme = 'auto', parameters, onParameterChange, onSelect, onDrill, sortable = false, onServerSort, customViews, linkHost, onLink, closedLink, viewer, onPrintPreview, kiosk = false, refreshFloorMs, clock, visibility, random, timeZone }: DashboardViewProps) {
+export function DashboardView({ kind = 'dashboard', name, document, client, layout: requested, medium, box: given, theme = 'auto', parameters, onParameterChange, onSelect, onDrill, sortable = false, onServerSort, customViews, linkHost, onLink, onCellLink, closedLink, viewer, onPrintPreview, kiosk = false, refreshFloorMs, clock, visibility, random, timeZone }: DashboardViewProps) {
   const layout = requested ?? (kiosk ? document.kiosk?.layout : undefined)
   const resolvedTheme = useTheme(theme)
   const { ref, box } = useBox(given)
@@ -154,6 +158,8 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
   const [resolution, setResolution] = useState<Resolution | null>(null)
   // the viewer's sorts of tables the server cut (DBR45): kept for every later request of this view, never stored
   const sortsRef = useRef<Record<string, ServerSort>>({})
+  // the rows the viewer expanded in matrices (DBR55), by widget: kept for every later request of this view, never stored
+  const expandRef = useRef<NonNullable<ResolveOptions['expand']>>({})
   const [failure, setFailure] = useState<string | null>(null)
   const latest = useRef<Resolution | null>(null)
   useEffect(() => {
@@ -161,7 +167,7 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
     const controller = new AbortController()
     let current = true
     setFailure(null)
-    resolveLayout({ client, ref: { kind, name }, layout: chosenName, placed, parameters: values, previous: latest.current, document, order: sortsRef.current, signal: controller.signal }).then(
+    resolveLayout({ client, ref: { kind, name }, layout: chosenName, placed, parameters: values, previous: latest.current, document, order: sortsRef.current, expand: expandRef.current, signal: controller.signal }).then(
       (next) => {
         if (!current) return
         latest.current = next
@@ -200,7 +206,7 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
       run: async () => {
         const l = live.current
         if (!l.chosenName) return
-        const next = await resolveLayout({ client: l.client, ref: { kind: l.kind, name: l.name }, layout: l.chosenName, placed: l.placed, parameters: l.values, previous: latest.current, document: l.document, force: true, order: sortsRef.current })
+        const next = await resolveLayout({ client: l.client, ref: { kind: l.kind, name: l.name }, layout: l.chosenName, placed: l.placed, parameters: l.values, previous: latest.current, document: l.document, force: true, order: sortsRef.current, expand: expandRef.current })
         latest.current = next
         setResolution(next)
       },
@@ -235,6 +241,27 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
     )
   }
   const serverSorting = client.sortsOnServer ? serverSort : onServerSort
+
+  // a click on the toggle of a matrix row that can expand (DBR55): the widget runs again with the rows the viewer has open, the module reads the details of each as the viewer, the others keep what they show
+  const toggleExpand = (e: RowExpand) => {
+    const l = live.current
+    if (!l.chosenName) return
+    const open = (latest.current?.results[e.widget] as RenderedMatrix | undefined)?.rows?.flatMap((r) => (r.expanded && r.key ? [r.key] : [])) ?? []
+    const current = expandRef.current[e.widget] ?? open
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+    const next = e.expanded ? [...current.filter((k) => !same(k, e.key)), e.key] : current.filter((k) => !same(k, e.key))
+    expandRef.current = { ...expandRef.current, [e.widget]: next }
+    l.client.resolve({ kind: l.kind, name: l.name }, l.chosenName, l.values, { only: [e.widget], order: sortsRef.current, expand: expandRef.current }).then(
+      (fresh) => {
+        const base = latest.current
+        if (!base) return
+        const merged: Resolution = { ...base, results: { ...base.results, ...fresh.widgets }, asOfBy: { ...base.asOfBy, ...Object.fromEntries(Object.keys(fresh.widgets).map((id) => [id, fresh.as_of])) } }
+        latest.current = merged
+        setResolution(merged)
+      },
+      (err: unknown) => setNotice(`The row could not be ${e.expanded ? 'expanded' : 'collapsed'}: ${err instanceof Error ? err.message : String(err)}`),
+    )
+  }
 
   // pointing at a widget: a selection sets the parameter it names (the same change a control makes, so the dependents resolve again); a drill goes to the host
   const [notice, setNotice] = useState<string | null>(null)
@@ -362,6 +389,8 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
         canFollow={follows}
         sortable={sortable}
         onServerSort={serverSorting}
+        onLink={onCellLink}
+        onExpand={client.expandsOnServer ? toggleExpand : undefined}
       />
     )
   const modalOpen = surface?.open.as === 'dialog'

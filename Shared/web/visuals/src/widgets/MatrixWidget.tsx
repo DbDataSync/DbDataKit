@@ -11,7 +11,7 @@ import { nextSort, sortedOrder, type ViewerSort } from './clickSort'
  * A matrix widget: the existing `MatrixGrid`, cut to its tile. A matrix **truncates columns first** (a column the grid has no room for goes, a total column is kept), then rows (a total row is kept), and says
  * "6 of 9 columns, 12 of 40 rows" with the action that maximizes the tile. `maximized` draws it whole and the widget scrolls.
  */
-export function MatrixWidget({ view: given, box, maximized = false, onMaximize, title, onCell, sortable = false }: { view: RenderedMatrix; box?: Box; maximized?: boolean; onMaximize?: () => void; title?: string; onCell?: (row: number, column: number | undefined, modifiers: Modifiers) => void; sortable?: boolean }) {
+export function MatrixWidget({ view: given, box, maximized = false, onMaximize, title, onCell, sortable = false, onLink, onExpand }: { view: RenderedMatrix; box?: Box; maximized?: boolean; onMaximize?: () => void; title?: string; onCell?: (row: number, column: number | undefined, modifiers: Modifiers) => void; sortable?: boolean; onLink?: (link: string, row: number, column: number) => void; onExpand?: (row: number, expanded: boolean) => void }) {
   // a click on a column's innermost header sorts the rows by that column on screen (plan 32 DBR45; never stored); a total row stays last, and a cell's row is still the row of the result
   const [sort, setSort] = useState<ViewerSort | null>(null)
   const order = sortedOrder(given.rows, sortable ? sort : null)
@@ -49,7 +49,9 @@ export function MatrixWidget({ view: given, box, maximized = false, onMaximize, 
     <div className={maximized ? 'vz-matrix-fit vz-maximized' : 'vz-matrix-fit'}>
       <MatrixGrid view={shown} onCell={onCell ? (r, c, m) => onCell(order[rowIndex[r]!]!, c === undefined ? undefined : columnIndex[c]!, m) : undefined}
         sort={sort === null ? null : { column: columnIndex.indexOf(sort.index), dir: sort.dir }}
-        onSortColumn={sortable ? (c) => setSort(nextSort(sort, columnIndex[c]!)) : undefined} />
+        onSortColumn={sortable ? (c) => setSort(nextSort(sort, columnIndex[c]!)) : undefined}
+        onLink={onLink ? (name, r, c) => onLink(name, order[rowIndex[r]!]!, columnIndex[c]!) : undefined}
+        onExpand={onExpand ? (r, expanded) => onExpand(order[rowIndex[r]!]!, expanded) : undefined} />
       {told.length > 0 ? <FitNotice text={told.join(', ')} onMaximize={onMaximize} label={`Show the whole matrix${title ? ` ${title}` : ''}`} /> : null}
     </div>
   )

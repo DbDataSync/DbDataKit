@@ -170,6 +170,12 @@ public sealed class ViewsModuleTests : IDisposable
         var sideways = await h.RenderAsync("all", new JsonObject { ["order"] = new JsonObject { ["by_region"] = new JsonObject { ["by"] = "orders.net_revenue", ["dir"] = "sideways" } } });
         Assert.Equal(400, sideways.Status);
         Assert.Contains("asc", sideways.Object["message"]!.GetValue<string>());
+        // `expand` (DBR55): an object of widget id to rows of member values
+        Assert.Equal(400, (await h.RenderAsync("all", new JsonObject { ["expand"] = "by_region" })).Status);
+        var notRows = await h.RenderAsync("all", new JsonObject { ["expand"] = new JsonObject { ["by_region"] = "West" } });
+        Assert.Equal(400, notRows.Status);
+        Assert.Contains("`expand`", notRows.Object["message"]!.GetValue<string>());
+        Assert.Equal(400, (await h.RenderAsync("all", new JsonObject { ["expand"] = new JsonObject { ["by_region"] = new JsonArray(new JsonArray(new JsonObject())) } })).Status);
         Assert.Equal(404, (await h.RenderAsync("all", name: "missing")).Status);
 
         var big = await h.RenderAsync("all", new JsonObject { ["parameters"] = new JsonObject { ["region"] = new string('x', 70_000) } });

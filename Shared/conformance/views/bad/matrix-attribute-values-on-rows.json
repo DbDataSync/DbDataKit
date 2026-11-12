@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "kind": "dashboard",
+  "title": "Filtered measures",
+  "widgets": {
+    "w": {
+      "type": "matrix",
+      "encodings": {
+        "rows": [
+          "customers.region"
+        ],
+        "columns": [
+          "orders.ordered_at_month"
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenue"
+          },
+          {
+            "attribute": "orders.status"
+          }
+        ],
+        "values_on": "rows"
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "layouts": [
+    {
+      "name": "desk",
+      "type": "reflow",
+      "default": true,
+      "grid": {
+        "columns": 12
+      },
+      "tiles": [
+        {
+          "widget": "w",
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 6
+        }
+      ]
+    }
+  ]
+}

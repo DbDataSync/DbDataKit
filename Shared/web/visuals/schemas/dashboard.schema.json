@@ -25,6 +25,7 @@
       "properties": { "layout": { "description": "The layout kiosk mode shows when none is named.", "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/name" } }
     },
     "links": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/links" },
+    "groups": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/groups" },
     "widgets": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/widgets" },
     "layouts": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/layouts" }
   }

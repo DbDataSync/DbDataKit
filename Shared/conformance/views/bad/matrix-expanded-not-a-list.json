@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "kind": "dashboard",
+  "title": "Groups",
+  "groups": {
+    "details": {
+      "fields": [
+        "customers.customer",
+        "products.category"
+      ]
+    }
+  },
+  "widgets": {
+    "w": {
+      "type": "matrix",
+      "encodings": {
+        "rows": [
+          "customers.region",
+          {
+            "group": "details",
+            "show": "drill"
+          }
+        ],
+        "columns": [
+          "orders.status"
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenue"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales_catalog"
+      },
+      "expanded": [
+        "West"
+      ]
+    }
+  },
+  "layouts": [
+    {
+      "name": "desk",
+      "type": "reflow",
+      "default": true,
+      "grid": {
+        "columns": 12
+      },
+      "tiles": [
+        {
+          "widget": "w",
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 6
+        }
+      ]
+    }
+  ]
+}

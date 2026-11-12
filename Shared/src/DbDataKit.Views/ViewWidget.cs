@@ -6,8 +6,12 @@ namespace DbDataKit.Views;
 /// <summary>A document's parameter, as J25 defines one. <see cref="Default"/> is the default as JSON (a list for <c>many</c>), null when there is none.</summary>
 public sealed record ViewParameter(string Name, string Type, string? For, bool Many, bool Required, bool HasDefault, string? Label, int Line, System.Text.Json.Nodes.JsonNode? Default = null);
 
-/// <summary>A field a widget encodes (<c>x</c> of a chart, a matrix's <c>rows</c>, a metric's <c>value</c>...), by channel, in encoding order, with its path in the document (<c>widgets.by_region.encodings.x</c>) and its position.</summary>
-public sealed record EncodedField(string Channel, string Field, string Path, int Line, int Column);
+/// <summary>A field a widget encodes (<c>x</c> of a chart, a matrix's <c>rows</c>, a metric's <c>value</c>...), by channel, in encoding order, with its path in the document (<c>widgets.by_region.encodings.x</c>) and its position; <c>Alias</c> and <c>Filtered</c> are those of its object form (DBR50).</summary>
+public sealed record EncodedField(string Channel, string Field, string Path, int Line, int Column, string? Alias = null, bool Filtered = false)
+{
+    /// <summary>The name the field has in the query's answer: its <c>alias</c> when it has one (plan 32 DBR50: a measure put in a visual twice, or filtered), else the field.</summary>
+    public string Output => Alias ?? Field;
+}
 
 /// <summary>
 /// A widget's query. <see cref="Form"/> is <c>derived</c> (the request is derived from the encodings), <c>semantic</c> (a request), <c>semantic_sql</c>, <c>saved</c>, <c>store</c> or <c>ref</c> (an already
@@ -15,8 +19,17 @@ public sealed record EncodedField(string Channel, string Field, string Path, int
 /// </summary>
 public sealed record WidgetQuery(string Form, bool Explicit, string? Model, JsonObject Raw);
 
-/// <summary>A widget: a type, its encodings and its query. <see cref="Raw"/> is the whole widget as JSON, in the order written.</summary>
-public sealed record ViewWidget(string Id, string Type, string? Title, IReadOnlyList<EncodedField> Fields, WidgetQuery? Query, JsonObject Raw, int Line, int Column);
+/// <summary>One level of a field group: the attribute, and the format its text reads under in the group's label.</summary>
+public sealed record GroupLevel(string Field, JsonNode? Format);
+
+/// <summary>
+/// A group of fields used as one (plan 32 section 9h, DBR52): two to four attributes, outermost first. As a chart channel or a matrix axis it is one field: one member per combination of the levels, ordered by the levels
+/// in turn, labelled by <see cref="Template"/> (the levels' texts, <c>{1}</c> to <c>{n}</c>; by default joined by a space).
+/// </summary>
+public sealed record ViewGroup(string Name, IReadOnlyList<GroupLevel> Levels, string? Label, string? Template, int Line);
+
+/// <summary>A widget: a type, its encodings and its query. <see cref="Raw"/> is the whole widget as JSON, in the order written. <see cref="Groups"/> are the groups of its document (null when the widget was read alone and no groups were given).</summary>
+public sealed record ViewWidget(string Id, string Type, string? Title, IReadOnlyList<EncodedField> Fields, WidgetQuery? Query, JsonObject Raw, int Line, int Column, IReadOnlyDictionary<string, ViewGroup>? Groups = null);
 
 /// <summary>The result of reading a widgets map alone: the widgets, or null when there is an error, and every diagnostic.</summary>
 public sealed class WidgetsLoadResult(IReadOnlyList<ViewWidget>? widgets, IReadOnlyList<ConfigDiagnostic> diagnostics)

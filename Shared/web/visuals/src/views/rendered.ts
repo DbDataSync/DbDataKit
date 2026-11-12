@@ -1,3 +1,4 @@
+import type { AttributeCellParts } from '../CellContent'
 import type { DataValue, RenderedChart, RenderedMatrix } from '../types'
 
 /**
@@ -19,7 +20,7 @@ export interface RenderedTable {
   type: 'table'
   columns: Array<{ field: string; label: string; align?: 'left' | 'right' | 'center' }>
   /** A total row is a row of the result and says so. */
-  rows: Array<{ total?: boolean; cells: Array<{ v?: DataValue; text: string }> }>
+  rows: Array<{ total?: boolean; cells: Array<{ v?: DataValue; text: string } & AttributeCellParts> }>
   /** The rows the query had when the server cut them at its limit. */
   total_rows?: number
 }

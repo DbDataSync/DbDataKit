@@ -1,0 +1,57 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "matrix",
+      "encodings": {
+        "rows": [
+          "customers.region"
+        ],
+        "columns": [
+          "orders.ordered_at_month"
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenue"
+          },
+          {
+            "attribute": "orders.status",
+            "display": "icon",
+            "icons": {
+              "Open": "circle",
+              "Completed": "check"
+            },
+            "many": "mixed",
+            "link": "set-status",
+            "label": "Status"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "attributes": [
+        "customers.region",
+        "orders.ordered_at_month",
+        "orders.status"
+      ],
+      "limit": 10000,
+      "totals": {
+        "subtotal_by": [
+          "orders.ordered_at_month",
+          "customers.region",
+          "orders.status"
+        ]
+      }
+    }
+  }
+}

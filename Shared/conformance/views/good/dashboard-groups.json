@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "kind": "dashboard",
+  "title": "Groups",
+  "groups": {
+    "period": {
+      "fields": [
+        "orders.ordered_at_year",
+        {
+          "field": "orders.ordered_at_month",
+          "format": {
+            "date": "MMM"
+          }
+        }
+      ],
+      "label": "Period",
+      "template": "{2} {1}"
+    },
+    "details": {
+      "fields": [
+        "customers.customer",
+        "products.category"
+      ],
+      "label": "Details"
+    }
+  },
+  "widgets": {
+    "w": {
+      "type": "chart",
+      "title": "Revenue by period",
+      "mark": "line",
+      "encodings": {
+        "x": {
+          "group": "period",
+          "title": "Period"
+        },
+        "y": "orders.net_revenue"
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    },
+    "detail": {
+      "type": "matrix",
+      "title": "Details",
+      "encodings": {
+        "rows": [
+          "customers.region",
+          {
+            "group": "details",
+            "show": "always"
+          }
+        ],
+        "columns": [
+          {
+            "group": "period"
+          }
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenue"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "layouts": [
+    {
+      "name": "desk",
+      "type": "reflow",
+      "default": true,
+      "grid": {
+        "columns": 12
+      },
+      "tiles": [
+        {
+          "widget": "w",
+          "x": 0,
+          "y": 0,
+          "w": 6,
+          "h": 6
+        },
+        {
+          "widget": "detail",
+          "x": 6,
+          "y": 0,
+          "w": 6,
+          "h": 6
+        }
+      ]
+    }
+  ]
+}

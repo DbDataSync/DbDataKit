@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "kind": "dashboard",
+  "title": "Groups",
+  "groups": {
+    "period": {
+      "fields": [
+        "orders.ordered_at_year",
+        {
+          "field": "orders.ordered_at_month",
+          "format": {
+            "date": "MMM"
+          }
+        }
+      ],
+      "label": "Period",
+      "template": "{2} {1}"
+    }
+  },
+  "widgets": {
+    "w": {
+      "type": "chart",
+      "mark": "bar",
+      "encodings": {
+        "x": "products.category",
+        "y": {
+          "group": "period"
+        }
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "layouts": [
+    {
+      "name": "desk",
+      "type": "reflow",
+      "default": true,
+      "grid": {
+        "columns": 12
+      },
+      "tiles": [
+        {
+          "widget": "w",
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 6
+        }
+      ]
+    }
+  ]
+}

@@ -134,6 +134,137 @@ encodings:
 * **Limits, stated:** an inner level sorted by a measure has **one** order for the whole axis (the first group's), not one per group; a third level is joined into the group label, not drawn as a third header row; the
   PDF is drawn from the same rendered chart by the same client code, so it carries the group headers (not checked here: the exporter's tests need Chromium and fonts).
 
+### Filtered and repeated measures (DBR50)
+
+A measure may be written as an **object** where a name was: `{field, alias, label, filters, format}`. It is how the **same measure is put in a visual several times** with different filters (two series, two matrix
+value columns, two metrics, two table columns): in a metric's `value` and `compare`, a chart channel (`y`, `color`, `tooltip`...; the channel object's `title` names it, as before), a matrix `values` entry and a table column.
+A chart's `y` may be a **list** (one to eight entries, one series each); the answer is folded into a `series` and a `value` column and drawn as one chart whose color is the series (the series keep the list's order and are named by the entry's `title`, else its alias or field; a `color` beside several measures is refused, `DBD-106`).
+
+```yaml
+encodings:
+  columns:
+    - customers.region
+    - {field: orders.net_revenue, alias: open_revenue, label: Open, filters: [{attribute: orders.status, operator: equals, values: [Open, Pending]}]}
+    - {field: orders.net_revenue, alias: completed_revenue, label: Completed, filters: [{attribute: orders.status, operator: equals, values: [{param: status}]}]}
+    - {field: orders.net_revenue, label: All}
+```
+
+* `DeriveRequest` writes the request's `measures` entry in the engine's own form, `{measure, as, filters}` (the widget's `alias` is the request's `as`); an entry with neither is the plain name. The **output** of an entry is its
+  alias, so a matrix's sort, a table's `sort.by`, `order` and an explicit query's outputs name the **alias** (`DBD-VIEW-005` says `open_revenue` is not an output, not `orders.net_revenue`).
+* The checks are the engine's, in its codes and words, at the document's path: `alias_required` (filters with no alias, at `filters`), `duplicate_measure` (one output name twice with different definitions, at the second entry; the
+  same entry twice is asked once), `wrong_member_kind` (`alias` or `filters` on an attribute), then the catalog check's `filter_member_not_in_source`, `alias_invalid` (an alias that is a catalog member name) and the rest.
+  The loaders refuse an alias that is not a snake_case name (`DBD-106` at `alias`), `filters` that are not a list of mappings (one to fifty), a marker of an undeclared parameter in them (`DBD-VIEW-008`), and `filters` on an
+  entry of a **written** query (`DBD-VIEW-007`: the query says its own measures).
+* A filter value may be `{param: name}`; a filter on a parameter the viewer left unset drops out of that entry, as it does from the query's filters (the request, and so the cache key, differ only for the entries that use it).
+
+### Attributes in the cell area (DBR51)
+
+A matrix's `values` entry may be an **attribute** where a measure was: it changes with the column headers like a measure does, and shows that attribute's value for each cell.
+
+```yaml
+encodings:
+  rows: [customers.region]
+  columns: [orders.ordered_at_month]
+  values:
+    - {field: orders.net_revenue, label: Revenue}
+    - {attribute: orders.status, display: icon, icons: {Open: circle, Completed: check}, many: mixed, link: set-status, label: Status}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `attribute` | the catalog attribute shown (instead of `field`; an entry is one or the other); `format` reads it as it reads an axis member (a date format on a date attribute) |
+| `display` | `text` (default), `icon` (the icon `icons` names for the value; a value the map does not list shows as text) or `badge` |
+| `icons` | value to icon, from a **closed vocabulary** of 24 names (`circle dot check cross warning info clock flag star pause play stop lock unlock arrow-up arrow-down arrow-right plus minus pin bell eye user tag`); an icon display needs it and it needs the icon display |
+| `many` | what a cell with several values shows: `mixed` (default: the text `Mixed`, a marker, the values in a tooltip), `first` or `last` (in the order of the answer), `count` (the number of distinct values, also the cell's `v`), `list` (comma-joined, five at most, then `…`) |
+| `link` | a named link of the document (`links`, [below](#links-one-vocabulary-for-a-click-plan-32-section-9f-dbr35)) that a click on the cell follows; a cell with no text has none |
+
+**The one-row rule.** An attribute is well defined only where a cell holds one row. `DeriveRequest` asks for the attribute **at the cells' grain** (after the axes) and rolls it up **last** in the request's totals, so the answer holds,
+for each cell, the **rows that name its values** and the **cell's own row with the attribute rolled up**, whose measures are the engine's: a measure shown beside an attribute is **never added across the attribute's values** by the
+view, so a cell with four values still holds one honest number. The shaper reads the values from the detail rows, gives the engine's matrix a synthetic measure in the attribute's place (so the grid, its labels, its totals and its
+column limit are the engine's own), and fills each attribute cell: one value is shown as `display` says, several by `many`, none is empty. **A total row or column, and an Other column, leave an attribute cell empty**: there is no one value.
+An attribute that is already on an axis adds nothing to the request (it is the same in every row of its cell). Every policy can be said, so there is no refusal for a `many` the cell cannot show; the engine's own refusals of the request (a
+cube too wide, an unknown member) land on the entry's `attribute` path.
+
+**Refused** (`DBD-106` at the key unless said): `field` and `attribute` together; `alias` or `filters` on an attribute (they belong to a measure); `display: icon` without `icons`, `icons` without it, an icon outside the vocabulary,
+`many` outside the five; `values_on: rows` with an attribute among the values; a `link` the document does not declare (`DBD-VIEW-036`); an attribute entry in a matrix over a **written** query (`DBD-VIEW-007`: the
+request cannot be asked at the cells' grain); a matrix of attributes only (`DBD-VIEW-041`, a request needs a measure).
+
+**A table column** takes the same `display`, `icons` and `link` (a table row has one value, so no `many`).
+
+**Rendering.** A rendered cell carries `icon`, `badge`, `mixed`, `values` and `link` beside `text` (`rendered-widgets.schema.json`). The client draws an icon as a glyph of the closed set (the bundled icon font of DBR37 is not
+built; the glyphs are text characters every font has, with the cell's text as the accessible name), and a cell that names a link as a button **only when the host follows links**: `DashboardView` takes `onLink({name, widget, row, column?})`;
+without it the cell is plain text, which is what print and export draw: **the value prints, the link is dropped** (`print: hidden | normal | link` of the link says more; the PDF annotation of `print: link` is DBR37's, not built).
+
+### Field groups (DBR52)
+
+A **group** is an ordered list of attributes used as **one field**. It is declared once in the document and named where a field of an attribute role goes:
+
+```yaml
+groups:
+  period:
+    fields:
+      - orders.ordered_at_year
+      - {field: orders.ordered_at_month, format: {date: MMM}}
+    label: Period
+    template: "{2} {1}"          # the levels' texts: month, then year -> Mar 2026 (the default joins them with a space)
+widgets:
+  trend: {type: chart, mark: line, encodings: {x: {group: period, title: Period}, y: orders.net_revenue}, query: {model: sales}}
+  detail:
+    type: matrix
+    encodings:
+      rows: [customers.region, {group: details, show: always}]
+      columns: [{group: period}]
+      values: [{field: orders.net_revenue}]
+    query: {model: sales}
+```
+
+* **A group** has two to four `fields` (outermost first, each a name or `{field, format}`), an optional `label` and `template` (`{1}` to `{n}`). A group cannot hold a group; a field is listed once in it. Declared in both kinds.
+* **In a chart** (`x`, `color`, `column`, `row`; not `y` or `tooltip`) `{group: name}` is **one field**: `DeriveRequest` asks for its levels as attributes in order and, for `x`, orders by the levels in turn (calendar order whatever the
+  rows' arrival order); the answer's rows get one member key per combination, the member is labelled by the template, and the axis is **one** axis, so a line over a year-and-month group is one continuous line labelled `Mar 2026`.
+  A group channel takes a `title` and a `sort` (`ascending`, `descending`, `sort_key`) and no `field`, `format`, `alias`, `filters`, `type` or `stack`.
+* **In a matrix** an entry of `rows` or `columns` is `{group: name}` (the same combined field: one header per combination, a total rolls every level up together) or, in `rows` only, `{group: name, show: always}`: the group's attributes
+  (at or below the row's grain: an order's number, its customer) shown **as extra header columns of every row**, the request asking for them after the row's own fields. `show: drill` (a row that expands on request) is described below.
+* **Checks.** `DBD-VIEW-047`: a group the document does not declare. `DBD-VIEW-048`: a field in a group and also in another place of the same widget (an axis, a channel, a tooltip, another group), naming both places. A level that is
+  not an attribute of the catalog is the engine's `unknown_member` or `wrong_member_kind`, at the entry's `group` path. A group in a written query (`mode: explicit`) is `DBD-VIEW-007`. The shape (`DBD-106`, `DBD-104`): one level, five
+  levels, a template naming `{3}` where the group has two, a field twice, a bad level format, a group in `y`, a `field` beside a `group`, `show` on a column entry or on a plain entry.
+
+### The editor's controls for entries and groups (DBR54)
+
+In the widget editor each entry of a well has **options** (a disclosure under it): a **measure** has its `alias`, a **Repeat this measure** button (a copy follows it with an alias nothing else has, `net_revenue_2`; one measure may be in a well
+as often as its aliases differ), its own **filters** (an attribute, an operator the field's type takes, a value or a parameter; the filters need the alias, and the derived request beside the wells shows `{measure, as, filters}` at once),
+and a chart channel's `title` or a column's `label`; an **attribute** entry (in a matrix's `values`, offered beside the measures when the field the catalog says is an attribute is put there, or a table column) has its **display**, an
+**icon map** (a value and an icon of the closed vocabulary, added and removed one at a time), the **many** policy (a matrix entry), its **link** (a choice among the document's declared links) and a matrix entry's label. Each change is
+a `setPath` of that entry, so it is one undo step, and what is wrong is said in the loaders' words as it is typed. The **document settings** hold the **field groups**: a group's levels (each with a date format, up, down, remove, one
+to add), its label and template, and the loaders' words about it; a group a widget names is not removed (the editor says which widget). A group is put in a well by the pick list (**Groups**; for the rows of a matrix also **Details of
+every row** and **Details of a row that expands**, DBR55). The pure parts (`entryParts.ts`, `wells.ts`) are `@dbdatakit/visuals` and are tested against the goldens: the chart of two series of one measure, the matrix with a status per month and the line over a group built through
+the controls are the golden widgets (`entryParts.test.ts`); the screens are `WidgetEditor.tsx` and `GroupEditor.tsx` of `@dbdatakit/views-editor` (`entries.test.tsx`, the story `views-editor-entries.spec.ts`, written and not run).
+
+#### Drill detail groups: a row that expands (DBR55)
+
+`{group: name, show: drill}` in `rows` makes each row **expandable**: the rows are asked for **without** the group's attributes, and a click on a row's toggle reads that member's details.
+
+```yaml
+widgets:
+  orders:
+    type: matrix
+    encodings: {rows: [customers.region, {group: who, show: drill}], columns: [orders.status], values: [{field: orders.net_revenue}]}
+    query: {model: sales}
+    expanded: [[West]]            # what print and export show; a viewer's own choice replaces it on screen
+```
+
+* **The request** for a row's details is `DeriveRequest.DeriveExpansion` (and `deriveExpansion`, the same golden `derive/expansions.json`): the widget's request with the drill group asked for like `show: always` (its attributes after the
+  row's own fields, the order by their levels), **no totals**, and the row's own fields filtered to its member values (the row's typed `key`). It runs as the viewer, like every request, through the same cache.
+* **The rendered row** of an expandable matrix carries `expandable` and `key`; an expanded one carries `expanded` and `children` (the labels after the row's own, and a cell for every column of the matrix, empty where the details have
+  none). The resolver reads at most **20** expansions per widget (the rest are not read and `notice` says so); a member that is no longer a row is not expanded; the widget's cache key holds the expansions.
+* **Asking.** The module's render request takes `expand`: `{"orders": [["West"], ["East"]]}` (widget id to rows, each the list of the member values of the row's own fields; `DBD-VIEW`-less `400` when it is not that shape). A widget not
+  listed shows the rows its document's `expanded` names (matched to the base rows by the text of their values), which is what a print or an export draws. `ResolveOptions.expand` is the client's side, `expandsOnServer` says a source honours it
+  (the module does; the fixtures do not, and show no toggle).
+* **On screen.** The first label cell of an expandable row is a button with `aria-expanded` (`Expand West` / `Collapse West`, Enter and Space work, it is a button), and the details are rows under it, indented. `DashboardView` keeps the
+  viewer's open rows, sends them with every later request of the view and runs only that widget when one is toggled; two open rows keep their own details. `onExpand` of `MatrixGrid` and `WidgetView` is the hook for a host with another
+  way to read them.
+* **Refused** (`DBD-106`): `show: drill` beside another group in the rows or a group on the columns (the row's key is its plain fields' values); `expanded` without a `show: drill` entry, or a row that does not name a value for each of
+  the rows' own fields. A drill group in a written query is `DBD-VIEW-007`, as every group.
+
 ### Sorting by a click (DBR45)
 
 A viewer may sort a table or a matrix by clicking a header, **on screen only** (the host sets `sortable` on `DashboardView`; the print and export routes never do): a click sorts ascending, a second click reverses, a third gives the
@@ -164,6 +295,7 @@ and sorts the rows loaded. The console's board sets `sortable`.
 | `DBD-VIEW-039` | a link to a dashboard, report, view, page or form the app does not have |
 | `DBD-VIEW-044` / `-045` | a name in a link's `with`, `new`, `edit` or `lock` that the target lacks; a value of the wrong type for it |
 | `DBD-VIEW-046` | `print: link` on a link shown in a dialog or panel (no address of its own) |
+| `DBD-VIEW-047` / `-048` | a field group the document does not declare; a field in a group and also in another place of the widget (DBR52) |
 | `DBD-VIEW-040` to `-043` | the derivation and the catalog check, [below](#deriving-the-request) (`-040` nothing to derive, `-041` no measure, `-042` totals twice or with nothing to roll up, `-043` a model the document does not depend on) |
 
 `ViewsLoader.LoadWidgets` (.NET) and `validateWidgets` (TypeScript) check a widgets map alone, as an assistant's answer, a portal block or a pin holds it. The shared documents and the expected code and path of each
@@ -193,6 +325,7 @@ a refusal of the engine lands on the field or the filter the person wrote.
 
 | Code | Meaning |
 | --- | --- |
+| `alias_required` / `duplicate_measure` | a measure with `filters` and no `alias`; one output name twice with different definitions (DBR50, above) |
 | `unknown_member` | an encoded field the catalog has no member of (the engine's code and words: `customers.regon is not a catalog member.`) |
 | `wrong_member_kind` | a dimension in a measure well (`customers.region is a attribute, not a measure.`) or a measure in a matrix axis, in the engine's words |
 | `DBD-VIEW-040` | nothing to derive: a widget with no query (`text`, `image`, `control`) or an explicit query (its encodings do not drive it) |
@@ -488,7 +621,7 @@ listener, off unless enabled) or its routes can be mounted by a host (`ViewsModu
 | --- | --- |
 | `GET /api/v1/dashboards`, `GET /api/v1/reports` | `{items: [{name, title, version}]}` of what the caller may open |
 | `GET /api/v1/{dashboards,reports}/{name}` | `{kind, name, title, version, as_of, text, document, layouts: [{name, type, default}]}`: the file as published, the document as JSON, the version as text (the registry's number) and `as_of` (when that version was published) |
-| `POST /api/v1/{dashboards,reports}/{name}/render` | the `rendered-widgets` document of the layout in play; body `{parameters?, layout?, only?, viewport?: {width, height}, medium?}`; with no `layout`, `LayoutSelector` chooses for the viewport (the default layout without one); an unknown key is refused |
+| `POST /api/v1/{dashboards,reports}/{name}/render` | the `rendered-widgets` document of the layout in play; body `{parameters?, layout?, only?, order?, expand?, viewport?: {width, height}, medium?}` (`order`: a viewer's sort of a table, DBR45; `expand`: the rows a viewer expanded in a matrix with a `show: drill` group, DBR55); with no `layout`, `LayoutSelector` chooses for the viewport (the default layout without one); an unknown key is refused |
 | `POST /api/v1/views/preview` | the **live preview of an unsaved draft** (plan 32 DBR28), resolved as the caller and stored nowhere: body `{kind?, document \| text, layout?, only?, parameters?, viewport?, medium?}` for a whole document (the answer is the layout's `rendered-widgets`), or `{kind?, widget, widget_id?, document?: {parameters}, parameters?}` for one widget placed alone (the answer holds its entry); see the bullet below |
 | `GET .../{name}/export?format=pdf&layout=&p.name=` | a **PDF** (`application/pdf`, an attachment `name-layout.pdf`): the layout named, else the one the **print** medium selects (a print layout, or the default), resolved as the caller and drawn in the pinned Chromium; `p.region=West` (repeated for a list) sets a parameter. No exporter or browser: **501 `export_unavailable`** naming the setting; 413 `export_too_large` over `max_pages`, 504 `export_timeout`, 503 `export_busy`, 500 `export_failed` (the page said it could not be drawn). Audited with the format, layout, pages and the browser's version |
 | `GET .../{name}/export?format=csv\|xlsx\|svg&widget=&layout=&p.name=` | the **data exports** (DBR17), resolved as the caller for the layout chosen as above (`layout=wall` names another) and audited like the PDF (`view.export`, with `format`, `widget`, rows, bytes). **`csv`**: the rows of the table or matrix `widget` (or a chart's data) as the caller was shown them, RFC 4180 (comma, CRLF), UTF-8 **with a byte-order mark** (Excel needs it, every other reader skips it), the engine's values not the formatted text (a total row says "Total"), and a **text** cell or header starting with `=` `+` `-` `@`, a tab or a carriage return gets a leading apostrophe so a spreadsheet never runs it (a number is never changed). **`xlsx`**: with `widget` one sheet; without, a sheet for each table, matrix and chart the layout places (named by the widget id, safe and unique ignoring case; a control, text and image have no rows) and, first, a `Metrics` sheet with a row for each metric of the layout (`Widget, Label, Value, Compare, Change`; one metric named by `widget` is still refused, it has no rows), header bold and frozen, totals bold, text always text, never a formula. **`svg`**: the chart `widget` as the print page draws it, taken out of the browser (the module has no JavaScript of its own, so it needs the exporter like the PDF does; 501 `export_unavailable` otherwise). `csv` and `xlsx` need **no browser**; the Gateway sets the limit in `views: {maxExportRows}` (default 100,000, 1 to 10,000,000). A failed widget is its error block: an xlsx sheet of `code, message, path`, and for `csv` and `svg` a 422 `widget_failed` with the widget's code and words. Refused in words: 400 `invalid` (`csv` and `svg` need `widget`, `pdf` takes none, an unknown format), 404 `widget_not_found`, 400 `widget_not_placed` (the layout does not place it), `widget_not_tabular`, `widget_not_chart`, `nothing_tabular`, 413 `export_too_large` over `ViewsOptions.MaxExportRows` (100,000 rows in all, and the 1,048,575 of an xlsx sheet) |

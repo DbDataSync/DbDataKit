@@ -1,0 +1,62 @@
+{
+  "parameters": [
+    "status"
+  ],
+  "widgets": {
+    "w": {
+      "type": "metric",
+      "encodings": {
+        "value": {
+          "field": "orders.net_revenue",
+          "alias": "chosen_revenue",
+          "filters": [
+            {
+              "attribute": "orders.status",
+              "operator": "equals",
+              "values": [
+                {
+                  "param": "status"
+                }
+              ]
+            }
+          ]
+        },
+        "compare": "orders.net_revenue"
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "measure": "orders.net_revenue",
+          "as": "chosen_revenue",
+          "filters": [
+            {
+              "attribute": "orders.status",
+              "operator": "equals",
+              "values": [
+                {
+                  "param": "status"
+                }
+              ]
+            }
+          ]
+        },
+        "orders.net_revenue"
+      ],
+      "limit": 1
+    }
+  },
+  "bindings": [
+    {
+      "request": "status",
+      "document": "status"
+    }
+  ]
+}

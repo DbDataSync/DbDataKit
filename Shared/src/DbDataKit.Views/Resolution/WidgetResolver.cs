@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using DbDataKit.Semantic.Presentation;
 using DbDataKit.Serving;
 
 namespace DbDataKit.Views;
@@ -45,9 +46,10 @@ public sealed partial class WidgetResolver
     /// <param name="only">Resolve only these widgets (those of them the layout places); null is every widget the layout places.</param>
     /// <param name="cancellationToken">Stops the whole resolution (a widget's own timeout is an error entry, not this).</param>
     /// <param name="orders">A viewer's sort by widget id (a table the viewer sorted by a click, DBR45): replaces that table's <c>order</c> for this run (derived and semantic queries only; another form, or a column the table does not show, is that widget's error entry).</param>
+    /// <param name="expand">The rows a viewer expanded, by widget id (plan 32 DBR55): each the member values of the row's own fields. A matrix with a <c>show: drill</c> group reads the details of each (at most <see cref="MaximumExpansions"/>, each a request as the viewer); a widget not listed shows the rows its document's <c>expanded</c> names.</param>
     /// <param name="locale">The locale numbers and dates are written in (DBR46): the request's, else the document's <c>locale</c>, else <see cref="ResolverOptions.Locale"/>, else English. An unknown code reads as English.</param>
     /// <exception cref="ViewResolutionException">The layout does not exist, or a parameter value is not one.</exception>
-    public async Task<RenderedWidgets> ResolveAsync(ServingContext context, ViewDocument document, string layout, IReadOnlyDictionary<string, JsonNode?>? parameters = null, IReadOnlyCollection<string>? only = null, CancellationToken cancellationToken = default, IReadOnlyDictionary<string, WidgetOrder>? orders = null, string? locale = null)
+    public async Task<RenderedWidgets> ResolveAsync(ServingContext context, ViewDocument document, string layout, IReadOnlyDictionary<string, JsonNode?>? parameters = null, IReadOnlyCollection<string>? only = null, CancellationToken cancellationToken = default, IReadOnlyDictionary<string, WidgetOrder>? orders = null, string? locale = null, IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyList<JsonNode?>>>? expand = null)
     {
         var chosen = document.Layouts.FirstOrDefault(l => l.Name == layout)
             ?? throw new ViewResolutionException(ResolveCodes.UnknownLayout, $"The document has no layout `{layout}` (it has {string.Join(", ", document.Layouts.Select(l => $"`{l.Name}`"))}).");
@@ -70,7 +72,7 @@ public sealed partial class WidgetResolver
             await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                (entries[index], keys[index]) = await ResolveWidgetAsync(context, document, widget, values, orders is not null && orders.TryGetValue(id, out var asked) ? asked : null, chosenLocale, cancellationToken).ConfigureAwait(false);
+                (entries[index], keys[index]) = await ResolveWidgetAsync(context, document, widget, values, orders is not null && orders.TryGetValue(id, out var asked) ? asked : null, chosenLocale, expand is not null && expand.TryGetValue(id, out var opened) ? opened : null, cancellationToken).ConfigureAwait(false);
             }
             finally { gate.Release(); }
         })).ConfigureAwait(false);
@@ -87,7 +89,7 @@ public sealed partial class WidgetResolver
 
     // ---- one widget ----
 
-    private async Task<(JsonObject Entry, string? Key)> ResolveWidgetAsync(ServingContext context, ViewDocument document, ViewWidget widget, ParameterValues values, WidgetOrder? order, string? locale, CancellationToken cancellationToken)
+    private async Task<(JsonObject Entry, string? Key)> ResolveWidgetAsync(ServingContext context, ViewDocument document, ViewWidget widget, ParameterValues values, WidgetOrder? order, string? locale, IReadOnlyList<IReadOnlyList<JsonNode?>>? expand, CancellationToken cancellationToken)
     {
         using var timeout = new CancellationTokenSource(options.WidgetTimeout, options.Time);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
@@ -127,6 +129,7 @@ public sealed partial class WidgetResolver
                 "chart" => ResultShaper.Chart(widget, rows),
                 _ => throw new WidgetProblem(ViewsCodes.ReservedWidget, $"A {widget.Type} widget cannot be resolved."),
             };
+            if (ResultShaper.HasDrillGroup(widget)) key = await ExpandAsync(context, widget, values, shaped, rows, expand, key, linked.Token).ConfigureAwait(false);
             return (shaped, key);
         }
         catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
@@ -142,6 +145,39 @@ public sealed partial class WidgetResolver
             options.OnUnexpected?.Invoke(widget.Id, e);
             return (new WidgetProblem("error", $"The widget could not be resolved ({e.GetType().Name}).").ToEntry(), key);
         }
+    }
+
+    /// <summary>The most rows one matrix has expanded at once: each is a request as the viewer.</summary>
+    public const int MaximumExpansions = 20;
+
+    /// <summary>
+    /// The details of the rows a matrix has expanded (plan 32 DBR55): the viewer's rows, else the document's <c>expanded</c>; each is matched to a row of the base matrix by its member values' text (a row that is no longer there
+    /// is not expanded), and read with <see cref="DeriveRequest.DeriveExpansion"/> as the viewer, shaped like the matrix with the details as extra header columns, and its rows put under the row as <c>children</c>. Returns the
+    /// cache key with the expansions in it, since the result depends on them.
+    /// </summary>
+    private async Task<string> ExpandAsync(ServingContext context, ViewWidget widget, ParameterValues values, JsonObject shaped, AnswerRows baseRows, IReadOnlyList<IReadOnlyList<JsonNode?>>? asked, string key, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<IReadOnlyList<JsonNode?>> wanted = asked ?? (widget.Raw["expanded"] as JsonArray ?? []).Select(k => (IReadOnlyList<JsonNode?>)((k as JsonArray) ?? []).Select(v => v).ToList()).ToList();
+        if (wanted.Count == 0 || widget.Query is not { Form: "derived" } query) return key;
+        var model = query.Model!;
+        var catalog = roles(model) ?? throw new WidgetProblem(ResolveCodes.NoCatalog, $"There is no catalog of the model `{model}` here, so the request cannot be derived.", $"widgets.{widget.Id}.query.model");
+        var map = query.Raw["params"] as JsonObject;
+        var details = ResultShaper.AsDetails(widget);
+        var done = new List<string>();
+        foreach (var want in wanted.Take(MaximumExpansions))
+        {
+            var row = (shaped["rows"] as JsonArray ?? []).OfType<JsonObject>().FirstOrDefault(r => r["key"] is JsonArray k && k.Count == want.Count
+                && k.Select((v, i) => ResultTable.Label(v) == ResultTable.Label(want[i])).All(b => b));
+            if (row?["key"] is not JsonArray typed) continue;
+            var derived = DeriveRequest.DeriveExpansion(widget, catalog, typed.Select(v => v).ToList());
+            if (derived.Request is null) { var d = derived.Diagnostics.First(); throw new WidgetProblem(d.Code, d.Message, d.KeyPath ?? $"widgets.{widget.Id}.encodings.rows"); }
+            var run = Semantic(model, RequestBinding.Bind(derived.Request, map, values), new ServingLimits(MaxRows: options.MaxRows, Timeout: options.WidgetTimeout));
+            var rows = (await RunOrRecallAsync(context, WidgetCacheKey.Of(context, run.Source, run.Canonical), run, cancellationToken).ConfigureAwait(false)).WithLocale(baseRows.Locale);
+            ResultShaper.AttachDetails(shaped, ResultShaper.Matrix(details, rows), typed);
+            done.Add(typed.ToJsonString());
+        }
+        if (wanted.Count > MaximumExpansions) shaped["notice"] = $"Only the first {MaximumExpansions} expanded rows are shown.";
+        return done.Count == 0 ? key : key + "\nexpand:" + string.Join("|", done);
     }
 
     /// <summary>The rows of a request: from the cache when it holds them for this viewer and this request, else from the core (and kept, when the cache is on).</summary>

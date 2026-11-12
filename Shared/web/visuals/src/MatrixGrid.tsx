@@ -1,4 +1,5 @@
 import type { KeyboardEvent, MouseEvent } from 'react'
+import { CellContent } from './CellContent'
 import type { RenderedMatrix } from './types'
 
 export interface Modifiers { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean; altKey: boolean }
@@ -20,15 +21,19 @@ function headerCells(columns: RenderedMatrix['columns'], level: number) {
  * A matrix view as a grid: row labels down the left, column labels across the top (outermost first), the server's text in every cell. Nothing is computed here: a
  * total row or column is the one the result held (`total` on the row or column), Other is a sum the server made, and a cell reads as the server formatted it.
  */
-export function MatrixGrid({ view, onCell, sort, onSortColumn }: {
+export function MatrixGrid({ view, onCell, sort, onSortColumn, onLink, onExpand }: {
   view: RenderedMatrix
   onCell?: (row: number, column: number | undefined, modifiers: Modifiers) => void
+  /** A cell that names a link of the document (an attribute's cell, plan 32 DBR51) was clicked: the link's name, the cell's row and column. Without it such a cell is plain text. */
+  onLink?: (link: string, row: number, column: number) => void
   /** The column the viewer sorted by (a click on the innermost header, plan 32 DBR45) and what a click does: both only when the host lets viewers sort. */
   sort?: { column: number; dir: 'asc' | 'desc' } | null
   onSortColumn?: (column: number) => void
+  /** A row that can expand (plan 32 DBR55: `expandable`) was toggled: its index and whether it is to be expanded. Without it the toggle is not drawn and a row stays as it is. */
+  onExpand?: (row: number, expanded: boolean) => void
 }) {
   const levels = Math.max(1, ...view.columns.map((c) => c.labels.length))
-  const rowLabelWidth = Math.max(1, ...view.rows.map((r) => r.labels.length))
+  const rowLabelWidth = Math.max(1, ...view.rows.map((r) => r.labels.length), ...view.rows.flatMap((r) => (r.children ?? []).map((c) => r.labels.length + c.labels.length)))
   return (
     <div className="vz-matrix-scroll">
       <table className="vz-matrix" data-testid={`vz-matrix-${view.id}`}>
@@ -48,8 +53,8 @@ export function MatrixGrid({ view, onCell, sort, onSortColumn }: {
           ))}
         </thead>
         <tbody>
-          {view.rows.map((row, r) => (
-            <tr key={r} className={row.total ? 'vz-total' : undefined}>
+          {view.rows.map((row, r) => [
+            <tr key={r} className={row.total ? 'vz-total' : undefined} aria-expanded={row.expandable && onExpand ? row.expanded === true : undefined}>
               {Array.from({ length: rowLabelWidth }, (_, i) => (
                 <th
                   key={i}
@@ -59,6 +64,10 @@ export function MatrixGrid({ view, onCell, sort, onSortColumn }: {
                   onClick={onCell && !row.total ? (e: MouseEvent) => onCell(r, undefined, e) : undefined}
                   onKeyDown={onCell && !row.total ? (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onCell(r, undefined, e) } } : undefined}
                 >
+                  {i === 0 && row.expandable && onExpand ? (
+                    <button type="button" className="vz-expand" data-testid={`vz-expand-${view.id}-${r}`} aria-expanded={row.expanded === true} aria-label={`${row.expanded ? 'Collapse' : 'Expand'} ${row.labels.join(' ')}`}
+                      onClick={(e) => { e.stopPropagation(); onExpand(r, row.expanded !== true) }}>{row.expanded ? '\u25BE' : '\u25B8'}</button>
+                  ) : null}
                   {row.labels[i] ?? ''}
                 </th>
               ))}
@@ -68,11 +77,19 @@ export function MatrixGrid({ view, onCell, sort, onSortColumn }: {
                   className={['vz-num', view.columns[c]?.total ? 'vz-total' : '', view.columns[c]?.other ? 'vz-other' : '', onCell && !row.total && !view.columns[c]?.total ? 'vz-pointable' : ''].filter(Boolean).join(' ')}
                   onClick={onCell && !row.total && !view.columns[c]?.total ? (e: MouseEvent) => onCell(r, c, e) : undefined}
                 >
-                  {cell.text}
+                  <CellContent cell={cell} onLink={onLink && !row.total && !view.columns[c]?.total ? (name) => onLink(name, r, c) : undefined} />
                 </td>
               ))}
-            </tr>
-          ))}
+            </tr>,
+            ...(row.expanded ? (row.children ?? []) : []).map((child, k) => (
+              <tr key={`${r}-${k}`} className="vz-child" data-testid={`vz-child-${view.id}-${r}-${k}`}>
+                {Array.from({ length: rowLabelWidth }, (_, i) => (
+                  <th key={i} scope="row" className={i < row.labels.length ? 'vz-child-pad' : undefined} aria-hidden={i < row.labels.length ? true : undefined}>{i < row.labels.length ? '' : child.labels[i - row.labels.length] ?? ''}</th>
+                ))}
+                {child.cells.map((cell, c) => <td key={c} className={['vz-num', view.columns[c]?.total ? 'vz-total' : ''].filter(Boolean).join(' ')}><CellContent cell={cell} /></td>)}
+              </tr>
+            )),
+          ])}
         </tbody>
       </table>
       {view.notice ? <p className="vz-notice" role="note">{view.notice}</p> : null}

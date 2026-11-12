@@ -1,0 +1,41 @@
+{
+  "parameters": [],
+  "groups": {
+    "period": {
+      "fields": [
+        "orders.ordered_at_year",
+        {
+          "field": "orders.ordered_at_month",
+          "format": {
+            "date": "MMM"
+          }
+        }
+      ],
+      "label": "Period",
+      "template": "{2} {1}"
+    }
+  },
+  "widgets": {
+    "w": {
+      "type": "chart",
+      "mark": "bar",
+      "encodings": {
+        "x": {
+          "group": "period"
+        },
+        "y": "orders.net_revenue",
+        "color": "orders.ordered_at_year"
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "refusal": [
+    {
+      "code": "DBD-VIEW-048",
+      "path": "widgets.w.encodings.color",
+      "message": "orders.ordered_at_year is in two places of the widget (widgets.w.encodings.x.group and widgets.w.encodings.color), and one of them is a group: a field is in one place."
+    }
+  ]
+}
