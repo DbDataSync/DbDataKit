@@ -97,6 +97,14 @@ public static class RunnerPublishApi
             return publishing.HasArtifact(sha256) ? Results.Ok() : Results.NotFound();
         });
 
+        // a stored file by hash, for a promotion to another group (plan 30 PB06): the same callers that may ask whether the runner has it
+        app.MapGet($"{root}/artifacts/{{sha256}}", (string sha256, HttpContext context) =>
+        {
+            var effective = callerOf(context).Roles;
+            if (!effective.HasFlag(ServerRole.Publisher) && !ServerRoles.Allows(effective, ServerRole.Viewer)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+            return publishing.Api.OpenArtifact(sha256) is { } stream ? Results.Stream(stream, "application/octet-stream") : Results.NotFound();
+        });
+
         app.MapPut($"{root}/artifacts/{{sha256}}", async (string sha256, HttpContext context) =>
         {
             var caller = callerOf(context);
@@ -184,6 +192,10 @@ public static class RunnerPublishApi
         app.MapGet($"{root}/definitions/{Integration}", Handler(context => Forward(publishing, context, caller(context), "GET", $"definitions/{Integration}", hasBody: false)));
 
         app.MapGet($"{root}/definitions/{Integration}/{{name}}", (string name, HttpContext context) => Forward(publishing, context, caller(context), "GET", $"definitions/{Integration}/{Esc(name)}", hasBody: false));
+
+        // one version whole (manifest, files, signature), which a promotion to another group publishes there (plan 30 PB06)
+        app.MapGet($"{root}/definitions/{Integration}/{{name}}/versions/{{version}}", (string name, string version, HttpContext context) =>
+            Forward(publishing, context, caller(context), "GET", $"definitions/{Integration}/{Esc(name)}/versions/{Esc(version)}", hasBody: false));
 
         app.MapGet($"{root}/trust/{Integration}", Handler(context => Forward(publishing, context, caller(context), "GET", $"trust/{Integration}", hasBody: false)));
 

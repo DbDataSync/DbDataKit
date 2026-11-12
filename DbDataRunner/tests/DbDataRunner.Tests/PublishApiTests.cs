@@ -24,10 +24,10 @@ internal sealed class PublisherClient : IDisposable
 
     public string ClientId => _self.Id;
 
-    public static async Task<PublisherClient> PairAsync(RunnerHarness h, string id)
+    public static async Task<PublisherClient> PairAsync(RunnerHarness h, string id, ServerRole ceiling = ServerRole.Publisher)
     {
         var self = new ConsoleIdentity(id, ConsoleSigningKey.Generate());
-        var paired = await PairingClient.PairAsync(h.Url, h.NewCode(ServerRole.Publisher), self, ClientKind.Server, "ci " + id);
+        var paired = await PairingClient.PairAsync(h.Url, h.NewCode(ceiling), self, ClientKind.Server, "ci " + id);
         return new PublisherClient(self, paired, new HttpClient(PairingClient.Pinned(paired.CertificateFingerprint)) { BaseAddress = h.Url });
     }
 
@@ -38,6 +38,14 @@ internal sealed class PublisherClient : IDisposable
         using var response = await _http.SendAsync(request);
         var text = await response.Content.ReadAsStringAsync();
         return (response.StatusCode, text.Length == 0 ? null : JsonNode.Parse(text));
+    }
+
+    /// <summary>The raw answer, for a caller that reads a stream or hands the response on (a promotion's link).</summary>
+    public async Task<HttpResponseMessage> RawAsync(HttpMethod method, string path, HttpContent? content, ServerRole role)
+    {
+        using var request = new HttpRequestMessage(method, path) { Content = content };
+        request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, _self.Issuer().Issue(new ConsoleTokenRequest(_paired.InstanceId, "ci", "ci", role)));
+        return await _http.SendAsync(request);
     }
 
     public Task<(HttpStatusCode Status, JsonNode? Body)> HeadAsync(string sha) => SendAsync(HttpMethod.Head, $"/api/v1/artifacts/{sha}");
