@@ -26,8 +26,10 @@ public sealed record CheckResultRecord(string CheckId, string Dataset, CheckOutc
 public sealed record StoredCheckResult(Guid Id, string CheckId, string Dataset, CheckOutcome Outcome, DateTimeOffset EvaluatedAt, decimal? Measured, decimal? Threshold, IReadOnlyList<string> SampleKeys, string? RunId, string? Message, decimal? Observed = null);
 
 /// <summary>The latest result of a check, and whether it blocks now and since when.</summary>
+/// <param name="ReleasedSince">When an administrator released the block this check set (the check still fails, and what depends on the dataset goes on); null when none was released or the check has passed since.</param>
+/// <param name="ReleasedBy">Who released it (a person's id).</param>
 public sealed record CheckStatusRow(string CheckId, string Dataset, string Severity, string OnError, CheckOutcome Outcome, DateTimeOffset StatusSince, Guid LastResultId, decimal? Measured, decimal? Threshold,
-    DateTimeOffset EvaluatedAt, bool Blocking, DateTimeOffset? BlockedSince);
+    DateTimeOffset EvaluatedAt, bool Blocking, DateTimeOffset? BlockedSince, DateTimeOffset? ReleasedSince = null, string? ReleasedBy = null);
 
 /// <summary>
 /// Writes and reads the <c>quality</c> module (<see cref="QualityModule"/>). <see cref="Record"/> stores a result and moves the check's status and block in <b>one transaction</b>, so a reader never sees a block without the result that set it.
@@ -123,8 +125,10 @@ public sealed class QualityStore(StateDatabase database)
                 dataset = $dataset, severity = $severity, on_error = $on_error,
                 status_changed_at = CASE WHEN status = $status THEN status_changed_at ELSE $at END,
                 status = $status, last_result_id = $id, measured = $measured, threshold = $threshold, evaluated_at = $at,
-                blocking = CASE WHEN $action = 1 THEN $true WHEN $action = 0 THEN $false ELSE blocking END,
-                blocked_at = CASE WHEN $action = 1 THEN COALESCE(blocked_at, $at) WHEN $action = 0 THEN NULL ELSE blocked_at END,
+                blocking = CASE WHEN $action = 1 THEN (CASE WHEN released_at IS NULL THEN $true ELSE $false END) WHEN $action = 0 THEN $false ELSE blocking END,
+                blocked_at = CASE WHEN $action = 1 THEN (CASE WHEN released_at IS NULL THEN COALESCE(blocked_at, $at) ELSE NULL END) WHEN $action = 0 THEN NULL ELSE blocked_at END,
+                released_at = CASE WHEN $action = 0 THEN NULL ELSE released_at END,
+                released_by = CASE WHEN $action = 0 THEN NULL ELSE released_by END,
                 updated_at = $now
             WHERE dataset_hash = $hash AND check_id = $check AND evaluated_at <= $at;
             """);
@@ -141,10 +145,10 @@ public sealed class QualityStore(StateDatabase database)
         return Convert.ToInt64(exists.ExecuteScalar(), CultureInfo.InvariantCulture) > 0;
     }
 
-    private const string StatusColumns = "check_id, dataset, severity, on_error, status, status_changed_at, last_result_id, measured, threshold, evaluated_at, blocking, blocked_at";
+    private const string StatusColumns = "check_id, dataset, severity, on_error, status, status_changed_at, last_result_id, measured, threshold, evaluated_at, blocking, blocked_at, released_at, released_by";
 
     private static CheckStatusRow ReadStatus(DbDataReader r) => new(r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), Parse(r.GetString(4)), r.Time(5), r.Uuid(6),
-        r.IsDBNull(7) ? null : r.Decimal(7), r.IsDBNull(8) ? null : r.Decimal(8), r.Time(9), r.Bool(10), r.NullableTime(11));
+        r.IsDBNull(7) ? null : r.Decimal(7), r.IsDBNull(8) ? null : r.Decimal(8), r.Time(9), r.Bool(10), r.NullableTime(11), r.NullableTime(12), r.IsDBNull(13) ? null : r.GetString(13));
 
     /// <summary>The status of one check, or null when it has none.</summary>
     public CheckStatusRow? Status(string dataset, string checkId) =>
@@ -208,6 +212,53 @@ public sealed class QualityStore(StateDatabase database)
             var value = command.ExecuteScalar();
             return value is null or DBNull ? (decimal?)null : StateValues.ToDecimal(value);
         });
+
+    /// <summary>The outcome a check was last alerted at for an evaluator (plan 23a FQ13), or null when nothing was alerted yet.</summary>
+    public CheckOutcome? AlertedOutcome(string evaluator, string dataset, string checkId) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var command = database.Command(Module, connection, "SELECT outcome FROM {table:check_alert} WHERE dataset_hash = $hash AND check_id = $check AND evaluator = $evaluator;");
+            command.Bind(database, "hash", DatasetHash(dataset)).Bind(database, "check", checkId).Bind(database, "evaluator", evaluator);
+            return command.ExecuteScalar() is string text ? Parse(text) : (CheckOutcome?)null;
+        });
+
+    /// <summary>Remembers the outcome a check was alerted at, for an evaluator (one row per check and evaluator).</summary>
+    public void SetAlerted(string evaluator, string dataset, string checkId, CheckOutcome outcome, DateTimeOffset at) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var transaction = database.BeginTransaction(connection, Module);
+            using (var update = database.Command(Module, connection, transaction, "UPDATE {table:check_alert} SET outcome = $outcome, alerted_at = $at WHERE dataset_hash = $hash AND check_id = $check AND evaluator = $evaluator;"))
+            {
+                update.Bind(database, "outcome", Name(outcome)).Bind(database, "at", at).Bind(database, "hash", DatasetHash(dataset)).Bind(database, "check", checkId).Bind(database, "evaluator", evaluator);
+                if (update.ExecuteNonQuery() == 0)
+                {
+                    using var insert = database.Command(Module, connection, transaction, database.Dialect.InsertOrIgnore("{table:check_alert}", "dataset_hash, check_id, evaluator, outcome, alerted_at", "$hash, $check, $evaluator, $outcome, $at", "dataset_hash, check_id, evaluator"));
+                    insert.Bind(database, "hash", DatasetHash(dataset)).Bind(database, "check", checkId).Bind(database, "evaluator", evaluator).Bind(database, "outcome", Name(outcome)).Bind(database, "at", at);
+                    insert.ExecuteNonQuery();
+                }
+            }
+
+            transaction.Commit();
+        });
+
+    /// <summary>
+    /// An administrator's release of a block (plan 23a FQ17): the check still fails, but what depends on the dataset is no longer held for it. The release stands while the check keeps failing (a failing evaluation does not set the block again) and ends when
+    /// the check passes: a later failure blocks as the first did. False when the check does not block now. The caller audits it (who, which check, when).
+    /// </summary>
+    public bool Release(string dataset, string checkId, string by, DateTimeOffset at)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(by);
+        return database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var command = database.Command(Module, connection,
+                "UPDATE {table:check_status} SET blocking = $false, blocked_at = NULL, released_at = $at, released_by = $by, updated_at = $at WHERE dataset_hash = $hash AND check_id = $check AND blocking = $true;");
+            command.Bind(database, "false", false).Bind(database, "true", true).Bind(database, "at", at).Bind(database, "by", by).Bind(database, "hash", DatasetHash(dataset)).Bind(database, "check", checkId);
+            return command.ExecuteNonQuery() > 0;
+        });
+    }
 
     /// <summary>Removes a check's status, and with it any block it held (the check is gone from its definition). Its history ages out under retention. False when it had none.</summary>
     public bool Forget(string dataset, string checkId) =>

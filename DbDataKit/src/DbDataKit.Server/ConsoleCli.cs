@@ -29,6 +29,7 @@ public static class ConsoleCli
         InstanceNoun(environment),
         UserNoun(environment),
         SetupNoun(environment),
+        BundleNoun(environment),
         RunnerNoun(environment),
         StateNoun(environment, configureMove),
         IdentityCli.Noun(environment),
@@ -422,6 +423,52 @@ public static class ConsoleCli
             (args, context) => UserSetEmailAsync(args, context, environment),
             DataSchemas.Object([("id", DataSchemas.String), ("email", DataSchemas.String)], "id", "email")),
     ]);
+
+    private static Noun BundleNoun(Func<string, string?>? environment) => new("bundle", "The single-machine bundle: servers on this machine are paired with the console by themselves",
+    [
+        new Verb("init", "Make the bundle token and bundle.json in the console's directory (a token file only this account can read); servers on this machine that are given the token pair with the console with no code typed", EffectClass.RepoFilesOnly,
+            "[--members <product,product>] [--rotate] [--repo <console directory>]",
+            (args, context) => BundleInitAsync(args, context, environment),
+            DataSchemas.Object([("token_file", DataSchemas.String), ("bundle_file", DataSchemas.String), ("members", DataSchemas.ListOf(DataSchemas.String))], "token_file", "bundle_file", "members")),
+        new Verb("show", "Say whether the console pairs with servers of this machine by itself, which products, and where the token file is (never the token)", EffectClass.OfflineOnly, "[--repo <console directory>]",
+            (args, context) => BundleShowAsync(args, context, environment),
+            DataSchemas.Object([("enabled", DataSchemas.Boolean), ("token_file", DataSchemas.String), ("members", DataSchemas.ListOf(DataSchemas.String)), ("problem", DataSchemas.String)], "enabled", "members")),
+    ]);
+
+    /// <summary><c>bundle init</c> (plan 23a FQ18): the token and <c>bundle.json</c>; a server of the bundle is given the token file's path as <c>DBDATAKIT_BUNDLE_TOKEN_FILE</c> (<c>install.sh --bundle-token-file</c> writes it into the service).</summary>
+    private static async Task<int> BundleInitAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string> { "rotate" }, new HashSet<string> { "repo", "members" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0) { await context.Error.WriteLineAsync("Usage: bundle init [--members <product,product>] [--rotate] [--repo <console directory>]"); return CliExit.Usage; }
+        var directory = DirectoryOf(parsed, environment);
+        var members = (parsed.Get("members") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        foreach (var member in members.Where(m => !ServerProducts.Announced.Contains(m)))
+        {
+            await context.Error.WriteLineAsync($"'{member}' is not a product this console manages ({string.Join(", ", ServerProducts.Announced)}).");
+            return CliExit.Usage;
+        }
+
+        var token = ConsoleBundle.Init(directory, members, parsed.Has("rotate"));
+        await context.Out.WriteLineAsync($"The bundle token is in {token} (only this account can read it). Give it to each server of this machine as DBDATAKIT_BUNDLE_TOKEN_FILE={token} (install.sh --bundle-token-file {token}); those servers pair with the console when they announce, and a server on another machine still waits for a Confirm.");
+        context.Data["token_file"] = token;
+        context.Data["bundle_file"] = Path.Combine(directory, BundleFile.FileName);
+        context.Data["members"] = members;
+        return CliExit.Ok;
+    }
+
+    private static async Task<int> BundleShowAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0) { await context.Error.WriteLineAsync("Usage: bundle show [--repo <console directory>]"); return CliExit.Usage; }
+        var (bundle, problem) = ConsoleBundle.Load(DirectoryOf(parsed, environment));
+        context.Data["enabled"] = bundle is not null;
+        context.Data["members"] = bundle?.Members.ToList() ?? [];
+        if (bundle is not null) context.Data["token_file"] = bundle.TokenFile;
+        if (problem is not null) context.Data["problem"] = problem;
+        await context.Out.WriteLineAsync(bundle is not null ? $"Servers of this machine that hold the bundle token ({(bundle.Members.Count == 0 ? "any product" : string.Join(", ", bundle.Members))}) are paired by the console by themselves; the token is in {bundle.TokenFile}."
+            : problem ?? "There is no bundle: every announced server waits for an administrator's Confirm. `dbdatakit bundle init` makes one.");
+        return problem is null ? CliExit.Ok : CliExit.Failure;
+    }
 
     private static Noun SetupNoun(Func<string, string?>? environment) => new("setup", "First-run setup of this install",
     [

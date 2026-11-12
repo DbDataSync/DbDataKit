@@ -30,7 +30,7 @@ internal sealed class SemanticAnswer : IServingAnswer
                 var name = column!["name"]!.GetValue<string>();
                 var type = column["type"]?.GetValue<string>();
                 var values = rows.Select(r => r.TryGetValue(name, out var v) ? v : null).ToList();
-                var (array, arrowType) = Build(type, values);
+                var (array, arrowType) = Build(type, values, column["x_scale"] is JsonValue scale && scale.TryGetValue<int>(out var s) ? s : null);
                 fields.Add(new Field(name, arrowType, true));
                 arrays.Add(array);
             }
@@ -74,8 +74,15 @@ internal sealed class SemanticAnswer : IServingAnswer
         if (items is { Count: > 0 }) metadata[MetadataPrefix + key] = JsonSerializer.SerializeToNode(items, QisJson.Options)!.ToJsonString();
     }
 
-    private static (IArrowArray, IArrowType) Build(string? type, List<object?> values)
+    private static (IArrowArray, IArrowType) Build(string? type, List<object?> values, int? scale = null)
     {
+        // a number the catalog gives a scale (the measure sums a decimal column the source declares with one) is a decimal of that scale; nothing is rounded that the scale holds (plan 14a SL09, D33)
+        if (type == "number" && scale is { } declared)
+        {
+            var decimals = new Decimal128Array.Builder(new Decimal128Type(38, declared));
+            foreach (var v in values) if (v is null) decimals.AppendNull(); else decimals.Append(Convert.ToDecimal(v, System.Globalization.CultureInfo.InvariantCulture));
+            return (decimals.Build(), new Decimal128Type(38, declared));
+        }
         switch (type)
         {
             case "integer":

@@ -263,6 +263,27 @@ export interface ReplicationTaskConfig {
 export interface TrackingConfig {
   mode: 'target' | 'state' | 'both' | null
   primary?: 'target' | 'state' | null
+  /** How much of the state table on the target is kept (plan 28c E17): absent is the last 1000 units and anything newer than 7 days. */
+  retention?: TrackingRetention | null
+}
+
+/** `tracking.retention`: a unit goes only when it is older than `days` and not among the newest `units` of its mapping. */
+export interface TrackingRetention {
+  units?: number | null
+  days?: number | null
+}
+
+/** What the state's copy of the target's units holds and what the follower last did (plan 28c E17). */
+export interface TrackingCopyStatus {
+  identity: string | null
+  rows: number
+  followedAt: string | null
+  caughtUp: boolean
+  error: string | null
+  divergenceId: number | null
+  divergenceReason: string | null
+  divergedAt: string | null
+  divergences: number
 }
 
 /** `GET /api/replications/{name}/tracking`: what was asked, what applies and why. */
@@ -276,6 +297,10 @@ export interface ReplicationTrackingStatus {
   targetDriver: string | null
   targetCanHoldState: boolean
   targetWritersBuilt: boolean
+  /** The state's copy of the target's units; null when the state is the runner's only or nothing was followed yet. */
+  copy: TrackingCopyStatus | null
+  retentionUnits: number
+  retentionDays: number
 }
 
 /** One side of a table mapping as configured: null connection/database inherit the replication's

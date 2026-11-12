@@ -53,12 +53,12 @@ public sealed class QualityStoreTests : IDisposable
             Assert.Equal(("check_result", "evaluated_at", 90d), (rule.Table, rule.TimeColumn, rule.DefaultDays));
             Assert.DoesNotContain(module.Retention, r => r.Table == "check_status");
             Assert.Equal("quality", module.Name);
-            Assert.Equal(1, module.Version);
+            Assert.Equal(3, module.Version);
         }
 
         Assert.Equal(StateScopeKind.Install, QualityModule.Module.Scope);
         Assert.Equal(StateScopeKind.Group, QualityModule.GroupModule.Scope);
-        Assert.Equal(["check_result", "check_status"], StateTableDefinitions.Read(QualityModule.Module).Select(t => t.Name).Order());
+        Assert.Equal(["check_alert", "check_result", "check_status"], StateTableDefinitions.Read(QualityModule.Module).Select(t => t.Name).Order());
         Assert.All(StateTableDefinitions.Read(QualityModule.Module), t => Assert.NotEmpty(t.PrimaryKey));
     }
 
@@ -69,7 +69,7 @@ public sealed class QualityStoreTests : IDisposable
         var layout = database.Layout!;
         var ns = layout.Namespace(QualityModule.Name);
         Assert.Equal("quality", ns.Module.Name);
-        Assert.Equal(1, Assert.Single(database.RegisteredModules(), m => m.Module == "quality").Version);
+        Assert.Equal(3, Assert.Single(database.RegisteredModules(), m => m.Module == "quality").Version);
         Assert.Equal(0, Count(database, "check_result"));
         Assert.Equal(0, Count(database, "check_status"));
     }
@@ -106,6 +106,35 @@ public sealed class QualityStoreTests : IDisposable
         Assert.Equal((CheckOutcome.Pass, 1800.5m, 21600m, "run-7", Start, status.LastResultId), (stored.Outcome, stored.Measured, stored.Threshold, stored.RunId, stored.EvaluatedAt, stored.Id));
         Assert.Empty(stored.SampleKeys);
         Assert.Null(stored.Message);
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public void An_administrators_release_lifts_the_block_while_the_check_fails_and_a_pass_ends_the_release(string engine)
+    {
+        var (store, _, _) = Open(engine);
+        Assert.False(store.Release(Orders, "orders_customer_present", "ada", Start));                        // nothing blocks yet: nothing to release
+        store.Record(Result(CheckOutcome.Fail, Start, measured: 3));
+        Assert.Single(store.BlocksOf(Orders));
+
+        Assert.True(store.Release(Orders, "orders_customer_present", "ada", Start.AddMinutes(5)));
+        var released = store.Status(Orders, "orders_customer_present")!;
+        Assert.Equal((false, null, Start.AddMinutes(5), "ada"), (released.Blocking, released.BlockedSince, released.ReleasedSince, released.ReleasedBy));
+        Assert.Empty(store.Blocks());
+        Assert.False(store.Release(Orders, "orders_customer_present", "ada", Start.AddMinutes(6)));          // no block left to release
+
+        // the check still fails: the release stands, the result is recorded, nothing blocks again
+        var again = store.Record(Result(CheckOutcome.Fail, Start.AddHours(1), measured: 4));
+        Assert.Equal((false, 4m, "ada"), (again.Blocking, again.Measured, again.ReleasedBy));
+        Assert.Empty(store.Blocks());
+        // an error does not end it either (it lifts nothing and sets nothing)
+        store.Record(Result(CheckOutcome.Error, Start.AddHours(2), message: "down"));
+        Assert.Equal("ada", store.Status(Orders, "orders_customer_present")!.ReleasedBy);
+
+        // a pass ends the release; the next failure blocks as the first did
+        var passed = store.Record(Result(CheckOutcome.Pass, Start.AddHours(3), measured: 0));
+        Assert.Equal((null, null), (passed.ReleasedSince, passed.ReleasedBy));
+        var failedAgain = store.Record(Result(CheckOutcome.Fail, Start.AddHours(4), measured: 1));
+        Assert.Equal((true, Start.AddHours(4)), (failedAgain.Blocking, failedAgain.BlockedSince));
     }
 
     [Theory, MemberData(nameof(Engines))]
@@ -315,8 +344,8 @@ public sealed class QualityStoreTests : IDisposable
         var ex = Assert.Throws<InvalidOperationException>(() => location.Open([QualityModule.Module]));
 
         Assert.Contains("'quality'", ex.Message);
-        Assert.Contains("version 2", ex.Message);
-        Assert.Contains("version 1", ex.Message);
+        Assert.Contains("version 4", ex.Message);
+        Assert.Contains("version 3", ex.Message);
         Assert.Contains("newer-quality 2.0", ex.Message);
         Assert.Contains("state database", ex.Message);
         if (engine == StateEngineIds.Sqlite) Assert.Contains(Path.GetFileName(location.Target), ex.Message);
@@ -327,7 +356,7 @@ public sealed class QualityStoreTests : IDisposable
     {
         var location = _engines.Provision(engine);
         location.Open([QualityModule.Module]);
-        var edited = new StateModule("quality", StateScopeKind.Install, [QualityModule.Module.Migrations[0].Replace("evaluated_at  {{time}} NOT NULL", "evaluated_at  {{time}} NULL", StringComparison.Ordinal)]);
+        var edited = new StateModule("quality", StateScopeKind.Install, [QualityModule.Module.Migrations[0].Replace("evaluated_at  {{time}} NOT NULL", "evaluated_at  {{time}} NULL", StringComparison.Ordinal), .. QualityModule.Module.Migrations.Skip(1)]);
         Assert.NotEqual(QualityModule.Module.Migrations[0], edited.Migrations[0]);
 
         var ex = Assert.Throws<InvalidOperationException>(() => location.Open([edited]));

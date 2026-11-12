@@ -112,4 +112,13 @@ public sealed class ConsoleQualityTests : IAsyncLifetime
     {
         Assert.Equal(HttpStatusCode.Unauthorized, (await Get("/api/quality", signedIn: false)).Status);
     }
+
+    [Fact]
+    public void Each_product_that_evaluates_checks_has_its_path_and_the_ones_that_do_not_have_none()
+    {
+        Assert.Equal("/api/quality", ConsoleQuality.PathOf(ServerProducts.Sync));
+        Assert.Equal("/api/v1/quality", ConsoleQuality.PathOf(ServerProducts.Build));
+        Assert.Equal("/api/v1/quality", ConsoleQuality.PathOf(ServerProducts.Store));        // plan 23a FQ11
+        Assert.Null(ConsoleQuality.PathOf(ServerProducts.Gateway));
+    }
 }

@@ -453,3 +453,35 @@ export interface PublishViewAnswer {
   unchanged: boolean | null
   depends_on: string[] | null
 }
+
+/** What the translation check of a saved query says (plan 14a SL20): its errors are what the compiler will refuse, its warnings are not refusals. */
+export interface QueryCheckAnswer {
+  ok: boolean
+  errors: { code: string; message: string }[]
+  warnings: { code: string; message: string }[]
+  /** What the query asks for, in the order the markers appear. */
+  parameters: { name: string; for: string | null; type: string | null; many: boolean }[]
+  /** The semantic request a `sql` text becomes; null for a `request`. */
+  request: unknown
+}
+
+export interface TryQueryBody {
+  model: string
+  sql?: string
+  request?: unknown
+  parameters?: Record<string, unknown>
+  explain?: boolean
+  limit?: number
+}
+
+/** The Gateway's answer to a run (`POST /api/v1/my/runs`): the columns and rows, the engine's warnings, and the version of the model it ran on. */
+export interface TryQueryAnswer {
+  status?: string
+  columns?: { name: string; type?: string }[]
+  rows?: unknown[][]
+  warnings?: string[]
+  request_hash?: string
+  remaining?: unknown
+  model_version?: number | string
+  [key: string]: unknown
+}

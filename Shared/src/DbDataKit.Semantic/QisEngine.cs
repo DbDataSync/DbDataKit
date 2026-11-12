@@ -905,6 +905,7 @@ public sealed partial class QisEngine(Catalog cat, ISourceExecutor executor, Val
                 ["x_semantics"] = Catalog.ToJson(cat.Doc.Measures[m].Semantics),
             };
             if (cat.Doc.Measures[m].Format is { } format) field["x_format"] = format.DeepClone();
+            if (cat.Doc.Measures[m].Scale is { } scale && cat.TypeOf(m) == "number") field["x_scale"] = scale;
             if (cat.Doc.Measures[m].Roles.Count > 0) field["x_kinds"] = Catalog.ToJson(cat.Doc.Measures[m].Roles.ToDictionary(kv => kv.Key, kv => (object)kv.Value));
             fields.Add(field);
         }

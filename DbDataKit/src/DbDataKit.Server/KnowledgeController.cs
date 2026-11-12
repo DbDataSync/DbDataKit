@@ -22,6 +22,8 @@ public sealed record SearchBody(string Question, string? Mode = null, string? Au
 
 public sealed record EmbeddingBody(string? Provider, string? Model);
 
+public sealed record SuggestBody(string Item, bool IsNew, string? Project, string Text, string Reason);
+
 public sealed record SubjectBody(string Type, string Name, string Status, string? NarrowingKind = null, string? NarrowingName = null);
 
 /// <summary>
@@ -37,7 +39,7 @@ public sealed class KnowledgeController(ConsoleKnowledge knowledge, ConsoleAgent
     /// <summary>The overview of the files with the index's state in it (the first line of the screen).</summary>
     private JsonObject Overview()
     {
-        var overview = knowledge.Overview();
+        var overview = knowledge.Overview(index.NeedsAnotherLook());
         var view = index.View();
         overview["index"] = new JsonObject { ["built"] = view.Opened, ["message"] = view.Opened ? $"The index is built: {view.Message}" : overview["index"]!["message"]!.GetValue<string>() };
         return overview;
@@ -98,6 +100,48 @@ public sealed class KnowledgeController(ConsoleKnowledge knowledge, ConsoleAgent
         knowledge.SetSubject(body.Type, body.Name, body.Status, body.NarrowingKind ?? "", body.NarrowingName ?? "");
         return Ok(Overview());
     }
+
+    // ---- suggestions at the edge (plan 27a KN19) ----
+
+    private static object View(SuggestionRow r, bool moved, bool full) => new
+    {
+        r.Id, r.Project, item = r.ItemId, r.Kind, r.Title, r.State, r.Reason, r.SuggestedBy, r.Via, r.Owner, r.BaseVersion, moved, createdAt = r.CreatedAt, r.DecidedBy, r.Note,
+        proposed = full ? r.Proposed : null,
+        preview = full && r.Preview is not null ? System.Text.Json.Nodes.JsonNode.Parse(r.Preview) : null,
+    };
+
+    /// <summary>Who may ask: the index must be built (it is what a suggestion is based on); a person sees their own and, for an administrator, those for the administrators' items.</summary>
+    private DbDataKit.Knowledge.Cli.SuggestionDesk? Desk() => index.Desk(User.FindFirst(DbDataKit.Server.ConsoleHost.Auth.UserIdClaim)?.Value ?? User.Identity?.Name ?? "unknown", IsAdmin);
+
+    private IActionResult NoIndex() => Conflict(new { error = "The index is not built, so there is nothing a suggestion can be based on. An administrator builds it on the Search and index tab." });
+
+    [HttpGet("suggestions")]
+    [Authorize(Policies.Viewer)]
+    public IActionResult Suggestions([FromQuery] string? state = null)
+    {
+        if (Desk() is not { } desk) return Ok(new { built = false, suggestions = Array.Empty<object>() });
+        return Ok(new { built = true, suggestions = desk.List(state).Select(r => View(r, desk.Moved(r), false)).ToList() });
+    }
+
+    [HttpGet("suggestions/{id}")]
+    [Authorize(Policies.Viewer)]
+    public IActionResult Suggestion(string id) =>
+        Desk() is { } desk && desk.Show(id) is { } row ? Ok(View(row, desk.Moved(row), true)) : NotFound(new { error = $"There is no suggestion '{id}' that you may see." });
+
+    [HttpPost("suggestions")]
+    [Authorize(Policies.Viewer)]
+    public IActionResult Suggest([FromBody] SuggestBody body)
+    {
+        if (Desk() is not { } desk) return NoIndex();
+        var outcome = desk.Suggest(body.Item, body.IsNew, body.Project, body.Text, body.Reason);
+        if (outcome.Row is { } row) return Ok(View(row, false, true));
+        return UnprocessableEntity(new { error = outcome.Refused, diagnostics = outcome.Problems });
+    }
+
+    [HttpPost("suggestions/{id}/withdraw")]
+    [Authorize(Policies.Viewer)]
+    public IActionResult Withdraw(string id) =>
+        Desk() is { } desk && desk.Withdraw(id) ? Ok(new { withdrawn = id }) : Conflict(new { error = $"'{id}' is not a suggestion of yours that is still open." });
 
     /// <summary>Reads what exists to be about from the joined lineage graph of the servers, as the person who asks (plan 27a KN02): what it shows exists, what it showed before and no longer does is gone (only when every server answered).</summary>
     [HttpPost("subjects/refresh")]

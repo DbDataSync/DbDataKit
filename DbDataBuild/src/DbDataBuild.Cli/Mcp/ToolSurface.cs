@@ -10,11 +10,18 @@ namespace DbDataBuild.Cli.Mcp;
 internal sealed class ToolSurface
 {
     /// <summary>Per command, the options a client cannot use: the ones that show values or read data the project's operator supplied.</summary>
+    private static readonly string[] SemanticWithheld = ["--address", "--insecure", "--ca-file", "--server-dir"];
+
     private static readonly Dictionary<string, string[]> WithheldOptions = new()
     {
         ["connection compare"] = ["--show-values"],
         ["connection check"] = ["--show-values"],
         ["project sample"] = ["--data"],
+        // the token in the agent's environment goes only to a Gateway the server is paired with: no address, no weaker certificate check, no other directory of pairings (plan 14a SL22)
+        ["semantic describe"] = SemanticWithheld,
+        ["semantic query"] = SemanticWithheld,
+        ["semantic explain"] = SemanticWithheld,
+        ["semantic members"] = SemanticWithheld,
     };
 
     private readonly string projectRoot;

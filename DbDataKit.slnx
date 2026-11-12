@@ -311,6 +311,7 @@
     <Project Path="DbDataSync/src/DbDataSync.Scripting.Abstractions/DbDataSync.Scripting.Abstractions.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.Scripting/DbDataSync.Scripting.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.State/DbDataSync.State.csproj" />
+    <Project Path="DbDataSync/src/DbDataSync.Tracking/DbDataSync.Tracking.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.TaskRunner/DbDataSync.TaskRunner.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.Updates/DbDataSync.Updates.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.Verification/DbDataSync.Verification.csproj" />

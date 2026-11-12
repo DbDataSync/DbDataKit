@@ -346,6 +346,14 @@ internal static class RefreshCommand
         LimitsObserver?.Invoke(limits);
         var originAccess = new OriginAccess(config, env, limits);
         var execution = new RefreshExecution(units, (unit, session, ct) => PrepareAsync(byUnit[unit.Position], stepsOf[unit.Position], inputs[byUnit[unit.Position]], scripts, context, session, originAccess, dryRun ? output.WriteLine : null, ct), Downstream);
+        // plan 23a FQ14: with a results directory, a model that reads a dataset a check blocks does not run, and says which check
+        if (!dryRun && (checkResults ?? env(ModelQuality.ResultsVariable)) is { Length: > 0 } blocksIn)
+        {
+            var blocked = ModelQuality.Blocks(root, connection.Name, blocksIn, env, out var blocksProblem);
+            if (blocksProblem != null) output.WriteLine(blocksProblem);
+            if (blocked.Count > 0)
+                execution = execution with { BlockedBy = model => blocked.Where(b => !string.Equals(b.Key, model, StringComparison.OrdinalIgnoreCase) && Downstream(b.Key).Contains(model)).Select(b => b.Value).FirstOrDefault() };
+        }
 
         var run = new RefreshRunInfo(planName, selection, members);
         // the transfers of a copy are not in the plan the engine opens up front: an origin that cannot be reached fails its own load (`failed: origin`), it does not refuse the refresh

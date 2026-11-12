@@ -40,6 +40,8 @@ public sealed class DeleteInsertWriter(SqlDialect dialect, ITableCatalog catalog
 {
     public string Kind => GenericDriverKinds.DeleteInsert;
 
+    public bool SupportsUnitState => true;
+
     public bool SupportsReconciliation => true;
 
     public IReadOnlyList<ParameterDescriptor> Parameters { get; } = [ApplyBatch.Descriptor];
@@ -99,6 +101,7 @@ public sealed class DeleteInsertWriter(SqlDialect dialect, ITableCatalog catalog
                 },
                 cancellationToken);
 
+            await UnitStateScope.BeforeCommitAsync(targetConnection, transaction, cancellationToken);   // plan 28c E17: the unit's state row, same transaction
             await transaction.CommitAsync(cancellationToken);
 
             // RowsWritten counts the insert only. Folding the delete count in would double-count every

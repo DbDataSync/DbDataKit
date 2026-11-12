@@ -17,7 +17,7 @@ public static class StoreState
     public static StateScope Scope { get; } = new(Group: "main", Service: ServiceId);
 
     /// <summary>The modules the server's state is built from.</summary>
-    public static IReadOnlyList<StateModule> Modules { get; } = [TrustModule.Module, NotificationsModule.Module];
+    public static IReadOnlyList<StateModule> Modules { get; } = [TrustModule.Module, QualityModule.Module, NotificationsModule.Module];
 
     /// <summary>The state engine: <c>DBDATAKIT_STATE_STORE_ENGINE</c>, else <c>DBDATAKIT_STATE_ENGINE</c>.</summary>
     public static string EngineVariable => SuiteEnvironment.StateEngineVariableOf(StoreSettings.ServiceName);
