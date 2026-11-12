@@ -265,7 +265,7 @@ describe('DashboardView with a custom widget', () => {
     await say({ type: 'views:hello' })
     await say({ type: 'views:open', link: 'edit-order', row: { id: 42, customers_region: 'East' } })
     expect(events.length).toBe(1)
-    expect(events[0]).toMatchObject({ widget: 'grid', values: { id: 42 }, route: null })
+    expect(events[0]).toMatchObject({ widget: 'grid', values: { id: 42 }, route: '/apps/sales/forms/orders', address: '/apps/sales/forms/orders?id=42' })
     expect(events[0]!.link).toMatchObject({ name: 'edit-order', as: 'dialog', targetKind: 'form', target: 'orders' })
     await say({ type: 'views:open', link: 'secret', row: {} })
     expect(events.length).toBe(1)

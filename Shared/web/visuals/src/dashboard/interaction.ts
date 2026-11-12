@@ -32,7 +32,12 @@ const drillOf = (widget: WidgetDoc | undefined): DrillDoc | null => {
   const raw = (widget as { drill?: unknown } | undefined)?.drill as DrillDoc | undefined
   return raw && typeof raw === 'object' && raw.to && typeof raw.to === 'object' ? raw : null
 }
-export { onSelectOf, drillOf }
+/** The name of the link a widget follows when pointed at (`on_click`, DBR35): a link of the document's `links`. Null for a widget with none. */
+const clickOf = (widget: WidgetDoc | undefined): string | null => {
+  const raw = (widget as { on_click?: unknown } | undefined)?.on_click
+  return typeof raw === 'string' ? raw : null
+}
+export { onSelectOf, drillOf, clickOf }
 
 /** A rendered chart names a field with `_` where the model's name has `.` (`customers.region` is `customers_region`); a row is read by either spelling. */
 export const datumKey = (field: string): string => field.replace(/\./g, '_')

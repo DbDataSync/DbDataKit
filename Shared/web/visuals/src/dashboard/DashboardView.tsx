@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { CustomViewsContext, type CustomViewsContextValue, type CustomViewsHost } from '../custom/CustomWidgetFrame'
-import type { LinkInfo, LinkScalar } from '../views/links'
-import { linkValues } from '../views/links'
+import { LinkSurface, type OpenSurface } from '../links/LinkSurface'
+import { surfaceAddress, thenWidgets } from '../links/surface'
+import { describeLink, linkValues, type LinkInfo, type LinkScalar } from '../views/links'
 import { placedWidgets } from '../client/fixtureClient'
 import type { ServerSort, ViewsClient } from '../client/types'
 import { useTheme, type ThemeChoice } from '../theme'
@@ -13,7 +14,7 @@ import { PagedFrame } from '../report/PagedFrame'
 import { usePrintPreview } from '../report/PrintPreview'
 import { ErrorTile } from '../widgets/states'
 import { DashboardFrame } from './DashboardFrame'
-import { drillOf, onSelectOf, resolveDrill, rowOf, selectFrom, type Hit, type HitHow, type ResolvedDrill, type Row } from './interaction'
+import { clickOf, drillOf, onSelectOf, resolveDrill, rowOf, selectFrom, type Hit, type HitHow, type ResolvedDrill, type Row } from './interaction'
 import { browserVisibility, createRefresher, formatAsOf, parseEvery, systemClock, type Clock, type RefreshState, type Visibility } from './refresh'
 import { changedParameters, defaultParameters, dependentWidgets, parametersKey, resolveLayout, type Resolution } from './resolution'
 
@@ -23,7 +24,18 @@ export interface LinkEvent {
   link: LinkInfo
   values: Record<string, LinkScalar | LinkScalar[]>
   route: string | null
+  /** The target's address with the values (and the locked names) in its query string; null when the host has no route for the target. */
+  address: string | null
   row: Row
+}
+
+/**
+ * What the host that serves the app gives so links open (plan 32 DBR36): the address of a link's target inside the app, and how a navigating link goes there. A link whose `as` is `dialog` or `panel` opens in the shell's
+ * own surface (`LinkSurface`: a sandboxed frame over the page); a `navigate` link calls `navigate` (the page's router).
+ */
+export interface LinkHost {
+  route(link: LinkInfo): string | null
+  navigate?(address: string, event: LinkEvent): void
 }
 
 export interface DashboardViewProps {
@@ -66,7 +78,12 @@ export interface DashboardViewProps {
    * Where the code of a custom widget (`type: custom`) is served from (DBR31): without it a custom widget draws a note. The widget's frame sends back parameter changes (the same cross-filter as a control) and the links it follows.
    */
   customViews?: CustomViewsHost
-  /** A link a widget followed was resolved: the host opens it. Without a handler a link does nothing. */
+  /**
+   * The app's addresses for link targets (DBR36). With it a click on a widget with an `on_click` (and a custom widget's `open`) follows the document's link: a dialog or a side panel opens in a frame of its own, a navigating link goes
+   * through `navigate`, and after a save `then` resolves the source widget (or the ones it names) again. Without it, and without `onLink`, a link does nothing.
+   */
+  linkHost?: LinkHost
+  /** A link a widget followed was resolved: the host opens it itself (`linkHost`'s surfaces are then not used). Without a handler a link does nothing. */
   onLink?: (event: LinkEvent) => void
   /** A dialog or panel a custom widget opened has closed (`saved` when a form saved): the widget is told. */
   closedLink?: CustomViewsContextValue['closed']
@@ -111,7 +128,7 @@ function useBox(given: Box | undefined) {
  * the widgets both layouts place. A widget that fails shows its own error; a failure of the call itself shows once, for the page. A canvas layout is drawn by `layoutCanvas` (DBR07), scaled or scrolled in the same container; a flow layout is the work of its own engine (DBR14):
  * until then a note says so.
  */
-export function DashboardView({ kind = 'dashboard', name, document, client, layout: requested, medium, box: given, theme = 'auto', parameters, onParameterChange, onSelect, onDrill, sortable = false, onServerSort, customViews, onLink, closedLink, viewer, onPrintPreview, kiosk = false, refreshFloorMs, clock, visibility, random, timeZone }: DashboardViewProps) {
+export function DashboardView({ kind = 'dashboard', name, document, client, layout: requested, medium, box: given, theme = 'auto', parameters, onParameterChange, onSelect, onDrill, sortable = false, onServerSort, customViews, linkHost, onLink, closedLink, viewer, onPrintPreview, kiosk = false, refreshFloorMs, clock, visibility, random, timeZone }: DashboardViewProps) {
   const layout = requested ?? (kiosk ? document.kiosk?.layout : undefined)
   const resolvedTheme = useTheme(theme)
   const { ref, box } = useBox(given)
@@ -221,12 +238,56 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
 
   // pointing at a widget: a selection sets the parameter it names (the same change a control makes, so the dependents resolve again); a drill goes to the host
   const [notice, setNotice] = useState<string | null>(null)
-  const interactive = onDrill !== undefined || Object.values(document.widgets).some((w) => onSelectOf(w) !== null)
+  const follows = linkHost !== undefined || onLink !== undefined
+  const interactive = onDrill !== undefined || Object.values(document.widgets).some((w) => onSelectOf(w) !== null || (follows && clickOf(w) !== null))
+  // a link followed (DBR36): the values for the row, the target's address, and what the host does with it: its own handler, a navigation, or the shell's dialog or panel
+  const [surface, setSurface] = useState<{ widget: string; link: LinkInfo; open: OpenSurface } | null>(null)
+  const [closedHere, setClosedHere] = useState<CustomViewsContextValue['closed']>(null)
+  const follow = (widget: string, link: LinkInfo, row: Row) => {
+    const route = linkHost?.route(link) ?? customViews?.route?.(link) ?? null
+    const linked = linkValues(link, row, values)
+    const address = route === null ? null : surfaceAddress(route, linked, link.lock)
+    const event: LinkEvent = { widget, link, values: linked, route, address, row }
+    if (onLink) { onLink(event); return }
+    if (!linkHost) return
+    if (address === null) { setNotice(`The link \`${link.name}\` leads to the ${link.targetKind} \`${link.target}\`, which this host has no address for.`); return }
+    if (link.as === 'navigate') { linkHost.navigate?.(address, event); return }
+    setSurface({ widget, link, open: { as: link.as, label: link.label ?? `${link.targetKind}: ${link.target}`, address } })
+  }
+  const closeSurface = (saved: boolean) => {
+    const open = surface
+    setSurface(null)
+    if (!open) return
+    setClosedHere({ widget: open.widget, link: open.link.name, saved })
+    const again = thenWidgets(open.link, open.widget, saved).filter((w) => w in (latest.current?.results ?? {}))
+    if (again.length > 0) resolveOnly(again)
+  }
+  // the widgets that resolve again after a save: the same call a sort makes, the other widgets keep what they show
+  const resolveOnly = (ids: string[]) => {
+    const l = live.current
+    if (!l.chosenName) return
+    l.client.resolve({ kind: l.kind, name: l.name }, l.chosenName, l.values, { only: ids, order: sortsRef.current }).then(
+      (fresh) => {
+        const base = latest.current
+        if (!base) return
+        const merged: Resolution = { ...base, results: { ...base.results, ...fresh.widgets }, asOfBy: { ...base.asOfBy, ...Object.fromEntries(Object.keys(fresh.widgets).map((id) => [id, fresh.as_of])) } }
+        latest.current = merged
+        setResolution(merged)
+      },
+      (e: unknown) => setNotice(`The page could not refresh after the change: ${e instanceof Error ? e.message : String(e)}`),
+    )
+  }
   const hit = (id: string, at: Hit, how: HitHow) => {
     const widget = document.widgets[id]
     const row = rowOf(widget, latest.current?.results[id], at)
     setNotice(null)
-    if (onDrill && drillOf(widget) && (how.drill || !onSelectOf(widget))) {
+    const clicked = follows ? clickOf(widget) : null
+    if (clicked && (how.drill || !onSelectOf(widget))) {
+      const doc = document.links?.[clicked]
+      if (!doc) setNotice(`The widget \`${id}\` follows the link \`${clicked}\`, which the document does not declare.`)
+      else if (!row) setNotice('That mark has no row to take values from.')
+      else follow(id, describeLink(clicked, doc), row)
+    } else if (onDrill && drillOf(widget) && (how.drill || !onSelectOf(widget))) {
       const out = resolveDrill(document, id, row, values)
       if (out.ok) onDrill(out.drill)
       else setNotice(out.message)
@@ -257,15 +318,12 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
       medium: medium === 'print' ? 'print' : 'screen',
       scheme: resolvedTheme,
       setParam: (parameter, value) => { setNotice(null); change(parameter, value) },
-      open: (widget, link, row) => {
-        setNotice(null)
-        onLink?.({ widget, link, values: linkValues(link, row, values), route: link.hasAddress ? customViews.route?.(link) ?? null : null, row: row as Row })
-      },
+      open: (widget, link, row) => { setNotice(null); follow(widget, link, row as Row) },
       notice: setNotice,
-      closed: closedLink ?? null,
+      closed: closedLink ?? closedHere,
     }
-    // `change` keeps the document's own parameters when none are given; the key stands for the values
-  }, [customViews, document, valuesKey, medium, resolvedTheme, onLink, closedLink, change])
+    // `change` keeps the document's own parameters when none are given; the key stands for the values; `follow` reads the latest through the refs and state it closes over each render
+  }, [customViews, linkHost, document, valuesKey, medium, resolvedTheme, onLink, closedLink, closedHere, change])
 
   const preview = usePrintPreview({ client, kind, name, layout: chosenName, parameters: values })
   const [maximized, setMaximized] = useState<string | null>(null)
@@ -301,12 +359,14 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
         asOf={asOf}
         stale={refreshState?.stale}
         canDrill={onDrill !== undefined}
+        canFollow={follows}
         sortable={sortable}
         onServerSort={serverSorting}
       />
     )
+  const modalOpen = surface?.open.as === 'dialog'
   const framed = (
-    <div ref={ref} className="vz-dashboard-host" data-testid="vz-dashboard-host" data-measuring={box ? undefined : ''} data-kiosk={kiosk ? '' : undefined} data-refresh={refreshing ? (refreshState?.paused ? 'paused' : refreshState?.stale ? 'stale' : 'on') : undefined} data-refresh-runs={refreshState?.runs} style={given ? { width: given.width, height: given.height } : { width: '100%', height: '100%' }}>
+    <div ref={ref} className="vz-dashboard-host" inert={modalOpen ? true : undefined} data-testid="vz-dashboard-host" data-measuring={box ? undefined : ''} data-kiosk={kiosk ? '' : undefined} data-refresh={refreshing ? (refreshState?.paused ? 'paused' : refreshState?.stale ? 'stale' : 'on') : undefined} data-refresh-runs={refreshState?.runs} style={given ? { width: given.width, height: given.height } : { width: '100%', height: '100%' }}>
       {failure ? <ErrorTile code="resolve_failed" message={failure} /> : null}
       {body}
       {preview.element}
@@ -317,5 +377,11 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
       ) : null}
     </div>
   )
-  return custom ? <CustomViewsContext.Provider value={custom}>{framed}</CustomViewsContext.Provider> : framed
+  const shown = (
+    <>
+      {framed}
+      {surface ? <LinkSurface key={surface.open.address} surface={surface.open} onClose={closeSurface} /> : null}
+    </>
+  )
+  return custom ? <CustomViewsContext.Provider value={custom}>{shown}</CustomViewsContext.Provider> : shown
 }

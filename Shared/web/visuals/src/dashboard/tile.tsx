@@ -21,6 +21,8 @@ export interface TileContext {
   stale?: boolean
   /** The host follows a `drill` (default yes). */
   canDrill?: boolean
+  /** The host follows an `on_click` link (DBR36): a widget with one is pointable. */
+  canFollow?: boolean
   /** Viewers sort a table or a matrix by clicking a header (plan 32 DBR45): on screen only, never stored; the print and export routes do not set it. */
   sortable?: boolean
   /** A table the server cut: the host runs it again with `order` (widget, column field, direction; null, null for the document's order). */
@@ -48,6 +50,7 @@ export function tileView(c: TileContext, id: string, box: Box, isMaximized: bool
       asOf={c.asOf?.[id]}
       stale={c.stale}
       canDrill={c.canDrill}
+      canFollow={c.canFollow}
       sortable={c.sortable}
       onServerSort={c.onServerSort}
     />

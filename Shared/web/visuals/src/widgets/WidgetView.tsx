@@ -14,7 +14,7 @@ import { TableWidget } from './TableWidget'
 import { TextBlock } from './TextBlock'
 import { EmptyTile, ErrorTile, LoadingTile } from './states'
 import { bodyBox, densityClass, type DensityClass } from './density'
-import { drillOf, howOf, onSelectOf, selectedOf, parameterDefault, type Hit, type HitHow } from '../dashboard/interaction'
+import { clickOf, drillOf, howOf, onSelectOf, selectedOf, parameterDefault, type Hit, type HitHow } from '../dashboard/interaction'
 
 export interface WidgetViewProps {
   /** The widget's id in its document. */
@@ -41,6 +41,8 @@ export interface WidgetViewProps {
   stale?: boolean
   /** Whether the host follows a `drill` (default yes): without it a widget with only a `drill` is not pointable. */
   canDrill?: boolean
+  /** Whether the host follows an `on_click` link (default no): without it a widget with only an `on_click` is not pointable. */
+  canFollow?: boolean
   /** Viewers sort a table or a matrix by clicking a header (plan 32 DBR45), on screen only; off by default so print, export and a host that does not say so are unchanged. */
   sortable?: boolean
   /** A table the server cut at its limit: the host runs it again with `order` (column field, direction; null, null for the document's order). */
@@ -61,7 +63,7 @@ function isEmpty(result: RenderedWidget): boolean {
  * One widget in its tile: a title bar (a metric carries its label instead), the body its type draws from its resolved result, and the three states besides drawn: **loading**, **empty** ("No data."), and
  * **error** (the server's code and words: one failing widget never fails the page). Light and dark by the theme; `density` is chosen from the box (a layout's `widget_options` can pin it).
  */
-export function WidgetView({ id, widget, result, loading = false, box, theme = 'auto', options, parameters = {}, definitions = [], onParameterChange, maximized = false, onMaximize, onHit, asOf, stale = false, canDrill = true, sortable = false, onServerSort }: WidgetViewProps) {
+export function WidgetView({ id, widget, result, loading = false, box, theme = 'auto', options, parameters = {}, definitions = [], onParameterChange, maximized = false, onMaximize, onHit, asOf, stale = false, canDrill = true, canFollow = false, sortable = false, onServerSort }: WidgetViewProps) {
   const resolved = useTheme(theme)
   const density: DensityClass = box ? densityClass(widget.type, box, options?.density) : options?.density === 'compact' ? 's' : 'l'
   const titled = widget.title !== undefined && widget.type !== 'metric' && options?.show_title !== false
@@ -71,7 +73,7 @@ export function WidgetView({ id, widget, result, loading = false, box, theme = '
 
   // pointing: only a widget that says what it does when selected or drilled is pointable
   const on = onSelectOf(widget)
-  const pointable = onHit !== undefined && (on !== null || (canDrill && drillOf(widget) !== null)) && (widget.type === 'chart' || widget.type === 'table' || widget.type === 'matrix')
+  const pointable = onHit !== undefined && (on !== null || (canDrill && drillOf(widget) !== null) || (canFollow && clickOf(widget) !== null)) && (widget.type === 'chart' || widget.type === 'table' || widget.type === 'matrix')
   const chosen = selectedOf(widget, parameters)
   const clear = () => {
     if (!on) return
