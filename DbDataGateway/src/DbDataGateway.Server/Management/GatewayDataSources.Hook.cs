@@ -111,7 +111,9 @@ public sealed partial class GatewayDataSources
     /// <summary>The read rules of the route: a publishing client reaches only the data sources it made (a hand-made one is refused, which is how a publisher learns it must adopt).</summary>
     internal void CheckSharedRead(string name, DefinitionsCaller caller)
     {
-        if (Of(caller) is { } called && TextOf(name) is not null && Scope(called, ObjectAction.Change, name) is { } refused) throw Refusal(refused);
+        if (Of(caller) is not { } called || TextOf(name) is null || Scope(called, ObjectAction.Change, name) is not { } refused) return;
+        Record(called, "data-source get", name, "refused");   // the route audits a refused read as it does a refused write
+        throw Refusal(refused);
     }
 }
 
