@@ -277,6 +277,7 @@ public static class CsxPackageBuilder
     }
 
     /// <summary>The kit and what its public surface stands on, as files: <c>DbDataKit.Runner.Kit</c> and every assembly outside the shared framework that it references, transitively.</summary>
+#pragma warning disable IL3000 // Assembly.Location is empty in a single-file app; an assembly without a file is skipped below (Length == 0), so the empty string is handled
     public static IReadOnlyList<string> KitReferences(params Assembly[] also)
     {
         var found = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -294,6 +295,7 @@ public static class CsxPackageBuilder
         }
         return [.. found.Values];
     }
+#pragma warning restore IL3000
 
     /// <summary>The simple names of what <see cref="KitReferences"/> gives: a package of the integration never brings its own copy of these (the task host answers them, so the job and the kit agree on their types).</summary>
     private static IReadOnlySet<string> HostAssemblyNames() => KitReferences().Select(p => Path.GetFileNameWithoutExtension(p)).ToHashSet(StringComparer.OrdinalIgnoreCase);
