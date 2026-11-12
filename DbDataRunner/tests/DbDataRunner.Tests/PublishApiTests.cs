@@ -205,6 +205,28 @@ public sealed class PublishApiTests
     }
 
     [Theory, MemberData(nameof(Engines))]
+    public async Task A_paired_client_describes_a_package_and_a_missing_one_answers_the_404_words_whatever_roles_it_holds(string engine)
+    {
+        await using var h = new RunnerHarness(engine);
+        await h.StartAsync();
+        using var client = await PublisherClient.PairAsync(h, "sync-like", ServerRole.Viewer | ServerRole.Operator | ServerRole.Publisher | ServerRole.Admin);
+        var v1 = FakePackage.Make("orders");
+        await v1.UploadAllAsync(client);
+        Assert.Equal(HttpStatusCode.OK, (await client.JsonAsync(HttpMethod.Put, "/api/v1/definitions/integration/orders", v1.Body("dev", "stage", expected: 0))).Status);
+
+        // the roles a Sync server's pairing signs with (the pairing's ceiling, administrator included), a viewer, and a publisher that is also a viewer
+        foreach (var role in new[] { ServerRole.Viewer | ServerRole.Operator | ServerRole.Publisher | ServerRole.Admin, ServerRole.Viewer, ServerRole.Publisher | ServerRole.Viewer })
+        {
+            var (missing, missingBody) = await client.SendAsync(HttpMethod.Get, "/api/v1/definitions/integration/nothing-here", role: role);
+            Assert.Equal(HttpStatusCode.NotFound, missing);
+            Assert.Equal("There is no integration 'nothing-here'.", Text(missingBody, "error"));
+            var (found, foundBody) = await client.SendAsync(HttpMethod.Get, "/api/v1/definitions/integration/orders", role: role);
+            Assert.Equal(HttpStatusCode.OK, found);
+            Assert.Equal("orders", Text(foundBody, "name"));
+        }
+    }
+
+    [Theory, MemberData(nameof(Engines))]
     public async Task A_stale_expected_version_is_refused_and_an_invalid_package_is_refused_with_the_reason(string engine)
     {
         await using var h = new RunnerHarness(engine);
