@@ -3,66 +3,14 @@ using System.Globalization;
 
 namespace DbDataBuild.Execution;
 
-/// <summary>What `import` reads beyond the shapes <see cref="CatalogReader"/> gives: which schema names exist, and each table's primary key (it seeds a new descriptor's grain). Read session only.</summary>
+/// <summary>
+/// What `import` reads beyond the shapes <see cref="CatalogReader"/> gives: which schema names exist, each table's primary key (it seeds a new descriptor's grain), its foreign keys and its indexes. Read session only. SQL Server, PostgreSQL and DuckDB
+/// are read by the shared catalog readers (<see cref="SharedCatalog"/>); what is written here is the standard-views SQL of an ODBC or Flight SQL source, the Flight SQL and ODBC metadata calls, and DuckDB's indexes.
+/// </summary>
 public static class SourceCatalogReader
 {
-    // sys and INFORMATION_SCHEMA are the engine's; db_* are the schema names of fixed database roles; guest is empty. pg_* are PostgreSQL's catalogs and temp schema names.
-    private const string SqlServerSchemas = "SELECT name FROM sys.schemas WHERE name NOT IN ('sys', 'INFORMATION_SCHEMA', 'guest') AND name NOT LIKE 'db[_]%' ORDER BY name";
-    private const string PostgresSchemas = "SELECT schema_name FROM information_schema.schemata WHERE schema_name <> 'information_schema' AND schema_name NOT LIKE 'pg\\_%' ORDER BY schema_name";
-
-    private const string SqlServerPrimaryKeys = @"
-SELECT o.name, col.name, ic.key_ordinal
-FROM sys.indexes i
-JOIN sys.objects o ON o.object_id = i.object_id
-JOIN sys.schemas s ON s.schema_id = o.schema_id
-JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
-JOIN sys.columns col ON col.object_id = ic.object_id AND col.column_id = ic.column_id
-WHERE i.is_primary_key = 1 AND ic.is_included_column = 0 AND o.type = 'U' AND s.name = @schema
-ORDER BY o.name, ic.key_ordinal";
-
-    private const string PostgresPrimaryKeys = @"
-SELECT t.relname, a.attname, k.ord
-FROM pg_index i
-JOIN pg_class t ON t.oid = i.indrelid
-JOIN pg_namespace n ON n.oid = t.relnamespace
-CROSS JOIN LATERAL unnest(i.indkey::int2[]) WITH ORDINALITY AS k(attnum, ord)
-JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
-WHERE i.indisprimary AND k.ord <= i.indnkeyatts AND n.nspname = @schema
-ORDER BY t.relname, k.ord";
-
-    // one row per column of a foreign key: its table, the key's name, the column, the referenced schema, table and column, and the position in the key
-    private const string SqlServerForeignKeys = @"
-SELECT o.name, fk.name, pc.name, rs.name, ro.name, rc.name, fkc.constraint_column_id
-FROM sys.foreign_keys fk
-JOIN sys.objects o ON o.object_id = fk.parent_object_id
-JOIN sys.schemas s ON s.schema_id = o.schema_id
-JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
-JOIN sys.columns pc ON pc.object_id = fkc.parent_object_id AND pc.column_id = fkc.parent_column_id
-JOIN sys.objects ro ON ro.object_id = fk.referenced_object_id
-JOIN sys.schemas rs ON rs.schema_id = ro.schema_id
-JOIN sys.columns rc ON rc.object_id = fkc.referenced_object_id AND rc.column_id = fkc.referenced_column_id
-WHERE s.name = @schema
-ORDER BY o.name, fk.name, fkc.constraint_column_id";
-
-    private const string PostgresForeignKeys = @"
-SELECT t.relname, c.conname, a.attname, rn.nspname, rt.relname, ra.attname, k.ord
-FROM pg_constraint c
-JOIN pg_class t ON t.oid = c.conrelid
-JOIN pg_namespace n ON n.oid = t.relnamespace
-JOIN pg_class rt ON rt.oid = c.confrelid
-JOIN pg_namespace rn ON rn.oid = rt.relnamespace
-CROSS JOIN LATERAL unnest(c.conkey, c.confkey) WITH ORDINALITY AS k(attnum, refnum, ord)
-JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
-JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = k.refnum
-WHERE c.contype = 'f' AND n.nspname = @schema
-ORDER BY t.relname, c.conname, k.ord";
-
-    // DuckDB: its own schemas are information_schema and pg_catalog (`main` is where tables go when no schema is named); the constraints come from duckdb_constraints(), parameters by position
-    private const string DuckDbSchemas = "SELECT schema_name FROM information_schema.schemata WHERE catalog_name = current_database() AND schema_name NOT IN ('information_schema', 'pg_catalog') ORDER BY schema_name";
-    private const string DuckDbPrimaryKeys = "SELECT table_name, array_to_string(constraint_column_names, chr(31)) FROM duckdb_constraints() WHERE constraint_type = 'PRIMARY KEY' AND database_name = current_database() AND schema_name = ? ORDER BY table_name";
     // duckdb_indexes(): the columns of an index are in the CREATE INDEX text (its `expressions` column is a VARCHAR that spells a list); ART indexes are ascending and cannot be INCLUDE-d
     private const string DuckDbIndexes = "SELECT table_name, index_name, is_unique, sql FROM duckdb_indexes() WHERE database_name = current_database() AND schema_name = ? ORDER BY table_name, index_name";
-    private const string DuckDbForeignKeys = "SELECT table_name, constraint_name, array_to_string(constraint_column_names, chr(31)), referenced_table, array_to_string(referenced_column_names, chr(31)), constraint_text FROM duckdb_constraints() WHERE constraint_type = 'FOREIGN KEY' AND database_name = current_database() AND schema_name = ? ORDER BY table_name, constraint_name";
 
     // A source known by its ODBC driver: the standard views. sys and pg_catalog are the engines' own and are left out whichever engine is behind the driver; every other schema name is the person's to select with the pattern.
     private const string AnsiSchemas = "SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'sys') ORDER BY schema_name";
