@@ -11,6 +11,14 @@ set -u
 # DBDATAKIT_TEST_SKIP_JDBC=false (docs/testing-environment.md, "Fast verifier runs").
 export DBDATAKIT_TEST_SKIP_JDBC="${DBDATAKIT_TEST_SKIP_JDBC:-true}"
 
+# Hard links instead of copies for NuGet assemblies and copied content in bin (dev machines only: CI does not use this script). They need the
+# NuGet cache and the repository on one volume (otherwise MSBuild copies, silently). Set DBDATAKIT_HARDLINKS=false to turn them off. A tool that
+# rewrites a file in bin in place would change the NuGet cache too: tests and tools must write new files, not edit those.
+if [ "${DBDATAKIT_HARDLINKS:-true}" != "false" ]; then
+  export CreateHardLinksForCopyLocalIfPossible=true CreateHardLinksForCopyFilesToOutputDirectoryIfPossible=true \
+         CreateHardLinksForAdditionalFilesIfPossible=true CreateHardLinksForPublishFilesIfPossible=true
+fi
+
 pool="${DBDATAKIT_BUILD_POOL:-}"
 if [ -z "$pool" ]; then
   case "$(basename -- "${1:-}")" in
