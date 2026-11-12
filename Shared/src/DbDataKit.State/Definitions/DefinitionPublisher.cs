@@ -24,7 +24,7 @@ public sealed record DefinitionBinding(string Channel, string Kind, string Name,
 /// <param name="ExpectedVersion">The highest version number the definition has, as the caller saw it (0 for a first publish); null does not check.</param>
 /// <param name="Format">The format of the manifest (24a UC01, numbered from 1 per kind); null takes what the kind reads from the manifest (<see cref="DefinitionKind.FormatOf"/>), or 1.</param>
 public sealed record PublishRequest(string Kind, string Name, string Manifest, string By, string Channel = DefinitionStore.Production, PublishMode? Mode = null, IReadOnlyList<string>? DependsOn = null,
-    string? Note = null, IReadOnlyList<ArtifactRef>? Artifacts = null, string? Progress = null, int? ExpectedVersion = null, int? Format = null);
+    string? Note = null, IReadOnlyList<ArtifactRef>? Artifacts = null, string? Progress = null, int? ExpectedVersion = null, int? Format = null, string? Signature = null, string? Signer = null);
 
 /// <summary>What a publish did: the version, whether anything changed (the same content again changes nothing), and the mode it took.</summary>
 public sealed record PublishResult(DefinitionVersion Version, bool Changed, PublishMode Mode);
@@ -709,11 +709,13 @@ public sealed partial class DefinitionPublisher
     {
         var withProgress = request.Progress is not null;
         using var insert = _database.Command(Module, connection, transaction,
-            $"INSERT INTO {{table:definition_version}} (kind, name, version, hash, content, depends_on, published_by, published_at, note, progress, format) VALUES ($kind, $name, $version, $hash, $content, CAST($depends AS {{{{json}}}}), $by, $now, $note, {(withProgress ? "$progress" : "NULL")}, $format);");
+            $"INSERT INTO {{table:definition_version}} (kind, name, version, hash, content, depends_on, published_by, published_at, note, progress, format, signature, signer) VALUES ($kind, $name, $version, $hash, $content, CAST($depends AS {{{{json}}}}), $by, $now, $note, {(withProgress ? "$progress" : "NULL")}, $format, {(request.Signature is null ? "NULL" : "$signature")}, {(request.Signer is null ? "NULL" : "$signer")});");
         insert.Bind(_database, "format", (long)format);
         insert.Bind(_database, "kind", request.Kind).Bind(_database, "name", request.Name).Bind(_database, "version", (long)number).Bind(_database, "hash", hash).Bind(_database, "content", request.Manifest)
             .Bind(_database, "depends", JsonSerializer.Serialize(request.DependsOn ?? [])).Bind(_database, "by", request.By).Bind(_database, "now", now).Bind(_database, "note", request.Note, System.Data.DbType.String);
         if (withProgress) insert.Bind(_database, "progress", request.Progress);
+        if (request.Signature is not null) insert.Bind(_database, "signature", request.Signature);
+        if (request.Signer is not null) insert.Bind(_database, "signer", request.Signer);
         insert.ExecuteNonQuery();
         foreach (var file in artifacts)
         {

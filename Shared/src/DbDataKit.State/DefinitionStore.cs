@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 namespace DbDataKit.State;
 
 /// <summary>One version of a published definition.</summary>
-public sealed record DefinitionVersion(string Kind, string Name, int Version, string Hash, string Content, IReadOnlyList<string> DependsOn, string PublishedBy, DateTimeOffset PublishedAt, string? Note, int Format = DefinitionFormat.First);
+public sealed record DefinitionVersion(string Kind, string Name, int Version, string Hash, string Content, IReadOnlyList<string> DependsOn, string PublishedBy, DateTimeOffset PublishedAt, string? Note, int Format = DefinitionFormat.First, string? Signature = null, string? Signer = null);
 
 /// <summary>What happened to a definition: <c>publish</c> (a new version, served at once), <c>switch</c> (a channel moved to another version) or <c>rollback</c>.</summary>
 public sealed record DefinitionEvent(long Id, string Action, string Kind, string Name, string Channel, int Version, string ActorId, DateTimeOffset At);
@@ -29,7 +29,7 @@ public sealed partial class DefinitionStore(StateDatabase database) : IDefinitio
 
     private const string Module = DefinitionsModule.Name;
 
-    private const string VersionColumns = "kind, name, version, hash, content, depends_on, published_by, published_at, note, format";
+    private const string VersionColumns = "kind, name, version, hash, content, depends_on, published_by, published_at, note, format, signature, signer";
 
     // the registry a publish goes through (plan 30 PB01); null is the compatibility mode
     private DefinitionKinds? _kinds;
@@ -84,7 +84,7 @@ public sealed partial class DefinitionStore(StateDatabase database) : IDefinitio
         {
             using var connection = database.OpenConnection();
             using var command = database.Command(Module, connection, """
-                SELECT v.kind, v.name, v.version, v.hash, v.content, v.depends_on, v.published_by, v.published_at, v.note, v.format
+                SELECT v.kind, v.name, v.version, v.hash, v.content, v.depends_on, v.published_by, v.published_at, v.note, v.format, v.signature, v.signer
                 FROM {table:definition_serving} s JOIN {table:definition_version} v ON v.kind = s.kind AND v.name = s.name AND v.version = s.version
                 WHERE s.kind = $kind AND s.channel = $channel ORDER BY v.name;
                 """);
@@ -140,7 +140,7 @@ public sealed partial class DefinitionStore(StateDatabase database) : IDefinitio
     }
 
     private static DefinitionVersion Read(DbDataReader reader) =>
-        new(reader.GetString(0), reader.GetString(1), reader.Int32(2), reader.GetString(3), reader.GetString(4), JsonSerializer.Deserialize<string[]>(reader.GetString(5)) ?? [], reader.GetString(6), reader.Time(7), reader.IsDBNull(8) ? null : reader.GetString(8), reader.Int32(9));
+        new(reader.GetString(0), reader.GetString(1), reader.Int32(2), reader.GetString(3), reader.GetString(4), JsonSerializer.Deserialize<string[]>(reader.GetString(5)) ?? [], reader.GetString(6), reader.Time(7), reader.IsDBNull(8) ? null : reader.GetString(8), reader.Int32(9), reader.IsDBNull(10) ? null : reader.GetString(10), reader.IsDBNull(11) ? null : reader.GetString(11));
 
     internal static void Check(string kind, string name, string channel)
     {
