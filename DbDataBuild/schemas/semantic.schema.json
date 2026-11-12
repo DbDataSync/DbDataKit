@@ -51,6 +51,10 @@
         }
       }
     },
+    "access": {
+      "$ref": "#/$defs/access",
+      "description": "Format 2 of the semantic package (plan 22a GP01, QG2): access rules as data. Row rules name a rules table (a table of this catalog on the same source as the table it filters, built by a published Build model), the person or group column and the matched columns; column rules hide, mask or null a column for a person or group. A catalog that has it is published in format 2."
+    },
     "checks": {
       "type": "array",
       "description": "Format 2 of the semantic package (plan 24a UC03): the model's data quality checks, check/1 entries (plan 23a FQ01). Each names the table it is about in dataset (a table of this catalog, or a lineage identity). The loader also refuses what a schema cannot say: a range with min above max, a check id used twice, a referential check with another number of columns than its target.",
@@ -735,6 +739,192 @@
           "additionalProperties": {
             "$ref": "#/$defs/attribute"
           }
+        }
+      }
+    },
+    "access": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_age": {
+          "$ref": "#/$defs/accessAge",
+          "description": "How old the data of a rules table may be: past it, the dataset is refused to everyone it has rules for. Default 1h."
+        },
+        "row": {
+          "type": "array",
+          "description": "Row rules, one entry for each dataset (a table of the catalog, an entity of the model).",
+          "items": {
+            "$ref": "#/$defs/accessDataset"
+          }
+        },
+        "columns": {
+          "type": "array",
+          "description": "Column rules: for a person or group, a column of a dataset is hidden, masked or returned as null.",
+          "items": {
+            "$ref": "#/$defs/accessColumnRule"
+          }
+        }
+      }
+    },
+    "accessAge": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,5}(s|m|h|d)$",
+      "description": "A whole number and s, m, h or d, at most 31d."
+    },
+    "accessId": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$"
+    },
+    "accessMatch": {
+      "enum": [
+        "all",
+        "any"
+      ]
+    },
+    "accessSubjectKind": {
+      "enum": [
+        "group",
+        "person"
+      ],
+      "description": "Whether the subject column of the rules table names groups or people. Default group."
+    },
+    "accessDataset": {
+      "type": "object",
+      "required": [
+        "dataset",
+        "groups"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "dataset": {
+          "type": "string",
+          "minLength": 1
+        },
+        "match": {
+          "$ref": "#/$defs/accessMatch",
+          "description": "How the groups combine. Default all."
+        },
+        "groups": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/accessGroup"
+          }
+        }
+      }
+    },
+    "accessGroup": {
+      "type": "object",
+      "required": [
+        "id",
+        "rules"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/accessId"
+        },
+        "match": {
+          "$ref": "#/$defs/accessMatch",
+          "description": "How the include rules of the group combine; its exclude rules always remove rows. Default all."
+        },
+        "rules": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/accessRule"
+          },
+          "description": "At least one include rule."
+        }
+      }
+    },
+    "accessRule": {
+      "type": "object",
+      "required": [
+        "id",
+        "effect",
+        "table",
+        "subject",
+        "columns"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/accessId"
+        },
+        "effect": {
+          "enum": [
+            "include",
+            "exclude"
+          ]
+        },
+        "table": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The rules table: a table of the same catalog and source as the dataset (in a model, schema.table on the model's connection), built by a published Build model."
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The column of the rules table that names the person or group."
+        },
+        "subject_kind": {
+          "$ref": "#/$defs/accessSubjectKind"
+        },
+        "columns": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Dataset column to rules-table column; several pairs are matched together, with equal values and NULL matching only NULL."
+        },
+        "max_age": {
+          "$ref": "#/$defs/accessAge"
+        }
+      }
+    },
+    "accessColumnRule": {
+      "type": "object",
+      "required": [
+        "subject",
+        "dataset",
+        "column",
+        "treatment"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "subject": {
+          "type": "string",
+          "minLength": 1
+        },
+        "subject_kind": {
+          "$ref": "#/$defs/accessSubjectKind"
+        },
+        "dataset": {
+          "type": "string",
+          "minLength": 1
+        },
+        "column": {
+          "type": "string",
+          "minLength": 1
+        },
+        "treatment": {
+          "enum": [
+            "hide",
+            "mask",
+            "null",
+            null
+          ],
+          "description": "A plain null in YAML is read as the word null, so it is accepted as the treatment `null`."
+        },
+        "mask": {
+          "enum": [
+            "fixed",
+            "hash"
+          ],
+          "description": "For treatment mask only. Default fixed."
         }
       }
     }

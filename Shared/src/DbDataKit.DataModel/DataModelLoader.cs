@@ -23,7 +23,7 @@ public static class DataModelLoader
     public const string BadRule = "DBD-MDL-005";
     public const string BadConstraint = "DBD-MDL-006";
 
-    /// <summary>The newest format this reads (<c>model/2</c>: the sections <c>cache</c> and <c>checks</c>, plan 24a UC03); format 1 is read as well.</summary>
+    /// <summary>The newest format this reads (<c>model/2</c>: the sections <c>cache</c>, <c>access</c> and <c>checks</c>, plan 24a UC03 and plan 22a GP01); format 1 is read as well.</summary>
     public const int Version = 2;
 
     /// <summary>
@@ -52,7 +52,7 @@ public static class DataModelLoader
 
     private sealed class Reader(string file, List<ConfigDiagnostic> diags) : YamlFieldReader(file, diags)
     {
-        private static readonly string[] RootKeysV2 = ["schemaVersion", "name", "title", "storage", "approval", "entities", "cache", "checks"];
+        private static readonly string[] RootKeysV2 = ["schemaVersion", "name", "title", "storage", "approval", "entities", "cache", "access", "checks"];
         private int _schemaVersion = 1;
         private static readonly string[] EntityKeys = ["title", "key", "attributes", "history", "role", "rules"];
         private static readonly string[] AttributeKeys = ["title", "type", "required", "unique", "default", "pattern", "min", "max", "allowed", "references"];
@@ -68,6 +68,8 @@ public static class DataModelLoader
             CheckKeys(map, RootKeysV2, "the model");
             if (!versionOk) return null;
             // the sections of format 2 are refused in a format-1 file with the file, the line and what to change
+            foreach (var entry in map.Entries.Where(e => _schemaVersion < 2 && e.Key.Value is "access"))
+                Diagnostics.Add(DbDataKit.Access.AccessSectionReader.RefusedInFormat1(File, entry.Key, "model/2", "Set `schemaVersion: 2`. A program that reads only model/1 then refuses the file by its version, which keeps it from serving the model without the rules."));
             foreach (var entry in map.Entries.Where(e => _schemaVersion < 2 && e.Key.Value is "cache" or "checks"))
                 Add(CacheNotInThisFormat, entry.Key, $"`{entry.Key.Value}` is a section of format 2 (model/2), and this file says `schemaVersion: {_schemaVersion}`.", "Set `schemaVersion: 2`. A program that reads only model/1 then refuses the file by its version, which keeps it from serving the model without the section.");
 
@@ -92,8 +94,12 @@ public static class DataModelLoader
             var cache = map.Get("cache") is { } cacheNode && _schemaVersion >= 2 ? CacheSection.Read(cacheNode, File, Diagnostics) : null;
             if (cache is { Enabled: true } enabled) CheckCacheable(map.Get("cache")!, enabled, entities);
             var checks = map.Get("checks") is { } checksNode && _schemaVersion >= 2 ? CheckSection.Read(checksNode, File, Diagnostics) : null;
+            // the access section (plan 22a GP01, QG2) is checked against the entities, their attributes and the model's connection
+            var access = map.Get("access") is { } accessNode && _schemaVersion >= 2 && name is not null && connection is not null
+                ? DbDataKit.Access.AccessSectionReader.Read(accessNode, File, Diagnostics, new ModelAccessTarget(name, connection, entities, cache))
+                : null;
             if (name is null || connection is null) return null;
-            return new DataModel(name, title, connection, approval, entities, instances, AgentWritesOf(map), _schemaVersion, cache, checks);
+            return new DataModel(name, title, connection, approval, entities, instances, AgentWritesOf(map), _schemaVersion, cache, checks, access);
         }
 
         /// <summary>A dataset that cannot be cached is refused when the cache is turned on for it (24a UC03): an entity that keeps effective-dated history is read while writes of future and past versions are in flight, so a cached read could answer for a state that no longer holds.</summary>
