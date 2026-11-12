@@ -175,7 +175,7 @@ public sealed class StateSettingsWriterTests : IDisposable
         var path = File("a: [1, 2\nstate:\n  engine: sqlite\n");
         var before = System.IO.File.ReadAllBytes(path);
 
-        var ex = Assert.Throws<InvalidOperationException>(() => new StateSettingsWriter().Write(path, new StateSettings("sqlite")));
+        var ex = Assert.Throws<InvalidOperationException>(() => new StateSettingsWriter().Write(path, new StateSettings(StateEngineIds.Sqlite)));
 
         Assert.Contains(path, ex.Message);
         Assert.Equal(before, System.IO.File.ReadAllBytes(path));

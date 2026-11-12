@@ -225,9 +225,9 @@ public sealed class StateSnapshotServiceTests : IDisposable
     public async Task Refusals_are_typed_and_name_the_fix()
     {
         // no SQLite path, and a SQLite file that is not there
-        var noPath = await Assert.ThrowsAsync<StateServiceException>(() => Export(new StateEndpoint(new StateSettings("sqlite")), NewDirectory()));
+        var noPath = await Assert.ThrowsAsync<StateServiceException>(() => Export(new StateEndpoint(new StateSettings(StateEngineIds.Sqlite)), NewDirectory()));
         Assert.Equal(StateServiceRefusal.SqlitePathMissing, noPath.Reason);
-        var missing = await Assert.ThrowsAsync<StateServiceException>(() => Export(new StateEndpoint(new StateSettings("sqlite"), Path.Combine(_scratch.Directory, "nothing.db")), NewDirectory()));
+        var missing = await Assert.ThrowsAsync<StateServiceException>(() => Export(new StateEndpoint(new StateSettings(StateEngineIds.Sqlite), Path.Combine(_scratch.Directory, "nothing.db")), NewDirectory()));
         Assert.Equal(StateServiceRefusal.SourceMissing, missing.Reason);
         Assert.Contains("nothing.db", missing.Message);
 
