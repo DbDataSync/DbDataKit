@@ -11,7 +11,7 @@ namespace DbDataKit.State;
 /// <b>Retention.</b> A settled message (<c>sent</c> or <c>dead</c>) and its attempts go after the state default of 30 days (<see cref="HistoryDays"/>), and the payloads that belonged to it with them (the retention job's orphan rule);
 /// a message that is still <c>pending</c> or <c>sending</c> is current work and is never removed by age.
 /// </para>
-/// <para>Scope: one copy per install. Migrations are appended, never edited. Migration 2 (plan 22a GP17) adds <c>subscription</c> and <c>subscription_run</c>; migration 3 (the GP18 fold of the channels into connections) adds <c>message.release_channel</c>.</para>
+/// <para>Scope: one copy per install. Migrations are appended, never edited. Migration 2 (plan 22a GP17) adds <c>subscription</c> and <c>subscription_run</c>; migration 3 (the GP18 fold of the channels into connections) adds <c>message.release_channel</c>; migration 4 (GP16) adds <c>alert_rule</c> and <c>alert_state</c>.</para>
 /// </summary>
 public static class DeliveryModule
 {
@@ -133,6 +133,33 @@ public static class DeliveryModule
         -- The release channel a message was written in (plan 21: prod, test, dev ...): the delivery channel name of a message is bound to a connection per release channel (the delivery: section), so the same name reaches a sandbox from a test channel
         -- and production only from prod. NULL (a message from before this column) is prod.
         ALTER TABLE {table:message} {{addcolumn}} release_channel {{key}} NULL;
+        """,
+        """
+        -- Alerts (plan 22a GP16). alert_rule: one row per kind of alert (failed-run, late-data, approvals-waiting, expiring-preview): enabled is 1 or 0; channel is the delivery channel the alert goes to (NULL: the notification feed only);
+        -- recipients a JSON list of addresses (a webhook channel ignores them); cooldown_minutes how long a source stays quiet after an alert; release_channel the release channel the message is written in (NULL: prod).
+        -- alert_state: what was last sent for one source (a job, a dataset, a preview ...) to one recipient (the channel's own address is '*'): status failing (an alert went out and the source has not recovered) or ok (the recovery went out);
+        -- last_sent_at is what the cool-down counts from; last_message the sentence sent.
+        CREATE TABLE {table:alert_rule} (
+            kind             {{key}} PRIMARY KEY,
+            enabled          {{int}} NOT NULL,
+            channel          {{key}} NULL,
+            recipients       {{json}} NULL,
+            cooldown_minutes {{int}} NOT NULL,
+            release_channel  {{key}} NULL,
+            updated_at       {{time}} NOT NULL,
+            row_version      {{int}} NOT NULL
+        );
+        CREATE TABLE {table:alert_state} (
+            source        {{key}} NOT NULL,
+            recipient     {{key}} NOT NULL,
+            kind          {{key}} NOT NULL,
+            status        {{key}} NOT NULL,
+            last_sent_at  {{time}} NOT NULL,
+            last_message  {{text}} NULL,
+            row_version   {{int}} NOT NULL,
+            PRIMARY KEY (source, recipient)
+        );
+        CREATE INDEX {index:alert_state_by_kind} ON {table:alert_state}(kind, status);
         """,
     ];
 
