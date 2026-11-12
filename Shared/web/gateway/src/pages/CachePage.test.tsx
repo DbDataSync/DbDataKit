@@ -54,6 +54,13 @@ describe('the cache words', () => {
     const events = { ...overview().events, received: 2, cleared: 5, last_at: '2026-11-12T10:00:00Z', last_product: 'build', last_dataset: 'sql/x' }
     expect(eventsText(events, new Date('2026-11-12T10:05:00Z'))).toBe('2 data changes reported, the last 5 min ago by build for sql/x; 5 entries cleared in all.')
   })
+
+  it('say that a change for a dataset this Gateway does not serve was heard and cleared nothing', () => {
+    const only = { ...overview().events, ignored: 3 }
+    expect(eventsText(only)).toContain('No data change for what this Gateway serves has been reported. 3 more were about datasets this Gateway does not serve and cleared nothing.')
+    const both = { ...overview().events, received: 1, cleared: 2, ignored: 1, last_at: '2026-11-12T10:00:00Z', last_product: 'sync', last_dataset: 'sql/x' }
+    expect(eventsText(both, new Date('2026-11-12T10:00:10Z'))).toBe('1 data change reported, the last 10 s ago by sync for sql/x; 2 entries cleared in all. 1 more was about datasets this Gateway does not serve and cleared nothing.')
+  })
 })
 
 describe('the cache screen', () => {
