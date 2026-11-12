@@ -30,7 +30,7 @@ public delegate void DefinitionsAuditor(string verb, DefinitionsCaller caller, s
 /// through <paramref name="changed"/> so it applies it at once. Framework-free: the host maps the routes and hands over the body text.
 /// </summary>
 public sealed partial class DefinitionsApi(DefinitionPublisher publisher, DefinitionStore store, DefinitionKinds kinds, PayloadStore payloads, IGroupSettings settings, string targetType, DefinitionsAuditor? audit = null, Action<string, string, string>? changed = null,
-    long maxArtifactBytes = 512L * 1024 * 1024)
+    long maxArtifactBytes = 512L * 1024 * 1024, IVersionSignatureVerifier? verifier = null, SignaturePolicy? policy = null, DefinitionTrustStore? trust = null)
 {
     public const string PayloadOwner = "publish";
 
@@ -40,7 +40,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
     [GeneratedRegex("^[a-z0-9][a-z0-9_-]{0,63}$")]
     private static partial Regex ChannelRule();
 
-    public static bool Handles(string route) => route.StartsWith("definitions/", StringComparison.Ordinal) || route.StartsWith("bindings/", StringComparison.Ordinal) || route.StartsWith("artifacts/", StringComparison.Ordinal) || route == "definitions";
+    public static bool Handles(string route) => route.StartsWith("definitions/", StringComparison.Ordinal) || route.StartsWith("bindings/", StringComparison.Ordinal) || route.StartsWith("artifacts/", StringComparison.Ordinal) || route == "definitions" || route.StartsWith("trust/", StringComparison.Ordinal) || route.StartsWith("settings/signatures/", StringComparison.Ordinal) || route == "settings/group";
 
     private static DefinitionsResult Error(int status, string message, string? code = null) =>
         new(status, new JsonObject { ["error"] = message, ["code"] = code ?? (status switch { 400 => "invalid", 403 => "denied", 404 => "not_found", 409 => "refused", 413 => "too_large", _ => "error" }), ["message"] = message });
@@ -117,6 +117,11 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
             if (parts is ["definitions", var k, var name] && method == "GET") return Describe(k, name, caller);
             if (parts is ["definitions", var k2, var n2] && method == "PUT") return Publish(k2, n2, body, caller);
             if (parts is ["definitions", var k3, var n3, var act] && method == "POST") return Act(k3, n3, act, body, caller);
+            if (parts is ["trust", var tk] && method == "GET") return Trust(tk, caller);
+            if (parts is ["trust", var tk2, "keys"] && method == "PUT") return AddKey(tk2, body, caller);
+            if (parts is ["trust", var tk3, var keyId, "revoke"] && method == "POST") return RevokeKey(tk3, keyId, caller);
+            if (parts is ["settings", "signatures", var sk] && method == "PUT") return RequireSignatures(sk, body, caller);
+            if (parts is ["settings", "group"] && method == "PUT") return GroupMode(body, caller);
             if (parts is ["bindings", var channel, var k4, var n4] && method == "PUT") return Bind(channel, k4, n4, body, caller);
             if (parts is ["bindings", var channel2, var k5, var n5, var slot] && method == "DELETE") return Unbind(channel2, k5, n5, slot, caller);
             return Error(404, "There is no such call.");
@@ -237,15 +242,23 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
                 files.Add(new ArtifactRef(path, sha.ToLowerInvariant(), bytes, Text(f, "media_type"), Sha256Rule().IsMatch(sha.ToLowerInvariant()) ? Find(sha.ToLowerInvariant()) : null));
             }
 
+        var verdict = (verifier ?? new NoSignatureVerifier()).Verify(new VersionSignatureRequest(kind, name, manifest, files, Text(json, "signature")));
+        if (verdict.State == SignatureState.Invalid || (verdict.State != SignatureState.Verified && policy?.Required(kind) == true))
+        {
+            var why = verdict.State == SignatureState.Invalid ? $"the signature is refused: {verdict.Message}" : $"this group requires signed versions of {kind} and the {kind} '{name}' has no signature (publish it signed with a key an administrator trusts for {kind}, or have an administrator turn signatures off for {kind})";
+            audit?.Invoke("definition.publish", caller, kind, name, channel, "refused", new { reason = why, signature = verdict.Word });
+            return Error(403, why.Length > 0 ? char.ToUpperInvariant(why[0]) + why[1..] + "." : why, "signature_" + verdict.Word);
+        }
+
         var depends = json["depends_on"] is JsonArray d ? d.Select(x => x?.GetValue<string>() ?? "").ToList() : [];
         var existed = store.Versions(kind, name).Count > 0;
         try
         {
-            var result = publisher.Publish(new PublishRequest(kind, name, manifest, caller.Actor, channel, mode, depends, Text(json, "note"), files, ExpectedVersion: expected, Format: format));
+            var result = publisher.Publish(new PublishRequest(kind, name, manifest, caller.Actor, channel, mode, depends, Text(json, "note"), files, ExpectedVersion: expected, Format: format, Signature: verdict.State == SignatureState.Verified ? Text(json, "signature") : null, Signer: verdict.Signer));
             if (!existed && !caller.Admin && caller.ClientId is not null) settings.Put(OwnerKey(kind, name), caller.ClientId);
-            audit?.Invoke("definition.publish", caller, kind, name, channel, "ok", new { version = result.Version.Version, mode = result.Mode.ToString().ToLowerInvariant(), changed = result.Changed, files = files.Count });
+            audit?.Invoke("definition.publish", caller, kind, name, channel, "ok", new { version = result.Version.Version, mode = result.Mode.ToString().ToLowerInvariant(), changed = result.Changed, files = files.Count, signature = verdict.Word, signer = verdict.Signer });
             changed?.Invoke(kind, name, channel);
-            return new(200, new JsonObject { ["kind"] = kind, ["name"] = name, ["channel"] = channel, ["version"] = result.Version.Version, ["changed"] = result.Changed, ["mode"] = result.Mode.ToString().ToLowerInvariant(), ["depends_on"] = new JsonArray([.. depends.Select(x => (JsonNode)JsonValue.Create(x)!)]) });
+            return new(200, new JsonObject { ["kind"] = kind, ["name"] = name, ["channel"] = channel, ["version"] = result.Version.Version, ["changed"] = result.Changed, ["signature"] = verdict.Word, ["mode"] = result.Mode.ToString().ToLowerInvariant(), ["depends_on"] = new JsonArray([.. depends.Select(x => (JsonNode)JsonValue.Create(x)!)]) });
         }
         catch (Exception ex) when (ex is PublishRefusedException or DefinitionRejectedException or DefinitionConflictException)
         {
@@ -348,5 +361,69 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
         audit?.Invoke("definition.unbind", caller, kind, name, channel, "ok", new { slot, removed });
         if (removed) changed?.Invoke(kind, name, channel);
         return new(200, new JsonObject { ["kind"] = kind, ["name"] = name, ["channel"] = channel, ["slot"] = slot, ["removed"] = removed });
+    }
+
+    // ---- the trust store and the signature policy (PB03)
+
+    private DefinitionsResult? NeedAdmin(string verb, DefinitionsCaller caller, string kind) => caller.Admin ? null : Refuse(verb, caller, kind, "-", "-", "this needs the admin role");
+
+    private DefinitionsResult Trust(string kind, DefinitionsCaller caller)
+    {
+        if (CheckKind(kind) is { } bad) return bad;
+        if (!caller.Admin && !caller.Viewer && !caller.Publisher) return Error(403, "This needs the viewer role.");
+        return new(200, new JsonObject
+        {
+            ["kind"] = kind, ["required"] = policy?.Required(kind) ?? false, ["test_group"] = policy?.IsTestGroup ?? false,
+            ["keys"] = new JsonArray([.. (trust?.List(kind) ?? []).Select(k => (JsonNode)new JsonObject { ["key_id"] = k.KeyId, ["label"] = k.Label, ["added_by"] = k.AddedBy, ["added_at"] = k.AddedAt.UtcDateTime.ToString("O"), ["revoked"] = k.Revoked, ["revoked_by"] = k.RevokedBy })]),
+        });
+    }
+
+    private DefinitionsResult AddKey(string kind, string? body, DefinitionsCaller caller)
+    {
+        if (CheckKind(kind) is { } bad) return bad;
+        if (NeedAdmin("definition.trust", caller, kind) is { } denied) return denied;
+        if (trust is null) return Error(404, "This host keeps no trust store.");
+        var json = Json(body, out var badJson);
+        if (json is null) return badJson!;
+        var key = Text(json, "public_key") is { } text ? Url.Decode(text) : null;
+        if (key is not { Length: 32 }) return Error(400, "The body is {\"public_key\": \"<the 32-byte Ed25519 public key, base64url>\", \"label\": \"...\"}.");
+        var added = trust.Add(kind, key, Text(json, "label"), caller.Actor);
+        audit?.Invoke("definition.trust", caller, kind, "-", "-", "ok", new { key_id = added.KeyId });
+        return new(200, new JsonObject { ["kind"] = kind, ["key_id"] = added.KeyId, ["revoked"] = added.Revoked });
+    }
+
+    private DefinitionsResult RevokeKey(string kind, string keyId, DefinitionsCaller caller)
+    {
+        if (CheckKind(kind) is { } bad) return bad;
+        if (NeedAdmin("definition.revoke", caller, kind) is { } denied) return denied;
+        if (trust is null) return Error(404, "This host keeps no trust store.");
+        var revoked = trust.Revoke(kind, keyId, caller.Actor);
+        audit?.Invoke("definition.revoke", caller, kind, "-", "-", revoked ? "ok" : "refused", new { key_id = keyId });
+        return revoked ? new(200, new JsonObject { ["kind"] = kind, ["key_id"] = keyId, ["revoked"] = true }) : Error(404, $"There is no key {keyId} of {kind} to revoke (or it is revoked already).");
+    }
+
+    private DefinitionsResult RequireSignatures(string kind, string? body, DefinitionsCaller caller)
+    {
+        if (CheckKind(kind) is { } bad) return bad;
+        if (NeedAdmin("definition.signatures", caller, kind) is { } denied) return denied;
+        if (policy is null) return Error(404, "This host keeps no signature policy.");
+        var json = Json(body, out var badJson);
+        if (json is null) return badJson!;
+        if (json["required"] is not JsonValue v || !v.TryGetValue<bool>(out var required)) return Error(400, "The body is {\"required\": true}.");
+        policy.Set(kind, required);
+        audit?.Invoke("definition.signatures", caller, kind, "-", "-", "ok", new { required });
+        return new(200, new JsonObject { ["kind"] = kind, ["required"] = required });
+    }
+
+    private DefinitionsResult GroupMode(string? body, DefinitionsCaller caller)
+    {
+        if (NeedAdmin("definition.group", caller, "-") is { } denied) return denied;
+        if (policy is null) return Error(404, "This host keeps no signature policy.");
+        var json = Json(body, out var badJson);
+        if (json is null) return badJson!;
+        if (Text(json, "mode") is not ("test" or "production")) return Error(400, "The body is {\"mode\": \"test\"} or {\"mode\": \"production\"}.");
+        policy.MarkTestGroup(Text(json, "mode") == "test");
+        audit?.Invoke("definition.group", caller, "-", "-", "-", "ok", new { mode = Text(json, "mode") });
+        return new(200, new JsonObject { ["mode"] = Text(json, "mode") });
     }
 }

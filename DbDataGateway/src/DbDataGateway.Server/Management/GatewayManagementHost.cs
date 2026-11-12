@@ -171,6 +171,16 @@ public static class GatewayManagementHost
 
         // the server upgrades itself when the console says so (plan 24a UC09); its own route wins over the catch-all below
         DbDataKit.Upgrade.UpgradeSetup.MapUpgrade(app, "dbdatagateway", GatewayHost.Version, "DbDataGateway", options.Management.Port, audit, () => [.. clients.All().Select(c => new DbDataKit.Upgrade.PeerGeneration(c.Name, c.Generation))]);
+        // the shared publish API's uploads (plan 30 PB02): streamed, so they are not the JSON calls below
+        var definitionsApi = new DbDataGateway.Server.Management.GatewayDefinitionsManagement(state, audit);
+        app.MapMethods($"{GatewayManagement.Prefix}/artifacts/{{sha256}}", ["HEAD", "PUT"], async (string sha256, HttpContext context) =>
+        {
+            var caller = new ManagementCaller(context.ManagementToken());
+            if (context.Request.Method == "HEAD")
+                return caller.Holds(ServerRole.Viewer) || caller.Holds(ServerRole.Publisher) ? (definitionsApi.HasArtifact(sha256) ? Results.Ok() : Results.NotFound()) : Results.StatusCode(StatusCodes.Status403Forbidden);
+            var result = await definitionsApi.StoreArtifactAsync(sha256, context.Request.Body, context.Request.ContentType, caller, context.RequestAborted);
+            return Results.Json(result.Body, statusCode: result.Status);
+        });
         app.MapMethods($"{GatewayManagement.Prefix}/{{**rest}}", ["GET", "POST", "PUT", "DELETE"], async (HttpContext context) =>
         {
             var caller = new ManagementCaller(context.ManagementToken());
