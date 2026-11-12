@@ -246,6 +246,12 @@ public static class GatewayHost
             services.AddHostedService(sp => sp.GetRequiredService<GatewayStoreModule>());
             services.AddSingleton<IReadinessProbe>(sp => new ServingModuleReadinessProbe(sp.GetRequiredService<GatewayStoreModule>()));
         }
+        if (GatewayModules.Has(options, GatewayModules.Mcp))
+        {
+            services.AddSingleton<GatewayMcpModule>();
+            services.AddHostedService(sp => sp.GetRequiredService<GatewayMcpModule>());
+            services.AddSingleton<IReadinessProbe>(sp => new ServingModuleReadinessProbe(sp.GetRequiredService<GatewayMcpModule>()));
+        }
         if (GatewayModules.Has(options, GatewayModules.Views))
         {
             services.AddSingleton<GatewayViewsModule>();

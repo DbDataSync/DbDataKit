@@ -153,6 +153,9 @@ public sealed class StoreCallers(StateDatabase state, Func<string> serverId, Ope
 
     public StoreCaller? Authenticate(string? authorization) => Identify(authorization) is { } user ? CallerOf(user) : null;
 
+    /// <summary>The caller an enabled home user is now, with the roles the home gives them now (a call that runs later, for a person who asked earlier, is checked again as that person), or null.</summary>
+    public StoreCaller? CallerFor(string userId) => UserOf(userId) is { } user ? CallerOf(user) : null;
+
     private StoreCaller CallerOf(UserRecord user)
     {
         var roles = new HomeDirectory(state).RolesOn(user.Id, serverId()).Roles;

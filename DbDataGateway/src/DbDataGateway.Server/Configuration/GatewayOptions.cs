@@ -72,6 +72,8 @@ public sealed class GatewayOptions
 
     public ViewsModuleOptions Views { get; set; } = new();
 
+    public McpModuleOptions Mcp { get; set; } = new();
+
     public ListenOptions Listen { get; set; } = new();
     public TlsOptions Tls { get; set; } = new();
 
@@ -319,6 +321,21 @@ public sealed class StoreModuleOptions
 
     [ConfigKey(Min = 1, Max = 65535)]
     public int Port { get; set; } = 8819;
+}
+
+/// <summary>The <c>mcp</c> module (plan 20 O12): where it listens, and how long a step an agent asked for waits for a person.</summary>
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class McpModuleOptions
+{
+    /// <summary>Where it listens: every address by default, since agents call it.</summary>
+    public string Address { get; set; } = "0.0.0.0";
+
+    [ConfigKey(Min = 1, Max = 65535)]
+    public int Port { get; set; } = 8821;
+
+    /// <summary>How long, in minutes, a step with an effect waits for a person before it is expired (never run).</summary>
+    [ConfigKey(Min = 1, Max = 10080)]
+    public int ApprovalMinutes { get; set; } = 60;
 }
 
 /// <summary>The <c>views</c> module (plan 32, DBR11b): where it listens. Published dashboards and reports are read and rendered here, as the identity home's people, through the models published to the group.</summary>
