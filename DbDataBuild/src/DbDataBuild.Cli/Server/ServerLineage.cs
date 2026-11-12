@@ -122,7 +122,7 @@ internal static class ServerLineage
     }
 
     /// <summary>The logins the server stores (when it has a secret store; one is never made for this) over the process's environment.</summary>
-    private static async Task<Func<string, string?>> EnvironmentAsync(string directory, CancellationToken token)
+    internal static async Task<Func<string, string?>> EnvironmentAsync(string directory, CancellationToken token)
     {
         IReadOnlyDictionary<string, string> logins = new Dictionary<string, string>();
         if (Directory.Exists(DbDataKit.Secrets.Store.SecretKeys.StoreDirectory(directory)))

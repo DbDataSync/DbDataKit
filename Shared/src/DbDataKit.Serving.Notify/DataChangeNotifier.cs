@@ -237,3 +237,18 @@ public sealed class DataChangeNotifier : IDataChangeNotifier, IAsyncDisposable
         _stop.Dispose();
     }
 }
+
+/// <summary>A logger for a server that has no logging pipeline of its own (Build, Sync's command line): each warning or information line goes to the line sink the server writes its own messages to.</summary>
+public sealed class LineLogger(Action<string> line) : ILogger
+{
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => logLevel is LogLevel.Information or LogLevel.Warning or LogLevel.Error or LogLevel.Critical;
+
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    {
+        if (!IsEnabled(logLevel)) return;
+        try { line(formatter(state, exception)); }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException) { /* the sink is gone (the server is stopping) */ }
+    }
+}
