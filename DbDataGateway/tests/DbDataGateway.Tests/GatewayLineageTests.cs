@@ -126,6 +126,16 @@ public sealed class GatewayLineageTests : IDisposable
     }
 
     [Fact]
+    public void The_last_read_of_a_table_is_a_run_along_its_serves_edge_and_a_table_nothing_read_has_none()
+    {
+        var graph = GatewayLineageGraph.Design("gw1", Sources(), [Model()], Resolve, [Read("fact_sales")], readers: false);
+        var run = Assert.Single(GatewayLineageGraph.Runs(graph));
+        Assert.Equal((EdgeKind.Serves, RunOutcome.Succeeded, DateTimeOffset.Parse("2026-11-12T09:30:00Z"), "suite://gw1/data-source/sqlserver_sales"), (run.Kind, run.Outcome, run.At, run.To));
+        Assert.Contains(graph.Edges, e => e.Key == run.EdgeKey);                          // a run only along an edge the graph has
+        Assert.Empty(GatewayLineageGraph.Runs(GatewayLineageGraph.Design("gw1", Sources(), [Model()], Resolve, [], readers: false)));
+    }
+
+    [Fact]
     public void Who_read_a_table_is_told_to_an_administrator_and_to_no_one_else()
     {
         var graph = GatewayLineageGraph.Design("gw1", Sources(), [], Resolve, [Read("fact_sales")], readers: false);

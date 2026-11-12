@@ -183,6 +183,20 @@ public static class GatewayLineageGraph
     private static ConnectionDefinition Placeholder(string name, DataSourceOptions options) =>
         new() { Name = name, Engine = options.Provider.ToLowerInvariant(), Address = new AddressSpec { Host = "unresolved-" + name } };
 
+    /// <summary>
+    /// The newest run of each <c>serves</c> edge that statements used (plan 18, G10b): the last read of the table, laid along the edge from the table to its data source, as a run that succeeded (the Gateway counts statements and not rows, so it
+    /// has no row count). Read from the node's <c>last_read</c>; an edge nothing read has no run.
+    /// </summary>
+    public static IReadOnlyList<EdgeRun> Runs(LineageGraph graph)
+    {
+        var runs = new List<EdgeRun>();
+        foreach (var edge in graph.Edges.Where(e => e.Kind == EdgeKind.Serves && e.Confidence == Confidence.Observed))
+            if (graph.Node(edge.From)?.PropertyMap.GetValueOrDefault("last_read") is { } text
+                && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var at))
+                runs.Add(new EdgeRun(edge.From, edge.To, EdgeKind.Serves, at, RunOutcome.Succeeded));
+        return runs;
+    }
+
     /// <summary>A physical table as the catalog writes it (<c>marts.fct_sales</c>, <c>[dbo].[orders]</c>, <c>"S"."T"</c>) as its schema and table.</summary>
     internal static (string? Schema, string Table) Split(string physical)
     {
@@ -215,7 +229,9 @@ public sealed class GatewayLineage(Func<GatewayOptions> options, Func<IEnumerabl
         if (!caller.Holds(ServerRole.Viewer)) return ManagementResult.Problem(403, "This call needs the viewer role.");
         try
         {
-            var body = LineageJson.Write(Build(caller.Holds(ServerRole.Admin), out var notes));
+            var graph = Build(caller.Holds(ServerRole.Admin), out var notes);
+            var body = LineageJson.Write(graph);
+            body["runs"] = LineageJson.WriteRuns(GatewayLineageGraph.Runs(graph));
             if (notes.Count > 0) body["problems"] = new JsonArray([.. notes.Select(n => (JsonNode)JsonValue.Create(n)!)]);
             return ManagementResult.Ok(body);
         }

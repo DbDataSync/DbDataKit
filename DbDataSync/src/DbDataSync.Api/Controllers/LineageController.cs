@@ -21,6 +21,17 @@ public sealed class LineageController(ConfigRepository configRepository, TaskRun
     /// <summary>The owner of Sync's graph in its own lineage store.</summary>
     public const string Owner = "sync";
 
+    /// <summary>
+    /// How often an edge should run, for the rule <c>Overdue</c> (plan 18 G10b): a replication that loops with a frequency (`Continuous`, `FrequencySeconds`) says how often it passes, and the edge is late after two of them (one pass missed is not yet late); a replication on a cron
+    /// expression has no fixed interval to be late at.
+    /// </summary>
+    internal static Func<EdgeRun, TimeSpan?> ExpectedEvery(LineageGraph graph, IReadOnlyList<SyncReplication> replications)
+    {
+        var every = replications.Where(r => r.Task.Scheduling is { Mode: ScheduleMode.Continuous, FrequencySeconds: > 0 }).ToDictionary(r => r.Task.Name, r => TimeSpan.FromSeconds(2.0 * r.Task.Scheduling.FrequencySeconds!.Value), StringComparer.Ordinal);
+        var detail = graph.Edges.Where(e => e.Kind == EdgeKind.Replicates && e.Granularity == Granularity.Table && e.Detail is { } d && d.Contains('/')).ToDictionary(e => e.Key, e => e.Detail![..e.Detail!.IndexOf('/')], StringComparer.Ordinal);
+        return run => detail.TryGetValue(run.EdgeKey, out var task) && every.TryGetValue(task, out var span) ? span : null;
+    }
+
     [Authorize(Policies.Viewer)]
     [HttpGet]
     public ActionResult<JsonObject> Get()
@@ -48,7 +59,7 @@ public sealed class LineageController(ConfigRepository configRepository, TaskRun
             document["problems"] = new JsonArray(problems.Select(p => (JsonNode)JsonValue.Create(p)!).ToArray());
             runs = SyncLineageRuns.Runs(graph, taskRunStore);
         }
-        document["runs"] = LineageJson.WriteRuns(runs);
+        document["runs"] = LineageJson.WriteRuns(LineageFreshness.Mark(runs, ExpectedEvery(graph, replications)));
         return Ok(document);
     }
 }

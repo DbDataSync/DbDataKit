@@ -47,7 +47,13 @@ public sealed class ConsoleGatewayLineageTests : IAsyncLifetime
     {
         sync = await PairableServer.StartAsync(product: "dbdatasync", instanceId: "sync-1", map: (server, _, _) => server.MapGet("/api/lineage", () => Results.Json(LineageJson.Write(SyncGraph()))));
         build = await PairableServer.StartAsync(product: "dbdatabuild", instanceId: "build-1", map: (server, _, _) => server.MapGet("/api/v1/lineage", () => Results.Json(LineageJson.Write(BuildGraph()))));
-        gateway = await PairableServer.StartAsync(product: "dbdatagateway", instanceId: "gateway-1", map: (server, _, _) => server.MapGet("/api/v1/lineage", () => Results.Json(LineageJson.Write(GatewayGraph()))));
+        gateway = await PairableServer.StartAsync(product: "dbdatagateway", instanceId: "gateway-1", map: (server, _, _) => server.MapGet("/api/v1/lineage", () =>
+        {
+            // what the Gateway sends: its graph and the last read of a served table as a run along its edge, with the lateness its product says (G10b)
+            var document = LineageJson.Write(GatewayGraph());
+            document["runs"] = LineageJson.WriteRuns([new EdgeRun(Model, Source, EdgeKind.Serves, new DateTimeOffset(2026, 11, 12, 9, 30, 0, TimeSpan.Zero), RunOutcome.Succeeded, Late: true)]);
+            return Results.Json(document);
+        }));
         app = ConsoleHost.Build(new ConsoleSettings(directory, new Uri("https://localhost:0")), ConsoleHost.Certificate(directory), _ => { }, webRoot: Path.Combine(directory, "none"));
         await app.StartAsync();
         http = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true, UseCookies = false }) { BaseAddress = new Uri(app.Urls.First()) };
@@ -92,6 +98,9 @@ public sealed class ConsoleGatewayLineageTests : IAsyncLifetime
         Assert.Contains(Crm + "#amount", provenance["reached"]!.AsArray().Select(r => (string)r!["id"]!));
         var impact = await Get($"/api/lineage?node={Uri.EscapeDataString(Crm + "#amount")}&direction=downstream");
         Assert.Contains(Served, impact["reached"]!.AsArray().Select(r => (string)r!["id"]!));
+        // the run overlay: the Gateway's run comes through the join with the lateness its server said
+        var run = Assert.Single(LineageJson.ReadRuns(body));
+        Assert.Equal((Model, Source, EdgeKind.Serves, true), (run.From, run.To, run.Kind, run.Late));
         Assert.Equal(["Build one", "Gateway one", "Sync one"], body["servers"]!.AsArray().Select(s => (string)s!["server"]!));
     }
 }
