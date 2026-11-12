@@ -276,7 +276,7 @@ function Well({ id, spec, widget, doc, catalog, put, change, apply }: { id: stri
           const entryRef = refs.find((r) => r.well === spec.id && r.index === i)
           return (
             <li key={`${f}-${i}`} data-testid={`${test}-entry-${i}`} className="row" style={{ gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-              <code>{isGroup ? `group ${f.slice(1).replace('#always', '')}${f.endsWith('#always') ? ' (details of every row)' : ''}` : f}</code>
+              <code>{isGroup ? `group ${f.slice(1).replace(/#(always|drill)$/, '')}${f.endsWith('#always') ? ' (details of every row)' : f.endsWith('#drill') ? ' (a row that expands)' : ''}` : f}</code>
               {problem && <span className="hint" role="alert" data-testid={`${test}-flag-${i}`}>{problem.code}: {problem.message}</span>}
               {spec.multiple && <button type="button" className="btn btn-sm" aria-label={`Move ${f} up`} data-testid={`${test}-up-${i}`} disabled={i === 0} onClick={() => change(spec, { op: 'move', from: i, to: i - 1 })}>Up</button>}
               {spec.multiple && <button type="button" className="btn btn-sm" aria-label={`Move ${f} down`} data-testid={`${test}-down-${i}`} disabled={i === fields.length - 1} onClick={() => change(spec, { op: 'move', from: i, to: i + 1 })}>Down</button>}
@@ -295,6 +295,7 @@ function Well({ id, spec, widget, doc, catalog, put, change, apply }: { id: stri
             {spec.kind !== 'measure' && <optgroup label="Attributes">{offered.filter((m) => catalog.attributes.includes(m)).map((m) => <option key={m.name} value={m.name}>{m.label ? `${m.label} (${m.name})` : m.name}</option>)}</optgroup>}
             {takesGroup && <optgroup label="Groups">{groups.map((g) => <option key={g} value={`@${g}`}>{`group ${g}`}</option>)}</optgroup>}
             {takesGroup && spec.id === 'rows' && widget.type === 'matrix' && <optgroup label="Details of every row">{groups.map((g) => <option key={g} value={`@${g}#always`}>{`details: ${g}`}</option>)}</optgroup>}
+            {takesGroup && spec.id === 'rows' && widget.type === 'matrix' && <optgroup label="Details of a row that expands">{groups.map((g) => <option key={g} value={`@${g}#drill`}>{`expandable: ${g}`}</option>)}</optgroup>}
           </select>
         )}
         <input aria-label={`Type a field for ${spec.label}`} data-testid={`${test}-type`} placeholder="or type a name" style={{ width: 130 }} value={typed} onChange={(e) => setTyped(e.target.value)}

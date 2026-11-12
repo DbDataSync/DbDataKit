@@ -236,7 +236,7 @@ and a chart channel's `title` or a column's `label`; an **attribute** entry (in 
 **icon map** (a value and an icon of the closed vocabulary, added and removed one at a time), the **many** policy (a matrix entry), its **link** (a choice among the document's declared links) and a matrix entry's label. Each change is
 a `setPath` of that entry, so it is one undo step, and what is wrong is said in the loaders' words as it is typed. The **document settings** hold the **field groups**: a group's levels (each with a date format, up, down, remove, one
 to add), its label and template, and the loaders' words about it; a group a widget names is not removed (the editor says which widget). A group is put in a well by the pick list (**Groups**; for the rows of a matrix also **Details of
-every row**). The pure parts (`entryParts.ts`, `wells.ts`) are `@dbdatakit/visuals` and are tested against the goldens: the chart of two series of one measure, the matrix with a status per month and the line over a group built through
+every row** and **Details of a row that expands**, DBR55). The pure parts (`entryParts.ts`, `wells.ts`) are `@dbdatakit/visuals` and are tested against the goldens: the chart of two series of one measure, the matrix with a status per month and the line over a group built through
 the controls are the golden widgets (`entryParts.test.ts`); the screens are `WidgetEditor.tsx` and `GroupEditor.tsx` of `@dbdatakit/views-editor` (`entries.test.tsx`, the story `views-editor-entries.spec.ts`, written and not run).
 
 #### Drill detail groups: a row that expands (DBR55)

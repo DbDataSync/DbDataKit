@@ -42,6 +42,7 @@ describe('the entry controls', () => {
     expect(out).toContain('group detail (details of every row)')
     expect(out).toContain('group period')
     expect(out).toContain('<option value="@period#always">details: period</option>')
+    expect(out).toContain('<option value="@period#drill">expandable: period</option>')
     // a group is flagged by no member problem and has no options of its own
     expect(out).not.toContain('ed-entry-m-rows-1-options')
     // a chart's x takes the group but not as details (that is for the rows of a matrix)
