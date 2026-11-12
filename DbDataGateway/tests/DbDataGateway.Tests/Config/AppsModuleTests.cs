@@ -53,7 +53,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
     private const string Manifest = "schemaVersion: 1\nname: notes\nversion: 1.0.0\nentry: index.html\nroles: [viewer]\nmodels:\n  - model: territories\n    entities: {territory: [read, write]}\n";
 
     /// <summary>The state is made before the host is (as an operator's commands would): a person with a role on one app, an app published, and the client the apps host signs in with, registered at the home.</summary>
-    private (string ClientId, string Ada, string Bob, StateDatabase Database) Prepare()
+    private (string ClientId, string Ada, string Bob, StateDatabase Database) Prepare(string? manifest = null)
     {
         var database = GatewayState.Open(dataDirectory);
         var users = new IdentityUserStore(database);
@@ -61,7 +61,7 @@ public sealed class AppsModuleTests : IAsyncLifetime
         var bob = users.CreateUser("Bob Babbage", "bob@example.invalid", UserRole.Viewer).Id;
         new HomeDirectory(database).AssignApp(AssignmentSubject.User(ada), "acme", ServerRole.Viewer);
         var store = new AppInstanceStore(new DefinitionStore(database));
-        store.PublishApp(new AppPackage(Manifest, new Dictionary<string, byte[]>
+        store.PublishApp(new AppPackage(manifest ?? Manifest, new Dictionary<string, byte[]>
         {
             ["index.html"] = Encoding.UTF8.GetBytes("<html><head></head><body>hello notes</body></html>"), ["app.js"] = "1"u8.ToArray(),
         }), "ada");
@@ -254,6 +254,84 @@ public sealed class AppsModuleTests : IAsyncLifetime
 
         var bobSession = await SignInAsync(apps, home, database, bob, "/apps/acme/");
         Assert.Equal(HttpStatusCode.Forbidden, (await PostTokenAsync(apps, "acme", bobSession)).StatusCode);   // no role on the app, no token
+    }
+
+    private const string PagesManifest = """
+        schemaVersion: 1
+        name: notes
+        version: 1.0.0
+        entry: index.html
+        roles: [viewer]
+        semantic: [sales]
+        views:
+          - name: orders-grid
+            kind: widget
+            export: OrdersGrid
+            queries:
+              orders: {semantic: {model: sales, request: {measures: [orders.net_revenue]}}}
+          - name: plain
+            kind: page
+            export: Plain
+            title: Plain page
+          - name: detail
+            kind: page
+            export: Detail
+            formats: [pdf, png]
+            params:
+              - {name: region, type: string, required: true}
+            queries:
+              orders: {semantic: {model: sales, request: {measures: [orders.net_revenue]}}}
+        """;
+
+    [Fact]
+    public async Task A_custom_page_is_served_at_its_address_to_the_people_with_a_role_and_its_rows_are_fetched_by_the_shell_as_the_person()
+    {
+        appsPort = FreePort();
+        var (clientId, ada, bob, database) = Prepare(PagesManifest);
+        var (apps, home) = await StartAsync(clientId);
+        Assert.Equal(HttpStatusCode.Redirect, (await GetAsync(apps, "/apps/acme/_views/plain")).StatusCode);   // nobody signed in: to the home
+        var session = await SignInAsync(apps, home, database, ada, "/apps/acme/");
+
+        var page = await GetAsync(apps, "/apps/acme/_views/plain?x=1", session);
+        Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+        var html = await page.Content.ReadAsStringAsync();
+        Assert.Contains("data-view-page=\"plain\"", html);
+        Assert.Contains("src=\"/apps/acme/_app/#view=Plain&amp;mode=screen\"", html);
+        Assert.Contains("frame-src 'self'", string.Join(' ', page.Headers.GetValues("Content-Security-Policy")));
+        Assert.Equal(HttpStatusCode.NotFound, (await GetAsync(apps, "/apps/acme/_views/orders-grid", session)).StatusCode);   // a widget has no address
+        Assert.Equal(HttpStatusCode.NotFound, (await GetAsync(apps, "/apps/acme/_views/nothing", session)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await GetAsync(apps, "/apps/globex/_views/plain", session)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await GetAsync(apps, "/apps/acme/_views/plain", await SignInAsync(apps, home, database, bob, "/apps/acme/"))).StatusCode);
+
+        async Task<HttpResponseMessage> Rows(string path, string? cookie, bool shell = true)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, path);
+            if (cookie is not null) request.Headers.Add("Cookie", $"{AppsEndpoints.SessionCookie}={cookie}");
+            if (shell) request.Headers.Add("X-DbData-Shell", "1");
+            return await apps.SendAsync(request);
+        }
+        Assert.Equal(HttpStatusCode.BadRequest, (await Rows("/apps/acme/_views/plain/_rows", session, shell: false)).StatusCode);   // not from the shell page
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Rows("/apps/acme/_views/plain/_rows", null)).StatusCode);
+        var rows = await Rows("/apps/acme/_views/plain/_rows", session);
+        Assert.Equal(HttpStatusCode.OK, rows.StatusCode);
+        Assert.Equal("""{"data":{},"params":{}}""", await rows.Content.ReadAsStringAsync());   // no declared query, no rows: the page's own text
+        Assert.Equal("no-store", string.Join(' ', rows.Headers.GetValues("Cache-Control")));
+
+        var missing = await Rows("/apps/acme/_views/detail/_rows", session);
+        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        Assert.Contains("needs the parameter `region`", (string)JsonNode.Parse(await missing.Content.ReadAsStringAsync())!["message"]!);
+        // the declared query runs as Ada through the serving core, which has no model 'sales' on this Gateway: the core's own refusal, in its words, not an empty page
+        var refused = await Rows("/apps/acme/_views/detail/_rows?region=West", session);
+        Assert.Contains((int)refused.StatusCode, new[] { 403, 404, 422 });
+        var refusal = JsonNode.Parse(await refused.Content.ReadAsStringAsync())!;
+        Assert.Contains("orders", (string)refusal["message"]!);
+
+        // the instance feed lists the pages by their manifest entries
+        var feed = JsonNode.Parse(await (await GetAsync(apps, AppsEndpoints.CatalogPath, session)).Content.ReadAsStringAsync())!;
+        var pages = feed["instances"]![0]!["pages"]!.AsArray();
+        Assert.Equal(["plain", "detail"], pages.Select(p => (string)p!["name"]!));
+        Assert.Equal("/apps/acme/_views/detail", (string)pages[1]!["address"]!);
+        Assert.Equal(["pdf", "png"], pages[1]!["formats"]!.AsArray().Select(f => (string)f!));
     }
 
     private async Task<(int Exit, string Out, string Error)> Command(params string[] args)
