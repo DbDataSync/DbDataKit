@@ -20,7 +20,7 @@ namespace DbDataGateway.Server.Serving;
 /// A data source that answers with the caller's own database login (pass-through) cannot hold rules: the Gateway has no login of its own to read the rules table with, so a model with rules on one is refused.
 /// </summary>
 public sealed class GatewayAccess(DataSourceCatalog sources, Func<GatewayOptions> options, Func<SemanticModels> models, IRulesTableLedger ledger, Func<string, string, string?> lineageIdentity, IAuditLog? audit = null,
-    ILogger? log = null, TimeProvider? time = null) : ISemanticAccess
+    ILogger? log = null, TimeProvider? time = null, Func<IReadOnlyCollection<ServedEntityModel>>? entityModels = null) : ISemanticAccess
 {
     private readonly TimeProvider _time = time ?? TimeProvider.System;
     private readonly DataSourceCatalog _sources = sources;
@@ -83,6 +83,11 @@ public sealed class GatewayAccess(DataSourceCatalog sources, Func<GatewayOptions
             if (hit) touched.Add(GatewayCachePolicy.ModelPrefix + model.Name);
         }
 
+        // the rules table of a Store model's entity (plan 22a GP11): its age starts again too, and the names it holds are read again; an entity read is never cached, so there is nothing to clear
+        foreach (var served in entityModels?.Invoke() ?? [])
+            foreach (var table in served.Model.Access?.RulesTables().Keys ?? (IEnumerable<string>)[])
+                if (lineageIdentity(served.DataSource, table) is { } identity && string.Equals(identity, notice.Dataset, StringComparison.OrdinalIgnoreCase))
+                    ledger.Changed(StoreEntityAccess.TableKey(served.DataSource, table), notice.At > _time.GetUtcNow() ? _time.GetUtcNow() : notice.At, notice.Product, "data.changed " + notice.Dataset);
         return touched;
     }
 

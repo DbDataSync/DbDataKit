@@ -22,7 +22,7 @@ public sealed record StoreAnswer(int Status, JsonNode Body)
 /// and the apps host answers an app's data calls with it in the same process (O08c), so both follow the same rules. Every call names who makes it (<see cref="StoreCaller"/>): viewer reads, author writes, a change request
 /// when the model asks for approval of the caller's writes, and its decision as the model says. The data source the model was published with (O04b) is opened for each call.
 /// </summary>
-public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime secrets, PublishedEntityModels models, GroupChangeRequests requests)
+public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime secrets, PublishedEntityModels models, GroupChangeRequests requests, StoreEntityAccess? access = null)
 {
     /// <summary>The model's default copy is the one the group serves; models with copies of their own (instances) are not served by the group yet.</summary>
     public const string DefaultCopy = "default";
@@ -38,12 +38,12 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
     }
 
     /// <summary>
-    /// An entity with row rules (plan 22a GP11, QG2) is not read through this API yet: the filter on the Store's own reads needs the caller's groups, which a <see cref="StoreCaller"/> does not carry, so the read is refused (D2) and never served unfiltered.
-    /// Writes keep the Store's roles and approval (QR6).
+    /// An entity with row rules (plan 22a GP11, QG2) is read through the filter of the caller's rules (<see cref="StoreEntityAccess"/>): the reads of the Store apply it (a row the caller may not read is not there: not in a list, and a get, an as-of read or a
+    /// history of it answers not found, so existence is never revealed). A server that has no resolver refuses such an entity (D2): it is never served unfiltered. Writes keep the Store's roles and approval (QR6).
     /// </summary>
-    private static StoreAnswer? RowRulesRefusal(ServedEntityModel served, string entity) =>
-        served.Model.Access?.RowRulesOf(entity) is null ? null
-            : StoreAnswer.Error(403, $"`{entity}` of the model '{served.Model.Name}' has row rules, and this server does not apply them to a read of an entity yet, so the rows are not served (plan 22a GP11).");
+    private StoreAnswer? RowRulesRefusal(ServedEntityModel served, string entity) =>
+        !StoreEntityAccess.Limits(served, entity) || access is not null ? null
+            : StoreAnswer.Error(403, $"`{entity}` of the model '{served.Model.Name}' has row rules, and this server cannot apply them to a read of an entity, so the rows are not served (plan 22a GP11).");
 
     /// <summary>The key attributes of an entity of a published model, or the problem (an action's single `key` value needs a one-field key).</summary>
     public (IReadOnlyList<string>? Key, StoreAnswer? Problem) KeyOf(string name, string entity)
@@ -95,7 +95,8 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
     }
 
     /// <summary>One row by its key (<c>key.&lt;attribute&gt;</c>); <c>as_of</c> the version that held then; <c>history=true</c> every version.</summary>
-    public async Task<StoreAnswer> RowAsync(StoreCaller caller, string name, string entity, IReadOnlyDictionary<string, string> query, CancellationToken cancellationToken, string? draft = null)
+    /// <param name="forWrite">The read is the first half of a write (an action that asks for the version it will change): the Store's own rules decide who may write (QR6), so the row rules of the caller do not apply to it.</param>
+    public async Task<StoreAnswer> RowAsync(StoreCaller caller, string name, string entity, IReadOnlyDictionary<string, string> query, CancellationToken cancellationToken, string? draft = null, bool forWrite = false)
     {
         if (Needs(caller, ServerRole.Viewer) is { } denied) return denied;
         var (served, missing) = Served(name, entity);
@@ -105,7 +106,12 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
         return await WithWriter(served!, async writer =>
         {
             if (query.GetValueOrDefault("history") == "true")
-                return StoreAnswer.Ok(new JsonObject { ["versions"] = new JsonArray([.. (await writer.HistoryAsync(entity, key, cancellationToken)).Select(r => (JsonNode)RowJson.Row(r))]) });
+            {
+                var versions = await writer.HistoryAsync(entity, key, cancellationToken);
+                // a row the caller may not read has no history for them either: not found, as for a row that was never there
+                if (versions.Count == 0 && StoreEntityAccess.Limits(served!, entity)) return StoreAnswer.Error(404, $"`{entity}` has no such row.");
+                return StoreAnswer.Ok(new JsonObject { ["versions"] = new JsonArray([.. versions.Select(r => (JsonNode)RowJson.Row(r))]) });
+            }
             StoredRow? row;
             if (query.GetValueOrDefault("as_of") is { Length: > 0 } asOf)
             {
@@ -114,7 +120,7 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
             }
             else row = await writer.GetAsync(entity, key, cancellationToken);
             return row is null ? StoreAnswer.Error(404, $"`{entity}` has no such row.") : StoreAnswer.Ok(RowJson.Row(row));
-        }, cancellationToken, draft);
+        }, cancellationToken, draft, readAs: forWrite ? null : caller);
     }
 
     /// <summary>A page of rows in key order: <c>limit</c> (100) and <c>offset</c> (0).</summary>
@@ -126,9 +132,14 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
         if (RowRulesRefusal(served!, entity) is { } ruled) return ruled;
         if (!int.TryParse(query.GetValueOrDefault("limit") is { Length: > 0 } l ? l : "100", out var limit) || !int.TryParse(query.GetValueOrDefault("offset") is { Length: > 0 } o ? o : "0", out var offset))
             return StoreAnswer.Error(400, "limit and offset are whole numbers.");
+        var limited = StoreEntityAccess.Limits(served!, entity);
         return await WithWriter(served!, async writer =>
-            StoreAnswer.Ok(new JsonObject { ["rows"] = new JsonArray([.. (await writer.ListAsync(entity, limit, offset, cancellationToken)).Select(r => (JsonNode)RowJson.Row(r))]), ["limit"] = limit, ["offset"] = offset }),
-            cancellationToken, draft);
+        {
+            var answer = new JsonObject { ["rows"] = new JsonArray([.. (await writer.ListAsync(entity, limit, offset, cancellationToken)).Select(r => (JsonNode)RowJson.Row(r))]), ["limit"] = limit, ["offset"] = offset };
+            // an entity with row rules also says how many rows the caller may read in all (the count is over the filter, never the table's)
+            if (limited) answer["total"] = await writer.CountAsync(entity, cancellationToken);
+            return StoreAnswer.Ok(answer);
+        }, cancellationToken, draft, readAs: caller);
     }
 
     /// <summary>
@@ -305,7 +316,7 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
     }
 
     /// <summary>Opens the model's data source (published with it, O04b) and runs <paramref name="work"/> with a writer on the model's tables; the writer's refusals become the answers a DbDataStore server gives.</summary>
-    private async Task<StoreAnswer> WithWriter(ServedEntityModel served, Func<ModelWriter, Task<StoreAnswer>> work, CancellationToken cancellationToken, string? draft = null)
+    private async Task<StoreAnswer> WithWriter(ServedEntityModel served, Func<ModelWriter, Task<StoreAnswer>> work, CancellationToken cancellationToken, string? draft = null, StoreCaller? readAs = null)
     {
         var current = options();
         if (!current.DataSources.TryGetValue(served.DataSource, out var source))
@@ -320,8 +331,12 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
         {
             await using DbConnection connection = engine == "sqlserver" ? new Microsoft.Data.SqlClient.SqlConnection(text) : new Npgsql.NpgsqlConnection(text);
             await connection.OpenAsync(cancellationToken);
-            return await work(new ModelWriter(served.Model, connection, engine, schema: served.Model.Name, draft: draft));
+            var writer = new ModelWriter(served.Model, connection, engine, schema: served.Model.Name, draft: draft);
+            // a read is made as the caller: their row rules are resolved now, before the writer opens a transaction of its own (a write is never filtered, QR6)
+            if (readAs is not null && access is not null && served.Model.Access is { Row.Count: > 0 }) writer.ReadAccess = access.For(served, readAs, writer);
+            return await work(writer);
         }
+        catch (StoreReadRefusedException refused) { return StoreAnswer.Error(403, refused.Message); }
         catch (WriteRefusedException refused) { return new StoreAnswer(422, RowJson.Refusal(refused)); }
         catch (VersionConflictException conflict) { return new StoreAnswer(409, new JsonObject { ["error"] = conflict.Message, ["expected_version"] = conflict.Expected, ["current_version"] = conflict.Current }); }
         catch (RowNotFoundException ex) { return StoreAnswer.Error(404, ex.Message); }

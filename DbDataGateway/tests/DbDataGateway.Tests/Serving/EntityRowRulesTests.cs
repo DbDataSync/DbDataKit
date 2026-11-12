@@ -39,7 +39,7 @@ public sealed class EntityRowRulesTests : IDisposable
         """;
 
     [Fact]
-    public async Task An_entity_with_row_rules_is_refused_to_a_read_and_one_without_is_not()
+    public async Task A_server_with_no_resolver_refuses_an_entity_with_row_rules_and_never_serves_it_unfiltered()
     {
         var layout = StateLayout.Create(StateEngineIds.Sqlite, [DefinitionsModule.Module], new StateScope(Group: "main"));
         var models = new PublishedEntityModels(new DefinitionStore(new StateDatabase(file, layout)));

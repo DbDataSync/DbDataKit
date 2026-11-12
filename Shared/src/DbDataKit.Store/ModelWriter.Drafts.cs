@@ -50,7 +50,7 @@ public sealed partial class ModelWriter
     }
 
     /// <summary>The same copy of the model without the draft: the real data.</summary>
-    public ModelWriter WithoutDraft() => new(_model, _connection, _engine, _clock, _schema, _instance, draft: null);
+    public ModelWriter WithoutDraft() => new(_model, _connection, _engine, _clock, _schema, _instance, draft: null) { ReadAccess = ReadAccess };
 
     /// <summary>Every change of the draft in order (the entries that still apply and the ones that do not): what submitting proposes.</summary>
     public async Task<IReadOnlyList<RowChange>> DraftChangesAsync(CancellationToken cancellationToken = default) =>

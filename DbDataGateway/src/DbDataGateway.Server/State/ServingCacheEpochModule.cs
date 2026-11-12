@@ -139,6 +139,11 @@ public sealed class RulesTableLedger(StateDatabase database, TimeProvider? time 
     private const string Module = ServingCacheEpochModule.Name;
     private const int KeyLength = 400;
 
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<StateDatabase, RulesTableLedger> PerState = new();
+
+    /// <summary>The one ledger of a state in this process: a change noted through it is seen at once by every reader of the same state (the semantic path and the Store's entity reads both ask it).</summary>
+    public static RulesTableLedger For(StateDatabase database, TimeProvider? time = null) => PerState.GetValue(database, d => new RulesTableLedger(d, time));
+
     /// <summary>How long a read of the state is believed.</summary>
     public static readonly TimeSpan ReadFor = TimeSpan.FromSeconds(2);
 
