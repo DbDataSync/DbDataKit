@@ -234,6 +234,20 @@ public static class WorkspaceManagement
             catch (ProjectKindUnavailableException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
         });
 
+        // the lineage of a Build draft, column by column (plan 33 SC20h): `project show graph --columns` on the draft, offline and read only
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/lineage", async (string project, string id, HttpContext context) =>
+        {
+            if (CompilerOf(project, id, context, out var compiler, out var root) is { } refused) return refused;
+            var body = await Body(context);
+            const string Shape = "The body is a JSON object with an optional \"column\" (model.column) to follow up and down.";
+            string? column;
+            try { column = body?["column"]?.GetValue<string>(); }
+            catch (Exception ex) when (ex is InvalidOperationException or FormatException) { return Results.Json(new { error = Shape }, statusCode: StatusCodes.Status400BadRequest); }
+            if (column is not null && !BuildProjectKind.IsColumnRef(column)) return Results.Json(new { error = Shape }, statusCode: StatusCodes.Status400BadRequest);
+            try { return Results.Json(ToolJson(await compiler.LineageAsync(root, column, context.RequestAborted))); }
+            catch (ProjectKindUnavailableException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
+        });
+
         app.MapPost("/api/v1/projects/{project}/workspaces/{id}/sample", async (string project, string id, HttpContext context) =>
         {
             if (CompilerOf(project, id, context, out var compiler, out var root) is { } refused) return refused;

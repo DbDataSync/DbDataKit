@@ -16,10 +16,10 @@ internal static class FakeBuild
         var path = Path.Combine(folder, "dbdatabuild");
         var script = """
             #!/bin/bash
-            verb="$1 $2"; out=""; root="."; pkg="orders-set"; dest=""; to="runner"; content=0; rows=50; seed=1; limit=20; models=""
+            verb="$1 $2"; out=""; root="."; pkg="orders-set"; dest=""; to="runner"; content=0; rows=50; seed=1; limit=20; models=""; third="$3"; col=""
             if [ "$1 $2 $3" = "project create starter" ]; then dest="$4"; mkdir -p "$dest/rendered" "$dest/models"; printf 'schema: dbdatabuild.project/2\ntitle: starter\n' > "$dest/dbdatabuild.yml"; printf 'cron: "*/15 * * * *"\n' > "$dest/rendered/refresh.plan.yaml"; echo "{}"; exit 0; fi
             if [ "$verb" = "project compile" ] || [ "$verb" = "project sample" ]; then shift; shift; fi
-            while [ $# -gt 0 ]; do case "$1" in --out) out="$2"; shift;; --project) root="$2"; shift;; --package) pkg="$2"; shift;; --to) to="$2"; shift;; --content) content=1;; --rows) rows="$2"; shift;; --seed) seed="$2"; shift;; --limit) limit="$2"; shift;; models/*) models="$models $1";; esac; shift; done
+            while [ $# -gt 0 ]; do case "$1" in --out) out="$2"; shift;; --project) root="$2"; shift;; --package) pkg="$2"; shift;; --to) to="$2"; shift;; --content) content=1;; --column) col="$2"; shift;; --rows) rows="$2"; shift;; --seed) seed="$2"; shift;; --limit) limit="$2"; shift;; models/*) models="$models $1";; esac; shift; done
             if [ "$verb" = "project compile" ]; then
               if grep -q 'broken' "$root/models/marts/orders.sql" 2>/dev/null; then echo '{"ok":false,"diagnostics":[{"code":"DDB-301","severity":"error","title":"A table is not defined","found":"nowhere","location":{"file":"models/marts/orders.sql","line":1}}],"data":{}}'; exit 1; fi
               if [ "$content" = "1" ]; then echo '{"ok":true,"data":{"files":[{"path":"rendered/sqlserver/orders.sql","hash":"h","content":"-- lowered\nSELECT 1 AS id"}]},"diagnostics":[]}'; exit 0; fi
@@ -29,6 +29,13 @@ internal static class FakeBuild
             if [ "$verb" = "project sample" ]; then
               if grep -q 'broken' "$root/models/marts/orders.sql" 2>/dev/null; then echo '{"ok":false,"diagnostics":[{"code":"DDB-301","severity":"error","title":"A table is not defined","found":"nowhere","location":{"file":"models/marts/orders.sql","line":1}}],"data":{}}'; exit 1; fi
               echo "{\"ok\":true,\"data\":{\"seed\":$seed,\"tables\":[{\"name\":\"marts.orders\",\"kind\":\"view\",\"origin\":null,\"columns\":[{\"name\":\"id\",\"type\":\"BIGINT\"}],\"row_count\":$rows,\"rows\":[[\"1\"],[\"2\"]],\"error\":null,\"warnings\":[\"models:$models limit:$limit\"]}]},\"diagnostics\":[]}"; exit 0
+            fi
+            if [ "$verb" = "project show" ] && [ "$third" = "graph" ]; then
+              if grep -q 'broken' "$root/models/marts/orders.sql" 2>/dev/null; then echo '{"ok":false,"exit_code":1,"data":{},"diagnostics":[{"code":"DDB-301","severity":"error","title":"A table is not defined","found":"nowhere","location":{"file":"models/marts/orders.sql","line":1}}],"errors":[]}'; exit 1; fi
+              if [ "$col" = "nosuch.x" ]; then echo '{"ok":false,"exit_code":2,"data":{},"diagnostics":[],"errors":["`nosuch` has no column `x` (a model of the project, and one of its declared columns)."]}'; exit 2; fi
+              lineage='null'
+              if [ -n "$col" ]; then lineage="{\"column\":\"$col\",\"upstream\":[{\"table\":\"staging.orders\",\"column\":\"order_id\",\"distance\":1}],\"downstream\":[]}"; fi
+              echo "{\"ok\":true,\"exit_code\":0,\"data\":{\"nodes\":[{\"name\":\"staging.orders\",\"category\":\"model\",\"kind\":\"table\",\"level\":0,\"file\":\"models/staging/orders.sql\",\"connections\":[\"sqlserver\"]},{\"name\":\"marts.orders\",\"category\":\"model\",\"kind\":\"table\",\"level\":1,\"file\":\"models/marts/orders.sql\",\"connections\":[\"sqlserver\"]}],\"edges\":[{\"from\":\"staging.orders\",\"to\":\"marts.orders\"}],\"unknown_tables\":[],\"column_edges\":[{\"from_table\":\"staging.orders\",\"from_column\":\"order_id\",\"to_model\":\"marts.orders\",\"to_column\":\"order_id\",\"transform\":\"direct\"}],\"column_lineage\":$lineage,\"diagram\":null},\"diagnostics\":[],\"errors\":[]}"; exit 0
             fi
             if [ "$verb" = "project show" ]; then
               if grep -q 'garbage' "$root/dbdatabuild.yml"; then echo '{"diagnostics":[{"code":"DDB-101","severity":"error","title":"The project file does not parse","found":"garbage","location":{"file":"dbdatabuild.yml","line":3}}]}'; exit 1; fi

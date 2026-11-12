@@ -32,6 +32,11 @@ public interface IDraftCompiler
 
     Task<DraftSampleResult> SampleAsync(string root, IReadOnlyList<string> modelPaths, int rows, int seed, int limit, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The lineage of the draft as <c>project show graph --columns</c> computes it offline (plan 33 SC20h): the models and their edges and, for each built model, which column of which table every output column comes from; with
+    /// <paramref name="column"/> (<c>model.column</c>, checked by the caller with <see cref="BuildProjectKind.IsColumnRef"/>) also what that column comes from and what is built from it, step by step. Read only.
+    /// </summary>
+    Task<DraftToolResult> LineageAsync(string root, string? column, CancellationToken cancellationToken);
 }
 
 public sealed partial class BuildProjectKind
@@ -151,6 +156,31 @@ public sealed partial class BuildProjectKind
             var diagnostics = DiagnosticsOf(document, exit, error);
             JsonNode? data = DataOf(document).TryGetProperty("tables", out var tables) ? new JsonObject { ["tables"] = JsonNode.Parse(tables.GetRawText()) } : null;
             return new(!diagnostics.Any(d => d.IsError) && data is not null, diagnostics, data);
+        }
+    }
+
+    /// <summary>Whether <paramref name="column"/> is <c>model.column</c> in the form the tool takes: no separator but the dots, no <c>..</c>, so it can never start with <c>-</c> or name a path.</summary>
+    public static bool IsColumnRef(string? column) =>
+        column is { Length: > 2 and <= 300 } && !column.StartsWith('-') && !column.StartsWith('.') && !column.EndsWith('.') && !column.Contains("..", StringComparison.Ordinal)
+        && column.All(c => char.IsLetterOrDigit(c) || c is '_' or '.' or '-' or '$') && column.Contains('.');
+
+    public async Task<DraftToolResult> LineageAsync(string root, string? column, CancellationToken cancellationToken)
+    {
+        if (tool.Find() is null) throw new ProjectKindUnavailableException(BuildTool.Missing);
+        var arguments = new List<string> { "project", "show", "graph", "--columns", "--project", root };
+        if (column is not null) arguments.AddRange(["--column", column]);
+        var (document, exit, error) = await RunToolAsync(arguments, root, cancellationToken);
+        using (document)
+        {
+            if (document is null) return new(false, [Failed(exit, error)], null);
+            var diagnostics = ReadDiagnostics(document.RootElement);
+            // a command that was used wrongly (a column the project does not have, exit 2) says why in the document's `errors`, not in its diagnostics
+            if (document.RootElement.ValueKind == JsonValueKind.Object && document.RootElement.TryGetProperty("errors", out var said) && said.ValueKind == JsonValueKind.Array)
+                foreach (var line in said.EnumerateArray().Select(e => e.GetString()).Where(e => !string.IsNullOrWhiteSpace(e)))
+                    diagnostics.Add(new("error", "DBD-WS-BUILD-LINEAGE", line!));
+            if (exit != 0 && !diagnostics.Any(d => d.IsError)) diagnostics.Add(Failed(exit, error));
+            JsonNode? data = DataOf(document).ValueKind == JsonValueKind.Object ? JsonNode.Parse(DataOf(document).GetRawText()) : null;
+            return new(exit == 0 && !diagnostics.Any(d => d.IsError) && data is not null, diagnostics, data);
         }
     }
 }

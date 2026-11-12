@@ -4,6 +4,7 @@ import { GraphView } from '@dbdatakit/build/graph'
 import { workspaceApi } from '../api'
 import { graphOfLoads, type LoadGraph } from '../buildGraph'
 import { planFilesOf } from '../buildPlan'
+import { BuildLineagePanel } from './BuildLineagePanel'
 
 /** The load graph without its query, so a test can draw it: the picture Build draws (`GraphView`), over the graph read from the draft's compiled plan, and a sentence for whatever could not be shown. */
 export function LoadGraphView({ graph, connections }: { graph: LoadGraph; connections: number }) {
@@ -31,6 +32,7 @@ export function BuildGraphPanel({ project, id, paths }: { project: string; id: s
     <>
       <ErrorBanner error={texts.error} />
       <LoadGraphView graph={graphOfLoads(texts.data ?? [])} connections={files.length} />
+      <BuildLineagePanel project={project} id={id} />
     </>
   )
 }

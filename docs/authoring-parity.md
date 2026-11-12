@@ -12,10 +12,10 @@ Summary (counts of the features below):
 
 | Product | built | partly | missing | not planned | features |
 | --- | --- | --- | --- | --- | --- |
-| Build | 16 | 3 | 0 | 6 | 25 |
+| Build | 17 | 2 | 0 | 6 | 25 |
 | Store | 7 | 0 | 0 | 3 | 10 |
 | Sync | 13 | 4 | 1 | 3 | 21 |
-| All | 36 | 7 | 1 | 12 | 56 |
+| All | 37 | 6 | 1 | 12 | 56 |
 
 ### Build
 
@@ -45,7 +45,7 @@ Summary (counts of the features below):
 | Publish a semantic model to a Gateway | `build/src/pages/ModelPublish.tsx` | `workspace/src/pages/PublishForm.tsx`, `BuildsPanel.tsx` (a `gateway` target: the build's compiled semantic models, made offline by `dbdatabuild project publish --to gateway --out`, over the data sources the Gateway has under the connections' names) | built | SC20e |
 | Publish the project's data sources (connection, read login as a secret, grants) to a Gateway; hand a data source over | `build/src/pages/PublishTab.tsx` | none: it puts a login on a Gateway, and the Workspace holds none (D20, the option not taken); the offline publish names data sources the Gateway already has, which an administrator or Build's server makes | not planned | SC20e |
 | Dashboards and reports of a project: list, new, check, publish (Views tab) | `build/src/pages/ViewsTab.tsx` | `workspace/src/pages/BuildViewsPanel.tsx` (list, new, edit with `@dbdatakit/views-editor`, check findings; the wells offer the measures and dimensions of the draft's own `semantic/*.yml`, read offline); no publish to a Gateway (with SC20e) | partly | SC20n |
-| Lineage: the model graph; column lineage is the console's Lineage page, which reads Build servers | `build/src/pages/ProjectPage.tsx` (`GraphTab`); console Lineage page | `workspace/src/pages/BuildGraphPanel.tsx` (model level only) | partly | SC20h |
+| Lineage: the model graph; column lineage is the console's Lineage page, which reads Build servers | `build/src/pages/ProjectPage.tsx` (`GraphTab`); console Lineage page | `workspace/src/pages/BuildGraphPanel.tsx` (the model level), `BuildLineagePanel.tsx`, `buildLineage.ts` (the column level: `project show graph --columns` run on the draft, a column followed up and down with `--column`) | built | SC20h |
 
 ### Store
 
@@ -102,4 +102,4 @@ Removing the standalone screens with these still `not planned` loses the feature
 
 Every `missing` and `partly` has a row in plan 33: SC20h (Build load graph), SC20k (cache-backed preview and import), SC20l (offline compile, lowered SQL and sample), SC20m (forms for model, connection and semantic files), SC20n (dashboards and reports of a project), SC20o (the decision on database-facing Build screens), SC21e (restore an earlier text), SC22f (error counts), SC22g (mapping columns from the cache), SC22h (connection test), SC22i (transform, segmenting and pipeline forms, the run login), SC22j (provisioning plan), SC22k (checks, scripts, library), SC22l (the decision on Sync's run and monitoring screens). The cache itself is SC20i (format, readers, checks) and SC20j (the paired Gateway's call that writes it: built; a Sync server's own call is not).
 
-**Audited 2026-11-12 (authoring pass 3).** Why the open rows are still open, each with its smallest design in its plan row: SC20h (column lineage needs `project show graph` run on the draft), SC20k (writing models from the cache needs a `--from-cache` mode of `project import`), SC22h (no Sync pairing: the Workspace pairs with Gateways and Runners; the Runner's slot binding test is the nearest paired call), SC22j (built 2026-11-12 as designed for the target side: `provisioning plan --from-cache`, the route and the Provisioning tab; the source's change-capture state is the live server's and is shown as not known), SC22k (built 2026-11-12: `script list|test --json`, the route, the template folder and the Scripts tab; the library and platform setting stays open with SC22c). SC20n's wells now offer the draft's own semantic model.
+**Audited 2026-11-12 (authoring pass 3).** Why the open rows are still open, each with its smallest design in its plan row: SC20h (built 2026-11-12: column lineage from `project show graph --columns` run on the draft, its shape read from the real tool), SC20k (writing models from the cache needs a `--from-cache` mode of `project import`), SC22h (no Sync pairing: the Workspace pairs with Gateways and Runners; the Runner's slot binding test is the nearest paired call), SC22j (built 2026-11-12 as designed for the target side: `provisioning plan --from-cache`, the route and the Provisioning tab; the source's change-capture state is the live server's and is shown as not known), SC22k (built 2026-11-12: `script list|test --json`, the route, the template folder and the Scripts tab; the library and platform setting stays open with SC22c). SC20n's wells now offer the draft's own semantic model.
