@@ -32,14 +32,18 @@ public static class LineageJson
     }
 
     /// <summary>
-    /// The newest run of each edge as the <c>runs</c> list of a lineage document (plan 18, G10b, additive: a document without it has no runs): <c>[{"from", "to", "kind", "at", "outcome": "succeeded"|"failed", "rows"?}]</c>, ordered by the edge's ends.
+    /// The newest run of each edge as the <c>runs</c> list of a lineage document (plan 18, G10b, additive: a document without it has no runs): <c>[{"from", "to", "kind", "at", "outcome": "succeeded"|"failed", "rows"?, "late"?: true}]</c>, ordered by the edge's ends; <c>late</c> (additive) is present only when the edge is overdue by its product's expectation.
     /// </summary>
     public static JsonArray WriteRuns(IEnumerable<EdgeRun> runs)
     {
         ArgumentNullException.ThrowIfNull(runs);
         var list = new JsonArray();
         foreach (var r in runs.OrderBy(r => r.From, StringComparer.Ordinal).ThenBy(r => r.To, StringComparer.Ordinal).ThenBy(r => r.Kind))
-            list.Add(new JsonObject { ["from"] = r.From, ["to"] = r.To, ["kind"] = r.Kind.ToString().ToLowerInvariant(), ["at"] = r.At, ["outcome"] = r.Outcome.ToString().ToLowerInvariant(), ["rows"] = r.Rows });
+        {
+            var run = new JsonObject { ["from"] = r.From, ["to"] = r.To, ["kind"] = r.Kind.ToString().ToLowerInvariant(), ["at"] = r.At, ["outcome"] = r.Outcome.ToString().ToLowerInvariant(), ["rows"] = r.Rows };
+            if (r.Late) run["late"] = true;       // additive: a run that is not late says nothing
+            list.Add(run);
+        }
         return list;
     }
 
@@ -54,7 +58,8 @@ public static class LineageJson
             if (list[i] is not JsonObject r) throw new LineageGraphException($"runs[{i}] is not an object.");
             if (r["at"] is not JsonValue at || !at.TryGetValue<DateTimeOffset>(out var when)) throw new LineageGraphException($"runs[{i}] has no `at` date and time.");
             long? rows = r["rows"] is JsonValue v && v.TryGetValue<long>(out var n) ? n : null;
-            runs.Add(new EdgeRun(Text(r, "from", $"runs[{i}]"), Text(r, "to", $"runs[{i}]"), Parse<EdgeKind>(Text(r, "kind", $"runs[{i}]"), $"runs[{i}].kind"), when, Parse<RunOutcome>(Text(r, "outcome", $"runs[{i}]"), $"runs[{i}].outcome"), rows));
+            var late = r["late"] is JsonValue l && l.TryGetValue<bool>(out var isLate) && isLate;
+            runs.Add(new EdgeRun(Text(r, "from", $"runs[{i}]"), Text(r, "to", $"runs[{i}]"), Parse<EdgeKind>(Text(r, "kind", $"runs[{i}]"), $"runs[{i}].kind"), when, Parse<RunOutcome>(Text(r, "outcome", $"runs[{i}]"), $"runs[{i}].outcome"), rows, late));
         }
         return runs;
     }

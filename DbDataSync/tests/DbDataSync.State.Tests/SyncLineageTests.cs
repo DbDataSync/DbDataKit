@@ -111,4 +111,28 @@ public sealed class SyncLineageTests : IDisposable
         Assert.Equal(DbDataKit.Lineage.RunOutcome.Failed, orders.Outcome);
         Assert.Equal(2, runs.Count);
     }
+
+    /// <summary>Plan 18 G07b and G16: Sync keeps its graph and the runs in the <c>lineage</c> module of its own state, and a run stays on its edge after the run history lost it.</summary>
+    [Fact]
+    public void The_graph_and_the_runs_are_kept_in_the_state_and_a_run_outlives_the_run_history_that_had_it_until_the_retention_of_run_detail()
+    {
+        Assert.Contains(DbDataKit.Lineage.LineageModule.Module, SyncState.Modules);
+        var database = new StateDatabase(Path.Combine(_tempDir, "state.db"));
+        var store = new TaskRunStore(database);
+        var queue = new WorkQueueStore(database);
+        var graph = SyncLineage.Design([new SyncReplication(Task(), [Customers()])], Connections);
+        var run = queue.Enqueue("crm-to-dwh", RunKind.Primary, "customers");
+        store.BeginRun(run, pid: 1);
+        store.CompleteRun(run, RunStatus.Failed, 0, 0, errorSummary: "the source refused");
+
+        var keeper = new DbDataKit.Lineage.LineageKeeper(new DbDataKit.Lineage.LineageStore(database, SyncState.ServiceId), "sync");
+        var kept = keeper.Keep(graph, SyncLineageRuns.Runs(graph, store), TimeSpan.FromDays(SyncStateModule.RunDetailDays));
+        Assert.Equal((true, 1, 0, 0), (kept.DesignChanged, kept.RunsAdded, kept.RunsPruned, kept.RunsLeftOut));
+
+        // the run history is pruned (nothing is left of the run), and the next answer still has the run on its edge
+        var again = keeper.Keep(graph, SyncLineageRuns.Runs(graph, new TaskRunStore(new StateDatabase(Path.Combine(_tempDir, "empty.db")))), TimeSpan.FromDays(SyncStateModule.RunDetailDays));
+        Assert.Equal((false, 0), (again.DesignChanged, again.RunsAdded));
+        var edge = Assert.Single(keeper.Read().Runs);
+        Assert.Equal((DbDataKit.Lineage.RunOutcome.Failed, Dataset("dwh", "public", "customers")), (edge.Outcome, edge.To));
+    }
 }

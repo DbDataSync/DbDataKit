@@ -28,13 +28,49 @@ public static partial class AuditLog
         static string Text(object? v) => (v as string)?.Trim() ?? "";
         static DateTime When(object? v) => v is DateTime d ? d : DateTime.MinValue;
         static long? Long(object? v) => v is null or DBNull ? null : Convert.ToInt64(v, CultureInfo.InvariantCulture);
+        return LastLoadsOf(rows.Select(r => new LoadStep(Text(r[0]), Convert.ToString(r[1], CultureInfo.InvariantCulture) ?? "", Text(r[2]), Long(r[3]), When(r[4]), r[5] is DateTime ended ? ended : When(r[4]))));
+    }
+
+    /// <summary>One step of a load as the tracking tables record it (a row of <c>run_log</c>): the model, the run it belongs to, how it ended (<c>ok</c> or <c>failed...</c>), the rows it wrote and when it began and ended (the start when it never ended).</summary>
+    public sealed record LoadStep(string Model, string RunId, string Status, long? Rows, DateTime StartedUtc, DateTime EndedUtc);
+
+    /// <summary>The last run of each model among the steps: a run is the steps of one run id (a model with several operations is one run), the newest by start time is the last.</summary>
+    public static IReadOnlyList<LastLoad> LastLoadsOf(IEnumerable<LoadStep> steps)
+    {
         var result = new List<LastLoad>();
-        foreach (var model in rows.GroupBy(r => Text(r[0])))
+        foreach (var model in steps.GroupBy(r => r.Model))
         {
-            var newest = model.GroupBy(r => Convert.ToString(r[1], CultureInfo.InvariantCulture)).OrderByDescending(g => g.Max(r => When(r[4]))).First().ToList();
-            var counted = newest.Select(r => Long(r[3])).Where(n => n != null).ToList();
-            result.Add(new LastLoad(model.Key, newest.Max(r => r[5] is DateTime ended ? ended : When(r[4])), newest.All(r => Text(r[2]) == "ok"), counted.Count == 0 ? null : counted.Sum()));
+            var newest = model.GroupBy(r => r.RunId).OrderByDescending(g => g.Max(r => r.StartedUtc)).First().ToList();
+            var counted = newest.Where(r => r.Rows != null).Select(r => r.Rows!.Value).ToList();
+            result.Add(new LastLoad(model.Key, newest.Max(r => r.EndedUtc), newest.All(r => r.Status == "ok"), counted.Count == 0 ? null : counted.Sum()));
         }
         return result.OrderBy(l => l.Model, StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>
+    /// The last run of each model from the documents of the server's copy of the tracking tables (the <c>run_log</c> stream, plan 28c E16): the same answer as <see cref="LastLoadsAsync"/> gives from the tables, without a connection to the target. A
+    /// document that is not a step of a load (a hook's row, a step that is still running, one that is not JSON) is not a run and is skipped.
+    /// </summary>
+    public static IReadOnlyList<LastLoad> LastLoadsFromCopy(IEnumerable<string> documents, IReadOnlyCollection<string> hookEvents)
+    {
+        var steps = new List<LoadStep>();
+        foreach (var document in documents)
+        {
+            try
+            {
+                using var parsed = System.Text.Json.JsonDocument.Parse(document);
+                var root = parsed.RootElement;
+                string? Field(string name) => root.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString()?.Trim() : null;
+                DateTime? Time(string name) => Field(name) is { } t && DateTime.TryParse(t, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var when) ? when : null;
+                var status = Field("status") ?? "";
+                if (Field("model") is not { Length: > 0 } model || Field("run_id") is not { } run || Time("started_utc") is not { } started) continue;
+                if (status != "ok" && !status.StartsWith("failed", StringComparison.Ordinal)) continue;
+                if (Field("operation") is { } operation && hookEvents.Contains(operation)) continue;
+                long? rows = root.TryGetProperty("rows_affected", out var r) && r.ValueKind == System.Text.Json.JsonValueKind.Number ? r.GetInt64() : null;
+                steps.Add(new LoadStep(model, run, status, rows, started, Time("ended_utc") ?? started));
+            }
+            catch (System.Text.Json.JsonException) { /* not a step of a run */ }
+        }
+        return LastLoadsOf(steps);
     }
 }

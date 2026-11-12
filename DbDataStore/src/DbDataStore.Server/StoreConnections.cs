@@ -57,6 +57,28 @@ public sealed class StoreConnections(string directory, ISecretResolver? secrets 
         catch (SecretNotFoundException ex) { throw new StoreConnectionException($"{name}.yaml needs a secret the server cannot find: {ex.Message}"); }
     }
 
+    private static readonly HashSet<string> AddressKeys = new(StringComparer.OrdinalIgnoreCase)
+        { "server", "data source", "host", "address", "addr", "network address", "port", "database", "initial catalog", "dbname" };
+
+    /// <summary>
+    /// The connection as lineage names a table's home (plan 18, G12): its engine and only the address keys (server, port, database), from the file's own address or, as a model's connection usually has none, from the string its secret reference
+    /// resolves to. The login's user and password are dropped before anything is returned. Null with a reason when the file or the secret cannot be read.
+    /// </summary>
+    public async Task<(DbDataKit.Connections.ConnectionDefinition? Definition, string? Problem)> AddressOnlyAsync(string name, CancellationToken cancellationToken)
+    {
+        DbDataKit.Connections.ConnectionDefinition definition;
+        try { definition = Load(name); } catch (StoreConnectionException ex) { return (null, ex.Message); }
+        if (definition.Address is not null) return (definition, null);
+        try
+        {
+            using var login = await new LoginResolver(secretResolver, Application).ResolveAsync(definition, LoginRole.Write, cancellationToken).ConfigureAwait(false);
+            if (login?.ConnectionString is not { } secret) return (null, $"{name}.yaml has no connection string the server can read, so its address is not known.");
+            var text = string.Join(';', secret.RevealString().Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Where(p => p.Split('=', 2) is [var key, _] && AddressKeys.Contains(key.Trim())));
+            return (new DbDataKit.Connections.ConnectionDefinition { Name = name, Engine = definition.Engine, ConnectionString = text }, null);
+        }
+        catch (SecretNotFoundException ex) { return (null, $"{name}.yaml needs a secret the server cannot find: {ex.Message}"); }
+    }
+
     public async Task<DbConnection> OpenAsync(string name, CancellationToken cancellationToken)
     {
         var definition = Load(name);

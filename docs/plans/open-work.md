@@ -59,7 +59,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | [32](32-dashboards-and-reports.md) DBR31 to DBR34, DBR36, DBR42, DBR50 to DBR55 | Custom views in the shell (frames, dialogs, panels, scheduled custom views), the nested axis in print, filtered and repeated measures, attributes in the matrix, field groups, actions with a confirmation popup and batches of changes | not built (9h is design only) |
 | [22a](22a-gap-slices.md) GP01, GP02, GP11 to GP15 | Access rules end to end | OWNER (QG2) |
 | [23a](23a-first-run-and-quality-slices.md) FQ03, FQ05, FQ11 to FQ15 | Checks stored with the Store's models and the serving definitions, run, warn and block | FQ03, FQ05 wait for QG2 |
-| [18](18-lineage.md) G08, G11b, G13 to G15 | The Gateway's graph and per-table run summary, `serves` edges, manual entries, OpenLineage export, tracing a value | G13 to G15 later |
+| [18](18-lineage.md) G13 to G15 | Manual entries, OpenLineage export, tracing a value | G13 to G15 later |
 | [27a](27a-knowledge-slices.md) KN06 (binding it, Windows), KN11 to KN17, KN19 to KN23, AG25, AG28 | The built-in embedding model is built (generator, catalog, files): it cannot be bound from the console yet; the Gateway hosting of the `knowledge` module (the library is built: a version per index, stage, switch, rollback, KN11), its subscription to published semantic models (KN12) and to Build\'s metadata (KN13, plus Build\'s own publish step), values as knowledge, the hosts of the read and index commands (KN16, KN17), suggestions, verified queries at staging, front-end agents and a published agent as an MCP tool | KN10 to KN14, KN16, KN17 PARTLY (libraries, commands and the console\'s Check tab built) |
 
 ## Runner
@@ -88,7 +88,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | Plan and row | What remains | Flag |
 | --- | --- | --- |
 | [25](25-surrogate-keys-and-agent-tests.md) K07, K10, K11, K12, K06b | Consumers of inferred relationships, `key_map`, Store ids as `BINARY(16)` and `uuid`, keys in pure SQL, the uniqueness check as a `check/1` | none blocked; K11's drafts exist |
-| [18](18-lineage.md) G06b | Runs on column edges, a job node per load | |
+| [18](18-lineage.md) G06b | A job node per load (decided against for now); the server path over a real tracking copy untested | |
 | [Build OPEN-ITEMS](../../DbDataBuild/docs/progress/OPEN-ITEMS.md) section S; [12](12-shared-tls-rollout.md) items 10 and 11; [Gateway README](../../DbDataGateway/README.md) Fabric (Not supported yet); [windows-test-install](../windows-test-install.md) | K1: Build's `SourceCatalogReader` (needs a schema-wide keys read in the shared readers first) and the ODBC and DuckDB opens; K2: Sync's `service`, `cert` and `secret` verbs on the shared commands (needs a Windows host); D11: Build's CLI on the shared router; F1: Fabric through the Gateway (needs a tenant) | D11 OWNER (deferred); K2 LOW (plan 12) |
 | [14a](14a-semantic-slices.md) SL03, SL10, SL22 | Build reads the registry; metadata documents with semantic models; the `semantic` noun | |
 | [27a](27a-knowledge-slices.md) AG01 | The suite-wide command-spec test with a golden of offered MCP tools: built (`CommandSurface`) and kept for the console; the other products add their own copy | PARTLY |
@@ -100,7 +100,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | [28c](28c-engines-on-runner.md) E17, E22 | State on the target, retiring the old paths | |
 | [29a](29a-state-slices.md) Q22, [29b](29b-state-migration-slices.md) C05, C07 | The runner-owned state for processes; the state API; the shared `state` section | |
 | [07](07-data-transfer.md) TR04 | Sync adopts the write gate | LOW |
-| [18](18-lineage.md) G07b | The `lineage` noun and the stored graph | |
+| [18](18-lineage.md) G07b | The target table's own upstream when Sync is not its only writer; runs on column edges | |
 | [14a](14a-semantic-slices.md) SL04 | Sync reads the engine registry | |
 
 ## Store
@@ -110,7 +110,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | [15](15-master-data-and-documents.md) | Everything listed there | LOW |
 | [21](21-channels-and-previews.md) CH02 to CH06 | The Store's part of releases and inherited reads | |
 | [26](26-app-publishing.md) Z12b, Z13b | Shared entities in `column` mode, instance-scoped tokens and roles, retype and mode moves, the consumer refusal | |
-| [18](18-lineage.md) G12 | Store and apps emitters | |
+| [18](18-lineage.md) G12 | The Store's documents, extractions and promotions (the Store has none yet); the apps host's own graph | |
 | [27a](27a-knowledge-slices.md) EA03, EA04, BK01, BK02 | Orphaned attributes, both kinds in search, the backlog module | not built |
 | [20](20-serving-layer.md) O08b | Entities as Flight SQL sources | |
 

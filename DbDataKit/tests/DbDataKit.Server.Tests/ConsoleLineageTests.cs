@@ -65,7 +65,8 @@ public sealed class ConsoleLineageTests : IAsyncLifetime
         });
         build = await PairableServer.StartAsync(product: "dbdatabuild", instanceId: "build-1", map: (server, _, _) =>
             server.MapGet("/api/v1/lineage", () => { var document = LineageJson.Write(BuildGraph()); document["problems"] = new JsonArray(); return Results.Json(document); }));
-        gateway = await PairableServer.StartAsync(product: "dbdatagateway", instanceId: "gateway-1");
+        gateway = await PairableServer.StartAsync(product: "dbdatagateway", instanceId: "gateway-1", map: (server, _, _) =>
+            server.MapGet("/api/v1/lineage", () => Results.Json(LineageJson.Write(LineageGraph.Empty))));
         app = ConsoleHost.Build(new ConsoleSettings(directory, new Uri("https://localhost:0")), ConsoleHost.Certificate(directory), _ => { }, webRoot: Path.Combine(directory, "none"));
         await app.StartAsync();
         http = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true, UseCookies = false }) { BaseAddress = new Uri(app.Urls.First()) };
@@ -104,8 +105,8 @@ public sealed class ConsoleLineageTests : IAsyncLifetime
         Assert.False(graph.Node(Warehouse)!.UnknownUpstream);                                // Build did not know its upstream; Sync does
         Assert.Equal(2, graph.Edges.Count);
         var servers = body["servers"]!.AsArray();
-        Assert.Equal(["Build one", "Sync one"], servers.Select(s => (string)s!["server"]!));   // the Gateway keeps no lineage and is not part of it
-        Assert.Contains(servers[1]!["problems"]!.AsArray(), p => ((string)p!).Contains("Replication 'old' is left out"));
+        Assert.Equal(["Build one", "Gateway one", "Sync one"], servers.Select(s => (string)s!["server"]!));   // the Gateway has none to add here, and is asked
+        Assert.Contains(servers[2]!["problems"]!.AsArray(), p => ((string)p!).Contains("Replication 'old' is left out"));
     }
 
     [Fact]

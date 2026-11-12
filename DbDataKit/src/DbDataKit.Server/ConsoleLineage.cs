@@ -23,7 +23,7 @@ public sealed class ConsoleLineage(ConsoleInstances instances, ConsoleRelay rela
     private readonly ConcurrentDictionary<string, ServerLineageAnswer> _answers = new(StringComparer.Ordinal);
 
     /// <summary>The path of a product's lineage on its management API, or null for a product that keeps none (yet).</summary>
-    public static string? PathOf(string? product) => product switch { "dbdatabuild" => "/api/v1/lineage", "dbdatasync" => "/api/lineage", "dbdatarunner" => "/api/v1/lineage", _ => null };
+    public static string? PathOf(string? product) => product switch { "dbdatabuild" => "/api/v1/lineage", "dbdatasync" => "/api/lineage", "dbdatarunner" => "/api/v1/lineage", "dbdatagateway" => "/api/v1/lineage", "dbdatastore" => "/api/v1/lineage", _ => null };
 
     public async Task<JoinedLineage> JoinedAsync(bool refresh, CancellationToken ct)
     {
@@ -45,7 +45,7 @@ public sealed class ConsoleLineage(ConsoleInstances instances, ConsoleRelay rela
     {
         var instance = status.Instance;
         if (!status.Reachable) return new(instance.Name, instance.InstanceId, status.Product, null, [], status.Problem ?? "It did not answer.", _clock.GetUtcNow());
-        if (PathOf(status.Product) is not { } path) return null;                      // a Gateway or a Store has no lineage of its own yet: not part of this
+        if (PathOf(status.Product) is not { } path) return null;                      // a product with no lineage of its own yet (a Store) is not part of this
         if (!refresh && _answers.TryGetValue(instance.InstanceId, out var known) && _clock.GetUtcNow() - known.At < Lifetime) return known;
 
         var (code, body) = await relay.CallAsync(instance, HttpMethod.Get, path, null, ct);

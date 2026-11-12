@@ -135,7 +135,7 @@ public static class SyncState
     /// <summary>Who is recorded as applying a migration: the service and its version.</summary>
     public static string AppliedBy => $"{ServiceId} {typeof(SyncState).Assembly.GetName().Version}";
 
-    /// <summary>The modules Sync's state is built from: its own and the shared ones it uses (<c>quality</c>: the results of the checks stored with its replications, plan 23a FQ10).</summary>
+    /// <summary>The modules Sync's state is built from: its own and the shared ones it uses (<c>quality</c>: the results of the checks stored with its replications, plan 23a FQ10; <c>lineage</c>: its graph and the runs along its edges, plan 18 G07b).</summary>
     public static IReadOnlyList<StateModule> Modules { get; } =
     [
         SyncStateModule.Module,
@@ -145,5 +145,6 @@ public static class SyncState
         AuditModule.Module,
         ProgressModule.Module,
         QualityModule.Module,
+        DbDataKit.Lineage.LineageModule.Module,
     ];
 }

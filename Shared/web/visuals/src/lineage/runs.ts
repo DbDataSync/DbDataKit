@@ -8,15 +8,23 @@ export interface LineageRunDoc {
   at: string
   outcome: 'succeeded' | 'failed'
   rows: number | null
+  /** The server says the edge is overdue by its own expectation of how often it runs (`HealthRule.Overdue`); absent when it is not. */
+  late?: boolean
 }
 
-/** The runs a drawn line stands for: it is `failed` when any edge folded into it failed, else `succeeded`; `at` is the newest. */
+/** The runs a drawn line stands for: it is `failed` when any edge folded into it failed, else `succeeded`; `at` is the newest; `late` when any edge folded into it is overdue. */
 export interface LinkRun {
   outcome: 'succeeded' | 'failed'
   at: string
   rows: number | null
   failed: number
   total: number
+  late?: boolean
+}
+
+/** The state a line is drawn in: `failed` is red, `late` amber (its last run succeeded but it is overdue), `fresh` green. */
+export function runState(run: LinkRun): 'failed' | 'late' | 'fresh' {
+  return run.outcome === 'failed' ? 'failed' : run.late ? 'late' : 'fresh'
 }
 
 /**
@@ -41,14 +49,15 @@ export function runsOfLinks(graph: LineageGraphDoc, links: readonly LineageLink[
     const failed = mine.filter((r) => r.outcome === 'failed').length
     const newest = mine.reduce((a, b) => (Date.parse(b.at) > Date.parse(a.at) ? b : a))
     const known = mine.filter((r) => r.rows !== null)
-    result.set(link.id, { outcome: failed > 0 ? 'failed' : 'succeeded', at: newest.at, rows: known.length === 0 ? null : known.reduce((n, r) => n + (r.rows ?? 0), 0), failed, total: mine.length })
+    result.set(link.id, { outcome: failed > 0 ? 'failed' : 'succeeded', at: newest.at, rows: known.length === 0 ? null : known.reduce((n, r) => n + (r.rows ?? 0), 0), failed, total: mine.length, late: mine.some((r) => r.late === true) || undefined })
   }
   return result
 }
 
-/** The words on a line for its run: `replicates · failed 2026-11-10 08:00` or `derives · ok`; the line's own name when it has no run. */
+/** The words on a line for its run: `replicates · failed 2026-11-10 08:00`, `replicates · late since 2026-11-10 08:00` or `derives · ok`; the line's own name when it has no run. */
 export function runLabel(kind: string, run: LinkRun | undefined): string {
   if (!run) return kind
   const when = run.at.slice(0, 16).replace('T', ' ')
-  return run.outcome === 'failed' ? `${kind} · failed ${when}` : `${kind} · ok ${when}`
+  const state = runState(run)
+  return state === 'failed' ? `${kind} · failed ${when}` : state === 'late' ? `${kind} · late, last ok ${when}` : `${kind} · ok ${when}`
 }

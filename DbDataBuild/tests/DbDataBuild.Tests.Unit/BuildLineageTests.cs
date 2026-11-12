@@ -103,15 +103,22 @@ public class BuildLineageTests
     }
 
     [Fact]
-    public void A_copy_is_a_declared_table_level_edge_from_its_origin_and_its_columns_are_a_gap()
+    public void A_copy_is_a_declared_edge_from_its_origin_and_where_the_origin_declares_its_columns_each_is_a_column_edge()
     {
         var (ctx, _) = Load("fan_in_fan_out");
         var lineage = BuildLineage.Design(ctx, Identity(ctx));
         var copies = lineage.Edges.Where(e => e.Kind == EdgeKind.Copies).ToList();
         Assert.NotEmpty(copies);
-        Assert.All(copies, e => Assert.Equal((Granularity.Table, Confidence.Declared), (e.Granularity, e.Confidence)));
-        Assert.DoesNotContain(lineage.Edges, e => e.Granularity == Granularity.Column && e.To.Contains("warehouse.orders#", StringComparison.Ordinal));
-        Assert.All(lineage.Nodes.Where(n => n.Kind == NodeKind.Column && n.Id.Contains("warehouse.orders#", StringComparison.Ordinal)), n => Assert.True(n.UnknownUpstream));
+        Assert.All(copies, e => Assert.Equal(Confidence.Declared, e.Confidence));
+        Assert.Contains(copies, e => e.Granularity == Granularity.Table);
+        // pos.orders is mapped and declares order_id, ordered_on, channel and amount: a copy has them, a column edge each, on every connection it is built for
+        var columns = copies.Where(e => e.Granularity == Granularity.Column).ToList();
+        Assert.Contains(columns, e => e.From.EndsWith("pos.orders#order_id", StringComparison.OrdinalIgnoreCase) && e.To.EndsWith("warehouse.orders#order_id", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(4 * ctx.TargetsOf(ctx.Project.BuiltModels.Single(m => m.Definition.IsCopy).Definition).Count() * 2, columns.Count);       // four columns, two origins on each of the two connections
+        // a copy's column is fed by its origin's: not a gap, except the slice column the copy adds (store_id, written from the connection's parameter), which no origin column feeds; the origin's own columns are where Build's knowledge stops (a mapped table)
+        Assert.All(lineage.Nodes.Where(n => n.Kind == NodeKind.Column && n.Id.Contains("warehouse.orders#", StringComparison.Ordinal) && n.Name != "store_id"), n => Assert.False(n.UnknownUpstream));
+        Assert.All(lineage.Nodes.Where(n => n.Kind == NodeKind.Column && n.Name == "store_id" && n.Id.Contains("warehouse.orders#", StringComparison.Ordinal)), n => Assert.True(n.UnknownUpstream));
+        Assert.All(lineage.Nodes.Where(n => n.Kind == NodeKind.Column && n.Id.Contains("pos.orders#", StringComparison.Ordinal)), n => Assert.True(n.UnknownUpstream));
     }
 
     [Fact]
@@ -136,18 +143,22 @@ public class BuildLineageTests
     }
 
     [Fact]
-    public void A_runs_ends_and_rows_are_laid_along_each_load_edge_into_the_model()
+    public void A_runs_ends_and_rows_are_laid_along_each_load_edge_into_the_model_and_each_column_edge_into_its_columns()
     {
         var (ctx, _) = Load("retail");
         var connection = ctx.Config.DefaultConnections.Single();
         var lineage = BuildLineage.Design(ctx, Identity(ctx));
-        var model = ctx.Project.BuiltModels.Select(m => m.Definition.Name).First(n => lineage.Upstream(Dataset(ctx, connection, n)).Any(e => e.Granularity == Granularity.Table));
+        var model = ctx.Project.BuiltModels.Select(m => m.Definition.Name).First(n => lineage.Upstream(Dataset(ctx, connection, n)).Any(e => e.Granularity == Granularity.Table)
+            && lineage.Nodes.Any(c => c.Kind == NodeKind.Column && c.Id.StartsWith(Dataset(ctx, connection, n) + "#", StringComparison.Ordinal) && lineage.Upstream(c.Id).Any(e => e.Granularity == Granularity.Column)));
         var ended = new DateTime(2026, 10, 1, 4, 30, 0, DateTimeKind.Utc);
         var runs = BuildLineage.Runs(lineage, ctx, connection, Identity(ctx)(connection), [new AuditLog.LastLoad(model, ended, true, 42), new AuditLog.LastLoad("not.a_model", ended, true, 1)]);
-        var loadEdges = lineage.Upstream(Dataset(ctx, connection, model)).Where(e => e.Granularity == Granularity.Table).ToList();
-        Assert.Equal(loadEdges.Count, runs.Count);
+        var id = Dataset(ctx, connection, model);
+        var loadEdges = lineage.Upstream(id).Where(e => e.Granularity == Granularity.Table).ToList();
+        var columnEdges = lineage.Nodes.Where(c => c.Kind == NodeKind.Column && c.Id.StartsWith(id + "#", StringComparison.Ordinal)).SelectMany(c => lineage.Upstream(c.Id)).Where(e => e.Granularity == Granularity.Column && e.Kind == EdgeKind.Derives).ToList();
+        Assert.NotEmpty(columnEdges);
         Assert.All(runs, r => Assert.Equal((RunOutcome.Succeeded, 42L, new DateTimeOffset(ended)), (r.Outcome, r.Rows, r.At)));
-        Assert.Equal(loadEdges.Select(e => e.Key).Order(), runs.Select(r => r.EdgeKey).Order());
+        Assert.Equal(loadEdges.Concat(columnEdges).Select(e => e.Key).Order(), runs.Select(r => r.EdgeKey).Order());
+        Assert.Equal(columnEdges.Count, runs.Count(r => lineage.Edges.Single(e => e.Key == r.EdgeKey).Granularity == Granularity.Column));      // a run only along an edge the graph has
 
         var failed = BuildLineage.Runs(lineage, ctx, connection, Identity(ctx)(connection), [new AuditLog.LastLoad(model, ended, false, null)]);
         Assert.All(failed, r => Assert.Equal((RunOutcome.Failed, (long?)null), (r.Outcome, r.Rows)));
@@ -159,5 +170,30 @@ public class BuildLineageTests
         var dir = Path.Combine(PolyglotBindingTests.RepoRoot(), "templates", "retail");
         var graph = await BuildLineage.Source(dir, _ => null)(CancellationToken.None);
         Assert.NotEmpty(graph.Edges);
+    }
+
+    /// <summary>Plan 18 G06b: the last load of each model is read from the documents of the server's copy of <c>run_log</c>, with no connection to the target, and says the same as the tables do.</summary>
+    [Fact]
+    public void The_last_loads_are_read_from_the_copy_of_the_run_log_skipping_hooks_running_steps_and_what_is_not_a_step()
+    {
+        static string Step(string model, string run, string status, string started, string? ended, long? rows, string op = "full_replace") =>
+            "{\"model\":\"" + model + "\",\"run_id\":\"" + run + "\",\"status\":\"" + status + "\",\"operation\":\"" + op + "\",\"started_utc\":\"" + started + "\"" + (ended is null ? "" : ",\"ended_utc\":\"" + ended + "\"") + (rows is null ? "" : ",\"rows_affected\":" + rows) + "}";
+        var docs = new[]
+        {
+            Step("marts.a", "r1", "ok", "2026-10-01T04:00:00Z", "2026-10-01T04:01:00Z", 10),
+            Step("marts.a", "r2", "ok", "2026-10-02T04:00:00Z", "2026-10-02T04:02:00Z", 30),         // the newer run of the model
+            Step("marts.a", "r2", "ok", "2026-10-02T04:02:00Z", "2026-10-02T04:03:00Z", 12),         // a second step of it: one run, rows added
+            Step("marts.b", "r3", "failed: the target refused", "2026-10-02T05:00:00Z", "2026-10-02T05:00:05Z", null),
+            Step("marts.c", "r4", "started", "2026-10-02T06:00:00Z", null, null),                    // still running: not a run
+            Step("marts.a", "r5", "ok", "2026-10-03T00:00:00Z", "2026-10-03T00:00:01Z", 1, op: "after_load"),   // a hook, not a load
+            "not json",
+        };
+
+        var last = AuditLog.LastLoadsFromCopy(docs, ["after_load"]);
+
+        Assert.Equal(["marts.a", "marts.b"], last.Select(l => l.Model));
+        var a = last[0];
+        Assert.Equal((true, 42L, new DateTime(2026, 10, 2, 4, 3, 0, DateTimeKind.Utc)), (a.Succeeded, a.Rows, a.EndedUtc.ToUniversalTime()));
+        Assert.Equal((false, (long?)null), (last[1].Succeeded, last[1].Rows));
     }
 }

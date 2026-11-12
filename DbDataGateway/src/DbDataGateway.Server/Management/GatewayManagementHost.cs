@@ -135,6 +135,18 @@ public static class GatewayManagementHost
             semanticRuns: new GatewaySemanticRuns(app.Services.GetRequiredService<DbDataGateway.Server.State.SemanticRunStore>(), app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(),
                 app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), app.Services.GetRequiredService<Serving.GatewayServing>(), app.Services.GetRequiredService<DbDataKit.Serving.IServingServices>(),
                 GatewayModules.Has(options, GatewayModules.Views) ? app.Services.GetRequiredService<Serving.GatewayViews>() : null, audit),
+            lineage: new GatewayLineage(() => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue,
+                () => app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>().All,
+                () => app.Services.GetRequiredService<Serving.PublishedEntityModels>().All,
+                () =>
+                {
+                    // the dashboards and reports published to the group read what they depend on; an app instance reads the Store models it is bound to
+                    var definitions = new DbDataKit.State.DefinitionStore(state);
+                    return [.. new[] { "dashboard", "report" }.SelectMany(kind => definitions.CurrentOfKind(kind).Select(v => new GatewayConsumer(kind, v.Name, v.DependsOn))),
+                        .. new DbDataKit.Apps.AppInstanceStore(definitions).List().Select(i => new GatewayConsumer("app", i.Name, [.. i.Bindings.Keys.Select(model => "entity-model:" + model)]))];
+                },
+                (name, text) => app.Services.GetRequiredService<Secrets.SecretsRuntime>().ResolveConnectionString($"Gateway:DataSources:{name}:ConnectionString", text, app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue.DataSources[name].Provider),
+                app.Services.GetRequiredService<DbDataGateway.Server.State.TableReadRecorder>(), app.Services.GetRequiredService<DbDataGateway.Server.State.TableReadStore>(), instanceId),
             audit: audit,
             serverSettings: new GatewayServerSettings(configDirectory, management, provider.ReloadNow, audit, git),
             entityModels: new GatewayEntityModels(app.Services.GetRequiredService<Serving.PublishedEntityModels>(),

@@ -21,7 +21,8 @@ public sealed partial class GatewayServing(
     ILogger<GatewayServing> log,
     TimeProvider time,
     GatewayEvents? events = null,
-    HomeCallers? homeCallers = null) : IServingServices, IServingIdentity, IServingSessions
+    HomeCallers? homeCallers = null,
+    DbDataGateway.Server.State.TableReadRecorder? tableReads = null) : IServingServices, IServingIdentity, IServingSessions
 {
     public IServingIdentity Identity => this;
 
@@ -35,7 +36,7 @@ public sealed partial class GatewayServing(
 
     public IServingUpdates? Updates => queries;
 
-    private readonly QueryService queries = new(sources, log, events);
+    private readonly QueryService queries = new(sources, log, events, tableReads);
     private readonly CatalogService catalog = new(sources, log);
 
     public async ValueTask<ServingCaller?> AuthenticateAsync(ServingCredentials credentials, string? clientAddress = null, CancellationToken cancellationToken = default)

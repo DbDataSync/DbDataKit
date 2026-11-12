@@ -96,7 +96,19 @@ internal static class BuildLineage
                         {
                             var kind = built.TryGetValue(from, out var b) ? b.Definition.Kind : declared.TryGetValue(from, out var d) ? d.Kind : "unknown";
                             var originId = Dataset(origin, from, kind, UnknownUpstreamOf(from));
-                            if (originId != self) edges.Add(new LineageEdge(originId, self, EdgeKind.Copies, Granularity.Table, Confidence.Declared));
+                            if (originId == self) continue;
+                            edges.Add(new LineageEdge(originId, self, EdgeKind.Copies, Granularity.Table, Confidence.Declared));
+                            // a copy's columns are its origin's: where the origin says what its columns are (a mapped or native model's declaration, a built model's), each is a column edge (plan 18, G06b)
+                            var originColumns = built.TryGetValue(from, out var originBuilt) ? (originBuilt.Definition.IsCopy ? [] : originBuilt.Definition.Columns.Select(c => c.Name).ToList())
+                                : declared.TryGetValue(from, out var originDeclared) ? originDeclared.Columns.Select(c => c.Name).ToList() : [];
+                            foreach (var column in originColumns)
+                            {
+                                Column(origin, from, column, knownUpstream: analysed.Contains(from + "\n" + column));
+                                Column(connection, def.Name, column, knownUpstream: true);
+                                var fromColumn = ColumnId(origin, from, column);
+                                var toColumn = ColumnId(connection, def.Name, column);
+                                if (fromColumn != toColumn) edges.Add(new LineageEdge(fromColumn, toColumn, EdgeKind.Copies, Granularity.Column, Confidence.Declared));
+                            }
                         }
                     }
                     continue;
@@ -171,19 +183,26 @@ internal static class BuildLineage
     }
 
     /// <summary>
-    /// The runs of the project's loads (G06): for each model on <paramref name="connection"/> that has run, the last run laid along every table-level edge into the model (a load reads all its inputs, so each of its load edges carries it), with when it
+    /// The runs of the project's loads (G06): for each model on <paramref name="connection"/> that has run, the last run laid along every table-level edge into the model (a load reads all its inputs, so each of its load edges carries it) and along every column edge into a column of the model (G06b), with when it
     /// ended, whether every step of it ended `ok`, and the rows it wrote. A model that reads nothing (a copy of nothing, constants) has no load edge to carry a run.
     /// </summary>
     public static IReadOnlyList<EdgeRun> Runs(LineageGraph design, ProjectContext ctx, string connection, ConnectionDefinition definition, IReadOnlyList<AuditLog.LastLoad> lastLoads)
     {
         var runs = new List<EdgeRun>();
+        var columnsOf = design.Nodes.Where(n => n.Kind == NodeKind.Column && n.Id.LastIndexOf('#') > 0).GroupBy(n => n.Id[..n.Id.LastIndexOf('#')], StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Select(n => n.Id).ToList(), StringComparer.Ordinal);
         foreach (var load in lastLoads)
         {
             var (schema, name) = DbDataBuild.Targets.Ddl.DdlGenerator.Split(load.Model);
             var id = LineageIdentity.Dataset(definition, schema, name).ToString();
             var at = new DateTimeOffset(DateTime.SpecifyKind(load.EndedUtc, DateTimeKind.Utc));
+            var outcome = load.Succeeded ? RunOutcome.Succeeded : RunOutcome.Failed;
             foreach (var edge in design.Upstream(id).Where(e => e.Granularity == Granularity.Table && e.Kind is EdgeKind.Derives or EdgeKind.Copies))
-                runs.Add(new EdgeRun(edge.From, edge.To, edge.Kind, at, load.Succeeded ? RunOutcome.Succeeded : RunOutcome.Failed, load.Rows));
+                runs.Add(new EdgeRun(edge.From, edge.To, edge.Kind, at, outcome, load.Rows));
+            // the same load is the run of each column edge into a column of the model (G06b): the console draws it on the line of an opened table
+            if (columnsOf.TryGetValue(id, out var columns))
+                foreach (var column in columns)
+                    foreach (var edge in design.Upstream(column).Where(e => e.Granularity == Granularity.Column && e.Kind is EdgeKind.Derives or EdgeKind.Copies))
+                        runs.Add(new EdgeRun(edge.From, edge.To, edge.Kind, at, outcome, load.Rows));
         }
         return runs;
     }

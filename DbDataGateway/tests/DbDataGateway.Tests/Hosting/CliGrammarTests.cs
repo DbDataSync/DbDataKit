@@ -37,6 +37,7 @@ public sealed class CliGrammarTests
               query       A client for smoke-testing a running gateway
               semantic    A served semantic model: what it offers, a query on it, what a query would run, the values of an attribute
               datasource  The gateway's data sources (the name the query client's --datasource uses)
+              lineage     What feeds what: the lineage graph, the impact of a change, the provenance of a result
               health      Is a running gateway answering
               ui          The local interfaces
 

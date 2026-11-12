@@ -133,7 +133,8 @@
 .lineage-link-binds path { stroke-dasharray: 4 3; }
 /* the last run of an edge (plan 18 G10b): a failed one is red and thick, one that ran is green */
 .lineage-run-failed path.react-flow__edge-path { stroke: #cf222e; stroke-width: 3; }
-.lineage-run-succeeded path.react-flow__edge-path { stroke: #1a7f37; }
+.lineage-run-fresh path.react-flow__edge-path { stroke: #1a7f37; }
+.lineage-run-late path.react-flow__edge-path { stroke: #bf8700; stroke-width: 2.5; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .lineage-card { background: #161b22; color: #e6edf3; border-color: #30363d; }
 }
