@@ -592,6 +592,32 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_idle_draft_gets_a_notice_in_the_feed_and_is_removed_on_the_day_and_a_busy_one_is_left()
+    {
+        var send = await Client();
+        await send(HttpMethod.Put, "/api/v1/models/territories", Model, ServerRole.Author);
+        await send(HttpMethod.Post, "/api/v1/models/territories/storage/create", null, ServerRole.Admin);
+        Assert.Equal(HttpStatusCode.OK, (await send(HttpMethod.Post, "/api/v1/models/territories/changes?draft=old", Insert("EU", "Europe", "20"), ServerRole.Author)).StatusCode);
+        var feed = new DbDataKit.State.NotificationFeedStore(StoreState.Open(directory), StoreState.ServiceId);
+        var connections = new StoreConnections(directory);
+        var settings = new PreviewSettings(IdleDays: 30, NoticeDays: 7);
+        var now = DateTimeOffset.UtcNow;
+
+        var early = await StoreDraftSweep.RunOnceAsync(directory, connections, feed, settings, now.AddDays(10), TimeSpan.FromHours(1));
+        Assert.Equal(new DraftSweepResult(0, 0), early);
+
+        var notice = await StoreDraftSweep.RunOnceAsync(directory, connections, feed, settings, now.AddDays(24), TimeSpan.FromDays(3));
+        Assert.Equal(new DraftSweepResult(0, 1), notice);
+        Assert.Equal([StoreDraftSweep.WarningKind], feed.List().Select(n => n.Kind).ToArray());
+        Assert.Equal(new DraftSweepResult(0, 0), await StoreDraftSweep.RunOnceAsync(directory, connections, feed, settings, now.AddDays(25), TimeSpan.FromHours(1)));   // the notice is sent once
+
+        var day = await StoreDraftSweep.RunOnceAsync(directory, connections, feed, settings, now.AddDays(31), TimeSpan.FromHours(1));
+        Assert.Equal(1, day.Removed);
+        Assert.Empty((await Json(await send(HttpMethod.Get, "/api/v1/models/territories/drafts", null, ServerRole.Viewer)))["drafts"]!.AsArray());
+        Assert.Contains(StoreDraftSweep.RemovedKind, feed.List().Select(n => n.Kind));
+    }
+
+    [Fact]
     public async Task An_instance_behind_the_model_keeps_working_and_one_that_is_migrated_gets_the_new_structure()
     {
         var send = await Client();

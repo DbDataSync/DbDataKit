@@ -57,6 +57,22 @@ public class KeyChecksTests
     }
 
     [Fact]
+    public void A_key_is_also_a_blocking_unique_check_of_the_framework_through_its_version_key_when_it_has_history()
+    {
+        var plain = ProjectContext.Load(Project("keys:\n  customer_key: {from: [source_system, customer_id]}\n")).Project.BuiltModels.Single().Definition;
+        var check = Assert.Single(ModelQuality.KeyChecksOf(plain, "suite://x/dim"));
+        Assert.Equal("key.customer_key.unique", check.Id);
+        Assert.Equal(DbDataKit.Quality.CheckKind.Unique, check.Kind);
+        Assert.Equal(DbDataKit.Quality.CheckSeverity.Block, check.Severity);
+        Assert.Equal(["customer_key"], check.Attachment.Columns);
+        Assert.Equal("suite://x/dim", check.Attachment.Dataset);
+
+        var history = ProjectContext.Load(Project("keys:\n  customer_key: {from: [customer_id], history: valid_from, version_key: customer_version_key}\n",
+            "  - {name: customer_id, type: BIGINT}\n  - {name: valid_from, type: DATE}\n  - {name: customer_key, type: BIGINT}\n  - {name: customer_version_key, type: BIGINT}\n")).Project.BuiltModels.Single().Definition;
+        Assert.Equal(["key.customer_version_key.unique"], ModelQuality.KeyChecksOf(history, "d").Select(c => c.Id));
+    }
+
+    [Fact]
     public void A_key_the_model_does_not_hold_as_a_column_has_nothing_to_count()
     {
         Assert.Empty(ChecksOf(Project("keys:\n  customer_key: {from: [source_system, customer_id]}\n", "  - {name: customer_id, type: BIGINT}\n")));

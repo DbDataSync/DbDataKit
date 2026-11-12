@@ -1,0 +1,7 @@
+{
+  "value": [
+    { "Name": "Region", "ParameterType": "String", "Prompt": "Region", "Nullable": false, "MultiValue": true, "DefaultValues": [], "Dependencies": ["Country"],
+      "ValidValues": [ { "Label": "Eastern", "Value": "East" }, { "Label": "Western", "Value": "West" } ] },
+    { "Name": "Year", "ParameterType": "Integer", "Prompt": "Year", "Nullable": true, "MultiValue": false, "DefaultValues": ["2026"], "ValidValues": null }
+  ]
+}

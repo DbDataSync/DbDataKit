@@ -210,6 +210,16 @@
       "note": "new with plan 27a IX15: the exchanges an outside API gave, as JSON with the entries in the order they are asked (request method, address and optionally body; response status, headers and body, written as text, inline JSON or base64), replayed by RecordedHttp in DbDataKit.Runner.Kit.Testing so a job is tested with no network; a request with no entry fails the test naming it; a credential (a response header such as Set-Cookie or Authorization, a user name or a credential-named parameter in an address) makes the file unreadable, naming the entry",
       "version_source": { "file": "Shared/src/DbDataKit.Runner.Kit.Testing/RecordedHttp.cs", "pattern": "Schema = \"http-recording/(\\d+)\";" },
       "files": [ { "path": "Shared/src/DbDataKit.Runner.Kit.Testing/RecordedHttp.cs", "sha256": null } ]
+    },
+    {
+      "id": "report-catalog",
+      "title": "External report catalog snapshot (a machine-written document, schema_version 1)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 32 RC02: what the scheduled read of an external report server (SSRS, Power BI Report Server) keeps per channel: provider, then every folder and item with its parameters, export formats and policies, no read time. Written by DbDataKit.ReportCatalogs, never by a person. Open until the first release that holds it (24a D5).",
+      "version_source": { "file": "Shared/src/DbDataKit.ReportCatalogs/ReportCatalogSnapshot.cs", "pattern": "public const int Current = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.ReportCatalogs/ReportCatalogSnapshot.cs", "sha256": null } ]
     }
   ]
 }

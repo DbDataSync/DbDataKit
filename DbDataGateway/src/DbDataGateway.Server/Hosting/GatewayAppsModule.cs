@@ -4,6 +4,7 @@ using DbDataKit.Identity;
 using DbDataKit.Secrets;
 using DbDataKit.Web.Trust;
 using DbDataKit.State;
+using DbDataKit.Serving;
 using DbDataGateway.Server.Configuration;
 using DbDataGateway.Server.Secrets;
 using DbDataGateway.Server.Serving;
@@ -19,12 +20,28 @@ namespace DbDataGateway.Server.Hosting;
 /// Like the identity home it is a web application of its own inside the process, so its pipeline never touches the Flight or management listeners. It serves an instance's bundle with the egress policy of its manifest
 /// (<see cref="AppSite"/>); an app's data calls (<c>/apps/&lt;instance&gt;/_data/...</c>) are answered by the group's published entity models in this process (<see cref="GroupAppData"/>, plan 20 O08c), and its semantic calls (<c>_data/api/v1/semantic/...</c>) by the semantic module as the signed-in person (<see cref="GroupAppSemantic"/>, plan 22a GP35c), so the store module's listener need not be on. A person is signed in through the identity home (<see cref="OpenIdClient"/>) and needs a role on <c>app:&lt;instance&gt;</c> to see the shell page; the token broker is the next slice (AP05c).
 /// </summary>
-public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, PublishedEntityModels models, DbDataKit.Serving.IServingServices serving, DbDataKit.Serving.Semantic.SemanticModels semanticModels, HomeCallers homeCallers, GroupSessionKey sessionKey, ILoggerFactory loggers, GroupCertificate? group = null) : IHostedService, IAsyncDisposable
+public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, PublishedEntityModels models, DbDataKit.Serving.IServingServices serving, DbDataKit.Serving.Semantic.SemanticModels semanticModels, HomeCallers homeCallers, GroupSessionKey sessionKey, ILoggerFactory loggers, GroupCertificate? group = null) : IHostedService, IServingModule, IAsyncDisposable
 {
     /// <summary>The folder next to the program that holds the runtime for apps of views only (<c>views-app.js</c>, <c>views-app.css</c>; plan 26, AP25), copied there by the build from <c>Shared/web/view-app/dist</c>.</summary>
     public const string ViewsRuntimeFolder = "apps-views";
 
     private WebApplication? _app;
+
+    /// <inheritdoc />
+    public string Name => GatewayModules.Apps;
+
+    // the module starts itself as a hosted service (its listener is its own); the contract's start is that start
+    Task IServingModule.StartAsync(IServingServices services, CancellationToken cancellationToken) => StartAsync(cancellationToken);
+
+    public Task DrainAsync(CancellationToken cancellationToken = default)
+    {
+        _draining = true;
+        return Task.CompletedTask;
+    }
+
+    public ServingHealth Health() => ServingModuleHealth.Of(_app is not null, _draining, state, ServingHealthState.Down);
+
+    private volatile bool _draining;
 
     /// <summary>The certificate chooser the listener asks at each handshake; set before the listener starts.</summary>
     private AppCertificates? Certificates { get; set; }
@@ -102,6 +119,7 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
         app.MapFallback(() => Results.Text("The apps host of this DbDataGateway. An app is at /apps/<instance>/.", "text/plain"));
         await app.StartAsync(cancellationToken);
         _app = app;
+        _draining = false;
     }
 
     /// <summary>The address people reach the apps host at: the setting, or the first TLS host name (localhost when there is none) on the module's port.</summary>
@@ -115,7 +133,14 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (_app is not null) await _app.StopAsync(cancellationToken);
+        _draining = true;
+        // a module that was stopped is not running: its line on /health says so
+        if (_app is { } running)
+        {
+            _app = null;
+            await running.StopAsync(cancellationToken);
+            await running.DisposeAsync();
+        }
     }
 
     public async ValueTask DisposeAsync()

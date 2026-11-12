@@ -1,0 +1,8 @@
+{
+  "InheritParentPolicy": true,
+  "Policies": [
+    { "GroupUserName": "CORP\\Analysts", "Roles": [ { "Name": "Browser" } ] },
+    { "GroupUserName": "CORP\\admin", "Roles": [ { "Name": "Content Manager" } ] },
+    { "GroupUserName": "CORP\\Analysts", "Roles": [ { "Name": "Publisher" } ] }
+  ]
+}
