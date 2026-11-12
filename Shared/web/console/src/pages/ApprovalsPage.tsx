@@ -6,7 +6,7 @@ import { consoleApi } from '../api'
 import { ConsoleShell } from '../ConsoleShell'
 import { decideRequest, decisionProblem, loadApprovals, waited, type ApprovalRow } from '../approvals'
 
-const kindText: Record<ApprovalRow['kind'], string> = { 'change-request': 'Change request', 'app-trust': 'App to approve' }
+const kindText: Record<ApprovalRow['kind'], string> = { 'change-request': 'Change request', 'app-trust': 'App to approve', 'mcp-step': 'Agent step' }
 
 /** A change request's decision: a note and the two buttons, each off with its reason; the Store decides and its sentence comes back when it refuses (SC21c). */
 function Decision({ row, onDecided }: { row: ApprovalRow; onDecided: () => void }) {
@@ -22,7 +22,7 @@ function Decision({ row, onDecided }: { row: ApprovalRow; onDecided: () => void 
   return (
     <div style={{ gridColumn: '1 / -1' }} data-testid="approvals-decision">
       <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <input className="input" style={{ flex: 1, minWidth: 200 }} aria-label="Note" placeholder="Note (needed to reject)" value={note} onChange={(e) => setNote(e.target.value)} data-testid="approvals-note" />
+        <input className="input" style={{ flex: 1, minWidth: 200 }} aria-label="Note" placeholder={row.mcp ? 'Note (optional)' : 'Note (needed to reject)'} value={note} onChange={(e) => setNote(e.target.value)} data-testid="approvals-note" />
         <button type="button" className="btn btn-primary" disabled={approveWhy !== null} title={approveWhy ?? undefined} data-testid="approvals-approve" onClick={() => send(true)}>Approve</button>
         <button type="button" className="btn" disabled={rejectWhy !== null} title={rejectWhy ?? undefined} data-testid="approvals-reject" onClick={() => send(false)}>Reject</button>
         {rejectWhy && !busy && note.trim() === '' && <span className="hint" data-testid="approvals-why">{rejectWhy}</span>}
@@ -79,7 +79,7 @@ export function ApprovalsPage() {
                     <Link className="btn" to={row.link} data-testid="approvals-open">{row.canDecide ? 'Review' : 'Read'}</Link>
                     {!row.canDecide && <span className="hint" data-testid="approvals-cannot">You may not decide it</span>}
                   </span>
-                  {row.request && row.canDecide && <Decision row={row} onDecided={() => client.invalidateQueries({ queryKey: ['approvals'] })} />}
+                  {(row.request || row.mcp) && row.canDecide && <Decision row={row} onDecided={() => client.invalidateQueries({ queryKey: ['approvals'] })} />}
                 </div>
               ))}
             </div>
