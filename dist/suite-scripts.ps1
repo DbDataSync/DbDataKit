@@ -33,7 +33,13 @@ function Stopped([string]$name) {
 $appDir = Split-Path $dir -Parent
 # The services run from a copy of this version's files under %ProgramData%, never from Scoop's app folder: Scoop refuses to update an app while a process runs from its folder.
 $binRoot = Join-Path $env:ProgramData 'DbDataKit\bin'
-$binThis = Join-Path $binRoot (Split-Path $dir -Leaf)
+# Scoop runs post_install with $dir naming its `current` junction: the folder of the copy is named by the version ($version is Scoop's own variable), else by what the junction points at
+$versionName = $null
+if ($version) { $versionName = [string]$version } else {
+  $item = Get-Item -LiteralPath $dir
+  if ($item.Target) { $versionName = Split-Path ([string]($item.Target | Select-Object -First 1)) -Leaf } else { $versionName = Split-Path $dir -Leaf }
+}
+$binThis = Join-Path $binRoot $versionName
 $base = $binThis
 function UnderFolder([string]$path, [string]$folder) { return ($path -and $path.StartsWith($folder.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) }
 function ExeOf($member, [string]$root) { return (Join-Path (Join-Path $root $member.Folder) $member.Exe) }
