@@ -9,8 +9,32 @@ public enum PublishMode
     Stage,
 }
 
-/// <summary>A named place a version needs filled in a channel before it can run there: a connection, a secret, a data source. Every declared slot is required.</summary>
-public sealed record DefinitionSlot(string Name, string? Description = null);
+/// <summary>
+/// What a slot is used for (plan 21 CH03): <see cref="Write"/> (the default, and what a slot that says nothing is) needs a binding in every channel it runs in; <see cref="Read"/> is only read from, so a channel without a binding
+/// of its own reads production's (writes are never inherited, plan 21 decision 5).
+/// </summary>
+public enum SlotAccess
+{
+    Write,
+    Read,
+}
+
+/// <summary>A named place a version needs filled in a channel before it can run there: a connection, a secret, a data source. Every declared slot is required; a <see cref="SlotAccess.Read"/> slot is satisfied by production's binding when the channel has none.</summary>
+public sealed record DefinitionSlot(string Name, string? Description = null, SlotAccess Access = SlotAccess.Write)
+{
+    /// <summary>The access a manifest wrote as <c>access: read|write</c>; null when it wrote nothing, and a value that is neither is a mistake the caller reports (it gets <see langword="false"/>).</summary>
+    public static bool TryParseAccess(string? text, out SlotAccess access)
+    {
+        access = SlotAccess.Write;
+        if (text is null || text.Length == 0) return true;
+        switch (text.Trim().ToLowerInvariant())
+        {
+            case "write": return true;
+            case "read": access = SlotAccess.Read; return true;
+            default: return false;
+        }
+    }
+}
 
 /// <summary>What a validator is shown: the version a publish is about to store.</summary>
 public sealed record DefinitionCandidate(string Kind, string Name, string Manifest, IReadOnlyList<ArtifactRef> Artifacts, IReadOnlyList<string> DependsOn, int Format = DefinitionFormat.First);

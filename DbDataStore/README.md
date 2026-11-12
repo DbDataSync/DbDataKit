@@ -93,6 +93,10 @@ A write waits as a change request when it is an agent's (a token whose subject s
 
 An applied change (a direct write, or the approval of a change request; never a refused write or a rejected request) is one line of `events.jsonl` in the server's directory: `seq` (only grows), `change_id` (the change request's id when it waited, else the write's own), model, instance, the entities touched, how many changes, who, when. `GET /api/v1/events?after=<seq>&model=<m>&limit=<n>` (viewer; default 100, at most 1000) answers the events after the last sequence a consumer saw, with `last` to keep and `first` (the oldest sequence still kept: the file is cut to its newest half past 4 MB, so a reader that was away for long sees a `first` beyond what it asked for). A write whose event could not be recorded is not undone. The scheduler's "on change" trigger that would use this, and the events of a model published to a serving group (it is written there), are plan 15's.
 
+## Drafts of previews: how long they live
+
+A draft with no write for `previews.idle_days` days (30) is removed with its writes; a notice goes into the notification feed `previews.notice_days` days (7) before, once, and one after the removal (kinds `PreviewExpiring`, `PreviewRemoved`). The pass runs hourly over every copy of every model and reads the `previews:` section of `server.yaml` again each time, so an edit applies without a restart (a section that does not parse is logged and the last good one stays; at start it stops the server, naming the file). `GET /api/v1/notifications[?since_id=n]` (viewer) is the feed the console's Monitoring shows. The same expiry runs on the Gateway for the drafts of its store module and the apps host's previews (`store.idleDays`, `store.noticeDays`).
+
 ## Published models
 
 Reads and writes of the data itself are served by the serving layer from the models this server publishes to it, so they continue with this server stopped; see "Publishing to the serving layer" below. Structure changes stay here.
