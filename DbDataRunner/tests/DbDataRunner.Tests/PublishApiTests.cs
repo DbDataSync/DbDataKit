@@ -415,6 +415,37 @@ public sealed class PublishApiTests
     }
 
     [Fact]
+    public async Task A_read_slot_a_channel_leaves_unbound_reads_prods_binding_and_a_write_slot_is_refused_naming_slot_and_channel()
+    {
+        await using var h = new RunnerHarness(StateEngineIds.Sqlite);
+        await h.StartAsync();
+        using var publisher = await PublisherClient.PairAsync(h, "builder-a");
+        var task = SamplePackage.Task("load") with { Connections = [new ConnectionSlot("source", "sqlserver", Access: SlotAccess.Read), new ConnectionSlot("target", "postgres")] };
+        var package = FakePackage.Make("orders", "1", task);
+        await package.UploadAllAsync(publisher);
+        await publisher.JsonAsync(HttpMethod.Put, "/api/v1/bindings/prod/integration/orders", new { slots = new { source = "erp", target = "warehouse" } });
+
+        // dev binds nothing: the read slot is satisfied by prod's, the write slot is not
+        var (refused, body) = await publisher.JsonAsync(HttpMethod.Put, "/api/v1/definitions/integration/orders", package.Body("dev", "stage"));
+        Assert.Equal(HttpStatusCode.BadRequest, refused);
+        var message = (string)body!["error"]!;
+        Assert.Contains("'target'", message);
+        Assert.DoesNotContain("'source'", message);
+        Assert.Contains("channel 'dev'", message);
+        Assert.Contains("No write binding in this channel", message);
+
+        // the channel's own binding of the write slot is all it needs
+        await publisher.JsonAsync(HttpMethod.Put, "/api/v1/bindings/dev/integration/orders", new { slots = new { target = "warehouse_dev" } });
+        var (status, published) = await publisher.JsonAsync(HttpMethod.Put, "/api/v1/definitions/integration/orders", package.Body("dev", "stage"));
+        Assert.True(status == HttpStatusCode.OK, published?.ToJsonString());
+
+        var (_, detail) = await h.GetAsync("/api/v1/definitions/integration/orders");
+        var slots = detail!["slots"]!.AsArray().Where(x => Text(x, "channel") == "dev").ToDictionary(x => Text(x, "slot"), x => Text(x, "access"));
+        Assert.Equal("read", slots["source"]);
+        Assert.Equal("write", slots["target"]);
+    }
+
+    [Fact]
     public async Task The_client_command_refuses_with_the_servers_reason_and_an_unpaired_server_needs_a_code()
     {
         await using var h = new RunnerHarness(StateEngineIds.Sqlite);

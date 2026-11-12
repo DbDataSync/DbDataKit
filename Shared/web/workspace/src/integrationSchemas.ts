@@ -46,7 +46,7 @@ const task: SchemaNode = {
     connections: {
       type: 'array',
       description: 'The connection slots the task opens. Each is bound to a connection of the channel on the Runner; the code never holds a secret.',
-      items: { type: 'object', required: ['name', 'kind'], properties: { name: { description: 'The slot\'s name.', type: 'string' }, kind: { description: 'What the connection is: `database`, `http`, `folder`.', type: 'string' } } },
+      items: { type: 'object', required: ['name', 'kind'], properties: { name: { description: 'The slot\'s name.', type: 'string' }, kind: { description: 'What the connection is: `database`, `http`, `folder`.', type: 'string' }, access: { description: 'Whether the task only reads the connection (`read`: a channel with no binding of its own reads production\'s) or writes to it (`write`, the default: every channel binds its own).', enum: ['read', 'write'] } } },
     },
     limits,
     requires: { type: 'array', description: 'What the runner must provide (`network:outside`).', items: { type: 'string' } },

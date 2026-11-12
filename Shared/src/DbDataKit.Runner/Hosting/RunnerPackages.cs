@@ -26,7 +26,9 @@ public static class RunnerPackages
     /// <summary>The connection slots the manifest's tasks declare: each needs a binding in a channel before the version serves there (plan 30 section 3.2).</summary>
     private static IReadOnlyList<DefinitionSlot> SlotsOfManifest(string manifest) =>
         PackageManifestReader.Load(manifest, "manifest") is { Ok: true, Manifest: { } m }
-            ? [.. m.Tasks.SelectMany(t => t.Connections).Select(c => c.Name).Distinct(StringComparer.Ordinal).Select(n => new DefinitionSlot(n))]
+            ? [.. m.Tasks.SelectMany(t => t.Connections).GroupBy(c => c.Name, StringComparer.Ordinal)
+                // a name two tasks declare is read only when every task that declares it says read
+                .Select(g => new DefinitionSlot(g.Key, Access: g.All(c => c.Access == SlotAccess.Read) ? SlotAccess.Read : SlotAccess.Write))]
             : [];
 
     /// <summary>The validator of the kind: the manifest loads without errors, names the definition, and its launch file is among the files; null when it does, the problems in words otherwise.</summary>

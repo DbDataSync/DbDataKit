@@ -44,11 +44,11 @@ export function BindingsCardView(p: BindingsCardViewProps) {
             return (
               <div key={r.slot} className="grid-row" style={{ gridTemplateColumns: '1fr 0.8fr 1.6fr 2fr', gap: 14 }} data-testid="runner-binding-row" data-slot={r.slot} data-bound={r.boundTo ?? ''} data-revision={r.revision ?? ''} data-declared={r.declared}>
                 <span className="mono">{r.slot}</span>
-                <span>{r.kind ?? ''}</span>
+                <span>{r.kind ?? ''}{r.declared && r.access === 'read' ? <span className="hint" data-testid="runner-binding-access"> (read)</span> : null}</span>
                 <span className="hint">{r.declared ? `${r.tasks.join(', ')} (v${r.versions.join(', v')})` : 'no version declares it now'}</span>
                 {p.canEdit
-                  ? <input className="input mono" list={listId} value={typed ?? r.boundTo ?? ''} placeholder="connection name" aria-label={`Connection for ${r.slot}`} onChange={(e) => p.onEdit(r.slot, e.target.value)} data-testid="runner-binding-input" />
-                  : <span className="mono" data-testid="runner-binding-value">{r.boundTo ?? 'not bound'}</span>}
+                  ? <input className="input mono" list={listId} value={typed ?? r.boundTo ?? ''} placeholder={r.inheritedFrom !== null ? `${r.inheritedFrom} (inherited from prod)` : 'connection name'} aria-label={`Connection for ${r.slot}`} onChange={(e) => p.onEdit(r.slot, e.target.value)} data-testid="runner-binding-input" />
+                  : <span className="mono" data-testid="runner-binding-value">{r.boundTo ?? (r.inheritedFrom !== null ? `${r.inheritedFrom} (inherited from prod)` : 'not bound')}</span>}
                 {p.canEdit && p.onTry && r.boundTo !== null && typed === undefined && (
                   <span className="row" style={{ gap: 8, gridColumn: '1 / -1' }}>
                     <button type="button" className="btn" disabled={p.trying === r.slot} onClick={() => p.onTry?.(r.slot)} data-testid="runner-binding-try">{p.trying === r.slot ? 'Trying...' : 'Try this binding'}</button>

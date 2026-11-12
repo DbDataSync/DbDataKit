@@ -117,9 +117,9 @@
       "current": 1,
       "previous": 1,
       "status": "frozen",
-      "note": "frozen by its release; the strict reader is its definition",
+      "note": "frozen by its release; the strict reader is its definition. 2026-11-12: the owner allowed one in-place change without a version bump (breaking changes need no bump right now): an optional `access: read|write` on a task connection (plan 21 CH03), hash re-recorded; no package/2",
       "version_source": { "file": "Shared/src/DbDataKit.Runner.Abstractions/PackageManifest.cs", "pattern": "public const int FormatVersion = (\\d+);" },
-      "files": [ { "path": "Shared/src/DbDataKit.Runner.Abstractions/PackageManifestReader.cs", "sha256": "8b3716b715005e42c8dc0d62953c5f5db4136e262941f46501c34fc0a4ce1b3f" } ]
+      "files": [ { "path": "Shared/src/DbDataKit.Runner.Abstractions/PackageManifestReader.cs", "sha256": "12cac7cd7b585bb28936ce89cd7b8c51f92f51fda1406de57b528be87cfd448c" } ]
     },
     {
       "id": "release",
