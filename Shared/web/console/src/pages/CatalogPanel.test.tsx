@@ -46,6 +46,14 @@ describe('an opened item', () => {
     expect(html(<Opened opening={{ ...base, mode: 'link', url: 'javascript:alert(1)' } as CatalogOpening} source={null} values={{}} />)).toContain('catalog-no-address')
   })
 
+  it('says a custom page opens at the apps host, not in a report server', () => {
+    const out = html(<Opened opening={{ key: 'views:page/acme.regional', mode: 'link', title: 'Regional', kind: 'page', name: 'acme.regional', url: 'https://apps.example/apps/acme/_views/regional?region=West' } as CatalogOpening} source={null} values={{}} />)
+    expect(out).toContain('>Open the page<')
+    expect(out).toContain('apps host')
+    expect(out).not.toContain('report server')
+    expect(out).toContain('rel="noopener noreferrer"')
+  })
+
   it('sends one of our documents to its board with the source and the values', () => {
     const out = html(<Opened opening={{ key: 'views:dashboard/sales', mode: 'document', title: 'Sales', kind: 'dashboard', name: 'sales' }} source="gw1" values={{ region: ['West'] }} />)
     expect(out).toContain('href="/views/dashboards/sales?source=gw1&amp;p.region=West"')

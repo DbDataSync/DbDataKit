@@ -37,7 +37,9 @@ public static class AppShell
     /// The token broker's side in the page (plan 26 section 3): a frame asks with <c>postMessage({dbdata: "app/1", type: "token.request", id})</c> and gets <c>{type: "token", id, token, expiresIn, audience}</c> or <c>{type: "error", id, message}</c>.
     /// Only the app's own frame is answered (the message's source is checked against it), and the request to the host carries a header a cross-site page cannot send.
     /// </summary>
-    public const string Script = """
+    public static readonly string Script = ScriptTemplate.Replace("__TOKENS__", CustomPages.TokensJson(), StringComparison.Ordinal);
+
+    private const string ScriptTemplate = """
         (function () {
           var route = null;
           function valid(p) { return typeof p === "string" && p.length <= 512 && p.charAt(0) === "/" && p.charAt(1) !== "/" && !/[\u0000-\u001f\u007f]/.test(p); }
@@ -46,6 +48,60 @@ public static class AppShell
           var frames = Array.prototype.slice.call(document.querySelectorAll("iframe[data-instance]"));
           var main = document.getElementById("app-frame");
           function tell(path) { if (main) main.contentWindow.postMessage({ dbdata: "app/1", type: "navigate", path: path }, "*"); }
+          // A custom page's frame (plan 32 DBR33): the page code says views:hello, this script fetches its rows as the person (the host's route, never the frame) and answers views:init. Only the SDK's shapes are read, only from this frame's window.
+          var TOKENS = __TOKENS__;
+          function fits(type, v) { return type === "integer" ? typeof v === "number" && isFinite(v) && Math.floor(v) === v : type === "number" ? typeof v === "number" && isFinite(v) : type === "boolean" ? typeof v === "boolean" : (typeof v === "string" || typeof v === "number" || typeof v === "boolean"); }
+          function notice(frame, text) {
+            var p = frame.previousElementSibling && frame.previousElementSibling.hasAttribute("data-view-notice") ? frame.previousElementSibling : null;
+            if (!p) { p = document.createElement("p"); p.setAttribute("data-view-notice", ""); p.setAttribute("role", "alert"); p.style.cssText = "margin:0;padding:8px 16px;background:#fd03;border-bottom:1px solid #8884"; frame.parentNode.insertBefore(p, frame); }
+            p.textContent = text;
+          }
+          function viewOf(frame) {
+            if (!frame.__view) {
+              var declared = {}; try { declared = JSON.parse(frame.getAttribute("data-params") || "{}"); } catch (e) {}
+              frame.__view = { declared: declared, values: null, started: false };
+              setTimeout(function () { if (!frame.__view.started) notice(frame, "This page did not start. Its app may not register the view '" + frame.getAttribute("data-export") + "'."); }, 15000);
+            }
+            return frame.__view;
+          }
+          function query(values) {
+            var parts = [];
+            Object.keys(values).sort().forEach(function (k) { [].concat(values[k]).forEach(function (one) { parts.push(encodeURIComponent(k) + "=" + encodeURIComponent(String(one))); }); });
+            return parts.join("&");
+          }
+          function props(frame, rows) {
+            var scheme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+            return { data: rows.data || {}, params: rows.params || {}, theme: { scheme: scheme, tokens: TOKENS[scheme] }, size: { width: frame.clientWidth || 800, height: "auto" }, mode: "screen", links: {} };
+          }
+          function rows(frame) {
+            var st = viewOf(frame);
+            var q = st.values ? query(st.values) : location.search.slice(1);
+            return fetch(frame.getAttribute("data-rows") + (q ? "?" + q : ""), { credentials: "same-origin", headers: { "X-DbData-Shell": "1" } })
+              .then(function (r) { return r.json().then(function (b) { return r.ok ? b : Promise.reject(new Error(b.message || ("The host refused the page's rows (" + r.status + ")."))); }); })
+              .then(function (b) { st.values = b.params || {}; var n = frame.previousElementSibling; if (n && n.hasAttribute("data-view-notice")) n.remove(); return b; });
+          }
+          function viewMessage(frame, m) {
+            var st = viewOf(frame);
+            switch (m.type) {
+              case "views:hello":
+                st.started = true;
+                rows(frame).then(function (b) { frame.contentWindow.postMessage({ type: "views:init", name: frame.getAttribute("data-export"), props: props(frame, b) }, "*"); }).catch(function (e) { notice(frame, String(e.message || e)); });
+                return;
+              case "views:ready": frame.setAttribute("data-state", "ready"); return;
+              case "views:error": if (typeof m.message === "string") notice(frame, m.message.slice(0, 2000)); frame.setAttribute("data-state", "error"); return;
+              case "views:size": if (typeof m.height === "number" && isFinite(m.height) && m.height >= 0 && m.height < 1e7) frame.style.flex = "1 0 " + Math.ceil(m.height) + "px"; return;
+              case "views:setParam": {
+                var d = st.declared[m.name];
+                if (typeof m.name !== "string" || !d || !st.values) { notice(frame, "The page asked to set `" + m.name + "`, which it does not declare."); return; }
+                var v = m.value, list = v === null ? [] : Array.isArray(v) ? v : [v];
+                if ((!d.many && Array.isArray(v)) || !list.every(function (x) { return fits(d.type, x); })) { notice(frame, "The page asked to set `" + m.name + "` to a value that is not a " + d.type + (d.many ? " list" : "") + "."); return; }
+                if (list.length) st.values[m.name] = d.many ? list : list[0]; else delete st.values[m.name];
+                history.replaceState(null, "", location.pathname + (Object.keys(st.values).length ? "?" + query(st.values) : "") + location.hash);
+                rows(frame).then(function (b) { frame.contentWindow.postMessage({ type: "views:props", props: props(frame, b) }, "*"); }).catch(function (e) { notice(frame, String(e.message || e)); });
+                return;
+              }
+            }
+          }
           frames.forEach(function (frame) {
             frame.addEventListener("load", function () {
               var theme = frame.getAttribute("data-theme");
@@ -58,6 +114,7 @@ public static class AppShell
           window.addEventListener("message", function (event) {
             var m = event.data;
             var frame = frames.filter(function (f) { return f.contentWindow === event.source; })[0];
+            if (frame && m && frame.hasAttribute("data-view-page") && typeof m.type === "string" && m.type.indexOf("views:") === 0) { viewMessage(frame, m); return; }
             if (!frame || !m || m.dbdata !== "app/1") return;
             var instance = frame.getAttribute("data-instance");
             if (m.type === "route") {
@@ -93,6 +150,18 @@ public static class AppShell
         var bundle = AppSite.BasePath + Uri.EscapeDataString(instance) + "/" + AppSite.BundleFolder;
         var theme = header?.Portal is { } look ? $" data-theme=\"{WebUtility.HtmlEncode(look.ThemeJson)}\"" : "";
         var frame = $"<iframe id=\"app-frame\" data-instance=\"{WebUtility.HtmlEncode(instance)}\"{theme} title=\"{WebUtility.HtmlEncode(title)}\" sandbox=\"allow-scripts allow-forms allow-popups\" src=\"{WebUtility.HtmlEncode(bundle)}\"></iframe>";
+        return Respond(Document(title, header, frame), embedOrigins);
+    }
+
+    /// <summary>
+    /// A custom page of an app (plan 32 DBR33): the shell's page with the app's own document as its one frame, mounted on the page's view (<c>#view=&lt;Export&gt;&amp;mode=screen</c>, which no server sees). The frame has the app's sandbox and is the instance's, so the
+    /// shell script gives it a token if it asks; the script also plays the host's side of the SDK's conversation for it (<c>data-view-page</c>): it fetches the rows from <c>data-rows</c> as the person and tells the frame, so the code never fetches.
+    /// The parameters are in the page's address; <c>data-params</c> is the declaration a <c>setParam</c> is checked against.
+    /// </summary>
+    public static AppResponse ViewPage(string instance, string title, CustomView view, Header? header = null, IReadOnlyList<string>? embedOrigins = null)
+    {
+        var bundle = AppSite.BasePath + Uri.EscapeDataString(instance) + "/" + AppSite.BundleFolder + "#view=" + Uri.EscapeDataString(view.Export) + "&mode=screen";
+        var frame = $"<iframe id=\"view-frame\" data-instance=\"{WebUtility.HtmlEncode(instance)}\" data-view-page=\"{WebUtility.HtmlEncode(view.Name)}\" data-export=\"{WebUtility.HtmlEncode(view.Export)}\" data-rows=\"{WebUtility.HtmlEncode(CustomPages.RowsAddress(instance, view.Name))}\" data-params=\"{WebUtility.HtmlEncode(CustomPages.DeclarationJson(view))}\" title=\"{WebUtility.HtmlEncode(title)}\" sandbox=\"allow-scripts allow-forms allow-popups\" src=\"{WebUtility.HtmlEncode(bundle)}\"></iframe>";
         return Respond(Document(title, header, frame), embedOrigins);
     }
 

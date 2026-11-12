@@ -53,7 +53,9 @@ public sealed partial class GatewaySemanticModels
         if (!string.Equals(parsed.Name, name, StringComparison.OrdinalIgnoreCase))
             throw Invalid(caller, name, "The catalog is named '" + parsed.Name + "', and the call names '" + name + "'; they are the same name.");
 
-        var adoption = new Adoption(context.Body["adopt"]);
+        var used = sources.Values.Concat(parsed.Doc.Sources.Keys.Where(k => !k.Contains('.') && !sources.ContainsKey(k)));
+        ServingSlots.CheckDeclared(content.Slots, used);
+        var adoption = new Adoption(context.Body["adopt"]) { Slots = content.Slots, IsBound = dataSource => context.BoundTo?.Invoke(dataSource) is not null };
         var problem = await CheckSourcesAsync(parsed, sources, ssas, caller, adoption, ct).ConfigureAwait(false);
         if (problem is not null) throw Invalid(caller, name, problem, extra: adoption.Hint);
         _asked.AddOrUpdate(context, adoption);
@@ -72,13 +74,19 @@ public sealed partial class GatewaySemanticModels
         response["created"] = created;
         response["unchanged"] = !result.Changed;
         if (WarningsOf(context.Manifest) is { } warnings) response["warnings"] = warnings;
-        if (!_asked.TryGetValue(context, out var adoption) || adoption.Adopted.Count == 0) return;
+        if (!_asked.TryGetValue(context, out var adoption) || (adoption.Adopted.Count == 0 && adoption.BoundUsed.Count == 0)) return;
+        foreach (var dataSource in adoption.BoundUsed)
+        {
+            adoptions?.Record(dataSource, Client(caller)!, Who(caller), name, "semantic-model (slot)", _clock.GetUtcNow());
+            Record(caller, "data-source use", dataSource, ServingSlots.UseNote(Client(caller)!, Who(caller), name));
+        }
         foreach (var dataSource in adoption.Adopted)
         {
             adoptions?.Record(dataSource, Client(caller)!, Who(caller), name, "semantic-model", _clock.GetUtcNow());
             Record(caller, "data-source adopt", dataSource, $"adopted by {Client(caller)} ({Who(caller)}) for the model {name}");
         }
-        response["adopted"] = new JsonArray([.. adoption.Adopted.Select(a => (JsonNode?)a)]);
+        if (adoption.Adopted.Count > 0) response["adopted"] = new JsonArray([.. adoption.Adopted.Select(a => (JsonNode?)a)]);
+        if (adoption.BoundUsed.Count > 0) response["slots_used"] = new JsonArray([.. adoption.BoundUsed.Select(a => (JsonNode?)a)]);
     }
 
     private static JsonArray? WarningsOf(string manifest)
@@ -86,6 +94,9 @@ public sealed partial class GatewaySemanticModels
         try { return PublishedSemanticModels.ContentOf(manifest) is { Catalog.Length: > 0 } content ? AccessPublishNotes.Warnings(CatalogLoader.LoadText(content.Catalog).Access, readOnDataSource: true) : null; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
     }
+
+    /// <summary>The checks around binding a slot of a model (plan 33 SW01): the data source of the same name, one of this Gateway's, made by the binding client or bound by an administrator.</summary>
+    internal void CheckSharedBind(BindingHookContext context) => ServingSlots.CheckBind(context, options, ConnectionOwner);
 
     /// <summary>The read rules of the route: a publishing client reads only its own models.</summary>
     internal void CheckSharedRead(string name, DefinitionsCaller caller)
@@ -105,6 +116,8 @@ public sealed class SemanticModelKindHook(GatewaySemanticModels models, Publishe
     public Task BeforePublishAsync(PublishHookContext context, CancellationToken ct) => models.CheckSharedPublishAsync(context, ct);
 
     public void AfterPublish(PublishHookContext context, PublishResult result, JsonObject response) => models.AfterSharedPublish(context, result, response);
+
+    public void BeforeBind(BindingHookContext context) => models.CheckSharedBind(context);
 
     public string? OwnerOf(string name) => store.OwnerOf(name.ToLowerInvariant());
 

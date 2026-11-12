@@ -108,7 +108,8 @@ public sealed class GatewayViews
             PageAssets = options.CurrentValue.Views.Export.PageAssets,
             // an action link's change is made by the group's Store as the viewer (plan 32 DBR53); no runner is connected to a Gateway, so a `task` says so
             Actions = new GroupViewsActions(GatewayStoreModule.ApiOf(options, state, secrets, entityModels), homeCallers),
-            CustomApps = new GatewayCustomViewApps(() => new DbDataKit.Apps.AppInstanceStore(store)),
+            CustomApps = new GatewayCustomViewApps(() => new DbDataKit.Apps.AppInstanceStore(store),
+                () => options.CurrentValue.Modules.Contains(GatewayModules.Apps) ? DbDataGateway.Server.Hosting.GatewayAppsModule.PublicUrlOf(options.CurrentValue) : null),
             Resolver = new ResolverOptions { FrameOrigins = new LiveOrigins(() => options.CurrentValue.Views.FrameOrigins) },
         }, Publications, new Callers(this), new StateViewsAudit(new AuditLog(state, DbDataGateway.Server.State.GatewayState.ServiceId)), loggers);
     }

@@ -40,6 +40,11 @@ public sealed partial class GatewaySemanticModels(
         };
         public List<string> Adopted { get; } = [];
         public JsonObject? Hint { get; set; }
+
+        /// <summary>The data sources the version names as slots, and whether the channel binds one (plan 33 SW01): a data source made by hand that is bound needs no <c>adopt</c>; one declared and not bound is left to the registry, which refuses the version naming the slot.</summary>
+        public IReadOnlyList<string>? Slots { get; init; }
+        public Func<string, bool> IsBound { get; init; } = _ => false;
+        public List<string> BoundUsed { get; } = [];
     }
 
     private sealed record RollbackRequest([property: JsonPropertyName("to_version")] int? ToVersion);
@@ -207,8 +212,13 @@ public sealed partial class GatewaySemanticModels(
             if (owner is not null && ConnectionOwner(dataSource) != owner)
             {
                 var madeBy = ConnectionOwner(dataSource);
+                // plan 33 SW01: a data source made by hand that the version names as a slot is the group's to allow, by binding the slot (an administrator's act, recorded); the registry refuses the version naming the slot while it is unbound
+                if (string.IsNullOrEmpty(madeBy) && ServingSlots.Declared(adopt.Slots, dataSource))
+                {
+                    if (adopt.IsBound(dataSource) && !adopt.BoundUsed.Contains(dataSource)) adopt.BoundUsed.Add(dataSource);
+                }
                 // plan 33 SC21f: a data source made by hand may be read by this client's model when the request names it in `adopt`; it is recorded after the publish. One another client made, never.
-                if (string.IsNullOrEmpty(madeBy) && adopt.Names.Contains(dataSource) && OwnerScope.AuthorizePublishingOver(caller.Token!, new ManagedObject(null)).Allowed)
+                else if (string.IsNullOrEmpty(madeBy) && adopt.Names.Contains(dataSource) && OwnerScope.AuthorizePublishingOver(caller.Token!, new ManagedObject(null)).Allowed)
                 {
                     if (!adopt.Adopted.Contains(dataSource)) adopt.Adopted.Add(dataSource);
                 }

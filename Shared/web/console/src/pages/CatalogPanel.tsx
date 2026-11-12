@@ -56,7 +56,7 @@ export function Opened({ opening, source, values }: { opening: CatalogOpening; s
       )}
       {(opening.mode === 'link' || (opening.mode === 'frame' && !framable(opening.url))) && (
         followable(opening.url)
-          ? <p><a className="btn btn-primary" href={opening.url} target="_blank" rel="noopener noreferrer" data-testid="catalog-link">Open in the report server</a> <span className="hint">it opens off this site, where the report server signs you in</span></p>
+          ? <p><a className="btn btn-primary" href={opening.url} target="_blank" rel="noopener noreferrer" data-testid="catalog-link">{opening.kind === 'page' ? 'Open the page' : 'Open in the report server'}</a> <span className="hint">{opening.kind === 'page' ? 'it opens at the apps host, where you sign in as you do for the app' : 'it opens off this site, where the report server signs you in'}</span></p>
           : <p className="error" role="alert" data-testid="catalog-no-address">The catalog gave no address this page may follow.</p>
       )}
     </div>

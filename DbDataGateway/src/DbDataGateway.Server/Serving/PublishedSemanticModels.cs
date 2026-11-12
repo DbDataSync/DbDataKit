@@ -29,7 +29,8 @@ public sealed partial class PublishedSemanticModels(DefinitionStore store, Seman
     private readonly ConcurrentDictionary<string, (int Version, string Reason)> _failed = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>A version's content in the store: the catalog and what serves it. It is also the manifest of the shared publish API (<c>camelCase</c>: <c>catalog</c>, <c>managedBy</c>, <c>sources</c>, <c>ssas</c>), so a client that publishes through <c>PUT /api/v1/definitions/semantic-model/{name}</c> sends exactly this.</summary>
-    public sealed record Content(string Catalog, string? ManagedBy, Dictionary<string, string> Sources, Dictionary<string, string> Ssas);
+    /// <param name="Slots">The data sources the version names as slots (plan 33 SW01): each is bound in the channel by the group (an administrator for a data source made by hand) before the version can serve, which takes the place of the per-publish <c>adopt</c>. Absent when the model names none, so a version published without slots reads as before.</param>
+    public sealed record Content(string Catalog, string? ManagedBy, Dictionary<string, string> Sources, Dictionary<string, string> Ssas, [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Slots = null);
 
     /// <summary>The content a manifest of the shared API carries, or null when it is not one.</summary>
     public static Content? ContentOf(string manifest)

@@ -17,6 +17,9 @@ public sealed record PublishHookContext(string Kind, string Name, string Channel
 {
     /// <summary>The request body as sent (a kind reads the fields it adds to it, such as the Gateway's <c>adopt</c>); never null from the API.</summary>
     public JsonObject Body { get; init; } = [];
+
+    /// <summary>What the channel binds a slot of this version to (its own binding, or production's for a slot that only reads), or null when it is unbound; null itself for a host that does not say. A kind whose slots take the place of a per-publish confirmation (the Gateway's data sources) reads it.</summary>
+    public Func<string, string?>? BoundTo { get; init; }
 }
 
 /// <summary>What a hook sees of a life-cycle call (<c>activate</c>, <c>switch</c>, <c>rollback</c>, <c>retire</c>) the API authorised: the parsed body, the version a <c>switch</c> names, and <c>expected_version</c>.</summary>

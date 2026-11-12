@@ -8,8 +8,8 @@ namespace DbDataGateway.Server.Serving;
 
 /// <summary>
 /// The serving kinds in plan 30's registry (PB01): <c>semantic-model</c>, <c>data-source</c>, <c>entity-model</c> and the apps' <c>app</c>, <c>app-instance</c> and <c>app-nav</c>, next to the views' <c>dashboard</c> and <c>report</c> (those register
-/// themselves in <see cref="GatewayViewsPublishing"/>). Each has the validator the per-kind endpoint runs before it publishes, the formats its program reads (24a UC01) and target type <c>serving</c>, mode <c>serve</c>. Slots: none for any of them
-/// yet; a data source's secrets are pushed to the instance, and become bindings with PB02. A store from <see cref="StoreOf"/> publishes through this registry.
+/// themselves in <see cref="GatewayViewsPublishing"/>). Each has the validator the per-kind endpoint runs before it publishes, the formats its program reads (24a UC01) and target type <c>serving</c>, mode <c>serve</c>. Slots: a model names the data sources it needs as slots in its manifest (<c>slots</c>, plan 33 SW01), and a version that names one is refused until the channel binds it; the others declare none (a data source's
+/// secrets are pushed to the instance, see plan 30 PB02). A store from <see cref="StoreOf"/> publishes through this registry.
 /// </summary>
 public static class ServingKinds
 {
@@ -19,9 +19,9 @@ public static class ServingKinds
 
     public static DefinitionKinds Register(DefinitionKinds kinds)
     {
-        kinds.Register(new DefinitionKind(PublishedSemanticModels.DefinitionKind, [TargetType], PublishMode.Serve) { Formats = DefinitionFormats.Of(2), Validator = ValidateModel, FormatOf = ModelFormat });
+        kinds.Register(new DefinitionKind(PublishedSemanticModels.DefinitionKind, [TargetType], PublishMode.Serve) { Formats = DefinitionFormats.Of(2), Validator = ValidateModel, FormatOf = ModelFormat, SlotsOf = manifest => SlotsOfModel(PublishedSemanticModels.ContentOf(manifest)?.Slots, SlotAccess.Read) });
         kinds.Register(new DefinitionKind(PublishedDataSources.DefinitionKind, [TargetType], PublishMode.Serve) { Formats = DefinitionFormats.Of(ConnectionDefinition.CurrentVersion), Validator = ValidateDataSource, FormatOf = text => ConnectionDefinitionLoader.FormatOfText(text) });
-        kinds.Register(new DefinitionKind(PublishedEntityModels.DefinitionKind, [TargetType], PublishMode.Serve) { Formats = DefinitionFormats.Of(DataModelLoader.Version), Validator = ValidateEntityModel, FormatOf = EntityModelFormat });
+        kinds.Register(new DefinitionKind(PublishedEntityModels.DefinitionKind, [TargetType], PublishMode.Serve) { Formats = DefinitionFormats.Of(DataModelLoader.Version), Validator = ValidateEntityModel, FormatOf = EntityModelFormat, SlotsOf = manifest => SlotsOfModel(EntityModelSlots(manifest), SlotAccess.Write) });
         return DbDataKit.Apps.AppDefinitions.Register(kinds);
     }
 
@@ -30,6 +30,19 @@ public static class ServingKinds
 
     /// <summary>The store over the group's state whose publishes go through <see cref="All"/>.</summary>
     public static DefinitionStore StoreOf(StateDatabase state) => new DefinitionStore(state).WithRegistry(All, TargetType);
+
+    /// <summary>
+    /// The slots a model names (plan 33 SW01): one for each data source the manifest lists in <c>slots</c>, named by the data source. A group binds the slot once in a channel, to the data source of the same name; until it does, the version is refused naming the slot.
+    /// A semantic model only reads, so its slots are <see cref="SlotAccess.Read"/> (a channel without a binding reads production's); an entity model writes its tables, so its slot is a write slot.
+    /// </summary>
+    internal static IReadOnlyList<DefinitionSlot> SlotsOfModel(IReadOnlyList<string>? names, SlotAccess access) =>
+        [.. (names ?? []).Where(n => !string.IsNullOrWhiteSpace(n)).Distinct(StringComparer.Ordinal).Select(n => new DefinitionSlot(n, $"the data source '{n}' this version reads from{(access == SlotAccess.Write ? " and writes to" : "")}", access))];
+
+    private static IReadOnlyList<string>? EntityModelSlots(string manifest)
+    {
+        try { return JsonSerializer.Deserialize<PublishedEntityModels.Content>(manifest, Json)?.Slots; }
+        catch (JsonException) { return null; }
+    }
 
     // what the format of a manifest is when a publish (the shared API) does not say: what the per-kind routes record, read from the content
     private static int? ModelFormat(string manifest)

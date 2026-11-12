@@ -109,12 +109,35 @@ public sealed class DefinitionsClient(IDefinitionsLink link, ConsoleSigningKey? 
         return new ServedDefinition(latest, version, (string?)read.Body["manifest"]);
     }
 
+    /// <summary>The names of the kind the caller may see (<c>GET definitions/{kind}</c>): a caller that only publishes sees the names it owns, so this is also how a publisher learns what it already made. Null when the group refuses the read (say why through <paramref name="refusal"/>).</summary>
+    public async Task<IReadOnlyList<string>?> NamesAsync(string kind, Action<DefinitionsAnswer>? refusal = null, CancellationToken ct = default)
+    {
+        var answer = await GetAsync($"definitions/{Uri.EscapeDataString(kind)}", ct).ConfigureAwait(false);
+        if (!answer.Ok) { refusal?.Invoke(answer); return null; }
+        return [.. (answer.Body["definitions"] as JsonArray ?? []).OfType<JsonObject>().Select(d => (string?)d["name"]).Where(n => n is not null).Select(n => n!)];
+    }
+
+    /// <summary>Hands a definition to a publisher client (<c>POST definitions/{kind}/{name}/adopt</c>, an administrator's call; the Gateway's data sources): the client then owns it. <paramref name="withPolicy"/> says the data source's serving policy may be replaced by the client's next publish.</summary>
+    public Task<DefinitionsAnswer> AdoptAsync(string kind, string name, string client, bool withPolicy = false, CancellationToken ct = default)
+    {
+        var body = new JsonObject { ["client"] = client };
+        if (withPolicy) body["adopt"] = true;
+        return SendAsync(HttpMethod.Post, $"definitions/{Uri.EscapeDataString(kind)}/{Uri.EscapeDataString(name)}/adopt", body, ct);
+    }
+
     /// <summary>Binds slots of a definition in a channel (<c>PUT bindings/{channel}/{kind}/{name}</c>): slot to the name of what it is bound to, never a value.</summary>
     public Task<DefinitionsAnswer> BindAsync(string channel, string kind, string name, IReadOnlyDictionary<string, string> slots, int? expectedRevision = null, CancellationToken ct = default)
     {
         var body = new JsonObject { ["slots"] = new JsonObject([.. slots.OrderBy(s => s.Key, StringComparer.Ordinal).Select(s => KeyValuePair.Create(s.Key, (JsonNode?)JsonValue.Create(s.Value)))]) };
         if (expectedRevision is { } revision) body["expected_revision"] = revision;
         return SendAsync(HttpMethod.Put, $"bindings/{Uri.EscapeDataString(channel)}/{Uri.EscapeDataString(kind)}/{Uri.EscapeDataString(name)}", body, ct);
+    }
+
+    /// <summary>Empties one slot of a definition in a channel (<c>DELETE bindings/{channel}/{kind}/{name}/{slot}</c>). A slot that was not bound is already empty (the group answers 404, which is not a failure here).</summary>
+    public async Task<DefinitionsAnswer> UnbindAsync(string channel, string kind, string name, string slot, CancellationToken ct = default)
+    {
+        var answer = await SendAsync(HttpMethod.Delete, $"bindings/{Uri.EscapeDataString(channel)}/{Uri.EscapeDataString(kind)}/{Uri.EscapeDataString(name)}/{Uri.EscapeDataString(slot)}", null, ct).ConfigureAwait(false);
+        return answer.Status == 404 ? new DefinitionsAnswer(200, new JsonObject { ["slot"] = slot, ["unbound"] = false }) : answer;
     }
 
     private Task<DefinitionsAnswer> GetAsync(string path, CancellationToken ct) => SendAsync(HttpMethod.Get, path, null, ct);

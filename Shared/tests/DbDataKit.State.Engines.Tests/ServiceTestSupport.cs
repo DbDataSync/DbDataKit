@@ -61,7 +61,7 @@ public sealed class ServiceScratch : IDisposable
     public StateEndpoint Provision(string engine, string? passwordOverride = null)
     {
         var n = ++_counter;
-        if (engine == "sqlite") return new StateEndpoint(new StateSettings("sqlite"), Path.Combine(Directory, $"state-{n}.db"));
+        if (engine == "sqlite") return new StateEndpoint(new StateSettings(StateEngineIds.Sqlite), Path.Combine(Directory, $"state-{n}.db"));
 
         var server = Server(engine);
         if (server is null)

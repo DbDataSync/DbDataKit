@@ -210,7 +210,7 @@ public sealed class StateMoveServiceTests : IDisposable
         Assert.Equal(MoveStep.Preflight, notEmpty.Step);
         Assert.Equal(StateServiceRefusal.TargetNotEmpty, Assert.IsType<StateServiceException>(notEmpty.InnerException).Reason);
 
-        var invalid = await Assert.ThrowsAsync<StateMoveException>(() => Move(source, new StateEndpoint(new StateSettings("sqlite") { Retention = new RetentionSettings { Days = 0 } }, Path.Combine(_scratch.Directory, "new.db")), settings));
+        var invalid = await Assert.ThrowsAsync<StateMoveException>(() => Move(source, new StateEndpoint(new StateSettings(StateEngineIds.Sqlite) { Retention = new RetentionSettings { Days = 0 } }, Path.Combine(_scratch.Directory, "new.db")), settings));
         Assert.Equal(MoveStep.Preflight, invalid.Step);
         Assert.Contains("settings.yaml", invalid.Message);
         Assert.False(File.Exists(Path.Combine(_scratch.Directory, "new.db")), "the target was not created: the settings were checked first");

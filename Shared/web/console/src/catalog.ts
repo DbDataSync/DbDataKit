@@ -11,7 +11,7 @@ export interface CatalogItem {
   id: string
   path: string
   name: string
-  type: 'folder' | 'dashboard' | 'report' | 'external-report' | string
+  type: 'folder' | 'dashboard' | 'report' | 'page' | 'external-report' | string
   description?: string | null
   owner?: string | null
   modified?: string | null
@@ -50,7 +50,7 @@ export interface CatalogOpening {
   mode: 'document' | 'frame' | 'link'
   title: string
   url?: string | null
-  kind?: 'dashboard' | 'report' | null
+  kind?: 'dashboard' | 'report' | 'page' | null
   name?: string | null
   version?: string | null
   layouts?: string[] | null

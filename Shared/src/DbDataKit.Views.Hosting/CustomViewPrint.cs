@@ -25,6 +25,12 @@ public interface ICustomViewApps
     /// <summary>A custom <b>page</b> of an app instance by the view's name (the address <c>/apps/&lt;instance&gt;/_views/&lt;name&gt;</c>): its manifest entry, its files and the app they come from; null for a name the instance does not have, or one that is a widget.</summary>
     CustomPageApp? FindPage(string instance, string name) => null;
 
+    /// <summary>Every custom page the host serves, by instance (the catalog lists them by their manifest entries); empty for a host that serves none.</summary>
+    IEnumerable<CustomPageApp> Pages() => [];
+
+    /// <summary>The absolute address of a page on the apps host (<c>https://apps.example/apps/&lt;instance&gt;/_views/&lt;name&gt;</c>), or null when this host does not know where its apps are served (the catalog then lists the page but cannot open it).</summary>
+    string? PageAddress(string instance, string name) => null;
+
     /// <summary>Whether this person may open the instance at all (the reading rule of an app: any role on it). A host that cannot say refuses, so a page is never exported for a person nobody checked.</summary>
     bool MayOpen(ViewsPrincipal who, string instance) => false;
 }
