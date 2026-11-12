@@ -103,13 +103,14 @@ public sealed class GrantsSpec
 /// <summary>
 /// How a connection of an outside kind (<c>http</c>, <c>model-provider</c>) signs in (plan 27a IX01 and IX02; <c>connection/2</c>, additive). Every secret is a <b>reference</b> (<c>secret:</c>, <c>env:</c>, <c>file:</c>, <c>keyring:</c>, <c>dpapi:</c>), never the value.
 /// <c>method</c> is <c>none</c>, <c>api_key</c> (<see cref="KeySecret"/> sent in the header or query parameter <see cref="Name"/>, after <see cref="Prefix"/>), <c>basic</c> (<see cref="User"/> and <see cref="PasswordSecret"/>),
-/// <c>oauth2_client_credentials</c> (<see cref="TokenUrl"/>, <see cref="ClientId"/>, <see cref="ClientSecretSecret"/>, <see cref="Scope"/>; the token is cached and refreshed), <c>client_certificate</c> (a PKCS#12 file or a secret holding it as Base64)
+/// <c>oauth2_client_credentials</c> (<see cref="TokenUrl"/>, <see cref="ClientId"/>, <see cref="ClientSecretSecret"/>, <see cref="Scope"/>; the token is cached and refreshed), <c>oauth2_authorization_code</c> (plan 27a IX03: a person gives consent once on the console, the refresh token is kept as the
+/// secret <see cref="RefreshTokenSecret"/> and every access token is got from it), <c>client_certificate</c> (a PKCS#12 file or a secret holding it as Base64)
 /// or <c>signed_webhook</c> (plan 22a GP18 fold: the request body is signed with HMAC-SHA256 and a timestamp using the shared secret <see cref="KeySecret"/>, sent in the header <see cref="Name"/>, default <c>X-DbData-Signature</c>).
 /// </summary>
 [ConfigSchema(Naming = KeyNaming.SnakeCase, Description = "How a connection of an outside kind signs in (connection/2).")]
 public sealed class SignInSpec
 {
-    [ConfigKey(Pattern = "none|api_key|basic|oauth2_client_credentials|client_certificate|signed_webhook")]
+    [ConfigKey(Pattern = "none|api_key|basic|oauth2_client_credentials|oauth2_authorization_code|client_certificate|signed_webhook")]
     public string Method { get; set; } = "none";
 
     /// <summary>api_key: where the key goes, <c>header</c> or <c>query</c>.</summary>
@@ -126,6 +127,15 @@ public sealed class SignInSpec
     public string? User { get; set; }
     public string? PasswordSecret { get; set; }
     public string? TokenUrl { get; set; }
+
+    /// <summary>oauth2_authorization_code: the address where a person gives consent (the provider's authorization endpoint).</summary>
+    public string? AuthorizeUrl { get; set; }
+
+    /// <summary>oauth2_authorization_code: the address that revokes a token (RFC 7009); none: revoking only forgets the token here.</summary>
+    public string? RevokeUrl { get; set; }
+
+    /// <summary>oauth2_authorization_code: the reference of the secret that keeps the refresh token the consent gave (the console writes it; it is never typed). Convention: <c>secret:dbdatakit:server:connection:&lt;name&gt;:refresh_token</c>.</summary>
+    public string? RefreshTokenSecret { get; set; }
     public string? ClientId { get; set; }
     public string? ClientSecretSecret { get; set; }
     public string? Scope { get; set; }

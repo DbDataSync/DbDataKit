@@ -333,6 +333,10 @@ public static class ConnectionDefinitionLoader
             CheckRef(s.ClientSecretSecret, "sign_in.client_secret_secret");
             CheckRef(s.CertificateSecret, "sign_in.certificate_secret");
             CheckRef(s.CertificatePasswordSecret, "sign_in.certificate_password_secret");
+            CheckRef(s.RefreshTokenSecret, "sign_in.refresh_token_secret");
+            if (s.Method != "oauth2_authorization_code")
+                foreach (var (key, present) in new[] { ("authorize_url", s.AuthorizeUrl is not null), ("revoke_url", s.RevokeUrl is not null), ("refresh_token_secret", s.RefreshTokenSecret is not null) })
+                    if (present) Err("sign_in." + key, $"`{key}` belongs to `sign_in.method: oauth2_authorization_code`.", $"Remove `{key}`.");
             void Needs(string key, bool given) { if (!given) Err("sign_in." + key, $"`sign_in.method: {s.Method}` needs `{key}`."); }
             void NoOthers(params (string Key, bool Present)[] keys)
             {
@@ -361,6 +365,15 @@ public static class ConnectionDefinitionLoader
                     Needs("client_secret_secret", s.ClientSecretSecret is not null);
                     if (s.TokenUrl is not null && !IsSafeAddress(s.TokenUrl)) Err("sign_in.token_url", "`token_url` is an http or https address with no user name, password or query in it.");
                     NoOthers(("key_secret", s.KeySecret is not null), ("password_secret", s.PasswordSecret is not null), ("certificate_file", s.CertificateFile is not null));
+                    break;
+                case "oauth2_authorization_code":
+                    Needs("authorize_url", s.AuthorizeUrl is not null);
+                    Needs("token_url", s.TokenUrl is not null);
+                    Needs("client_id", !string.IsNullOrWhiteSpace(s.ClientId));
+                    Needs("refresh_token_secret", s.RefreshTokenSecret is not null);
+                    foreach (var (key, url) in new[] { ("authorize_url", s.AuthorizeUrl), ("token_url", s.TokenUrl), ("revoke_url", s.RevokeUrl) })
+                        if (url is not null && !IsSafeAddress(url)) Err("sign_in." + key, $"`{key}` is an http or https address with no user name, password or query in it.");
+                    NoOthers(("key_secret", s.KeySecret is not null), ("user", s.User is not null), ("password_secret", s.PasswordSecret is not null), ("certificate_file", s.CertificateFile is not null), ("certificate_secret", s.CertificateSecret is not null));
                     break;
                 case "signed_webhook":
                     Needs("key_secret", s.KeySecret is not null);

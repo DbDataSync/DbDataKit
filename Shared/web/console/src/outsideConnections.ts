@@ -15,7 +15,7 @@ export const KIND_MEANING: Record<OutsideKind, string> = {
 }
 
 /** What a person can start from: a kind, or a webhook (an `http` connection with a `webhook:` section) of one of the formats delivery channels send. */
-export interface NewChoice { id: string; label: string; kind: OutsideKind; flavor?: 'slack' | 'teams' | 'signed'; meaning: string }
+export interface NewChoice { id: string; label: string; kind: OutsideKind; flavor?: 'slack' | 'teams' | 'signed' | 'oauth'; meaning: string }
 
 export const NEW_CHOICES: NewChoice[] = [
   { id: 'http', label: KIND_LABEL.http, kind: 'http', meaning: KIND_MEANING.http },
@@ -23,15 +23,16 @@ export const NEW_CHOICES: NewChoice[] = [
   { id: 'smtp', label: KIND_LABEL.smtp, kind: 'smtp', meaning: KIND_MEANING.smtp },
   { id: 'slack', label: 'webhook: Slack', kind: 'http', flavor: 'slack', meaning: 'A Slack incoming webhook (Block Kit). Its address carries a token: paste it once and only the template stays in the file.' },
   { id: 'teams', label: 'webhook: Teams', kind: 'http', flavor: 'teams', meaning: 'A Teams Workflows webhook (Adaptive Card). The flow and the signature in its address are secret parts: paste the address once.' },
+  { id: 'oauth', label: 'API: OAuth 2 consent', kind: 'http', flavor: 'oauth', meaning: 'An API that a person signs in to once (OAuth 2 authorization code): press Authorize, give consent at the provider, and the refresh token is kept as a secret; the connection then refreshes its own access tokens.' },
   { id: 'signed', label: 'webhook: signed', kind: 'http', flavor: 'signed', meaning: 'A generic webhook, a JSON document signed with HMAC-SHA256 and a timestamp with a secret you share with the receiver.' },
 ]
 
 export const SIGN_IN_LABEL: Record<string, string> = {
-  none: 'no sign-in', api_key: 'API key', basic: 'user and password', oauth2_client_credentials: 'OAuth 2 client credentials', client_certificate: 'client certificate', signed_webhook: 'signed webhook (HMAC)',
+  none: 'no sign-in', api_key: 'API key', basic: 'user and password', oauth2_client_credentials: 'OAuth 2 client credentials', oauth2_authorization_code: 'OAuth 2 consent (authorization code)', client_certificate: 'client certificate', signed_webhook: 'signed webhook (HMAC)',
 }
 
 /** What a typed secret is called on the screen, by the field it is kept under; the name of a placeholder of the address is its own label. */
-export const SECRET_LABEL: Record<string, string> = { key: 'API key', password: 'Password', client_secret: 'Client secret', certificate: 'Certificate (PKCS#12, Base64)', certificate_password: 'Certificate password' }
+export const SECRET_LABEL: Record<string, string> = { key: 'API key', password: 'Password', client_secret: 'Client secret', certificate: 'Certificate (PKCS#12, Base64)', certificate_password: 'Certificate password', refresh_token: 'Refresh token (kept by Authorize; type one only if the provider gave it to you)' }
 
 export const secretLabel = (field: string, path = ''): string => SECRET_LABEL[field] ?? (path.startsWith('endpoint_secrets.') ? `Secret part {${field}} of the address` : path === 'endpoint' ? 'The whole address (a secret)' : field)
 
@@ -48,7 +49,24 @@ export interface OutsideConnection {
   cloud: boolean | null
   secrets: ConnectionSecret[]
   diagnostics: Diagnostic[]
+  /** For a connection that signs in with a person's consent (plan 27a IX03): whether it can sign in now, in words; absent for any other. */
+  health?: ConnectionHealth | null
 }
+
+/** Whether a connection that signs in with consent can sign in now; `ok: false` is unhealthy and the message says what a person does. */
+export interface ConnectionHealth { ok: boolean; message: string; at: string }
+
+/** What the console's callback sends the person back with after the provider's consent page (plan 27a IX03): the `?consent=ok|failed&connection=&message=` of the Connections address. */
+export interface ConsentReturn { ok: boolean; connection: string; message: string }
+
+export function consentReturn(search: string): ConsentReturn | null {
+  const q = new URLSearchParams(search)
+  const state = q.get('consent')
+  return state === 'ok' || state === 'failed' ? { ok: state === 'ok', connection: q.get('connection') ?? '', message: q.get('message') ?? '' } : null
+}
+
+/** Whether a connection signs in with a person's consent (so the screen shows Authorize and Disconnect). */
+export const needsConsent = (c: Pick<OutsideConnection, 'signIn'>): boolean => c.signIn === 'oauth2_authorization_code'
 
 /** What Test found (plan 27a IX02): whether the system was reached (null: not tried), whether it accepted the sign-in, a sentence that says what to do, and the failure's kind and whether a retry can help. Never a secret. */
 export interface OutsideTest { ok: boolean; reached: boolean | null; signIn: string; message: string; kind: string | null; temporary: boolean; status: number | null; milliseconds: number }
@@ -64,6 +82,8 @@ export const outsideApi = {
   save: (name: string, yaml: string) => request<{ saved: boolean; diagnostics: Diagnostic[] }>(`/api/outside-connections/${enc(name)}`, json('PUT', { yaml })),
   remove: (name: string) => request<void>(`/api/outside-connections/${enc(name)}`, json('DELETE')),
   test: (name: string) => request<OutsideTest>(`/api/outside-connections/${enc(name)}/test`, json('POST')),
+  authorize: (name: string) => request<{ url: string; redirectUri: string }>(`/api/outside-connections/${enc(name)}/authorize`, json('POST')),
+  revoke: (name: string) => request<{ ok: boolean; message: string }>(`/api/outside-connections/${enc(name)}/revoke`, json('POST')),
   setSecret: (name: string, field: string, value: string) => request<{ stored: boolean; reference: string }>(`/api/outside-connections/${enc(name)}/secrets/${enc(field)}`, json('PUT', { value })),
 }
 

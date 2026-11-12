@@ -26,7 +26,8 @@ An **integration** is ordinary code that moves data between the suite and a syst
 | Recorded HTTP responses and a fake file share for tests | **built** (IX15; `RecordedHttp` and `FakeFileShare` in `DbDataKit.Runner.Kit.Testing`; the recording format `http-recording/1` is in `docs/formats.json`) |
 | Dry run (`--dry-run`, the kit refuses writes) and the sandbox run before promotion | **not built** (IX16) |
 | Outbound steps in a non-production channel use the channel's connection or are refused | **not built** (IX17) |
-| OAuth 2 authorization code, the serving layer's end of webhooks, the DbDataStore change trigger | **not built** (IX03, IX18, IX19) |
+| OAuth 2 authorization code (consent once on the console, the refresh token a secret, refresh, revoke, an unhealthy connection when the provider revoked the grant) | **built** (IX03; `OAuthAuthorizationCode`, the Authorize and Disconnect buttons of the Connections screen) |
+| The serving layer's end of webhooks, the DbDataStore change trigger | **not built** (IX18, IX19) |
 | Notebooks | **parked**; no row is built |
 | Agents in integrations and agents that write them | **not built** (AG27; plan 27 section 4.9) |
 | Approval of a trusted integration version by an administrator before it serves | **not built** (plan 27 section 4.7; the Runner stages a version and an administrator activates it, which is the approval point today) |
