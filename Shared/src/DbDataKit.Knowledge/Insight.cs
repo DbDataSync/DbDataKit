@@ -11,8 +11,16 @@ public sealed record DiagnosticView(string Code, string Severity, string File, i
 /// <summary>One chunk of an item as it will be split: where it sits (heading path), its size and whether it differs from the published version (plan 27a KN38).</summary>
 public sealed record ChunkView(string Id, IReadOnlyList<string> HeadingPath, int Tokens, int StartLine, bool Changed, string Text);
 
-/// <summary>An item as typed, read strictly, with how it would be chunked.</summary>
-public sealed record ChunkPreview(string? Title, string? Role, string? Owner, IReadOnlyList<DiagnosticView> Diagnostics, IReadOnlyList<ChunkView> Chunks, int ChangedChunks);
+/// <summary>What a screen shows of a verified query (KN21): its model, the questions that are embedded, the pinned request, the semantic SQL kept for reading, and who verified it against which version.</summary>
+public sealed record VerifiedPreview(string Model, IReadOnlyList<string> Questions, string? Request, string? SemanticSql, string? SavedQuery, string? SavedQueryVersion, string VerifiedBy, string VerifiedAt, string ModelVersion)
+{
+    private static readonly System.Text.Json.JsonSerializerOptions Indented = new() { WriteIndented = true };
+
+    public static VerifiedPreview Of(VerifiedQuery q) => new(q.Model, q.Questions, q.Request?.ToJsonString(Indented), q.SemanticSql, q.SavedQuery, q.SavedQueryVersion, q.Verified.By, q.Verified.At, q.Verified.ModelVersion);
+}
+
+/// <summary>An item as typed, read strictly, with how it would be chunked (and, for a verified query, what it pins).</summary>
+public sealed record ChunkPreview(string? Title, string? Role, string? Owner, IReadOnlyList<DiagnosticView> Diagnostics, IReadOnlyList<ChunkView> Chunks, int ChangedChunks, VerifiedPreview? Verified = null);
 
 /// <summary>An item that applies, in the order it would be given (plan 27a KN38), and why it does.</summary>
 public sealed record ScopedItem(string Id, string Title, string Role, int Rank, string Scope, string? Owner);
@@ -40,7 +48,7 @@ public static class KnowledgeInsight
             foreach (var chunk in Chunker.Split(published, options)) known.Add(chunk.Hash);
         var chunks = Chunker.Split(item, options)
             .Select(c => new ChunkView(c.Id, c.HeadingPath, options.Tokens(c.EmbeddedText), c.StartLine, publishedText is not null && !known.Contains(c.Hash), c.Text)).ToList();
-        return new ChunkPreview(item.Title, item.Role.ToString().ToLowerInvariant(), item.Owner, diagnostics, chunks, chunks.Count(c => c.Changed));
+        return new ChunkPreview(item.Title, item.Role.ToString().ToLowerInvariant(), item.Owner, diagnostics, chunks, chunks.Count(c => c.Changed), item.Verified is { } verified ? VerifiedPreview.Of(verified) : null);
     }
 
     /// <summary>What <see cref="ScopeMatcher"/> gives for what is in play, with the items it leaves out and the reason of each.</summary>
@@ -106,7 +114,7 @@ public static class Worklists
     /// <summary>
     /// The worklists per owner: orphaned items (with the subjects that are gone), items over a budget (<paramref name="overBudget"/> says for an item), items marked for another look (<paramref name="needsLook"/>, ids). An item with no owner is listed under <c>(no owner)</c>.
     /// </summary>
-    public static IReadOnlyList<OwnerWorklist> Build(IEnumerable<KnowledgeItem> items, ISubjectCatalog catalog, Func<KnowledgeItem, string?>? overBudget = null, IReadOnlySet<string>? needsLook = null)
+    public static IReadOnlyList<OwnerWorklist> Build(IEnumerable<KnowledgeItem> items, ISubjectCatalog catalog, Func<KnowledgeItem, string?>? overBudget = null, IReadOnlySet<string>? needsLook = null, IReadOnlyDictionary<string, string>? needsLookWhy = null)
     {
         var work = new List<(string Owner, WorkItem Item)>();
         foreach (var item in items)
@@ -118,7 +126,7 @@ public static class Worklists
                 work.Add((owner, new WorkItem("orphaned", item.Id, item.Title, $"Everything it is about is gone ({string.Join(", ", gone.Select(s => s.Key))}); it reaches nobody. Point it at another object, or retire it.", gone.FirstOrDefault()?.Key, gone.FirstOrDefault())));
             }
             if (overBudget?.Invoke(item) is { } over) work.Add((owner, new WorkItem("over-budget", item.Id, item.Title, over, null, null)));
-            if (needsLook is not null && needsLook.Contains(item.Id)) work.Add((owner, new WorkItem("needs-look", item.Id, item.Title, "Something it depends on changed; read it again.", null, null)));
+            if (needsLook is not null && needsLook.Contains(item.Id)) work.Add((owner, new WorkItem("needs-look", item.Id, item.Title, needsLookWhy is not null && needsLookWhy.TryGetValue(item.Id, out var why) ? why : "Something it depends on changed; read it again.", null, null)));
         }
         return [.. work.GroupBy(w => w.Owner, StringComparer.Ordinal).OrderBy(g => g.Key, StringComparer.Ordinal)
             .Select(g => new OwnerWorklist(g.Key, [.. g.Select(w => w.Item).OrderBy(w => w.Kind, StringComparer.Ordinal).ThenBy(w => w.ItemId, StringComparer.Ordinal)]))];

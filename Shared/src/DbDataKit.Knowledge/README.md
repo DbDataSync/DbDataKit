@@ -52,3 +52,30 @@ Structure first (Markdown headings; a section too long splits at paragraphs, the
 - **Re-pointing** (`KnowledgeInsight.Repoint`): rewrites the name of a subject where it is written (the subject carries its line); the rest of the file is untouched, and it refuses when the file is not as it was read.
 - **Worklists** (`Worklists.Build`): per owner, the items that are orphaned (with the subject that is gone), over a budget or marked for another look.
 - **Generated knowledge** (`GeneratedKnowledge.RenderSemanticModel`, plan 27a KN12): what a published semantic model says about itself as one small item per subject (the model, each dimension, attribute, measure, hierarchy and saved query), with stable ids (`generated:semantic-model:Sales/measure:revenue`), the definition's owner, the subject as what each is about (so access is the subject's), a line naming the definition and its direct upstream and downstream, and nothing volatile; the version and channel are not in the text, so a version that did not change an item does not change it. `GeneratedKnowledge.Undescribed` lists what has no description.
+
+## Verified queries: `kind: verified-query` of `knowledge/1` (KN21)
+
+A question and the request that answers it, verified by a person, kept as a knowledge item so people and agents find it by how the question is asked.
+
+```markdown
+---
+knowledge: 1
+kind: verified-query
+title: Revenue by region, last quarter
+owner: finance-data
+model: Sales                       # the semantic model; the item is about it unless `about` says otherwise
+questions:                         # what is embedded and found (1 to 20, one line each)
+  - What was revenue by region last quarter?
+request:                           # the pinned request, the document `semantic query --request` takes; a mapping or JSON text
+  kind: query
+  query: { measures: [revenue], attributes: [region.name], filters: [{ attribute: date.quarter, operator: last_complete }], limit: 10 }
+semantic-sql: SELECT region.name, revenue FROM Sales WHERE ...   # kept for reading; with no request it is translated into one
+verified: { by: maria, at: 2026-11-06, model-version: "4" }       # who, when, against which version of the model
+---
+Notes for people (not embedded).
+```
+
+- **The request is the truth.** `VerifiedQueries.Resolve` translates the semantic SQL (the host supplies the translator, `SqlToRequest`; this library needs no DuckDB) and compares it with the request; they must say the same thing, whatever the order of keys. When they disagree the item is refused by `knowledge check` (`DBD-KNW-052`, saying the request is what runs); SQL that does not translate is `DBD-KNW-051`.
+- **Or a saved query of the model's catalog**, by name and version: `saved-query: Sales/revenue_by_region@3` (the model before `/` replaces `model:`, the version of the model after `@` is kept). It has no request of its own and runs as `SELECT * FROM revenue_by_region(...)`.
+- A verified query is a reference (never always given), `chunking: none`; **only the question texts are embedded**; its notes are not. The keys of the kind in another kind of item are refused.
+- `VerifiedQuery`, `Verification` and `ResolvedQuery` are what the loader adds to `KnowledgeItem.Verified`; the index keeps them in the `verified_query` table of the `knowledge` module (second migration) with the status `verified` or `needs-reverification` (KN22).

@@ -56,12 +56,23 @@ public sealed class StateKnowledgeIndex(KnowledgeStore store, string channel, Kn
     /// <param name="force">Write it even when it is there with the same hash (after a change of how chunks are made).</param>
     /// <param name="source">What it came from (the project or definition).</param>
     /// <param name="version">The published version, a short hash.</param>
-    public bool Put(KnowledgeItem item, IReadOnlyList<Chunk> chunks, string source, string version, TimeProvider? time = null, bool force = false)
+    /// <param name="translate">Translates the semantic SQL of a verified query that has no request of its own (KN21); a query that cannot be translated is indexed marked as needing another look.</param>
+    public bool Put(KnowledgeItem item, IReadOnlyList<Chunk> chunks, string source, string version, TimeProvider? time = null, bool force = false, SqlToRequest? translate = null)
     {
         var audience = JsonSerializer.Serialize(new AudienceJson(item.For.Audience, item.For.Agents, item.For.Channels), Json);
         var stored = new StoredItem(item.Id, item.File, item.Title, item.Role.ToString().ToLowerInvariant(), item.Owner, audience, item.AboutImplied, item.Hash, source, version, [.. item.About.Select(a => a.Key)], (time ?? TimeProvider.System).GetUtcNow());
         var pieces = chunks.Select((c, i) => new StoredChunk(i, string.Join(" > ", c.HeadingPath), c.Text, ChunkerOptions.EstimateTokens(c.Text), c.Hash, c.StartLine)).ToList();
-        return Store.Put(Channel, stored, pieces, force);
+        return Store.Put(Channel, stored, pieces, force, item.Verified is { } verified ? Verified(verified, translate) : null);
+    }
+
+    private static StoredVerified Verified(VerifiedQuery query, SqlToRequest? translate)
+    {
+        var resolved = VerifiedQueries.Resolve(query, translate);
+        // the request is the truth: with a request, a disagreeing SQL changes nothing that runs (the check refused it before it was published)
+        var request = resolved.Request ?? query.Request;
+        var failed = request is null && resolved.SavedQuerySql is null;
+        return new StoredVerified(query.Model, request?.ToJsonString(), query.SavedQuery, query.SavedQueryVersion, query.SemanticSql, query.Verified.By, query.Verified.At, query.Verified.ModelVersion,
+            failed ? VerifiedStatus.NeedsReverification : VerifiedStatus.Verified, failed ? resolved.Error : null);
     }
 
     public bool Remove(string itemId) => Store.Remove(Channel, itemId);

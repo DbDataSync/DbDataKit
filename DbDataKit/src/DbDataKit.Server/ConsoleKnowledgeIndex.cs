@@ -165,6 +165,43 @@ public sealed class ConsoleKnowledgeIndex(ConsoleSettings settings, ConsoleKnowl
         Refresh();
     }
 
+    // ---- suggestions (KN19) ----
+
+    private sealed class ConsoleSuggester(string person, bool administrator) : DbDataKit.Knowledge.Cli.ISuggestionCaller
+    {
+        public string Person { get; } = person;
+
+        public string? Agent => null;
+
+        /// <summary>The console knows administrators and viewers; the groups of the identity home are another module's. An administrator owns what the install's administrators own.</summary>
+        public IReadOnlyCollection<string> Groups { get; } = administrator ? ["administrators"] : [];
+
+        public bool AnswerConfirmed(string answerKey) => true;
+    }
+
+    /// <summary>The desk of suggestions over the console's index, as the person who asks (their own suggestions, and for an administrator those of the administrators' items); null until the index is built.</summary>
+    public DbDataKit.Knowledge.Cli.SuggestionDesk? Desk(string person, bool administrator)
+    {
+        if (!Enabled) return null;
+        var (index, opened) = Index();
+        return new DbDataKit.Knowledge.Cli.SuggestionDesk(new SuggestionStore(opened.Database), index, new ConsoleSuggester(person, administrator), new ConsoleCaller(null, administrator), knowledge.Catalog);
+    }
+
+    // ---- verified queries that need another look (KN22) ----
+
+    /// <summary>The verified queries of the files the index marks as needing re-verification, by the id the files give them (the project is not part of it), with why. Empty when the index is not built or cannot be read.</summary>
+    public IReadOnlyDictionary<string, string> NeedsAnotherLook()
+    {
+        if (!Enabled) return new Dictionary<string, string>();
+        try
+        {
+            var (index, _) = Index();
+            return index.Store.VerifiedQueries(Channel).Where(v => v.Verified.Status == VerifiedStatus.NeedsReverification)
+                .ToDictionary(v => v.ItemId[(v.ItemId.IndexOf(':', StringComparison.Ordinal) + 1)..], v => v.Verified.StatusNote ?? "It needs to be verified again.", StringComparer.Ordinal);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.Data.Common.DbException or IOException) { return new Dictionary<string, string>(); }
+    }
+
     // ---- what the screen shows ----
 
     public KnowledgeIndexView View()

@@ -121,6 +121,7 @@ public static class ConsoleHost
         builder.Services.AddSingleton<ConsoleKnowledge>();
         builder.Services.AddSingleton(sp => new ConsoleKnowledgeIndex(settings, sp.GetRequiredService<ConsoleKnowledge>(), sp.GetRequiredService<ConsoleModels>(), log: sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataKit.Server.KnowledgeIndex")));
         builder.Services.AddSingleton<ConsoleAgents>();
+        builder.Services.AddSingleton<ConsoleEvaluation>();   // the evaluation sets of the agents (plan 27a AG23, AG24)
         // an outside agent (`ui mcp --report-to`) signs in as the person with a token made on the Agents page, as Basic credentials, and reaches the outside endpoints only
         builder.Services.AddSingleton<IPasswordCredentials>(sp => new AgentTokenCredentials(sp.GetRequiredService<ConsoleAgents>().Store, sp.GetRequiredService<IUserAccounts>()));
         builder.Services.AddSingleton<ConsoleQuality>();
