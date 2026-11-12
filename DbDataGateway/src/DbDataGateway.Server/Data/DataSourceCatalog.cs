@@ -68,7 +68,7 @@ public sealed class DataSourceCatalog(
             throw new RpcException(new Status(StatusCode.PermissionDenied, $"Not authorized for data source '{name}'."));
 
         if (!providers.TryGet(source.Provider, out var registered))
-            throw new RpcException(new Status(StatusCode.Internal, $"Data source '{name}' uses unknown provider '{source.Provider}'."));
+            throw new RpcException(new Status(StatusCode.Internal, GatewaySources.Refusal(name, source.Provider)));
         var provider = ProviderFor(source, registered);
 
         // Resolved per call from the current options snapshot: nothing secret outlives the snapshot, and a rotated secret is picked up.

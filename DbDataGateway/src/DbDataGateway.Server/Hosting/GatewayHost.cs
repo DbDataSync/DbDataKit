@@ -238,14 +238,7 @@ public static class GatewayHost
         {
             var redactor = sp.GetRequiredService<IRedactor>();
             bool raw = sp.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue.LogDriverErrors;
-            return new DbDataKit.Connections.ProviderRegistry(
-            [
-                new DbDataKit.Connections.Odbc.OdbcProvider(redactor: redactor, includeRawFailures: raw),
-                new DbDataKit.Connections.SqlServer.SqlServerProvider(redactor: redactor, includeRawFailures: raw),
-                new DbDataKit.Connections.DuckDb.DuckDbProvider(redactor: redactor, includeRawFailures: raw),
-                new DbDataKit.Connections.Postgres.PostgresProvider(redactor: redactor, includeRawFailures: raw),
-                new DbDataKit.Connections.FlightSql.FlightSqlProvider(redactor: redactor, includeRawFailures: raw),
-            ]);
+            return DbDataGateway.Server.Data.GatewaySources.Providers(redactor, raw);
         });
         services.AddSingleton<QueryLimits>();
         services.AddSingleton<ActiveQueries>();
