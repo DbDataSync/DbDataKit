@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { consoleApi, type InstanceSummary } from '../api'
 import { ConsoleShell } from '../ConsoleShell'
-import { commonText, keepStale, lagText, loadTracking, resolutionText, resolveDivergence, switchPrimary, type CopyRow, type Resolution, type TrackingDivergence } from '../tracking'
+import { commonText, keepStale, lagText, loadTracking, resolutionText, resolveDivergence, switchPrimaryOf, type CopyRow, type Resolution, type TrackingDivergence } from '../tracking'
 
 /** The copies the last answers showed, kept while the page is left and come back to: a server that stops answering keeps its copies on the page, marked old. */
 let previous: CopyRow[] = []
@@ -11,8 +11,8 @@ const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '')
 
 /**
  * The copy of Build's tracking tables and of the units Sync keeps on its targets (plan 28c E18, E17): for every connection of every Build server and runner that keeps one, the mode and primary of the setting, how old the newest copied row is, and a divergence with the point where the two sides part
- * (the last row both hold). An administrator resolves an open divergence: archive keeps the copy's later rows apart, reset deletes them, and the copy then follows the target again from the common point; the server audits it. Switching the primary is asked for here
- * and refused in a sentence while a side is down or a divergence is open (and, in this release, because Build keeps its records on the target first). Read from each server through the relay every thirty seconds; a server that does not answer is named, and its
+ * (the last row both hold). An administrator resolves an open divergence: archive keeps the copy's later rows apart, reset deletes them, and the copy then follows the target again from the common point; the server audits it. Switching the primary of a Build server's copy is asked for here (an administrator; the server brings its copy level with the target first)
+ * and is refused in a sentence while a side is down or a divergence is open; a Sync replication's and a runner's primary are changed where they are set, and the page says where. Read from each server through the relay every thirty seconds; a server that does not answer is named, and its
  * copies stay on the page marked as old.
  */
 export function TrackingPage() {
@@ -34,7 +34,19 @@ export function TrackingPage() {
   const data = view.data
   const rows = data?.rows ?? []
   const divergences = data?.divergences ?? []
-  const [switched, setSwitched] = useState<{ key: string; message: string } | null>(null)
+  const [switched, setSwitched] = useState<{ key: string; message: string; done?: boolean } | null>(null)
+  const [switching, setSwitching] = useState<string | null>(null)
+  const servers_ = new Map(servers.map((s) => [s.id, s]))
+  const switchOf = async (row: CopyRow) => {
+    const server = servers_.get(row.server)
+    if (!server) return
+    setSwitching(row.key)
+    setSwitched(null)
+    const result = await switchPrimaryOf(server, row, data?.problems ?? [])
+    setSwitching(null)
+    setSwitched({ key: row.key, message: result.message, done: result.done })
+    if (result.done) client.invalidateQueries({ queryKey: ['tracking'] })
+  }
   const [resolved, setResolved] = useState<string | null>(null)
   const resolve = useMutation({
     mutationFn: ({ server, id, how }: { server: InstanceSummary; id: number; how: Resolution }) => resolveDivergence(server, id, how),
@@ -67,9 +79,9 @@ export function TrackingPage() {
                   <span data-testid="tracking-mode">{row.mode}</span>
                   <span data-testid="tracking-primary">{row.primary ?? 'the only side'}</span>
                   <span data-testid="tracking-lag">{`${lagText(row.newest, Date.now())}; ${row.rows} rows in ${row.streams} streams`}</span>
-                  <button className="btn" data-testid="tracking-switch" onClick={() => setSwitched({ key: row.key, message: switchPrimary(row, data?.problems ?? []).message })}>Switch primary</button>
+                  <button className="btn" data-testid="tracking-switch" disabled={switching === row.key} onClick={() => void switchOf(row)}>Switch primary</button>
                 </div>
-                {switched?.key === row.key && <div className="hint" role="status" data-testid="tracking-switch-message" style={{ padding: '0 14px 10px' }}>{switched.message}</div>}
+                {switched?.key === row.key && <div className="hint" role="status" data-testid="tracking-switch-message" data-switched={switched.done === true} style={{ padding: '0 14px 10px' }}>{switched.message}</div>}
               </div>
             ))}
           </div>
