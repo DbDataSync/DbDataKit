@@ -80,12 +80,24 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
         {
             loggers.CreateLogger("Apps").LogWarning(ex, "The app instances' OpenID clients could not be registered; apps get no token until they are.");
         }
+        // an instance saved with the offline command while this host runs has no client at the home yet (the reconcile above ran at the start): when the home says so, this host's own home gets it now and the trade is asked once more
+        async Task<(string AccessToken, int ExpiresInSeconds)> ExchangeAsync(string refreshToken, string instance, CancellationToken ct)
+        {
+            try { return await client.ExchangeForAppAsync(refreshToken, instance, ct); }
+            catch (OpenIdClientException e) when (local && e.Error == "invalid_target")
+            {
+                var name = DbDataKit.Apps.AppInstanceName.Split(instance).Name;
+                if (!AppInstanceClients.Reconcile(state, instances, AppInstanceClients.CallbackOf(PublicUrlOf(options.CurrentValue)), options.CurrentValue.Apps.Home.ClientId).Contains(name)) throw;
+                loggers.CreateLogger("Apps").LogInformation("Registered an OpenID client for the app instance {Instance} at the identity home when its first token was asked for.", name);
+                return await client.ExchangeForAppAsync(refreshToken, instance, ct);
+            }
+        }
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy"));
         // a name bound to an instance is routed to it by Host and path, before the routes see the request (plan 26 AP08)
         app.UseAppAddresses(bindings, instances, new TrustedProxies(current.Apps.TrustedProxies));
         app.UseRouting();
-        app.MapApps(instances, new AppSite(instances, name => instances.Resolve(name) is { } r ? approvals.ApprovedEgress(r) : AppEgress.None, views: ViewsRuntime.FromDirectory(Path.Combine(AppContext.BaseDirectory, ViewsRuntimeFolder))), client, new AppSessions(refresh: client.RefreshAsync, refreshAfter: TimeSpan.FromSeconds(current.Apps.RolesRefreshSeconds), store: new AppSessionStore(state, sessionKey), exchange: client.ExchangeForAppAsync),
+        app.MapApps(instances, new AppSite(instances, name => instances.Resolve(name) is { } r ? approvals.ApprovedEgress(r) : AppEgress.None, views: ViewsRuntime.FromDirectory(Path.Combine(AppContext.BaseDirectory, ViewsRuntimeFolder))), client, new AppSessions(refresh: client.RefreshAsync, refreshAfter: TimeSpan.FromSeconds(current.Apps.RolesRefreshSeconds), store: new AppSessionStore(state, sessionKey), exchange: ExchangeAsync),
             new AppDataGateway(instances, new GroupAppData(GatewayStoreModule.ApiOf(options, state, secrets, models)), new AppTokenValidator(jwks), jwks, approvals: approvals, semantic: new GroupAppSemantic(serving, semanticModels, homeCallers, options)), new AppStorage(state), approvals, () => options.CurrentValue.Apps.StorageCapMb * 1024L * 1024L);
         app.MapFallback(() => Results.Text("The apps host of this DbDataGateway. An app is at /apps/<instance>/.", "text/plain"));
         await app.StartAsync(cancellationToken);
