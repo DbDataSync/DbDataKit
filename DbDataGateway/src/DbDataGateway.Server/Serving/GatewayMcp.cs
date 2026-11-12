@@ -87,6 +87,7 @@ public sealed class McpApprovals(StateDatabase state, Func<StoreCallers> callers
         if (_store.Approval(id) is not { Origin: Origin } row) return McpDecision.Error(404, "There is no such approval request.");
         if (by.IsAgent) return McpDecision.Error(403, "An agent cannot answer an approval request: a person does.");
         if (string.Equals(by.UserId, row.Person, StringComparison.Ordinal)) return McpDecision.Error(403, "The one who asked cannot answer their own request: another person does.");
+        if (!by.Interactive) return McpDecision.Error(403, "An approval is given by a person who signed in (an access token the identity home issued), not with a personal access token or a service account's token: a token can be handed to an agent.");
         if (!MayAnswer(by)) return McpDecision.Error(403, "Answering an approval request needs the approver or admin role on this server.");
         if (row.Status != "pending") return McpDecision.Error(409, $"The request is {row.Status}; it cannot be answered any more.");
         if (!_store.Answer(id, approve, by.UserId, note, anyPerson: true)) return McpDecision.Error(409, "The request was answered or expired just now; it cannot be answered any more.");

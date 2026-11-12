@@ -34,7 +34,7 @@ public sealed class McpApprovalTests : IDisposable
     {
         var (user, token) = HomeSeed.Person(_state, name, $"{name.ToLowerInvariant()}@example.invalid");
         new HomeDirectory(_state).Assign(AssignmentSubject.User(user.Id), "srv", roles);
-        return _callers.Authenticate("Bearer " + token)!;
+        return _callers.Authenticate("Bearer " + token)! with { Interactive = true };
     }
 
     private StoreCaller Agent(string name, ServerRole roles)
@@ -204,6 +204,10 @@ public sealed class McpApprovalTests : IDisposable
         Assert.Equal(403, (await approvals.DecideAsync(requester, id, true, null, default)).Status);
         Assert.Equal(403, (await approvals.DecideAsync(otherAgent, id, true, null, default)).Status);
         Assert.Equal(403, (await approvals.DecideAsync(viewer, id, true, null, default)).Status);
+        // a person's personal access token is a token an agent could hold: it does not answer
+        var withToken = requester with { UserId = "someone-else", Interactive = false };
+        Assert.Equal(403, (await approvals.DecideAsync(Person("Tok", ServerRole.Viewer | ServerRole.Approver) with { Interactive = false }, id, true, null, default)).Status);
+        Assert.Contains("signed in", (string)(await approvals.DecideAsync(withToken, id, true, null, default)).Body["error"]!);
         Assert.Equal(404, (await approvals.DecideAsync(viewer, Guid.NewGuid(), true, null, default)).Status);
         Assert.Equal(0, _runs);
         Assert.Equal("pending", approvals.Get(id)!.Status);

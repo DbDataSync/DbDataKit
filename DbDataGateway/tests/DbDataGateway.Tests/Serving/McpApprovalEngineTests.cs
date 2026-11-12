@@ -53,7 +53,7 @@ public sealed class McpApprovalEngineTests : IDisposable
             {
                 var (user, token) = HomeSeed.Person(state, who, $"{who.ToLowerInvariant()}@example.invalid");
                 new HomeDirectory(state).Assign(AssignmentSubject.User(user.Id), "srv", roles);
-                return callers.Authenticate("Bearer " + token)!;
+                return callers.Authenticate("Bearer " + token)! with { Interactive = true };
             }
             var ada = Make("Ada", ServerRole.Viewer | ServerRole.Author);
             var bea = Make("Bea", ServerRole.Viewer | ServerRole.Approver);

@@ -169,33 +169,28 @@ public sealed class McpModuleTests : IAsyncLifetime
         var waiting = await RouteAsync(http, bea, "/api/v1/mcp/approvals", HttpMethod.Get);
         Assert.Equal(id, (string)waiting.Body["approvals"]![0]!["id"]!);
         Assert.Equal(HttpStatusCode.Forbidden, (await RouteAsync(http, linus, "/api/v1/mcp/approvals", HttpMethod.Get)).Status);
-        var approved = await RouteAsync(http, bea, $"/api/v1/mcp/approvals/{id}/approve");
-        Assert.Equal(HttpStatusCode.OK, approved.Status);
-        Assert.False((bool)approved.Body["ran"]!);
-        Assert.Contains("nowhere", (string)approved.Body["error"]!);
-        Assert.Equal(HttpStatusCode.Conflict, (await RouteAsync(http, bea, $"/api/v1/mcp/approvals/{id}/approve")).Status);
-        Assert.Single(audit.Audit(origin: "mcp"), a => a.Kind == "tool-failed");
-
-        var status = await CallAsync(http, ada, "approval_status", new() { ["id"] = id });
-        Assert.Equal("approved", (string)status["structuredContent"]!["status"]!);
+        // an approver with only a personal access token is refused, saying why; the approval itself runs for a signed-in person (McpApprovalTests)
+        var byToken = await RouteAsync(http, bea, $"/api/v1/mcp/approvals/{id}/approve");
+        Assert.Equal(HttpStatusCode.Forbidden, byToken.Status);
+        Assert.Contains("signed in", (string)byToken.Body["error"]!);
+        var denyByToken = await RouteAsync(http, bea, $"/api/v1/mcp/approvals/{id}/deny");
+        Assert.Equal(HttpStatusCode.Forbidden, denyByToken.Status);
+        Assert.DoesNotContain(audit.Audit(origin: "mcp"), a => a.Kind is "tool-called" or "tool-failed");
+        Assert.Equal("pending", (string)(await CallAsync(http, ada, "approval_status", new() { ["id"] = id }))["structuredContent"]!["status"]!);
     }
 
     [Fact]
-    public async Task A_denied_request_never_runs_and_a_caller_without_the_author_role_is_not_even_asked_about()
+    public async Task A_caller_without_the_author_role_is_not_even_asked_about_and_a_request_stays_pending_without_a_sign_in()
     {
         var (http, state, ada, _, _, bea, linus) = await StartAsync();
         var write = new JsonObject { ["model"] = "nowhere", ["changes"] = new JsonArray(new JsonObject { ["action"] = "insert", ["entity"] = "t", ["values"] = new JsonObject() }) };
 
         var id = Text(await CallAsync(http, ada, "write_entity_changes", write))["pending approval ".Length..];
-        var denied = await RouteAsync(http, bea, $"/api/v1/mcp/approvals/{id}/deny");
-        var late = await RouteAsync(http, bea, $"/api/v1/mcp/approvals/{id}/approve");
         var viewers = await CallAsync(http, linus, "write_entity_changes", write);
 
-        Assert.Equal("denied", (string)denied.Body["status"]!);
-        Assert.Equal(HttpStatusCode.Conflict, late.Status);
         Assert.DoesNotContain(new AgentStore(state).Audit(origin: "mcp"), a => a.Kind is "tool-called" or "tool-failed");
         Assert.True((bool)viewers["isError"]!);
-        Assert.Single(new AgentStore(state).Approvals(false, null, 50));
+        Assert.Equal("pending", Assert.Single(new AgentStore(state).Approvals(false, null, 50)).Status);
     }
 
     [Fact]
