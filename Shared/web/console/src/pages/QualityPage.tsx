@@ -28,7 +28,7 @@ export function QualityPage() {
     setRunning(serverId)
     setOutcome(null)
     try {
-      const answer: QualityRunAnswer = await qualityApi.run(serverId, dataset)
+      const answer: QualityRunAnswer = await qualityApi.run(serverId, dataset, data?.servers.find((x) => x.server_id === serverId)?.product ?? null)
       setOutcome({ ok: true, text: `${serverName} evaluated ${answer.evaluated} check${answer.evaluated === 1 ? '' : 's'}: ${answer.passed} passed, ${answer.failed} failed, ${answer.errors} could not run.${answer.notes.length > 0 ? ' ' + answer.notes.join(' ') : ''}` })
       await client.invalidateQueries({ queryKey: ['quality'] })
     } catch (e) {

@@ -13,7 +13,7 @@ public sealed record ServerQualityAnswer(string Server, string InstanceId, strin
 public sealed class ConsoleQuality(ConsoleInstances instances, ConsoleRelay relay)
 {
     /// <summary>The path of a product's check results on its management API, or null for a product that keeps none (yet).</summary>
-    public static string? PathOf(string? product) => product switch { ServerProducts.Build => "/api/v1/quality", ServerProducts.Sync => "/api/quality", _ => null };
+    public static string? PathOf(string? product) => product switch { ServerProducts.Build => "/api/v1/quality", ServerProducts.Sync => "/api/quality", ServerProducts.Store => "/api/v1/quality", _ => null };
 
     /// <summary>The latest result of every check in an overview as the lineage graph reads it (plan 23a FQ16): one <see cref="DbDataKit.Lineage.NodeCheck"/> per check and server.</summary>
     public static IReadOnlyList<DbDataKit.Lineage.NodeCheck> ChecksOf(JsonObject overview)

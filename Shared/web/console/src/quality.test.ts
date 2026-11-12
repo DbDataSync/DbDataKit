@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { alertsLine, blockLine, datasetState, historyPath, measureLine, panelLine, runBlockedReason, sortDatasets, stateWord, type QualityCheck, type QualityDataset, type QualityServer } from './quality'
+import { alertsLine, runPath, blockLine, datasetState, historyPath, measureLine, panelLine, runBlockedReason, sortDatasets, stateWord, type QualityCheck, type QualityDataset, type QualityServer } from './quality'
 
 const check = (over: Partial<QualityCheck> = {}): QualityCheck => ({
   check_id: 'c', severity: 'block', on_error: 'alert', status: 'pass', status_since: 't', measured: 0, threshold: 0, evaluated_at: 't', blocking: false, blocked_since: null, server: 'Sync one', server_id: 'sync-1', product: 'dbdatasync', ...over,
@@ -65,6 +65,9 @@ describe('where the history of a check is read', () => {
   it('is the evaluating product\'s own route', () => {
     expect(historyPath('dbdatabuild')).toBe('/api/v1/quality/history')
     expect(historyPath('dbdatasync')).toBe('/api/quality/history')
+    expect(historyPath('dbdatastore')).toBe('/api/v1/quality/history')
+    expect(runPath('dbdatastore')).toBe('/api/v1/quality/run')
+    expect(runPath('dbdatasync')).toBe('/api/quality/run')
   })
 })
 

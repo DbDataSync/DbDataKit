@@ -84,7 +84,10 @@ export function panelLine(dataset: QualityDataset | undefined): string {
 const relay = (serverId: string, path: string) => `/relay/${encodeURIComponent(serverId)}${path}`
 
 /** The history of a check is the evaluating server's own route; the path is the one its product serves. */
-export const historyPath = (product: string | null) => (product === 'dbdatabuild' ? '/api/v1/quality/history' : '/api/quality/history')
+export const historyPath = (product: string | null) => (product === 'dbdatabuild' || product === 'dbdatastore' ? '/api/v1/quality/history' : '/api/quality/history')
+
+/** The server's own route that evaluates a dataset's checks on request: a Sync server's is under `/api`, the Store's under `/api/v1`. */
+export const runPath = (product: string | null) => (product === 'dbdatastore' ? '/api/v1/quality/run' : '/api/quality/run')
 
 /** Where the alerts of failed checks go (`GET /api/quality/alerts`, the section `quality: alerts:` of settings.yaml). */
 export interface QualityAlertsState { configured: boolean; channel: string | null; channelKnown: boolean; problem: string | null; recipients: string[] }
@@ -102,6 +105,6 @@ export const qualityApi = {
   alerts: () => request<QualityAlertsState>('/api/quality/alerts'),
   history: (check: Pick<QualityCheck, 'server_id' | 'product' | 'check_id'>, dataset: string) =>
     request<{ results: QualityResult[] }>(relay(check.server_id, `${historyPath(check.product)}?dataset=${encodeURIComponent(dataset)}&check=${encodeURIComponent(check.check_id)}`)),
-  /** Evaluates the dataset's checks now, on the server that owns them (a Sync server; the server answers 403 for anyone but an administrator). */
-  run: (serverId: string, dataset: string) => request<QualityRunAnswer>(relay(serverId, '/api/quality/run'), { method: 'POST', body: JSON.stringify({ dataset }) }),
+  /** Evaluates the dataset's checks now, on the server that owns them (a Sync server or a Store; the server answers 403 for anyone but an administrator). */
+  run: (serverId: string, dataset: string, product: string | null = null) => request<QualityRunAnswer>(relay(serverId, runPath(product)), { method: 'POST', body: JSON.stringify({ dataset }) }),
 }
