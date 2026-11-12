@@ -45,11 +45,9 @@ public class OutsideHttpTests
     {
         const string key = "api-key-canary-7c1d";
         var yaml = "schema: connection/2\nkind: http\nname: crm\nendpoint: https://crm.example.test/api\nsign_in: { method: api_key, key_secret: env:CRM_KEY }\n";
-        var loaded = ConnectionDefinitionLoader.Load(yaml, "connections/crm.yml", outsideKinds: true);
-        Assert.True(loaded.Ok, string.Join("\n", loaded.Diagnostics));
         var api = new FakeApi((request, n) => n == 1 ? FakeApi.Json("""{"ok":true}""") : new HttpResponseMessage(HttpStatusCode.Forbidden) { Content = new StringContent(key) });
         var secrets = new SecretResolverChain([new EnvSecretProvider(name => name == "CRM_KEY" ? key : null)]);
-        using var http = OutsideHttp.Open(loaded.Definition!, secrets, new OutsideHttpOptions { Delay = (_, _) => Task.CompletedTask }, new HttpConnectionOptions(api));
+        using var http = OutsideHttp.OpenYaml(yaml, "connections/crm.yml", secrets, new OutsideHttpOptions { Delay = (_, _) => Task.CompletedTask }, new HttpConnectionOptions(api));
         Assert.Equal(HttpStatusCode.OK, (await http.GetAsync("contacts")).Status);
         Assert.Equal(key, api.Requests[0].Headers["X-Api-Key"]);
         Assert.Equal("/api/contacts", api.Requests[0].Url);

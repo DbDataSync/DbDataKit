@@ -103,6 +103,14 @@ public sealed class OutsideHttp : IDisposable
     public static OutsideHttp Open(ConnectionDefinition definition, ISecretResolver secrets, OutsideHttpOptions? options = null, HttpConnectionOptions? connection = null) =>
         new(HttpConnections.Create(definition, secrets, connection), (options ?? new OutsideHttpOptions()) with { Connection = definition.Name });
 
+    /// <summary>The same for a connection file: loaded with the typed loader of HTTP connections (<see cref="ConnectionDefinitionLoader.LoadHttpConnection"/>), which refuses a file of another kind naming it. A file with errors is an <see cref="ArgumentException"/> that lists them.</summary>
+    public static OutsideHttp OpenYaml(string yaml, string file, ISecretResolver secrets, OutsideHttpOptions? options = null, HttpConnectionOptions? connection = null)
+    {
+        var loaded = ConnectionDefinitionLoader.LoadHttpConnection(yaml, file);
+        if (!loaded.Ok) throw new ArgumentException($"The connection file '{file}' cannot be used: {string.Join("; ", loaded.Diagnostics.Select(d => d.ToString()))}", nameof(yaml));
+        return Open(loaded.Definition!, secrets, options, connection);
+    }
+
     public Uri? BaseAddress => _client.BaseAddress;
 
     /// <summary>GET a path (relative to the connection's address), with a query.</summary>
