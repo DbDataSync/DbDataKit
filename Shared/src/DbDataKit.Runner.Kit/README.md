@@ -102,4 +102,5 @@ The kit stays small. What an integration needs to talk to a system that is not a
 | --- | --- | --- |
 | `DbDataKit.Runner.Kit.Formats` | rows from and to CSV and TSV, fixed width, JSON, JSON Lines, XML, Excel and Parquet; gzip, zip and OpenPGP; a bad row reported with its position and a decision (refuse, skip, collect) | IX08, IX09 |
 | `DbDataKit.Runner.Kit.Http` | an HTTP client on a connection's sign-in: paging (offset, cursor, link header), a per-connection rate limit, `Retry-After`, retries of temporary failures, the connection's failure classification | IX10 |
+| `DbDataKit.Runner.Kit.Changes` | the rows added, changed and gone since the last run of a source with no change feed: a row-hash snapshot kept as a checkpoint of the job's progress | IX13 |
 | `DbDataKit.Runner.Kit.Landing` | rows into a staging table (write gate, one transaction per batch, an idempotency key) and records into a DbDataStore entity through the Store's write path, both landing again changing nothing | IX11 |

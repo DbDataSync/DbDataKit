@@ -109,6 +109,7 @@
     <Project Path="Shared/src/DbDataKit.Runner.Protocol.Server/DbDataKit.Runner.Protocol.Server.csproj" />
     <Project Path="Shared/src/DbDataKit.Runner.TaskHost/DbDataKit.Runner.TaskHost.csproj" />
     <Project Path="Shared/src/DbDataKit.Runner.Kit.Analyzers/DbDataKit.Runner.Kit.Analyzers.csproj" />
+    <Project Path="Shared/src/DbDataKit.Runner.Kit.Changes/DbDataKit.Runner.Kit.Changes.csproj" />
     <Project Path="Shared/src/DbDataKit.Runner.Kit.Formats/DbDataKit.Runner.Kit.Formats.csproj" />
     <Project Path="Shared/src/DbDataKit.Runner.Kit.Http/DbDataKit.Runner.Kit.Http.csproj" />
     <Project Path="Shared/src/DbDataKit.Runner.Kit.Landing/DbDataKit.Runner.Kit.Landing.csproj" />
@@ -218,6 +219,7 @@
     <Project Path="Shared/tests/DbDataKit.Runner.Limits.TestChild/DbDataKit.Runner.Limits.TestChild.csproj" />
     <Project Path="Shared/tests/DbDataKit.Runner.Limits.Tests/DbDataKit.Runner.Limits.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Runner.Kit.Tests/DbDataKit.Runner.Kit.Tests.csproj" />
+    <Project Path="Shared/tests/DbDataKit.Runner.Kit.Changes.Tests/DbDataKit.Runner.Kit.Changes.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Runner.Kit.Formats.Tests/DbDataKit.Runner.Kit.Formats.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Runner.Kit.Http.Tests/DbDataKit.Runner.Kit.Http.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Runner.Kit.Landing.Tests/DbDataKit.Runner.Kit.Landing.Tests.csproj" />
