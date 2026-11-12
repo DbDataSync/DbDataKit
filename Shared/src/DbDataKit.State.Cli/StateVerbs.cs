@@ -34,7 +34,7 @@ public static class StateVerbs
             (args, output) => StateVerifyVerb.RunAsync(context, args, output),
             StateVerifyVerb.Schema),
         new Verb("move", "Move the state to another engine or database offline: export, import into the empty target, verify, and only then write the new settings; the old database is untouched; needs --yes or an answer of yes, and the service stopped", EffectClass.TargetWrites,
-            $"--to-engine sqlite|mssql|postgres [--to-connection <string with secret references>] [--to-schema <s>] [--to-prefix <p>] [--keep-snapshot] [--yes] {context.OptionsUsage}".TrimEnd(),
+            $"--to-engine sqlite|mssql|postgres [--to-connection <string with secret references>] [--to-schema <s>] [--to-prefix <p>] [--to-sqlite <file>] [--keep-snapshot] [--yes] {context.OptionsUsage}".TrimEnd(),
             (args, output) => StateMoveVerb.RunAsync(context, args, output),
             StateMoveVerb.Schema),
         new Verb("show", "Show the effective engine, the connection (secrets masked), where each module's tables are, each module's version in the registry and what is pending; read-only, creates and migrates nothing", EffectClass.TargetReadOnly,

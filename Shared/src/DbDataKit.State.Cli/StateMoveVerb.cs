@@ -20,8 +20,8 @@ internal static class StateMoveVerb
 
     public static async Task<int> RunAsync(StateVerbContext context, string[] args, CliContext output)
     {
-        var usage = $"Usage: state move --to-engine sqlite|mssql|postgres [--to-connection <connection string with secret references>] [--to-schema <schema>] [--to-prefix <prefix>] [--keep-snapshot] [--yes] {context.OptionsUsage}".TrimEnd();
-        var parsed = CliArgs.Parse(args, new HashSet<string> { "keep-snapshot", "yes" }, new HashSet<string>(context.Options.Concat(["to-engine", "to-connection", "to-schema", "to-prefix"])));
+        var usage = $"Usage: state move --to-engine sqlite|mssql|postgres [--to-connection <connection string with secret references>] [--to-schema <schema>] [--to-prefix <prefix>] [--to-sqlite <file>] [--keep-snapshot] [--yes] {context.OptionsUsage}".TrimEnd();
+        var parsed = CliArgs.Parse(args, new HashSet<string> { "keep-snapshot", "yes" }, new HashSet<string>(context.Options.Concat(["to-engine", "to-connection", "to-schema", "to-prefix", "to-sqlite"])));
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("to-engine") is not { Length: > 0 })
         {
             await output.Error.WriteLineAsync(usage);
@@ -35,7 +35,7 @@ internal static class StateMoveVerb
         if (settingsFile is null)
         {
             var sentence = $"{StateSnapshotSupport.Capital(context.Product)} keeps no settings file with a state section that 'state move' can write, so it cannot switch it for you. " +
-                $"Use '{context.Program} state export --to <directory>', name the new engine the way {context.Product}'s documentation says, and run '{context.Program} state import --from <directory>'.";
+                $"Use '{context.StateCommand("export")} --to <directory>', name the new engine the way {context.Product}'s documentation says, and run '{context.StateCommand("import")} --from <directory>'.";
             await output.Error.WriteLineAsync(sentence);
             output.Data["error"] = sentence;
             return StateExit.Settings;
@@ -67,7 +67,7 @@ internal static class StateMoveVerb
             }
         }
 
-        var options = new MoveOptions { DeleteSnapshotOnSuccess = !keep, SecretSamples = context.SecretSamples, RestartCommand = $"{context.Program} service restart" };
+        var options = new MoveOptions { DeleteSnapshotOnSuccess = !keep, SecretSamples = context.SecretSamplesFor?.Invoke(parsed) ?? context.SecretSamples, RestartCommand = $"{context.Program} service restart" };
         if (context.ConfigureMove is { } configure) options = configure(options);
         var service = new StateMoveService(opened.Secrets, appliedBy: context.Program);
         try

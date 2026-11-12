@@ -24,15 +24,15 @@ public sealed class OutsideConnectionsController(ConsoleConnections connections,
 
     [HttpGet]
     [Authorize(Policies.Viewer)]
-    public IActionResult List() => Ok(new { kinds = new[] { ConnectionKinds.Http, ConnectionKinds.ModelProvider, ConnectionKinds.Smtp }, flavors = new[] { "slack", "teams", "signed" }, connections = connections.List() });
+    public IActionResult List() => Ok(new { kinds = new[] { ConnectionKinds.Http, ConnectionKinds.ModelProvider, ConnectionKinds.Smtp, ConnectionKinds.Sftp, ConnectionKinds.Scp, ConnectionKinds.Ftps, ConnectionKinds.Smb, ConnectionKinds.S3, ConnectionKinds.AzureBlob }, flavors = new[] { "slack", "teams", "signed", "oauth" }, connections = connections.List() });
 
     [HttpGet("template")]
     [Authorize(Policies.Admin)]
     public IActionResult Template([FromQuery] string kind, [FromQuery] string name, [FromQuery] string? flavor = null) =>
         !ConsoleConnections.IsName(name) ? BadRequest(new { error = "A connection's name starts with a letter and has letters, digits, '-', '_' and '.'." })
-        : flavor is not null && (kind != ConnectionKinds.Http || flavor is not ("slack" or "teams" or "signed")) ? BadRequest(new { error = "A flavor is slack, teams or signed, and goes with kind http." })
-        : kind is ConnectionKinds.Http or ConnectionKinds.ModelProvider or ConnectionKinds.Smtp ? Ok(new { yaml = ConsoleConnections.Template(kind, name, flavor) })
-        : BadRequest(new { error = $"The console keeps connections of kind {ConnectionKinds.Http}, {ConnectionKinds.ModelProvider} and {ConnectionKinds.Smtp}." });
+        : flavor is not null && (kind != ConnectionKinds.Http || flavor is not ("slack" or "teams" or "signed" or "oauth")) ? BadRequest(new { error = "A flavor is slack, teams, signed or oauth, and goes with kind http." })
+        : kind is ConnectionKinds.Http or ConnectionKinds.ModelProvider or ConnectionKinds.Smtp or ConnectionKinds.Sftp or ConnectionKinds.Scp or ConnectionKinds.Ftps or ConnectionKinds.Smb or ConnectionKinds.S3 or ConnectionKinds.AzureBlob ? Ok(new { yaml = ConsoleConnections.Template(kind, name, flavor) })
+        : BadRequest(new { error = $"The console keeps connections of kind {ConnectionKinds.Http}, {ConnectionKinds.ModelProvider}, {ConnectionKinds.Smtp}, {ConnectionKinds.Sftp}, {ConnectionKinds.Scp}, {ConnectionKinds.Ftps}, {ConnectionKinds.Smb}, {ConnectionKinds.S3} and {ConnectionKinds.AzureBlob}." });
 
     [HttpPost("{name}/check")]
     [Authorize(Policies.Admin)]
@@ -90,6 +90,39 @@ public sealed class OutsideConnectionsController(ConsoleConnections connections,
 
         Audit("connection-webhook-split", name, $"a {split.Service} address was split: template {split.Template}, secret parts {string.Join(", ", split.Secrets.Keys)}");
         return Ok(new { detected = true, service = split.Service, format = split.Format, template = split.Template, secrets = split.Secrets });
+    }
+
+    /// <summary>Authorize (plan 27a IX03): the address of the provider's consent page for an authorization-code connection; the person is sent there and the provider returns them to <see cref="OAuthCallback"/>.</summary>
+    [HttpPost("{name}/authorize")]
+    [Authorize(Policies.Admin)]
+    public IActionResult Authorize(string name)
+    {
+        if (!ConsoleConnections.IsName(name)) return BadRequest(new { error = "That is not a connection's name." });
+        var redirect = $"{Request.Scheme}://{Request.Host}/api/outside-connections/oauth/callback";
+        if (connections.BeginConsent(name, redirect) is not { } url) return BadRequest(new { error = $"`{name}` is not a saved connection with `sign_in.method: oauth2_authorization_code`." });
+        Audit("connection-consent-started", name, "a person was sent to the provider to give consent");
+        return Ok(new { url, redirectUri = redirect });
+    }
+
+    /// <summary>Where the provider returns the person after consent (the redirect address to register with the provider). It keeps the refresh token as a secret and sends the person back to the Connections screen with the outcome in words.</summary>
+    [HttpGet("oauth/callback")]
+    [Authorize(Policies.Admin)]
+    public async Task<IActionResult> OAuthCallback([FromQuery] string? code, [FromQuery] string? state, [FromQuery] string? error, CancellationToken cancellation)
+    {
+        var outcome = await connections.CompleteConsentAsync(state, code, error, cancellation);
+        Audit(outcome.Ok ? "connection-consent-given" : "connection-consent-failed", outcome.Connection ?? "-", outcome.Ok ? "the refresh token was stored" : outcome.Message);
+        return Redirect($"/connections?consent={(outcome.Ok ? "ok" : "failed")}&connection={Uri.EscapeDataString(outcome.Connection ?? "")}&message={Uri.EscapeDataString(outcome.Message)}");
+    }
+
+    /// <summary>Revoke (plan 27a IX03): the provider is asked to revoke the refresh token (when the connection names a revoke address) and the token is forgotten here.</summary>
+    [HttpPost("{name}/revoke")]
+    [Authorize(Policies.Admin)]
+    public async Task<IActionResult> Revoke(string name, CancellationToken cancellation)
+    {
+        if (!ConsoleConnections.IsName(name)) return BadRequest(new { error = "That is not a connection's name." });
+        if (await connections.RevokeConsentAsync(name, cancellation) is not { } outcome) return BadRequest(new { error = $"`{name}` is not a saved connection with `sign_in.method: oauth2_authorization_code`." });
+        Audit("connection-consent-revoked", name, outcome.Message);
+        return Ok(new { outcome.Ok, outcome.Message });
     }
 
     /// <summary>Keeps a typed secret (a key, a password, a client secret, a certificate) in the console's secret store under the connection's name and gives the reference to write in the file.</summary>

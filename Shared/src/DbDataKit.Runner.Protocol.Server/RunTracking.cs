@@ -69,7 +69,10 @@ internal sealed class RunTracking(StateDatabase database, IReadOnlyDictionary<st
 
         var last = rows[^1];
         var parts = new Dictionary<string, ProgressValue> { [TrackingFollower.OrderPartName] = ProgressValue.OfInt(last.Order), [TrackingFollower.KeyPartName] = ProgressValue.OfText(last.Key) };
-        return _progress.Advance(CheckpointName(kind), parts, expectedVersion, itemKey: id, actor: "tracking-follower", alsoWrite: (connection, transaction) => _store.Write(connection, transaction, id, kind.Stream, rows));
+        var advanced = _progress.Advance(CheckpointName(kind), parts, expectedVersion, itemKey: id, actor: "tracking-follower", alsoWrite: (connection, transaction) => _store.Write(connection, transaction, id, kind.Stream, rows));
+        // the run's record in the runs module (plan 29a Q21), after the rows and the checkpoint are in
+        if (advanced && kind.Name == "run_log") BuildRunsProjection.Project(database, id, rows);
+        return advanced;
     }
 
     public IReadOnlyList<TrackingPosition> Tail(string identity, string stream, int count)
