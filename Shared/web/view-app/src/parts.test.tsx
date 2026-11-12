@@ -93,6 +93,22 @@ describe('the detail page and the dashboard', () => {
     expect(html).toContain('data-testid="vz-chart-w2"')
     expect(html).toContain('Only the first rows of territory')
   })
+
+  it('a report of an external server is framed only when the host approved its origin, and always has its link (AP17)', () => {
+    const embed = (framed: boolean, url: string) => ({ kind: 'embed' as const, title: 'Sales', entity: '', aggregate: 'count' as const, measure: null, by: null, columns: [], limit: 10, url, link_text: 'Open the sales report', framed })
+    const board = (...widgets: ReturnType<typeof embed>[]): DashboardSpec => ({ kind: 'dashboard', title: 'D', model: 'territories', params: [], links: [], widgets })
+    const approved = renderToStaticMarkup(<DashboardBoard spec={board(embed(true, 'https://reports.contoso.com/Reports/report/Sales'))} rows={{}} />)
+    expect(approved).toContain('data-mode="frame"')
+    expect(approved).toContain('<iframe')
+    expect(approved).toContain('src="https://reports.contoso.com/Reports/report/Sales"')
+    expect(approved).toContain('>Open the sales report<')
+    const unapproved = renderToStaticMarkup(<DashboardBoard spec={board(embed(false, 'https://other.contoso.com/r'))} rows={{}} />)
+    expect(unapproved).toContain('data-mode="link"')
+    expect(unapproved).not.toContain('<iframe')
+    expect(unapproved).toContain('href="https://other.contoso.com/r"')
+    const unsafe = renderToStaticMarkup(<DashboardBoard spec={board(embed(true, 'http://reports.contoso.com/r'))} rows={{}} />)
+    expect(unsafe).not.toContain('<iframe')                // not https: an error tile, never a frame
+  })
 })
 
 describe('the app', () => {

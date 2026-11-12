@@ -57,7 +57,7 @@ public enum AppTokenFailure
 }
 
 /// <summary>A token that passed: the person, the instance, the roles the home gave the person on it and the scope that is left after both the manifest and the person's roles.</summary>
-public sealed record AppAccessToken(string Instance, string SubjectId, string ClientId, IReadOnlyList<string> Roles, IReadOnlyList<string> Scope, DateTimeOffset ExpiresAtUtc)
+public sealed record AppAccessToken(string Instance, string SubjectId, string ClientId, IReadOnlyList<string> Roles, IReadOnlyList<string> Scope, DateTimeOffset ExpiresAtUtc, string? SubjectName = null)
 {
     /// <summary>Whether the token lets the app read (or, with <paramref name="write"/>, write) the entity; write includes read. A model or entity the scope does not name is refused.</summary>
     public bool Allows(string model, string entity, bool write) =>
@@ -93,7 +93,7 @@ public sealed class AppTokenValidator(Func<string, IReadOnlyDictionary<string, o
         if (claims.GetValueOrDefault("aud") as string != AppAudience.Of(instance)) return new(null, AppTokenFailure.WrongAudience);
         if (claims.GetValueOrDefault("sub") as string is not { Length: > 0 } subject || claims.GetValueOrDefault("client_id") as string is not { } client) return new(null, AppTokenFailure.Invalid);
         var expires = claims.GetValueOrDefault("exp") is JsonElement { ValueKind: JsonValueKind.Number } e ? DateTimeOffset.FromUnixTimeSeconds(e.GetInt64()) : DateTimeOffset.MinValue;
-        return new(new AppAccessToken(instance, subject, client, Strings(claims.GetValueOrDefault("dbdata_roles")), Strings(claims.GetValueOrDefault("dbdata_scope")), expires), AppTokenFailure.None);
+        return new(new AppAccessToken(instance, subject, client, Strings(claims.GetValueOrDefault("dbdata_roles")), Strings(claims.GetValueOrDefault("dbdata_scope")), expires, claims.GetValueOrDefault("name") as string), AppTokenFailure.None);
     }
 
     private static IReadOnlyList<string> Strings(object? value) =>

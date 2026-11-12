@@ -5,7 +5,7 @@ import { rowKey } from './keys'
 import { SchemeContext, useShellTheme } from './scheme'
 import { DashboardBoard, DetailPage, FormFields, GridTable, Links, formAttributes } from './parts'
 import { nextSort, shapeRows, type SortState } from './shape'
-import { SUPPORTED_FORMAT, parseRoute, resolveParams, type DashboardSpec, type DetailSpec, type FormSpec, type GridSpec, type ViewSpec, type ViewsDoc } from './spec'
+import { SUPPORTED_FORMAT, parseRoute, readsRows, resolveParams, type DashboardSpec, type DetailSpec, type FormSpec, type GridSpec, type ViewSpec, type ViewsDoc } from './spec'
 import type { Host } from './data'
 
 export interface ScreenProps<S extends ViewSpec = ViewSpec> { spec: S; client: StoreClient; params: Record<string, string>; go: (route: string) => void }
@@ -100,7 +100,7 @@ export function FormScreen({ spec, client, params, go }: ScreenProps<FormSpec>) 
 }
 
 export function DashboardScreen({ spec, client }: ScreenProps<DashboardSpec>) {
-  const entities = [...new Set(spec.widgets.map((w) => w.entity))]
+  const entities = [...new Set(spec.widgets.filter(readsRows).map((w) => w.entity))]
   const all = useLoad(async () => Object.fromEntries(await Promise.all(entities.map(async (e) => [e, await loadAll(client, spec.model, e)] as const))), [client, spec.model, entities.join()])
   if (all.error) return <ErrorNote error={all.error} />
   if (!all.data) return <Loading />

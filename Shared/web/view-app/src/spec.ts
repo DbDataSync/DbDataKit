@@ -18,9 +18,13 @@ export interface FormSpec extends Base {
 }
 export interface DetailSpec extends Base { kind: 'detail'; entity: string; key: string; sections: { title: string; attributes: AttrRef[] }[] }
 export interface WidgetSpec {
-  kind: 'metric' | 'bar' | 'line' | 'table'; title: string; entity: string; aggregate: 'count' | 'sum' | 'avg' | 'min' | 'max'
+  kind: 'metric' | 'bar' | 'line' | 'table' | 'embed'; title: string; entity: string; aggregate: 'count' | 'sum' | 'avg' | 'min' | 'max'
   measure: AttrRef | null; by: AttrRef | null; columns: AttrRef[]; limit: number
+  /** An `embed` widget (plan 26 AP17), which has no entity and no data: the report's address, the words of its link, and whether the host frames it (the origin is one the instance's approval allows). */
+  url?: string; link_text?: string | null; framed?: boolean
 }
+/** The widgets that read rows of an entity: every kind but an `embed`. */
+export const readsRows = (w: WidgetSpec): boolean => w.kind !== 'embed'
 export interface DashboardSpec extends Base { kind: 'dashboard'; widgets: WidgetSpec[] }
 export type ViewSpec = GridSpec | FormSpec | DetailSpec | DashboardSpec
 

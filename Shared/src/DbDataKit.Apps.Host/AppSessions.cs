@@ -33,6 +33,14 @@ public sealed class AppSession(string id, HomeIdentity identity, DateTimeOffset 
     public IReadOnlyList<string> RolesOn(string instance) => Identity.Roles.GetValueOrDefault(AppInstanceAudience.Of(AppInstanceName.Split(instance).Name)) ?? [];   // a preview (`acme~preview`) is opened by the roles of `acme`
 }
 
+/// <summary>What asking the home for an app's token gave: the token, or the status and the words to answer the shell with.</summary>
+public sealed record AppTokenOutcome(AppToken? Token, int Status, string? Message)
+{
+    public static AppTokenOutcome Of(AppToken token) => new(token, 200, null);
+
+    public static AppTokenOutcome Failed(int status, string message) => new(null, status, message);
+}
+
 /// <summary>A session as a store keeps it (plan 26 AP29): the identity the home gave as a document, the home's refresh token (the store protects it; it is a credential), when the session ends and when the home last answered.</summary>
 public sealed record StoredAppSession(string Id, string Identity, string? RefreshToken, DateTimeOffset ExpiresAt, DateTimeOffset AskedAt);
 
@@ -59,7 +67,8 @@ public interface IAppSessionStore
 /// the home again, with the refresh token, once the last answer is <see cref="RefreshAfter"/> old: the roles are the home's current word; when the home says the sign-in is over (the person is disabled, the token revoked)
 /// the session ends; when the home cannot be reached the last answer stands and the host asks again soon.
 /// </summary>
-public sealed class AppSessions(TimeProvider? clock = null, Func<string, CancellationToken, Task<(HomeIdentity Identity, HomeGrant Grant)>>? refresh = null, TimeSpan? refreshAfter = null, IAppSessionStore? store = null)
+public sealed class AppSessions(TimeProvider? clock = null, Func<string, CancellationToken, Task<(HomeIdentity Identity, HomeGrant Grant)>>? refresh = null, TimeSpan? refreshAfter = null, IAppSessionStore? store = null,
+    Func<string, string, CancellationToken, Task<(string AccessToken, int ExpiresInSeconds)>>? exchange = null)
 {
     public static readonly TimeSpan Lifetime = TimeSpan.FromHours(8);
     public static readonly TimeSpan DefaultRefreshAfter = TimeSpan.FromMinutes(5);
@@ -158,6 +167,51 @@ public sealed class AppSessions(TimeProvider? clock = null, Func<string, Cancell
                 session.AskedAtUtc = _clock.GetUtcNow() - (RefreshAfter - RetryAfter);
             }
             return session;
+        }
+        finally
+        {
+            session.Asking.Release();
+        }
+    }
+
+    /// <summary>
+    /// The token an app of <paramref name="instance"/> uses for data (plan 26 AP19): the identity home's access token for that instance, got by trading this session's refresh token (the <c>exchange</c> the host was given; the home checks the person's
+    /// role on the instance and narrows the approved manifest's scope to it, and the token's audience is <c>app:&lt;instance&gt;</c>). The host signs nothing. The refresh token is not used up by the trade, so it is done under the same lock
+    /// as the refresh itself, with the token that stands now; when the home says that token is no longer valid and another instance of the group has already replaced it, the replacement is tried once. The result says why when there is no token.
+    /// </summary>
+    public async Task<AppTokenOutcome> TokenAsync(AppSession session, string instance, CancellationToken ct)
+    {
+        if (exchange is null) return AppTokenOutcome.Failed(503, "This host has no way to ask the identity home for app tokens.");
+        await session.Asking.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            for (var attempt = 0; ; attempt++)
+            {
+                if (session.RefreshToken is not { } token) return AppTokenOutcome.Failed(401, "Sign in again: the identity home gave this sign-in no way to ask for an app's token.");
+                try
+                {
+                    var (access, seconds) = await exchange(token, instance, ct).ConfigureAwait(false);
+                    return AppTokenOutcome.Of(new AppToken(access, seconds, AppInstanceAudience.Of(instance)));
+                }
+                catch (OpenIdClientException e) when (e.HomeRefused)
+                {
+                    if (attempt == 0 && Adopt(session)) continue;
+                    End(session.Id);
+                    return AppTokenOutcome.Failed(401, "Sign in again.");
+                }
+                catch (OpenIdClientException e) when (e.Error == "access_denied")
+                {
+                    return AppTokenOutcome.Failed(403, "The identity home gives you no role on this app.");
+                }
+                catch (OpenIdClientException e) when (e.Error is "unauthorized_client" or "unsupported_grant_type" or "invalid_target" or "invalid_client")
+                {
+                    return AppTokenOutcome.Failed(503, $"The identity home does not give this host tokens for this app ({e.Error}): the home must let this host's client exchange tokens, and the instance needs its client there. {e.Message}");
+                }
+                catch (OpenIdClientException e)
+                {
+                    return AppTokenOutcome.Failed(503, e.Message);
+                }
+            }
         }
         finally
         {

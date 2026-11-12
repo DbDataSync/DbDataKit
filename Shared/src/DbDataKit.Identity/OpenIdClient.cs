@@ -71,8 +71,11 @@ public sealed record HomeIdentity(string UserId, string? Name, string? Email, IR
 }
 
 /// <summary>A sign-in that cannot be completed; the message is ours and never holds a token or a code.</summary>
-public sealed class OpenIdClientException(string message, bool homeRefused = false) : Exception(message)
+public sealed class OpenIdClientException(string message, bool homeRefused = false, string? error = null) : Exception(message)
 {
+    /// <summary>The error the home answered with (RFC 6749 section 5.2: <c>invalid_grant</c>, <c>access_denied</c>, <c>unauthorized_client</c>, <c>invalid_target</c> ...), or null when it gave none or was not reached.</summary>
+    public string? Error { get; } = error;
+
     /// <summary>True when the home answered and said no (the refresh token is revoked, expired or used, or the person is disabled): the sign-in is over. False when the home could not be asked.</summary>
     public bool HomeRefused { get; } = homeRefused;
 }
@@ -159,6 +162,42 @@ public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, T
             var idToken = token.TryGetProperty("id_token", out var t) ? t.GetString() : null;
             var identity = await ValidateAsync(idToken, null, discovery, ct);
             return (identity, new HomeGrant(token.TryGetProperty("refresh_token", out var r) ? r.GetString() : null, idToken));
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or OperationCanceledException && !ct.IsCancellationRequested)
+        {
+            throw new OpenIdClientException("The identity home could not be reached.");
+        }
+    }
+
+    /// <summary>
+    /// The access token of one app instance for the person the refresh token belongs to (RFC 8693 token exchange at the home; plan 26 AP19). The refresh token is not used up: <see cref="RefreshAsync"/> keeps rotating it. The home refuses when
+    /// the sign-in is over (<see cref="OpenIdClientException.HomeRefused"/>), when the person holds no role on the instance (<c>access_denied</c>), when the instance has no client or no approved version, or when it does not let this client exchange
+    /// (<c>unauthorized_client</c>, <c>unsupported_grant_type</c>); <see cref="OpenIdClientException.Error"/> says which.
+    /// </summary>
+    /// <param name="refreshToken">The refresh token of the person's sign-in.</param>
+    /// <param name="instance">The instance as the host addresses it (<c>acme</c>, or <c>acme~preview</c>): the audience of the token is <c>app:&lt;instance&gt;</c>.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<(string AccessToken, int ExpiresInSeconds)> ExchangeForAppAsync(string refreshToken, string instance, CancellationToken ct)
+    {
+        try
+        {
+            var discovery = await DiscoveryAsync(ct);
+            var form = new Dictionary<string, string>
+            {
+                ["grant_type"] = "urn:ietf:params:oauth:grant-type:token-exchange", ["subject_token"] = refreshToken, ["subject_token_type"] = "urn:ietf:params:oauth:token-type:refresh_token",
+                ["audience"] = "app:" + instance, ["client_id"] = options.ClientId,
+            };
+            if (options.ClientSecret is not null) form["client_secret"] = options.ClientSecret;
+            using var response = await http.PostAsync(discovery.TokenEndpoint, new FormUrlEncodedContent(form), ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                string? error = null;
+                try { error = (await response.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("error").GetString(); } catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException) { }
+                throw new OpenIdClientException($"The identity home did not give a token for the app ({(int)response.StatusCode}{(error is null ? "" : ", " + error)}).", homeRefused: error == "invalid_grant", error: error);
+            }
+            var token = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
+            if (!token.TryGetProperty("access_token", out var access) || access.GetString() is not { Length: > 0 } text) throw new OpenIdClientException("The identity home sent no access token.");
+            return (text, token.TryGetProperty("expires_in", out var expires) && expires.TryGetInt32(out var seconds) ? seconds : 600);
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or OperationCanceledException && !ct.IsCancellationRequested)
         {

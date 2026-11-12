@@ -52,7 +52,7 @@ public static class ViewsApp
 
     /// <summary>
     /// The generated document. Everything named in it is a fixed path under the instance's bundle folder. The specs are in the page itself: a sandboxed document has an opaque origin, so a <c>fetch</c> of <c>views.json</c> would be a
-    /// cross-origin read this host does not answer with CORS headers. <paramref name="views"/> is <see cref="Json(ResolvedInstance)"/>; its angle brackets are escaped by the serializer, and again here, so it cannot end the element.
+    /// cross-origin read this host does not answer with CORS headers. <paramref name="views"/> is <see cref="Json(ResolvedInstance, IReadOnlyList{string})"/>; its angle brackets are escaped by the serializer, and again here, so it cannot end the element.
     /// </summary>
     public static byte[] Document(string title, string basePath, bool style, byte[] views) => Encoding.UTF8.GetBytes($$"""
         <!doctype html>
@@ -77,14 +77,14 @@ public static class ViewsApp
         new Dictionary<string, byte[]> { [GeneratedPath] = Json(manifest, read, "", manifest.Title ?? manifest.Name) };
 
     /// <summary>The app's specs as the runtime reads them: the file names in the manifest's order (the first is the home view), and each spec by its file name. A file that does not read is listed under <c>problems</c> with its diagnostics.</summary>
-    public static byte[] Json(ResolvedInstance instance) =>
-        Json(instance.Manifest, file => instance.Package.Files.TryGetValue(file, out var bytes) ? bytes : null, instance.Instance.Name, instance.Instance.Title ?? instance.Manifest.Title ?? instance.Instance.Name);
+    public static byte[] Json(ResolvedInstance instance, IReadOnlyList<string>? frameOrigins = null) =>
+        Json(instance.Manifest, file => instance.Package.Files.TryGetValue(file, out var bytes) ? bytes : null, instance.Instance.Name, instance.Instance.Title ?? instance.Manifest.Title ?? instance.Instance.Name, frameOrigins);
 
     /// <summary>
     /// The same document for a source tree that is not published yet (plan 22a GP34): <c>apps build</c> makes it from the manifest and the spec files and gives it to the bundler as <c>src/views.generated.json</c>, so a code app can
     /// draw its spec files with the same components the host does and the bundle holds what was checked. <paramref name="read"/> answers a file's bytes (null when the package does not hold it).
     /// </summary>
-    public static byte[] Json(AppManifest manifest, Func<string, byte[]?> read, string instance, string title)
+    public static byte[] Json(AppManifest manifest, Func<string, byte[]?> read, string instance, string title, IReadOnlyList<string>? frameOrigins = null)
     {
         var views = new JsonObject();
         var problems = new JsonArray();
@@ -94,7 +94,7 @@ public static class ViewsApp
             // a dashboard or a report (dashboard/1, report/1) is not a view spec: it is checked by `app validate` and drawn by its own screen, which this runtime does not have yet (plan 32 DBR13)
             if (ViewSpecLoader.IsDocument(Encoding.UTF8.GetString(bytes))) continue;
             var loaded = ViewSpecLoader.Load(Encoding.UTF8.GetString(bytes), file, manifest.Name);
-            if (loaded.Spec is { } spec && loaded.Ok) views[file] = Spec(spec);
+            if (loaded.Spec is { } spec && loaded.Ok) views[file] = Spec(spec, frameOrigins ?? []);
             else foreach (var d in loaded.Diagnostics) problems.Add($"{d.Path}:{d.Line}:{d.Column}: {d.Message}");
         }
         var root = new JsonObject
@@ -111,7 +111,15 @@ public static class ViewsApp
         return Encoding.UTF8.GetBytes(root.ToJsonString());
     }
 
-    private static JsonNode Spec(ViewSpec spec)
+    /// <summary>
+    /// Whether the host frames an embed's address (plan 26 AP17): its origin is covered by one the instance's approval allows (<c>egress.frame</c>, <see cref="EgressPolicy.Effective"/>), the same list the document's <c>frame-src</c> is built from, so
+    /// what the page draws as a frame is what the browser lets it frame. An origin nobody approved is drawn as a link.
+    /// </summary>
+    public static bool Framed(string url, IReadOnlyList<string> frameOrigins) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
+        && frameOrigins.Any(o => EgressPolicy.Covers(o, uri.GetLeftPart(UriPartial.Authority).ToLowerInvariant()));
+
+    private static JsonNode Spec(ViewSpec spec, IReadOnlyList<string> frameOrigins)
     {
         var o = new JsonObject
         {
@@ -151,7 +159,9 @@ public static class ViewsApp
                 o["sections"] = new JsonArray([.. d.Sections.Select(s => (JsonNode)new JsonObject { ["title"] = s.Title, ["attributes"] = new JsonArray([.. s.Attributes.Select(Attr)]) })]);
                 break;
             case DashboardView b:
-                o["widgets"] = new JsonArray([.. b.Widgets.Select(w => (JsonNode)new JsonObject
+                o["widgets"] = new JsonArray([.. b.Widgets.Select(w => w.Kind == ViewWidgetKind.Embed
+                    ? new JsonObject { ["kind"] = "embed", ["title"] = w.Title, ["entity"] = "", ["url"] = w.Url, ["link_text"] = w.LinkText, ["framed"] = Framed(w.Url!, frameOrigins) }
+                    : (JsonNode)new JsonObject
                 {
                     ["kind"] = w.Kind.ToString().ToLowerInvariant(), ["title"] = w.Title, ["entity"] = w.Entity, ["aggregate"] = w.Aggregate.ToString().ToLowerInvariant(),
                     ["measure"] = w.Measure is { } m ? Attr(m) : null, ["by"] = w.By is { } by ? Attr(by) : null,

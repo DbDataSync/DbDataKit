@@ -13,7 +13,11 @@ public sealed record AuthorizeRequest(string? ClientId, string? RedirectUri, str
 /// <summary>The answer to an authorization request: a URI to send the browser to, or, when the client or its redirect URI cannot be trusted, a message to show instead (never a redirect).</summary>
 public sealed record AuthorizeResult(string? RedirectTo, string? Error);
 
-public sealed record TokenRequest(string? GrantType, string? Code, string? RedirectUri, string? ClientId, string? ClientSecret, string? CodeVerifier, string? RefreshToken = null);
+/// <summary>
+/// A token request as the provider needs it (the form of POST /token). For <see cref="OpenIdProvider.TokenExchangeGrant"/> <c>SubjectToken</c> is a refresh token of the authenticated client (RFC 8693 <c>subject_token</c>) and
+/// <c>Audience</c> what the new token is for, <c>app:&lt;instance&gt;</c>.
+/// </summary>
+public sealed record TokenRequest(string? GrantType, string? Code, string? RedirectUri, string? ClientId, string? ClientSecret, string? CodeVerifier, string? RefreshToken = null, string? SubjectToken = null, string? Audience = null, string? SubjectTokenType = null);
 
 /// <summary>Tokens for a client; the refresh token only when the client asked for <c>offline_access</c>.</summary>
 public sealed record TokenResponse(string AccessToken, string IdToken, int ExpiresIn, string Scope, string? RefreshToken = null);
@@ -36,8 +40,17 @@ public sealed class OAuthException(string error, string description, int status 
 /// The OpenID Connect provider of the identity home: the authorization code flow with PKCE (S256 only), id tokens and access tokens signed ES256, discovery and userinfo. Signing a person in is the host's (it hands the
 /// signed-in user id to <see cref="Authorize"/>); this issues the code and trades it for tokens that carry the home's user id as <c>sub</c>, the groups, and the roles held on every server and app (<c>dbdata_roles</c>).
 /// </summary>
-public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, HomeDirectory directory, OidcClients clients, SigningKeys keys, string issuer, TimeProvider? clock = null, IAppGrants? apps = null, TimeSpan? refreshLifetime = null)
+public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, HomeDirectory directory, OidcClients clients, SigningKeys keys, string issuer, TimeProvider? clock = null, IAppGrants? apps = null, TimeSpan? refreshLifetime = null, Func<string, bool>? appHosts = null)
 {
+    /// <summary>The grant an apps host uses to get an instance's access token for a person it signed in (RFC 8693; plan 26 AP19).</summary>
+    public const string TokenExchangeGrant = "urn:ietf:params:oauth:grant-type:token-exchange";
+
+    /// <summary>The <c>subject_token_type</c> of the exchange: the client's refresh token for the person.</summary>
+    public const string RefreshTokenType = "urn:ietf:params:oauth:token-type:refresh_token";
+
+    /// <summary>The <c>issued_token_type</c> of the exchange's answer.</summary>
+    public const string AccessTokenType = "urn:ietf:params:oauth:token-type:access_token";
+
     private const string Module = IdentityModule.Name;
 
 
@@ -65,7 +78,7 @@ public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, 
         userinfo_endpoint = Issuer + "/identity/userinfo",
         jwks_uri = Issuer + "/identity/jwks",
         response_types_supported = new[] { "code" },
-        grant_types_supported = new[] { "authorization_code", "refresh_token" },
+        grant_types_supported = appHosts is null ? new[] { "authorization_code", "refresh_token" } : new[] { "authorization_code", "refresh_token", TokenExchangeGrant },
         subject_types_supported = new[] { "public" },
         id_token_signing_alg_values_supported = new[] { "ES256" },
         scopes_supported = KnownScopes,
@@ -116,6 +129,7 @@ public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, 
     public TokenResponse Exchange(TokenRequest request)
     {
         if (request.GrantType == "refresh_token") return Refresh(request);
+        if (request.GrantType == TokenExchangeGrant) return ExchangeForApp(request);
         if (request.GrantType != "authorization_code") throw new OAuthException("unsupported_grant_type", "Only authorization_code and refresh_token are supported.");
         if (request.ClientId is null || !clients.Authenticates(request.ClientId, request.ClientSecret)) throw new OAuthException("invalid_client", "The client could not be authenticated.", 401);
         if (string.IsNullOrEmpty(request.Code) || string.IsNullOrEmpty(request.CodeVerifier)) throw new OAuthException("invalid_request", "code and code_verifier are required.");
@@ -134,7 +148,39 @@ public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, 
         return Issue(user, request.ClientId, grant.Scope, grant.Nonce, refresh);
     }
 
-    private TokenResponse Issue(UserRecord user, string clientId, string scope, string? nonce, string? refreshToken)
+    /// <summary>
+    /// The token exchange (RFC 8693; plan 26 AP19): an apps host that signed a person in with its own confidential client trades that person's refresh token for the access token of one app instance, so the app's token is the home's
+    /// and the host signs nothing. The client authenticates (with its secret when it has one: a confidential client is the better registration, a public one is what the suite's setups make and holds no more power than the refresh token it presents already gives); only a client the host of the home named as an apps host may ask (<c>appHosts</c>), and only with a refresh token of its own that is still the one in force
+    /// (not used, not revoked, not expired). The refresh token is <b>not</b> used up and no new one is made: the host's own refresh keeps rotating it. The instance is the audience (<c>app:&lt;instance&gt;</c>, or a preview of one,
+    /// <c>app:&lt;instance&gt;~&lt;channel&gt;</c>, which is the instance's client and roles with the scope of that channel's manifest); the instance must have its client here, the person must hold a role on it, and what the token allows
+    /// is what any token of the instance allows: the approved manifest's scope narrowed by the person's roles (<see cref="Issue"/>). Anything else is refused in the words of RFC 6749 and 8693.
+    /// </summary>
+    private TokenResponse ExchangeForApp(TokenRequest request)
+    {
+        if (request.ClientId is null || !clients.Authenticates(request.ClientId, request.ClientSecret)) throw new OAuthException("invalid_client", "The client could not be authenticated.", 401);
+        if (appHosts is null || !appHosts(request.ClientId)) throw new OAuthException("unauthorized_client", "This client may not exchange tokens: only the apps host of this home may.");
+        if (string.IsNullOrEmpty(request.SubjectToken)) throw new OAuthException("invalid_request", "subject_token is required.");
+        if (request.SubjectTokenType is not null && request.SubjectTokenType != RefreshTokenType) throw new OAuthException("invalid_request", $"subject_token_type is {RefreshTokenType}.");
+        if (request.Audience is not { } audience || !audience.StartsWith(AppAudience.Prefix, StringComparison.Ordinal) || audience.Length == AppAudience.Prefix.Length)
+            throw new OAuthException("invalid_target", "audience is app:<instance>.");
+        var instance = audience[AppAudience.Prefix.Length..];
+        var name = instance.Contains('~') ? instance[..instance.IndexOf('~')] : instance;
+        if (clients.AppClientOf(name) is not { } appClient) throw new OAuthException("invalid_target", "No such app instance is registered here.");
+
+        var row = ReadRefresh(Hash(request.SubjectToken));
+        if (row is null || row.ClientId != request.ClientId || row.RevokedAt is not null || row.UsedAt is not null) throw new OAuthException("invalid_grant", "The subject token is not valid.");
+        if (row.ExpiresAt <= _clock.GetUtcNow()) throw new OAuthException("invalid_grant", "The subject token has expired.");
+        var user = users.Get(row.UserId);
+        if (user is not { Enabled: true })
+        {
+            RevokeFamily(row.FamilyId);
+            throw new OAuthException("invalid_grant", "The user cannot sign in.");
+        }
+        if (directory.RolesIn(user.Id, name) == ServerRole.None) throw new OAuthException("access_denied", "The person holds no role on this app.", 403);
+        return Issue(user, appClient.ClientId, "openid", null, null, instance);
+    }
+
+    private TokenResponse Issue(UserRecord user, string clientId, string scope, string? nonce, string? refreshToken, string? appInstance = null)
     {
         var now = _clock.GetUtcNow().ToUnixTimeSeconds();
         var scopes = scope.Split(' ');
@@ -153,11 +199,13 @@ public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, 
         var access = new Dictionary<string, object?> { ["iss"] = Issuer, ["sub"] = user.Id, ["aud"] = Issuer, ["client_id"] = clientId, ["scope"] = scope, ["iat"] = now, ["exp"] = now + (long)TokenLifetime.TotalSeconds };
         if (clients.Find(clientId)?.App is { } app)
         {
+            var instance = appInstance ?? app;
             // An app's access token is for the instance, not the home (plan 13a U19): the audience is the instance, the roles are the ones the person holds on it, and the scope is the approved manifest's narrowed by
             // those roles, so the token is never wider than the person. Read again at every refresh. An instance with no approved version gets nothing.
-            var manifest = apps?.ScopeOf(app) ?? throw new OAuthException("invalid_grant", "The app has no approved version, so it gets no token.");
+            var manifest = apps?.ScopeOf(instance) ?? throw new OAuthException("invalid_grant", "The app has no approved version, so it gets no token.");
             var held = directory.RolesIn(user.Id, app);
-            access["aud"] = AppAudience.Of(app);
+            access["aud"] = AppAudience.Of(instance);
+            access["name"] = user.DisplayName;
             access["dbdata_roles"] = ServerRoles.Names(ServerRoles.Close(held));
             access["dbdata_scope"] = AppScope.Narrow(manifest, held);
         }
@@ -243,16 +291,16 @@ public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, 
         return token;
     }
 
-    private sealed record RefreshRow(string FamilyId, string ClientId, string UserId, string Scope, DateTimeOffset ExpiresAt, DateTimeOffset? RevokedAt);
+    private sealed record RefreshRow(string FamilyId, string ClientId, string UserId, string Scope, DateTimeOffset ExpiresAt, DateTimeOffset? RevokedAt, DateTimeOffset? UsedAt = null);
 
     private RefreshRow? ReadRefresh(string hash) => database.Retry(() =>
     {
         using var connection = database.OpenConnection();
-        using var cmd = database.Command(Module, connection, "SELECT family_id, client_id, account_id, scope, expires_at, revoked_at FROM {table:refresh_token} WHERE token_hash = $hash;");
+        using var cmd = database.Command(Module, connection, "SELECT family_id, client_id, account_id, scope, expires_at, revoked_at, used_at FROM {table:refresh_token} WHERE token_hash = $hash;");
         cmd.Bind(database, "hash", hash);
         using var reader = cmd.ExecuteReader();
         return reader.Read()
-            ? new RefreshRow(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.Time(4), reader.NullableTime(5))
+            ? new RefreshRow(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.Time(4), reader.NullableTime(5), reader.NullableTime(6))
             : null;
     });
 

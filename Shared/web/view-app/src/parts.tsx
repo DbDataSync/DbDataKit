@@ -1,5 +1,5 @@
 import { ErrorNote, FieldView, StoreError, ViolationList, formatCell, titleOf, type AttributeSchema, type EntitySchema, type StoredRow, type Violation } from '@dbdatakit/store-ui'
-import { DataTable, VegaChart } from '@dbdatakit/visuals'
+import { DataTable, EmbedBlock, VegaChart } from '@dbdatakit/visuals'
 import { useScheme } from './scheme'
 import type { ReactNode } from 'react'
 import { chartDocument, formatNumber, measure, measureTitle, tableRows, type SortState } from './shape'
@@ -164,7 +164,9 @@ export function DashboardBoard({ spec, rows, truncated }: { spec: DashboardSpec;
       {spec.widgets.map((w, i) => {
         const data = rows[w.entity] ?? []
         let body: ReactNode
-        if (w.kind === 'metric') body = <p className="va-metric" data-testid={`va-metric-${i}`}><b>{formatNumber(measure(data, w))}</b> <span>{measureTitle(w)}</span></p>
+        // a report of an external report server (plan 26 AP17): a frame when the host approves its origin, always with its link; the policy of this document lists the same origins for `frame-src`, so a frame the host did not approve is blocked as well
+        if (w.kind === 'embed') body = <EmbedBlock widget={{ type: 'embed', title: w.title, url: w.url ?? '', ...(w.link_text ? { link_text: w.link_text } : {}) }} result={{ type: 'embed', url: w.url ?? '', framed: w.framed === true, ...(w.link_text ? { link_text: w.link_text } : {}) }} />
+        else if (w.kind === 'metric') body = <p className="va-metric" data-testid={`va-metric-${i}`}><b>{formatNumber(measure(data, w))}</b> <span>{measureTitle(w)}</span></p>
         else if (w.kind === 'table') {
           const t = tableRows(data, w)
           body = <DataTable id={`w${i}`} columns={t.columns} rows={t.rows} limit={w.limit} />

@@ -38,6 +38,52 @@ public sealed class ViewsAppTests : IDisposable
         return new AppSite(store, views: runtime ?? Runtime);
     }
 
+    private const string ReportBoard = "schemaVersion: 1\nkind: dashboard\ntitle: Board\nmodel: territories\nwidgets:\n  - {kind: metric, title: Count, entity: territory, measure: count}\n  - {kind: embed, title: Sales, url: 'https://reports.contoso.com/Reports/report/Sales?rs:Embed=true', link_text: Open the sales report}\n  - {kind: embed, title: Other, url: 'https://other.contoso.com/r'}\n";
+
+    private AppSite PublishReports(Func<string, AppEgress>? approved)
+    {
+        var manifest = Manifest.Replace("roles: [viewer]\n", "roles: [viewer]\ntrust: trusted\negress:\n  frame: [https://reports.contoso.com, https://other.contoso.com]\n");
+        store.PublishApp(new AppPackage(manifest, new Dictionary<string, byte[]> { ["views/list.yaml"] = Bytes(Grid), ["views/one.yaml"] = Bytes(Detail), ["views/board.yaml"] = Bytes(ReportBoard) }), "ada");
+        store.Save(new AppInstance("tv", "tv"), "ada");
+        return new AppSite(store, approved, views: Runtime);
+    }
+
+    private static AppEgress Frames(params string[] origins) => AppEgress.None with { Frame = origins };
+
+    [Fact]
+    public void An_approved_report_origin_is_framed_and_one_nobody_approved_is_a_link_and_blocked_by_the_policy()
+    {
+        var response = PublishReports(_ => Frames("https://reports.contoso.com")).Get("tv", "views.json");
+        var widgets = JsonNode.Parse(response.Body)!["views"]!["views/board.yaml"]!["widgets"]!.AsArray();
+        Assert.Equal("embed", (string)widgets[1]!["kind"]!);
+        Assert.Equal("https://reports.contoso.com/Reports/report/Sales?rs:Embed=true", (string)widgets[1]!["url"]!);
+        Assert.Equal("Open the sales report", (string)widgets[1]!["link_text"]!);
+        Assert.True((bool)widgets[1]!["framed"]!);                          // approved: a frame
+        Assert.False((bool)widgets[2]!["framed"]!);                         // asked for but not approved: only the link
+        var policy = response.Headers["Content-Security-Policy"];
+        Assert.Contains("frame-src https://reports.contoso.com;", policy);
+        Assert.DoesNotContain("other.contoso.com", policy);                 // the browser blocks the second origin as well
+    }
+
+    [Fact]
+    public void With_no_approval_every_embed_is_a_link_and_the_policy_frames_nothing()
+    {
+        var response = PublishReports(null).Get("tv", "views.json");
+        var widgets = JsonNode.Parse(response.Body)!["views"]!["views/board.yaml"]!["widgets"]!.AsArray();
+        Assert.All(widgets.Skip(1), w => Assert.False((bool)w!["framed"]!));
+        Assert.Contains("frame-src 'none'", response.Headers["Content-Security-Policy"]);
+    }
+
+    [Fact]
+    public void A_wildcard_approval_frames_the_hosts_under_it_and_a_http_address_is_never_framed()
+    {
+        Assert.True(ViewsApp.Framed("https://a.contoso.com/r", ["https://*.contoso.com"]));
+        Assert.False(ViewsApp.Framed("https://contoso.com/r", ["https://*.contoso.com"]));
+        Assert.False(ViewsApp.Framed("http://reports.contoso.com/r", ["https://reports.contoso.com"]));
+        Assert.False(ViewsApp.Framed("https://reports.contoso.com:8443/r", ["https://reports.contoso.com"]));
+        Assert.True(ViewsApp.Framed("https://Reports.Contoso.com/r", ["https://reports.contoso.com"]));
+    }
+
     [Fact]
     public void The_page_is_generated_loads_the_runtime_and_is_served_sandboxed_with_a_base_under_the_instance()
     {

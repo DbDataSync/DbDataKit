@@ -240,12 +240,13 @@ public sealed class AppsModuleTests : IAsyncLifetime
         var response = await PostTokenAsync(apps, "acme", session);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
-        Assert.Equal(300, (int)body["expiresIn"]!);
+        // the token is the identity home's (a refresh-token exchange), not one the host signed: ten minutes, and its own `dbdata_roles` claim
+        Assert.Equal(600, (int)body["expiresIn"]!);
         Assert.Equal("app:acme", (string)body["audience"]!);
         var claims = JsonNode.Parse(Convert.FromBase64String(((string)body["token"]!).Split('.')[1].Replace('-', '+').Replace('_', '/').PadRight(((string)body["token"]!).Split('.')[1].Length + 3 & ~3, '=')))!;
         Assert.Equal(("app:acme", ada), ((string)claims["aud"]!, (string)claims["sub"]!));
-        Assert.Contains("viewer", claims["roles"]!.AsArray().Select(r => (string)r!));
-        Assert.DoesNotContain("admin", claims["roles"]!.AsArray().Select(r => (string)r!));
+        Assert.Contains("viewer", claims["dbdata_roles"]!.AsArray().Select(r => (string)r!));
+        Assert.DoesNotContain("admin", claims["dbdata_roles"]!.AsArray().Select(r => (string)r!));
 
         Assert.Equal(HttpStatusCode.BadRequest, (await PostTokenAsync(apps, "acme", session, header: false)).StatusCode);   // not from the shell page
         Assert.Equal(HttpStatusCode.Unauthorized, (await PostTokenAsync(apps, "acme", null)).StatusCode);

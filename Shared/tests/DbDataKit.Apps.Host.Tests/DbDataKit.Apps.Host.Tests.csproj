@@ -4,5 +4,8 @@
     <Using Include="Xunit" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <ProjectReference Include="..\..\src\DbDataKit.Apps.Host\DbDataKit.Apps.Host.csproj" />
+    <!-- the identity home's throwaway state (the same fixture the identity tests use): the apps host's tokens are the home's, so its tests ask a real one -->
+    <Compile Include="..\DbDataKit.Identity.Tests\HomeFixture.cs" Link="HomeFixture.cs" />
+    <Compile Include="..\DbDataKit.Identity.Tests\HomeHandler.cs" Link="HomeHandler.cs" />
   </ItemGroup>
 </Project>
