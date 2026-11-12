@@ -12,10 +12,10 @@ Summary (counts of the features below):
 
 | Product | built | partly | missing | not planned | features |
 | --- | --- | --- | --- | --- | --- |
-| Build | 17 | 2 | 0 | 6 | 25 |
+| Build | 18 | 1 | 0 | 6 | 25 |
 | Store | 7 | 0 | 0 | 3 | 10 |
 | Sync | 13 | 4 | 1 | 3 | 21 |
-| All | 37 | 6 | 1 | 12 | 56 |
+| All | 38 | 5 | 1 | 12 | 56 |
 
 ### Build
 
@@ -34,7 +34,7 @@ Summary (counts of the features below):
 | The lowered SQL of a model (rendered files per model) | `build/src/pages/PreviewPanel.tsx` | `workspace/src/pages/BuildCompilePanel.tsx` (`POST .../lowered`, read only) | built | SC20l |
 | Offline sample: a model run on generated rows (Sample tab) | `build/src/pages/DeployTabs.tsx` (`SampleTab`), `PreviewPanel.tsx` | `workspace/src/pages/BuildCompilePanel.tsx` (`POST .../sample`: rows, seed, models) | built | SC20l |
 | Preview of a table or model: its columns and types, with generated values (never the database's rows) | `build/src/pages/PreviewPanel.tsx` | `workspace/src/pages/CatalogPanel.tsx` (from the catalog cache, `catalogCache.ts`) | built | SC20k |
-| Import tables from a database into the project (list what is not mapped yet, write the files) | `build/src/pages/ImportPanel.tsx`, `DefinitionPanel.tsx` | `workspace/src/pages/CatalogPanel.tsx` lists the cached tables; writing model files from them is not built | partly | SC20k |
+| Import tables from a database into the project (list what is not mapped yet, write the files) | `build/src/pages/ImportPanel.tsx`, `DefinitionPanel.tsx` | `workspace/src/pages/CatalogPanel.tsx` lists the cached tables; `BuildImportPanel.tsx`, `buildImport.ts` write the model files from them (`project import --from-cache` on a copy, the files written through the file routes); the cache has no index and no foreign key, so a new descriptor has none and a committed one keeps its own | built | SC20k |
 | Project tests (metadata rules and model tests, violating rows) | `build/src/pages/TestsPanel.tsx` | none: the tests read the target database | not planned | SC20o |
 | Status of a target (every declared object, what a deploy would do) | `build/src/pages/DeployTabs.tsx` (`StatusTab`) | none: reads a target database | not planned | SC20o |
 | Refresh plans: the compiled plans and what each loads | `build/src/pages/DeployTabs.tsx` (`PlansTab`) | `workspace/src/pages/BuildPlanPanel.tsx` (`PlanView`: the plan files, how many loads) | built | SC20f |
@@ -102,4 +102,4 @@ Removing the standalone screens with these still `not planned` loses the feature
 
 Every `missing` and `partly` has a row in plan 33: SC20h (Build load graph), SC20k (cache-backed preview and import), SC20l (offline compile, lowered SQL and sample), SC20m (forms for model, connection and semantic files), SC20n (dashboards and reports of a project), SC20o (the decision on database-facing Build screens), SC21e (restore an earlier text), SC22f (error counts), SC22g (mapping columns from the cache), SC22h (connection test), SC22i (transform, segmenting and pipeline forms, the run login), SC22j (provisioning plan), SC22k (checks, scripts, library), SC22l (the decision on Sync's run and monitoring screens). The cache itself is SC20i (format, readers, checks) and SC20j (the paired Gateway's call that writes it: built; a Sync server's own call is not).
 
-**Audited 2026-11-12 (authoring pass 3).** Why the open rows are still open, each with its smallest design in its plan row: SC20h (built 2026-11-12: column lineage from `project show graph --columns` run on the draft, its shape read from the real tool), SC20k (writing models from the cache needs a `--from-cache` mode of `project import`), SC22h (no Sync pairing: the Workspace pairs with Gateways and Runners; the Runner's slot binding test is the nearest paired call), SC22j (built 2026-11-12 as designed for the target side: `provisioning plan --from-cache`, the route and the Provisioning tab; the source's change-capture state is the live server's and is shown as not known), SC22k (built 2026-11-12: `script list|test --json`, the route, the template folder and the Scripts tab; the library and platform setting stays open with SC22c). SC20n's wells now offer the draft's own semantic model.
+**Audited 2026-11-12 (authoring pass 3).** Why the open rows are still open, each with its smallest design in its plan row: SC20h (built 2026-11-12: column lineage from `project show graph --columns` run on the draft, its shape read from the real tool), SC20k (built 2026-11-12: `project import --from-cache`, the route and the import form of the Catalog tab), SC22h (no Sync pairing: the Workspace pairs with Gateways and Runners; the Runner's slot binding test is the nearest paired call), SC22j (built 2026-11-12 as designed for the target side: `provisioning plan --from-cache`, the route and the Provisioning tab; the source's change-capture state is the live server's and is shown as not known), SC22k (built 2026-11-12: `script list|test --json`, the route, the template folder and the Scripts tab; the library and platform setting stays open with SC22c). SC20n's wells now offer the draft's own semantic model.

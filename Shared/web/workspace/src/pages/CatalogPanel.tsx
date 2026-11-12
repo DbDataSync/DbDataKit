@@ -4,6 +4,7 @@ import { ApiError, ErrorBanner } from '@dbdatakit/shell'
 import { workspaceApi, type AdoptionRequest, type CatalogRefreshAnswer, type CatalogRefreshRequest, type PublishTarget } from '../api'
 import { adoptionRequest, catalogAdoptionSentence, refreshButton, refreshedLine, refreshLabel } from '../model'
 import { shapePreview } from '../catalogPreview'
+import { BuildImportPanel } from './BuildImportPanel'
 import { CATALOG_CACHE_FILE, readCatalogCache, tableLabel, type CacheRead, type CacheTable } from '../catalogCache'
 
 /** The catalog cache without its query, so a test can draw it: what is cached per connection, or what is wrong with the file (the strict reader's words, with the key path). */
@@ -102,7 +103,7 @@ export function RefreshForm({ canWrite, targets, busy, onRefresh, adoption = nul
 }
 
 /** The cache of a draft, read through the file route and checked by the twin reader; with the refresh from a Gateway above it. */
-export function CatalogPanel({ project, id, onOpen, canWrite = true }: { project: string; id: string; onOpen: (path: string) => void; canWrite?: boolean }) {
+export function CatalogPanel({ project, id, onOpen, canWrite = true, kind }: { project: string; id: string; onOpen: (path: string) => void; canWrite?: boolean; kind?: string }) {
   const { read, present, error } = useCatalogRead(project, id)
   const [preview, setPreview] = useState<string | null>(null)
   const client = useQueryClient()
@@ -123,6 +124,7 @@ export function CatalogPanel({ project, id, onOpen, canWrite = true }: { project
       {refresh.isSuccess && <div className="empty" data-testid="wsp-catalog-refreshed">{refreshedLine(refresh.data)}</div>}
       <ErrorBanner error={error} />
       <CatalogView read={read} present={present} onOpen={onOpen} preview={preview} onPreview={setPreview} />
+      {kind === 'build' && read?.cache && Object.keys(read.cache.connections).length > 0 && <BuildImportPanel project={project} id={id} connections={read.cache.connections} canWrite={canWrite} />}
     </>
   )
 }

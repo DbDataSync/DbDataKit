@@ -122,6 +122,8 @@ export const workspaceApi = {
   scriptTest: (project: string, id: string, name: string, rows = 5) => request<ToolAnswer<ScriptTest>>(`${ws(project, id)}/script-test`, json({ name, rows })),
   /** The column lineage of a Build draft as `project show graph --columns` computes it, read only (plan 33 SC20h); with `column` (`model.column`) also what that column comes from and what is built from it. `data` is the tool's own document. */
   lineage: (project: string, id: string, column?: string) => request<ToolAnswer<unknown>>(`${ws(project, id)}/lineage`, json(column ? { column } : {})),
+  /** The mapped models `project import --from-cache` would make of the draft's catalog cache for one connection (plan 33 SC20k): on a copy, nothing written; `data` is the tool's own document with the text of each file it wrote. With no `tables` it refreshes the descriptors the project has. */
+  importPreview: (project: string, id: string, connection: string, tables: string[] = []) => request<ToolAnswer<unknown>>(`${ws(project, id)}/import-preview`, json({ connection, ...(tables.length > 0 ? { tables } : {}) })),
   /** The provisioning plan of one replication of a Sync draft, offline, from the draft's `catalog-cache.yaml` (plan 33 SC22j). Applying is the Sync server's. */
   provisioningPlan: (project: string, id: string, replication: string) => request<ToolAnswer<ProvisioningPlan>>(`${ws(project, id)}/provisioning-plan`, json({ replication })),
   /** The commits in which one file changed (newest first), and its text as one of them committed it (plan 33 SC21e). */

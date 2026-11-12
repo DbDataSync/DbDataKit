@@ -30,6 +30,12 @@ internal static class FakeBuild
               if grep -q 'broken' "$root/models/marts/orders.sql" 2>/dev/null; then echo '{"ok":false,"diagnostics":[{"code":"DDB-301","severity":"error","title":"A table is not defined","found":"nowhere","location":{"file":"models/marts/orders.sql","line":1}}],"data":{}}'; exit 1; fi
               echo "{\"ok\":true,\"data\":{\"seed\":$seed,\"tables\":[{\"name\":\"marts.orders\",\"kind\":\"view\",\"origin\":null,\"columns\":[{\"name\":\"id\",\"type\":\"BIGINT\"}],\"row_count\":$rows,\"rows\":[[\"1\"],[\"2\"]],\"error\":null,\"warnings\":[\"models:$models limit:$limit\"]}]},\"diagnostics\":[]}"; exit 0
             fi
+            if [ "$verb" = "project import" ]; then
+              if [ "$third" = "nocache" ]; then echo '{"ok":false,"exit_code":1,"data":{},"diagnostics":[],"errors":["The catalog cache catalog-cache.yaml has no entry for the connection `nocache` (it has: sqlserver)."]}'; exit 1; fi
+              mkdir -p "$root/models/src"
+              printf 'name: src.events\nkind: mapped\nconnections=: [%s]\ngrain: [id]\ncolumns:\n  - {name: id, type: INTEGER, nullable: false}\n' "$third" > "$root/models/src/events.yml"
+              echo "{\"ok\":true,\"exit_code\":0,\"data\":{\"connection\":\"$third\",\"mode\":\"write\",\"mapped_models\":[{\"name\":\"src.events\",\"object_kind\":\"table\",\"file\":\"models/src/events.yml\",\"status\":\"new\",\"grain\":[\"id\"],\"indexes\":[],\"foreign_keys\":[],\"notes\":[],\"changes\":[{\"kind\":\"new\",\"column\":null,\"detail\":\"1 column(s)\"}],\"columns\":[{\"name\":\"id\",\"native_type\":\"integer\",\"logical_type\":\"INTEGER\",\"fit\":\"exact\",\"reason\":null,\"nullable\":false}]}],\"skipped\":[],\"catalog_notes\":[\"the catalog cache holds columns, types, nullability and the primary key only: no index and no foreign key was read\"],\"written\":[\"models/src/events.yml\"]},\"diagnostics\":[],\"errors\":[]}"; exit 0
+            fi
             if [ "$verb" = "project show" ] && [ "$third" = "graph" ]; then
               if grep -q 'broken' "$root/models/marts/orders.sql" 2>/dev/null; then echo '{"ok":false,"exit_code":1,"data":{},"diagnostics":[{"code":"DDB-301","severity":"error","title":"A table is not defined","found":"nowhere","location":{"file":"models/marts/orders.sql","line":1}}],"errors":[]}'; exit 1; fi
               if [ "$col" = "nosuch.x" ]; then echo '{"ok":false,"exit_code":2,"data":{},"diagnostics":[],"errors":["`nosuch` has no column `x` (a model of the project, and one of its declared columns)."]}'; exit 2; fi

@@ -248,6 +248,25 @@ public static class WorkspaceManagement
             catch (ProjectKindUnavailableException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
         });
 
+        // the mapped models the draft's catalog cache would make (plan 33 SC20k): `project import --from-cache` on a copy; the author writes the ones they choose through the file routes
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/import-preview", async (string project, string id, HttpContext context) =>
+        {
+            if (CompilerOf(project, id, context, out var compiler, out var root) is { } refused) return refused;
+            var body = await Body(context);
+            const string Shape = "The body is a JSON object with the \"connection\" of the project and optional \"tables\" (up to 50 schema.table patterns; none refreshes the descriptors the project has).";
+            string? connection;
+            var tables = new List<string>();
+            try
+            {
+                connection = body?["connection"]?.GetValue<string>();
+                if (body?["tables"] is { } asked) foreach (var t in asked.AsArray()) tables.Add(t!.GetValue<string>());
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or FormatException) { return Results.Json(new { error = Shape }, statusCode: StatusCodes.Status400BadRequest); }
+            if (!BuildProjectKind.IsConnectionName(connection) || tables.Count > 50 || tables.Any(t => !BuildProjectKind.IsTablePattern(t))) return Results.Json(new { error = Shape }, statusCode: StatusCodes.Status400BadRequest);
+            try { return Results.Json(ToolJson(await compiler.ImportAsync(root, connection!, tables, context.RequestAborted))); }
+            catch (ProjectKindUnavailableException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
+        });
+
         app.MapPost("/api/v1/projects/{project}/workspaces/{id}/sample", async (string project, string id, HttpContext context) =>
         {
             if (CompilerOf(project, id, context, out var compiler, out var root) is { } refused) return refused;

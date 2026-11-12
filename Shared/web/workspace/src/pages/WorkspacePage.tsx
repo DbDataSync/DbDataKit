@@ -332,7 +332,7 @@ export function WorkspacePage() {
                   : tab === 'provisioning' && kind === 'sync'
                     ? <SyncProvisioningPanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} />
                   : tab === 'catalog' && (kind === 'build' || kind === 'sync')
-                    ? <CatalogPanel project={project} id={id} onOpen={setSelected} />
+                    ? <CatalogPanel project={project} id={id} onOpen={setSelected} canWrite={editable && canWrite} kind={kind} />
                   : tab === 'check'
                     ? <CheckPanel project={project} id={id} onOpen={setSelected} />
                     : tab === 'builds'

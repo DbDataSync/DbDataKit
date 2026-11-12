@@ -4,6 +4,7 @@ using DbDataBuild.Define;
 using DbDataBuild.Execution;
 using DbDataBuild.Models;
 using DbDataBuild.State;
+using DbDataKit.Catalog;
 
 namespace DbDataBuild.Cli;
 
@@ -18,14 +19,31 @@ internal static class ImportCommand
     internal sealed record Row(string Name, string Kind, string? File, string Status, IReadOnlyList<MappedModelChange> Changes, ImportedObject? Live, DeclaredModel? Descriptor, string? NewText, string? OldText, string? ExpectedHash);
     internal sealed record Skipped(string Object, string Reason);
 
-    public static int Run(CommandSpec spec, string root, string? targetArg, string[] patterns, bool write, bool check, TextWriter output, TextWriter error, Func<string, string?> env)
+    public static int Run(CommandSpec spec, string root, string? targetArg, string[] patterns, bool write, bool check, TextWriter output, TextWriter error, Func<string, string?> env, string? fromCache = null)
     {
         if (write && check) { error.WriteLine("--check writes nothing, so it cannot be combined with --write."); return CliApp.ExitUsage; }
         var ctx = ProjectContext.Load(root);
         var connection = CommandTargets.Resolve(ctx.Config, targetArg, error, readOnlyOk: true);
         if (connection == null) return CliApp.ExitUsage;
         var target = connection.Name; var engine = connection.Engine;
-        var (login, missing) = LoginSettings.FromEnvironment(connection, Login.Read, env);
+        // with --from-cache no connection is opened and no login is asked for: the shape of the tables is the project's catalog cache
+        var (login, missing) = fromCache is null ? LoginSettings.FromEnvironment(connection, Login.Read, env) : (null, null);
+        CachedImportCatalog? cached = null;
+        if (fromCache is not null)
+        {
+            var path = Path.IsPathRooted(fromCache) ? fromCache : Path.Combine(root, fromCache);
+            if (!File.Exists(path)) { error.WriteLine($"The catalog cache {fromCache} does not exist (the Workspace writes it as catalog-cache.yaml at the root of a draft)."); return CliApp.ExitUsage; }
+            var load = CatalogCache.Load(File.ReadAllText(path), fromCache);
+            if (!load.Ok)
+            {
+                foreach (var d in load.Diagnostics) error.WriteLine($"{fromCache}:{d.Line}: {d.Code}: {d.Message}");
+                return CliApp.ExitFindings;
+            }
+            if (!load.Cache!.Connections.TryGetValue(target, out var shape)) { error.WriteLine($"The catalog cache {fromCache} has no entry for the connection `{target}` (it has: {string.Join(", ", load.Cache.Connections.Keys.Order(StringComparer.Ordinal))})."); return CliApp.ExitFindings; }
+            if (!string.Equals(shape.Engine, engine, StringComparison.OrdinalIgnoreCase)) { error.WriteLine($"The catalog cache says `{target}` is `{shape.Engine}`, and the project's connection `{target}` is `{engine}`: refresh the cache from the right data source."); return CliApp.ExitFindings; }
+            if (!CachedImportCatalog.Supports(engine)) { error.WriteLine($"`{target}` is `{engine}`: its types are mapped through its dialect's `types:`, which only a connection can load, so a descriptor is not made from the cache. Import from the connection."); return CliApp.ExitFindings; }
+            cached = new CachedImportCatalog(shape, engine);
+        }
 
         var committed = ctx.Project.MappedModels.ToDictionary(d => d.Name, StringComparer.OrdinalIgnoreCase);
         var models = ctx.Project.Models.Select(m => m.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -49,16 +67,16 @@ internal static class ImportCommand
                 wanted.Add((Glob(st.SchemaName), Glob(st.Table), st.SchemaName.AsSpan().IndexOfAny('*', '?') < 0 ? st.SchemaName : null));
             }
 
-        output.WriteLine($"{ProductInfo.Cli} {spec.Name}  |  effect: {spec.Effect.Describe()}  |  {spec.Marks}{(write ? " + writes models/" : "")}  |  connection: {target}  |  login: {login?.Describe() ?? "none"}");
+        output.WriteLine($"{ProductInfo.Cli} {spec.Name}  |  effect: {(cached is null ? spec.Effect.Describe() : "Offline only (the catalog cache)")}  |  {spec.Marks}{(write ? " + writes models/" : "")}  |  connection: {(cached is null ? target : "none (catalog cache of " + target + ")")}  |  login: {login?.Describe() ?? "none"}");
         if (missing != null) { error.Diag(missing); return CliApp.ExitFindings; }
-        if (login!.Dialect.Catalog == CatalogStyle.None)
+        if (login is not null && login.Dialect.Catalog == CatalogStyle.None)
         {
             error.WriteLine($"`{target}` has the dialect `{login.Dialect.Name}`, which says `catalog: none`: its tables and columns are not read from a catalog, so they are not guessed. Declare each table by hand as a mapped model (its columns and types in a mapped model).");
             return CliApp.ExitFindings;
         }
 
         List<Row> rows; List<Skipped> skipped; List<Diagnostic> diags; List<string> catalogNotes;
-        try { (rows, skipped, diags, catalogNotes) = GatherAsync(ctx, root, connection, login!, wanted, null).GetAwaiter().GetResult(); }
+        try { (rows, skipped, diags, catalogNotes) = (cached is not null ? GatherCoreAsync(ctx, root, connection, cached, null, wanted) : GatherAsync(ctx, root, connection, login!, wanted, null)).GetAwaiter().GetResult(); }
         catch (GateRefusedException ex) { error.Diag(ex.Diagnostic); return CliApp.ExitFindings; }
         catch (CatalogUnavailableException ex) { error.WriteLine(ex.Message); return CliApp.ExitFindings; }
 
@@ -136,6 +154,14 @@ internal static class ImportCommand
     internal static async Task<(List<Row> Rows, List<Skipped> Skipped, List<Diagnostic> Diags, List<string> Notes)> GatherAsync(ProjectContext ctx, string root, ConnectionConfig connection, LoginSettings login,
         List<(Regex SchemaName, Regex Table, string? LiteralSchema)> wanted, SessionOpener? open)
     {
+        await using var read = await (open ?? ReadSession.OpenAsync)(login, default);
+        return await GatherCoreAsync(ctx, root, connection, new LiveImportCatalog(read, connection.Engine), login.Dialect, wanted);
+    }
+
+    /// <summary>The comparison of <see cref="GatherAsync"/> over any <see cref="IImportCatalog"/>: the live one, or the project's catalog cache (<c>--from-cache</c>, plan 33 SC20k).</summary>
+    internal static async Task<(List<Row> Rows, List<Skipped> Skipped, List<Diagnostic> Diags, List<string> Notes)> GatherCoreAsync(ProjectContext ctx, string root, ConnectionConfig connection, IImportCatalog catalog, DialectProfile? dialect,
+        List<(Regex SchemaName, Regex Table, string? LiteralSchema)> wanted)
+    {
         var target = connection.Name; var engine = connection.Engine;
         var committed = ctx.Project.MappedModels.ToDictionary(d => d.Name, StringComparer.OrdinalIgnoreCase);
         var models = ctx.Project.Models.Select(m => m.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -143,27 +169,28 @@ internal static class ImportCommand
         var catalogNotes = new List<string>();
         var skipped = new List<Skipped>();
         var diags = new List<Diagnostic>();
-        await using var read = await (open ?? ReadSession.OpenAsync)(login, default);
-        var allSchemas = await SourceCatalogReader.SchemasAsync(read, engine);
+        var allSchemas = await catalog.SchemasAsync();
         var schemas = allSchemas.Where(s => wanted.Any(w => w.SchemaName.IsMatch(s))).ToList();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var schema in schemas)
         {
             if (string.Equals(schema, ctx.Config.TrackingSchemaName, StringComparison.OrdinalIgnoreCase)) { skipped.Add(new(schema, "the tracking schema name holds the tool's own tables")); continue; }
-            var shapes = await CatalogReader.ReadObjectsAsync(read, engine, schema);
-            var keys = await SourceCatalogReader.PrimaryKeysAsync(read, engine, schema);
-            var foreignKeys = await SourceCatalogReader.ForeignKeysAsync(read, engine, schema);
+            var shapes = await catalog.ObjectsAsync(schema);
+            var keys = await catalog.PrimaryKeysAsync(schema);
+            var foreignKeys = await catalog.ForeignKeysAsync(schema);
             // the engines' shapes carry their indexes already; an origin's come from its own catalog where it has one (duckdb_indexes(), ODBC's SQLStatistics) and are said to be missing where it has none
-            var indexes = await SourceCatalogReader.IndexesAsync(read, engine, schema);
+            var indexes = await catalog.IndexesAsync(schema);
             foreach (var (qualified, shape0) in shapes.OrderBy(k => k.Key, StringComparer.Ordinal))
             {
                 var shape = indexes != null && indexes.TryGetValue(shape0.Name, out var found) ? shape0 with { Physical = shape0.Physical.Concat(found).ToList() } : shape0;
                 if (!wanted.Any(w => w.SchemaName.IsMatch(shape.SchemaName) && w.Table.IsMatch(shape.Name))) continue;
                 seen.Add(qualified);
                 if (models.Contains(qualified)) { skipped.Add(new(qualified, "it is a built model, not a table to map")); continue; }
-                var live = MappedModelImport.Describe(engine, shape, keys.GetValueOrDefault(shape.Name), foreignKeys.GetValueOrDefault(shape.Name), ctx.Config.Layout, login.Dialect);
+                var live = MappedModelImport.Describe(engine, shape, keys.GetValueOrDefault(shape.Name), foreignKeys.GetValueOrDefault(shape.Name), ctx.Config.Layout, dialect);
                 // a table the project already has a mapped model for is written where that model's file is, whatever the layout says
                 if (committed.TryGetValue(qualified, out var existing) && existing.File.Length > 0) live = live with { File = existing.File };
+                // a catalog that does not know indexes and foreign keys (the cache) leaves the ones a person committed as they are, instead of reading their absence as a removal
+                if (!catalog.KnowsIndexesAndForeignKeys && committed.TryGetValue(qualified, out var kept)) live = live with { Indexes = kept.Indexes, ForeignKeys = kept.ForeignKeys };
                 if (live.File == null)
                 {
                     diags.Add(new Diagnostic(DiagnosticCatalog.MappedModelNotImportable, new(qualified, 0, 0), $"`{qualified}` has a dot, slash or backslash in its schema name or table name, so it cannot be a path under models/."));
@@ -173,7 +200,7 @@ internal static class ImportCommand
                 rows.Add(Compare(root, target, live, committed.GetValueOrDefault(qualified), diags));
             }
         }
-        catalogNotes.AddRange(read.CatalogNotes);
+        catalogNotes.AddRange(catalog.Notes);
         // descriptors the project has for tables the target does not show (in the schema names searched)
         foreach (var d in committed.Values.Where(d => wanted.Any(w => { var (s, t) = Split(d.Name)!.Value; return w.SchemaName.IsMatch(s) && w.Table.IsMatch(t); })))
         {

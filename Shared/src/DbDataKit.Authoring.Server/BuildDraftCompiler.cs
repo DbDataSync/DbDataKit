@@ -37,6 +37,13 @@ public interface IDraftCompiler
     /// <paramref name="column"/> (<c>model.column</c>, checked by the caller with <see cref="BuildProjectKind.IsColumnRef"/>) also what that column comes from and what is built from it, step by step. Read only.
     /// </summary>
     Task<DraftToolResult> LineageAsync(string root, string? column, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The mapped models <c>project import --from-cache</c> would write from the draft's <c>catalog-cache.yaml</c> (plan 33 SC20k), made on a copy with the product's own import and compared with the draft: the tool's account of each table (status, columns with their types and how faithful
+    /// the mapping is, what was left out) and the text of each file it wrote. The draft is untouched; an author writes the files they choose through the file routes. <paramref name="tables"/> are <c>schema.table</c> patterns (checked by the caller with
+    /// <see cref="BuildProjectKind.IsTablePattern"/>); none refreshes the descriptors the project has.
+    /// </summary>
+    Task<DraftToolResult> ImportAsync(string root, string connection, IReadOnlyList<string> tables, CancellationToken cancellationToken);
 }
 
 public sealed partial class BuildProjectKind
@@ -181,6 +188,56 @@ public sealed partial class BuildProjectKind
             if (exit != 0 && !diagnostics.Any(d => d.IsError)) diagnostics.Add(Failed(exit, error));
             JsonNode? data = DataOf(document).ValueKind == JsonValueKind.Object ? JsonNode.Parse(DataOf(document).GetRawText()) : null;
             return new(exit == 0 && !diagnostics.Any(d => d.IsError) && data is not null, diagnostics, data);
+        }
+    }
+
+    /// <summary>Whether <paramref name="pattern"/> is a <c>schema.table</c> pattern in the form the tool takes (letters, digits, <c>_ $ - . * ?</c>): never an option, never a path.</summary>
+    public static bool IsTablePattern(string? pattern) =>
+        pattern is { Length: > 2 and <= 200 } && !pattern.StartsWith('-') && pattern.Contains('.') && pattern.All(c => char.IsLetterOrDigit(c) || c is '_' or '$' or '-' or '.' or '*' or '?');
+
+    /// <summary>Whether <paramref name="name"/> names a connection of the project in the form the tool takes.</summary>
+    public static bool IsConnectionName(string? name) =>
+        name is { Length: > 0 and <= 100 } && !name.StartsWith('-') && !name.StartsWith('.') && !name.Contains("..", StringComparison.Ordinal) && name.All(c => char.IsLetterOrDigit(c) || c is '_' or '-' or '.');
+
+    public async Task<DraftToolResult> ImportAsync(string root, string connection, IReadOnlyList<string> tables, CancellationToken cancellationToken)
+    {
+        if (tool.Find() is null) throw new ProjectKindUnavailableException(BuildTool.Missing);
+        if (!File.Exists(Path.Combine(root, "catalog-cache.yaml")))
+            return new(false, [new("error", "DBD-WS-BUILD-IMPORT", "The draft has no catalog-cache.yaml: refresh the catalog cache of the project first (the Catalog tab).")], null);
+        var copy = Path.Combine(Path.GetTempPath(), "ddw-import-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            CopyDraft(root, copy);
+            List<string> arguments = ["project", "import", connection, .. tables, "--from-cache", "catalog-cache.yaml", "--write", "--project", copy];
+            var (document, exit, error) = await RunToolAsync(arguments, copy, cancellationToken);
+            using (document)
+            {
+                if (document is null) return new(false, [Failed(exit, error.Replace(copy, ".", StringComparison.Ordinal))], null);
+                var diagnostics = ReadDiagnostics(document.RootElement);
+                if (document.RootElement.ValueKind == JsonValueKind.Object && document.RootElement.TryGetProperty("errors", out var said) && said.ValueKind == JsonValueKind.Array)
+                    foreach (var line in said.EnumerateArray().Select(e => e.GetString()).Where(e => !string.IsNullOrWhiteSpace(e)))
+                        diagnostics.Add(new("error", "DBD-WS-BUILD-IMPORT", line!.Replace(copy, ".", StringComparison.Ordinal)));
+                if (exit != 0 && !diagnostics.Any(d => d.IsError)) diagnostics.Add(Failed(exit, error));
+                var data = DataOf(document).ValueKind == JsonValueKind.Object ? JsonNode.Parse(DataOf(document).GetRawText()) as JsonObject : null;
+                if (data is null) return new(false, diagnostics, null);
+                var files = new JsonArray();
+                foreach (var written in (data["written"] as JsonArray)?.Select(w => (string?)w).Where(w => w is not null) ?? [])
+                {
+                    var path = written!.Replace('\\', '/');
+                    if (!IsModelPath(path)) continue;
+                    var file = Path.Combine(copy, path.Replace('/', Path.DirectorySeparatorChar));
+                    var was = Path.Combine(root, path.Replace('/', Path.DirectorySeparatorChar));
+                    var text = File.Exists(file) ? File.ReadAllText(file) : null;
+                    if (text is null) continue;
+                    files.Add(new JsonObject { ["path"] = path, ["content"] = text.Length > MaxFileText ? text[..MaxFileText] : text, ["exists"] = File.Exists(was), ["truncated"] = text.Length > MaxFileText });
+                }
+                data["files"] = files;
+                return new(exit == 0 && !diagnostics.Any(d => d.IsError), diagnostics, data);
+            }
+        }
+        finally
+        {
+            try { if (Directory.Exists(copy)) Directory.Delete(copy, true); } catch (IOException) { }
         }
     }
 }
