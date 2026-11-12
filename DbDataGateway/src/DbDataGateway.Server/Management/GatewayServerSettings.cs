@@ -103,6 +103,11 @@ public sealed partial class GatewayServerSettings(string configDirectory, Gatewa
                     ["views.export.mode"] = o.Views.Export.Mode,
                     ["views.export.path"] = o.Views.Export.Path,
                     ["logSql"] = o.LogSql,
+                    // the scalar part of the semantic: section (plan 14a SL11); the hand-set models and the Analysis Services connections stay in the text
+                    ["semantic.level"] = o.Semantic.Level,
+                    ["semantic.combine.memoryMb"] = o.Semantic.Combine.MemoryMb,
+                    ["semantic.combine.timeoutSeconds"] = o.Semantic.Combine.TimeoutSeconds,
+                    ["semantic.combine.maxInputRows"] = o.Semantic.Combine.MaxInputRows,
                 },
             });
         });
