@@ -300,6 +300,34 @@ public class SemanticFilesTests : IDisposable
     }
 
     [Fact]
+    public void Dashboard_new_and_report_new_make_a_starting_file_that_validates_and_never_overwrite()
+    {
+        var dir = Retail();
+        var (exit, output, err) = Run("dashboard", "new", "board-two", "--title", "Board two", "--project", dir);
+        Assert.Equal(0, exit);
+        Assert.Equal("", err);
+        Assert.Contains("created dashboards/board-two.yaml", output);
+        var text = File.ReadAllText(Path.Combine(dir, "dashboards", "board-two.yaml"));
+        Assert.Contains("title: \"Board two\"", text);
+        Assert.Contains("type: reflow", text);
+        Assert.Contains("{widget: note, x: 0, y: 0, w: 12, h: 1}", text);
+        Assert.Equal(0, Run("dashboard", "validate", "dashboards/board-two.yaml", "--project", dir).Exit);
+
+        Assert.Equal(0, Run("report", "new", "monthly-two", "--project", dir).Exit);
+        var report = File.ReadAllText(Path.Combine(dir, "reports", "monthly-two.yaml"));
+        Assert.Contains("type: flow", report);
+        Assert.Contains("title: \"monthly-two\"", report);
+        Assert.Equal(0, Run("report", "validate", "reports/monthly-two.yaml", "--project", dir).Exit);
+
+        var (again, _, againErr) = Run("dashboard", "new", "board-two", "--project", dir);
+        Assert.Equal(CliApp.ExitUsage, again);
+        Assert.Contains("already", againErr);
+        var (bad, _, badErr) = Run("report", "new", "9lives", "--project", dir);
+        Assert.Equal(CliApp.ExitUsage, bad);
+        Assert.Contains("is not a name", badErr);
+    }
+
+    [Fact]
     public void A_project_without_semantic_files_is_not_asked_anything()
     {
         var dir = Retail();

@@ -4,7 +4,7 @@
 Shared/web/visuals/schemas/{dashboard,report}.schema.json refer to core, vega-lite-subset and view by absolute `$id`; an editor that
 reads one file (VS Code's YAML extension, a JSON Schema store, the agent kit) cannot follow those. The bundle copies the `$defs` of every
 document the kind reaches into one `$defs`, each under its document's prefix (`core__name`, `view__sort`), and turns every reference
-into a local pointer. Written to Shared/web/visuals/schemas/bundled/. The sources stay the authority:
+into a local pointer. Written to Shared/web/visuals/schemas/bundled/ and to DbDataBuild/schemas/ (Build's project schemas). The sources stay the authority:
 
     python3 -I scripts/bundle_views_schemas.py           # writes the bundles
     python3 -I scripts/bundle_views_schemas.py --check   # fails when a bundle is not what the sources give (a unit test runs this)
@@ -17,6 +17,8 @@ import sys
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 SCHEMAS = os.path.join(ROOT, "Shared", "web", "visuals", "schemas")
 OUT = os.path.join(SCHEMAS, "bundled")
+# Build's project schemas (the agent kit and the editor settings point at them): the same bundles, so a project's dashboards and reports complete in an editor
+BUILD = os.path.join(ROOT, "DbDataBuild", "schemas")
 KINDS = ("dashboard", "report")
 REF = re.compile(r"^(?P<id>https?://[^#]*)?(?P<frag>#.*)?$")
 
@@ -106,16 +108,17 @@ def main(argv):
     check = "--check" in argv
     problems = []
     for kind in KINDS:
-        path = os.path.join(OUT, kind + ".schema.json")
         text = text_of(kind)
-        if check:
-            current = open(path, encoding="utf-8", newline="").read().replace("\r\n", "\n") if os.path.exists(path) else None
-            if current != text:
-                problems.append(f"{os.path.relpath(path, ROOT)} is not what the sources give: run python3 -I scripts/bundle_views_schemas.py")
-        else:
-            os.makedirs(OUT, exist_ok=True)
-            with open(path, "w", encoding="utf-8", newline="\n") as f:
-                f.write(text)
+        for folder in (OUT, BUILD):
+            path = os.path.join(folder, kind + ".schema.json")
+            if check:
+                current = open(path, encoding="utf-8", newline="").read().replace("\r\n", "\n") if os.path.exists(path) else None
+                if current != text:
+                    problems.append(f"{os.path.relpath(path, ROOT)} is not what the sources give: run python3 -I scripts/bundle_views_schemas.py")
+            else:
+                os.makedirs(folder, exist_ok=True)
+                with open(path, "w", encoding="utf-8", newline="\n") as f:
+                    f.write(text)
     for p in problems:
         print(p)
     return 1 if problems else 0
