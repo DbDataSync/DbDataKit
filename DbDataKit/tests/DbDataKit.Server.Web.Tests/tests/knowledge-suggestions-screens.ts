@@ -55,7 +55,7 @@ export async function suggestionsStory(page: Page, mock: SuggestionsMock) {
   await expect(page.getByTestId('suggest-send')).toBeDisabled()
   await page.getByTestId('item-text').click()
   await page.keyboard.press('Control+End')
-  await page.keyboard.type(' After returns.')
+  await page.keyboard.insertText(' After returns.')   // inserted, not typed: typing loses keys while the editor redraws
   await page.getByTestId('suggest-reason').fill('Returns are netted out too')
   await expect(page.getByTestId('suggest-send')).toBeEnabled()
   await page.getByTestId('suggest-send').click()

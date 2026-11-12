@@ -1,3 +1,4 @@
+bundle_show  reads-definitions
 knowledge_check  reads-definitions
 knowledge_orphans  reads-definitions
 knowledge_context  reads-definitions
