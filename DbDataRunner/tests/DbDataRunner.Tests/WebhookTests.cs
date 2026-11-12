@@ -50,6 +50,29 @@ public sealed class WebhookTests
     }
 
     [Theory, MemberData(nameof(Engines))]
+    public async Task A_signed_body_that_arrives_again_is_refused_as_a_replay_makes_no_item_and_is_audited_and_another_body_is_not_a_replay(string engine)
+    {
+        await using var h = new RunnerHarness(engine);
+        h.Install(Listening());
+        await h.StartAsync();
+
+        Assert.Equal(HttpStatusCode.Accepted, (await h.PostRawAsync(Path, Body, Signed(Body))).Status);
+        var (status, reply) = await h.PostRawAsync(Path, Body, Signed(Body));
+
+        Assert.Equal(HttpStatusCode.Conflict, status);
+        Assert.Contains("replay", (string)reply!["error"]!, StringComparison.Ordinal);
+        Assert.Single(Inbox(h).InboxRecords());                                       // the replay made no item
+        var entries = h.Audit.Read(new AuditQuery(Verb: "runner.webhook.receive")).Select(e => e.Entry).ToList();
+        Assert.Equal([AuditEvent.Ok, AuditEvent.Refused], entries.OrderBy(e => e.Outcome == AuditEvent.Ok ? 0 : 1).Select(e => e.Outcome).ToArray());
+        Assert.Contains(entries, e => e.Detail!.Contains("\"replays\":1", StringComparison.Ordinal));
+        Assert.DoesNotContain(entries, e => (e.Detail ?? "").Contains("4711", StringComparison.Ordinal));
+
+        var other = Encoding.UTF8.GetBytes("""{"order":"another-order"}""");
+        Assert.Equal(HttpStatusCode.Accepted, (await h.PostRawAsync(Path, other, Signed(other))).Status);
+        Assert.Equal(2, Inbox(h).InboxRecords().Count);
+    }
+
+    [Theory, MemberData(nameof(Engines))]
     public async Task A_bad_signature_is_answered_401_stored_with_signature_ok_false_audited_and_not_triggered(string engine)
     {
         await using var h = new RunnerHarness(engine);
