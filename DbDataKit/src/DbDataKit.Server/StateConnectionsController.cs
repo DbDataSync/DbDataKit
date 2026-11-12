@@ -156,7 +156,7 @@ public sealed class StateConnectionsController(ConsoleStateConnections connectio
     {
         var (server, connection, problem) = Resolve(request);
         if (problem is not null) return problem;
-        var (code, body) = await relay.CallAsync(server!, HttpMethod.Post, "/api/v1/state/move", Payload(connection, dryRun: false), cancellationToken);
+        var (code, body) = await relay.CallAsync(server!, HttpMethod.Post, "/api/v1/state/move", Payload(connection!, dryRun: false), cancellationToken);
         return StatusCode(code is >= 200 and < 600 ? code : 502, body ?? new JsonObject { ["error"] = "No answer." });
     }
 
