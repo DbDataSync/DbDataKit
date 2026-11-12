@@ -23,6 +23,8 @@
     <None Include="..\DbDataKit.Semantic.Tests\conformance\catalog\catalog.yaml" Link="conformance\catalog\catalog.yaml" CopyToOutputDirectory="PreserveNewest" />
     <!-- the schemas, which live with the shared visuals -->
     <None Include="..\..\web\visuals\schemas\*.schema.json" LinkBase="schemas" CopyToOutputDirectory="PreserveNewest" />
+    <!-- the one-file schemas of the editors (scripts/bundle_views_schemas.py): a test says they judge every conformance document as the schemas of the package do -->
+    <None Include="..\..\web\visuals\schemas\bundled\*.schema.json" LinkBase="schemas\bundled" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\web\visuals\schemas\views-format.lock.json" LinkBase="schemas" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <!-- the engine's catalog loader (the catalog check of a published document) needs libduckdb beside the test assembly, as in the semantic suites -->

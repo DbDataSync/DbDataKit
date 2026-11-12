@@ -116,6 +116,7 @@
     <Project Path="src/DbDataKit.Upgrade/DbDataKit.Upgrade.csproj" />
     <Project Path="src/DbDataKit.Views/DbDataKit.Views.csproj" />
     <Project Path="src/DbDataKit.Views.Export/DbDataKit.Views.Export.csproj" />
+    <Project Path="src/DbDataKit.ReportCatalogs/DbDataKit.ReportCatalogs.csproj" />
     <Project Path="src/DbDataKit.Views.Hosting/DbDataKit.Views.Hosting.csproj" />
     <Project Path="src/DbDataKit.Web/DbDataKit.Web.csproj" />
   </Folder>
@@ -221,6 +222,7 @@
     <Project Path="tests/DbDataKit.Upgrade.Tests/DbDataKit.Upgrade.Tests.csproj" />
     <Project Path="tests/DbDataKit.Views.Tests/DbDataKit.Views.Tests.csproj" />
     <Project Path="tests/DbDataKit.Views.Export.Tests/DbDataKit.Views.Export.Tests.csproj" />
+    <Project Path="tests/DbDataKit.ReportCatalogs.Tests/DbDataKit.ReportCatalogs.Tests.csproj" />
     <Project Path="tests/DbDataKit.Views.Hosting.Tests/DbDataKit.Views.Hosting.Tests.csproj" />
     <Project Path="tests/DbDataKit.Web.Tests/DbDataKit.Web.Tests.csproj" />
   </Folder>
