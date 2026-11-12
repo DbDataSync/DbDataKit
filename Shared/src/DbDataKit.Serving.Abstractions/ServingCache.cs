@@ -28,7 +28,9 @@ public enum ServingCacheScope
 /// <param name="Scope">Who may share an entry.</param>
 /// <param name="DefinitionVersion">The published version the request is pinned to; part of the key, so a new version is a new key.</param>
 /// <param name="Datasets">The datasets the answer reads, by the identity a <c>data.changed</c> message names; empty when it cannot say (only the time-to-live and a publish clear it).</param>
-public sealed record ServingCachePlan(TimeSpan Ttl, ServingCacheScope Scope, string? DefinitionVersion, IReadOnlyList<string>? Datasets = null);
+/// <param name="Access">What the caller's access rules do to this answer, as a fingerprint the host computes (plan 22a GP13: the caller's resolved column treatments; the resolver of GP10 folds its row-rule fingerprint in): part of the key in every scope, so
+/// an answer made for a caller who sees a column masked is never served to one who sees it as it is. Null or <c>-</c> when no rule applies.</param>
+public sealed record ServingCachePlan(TimeSpan Ttl, ServingCacheScope Scope, string? DefinitionVersion, IReadOnlyList<string>? Datasets = null, string? Access = null);
 
 /// <summary>
 /// Which requests are cached. The cache is off unless this says otherwise: a request the policy gives no plan for is never stored and never answered from the cache (plan 24 section 3.1, 24a UC12). The policy is
@@ -283,6 +285,7 @@ public static class ServingCacheKey
         fields.Add(context.Preview is { } preview ? "preview:" + preview : "-");
         fields.Add(plan.DefinitionVersion ?? "-");
         fields.Add(plan.Scope.ToString());
+        fields.Add(plan.Access is { Length: > 0 } access ? "access:" + access : "-");
         switch (plan.Scope)
         {
             case ServingCacheScope.Caller:

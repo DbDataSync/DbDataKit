@@ -2,7 +2,7 @@
   <PropertyGroup>
     <RootNamespace>DbDataKit.Access</RootNamespace>
     <PackageId>DbDataKit.Access</PackageId>
-    <Description>The access rules model of the suite (plan 22a, QG2): row rules are rows of a rules table that a published Build model builds, column rules are entries on metadata. The access section of a definition (access/1), its strict loader with file and line, its JSON Schema and the checks against the definition's datasets and columns. No evaluation.</Description>
+    <Description>The access rules model of the suite (plan 22a, QG2): row rules are rows of a rules table that a published Build model builds, column rules are entries on metadata. The access section of a definition (access/1), its strict loader with file and line, its JSON Schema and the checks against the definition's datasets and columns. Column rules are resolved for a caller here (ColumnTreatments); the row filter is not.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>

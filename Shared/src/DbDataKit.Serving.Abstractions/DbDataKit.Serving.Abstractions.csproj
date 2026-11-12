@@ -9,6 +9,7 @@
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
     <PackageReference Include="Apache.Arrow" />
+    <ProjectReference Include="..\DbDataKit.Access\DbDataKit.Access.csproj" />   <!-- ColumnTreatments: the column rules of an access section, applied to an answer -->
     <ProjectReference Include="..\DbDataKit.Connections.Abstractions\DbDataKit.Connections.Abstractions.csproj" />   <!-- ConnectionFailure: the classified failure a backend reports -->
     <InternalsVisibleTo Include="DbDataKit.Serving.Abstractions.Tests" />
   </ItemGroup>

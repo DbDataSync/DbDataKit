@@ -54,7 +54,8 @@ public sealed class GatewayCachePolicy(DataSourceCatalog sources, Func<GatewayOp
             if (!setting.Enabled || setting.Note is not null) return null;
             foreach (var used in UsedBy(model))
                 if (!Usable(principal, used)) return null;
-            return new ServingCachePlan(setting.Ttl, setting.Scope, setting.Version, setting.Datasets);
+            // the caller's column rules are part of the key (plan 22a GP13): a caller who sees a column masked never shares an entry with one who sees it as it is
+            return new ServingCachePlan(setting.Ttl, setting.Scope, setting.Version, setting.Datasets, SemanticColumnAccess.Fingerprint(model, caller));
         }
 
         var name = request.Source.Trim();

@@ -40,6 +40,9 @@ public sealed class SemanticModels
     /// </summary>
     public Func<SemanticModel, string, ISourceExecutor, ISourceExecutor>? SsasExecutor { get; init; }
 
+    /// <summary>The key of the keyed hash that masks a column with <c>mask: hash</c> (plan 22a GP13): the install's own secret, read from the host's secrets store. Null, or an empty key, uses a key of this process only.</summary>
+    public Func<byte[]>? MaskKey { get; set; }
+
     /// <summary>Where people keep saved queries of their own (J27); null when the host keeps none.</summary>
     public IUserSavedQueries? UserQueries { get; set; }
 
