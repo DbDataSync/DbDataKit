@@ -25,7 +25,8 @@ public sealed class OracleTriggerInstall : ITriggerAuditInstallCheck
     {
         using var cmd = connection.CreateTimedCommand();
         cmd.CommandText =
-            "SELECT text FROM all_source WHERE owner = :schema AND name = :triggerName AND type = 'TRIGGER' ORDER BY line";
+            // the trigger is created quoted, so its name keeps the case of the table (ds_trg_Orders): compare without regard to case, not against the upper-cased name
+            "SELECT text FROM all_source WHERE UPPER(owner) = :schema AND UPPER(name) = :triggerName AND type = 'TRIGGER' ORDER BY line";
         cmd.AddParameter("schema", schema.ToUpperInvariant());
         cmd.AddParameter("triggerName", OracleTriggerAudit.TriggerName(table).ToUpperInvariant());
 

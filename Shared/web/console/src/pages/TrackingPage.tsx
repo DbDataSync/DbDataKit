@@ -29,6 +29,7 @@ export function TrackingPage() {
     },
     enabled: instances.isSuccess,
     refetchInterval: 30_000,
+    staleTime: 0,   // what the servers answer is asked again on every visit (the console's default of five seconds would show a server that went down as up when the page is left and come back to)
   })
   const data = view.data
   const rows = data?.rows ?? []

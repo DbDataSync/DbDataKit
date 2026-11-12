@@ -137,9 +137,8 @@ public sealed class RunnerOwnedRunsTests(RunnerOwnedApiFactory factory) : IClass
         }
 
         // a replication this server still owns never asks the runner
-        var calls = factory.Runner.Calls;
         Assert.Null((await HistoryAsync("never-moved")).RunnerUnavailable);
-        Assert.Equal(calls, factory.Runner.Calls);
+        Assert.Equal(0, factory.Runner.AskedAbout("never-moved"));
     }
 
     [Fact]
