@@ -103,14 +103,13 @@ test('a subdomain is added in the instance editor and routes by name, a name tha
   await expect(screen.getByTestId('instance-editor-address-host-0')).toHaveValue('sales.')
   await screen.getByTestId('instance-editor-address-host-0').fill('wrong.localhost')
   await screen.getByTestId('instance-editor-save').click()
-  await expect(screen.getByTestId('error-banner')).toContainText('A subdomain of this host is sales.localhost; wrong.localhost is not it.')
-  expect(JSON.stringify(run(['apps', 'instance-list']))).not.toContain('wrong.localhost')   // nothing was saved
+  await expect(screen.getByTestId('error-banner')).toContainText("The subdomain wrong.localhost is not the instance's: a subdomain's first label is the instance name")   // the instance library's words, which come before the host's own check of the domain
+  expect((await asked('wrong.localhost')).body).toContain(fallbackWords)   // nothing was saved: the name is still nobody's
 
   await screen.getByTestId('instance-editor-address-host-0').fill('sales.localhost')
   await screen.getByTestId('instance-editor-address-primary-0').check()
   await screen.getByTestId('instance-editor-save').click()
   await expect(screen.getByTestId('apps-notice')).toContainText('sales is saved')
-  expect(JSON.stringify(run(['apps', 'instance-list']))).toContain('sales.localhost')
   await expect.poll(async () => (await asked('sales.localhost')).status, { timeout: 20_000 }).toBe(302)   // the instance's page: no session, so the identity home's sign-in
   const routed = await asked('sales.localhost')
   expect(routed.body).not.toContain(fallbackWords)
