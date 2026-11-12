@@ -29,10 +29,10 @@ test('a report server connection starts with the Windows sign-in, keeps its pass
 
   // the template is a valid file as it is: the user and the reference of the password; nothing is typed into the file
   await page.getByTestId('outside-save').click()
-  const row = page.getByTestId('outside-row')
+  const row = page.locator('[data-testid="outside-row"][data-name="ssrs"]')
   await expect(row).toHaveAttribute('data-kind', 'report-catalog')
-  await expect(page.getByTestId('outside-kind')).toHaveText('report server (SSRS, Power BI)')
-  await expect(page.getByTestId('outside-detail')).toContainText('https://reports.example.com/Reports, Windows sign-in (NTLM or Negotiate, user and password)')
+  await expect(row.getByTestId('outside-kind')).toHaveText('report server (SSRS, Power BI)')
+  await expect(row.getByTestId('outside-detail')).toContainText('https://reports.example.com/Reports, Windows sign-in (NTLM or Negotiate, user and password)')
   await expect(page.getByTestId('outside-diagnostic')).toHaveCount(0)
   await expect(page.getByTestId('outside-secret')).toHaveCount(1)
   await expect(page.getByTestId('outside-secret')).toHaveAttribute('data-field', 'password')
@@ -46,7 +46,7 @@ test('a report server connection starts with the Windows sign-in, keeps its pass
   // the integrated sign-in has no user and no password: the file says so, and the screen asks for no secret
   await replaceEditorText(page, 'schema: connection/2\nkind: report-catalog\nname: ssrs\nendpoint: https://reports.example.com/Reports\nreport_catalog: { provider: ssrs }\nsign_in: { method: integrated }\n')
   await page.getByTestId('outside-save').click()
-  await expect(page.getByTestId('outside-detail')).toContainText('https://reports.example.com/Reports, Windows sign-in as the service account (integrated)')
+  await expect(row.getByTestId('outside-detail')).toContainText('https://reports.example.com/Reports, Windows sign-in as the service account (integrated)')
   await expect(page.getByTestId('outside-secret')).toHaveCount(0)
   await expect(page.getByTestId('outside-diagnostic')).toHaveCount(0)
 
@@ -56,5 +56,5 @@ test('a report server connection starts with the Windows sign-in, keeps its pass
   await expect(page.getByTestId('outside-diagnostic').first()).toBeVisible()
   await expect(page.getByTestId('outside-diagnostic').first()).toContainText('line')
   await expect(page.getByTestId('outside-diagnostic').first()).toHaveAttribute('data-severity', 'error')
-  await expect(page.getByTestId('outside-detail')).not.toContainText('user and password')
+  await expect(row.getByTestId('outside-detail')).not.toContainText('user and password')
 })
