@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using DbDataKit.Identity;
 using DbDataKit.State;
 using DbDataKit.Web.Trust;
+using DbDataGateway.Server.Management;
 using DbDataGateway.Server.Serving;
 using DbDataGateway.Server.State;
 using DbDataGateway.Tests.Config;
@@ -251,5 +252,41 @@ public sealed class McpApprovalTests : IDisposable
         Assert.Equal(-32601, (int)unknown["error"]!["code"]!);
         Assert.Null(notification);
         Assert.True((bool)(await CallAsync(server, agent, "no_such_tool"))["isError"]!);
+    }
+
+    private static ValidatedToken ConsoleToken(string id, string name, ServerRole roles, bool console = true)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new ValidatedToken(new PairedClient("console-1", "console", [], ServerRole.Admin | ServerRole.Approver), id, name, console, roles, new Dictionary<string, ServerRole>(), "t", now, now.AddMinutes(5));
+    }
+
+    [Fact]
+    public async Task The_console_lists_and_answers_through_the_management_routes_as_the_person_its_token_names()
+    {
+        var (server, approvals) = Make();
+        var agent = Agent("loader", ServerRole.Viewer | ServerRole.Author);
+        var id = PendingId(await CallAsync(server, agent, "touch", new() { ["what"] = "x" }));
+        var viewer = ConsoleToken("u-view", "Vera", ServerRole.Viewer);
+        var approver = ConsoleToken("u-app", "Bea", ServerRole.Viewer | ServerRole.Approver);
+        var path = $"{GatewayMcpManagement.Prefix}/{id}";
+
+        Assert.Equal(403, (await GatewayMcpManagement.HandleAsync(approvals, viewer, "GET", GatewayMcpManagement.Prefix, null, default)).Status);
+        var list = await GatewayMcpManagement.HandleAsync(approvals, approver, "GET", GatewayMcpManagement.Prefix, null, default);
+        Assert.Equal(200, list.Status);
+        Assert.Equal(id.ToString(), (string)list.Body["approvals"]![0]!["id"]!);
+        Assert.Equal(403, (await GatewayMcpManagement.HandleAsync(approvals, viewer, "POST", path + "/approve", "{}", default)).Status);
+        // a token that is not the console's (not a person who signed in there) does not answer
+        Assert.Equal(403, (await GatewayMcpManagement.HandleAsync(approvals, ConsoleToken("u-app", "Bea", ServerRole.Approver, console: false), "POST", path + "/approve", "{}", default)).Status);
+        Assert.Equal(0, _runs);
+
+        var done = await GatewayMcpManagement.HandleAsync(approvals, approver, "POST", path + "/approve", "{\"note\":\"ok\"}", default);
+        var again = await GatewayMcpManagement.HandleAsync(approvals, approver, "POST", path + "/deny", null, default);
+
+        Assert.Equal(200, done.Status);
+        Assert.True((bool)done.Body["ran"]!);
+        Assert.Equal(409, again.Status);
+        Assert.Equal(1, _runs);
+        Assert.Equal("u-app", approvals.Get(id)!.AnsweredBy);
+        Assert.Empty((JsonArray)(await GatewayMcpManagement.HandleAsync(approvals, approver, "GET", GatewayMcpManagement.Prefix, null, default)).Body["approvals"]!);
     }
 }

@@ -193,6 +193,15 @@ public static class GatewayManagementHost
             var result = await definitionsApi.StoreArtifactAsync(sha256, context.Request.Body, context.Request.ContentType, caller, context.RequestAborted);
             return Results.Json(result.Body, statusCode: result.Status);
         });
+        // the approvals of the mcp module, for the console's inbox (plan 27a AG33): the person the token names answers, with the module's own rules
+        if (GatewayModules.Has(options, GatewayModules.Mcp))
+            app.MapMethods($"{GatewayMcpManagement.Prefix}/{{**rest}}", ["GET", "POST"], async (HttpContext context) =>
+            {
+                using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
+                var body = context.Request.Method == "POST" ? await reader.ReadToEndAsync(context.RequestAborted) : null;
+                var result = await GatewayMcpManagement.HandleAsync(app.Services.GetRequiredService<Serving.McpServices>().Approvals, context.ManagementToken(), context.Request.Method, context.Request.Path.Value! + context.Request.QueryString, body, context.RequestAborted);
+                return Results.Json(result.Body, statusCode: result.Status);
+            });
         app.MapMethods($"{GatewayManagement.Prefix}/{{**rest}}", ["GET", "POST", "PUT", "DELETE"], async (HttpContext context) =>
         {
             var caller = new ManagementCaller(context.ManagementToken());

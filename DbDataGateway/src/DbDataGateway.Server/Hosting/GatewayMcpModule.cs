@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text.Json.Nodes;
 using DbDataKit.Serving;
-using DbDataKit.Serving.Semantic;
 using DbDataKit.State;
 using DbDataGateway.Server.Configuration;
 using DbDataGateway.Server.Secrets;
@@ -17,8 +16,8 @@ namespace DbDataGateway.Server.Hosting;
 /// (a service account's personal access token, or a person's) and is the caller of every tool: what it reads is what that identity could read through Flight SQL or the store module. A tool with an effect does not run: it is recorded as an approval request
 /// (<see cref="McpApprovals"/>) and runs only after a person answers it on <c>POST /api/v1/mcp/approvals/{id}/approve</c> (or <c>deny</c>); <c>GET /api/v1/mcp/approvals</c> lists them for an approver. Every request, answer and run is an audit row naming the person and the agent.
 /// </summary>
-public sealed class GatewayMcpModule(IOptionsMonitor<GatewayOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, IServingServices serving, SemanticModels semantic, PublishedEntityModels models,
-    GatewayViewsPublishing views, HomeCallers homeCallers, ILoggerFactory loggers, GroupCertificate? group = null) : IHostedService, IServingModule, IAsyncDisposable
+public sealed class GatewayMcpModule(IOptionsMonitor<GatewayOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, McpServices mcp,
+    HomeCallers homeCallers, ILoggerFactory loggers, GroupCertificate? group = null) : IHostedService, IServingModule, IAsyncDisposable
 {
     private WebApplication? _app;
     private volatile bool _draining;
@@ -45,10 +44,8 @@ public sealed class GatewayMcpModule(IOptionsMonitor<GatewayOptions> options, St
         if (certificate.Current is null)
             certificate.Set(CertificateProvider.Load(current, GatewayHost.ResolveDataDirectory(current), loggers.CreateLogger("Tls"), secrets: secrets, group: group));
 
-        var store = GatewayStoreModule.ApiOf(options, state, secrets, models);
-        var tools = McpTools.Create(serving, semantic, store, () => views, () => homeCallers.GetAsync().AsTask().GetAwaiter().GetResult(), options);
-        var approvals = Approvals = new McpApprovals(state, () => homeCallers.GetAsync().AsTask().GetAwaiter().GetResult(), tools.ToDictionary(t => t.Name, StringComparer.Ordinal), TimeSpan.FromMinutes(current.Mcp.ApprovalMinutes));
-        var server = new McpServer(tools, approvals, typeof(GatewayMcpModule).Assembly.GetName().Version?.ToString() ?? "0");
+        var approvals = Approvals = mcp.Approvals;
+        var server = mcp.Server;
 
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();

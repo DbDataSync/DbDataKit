@@ -8,7 +8,7 @@ export interface ApprovalRow {
   server: string
   serverName: string
   product: 'dbdatastore' | 'dbdatagateway'
-  kind: 'change-request' | 'app-trust'
+  kind: 'change-request' | 'app-trust' | 'mcp-step'
   /** What waits, as the owning screen names it: the model (and instance), or `<app> version <n>`. */
   subject: string
   detail: string
@@ -24,7 +24,26 @@ export interface ApprovalRow {
   link: string
   /** A change request: which one, so it can be decided here (SC21c). Absent on an app version, which is decided on the Gateway's screen. */
   request?: { model: string; instance: string; id: string }
+  /** A step an agent asked through the Gateway's `mcp` module (plan 27a AG33): its id, decided here as the signed-in person. */
+  mcp?: { id: string }
 }
+
+/** The Gateway's `GET /api/v1/mcp/approvals`: the steps agents asked for that wait for a person. */
+export interface McpApprovalList {
+  approvals: { id: string; status: string; tool: string; summary: string; asked_by: string; agent: string; arguments: unknown; asked_at: string }[]
+}
+
+/** The waiting steps of a Gateway's `mcp` module as rows: always an agent's step, with the sentence the module wrote about it. The server refuses an answer from anyone who may not give it (the requester, a token), and says so. */
+export function mcpRows(server: InstanceSummary, list: McpApprovalList): ApprovalRow[] {
+  return list.approvals.filter((a) => a.status === 'pending').map((a) => ({
+    key: `${server.id}/mcp/${a.id}`, server: server.id, serverName: server.name, product: 'dbdatagateway', kind: 'mcp-step',
+    subject: a.tool, detail: a.summary, by: a.agent, byAgent: true, since: a.asked_at, canDecide: true,
+    link: `/servers/${server.id}`, mcp: { id: a.id },
+  }))
+}
+
+/** The relay address of an answer to an agent's step on a Gateway's `mcp` module. */
+export const mcpDecisionPath = (server: string, id: string, approve: boolean): string => `/relay/${server}/api/v1/mcp/approvals/${encodeURIComponent(id)}/${approve ? 'approve' : 'deny'}`
 
 /** The Store's list of a model's requests (`GET /api/v1/models/{m}/requests?state=pending`). */
 export interface StoreRequestList {
@@ -79,9 +98,9 @@ export function decisionPath(server: string, request: NonNullable<ApprovalRow['r
 
 /** Why a decision cannot be sent yet, in words; null when it can. A rejection needs its reason written (the person who proposed it reads it), an approval needs none. */
 export function decisionProblem(row: ApprovalRow, approve: boolean, note: string): string | null {
-  if (!row.request) return 'This is decided on its own screen.'
+  if (!row.request && !row.mcp) return 'This is decided on its own screen.'
   if (!row.canDecide) return 'You may not decide it.'
-  if (!approve && note.trim() === '') return 'Say why in the note: the person who proposed it reads it.'
+  if (!approve && !row.mcp && note.trim() === '') return 'Say why in the note: the person who proposed it reads it.'
   return null
 }
 
@@ -90,8 +109,9 @@ export function decisionProblem(row: ApprovalRow, approve: boolean, note: string
  * and records who decided; this only sends the decision and the note.
  */
 export function decideRequest(row: ApprovalRow, approve: boolean, note: string): Promise<unknown> {
-  if (!row.request) return Promise.reject(new Error('This is decided on its own screen.'))
   const text = note.trim()
+  if (row.mcp) return request(mcpDecisionPath(row.server, row.mcp.id, approve), { method: 'POST', body: JSON.stringify(text ? { note: text } : {}), headers: { 'Content-Type': 'application/json' } })
+  if (!row.request) return Promise.reject(new Error('This is decided on its own screen.'))
   return request(decisionPath(row.server, row.request, approve), { method: 'POST', body: JSON.stringify(text ? { note: text } : {}), headers: { 'Content-Type': 'application/json' } })
 }
 
@@ -136,6 +156,8 @@ export async function loadApprovals(servers: InstanceSummary[]): Promise<{ rows:
         const { apps } = await request<{ apps: GatewayAppSummary[] }>(relay(server, '/api/v1/apps'))
         const details = await Promise.all(apps.map((a) => request<GatewayAppDetail>(relay(server, `/api/v1/apps/${enc(a.name)}`))))
         details.forEach((d) => rows.push(...appRows(server, d)))
+        // the agents' steps of the mcp module: a Gateway without the module (404) or a person without the role to see them (403) has none to show
+        await request<McpApprovalList>(relay(server, '/api/v1/mcp/approvals')).then((l) => rows.push(...mcpRows(server, l)), () => undefined)
       }
     } catch (error) {
       problems.push({ server: server.name, message: error instanceof Error ? error.message : 'No answer' })

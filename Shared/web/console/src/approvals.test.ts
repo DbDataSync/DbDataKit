@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { appRows, decideRequest, decisionPath, decisionProblem, sortApprovals, storeRows, waited, type ApprovalRow, type GatewayAppDetail, type StoreRequestList } from './approvals'
+import { appRows, decideRequest, mcpDecisionPath, mcpRows, decisionPath, decisionProblem, sortApprovals, storeRows, waited, type ApprovalRow, type GatewayAppDetail, type StoreRequestList } from './approvals'
 import type { InstanceSummary } from './api'
 
 const server = (id: string, name: string, product: string): InstanceSummary => ({ id, name, url: 'https://x', product, version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null })
@@ -119,5 +119,29 @@ describe('deciding a change request here (SC21c)', () => {
     vi.stubGlobal('fetch', fetchMock)
     await expect(decideRequest(appRows(gateway, detail(null, version(1)))[0]!, true, '')).rejects.toThrow(/own screen/)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('the steps agents asked through a Gateway\'s mcp module (AG33)', () => {
+  const step = (over = {}) => ({ id: 'a1', status: 'pending', tool: 'write_entity_changes', summary: 'Write 2 change(s) to the master data model \'budgets\'.', asked_by: 'u1', agent: 'loader', arguments: {}, asked_at: '2026-11-10T10:00:00Z', ...over })
+
+  it('lists each waiting step as an agent\'s, with the module\'s sentence, and leaves out an answered one', () => {
+    const rows = mcpRows(gateway, { approvals: [step(), step({ id: 'a2', status: 'approved' })] })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ kind: 'mcp-step', subject: 'write_entity_changes', by: 'loader', byAgent: true, canDecide: true, mcp: { id: 'a1' }, product: 'dbdatagateway' })
+    expect(rows[0]!.detail).toContain('budgets')
+  })
+
+  it('answers through the relay to the module\'s own routes, with the note when there is one, and needs no note to deny', async () => {
+    const [row] = mcpRows(gateway, { approvals: [step()] })
+    expect(mcpDecisionPath('gw1', 'a1', true)).toBe('/relay/gw1/api/v1/mcp/approvals/a1/approve')
+    expect(decisionProblem(row!, false, '')).toBeNull()
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    await decideRequest(row!, false, ' not now ')
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('/relay/gw1/api/v1/mcp/approvals/a1/deny')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body as string)).toEqual({ note: 'not now' })
   })
 })
