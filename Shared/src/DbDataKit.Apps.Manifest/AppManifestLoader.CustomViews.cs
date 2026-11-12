@@ -118,7 +118,7 @@ public static partial class AppManifestLoader
                     if (request.Get(key) is YamlSequence list) foreach (var item in list.Items) if (item is YamlScalar s) members.Add(s.Value);
             }
             else { Add(BadCustomView, (YamlNode?)body.Get("request") ?? body, $"The semantic query `{name}` has a `request`: `{{measures: [...], attributes: [...], limit: 100}}`."); return null; }
-            return new CustomViewQuery(name, form, model.Value, entity, members, new SpecPos(entry.Key.Line, entry.Key.Column), new SpecPos(model.Line, model.Column));
+            return new CustomViewQuery(name, form, model.Value, entity, members, new SpecPos(entry.Key.Line, entry.Key.Column), new SpecPos(model.Line, model.Column), body);
         }
     }
 }

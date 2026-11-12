@@ -2,10 +2,11 @@
 // a whole dashboard or report written as code. It registers with `defineWidget` / `definePage`; the host (the shell and the exporter) sends it its rows, parameters, theme and size and receives
 // `setParam`, `open`, the ready signal and an error. The code never fetches data on the paths that print or email: the host runs the view's declared queries as the viewer and hands the rows in.
 //
-// This file imports nothing but React: an app's policy forbids what compiles code at load (see `docs/ci-lessons.md`, "Web code that runs under an app's policy"), so it does not import `@dbdatakit/visuals`
+// This file imports nothing but React and react-dom (the frame's own root, `startViewFrame`): an app's policy forbids what compiles code at load (see `docs/ci-lessons.md`, "Web code that runs under an app's policy"), so it does not import `@dbdatakit/visuals`
 // (its validators do); the few pure rules it needs (the route's query string) are written here and have a test against the shared goldens.
-import { createContext, createElement, useContext, useEffect, useMemo, useState } from 'react'
+import { Component, createContext, createElement, useContext, useEffect, useMemo, useState } from 'react'
 import type { ComponentType, ReactNode } from 'react'
+import { createRoot } from 'react-dom/client'
 
 export type ViewMode = 'screen' | 'print' | 'image'
 export type Scalar = string | number | boolean
@@ -64,6 +65,7 @@ export const registeredNames = () => [...registry.keys()].sort()
 
 /** What the code sends the host. Only these: a widget cannot choose a target or call the shell, it names a link the document declared. */
 export type ToHost =
+  | { type: 'views:hello' }
   | { type: 'views:ready' }
   | { type: 'views:error'; message: string }
   | { type: 'views:setParam'; name: string; value: Scalar | Scalar[] | null }
@@ -203,4 +205,73 @@ export function PageBreak() {
 /** The theme as the CSS custom properties the code styles with (`var(--sui-text)`): put them on a container's `style`. */
 export function themeStyle(theme: ViewProps['theme']): Record<string, string> {
   return Object.fromEntries(Object.entries(theme.tokens).map(([k, v]) => [k.startsWith('--') ? k : `--${k}`, v]))
+}
+
+// ---- the frame: what runs in the sandboxed document the host frames ----
+
+/**
+ * What the host's frame address says: the view to mount and the mode, in the fragment (`<app's page>#view=OrdersGrid&mode=print`), which no server sees and which the sandbox keeps. A document opened without it is the app's own screen,
+ * not a view frame. `view` is a name a view can register; anything else is not a frame.
+ */
+export function frameRequest(hash: string = typeof location === 'undefined' ? '' : location.hash): { view: string; mode: ViewMode } | null {
+  const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash)
+  const view = params.get('view')
+  if (!view || !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(view)) return null
+  const mode = params.get('mode')
+  return { view, mode: mode === 'print' || mode === 'image' ? mode : 'screen' }
+}
+
+class FrameBoundary extends Component<{ port: HostPort; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() { return { failed: true } }
+  componentDidCatch(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    ;(window as unknown as { __reportError?: string }).__reportError = message
+    this.props.port.send({ type: 'views:error', message })
+  }
+  render() { return this.state.failed ? null : this.props.children }
+}
+
+function FrameRoot({ port, name, initial }: { port: HostPort; name: string; initial: ViewProps }) {
+  const entry = registered(name)
+  if (!entry) throw new Error(`The app registers no view named '${name}' (it registers: ${registeredNames().join(', ') || 'none'}).`)
+  return createElement(ViewHost, { port, props: initial, children: createElement(Mounted, { component: entry.component }) })
+}
+
+/** The registered component, given the host's props as its own props (and through `useView`), drawn again whenever the host sends them. */
+function Mounted({ component }: { component: ViewComponent }) {
+  return createElement(component, host().props)
+}
+
+/**
+ * The frame's runtime. An app's entry calls it after its `defineWidget` / `definePage` calls: **in a view frame** (the address's fragment names a view, `frameRequest`) it waits for the host's `views:init`, mounts the
+ * registered component with the props it gave (the host sends `views:props` on every change, and the component sees them through `ViewHost`), reports the content's height as `views:size` (the host sizes a page and
+ * checks a widget against a printed page with it), and turns a render error into `views:error`; it returns true and the app must not mount its own screen. **In any other document** it does nothing and returns false.
+ * The component calls `useReady().ready()` when it is drawn: the exporter waits for it.
+ */
+export function startViewFrame(options: { root?: HTMLElement; port?: HostPort; request?: ReturnType<typeof frameRequest> } = {}): boolean {
+  const request = options.request === undefined ? frameRequest() : options.request
+  if (!request) return false
+  const port = options.port ?? windowPort()
+  const root = options.root ?? (document.getElementById('dbdatakit-view') ?? document.body.appendChild(Object.assign(document.createElement('div'), { id: 'dbdatakit-view' })))
+  let mounted: ReturnType<typeof createRoot> | null = null
+  const off = port.subscribe((m) => {
+    if (m.type !== 'views:init' || mounted) return
+    mounted = createRoot(root)
+    mounted.render(createElement(FrameBoundary, { port, children: createElement(FrameRoot, { port, name: m.name, initial: { ...m.props, mode: request.mode } }) }))
+    watchHeight(port)
+  })
+  void off
+  port.send({ type: 'views:hello' })
+  return true
+}
+
+function watchHeight(port: HostPort) {
+  let last = -1
+  const report = () => {
+    const height = Math.ceil(Math.max(document.documentElement?.scrollHeight ?? 0, document.body?.scrollHeight ?? 0))
+    if (height !== last) { last = height; port.send({ type: 'views:size', height }) }
+  }
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(report).observe(document.documentElement)
+  report()
 }

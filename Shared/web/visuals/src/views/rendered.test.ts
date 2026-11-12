@@ -21,11 +21,20 @@ const problems = (v: ValidateFunction) => (v.errors ?? []).map((e) => `${e.insta
 const bundle = sampleBundle()
 
 // the union of the TypeScript types, written so that adding a type to one place and not the other fails to compile or fails the test
-const TYPES = ['metric', 'table', 'matrix', 'chart', 'text', 'image', 'control', 'embed', 'error'] as const satisfies ReadonlyArray<RenderedWidget['type']>
+const TYPES = ['metric', 'table', 'matrix', 'chart', 'text', 'image', 'control', 'embed', 'custom', 'error'] as const satisfies ReadonlyArray<RenderedWidget['type']>
 type Covered = (typeof TYPES)[number]
 const everyTypeIsListed: Exclude<RenderedWidget['type'], Covered> extends never ? true : false = true
 
 describe('rendered-widgets', () => {
+  it('a custom widget carries the rows of its declared queries by name; an extra key or a row that is not an object is refused', () => {
+    const good = { type: 'custom', component: 'sales-portal/RegionGrid', params: { region: ['East'] }, data: { by_region: { columns: ['customers_region'], rows: [{ customers_region: 'East' }] } } }
+    expect(widget(good), problems(widget).join('\n')).toBe(true)
+    expect(widget({ ...good, html: '<b>x</b>' })).toBe(false)
+    expect(widget({ ...good, data: { q: { columns: [], rows: ['x'] } } })).toBe(false)
+    expect(widget({ type: 'custom', component: 'a/B' })).toBe(false)
+  })
+
+
   it('lists exactly the widget types of the TypeScript union', () => {
     expect(everyTypeIsListed).toBe(true)
     const listed = (renderedSchema.$defs.widget.oneOf as Array<{ $ref: string }>).map((o) => (renderedSchema.$defs as unknown as Record<string, { properties: { type: { const: string } } }>)[o.$ref.split('/').pop()!]!.properties.type.const)

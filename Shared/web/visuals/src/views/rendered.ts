@@ -39,10 +39,16 @@ export interface RenderedControl { type: 'control'; values?: Array<{ value: stri
 /** An embed widget as the server resolved it: the address with its pairs filled, its origin, and whether the host approves that origin to be framed (a frame) or not (a link). */
 export interface RenderedEmbed { type: 'embed'; url: string; origin?: string | null; framed: boolean; link_text?: string }
 
+/**
+ * A custom widget's input as the host resolved it (DBR31): the rows of the queries its manifest entry declares, by the query's name, run as the viewer, and the parameter values the widget has. The code of the app draws them in
+ * a sandboxed frame; nothing in the frame fetches. A query that failed makes the whole widget an error entry (a view with some rows missing would show a wrong figure).
+ */
+export interface RenderedCustom { type: 'custom'; component: string; params?: Record<string, unknown>; data: Record<string, { columns: string[]; rows: Array<Record<string, unknown>> }> }
+
 /** One widget that failed (denied, timed out, refused by the engine, no recorded result): it draws as an error tile, the rest of the page draws. */
 export interface RenderedWidgetError { type: 'error'; code: string; message: string; path?: string | null; suggestions?: string[] | null }
 
-export type RenderedWidget = RenderedMetric | RenderedTable | RenderedMatrix | RenderedChart | RenderedText | RenderedImage | RenderedControl | RenderedEmbed | RenderedWidgetError
+export type RenderedWidget = RenderedMetric | RenderedTable | RenderedMatrix | RenderedChart | RenderedText | RenderedImage | RenderedControl | RenderedEmbed | RenderedCustom | RenderedWidgetError
 
 /** What one resolution of a layout gives: the widgets it placed (those asked for, when `only` narrowed it), by id. */
 export interface RenderedWidgets {

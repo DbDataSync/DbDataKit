@@ -1,18 +1,30 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { CustomViewsContext, type CustomViewsContextValue, type CustomViewsHost } from '../custom/CustomWidgetFrame'
+import type { LinkInfo, LinkScalar } from '../views/links'
+import { linkValues } from '../views/links'
 import { placedWidgets } from '../client/fixtureClient'
 import type { ServerSort, ViewsClient } from '../client/types'
 import { useTheme, type ThemeChoice } from '../theme'
 import type { ViewKind } from '../views/document'
-import type { Box, LayoutDoc, ParameterValue, ParameterValues, ViewsDoc } from '../views/model'
+import type { Box, LayoutDoc, ParameterDefinition, ParameterValue, ParameterValues, ViewsDoc } from '../views/model'
 import type { RenderedWidget } from '../views/rendered'
 import { selectLayout, type LayoutSelection, type Medium } from '../views/selectLayout'
 import { PagedFrame } from '../report/PagedFrame'
 import { usePrintPreview } from '../report/PrintPreview'
 import { ErrorTile } from '../widgets/states'
 import { DashboardFrame } from './DashboardFrame'
-import { drillOf, onSelectOf, resolveDrill, rowOf, selectFrom, type Hit, type HitHow, type ResolvedDrill } from './interaction'
+import { drillOf, onSelectOf, resolveDrill, rowOf, selectFrom, type Hit, type HitHow, type ResolvedDrill, type Row } from './interaction'
 import { browserVisibility, createRefresher, formatAsOf, parseEvery, systemClock, type Clock, type RefreshState, type Visibility } from './refresh'
 import { changedParameters, defaultParameters, dependentWidgets, parametersKey, resolveLayout, type Resolution } from './resolution'
+
+/** A link a widget followed (plan 32 DBR31, DBR36): which widget, the link read, the values it gives for the row, and the target's address when the host has one. The host opens it (`as`: navigate, a dialog, a panel). */
+export interface LinkEvent {
+  widget: string
+  link: LinkInfo
+  values: Record<string, LinkScalar | LinkScalar[]>
+  route: string | null
+  row: Row
+}
 
 export interface DashboardViewProps {
   /** The document's kind and name: what the client resolves it by. */
@@ -50,6 +62,14 @@ export interface DashboardViewProps {
    * Kiosk mode (`?mode=kiosk`, plan 32 section 3.5 item 5): the layout the document's `kiosk.layout` names is shown unless `layout` names another, and the tiles have no maximize action. The host's chrome is the host's to hide.
    */
   kiosk?: boolean
+  /**
+   * Where the code of a custom widget (`type: custom`) is served from (DBR31): without it a custom widget draws a note. The widget's frame sends back parameter changes (the same cross-filter as a control) and the links it follows.
+   */
+  customViews?: CustomViewsHost
+  /** A link a widget followed was resolved: the host opens it. Without a handler a link does nothing. */
+  onLink?: (event: LinkEvent) => void
+  /** A dialog or panel a custom widget opened has closed (`saved` when a form saved): the widget is told. */
+  closedLink?: CustomViewsContextValue['closed']
   /** The lowest refresh interval in milliseconds (the server's setting; 15 s by default). */
   refreshFloorMs?: number
   /** Time, for the refresh: the system's by default, a fake in tests. */
@@ -91,7 +111,7 @@ function useBox(given: Box | undefined) {
  * the widgets both layouts place. A widget that fails shows its own error; a failure of the call itself shows once, for the page. A canvas layout is drawn by `layoutCanvas` (DBR07), scaled or scrolled in the same container; a flow layout is the work of its own engine (DBR14):
  * until then a note says so.
  */
-export function DashboardView({ kind = 'dashboard', name, document, client, layout: requested, medium, box: given, theme = 'auto', parameters, onParameterChange, onSelect, onDrill, sortable = false, onServerSort, viewer, onPrintPreview, kiosk = false, refreshFloorMs, clock, visibility, random, timeZone }: DashboardViewProps) {
+export function DashboardView({ kind = 'dashboard', name, document, client, layout: requested, medium, box: given, theme = 'auto', parameters, onParameterChange, onSelect, onDrill, sortable = false, onServerSort, customViews, onLink, closedLink, viewer, onPrintPreview, kiosk = false, refreshFloorMs, clock, visibility, random, timeZone }: DashboardViewProps) {
   const layout = requested ?? (kiosk ? document.kiosk?.layout : undefined)
   const resolvedTheme = useTheme(theme)
   const { ref, box } = useBox(given)
@@ -226,6 +246,27 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
     return shown
   }, [refreshing, resolution, document, timeZone])
 
+  // custom widgets (DBR31): the frames reach the document only through these two, and the document's rules decide
+  const custom = useMemo<CustomViewsContextValue | null>(() => {
+    if (!customViews) return null
+    return {
+      host: customViews,
+      links: document.links,
+      definitions: document.parameters as ParameterDefinition[] | undefined,
+      parameters: values,
+      medium: medium === 'print' ? 'print' : 'screen',
+      scheme: resolvedTheme,
+      setParam: (parameter, value) => { setNotice(null); change(parameter, value) },
+      open: (widget, link, row) => {
+        setNotice(null)
+        onLink?.({ widget, link, values: linkValues(link, row, values), route: link.hasAddress ? customViews.route?.(link) ?? null : null, row: row as Row })
+      },
+      notice: setNotice,
+      closed: closedLink ?? null,
+    }
+    // `change` keeps the document's own parameters when none are given; the key stands for the values
+  }, [customViews, document, valuesKey, medium, resolvedTheme, onLink, closedLink, change])
+
   const preview = usePrintPreview({ client, kind, name, layout: chosenName, parameters: values })
   const [maximized, setMaximized] = useState<string | null>(null)
   useEffect(() => setMaximized(null), [chosenName])
@@ -264,7 +305,7 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
         onServerSort={serverSorting}
       />
     )
-  return (
+  const framed = (
     <div ref={ref} className="vz-dashboard-host" data-testid="vz-dashboard-host" data-measuring={box ? undefined : ''} data-kiosk={kiosk ? '' : undefined} data-refresh={refreshing ? (refreshState?.paused ? 'paused' : refreshState?.stale ? 'stale' : 'on') : undefined} data-refresh-runs={refreshState?.runs} style={given ? { width: given.width, height: given.height } : { width: '100%', height: '100%' }}>
       {failure ? <ErrorTile code="resolve_failed" message={failure} /> : null}
       {body}
@@ -276,4 +317,5 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
       ) : null}
     </div>
   )
+  return custom ? <CustomViewsContext.Provider value={custom}>{framed}</CustomViewsContext.Provider> : framed
 }

@@ -73,11 +73,12 @@ views:
 ```
 
 ```tsx
-import { defineWidget, useView, useSetParam, useReady } from '@dbdatakit/views-sdk'
+import { defineWidget, startViewFrame, useView, useSetParam, useReady } from '@dbdatakit/views-sdk'
 defineWidget('OrdersGrid', function OrdersGrid() { const { data, params, mode } = useView(); /* data.orders.rows ... */ return <table>...</table> })
+if (!startViewFrame()) { /* not a view frame: mount the app's own screens */ }
 ```
 
-`app validate` checks the entries (`DBD-APP-019` shape, `-020` a widget with no declared query, `-021` a query naming a semantic model the manifest does not list, a Store entity without `read`, or a member the model lacks, `-022` an `export` that no `defineWidget('Export', ...)` / `definePage` in the source registers) with the manifest's file and line, and the build refuses an import outside the default library and the allow-list naming file and line. The SDK's messages with the host (`views:ready`, `views:error`, `views:setParam`, `views:open`; `views:init`, `views:props`, `views:closed`) are the contract the shell and the exporter implement: a widget fires only a **named** link (`open(name, row)`), it cannot choose a target. Running a custom view on screen, in an export and by email is DBR31 to DBR34.
+`app validate` checks the entries (`DBD-APP-019` shape, `-020` a widget with no declared query, `-021` a query naming a semantic model the manifest does not list, a Store entity without `read`, or a member the model lacks, `-022` an `export` that no `defineWidget('Export', ...)` / `definePage` in the source registers) with the manifest's file and line, and the build refuses an import outside the default library and the allow-list naming file and line. The SDK's messages with the host (`views:hello`, `views:ready`, `views:error`, `views:size`, `views:setParam`, `views:open`; `views:init`, `views:props`, `views:closed`) are the contract the shell and the exporter implement: a widget fires only a **named** link (`open(name, row)`), it cannot choose a target. The entry of the app calls `startViewFrame()` after its registrations (it mounts the registered view when the address's fragment names one, `#view=<Export>&mode=screen`, and does nothing otherwise). How a host resolves the rows and runs the frame on screen is [Custom widgets on screen](views.md#custom-widgets-on-screen); running a custom view in an export and by email is DBR32 to DBR34.
 
 ## Offline builds, the package store and the allow-list
 
