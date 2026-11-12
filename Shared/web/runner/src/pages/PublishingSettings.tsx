@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ErrorBanner } from '@dbdatakit/shell'
+import { ErrorBanner, TrustStore } from '@dbdatakit/shell'
 import { runnerApi } from '../api'
 import { signaturesText } from '../bindings'
 import { ConfirmDialog } from './Dialogs'
@@ -55,6 +55,7 @@ export function PublishingSettings({ canEdit }: { canEdit: boolean }) {
           onDone={() => { setAsking(false); void client.invalidateQueries({ queryKey: ['runner'] }) }}
         />
       )}
+      <div style={{ marginTop: 12 }}><TrustStore kind="integration" api={runnerApi.trust} canEdit={canEdit} /></div>
     </>
   )
 }

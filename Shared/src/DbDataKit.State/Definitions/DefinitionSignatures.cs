@@ -17,6 +17,9 @@ public sealed record SignatureVerdict(SignatureState State, string? Signer = nul
     public string Word => State.ToString().ToLowerInvariant();
 }
 
+/// <summary>A version an instance refused to prepare because of its signature (plan 30 PB03); the message names the kind, the name, the version and what is wrong.</summary>
+public sealed class VersionSignatureRefusedException(string message) : Exception(message);
+
 /// <summary>What a signature covers (plan 30 section 6.2): the manifest, and every artifact's path and SHA-256, plus the signature text the publisher sent, if any.</summary>
 public sealed record VersionSignatureRequest(string Kind, string Name, string Manifest, IReadOnlyList<ArtifactRef> Artifacts, string? Signature);
 

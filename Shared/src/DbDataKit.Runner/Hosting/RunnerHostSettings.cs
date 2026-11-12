@@ -56,6 +56,9 @@ public sealed record RunnerHostSettings(string Directory)
     /// <summary>What staging says of the contracts a package was built against (null: <see cref="RunnerContracts.Check(PackageManifest)"/>).</summary>
     public Func<PackageManifest, string?>? StagingContracts { get; init; }
 
+    /// <summary>What staging checks of a version before it prepares it (plan 30 PB03: the signature against the group's trust store); null: nothing. A host with a trust store sets it (<c>RunnerVersionGate</c>).</summary>
+    public Func<DbDataKit.State.DefinitionVersion, string?>? VersionGate { get; init; }
+
     /// <summary>The platform this runner is (null: <see cref="RuntimePlatforms.Current"/>); see <see cref="DbDataKit.Runner.Scheduler.RunnerSchedulerOptions.Platform"/>.</summary>
     public string? Platform { get; init; }
 
