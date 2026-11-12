@@ -58,9 +58,14 @@ export interface ExportedFile {
   browser: string | null
 }
 
+/** What a download is (`format=` of the export route): the PDF of a layout, the xlsx of its tables, matrices and charts, or one widget's rows (`csv`, `xlsx`) or a chart's picture (`svg`), which name the widget. */
+export type ExportFormat = 'pdf' | 'csv' | 'xlsx' | 'svg'
+
 export interface ExportOptions {
   /** The layout to draw; absent: the one the print medium selects. */
   layout?: string
+  /** The widget a `csv` or `svg` (or a one-sheet `xlsx`) is of. */
+  widget?: string
   parameters?: ParameterValues
   signal?: AbortSignal
 }
@@ -148,6 +153,8 @@ export interface ViewsClient {
   sortsOnServer?: boolean
   /** The PDF the exporter draws of the **published** document, as the caller (`GET .../export?format=pdf`; through the console's relay as JSON with the file in base64). Optional: the fixtures have no exporter. A host without a browser refuses with `unavailable` and the module's words, which name the `views.export` setting. */
   exportPdf?(ref: { kind: ViewKind; name: string }, options?: ExportOptions): Promise<ExportedFile>
+  /** A download of the **published** document in any format of the export route (DBR17: `pdf`, `xlsx`, a widget's `csv` or `xlsx`, a chart's `svg`); `exportPdf` is `exportFile` with `format: 'pdf'`. Optional: the fixtures have no server. */
+  exportFile?(ref: { kind: ViewKind; name: string }, format: ExportFormat, options?: ExportOptions): Promise<ExportedFile>
   /** One widget's rendered form, for the editor's live preview. */
   preview(request: PreviewRequest): Promise<RenderedWidget>
   /** An unsaved document as the caller would see it, in one call (plan 32 DBR28). Optional: a source with no server (the fixture source) leaves the editor to ask `preview` for each widget. A document the server would refuse to publish rejects with `invalid`, its diagnostics placed in the text. */
