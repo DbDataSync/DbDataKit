@@ -2122,6 +2122,52 @@
       "if": {
         "properties": {
           "command": {
+            "const": "state backup"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_backup"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state backup"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_backup"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "state export"
           },
           "ok": {
@@ -2344,6 +2390,52 @@
         "properties": {
           "data": {
             "$ref": "#/$defs/data_state_move"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state restore"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_restore"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "state restore"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_state_restore"
           }
         }
       }
@@ -3333,6 +3425,42 @@
       "type": "object",
       "additionalProperties": false
     },
+    "data_state_backup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "modules": {
+          "type": "integer"
+        },
+        "tables": {
+          "type": "integer"
+        },
+        "rows": {
+          "type": "integer"
+        },
+        "payload_files": {
+          "type": "integer"
+        },
+        "payload_bytes": {
+          "type": "integer"
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    },
     "data_state_export": {
       "type": "object",
       "additionalProperties": false,
@@ -3611,6 +3739,54 @@
           "items": {
             "type": "string"
           }
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    },
+    "data_state_restore": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "modules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tables": {
+          "type": "integer"
+        },
+        "rows": {
+          "type": "integer"
+        },
+        "payload_files": {
+          "type": "integer"
+        },
+        "payload_bytes": {
+          "type": "integer"
+        },
+        "migrated": {
+          "type": "boolean"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "summary": {
+          "type": "string"
+        },
+        "next": {
+          "type": "string"
         },
         "error": {
           "type": "string"
