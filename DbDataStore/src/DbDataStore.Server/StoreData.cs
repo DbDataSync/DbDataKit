@@ -119,11 +119,11 @@ public static class StoreData
     private static string? OutsideScope(ValidatedToken token, string model, IEnumerable<RowChange> changes) =>
         changes.Select(c => c.Entity).FirstOrDefault(entity => !TokenScope.Allows(token, model, entity, write: true));
 
-    public static void Map(IEndpointRouteBuilder app, string directory, StoreConnections connections, StoreDataChanges? dataChanges = null)
+    public static void Map(IEndpointRouteBuilder app, string directory, StoreConnections connections, StoreDataChanges? dataChanges = null, StoreContractGuard? contractGuard = null)
     {
         // the model's own copy, and each instance of it: the same routes under two prefixes
-        MapUnder(app, directory, connections, "/api/v1/models/{name}", dataChanges);
-        MapUnder(app, directory, connections, "/api/v1/models/{name}/instances/{instance}", dataChanges);
+        MapUnder(app, directory, connections, "/api/v1/models/{name}", dataChanges, contractGuard);
+        MapUnder(app, directory, connections, "/api/v1/models/{name}/instances/{instance}", dataChanges, contractGuard);
 
         // which instances a model has: a viewer lists them, an administrator registers and forgets them (forgetting never touches the data)
         app.MapGet("/api/v1/models/{name}/instances", async (string name, HttpContext context) =>
@@ -197,7 +197,7 @@ public static class StoreData
         });
     }
 
-    private static void MapUnder(IEndpointRouteBuilder app, string directory, StoreConnections connections, string prefix, StoreDataChanges? dataChanges)
+    private static void MapUnder(IEndpointRouteBuilder app, string directory, StoreConnections connections, string prefix, StoreDataChanges? dataChanges, StoreContractGuard? contractGuard)
     {
         app.MapGet(prefix + "/storage", async (string name, HttpContext context) =>
         {
@@ -311,6 +311,9 @@ public static class StoreData
                 var applied = false;
                 if (approved.Length > 0)
                 {
+                    // plan 21 CH06: a column a published consumer reads, in any channel, is not dropped; the consumers are named, and an administrator may allow each by name (recorded in the audit)
+                    if (contractGuard is not null && await contractGuard.CheckAsync(plan, connectionName, schema, context.Request.Query["allow_consumer"].Where(a => !string.IsNullOrWhiteSpace(a)).Select(a => a!).ToList(), context.ManagementToken(), context.RequestAborted) is { Count: > 0 } refusals)
+                        return Results.Json(new { error = string.Join(" ", refusals), consumers_refused = refusals, hash = plan.Hash }, statusCode: StatusCodes.Status409Conflict);
                     await ModelStorage.ApplyContractAsync(connection, plan, approved, context.RequestAborted);
                     applied = plan.Steps.Count > 0;
                     // a copy that has both its expand and its contract done runs the model as it is now

@@ -19,7 +19,7 @@ internal sealed class BuildDataChanges(IDataChangeNotifier notifier, string serv
     public IDataChangeNotifier Notifier => notifier;
 
     /// <summary>The pairings of <c>build/proxies.json</c> as the notifier reads them.</summary>
-    private sealed class FromProxies(ProxiesFile proxies) : IGatewayPairings
+    internal sealed class FromProxies(ProxiesFile proxies) : IGatewayPairings
     {
         public IReadOnlyList<GatewayPairing> All() => [.. proxies.All().Select(p => new GatewayPairing(p.Name, p.Url, p.InstanceId, p.Fingerprint, p.PairedAt))];
     }

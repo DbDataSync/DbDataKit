@@ -218,4 +218,25 @@ public sealed class GatewayLineageTests : IDisposable
         var column = graph.Edges.First(e => e.Kind == EdgeKind.Binds).From;
         Assert.Contains(graph.Impact(column, 6).Reached, r => r.Node.Id == dashboard.Id);
     }
+
+    /// <summary>Plan 21 CH06: a consumer is a node for each channel it is published in, with the property <c>channel</c>, so the contract guard of Build and the Store names the channel; production keeps its address.</summary>
+    [Fact]
+    public void A_consumer_published_in_several_channels_is_one_node_each_and_the_contract_guard_names_every_channel()
+    {
+        var consumers = new[]
+        {
+            new GatewayConsumer("dashboard", "sales_overview", ["semantic-model:sales_catalog"]),
+            new GatewayConsumer("dashboard", "sales_overview", ["semantic-model:sales_catalog"], "test"),
+        };
+
+        var graph = GatewayLineageGraph.Design("gw1", Sources(), [Model()], Resolve, [], readers: false, consumers: consumers);
+
+        Assert.Equal("prod", graph.Node("suite://gw1/dashboard/sales_overview")!.PropertyMap["channel"]);
+        Assert.Equal("test", graph.Node("suite://gw1/dashboard/sales_overview~test")!.PropertyMap["channel"]);
+        // the column the model's measures read is read by the dashboard in both channels
+        var column = graph.Edges.First(e => e.Kind == EdgeKind.Binds).From;
+        var found = ContractGuard.Consumers(graph, [column]);
+        Assert.Equal([("sales_overview", "prod"), ("sales_overview", "test")], found.Where(c => c.Kind == "dashboard").Select(c => (c.Name, c.Channel)));
+        Assert.Contains("published in channel 'test'", ContractGuard.Refusal("drop the column", found));
+    }
 }

@@ -32,7 +32,11 @@ export function fitChartSpec(spec: Record<string, unknown>, box: Box, density: D
   const height = Math.max(1, Math.floor(box.height))
   if (columns > 0 || rows > 0) {
     copy.width = Math.max(40, Math.floor((width - 80) / Math.max(1, columns)))
-    copy.height = Math.max(40, Math.floor((height - 60) / Math.max(1, rows)))
+    // a nested axis (DBR42) draws the outer level's labels, and its title, below the inner axis: that is a second axis band the 60 pixels of the first do not hold (found by drawing it in a browser: the year labels were cut off)
+    const nested = typeof encoding.column === 'object' && encoding.column !== null && (encoding.column as Json).header?.orient === 'bottom'
+    if (nested && dropTitles) encoding.column.header = { ...encoding.column.header, title: null }
+    const reserve = 60 + (nested ? (dropTitles ? 24 : 46) : 0)
+    copy.height = Math.max(40, Math.floor((height - reserve) / Math.max(1, rows)))
     delete copy.autosize
   } else {
     copy.width = width

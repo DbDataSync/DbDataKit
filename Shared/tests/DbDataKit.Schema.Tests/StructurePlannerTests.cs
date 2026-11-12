@@ -236,4 +236,22 @@ public class StructurePlannerTests
         Assert.Contains("Fabric has no CREATE INDEX", unsupported[0].Message);
         Assert.True(StructurePlanner.Indexes(Want([Col("a")]), null, Ddl, true, new Host(), [], []));          // nothing declared and nothing there: nothing to do
     }
+
+    /// <summary>Plan 21 CH06: the steps a caller must ask lineage about are found from the words the planner writes them in, so a change to those words fails here.</summary>
+    [Fact]
+    public void The_steps_that_take_a_column_away_are_recognised_from_what_the_planner_writes()
+    {
+        var steps = new List<StructureStep>();
+        StructurePlanner.Columns(Want([Col("id"), Col("full_name"), Col("opt"), Col("note", "VARCHAR(10)", "varchar", 10)], renames: [new RenameSpec("name", "full_name")]),
+            Live(Shape("id"), Shape("name"), Shape("gone"), Shape("opt", nullable: false), Shape("note", "bigint")), Ddl, new Host(), steps, []);
+
+        var found = steps.Select(s => (s.Description, Change: ContractSteps.Of(s.Description, s.Reasons))).Where(x => x.Change is not null).Select(x => $"{x.Change!.Value.Verb} {x.Change.Value.Column}").Order().ToList();
+        Assert.Contains("drop gone", found);
+        Assert.Contains("rename name", found);
+        Assert.Contains("retype note", found);
+        Assert.DoesNotContain(found, f => f.Contains("opt"));         // relaxing nullability keeps every reader working
+        Assert.Null(ContractSteps.Of("add column x", ["col.added"]));
+        Assert.Null(ContractSteps.Of("alter column x", ["col.type.widen"]));
+        Assert.Equal(("retype", "x"), ContractSteps.Of("alter column x", ["col.type.other"]));
+    }
 }

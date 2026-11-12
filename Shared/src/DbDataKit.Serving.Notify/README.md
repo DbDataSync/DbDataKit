@@ -15,3 +15,7 @@ dataset tells the serving groups (Gateways) it is paired with, so they clear the
 - **Pairings.** `GatewayPairingsFile` (`gateways.json`, the shape of Build's `proxies.json`) and `GatewayPairingApi` (`GET/POST/DELETE /api/v1/gateways`) for a
   server that pairs only to tell a group of changes (Sync, the Runner). Build and DbDataStore pass their own lists (`IGatewayPairings`).
 - **Dataset names** are lineage identities (`LineageIdentity.Dataset(...).ToString()`), the names the Gateway's graph holds.
+
+## The lineage client (plan 21 CH06)
+
+`GatewayLineageClient` reads `GET /api/v1/lineage` from every paired serving group, as the server itself (the same signed token with the Publisher role and the pinned certificate as the notifier; the Gateway lets a Publisher read its graph, without the readers' names). The Store's contract step and Build's apply give the graphs to `ContractGuard.Check` (`DbDataKit.Lineage`) before they drop, rename away or retype a column, which refuses naming each published consumer and its channel. A group that does not answer is in `Unreachable`, never skipped, so the step is refused until a person names it; with no pairing the answer is empty.

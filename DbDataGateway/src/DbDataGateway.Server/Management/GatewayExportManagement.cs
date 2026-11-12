@@ -61,23 +61,23 @@ public sealed class GatewayExportManagement(ExportInstaller installer, Func<Gate
             if (written.Status != 200)
             {
                 var why = written.Body["error"]?.GetValue<string>() ?? "server.yaml was refused";
-                Finish("failed", $"The component is installed in {result.Directory}, but views.export could not be set: {why}", false);
                 Record(caller, "export.install", "failed: views.export not set: " + why);
+                Finish("failed", $"The component is installed in {result.Directory}, but views.export could not be set: {why}", false);
                 return;
             }
             var restart = written.Body["restart_needed"]?.GetValue<bool>() ?? true;
-            Finish("done", result.AlreadyInstalled ? $"Release {result.Version} was already installed; views.export points at it." : $"Release {result.Version} is installed (Chromium {result.Chromium}). Restart the gateway to use it.", restart);
             Record(caller, "export.install", (result.AlreadyInstalled ? "already installed " : "installed ") + result.Version);
+            Finish("done", result.AlreadyInstalled ? $"Release {result.Version} was already installed; views.export points at it." : $"Release {result.Version} is installed (Chromium {result.Chromium}). Restart the gateway to use it.", restart);
         }
         catch (ExportInstallException ex)
         {
-            Finish("failed", ex.Message, false);
             Record(caller, "export.install", "failed: " + ex.Message.Split('\n')[0].Trim());
+            Finish("failed", ex.Message, false);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Finish("failed", "The install failed: " + ex.Message, false);
             Record(caller, "export.install", "failed: " + ex.Message);
+            Finish("failed", "The install failed: " + ex.Message, false);
         }
     }
 

@@ -501,6 +501,18 @@ describe('charts drawn at a box (SVG)', () => {
     expect(await chartToSvg(spec)).toMatch(/^<svg /)
   })
 
+  it('a nested axis (the column header below the inner labels) keeps room for its second band of labels, and drops the header title with the axis titles', () => {
+    const nested = structuredClone(chart.vega_lite) as Record<string, any>
+    nested.encoding.column = { field: 'customers_region', type: 'nominal', header: { orient: 'bottom', titleOrient: 'bottom' } }
+    nested.encoding.x = { field: 'products_category', type: 'nominal' }
+    const large = fitChartSpec(nested, { width: 880, height: 360 }, 'l') as Record<string, any>
+    expect(large.height).toBe(360 - 106)
+    const small = fitChartSpec(nested, { width: 880, height: 360 }, 's') as Record<string, any>
+    expect(small.height).toBe(360 - 84)
+    expect(small.encoding.column.header.title).toBeNull()
+    expect(large.encoding.column.header.title).toBeUndefined()
+  })
+
   it('does not change the spec it is given', () => {
     const before = JSON.stringify(chart.vega_lite)
     fitChartSpec(chart.vega_lite, box, 'xs')
