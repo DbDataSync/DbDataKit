@@ -16,9 +16,11 @@ public static class IntegrationTemplates
         var assembly = typeof(IntegrationTemplates).Assembly;
         var folder = Prefix + template + "/";
         var files = new List<ProjectKindFile>();
-        foreach (var name in assembly.GetManifestResourceNames().Select(n => n.Replace('\\', '/')).Where(n => n.StartsWith(folder, StringComparison.Ordinal)).Order(StringComparer.Ordinal))
+        // the resource name is "IntegrationTemplates/" + the folder as MSBuild writes it (backslashes on Windows): match on the normalised name, open by the name as it is
+        foreach (var resource in assembly.GetManifestResourceNames().Where(n => n.Replace('\\', '/').StartsWith(folder, StringComparison.Ordinal)).OrderBy(n => n.Replace('\\', '/'), StringComparer.Ordinal))
         {
-            using var stream = assembly.GetManifestResourceStream(name) ?? assembly.GetManifestResourceStream(name.Replace('/', '\\'))!;
+            var name = resource.Replace('\\', '/');
+            using var stream = assembly.GetManifestResourceStream(resource)!;
             using var reader = new StreamReader(stream, new UTF8Encoding(false, true));
             var text = reader.ReadToEnd().Replace("\r\n", "\n").Replace("{{package}}", package, StringComparison.Ordinal).Replace("{{title}}", title ?? id, StringComparison.Ordinal);
             files.Add(new ProjectKindFile(name[folder.Length..], new UTF8Encoding(false).GetBytes(text)));
