@@ -34,6 +34,8 @@ export function chartConfig(theme: Theme): Record<string, unknown> {
     title: { color: p.text, font: 'system-ui, sans-serif', fontSize: 14, fontWeight: 600, anchor: 'start' },
     axis: { ...label, domainColor: p.axis, gridColor: p.grid, tickColor: p.axis },
     legend: { ...label },
+    // the headers of a facet and of a nested axis (DBR42): without them their labels stay black on a dark page
+    header: { ...label },
     range: { category: p.categories },
     mark: { color: p.categories[0] },
     text: { color: p.text },
