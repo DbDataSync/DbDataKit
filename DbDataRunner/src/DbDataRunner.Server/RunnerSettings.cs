@@ -104,6 +104,9 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
     /// <summary>A name for the instance's group; instances that share a database and a group name share their queue, instances and pairings.</summary>
     public string Group { get; init; } = RunnerState.DefaultGroup;
 
+    /// <summary>Tells the serving groups this server is paired with what a task's run wrote (plan 24a UC13); null: nothing is sent (a test, a tool).</summary>
+    public RunnerDataChanges? DataChanges { get; init; }
+
     /// <summary>What the engine of <c>DbDataKit.Runner</c> is configured with: this server's directory, group, channels and timing.</summary>
     public DbDataKit.Runner.RunnerHostSettings ToHostSettings() => new(Directory)
     {
@@ -122,6 +125,7 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
         TaskEnvironment = TaskEnvironment,
         SecretStore = SecretStore,
         ActivationMaxWait = ActivationMaxWait,
+        WrapRunner = DataChanges is { } changes ? runner => new DataChangeRunner(runner, changes) : null,
     };
 
     public string ServerYaml => Path.Combine(Directory, "server.yaml");

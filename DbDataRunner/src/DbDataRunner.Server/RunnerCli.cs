@@ -47,6 +47,9 @@ public static class RunnerCli
         TasksNoun(environment),
         RunnerLabelVerbs.Create(environment),
         RunnerLineageNoun.Create(environment),
+        // plan 24a UC13: the serving groups this server tells when a task's run wrote datasets
+        DbDataKit.Serving.Notify.GatewayNoun.Create(args => RunnerDataChanges.PairingsIn(DirectoryOf(args, environment)),
+            args => RunnerDataChanges.Identity(new RunnerSecretStore(DirectoryOf(args, environment), environment)), "DbDataRunner server", "[--repo <server directory>]", "repo"),
         PackageNoun(environment),
         StateNoun(environment),
         RunnerService.Noun(RunnerServiceEnvironment.Real()),
