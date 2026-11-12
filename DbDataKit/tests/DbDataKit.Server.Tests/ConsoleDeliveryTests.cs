@@ -40,13 +40,18 @@ public sealed class ConsoleDeliveryTests : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        var probe = new TcpListener(IPAddress.Loopback, 0);
-        probe.Start();
-        port = ((IPEndPoint)probe.LocalEndpoint).Port;
-        probe.Stop();
-        listener = new HttpListener();
-        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-        listener.Start();
+        // a free port is asked for and then used: another test of this process can take it in between, so a port that is taken is asked for again
+        for (var attempt = 0; ; attempt++)
+        {
+            var probe = new TcpListener(IPAddress.Loopback, 0);
+            probe.Start();
+            port = ((IPEndPoint)probe.LocalEndpoint).Port;
+            probe.Stop();
+            listener = new HttpListener();
+            listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+            try { listener.Start(); break; }
+            catch (HttpListenerException) when (attempt < 10) { try { listener.Close(); } catch (HttpListenerException) { } }
+        }
         _ = Task.Run(async () =>
         {
             while (listener.IsListening)
