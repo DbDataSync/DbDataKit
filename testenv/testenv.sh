@@ -2,7 +2,7 @@
 # The shared test engines (docs/ci-and-testing.md): start, stop, and print the connection variables every suite needs.
 #
 #   testenv/testenv.sh up mssql postgres         start the engines and wait until they are healthy (`up` alone: the seven everyday ones;
-#                                                `up all`: also the slow ones, mssql2025 spark bigquery flight flight-tls, and the
+#                                                `up all`: also the slow ones, mssql2025 spark bigquery flight flight-tls, the file servers sftp ssh ftps, the object stores s3 azurite, and the
 #                                                previous releases mssql2022 postgres16)
 #   testenv/testenv.sh down                      stop and remove them (and their data)
 #   testenv/testenv.sh status                    list the engines that are running
@@ -51,7 +51,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 compose=(docker compose -f "$here/docker-compose.yml")
 password="${DBDATAKIT_TEST_PASSWORD:-DbKit_Test_Pw1}"
 host=127.0.0.1
-engines_all=(mssql mssql-target postgres postgres-logical mysql mariadb oracle mssql2025 spark bigquery flight flight-tls mssql2022 postgres16)
+engines_all=(mssql mssql-target postgres postgres-logical mysql mariadb oracle mssql2025 spark bigquery flight flight-tls mssql2022 postgres16 sftp ssh ftps s3 azurite)
 engines_default=(mssql mssql-target postgres postgres-logical mysql mariadb oracle)   # what `up` with no engine named starts
 cache="${DBDATAKIT_TEST_CACHE:-$HOME/.cache/dbdatakit-testenv}"
 
@@ -152,6 +152,45 @@ canonical() {
     echo "DBDATAKIT_TEST_POSTGRES16_DB=postgres"
     echo "DBDATAKIT_TEST_POSTGRES16=Host=$host;Port=15434;Username=postgres;Password=$password;Database=postgres"
   fi
+  if grep -qx sftp <<<"$up"; then
+    echo "DBDATAKIT_TEST_SFTP_HOST=$host"
+    echo "DBDATAKIT_TEST_SFTP_PORT=13022"
+    echo "DBDATAKIT_TEST_SFTP_USER=foo"
+    echo "DBDATAKIT_TEST_SFTP_PASSWORD=$password"
+    echo "DBDATAKIT_TEST_SFTP_ROOT=/upload"
+    echo "DBDATAKIT_TEST_SFTP_KEY_FILE=$cache/sftp/client_ed25519"
+  fi
+  if grep -qx ssh <<<"$up"; then
+    echo "DBDATAKIT_TEST_SSH_HOST=$host"
+    echo "DBDATAKIT_TEST_SSH_PORT=13023"
+    echo "DBDATAKIT_TEST_SSH_USER=foo"
+    echo "DBDATAKIT_TEST_SSH_PASSWORD=$password"
+    echo "DBDATAKIT_TEST_SSH_ROOT=/config"
+  fi
+  if grep -qx s3 <<<"$up"; then
+    echo "DBDATAKIT_TEST_S3_ENDPOINT=http://$host:13090"
+    echo "DBDATAKIT_TEST_S3_ACCESS_KEY=dbkit-access-key"
+    echo "DBDATAKIT_TEST_S3_SECRET_KEY=$password"
+    echo "DBDATAKIT_TEST_S3_BUCKET=dbkit"
+  fi
+  if grep -qx azurite <<<"$up"; then
+    # the emulator's well-known account (public, documented by Microsoft: it protects nothing)
+    echo "DBDATAKIT_TEST_AZURITE_ENDPOINT=http://$host:13100/devstoreaccount1"
+    echo "DBDATAKIT_TEST_AZURITE_ACCOUNT=devstoreaccount1"
+    echo "DBDATAKIT_TEST_AZURITE_KEY=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+    echo "DBDATAKIT_TEST_AZURITE_CONTAINER=dbkit"
+  fi
+  if grep -qx ftps <<<"$up"; then
+    echo "DBDATAKIT_TEST_FTPS_HOST=$host"
+    echo "DBDATAKIT_TEST_FTPS_PORT=13021"
+    echo "DBDATAKIT_TEST_FTPS_USER=foo"
+    echo "DBDATAKIT_TEST_FTPS_PASSWORD=$password"
+    # the certificate is made when the container starts: its SHA-256 (what `certificate_sha256` pins), only with a real container
+    if [ -z "${TESTENV_ASSUME_RUNNING+x}" ]; then
+      fp="$(docker exec dbkit-test-ftps openssl x509 -in /etc/ssl/private/pure-ftpd.pem -noout -fingerprint -sha256 2>/dev/null | sed 's/.*=//; s/://g')"
+      [ -n "$fp" ] && echo "DBDATAKIT_TEST_FTPS_CERT_SHA256=$fp"
+    fi
+  fi
   if grep -qx spark <<<"$up"; then echo "DBDATAKIT_TEST_SPARK=Host=$host;Port=10000"; fi
   if grep -qx bigquery <<<"$up"; then echo "DBDATAKIT_TEST_BIGQUERY=Host=$host;Port=9050"; fi
   if grep -qx flight <<<"$up"; then
@@ -169,6 +208,22 @@ canonical() {
   fi
 }
 
+# The key pair sftp's tests sign in with: made once in the cache folder, by the ssh-keygen of the sftp image itself (nothing to install), and mounted by the compose file.
+prepare() {
+  local e
+  for e in "$@"; do
+    case "$e" in
+      sftp)
+        mkdir -p "$cache/sftp"
+        if [ ! -f "$cache/sftp/client_ed25519" ]; then
+          docker run --rm -v "$cache/sftp:/k" --entrypoint sh "${DBDATAKIT_TEST_SFTP_IMAGE:-atmoz/sftp:alpine}" -c 'ssh-keygen -q -t ed25519 -N "" -C dbdatakit-test -f /k/client_ed25519 && chmod 644 /k/client_ed25519 /k/client_ed25519.pub'
+        fi
+        export DBDATAKIT_TEST_SFTP_KEYS="$cache/sftp"
+        ;;
+    esac
+  done
+}
+
 # Readiness of the engines that have no compose healthcheck: wait_ready <engine> returns when it answers, or exits 1 after its timeout.
 wait_until() {   # wait_until <seconds> <description> <command...>
   local seconds=$1 what=$2; shift 2
@@ -182,6 +237,8 @@ wait_ready() {
     bigquery) wait_until 60 "the BigQuery emulator" curl -fs "http://$host:9050/bigquery/v2/projects/ddb/datasets" ;;
     flight) wait_until 90 "Flight SQL" logged flight "SQLFlite server - started" ;;
     flight-tls) wait_until 90 "Flight SQL (TLS)" logged flight-tls "SQLFlite server - started" ;;
+    s3) wait_until 90 "the S3 mock" curl -fs "http://$host:13090/" ;;
+    azurite) wait_until 60 "Azurite" curl -s -o /dev/null "http://$host:13100/" ;;
   esac
 }
 
@@ -224,6 +281,7 @@ case "$cmd" in
   up)
     if [ "$#" -eq 0 ]; then set -- "${engines_default[@]}"; elif [ "$1" = all ]; then set -- "${engines_all[@]}"; fi
     profiles_for "$@"
+    prepare "$@"
     # --build: postgres-logical is built from testenv/postgres-logical (a no-op for the engines that are pulled).
     # One retry: a container that exits at start before answering (SQL Server 2025 in CI, docs/ci-lessons.md) is removed and started again.
     if ! "${compose[@]}" "${PROFILES[@]}" up -d --build --wait --wait-timeout 240; then
