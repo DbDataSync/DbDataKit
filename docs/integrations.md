@@ -22,7 +22,7 @@ An **integration** is ordinary code that moves data between the suite and a syst
 | Change detection with no change feed (a row-hash snapshot kept as a checkpoint, compared with the next run) | **built** (IX13; `DbDataKit.Runner.Kit.Changes`) |
 | Refused-record listing and replay (the kit's surface over the dead letters; the runner's API and screens are plan 28a R25) | **built** in the kit (IX14; `RefusedRecords`) |
 | Lineage nodes for outside systems | **not built** (IX12) |
-| Recorded HTTP responses and a fake file share for tests | **not built** (IX15) |
+| Recorded HTTP responses and a fake file share for tests | **built** (IX15; `RecordedHttp` and `FakeFileShare` in `DbDataKit.Runner.Kit.Testing`; the recording format `http-recording/1` is in `docs/formats.json`) |
 | Dry run (`--dry-run`, the kit refuses writes) and the sandbox run before promotion | **not built** (IX16) |
 | Outbound steps in a non-production channel use the channel's connection or are refused | **not built** (IX17) |
 | OAuth 2 authorization code, the serving layer's end of webhooks, the DbDataStore change trigger | **not built** (IX03, IX18, IX19) |
