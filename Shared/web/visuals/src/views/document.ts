@@ -1,7 +1,7 @@
 import type { ErrorObject, ValidateFunction } from 'ajv'
 import dashboardSchema from '../../schemas/dashboard.schema.json'
 import reportSchema from '../../schemas/report.schema.json'
-import { NAME, VIEW, ajv, classifiers, defs, isObject, join, at, part, pathOf, props, run, Issues } from './common'
+import { NAME, VIEW, ajv, lazy, classifiers, defs, isObject, join, at, part, pathOf, props, run, Issues } from './common'
 import type { Area, Json, ViewsIssue } from './common'
 import { checkWidgets } from './widgets'
 import type { Context, DrillTarget, WidgetInfo } from './widgets'
@@ -38,7 +38,7 @@ function top(schema: unknown): ValidateFunction {
   properties.links = {}
   properties.groups = {}
   properties.layouts = {}
-  return ajv.compile({ ...copy, $defs: defs })
+  return lazy(() => ajv.compile({ ...copy, $defs: defs }))
 }
 
 const layoutChecks: Record<string, ValidateFunction> = { reflow: part(defs.layout_reflow!), canvas: part(defs.layout_canvas!), flow: part(defs.layout_flow!) }

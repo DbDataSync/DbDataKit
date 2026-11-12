@@ -102,19 +102,74 @@ public static class AppShell
               }
             }
           }
-          frames.forEach(function (frame) {
+          function wire(frame) {
             frame.addEventListener("load", function () {
               var theme = frame.getAttribute("data-theme");
               if (theme) frame.contentWindow.postMessage({ dbdata: "app/1", type: "theme", tokens: JSON.parse(theme) }, "*");
               if (frame === main) { route = fromAddress(); if (route) tell(route); }
               else { var start = frame.getAttribute("data-route"); if (valid(start)) frame.contentWindow.postMessage({ dbdata: "app/1", type: "navigate", path: start }, "*"); }
             });
-          });
+          }
+          frames.forEach(wire);
+          // A dialog or a side panel a view asks for (plan 32 DBR36): the page opens it, not the app's document, because a frame inside the app's document cannot get a token (the broker answers only the frames of this page). The surface is
+          // a frame of the same instance as the one that asked, opened at the route it named with `_as=dialog|panel` added (the form view reads it, and says views:saved or views:close to this page, which closes the surface and tells the asking
+          // frame `{type: "surface.closed", id, saved}`). One surface at a time; the page behind a dialog is inert; focus goes in and returns to the frame that asked. The route is checked as every route is (a path on this host's own app).
+          var surface = null;
+          function closeSurface(s, saved) {
+            if (!s || !s.open) return;
+            s.open = false; surface = null;
+            document.removeEventListener("keydown", s.onKey, true);
+            var i = frames.indexOf(s.frame); if (i >= 0) frames.splice(i, 1);
+            s.box.remove();
+            s.inert.forEach(function (n) { n.removeAttribute("inert"); });
+            if (s.opener && s.opener.isConnected) s.opener.focus();
+            if (s.source.contentWindow) s.source.contentWindow.postMessage({ dbdata: "app/1", type: "surface.closed", id: s.id, saved: saved }, "*");
+          }
+          function openSurface(source, m) {
+            if (typeof m.id !== "string" || m.id.length > 64) return;
+            function refuse() { if (source.contentWindow) source.contentWindow.postMessage({ dbdata: "app/1", type: "surface.refused", id: m.id }, "*"); }
+            if (surface || (m.as !== "dialog" && m.as !== "panel") || !valid(m.route)) { refuse(); return; }
+            var path = m.route + (m.route.indexOf("?") < 0 ? "?" : "&") + "_as=" + m.as;
+            if (!valid(path)) { refuse(); return; }
+            var modal = m.as === "dialog";
+            var instance = source.getAttribute("data-instance");
+            var box = document.createElement("div");
+            box.className = "shell-surface shell-surface-" + m.as; box.setAttribute("data-testid", "shell-surface-" + m.as);
+            var label = typeof m.label === "string" ? m.label.slice(0, 200) : "";
+            var scrim = document.createElement("div"); scrim.className = "shell-surface-scrim"; scrim.setAttribute("data-testid", "shell-surface-scrim");
+            var sheet = document.createElement("div"); sheet.className = "shell-surface-box"; sheet.setAttribute("role", modal ? "dialog" : "complementary"); if (modal) sheet.setAttribute("aria-modal", "true"); sheet.setAttribute("aria-label", label);
+            var head = document.createElement("header"); head.className = "shell-surface-head";
+            var title = document.createElement("h2"); title.textContent = label;
+            var close = document.createElement("button"); close.type = "button"; close.textContent = "Close"; close.setAttribute("data-testid", "shell-surface-close"); close.setAttribute("aria-label", "Close " + label);
+            head.appendChild(title); head.appendChild(close);
+            var frame = document.createElement("iframe");
+            frame.className = "shell-surface-frame"; frame.setAttribute("data-testid", "shell-surface-frame"); frame.setAttribute("title", label);
+            frame.setAttribute("data-instance", instance); frame.setAttribute("data-route", path);
+            if (source.getAttribute("data-theme")) frame.setAttribute("data-theme", source.getAttribute("data-theme"));
+            frame.setAttribute("sandbox", "allow-scripts allow-forms allow-popups");
+            frame.setAttribute("src", "/apps/" + encodeURIComponent(instance) + "/_app/");
+            sheet.appendChild(head); sheet.appendChild(frame);
+            if (modal) box.appendChild(scrim);
+            box.appendChild(sheet);
+            var s = { open: true, id: m.id, source: source, frame: frame, box: box, saved: false, opener: source, inert: [], onKey: null };
+            s.onKey = function (e) { if (e.key === "Escape") { e.stopPropagation(); closeSurface(s, s.saved); } };
+            frame.__surface = s;
+            if (modal) { s.inert = Array.prototype.filter.call(document.body.children, function (n) { return n.tagName !== "SCRIPT"; }); s.inert.forEach(function (n) { n.setAttribute("inert", ""); }); }
+            document.body.appendChild(box);
+            frames.push(frame); wire(frame);
+            surface = s;
+            document.addEventListener("keydown", s.onKey, true);
+            close.addEventListener("click", function () { closeSurface(s, s.saved); });
+            scrim.addEventListener("click", function () { closeSurface(s, s.saved); });
+            close.focus();
+          }
           window.addEventListener("popstate", function () { var p = fromAddress(); if (p && p !== route) { route = p; tell(p); } });
           window.addEventListener("message", function (event) {
             var m = event.data;
             var frame = frames.filter(function (f) { return f.contentWindow === event.source; })[0];
             if (frame && m && frame.hasAttribute("data-view-page") && typeof m.type === "string" && m.type.indexOf("views:") === 0) { viewMessage(frame, m); return; }
+            // what the form in a dialog or panel says: only these two, only from that surface's own frame
+            if (frame && frame.__surface && m && (m.type === "views:saved" || m.type === "views:close")) { if (m.type === "views:saved") frame.__surface.saved = true; closeSurface(frame.__surface, frame.__surface.saved); return; }
             if (!frame || !m || m.dbdata !== "app/1") return;
             var instance = frame.getAttribute("data-instance");
             if (m.type === "route") {
@@ -122,6 +177,7 @@ public static class AppShell
               if (frame === main && valid(m.path) && m.path !== route) { route = m.path; history.pushState(null, "", "#" + encodeURI(m.path)); }
               return;
             }
+            if (m.type === "surface.open") { openSurface(frame, m); return; }
             if (m.type === "storage" && typeof m.id === "string") {
               fetch("/apps/" + encodeURIComponent(instance) + "/_storage", { method: "POST", credentials: "same-origin", headers: { "X-DbData-Shell": "1", "Content-Type": "application/json" },
                 body: JSON.stringify({ op: m.op, scope: m.scope, key: m.key, value: m.value, ifVersion: m.ifVersion, prefix: m.prefix }) })
@@ -242,7 +298,12 @@ public static class AppShell
             nav.portal a{color:var(--sui-accent,inherit);text-decoration:none;padding:4px 0}nav.portal a[aria-current=page]{font-weight:600;border-bottom:2px solid currentColor}nav.portal .group>span{opacity:.6}nav.portal .group ul{padding-left:12px}nav.portal [role=separator]{border-top:1px solid #8884;margin:4px 0}
             .row{display:flex;flex:1;min-height:0}main{flex:1;display:flex;flex-direction:column;max-width:var(--portal-width);margin:0 auto;width:100%;min-width:0}.note{padding:16px}
             iframe.slot{flex:none;width:auto}iframe.slot-header{height:40px;width:260px}iframe.slot-footer{height:36px;width:100%;display:block}iframe.slot-aside{width:280px;border-left:1px solid #8884}iframe.slot-home{height:320px;width:100%;flex:none}
-            footer.portal{padding:8px 16px;border-top:1px solid #8884;opacity:.75}footer.portal a{color:inherit}</style>
+            footer.portal{padding:8px 16px;border-top:1px solid #8884;opacity:.75}footer.portal a{color:inherit}
+            .shell-surface{position:fixed;inset:0;z-index:50;display:flex;pointer-events:none}.shell-surface>*{pointer-events:auto}
+            .shell-surface-scrim{position:absolute;inset:0;background:#0006}.shell-surface-box{position:relative;display:flex;flex-direction:column;background:var(--sui-surface,Canvas);color:var(--sui-text,CanvasText);border:1px solid #8886;box-shadow:0 8px 32px #0005}
+            .shell-surface-dialog{align-items:center;justify-content:center}.shell-surface-dialog .shell-surface-box{width:min(40rem,calc(100vw - 32px));height:min(36rem,calc(100vh - 32px));border-radius:8px}
+            .shell-surface-panel{justify-content:flex-end}.shell-surface-panel .shell-surface-box{width:min(32rem,100vw);height:100%;border-width:0 0 0 1px}
+            .shell-surface-head{display:flex;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid #8884}.shell-surface-head h2{margin:0;font-size:1rem;flex:1}.shell-surface-frame{flex:1;border:0;width:100%;min-height:0}</style>
             </head><body class="{{(look.SideMenu ? "side" : "top")}}">
             {{head}}{{NoticeHtml(header)}}
             <div class="row">{{(look.SideMenu ? nav : "")}}<main>

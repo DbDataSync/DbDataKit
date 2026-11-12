@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { appSemanticClient, appStoreClient, loadAll } from './data'
+import { appSemanticClient, appStoreClient, appViewsClient, loadAll } from './data'
 import { rows } from './fixtures'
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -46,5 +46,23 @@ describe('reading through the app', () => {
     const result = await appSemanticClient({ instance: 'tv', token: async () => 'tok' }, fake).query('sales', { measures: ['orders.n'], limit: 1 })
     expect(result.rows).toEqual([{ n: 1 }])
     expect(seen).toEqual([{ url: '/apps/tv/_data/api/v1/semantic/models/sales/query', auth: 'Bearer tok' }])
+  })
+
+  it('reaches the views client on the same route and token: a document by its file, then its widgets rendered as the person', async () => {
+    const seen: { url: string; auth: string | null; method: string; body: unknown }[] = []
+    const fake = (async (url: string, init?: RequestInit) => {
+      seen.push({ url, auth: new Headers(init?.headers).get('Authorization'), method: init?.method ?? 'GET', body: init?.body ? JSON.parse(String(init.body)) : undefined })
+      return url.endsWith('/render') ? json({ kind: 'rendered_widgets', layout: 'wall', as_of: '2026-11-12T09:00:00Z', widgets: {} }) : json({ kind: 'dashboard', name: 'views/sales.yaml', version: 'abc', text: 'schemaVersion: 1' })
+    }) as unknown as typeof fetch
+    const client = appViewsClient({ instance: 'tv', token: async () => 'tok' }, fake)
+    const opened = await client.open('dashboard', 'views/sales.yaml')
+    await client.resolve({ kind: 'dashboard', name: 'views/sales.yaml' }, 'wall', { region: 'West' })
+    expect(opened.version).toBe('abc')
+    expect(seen.map((s) => [s.method, s.url])).toEqual([
+      ['GET', '/apps/tv/_data/api/v1/dashboards/views%2Fsales.yaml'],
+      ['POST', '/apps/tv/_data/api/v1/dashboards/views%2Fsales.yaml/render'],
+    ])
+    expect(seen[1].body).toEqual({ parameters: { region: 'West' }, layout: 'wall' })
+    expect(seen.every((s) => s.auth === 'Bearer tok')).toBe(true)
   })
 })

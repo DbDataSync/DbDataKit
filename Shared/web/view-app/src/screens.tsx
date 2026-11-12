@@ -5,8 +5,10 @@ import { rowKey } from './keys'
 import { SchemeContext, useShellTheme } from './scheme'
 import { DashboardBoard, DetailPage, FormFields, GridTable, Links, formAttributes } from './parts'
 import { nextSort, shapeRows, type SortState } from './shape'
-import { SUPPORTED_FORMAT, lockedFields, notifyParent, openedByLink, parseRoute, readsRows, resolveParams, startingValues, type DashboardSpec, type DetailSpec, type FormSpec, type GridSpec, type ViewSpec, type ViewsDoc } from './spec'
+import { AS_PARAM, SUPPORTED_FORMAT, lockedFields, notifyParent, openedByLink, parseRoute, readsRows, resolveParams, startingValues, type DashboardSpec, type DetailSpec, type FormSpec, type GridSpec, type ViewSpec, type ViewsDoc } from './spec'
 import type { Host } from './data'
+import { DocumentScreen } from './document'
+import type { OpenSurface, ViewsClient } from '@dbdatakit/visuals'
 
 export interface ScreenProps<S extends ViewSpec = ViewSpec> { spec: S; client: StoreClient; params: Record<string, string>; go: (route: string) => void; /** The route's whole query: the starting values and `_lock` of a form a link opened. */ query?: Record<string, string> }
 
@@ -127,9 +129,13 @@ export type CodePages = Record<string, CodePage>
 export interface ViewAppProps {
   doc: ViewsDoc
   client: StoreClient
-  host: Pick<Host, 'route' | 'onNavigate'> & Partial<Pick<Host, 'onTheme'>>
+  host: Pick<Host, 'route' | 'onNavigate'> & Partial<Pick<Host, 'onTheme' | 'openSurface'>>
   /** Pages of code. An app can be only spec files (none here); one page can be code and the rest stay specs. */
   pages?: CodePages
+  /** The views client of the app (`appViewsClient`): what draws the app's dashboards and reports (plan 32 DBR13). Without it such a file says the host cannot draw it. */
+  views?: ViewsClient
+  /** Opens a link's dialog or panel in the shell (plan 32 DBR36); without it such a link goes to its target as a page. */
+  openSurface?: (surface: OpenSurface, closed: (saved: boolean) => void) => void
 }
 
 /** The views and pages a person can open from the menu: the spec files that need no parameter, in the manifest's order (a code page with the key of a spec takes its place), then the other code pages in key order. */
@@ -139,7 +145,7 @@ export function menuOf(doc: ViewsDoc, pages: CodePages = {}): { key: string; tit
 }
 
 /** The app: the view or page the route names (the first one by default), a menu of the views that need no parameter and the pages, and the screen. Moving between them tells the shell, so the address and the back button follow. */
-export function ViewApp({ doc, client, host, pages = {} }: ViewAppProps) {
+export function ViewApp({ doc, client, host, pages = {}, views, openSurface }: ViewAppProps) {
   const [route, setRoute] = useState('/')
   useEffect(() => host.onNavigate((p) => setRoute(p)), [host])
   const shellScheme = useShellTheme(host)   // the portal's look reaches the controls as --sui-* variables and the charts as a scheme
@@ -160,20 +166,28 @@ export function ViewApp({ doc, client, host, pages = {} }: ViewAppProps) {
     else {
       const props = { client, params: resolved.values, go, query }
       const key = current + route   // a new route starts the screen again (React takes a key as a prop of its own, never in a spread)
-      body = spec.kind === 'grid' ? <GridScreen key={key} spec={spec} {...props} /> : spec.kind === 'form' ? <FormScreen key={key} spec={spec} {...props} /> : spec.kind === 'detail' ? <DetailScreen key={key} spec={spec} {...props} /> : <DashboardScreen key={key} spec={spec} {...props} />
+      body = spec.kind === 'document'
+        ? (views
+          ? <DocumentScreen key={key} file={current} kind={spec.document} views={views} query={query} doc={doc} route={host.route} go={go} openSurface={openSurface ?? host.openSurface} />
+          : <div className="sui-error" role="alert">{`This host cannot draw the ${spec.document} '${current}': it gives the app no views client.`}</div>)
+        : spec.kind === 'grid' ? <GridScreen key={key} spec={spec} {...props} /> : spec.kind === 'form' ? <FormScreen key={key} spec={spec} {...props} /> : spec.kind === 'detail' ? <DetailScreen key={key} spec={spec} {...props} /> : <DashboardScreen key={key} spec={spec} {...props} />
     }
   }
+  // a portal's home block draws a dashboard or report to the whole frame (`?_as=block`): no menu, no title, the board is the box (plan 32 DBR13)
+  const block = spec?.kind === 'document' && query[AS_PARAM] === 'block'
+  // a view the shell opened in a dialog or a side panel has the surface's own title and close: no menu and no title of the app
+  const bare = block || openedByLink(query)
   const titleOf = page?.title ?? spec?.title ?? doc.title
   return (
     <StoreClientProvider client={client}>
       <SchemeContext.Provider value={shellScheme}>
-      <div className="va-app">
-        {menu.length > 1 && (
+      <div className={block ? 'va-app va-block' : 'va-app'}>
+        {!bare && menu.length > 1 && (
           <nav className="va-menu" aria-label="Views">
             {menu.map((m) => <a key={m.key} href={`#/${m.key}`} aria-current={m.key === current ? 'page' : undefined} onClick={(e) => { e.preventDefault(); go(`/${m.key}`) }}>{m.title}</a>)}
           </nav>
         )}
-        <h2 className="va-title">{titleOf}</h2>
+        {!bare && <h2 className="va-title">{titleOf}</h2>}
         {body}
         {spec && (spec.kind === 'grid' || spec.kind === 'dashboard') && <Links links={spec.links} row={null} params={resolveParams(spec.params, query).values} go={go} only={spec.kind === 'grid' ? 'page' : 'all'} />}
       </div>

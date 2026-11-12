@@ -21,3 +21,10 @@ body { margin: 0; padding: 16px; font: 14px system-ui, sans-serif; }
 .va-widget h3 { margin: 0 0 8px; font-size: 1rem; }
 .va-metric b { font-size: 2rem; }
 .va-saved { color: #1a7f37; margin: 8px 0; }
+
+/* a dashboard or report of the app (plan 32 DBR13): the board fills what is left of the window, and the shared view lays itself out for that box (a reflow layout fits it, a canvas scales into it) */
+.va-board { height: calc(100vh - 6.5rem); min-height: 320px; position: relative; }
+/* a portal's home block (`?_as=block`): the board is the frame, to its edges */
+body:has(.va-block) { padding: 0; overflow: hidden; }
+.va-block { max-width: none; margin: 0; }
+.va-block .va-board { height: 100vh; min-height: 0; }

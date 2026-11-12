@@ -13,9 +13,9 @@ export function pathSteps(path: string): Array<string | number> {
 
 /**
  * Parses a YAML or JSON file and validates it as a dashboard or a report with the TypeScript validator (the same checks, codes and paths as the .NET loaders), placing each diagnostic in the text.
- * A syntax error or a duplicate key stops before validation. A path that names a key the file does not have (a missing key) is placed at the nearest parent that exists.
+ * A syntax error or a duplicate key stops before validation. With `trusted` (the host has checked the document) it is parsed and not validated here. A path that names a key the file does not have (a missing key) is placed at the nearest parent that exists.
  */
-export function validateText(text: string, options: { kind?: ViewKind; file?: string } = {}): ValidationResult {
+export function validateText(text: string, options: { kind?: ViewKind; file?: string; trusted?: boolean } = {}): ValidationResult {
   const file = options.file
   const lines = new LineCounter()
   const doc = parseDocument(text, { lineCounter: lines, prettyErrors: false, uniqueKeys: true })
@@ -35,6 +35,8 @@ export function validateText(text: string, options: { kind?: ViewKind; file?: st
   const value = doc.toJS() as unknown
   if (value === null || value === undefined) return { ok: false, document: null, diagnostics: [place('DBD-106', 'error', '', 'The file is empty: a dashboard or a report is a mapping with `schemaVersion`, `kind`, `title`, `widgets` and `layouts`.', 0)] }
 
+  // a document the host has already loaded and checked (an app's, which the publish check and the host's own loader read): only parsed here, so a page that may not compile a schema can still draw it
+  if (options.trusted) return typeof value === 'object' && !Array.isArray(value) ? { ok: true, document: value as ViewsDoc, diagnostics: [] } : { ok: false, document: null, diagnostics: [place('DBD-106', 'error', '', 'The file is not a mapping.', 0)] }
   const issues: ViewsIssue[] = validateViewsDocument(value, { kind: options.kind, file })
   const offsetOf = (path: string): number => {
     let steps = pathSteps(path)

@@ -462,3 +462,24 @@ describe('exportFile (DBR17)', () => {
     await expect(client.exportFile!({ kind: 'dashboard', name: 'sales' }, 'csv', { widget: 'kpi' })).rejects.toThrow('The widget has no rows.')
   })
 })
+
+describe('a document the host has checked (an app of the apps host, plan 32 DBR13)', () => {
+  const text = 'schemaVersion: 1\nkind: dashboard\ntitle: T\nwidgets:\n  a: {type: nonsense}\nlayouts: []\n'
+
+  it('is only parsed when it is trusted, so a page that may not compile a schema can draw it, and is validated when it is not', () => {
+    const trusted = validateText(text, { kind: 'dashboard', file: 'a.yaml', trusted: true })
+    expect(trusted.ok).toBe(true)
+    expect(trusted.document?.title).toBe('T')
+    expect(validateText(text, { kind: 'dashboard', file: 'a.yaml' }).ok).toBe(false)
+    expect(validateText('a: [', { kind: 'dashboard', trusted: true }).ok).toBe(false)   // a syntax error is still a syntax error
+  })
+
+  it('is opened by the module client without validation when the client is trusted, and a file name keeps its own extension in a diagnostic', async () => {
+    const answer = (body: unknown) => (async () => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch
+    const body = { name: 'views/a.yaml', version: 'v1', text }
+    expect((await moduleClient({ baseUrl: '', fetch: answer(body), trusted: true }).open('dashboard', 'views/a.yaml')).document?.title).toBe('T')
+    const checked = await moduleClient({ baseUrl: '', fetch: answer(body) }).open('dashboard', 'views/a.yaml')
+    expect(checked.document).toBeNull()
+    expect(checked.diagnostics[0]?.file).toBe('views/a.yaml')
+  })
+})

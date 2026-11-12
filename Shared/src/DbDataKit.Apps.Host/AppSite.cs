@@ -12,7 +12,7 @@ public sealed record AppResponse(int Status, string ContentType, IReadOnlyDictio
 /// and gets the entry document too (the app's own router reads it). Every answer carries the Content-Security-Policy built from what the administrator approved of the manifest's egress requests (<see cref="EgressPolicy"/>),
 /// and an app whose origin is <c>sandbox</c> gets the <c>sandbox</c> directive, which makes its document an opaque origin that cannot read the host's cookies or storage.
 /// </summary>
-public sealed class AppSite(AppInstanceStore instances, Func<string, AppEgress>? approvedEgress = null, string channel = DefinitionStore.Production, ViewsRuntime? views = null)
+public sealed class AppSite(AppInstanceStore instances, Func<string, AppEgress>? approvedEgress = null, string channel = DefinitionStore.Production, ViewsRuntime? views = null, IViewDocumentChecker? documents = null)
 {
     public const string BasePath = "/apps/";
 
@@ -83,9 +83,9 @@ public sealed class AppSite(AppInstanceStore instances, Func<string, AppEgress>?
         {
             ViewsRuntime.ScriptName => (views.Script, Types[".js"]),
             ViewsRuntime.StyleName when views.Style is not null => (views.Style, Types[".css"]),
-            ViewsApp.ViewsFile => (ViewsApp.Json(instance, FrameOrigins(instance, instanceName)), Types[".json"]),
+            ViewsApp.ViewsFile => (ViewsApp.Json(instance, FrameOrigins(instance, instanceName), documents), Types[".json"]),
             _ when path.Length > 0 && Path.HasExtension(path) => null,
-            _ => (ViewsApp.Document(instance.Instance.Title ?? instance.Manifest.Title ?? instanceName, BasePath + Uri.EscapeDataString(instanceName) + "/" + BundleFolder, views.Style is not null, ViewsApp.Json(instance, FrameOrigins(instance, instanceName))), Types[".html"]),
+            _ => (ViewsApp.Document(instance.Instance.Title ?? instance.Manifest.Title ?? instanceName, BasePath + Uri.EscapeDataString(instanceName) + "/" + BundleFolder, views.Style is not null, ViewsApp.Json(instance, FrameOrigins(instance, instanceName), documents)), Types[".html"]),
         };
         if (served is not { } file) return Text(404, "No such file.");
         var egress = EgressPolicy.Effective(instance.Manifest.Egress ?? AppEgress.None, approvedEgress?.Invoke(instanceName) ?? AppEgress.None);

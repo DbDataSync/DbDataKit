@@ -102,6 +102,12 @@ export interface DashboardViewProps {
   pendingLimit?: number
   /** The pending set changed: the number of changes staged and not yet submitted. A host that routes pages uses it to ask before the person leaves (the page itself asks before it is closed or reloaded). */
   onPendingChange?: (count: number) => void
+  /**
+   * Where a `dialog` or `panel` link opens when the host owns the surface (plan 32 DBR36): a view inside an app's own document cannot frame the target itself (a frame nested in the app's document cannot get a token: the shell page
+   * brokers it), so the shell page opens it. Called with what to show and a function to call when it closes (`true` after a save: `then` runs as it does for the view's own surface and a custom widget is told). Without it the view
+   * opens `LinkSurface` itself.
+   */
+  openSurface?: (surface: OpenSurface, closed: (saved: boolean) => void) => void
   /** A link a widget followed was resolved: the host opens it itself (`linkHost`'s surfaces are then not used). Without a handler a link does nothing. */
   onLink?: (event: LinkEvent) => void
   /** A dialog or panel a custom widget opened has closed (`saved` when a form saved): the widget is told. */
@@ -147,7 +153,7 @@ function useBox(given: Box | undefined) {
  * the widgets both layouts place. A widget that fails shows its own error; a failure of the call itself shows once, for the page. A canvas layout is drawn by `layoutCanvas` (DBR07), scaled or scrolled in the same container; a flow layout is the work of its own engine (DBR14):
  * until then a note says so.
  */
-export function DashboardView({ kind = 'dashboard', name, document, client, layout: requested, medium, box: given, theme = 'auto', parameters, onParameterChange, onSelect, onDrill, sortable = false, onServerSort, customViews, linkHost, actionHost: givenActionHost, pendingLimit = DEFAULT_PENDING_LIMIT, onPendingChange, onLink, onCellLink, closedLink, viewer, onPrintPreview, kiosk = false, refreshFloorMs, clock, visibility, random, timeZone }: DashboardViewProps) {
+export function DashboardView({ kind = 'dashboard', name, document, client, layout: requested, medium, box: given, theme = 'auto', parameters, onParameterChange, onSelect, onDrill, sortable = false, onServerSort, customViews, linkHost, actionHost: givenActionHost, pendingLimit = DEFAULT_PENDING_LIMIT, onPendingChange, onLink, onCellLink, closedLink, openSurface, viewer, onPrintPreview, kiosk = false, refreshFloorMs, clock, visibility, random, timeZone }: DashboardViewProps) {
   const layout = requested ?? (kiosk ? document.kiosk?.layout : undefined)
   const resolvedTheme = useTheme(theme)
   const { ref, box } = useBox(given)
@@ -349,7 +355,9 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
     if (!linkHost) return
     if (address === null) { setNotice(`The link \`${link.name}\` leads to the ${link.targetKind} \`${link.target}\`, which this host has no address for.`); return }
     if (link.as === 'navigate') { linkHost.navigate?.(address, event); return }
-    setSurface({ widget, link, open: { as: link.as, label: link.label ?? `${link.targetKind}: ${link.target}`, address } })
+    const open: OpenSurface = { as: link.as, label: link.label ?? `${link.targetKind}: ${link.target}`, address }
+    if (openSurface) { openSurface(open, (saved) => closed(widget, link, saved)); return }
+    setSurface({ widget, link, open })
   }
   // an action was accepted (applied, waiting for approval, or started): the popup says so and stays until it is closed; what `then` names resolves again at once, but not after a plain cancel
   const actionDone = (_outcome: ActionOutcome) => {
@@ -359,13 +367,15 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
     if (again.length > 0) resolveOnly(again)
     setClosedHere({ widget: open.widget, link: open.link.name, saved: true })
   }
+  const closed = (widget: string, link: LinkInfo, saved: boolean) => {
+    setClosedHere({ widget, link: link.name, saved })
+    const again = thenWidgets(link, widget, saved).filter((w) => w in (latest.current?.results ?? {}))
+    if (again.length > 0) resolveOnly(again)
+  }
   const closeSurface = (saved: boolean) => {
     const open = surface
     setSurface(null)
-    if (!open) return
-    setClosedHere({ widget: open.widget, link: open.link.name, saved })
-    const again = thenWidgets(open.link, open.widget, saved).filter((w) => w in (latest.current?.results ?? {}))
-    if (again.length > 0) resolveOnly(again)
+    if (open) closed(open.widget, open.link, saved)
   }
   // the widgets that resolve again after a save: the same call a sort makes, the other widgets keep what they show
   const resolveOnly = (ids: string[]) => {

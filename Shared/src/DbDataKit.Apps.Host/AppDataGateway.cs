@@ -51,7 +51,7 @@ public interface IAppData
 /// with the store's server stopped and a model in development is never what an app sees. The browser reaches nothing else, needs no CORS but this route's, and the app never holds a token anything else accepts. Only row reads
 /// and the changes endpoint are answered.
 /// </summary>
-public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, AppTokenValidator tokens, JwksTokenVerifier? keys = null, AppApprovalStore? approvals = null, IAppSemantic? semantic = null)
+public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, AppTokenValidator tokens, JwksTokenVerifier? keys = null, AppApprovalStore? approvals = null, IAppSemantic? semantic = null, IAppViews? views = null)
 {
     private static readonly Regex SemanticPath = new(@"^api/v1/semantic/models(/(?<model>[^/]+)/(?<kind>catalog|query))?$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
@@ -85,6 +85,8 @@ public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, Ap
         var trimmed = path.Trim('/');
         if (trimmed.StartsWith("api/v1/semantic/", StringComparison.Ordinal) || trimmed == "api/v1/semantic")
             return await ForwardSemanticAsync(resolved, instance, trimmed, method, body, token, via, ct);
+        if (AppViewsRoute.Parse(trimmed) is { } document)
+            return await ForwardViewsAsync(resolved, instance, document, method, body, token, via, ct);
         var match = DataPath.Match(trimmed);
         if (!match.Success)
             return StorePath.IsMatch(trimmed)
@@ -130,6 +132,20 @@ public sealed class AppDataGateway(AppInstanceStore instances, IAppData data, Ap
             return Refuse(403, $"This app may not use the semantic model '{model}': its manifest does not list it under `semantic`.");
         var call = new AppSemanticCall(instance, token.SubjectId, token.SubjectName, RolesOf(token), listed, route, model, body, via);
         return (await semantic.SendAsync(call, ct)) with { Headers = Cors };
+    }
+
+    // The views route (plan 32 DBR13): an app's dashboard or report, the text of the file the manifest lists under `views` and its rendered widgets as the person the token names. What is read is the package's own file; what is rendered is
+    // the serving layer's (IAppViews), whose queries run as the person and are limited to what the manifest lists.
+    private async Task<AppResponse> ForwardViewsAsync(ResolvedInstance resolved, string instance, (string Kind, string File, bool Render) route, string method, byte[] body, AppAccessToken token, string? via, CancellationToken ct)
+    {
+        if (route.Render ? !HttpMethods.IsPost(method) : !HttpMethods.IsGet(method))
+            return Refuse(405, route.Render ? "A render is sent with POST." : "A document is read with GET.");
+        if (AppViewsRoute.TextOf(resolved, route.File) is not { } text)
+            return Refuse(404, $"This app has no dashboard or report '{route.File}': it is not a file of its manifest's `views` list.");
+        if (!route.Render) return AppViewsRoute.Open(route.Kind, route.File, text);
+        if (views is null) return Refuse(404, "This host renders no dashboards or reports.");
+        var call = new AppViewsCall(instance, resolved, route.File, token.SubjectId, token.SubjectName, RolesOf(token), body, via);
+        return (await views.SendAsync(call, ct)) with { Headers = Cors };
     }
 
     /// <summary>The roles the token names (the home's role names on the instance) as the flags the servers' checks use.</summary>

@@ -36,6 +36,8 @@ export interface ModuleClientOptions {
   headers?: () => HeadersInit | Promise<HeadersInit>
   /** Also ask the module to check what the local validator passes (`validate`, through the preview route with nothing to resolve): the catalog binding of a publish. Off by default: each check is an audited call, and the console's relay does not carry the route yet. A module that cannot be asked leaves the local answer. */
   serverCheck?: boolean
+  /** The module has loaded and checked every document it gives (an app's, through the apps host): `open` only parses the text and does not validate it in the browser, which a page under a Content-Security-Policy without `unsafe-eval` could not do. Off by default. */
+  trusted?: boolean
 }
 
 const CONTENT_TYPES: Record<ExportFormat, string> = { pdf: 'application/pdf', csv: 'text/csv', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', svg: 'image/svg+xml' }
@@ -210,7 +212,7 @@ export function moduleClient(options: ModuleClientOptions): ViewsClient {
     async open(kind, name): Promise<OpenedDocument> {
       const body = await call<{ name: string; version: string; text: string }>('GET', `/api/v1/${collection(kind)}/${segment(name)}`)
       if (typeof body.text !== 'string' || typeof body.version !== 'string') throw new ViewsClientError('bad_response', 'The views module gave a document with no `text` or `version`.')
-      const result = validateText(body.text, { kind, file: `${name}.yaml` })
+      const result = validateText(body.text, { kind, file: /\.(ya?ml|json)$/i.test(name) ? name : `${name}.yaml`, ...(options.trusted ? { trusted: true } : {}) })
       return { name, kind, text: body.text, version: body.version, document: result.document, diagnostics: result.diagnostics }
     },
 
