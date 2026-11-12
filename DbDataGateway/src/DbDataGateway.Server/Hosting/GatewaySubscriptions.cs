@@ -24,9 +24,10 @@ public sealed class HomeSubscriberDirectory(GatewayViews views) : ISubscriberDir
 /// <summary>
 /// Scheduled delivery in the Gateway (plan 32 DBR18, decision: in process, as <c>quality-system</c> runs in its host): the system task <c>views-export / subscriptions</c> (<see cref="ViewsExportTasks"/>) composed over the Gateway's state, the views module's
 /// <see cref="SubscriptionRenderer"/> (the document drawn <b>as the subscriber</b>: the identity home's user of that subject id, their groups, their data sources) and the delivery service, run every minute (<see cref="ViewsExportSettings.Every"/>) while the
-/// views module is on <b>and this instance can export</b> (<c>views.export</c>) <b>and the host registered delivery channels</b> (<see cref="IDeliveryChannels"/>): an instance that could only fail a due subscription (no browser, or no channel to send by) does not claim it,
-/// so it waits for a process that can. The Gateway has no channels of its own yet (the channel names are the console's bindings and connections: plan 22a GP18, plan 27a), so nothing registers them today and the task is idle; a host or a test that registers them
-/// makes it run, and this instance then also sends the outbox.
+/// views module is on <b>and this instance can export</b> (<c>views.export</c>): an instance that could only fail a due subscription (no browser) does not claim it, so it waits for a process that can.
+/// <para><b>Channels.</b> The Gateway has no delivery channels of its own (a channel name is the console's binding and connection: plan 22a GP18, plan 27a), and needs none: it knows a channel by the <b>kind the console stored on the subscription</b>
+/// (<see cref="EnqueueOnlyChannels"/>), draws the document as the subscriber and <b>writes the message to the shared outbox</b> (the <c>delivery</c> module of the group's state, the same one the console's sender works through); the console's sender claims it and sends it through its
+/// own channel, so the Gateway never holds a connection or a secret and does not run a sender. A host that registers real <see cref="IDeliveryChannels"/> (a test, a future install with its own) sends the outbox here as well.</para>
 /// </summary>
 public sealed class GatewaySubscriptions : BackgroundService
 {
@@ -51,7 +52,7 @@ public sealed class GatewaySubscriptions : BackgroundService
         _every = every ?? TimeSpan.FromMinutes(1);
     }
 
-    /// <summary>Whether the host registered delivery channels (without them the task does not run).</summary>
+    /// <summary>Whether the host registered delivery channels of its own: only then does this instance send the outbox. Without them it only enqueues for the process that has the channels.</summary>
     public bool HasChannels => _channels is not null;
 
     /// <summary>The subscriptions of the Gateway's state.</summary>
@@ -63,14 +64,14 @@ public sealed class GatewaySubscriptions : BackgroundService
     private ViewsExportTasks? Compose()
     {
         if (_tasks is not null) return _tasks;
-        if (_channels is null || _views.Module.Api is not { } api) return null;      // no channel to send by, or the module has not started
+        if (_views.Module.Api is not { } api) return null;                           // the module has not started
         var renderer = new SubscriptionRenderer(api, _views.Publications, new HomeSubscriberPrincipals(_views));
-        _delivery = new DeliveryService(new DeliveryStore(_state), new PayloadStore(_state), _channels, DeliveryPolicy.Default, new SecretScrubber(), _time, null, RunService);
+        _delivery = new DeliveryService(new DeliveryStore(_state), new PayloadStore(_state), _channels ?? new EnqueueOnlyChannels(() => Subscriptions.ChannelKinds()), DeliveryPolicy.Default, new SecretScrubber(), _time, null, RunService);
         var service = new SubscriptionService(Subscriptions, _delivery, renderer, new HomeSubscriberDirectory(_views), _time);
         return _tasks = new ViewsExportTasks(service, _state, RunService);
     }
 
-    /// <summary>One pass of the task, or null when this instance does not draw subscriptions (no exporter, no delivery channels, or the views module is not started).</summary>
+    /// <summary>One pass of the task, or null when this instance does not draw subscriptions (no exporter, or the views module is not started).</summary>
     public async Task<TaskRunResult?> RunPassAsync(CancellationToken cancellationToken, string? subscription = null)
     {
         if (!_views.CanExport) return null;

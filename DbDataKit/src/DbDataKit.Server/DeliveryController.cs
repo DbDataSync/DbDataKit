@@ -34,7 +34,7 @@ public sealed class DeliveryController(ConsoleDelivery delivery) : ControllerBas
 
     private object View(SubscriptionRow s) => new
     {
-        id = s.Id, name = s.Fields.Name, kind = s.Fields.Kind, view = s.Fields.ViewName, parameters = s.Fields.Parameters, layout = s.Fields.Layout, format = s.Fields.ExportFormat, widget = s.Fields.Widget, channel = s.Fields.Channel,
+        id = s.Id, name = s.Fields.Name, kind = s.Fields.Kind, view = s.Fields.ViewName, parameters = s.Fields.Parameters, layout = s.Fields.Layout, format = s.Fields.ExportFormat, widget = s.Fields.Widget, channel = s.Fields.Channel, channelKind = s.Fields.ChannelKind,
         recipient = s.Fields.Recipient, inlinePreview = s.Fields.InlinePreview, schedule = new { cron = s.Fields.Cron, timeZone = s.Fields.TimeZone }, person = s.Person, personName = s.PersonName ?? delivery.Users.Get(s.Person)?.DisplayName ?? s.Person, owner = s.Owner,
         status = s.Status, statusDetail = s.StatusDetail, nextRunAt = s.NextRunAt, lastRunAt = s.LastRunAt, lastOutcome = s.LastOutcome, lastDetail = s.LastDetail, version = s.Version,
         channelProblem = delivery.Channels.Find(s.Fields.Channel) is null ? $"The channel '{s.Fields.Channel}' is not configured." : null,
@@ -166,9 +166,10 @@ public sealed class DeliveryController(ConsoleDelivery delivery) : ControllerBas
         try
         {
             var spec = SubscriptionSpec.Read(body, "request");
-            return delivery.Channels.Find(spec.Fields.Channel) is null
+            // the channel's kind is stored with the subscription (plan 32 DBR18): the Gateway, which draws the document and has no channels, writes the message to the shared outbox by it and this console's sender sends it
+            return delivery.Channels.Find(spec.Fields.Channel) is not { } channel
                 ? (null, Refuse(400, "unknown_channel", $"The channel '{spec.Fields.Channel}' is not configured ({(delivery.Channels.Names.Count == 0 ? "the delivery: section has no channels" : "channels: " + string.Join(", ", delivery.Channels.Names))})."))
-                : (spec, null);
+                : (new SubscriptionSpec(spec.Fields with { ChannelKind = channel.Kind }), null);
         }
         catch (SubscriptionSpecException e)
         {

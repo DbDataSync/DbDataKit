@@ -127,6 +127,15 @@ public sealed class ConsoleDelivery
 
     public ChannelKinds Kinds { get; }
 
+    /// <summary>Writes each channel's kind onto the subscriptions that name it (plan 32 DBR18): fills a subscription from before the column and follows a binding that changed a channel's kind. Returns the rows changed.</summary>
+    public int SyncSubscriptionChannelKinds()
+    {
+        var changed = 0;
+        foreach (var name in Channels.Names)
+            if (Channels.Find(name) is { } channel) changed += Subscriptions.SetChannelKind(name, channel.Kind);
+        return changed;
+    }
+
     public DeliverySettings Settings => _settings;
 
     /// <summary>Why the <c>delivery:</c> section could not be used, or null.</summary>
@@ -230,6 +239,17 @@ public sealed class ConsoleDeliverySender(ConsoleDelivery delivery) : Background
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // the kind of each channel is kept on the subscriptions that name it (plan 32 DBR18), so the Gateway, which draws them and has no channels, enqueues for this sender with the right kind after a binding changed
+        _ = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+            do
+            {
+                try { delivery.SyncSubscriptionChannelKinds(); }
+                catch (Exception) when (!stoppingToken.IsCancellationRequested) { }
+            }
+            while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false));
+        }, CancellationToken.None).ContinueWith(_ => { }, TaskScheduler.Default);
         await delivery.Service.RunAsync(stoppingToken).ConfigureAwait(false);
     }
 }
