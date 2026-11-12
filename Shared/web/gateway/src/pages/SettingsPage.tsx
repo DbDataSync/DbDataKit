@@ -121,6 +121,24 @@ export function SettingsView(p: SettingsViewProps) {
                   {SEMANTIC_NUMBERS.map((f) => <SemanticNumberField key={f.key} field={f} value={values.semantic[f.key]} disabled={!p.allowed || !p.check} items={grouped.byField[f.key]} typed={p.semanticText?.[f.key]} onField={p.onField} onTyped={(k, t) => p.onSemanticText?.(k, t)} />)}
                   <p className="hint" data-testid="settings-semantic-text">The models set up by hand (catalog file and the data source of each source) and the Analysis Services connections (a secret reference, never a password) are edited in the server.yaml tab, under <span className="mono">semantic:</span>.</p>
                 </fieldset>
+                <fieldset style={{ border: 0, padding: 0, margin: '12px 0' }} data-testid="settings-telemetry">
+                  <legend className="card-title">Telemetry (OpenTelemetry)</legend>
+                  <label className="row" style={{ gap: 6 }}>
+                    <input type="checkbox" checked={values.telemetryEnabled} disabled={!p.allowed || !p.check} onChange={(e) => p.onField('telemetry.enabled', e.target.checked)} data-testid="settings-telemetry-enabled" /> Send traces and metrics
+                  </label>
+                  <FieldErrors field="telemetry.enabled" items={grouped.byField['telemetry.enabled']} />
+                  <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center', margin: '6px 0' }}>
+                    <label htmlFor="settings-telemetry-endpoint">Collector address</label>
+                    <input id="settings-telemetry-endpoint" className="input" placeholder="http://collector.internal:4317" disabled={!p.allowed || !p.check || !values.telemetryEnabled} value={values.telemetryEndpoint} onChange={(e) => p.onField('telemetry.endpoint', e.target.value)} data-testid="settings-telemetry-endpoint" />
+                    <label htmlFor="settings-telemetry-protocol">Protocol</label>
+                    <select id="settings-telemetry-protocol" className="input" disabled={!p.allowed || !p.check || !values.telemetryEnabled} value={values.telemetryProtocol} onChange={(e) => p.onField('telemetry.protocol', e.target.value)} data-testid="settings-telemetry-protocol">
+                      <option value="grpc">gRPC</option><option value="http">HTTP</option>
+                    </select>
+                  </div>
+                  <FieldErrors field="telemetry.endpoint" items={grouped.byField['telemetry.endpoint']} />
+                  <FieldErrors field="telemetry.protocol" items={grouped.byField['telemetry.protocol']} />
+                  <p className="hint" data-testid="settings-telemetry-note">Off by default; read when the Gateway starts. The share of traces kept (<code>telemetry.samplingRatio</code>) and the instance name are edited in the server.yaml tab. A span or a metric never holds a secret, a query text or a value.</p>
+                </fieldset>
                 <label className="row" style={{ gap: 6 }}>
                   <input type="checkbox" checked={values.logSql} disabled={!p.allowed || !p.check} onChange={(e) => p.onField('logSql', e.target.checked)} data-testid="settings-log-sql" /> Log the SQL text of queries
                 </label>
