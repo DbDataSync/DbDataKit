@@ -53,6 +53,11 @@ const KnowledgeIcon = () => (
     <path d="M5 4h10a3 3 0 013 3v13H8a3 3 0 01-3-3z" /><path d="M5 17a3 3 0 013-3h10M9 8h5" />
   </svg>
 )
+const BacklogIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <rect x="4" y="4" width="5" height="16" rx="1" /><rect x="10" y="4" width="5" height="10" rx="1" /><rect x="16" y="4" width="4" height="13" rx="1" />
+  </svg>
+)
 const DocsIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M4 5.5C4 4.7 4.7 4 5.5 4H12v16H5.5C4.7 20 4 19.3 4 18.5z" /><path d="M20 5.5c0-.8-.7-1.5-1.5-1.5H12v16h6.5c.8 0 1.5-.7 1.5-1.5z" />
@@ -79,6 +84,7 @@ const rail: RailItem[] = [
   { to: '/deployments', title: 'Deployments', icon: <LineageIcon />, testId: 'rail-deployments' },
   { to: '/agents', title: 'Agents', icon: <AgentsIcon />, testId: 'rail-agents' },
   { to: '/knowledge', title: 'Knowledge', icon: <KnowledgeIcon />, testId: 'rail-knowledge' },
+  { to: '/backlog', title: 'Backlog', icon: <BacklogIcon />, testId: 'rail-backlog' },
   { to: '/delivery', title: 'Delivery', icon: <MonitoringIcon />, testId: 'rail-delivery' },
   { to: '/bindings', title: 'Bindings', icon: <ConnectionsIcon />, testId: 'rail-bindings' },
   { to: '/views', title: 'Views', icon: <ViewsIcon />, testId: 'rail-views' },
