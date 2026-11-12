@@ -312,7 +312,8 @@ public class InformationSchemaCatalogReader : ICatalogReader
         return ForeignKeysOf(rows);
     }
 
-    private static IReadOnlyList<ForeignKeyInfo> ForeignKeysOf(IEnumerable<CatalogRow> rows) =>
+    /// <summary>The foreign keys of the rows of <see cref="ForeignKeysQuery"/> (of one table), by name. A reader whose query carries more than the standard columns overrides it.</summary>
+    protected virtual IReadOnlyList<ForeignKeyInfo> ForeignKeysOf(IEnumerable<CatalogRow> rows) =>
         rows.GroupBy(r => r.Text(0) ?? "").OrderBy(g => g.Key, StringComparer.Ordinal).Select(g =>
         {
             var ordered = g.OrderBy(r => r.Int(1) ?? 0).ToList();

@@ -140,6 +140,22 @@ public class SchemaKeysTests
     }
 }
 
+public class DuckDbReferencedSchemaTests
+{
+    [Theory]
+    [InlineData("FOREIGN KEY (pid) REFERENCES p(id)", "p", "main", "main")]
+    [InlineData("FOREIGN KEY (pid) REFERENCES s.p(id)", "p", "main", "s")]
+    [InlineData("FOREIGN KEY (pid) REFERENCES memory.other.p(id)", "p", "main", "other")]
+    [InlineData("FOREIGN KEY (pid, x) REFERENCES my s.P q(id, \"i d\")", "P q", "main", "my s")]
+    [InlineData("FOREIGN KEY (pid) REFERENCES \"other\".p(id)", "p", "main", "other")]
+    [InlineData("something else", "p", "main", "main")]
+    public void The_schema_of_a_foreign_key_is_read_from_its_constraint_text(string text, string table, string own, string expected) =>
+        Assert.Equal(expected, DuckDbCatalogReader.ReferencedSchema(text, table, own));
+
+    [Fact]
+    public void Without_a_text_the_key_s_own_schema_is_the_answer() => Assert.Equal("main", DuckDbCatalogReader.ReferencedSchema(null, "p", "main"));
+}
+
 /// <summary>The same on a real in-process DuckDB.</summary>
 public class SchemaKeysDuckDbTests(DuckDbFixture fixture) : IClassFixture<DuckDbFixture>
 {
