@@ -32,7 +32,7 @@ Every server that a console manages also answers the same four things on its man
 
 ### Default-port clashes to know about
 
-* No two services share a default port (plan 33 SC19; `scripts/check_default_ports.py` fails when two do): DbDataKit 8480, Build 8470, the Workspace 8471, the identity home on its own 8482, the Store 8490, the Runner 8495, Sync 5080 and the Gateway 8815 (Flight), 8816 (management), 8817 (identity), 8818 (apps), 8819 (store module) and 8820 (views). The Workspace and the identity home moved from 8495 and 8490.
+* No two services share a default port (plan 33 SC19; `scripts/check_default_ports.py` fails when two do): DbDataKit 8480, Build 8470, the Workspace 8471, the identity home on its own 8482, the Store 8490, the Runner 8495, Sync 5080 and the Gateway 8815 (Flight), 8816 (management), 8817 (identity), 8818 (apps), 8819 (store module), 8820 (views) and 8821 (mcp). The Workspace and the identity home moved from 8495 and 8490.
 * The console (8480) and its announce port (8481 in the examples) are different listeners on purpose: the announce port is plain HTTP and takes nothing but the announcement.
 
 ### Safe defaults to know about
