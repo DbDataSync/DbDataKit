@@ -3,6 +3,7 @@ using DbDataKit.Identity;
 using DbDataKit.Secrets;
 using DbDataKit.State;
 using DbDataKit.Web.Trust;
+using DbDataKit.Serving;
 using DbDataGateway.Server.Configuration;
 using DbDataGateway.Server.Secrets;
 using DbDataGateway.Server.Serving;
@@ -20,9 +21,25 @@ namespace DbDataGateway.Server.Hosting;
 /// which the apps host answers an app's data calls with too (O08c).
 /// </summary>
 public sealed class GatewayStoreModule(IOptionsMonitor<GatewayOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, PublishedEntityModels models, ILoggerFactory loggers,
-    HomeCallers homeCallers, GroupCertificate? group = null) : IHostedService, IAsyncDisposable
+    HomeCallers homeCallers, GroupCertificate? group = null) : IHostedService, IServingModule, IAsyncDisposable
 {
     private WebApplication? _app;
+
+    /// <inheritdoc />
+    public string Name => GatewayModules.Store;
+
+    // the module starts itself as a hosted service (its listener is its own); the contract's start is that start
+    Task IServingModule.StartAsync(IServingServices services, CancellationToken cancellationToken) => StartAsync(cancellationToken);
+
+    public Task DrainAsync(CancellationToken cancellationToken = default)
+    {
+        _draining = true;
+        return Task.CompletedTask;
+    }
+
+    public ServingHealth Health() => ServingModuleHealth.Of(_app is not null, _draining, state, ServingHealthState.Down);
+
+    private volatile bool _draining;
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -50,6 +67,7 @@ public sealed class GatewayStoreModule(IOptionsMonitor<GatewayOptions> options, 
         Map(app, ApiOf(options, state, secrets, models));
         await app.StartAsync(cancellationToken);
         _app = app;
+        _draining = false;
     }
 
     /// <summary>The group's store for this instance: what the module's listener and the apps host's data calls answer with.</summary>
@@ -113,7 +131,14 @@ public sealed class GatewayStoreModule(IOptionsMonitor<GatewayOptions> options, 
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (_app is not null) await _app.StopAsync(cancellationToken);
+        _draining = true;
+        // a module that was stopped is not running: its line on /health says so
+        if (_app is { } running)
+        {
+            _app = null;
+            await running.StopAsync(cancellationToken);
+            await running.DisposeAsync();
+        }
     }
 
     public async ValueTask DisposeAsync()

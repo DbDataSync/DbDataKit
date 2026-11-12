@@ -4,6 +4,7 @@ using DbDataKit.Identity;
 using DbDataKit.Secrets;
 using DbDataKit.State;
 using DbDataKit.Web.Auth;
+using DbDataKit.Serving;
 using DbDataGateway.Server.Configuration;
 using DbDataGateway.Server.Secrets;
 using DbDataGateway.Server.Tls;
@@ -22,7 +23,7 @@ namespace DbDataGateway.Server.Hosting;
 /// </para>
 /// </summary>
 public sealed class GatewayIdentityModule(
-    IOptionsMonitor<GatewayOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, ILoggerFactory loggers, GroupCertificate? group = null) : IHostedService, IAsyncDisposable
+    IOptionsMonitor<GatewayOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, ILoggerFactory loggers, GroupCertificate? group = null) : IHostedService, IServingModule, IAsyncDisposable
 {
     /// <summary>The secret that holds the key the signing keys are protected with.</summary>
     public const string SigningKeySecret = "dbdatakit:gateway:identity:signing-keys";
@@ -32,6 +33,22 @@ public sealed class GatewayIdentityModule(
 
     private readonly ILogger _log = loggers.CreateLogger("DbDataGateway.Identity");
     private WebApplication? _app;
+
+    /// <inheritdoc />
+    public string Name => GatewayModules.Identity;
+
+    // the module starts itself as a hosted service (its listener is its own); the contract's start is that start
+    Task IServingModule.StartAsync(IServingServices services, CancellationToken cancellationToken) => StartAsync(cancellationToken);
+
+    public Task DrainAsync(CancellationToken cancellationToken = default)
+    {
+        _draining = true;
+        return Task.CompletedTask;
+    }
+
+    public ServingHealth Health() => ServingModuleHealth.Of(_app is not null, _draining, state, ServingHealthState.Down);
+
+    private volatile bool _draining;
 
     /// <summary>The address people reach the home at: the setting, or the first TLS host name (localhost when there is none) on the module's port.</summary>
     public static Uri PublicUrlOf(GatewayOptions options) =>
@@ -88,6 +105,7 @@ public sealed class GatewayIdentityModule(
         app.MapFallback(() => Results.Text("The identity home of this DbDataGateway. Its endpoints are under /.well-known/openid-configuration and /identity/.", "text/plain")).AllowAnonymous();
         await app.StartAsync(cancellationToken);
         _app = app;
+        _draining = false;
         _log.LogInformation("Identity home on {Address}:{Port}; its issuer is {Issuer}; sign-in with a passkey{Entra}{Windows}.", current.Identity.Address, current.Identity.Port, publicUrl.GetLeftPart(UriPartial.Authority),
             entra is null ? "" : ", through Entra ID", windows is null ? "" : ", with Windows");
     }
@@ -131,7 +149,14 @@ public sealed class GatewayIdentityModule(
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (_app is not null) await _app.StopAsync(cancellationToken);
+        _draining = true;
+        // a module that was stopped is not running: its line on /health says so
+        if (_app is { } running)
+        {
+            _app = null;
+            await running.StopAsync(cancellationToken);
+            await running.DisposeAsync();
+        }
     }
 
     public async ValueTask DisposeAsync()
