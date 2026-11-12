@@ -155,4 +155,8 @@ public static class TrackingSchema
 /// Where the records about one data connection are kept: the engine and schema name of its tracking store, and the name of the data connection, which is part of every record's key. The engine is the
 /// tracking connection's (it can differ from the data connection's: that is what central tracking is).
 /// </summary>
-public sealed record TrackingScope(string Engine, string SchemaName, string Connection);
+public sealed record TrackingScope(string Engine, string SchemaName, string Connection)
+{
+    /// <summary>Where each record goes before the target when the project's tracking has the state as its primary (plan 28c E16); null for the target primary, which every project has unless it says otherwise.</summary>
+    public ITrackingJournal? Journal { get; init; }
+}

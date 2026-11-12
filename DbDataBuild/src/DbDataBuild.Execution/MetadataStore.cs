@@ -133,7 +133,7 @@ public static class MetadataStore
         var document = scope.Engine == "postgres" ? "CAST(@document AS jsonb)" : "@document";
         var text = $"INSERT INTO {c(scope.SchemaName)}.{c("metadata_document")} ({c("connection")}, {c("subject_kind")}, {c("subject")}, {c("document")}, {c("document_hash")}, {c("recorded_utc")}, {c("tool_version")}, {c("plan_id")}, {c("git_commit")}, {c("model_kind")}) " +
                    $"VALUES (@connection, @subject_kind, @subject, {document}, @document_hash, @recorded_utc, @tool_version, @plan_id, @git_commit, @model_kind)";
-        return gate.ExecuteAsync(GateStatement.Tracking(stepId, text,
+        return new JournaledGate(gate, scope, "metadata_document").ExecuteAsync(GateStatement.Tracking(stepId, text,
         [
             new("connection", DbType.String, scope.Connection), new("subject_kind", DbType.AnsiString, subjectKind), new("subject", DbType.String, subject), new("document", DbType.String, json), new("document_hash", DbType.AnsiStringFixedLength, hash),
             new("recorded_utc", DbType.DateTime2, TrackingClock.NextUtc()), new("tool_version", DbType.AnsiString, toolVersion), new("plan_id", DbType.AnsiString, planId), new("git_commit", DbType.AnsiString, gitCommit),

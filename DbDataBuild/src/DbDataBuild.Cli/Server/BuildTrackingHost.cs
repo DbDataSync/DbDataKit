@@ -20,8 +20,8 @@ internal sealed class BuildTrackingHost(ProjectsFile projects, StateDatabase dat
 
     public bool Enabled => settings.Mode != TrackingMode.Target;
 
-    /// <summary>Copies the tracking of one project (or every hosted project when <paramref name="project"/> is null; of one connection when <paramref name="connection"/> is given), within <paramref name="budget"/> in all.</summary>
-    public async Task<IReadOnlyList<BuildTrackingResult>> CopyAsync(HostedProject? project, string? connection, TimeSpan budget, CancellationToken cancellationToken)
+    /// <summary>Copies the tracking of one project (a project whose tracking is state-first is left to its own writes, unless <paramref name="forSwitch"/> asks for the comparison a switch of the primary needs) (or every hosted project when <paramref name="project"/> is null; of one connection when <paramref name="connection"/> is given), within <paramref name="budget"/> in all.</summary>
+    public async Task<IReadOnlyList<BuildTrackingResult>> CopyAsync(HostedProject? project, string? connection, TimeSpan budget, CancellationToken cancellationToken, bool forSwitch = false)
     {
         var results = new List<BuildTrackingResult>();
         if (!Enabled || !await _one.WaitAsync(0, cancellationToken).ConfigureAwait(false)) return results;
@@ -32,7 +32,7 @@ internal sealed class BuildTrackingHost(ProjectsFile projects, StateDatabase dat
             string? Env(string name) => env.TryGetValue(name, out var v) ? v : Environment.GetEnvironmentVariable(name);
             foreach (var hosted in project is null ? projects.All() : [project])
             {
-                foreach (var (name, scope, read) in Tracked(hosted, connection, Env))
+                foreach (var (name, scope, read) in Tracked(hosted, connection, Env, forSwitch))
                 {
                     var remaining = budget - (DateTime.UtcNow - started);
                     if (remaining <= TimeSpan.Zero) return results;
@@ -52,8 +52,8 @@ internal sealed class BuildTrackingHost(ProjectsFile projects, StateDatabase dat
         return results;
     }
 
-    private IEnumerable<(string Connection, TrackingScope Scope, LoginSettings Read)> Tracked(HostedProject hosted, string? only, Func<string, string?> env) =>
-        BuildTrackedConnections.Of(projects.RootOf(hosted), only, env);
+    private IEnumerable<(string Connection, TrackingScope Scope, LoginSettings Read)> Tracked(HostedProject hosted, string? only, Func<string, string?> env, bool forSwitch) =>
+        BuildTrackedConnections.Of(projects.RootOf(hosted), only, env, includeStateFirst: forSwitch);
 
     private async Task<BuildTrackingResult> CopyOneAsync(HostedProject hosted, string connection, TrackingScope scope, LoginSettings login, TimeSpan budget, CancellationToken cancellationToken)
     {

@@ -143,7 +143,15 @@ internal static class ServerCli
 
         var host = new TuiCommand.CliHost(Environment.GetEnvironmentVariable);
         var secrets = ServerSecrets.Open(settings.Directory);
-        var runner = new ChildProcessCommandRunner(logins: token => ServerSecrets.LoginsAsync(secrets, token));
+        // what a command the server starts gets beside the logins: where the server's state is (a project whose tracking is state-first writes to it first, plan 28c E16) and the primary the server's own tracking setting says
+        var serverDirectory = settings.Directory;
+        async Task<IReadOnlyDictionary<string, string>> ChildEnvironment(CancellationToken token)
+        {
+            var logins = new Dictionary<string, string>(await ServerSecrets.LoginsAsync(secrets, token), StringComparer.Ordinal) { [TrackingJournals.ServerDirectoryVariable] = serverDirectory };
+            if (BuildTrackingSettings.PrimaryOverride(serverDirectory) is { } primary) logins[TrackingJournals.PrimaryVariable] = primary;
+            return logins;
+        }
+        var runner = new ChildProcessCommandRunner(logins: ChildEnvironment);
         using var sessions = new WarmSessionRunner(logins: token => ServerSecrets.LoginsAsync(secrets, token));
         // running plans on their schedules is opt-in: a server that was only meant to answer reads never writes a target by itself
         // maintenance mode (plan 29b, C05): the scheduler stops claiming while the gate is on, and the gate is idle when the plans it started have ended
@@ -167,7 +175,7 @@ internal static class ServerCli
             }
 
             var schedulerState = BuildSchedulerSchema.Open(settings.Directory, settings: state);
-            var trackingHost = new BuildTrackingHost(projects, schedulerState, tracking, token => ServerSecrets.LoginsAsync(secrets, token), line => context.Error.WriteLine(line));
+            var trackingHost = new BuildTrackingHost(projects, schedulerState, tracking, ChildEnvironment, line => context.Error.WriteLine(line));
             var ownerFile = settings.Directory;
             var reporter = new RunnerDecisionReporter(() => BuildScheduleSettings.Read(ownerFile).Runner is { } link
                 ? new ClientRunnerSchedule(new DbDataKit.Runner.Client.RunnerPublishClient(new DbDataKit.Runner.Client.RunnerClientStore(link.ClientDirectory ?? DbDataKit.Runner.Client.RunnerClientStore.DefaultDirectory(environment)), environment), link) : null, line => context.Error.WriteLine(line));

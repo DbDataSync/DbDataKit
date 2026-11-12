@@ -22,6 +22,12 @@ internal static class RunnerTrackingCopy
             return lines;
         }
 
+        if (BuildTrackedConnections.StateFirst(projectRoot, env))
+        {
+            lines.Add("the project's tracking is state-first (`tracking: { mode: state }`): its runs write every record to the runner's state before the target, so there is nothing for a follower to copy");
+            return lines;
+        }
+
         var started = DateTime.UtcNow;
         try
         {

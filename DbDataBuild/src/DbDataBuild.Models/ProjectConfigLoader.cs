@@ -545,14 +545,30 @@ public static class ProjectConfigLoader
         {
             if (top.Get("tracking") is not { } node) return null;
             if (node is YamlScalar { Value: "none" }) return new TrackingConfig(null, ProductInfo.TrackingSchemaName, Disabled: true);
-            var t = ReadTrackingMapping(node, connections, "`tracking`", ["connection", "schema", "runner_copy"]);
+            var t = ReadTrackingMapping(node, connections, "`tracking`", ["connection", "schema", "runner_copy", "mode", "primary"]);
             var runnerCopy = true;
             if (t != null && node is YamlMapping { } map && map.Get("runner_copy") is { } rc)
             {
                 if (rc is YamlScalar { Value: "true" or "false" } rcs) runnerCopy = rcs.Value == "true";
                 else Add(DiagnosticCatalog.InvalidValue, rc, "`tracking.runner_copy` is `true` or `false`.", "`false` stops the runner from keeping a copy of this project's tracking tables.");
             }
-            return t == null ? null : new TrackingConfig(t.Value.Connection, t.Value.SchemaName ?? ProductInfo.TrackingSchemaName, RunnerCopy: runnerCopy);
+            string? mode = null, primary = null;
+            if (t != null && node is YamlMapping { } keys)
+            {
+                if (keys.Get("mode") is { } m)
+                {
+                    if (m is YamlScalar { Value: "target" or "state" or "both" } ms) mode = ms.Value;
+                    else Add(DiagnosticCatalog.InvalidValue, m, "`tracking.mode` is `target`, `state` or `both`.", "`state` writes the records to the state first (the target keeps a second copy), `both` keeps the target as the primary unless `primary` says otherwise, `target` keeps them on the target only.");
+                }
+                if (keys.Get("primary") is { } pr)
+                {
+                    if (pr is YamlScalar { Value: "target" or "state" } ps) primary = ps.Value;
+                    else Add(DiagnosticCatalog.InvalidValue, pr, "`tracking.primary` is `target` or `state`.", "The side the records are written to first.");
+                    if (primary != null && mode == "target") Add(DiagnosticCatalog.InvalidValue, pr, "`tracking.mode: target` keeps one side only, so it takes no `primary`.", "Remove `primary`, or use `mode: both`.");
+                    if (primary == "target" && mode == "state") Add(DiagnosticCatalog.InvalidValue, pr, "`tracking.mode: state` writes to the state first, so its primary is `state`.", "Remove `primary`, or use `mode: both`.");
+                }
+            }
+            return t == null ? null : new TrackingConfig(t.Value.Connection, t.Value.SchemaName ?? ProductInfo.TrackingSchemaName, RunnerCopy: runnerCopy, Mode: mode, Primary: primary);
         }
 
         private (string? Connection, string? SchemaName)? ReadTrackingMapping(YamlNode node, IReadOnlySet<string> connections, string where, string[]? keys = null)
