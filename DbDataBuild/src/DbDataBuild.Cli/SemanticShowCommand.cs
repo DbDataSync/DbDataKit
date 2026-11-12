@@ -47,7 +47,7 @@ internal static class SemanticShowCommand
             foreach (var b in compiled.Bindings)
                 output.WriteLine($"  {b.Member,-30} {b.Kind,-10} {b.Source,-12} {b.Model}.{b.Column}{(b.Aggregate != null ? $"  ({b.Aggregate})" : "")}");
             foreach (var r in compiled.Relationships)
-                output.WriteLine($"  relationship {r.Name}: {r.FromModel}({string.Join(", ", r.FromColumns)}) -> {r.ToModel}({string.Join(", ", r.ToColumns)}){(r.Role != null ? $" as {r.Role}" : "")}");
+                output.WriteLine($"  relationship {r.Name}: {r.FromModel}({string.Join(", ", r.FromColumns)}) -> {r.ToModel}({string.Join(", ", r.ToColumns)}){(r.Role != null ? $" as {r.Role}" : "")}{(r.DeclaredAt is { } at ? $"  [foreign key, {at.File}:{at.Line}]" : "  [semantic file]")}");
             foreach (var (name, levels) in Hierarchies(m))
                 output.WriteLine($"  hierarchy {name}: {string.Join(" > ", levels)}");
         }
@@ -72,7 +72,7 @@ internal static class SemanticShowCommand
             sources = compiled.Sources.OrderBy(s => s.Key, StringComparer.Ordinal).Select(s => new { source = s.Key, connection = m.Connections[s.Key], engine = ctx.Config.Connections[m.Connections[s.Key]].Engine }).ToList(),
             bindings = compiled.Bindings.Select(b => new { member = b.Member, kind = b.Kind, source = b.Source, connection = m.Connections[b.Source], model = b.Model, column = b.Column, aggregate = b.Aggregate }).ToList(),
             tables = compiled.Tables.Select(t => new { name = t.Name, model = t.Model, source = t.Source, connection = m.Connections[t.Source], physical = t.Physical.Name, primary_key = t.Physical.PrimaryKey, columns = t.Physical.Columns.Select(c => new { name = c.Name, type = c.DataType }).ToList() }).ToList(),
-            relationships = compiled.Relationships.Select(r => new { name = r.Name, from = r.FromModel, to = r.ToModel, from_columns = r.FromColumns, to_columns = r.ToColumns, source = r.Source, role = r.Role }).ToList(),
+            relationships = compiled.Relationships.Select(r => new { name = r.Name, from = r.FromModel, to = r.ToModel, from_columns = r.FromColumns, to_columns = r.ToColumns, source = r.Source, role = r.Role, origin = r.DeclaredAt is null ? "file" : "foreign_key", declared_at = r.DeclaredAt is { } at ? new { file = at.File, line = at.Line } : null }).ToList(),
             hierarchies = Hierarchies(m).Select(h => new { name = h.Name, levels = h.Levels }).ToList(),
         };
     }

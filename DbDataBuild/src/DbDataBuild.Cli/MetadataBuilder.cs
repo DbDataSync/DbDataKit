@@ -61,7 +61,22 @@ internal static class MetadataBuilder
                 connections = m.Connections,
                 definition_hash = DefinitionHashOf(ctx, m.Name),
             }).ToList(),
+            // the semantic models of semantic/ and the table each generated model has on every connection (plan 14a SL10); absent when the project has none (null is omitted)
+            semantic = SemanticModelsOf(ctx),
         };
+    }
+
+    private static object? SemanticModelsOf(ProjectContext ctx)
+    {
+        var compiled = ctx.Semantic.Models.Where(m => m.Compilation is not null).OrderBy(m => m.Name, StringComparer.Ordinal).ToList();
+        if (compiled.Count == 0) return null;
+        return compiled.Select(m => new
+        {
+            name = m.Name,
+            file = m.File,
+            connections = m.Connections.OrderBy(c => c.Key, StringComparer.Ordinal).ToDictionary(c => c.Key, c => c.Value),
+            tables = m.Compilation!.Tables.Select(t => new { model = t.Model, source = t.Source, connection = m.Connections[t.Source], physical = t.Physical.Name }).ToList(),
+        }).ToList();
     }
 
     /// <summary>The definition hash of every model of the project, of any kind, by name.</summary>

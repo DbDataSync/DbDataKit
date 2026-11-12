@@ -300,6 +300,61 @@
               "boolean"
             ]
           }
+        },
+        "semantic": {
+          "description": "The project's semantic models (`semantic/`): the file, the connection each source reads and the physical table each generated model has on each connection. Left out when the project has none (plan 14a SL10; an optional key is not a version change).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string"
+              },
+              "connections": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "tables": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "model": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "connection": {
+                      "type": "string"
+                    },
+                    "physical": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "source",
+                    "connection",
+                    "physical"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "name",
+              "file",
+              "connections",
+              "tables"
+            ]
+          }
         }
       },
       "required": [
