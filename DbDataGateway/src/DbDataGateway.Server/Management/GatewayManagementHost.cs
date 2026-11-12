@@ -168,6 +168,7 @@ public static class GatewayManagementHost
                 app.Services.GetRequiredService<DbDataGateway.Server.State.TableReadRecorder>(), app.Services.GetRequiredService<DbDataGateway.Server.State.TableReadStore>(), instanceId),
             audit: audit,
             cache: cacheApi,
+            accessKeys: new GatewayAccessManagement(app.Services.GetRequiredService<DbDataGateway.Server.State.GroupMaskKey>(), servingCache, audit),
             definitions: new GatewayDefinitionsManagement(state, audit, hooks: GatewayDefinitionsManagement.HooksOf(state, semanticModels, app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), dataSources, entityModels)),
             serverSettings: serverSettings,
             export: new GatewayExportManagement(new Export.ExportInstaller(Export.ExportInstaller.DefaultFetcher(), dataDirectory, GatewayHost.Version),

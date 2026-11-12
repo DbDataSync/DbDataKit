@@ -44,6 +44,7 @@ public static class Cli
         CertNoun(),
         SecretNoun(),
         IdentityCommand.Noun(),
+        AccessCommand.Noun(),
         AppsCommand.Noun(),
         ViewsCommand.Noun(),
         ExportCommand.Noun(),

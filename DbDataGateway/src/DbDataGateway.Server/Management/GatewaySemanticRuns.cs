@@ -244,7 +244,7 @@ public sealed class GatewaySemanticRuns(SemanticRunStore store, SemanticModels m
         }
 
         // the replay runs on a model set of its own that holds the one version, so the statement meets that version whatever is served now; it writes its own record below
-        var own = new SemanticModels { Level = models.Level, UserQueries = models.UserQueries, Access = models.Access };
+        var own = new SemanticModels { Level = models.Level, UserQueries = models.UserQueries, Access = models.Access, MaskKey = models.MaskKey };
         own.Set(model);
         var started = _clock.GetUtcNow();
         var clock = System.Diagnostics.Stopwatch.StartNew();

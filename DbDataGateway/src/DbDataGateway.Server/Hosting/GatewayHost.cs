@@ -176,6 +176,8 @@ public static class GatewayHost
             loaded.Runs = sp.GetRequiredService<DbDataGateway.Server.State.SemanticRunStore>();
             // the access rules of a model with row rules (plan 22a GP11): a model that has them and finds no resolver here is refused
             loaded.Access = sp.GetRequiredService<GatewayAccess>();
+            // the key of the hash mask of a column rule (plan 22a GP13): the group's, made on first use, the same on every instance and across restarts
+            loaded.MaskKey = sp.GetRequiredService<DbDataGateway.Server.State.GroupMaskKey>().Current;
             // a changed server.yaml is applied to the models without a restart; the first pass only learns which names the file gives
             var directory = ResolveDataDirectory(current);
             var configured = SemanticModelsLoader.Reload(loaded, current, directory, new HashSet<string>(), _ => { });
@@ -215,6 +217,7 @@ public static class GatewayHost
         services.AddSingleton(sp => new DbDataGateway.Server.State.ServingCacheEpochStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>(), sp.GetRequiredService<TimeProvider>()));
         // the access rules (plan 22a GP10, GP11): the group's record of when each rules table last changed, and the resolver over it with the Gateway's reader of a rules table's names
         services.AddSingleton(sp => new DbDataGateway.Server.State.RulesTableLedger(sp.GetRequiredService<DbDataKit.State.StateDatabase>(), sp.GetRequiredService<TimeProvider>()));
+        services.AddSingleton(sp => new DbDataGateway.Server.State.GroupMaskKey(sp.GetRequiredService<DbDataKit.State.StateDatabase>(), sp.GetRequiredService<DbDataGateway.Server.State.GroupSessionKey>(), sp.GetRequiredService<TimeProvider>()));
         services.AddSingleton(sp =>
         {
             var current = sp.GetRequiredService<IOptionsMonitor<GatewayOptions>>();
