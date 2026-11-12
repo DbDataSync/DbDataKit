@@ -14,7 +14,7 @@ namespace DbDataKit.Runner.Api;
 /// The connections the console hands a runner (plan 27a IX23, <c>docs/channel-bindings.md</c> "The runner: what it keeps and how the console hands it a connection"): the Runner is a separate server and never reads the console's <c>connections/</c> folder,
 /// so when an administrator binds a runner slot to a console connection (or sends it again) the console puts the connection's <b>definition with its secret references, never a value</b> here, and the runner keeps its own copy (<c>connection_copy</c>).
 /// <list type="bullet">
-/// <item><c>GET {prefix}/connection-copies</c> (viewer): every copy with its <c>version</c> (the hash both sides compute, <see cref="ConnectionCopyVersion"/>), kind, who sent it and when, which package slots use it, whether a file of the runner's own directory
+/// <item><c>GET {prefix}/connection-copies</c> (viewer): every copy with its <c>version</c> and its <c>definition</c> (the text with secret references, never a value; the console compares and adopts it, IX25) (the hash both sides compute, <see cref="ConnectionCopyVersion"/>), kind, who sent it and when, which package slots use it, whether a file of the runner's own directory
 /// shadows it, and for each secret reference whether it <b>resolves on this runner</b> (never a value).</item>
 /// <item><c>PUT {prefix}/connection-copies/{name}</c> (administrator), body <c>{"definition": "&lt;connection yaml&gt;"}</c>: validated by the shared strict loader (a value written as itself is refused, without being echoed), kept, audited with the name and version only.</item>
 /// <item><c>DELETE {prefix}/connection-copies/{name}</c> (administrator): removes the copy; a slot bound to the name then fails naming it.</item>
@@ -98,7 +98,7 @@ public static class RunnerConnectionCopyApi
         var shadowed = directory is not null && new[] { ".yaml", ".yml" }.Any(e => File.Exists(Path.Combine(directory, copy.Name + e)));
         return new JsonObject
         {
-            ["name"] = copy.Name, ["version"] = copy.Version, ["kind"] = copy.Kind, ["sent_by"] = copy.SentBy, ["sent_at"] = copy.SentAt, ["problem"] = problem,
+            ["name"] = copy.Name, ["version"] = copy.Version, ["kind"] = copy.Kind, ["sent_by"] = copy.SentBy, ["sent_at"] = copy.SentAt, ["problem"] = problem, ["definition"] = copy.Definition,
             ["shadowed_by_file"] = shadowed, ["secrets"] = secrets, ["used_by"] = new JsonArray([.. uses.GetValueOrDefault(copy.Name) ?? []]),
             ["unresolved"] = secrets.Count(s => !(bool)s!["resolves"]!),
         };
