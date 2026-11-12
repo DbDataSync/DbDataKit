@@ -21,13 +21,26 @@ namespace DbDataGateway.Server.Management;
 /// kept, so a rollback is a switch of which one is served. A model named in <c>server.yaml</c> is not replaced by a publish.
 /// </summary>
 public sealed class GatewaySemanticModels(
-    PublishedSemanticModels store, SemanticModels models, Func<GatewayOptions> options, string configDirectory, Func<DataSourceCatalog> catalog, IAuditLog audit, TimeProvider? clock = null)
+    PublishedSemanticModels store, SemanticModels models, Func<GatewayOptions> options, string configDirectory, Func<DataSourceCatalog> catalog, IAuditLog audit, TimeProvider? clock = null, DataSourceAdoptions? adoptions = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly SemaphoreSlim _publishing = new(1, 1);
 
-    private sealed record PublishRequest(string? Catalog, Dictionary<string, string>? Sources, Dictionary<string, string>? Ssas, [property: JsonPropertyName("expected_version")] int? ExpectedVersion);
+    private sealed record PublishRequest(string? Catalog, Dictionary<string, string>? Sources, Dictionary<string, string>? Ssas, [property: JsonPropertyName("expected_version")] int? ExpectedVersion, JsonNode? Adopt = null);
+
+    /// <summary>What a publish asked to adopt (plan 33 SC21f: the data sources made by hand it puts the model on, named in <c>adopt</c> as a name or a list of names), what the Gateway let through and, when it refused for want of one, the hint a screen asks the person about.</summary>
+    private sealed class Adoption(JsonNode? asked)
+    {
+        public HashSet<string> Names { get; } = asked switch
+        {
+            JsonValue v when v.TryGetValue<string>(out var one) => [one],
+            JsonArray list => [.. list.OfType<JsonValue>().Select(x => x.TryGetValue<string>(out var s) ? s : "").Where(s => s.Length > 0)],
+            _ => [],
+        };
+        public List<string> Adopted { get; } = [];
+        public JsonObject? Hint { get; set; }
+    }
 
     private sealed record RollbackRequest([property: JsonPropertyName("to_version")] int? ToVersion);
 
@@ -144,8 +157,9 @@ public sealed class GatewaySemanticModels(
             if (!string.Equals(parsed.Name, name, StringComparison.OrdinalIgnoreCase))
                 return Refused(caller, name, "The catalog is named '" + parsed.Name + "', and the call names '" + name + "'; they are the same name.");
 
-            var problem = await CheckSourcesAsync(parsed, sources, ssas, caller, cancellationToken);
-            if (problem is not null) return Refused(caller, name, problem);
+            var adoption = new Adoption(request.Adopt);
+            var problem = await CheckSourcesAsync(parsed, sources, ssas, caller, adoption, cancellationToken);
+            if (problem is not null) return Refused(caller, name, problem, extra: adoption.Hint);
 
             var was = store.Current(name);
             PublishedVersion version;
@@ -161,13 +175,18 @@ public sealed class GatewaySemanticModels(
             // served here at once; the other instances of the group serve it when they next look
             Serve(name);
             Record(caller, "semantic-model publish", name, created ? "created" : unchanged ? "unchanged" : "changed");
-            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["version"] = version.Number, ["created"] = created, ["unchanged"] = unchanged });
+            foreach (var dataSource in adoption.Adopted)
+            {
+                adoptions?.Record(dataSource, Client(caller)!, Who(caller), name, "semantic-model", _clock.GetUtcNow());
+                Record(caller, "data-source adopt", dataSource, $"adopted by {Client(caller)} ({Who(caller)}) for the model {name}");
+            }
+            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["version"] = version.Number, ["created"] = created, ["unchanged"] = unchanged, ["adopted"] = adoption.Adopted.Count == 0 ? null : new JsonArray([.. adoption.Adopted.Select(a => (JsonNode?)a)]) });
         }
         finally { _publishing.Release(); }
     }
 
     /// <summary>The first reason the mapping cannot be served, or null.</summary>
-    private async Task<string?> CheckSourcesAsync(Catalog parsed, Dictionary<string, string> sources, Dictionary<string, string> ssas, ManagementCaller caller, CancellationToken cancellationToken)
+    private async Task<string?> CheckSourcesAsync(Catalog parsed, Dictionary<string, string> sources, Dictionary<string, string> ssas, ManagementCaller caller, Adoption adopt, CancellationToken cancellationToken)
     {
         var current = options();
         var owner = Client(caller);
@@ -185,7 +204,21 @@ public sealed class GatewaySemanticModels(
             }
             var dataSource = sources.TryGetValue(source, out var mapped) ? mapped : source;
             if (!current.DataSources.ContainsKey(dataSource)) return $"Source '{source}' maps to '{dataSource}', which is not a data source of this server.";
-            if (owner is not null && ConnectionOwner(dataSource) != owner) return $"Source '{source}' maps to '{dataSource}', which this client did not make; a publishing client's models read only its own data sources.";
+            if (owner is not null && ConnectionOwner(dataSource) != owner)
+            {
+                var madeBy = ConnectionOwner(dataSource);
+                // plan 33 SC21f: a data source made by hand may be read by this client's model when the request names it in `adopt`; it is recorded after the publish. One another client made, never.
+                if (string.IsNullOrEmpty(madeBy) && adopt.Names.Contains(dataSource) && OwnerScope.AuthorizePublishingOver(caller.Token!, new ManagedObject(null)).Allowed)
+                {
+                    if (!adopt.Adopted.Contains(dataSource)) adopt.Adopted.Add(dataSource);
+                }
+                else
+                {
+                    if (string.IsNullOrEmpty(madeBy)) adopt.Hint = new JsonObject { ["data_source"] = dataSource, ["made_by"] = "hand", ["publish_adopt"] = true, ["field"] = "adopt" };
+                    return $"Source '{source}' maps to '{dataSource}', which this client did not make; a publishing client's models read only its own data sources."
+                        + (string.IsNullOrEmpty(madeBy) ? $" It was made by hand or by an administrator: publish again with \"adopt\": \"{dataSource}\" to read it; the Gateway records who adopted it and when, in its audit and in the data source's metadata." : " Another server client made it; ask an administrator to hand it over.");
+                }
+            }
             try
             {
                 var resolved = catalog().Resolve(new GatewayPrincipal("management", "management", ["*"]), dataSource);
@@ -272,11 +305,12 @@ public sealed class GatewaySemanticModels(
 
     private string Who(ManagementCaller caller) { var entry = caller.Audit("", null, "", _clock.GetUtcNow()); return entry.UserName ?? entry.UserId; }
 
-    private ManagementResult Refused(ManagementCaller caller, string name, string error, string? detail = null)
+    private ManagementResult Refused(ManagementCaller caller, string name, string error, string? detail = null, JsonObject? extra = null)
     {
         Record(caller, "semantic-model publish", name, "invalid");
         var body = new JsonObject { ["error"] = error, ["valid"] = false };
         if (detail is not null) body["detail"] = detail;
+        if (extra is not null) body["adopt"] = extra;
         return new ManagementResult(400, body);
     }
 

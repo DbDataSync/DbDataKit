@@ -53,13 +53,19 @@ export interface PublishedAnswer {
   /** a preview with data (GP35d): the instance it is of and where the Gateway serves it */
   instance?: string; preview_path?: string | null; preview_address?: string | null
   package?: string; channel?: string; mode?: string; changed?: boolean; uploaded?: number; skipped?: number; tasks?: string[]; runner?: string
-  models?: { model: string; data_source: string; version?: number | null; created?: boolean | null; unchanged?: boolean | null }[]
+  models?: { model: string; data_source?: string; data_sources?: Record<string, string>; version?: number | null; created?: boolean | null; unchanged?: boolean | null; adopted?: string | string[] | null }[]
 }
 export interface PublishAnswer { steps: string[]; published: PublishedAnswer }
 /** What sending a build to the Gateway's preview channel answered (`POST .../builds/{b}/preview-data`). */
 export interface PreviewDataAnswer { steps: string[]; preview: PublishedAnswer }
-/** What a publish says besides the target and the note: for a Runner the channel (and whether it serves at once, the slots to bind), for a Gateway the data source of the models. */
-export interface PublishOptions { channel?: string; serve?: boolean; bind?: Record<string, string>; data_source?: string }
+/** What a publish says besides the target and the note: for a Runner the channel (and whether it serves at once, the slots to bind), for a Gateway the data source of the models and, once the person confirmed it (plan 33 SC21f), the data sources made by hand the models may go on (`adopt`). */
+export interface PublishOptions { channel?: string; serve?: boolean; bind?: Record<string, string>; data_source?: string; adopt?: string[] }
+/** The Gateway refused a publish for want of an adoption (SC21f): the data source a model would go on and who made it (`hand`: by hand or by an administrator). A screen asks the person, then publishes again with `adopt`. */
+export interface AdoptionRequest { data_source: string; made_by: string }
+/** What a refresh of the catalog cache answered (plan 33 SC20j): the connection, the Gateway's data source it was read from, and how much was cached. No row and no secret is in it. */
+export interface CatalogRefreshAnswer { connection: string; data_source: string; target: string; file: string; created: boolean; generated_at: string; tables: number; columns: number; steps: string[] }
+/** What a refresh is asked: the publisher key of a Gateway, the project's connection, the Gateway's data source for it (blank: the connection's name) and `adopt` once the person confirmed a data source made by hand. */
+export interface CatalogRefreshRequest { target: string; connection: string; data_source?: string; adopt?: boolean }
 /** A target's publisher key as a person may see it: the reference to the secret, never the key, and the Gateway it is paired with. */
 export interface PublisherKey { name: string; secret_ref: string; updated: string; gateway: { url: string; roles: string[]; client_name: string; paired: string } | null }
 
@@ -115,6 +121,8 @@ export const workspaceApi = {
   /** Where a build's preview is served from (through the relay): a page for a frame, with no network and no data. */
   previewUrl: (project: string, id: string, build: string) => apiUrl(`${builds(project, id)}/${enc(build)}/preview/`),
   publishTargets: (project?: string) => request<{ targets: PublishTarget[] }>(project ? `/api/v1/publish-targets?project=${enc(project)}` : '/api/v1/publish-targets').then((r) => r.targets),
+  /** Asks a paired Gateway for the tables and columns of a data source and writes them into the draft's `catalog-cache.yaml` (SC20j). */
+  refreshCatalog: (project: string, id: string, body: CatalogRefreshRequest) => request<CatalogRefreshAnswer>(`/api/v1/projects/${enc(project)}/workspaces/${enc(id)}/catalog/refresh`, json(body)),
   publish: (project: string, id: string, build: string, target: string, note: string, options: PublishOptions = {}) => request<PublishAnswer>(`${builds(project, id)}/${enc(build)}/publish`, json({ target, ...(note ? { note } : {}), ...options })),
   previewWithData: (project: string, id: string, build: string, target: string, instance: string) => request<PreviewDataAnswer>(`${builds(project, id)}/${enc(build)}/preview-data`, json({ target, instance })),
   publisherKeys: () => request<{ keys: PublisherKey[] }>('/api/v1/publisher-keys').then((r) => r.keys),

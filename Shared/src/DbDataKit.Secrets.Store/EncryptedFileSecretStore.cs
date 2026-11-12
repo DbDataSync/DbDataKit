@@ -49,13 +49,13 @@ public sealed partial class EncryptedFileSecretStore : ISecretStore, ISecretProv
 
     /// <param name="directory">The store directory (<c>&lt;data&gt;/secrets</c>), created restricted if it is not there.</param>
     /// <param name="keys">Where the data keys come from.</param>
-    /// <param name="windowsIdentities">Who may reach the files on Windows (default: the current user, SYSTEM and Administrators); ignored elsewhere.</param>
+    /// <param name="windowsIdentities">Who may reach the files on Windows (default: the current user, SYSTEM, Administrators and the accounts of the services that run on the data directory); ignored elsewhere.</param>
     /// <param name="clock">For the time written beside each value.</param>
     public EncryptedFileSecretStore(string directory, IKeySource keys, IEnumerable<string>? windowsIdentities = null, TimeProvider? clock = null)
     {
         _directory = Path.GetFullPath(directory);
         _keys = keys;
-        _identities = (windowsIdentities ?? ["CurrentUser", "SYSTEM", "Administrators"]).ToArray();
+        _identities = (windowsIdentities ?? AclHelper.DefaultIdentities(Path.GetFullPath(Path.Combine(directory, "..")))).ToArray();
         _clock = clock ?? TimeProvider.System;
     }
 

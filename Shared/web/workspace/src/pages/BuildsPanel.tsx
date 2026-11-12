@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, ErrorBanner, Link } from '@dbdatakit/shell'
 import { workspaceApi, type BuildDetail, type BuildSummary, type PreviewDataAnswer, type PublishAnswer, type PublishOptions } from '../api'
-import { buildBusy, buildButton, buildWord, diagnosticLine, makeLabel, notIsolated, publishedLine } from '../model'
+import { adoptionRequest, buildBusy, buildButton, buildWord, diagnosticLine, makeLabel, notIsolated, publishedLine } from '../model'
 import { PreviewDataForm } from './PreviewDataForm'
 import { PublishForm } from './PublishForm'
 
@@ -125,7 +125,8 @@ function BuildDetailView({ project, id, buildId, canWrite, kind }: { project: st
                 )}
               </>
             )}
-            <PublishForm canWrite={canWrite} status={build.status} targets={targets.data ?? []} models={kind === 'store'} busy={publish.isPending} onPublish={(target, note, options) => publish.mutate({ target, note, options })} />
+            <PublishForm canWrite={canWrite} status={build.status} targets={targets.data ?? []} models={kind === 'store'} busy={publish.isPending} onPublish={(target, note, options) => publish.mutate({ target, note, options })}
+              adoption={publish.isError && publish.error instanceof ApiError ? adoptionRequest(publish.error.body) : null} onCancelAdoption={publish.reset} />
             {publish.isPending && <div className="hint" data-testid="wsp-publish-progress">Publishing: the server reads the key and sends it; the Gateway or Runner checks it and stores the version...</div>}
             {publish.isError && <PublishFailure error={publish.error} />}
             {publish.isSuccess && (

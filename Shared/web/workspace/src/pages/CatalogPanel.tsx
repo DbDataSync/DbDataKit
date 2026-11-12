@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { ErrorBanner } from '@dbdatakit/shell'
-import { workspaceApi } from '../api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ApiError, ErrorBanner } from '@dbdatakit/shell'
+import { workspaceApi, type AdoptionRequest, type CatalogRefreshAnswer, type CatalogRefreshRequest, type PublishTarget } from '../api'
+import { adoptionRequest, catalogAdoptionSentence, refreshButton, refreshedLine, refreshLabel } from '../model'
 import { shapePreview } from '../catalogPreview'
 import { CATALOG_CACHE_FILE, readCatalogCache, tableLabel, type CacheRead, type CacheTable } from '../catalogCache'
 
@@ -65,12 +66,61 @@ export function useCatalogRead(project: string, id: string): { read: CacheRead |
   return { read: present && text.data !== undefined ? readCatalogCache(text.data) : null, present, error: text.error }
 }
 
-/** The cache of a draft, read through the file route and checked by the twin reader. */
-export function CatalogPanel({ project, id, onOpen }: { project: string; id: string; onOpen: (path: string) => void }) {
+/**
+ * **Refresh from a data source** (plan 33 SC20j, D20): the Workspace holds no login, so a paired Gateway, which does, answers a read-only question (the tables and columns of a data source: names, types, keys, never a row) and the answer is written into the
+ * draft as `catalog-cache.yaml`. A data source made by hand is asked for only after the confirmation `adoption` shows (the Gateway records who and when). It sends nothing itself: `onRefresh` gets the request, so the screen and its tests say the same.
+ */
+export function RefreshForm({ canWrite, targets, busy, onRefresh, adoption = null, onCancelAdoption, initialTarget = '', initialConnection = '', initialDataSource = '' }: {
+  canWrite: boolean; targets: readonly PublishTarget[]; busy: boolean; onRefresh: (request: CatalogRefreshRequest) => void
+  adoption?: AdoptionRequest | null; onCancelAdoption?: () => void; initialTarget?: string; initialConnection?: string; initialDataSource?: string
+}) {
+  const [target, setTarget] = useState(initialTarget)
+  const [connection, setConnection] = useState(initialConnection)
+  const [dataSource, setDataSource] = useState(initialDataSource)
+  const gateways = targets.filter((t) => t.product === 'gateway' && t.can_publish)
+  const state = refreshButton({ canWrite, target, connection, busy, targets })
+  const request = (adopt: boolean): CatalogRefreshRequest => ({ target: target.trim(), connection: connection.trim(), ...(dataSource.trim() !== '' ? { data_source: dataSource.trim() } : {}), ...(adopt ? { adopt: true } : {}) })
+  return (
+    <form className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '6px 0 10px' }} data-testid="wsp-catalog-refresh" onSubmit={(e) => { e.preventDefault(); if (state.enabled) onRefresh(request(false)) }}>
+      <input className="input mono" list="wsp-catalog-targets" aria-label="Gateway to read the catalog from" placeholder="publisher key of a Gateway" value={target} onChange={(e) => setTarget(e.target.value)} data-testid="wsp-catalog-refresh-target" />
+      <datalist id="wsp-catalog-targets">{gateways.map((t) => <option key={t.name} value={t.name}>{t.gateway ?? 'not paired'}</option>)}</datalist>
+      <input className="input mono" aria-label="Connection of the project" placeholder="connection of the project" value={connection} onChange={(e) => setConnection(e.target.value)} data-testid="wsp-catalog-refresh-connection" />
+      <input className="input mono" aria-label="Data source on the Gateway" placeholder="data source (blank: the connection's name)" value={dataSource} onChange={(e) => setDataSource(e.target.value)} data-testid="wsp-catalog-refresh-datasource" />
+      <button type="submit" className="btn" disabled={!state.enabled} title={state.why ?? undefined} data-testid="wsp-catalog-refresh-go">{refreshLabel(connection, dataSource)}</button>
+      {state.why && <span className="hint" data-testid="wsp-catalog-refresh-why">{state.why}</span>}
+      {adoption && !busy && (
+        <div className="callout" style={{ flexBasis: '100%' }} role="alertdialog" aria-label={`Adopt the data source ${adoption.data_source}`} data-testid="wsp-catalog-adopt" data-data-source={adoption.data_source} data-made-by={adoption.made_by}>
+          <div data-testid="wsp-catalog-adopt-text">{catalogAdoptionSentence(adoption)}</div>
+          <div className="row" style={{ gap: 8, marginTop: 8 }}>
+            <button type="button" className="btn btn-primary" onClick={() => onRefresh(request(true))} data-testid="wsp-catalog-adopt-confirm">Confirm and read {adoption.data_source}</button>
+            <button type="button" className="btn" onClick={() => onCancelAdoption?.()} data-testid="wsp-catalog-adopt-cancel">Do not read it</button>
+          </div>
+        </div>
+      )}
+    </form>
+  )
+}
+
+/** The cache of a draft, read through the file route and checked by the twin reader; with the refresh from a Gateway above it. */
+export function CatalogPanel({ project, id, onOpen, canWrite = true }: { project: string; id: string; onOpen: (path: string) => void; canWrite?: boolean }) {
   const { read, present, error } = useCatalogRead(project, id)
   const [preview, setPreview] = useState<string | null>(null)
+  const client = useQueryClient()
+  const targets = useQuery({ queryKey: ['workspace', 'targets', 'all'], queryFn: () => workspaceApi.publishTargets(), retry: false })
+  const refresh = useMutation<CatalogRefreshAnswer, Error, CatalogRefreshRequest>({
+    mutationFn: (request) => workspaceApi.refreshCatalog(project, id, request),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['workspace', 'files', project, id] })
+      void client.invalidateQueries({ queryKey: ['workspace', 'catalog', project, id] })
+    },
+  })
   return (
     <>
+      <RefreshForm canWrite={canWrite} targets={targets.data ?? []} busy={refresh.isPending} onRefresh={(request) => refresh.mutate(request)}
+        adoption={refresh.isError && refresh.error instanceof ApiError ? adoptionRequest(refresh.error.body) : null} onCancelAdoption={refresh.reset} />
+      {refresh.isPending && <div className="hint" data-testid="wsp-catalog-refresh-progress">Asking the Gateway for the tables and columns of the data source...</div>}
+      {refresh.isError && <div data-testid="wsp-catalog-refresh-refused"><ErrorBanner error={refresh.error} /></div>}
+      {refresh.isSuccess && <div className="empty" data-testid="wsp-catalog-refreshed">{refreshedLine(refresh.data)}</div>}
       <ErrorBanner error={error} />
       <CatalogView read={read} present={present} onOpen={onOpen} preview={preview} onPreview={setPreview} />
     </>

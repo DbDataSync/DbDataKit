@@ -8,6 +8,7 @@ internal sealed record PublishOptions(string To, string? Server, string? Code, s
     string? PromoteFrom, string? RuntimeRange, string? ClientDir, string? Out, bool RunnerSchedules = false);
 
 /// <summary>
+/// `dbdatabuild project publish --to gateway --out` (plan 33 SC20e) writes the models and data sources a Gateway publish would send, with no login (<see cref="ProjectPublishGateway"/>).
 /// `dbdatabuild project publish --to runner` (plan 28c E07): the committed files of the project as a definition package on a runner. Nothing is compiled here (see <see cref="RunnerProject"/>); the package is sent by the shared publishing
 /// client (<see cref="RunnerPublishClient"/>: a file the runner has is not sent again, the version is staged and the runners of the group prepare it). A channel's connection slots are its own, so `--bind` fills them first, and
 /// `--promote-from` moves the version one channel serves to another (the runner's `switch`, an administrator's call) instead of publishing.
@@ -17,7 +18,12 @@ internal static class ProjectPublishCommand
     public static int Run(CommandSpec spec, string root, PublishOptions o, TextWriter output, TextWriter error, Func<string, string?> environment)
     {
         output.WriteLine($"{ProductInfo.Cli} {spec.Name}  |  effect: {spec.Effect.Describe()}  |  {spec.Marks}  |  connection: none");
-        if (o.To != "runner") { error.WriteLine($"--to is `runner`, the only place a project is published to, not `{o.To}`."); return CliApp.ExitUsage; }
+        if (o.To == "gateway")
+        {
+            if (o.Server is not null || o.Channel is not null || o.PromoteFrom is not null || o.Serve) { error.WriteLine("--to gateway only writes (--out <directory>); --server, --channel, --serve and --promote-from belong to --to runner."); return CliApp.ExitUsage; }
+            return ProjectPublishGateway.Run(spec, root, o.Out, output, error);
+        }
+        if (o.To != "runner") { error.WriteLine($"--to is `runner` or `gateway`, not `{o.To}`."); return CliApp.ExitUsage; }
         var package = o.Package ?? RunnerProject.DefaultPackageName(root);
         var bindings = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var text in o.Bind)

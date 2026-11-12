@@ -73,6 +73,38 @@ public sealed class WorkspaceStorePublishTests
     }
 
     [Fact]
+    public async Task A_model_goes_on_a_hand_made_data_source_only_with_the_confirmation_the_refusal_names_the_data_source_and_who_made_it_and_the_gateway_records_the_adoption()
+    {
+        await using var gateway = await FakeGateway.StartAsync();
+        gateway.HandMade.Add("mdm");
+        await using var server = await WorkspaceHarness.StartAsync();
+        await Pair(server, gateway);
+        var workspace = await DraftAsync(server);
+        var build = await BuildAsync(server, workspace);
+
+        // refused with what a screen needs to ask: the data source and who made it
+        var refused = await Publish(server, workspace, build, new JsonObject { ["target"] = "edge" });
+        Assert.Equal(HttpStatusCode.Conflict, refused.Response.StatusCode);
+        Assert.Contains("adopt", (string)refused.Body!["error"]!);
+        Assert.Equal(("mdm", "hand"), ((string)refused.Body["adopt"]!["data_source"]!, (string)refused.Body["adopt"]!["made_by"]!));
+        Assert.Empty(gateway.Models);
+
+        // a confirmation that names another data source is no confirmation, here and not only at the Gateway
+        var wrong = await Publish(server, workspace, build, new JsonObject { ["target"] = "edge", ["adopt"] = "elsewhere" });
+        Assert.Equal(HttpStatusCode.BadRequest, wrong.Response.StatusCode);
+        Assert.Contains("confirm the data source it goes on", (string)wrong.Body!["error"]!);
+        Assert.Empty(gateway.Models);
+
+        var adopted = await Publish(server, workspace, build, new JsonObject { ["target"] = "edge", ["adopt"] = "mdm" });
+        Assert.Equal(HttpStatusCode.OK, adopted.Response.StatusCode);
+        Assert.Equal("mdm", (string)adopted.Body!["published"]!["models"]![0]!["adopted"]!);
+        Assert.Contains($"mdm for {Project} by ", Assert.Single(gateway.Adoptions));
+        // the Workspace keeps the confirmation with the publish
+        var recorded = (await server.AsAda(HttpMethod.Get, $"/api/v1/projects/{Project}/workspaces/{workspace}/builds/{build}")).Body!["publishes"]!.ToJsonString();
+        Assert.Contains("\"adopted\":\"mdm\"", recorded);
+    }
+
+    [Fact]
     public async Task A_data_source_the_gateway_does_not_have_and_a_gateways_refusal_come_back_in_its_words_and_a_runner_is_not_a_target()
     {
         await using var gateway = await FakeGateway.StartAsync();
