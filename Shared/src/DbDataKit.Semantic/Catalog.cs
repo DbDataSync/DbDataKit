@@ -279,10 +279,13 @@ public sealed class Catalog
     public string Name => Source["name"]!.GetValue<string>();
 
     /// <summary>
-    /// The format of the semantic package this catalog needs (plan 24a UC03): 2 when it carries a <c>cache</c> or <c>checks</c> section, otherwise 1, so a catalog that uses nothing of format 2 is still published in
+    /// The format of the semantic package this catalog needs (plan 24a UC03): 2 when it carries a <c>cache</c>, <c>access</c> or <c>checks</c> section, otherwise 1, so a catalog that uses nothing of format 2 is still published in
     /// format 1 and an instance that reads only format 1 keeps serving it. A published <c>semantic-model</c> definition records this number as its format (24a UC01).
     /// </summary>
-    public int Format => Source["cache"] is not null || Source["checks"] is not null ? 2 : 1;
+    public int Format => Source["cache"] is not null || Source["access"] is not null || Source["checks"] is not null ? 2 : 1;
+
+    /// <summary>The <c>access</c> section (format 2, plan 22a GP01): row rules by rules table and column rules; null when the catalog has none. Checked at load.</summary>
+    public DbDataKit.Access.AccessSection? Access => CatalogLoader.ReadAccess(Source);
 
     /// <summary>The <c>cache</c> section (format 2), or null when the catalog has none: the cache is off. Values were checked at load.</summary>
     public DbDataKit.Config.Yaml.CacheSection? Cache => Source["cache"] is JsonObject cache ? CacheOf(cache) : null;

@@ -13,5 +13,6 @@
     <ProjectReference Include="..\DbDataKit.Dialect\DbDataKit.Dialect.csproj" />
     <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
     <ProjectReference Include="..\DbDataKit.Quality\DbDataKit.Quality.csproj" />
+    <ProjectReference Include="..\DbDataKit.Access\DbDataKit.Access.csproj" />
   </ItemGroup>
 </Project>

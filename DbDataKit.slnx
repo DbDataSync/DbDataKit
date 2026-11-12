@@ -97,6 +97,7 @@
     <Project Path="Shared/src/DbDataKit.Knowledge.Index/DbDataKit.Knowledge.Index.csproj" />
     <Project Path="Shared/src/DbDataKit.Knowledge.Cli/DbDataKit.Knowledge.Cli.csproj" />
     <Project Path="Shared/src/DbDataKit.Knowledge.Onnx/DbDataKit.Knowledge.Onnx.csproj" />
+    <Project Path="Shared/src/DbDataKit.Access/DbDataKit.Access.csproj" />
     <Project Path="Shared/src/DbDataKit.Agents/DbDataKit.Agents.csproj" />
     <Project Path="Shared/src/DbDataKit.Agents.Providers/DbDataKit.Agents.Providers.csproj" />
     <Project Path="Shared/src/DbDataKit.Lineage/DbDataKit.Lineage.csproj" />
@@ -168,6 +169,7 @@
     <Project Path="Shared/tests/DbDataKit.Apps.Manifest.Tests/DbDataKit.Apps.Manifest.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Authoring.Tests/DbDataKit.Authoring.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Backlog.Tests/DbDataKit.Backlog.Tests.csproj" />
+    <Project Path="Shared/tests/DbDataKit.Access.Tests/DbDataKit.Access.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Quality.Tests/DbDataKit.Quality.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Quality.Evaluation.Tests/DbDataKit.Quality.Evaluation.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Quality.Runner.Tests/DbDataKit.Quality.Runner.Tests.csproj" />
