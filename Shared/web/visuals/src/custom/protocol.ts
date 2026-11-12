@@ -22,6 +22,8 @@ export interface HostLinkInfo {
   values: Record<string, { kind: 'literal' | 'field' | 'param' | 'ask'; text: string; value?: Scalar }>
   print?: 'hidden' | 'normal' | 'link'
   label?: string
+  /** The link is an action (a `change` or a `task`, DBR53): the code fires it with `request`. */
+  action?: boolean
 }
 
 export interface ViewProps {
@@ -84,6 +86,7 @@ export function readToHost(data: unknown): ToHost | null {
 export function hostLinkInfo(link: LinkInfo, route: string | null): HostLinkInfo {
   return {
     route: link.hasAddress ? route : null,
+    ...(link.action ? { action: true } : {}),
     as: link.as,
     values: Object.fromEntries(Object.entries(link.values).map(([k, v]) => [k, { kind: v.kind, text: v.text, ...(v.value === undefined ? {} : { value: v.value }) }])),
     ...(link.print ? { print: link.print } : {}),

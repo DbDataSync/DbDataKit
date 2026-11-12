@@ -196,6 +196,22 @@ tr.vz-pointable:hover td, th.vz-pointable:hover, td.vz-pointable:hover { backgro
 .vz-surface-panel .vz-surface-box { top: 0; right: 0; bottom: 0; width: min(520px, 96vw); }
 .vz-surface-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--vz-edge, #d0d7de); }
 .vz-surface-head h2 { margin: 0; font-size: 15px; }
+.vz-action-box { height: auto; max-height: 84vh; overflow: auto; }
+.vz-action-body { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.vz-action-forecast { margin: 0; font-size: 13px; }
+.vz-action-shows { margin: 0; display: grid; gap: 2px; font-size: 13px; }
+.vz-action-shows div { display: flex; gap: 8px; }
+.vz-action-shows dt { color: var(--vz-muted, #57606a); min-width: 8em; }
+.vz-action-shows dd { margin: 0; }
+.vz-action-ask { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.vz-action-writes { border-collapse: collapse; font-size: 13px; width: 100%; }
+.vz-action-writes caption { text-align: left; font-weight: 600; padding-bottom: 4px; }
+.vz-action-writes th, .vz-action-writes td { text-align: left; padding: 3px 8px; border-top: 1px solid var(--vz-edge, #d0d7de); }
+.vz-action-writes th { font-weight: 500; color: var(--vz-muted, #57606a); width: 30%; }
+.vz-action-problem { color: #b42318; font-size: 13px; margin: 0; }
+.vz-action-done { font-size: 13px; margin: 0; }
+.vz-action-buttons { display: flex; justify-content: flex-end; gap: 8px; }
+.vz-button-danger { background: #b42318; color: #fff; border-color: #b42318; }
 .vz-surface-frame { flex: 1; min-height: 0; border: 0; width: 100%; background: transparent; }
 /* an attribute in a cell (plan 32 DBR51): an icon chosen by the value, a badge, a mixed marker, a link */
 .vz-icon { display: inline-block; min-width: 1.1em; text-align: center; font-size: 1.05em; line-height: 1; }

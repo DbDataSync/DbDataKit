@@ -23,6 +23,8 @@ export interface HostLinkInfo {
   /** What the exporter draws: `hidden`, `normal` or `link`, or absent for the element's meaning to decide. */
   print?: 'hidden' | 'normal' | 'link'
   label?: string
+  /** The link is an action (a `change` or a `task`): fire it with `useRequest`. */
+  action?: boolean
 }
 
 /** What a view is given. `size.height` is `'auto'` for a page (it grows and paginates). */
@@ -151,6 +153,15 @@ export function useSetParam(): (name: string, value: Scalar | Scalar[] | null) =
 export function useOpen(): (link: string, row: Row) => void {
   const { port, mode, props } = host()
   return (link, row) => { if (mode === 'screen' && link in props.links) port.send({ type: 'views:open', link, row }) }
+}
+
+/**
+ * `request(link, row)`: fires an **action** of the document (a `change` or a `task`, plan 32 DBR53) for a row. The shell shows its own confirmation popup in the **declaration's** words and sends nothing until the person confirms:
+ * the code can name only a declared link and give the row, never the popup's text, the values written or the target. Does nothing in print and image mode, or for a link that is not an action.
+ */
+export function useRequest(): (link: string, row: Row) => void {
+  const { port, mode, props } = host()
+  return (link, row) => { if (mode === 'screen' && props.links[link]?.action === true) port.send({ type: 'views:open', link, row }) }
 }
 
 /** The link a dialog or panel last closed for, and whether a form saved: the view may draw again. */
