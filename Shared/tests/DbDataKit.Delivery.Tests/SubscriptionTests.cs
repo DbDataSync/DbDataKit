@@ -40,9 +40,9 @@ public sealed class SubscriptionTests
 
     private static RenderResult.Rendered Rendered(string text, string title = "Sales") => new(Encoding.UTF8.GetBytes(text), "application/pdf", "sales.pdf", title, $"Sales for the week: {text}", "https://console.example/views/sales", []);
 
-    private static (SubscriptionService Service, SubscriptionStore Store, FakeRenderer Renderer, FakeDirectory Directory, ScriptedChannel Channel, ChannelSet Channels) Build(DeliveryHarness h, Func<SubscriptionRender, RenderResult> render, DbDataKit.Monitoring.INotificationFeed? notifications = null)
+    private static (SubscriptionService Service, SubscriptionStore Store, FakeRenderer Renderer, FakeDirectory Directory, ScriptedChannel Channel, ChannelSet Channels) Build(DeliveryHarness h, Func<SubscriptionRender, RenderResult> render, DbDataKit.Monitoring.INotificationFeed? notifications = null, string kind = "scripted")
     {
-        var channel = new ScriptedChannel("mail", _ => DeliveryResult.Sent());
+        var channel = new ScriptedChannel("mail", _ => DeliveryResult.Sent(), kind: kind);
         var channels = new ChannelSet(channel);
         var delivery = h.Service(channels, "sender");
         var renderer = new FakeRenderer(render);
@@ -104,9 +104,76 @@ public sealed class SubscriptionTests
     public void The_module_has_the_subscription_tables_in_its_second_migration_and_follows_the_conventions()
     {
         Assert.Empty(StateConventions.Violations(DeliveryModule.Module));
-        Assert.Equal(4, DeliveryModule.Module.Version);
+        Assert.Equal(5, DeliveryModule.Module.Version);
         Assert.Contains(DeliveryModule.Module.Retention, r => r is { Table: "subscription_run", TimeColumn: "started_at", DefaultDays: 90 });
         Assert.DoesNotContain(DeliveryModule.Module.Retention, r => r.Table == "subscription");
+    }
+
+    [Fact]
+    public void The_inline_preview_is_a_flag_of_a_pdf_subscription()
+    {
+        static SubscriptionSpec Read(string extra) => SubscriptionSpec.Read(JsonNode.Parse("""{"name": "n", "kind": "report", "view": "v", "channel": "mail", "schedule": {"cron": "0 7 * * *"}""" + extra + "}")!.AsObject(), "request");
+        Assert.False(Read("").Fields.InlinePreview);
+        Assert.True(Read(", \"inline_preview\": true").Fields.InlinePreview);
+        Assert.False(Read(", \"inline_preview\": false, \"format\": \"xlsx\"").Fields.InlinePreview);
+        Assert.Contains("inline_preview is true or false", Assert.Throws<SubscriptionSpecException>(() => Read(", \"inline_preview\": \"yes\"")).Message);
+        Assert.Contains("`inline_preview` is a picture of a PDF's pages", Assert.Throws<SubscriptionSpecException>(() => Read(", \"inline_preview\": true, \"format\": \"xlsx\"")).Message);
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public void The_inline_preview_is_stored_and_edited(string engine)
+    {
+        using var h = new DeliveryHarness(engine);
+        var store = new SubscriptionStore(h.Database);
+        var id = store.Create(Fields() with { InlinePreview = true }, "ana", "Ana Lopez", "ana", T0);
+        var row = store.Find(id)!;
+        Assert.True(row.Fields.InlinePreview);
+        Assert.True(store.Update(id, Fields(), T0, row.Version));
+        Assert.False(store.Find(id)!.Fields.InlinePreview);
+        Assert.False(store.Find(store.Create(Fields(), "bo", "Bo Chen", "bo", T0))!.Fields.InlinePreview);
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public async Task An_email_shows_the_preview_picture_inline_and_a_chat_channel_gets_the_link_only(string engine)
+    {
+        using var h = new DeliveryHarness(engine);
+        byte[] png = [137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3];
+        RenderResult Render(SubscriptionRender r) => Rendered("pdf bytes") with { Preview = r.InlinePreview ? png : null };
+        foreach (var kind in new[] { "email", "teams" })
+        {
+            var (service, store, renderer, _, _, _) = Build(h, Render, kind: kind);
+            var idWith = store.Create(Fields($"With picture ({kind})") with { InlinePreview = true }, "ana", "Ana Lopez", "ana", T0);
+            var idWithout = store.Create(Fields($"Without ({kind})"), "bo", "Bo Chen", "bo", T0);
+            var results = await service.RunDueAsync(default);
+            Assert.All(results, r => Assert.Equal("sent", r.Outcome));
+            Assert.Equal([false, true], renderer.Asked.Select(a => a.InlinePreview).Order());   // the renderer is asked for a picture only when the subscription says so
+
+            var messages = h.Store.List(source: null);
+            var withPicture = messages.Single(m => m.Source == $"subscription:{idWith:D}");
+            var without = messages.Single(m => m.Source == $"subscription:{idWithout:D}");
+            Assert.Single(without.Attachments);
+            Assert.DoesNotContain("cid:", without.BodyHtml);
+            if (kind == "email")
+            {
+                Assert.Equal(["sales.pdf", "preview.png"], withPicture.Attachments.Select(a => a.Name));
+                var inline = withPicture.Attachments[1];
+                Assert.Equal(("image/png", "preview@dbdatakit"), (inline.MediaType, inline.ContentId));
+                Assert.Null(withPicture.Attachments[0].ContentId);
+                Assert.Contains("<img src=\"cid:preview@dbdatakit\"", withPicture.BodyHtml);
+                using var reader = h.Payloads.OpenRead(inline.Payload);
+                using var ms = new MemoryStream();
+                reader.CopyTo(ms);
+                Assert.Equal(png, ms.ToArray());
+            }
+            else
+            {
+                Assert.Single(withPicture.Attachments);     // Teams and Slack cannot hold a file: the message links to the live view
+                Assert.DoesNotContain("cid:", withPicture.BodyHtml);
+                Assert.Equal("https://console.example/views/sales", withPicture.Link);
+            }
+
+            foreach (var created in store.List()) store.Delete(created.Id);
+        }
     }
 
     [Theory, MemberData(nameof(Engines))]

@@ -72,6 +72,8 @@ export interface Subscription {
   widget: string | null
   channel: string
   recipient: string | null
+  /** An email also shows a picture of the document inline (a PDF subscription only; Teams and Slack link to the view). */
+  inlinePreview?: boolean
   schedule: { cron: string; timeZone: string }
   person: string
   personName: string
@@ -98,6 +100,7 @@ export interface SubscriptionForm {
   layout: string
   channel: string
   recipient: string
+  inlinePreview?: boolean
   cron: string
   timeZone: string
   /** The document's parameters as JSON text: an object of values or lists of values. */
@@ -116,6 +119,7 @@ export function buildRequest(form: SubscriptionForm): { body: Record<string, unk
   if (form.widget.trim() !== '' && form.format !== 'pdf') body.widget = form.widget.trim()
   if (form.layout.trim() !== '' && form.format === 'pdf') body.layout = form.layout.trim()
   if (form.recipient.trim() !== '') body.recipient = form.recipient.trim()
+  if (form.inlinePreview && form.format === 'pdf') body.inline_preview = true
   if (form.parameters.trim() !== '') {
     try {
       const parsed: unknown = JSON.parse(form.parameters)
@@ -129,7 +133,7 @@ export function buildRequest(form: SubscriptionForm): { body: Record<string, unk
 }
 
 export const formFromSubscription = (s: Subscription): SubscriptionForm => ({
-  name: s.name, kind: s.kind, view: s.view, format: s.format, widget: s.widget ?? '', layout: s.layout ?? '', channel: s.channel, recipient: s.recipient ?? '', cron: s.schedule.cron, timeZone: s.schedule.timeZone,
+  name: s.name, kind: s.kind, view: s.view, format: s.format, widget: s.widget ?? '', layout: s.layout ?? '', channel: s.channel, recipient: s.recipient ?? '', inlinePreview: s.inlinePreview === true, cron: s.schedule.cron, timeZone: s.schedule.timeZone,
   parameters: s.parameters ? JSON.stringify(s.parameters) : '',
 })
 

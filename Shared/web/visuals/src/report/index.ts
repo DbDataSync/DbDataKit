@@ -1,4 +1,4 @@
-export { PagedFrame } from './PagedFrame'
+export { PagedFrame, fitScale } from './PagedFrame'
 export type { PagedFrameProps } from './PagedFrame'
 export { PrintPreviewDialog, usePrintPreview } from './PrintPreview'
 export type { PrintPreview } from './PrintPreview'

@@ -1,7 +1,10 @@
 namespace DbDataKit.Delivery;
 
-/// <summary>A file that goes with a message, as a channel gets it at send time: the bytes are read from the outbox's payload just before the try.</summary>
-public sealed record DeliveryAttachment(string Name, string MediaType, byte[] Content);
+/// <summary>
+/// A file that goes with a message, as a channel gets it at send time: the bytes are read from the outbox's payload just before the try. A <paramref name="ContentId"/> makes it <b>inline</b>: a picture the HTML body names as <c>cid:&lt;ContentId&gt;</c>
+/// (email puts it in the message beside the body, not among the downloads); a channel that cannot show one (Teams, Slack, the webhook) says the file is not included, as it does for any attachment.
+/// </summary>
+public sealed record DeliveryAttachment(string Name, string MediaType, byte[] Content, string? ContentId = null);
 
 /// <summary>What a channel is given to send: the message as written to the outbox and the number of this try (from 1).</summary>
 public sealed record DeliveryPayload(Guid MessageId, string Channel, IReadOnlyList<string> Recipients, string Subject, string? Text, string? Html, string? Link, IReadOnlyList<DeliveryAttachment> Attachments, int Attempt);

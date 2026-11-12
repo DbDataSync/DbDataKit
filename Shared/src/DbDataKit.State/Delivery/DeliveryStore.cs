@@ -6,7 +6,7 @@ using System.Text.Json.Nodes;
 namespace DbDataKit.State;
 
 /// <summary>An attachment as the outbox keeps it: the payload that holds the bytes (owned by the message row), and how it is called and typed.</summary>
-public sealed record AttachmentRef(Guid Payload, string Name, string MediaType, long Size);
+public sealed record AttachmentRef(Guid Payload, string Name, string MediaType, long Size, string? ContentId = null);
 
 /// <summary>A message to write to the outbox. <paramref name="Id"/> is chosen by the caller when the attachments' payloads were written first (they name the message row as their owner).</summary>
 public sealed record NewMessage(string Channel, string Subject, IReadOnlyList<string>? Recipients = null, string? BodyText = null, string? BodyHtml = null, string? Link = null,
@@ -58,7 +58,7 @@ public sealed class DeliveryStore(StateDatabase database)
         var id = message.Id ?? database.NewId();
         var now = database.Time.GetUtcNow();
         var recipients = message.Recipients is { Count: > 0 } r ? JsonSerializer.Serialize(r, Json) : null;
-        var attachments = message.Attachments is { Count: > 0 } a ? JsonSerializer.Serialize(a.Select(x => new { payload = x.Payload.ToString("D"), name = x.Name, media_type = x.MediaType, size = x.Size }), Json) : null;
+        var attachments = message.Attachments is { Count: > 0 } a ? JsonSerializer.Serialize(a.Select(x => x.ContentId is null ? (object)new { payload = x.Payload.ToString("D"), name = x.Name, media_type = x.MediaType, size = x.Size } : new { payload = x.Payload.ToString("D"), name = x.Name, media_type = x.MediaType, size = x.Size, content_id = x.ContentId }), Json) : null;
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
@@ -190,7 +190,7 @@ public sealed class DeliveryStore(StateDatabase database)
         var attachments = new List<AttachmentRef>();
         if (Text(r, 7) is { } aj && JsonNode.Parse(aj) is JsonArray list)
             foreach (var item in list.OfType<JsonObject>())
-                attachments.Add(new AttachmentRef(Guid.Parse((string)item["payload"]!), (string)item["name"]!, (string)item["media_type"]!, (long)item["size"]!));
+                attachments.Add(new AttachmentRef(Guid.Parse((string)item["payload"]!), (string)item["name"]!, (string)item["media_type"]!, (long)item["size"]!, (string?)item["content_id"]));
         return new MessageRow(r.Uuid(0), r.GetString(1), recipients, r.GetString(3), Text(r, 4), Text(r, 5), Text(r, 6), attachments, Text(r, 8), Text(r, 9), r.GetString(10), r.Int32(11), r.Time(12), Text(r, 13), r.NullableTime(14),
             Text(r, 15), Text(r, 16), r.Time(17), r.Time(18), r.NullableTime(19), Text(r, 20));
     }

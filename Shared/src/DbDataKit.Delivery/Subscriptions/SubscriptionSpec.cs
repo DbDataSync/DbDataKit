@@ -18,6 +18,7 @@ public sealed class SubscriptionSpecException(string message) : Exception(messag
 ///   "widget": "orders-table",           // required for csv (one widget's rows); optional for xlsx; not for pdf
 ///   "channel": "mail",                  // a channel of the delivery: section
 ///   "recipient": "ana@example.com",     // optional: the subscriber's own address when left out
+///   "inline_preview": true,             // optional, PDF only: an email also shows a picture of the document in the message (Teams and Slack: the link only)
 ///   "schedule": { "cron": "0 7 * * 1", "time_zone": "Europe/Berlin" } }
 /// </code>
 /// A schedule is at most hourly (no occurrence within an hour of the next): a person's mailbox is not a monitoring system. The parameters are the document's own, by name, scalars or lists of scalars; the rendering checks them against the document.
@@ -28,7 +29,7 @@ public sealed record SubscriptionSpec(SubscriptionFields Fields)
 
     public static IReadOnlyList<string> Formats { get; } = ["pdf", "csv", "xlsx"];
 
-    private static readonly string[] Keys = ["name", "kind", "view", "parameters", "layout", "format", "widget", "channel", "recipient", "schedule"];
+    private static readonly string[] Keys = ["name", "kind", "view", "parameters", "layout", "format", "widget", "channel", "recipient", "inline_preview", "schedule"];
     private static readonly string[] ScheduleKeys = ["cron", "time_zone"];
     private static readonly Regex Identifier = new(@"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$", RegexOptions.CultureInvariant);
 
@@ -57,6 +58,13 @@ public sealed record SubscriptionSpec(SubscriptionFields Fields)
         if (recipient is not null && (recipient.Length > 254 || recipient.Contains(' ', StringComparison.Ordinal) || recipient.Count(c => c == '@') != 1 || recipient.StartsWith('@') || recipient.EndsWith('@')))
             throw new SubscriptionSpecException($"{source}: recipient is an email address.");
 
+        var preview = false;
+        if (json["inline_preview"] is { } ip)
+        {
+            if (ip is not JsonValue pv || !pv.TryGetValue<bool>(out preview)) throw new SubscriptionSpecException($"{source}: inline_preview is true or false.");
+            if (preview && format != "pdf") throw new SubscriptionSpecException($"{source}: `inline_preview` is a picture of a PDF's pages; `csv` and `xlsx` have none.");
+        }
+
         JsonObject? parameters = null;
         if (json["parameters"] is { } p)
         {
@@ -76,7 +84,7 @@ public sealed record SubscriptionSpec(SubscriptionFields Fields)
         if (Schedule.OnCron(cron, zone).Validate() is { } problem) throw new SubscriptionSpecException($"{source}: schedule: {problem}");
         if (Gap(cron, zone) is { } gap && gap < MinInterval)
             throw new SubscriptionSpecException($"{source}: schedule `{cron}` runs every {(gap.TotalMinutes < 1 ? "minute" : $"{gap.TotalMinutes:0} minutes")}; a subscription is at most hourly.");
-        return new SubscriptionSpec(new SubscriptionFields(name, kind, view, parameters, layout, format, widget, channel, recipient, cron, zone));
+        return new SubscriptionSpec(new SubscriptionFields(name, kind, view, parameters, layout, format, widget, channel, recipient, cron, zone, preview));
     }
 
     /// <summary>The smallest gap between the next occurrences of a schedule (a month ahead), or null when it has fewer than two.</summary>
