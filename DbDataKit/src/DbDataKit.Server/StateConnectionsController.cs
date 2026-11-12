@@ -114,13 +114,17 @@ public sealed class StateConnectionsController(ConsoleStateConnections connectio
 
         // the target's checks are the server's own, made with its own modules (their tables, their engine features) and its own secret store: the dry run of the move answers them (plan 29b C06)
         var (dryCode, dry) = await relay.CallAsync(server, HttpMethod.Post, "/api/v1/state/move", Payload(connection!, dryRun: true), cancellationToken);
-        if (dryCode == 200 && dry?["steps"] is JsonArray steps)
+        if (dryCode == 200)
         {
-            foreach (var step in steps.OfType<JsonObject>())
-                Add($"target {step["name"]?.GetValue<string>()}", step["status"]?.GetValue<string>() != "failed", step["message"]?.GetValue<string>() ?? "");
-            Add("target empty", true, "The target holds no module: it can take the state.");
+            if (dry?["steps"] is JsonArray steps)
+                foreach (var step in steps.OfType<JsonObject>())
+                    Add($"target {step["name"]?.GetValue<string>()}", step["status"]?.GetValue<string>() != "failed", step["message"]?.GetValue<string>() ?? "");
+            Add("server can open the target", true, dry?["message"]?.GetValue<string>() ?? "The server can open the target.");
+            // the server's own preflight refuses a target that holds a module (409); the console adds what it sees itself when it can reach the target (never a SQLite file, which is on the server's machine)
+            var seen = connection!.Engine == "sqlite" ? null : await TestAsync(connection);
+            if (seen is { Ok: true, Empty: false }) Add("target empty", false, EmptySentence(seen));
+            else Add("target empty", true, "The target holds no module: it can take the state.");
         }
-        else if (dryCode == 200) Add("server can open the target", true, dry?["message"]?.GetValue<string>() ?? "The server can open the target.");
         else
         {
             // an older server answers without the steps: the checks the console can make itself (never for a SQLite file, which is on the server's machine)
@@ -128,8 +132,10 @@ public sealed class StateConnectionsController(ConsoleStateConnections connectio
             {
                 var report = await TestAsync(connection);
                 foreach (var step in report.Steps) Add($"target {step.Name}", step.Status != "failed", step.Message);
-                if (report.Ok) Add("target empty", report.Empty, report.Empty ? "The target holds no module: it can take the state." : $"The target already holds {string.Join(", ", report.Modules.Select(m => m.Module).Distinct())}: a move goes into an empty database. Create a new empty database and point the connection at it.");
+                if (report.Ok) Add("target empty", report.Empty, report.Empty ? "The target holds no module: it can take the state." : EmptySentence(report));
             }
+            else if (dryCode == 409 && dry?["reason"]?.GetValue<string>() == "targetnotempty")
+                Add("target empty", false, "The target already holds modules: a move goes into an empty database. Create a new empty database and point the connection at it.");
 
             switch (dryCode)
             {
@@ -181,6 +187,9 @@ public sealed class StateConnectionsController(ConsoleStateConnections connectio
         if (connections.Find(request.Connection ?? "") is not { } connection) return (null, null, NotFound(new { error = "No such state connection." }));
         return (server, connection, null);
     }
+
+    private static string EmptySentence(DbDataKit.State.Cli.StateConnectionReport report) =>
+        $"The target already holds {string.Join(", ", report.Modules.Select(m => m.Module).Distinct())}: a move goes into an empty database. Create a new empty database and point the connection at it.";
 
     private async Task<DbDataKit.State.Cli.StateConnectionReport> TestAsync(StateConnection connection)
     {
