@@ -5,7 +5,7 @@ const by = (page: Page, id: string) => page.getByTestId(id)
 /**
  * The entry controls and the group editor of the widget editor (plan 32 DBR54, over DBR50 to DBR52): the same measure is put in a table twice under two aliases with a filter each (the request asks `{measure, as, filters}`
  * for both); a matrix gets an attribute in its cell area with an icon map and a link; a field group is declared in the document settings and named by a chart's x well (the request asks for its levels in order), and a group a
- * widget uses is not removed. That the saved file equals the goldens is the unit test `entryParts.test.ts`; this story checks the screen. Written without a browser to run it: a verifier runs it once.
+ * widget uses is not removed. That the saved file equals the goldens is the unit test `entryParts.test.ts`; this story checks the screen.
  */
 export async function editorEntriesStory(page: Page) {
   await page.setViewportSize({ width: 1440, height: 1800 })
@@ -38,15 +38,16 @@ export async function editorEntriesStory(page: Page) {
 
   // 2. A field group in the document settings, then named by a chart's x well.
   await by(page, 'ed-group-name').fill('period')
-  await by(page, 'ed-group-new-fields').fill('orders.ordered_at_year, orders.ordered_at_month')
+  await by(page, 'ed-group-new-fields').fill('date.year, date.year_month')
   await by(page, 'ed-group-add').click()
   await expect(by(page, 'ed-group-period')).toBeVisible()
   await by(page, 'ed-group-template-period').fill('{2} {1}')
   await by(page, 'ed-add-chart').click()
   await expect(by(page, 'ed-widget-editor-chart')).toBeVisible()
   await by(page, 'ed-well-chart-x-pick').selectOption('@period')
-  await expect(by(page, 'ed-well-chart-x-entry-0')).toContainText('group period')
-  await expect(by(page, 'ed-derived-request-chart')).toContainText('orders.ordered_at_month')
+  // x takes up to three levels, so the pick is added after the chart's own first level
+  await expect(by(page, 'ed-well-chart-x-entry-1')).toContainText('group period')
+  await expect(by(page, 'ed-derived-request-chart')).toContainText('date.year_month')
   // a group in use is not removed
   await expect(by(page, 'ed-group-remove-period')).toBeDisabled()
   await expect(by(page, 'ed-group-uses-period')).toContainText('chart')
@@ -54,7 +55,7 @@ export async function editorEntriesStory(page: Page) {
   // 3. An attribute in a matrix's cell area: display, icons, the many policy and a link.
   await by(page, 'ed-add-matrix').click()
   await expect(by(page, 'ed-widget-editor-matrix')).toBeVisible()
-  await by(page, 'ed-well-matrix-values-type').fill('orders.status')
+  await by(page, 'ed-well-matrix-values-type').fill('products.category')
   await by(page, 'ed-well-matrix-values-type').press('Enter')
   await by(page, 'ed-entry-matrix-values-1-options').locator('summary').click()
   await by(page, 'ed-entry-matrix-values-1-display').selectOption('icon')
