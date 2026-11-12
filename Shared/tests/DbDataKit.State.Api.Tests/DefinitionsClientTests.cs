@@ -43,11 +43,29 @@ public sealed class DefinitionsClientTests : IDisposable
 
         public string? OwnerOf(string name) => name == "legacy" ? "client-a" : null;
 
+        // a kind that hands a definition over does it itself (the Gateway's data-source adopt)
+        public Task<DefinitionsResult?> ActAsync(LifecycleHookContext context, CancellationToken ct) =>
+            Task.FromResult<DefinitionsResult?>(context.Act == "adopt" ? new DefinitionsResult(200, new JsonObject { ["name"] = context.Name, ["managed_by"] = (string?)context.Body["client"], ["adopted"] = true }) : null);
+
         public void BeforeRead(string name, DefinitionsCaller caller)
         {
             if (!caller.Admin && Owners.TryGetValue(name, out var owner) && owner != caller.ClientId) throw new DefinitionsRefusalException(403, "This client may not read that model.");
         }
     }
+
+    /// <summary>A kind whose slots are named by its manifest (<c>db,cache</c>) and whose hook reads what the channel binds each slot to when a version is published.</summary>
+    private sealed class SlottedHook : IDefinitionKindHook
+    {
+        public string Kind => "slotted";
+        public Dictionary<string, string?> Seen { get; } = [];
+
+        public void BeforePublish(PublishHookContext context)
+        {
+            foreach (var slot in context.Manifest.Split(',', StringSplitOptions.RemoveEmptyEntries)) Seen[slot] = context.BoundTo?.Invoke(slot);
+        }
+    }
+
+    private SlottedHook slotted = new();
 
     /// <summary>A group's API reached as a client reaches it: through a link with the caller's roles.</summary>
     private sealed class Link(DefinitionsApi api, DefinitionsCaller caller) : IDefinitionsLink
@@ -75,14 +93,15 @@ public sealed class DefinitionsClientTests : IDisposable
     private (DefinitionsApi Api, OwnedHook Hook, DefinitionTrustStore Trust, SignaturePolicy Policy) Open()
     {
         var database = new StateDatabase(file, StateLayout.Create(StateEngineIds.Sqlite, [DefinitionsModule.Module, PayloadStore.Module, TrustModule.Module], new StateScope(Group: "main")));
-        var kinds = new DefinitionKinds().Register(new DefinitionKind("model", ["serving"], PublishMode.Serve)).Register(new DefinitionKind("page", ["serving"], PublishMode.Serve) { Slots = [new DefinitionSlot("db")] });
+        var kinds = new DefinitionKinds().Register(new DefinitionKind("model", ["serving"], PublishMode.Serve)).Register(new DefinitionKind("page", ["serving"], PublishMode.Serve) { Slots = [new DefinitionSlot("db")] })
+            .Register(new DefinitionKind("slotted", ["serving"], PublishMode.Serve) { SlotsOf = manifest => [.. manifest.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(n => new DefinitionSlot(n, Access: n.StartsWith("ro-", StringComparison.Ordinal) ? SlotAccess.Read : SlotAccess.Write))] });
         var payloads = new PayloadStore(database);
         var trust = new DefinitionTrustStore(database);
         var settings = new GroupSettings(database);
         var policy = new SignaturePolicy(settings);
         var hook = new OwnedHook();
         var api = new DefinitionsApi(new DefinitionPublisher(database, kinds, payloads, "serving"), new DefinitionStore(database), kinds, payloads, settings, "serving",
-            verifier: new TrustStoreVerifier(trust), policy: policy, trust: trust, hooks: [hook]);
+            verifier: new TrustStoreVerifier(trust), policy: policy, trust: trust, hooks: [hook, slotted]);
         return (api, hook, trust, policy);
     }
 
@@ -195,5 +214,73 @@ public sealed class DefinitionsClientTests : IDisposable
         Assert.True((await client.PublishAsync(new DefinitionPublishRequest("page", "p", "m2", files))).Ok);
         Assert.Single(link.Calls, c => c.StartsWith("PUT artifacts/", StringComparison.Ordinal));
         Assert.Equal(2, link.Calls.Count(c => c.StartsWith("HEAD artifacts/", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task A_publisher_that_only_publishes_lists_the_names_it_owns_and_a_viewer_or_an_administrator_lists_them_all()
+    {
+        var (api, _, _, policy) = Open();
+        policy.MarkTestGroup(true);
+        var a = new DefinitionsClient(new Link(api, PublisherA));
+        var b = new DefinitionsClient(new Link(api, PublisherB));
+        Assert.True((await a.PublishAsync(new DefinitionPublishRequest("model", "alpha", "x"))).Ok);
+        Assert.True((await a.PublishAsync(new DefinitionPublishRequest("model", "beta", "x"))).Ok);
+        Assert.True((await b.PublishAsync(new DefinitionPublishRequest("model", "gamma", "x"))).Ok);
+        Assert.True((await new DefinitionsClient(new Link(api, Admin)).PublishAsync(new DefinitionPublishRequest("model", "delta", "x"))).Ok);
+
+        Assert.Equal(["alpha", "beta"], await a.NamesAsync("model"));
+        Assert.Equal(["gamma"], await b.NamesAsync("model"));
+        Assert.Equal(["alpha", "beta", "delta", "gamma"], (await new DefinitionsClient(new Link(api, Admin)).NamesAsync("model"))!.Order(StringComparer.Ordinal));
+        var viewer = new DefinitionsClient(new Link(api, new DefinitionsCaller("v", false, false, true, "client-v")));
+        Assert.Equal(["alpha", "beta", "delta", "gamma"], (await viewer.NamesAsync("model"))!.Order(StringComparer.Ordinal));
+        // a publisher with no client id (no owner to compare) sees none
+        Assert.Empty((await new DefinitionsClient(new Link(api, new DefinitionsCaller("p", false, true, false))).NamesAsync("model"))!);
+    }
+
+    [Fact]
+    public async Task Adopt_is_the_kinds_own_call_an_administrators_and_a_kind_without_it_answers_in_words()
+    {
+        var (api, _, _, policy) = Open();
+        policy.MarkTestGroup(true);
+        var admin = new DefinitionsClient(new Link(api, Admin));
+
+        var done = await admin.AdoptAsync("model", "by-hand", "client-a");
+        Assert.True(done.Ok, done.Error);
+        Assert.Equal("client-a", (string)done.Body["managed_by"]!);
+        Assert.True((bool)done.Body["adopted"]!);
+
+        var none = await admin.AdoptAsync("page", "p", "client-a");
+        Assert.Equal(404, none.Status);
+        Assert.Contains("has no adopt call", none.Error);
+
+        // a publisher does not hand definitions out
+        var refused = await new DefinitionsClient(new Link(api, PublisherA)).AdoptAsync("model", "by-hand", "client-a");
+        Assert.Equal(403, refused.Status);
+    }
+
+    [Fact]
+    public async Task A_hook_reads_what_the_channel_binds_a_slot_to_and_a_version_with_an_unbound_slot_is_refused_naming_it()
+    {
+        var (api, _, _, policy) = Open();
+        policy.MarkTestGroup(true);
+        var client = new DefinitionsClient(new Link(api, Admin));
+
+        var refused = await client.PublishAsync(new DefinitionPublishRequest("slotted", "s", "db,ro-cache"));
+        Assert.Equal(409, refused.Status);
+        Assert.Equal("unboundslot", (string)refused.Body["code"]!);
+        Assert.Contains("'db'", refused.Error);
+        Assert.Null(slotted.Seen["db"]);   // the hook saw no binding at the time
+
+        // production binds the two; the read slot is inherited by the test channel, the write slot is not
+        Assert.True((await client.BindAsync("prod", "slotted", "s", new Dictionary<string, string> { ["db"] = "erp", ["ro-cache"] = "redis" })).Ok);
+        var ok = await client.PublishAsync(new DefinitionPublishRequest("slotted", "s", "db,ro-cache"));
+        Assert.True(ok.Ok, ok.Error);
+        Assert.Equal("erp", slotted.Seen["db"]);
+        Assert.Equal("redis", slotted.Seen["ro-cache"]);
+
+        var test = await client.PublishAsync(new DefinitionPublishRequest("slotted", "s", "db,ro-cache", Channel: "test"));
+        Assert.Equal(409, test.Status);
+        Assert.Contains("'db'", test.Error);
+        Assert.Equal("redis", slotted.Seen["ro-cache"]);   // inherited from production
     }
 }
