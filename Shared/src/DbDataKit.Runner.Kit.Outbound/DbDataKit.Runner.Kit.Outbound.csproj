@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Runner.Kit.Outbound</RootNamespace>
+    <PackageId>DbDataKit.Runner.Kit.Outbound</PackageId>
+    <Description>Outbound patterns of the kit (plan 27a IX22): sending suite data (a table or view, a DbDataStore entity, any query) to an API or a file so that a push that fails halfway resumes without repeating the sent part, a second run with no change sends nothing, and every request carries an idempotency key.</Description>
+    <IsPackable>true</IsPackable>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Runner.Kit.Changes\DbDataKit.Runner.Kit.Changes.csproj" />
+    <ProjectReference Include="..\DbDataKit.Store\DbDataKit.Store.csproj" />
+    <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+  </ItemGroup>
+</Project>

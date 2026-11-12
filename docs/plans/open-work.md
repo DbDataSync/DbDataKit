@@ -69,7 +69,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | [28c](28c-engines-on-runner.md) E06f, E17, E21, E22 | Splitting the Sync integration CI job (recorded only); Sync's state on the target; interactive writes as manual tasks; retiring the old paths (`ProcessSupervisor`, `BuildScheduler`, the loopback state) | E21 OWNER (optional) |
 | [28c](28c-engines-on-runner.md) E14, E16, CW02 | The rest of Sync on modules; Build tracking's remainder; the primary-key-update remainder | PARTLY |
 | [29a](29a-state-slices.md) Q20, Q22, Q25 | The migration function (a `package/2`); Sync's processes on the runner-owned state; deleting the old state path | Q20 PARTLY |
-| [27a](27a-knowledge-slices.md) IX03 to IX09, IX11, IX16 to IX24 | OAuth 2 authorization code, SFTP, SMB and object storage, the kit's formats and landing, templates, the integration kind in the Workspace | IX20 to IX24 and the W rows follow the Workspace |
+| [27a](27a-knowledge-slices.md) IX03 to IX06, IX12, IX16 to IX24 | OAuth 2 authorization code, SFTP, SMB and object storage, lineage nodes for outside systems, templates, the integration kind in the Workspace | IX20 to IX24 and the W rows follow the Workspace |
 
 ## Workspace
 
