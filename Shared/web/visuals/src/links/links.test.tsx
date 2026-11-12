@@ -116,6 +116,20 @@ describe('the shell opens a link target in a dialog or a side panel (DBR36)', ()
     expect(host.ownerDocument.activeElement).toBe(opener)
   })
 
+  it('a host that owns the surface (the shell page, for a view in an app document) is given the dialog to open and draws none itself; its close runs then as the view\'s own would', async () => {
+    const opened: { as: string; label: string; address: string; closed: (saved: boolean) => void }[] = []
+    await show({ openSurface: (surface, closed) => opened.push({ ...surface, closed }) })
+    await click(row('orders', 'East'))
+    expect(q('vz-surface-dialog')).toBeNull()   // no frame of its own: a frame nested in an app's document could get no token
+    expect(opened.map(({ as, label, address }) => ({ as, label, address }))).toEqual([{ as: 'dialog', label: 'Edit order', address: '/apps/sales/forms/orders?region=East&units=70&_lock=region' }])
+    expect(calls).toEqual([['orders', 'other', 'totals', 'grid']])
+
+    await act(async () => opened[0]!.closed(false))   // a close without a save resolves nothing
+    expect(calls).toHaveLength(1)
+    await act(async () => opened[0]!.closed(true))    // a save: `then: refresh` is the source widget alone
+    expect(calls).toEqual([['orders', 'other', 'totals', 'grid'], ['orders']])
+  })
+
   it('then: none and a close without a save resolve nothing; a list of widgets resolves those', async () => {
     await show()
     await show({ document: { ...document_, widgets: { ...document_.widgets, orders: { ...document_.widgets.orders!, on_click: 'quiet' } as never } } })

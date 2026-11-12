@@ -110,63 +110,18 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
         }
     }
 
-    /// <summary>A render request's <c>order</c>: an object of widget id to <c>{by, dir}</c> (<c>dir</c> is <c>asc</c> or <c>desc</c>, default <c>asc</c>).</summary>
-    private static Dictionary<string, WidgetOrder> ReadOrders(JsonNode node)
-    {
-        const string Shape = "`order` must be an object of widget ids to `{\"by\": field, \"dir\": \"asc\" | \"desc\"}`.";
-        var result = new Dictionary<string, WidgetOrder>(StringComparer.Ordinal);
-        foreach (var (id, value) in node as JsonObject ?? throw new ArgumentException(Shape))
-        {
-            if (value is not JsonObject o || o["by"] is not JsonValue by || !by.TryGetValue<string>(out var field) || field.Length == 0) throw new ArgumentException(Shape);
-            var dir = o["dir"] is JsonValue d && d.TryGetValue<string>(out var text) ? text : "asc";
-            if (dir is not ("asc" or "desc")) throw new ArgumentException(Shape);
-            result[id] = new WidgetOrder(field, dir == "desc");
-        }
-        return result;
-    }
-
-    /// <summary>A render request's <c>expand</c> (plan 32 DBR55): an object of widget id to the rows expanded, each the list of the member values of the row's own fields, at most <see cref="WidgetResolver.MaximumExpansions"/> rows.</summary>
-    private static Dictionary<string, IReadOnlyList<IReadOnlyList<JsonNode?>>> ReadExpand(JsonNode node)
-    {
-        const string Shape = "`expand` must be an object of widget ids to lists of rows, each row the list of its member values: `{\"orders\": [[\"West\"], [\"East\"]]}`.";
-        var result = new Dictionary<string, IReadOnlyList<IReadOnlyList<JsonNode?>>>(StringComparer.Ordinal);
-        foreach (var (id, value) in node as JsonObject ?? throw new ArgumentException(Shape))
-        {
-            if (value is not JsonArray rows || rows.Count > WidgetResolver.MaximumExpansions) throw new ArgumentException(Shape);
-            result[id] = rows.Select(r => r is JsonArray key && key.All(v => v is null or JsonValue) ? (IReadOnlyList<JsonNode?>)key.Select(v => v?.DeepClone()).ToList() : throw new ArgumentException(Shape)).ToList();
-        }
-        return result;
-    }
-
     /// <summary>The render of a document already found: a published one (the module's cache, the definition header) or a person's own (<paramref name="isPublished"/> false: no cache, no header, the audit says whose it is).</summary>
     private async Task<ViewsAnswer> RenderViewAsync(ViewsPrincipal who, string kind, PublishedView view, JsonObject? body, string verb, string? clientAddress, string? traceId, CancellationToken cancellationToken, bool isPublished)
     {
-        Dictionary<string, JsonNode?>? parameters = null;
-        List<string>? only = null;
-        string? layout = null;
-        Dictionary<string, WidgetOrder>? orders = null;
-        Dictionary<string, IReadOnlyList<IReadOnlyList<JsonNode?>>>? expands = null;
-        LayoutContext viewport = new();
-        try
-        {
-            foreach (var key in body?.Select(p => p.Key) ?? [])
-                if (key is not ("parameters" or "layout" or "only" or "viewport" or "medium" or "order" or "expand"))
-                    throw new ArgumentException($"Unknown key `{key}`: a render request has `parameters`, `layout`, `only`, `order`, `expand`, `viewport` and `medium`.");
-            if (body?["order"] is { } ord) orders = ReadOrders(ord);
-            if (body?["expand"] is { } exp) expands = ReadExpand(exp);
-            if (body?["parameters"] is { } p) parameters = (p as JsonObject ?? throw new ArgumentException("`parameters` must be an object of values by parameter name.")).ToDictionary(x => x.Key, x => x.Value?.DeepClone());
-            if (body?["only"] is { } o) only = (o as JsonArray ?? throw new ArgumentException("`only` must be a list of widget ids.")).Select(x => x is JsonValue v && v.TryGetValue<string>(out var s) ? s : throw new ArgumentException("`only` must be a list of widget ids.")).ToList();
-            if (body?["layout"] is { } l) layout = l is JsonValue lv && lv.TryGetValue<string>(out var ls) ? ls : throw new ArgumentException("`layout` must be a layout's name.");
-            var medium = body?["medium"] is JsonValue mv && mv.TryGetValue<string>(out var ms) ? ms : "screen";
-            double? Dimension(string key) => body?["viewport"] is JsonObject v && v[key] is JsonValue d && d.TryGetValue<double>(out var n) ? n : null;
-            viewport = new LayoutContext(Dimension("width"), Dimension("height"), medium, layout);
-        }
+        RenderRequest request;
+        try { request = RenderRequest.Parse(body); }
         catch (ArgumentException e)
         {
             return Refuse(who, verb, kind, view, 400, "invalid", e.Message, traceId);
         }
 
-        var chosen = LayoutSelector.Select(view.Document, viewport);
+        var (parameters, only, orders, expands) = (request.Parameters, request.Only, request.Orders, request.Expands);
+        var chosen = LayoutSelector.Select(view.Document, request.Viewport);
         if (chosen.Layout is not { } picked)
             return Refuse(who, verb, kind, view, 400, ResolveCodes.UnknownLayout, chosen.Refusal ?? "No layout fits.", traceId);
 

@@ -1,4 +1,5 @@
 import { createSemanticClient, type SemanticClient } from '@dbdatakit/semantic-client'
+import { moduleClient, type ViewsClient } from '@dbdatakit/visuals'
 import { createStoreClient, type Fetcher, type StoreClient } from '@dbdatakit/store-ui'
 import { parseShellTheme, type ShellTheme, type StoredRow } from '@dbdatakit/store-ui'
 
@@ -94,4 +95,16 @@ export function appStoreClient(host: Pick<Host, 'instance' | 'token'>, fetchImpl
 /** The semantic client of an app, on the same route and token. The apps host serves the semantic route (plan 22a GP35c) for the models the manifest lists under `semantic:`, as the signed-in person; a model it does not list is refused (`denied`). */
 export function appSemanticClient(host: Pick<Host, 'instance' | 'token'>, fetchImpl?: typeof fetch): SemanticClient {
   return createSemanticClient(appFetcher(host, fetchImpl))
+}
+
+/**
+ * The views client of an app (plan 32 DBR13): the shared `moduleClient` over the app's data route, with the shell's token. The route reads a dashboard or a report of the app by its file (`api/v1/dashboards/<file>`, the file the manifest
+ * lists under `views`) and renders its widgets as the signed-in person (`.../render`), so `DashboardView` draws an app's document as it draws a published one. Exports, versions and the editor's calls are not on the app's route and answer `unavailable`.
+ */
+export function appViewsClient(host: Pick<Host, 'instance' | 'token'>, fetchImpl?: typeof fetch): ViewsClient {
+  return moduleClient({
+    baseUrl: `/apps/${encodeURIComponent(host.instance)}/_data`,
+    ...(fetchImpl ? { fetch: fetchImpl } : {}),
+    headers: async () => ({ Authorization: `Bearer ${await host.token()}` }),
+  })
 }
