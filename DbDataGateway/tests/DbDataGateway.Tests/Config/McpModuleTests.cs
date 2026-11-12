@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using DbDataKit.Hosting;
 using DbDataKit.Identity;
 using DbDataKit.State;
+using DbDataKit.Views;
 using DbDataKit.Web.Trust;
 using DbDataGateway.Server.Configuration;
 using DbDataGateway.Server.Hosting;
@@ -191,6 +192,41 @@ public sealed class McpModuleTests : IAsyncLifetime
         Assert.DoesNotContain(new AgentStore(state).Audit(origin: "mcp"), a => a.Kind is "tool-called" or "tool-failed");
         Assert.True((bool)viewers["isError"]!);
         Assert.Equal("pending", Assert.Single(new AgentStore(state).Approvals(false, null, 50)).Status);
+    }
+
+    private static JsonObject SalesDashboard(string field = "customers.region") => (JsonObject)JsonNode.Parse($$$"""
+        {"schemaVersion": 1, "kind": "dashboard", "title": "Revenue by region",
+         "widgets": {"by_region": {"type": "chart", "mark": "bar", "encodings": {"x": "{{{field}}}", "y": "orders.net_revenue"}, "query": {"model": "sales_catalog"} } },
+         "layouts": [{"name": "desk", "type": "reflow", "default": true, "grid": {"columns": 12}, "tiles": [{"widget": "by_region", "x": 0, "y": 0, "w": 12, "h": 4}]}]}
+        """)!;
+
+    [Fact]
+    public async Task The_dashboard_tools_check_as_the_caller_a_draft_waits_for_a_person_and_a_bad_one_is_never_put_to_them()
+    {
+        var (http, state, ada, bob, _, _, linus) = await StartAsync();
+
+        // views_validate reads, at once, with the models the caller may read: Ada's field is in the model, a field the model lacks is refused with the engine's code, a model Bob may not read is "not bound"
+        var good = await CallAsync(http, ada, "views_validate", new() { ["document"] = SalesDashboard() });
+        var unknown = await CallAsync(http, ada, "views_validate", new() { ["document"] = SalesDashboard("customers.country") });
+        var notHis = await CallAsync(http, bob, "views_validate", new() { ["document"] = SalesDashboard() });
+        Assert.False((bool)good["isError"]!, Text(good));
+        Assert.Contains("is valid", Text(good));
+        Assert.True((bool)unknown["isError"]!);
+        Assert.Contains("unknown_member", Text(unknown));
+        Assert.Contains("widgets.by_region", Text(unknown));
+        Assert.True((bool)notHis["isError"]!);
+        Assert.Contains("DBD-VIEW-043", Text(notHis));
+
+        // a draft that would be refused is refused when it is asked for: no approval is recorded; a valid one waits for a person and nothing is stored meanwhile
+        var refused = await CallAsync(http, ada, "dashboard_draft", new() { ["name"] = "revenue", ["document"] = SalesDashboard("customers.country") });
+        Assert.True((bool)refused["isError"]!);
+        Assert.Empty(new AgentStore(state).Approvals(false, null, 50));
+        var asked = await CallAsync(http, ada, "dashboard_draft", new() { ["name"] = "revenue", ["document"] = SalesDashboard() });
+        Assert.StartsWith("pending approval ", Text(asked));
+        Assert.Equal("dashboard_draft", Assert.Single(new AgentStore(state).Approvals(false, null, 50)).Tool);
+        var userViews = new UserViewStore(state);
+        Assert.Empty(userViews.List(new UserViewViewer("anyone", "x", []), null, own: false, shared: false));
+        Assert.True((await CallAsync(http, ada, "layout_add", new() { ["kind"] = "dashboard", ["name"] = "revenue", ["layout"] = JsonNode.Parse("""{"name":"print","type":"flow","sections":[{"blocks":[{"widget":"by_region"}]}]}""") }))["isError"]!.GetValue<bool>());   // there is no such draft yet
     }
 
     [Fact]
