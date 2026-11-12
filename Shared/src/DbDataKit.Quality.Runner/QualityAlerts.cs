@@ -10,7 +10,11 @@ public enum QualityAlertKind { Failed, Recovered }
 
 /// <summary>One alert (plan 23a FQ13): sent when a check's status <b>changes</b>, once per failure and once per recovery, never once per evaluation.</summary>
 /// <param name="Previous">The status the check had before this evaluation; null when it had none.</param>
-public sealed record QualityAlert(QualityAlertKind Kind, string Dataset, CheckDefinition Check, CheckEvaluation Evaluation, CheckOutcome? Previous, bool Blocking, IReadOnlyList<string> Owners);
+/// <param name="Status">What the check's result is now: <see cref="CheckOutcome.Fail"/> or <see cref="CheckOutcome.Error"/> for a failed alert, <see cref="CheckOutcome.Pass"/> for a recovered one.</param>
+/// <param name="CheckKind">The kind (<c>not_null</c>, ...) when the source knows it; the console, which reads only overviews, does not.</param>
+/// <param name="Source">The server that evaluated the check when more than one can (the console watches several), else null.</param>
+public sealed record QualityAlert(QualityAlertKind Kind, string Dataset, string CheckId, string Severity, string OnError, CheckOutcome Status, CheckOutcome? Previous, bool Blocking, IReadOnlyList<string> Owners,
+    decimal? Measured = null, decimal? Threshold = null, IReadOnlyList<string>? SampleKeys = null, string? Message = null, string? CheckKind = null, string? Source = null);
 
 /// <summary>Where a run's alerts go. A failure to alert never fails the evaluation: the run service reports it in <see cref="QualityRunReport.AlertProblems"/>.</summary>
 public interface IQualityAlerts
@@ -42,34 +46,45 @@ public sealed class DeliveryQualityAlerts(DeliveryService delivery, QualityAlert
     /// <summary>The subject and the text of an alert.</summary>
     public static (string Subject, string Text) Describe(QualityAlert alert)
     {
-        var check = alert.Check;
-        var evaluation = alert.Evaluation;
         var text = new StringBuilder();
         text.Append("Dataset: ").AppendLine(alert.Dataset);
-        text.Append("Check: ").Append(check.Id).Append(" (").Append(CheckNames.Name(check.Kind)).Append(", ").Append(CheckNames.Name(check.Severity)).AppendLine(")");
+        text.Append("Check: ").Append(alert.CheckId).Append(" (").Append(alert.CheckKind is null ? "" : alert.CheckKind + ", ").Append(alert.Severity).AppendLine(")");
+        if (alert.Source is not null) text.Append("Evaluated by: ").AppendLine(alert.Source);
         string subject;
         if (alert.Kind == QualityAlertKind.Recovered)
         {
-            subject = $"Recovered: {check.Id} on {alert.Dataset}";
+            subject = $"Recovered: {alert.CheckId} on {alert.Dataset}";
             text.AppendLine("Status: passing again.");
         }
-        else if (evaluation.Status == EvaluationStatus.Error)
+        else if (alert.Status == CheckOutcome.Error)
         {
-            subject = $"Could not check: {check.Id} on {alert.Dataset}";
-            text.Append("Status: the check could not run. ").AppendLine(evaluation.Message ?? "");
-            text.AppendLine(check.OnError == CheckOnError.Block ? "A check that cannot run blocks what depends on the dataset (on_error: block)." : "It does not block (on_error: alert).");
+            subject = $"Could not check: {alert.CheckId} on {alert.Dataset}";
+            text.Append("Status: the check could not run. ").AppendLine(alert.Message ?? "");
+            text.AppendLine(alert.OnError == "block" ? "A check that cannot run blocks what depends on the dataset (on_error: block)." : "It does not block (on_error: alert).");
         }
         else
         {
-            subject = $"{(alert.Blocking ? "Blocked" : "Failed")}: {check.Id} on {alert.Dataset}";
+            subject = $"{(alert.Blocking ? "Blocked" : "Failed")}: {alert.CheckId} on {alert.Dataset}";
             text.Append("Status: failed");
-            if (evaluation.Measured is { } measured) text.Append(CultureInfo.InvariantCulture, $", measured {measured:0.##}");
-            if (evaluation.Threshold is { } threshold) text.Append(CultureInfo.InvariantCulture, $", allowed {threshold:0.##}");
+            if (alert.Measured is { } measured) text.Append(CultureInfo.InvariantCulture, $", measured {measured:0.##}");
+            if (alert.Threshold is { } threshold) text.Append(CultureInfo.InvariantCulture, $", allowed {threshold:0.##}");
             text.AppendLine(".");
-            if (evaluation.SampleKeys is { Count: > 0 } keys) text.Append("Sample keys: ").AppendLine(string.Join("; ", keys));
+            if (alert.SampleKeys is { Count: > 0 } keys) text.Append("Sample keys: ").AppendLine(string.Join("; ", keys));
             text.AppendLine(alert.Blocking ? "What depends on the dataset waits until the check passes." : "A warning: nothing is stopped.");
         }
 
         return (subject, text.ToString().TrimEnd());
+    }
+
+    /// <summary>
+    /// Whether a check's new status makes an alert, given the status it was last alerted at (plan 23a FQ13): one when it turned unhealthy (a fail or an error after a pass, or after nothing), one when it passes after it was not passing, none otherwise; a fail that
+    /// becomes an error is still the failure that was alerted, an error that becomes a fail is a new thing to say. Null: no alert.
+    /// </summary>
+    public static QualityAlertKind? Transition(CheckOutcome? previous, CheckOutcome now)
+    {
+        if (now == CheckOutcome.Pass) return previous is { } p && p != CheckOutcome.Pass ? QualityAlertKind.Recovered : null;
+        if (previous == now) return null;
+        if (previous == CheckOutcome.Fail && now == CheckOutcome.Error) return null;
+        return QualityAlertKind.Failed;
     }
 }

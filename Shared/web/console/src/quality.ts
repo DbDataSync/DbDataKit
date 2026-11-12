@@ -86,8 +86,20 @@ const relay = (serverId: string, path: string) => `/relay/${encodeURIComponent(s
 /** The history of a check is the evaluating server's own route; the path is the one its product serves. */
 export const historyPath = (product: string | null) => (product === 'dbdatabuild' ? '/api/v1/quality/history' : '/api/quality/history')
 
+/** Where the alerts of failed checks go (`GET /api/quality/alerts`, the section `quality: alerts:` of settings.yaml). */
+export interface QualityAlertsState { configured: boolean; channel: string | null; channelKnown: boolean; problem: string | null; recipients: string[] }
+
+/** The words for the alerts card: what is set, and what is wrong with it. */
+export function alertsLine(a: QualityAlertsState): string {
+  if (a.problem) return `The alert settings cannot be used: ${a.problem}`
+  if (!a.configured) return 'Alerts of failed checks are off. Name a delivery channel in settings.yaml (quality: alerts: channel:) and a message is sent when a check fails and when it passes again.'
+  const who = a.recipients.length > 0 ? ` to ${a.recipients.join(', ')}` : ''
+  return a.channelKnown ? `A failed check is sent through the channel ${a.channel}${who}, once when it fails and once when it passes again.` : `Alerts name the channel ${a.channel}, which this install does not have: nothing is sent. Add it on the Delivery page.`
+}
+
 export const qualityApi = {
   overview: () => request<QualityAnswer>('/api/quality'),
+  alerts: () => request<QualityAlertsState>('/api/quality/alerts'),
   history: (check: Pick<QualityCheck, 'server_id' | 'product' | 'check_id'>, dataset: string) =>
     request<{ results: QualityResult[] }>(relay(check.server_id, `${historyPath(check.product)}?dataset=${encodeURIComponent(dataset)}&check=${encodeURIComponent(check.check_id)}`)),
   /** Evaluates the dataset's checks now, on the server that owns them (a Sync server; the server answers 403 for anyone but an administrator). */

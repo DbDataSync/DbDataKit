@@ -127,6 +127,8 @@ public static class ConsoleHost
         // delivery: the channels of settings.yaml, the outbox, the subscriptions and the sender that works through the outbox (plan 22a GP07 to GP09, GP17, GP18)
         builder.Services.AddSingleton(sp => new ConsoleDelivery(settings, sp.GetRequiredService<StateDatabase>(), sp.GetRequiredService<ConsoleConnections>(), sp.GetRequiredService<ConsoleBindings>(), sp.GetRequiredService<IUserAccounts>(), sp.GetService<DbDataKit.Delivery.ISubscriptionRenderer>(), null, sp.GetService<DbDataKit.Monitoring.INotificationFeed>()));
         builder.Services.AddHostedService<ConsoleDeliverySender>();
+        builder.Services.AddSingleton<ConsoleQualityAlerts>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<ConsoleQualityAlerts>());
         builder.Services.AddSingleton(sp => new SetupItems(sp.GetRequiredService<StateDatabase>()));
         if (settings.Home is { } home)
         {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blockLine, datasetState, historyPath, measureLine, panelLine, runBlockedReason, sortDatasets, stateWord, type QualityCheck, type QualityDataset, type QualityServer } from './quality'
+import { alertsLine, blockLine, datasetState, historyPath, measureLine, panelLine, runBlockedReason, sortDatasets, stateWord, type QualityCheck, type QualityDataset, type QualityServer } from './quality'
 
 const check = (over: Partial<QualityCheck> = {}): QualityCheck => ({
   check_id: 'c', severity: 'block', on_error: 'alert', status: 'pass', status_since: 't', measured: 0, threshold: 0, evaluated_at: 't', blocking: false, blocked_since: null, server: 'Sync one', server_id: 'sync-1', product: 'dbdatasync', ...over,
@@ -65,5 +65,15 @@ describe('where the history of a check is read', () => {
   it('is the evaluating product\'s own route', () => {
     expect(historyPath('dbdatabuild')).toBe('/api/v1/quality/history')
     expect(historyPath('dbdatasync')).toBe('/api/quality/history')
+  })
+})
+
+describe('alertsLine (plan 23a FQ13)', () => {
+  const state = { configured: true, channel: 'ops', channelKnown: true, problem: null, recipients: ['a@example.com'] }
+  it('says what is set, and what is wrong with it', () => {
+    expect(alertsLine({ ...state, configured: false, channel: null, recipients: [] })).toContain('are off')
+    expect(alertsLine(state)).toBe('A failed check is sent through the channel ops to a@example.com, once when it fails and once when it passes again.')
+    expect(alertsLine({ ...state, channelKnown: false })).toContain('nothing is sent')
+    expect(alertsLine({ ...state, problem: 'settings.yaml, line 4: bad' })).toBe('The alert settings cannot be used: settings.yaml, line 4: bad')
   })
 })

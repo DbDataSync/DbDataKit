@@ -53,12 +53,12 @@ public sealed class QualityStoreTests : IDisposable
             Assert.Equal(("check_result", "evaluated_at", 90d), (rule.Table, rule.TimeColumn, rule.DefaultDays));
             Assert.DoesNotContain(module.Retention, r => r.Table == "check_status");
             Assert.Equal("quality", module.Name);
-            Assert.Equal(1, module.Version);
+            Assert.Equal(2, module.Version);
         }
 
         Assert.Equal(StateScopeKind.Install, QualityModule.Module.Scope);
         Assert.Equal(StateScopeKind.Group, QualityModule.GroupModule.Scope);
-        Assert.Equal(["check_result", "check_status"], StateTableDefinitions.Read(QualityModule.Module).Select(t => t.Name).Order());
+        Assert.Equal(["check_alert", "check_result", "check_status"], StateTableDefinitions.Read(QualityModule.Module).Select(t => t.Name).Order());
         Assert.All(StateTableDefinitions.Read(QualityModule.Module), t => Assert.NotEmpty(t.PrimaryKey));
     }
 
@@ -69,7 +69,7 @@ public sealed class QualityStoreTests : IDisposable
         var layout = database.Layout!;
         var ns = layout.Namespace(QualityModule.Name);
         Assert.Equal("quality", ns.Module.Name);
-        Assert.Equal(1, Assert.Single(database.RegisteredModules(), m => m.Module == "quality").Version);
+        Assert.Equal(2, Assert.Single(database.RegisteredModules(), m => m.Module == "quality").Version);
         Assert.Equal(0, Count(database, "check_result"));
         Assert.Equal(0, Count(database, "check_status"));
     }
@@ -315,8 +315,8 @@ public sealed class QualityStoreTests : IDisposable
         var ex = Assert.Throws<InvalidOperationException>(() => location.Open([QualityModule.Module]));
 
         Assert.Contains("'quality'", ex.Message);
+        Assert.Contains("version 3", ex.Message);
         Assert.Contains("version 2", ex.Message);
-        Assert.Contains("version 1", ex.Message);
         Assert.Contains("newer-quality 2.0", ex.Message);
         Assert.Contains("state database", ex.Message);
         if (engine == StateEngineIds.Sqlite) Assert.Contains(Path.GetFileName(location.Target), ex.Message);
@@ -327,7 +327,7 @@ public sealed class QualityStoreTests : IDisposable
     {
         var location = _engines.Provision(engine);
         location.Open([QualityModule.Module]);
-        var edited = new StateModule("quality", StateScopeKind.Install, [QualityModule.Module.Migrations[0].Replace("evaluated_at  {{time}} NOT NULL", "evaluated_at  {{time}} NULL", StringComparison.Ordinal)]);
+        var edited = new StateModule("quality", StateScopeKind.Install, [QualityModule.Module.Migrations[0].Replace("evaluated_at  {{time}} NOT NULL", "evaluated_at  {{time}} NULL", StringComparison.Ordinal), .. QualityModule.Module.Migrations.Skip(1)]);
         Assert.NotEqual(QualityModule.Module.Migrations[0], edited.Migrations[0]);
 
         var ex = Assert.Throws<InvalidOperationException>(() => location.Open([edited]));

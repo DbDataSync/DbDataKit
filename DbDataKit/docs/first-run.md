@@ -37,10 +37,26 @@ After you sign in, **Setup** in the rail (administrators) lists the first steps,
 | Pair your first server | Servers | a server is paired |
 | Add your first connection | Connections | a Sync server or a Gateway has a connection |
 | Make a first Build project | Servers | a Build server hosts a project |
-| Connect a git remote; set up where alerts are sent | | not available yet: they are listed so they are not forgotten, and never count as left |
+| Set up where alerts are sent | Delivery | a delivery channel is configured |
+| Send failed checks to a channel | Quality | the section `quality: alerts:` of `settings.yaml` names a channel this install has |
+| Connect a git remote | | not available yet: it is listed so it is not forgotten, and never counts as left |
 
 A step is **finished by what the install has**, never by a click: pairing a server finishes its step whatever was pressed before. **Skip** takes a step off the Home banner; it stays on the list, where **Put back** returns it. A step that is finished stays finished even if it was skipped earlier.
 
 ## What is not built yet
 
 A single-machine bundle that installs the console and the servers together and pairs them with nobody typing a code is planned (plan 23a, FQ18). Today each server announces itself to the console and waits for an administrator to confirm it on the Servers page.
+
+### Alerts of failed checks
+
+The servers that evaluate data quality checks (Sync, Build) keep the results; the console watches them and sends a message through a delivery channel **when a check fails and once when it passes again**, not at every evaluation, and not again after the console restarts. Name the channel in `settings.yaml`:
+
+```yaml
+quality:
+  alerts:
+    channel: ops              # a delivery channel (the Delivery page)
+    recipients: [data@example.com]
+    every_seconds: 60         # how often the servers are asked, at least 10
+```
+
+The Quality page says what is set, whether the channel exists and what is wrong with the file. The message names the check, the dataset, the measure and the keys of a few failing rows, and says whether what depends on the dataset waits.

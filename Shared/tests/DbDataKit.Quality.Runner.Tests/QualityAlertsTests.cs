@@ -141,4 +141,46 @@ public sealed class QualityAlertsTests : IDisposable
         Assert.Contains("the alert was not sent", Assert.Single(report.AlertProblems!));
         Assert.Contains("'nowhere'", report.AlertProblems![0]);
     }
+
+    private static ObservedCheck Seen(CheckOutcome status, string server = "sync-1", string check = "orders_name_present") =>
+        new(server, "mssql://db/dbo.orders", check, "block", "alert", status, Blocking: status == CheckOutcome.Fail, Measured: status == CheckOutcome.Fail ? 3 : 0, Threshold: 0);
+
+    [Theory, MemberData(nameof(Engines))]
+    public async Task The_watcher_alerts_once_per_failure_and_once_per_recovery_and_a_restart_says_nothing_again(string engine)
+    {
+        var f = Open(engine, "alerts");
+        var sender = new DeliveryQualityAlerts(f.Delivery, new QualityAlertSettings("alerts", ["data@example.com"]));
+        Task<IReadOnlyList<string>> Keys(ObservedCheck c, CancellationToken t) => Task.FromResult<IReadOnlyList<string>>(["order_id=7"]);
+        QualityAlertWatcher Watcher() => new(f.Store, sender, Keys, f.Clock);
+
+        await Watcher().ObserveAsync([Seen(CheckOutcome.Pass)]);                         // first seen and healthy: remembered, quiet
+        Assert.Empty(f.Messages.List(source: "alert:check"));
+        await Watcher().ObserveAsync([Seen(CheckOutcome.Fail)]);
+        await Watcher().ObserveAsync([Seen(CheckOutcome.Fail)]);                         // a new watcher (a restart) sees the same failure: no second alert
+        await Watcher().ObserveAsync([Seen(CheckOutcome.Error)]);                        // a fail that cannot be checked any more is still the failure that was alerted
+        var failed = Assert.Single(f.Messages.List(source: "alert:check"));
+        Assert.Equal("Blocked: orders_name_present on mssql://db/dbo.orders", failed.Subject);
+        Assert.Contains("Sample keys: order_id=7", failed.BodyText);
+        Assert.Contains("Evaluated by: sync-1", failed.BodyText);
+        Assert.Contains("measured 3, allowed 0", failed.BodyText);
+
+        var report = await Watcher().ObserveAsync([Seen(CheckOutcome.Pass), Seen(CheckOutcome.Fail, server: "build-1")]);   // the same check on another server is its own thing
+        Assert.Equal((2, 2), (report.Observed, report.Alerts));
+        Assert.Equal(3, f.Messages.List(source: "alert:check").Count);
+        Assert.Equal(CheckOutcome.Pass, f.Store.AlertedOutcome("sync-1", "mssql://db/dbo.orders", "orders_name_present"));
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public async Task The_watcher_remembers_nothing_for_an_alert_it_could_not_write_and_tries_again(string engine)
+    {
+        var f = Open(engine, "alerts");
+        var broken = new DeliveryQualityAlerts(f.Delivery, new QualityAlertSettings("nowhere"));
+        var report = await new QualityAlertWatcher(f.Store, broken, time: f.Clock).ObserveAsync([Seen(CheckOutcome.Fail)]);
+        Assert.Equal(0, report.Alerts);
+        Assert.Contains("the alert was not sent", Assert.Single(report.Problems));
+        Assert.Null(f.Store.AlertedOutcome("sync-1", "mssql://db/dbo.orders", "orders_name_present"));
+
+        var fixedReport = await new QualityAlertWatcher(f.Store, new DeliveryQualityAlerts(f.Delivery, new QualityAlertSettings("alerts")), time: f.Clock).ObserveAsync([Seen(CheckOutcome.Fail)]);
+        Assert.Equal(1, fixedReport.Alerts);
+    }
 }

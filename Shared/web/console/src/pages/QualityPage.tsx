@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { ConsoleShell } from '../ConsoleShell'
-import { blockLine, datasetState, measureLine, qualityApi, runBlockedReason, sortDatasets, stateWord, type QualityCheck, type QualityDataset, type QualityRunAnswer, type QualityServer } from '../quality'
+import { alertsLine, blockLine, datasetState, measureLine, qualityApi, runBlockedReason, sortDatasets, stateWord, type QualityCheck, type QualityDataset, type QualityRunAnswer, type QualityServer } from '../quality'
 
 /**
  * The data quality of the suite's datasets (plan 23a FQ17), from the servers that evaluate checks (Sync's replications, Build's models) joined by dataset identity: what is blocked, what is failing, and for each check its latest result,
@@ -15,6 +15,7 @@ export function QualityPage() {
   const isAdmin = useIsAdmin()
   const [params, setParams] = useSearchParams()
   const quality = useQuery({ queryKey: ['quality'], queryFn: qualityApi.overview })
+  const alerts = useQuery({ queryKey: ['quality', 'alerts'], queryFn: qualityApi.alerts })
   const [open, setOpen] = useState<string | null>(null)
   const [running, setRunning] = useState<string | null>(null)
   const [outcome, setOutcome] = useState<{ ok: boolean; text: string } | null>(null)
@@ -44,6 +45,11 @@ export function QualityPage() {
           <span className="page-note">The checks stored with your replications and models: what is blocked, what is failing, and what each check last found.</span>
         </div>
         <ErrorBanner error={quality.error} />
+        {alerts.data && (
+          <div className="card" style={{ marginBottom: 14 }} data-testid="quality-alerts" data-configured={alerts.data.configured && alerts.data.channelKnown && !alerts.data.problem}>
+            <div className="card-body">{alertsLine(alerts.data)}</div>
+          </div>
+        )}
         {quality.isLoading && <div className="hint" data-testid="quality-loading">Asking the servers…</div>}
         {data && (
           <div className="card" style={{ marginBottom: 14 }} data-testid="quality-servers">

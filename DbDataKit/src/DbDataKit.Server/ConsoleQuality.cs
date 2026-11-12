@@ -26,6 +26,16 @@ public sealed class ConsoleQuality(ConsoleInstances instances, ConsoleRelay rela
         return all;
     }
 
+    /// <summary>The sample keys of a check's latest failed result as its server keeps them (the history route), for an alert; empty when the server does not answer or has none.</summary>
+    public async Task<IReadOnlyList<string>> SampleKeysAsync(string serverId, string? product, string dataset, string checkId, CancellationToken ct)
+    {
+        if (instances.Registry.Find(serverId) is not { } instance || PathOf(product) is not { } path) return [];
+        var (code, body) = await relay.CallAsync(instance, HttpMethod.Get, $"{path}/history?dataset={Uri.EscapeDataString(dataset)}&check={Uri.EscapeDataString(checkId)}", null, ct);
+        if (code != 200 || body?["results"]?.AsArray() is not { } results) return [];
+        var latest = results.FirstOrDefault(r => r?["status"]?.GetValue<string>() == "fail");
+        return [.. (latest?["sample_keys"]?.AsArray() ?? []).Select(k => k?.GetValue<string>()).Where(k => k is not null).Select(k => k!)];
+    }
+
     public async Task<JsonObject> OverviewAsync(CancellationToken ct)
     {
         var statuses = await instances.StatusOfAllAsync(ct);

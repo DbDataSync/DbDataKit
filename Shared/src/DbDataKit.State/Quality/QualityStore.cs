@@ -209,6 +209,36 @@ public sealed class QualityStore(StateDatabase database)
             return value is null or DBNull ? (decimal?)null : StateValues.ToDecimal(value);
         });
 
+    /// <summary>The outcome a check was last alerted at for an evaluator (plan 23a FQ13), or null when nothing was alerted yet.</summary>
+    public CheckOutcome? AlertedOutcome(string evaluator, string dataset, string checkId) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var command = database.Command(Module, connection, "SELECT outcome FROM {table:check_alert} WHERE dataset_hash = $hash AND check_id = $check AND evaluator = $evaluator;");
+            command.Bind(database, "hash", DatasetHash(dataset)).Bind(database, "check", checkId).Bind(database, "evaluator", evaluator);
+            return command.ExecuteScalar() is string text ? Parse(text) : (CheckOutcome?)null;
+        });
+
+    /// <summary>Remembers the outcome a check was alerted at, for an evaluator (one row per check and evaluator).</summary>
+    public void SetAlerted(string evaluator, string dataset, string checkId, CheckOutcome outcome, DateTimeOffset at) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var transaction = database.BeginTransaction(connection, Module);
+            using (var update = database.Command(Module, connection, transaction, "UPDATE {table:check_alert} SET outcome = $outcome, alerted_at = $at WHERE dataset_hash = $hash AND check_id = $check AND evaluator = $evaluator;"))
+            {
+                update.Bind(database, "outcome", Name(outcome)).Bind(database, "at", at).Bind(database, "hash", DatasetHash(dataset)).Bind(database, "check", checkId).Bind(database, "evaluator", evaluator);
+                if (update.ExecuteNonQuery() == 0)
+                {
+                    using var insert = database.Command(Module, connection, transaction, database.Dialect.InsertOrIgnore("{table:check_alert}", "dataset_hash, check_id, evaluator, outcome, alerted_at", "$hash, $check, $evaluator, $outcome, $at", "dataset_hash, check_id, evaluator"));
+                    insert.Bind(database, "hash", DatasetHash(dataset)).Bind(database, "check", checkId).Bind(database, "evaluator", evaluator).Bind(database, "outcome", Name(outcome)).Bind(database, "at", at);
+                    insert.ExecuteNonQuery();
+                }
+            }
+
+            transaction.Commit();
+        });
+
     /// <summary>Removes a check's status, and with it any block it held (the check is gone from its definition). Its history ages out under retention. False when it had none.</summary>
     public bool Forget(string dataset, string checkId) =>
         database.Retry(() =>

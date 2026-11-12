@@ -84,19 +84,14 @@ public sealed class QualityRunService(IQualitySource source, QualityStore store,
         return new QualityRunReport(reports, problems);
     }
 
-    /// <summary>
-    /// The alert this evaluation makes, if any (plan 23a FQ13): one when the check turned unhealthy (a fail or an error after a pass, or after nothing) or went from an error to a fail, one when it passes after it was not passing, none otherwise: a check that fails twice alerts once.
-    /// An evaluation older than the stored status (another evaluator finished later) changed nothing and alerts nothing.
-    /// </summary>
+    /// <summary>The alert this evaluation makes, if any (<see cref="DeliveryQualityAlerts.Transition"/>). An evaluation older than the stored status (another evaluator finished later) changed nothing and alerts nothing.</summary>
     private static QualityAlert? AlertFor(QualityDataset dataset, CheckDefinition check, CheckEvaluation result, CheckStatusRow? previous, CheckStatusRow now)
     {
         var outcome = Outcome(result.Status);
         if (now.EvaluatedAt != result.EvaluatedAt || now.LastResultId == previous?.LastResultId) return null;
-        if (outcome == CheckOutcome.Pass)
-            return previous is { Outcome: not CheckOutcome.Pass } ? new QualityAlert(QualityAlertKind.Recovered, dataset.Identity, check, result, previous.Outcome, now.Blocking, dataset.Owners ?? []) : null;
-        if (previous?.Outcome == outcome) return null;
-        if (previous?.Outcome == CheckOutcome.Fail && outcome == CheckOutcome.Error) return null;   // still not healthy, and the failure was alerted
-        return new QualityAlert(QualityAlertKind.Failed, dataset.Identity, check, result, previous?.Outcome, now.Blocking, dataset.Owners ?? []);
+        if (DeliveryQualityAlerts.Transition(previous?.Outcome, outcome) is not { } kind) return null;
+        return new QualityAlert(kind, dataset.Identity, check.Id, CheckNames.Name(check.Severity), CheckNames.Name(check.OnError), outcome, previous?.Outcome, now.Blocking, dataset.Owners ?? [],
+            result.Measured, result.Threshold, result.SampleKeys, result.Message, CheckNames.Name(check.Kind));
     }
 
     private static CheckOutcome Outcome(EvaluationStatus status) => status switch

@@ -67,6 +67,18 @@ public static class QualityModule
         );
         CREATE INDEX {index:check_status_by_block} ON {table:check_status}(blocking, dataset_hash);
         """,
+        """
+        -- What a watcher has already told people (plan 23a FQ13): the outcome a check was last alerted at, per evaluator (the server that evaluated it, as the console watches several; empty for the install's own),
+        -- so an alert is sent once per failure and once per recovery and a restart of the watcher does not send them again. No retention: it goes with Forget.
+        CREATE TABLE {table:check_alert} (
+            dataset_hash {{key}} NOT NULL,
+            check_id     {{key}} NOT NULL,
+            evaluator    {{key}} NOT NULL,
+            outcome      {{key}} NOT NULL,
+            alerted_at   {{time}} NOT NULL,
+            PRIMARY KEY (dataset_hash, check_id, evaluator)
+        );
+        """,
     ];
 
     private static StateModule Make(StateScopeKind scope) => new(Name, scope, Migrations, retention: [new RetentionRule("check_result", "evaluated_at", HistoryDays)]);
