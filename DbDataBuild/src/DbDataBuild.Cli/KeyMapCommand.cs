@@ -214,7 +214,10 @@ internal static class KeyMapCommand
                     if (matching > 0 && !showValues) output.WriteLine($"The business keys are not read: add --show-values to list them (up to --limit, {limit}).");
                     return CliApp.ExitOk;
                 }
-                var (_, rows) = await session.QueryFirstRowsAsync($"SELECT {t.Col("key_value")}, {t.Col("key_text")} FROM {t.Map}{clause} ORDER BY {t.Col("key_value")}", limit, 0);
+                // the limit is a number of ours, so it is written into the text; the values of the filter are bound
+                var top = t.Engine == "sqlserver" ? $"TOP ({limit.ToString(CultureInfo.InvariantCulture)}) " : "";
+                var tail = t.Engine == "sqlserver" ? "" : $" LIMIT {limit.ToString(CultureInfo.InvariantCulture)}";
+                var rows = await session.QueryAsync($"SELECT {top}{t.Col("key_value")}, {t.Col("key_text")} FROM {t.Map}{clause} ORDER BY {t.Col("key_value")}{tail}", parameters, default, 0);
                 var entries = rows.Select(r => (Value: Convert.ToInt64(r[0], CultureInfo.InvariantCulture), Text: Convert.ToString(r[1], CultureInfo.InvariantCulture) ?? "")).ToList();
                 output.Payload("entries", entries.Select(e => new { value = e.Value, text = e.Text, parts = Split(e.Text) }).ToList());
                 foreach (var e in entries) output.WriteLine($"  {e.Value,12}  {Display(e.Text)}");

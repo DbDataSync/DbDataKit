@@ -158,7 +158,7 @@ public partial class ApplyConformanceTests
             Assert.Equal(1, await LogRows());
             var logged = (await engine.RowsAsync($"SELECT {run.Q("repaired_by")}, {run.Q("operation")}, {run.Q("key_value")}, {run.Q("text_before")}, {run.Q("text_after")}, {run.Q("forced")}, {run.Q("reason")} FROM {log}")).Single().Split('|');
             Assert.Equal("Ada via Test console", logged[0]); Assert.Equal("add", logged[1]); Assert.Equal("100", logged[2]);
-            Assert.Equal("", logged[3]); Assert.Equal("ZZ\u001f5", logged[4].Replace("|", "\u001f")); Assert.Equal("restored from the 11 Nov backup", logged[6]);
+            Assert.Equal("∅", logged[3]); Assert.Equal("ZZ\u001f5", logged[4].Replace("|", "\u001f")); Assert.Equal("restored from the 11 Nov backup", logged[6]);
             Assert.Equal(1, long.Parse((await engine.RowsAsync($"SELECT COUNT(*) FROM {log} WHERE {run.Q("repaired_at")} IS NOT NULL AND {run.Q("db_login")} IS NOT NULL AND {run.Q("run_id")} IS NOT NULL")).Single()));
             Assert.True(await identityOf() >= 100, "the identity follows an explicit integer");
             await engine.ExecAsync("INSERT INTO staging.customers VALUES ('SAP', 3)");
