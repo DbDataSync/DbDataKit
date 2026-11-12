@@ -106,6 +106,10 @@ export interface FormFieldsProps {
   busy?: boolean
   saved?: string | null
   onSubmit?: () => void
+  /** Fields a link locked: shown read-only, still saved (plan 32 DBR36). */
+  locked?: ReadonlySet<string>
+  /** Given when the form is a link's target in a dialog or panel: a Cancel that closes it. */
+  onCancel?: () => void
 }
 
 /** The attributes of a form view, as the shared field controls: the spec's label, `required` and `readonly` over the model's own type and limits. A key of an existing row is shown and never edited. */
@@ -117,13 +121,13 @@ export function formAttributes(spec: FormSpec, entity: EntitySchema, isNew: bool
   })
 }
 
-export function FormFields({ spec, entity, row, text, onText, problems = {}, violations = [], error, busy, saved, onSubmit }: FormFieldsProps) {
+export function FormFields({ spec, entity, row, text, onText, problems = {}, violations = [], error, busy, saved, onSubmit, locked, onCancel }: FormFieldsProps) {
   const fields = formAttributes(spec, entity, row === null)
   return (
     <form className="sui-form va-form" data-testid="va-form" noValidate onSubmit={(e) => { e.preventDefault(); onSubmit?.() }}>
       {fields.map(({ attribute, help, readOnly }) => (
         <div key={attribute.name}>
-          <FieldView attribute={attribute} value={text[attribute.name] ?? ''} onChange={(v) => onText?.(attribute.name, v)} disabled={busy || readOnly} problem={problems[attribute.name]} />
+          <FieldView attribute={attribute} value={text[attribute.name] ?? ''} onChange={(v) => onText?.(attribute.name, v)} disabled={busy || readOnly || locked?.has(attribute.name)} problem={problems[attribute.name]} />
           {help && <span className="sui-hint">{help}</span>}
         </div>
       ))}
@@ -132,7 +136,7 @@ export function FormFields({ spec, entity, row, text, onText, problems = {}, vio
         ? <div className="sui-error" role="alert">{error.message} Reload the row to see its latest values.</div>
         : <ErrorNote error={error} />)}
       {saved && <div className="va-saved" role="status">{saved}</div>}
-      <div className="sui-actions"><button type="submit" disabled={busy}>{spec.submit ?? (row === null ? 'Create' : 'Save')}</button></div>
+      <div className="sui-actions"><button type="submit" disabled={busy}>{spec.submit ?? (row === null ? 'Create' : 'Save')}</button>{onCancel && <button type="button" data-testid="va-form-cancel" disabled={busy} onClick={onCancel}>Cancel</button>}</div>
     </form>
   )
 }

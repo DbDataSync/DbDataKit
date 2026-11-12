@@ -91,3 +91,34 @@ export function linkRoute(link: LinkSpec, row: Record<string, unknown> | null, p
   }
   return routeOf(link.to, query)
 }
+
+/** The query names the host adds when a form is the target of a link the shell opens in a dialog or panel (plan 32 DBR36): `_lock` is the fields it makes read-only (a courtesy of the screen: the Store still decides), `_as` says it is in one. */
+export const LOCK_PARAM = '_lock'
+export const AS_PARAM = '_as'
+
+/** Whether a form was opened by a link as a dialog or a panel: it then reports a saved write and a cancel to the page that framed it. */
+export const openedByLink = (query: Record<string, string>): boolean => query[AS_PARAM] === 'dialog' || query[AS_PARAM] === 'panel'
+
+/** The starting values of a form that creates a row (a link's `new: {field: value}` arrives as `?field=value`): the listed fields the query names, as the text a person would type. A name the form does not list gives nothing. */
+export function startingValues(spec: FormSpec, query: Record<string, string>): Record<string, string> {
+  if (spec.mode !== 'create') return {}
+  return Object.fromEntries(spec.fields.filter((f) => Object.hasOwn(query, f.attribute) && query[f.attribute] !== '').map((f) => [f.attribute, query[f.attribute]!]))
+}
+
+/** The fields a link locks (`_lock=customer_id,status`), those the form lists: read-only on screen, but still part of what is saved. */
+export function lockedFields(spec: FormSpec, query: Record<string, string>): ReadonlySet<string> {
+  const listed = new Set(spec.fields.map((f) => f.attribute))
+  return new Set((query[LOCK_PARAM] ?? '').split(',').map((n) => n.trim()).filter((n) => listed.has(n)))
+}
+
+/** What the form says to the page that framed it: only these two shapes, the ones the shell's surface reads (`@dbdatakit/visuals`, the links). */
+export type FrameMessage = { type: 'views:saved' } | { type: 'views:close' }
+
+/** The part of a window the form needs to speak to the page above it. */
+export interface FrameWindow { parent: { postMessage(message: unknown, targetOrigin: string): void } }
+
+/** Posts to the framing page (the shell, which owns the dialog); nothing happens in a document with no page above it. */
+export function notifyParent(message: FrameMessage, win: FrameWindow | undefined = typeof window === 'undefined' ? undefined : (window as unknown as FrameWindow)): void {
+  if (!win || (win as unknown) === (win.parent as unknown)) return
+  win.parent.postMessage(message, '*')   // this document is sandboxed (an opaque origin), so the page's origin cannot be named as the target
+}
