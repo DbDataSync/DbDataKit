@@ -130,7 +130,11 @@ if ($global) {
           [void](Run (ExeOf $consoleMember $exeDir) @('instance', 'remove', $m.Product))
           $listed = Run $exe @('server', 'clients', '--format', 'json')
           if ($listed.Code -eq 0) {
-            foreach ($c in @(($listed.Output | ConvertFrom-Json).data.clients | Where-Object { $_.kind -eq 'console' })) { [void](Run $exe @('server', 'unpair', $c.id)) }
+            # stderr is merged into the output (a warning line may come first): the JSON starts at its first brace. A pairing that cannot be removed never keeps the service from being stopped.
+            try {
+              $json = $listed.Output.Substring([Math]::Max(0, $listed.Output.IndexOf('{')))
+              foreach ($c in @(($json | ConvertFrom-Json).data.clients | Where-Object { $_.kind -eq 'console' })) { [void](Run $exe @('server', 'unpair', $c.id)) }
+            } catch { Write-Warning "dbdatakit-full: $($m.Product): the pairing with the console was not removed: $($_.Exception.Message)" }
           }
         }
         Stopped $m.Service
