@@ -31,8 +31,11 @@ function Stopped([string]$name) {
   if ($service -and $service.Status -ne 'Stopped') { Stop-Service -Name $name -Force -ErrorAction Stop; $service.WaitForStatus('Stopped', '00:01:00') }
 }
 $appDir = Split-Path $dir -Parent
-$current = Join-Path $appDir 'current'
-if (Test-Path $current) { $base = $current } else { $base = $dir }
+# The services run from a copy of this version's files under %ProgramData%, never from Scoop's app folder: Scoop refuses to update an app while a process runs from its folder.
+$binRoot = Join-Path $env:ProgramData 'DbDataKit\bin'
+$binThis = Join-Path $binRoot (Split-Path $dir -Leaf)
+$base = $binThis
+function UnderFolder([string]$path, [string]$folder) { return ($path -and $path.StartsWith($folder.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) }
 function ExeOf($member, [string]$root) { return (Join-Path (Join-Path $root $member.Folder) $member.Exe) }
 $consoleMember = $Members[0]
 #endregion
@@ -44,7 +47,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 foreach ($m in $Members) {
   if (-not $m.Service) { continue }
   $registered = ServicePath $m.Service
-  if ($registered -and -not $registered.StartsWith($appDir + '\', [StringComparison]::OrdinalIgnoreCase)) {
+  if ($registered -and -not (UnderFolder $registered $appDir) -and -not (UnderFolder $registered $binRoot)) {
     Fail "the service $($m.Service) is registered from '$registered', not from this package. Use one install route per machine: remove that one first ($($m.Product) service uninstall, then uninstall the product)."
   }
 }
@@ -53,6 +56,16 @@ foreach ($m in $Members) {
 #region post_install
 foreach ($v in $MachineVars) { Set-Item -Path "Env:$($v.Name)" -Value (Join-Path $env:ProgramData $v.Folder) }
 $failed = New-Object System.Collections.ArrayList
+# the program files of this version, copied beside the data: a member whose copy is there (a repeat of this install) is left as it is, its files may be in use
+foreach ($m in $Members) {
+  $from = Join-Path $dir $m.Folder
+  $to = Join-Path $binThis $m.Folder
+  if (-not (Test-Path -LiteralPath $from)) { continue }
+  if (Test-Path -LiteralPath (Join-Path $to $m.Exe)) { Say "$($m.Product) is copied already"; continue }
+  New-Item -ItemType Directory -Force -Path $to | Out-Null
+  Copy-Item -Path (Join-Path $from '*') -Destination $to -Recurse -Force
+  Say "copied $($m.Product) to $to"
+}
 $consoleExe = ExeOf $consoleMember $base
 function WaitHealthy($member) {
   $exe = ExeOf $member $base
@@ -66,6 +79,13 @@ function Registered($member) {
   $exe = ExeOf $member $base
   $path = ServicePath $member.Service
   if ($path -and $path.Equals($exe, [StringComparison]::OrdinalIgnoreCase)) { Say "$($member.Service) is registered already"; return }
+  if ($path) {
+    # registered from another version's files (an update): stopped and registered again from these, with the same data
+    Stopped $member.Service
+    if (Test-Path -LiteralPath $path) { [void](Run $path (@($member.Unregister -split ' ') | Where-Object { $_ })) }
+    if (ServicePath $member.Service) { [void](Run 'sc.exe' @('delete', $member.Service)) }
+    Say "re-pointing $($member.Service) from $path"
+  }
   $result = Run $exe (@($member.Register -split ' ') | Where-Object { $_ })
   if ($result.Code -ne 0) { Fail "$($member.Product) $($member.Register) exited $($result.Code): $($result.Output.Trim())" }
   Say "registered $($member.Service)"
@@ -101,6 +121,12 @@ foreach ($m in $Members) {
   try { Paired $m; Started $m } catch { [void]$failed.Add("$($m.Product): $($_.Exception.Message)") }
 }
 if ($failed.Count -gt 0) { Fail ("some members are not ready, the others are. Run this again after fixing: scoop update dbdatakit-full (or the commands named here). " + ($failed -join ' | ')) }
+# the copies of other versions are not needed any more
+if (Test-Path -LiteralPath $binRoot) {
+  foreach ($old in @(Get-ChildItem -LiteralPath $binRoot -Directory | Where-Object { $_.FullName -ne $binThis })) {
+    try { Remove-Item -LiteralPath $old.FullName -Recurse -Force -ErrorAction Stop } catch { Write-Warning "dbdatakit-full: $($old.FullName) was not removed: $($_.Exception.Message)" }
+  }
+}
 Say 'every service is registered, running and paired with the console.'
 Say "The console is on $($consoleMember.Address). The first-run invitation is in $(Join-Path $env:ProgramData 'DbDataKit\server\FIRST-RUN.txt')."
 Say 'Settings and data stay under %ProgramData%\DbDataKit when the package is uninstalled.'
@@ -139,13 +165,19 @@ if ($global) {
         }
         Stopped $m.Service
         if (ServicePath $m.Service) {
-          $removed = Run $exe (@($m.Unregister -split ' ') | Where-Object { $_ })
+          $own = ServicePath $m.Service
+          if (-not $own -or -not (Test-Path -LiteralPath $own)) { $own = $exe }
+          $removed = Run $own (@($m.Unregister -split ' ') | Where-Object { $_ })
           if ($removed.Code -ne 0) { Write-Warning "dbdatakit-full: $($m.Product) $($m.Unregister) exited $($removed.Code): $($removed.Output.Trim())" }
         }
       } catch { Write-Warning "dbdatakit-full: $($m.Product): $($_.Exception.Message)" }
     }
+    # the copy of the program files goes with the uninstall (data and settings stay)
+    if (Test-Path -LiteralPath $binThis) { try { Remove-Item -LiteralPath $binThis -Recurse -Force -ErrorAction Stop } catch { Write-Warning "dbdatakit-full: $binThis was not removed: $($_.Exception.Message)" } }
+    if ((Test-Path -LiteralPath $binRoot) -and -not (Get-ChildItem -LiteralPath $binRoot -Force)) { Remove-Item -LiteralPath $binRoot -Force -ErrorAction SilentlyContinue }
   } else {
-    foreach ($m in $reverse) { if ($m.Service) { try { Stopped $m.Service } catch { Write-Warning "dbdatakit-full: $($m.Product): $($_.Exception.Message)" } } }
+    # only a service that runs from this version's files: after an update's install the services are the new version's
+    foreach ($m in $reverse) { if ($m.Service -and (UnderFolder (ServicePath $m.Service) $binThis)) { try { Stopped $m.Service } catch { Write-Warning "dbdatakit-full: $($m.Product): $($_.Exception.Message)" } } }
   }
 }
 #endregion

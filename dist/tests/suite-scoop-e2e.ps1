@@ -63,6 +63,8 @@ function AssertEveryMemberRunsPairedAndHealthy([string]$why) {
   foreach ($s in Services) {
     $svc = Get-Service -Name $s.Name -ErrorAction SilentlyContinue
     Assert ($null -ne $svc -and $svc.Status -eq 'Running') "$why : the service $($s.Name) is running"
+    $binary = ([string](Get-CimInstance Win32_Service -Filter "Name='$($s.Name)'").PathName).Trim('"')
+    Assert ($binary.StartsWith((Join-Path $env:ProgramData 'DbDataKit\bin') + '\', [StringComparison]::OrdinalIgnoreCase) -and -not $binary.StartsWith($scoopApp, [StringComparison]::OrdinalIgnoreCase)) "$why : the service $($s.Name) runs from the copy under %ProgramData%\DbDataKit\bin, not from Scoop's folder"
     $account = (Get-CimInstance Win32_Service -Filter "Name='$($s.Name)'").StartName
     Write-Host "   $($s.Name) runs as $account"
     $health = Native "health-$($s.Product)" { & (Exe $s.Product) health check }
@@ -165,6 +167,8 @@ try {
   $update = Native 'update' { scoop update dbdatakit-full -g }
   Assert ($update.Code -eq 0) 'scoop update -g succeeded'
   Assert (Test-Path (Join-Path $scoopApp $second)) "the new version folder $second exists"
+  Assert (Test-Path (Join-Path $env:ProgramData "DbDataKit\bin\$second")) "the services' files of version $second are copied under %ProgramData%"
+  Assert (-not (Test-Path (Join-Path $env:ProgramData "DbDataKit\bin\$Version"))) "the copy of the old version $Version is removed"
   $current = (Get-Item (Join-Path $scoopApp 'current')).Target
   Write-Host "   current -> $current"
   AssertEveryMemberRunsPairedAndHealthy 'after the update'
@@ -179,6 +183,7 @@ try {
   foreach ($s in Services) { Assert (-not (ServiceExists $s.Name)) "$($s.Name) no longer exists" }
   $listed = Native 'instance-list-after' { & (Join-Path $copy 'dbdatakit.exe') instance list --offline }
   foreach ($s in Services) { if ($s.Product -ne 'dbdatakit') { Assert ($listed.Text -notmatch [regex]::Escape($s.Product)) "the console no longer lists $($s.Product)" } }
+  Assert (-not (Test-Path (Join-Path $env:ProgramData 'DbDataKit\bin'))) 'the copy of the program files is removed'
   Assert (Test-Path $data) 'the settings and data under %ProgramData% remain'
   Write-Host 'Suite install end-to-end: OK'
 }
