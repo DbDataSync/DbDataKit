@@ -122,4 +122,5 @@ Decided by the owner after the table above was closed. The numbers are the ones 
 | Secret store | `Shared/src/DbDataKit.Secrets.Store/README.md`, `Shared/src/DbDataKit.Secrets.Cli/README.md` |
 | Config layout, connection format | `Shared/src/DbDataKit.Config.Git/README.md`, `Shared/src/DbDataKit.Connections.Abstractions/README.md` |
 | Scripting, libraries, drivers | `Shared/src/DbDataKit.Scripting/README.md` |
+| Integrations: what they are, package kinds, authoring, build (csx with no SDK), test, publish; what is built and what is not | `docs/integrations.md` |
 | Releases and distribution | `docs/releases.md`, `dist/README.md` |

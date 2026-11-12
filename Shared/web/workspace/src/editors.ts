@@ -3,13 +3,14 @@ import type { CheckDiagnostic } from './api'
 import { buildSchemaOf } from './buildSchemas'
 
 /** The structured editors a draft's file can have beside the plain text one (plan 33 SC21d, SC22d): a form made from a schema, over the same text as the YAML. */
-export type EditorKind = 'store-model' | 'sync-task' | 'sync-mapping' | 'sync-connection' | 'build-file'
+export type EditorKind = 'store-model' | 'sync-task' | 'sync-mapping' | 'sync-connection' | 'build-file' | 'integration-manifest'
 
 /** Which structured editor a file of a project of this kind gets, by where the kind keeps it; null for a file that is edited as text only. */
 export function editorKindOf(projectKind: string | undefined, path: string): EditorKind | null {
   if (!/\.ya?ml$/i.test(path)) return null
   if (projectKind === 'build') return buildSchemaOf(path) ? 'build-file' : null
   if (projectKind === 'store') return /^models\/(?:[^/]+\/)*[^/]+$/.test(path) ? 'store-model' : null
+  if (projectKind === 'integration') return path === 'package.yaml' ? 'integration-manifest' : null
   if (projectKind === 'sync') {
     if (/^config\/replications\/[^/]+\/task\.ya?ml$/i.test(path)) return 'sync-task'
     if (/^config\/replications\/[^/]+\/table-mappings\/[^/]+$/.test(path)) return 'sync-mapping'

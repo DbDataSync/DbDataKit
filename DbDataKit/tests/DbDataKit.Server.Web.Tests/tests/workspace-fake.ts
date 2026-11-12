@@ -9,7 +9,7 @@ import YAML from 'yaml'
  */
 export const SERVER = 'ws-1'
 
-type Kind = 'store' | 'sync' | 'build'
+type Kind = 'store' | 'sync' | 'build' | 'integration'
 interface Project { id: string; kind: Kind; title: string | null; created: string }
 interface Workspace { id: string; project: string; name: string; branch: string; base: string; created: string; files: Map<string, string>; builds: Build[] }
 interface Build { id: string; kind: Kind; publishes: { at: string; by: string; target: string; ok: boolean; answer?: unknown }[] }
@@ -41,6 +41,9 @@ function check(kind: Kind, files: Map<string, string>): Finding[] {
         if (m && !m[1].startsWith('secret:')) found.push({ severity: 'error', code: 'DBD-WS-SYNC-SECRET', message: `${file} has a \`password_secret\` that is not a secret reference.`, file, line: i + 1 })
       })
     }
+    if (kind === 'integration' && file.startsWith('src/') && file.endsWith('.csx') && text.includes('BROKEN')) {
+      found.push({ severity: 'error', code: 'DBD-INT-CS1002', message: '; expected', file, line: lineOf(text, 'BROKEN') })
+    }
     if (kind === 'build' && file.startsWith('models/') && file.endsWith('.sql') && text.includes('nowhere')) {
       found.push({ severity: 'error', code: 'DDB-301', message: "The table 'nowhere' is not defined by any model.", file, line: lineOf(text, 'nowhere') })
     }
@@ -50,6 +53,12 @@ function check(kind: Kind, files: Map<string, string>): Finding[] {
 
 const template = (id: string, kind: Kind): Map<string, string> => {
   if (kind === 'store') return new Map([[`models/${id}.yaml`, ['schemaVersion: 2', `name: ${id}`, 'title: Sales', 'storage: {connection: mdm_sql}', 'entities:', '  item:', '    key: [code]', '    attributes:', '      code: {type: VARCHAR(20), required: true}', '      name: {type: VARCHAR(100), required: true}', ''].join('\n')]])
+  if (kind === 'integration') return new Map([
+    ['package.yaml', ['schema: package/1', `name: ${id}`, `launch: { kind: assembly, assembly: bin/${id}.dll }`, 'tasks:', '  - name: hello', '    entry: { type: Integration.Hello }', '    triggers:', '      - manual: true', ''].join('\n')],
+    ['src/hello.csx', 'namespace Integration;\n\n[RunnerTask("hello")]\npublic sealed class Hello : RunnerJob<NoInput, NoProgress, NoSlots>\n{\n    protected override Task RunAsync(CancellationToken ct) => Task.CompletedTask;\n}\n'],
+    ['tests/hello.csx', 'var sim = new RunSimulator<Integration.Hello>();\nawait sim.RunAsync();\nsim.Dispose();\n'],
+    ['README.md', `# ${id}\n`],
+  ])
   if (kind === 'sync') return new Map([
     ['config/connections/source-db.yaml', 'schema: connection/1\nname: source-db\nengine: sqlserver\naddress:\n  host: source.example.com\n  database: App\nauth:\n  mode: sql\n  user: sync\n  password_secret: secret:dbdatakit:sync:connection:source-db\n'],
     ['config/connections/target-db.yaml', 'schema: connection/1\nname: target-db\nengine: postgres\naddress:\n  host: target.example.com\n  database: dw\nauth:\n  mode: sql\n  user: sync\n  password_secret: secret:dbdatakit:sync:connection:target-db\n'],
@@ -68,6 +77,7 @@ const KINDS = [
   { name: 'app', title: 'App', description: 'An app.', buildable: true, produces: false, publishes: [{ product: 'gateway', what: 'app', description: 'The built app.' }] },
   { name: 'build', title: 'Build project', description: 'Models of dbdatabuild.', buildable: false, produces: true, publishes: [{ product: 'runner', what: 'package', description: 'The refresh package.' }, { product: 'gateway', what: 'semantic-model', description: 'The compiled semantic models.' }] },
   { name: 'store', title: 'Store model', description: 'Master data models.', buildable: false, produces: true, publishes: [{ product: 'gateway', what: 'model', description: 'The models.' }] },
+  { name: 'integration', title: 'Integration', description: 'Code for the Runner.', buildable: false, produces: true, publishes: [{ product: 'runner', what: 'package', description: 'The integration as a package.' }] },
   { name: 'sync', title: 'Sync replication set', description: 'Replications of dbdatasync.', buildable: false, produces: true, publishes: [{ product: 'runner', what: 'package', description: 'The replications.' }] },
 ]
 

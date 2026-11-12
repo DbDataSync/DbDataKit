@@ -67,7 +67,7 @@ export function languageOf(path: string): 'yaml' | 'csharp' | 'sql' | 'plaintext
   const lower = path.toLowerCase()
   if (lower.endsWith('.yaml') || lower.endsWith('.yml')) return 'yaml'
   if (lower.endsWith('.sql')) return 'sql'
-  if (lower.endsWith('.cs')) return 'csharp'
+  if (lower.endsWith('.cs') || lower.endsWith('.csx')) return 'csharp'
   return 'plaintext'
 }
 
