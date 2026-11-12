@@ -21,7 +21,7 @@ public static class RunnerLineageNoun
         {
             var directory = Path.GetFullPath(Options.Value.Repo ?? RunnerSettings.DefaultDirectory(environment));
             var group = RunnerSettings.GroupFrom(environment, Options.Value.Group);
-            var state = RunnerState.Open(directory, RunnerSettings.StateFrom(environment), environment, group);
+            var state = RunnerState.Open(directory, RunnerSettings.StateFrom(directory, environment), environment, group);
             try { return Task.FromResult(RunnerDeploymentLineage.Build(state, group, new RunnerSettings(directory, new Uri("https://localhost:0")).InstanceLease)); }
             finally { (state as IDisposable)?.Dispose(); }
         }, deployment: true);

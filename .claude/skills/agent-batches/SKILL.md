@@ -21,7 +21,7 @@ new formats get a `docs/formats.json` entry and a `docs/ui-editors.md` row; scre
 first if the worktree base is old. Use the brief template in `docs/agent-workflow.md`. Keep 5 to 7 agents running; start the next as one reports.
 
 **Machine rules (put them in every brief).**
-- Every build or test: `scripts/build-slot.sh <command>` (two slots; `flock -o /tmp/build.lock <command>` is slot 1 and still works) with `-p:UseSharedCompilation=false` and `MSBUILDDISABLENODEREUSE=1` (without `-o` the compiler server holds the lock for ten minutes).
+- Every build or test: `scripts/build-slot.sh <command>` (two dotnet slots and two node slots, chosen by the command; refuses under 3 GB free; `flock -o /tmp/build.lock <command>` is dotnet slot 1 and still works) with `-p:UseSharedCompilation=false` and `MSBUILDDISABLENODEREUSE=1` (without `-o` the compiler server holds the lock for ten minutes).
 - Delete `bin`, `obj`, `node_modules`, `.duckdb`, `DbDataBuild/native` right after each step; stop building under 3 GB free (`df -h /`).
 - Sync only with `DBDATAKIT_TEST_SKIP_JDBC=true`; never restore IKVM.
 - Prune unused docker images (`docker image prune -a -f`) when disk is low; pull again through the mirror when engines are needed.

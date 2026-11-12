@@ -324,6 +324,9 @@ public sealed class RunSimulator<TJob> : IDisposable
         lock (_gate) return _progress[found] as TProgress ?? throw new InvalidOperationException($"The job's progress is {_progress[found].GetType().Name}, not {typeof(TProgress).Name}.");
     }
 
+    /// <summary>The records the job refused with <c>RejectAsync</c> (the task's dead letters): list them, read a body, replay the open ones once, discard one (plan 27a IX14).</summary>
+    public RefusedRecords Refused() => new(Database, new ProgressKey(_environment.Package, _environment.Channel, TaskName));
+
     /// <summary>The units of one kind in the chain as stored now: how many ran, failed, were skipped or are left started, and which keys.</summary>
     public UnitsSummary Units(UnitDefinition unit)
     {

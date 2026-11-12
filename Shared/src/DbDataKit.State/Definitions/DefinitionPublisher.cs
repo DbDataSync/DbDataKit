@@ -412,12 +412,57 @@ public sealed partial class DefinitionPublisher
         });
     }
 
+    /// <summary>Takes a slot's binding in a channel away (plan 27a IX23: a runner's slot channel can be emptied); false when it was not bound. Moves the change log like a bind.</summary>
+    public bool Unbind(string channel, string kind, string name, string slot, string by)
+    {
+        DefinitionStore.Check(kind, name, channel);
+        var now = _database.Time.GetUtcNow();
+        return _database.Retry(() =>
+        {
+            using var connection = _database.OpenConnection();
+            using var transaction = connection.BeginTransaction();
+            if (ReadBinding(connection, transaction, channel, kind, name, slot) is null) return false;
+            using var delete = _database.Command(Module, connection, transaction, "DELETE FROM {table:definition_binding} WHERE channel = $channel AND kind = $kind AND name = $name AND slot = $slot;");
+            delete.Bind(_database, "channel", channel).Bind(_database, "kind", kind).Bind(_database, "name", name).Bind(_database, "slot", slot).ExecuteNonQuery();
+            var active = ReadHead(connection, transaction, kind, name, channel)?.Active ?? 0;
+            Log(connection, transaction, "unbind", kind, name, channel, active, by, now, slot);
+            transaction.Commit();
+            return true;
+        });
+    }
+
     public IReadOnlyList<DefinitionBinding> Bindings(string channel, string kind, string name) =>
         _database.Retry(() =>
         {
             using var connection = _database.OpenConnection();
             using var command = _database.Command(Module, connection, "SELECT channel, kind, name, slot, bound_to, revision, bound_by, bound_at FROM {table:definition_binding} WHERE channel = $channel AND kind = $kind AND name = $name ORDER BY slot;");
             command.Bind(_database, "channel", channel).Bind(_database, "kind", kind).Bind(_database, "name", name);
+            using var reader = command.ExecuteReader();
+            var found = new List<DefinitionBinding>();
+            while (reader.Read()) found.Add(ReadBindingRow(reader));
+            return (IReadOnlyList<DefinitionBinding>)found;
+        });
+
+    /// <summary>Every binding of a kind, of every definition in every channel, including definitions that have no version yet (slots are bound before a first publish).</summary>
+    public IReadOnlyList<DefinitionBinding> BindingsOfKind(string kind) =>
+        _database.Retry(() =>
+        {
+            using var connection = _database.OpenConnection();
+            using var command = _database.Command(Module, connection, "SELECT channel, kind, name, slot, bound_to, revision, bound_by, bound_at FROM {table:definition_binding} WHERE kind = $kind ORDER BY name, channel, slot;");
+            command.Bind(_database, "kind", kind);
+            using var reader = command.ExecuteReader();
+            var found = new List<DefinitionBinding>();
+            while (reader.Read()) found.Add(ReadBindingRow(reader));
+            return (IReadOnlyList<DefinitionBinding>)found;
+        });
+
+    /// <summary>Every binding of a definition in every channel (the posture check of plan 27a IX17 compares a channel's connection with production's).</summary>
+    public IReadOnlyList<DefinitionBinding> BindingsOf(string kind, string name) =>
+        _database.Retry(() =>
+        {
+            using var connection = _database.OpenConnection();
+            using var command = _database.Command(Module, connection, "SELECT channel, kind, name, slot, bound_to, revision, bound_by, bound_at FROM {table:definition_binding} WHERE kind = $kind AND name = $name ORDER BY channel, slot;");
+            command.Bind(_database, "kind", kind).Bind(_database, "name", name);
             using var reader = command.ExecuteReader();
             var found = new List<DefinitionBinding>();
             while (reader.Read()) found.Add(ReadBindingRow(reader));
