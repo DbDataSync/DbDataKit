@@ -16,6 +16,7 @@
     <Using Include="Microsoft.Extensions.Configuration" />
     <DbDataKitReference Include="Config.Testing" />
     <DbDataKitReference Include="Serving.Conformance" />
+    <DbDataKitReference Include="Authoring.Server" />   <!-- the Workspace server's publish (WorkspaceGatewayPublish) run against a real Gateway: plan 33 SW01 -->
     <DbDataKitReference Include="Serving.Notify" />   <!-- the producer side of data.changed, run against a real Gateway; plan 24a UC13 -->
     <None Include="Config\Golden\*" CopyToOutputDirectory="PreserveNewest" />
     <!-- the sample semantic model and its data, as the semantic engine's own conformance suite runs on them -->

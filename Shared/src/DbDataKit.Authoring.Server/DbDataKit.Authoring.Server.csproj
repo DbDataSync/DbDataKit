@@ -20,6 +20,7 @@
     <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
     <ProjectReference Include="..\DbDataKit.DataModel\DbDataKit.DataModel.csproj" />
     <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+    <ProjectReference Include="..\DbDataKit.State.Api\DbDataKit.State.Api.csproj" />   <!-- DefinitionsClient: the Workspace publishes over the shared publish API (plan 33 SW01) -->
     <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
     <ProjectReference Include="..\DbDataKit.Secrets\DbDataKit.Secrets.csproj" />
     <ProjectReference Include="..\DbDataKit.Web\DbDataKit.Web.csproj" />

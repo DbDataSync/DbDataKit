@@ -59,7 +59,16 @@ public sealed class WorkspaceStorePublishTests
         Assert.Equal((Project, "mdm", 1, true), ((string)model["model"]!, (string)model["data_source"]!, (int)model["version"]!, (bool)model["created"]!));
         Assert.StartsWith("schemaVersion: 2", gateway.Models[Project].Text);
         Assert.StartsWith("schemaVersion: 1", (string)(await server.AsAda(HttpMethod.Get, path)).Body!["content"]!);
-        Assert.Collection(gateway.Calls.Where(c => c.Contains("entity-models")), c => Assert.StartsWith("GET /api/v1/entity-models/territories as client:workspace-", c), c => Assert.StartsWith("PUT /api/v1/entity-models/territories as client:workspace-", c));
+        // through the shared publish API (plan 33 SW01): what the Gateway holds is read first; the data source the model names is not one this client published, so it is a slot, which the Gateway refuses until it is bound and the client,
+        // which made it, binds itself before it publishes again
+        Assert.Contains(gateway.Calls, c => c.StartsWith("GET /api/v1/definitions/data-source as client:workspace-", StringComparison.Ordinal));
+        Assert.Collection(gateway.Calls.Where(c => c.Contains("entity-model") && !c.Contains("/trust/")),
+            c => Assert.StartsWith("GET /api/v1/definitions/entity-model/territories as client:workspace-", c), c => Assert.StartsWith("PUT /api/v1/definitions/entity-model/territories as client:workspace-", c),
+            c => Assert.StartsWith("PUT /api/v1/bindings/prod/entity-model/territories as client:workspace-", c), c => Assert.StartsWith("PUT /api/v1/definitions/entity-model/territories as client:workspace-", c));
+        Assert.DoesNotContain(gateway.Calls, c => c.Contains("/api/v1/entity-models/", StringComparison.Ordinal));
+        var sent = (string)gateway.Published.Single()["manifest"]!;
+        Assert.Contains("\"managedBy\":\"workspace-", sent);   // the manifest is signed as sent, so it says whose it is
+        Assert.Contains("\"slots\":[\"mdm\"]", sent);
         Assert.All(gateway.Calls, c => Assert.Contains("with publisher", c));
 
         // the same model again leaves the Gateway's version where it was; a change goes over the version it has
@@ -105,6 +114,34 @@ public sealed class WorkspaceStorePublishTests
     }
 
     [Fact]
+    public async Task A_model_goes_on_a_hand_made_data_source_the_group_bound_as_a_slot_with_no_confirmation_and_the_refusal_without_the_binding_says_who_binds_it()
+    {
+        await using var gateway = await FakeGateway.StartAsync();
+        gateway.HandMade.Add("mdm");
+        await using var server = await WorkspaceHarness.StartAsync();
+        await Pair(server, gateway);
+        var workspace = await DraftAsync(server);
+        var build = await BuildAsync(server, workspace);
+
+        // not bound: the Workspace tried to bind it itself (the Gateway lets a publishing client bind only what it made) and says what an administrator does
+        var refused = await Publish(server, workspace, build, new JsonObject { ["target"] = "edge" });
+        Assert.Equal(HttpStatusCode.Conflict, refused.Response.StatusCode);
+        Assert.Contains("An administrator of the Gateway binds it once (PUT /api/v1/bindings/prod/entity-model/territories", (string)refused.Body!["error"]!);
+        Assert.Empty(gateway.Models);
+
+        // an administrator binds the slot, once: the same publish needs no confirmation and the Workspace binds nothing
+        gateway.Bindings.Clear();
+        gateway.Bindings[$"entity-model/{Project}/mdm"] = "an administrator";
+        gateway.Calls.Clear();
+        var published = await Publish(server, workspace, build, new JsonObject { ["target"] = "edge" });
+        Assert.Equal(HttpStatusCode.OK, published.Response.StatusCode);
+        Assert.Equal("mdm", (string)published.Body!["published"]!["models"]![0]!["slots_used"]![0]!);
+        Assert.Contains($"mdm for {Project} by ", Assert.Single(gateway.SlotUses));
+        Assert.Empty(gateway.Adoptions);
+        Assert.DoesNotContain(gateway.Calls, c => c.Contains("/api/v1/bindings/", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task A_data_source_the_gateway_does_not_have_and_a_gateways_refusal_come_back_in_its_words_and_a_runner_is_not_a_target()
     {
         await using var gateway = await FakeGateway.StartAsync();
@@ -117,7 +154,7 @@ public sealed class WorkspaceStorePublishTests
 
         var missing = await Publish(server, workspace, build, new JsonObject { ["target"] = "edge", ["data_source"] = "warehouse" });
         Assert.Equal(HttpStatusCode.Conflict, missing.Response.StatusCode);
-        Assert.Contains("The Gateway refused the model territories on the data source 'warehouse' (409): 'warehouse' is not a data source of this server", (string)missing.Body!["error"]!);
+        Assert.Contains("The Gateway refused the model territories on the data source 'warehouse' (400): 'warehouse' is not a data source of this server", (string)missing.Body!["error"]!);
         gateway.DataSources.Add("warehouse");
         Assert.Equal("warehouse", (string)(await Publish(server, workspace, build, new JsonObject { ["target"] = "edge", ["data_source"] = "warehouse" })).Body!["published"]!["models"]![0]!["data_source"]!);
 
