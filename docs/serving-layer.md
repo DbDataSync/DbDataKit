@@ -57,7 +57,7 @@ Health per module is on the host's `/health` and `/health/ready`: each of `fligh
 | The console | everything an end user does | administration, approvals made in the console, monitoring views |
 | A serving instance | the others behind the load balancer | nothing, if the group has more than one instance |
 
-Tests for each row with the back-end stopped are not written yet (plan 20 O13); several of the rows are exercised by `GroupStateTests`, which run a done-when with no Store server or no Build.
+Tests of the rows with the back-end not running: `OutageTests` (Build, Sync and the console, on a serving instance of its own with nothing beside it) and `GroupStateTests` (the DbDataStore server, on SQL Server and PostgreSQL). The row for a stopped serving instance waits for the high-availability tests (plan 20 O05).
 
 ## High availability, groups and identity
 
