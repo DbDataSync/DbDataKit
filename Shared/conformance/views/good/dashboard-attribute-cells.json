@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "kind": "dashboard",
+  "title": "Filtered measures",
+  "links": {
+    "set-status": {
+      "form": "orders",
+      "edit": {
+        "id": "$orders.id"
+      },
+      "as": "dialog",
+      "then": "refresh",
+      "print": "hidden"
+    }
+  },
+  "widgets": {
+    "w": {
+      "type": "matrix",
+      "title": "Status by month",
+      "encodings": {
+        "rows": [
+          "customers.region"
+        ],
+        "columns": [
+          "orders.ordered_at_month"
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenue",
+            "label": "Revenue"
+          },
+          {
+            "attribute": "orders.status",
+            "display": "icon",
+            "icons": {
+              "Open": "circle",
+              "Completed": "check"
+            },
+            "many": "mixed",
+            "link": "set-status",
+            "label": "Status"
+          }
+        ],
+        "totals": {
+          "rows": true
+        }
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "layouts": [
+    {
+      "name": "desk",
+      "type": "reflow",
+      "default": true,
+      "grid": {
+        "columns": 12
+      },
+      "tiles": [
+        {
+          "widget": "w",
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 6
+        }
+      ]
+    }
+  ]
+}

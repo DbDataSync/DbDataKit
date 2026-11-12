@@ -61,7 +61,9 @@ export const WIDGET_TYPES: readonly WidgetType[] = ['metric', 'chart', 'matrix',
 export const wellsOf = (type: WidgetType): readonly WellSpec[] => WELLS[type] ?? []
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
-const fieldOf = (node: unknown): string | undefined => (typeof node === 'string' && node.length > 0 ? node : isObject(node) && typeof node.field === 'string' && node.field.length > 0 ? node.field : undefined)
+// a matrix value may be an attribute in the cell area (`{attribute, display, ...}`, DBR51): its field is the attribute
+const fieldOf = (node: unknown): string | undefined =>
+  typeof node === 'string' && node.length > 0 ? node : isObject(node) && typeof node.field === 'string' && node.field.length > 0 ? node.field : isObject(node) && typeof node.attribute === 'string' && node.attribute.length > 0 ? node.attribute : undefined
 
 function getAt(raw: unknown, path: readonly string[]): unknown {
   let node: unknown = raw
@@ -81,9 +83,9 @@ export function wellFields(widget: WidgetDoc, spec: WellSpec): string[] {
 function valueWith(widget: WidgetDoc, spec: WellSpec, fields: string[]): unknown {
   if (fields.length === 0) return undefined
   const node = getAt(widget, spec.path)
-  const old = (Array.isArray(node) ? node : [node]).filter(isObject).filter((o) => typeof o.field === 'string')
+  const old = (Array.isArray(node) ? node : [node]).filter(isObject).filter((o) => typeof o.field === 'string' || typeof o.attribute === 'string')
   const entry = (field: string): unknown => {
-    const existing = old.find((o) => o.field === field)
+    const existing = old.find((o) => (o.field ?? o.attribute) === field)
     return spec.shape === 'objects' ? existing ?? { field } : existing ?? field
   }
   if (spec.shape === 'field') return entry(fields[0]!)

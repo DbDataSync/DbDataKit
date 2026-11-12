@@ -91,8 +91,8 @@ public class WidgetSchemaTests
         Assert.Equal("#/$defs/matrix_axis", encodings["properties"]!["rows"]!["$ref"]!.GetValue<string>());
         Assert.Equal("#/$defs/matrix_axis", encodings["properties"]!["columns"]!["$ref"]!.GetValue<string>());
         Assert.Equal("#/$defs/matrix_values", encodings["properties"]!["values"]!["$ref"]!.GetValue<string>());
-        // a matrix value is the view's own keys and the object form of a measure (DBR50: alias, filters)
-        Assert.Equal(Props(At(view, "$defs/matrix/properties/values/items")).Concat(["alias", "filters"]).Order(), Props(At(core, "$defs/matrix_values/items")));
+        // a matrix value is the view's own keys, the object form of a measure (DBR50: alias, filters) and an attribute in the cell area (DBR51)
+        Assert.Equal(Props(At(view, "$defs/matrix/properties/values/items")).Concat(["alias", "filters", "attribute", "display", "icons", "many", "link"]).Order(), Props(At(core, "$defs/matrix_values/items")));
         Assert.Equal(["values"], matrix["required"]!.AsArray().Select(v => v!.GetValue<string>()).Where(v => v is not ("type" or "id")));
         Assert.Equal(["values"], encodings["required"]!.AsArray().Select(v => v!.GetValue<string>()));
         // the chart: the channels are the subset's, and so are the mark and the channel object

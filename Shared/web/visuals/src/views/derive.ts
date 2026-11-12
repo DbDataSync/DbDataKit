@@ -163,7 +163,7 @@ export function deriveRequest(widget: DerivableWidget, roles: CatalogRoles): Der
 
   // ---- totals ----
   let totals: Json | undefined
-  if (type === 'matrix') totals = matrixTotals(encodings, (n) => roleOf(roles, n) === 'measure' || measures.some((m) => m.name === n), wp, query, issue)
+  if (type === 'matrix') totals = matrixTotals(encodings, (n) => roleOf(roles, n) === 'measure' || measures.some((m) => m.name === n), cellAttributes(encodings), wp, query, issue)
   else if (isObject(query.totals)) {
     totals = structuredClone(query.totals)
     if (totals.subtotal_by === undefined && attributes.length > 0) totals = { subtotal_by: [...attributes], ...totals }
@@ -218,7 +218,12 @@ function slotsOf(type: string, encodings: Json, path: string): Slot[] {
         const list = encodings[axis]
         if (Array.isArray(list)) list.forEach((f, i) => entry(f, at(join(path, axis), i), 'attribute'))
       }
-      if (Array.isArray(encodings.values)) encodings.values.forEach((v, i) => { if (isObject(v)) entry(v, at(join(path, 'values'), i), 'measure') })
+      if (Array.isArray(encodings.values)) encodings.values.forEach((v, i) => {
+        if (!isObject(v)) return
+        // an attribute in the cell area (DBR51) is asked for at the cells' grain, after the axes
+        if (isString(v.attribute)) slots.push({ field: v.attribute, path: join(at(join(path, 'values'), i), 'attribute'), well: 'attribute' })
+        else entry(v, at(join(path, 'values'), i), 'measure')
+      })
       break
     case 'table':
       if (Array.isArray(encodings.columns)) encodings.columns.forEach((c, i) => { if (isObject(c)) entry(c, at(join(path, 'columns'), i), 'either') })
@@ -261,7 +266,18 @@ function nestedOrder(levels: unknown[], xPath: string, origins: Map<string, stri
 
 // ---- a matrix's totals ----
 
-function matrixTotals(encodings: Json, isMeasure: (name: string) => boolean, wp: string, query: Json, issue: (code: string, path: string, message: string) => void): Json | undefined {
+/**
+ * The attributes of a matrix's cell area (DBR51; the twin of `DeriveRequest.CellAttributes`): the `attribute` entries of `values` that are not already on an axis, asked for at the cells' grain and rolled up last in the
+ * request's totals, so the answer holds the cell's own row (the attribute rolled up) beside the rows that say which values the cell has.
+ */
+export function cellAttributes(encodings: Json): string[] {
+  const entryField = (n: unknown): string => (isObject(n) ? String(n.field ?? '') : String(n ?? ''))
+  const onAxes = new Set(['rows', 'columns'].flatMap((a) => (Array.isArray(encodings[a]) ? (encodings[a] as unknown[]).map(entryField) : [])))
+  const list = Array.isArray(encodings.values) ? (encodings.values as unknown[]).map((v) => (isObject(v) && isString(v.attribute) ? v.attribute : '')) : []
+  return [...new Set(list.filter((a) => a.length > 0 && !onAxes.has(a)))]
+}
+
+function matrixTotals(encodings: Json, isMeasure: (name: string) => boolean, cellAttrs: string[], wp: string, query: Json, issue: (code: string, path: string, message: string) => void): Json | undefined {
   // an axis entry is a field name or `{field, format, sort}` (DBR41)
   const entryField = (n: unknown): string => (isObject(n) ? String(n.field ?? '') : String(n ?? ''))
   const axis = (name: string): string[] => [...new Set(Array.isArray(encodings[name]) ? (encodings[name] as unknown[]).map(entryField) : [])]
@@ -276,16 +292,16 @@ function matrixTotals(encodings: Json, isMeasure: (name: string) => boolean, wp:
   const byMeasure = (name: string) => { const s = axisSort(name); return isObject(s) && typeof s.by === 'string' && isMeasure(s.by) }
   const needRow = wantRow || (byMeasure('columns') && rows.length > 0)
   const needColumn = wantColumn || (byMeasure('rows') && columns.length > 0)
-  if (!needRow && !needColumn) return undefined
+  if (!needRow && !needColumn && cellAttrs.length === 0) return undefined
 
   if (query.totals !== undefined) { issue(VIEW('042'), `${wp}.query.totals`, "A matrix's totals are made from its encodings (`totals`, and a sort by a measure); the query asks for them too."); return undefined }
   if (wantRow && rows.length === 0) { issue(VIEW('042'), `${wp}.encodings.totals.rows`, 'A total row needs at least one row field to roll up.'); return undefined }
   if (wantColumn && columns.length === 0) { issue(VIEW('042'), `${wp}.encodings.totals.columns`, 'A total column needs at least one column field to roll up.'); return undefined }
 
-  const all = [...rows, ...columns]
+  const all = [...rows, ...columns, ...cellAttrs]
   if (needRow && needColumn) return { subtotal_by: all, grand_total: true, cube: true }
-  // a roll-up takes the innermost attribute first: the axis to roll up goes last
-  return needRow ? { subtotal_by: [...columns, ...rows] } : { subtotal_by: all }
+  // a roll-up takes the innermost attribute first: the axis to roll up goes last, and the attributes of the cell area after it
+  return needRow || !needColumn ? { subtotal_by: [...columns, ...rows, ...cellAttrs] } : { subtotal_by: all }
 }
 
 // ---- parameter markers ----

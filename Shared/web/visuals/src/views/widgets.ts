@@ -81,6 +81,23 @@ export function checkWidgets(raw: unknown, context: Context, issues: Issues, bas
 interface Encoded { channel: string; field: string; path: string; alias?: string; filtered?: boolean }
 const outputOf = (f: Encoded) => f.alias ?? f.field
 
+const DISPLAYS = ['text', 'icon', 'badge']
+const MANY = ['mixed', 'first', 'last', 'count', 'list']
+
+/**
+ * How an attribute shows in a cell (plan 32 section 9h, DBR51), as `ViewsLoader.AttributeOptions` reads it: `display`, `icons` (an icon display needs its map and a map needs the icon display), `many` (a matrix entry
+ * only) and `link`, a named link of the document, resolved once the document has read `links`. The shape (the closed icon vocabulary, the keys) is the schema's.
+ */
+function attributeOptions(entry: Json, path: string, matrix: boolean, context: Context, issues: Issues): void {
+  const display = typeof entry.display === 'string' && DISPLAYS.includes(entry.display) ? entry.display : undefined
+  if (isObject(entry.icons)) {
+    if (display !== undefined && display !== 'icon') issues.add('DBD-106', join(path, 'icons'), '`icons` belong to `display: icon`.')
+  } else if (display === 'icon' && entry.icons === undefined) issues.add('DBD-106', join(path, 'display'), '`display: icon` needs `icons`: the icon each value shows.')
+  if (entry.many !== undefined && !matrix) issues.add('DBD-106', join(path, 'many'), '`many` is for an attribute entry of a matrix: a table row has one value.')
+  else if (entry.many !== undefined && !(typeof entry.many === 'string' && MANY.includes(entry.many))) issues.add('DBD-106', join(path, 'many'), `\`many\` is one of: ${MANY.join(', ')}.`)
+  if (isLinkName(entry.link)) context.clickRefs?.push({ name: entry.link, path: join(path, 'link') })
+}
+
 /** What the object form of a measure says beyond the field (plan 32 DBR50): the `alias` that names its output, whether it has `filters`; the markers in them are checked as the query's are. */
 function measureOptions(entry: Json, path: string, field: Encoded, context: Context, issues: Issues): Encoded {
   const alias = typeof entry.alias === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(entry.alias) ? entry.alias : undefined
@@ -124,10 +141,31 @@ function checkWidget(id: string, raw: unknown, path: string, context: Context, i
           if (sorted.length > 1) issues.add('DBD-106', join(at(join(ep, axis), sorted[1]!), 'sort'), `Only one level of the ${axis} carries a sort: it is the sort of the axis.`)
         }
       }
-      if (Array.isArray(encodings?.values)) encodings.values.forEach((v, i) => { if (isObject(v) && typeof v.field === 'string') fields.push(measureOptions(v, at(join(ep, 'values'), i), { channel: 'values', field: v.field, path: join(at(join(ep, 'values'), i), 'field') }, context, issues)) })
+      if (Array.isArray(encodings?.values)) encodings.values.forEach((v, i) => {
+        if (!isObject(v)) return
+        const vp = at(join(ep, 'values'), i)
+        if (v.attribute !== undefined) {
+          // an attribute in the cell area (DBR51): shown at the cells' grain, by the one-row rule
+          if (v.field !== undefined) issues.add('DBD-106', join(vp, 'field'), 'A value is a measure (`field`) or an attribute (`attribute`), not both.')
+          else if (typeof v.attribute === 'string' && v.attribute.length > 0) {
+            fields.push({ channel: 'values', field: v.attribute, path: join(vp, 'attribute') })
+            attributeOptions(v, vp, true, context, issues)
+            for (const bad of ['alias', 'filters']) if (v[bad] !== undefined) issues.add('DBD-106', join(vp, bad), `\`${bad}\` belongs to a measure: an attribute has no aggregate to narrow or name.`)
+            if (encodings?.values_on === 'rows') issues.add('DBD-106', join(ep, 'values_on'), 'A matrix with an attribute among its values lists the values across the columns: `values_on: rows` is not available.')
+          }
+        } else if (typeof v.field === 'string') {
+          for (const bad of ['display', 'icons', 'many', 'link']) if (v[bad] !== undefined) issues.add('DBD-106', join(vp, bad), `\`${bad}\` belongs to an attribute entry (\`attribute:\`); this value is a measure.`)
+          fields.push(measureOptions(v, vp, { channel: 'values', field: v.field, path: join(vp, 'field') }, context, issues))
+        }
+      })
       break
     case 'table':
-      if (Array.isArray(encodings?.columns)) encodings.columns.forEach((c, i) => { if (isObject(c) && typeof c.field === 'string') fields.push(measureOptions(c, at(join(ep, 'columns'), i), { channel: 'columns', field: c.field, path: join(at(join(ep, 'columns'), i), 'field') }, context, issues)) })
+      if (Array.isArray(encodings?.columns)) encodings.columns.forEach((c, i) => {
+        if (!isObject(c) || typeof c.field !== 'string') return
+        const cp = at(join(ep, 'columns'), i)
+        fields.push(measureOptions(c, cp, { channel: 'columns', field: c.field, path: join(cp, 'field') }, context, issues))
+        attributeOptions(c, cp, false, context, issues)
+      })
       break
     case 'text': text(raw, path, context, issues); break
     case 'embed': embed(raw, path, context, issues); break
@@ -145,6 +183,10 @@ function checkWidget(id: string, raw: unknown, path: string, context: Context, i
         for (const f of fields.filter((f) => !query.outputs!.has(outputOf(f))))
           issues.add(VIEW('005'), f.path, `\`${outputOf(f)}\` is encoded as ${f.channel} but is not an output of the query (it gives ${[...query.outputs].sort().join(', ')}).`)
       // a written query says its own measures: the filters of an encoded measure are how a derived request is told, so there they have no meaning
+      // an attribute in a matrix's cells needs the request asked at the cells' grain, which only a derived query does
+      if (query.explicit && type === 'matrix')
+        for (const f of fields.filter((f) => f.channel === 'values' && f.path.endsWith('.attribute')))
+          issues.add(VIEW('007'), f.path, `\`${f.field}\` is an attribute among the values of a matrix, which asks for the request at the cells' grain, but the query is written out (\`mode: explicit\`).`)
       if (query.explicit)
         for (const f of fields.filter((f) => f.filtered))
           issues.add(VIEW('007'), f.path, `\`${f.field}\` carries \`filters\`, but the query is written out (\`mode: explicit\`) and says its own measures.`)

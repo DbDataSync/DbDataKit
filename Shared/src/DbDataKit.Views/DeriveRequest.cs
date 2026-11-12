@@ -207,7 +207,7 @@ public static class DeriveRequest
 
         // ---- totals ----
         JsonObject? totals = null;
-        if (widget.Type == "matrix") totals = MatrixTotals(encodings, n => roles.Of(n) == CatalogRole.Measure || measures.Any(m => m.Name == n), wp, query, diagnostics, Diag);
+        if (widget.Type == "matrix") totals = MatrixTotals(encodings, n => roles.Of(n) == CatalogRole.Measure || measures.Any(m => m.Name == n), CellAttributes(encodings), wp, query, diagnostics, Diag);
         else if (query["totals"] is JsonObject qt)
         {
             totals = (JsonObject)qt.DeepClone();
@@ -280,7 +280,11 @@ public static class DeriveRequest
                         for (var i = 0; i < fields.Count; i++) Entry(fields[i], $"{path}.{axis}[{i}]", Well.Attribute);
                 if (encodings["values"] is JsonArray values)
                     for (var i = 0; i < values.Count; i++)
-                        if (values[i] is JsonObject) Entry(values[i], $"{path}.values[{i}]", Well.Measure);
+                    {
+                        // an attribute in the cell area (DBR51) is asked for at the cells' grain, after the axes
+                        if (values[i] is JsonObject { } entry && entry["attribute"] is JsonValue av && av.TryGetValue<string>(out var attribute) && attribute.Length > 0) slots.Add(new(attribute, $"{path}.values[{i}].attribute", Well.Attribute));
+                        else if (values[i] is JsonObject) Entry(values[i], $"{path}.values[{i}]", Well.Measure);
+                    }
                 break;
             case "table":
                 if (encodings["columns"] is JsonArray columns)
@@ -331,7 +335,20 @@ public static class DeriveRequest
 
     // ---- a matrix's totals ----
 
-    private static JsonObject? MatrixTotals(JsonObject encodings, Func<string, bool> isMeasure, string wp, JsonObject query, List<ConfigDiagnostic> diagnostics, Func<string, string, string, string?, ConfigDiagnostic> diag)
+    /// <summary>
+    /// The attributes of a matrix's cell area (DBR51): the <c>attribute</c> entries of <c>values</c> that are not already on an axis (an axis attribute is the same in every row of its cell). They are asked for at the cells' grain, and
+    /// rolled up <b>last</b> in the request's totals, so the answer holds the cell's own row (the attribute rolled up: every measure as the engine adds it) beside the rows that say which values the cell has.
+    /// </summary>
+    internal static List<string> CellAttributes(JsonObject encodings)
+    {
+        static string EntryField(JsonNode? n) => n is JsonObject o ? o["field"]?.GetValue<string>() ?? "" : n?.GetValue<string>() ?? "";
+        var onAxes = new HashSet<string>(new[] { "rows", "columns" }.SelectMany(a => encodings[a] is JsonArray l ? l.Select(EntryField) : []));
+        return encodings["values"] is JsonArray values
+            ? [.. values.OfType<JsonObject>().Select(o => o["attribute"] is JsonValue v && v.TryGetValue<string>(out var a) ? a : null).OfType<string>().Where(a => a.Length > 0 && !onAxes.Contains(a)).Distinct()]
+            : [];
+    }
+
+    private static JsonObject? MatrixTotals(JsonObject encodings, Func<string, bool> isMeasure, List<string> cellAttributes, string wp, JsonObject query, List<ConfigDiagnostic> diagnostics, Func<string, string, string, string?, ConfigDiagnostic> diag)
     {
         // an axis entry is a field name or `{field, format, sort}` (DBR41)
         static string EntryField(JsonNode? n) => n is JsonObject o ? o["field"]?.GetValue<string>() ?? "" : n?.GetValue<string>() ?? "";
@@ -345,7 +362,7 @@ public static class DeriveRequest
         bool ByMeasure(string axis) => AxisSort(axis)?["by"] is JsonValue v && v.TryGetValue<string>(out var by) && isMeasure(by);
         var needRow = wantRow || (ByMeasure("columns") && rows.Count > 0);
         var needColumn = wantColumn || (ByMeasure("rows") && columns.Count > 0);
-        if (!needRow && !needColumn) return null;
+        if (!needRow && !needColumn && cellAttributes.Count == 0) return null;
 
         if (query["totals"] is not null)
         { diagnostics.Add(diag(ViewsCodes.TotalsConflict, $"{wp}.query.totals", "A matrix's totals are made from its encodings (`totals`, and a sort by a measure); the query asks for them too.", "Remove `totals` from the query.")); return null; }
@@ -354,12 +371,12 @@ public static class DeriveRequest
         if (wantColumn && columns.Count == 0)
         { diagnostics.Add(diag(ViewsCodes.TotalsConflict, $"{wp}.encodings.totals.columns", "A total column needs at least one column field to roll up.", null)); return null; }
 
-        string[] all = [.. rows, .. columns];
+        string[] all = [.. rows, .. columns, .. cellAttributes];
         if (needRow && needColumn)
             return new JsonObject { ["subtotal_by"] = Array(all), ["grand_total"] = true, ["cube"] = true };
-        // a roll-up takes the innermost attribute first: the axis to roll up goes last
-        return needRow
-            ? new JsonObject { ["subtotal_by"] = Array([.. columns, .. rows]) }
+        // a roll-up takes the innermost attribute first: the axis to roll up goes last, and the attributes of the cell area after it
+        return needRow || !needColumn
+            ? new JsonObject { ["subtotal_by"] = Array([.. columns, .. rows, .. cellAttributes]) }
             : new JsonObject { ["subtotal_by"] = Array(all) };
     }
 

@@ -63,6 +63,10 @@
     {
       "file": "good/dashboard-filtered-measures.json",
       "kind": "dashboard"
+    },
+    {
+      "file": "good/dashboard-attribute-cells.json",
+      "kind": "dashboard"
     }
   ],
   "bad": [
@@ -1209,6 +1213,105 @@
       "code": "DBD-106",
       "path": "widgets.w.encodings.color",
       "line": 15,
+      "schema": false
+    },
+    {
+      "name": "matrix-value-with-field-and-attribute",
+      "file": "bad/matrix-value-with-field-and-attribute.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.values[0].field",
+      "line": 17,
+      "schema": false
+    },
+    {
+      "name": "matrix-attribute-icon-display-without-icons",
+      "file": "bad/matrix-attribute-icon-display-without-icons.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.values[0].display",
+      "line": 18,
+      "schema": false
+    },
+    {
+      "name": "matrix-attribute-icons-without-the-icon-display",
+      "file": "bad/matrix-attribute-icons-without-the-icon-display.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.values[0].icons",
+      "line": 19,
+      "schema": false
+    },
+    {
+      "name": "matrix-attribute-icon-outside-the-vocabulary",
+      "file": "bad/matrix-attribute-icon-outside-the-vocabulary.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.values[0].icons.Open",
+      "line": 20,
+      "schema": true
+    },
+    {
+      "name": "matrix-attribute-many-unknown",
+      "file": "bad/matrix-attribute-many-unknown.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.values[0].many",
+      "line": 18,
+      "schema": true
+    },
+    {
+      "name": "matrix-attribute-with-an-alias",
+      "file": "bad/matrix-attribute-with-an-alias.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.values[0].alias",
+      "line": 18,
+      "schema": false
+    },
+    {
+      "name": "matrix-attribute-values-on-rows",
+      "file": "bad/matrix-attribute-values-on-rows.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.values_on",
+      "line": 23,
+      "schema": false
+    },
+    {
+      "name": "matrix-attribute-link-not-declared",
+      "file": "bad/matrix-attribute-link-not-declared.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-036",
+      "path": "widgets.w.encodings.values[0].link",
+      "line": 18,
+      "schema": false
+    },
+    {
+      "name": "matrix-attribute-in-an-explicit-query",
+      "file": "bad/matrix-attribute-in-an-explicit-query.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-007",
+      "path": "widgets.w.encodings.values[0].attribute",
+      "line": 14,
+      "schema": false
+    },
+    {
+      "name": "table-column-many",
+      "file": "bad/table-column-many.json",
+      "as": "dashboard",
+      "code": "DBD-104",
+      "path": "widgets.w.encodings.columns[0].many",
+      "line": 12,
+      "schema": true
+    },
+    {
+      "name": "table-column-icon-display-without-icons",
+      "file": "bad/table-column-icon-display-without-icons.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.columns[0].display",
+      "line": 12,
       "schema": false
     }
   ],

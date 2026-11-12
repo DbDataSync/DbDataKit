@@ -155,6 +155,22 @@
     {
       "name": "table-sort-by-an-alias-adds-no-column",
       "file": "good/table-sort-by-an-alias-adds-no-column.json"
+    },
+    {
+      "name": "matrix-attribute-in-the-cell-area",
+      "file": "good/matrix-attribute-in-the-cell-area.json"
+    },
+    {
+      "name": "matrix-attribute-in-the-cell-area-with-totals",
+      "file": "good/matrix-attribute-in-the-cell-area-with-totals.json"
+    },
+    {
+      "name": "matrix-attribute-already-on-an-axis-adds-nothing",
+      "file": "good/matrix-attribute-already-on-an-axis-adds-nothing.json"
+    },
+    {
+      "name": "table-attribute-column-with-icons-and-a-link",
+      "file": "good/table-attribute-column-with-icons-and-a-link.json"
     }
   ],
   "refused": [

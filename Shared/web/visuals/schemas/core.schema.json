@@ -202,6 +202,10 @@
         "format": { "$ref": "#/$defs/format" }
       }
     },
+    "icon": { "description": "An icon of the closed vocabulary an attribute's value may show as (plan 32 DBR51): drawn from the bundled icon set, never by name from the page.", "enum": ["circle", "dot", "check", "cross", "warning", "info", "clock", "flag", "star", "pause", "play", "stop", "lock", "unlock", "arrow-up", "arrow-down", "arrow-right", "plus", "minus", "pin", "bell", "eye", "user", "tag"] },
+    "attribute_display": { "description": "How an attribute reads in a cell: text, an icon chosen by the value, or a badge.", "enum": ["text", "icon", "badge"] },
+    "attribute_icons": { "description": "The icon each value of the attribute shows as (display: icon); a value the map does not list shows as text.", "type": "object", "minProperties": 1, "maxProperties": 100, "additionalProperties": { "$ref": "#/$defs/icon" } },
+    "attribute_many": { "description": "What a matrix cell with several rows shows: mixed (a marker, the values in a tooltip; the default), first, last, count (the number of distinct values) or list (comma-joined, capped).", "enum": ["mixed", "first", "last", "count", "list"] },
     "chart_channel": {
       "description": "The Vega-Lite subset's channel object (its own definitions of field, type, sort, stack and title, referenced and not copied), `format` (plan 32 DBR41: how the channel's values read on an axis, in a legend and in a tooltip) and, on a measure, `alias` and `filters` (DBR50). The subset and the QIS view (0.3) are unchanged: the format belongs to the widget vocabulary and the renderer maps it.",
       "type": "object",
@@ -276,20 +280,25 @@
       }
     },
     "matrix_values": {
-      "description": "The measures of a matrix: the QIS view's own `field`, `empty` and `label`, and a `format` that is a preset or a mapping (the view's own takes the presets only).",
+      "description": "The values of a matrix: a measure (the QIS view's own `field`, `empty` and `label`, a `format` that is a preset or a mapping, and `alias` and `filters`, DBR50) or an attribute in the cell area (`attribute` with `display`, `icons`, `many`, `link`; plan 32 DBR51). An entry is one or the other.",
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["field"],
+        "anyOf": [{ "required": ["field"] }, { "required": ["attribute"] }],
         "additionalProperties": false,
         "properties": {
           "field": { "$ref": "#/$defs/field" },
+          "attribute": { "$ref": "#/$defs/field" },
           "empty": { "$ref": "https://example.internal/qis/view.schema.json#/$defs/matrix/properties/values/items/properties/empty" },
           "format": { "$ref": "#/$defs/format" },
           "label": { "$ref": "https://example.internal/qis/view.schema.json#/$defs/matrix/properties/values/items/properties/label" },
           "alias": { "$ref": "#/$defs/alias" },
-          "filters": { "$ref": "#/$defs/measure_filters" }
+          "filters": { "$ref": "#/$defs/measure_filters" },
+          "display": { "$ref": "#/$defs/attribute_display" },
+          "icons": { "$ref": "#/$defs/attribute_icons" },
+          "many": { "$ref": "#/$defs/attribute_many" },
+          "link": { "$ref": "#/$defs/name" }
         }
       }
     },
@@ -319,7 +328,10 @@
         "align": { "enum": ["left", "right", "center"] },
         "width": { "description": "A width hint in CSS pixels.", "type": "integer", "minimum": 20, "maximum": 2000 },
         "alias": { "$ref": "#/$defs/alias" },
-        "filters": { "$ref": "#/$defs/measure_filters" }
+        "filters": { "$ref": "#/$defs/measure_filters" },
+        "display": { "$ref": "#/$defs/attribute_display" },
+        "icons": { "$ref": "#/$defs/attribute_icons" },
+        "link": { "description": "The name of a link of the document that a click on the cell follows (plan 32 DBR51).", "$ref": "#/$defs/name" }
       }
     },
 

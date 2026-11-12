@@ -100,6 +100,12 @@ public static partial class ViewsLoader
                     Diagnostics.Add(DefaultDiagnosticCatalog.Instance.Create(ViewsCodes.BadQuery, File, f.Line, f.Column,
                         $"`{f.Field}` carries `filters`, but the query is written out (`mode: explicit`) and says its own measures.",
                         "Put the filters in the query's own measure, or drop `mode: explicit` and let the encodings derive the query.", f.Path));
+            // an attribute in a matrix's cells needs the request asked at the cells' grain, which only a derived query does
+            if (query is { Explicit: true } && type == "matrix")
+                foreach (var f in fields.Where(f => f.Channel == "values" && f.Path.EndsWith(".attribute", StringComparison.Ordinal)))
+                    Diagnostics.Add(DefaultDiagnosticCatalog.Instance.Create(ViewsCodes.BadQuery, File, f.Line, f.Column,
+                        $"`{f.Field}` is an attribute among the values of a matrix, which asks for the request at the cells' grain, but the query is written out (`mode: explicit`).",
+                        "Drop `mode: explicit` and let the encodings derive the query.", f.Path));
             return new ViewWidget(id, type, title, fields, query, ToObject(map), map.Line, map.Column);
         }
 
@@ -170,6 +176,35 @@ public static partial class ViewsLoader
             if (m.Get("format") is { } fmt) FormatValue(fmt, J(path, "format"));
             return field with { Alias = alias, Filtered = filtered };
         }
+
+        /// <summary>
+        /// How an attribute shows in a cell (plan 32 section 9h, DBR51): <c>display</c> (text, icon or badge), <c>icons</c> (a value-to-icon map of the closed vocabulary, the one an icon display draws by), <c>many</c> (what a matrix cell
+        /// with several rows shows; a matrix entry only) and <c>link</c> (a named link of the document the cell follows). An icon display needs its map and a map needs the icon display.
+        /// </summary>
+        private void AttributeOptions(YamlMapping m, string path, bool matrix)
+        {
+            string? display = null;
+            if (m.Get("display") is { } dn) display = Choice(dn, J(path, "display"), "`display`", Choices["display"]);
+            if (m.Get("icons") is { } ic && Map(ic, J(path, "icons"), "`icons`", m) is { } icons)
+            {
+                if (icons.Entries.Count is 0 or > MaximumIcons) Bad(ViewsCodes.InvalidValue, icons, J(path, "icons"), $"`icons` maps 1 to {MaximumIcons} values to icons.");
+                foreach (var e in icons.Entries)
+                {
+                    if (e.Value is not YamlScalar { Value: var icon } || !Choices["icon"].Contains(icon)) Bad(ViewsCodes.InvalidValue, e.Value, J(J(path, "icons"), e.Key.Value), $"An icon is one of: {string.Join(", ", Choices["icon"])}.");
+                }
+                if (display is not null && display != "icon") Bad(ViewsCodes.InvalidValue, ic, J(path, "icons"), "`icons` belong to `display: icon`.", "Say `display: icon`, or drop `icons`.");
+            }
+            else if (display == "icon" && m.Get("icons") is null) Bad(ViewsCodes.InvalidValue, m.Get("display")!, J(path, "display"), "`display: icon` needs `icons`: the icon each value shows.");
+            if (m.Get("many") is { } mn)
+            {
+                if (!matrix) Bad(ViewsCodes.InvalidValue, mn, J(path, "many"), "`many` is for an attribute entry of a matrix: a table row has one value.");
+                else Choice(mn, J(path, "many"), "`many`", Choices["many"]);
+            }
+            if (m.Get("link") is { } ln && Name(ln, J(path, "link"), "`link`") is { } link) linkRefs.Add((link, ln, J(path, "link")));
+        }
+
+        /// <summary>The most values one icon map lists.</summary>
+        public const int MaximumIcons = 100;
 
         /// <summary>A filtered measure's own filters, at most (the engine's grammar is checked by the catalog check).</summary>
         public const int MaximumMeasureFilters = 50;
@@ -301,7 +336,25 @@ public static partial class ViewsLoader
                     var vp = I(J(ep, "values"), i);
                     if (Map(vals.Items[i], vp, "A value", vals) is not { } vm) continue;
                     CheckKeysAt(vm, Keys["matrix_value"], "a matrix value", vp);
-                    if (Required(vm, "field", vp) is { } fn && Field(fn, J(vp, "field"), "`field`") is { } f) fields.Add(MeasureOptions(vm, vp, new EncodedField("values", f, J(vp, "field"), fn.Line, fn.Column)));
+                    if (vm.Get("attribute") is { } an)
+                    {
+                        // an attribute in the cell area (DBR51): shown at the cells' grain, by the one-row rule
+                        if (vm.Get("field") is not null) Bad(ViewsCodes.InvalidValue, vm.Get("field")!, J(vp, "field"), "A value is a measure (`field`) or an attribute (`attribute`), not both.");
+                        else if (Field(an, J(vp, "attribute"), "`attribute`") is { } attribute)
+                        {
+                            fields.Add(new("values", attribute, J(vp, "attribute"), an.Line, an.Column));
+                            AttributeOptions(vm, vp, true);
+                            foreach (var bad in new[] { "alias", "filters" })
+                                if (vm.Get(bad) is { } b) Bad(ViewsCodes.InvalidValue, b, J(vp, bad), $"`{bad}` belongs to a measure: an attribute has no aggregate to narrow or name.");
+                            if (enc.Get("values_on") is YamlScalar { Value: "rows" } rowsOn) Bad(ViewsCodes.InvalidValue, rowsOn, J(ep, "values_on"), "A matrix with an attribute among its values lists the values across the columns: `values_on: rows` is not available.");
+                        }
+                    }
+                    else
+                    {
+                        foreach (var bad in new[] { "display", "icons", "many", "link" })
+                            if (vm.Get(bad) is { } b) Bad(ViewsCodes.InvalidValue, b, J(vp, bad), $"`{bad}` belongs to an attribute entry (`attribute:`); this value is a measure.");
+                        if (Required(vm, "field", vp) is { } fn && Field(fn, J(vp, "field"), "`field`") is { } f) fields.Add(MeasureOptions(vm, vp, new EncodedField("values", f, J(vp, "field"), fn.Line, fn.Column)));
+                    }
                     if (vm.Get("empty") is { } em) Choice(em, J(vp, "empty"), "`empty`", ["blank", "zero"]);
                 }
             if (enc.Get("values_on") is { } vo) Choice(vo, J(ep, "values_on"), "`values_on`", ["columns", "rows"]);
@@ -342,6 +395,7 @@ public static partial class ViewsLoader
                     if (Map(cols.Items[i], cp, "A column", cols) is not { } cm) continue;
                     CheckKeysAt(cm, Keys["table_column"], "a table column", cp);
                     if (Required(cm, "field", cp) is { } fn && Field(fn, J(cp, "field"), "`field`") is { } f) fields.Add(MeasureOptions(cm, cp, new EncodedField("columns", f, J(cp, "field"), fn.Line, fn.Column)));
+                    AttributeOptions(cm, cp, false);
                     if (cm.Get("align") is { } al) Choice(al, J(cp, "align"), "`align`", Choices["align"]);
                     if (cm.Get("width") is { } wd) Whole(wd, J(cp, "width"), "`width` (a hint in CSS pixels)", 20, 2000);
                 }
