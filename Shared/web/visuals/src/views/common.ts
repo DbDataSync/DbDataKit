@@ -20,7 +20,8 @@ export interface ViewsIssue {
 }
 
 const AjvCtor = ((Ajv2020 as unknown as { default?: typeof Ajv2020 }).default ?? Ajv2020) as typeof Ajv2020
-export const ajv = new AjvCtor({ strict: false, allErrors: true, validateFormats: false, verbose: true })
+// the schemas are fixed files of this package, so they are not checked against the meta-schema either: that check compiles the meta-schema with `new Function`, at load, in every page that imports this module
+export const ajv = new AjvCtor({ strict: false, allErrors: true, validateFormats: false, verbose: true, validateSchema: false })
 ajv.addSchema(viewSchema as object)
 ajv.addSchema(vegaSubsetSchema as object)
 ajv.addSchema(coreSchema as object)
@@ -29,11 +30,26 @@ export type Json = Record<string, unknown>
 export const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v)
 export const defs = (coreSchema as unknown as { $defs: Record<string, Json> }).$defs
 
+/**
+ * A validator compiled on its first use, not when the module loads: Ajv compiles a schema to code with `new Function`, which a page under a Content-Security-Policy without `unsafe-eval` (an app of the apps host,
+ * plan 26 AP25) refuses, and such a page draws a document it was given validated (`trusted`) and never reaches a compile; a module that compiled at load would fail the whole page.
+ */
+export function lazy(compile: () => ValidateFunction): ValidateFunction {
+  let compiled: ValidateFunction | undefined
+  const check = ((data: unknown) => {
+    compiled ??= compile()
+    const ok = compiled(data)
+    check.errors = compiled.errors
+    return ok
+  }) as ValidateFunction
+  return check
+}
+
 /** A part of the core compiled alone: its `$defs` come along so the local references resolve. */
 export function part(def: Json, change?: (copy: Json) => void): ValidateFunction {
   const copy = JSON.parse(JSON.stringify(def)) as Json
   change?.(copy)
-  return ajv.compile({ ...copy, $defs: defs })
+  return lazy(() => ajv.compile({ ...copy, $defs: defs }))
 }
 
 export const props = (def: Json): string[] => Object.keys(def.properties as Json)

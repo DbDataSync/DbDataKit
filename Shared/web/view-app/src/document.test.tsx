@@ -102,4 +102,17 @@ describe('the app', () => {
     await act(async () => root.render(<ViewApp doc={both} client={{} as never} host={shell} />))
     expect(host.textContent).toContain('gives the app no views client')
   })
+
+  it('draws a document to the whole frame in a portal\'s home block (`_as=block`): no menu and no title, the board only', async () => {
+    const { views } = client()
+    const shell = { route: () => {}, onNavigate: (listen: (p: string) => void) => { listen(`/${FILE}?_as=block`); return () => {} } }
+    const both = appDoc({ ...files, 'views/other.yaml': { kind: 'document', document: 'report', title: 'Other', model: '', params: [], links: [] } })
+    await act(async () => root.render(<ViewApp doc={both} client={{} as never} host={shell} views={views} />))
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+    expect(host.querySelector('.va-block')).not.toBeNull()
+    expect(host.querySelector('.va-menu')).toBeNull()
+    expect(host.querySelector('.va-title')).toBeNull()
+    expect(host.querySelector('[data-testid="va-board"]')).not.toBeNull()
+    expect(host.textContent).toContain('Region all')
+  })
 })

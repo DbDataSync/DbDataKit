@@ -5,7 +5,7 @@ import { rowKey } from './keys'
 import { SchemeContext, useShellTheme } from './scheme'
 import { DashboardBoard, DetailPage, FormFields, GridTable, Links, formAttributes } from './parts'
 import { nextSort, shapeRows, type SortState } from './shape'
-import { SUPPORTED_FORMAT, lockedFields, notifyParent, openedByLink, parseRoute, readsRows, resolveParams, startingValues, type DashboardSpec, type DetailSpec, type FormSpec, type GridSpec, type ViewSpec, type ViewsDoc } from './spec'
+import { AS_PARAM, SUPPORTED_FORMAT, lockedFields, notifyParent, openedByLink, parseRoute, readsRows, resolveParams, startingValues, type DashboardSpec, type DetailSpec, type FormSpec, type GridSpec, type ViewSpec, type ViewsDoc } from './spec'
 import type { Host } from './data'
 import { DocumentScreen } from './document'
 import type { OpenSurface, ViewsClient } from '@dbdatakit/visuals'
@@ -173,17 +173,19 @@ export function ViewApp({ doc, client, host, pages = {}, views, openSurface }: V
         : spec.kind === 'grid' ? <GridScreen key={key} spec={spec} {...props} /> : spec.kind === 'form' ? <FormScreen key={key} spec={spec} {...props} /> : spec.kind === 'detail' ? <DetailScreen key={key} spec={spec} {...props} /> : <DashboardScreen key={key} spec={spec} {...props} />
     }
   }
+  // a portal's home block draws a dashboard or report to the whole frame (`?_as=block`): no menu, no title, the board is the box (plan 32 DBR13)
+  const block = spec?.kind === 'document' && query[AS_PARAM] === 'block'
   const titleOf = page?.title ?? spec?.title ?? doc.title
   return (
     <StoreClientProvider client={client}>
       <SchemeContext.Provider value={shellScheme}>
-      <div className="va-app">
-        {menu.length > 1 && (
+      <div className={block ? 'va-app va-block' : 'va-app'}>
+        {!block && menu.length > 1 && (
           <nav className="va-menu" aria-label="Views">
             {menu.map((m) => <a key={m.key} href={`#/${m.key}`} aria-current={m.key === current ? 'page' : undefined} onClick={(e) => { e.preventDefault(); go(`/${m.key}`) }}>{m.title}</a>)}
           </nav>
         )}
-        <h2 className="va-title">{titleOf}</h2>
+        {!block && <h2 className="va-title">{titleOf}</h2>}
         {body}
         {spec && (spec.kind === 'grid' || spec.kind === 'dashboard') && <Links links={spec.links} row={null} params={resolveParams(spec.params, query).values} go={go} only={spec.kind === 'grid' ? 'page' : 'all'} />}
       </div>

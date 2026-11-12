@@ -108,6 +108,21 @@ public sealed class HomeViewHtmlTests : IDisposable
     }
 
     [Fact]
+    public void A_dashboard_block_that_names_a_dashboard_or_report_file_of_the_app_is_drawn_to_the_whole_frame_and_a_view_spec_is_not()
+    {
+        // plan 32 DBR13: the frame's box is the board's (`_as=block`: no menu, no title); the other views of the app keep their own page
+        var manifest = "schemaVersion: 1\nname: board\nversion: 1.0.0\nroles: [viewer]\nviews: [views/wall.yaml, views/list.yaml]\nmodels:\n  - model: territories\n    entities: {territory: [read]}\n";
+        var wall = "schemaVersion: 1\nkind: report\ntitle: Wall\nwidgets:\n  t: {type: text, text: hello}\nlayouts:\n  - {name: print, type: flow, default: true, sections: [{blocks: [{widget: t}]}]}\n";
+        var list = "schemaVersion: 1\nkind: grid\ntitle: Territories\nmodel: territories\nentity: territory\ncolumns: [code]\n";
+        store.PublishApp(new AppPackage(manifest, new Dictionary<string, byte[]> { ["views/wall.yaml"] = Encoding.UTF8.GetBytes(wall), ["views/list.yaml"] = Encoding.UTF8.GetBytes(list) }), "ada");
+        store.Save(new AppInstance("sales", "board"), "ada");
+        var portal = Publish("schemaVersion: 1\nblocks:\n  - dashboard: {app: sales, view: views/wall.yaml}\n  - dashboard: {app: sales, view: views/list.yaml}\n");
+        var html = HomeViewHtml.Render(store, portal, Person("sales"))!;
+        Assert.Contains("data-route=\"/views/wall.yaml?_as=block\"", html);
+        Assert.Contains("data-route=\"/views/list.yaml\"", html);
+    }
+
+    [Fact]
     public void A_block_with_roles_is_shown_to_a_person_who_holds_one_on_the_portal_or_for_a_dashboard_on_its_app()
     {
         const string manifest = Portal2;

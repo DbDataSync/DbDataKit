@@ -105,6 +105,7 @@ export function appViewsClient(host: Pick<Host, 'instance' | 'token'>, fetchImpl
   return moduleClient({
     baseUrl: `/apps/${encodeURIComponent(host.instance)}/_data`,
     ...(fetchImpl ? { fetch: fetchImpl } : {}),
+    trusted: true,   // the host loaded and checked the document; this page may not compile a schema (its policy has no `unsafe-eval`)
     headers: async () => ({ Authorization: `Bearer ${await host.token()}` }),
   })
 }
