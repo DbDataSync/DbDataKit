@@ -46,3 +46,28 @@ an earlier one), `Units(unit)` (how many completed, failed, skipped or left star
 
 Notes: `maxParallelism: 1` makes a fan-out deterministic. A job that opens a slot needs `slots:` (what a runner would bind to a connection). `Progress<T>(attempt)` keeps the flat members as they were after that attempt; a
 `Keyed<T>` member reads the store when first used. Dispose the simulator to remove its temporary database.
+
+## The outside world in memory (plan 27a IX15)
+
+A job for an integration talks to an API or a file share. Test it with neither.
+
+**`RecordedHttp`** replays a recording (`HttpRecording`, format `http-recording/1`, a JSON file) as an `HttpMessageHandler`:
+
+```csharp
+var recording = new HttpRecording()
+    .Add("GET", "https://api.example.test/v1/orders", json: """{"items":[{"id":1}],"next_cursor":"b"}""")
+    .Add("GET", "https://api.example.test/v1/orders?cursor=b", json: """{"items":[{"id":2}],"next_cursor":null}""");   // or HttpRecording.Load("orders.json")
+var recorded = new RecordedHttp(recording);
+using var http = new OutsideHttp(recorded.Client("https://api.example.test/v1/"));      // the job's client, no network
+// ... run the job under RunSimulator ...
+recorded.Verify();                                   // every request had an answer, every entry was asked for
+```
+
+* A request is matched on method, address (scheme, host, path and the query as a set, so the order of parameters does not matter) and, if the entry says so, body (`body` as text, `json` compared as JSON). Each entry answers once, in file order, so `[503, 200]` for one address tests the client's retry; `"repeat": true` answers every match.
+* **A request with no entry is not sent anywhere.** The handler throws `RecordingException` naming it (`No recording for GET https://api.example.test/v1/orders?cursor=b`) and keeps it in `Misses`; `Verify()` fails the test with every such request and every entry nobody asked for, so a job that swallows the failure still fails the test. The value of a parameter that names a credential (`api_key`, `token`, ...) is shown as `***`.
+* **A recording holds no secret.** A response header that is a credential or a cookie, a user name in an address and a credential-named query parameter make the file unreadable, naming the file and the entry (never the value). There is no capture from a live API: write the file from the API's documentation, or from an answer you have read and cleaned.
+* The file: `{ "schema": "http-recording/1", "entries": [ { "request": { "method", "url", "body"?, "json"? }, "response": { "status", "headers"?, "body"? | "json"? | "body_base64"? }, "repeat"? } ] }`. The format is registered in `docs/formats.json` (open) and has no editor screen (`docs/ui-editors.md`: a fixture edited as text).
+
+**`FakeFileShare`** is a folder an outside system fills, in memory: `Put` a finished file (with its modification time), `Begin` a file a writer has not finished (it is listed with `Complete` false and cannot be read, and `Finish` makes it whole), `ListAsync`, `ReadAsync`, `WriteAsync` (whole in one step), `MoveAsync`, `DeleteAsync`; `FailNext("read", new IOException(...), times, path)` makes the next calls fail (an `IOException` is temporary for the runner's retry, a missing file is a `FileNotFoundException`, permanent); `Log` and `Calls("read")` say what the job did; time is a `TimeProvider`. A listing gives the SHA-256 the job hands to `Files.ClaimAsync`. It is the common small shape of SFTP, FTPS, SMB and object storage, not their interface: those clients (plan 27a IX04 to IX06) are not built, and when they are, a job takes its share as the slot's handle and this class stands in for it in the test.
+
+Tests (`OutsideWorldTests`): a cursor-paged job reads its pages from a recording, a missing recording fails naming the request even when the job fails first, an unused entry fails the check, a secret in the query is not printed, a 503 then a 200 tests the retry, body and repeat matching, a recording file round-trips and a credential in one is refused naming the entry, a file being written is not picked up and a file is taken once whatever it is called, a failing read is temporary and the retry goes through.

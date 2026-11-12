@@ -36,7 +36,7 @@ public sealed class SecretNotSetException(string reference) : Exception($"The se
 /// Gets and keeps the access token of OAuth 2 client credentials (plan 27a IX02). The token is cached until shortly before it expires (<see cref="Skew"/>); a caller that was refused with it asks for a new one with <c>stale</c> naming the one it used, and
 /// when another caller already replaced it that one is used: <b>an expired token is refreshed once</b>, however many callers meet the expiry together. A refusal of the client (a wrong id or secret) is a permanent login failure and nothing is cached.
 /// </summary>
-internal sealed class OAuthTokenSource(SignInSpec spec, ISecretResolver secrets, HttpMessageInvoker invoker, TimeProvider time)
+internal sealed class OAuthTokenSource(SignInSpec spec, ISecretResolver secrets, HttpMessageInvoker invoker, TimeProvider time) : ITokenSource
 {
     public static readonly TimeSpan Skew = TimeSpan.FromSeconds(30);
 
@@ -95,7 +95,7 @@ internal sealed class OAuthTokenSource(SignInSpec spec, ISecretResolver secrets,
 /// Signs each request of a connection of kind <c>http</c> in (plan 27a IX02): an API key in a header or the query, basic, or a bearer token of OAuth 2 client credentials. With OAuth 2 a request that the system refuses with 401 while it used a cached token is sent once more with
 /// a new one (the request is copied before it is sent, so it can be). A client certificate is not a header: it is on the connection (<see cref="HttpConnections"/>). Secrets are read for each request and dropped; none is kept here, in a message or a log.
 /// </summary>
-internal sealed class SignInHandler(SignInSpec spec, ISecretResolver secrets, OAuthTokenSource? tokens, HttpMessageHandler inner, TimeProvider time) : DelegatingHandler(inner)
+internal sealed class SignInHandler(SignInSpec spec, ISecretResolver secrets, ITokenSource? tokens, HttpMessageHandler inner, TimeProvider time) : DelegatingHandler(inner)
 {
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
@@ -130,6 +130,7 @@ internal sealed class SignInHandler(SignInSpec spec, ISecretResolver secrets, OA
                     break;
                 }
             case "oauth2_client_credentials":
+            case "oauth2_authorization_code":
                 return await SendWithTokenAsync(request, ct).ConfigureAwait(false);
         }
         return await base.SendAsync(request, ct).ConfigureAwait(false);

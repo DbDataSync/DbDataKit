@@ -58,7 +58,7 @@ internal static class BuildSchedulerSchema
     public const string Service = "dbdatabuild";
 
     /// <summary>The scheduling module, the <c>quality</c> module (the results of the models' checks, plan 23a FQ09: install scope), and the modules of the copy of the tracking tables (plan 28c E16): the progress store the follower's checkpoints are in, the divergence records and <c>build_tracking</c> itself.</summary>
-    public static IReadOnlyList<StateModule> Modules { get; } = [SchedulingModule.Module, DbDataBuild.State.BuildRunsModule.Module, .. DbDataKit.Tracking.Build.BuildTrackingState.Modules, QualityModule.Module];
+    public static IReadOnlyList<StateModule> Modules { get; } = [SchedulingModule.Module, RunsModule.Module, DbDataBuild.State.BuildRunsModule.Module, .. DbDataKit.Tracking.Build.BuildTrackingState.Modules, QualityModule.Module];
 
     /// <summary>Install-scoped modules ignore it; the copy's modules are kept for the group <c>main</c>, the one a server has until it has groups of its own.</summary>
     public static StateScope Scope => DbDataKit.Tracking.Build.BuildTrackingState.Scope;

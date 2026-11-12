@@ -6,16 +6,16 @@ using DbDataKit.Secrets;
 namespace DbDataKit.Connections.Http;
 
 /// <summary>What a caller can give: a handler to send through instead of the platform's (a test's recorded answers), and a clock (a test's, to move past a token's expiry).</summary>
-public sealed record HttpConnectionOptions(HttpMessageHandler? InnerHandler = null, TimeProvider? Time = null);
+public sealed record HttpConnectionOptions(HttpMessageHandler? InnerHandler = null, TimeProvider? Time = null, IRefreshTokenStore? RefreshTokens = null, Action<string, string>? ConsentLost = null, Action<string>? TokenRefreshed = null);
 
 /// <summary>An <see cref="HttpClient"/> of a connection of kind <c>http</c>: its base address is the endpoint, every request signs in as the connection says, and the client's timeouts are the connection's.</summary>
 public sealed class HttpConnectionClient : IDisposable
 {
-    private readonly OAuthTokenSource? _tokens;
+    private readonly ITokenSource? _tokens;
 
     private readonly string[] _secrets;
 
-    internal HttpConnectionClient(HttpClient client, OAuthTokenSource? tokens, X509Certificate2? certificate, IReadOnlyList<string>? secrets = null)
+    internal HttpConnectionClient(HttpClient client, ITokenSource? tokens, X509Certificate2? certificate, IReadOnlyList<string>? secrets = null)
     {
         Client = client;
         _tokens = tokens;
@@ -49,6 +49,10 @@ public sealed class HttpConnectionClient : IDisposable
 /// </summary>
 public static class HttpConnections
 {
+    /// <summary>The invoker that reaches the token and revoke addresses of a connection the way its requests are reached (its TLS rules, a test's handler): the console uses it for the consent flow.</summary>
+    public static HttpMessageInvoker TokenInvoker(ConnectionDefinition definition, HttpConnectionOptions? options = null) =>
+        new(options?.InnerHandler ?? Sockets(definition, null), disposeHandler: options?.InnerHandler is null);
+
     public static HttpConnectionClient Create(ConnectionDefinition definition, ISecretResolver secrets, HttpConnectionOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
@@ -67,7 +71,12 @@ public static class HttpConnections
             inner = Sockets(definition, certificate);
         }
 
-        OAuthTokenSource? tokens = spec.Method == "oauth2_client_credentials" ? new OAuthTokenSource(spec, secrets, new HttpMessageInvoker(inner, disposeHandler: false), time) : null;
+        ITokenSource? tokens = spec.Method switch
+        {
+            "oauth2_client_credentials" => new OAuthTokenSource(spec, secrets, new HttpMessageInvoker(inner, disposeHandler: false), time),
+            "oauth2_authorization_code" => new AuthorizationCodeTokenSource(definition.Name, spec, secrets, new HttpMessageInvoker(inner, disposeHandler: false), time, options.RefreshTokens, options.ConsentLost, options.TokenRefreshed),
+            _ => null,
+        };
         var handler = new SignInHandler(spec, secrets, tokens, inner, time);
         var (composed, parts) = ComposeEndpoint(definition, secrets);
         // an API's address is a base for relative paths (a trailing slash); a webhook's is the whole address, which a slash would change

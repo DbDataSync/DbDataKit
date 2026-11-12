@@ -63,7 +63,7 @@ internal static class StateExportVerb
                     : $"Secrets check: {secrets.Count} credential(s) of the state connection looked for in every file of the snapshot; none found.");
             }
 
-            await output.Out.WriteLineAsync($"Next: copy the directory where it is needed and run '{context.Program} state import --from <directory>' against an empty database.");
+            await output.Out.WriteLineAsync($"Next: copy the directory where it is needed and run '{context.StateCommand("import")} --from <directory>' against an empty database.");
             return CliExit.Ok;
         }
         catch (Exception ex) when (StateSnapshotSupport.IsRefusal(ex)) { return await StateSnapshotSupport.RefuseAsync(output, ex); }

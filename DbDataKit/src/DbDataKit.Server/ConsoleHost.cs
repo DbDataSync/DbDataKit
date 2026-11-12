@@ -113,7 +113,8 @@ public static class ConsoleHost
         builder.Services.TryAddSingleton<ModelHttp>();
         // the connections of outside systems (plan 27a IX01): connections/ in the console's directory
         builder.Services.AddSingleton(sp => new ConsoleConnections(settings, sp.GetRequiredService<EncryptedFileSecretStore>()));
-        builder.Services.AddSingleton(sp => new ConsoleBindings(settings, sp.GetRequiredService<ConsoleConnections>(), sp.GetRequiredService<AuditLog>()));
+        builder.Services.AddSingleton(sp => new ConsoleBindings(settings, sp.GetRequiredService<ConsoleConnections>(), sp.GetRequiredService<AuditLog>(), sp.GetRequiredService<StateDatabase>()));
+        builder.Services.AddSingleton<ConsoleRunnerBindings>();
         builder.Services.AddSingleton<ConsoleModels>(sp => new ConsoleModels(settings, sp.GetRequiredService<ConsoleConnections>(), sp.GetRequiredService<ConsoleBindings>(), sp.GetRequiredService<ModelHttp>()));
         builder.Services.TryAddSingleton<IAgentModels>(sp => sp.GetRequiredService<ConsoleModels>());
         builder.Services.TryAddSingleton<IAgentToolSource, ConsoleToolSource>();

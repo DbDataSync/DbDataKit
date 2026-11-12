@@ -120,7 +120,7 @@ internal static partial class StateInitVerb
         // ---- 2. a state that has data is moved, not re-pointed
         var same = StateTopology.Same(current, settings);
         if (!same && PopulatedBy(context, target, current, parsed) is { } populated)
-            return await Stop(StateExit.Populated, "current", $"The state this {context.Product} has now ({populated}) already holds data, and pointing {context.Product} at another place would leave it behind: use '{context.Program} state move' (plan 29b slice C04, which X04's export and import make possible) to carry it over, then this setting follows.");
+            return await Stop(StateExit.Populated, "current", $"The state this {context.Product} has now ({populated}) already holds data, and pointing {context.Product} at another place would leave it behind: use '{context.StateCommand("move")}' (plan 29b slice C04, which X04's export and import make possible) to carry it over, then this setting follows.");
         await steps.Add("current", "ok", same ? "the settings already say this" : "nothing is stored yet that this would leave behind");
 
         // ---- 3. the schemas and the service's rights
@@ -139,7 +139,7 @@ internal static partial class StateInitVerb
                 await steps.Add("schemas", "printed", $"{schemaStatements.Count} statement(s) create the schemas; nothing was run (add --admin-connection and --apply to run them)");
                 foreach (var statement in schemaStatements) await output.Out.WriteLineAsync("  " + statement);
                 if (login is null)
-                    await steps.Add("grants", "skipped", $"no --login given; to print the rights of the login the service runs as: {context.Program} state grants --login <name>");
+                    await steps.Add("grants", "skipped", $"no --login given; to print the rights of the login the service runs as: {context.StateCommand("grants")} --login <name>");
                 else
                 {
                     await steps.Add("grants", "printed", $"{grants.Count} statement(s) give '{login}' the {(parsed.Has("migrate") ? "migrate" : "runtime")} rights on this service's namespaces only; a database administrator runs them after the modules exist (init --apply makes them first)");
@@ -176,7 +176,7 @@ internal static partial class StateInitVerb
             var overriding = new[] { ("engine", effective.Engine), ("connection", effective.Connection), ("namespaces", effective.Namespaces), ("retention", effective.Retention) }.Where(s => s.Item2.Kind == StateSourceKind.Environment).ToList();
             if (overriding.Count > 0)
             {
-                var sentence = $"{string.Join(", ", overriding.Select(s => $"the {s.Item1} still comes from {s.Item2}"))}: it wins over {(file is null ? "the settings" : file)}, so unset it (or set it to the same value) for the state section to apply; '{context.Program} state show' lists where each setting comes from.";
+                var sentence = $"{string.Join(", ", overriding.Select(s => $"the {s.Item1} still comes from {s.Item2}"))}: it wins over {(file is null ? "the settings" : file)}, so unset it (or set it to the same value) for the state section to apply; '{context.StateCommand("show")}' lists where each setting comes from.";
                 output.Data["overridden_by_environment"] = overriding.Select(s => (object?)s.Item1).ToList();
                 await steps.Add("override", "note", sentence);
             }
@@ -196,7 +196,7 @@ internal static partial class StateInitVerb
         output.Data["ok"] = report.Ok || pendingByDesign;
         if (pendingByDesign)
         {
-            await output.Out.WriteLineAsync($"Not usable yet: run the statements above (or init again with --admin-connection and --apply), then '{context.Program} state test'.");
+            await output.Out.WriteLineAsync($"Not usable yet: run the statements above (or init again with --admin-connection and --apply), then '{context.StateCommand("test")}'.");
             return CliExit.Ok;
         }
 
@@ -270,7 +270,7 @@ internal static partial class StateInitVerb
 
             // a grant on a table needs the table, and the registry: the modules are applied as the administrator
             var module = new StateSettings(StateTopology.EngineName(engine), admin) { Namespaces = settings.Namespaces };
-            _ = StateOpener.Open(module, target.SqlitePath, context.Modules ?? [], scope, null, $"{context.Program} state init");
+            _ = StateOpener.Open(module, target.SqlitePath, context.Modules ?? [], scope, null, $"{context.StateCommand("init")}");
             await steps.Add("modules", "ok", $"{(context.Modules ?? []).Count} module(s) are at the version of this program");
 
             if (login is null)

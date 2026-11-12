@@ -36,6 +36,12 @@ public sealed record StateVerbContext(
     IReadOnlyList<string> Options,
     string OptionsUsage)
 {
+    /// <summary>How a sentence names one of the verbs: <c>dbdatakit state move</c>. A product whose command line has the verbs under another noun (the identity home: <c>dbdatakit identity state-move</c>) sets it.</summary>
+    public Func<string, string>? CommandOf { get; init; }
+
+    /// <summary>The command an operator types for <paramref name="verb"/> (<c>export</c>, <c>show</c>), for the sentences that name a fix.</summary>
+    public string StateCommand(string verb) => CommandOf is { } of ? of(verb) : $"{Program} state {verb}";
+
     /// <summary>For tests: what the engine's version is, in place of asking the engine (the support check of <c>state test</c> is run against it).</summary>
     public Func<DbConnection?, string?>? EngineVersion { get; init; }
 
@@ -44,6 +50,9 @@ public sealed record StateVerbContext(
 
     /// <summary>The encrypted columns <c>state move</c> tries to decrypt in the target before it writes the settings (plan 29b C04): the product names the ones it keeps (the console: the identity home's signing keys), with the keys of its own secret store. Empty: none.</summary>
     public IReadOnlyList<DbDataKit.State.Engines.Snapshots.StateSecretSample> SecretSamples { get; init; } = [];
+
+    /// <summary>The same, read from the options of the command (a <c>--repo</c> that names another directory has another secret store); when set it is used in place of <see cref="SecretSamples"/>.</summary>
+    public Func<CliArgs, IReadOnlyList<DbDataKit.State.Engines.Snapshots.StateSecretSample>>? SecretSamplesFor { get; init; }
 
     /// <summary>For tests: changes the options of <c>state move</c> before it runs (for example <c>MoveOptions.AfterImport</c>, to inject a failure after the import, or a fixed snapshot directory).</summary>
     public Func<DbDataKit.State.Engines.Snapshots.MoveOptions, DbDataKit.State.Engines.Snapshots.MoveOptions>? ConfigureMove { get; init; }

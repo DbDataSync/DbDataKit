@@ -73,9 +73,18 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         });
         // the rest of the table (RunnerRoutes), each with the role the real runner asks for (RunnerRoleTests pins them to the real runner)
         server.MapGet("/api/v1/connections", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { connections = Array.Empty<object>() })));
+        server.MapDelete("/api/v1/bindings/{channel}/integration/{name}/{slot}", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { unbound = true })));
+        server.MapGet("/api/v1/connection-copies", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { copies = Array.Empty<object>() })));
+        server.MapPut("/api/v1/connection-copies/{name}", (HttpContext c, string name) => Needs(c, ServerRole.Admin, () => Results.Json(new { name })));
         server.MapGet("/api/v1/settings", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { require_signatures = false })));
         server.MapGet("/api/v1/lineage", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { edges = Array.Empty<object>() })));
         server.MapGet("/api/v1/tracking", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { holder = "runner", copies = Array.Empty<object>(), divergences = Array.Empty<object>() })));
+        // the state endpoints every server has (plan 29b C05, C06)
+        server.MapGet("/api/v1/state", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { product = "dbdatarunner" })));
+        server.MapGet("/api/v1/state/maintenance", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { enabled = false })));
+        server.MapGet("/api/v1/state/move", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { state = "none" })));
+        server.MapPost("/api/v1/state/maintenance", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { enabled = true })));
+        server.MapPost("/api/v1/state/move", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { state = "running" })));
         server.MapPost("/api/v1/tracking/divergences/{id}/resolve", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { resolved = true })));
         server.MapGet("/api/v1/secrets/overview", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { secrets = Array.Empty<object>() })));
         server.MapGet("/api/v1/certificate", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { present = true })));
@@ -225,8 +234,9 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
     /// <summary>The table, as the owner decision of 2026-11-08 fixed it: the routes UE06 and the screens before it use, and what UE08, UE10 and UE11 add, with the runner's own role for each. A route added or a role changed fails here until this list says so.</summary>
     public static readonly (string Method, string Pattern, ServerRole Role, ServerRole Or)[] Expected =
     [
-        ("GET", "api/v1/status", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/instances", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/connections", ServerRole.Viewer, ServerRole.None),
+        ("GET", "api/v1/status", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/instances", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/connections", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/connection-copies", ServerRole.Viewer, ServerRole.None), ("PUT", "api/v1/connection-copies/{name}", ServerRole.Admin, ServerRole.None),
         ("GET", "api/v1/runs", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}/logs", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/settings", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/lineage", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/tracking", ServerRole.Viewer, ServerRole.None),
+        ("GET", "api/v1/state", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/state/maintenance", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/state/move", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/upgrade", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/certificate", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/secrets/overview", ServerRole.Admin, ServerRole.None),
@@ -239,8 +249,9 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         ("POST", "api/v1/definitions/integration/{name}/activate", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/definitions/integration/{name}/switch", ServerRole.Admin, ServerRole.None),
         ("POST", "api/v1/definitions/integration/{name}/rollback", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/definitions/integration/{name}/retire", ServerRole.Admin, ServerRole.None),
         ("PUT", "api/v1/artifacts/{sha}", ServerRole.Admin, ServerRole.Publisher), ("PUT", "api/v1/definitions/integration/{name}", ServerRole.Admin, ServerRole.Publisher),
-        ("PUT", "api/v1/bindings/{name}/integration/{name}", ServerRole.Admin, ServerRole.Publisher), ("POST", "api/v1/bindings/{name}/integration/{name}/test", ServerRole.Admin, ServerRole.None), ("PUT", "api/v1/settings/require_signatures", ServerRole.Admin, ServerRole.None),
+        ("PUT", "api/v1/bindings/{name}/integration/{name}", ServerRole.Admin, ServerRole.Publisher), ("DELETE", "api/v1/bindings/{name}/integration/{name}/{name}", ServerRole.Admin, ServerRole.Publisher), ("POST", "api/v1/bindings/{name}/integration/{name}/test", ServerRole.Admin, ServerRole.None), ("PUT", "api/v1/settings/require_signatures", ServerRole.Admin, ServerRole.None),
         ("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/tracking/divergences/{id}/resolve", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/upgrade", ServerRole.Admin, ServerRole.None),
+        ("POST", "api/v1/state/maintenance", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/state/move", ServerRole.Admin, ServerRole.None),
     ];
 
     public static TheoryData<string> Rows => [.. ServerProducts.RunnerRoutes.Select(r => $"{r.Method} {r.Pattern}")];
@@ -254,6 +265,30 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
     /// <summary>Pairs the runner again so that this console may grant at most <paramref name="ceiling"/>; the administrator then holds what both allow, so it stands for a person with exactly that role.</summary>
     private Task HoldOnly(ServerRole ceiling) =>
         app.Services.GetRequiredService<ConsoleInstances>().PairAsync(runner.Url, runner.NewCodeWith(ceiling), "Runner", default);
+
+    [Fact]
+    public async Task A_registered_runners_slot_is_changed_through_the_relay_the_definition_goes_first_an_empty_channel_is_unbound_and_only_an_administrator_does_it()
+    {
+        // plan 27a IX23: the console hands a registered (not embedded) runner the definition with secret references, then binds, as the signed-in person
+        Directory.CreateDirectory(Path.Combine(directory, "connections"));
+        File.WriteAllText(Path.Combine(directory, "connections", "crm.yml"), "schema: connection/2\nname: crm\nkind: http\nendpoint: https://crm.example/api\nsign_in:\n  method: api_key\n  key_secret: 'env:DBDATAKIT_TEST_IX23_RELAYED'\n");
+        var path = $"/api/bindings/runner/{Id}/orders/api";
+
+        var refused = await Send(HttpMethod.Put, path, viewer, """{"channels":{"prod":"crm"}}""");
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Empty(reached);
+
+        var response = await Send(HttpMethod.Put, path, admin, """{"channels":{"prod":"crm","dev":""}}""");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var calls = reached.ToArray();
+        int At(string prefix) => Array.FindIndex(calls, c => c.StartsWith(prefix, StringComparison.Ordinal));
+        var (unbind, send, bind) = (At("DELETE /api/v1/bindings/dev/integration/orders/api as"), At("PUT /api/v1/connection-copies/crm as"), At("PUT /api/v1/bindings/prod/integration/orders as"));
+        Assert.True(unbind >= 0 && send >= 0 && bind >= 0, string.Join('\n', calls));
+        Assert.True(send < bind, "the definition goes before the bind");
+        Assert.All(new[] { unbind, send, bind }, i => Assert.EndsWith("by Admin person", calls[i]));
+        Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Post, $"/api/bindings/runner/{Id}/connections/crm/send", admin, "{}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Send(HttpMethod.Post, $"/api/bindings/runner/{Id}/connections/nothing/send", admin, "{}")).StatusCode);
+    }
 
     [Fact]
     public void The_table_is_exactly_the_routes_of_the_owner_decision_with_the_runners_own_roles() =>

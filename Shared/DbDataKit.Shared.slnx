@@ -19,6 +19,7 @@
     <Project Path="src/DbDataKit.Config/DbDataKit.Config.csproj" />
     <Project Path="src/DbDataKit.Connections.Abstractions/DbDataKit.Connections.Abstractions.csproj" />
     <Project Path="src/DbDataKit.Connections.Descriptor/DbDataKit.Connections.Descriptor.csproj" />
+    <Project Path="src/DbDataKit.Connections.Files/DbDataKit.Connections.Files.csproj" />
     <Project Path="src/DbDataKit.Connections.Http/DbDataKit.Connections.Http.csproj" />
     <Project Path="src/DbDataKit.Connections.DuckDb/DbDataKit.Connections.DuckDb.csproj" />
     <Project Path="src/DbDataKit.Connections.Odbc/DbDataKit.Connections.Odbc.csproj" />
@@ -72,11 +73,17 @@
     <Project Path="src/DbDataKit.Runner/DbDataKit.Runner.csproj" />
     <Project Path="src/DbDataKit.Runner.Api/DbDataKit.Runner.Api.csproj" />
     <Project Path="src/DbDataKit.Runner.Client/DbDataKit.Runner.Client.csproj" />
+    <Project Path="src/DbDataKit.Runner.FileConnections/DbDataKit.Runner.FileConnections.csproj" />
     <Project Path="src/DbDataKit.Runner.Limits/DbDataKit.Runner.Limits.csproj" />
     <Project Path="src/DbDataKit.Runner.Kit/DbDataKit.Runner.Kit.csproj" />
     <Project Path="src/DbDataKit.Runner.Kit.Analyzers/DbDataKit.Runner.Kit.Analyzers.csproj" />
     <Project Path="src/DbDataKit.Runner.Protocol/DbDataKit.Runner.Protocol.csproj" />
     <Project Path="src/DbDataKit.Runner.Protocol.Server/DbDataKit.Runner.Protocol.Server.csproj" />
+    <Project Path="src/DbDataKit.Runner.Kit.Changes/DbDataKit.Runner.Kit.Changes.csproj" />
+    <Project Path="src/DbDataKit.Runner.Kit.Formats/DbDataKit.Runner.Kit.Formats.csproj" />
+    <Project Path="src/DbDataKit.Runner.Kit.Http/DbDataKit.Runner.Kit.Http.csproj" />
+    <Project Path="src/DbDataKit.Runner.Kit.Landing/DbDataKit.Runner.Kit.Landing.csproj" />
+    <Project Path="src/DbDataKit.Runner.Kit.Outbound/DbDataKit.Runner.Kit.Outbound.csproj" />
     <Project Path="src/DbDataKit.Runner.Kit.Testing/DbDataKit.Runner.Kit.Testing.csproj" />
     <Project Path="src/DbDataKit.Runner.Packaging/DbDataKit.Runner.Packaging.csproj" />
     <Project Path="src/DbDataKit.Runner.TaskHost/DbDataKit.Runner.TaskHost.csproj" />
@@ -131,6 +138,7 @@
     <Project Path="tests/DbDataKit.Store.Tests/DbDataKit.Store.Tests.csproj" />
     <Project Path="tests/DbDataKit.Connections.Abstractions.Tests/DbDataKit.Connections.Abstractions.Tests.csproj" />
     <Project Path="tests/DbDataKit.Connections.Descriptor.Tests/DbDataKit.Connections.Descriptor.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Connections.Files.Tests/DbDataKit.Connections.Files.Tests.csproj" />
     <Project Path="tests/DbDataKit.Connections.Http.Tests/DbDataKit.Connections.Http.Tests.csproj" />
     <Project Path="tests/DbDataKit.Connections.DuckDb.Tests/DbDataKit.Connections.DuckDb.Tests.csproj" />
     <Project Path="tests/DbDataKit.Connections.Odbc.Tests/DbDataKit.Connections.Odbc.Tests.csproj" />
@@ -184,6 +192,11 @@
     <Project Path="tests/DbDataKit.Runner.Limits.TestChild/DbDataKit.Runner.Limits.TestChild.csproj" />
     <Project Path="tests/DbDataKit.Runner.Limits.Tests/DbDataKit.Runner.Limits.Tests.csproj" />
     <Project Path="tests/DbDataKit.Runner.Kit.Tests/DbDataKit.Runner.Kit.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Runner.Kit.Changes.Tests/DbDataKit.Runner.Kit.Changes.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Runner.Kit.Formats.Tests/DbDataKit.Runner.Kit.Formats.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Runner.Kit.Http.Tests/DbDataKit.Runner.Kit.Http.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Runner.Kit.Landing.Tests/DbDataKit.Runner.Kit.Landing.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Runner.Kit.Outbound.Tests/DbDataKit.Runner.Kit.Outbound.Tests.csproj" />
     <Project Path="tests/DbDataKit.Runner.Kit.Testing.Tests/DbDataKit.Runner.Kit.Testing.Tests.csproj" />
     <Project Path="tests/DbDataKit.Runner.Packaging.Tests/DbDataKit.Runner.Packaging.Tests.csproj" />
     <Project Path="tests/DbDataKit.Runner.TestPackage/DbDataKit.Runner.TestPackage.csproj" />

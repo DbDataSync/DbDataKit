@@ -1,4 +1,5 @@
 using DbDataKit.Connections;
+using DbDataKit.State;
 
 namespace DbDataKit.Runner.Connections;
 
@@ -7,6 +8,35 @@ public interface IConnectionCatalog
 {
     /// <summary>The definition named <paramref name="name"/>; null when the runner has none. A document that exists and does not load throws <see cref="InvalidDataException"/> naming the file.</summary>
     ConnectionDefinition? Find(string name);
+}
+
+/// <summary>
+/// The connections the console handed over (<c>connection_copy</c>, plan 27a IX23): the definition the console sent with secret references, never a value, read from the runner's own state, so the runner never reads the console's folder. A copy that
+/// does not load throws <see cref="InvalidDataException"/> naming it, as a file would.
+/// </summary>
+public sealed class StoredConnectionCatalog(ConnectionCopies copies) : IConnectionCatalog
+{
+    public ConnectionDefinition? Find(string name)
+    {
+        if (copies.Get(name) is not { } copy) return null;
+        var load = ConnectionDefinitionLoader.LoadConnectionOfAnyKind(copy.Definition, $"the copy of the connection '{name}' (sent by {copy.SentBy})");
+        if (!load.Ok)
+            throw new InvalidDataException($"The copy of the connection '{name}' does not load: {string.Join(" ", load.Diagnostics.Where(d => d.Severity == DbDataKit.Config.Yaml.ConfigSeverity.Error).Select(d => d.ToString()))} Send it again from the console's Bindings page.");
+        if (!string.Equals(load.Definition!.Name, name, StringComparison.Ordinal))
+            throw new InvalidDataException($"The copy of the connection '{name}' names the connection '{load.Definition.Name}'.");
+        return load.Definition;
+    }
+}
+
+/// <summary>The first catalog that has the name: an operator's own file in the runner's connections directory wins over a copy the console sent (a file on this machine is the stronger statement), and a name in neither is unknown.</summary>
+public sealed class LayeredConnectionCatalog(params IConnectionCatalog[] layers) : IConnectionCatalog
+{
+    public ConnectionDefinition? Find(string name)
+    {
+        foreach (var layer in layers)
+            if (layer.Find(name) is { } found) return found;
+        return null;
+    }
 }
 
 /// <summary>A catalog in memory, for tests and for hosts that build their connections in code.</summary>
