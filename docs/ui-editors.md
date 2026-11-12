@@ -8,7 +8,7 @@ Read as of 2026-11-08 from the code of `Shared/web/*`, `DbDataGateway/src/DbData
 
 **The rule.** A stored format registered in `docs/formats.json` must have a row here with a state. `scripts/check_ui_editors.py` fails, naming the format, when one has none, when a row names a format that is not registered, a screen file (`Name.tsx`) that does not exist under `Shared/web/*/src`, a state that is not one of the five, a state other than `full` that gives neither a slice nor a reason, a `planned` row whose slice is not a row of a plan in `docs/plans`, a reference to a plan that no longer exists (`UEnn`), or a `Counts:` line that is wrong. A format that needs no editor gets the row and `none (reason)`. The same rule is in `CLAUDE.md` (everything built and published has an editor screen).
 
-Counts: full 46, partial 30, view-only 9, none 15, planned 17.
+Counts: full 46, partial 31, view-only 9, none 15, planned 17.
 
 The table is sorted by what blocks "ready to test soon" (apps, dashboards, reports, quality, runner scheduling), then the other gaps, then the planned, then what is complete. The Format column is the id in `docs/formats.json`; `-` means the thing is not in the registry (see "Not in the registry" below).
 

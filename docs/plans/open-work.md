@@ -117,7 +117,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 
 | Plan and row | What remains | Flag |
 | --- | --- | --- |
-| [22a](22a-gap-slices.md) GP28, GP29 | OpenTelemetry: the hosts' spans and counters, traces across servers (the library `DbDataKit.Telemetry` is built, GP27) | |
+| [22a](22a-gap-slices.md) GP29 | OpenTelemetry: what is left is the trace id in the serving contract and the hop through a module (the hosts' spans and counters, GP28, and the trace across the console's relay are built; `docs/observability.md`) | |
 | [22a](22a-gap-slices.md) GP23 | Descriptions and owners in lineage nodes: the emitters, once the definitions carry the text (the contract `LineageDescriptions` is built) | PARTLY |
 | [24a](24a-upgrade-and-cache-slices.md) UC07 (program legs) | The compatibility job runs the previous release's programs against the current build (the contract check of generations and formats is built) | the first stable release that carries the generation |
 | [27a](27a-knowledge-slices.md) AX01 to AX12, BK05 to BK11 | Actions (one script format, callable and served, principals, grants, audit) and the backlog's links, notifications, automatic items, assistant and agent hand-off | not built |

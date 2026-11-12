@@ -371,6 +371,13 @@ How it works now, and what to keep true when you add a job:
 | --- | --- | --- |
 | dispatching `suite-release.yml` fails at once with `failed to parse workflow: error parsing called workflow ... dbdatabuild-release.yml (Line: 192, Col: 14): Unexpected value ''`, `Unexpected value 'rids'`; no run starts | a step's `with:` has its input at the same indent (`rids:` under `with:` in the `duckdb-cache` step), so the input is not under it; a called workflow that does not parse stops every release that calls it, and nothing runs the file until a release is cut | indent the input under `with:`; `scripts/tests/test_workflow_with_blocks.py` fails for any `with:` whose next line is not indented under it |
 
+### Telemetry tests (plan 22a GP28, GP29)
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| a telemetry test sees every span twice (or a span of another host), or `SuiteTelemetry.Source.HasListeners()` is true in an "off" test | the `ActivitySource` and `Meter` of the suite are static, and each host with telemetry on adds its own provider and exporter that all listen to them; tests of one assembly run in parallel | start `TelemetryCapture.Start()` in the test, filter by `dbdatakit.product`, take each span once by span id (`TraceAcrossServersTests.Spans`), and keep the "off" assertions in a class whose tests do not turn telemetry on beside them (`TelemetryHostTests` is one class: its tests run in order) |
+| a span's parent is not the root you expect when a request carries no `traceparent` | ASP.NET Core's own hosting activity exists when anything listens to its diagnostics, and the request span becomes its child (same trace) | assert the trace id and the parent link between the two hosts, not that the first span has no parent |
+
 ### Gateway test hosts
 
 | Signature | Cause | Fix |

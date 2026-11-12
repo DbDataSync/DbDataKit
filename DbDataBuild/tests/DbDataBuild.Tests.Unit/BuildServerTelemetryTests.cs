@@ -22,12 +22,12 @@ public sealed class BuildServerTelemetryTests : IAsyncLifetime
         public Task<CommandResult> RunAsync(IReadOnlyList<string> argv, string projectRoot, string? actor, CancellationToken cancellationToken) => Task.FromResult(new CommandResult(0, """{"command":"fake","ok":true}""", ""));
     }
 
-    public ValueTask InitializeAsync() => ValueTask.CompletedTask;
+    public Task InitializeAsync() => Task.CompletedTask;
 
-    public ValueTask DisposeAsync()
+    public Task DisposeAsync()
     {
         foreach (var d in new[] { project, serverDir }) try { Directory.Delete(d, true); } catch (IOException) { }
-        return ValueTask.CompletedTask;
+        return Task.CompletedTask;
     }
 
     private async Task<(WebApplication App, HttpClient Http, string Token, string Id)> StartAsync(bool telemetry)
