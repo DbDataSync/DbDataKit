@@ -86,7 +86,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 
 | Plan and row | What remains | Flag |
 | --- | --- | --- |
-| [25](25-surrogate-keys-and-agent-tests.md) K07, K10, K11, K12 | Consumers of inferred relationships, `key_map`, Store ids as `BINARY(16)` and `uuid`, keys in pure SQL | none blocked; K11's drafts exist |
+| [25](25-surrogate-keys-and-agent-tests.md) K07, K10, K11 | Consumers of inferred relationships, `key_map`, Store ids as `BINARY(16)` and `uuid` | none blocked; K11's drafts exist |
 | [18](18-lineage.md) G06b | Runs on column edges, a job node per load | |
 | [Build OPEN-ITEMS](../../DbDataBuild/docs/progress/OPEN-ITEMS.md) section S; [12](12-shared-tls-rollout.md) items 10 and 11; [Gateway README](../../DbDataGateway/README.md) Fabric (Not supported yet); [windows-test-install](../windows-test-install.md) | K1: Build's `SourceCatalogReader` (needs a schema-wide keys read in the shared readers first) and the ODBC and DuckDB opens; K2: Sync's `service`, `cert` and `secret` verbs on the shared commands (needs a Windows host); D11: Build's CLI on the shared router; F1: Fabric through the Gateway (needs a tenant) | D11 OWNER (deferred); K2 LOW (plan 12) |
 | [14a](14a-semantic-slices.md) SL03, SL10, SL22 | Build reads the registry; metadata documents with semantic models; the `semantic` noun | |

@@ -53,6 +53,28 @@ internal static class DefineCommand
         var selection = Select(projectRoot, paths, mapped, error, out var selectionProblem);
         if (selectionProblem) return CliApp.ExitUsage;
 
+        // ---- keys written in the queries (plan 25 K12): stored in the definitions first, so the project below knows them ----
+        var keyDifferences = new List<Diagnostic>();
+        var keyEdits = KeyEdits(projectRoot, selection, keyDifferences, out var keyProblems);
+        if (keyProblems.Count > 0) { foreach (var d in keyProblems) error.Diag(d); return CliApp.ExitFindings; }
+        if (check) { foreach (var e in keyEdits) keyDifferences.Add(new Diagnostic(DiagnosticCatalog.DefinitionOutOfSync, new(e.File, 0, 0), $"`{e.File}` does not define the key(s) its query calls with `{KeyInference.FunctionName}`: {string.Join(", ", e.Names)}.")); }
+        else if (keyEdits.Count > 0)
+        {
+            foreach (var e in keyEdits) { output.WriteLine(); output.Write(UnifiedDiff.Create(e.OldText, e.NewText, e.File)); }
+            if (!write)
+            {
+                output.WriteLine();
+                output.Write($"Write the keys to {keyEdits.Count} definition file(s)? [y/N] ");
+                if (input.ReadLine()?.Trim().ToLowerInvariant() is not ("y" or "yes")) { output.WriteLine("Nothing was written."); return CliApp.ExitFindings; }
+            }
+            foreach (var e in keyEdits)
+            {
+                if (DefinitionFile.WriteIfUnchanged(Path.Combine(projectRoot, e.File), e.File, e.Hash, e.NewText) is { } problem) { error.Diag(problem); return CliApp.ExitFindings; }
+                output.WriteLine($"wrote {e.File} (keys: {string.Join(", ", e.Names)})");
+            }
+            project = ProjectValidator.Validate(projectRoot, config);                                    // the keys are macros now
+        }
+
         var targets = new List<DefineTarget>();
         ProjectContext? macroContext = null;
         var hashes = new Dictionary<string, string?>();          // definition file -> hash of the bytes read (null: no file)
@@ -103,7 +125,7 @@ internal static class DefineCommand
                 if (existing != null) name = existing.Name;
             }
             else hashes[ymlRel] = null;
-            var queryText = parsedHead.Body;
+            var queryText = KeyInference.Rewrite(parsedHead.Body, existing?.Keys ?? []);       // a stored key's call is the key's own function
             if (project.BuiltModels.FirstOrDefault(s => s.DefinitionFile == ymlRel) is { } known) queryText = QueryParameters.Mark(QueryParameters.ResolveNames(queryText, known, config, (known.Definition.Targets ?? config.DefaultConnections).FirstOrDefault() ?? ""), known, config).Sql;      // a name stands as the name it is (on the model's first connection, as the render reads it), a value as a typed marker
             var macroSupport = project.BuiltModels.FirstOrDefault(s => s.DefinitionFile == ymlRel) is { } macroSource ? (macroContext ??= ProjectContext.Load(projectRoot)).MacroSupportFor(macroSource, queryText) : null;
             targets.Add(new DefineTarget(name, ymlRel, sqlRel, queryText, existingText, existing, existingProblems, macroSupport, head));
@@ -124,6 +146,7 @@ internal static class DefineCommand
         if (check)
         {
             var found = new List<Diagnostic>(shown);
+            found.AddRange(keyDifferences);
             found.AddRange(engine.Check(targets));
             foreach (var d in found) error.Diag(d);
             var errors = found.Count(d => d.Severity == Severity.Error);
@@ -217,6 +240,34 @@ internal static class DefineCommand
 
         if (!failed && written.Count > 0) output.Next("project compile");
         return failed ? CliApp.ExitFindings : CliApp.ExitOk;
+    }
+
+    private sealed record KeyEdit(string File, string OldText, string NewText, IReadOnlyList<string> Names, string Hash);
+
+    /// <summary>
+    /// For each selected model that has a query and a definition, the definition's text with the keys its query calls through <c>surrogate_key(...)</c> added to <c>keys:</c>. A model with no definition yet has none to
+    /// write into: the definition is created first, and the next run stores its keys. <paramref name="problems"/> are calls that cannot be read as a key, or that disagree with a stored key.
+    /// </summary>
+    private static List<KeyEdit> KeyEdits(string projectRoot, IEnumerable<string> stems, List<Diagnostic> differences, out List<Diagnostic> problems)
+    {
+        var edits = new List<KeyEdit>();
+        problems = [];
+        foreach (var stem in stems)
+        {
+            var sqlPath = Path.Combine(projectRoot, stem + ".sql");
+            var ymlPath = Path.Combine(projectRoot, stem + ".yml");
+            if (!File.Exists(sqlPath) || !File.Exists(ymlPath)) continue;
+            var sql = QueryHeadParser.Parse(stem + ".sql", Utf8Text(File.ReadAllBytes(sqlPath))).Body;
+            if (!sql.Contains(KeyInference.FunctionName, StringComparison.OrdinalIgnoreCase)) continue;
+            var (keys, found) = KeyInference.Infer(sql);
+            var ymlBytes = File.ReadAllBytes(ymlPath);
+            var yml = Utf8Text(ymlBytes);
+            var (text, conflicts) = KeyInference.Store(yml, stem + ".yml", keys);
+            foreach (var (line, problem) in found) problems.Add(new Diagnostic(DiagnosticCatalog.InvalidValue, new(stem + ".sql", line, 1), problem));
+            foreach (var (line, problem) in conflicts) problems.Add(new Diagnostic(DiagnosticCatalog.InvalidValue, new(stem + ".sql", line, 1), problem));
+            if (text != null) edits.Add(new KeyEdit(stem + ".yml", yml, text, keys.Select(k => k.Name).ToList(), DefinitionFile.Hash(ymlBytes)));
+        }
+        return edits;
     }
 
     private static string Describe(DefineStatus s) => s switch
