@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner, request, useIsAdmin } from '@dbdatakit/shell'
 import { consoleApi } from '../api'
 import { ConsoleShell } from '../ConsoleShell'
-import { actionsFor, draftBlock, draftBody, emptyItem, itemLine, type ItemDraft, type ReleaseView } from '../releases'
+import { actionsFor, draftBlock, draftBody, emptyItem, gatewayKinds, itemLine, runnerKind, serverProductOfKind, type ItemDraft, type ReleaseView } from '../releases'
 
 const releasesApi = {
   list: () => request<ReleaseView[]>('/api/releases'),
@@ -12,7 +12,7 @@ const releasesApi = {
 }
 
 /**
- * Releases (plan 21 CH02): ordered promotions of packages between runners with one approval. A draft is made here, approved once (by an administrator who holds the administrator role on every item's server), started and, when an item fails, resumed at that
+ * Releases (plan 21 CH02): ordered promotions of packages (runners) and definitions (Gateways) between groups with one approval. A draft is made here, approved once (by an administrator who holds the administrator role on every item's target server), started and, when an item fails, resumed at that
  * item. It is a sequence, not a transaction: what the items before the failing one did stays done.
  */
 export function ReleasesPage() {
@@ -20,7 +20,7 @@ export function ReleasesPage() {
   const client = useQueryClient()
   const list = useQuery({ queryKey: ['releases'], queryFn: releasesApi.list, refetchInterval: 5000 })
   const servers = useQuery({ queryKey: ['instances'], queryFn: consoleApi.instances.list })
-  const runners = (servers.data ?? []).filter((s) => s.product === 'dbdatarunner')
+  const serversFor = (kind: string) => (servers.data ?? []).filter((s) => s.product === serverProductOfKind(kind))
   const serverName = (id: string) => servers.data?.find((s) => s.id === id)?.name ?? id
   const [name, setName] = useState('')
   const [items, setItems] = useState<ItemDraft[]>([{ ...emptyItem }])
@@ -33,7 +33,7 @@ export function ReleasesPage() {
   return (
     <ConsoleShell crumbs={[{ label: 'Releases', heading: true }]}>
       <div className="pane" data-testid="releases-page">
-        <div className="page-head"><h1 className="page-title">Releases</h1><span className="page-note">Packages promoted between runners in order, with one approval. A release is a sequence, not a transaction.</span></div>
+        <div className="page-head"><h1 className="page-title">Releases</h1><span className="page-note">Packages and Gateway definitions promoted between groups in order, with one approval. A release is a sequence, not a transaction.</span></div>
         <ErrorBanner error={list.error ?? create.error ?? act.error} />
         {list.isSuccess && list.data.length === 0 && <div className="empty" data-testid="releases-empty">No release yet.</div>}
         {(list.data ?? []).map((r) => {
@@ -72,9 +72,10 @@ export function ReleasesPage() {
               <label className="field"><span>Name</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} data-testid="release-name" /></label>
               {items.map((it, n) => (
                 <div key={n} className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 8 }} data-testid="release-item-form">
-                  <select className="input" aria-label="Read from" value={it.source} onChange={(e) => set(n, { source: e.target.value })} data-testid="release-item-source"><option value="">Same runner</option>{runners.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
-                  <select className="input" aria-label="Goes to" value={it.target} onChange={(e) => set(n, { target: e.target.value })} data-testid="release-item-target"><option value="">Goes to...</option>{runners.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
-                  <input className="input mono" placeholder="package" value={it.name} onChange={(e) => set(n, { name: e.target.value })} data-testid="release-item-name" />
+                  <select className="input" aria-label="Kind" value={it.kind} onChange={(e) => set(n, { kind: e.target.value, source: '', target: '' })} data-testid="release-item-kind"><option value={runnerKind}>Runner package</option>{gatewayKinds.map((k) => <option key={k} value={k}>Gateway {k}</option>)}</select>
+                  <select className="input" aria-label="Read from" value={it.source} onChange={(e) => set(n, { source: e.target.value })} data-testid="release-item-source"><option value="">Same server</option>{serversFor(it.kind).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+                  <select className="input" aria-label="Goes to" value={it.target} onChange={(e) => set(n, { target: e.target.value })} data-testid="release-item-target"><option value="">Goes to...</option>{serversFor(it.kind).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+                  <input className="input mono" placeholder={it.kind === runnerKind ? 'package' : 'definition'} value={it.name} onChange={(e) => set(n, { name: e.target.value })} data-testid="release-item-name" />
                   <input className="input mono" placeholder="version" size={6} value={it.version} onChange={(e) => set(n, { version: e.target.value })} data-testid="release-item-version" />
                   <input className="input mono" placeholder="from channel" size={10} value={it.fromChannel} onChange={(e) => set(n, { fromChannel: e.target.value })} data-testid="release-item-from" />
                   <input className="input mono" placeholder="to channel" size={10} value={it.toChannel} onChange={(e) => set(n, { toChannel: e.target.value })} data-testid="release-item-to" />

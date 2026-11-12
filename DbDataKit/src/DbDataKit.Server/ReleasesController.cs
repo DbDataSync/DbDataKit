@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DbDataKit.Server;
 
-/// <summary>One item of a new release: a package on a runner moved from one channel to the next; <paramref name="Source"/> is the server the version is read from (absent: the target itself).</summary>
+/// <summary>One item of a new release: a package on a runner (or a definition on a Gateway, <paramref name="Product"/> <c>gateway</c> with its <paramref name="Kind"/>) moved from one channel to the next; <paramref name="Source"/> is the server the version is read from (absent: the target itself).</summary>
 public sealed record ReleaseItemBody(string Target, string Name, int Version, string FromChannel, string ToChannel, string? Source = null, string? Product = null, string? Kind = null);
 
 public sealed record ReleaseBody(string Name, List<ReleaseItemBody>? Items);
@@ -37,11 +37,15 @@ public sealed class ReleasesController(ConsoleReleases releases) : ControllerBas
 
     [HttpPost]
     [Authorize(Policies.Admin)]
-    public IActionResult Create([FromBody] ReleaseBody body)
+    public async Task<IActionResult> Create([FromBody] ReleaseBody body, CancellationToken ct)
     {
-        var items = (body.Items ?? []).Select(i => new ReleaseItem(0, i.Product ?? ConsoleReleases.Product, i.Target, i.Kind ?? ConsoleReleases.Kind, i.Name, i.Version, i.FromChannel, i.ToChannel, Source: string.IsNullOrWhiteSpace(i.Source) ? null : i.Source)).ToList();
+        var items = (body.Items ?? []).Select(i =>
+        {
+            var product = i.Product ?? ConsoleReleases.Product;
+            return new ReleaseItem(0, product, i.Target, i.Kind ?? (product == ConsoleReleases.Product ? ConsoleReleases.Kind : ""), i.Name, i.Version, i.FromChannel, i.ToChannel, Source: string.IsNullOrWhiteSpace(i.Source) ? null : i.Source);
+        }).ToList();
         for (var n = 0; n < items.Count; n++)
-            if (releases.Problem(items[n]) is { } problem) return BadRequest(new { error = $"Item {n + 1}: {problem}" });
+            if (await releases.ProblemAsync(items[n], ct) is { } problem) return BadRequest(new { error = $"Item {n + 1}: {problem}" });
         return Do(() => Created($"/api/releases/", View(releases.Store.Create(body.Name, PersonId, items))));
     }
 
