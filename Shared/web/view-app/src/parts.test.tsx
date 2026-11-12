@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { StoreError } from '@dbdatakit/store-ui'
 import { doc, grid, rows, territory } from './fixtures'
 import { DashboardBoard, DetailPage, FormFields, GridTable } from './parts'
-import type { DashboardSpec, DetailSpec, FormSpec } from './spec'
+import { lockedFields, notifyParent, openedByLink, startingValues, type DashboardSpec, type DetailSpec, type FormSpec } from './spec'
 import { ViewApp, menuOf } from './screens'
 
 const go = () => {}
@@ -52,6 +52,50 @@ describe('the form', () => {
     const conflict = renderToStaticMarkup(<FormFields spec={spec} entity={territory} row={rows[0]} text={{}} error={new StoreError('The row changed.', 409, [], 3)} />)
     expect(conflict).toContain('The row changed. Reload the row')
     expect(renderToStaticMarkup(<FormFields spec={spec} entity={territory} row={null} text={{}} error={new Error('The Store is away.')} />)).toContain('The Store is away.')
+  })
+})
+
+describe('a form a link opened in a dialog or a panel (plan 32 DBR36)', () => {
+  const spec: FormSpec = {
+    kind: 'form', title: 'New order', model: 'territories', entity: 'territory', mode: 'create', key: null, submit: null, params: [], links: [],
+    fields: [{ attribute: 'code', label: null, readOnly: false, required: false, help: null }, { attribute: 'quota', label: null, readOnly: false, required: true, help: null }],
+  }
+
+  it('starts a form that creates a row from the query (the `new` of a link), listed fields only, and leaves an edit form to its row', () => {
+    expect(startingValues(spec, { code: 'EU', quota: '5', other: 'x', _lock: 'code' })).toEqual({ code: 'EU', quota: '5' })
+    expect(startingValues(spec, { code: '' })).toEqual({})
+    expect(startingValues({ ...spec, mode: 'edit', key: 'code' }, { code: 'EU' })).toEqual({})
+    expect(startingValues(spec, {})).toEqual({})
+  })
+
+  it('locks the listed fields the query names and no other: they are read-only on screen, and still the form to save', () => {
+    expect([...lockedFields(spec, { _lock: 'code, nothing,quota' })]).toEqual(['code', 'quota'])
+    expect([...lockedFields(spec, {})]).toEqual([])
+    const html = renderToStaticMarkup(<FormFields spec={spec} entity={territory} row={null} text={{ code: 'EU', quota: '5' }} locked={new Set(['code'])} />)
+    expect(html).toMatch(/<input[^>]*id="sui-code"[^>]*disabled/)
+    expect(html).not.toMatch(/<input[^>]*id="sui-quota"[^>]*disabled/)
+  })
+
+  it('has a Cancel only when it was opened as a dialog or a panel', () => {
+    expect(openedByLink({ _as: 'dialog' })).toBe(true)
+    expect(openedByLink({ _as: 'panel' })).toBe(true)
+    expect(openedByLink({ _as: 'navigate' })).toBe(false)
+    expect(openedByLink({})).toBe(false)
+    expect(renderToStaticMarkup(<FormFields spec={spec} entity={territory} row={null} text={{}} onCancel={go} />)).toContain('data-testid="va-form-cancel"')
+    expect(renderToStaticMarkup(<FormFields spec={spec} entity={territory} row={null} text={{}} />)).not.toContain('va-form-cancel')
+  })
+
+  it('tells the page above it, with exactly the two messages the surface reads, and nothing when there is no page above', () => {
+    const sent: unknown[] = []
+    const above = { postMessage: (m: unknown, target: string) => sent.push([m, target]) }
+    notifyParent({ type: 'views:saved' }, { parent: above })
+    notifyParent({ type: 'views:close' }, { parent: above })
+    expect(sent).toEqual([[{ type: 'views:saved' }, '*'], [{ type: 'views:close' }, '*']])
+    const top: { parent?: unknown; postMessage(m: unknown, t: string): void } = { postMessage: (m, t) => sent.push([m, t]) }
+    top.parent = top
+    notifyParent({ type: 'views:saved' }, top as never)
+    expect(sent).toHaveLength(2)   // a top-level document speaks to nobody
+    notifyParent({ type: 'views:saved' }, undefined)
   })
 })
 

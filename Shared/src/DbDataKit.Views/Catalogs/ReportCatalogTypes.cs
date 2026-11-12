@@ -9,6 +9,9 @@ public static class ReportItemTypes
     public const string Dashboard = "dashboard";
     public const string Report = "report";
 
+    /// <summary>A custom page of an app (plan 32 DBR33): code in an app's document, opened at the apps host's address and exported by the views module.</summary>
+    public const string Page = "page";
+
     /// <summary>A report of an external report server (SSRS, Power BI Report Server): opened by address, in a frame or as a link.</summary>
     public const string External = "external-report";
 }

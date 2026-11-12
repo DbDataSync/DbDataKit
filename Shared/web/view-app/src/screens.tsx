@@ -5,10 +5,10 @@ import { rowKey } from './keys'
 import { SchemeContext, useShellTheme } from './scheme'
 import { DashboardBoard, DetailPage, FormFields, GridTable, Links, formAttributes } from './parts'
 import { nextSort, shapeRows, type SortState } from './shape'
-import { SUPPORTED_FORMAT, parseRoute, readsRows, resolveParams, type DashboardSpec, type DetailSpec, type FormSpec, type GridSpec, type ViewSpec, type ViewsDoc } from './spec'
+import { SUPPORTED_FORMAT, lockedFields, notifyParent, openedByLink, parseRoute, readsRows, resolveParams, startingValues, type DashboardSpec, type DetailSpec, type FormSpec, type GridSpec, type ViewSpec, type ViewsDoc } from './spec'
 import type { Host } from './data'
 
-export interface ScreenProps<S extends ViewSpec = ViewSpec> { spec: S; client: StoreClient; params: Record<string, string>; go: (route: string) => void }
+export interface ScreenProps<S extends ViewSpec = ViewSpec> { spec: S; client: StoreClient; params: Record<string, string>; go: (route: string) => void; /** The route's whole query: the starting values and `_lock` of a form a link opened. */ query?: Record<string, string> }
 
 const Loading = () => <div className="sui-loading" aria-busy="true">Loading…</div>
 
@@ -45,7 +45,10 @@ export function DetailScreen({ spec, client, params, go }: ScreenProps<DetailSpe
   return <DetailPage spec={spec} entity={entity} row={row.data} params={params} go={go} />
 }
 
-export function FormScreen({ spec, client, params, go }: ScreenProps<FormSpec>) {
+export function FormScreen({ spec, client, params, go, query = {} }: ScreenProps<FormSpec>) {
+  const starting = startingValues(spec, query)
+  const locked = lockedFields(spec, query)
+  const framed = openedByLink(query)
   const { entity, error } = useEntity(client, spec)
   const key = entity && spec.mode === 'edit' ? rowKey(entity, spec.key, params) : null
   const keyText = key && !(key instanceof Error) ? JSON.stringify(key.key) : ''
@@ -60,7 +63,7 @@ export function FormScreen({ spec, client, params, go }: ScreenProps<FormSpec>) 
   const rowId = row ? JSON.stringify(row.values) + row.version : 'new'
   useEffect(() => {
     if (!entity) return
-    setText(Object.fromEntries(formAttributes(spec, entity, row === null).map(({ attribute }) => [attribute.name, row ? toInput(attribute, row.values[attribute.name]) : ''])))
+    setText(Object.fromEntries(formAttributes(spec, entity, row === null).map(({ attribute }) => [attribute.name, row ? toInput(attribute, row.values[attribute.name]) : starting[attribute.name] ?? ''])))
     setProblems({}); setViolations([]); setFailure(null)
     // the form starts again when the row (or its version) changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -80,8 +83,10 @@ export function FormScreen({ spec, client, params, go }: ScreenProps<FormSpec>) 
     try {
       await client.apply(spec.model, [draft.change])
       setSaved(row === null ? 'Created.' : 'Saved.')
-      if (row === null) setText(Object.fromEntries(Object.keys(text).map((k) => [k, ''])))
+      if (row === null) setText(Object.fromEntries(Object.keys(text).map((k) => [k, starting[k] ?? ''])))
       else existing.reload()
+      // a form a link opened in a dialog or a panel tells the page that framed it, which closes it and has the widget read again (`then`)
+      if (framed) notifyParent({ type: 'views:saved' })
     } catch (e) {
       const f = e instanceof Error ? e : new Error(String(e))
       setFailure(f)
@@ -93,7 +98,7 @@ export function FormScreen({ spec, client, params, go }: ScreenProps<FormSpec>) 
   }
   return (
     <>
-      <FormFields spec={spec} entity={entity} row={row} text={text} onText={(n, v) => setText((t) => ({ ...t, [n]: v }))} problems={problems} violations={violations} error={failure} busy={busy} saved={saved} onSubmit={() => void submit()} />
+      <FormFields spec={spec} entity={entity} row={row} text={text} onText={(n, v) => setText((t) => ({ ...t, [n]: v }))} problems={problems} violations={violations} error={failure} busy={busy} saved={saved} onSubmit={() => void submit()} locked={locked} onCancel={framed ? () => notifyParent({ type: 'views:close' }) : undefined} />
       <Links links={spec.links} row={row ? row.values : null} params={params} go={go} />
     </>
   )
@@ -153,7 +158,7 @@ export function ViewApp({ doc, client, host, pages = {} }: ViewAppProps) {
     const resolved = resolveParams(spec.params, query)
     if (resolved.errors.length > 0) body = <div className="sui-error" role="alert">{resolved.errors.map((e) => <p key={e}>{e}</p>)}</div>
     else {
-      const props = { client, params: resolved.values, go }
+      const props = { client, params: resolved.values, go, query }
       const key = current + route   // a new route starts the screen again (React takes a key as a prop of its own, never in a spread)
       body = spec.kind === 'grid' ? <GridScreen key={key} spec={spec} {...props} /> : spec.kind === 'form' ? <FormScreen key={key} spec={spec} {...props} /> : spec.kind === 'detail' ? <DetailScreen key={key} spec={spec} {...props} /> : <DashboardScreen key={key} spec={spec} {...props} />
     }

@@ -2,6 +2,7 @@ using DbDataKit.Identity;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using System.Text.Json.Nodes;
 
 namespace DbDataKit.Apps;
 
@@ -19,7 +20,7 @@ public static class AppsEndpoints
     public const string CallbackPath = "/apps/-/callback";
     public const string SessionCookie = "dbdata_apps";
 
-    public static IEndpointRouteBuilder MapApps(this IEndpointRouteBuilder app, AppInstanceStore instances, AppSite site, OpenIdClient client, AppSessions sessions, AppDataGateway? data = null, AppStorage? storage = null, AppApprovalStore? approvals = null, Func<long>? storageCapBytes = null)
+    public static IEndpointRouteBuilder MapApps(this IEndpointRouteBuilder app, AppInstanceStore instances, AppSite site, OpenIdClient client, AppSessions sessions, AppDataGateway? data = null, AppStorage? storage = null, AppApprovalStore? approvals = null, Func<long>? storageCapBytes = null, ICustomPageRows? pages = null)
     {
         app.MapGet("/apps/{instance}/_app/{**path}", async (HttpContext context, string instance, string? path) =>
         {
@@ -94,7 +95,7 @@ public static class AppsEndpoints
             if (await sessions.FindAsync(context.Request.Cookies[SessionCookie], context.RequestAborted) is not { } session) { await Text(context, 401, "Sign in first."); return; }
             var entries = instances.List().Where(i => session.RolesOn(i.Name).Count > 0)
                 .Select(i => instances.Resolve(i.Name)).OfType<ResolvedInstance>()
-                .Select(r => new { name = r.Instance.Name, title = TitleOf(r), description = r.Manifest.Description, app = r.Instance.App, version = r.AppVersion.Version, channel = DbDataKit.State.DefinitionStore.Production, launch = LaunchUrl(r.Instance.Name) });
+                .Select(r => new { name = r.Instance.Name, title = TitleOf(r), description = r.Manifest.Description, app = r.Instance.App, version = r.AppVersion.Version, channel = DbDataKit.State.DefinitionStore.Production, launch = LaunchUrl(r.Instance.Name), pages = CustomPages.Pages(r, r.Instance.Name) });
             context.Response.Headers.CacheControl = "no-store";
             await context.Response.WriteAsJsonAsync(new { instances = entries });
         });
@@ -120,6 +121,53 @@ public static class AppsEndpoints
                 context.Response.StatusCode = StatusCodes.Status400BadRequest;
                 await context.Response.WriteAsync(e.Message);
             }
+        });
+
+        // A custom page of an app (plan 32 DBR33): /apps/<instance>/_views/<name>?<parameters> is the shell's page around the app's own document mounted on the page's view; /_rows is where that page's script fetches the rows, as the person.
+        // Both need the sign-in, a role on the instance and, for a trusted app, an approval for these bytes: the same rule as the shell page and the token.
+        async Task<(ResolvedInstance Resolved, AppSession Session, CustomView View)?> OpenPageAsync(HttpContext context, string instance, string name, bool fromScript)
+        {
+            if (instances.Resolve(instance) is not { } resolved) { await Text(context, 404, "No such app."); return null; }
+            if (await sessions.FindAsync(context.Request.Cookies[SessionCookie], context.RequestAborted) is not { } session)
+            {
+                if (fromScript) { await Text(context, 401, "Sign in first."); return null; }
+                context.Response.Redirect((await client.BeginAsync(AppAddressing.PublicPath(context) + context.Request.QueryString, context.RequestAborted, AppAddressing.CallbackFor(context))).AbsoluteUri);
+                return null;
+            }
+            if (session.RolesOn(instance).Count == 0) { await Text(context, 403, "The identity home gives you no role on this app."); return null; }
+            if (Unapproved(approvals, resolved) is { } why) { await Text(context, 403, why); return null; }
+            if (CustomPages.Find(resolved, name) is not { } view) { await Text(context, 404, $"This app has no page '{name}'."); return null; }
+            return (resolved, session, view);
+        }
+
+        app.MapGet("/apps/{instance}/" + CustomPages.Segment + "/{name}", async (HttpContext context, string instance, string name) =>
+        {
+            if (await OpenPageAsync(context, instance, name, fromScript: false) is not var (resolved, session, view)) return;
+            var embed = context.Request.Query.ContainsKey("embed");
+            var origins = AppInstanceStore.EmbedOrigins(resolved.Instance.Settings.GetValueOrDefault(AppInstanceStore.EmbedSetting), out _) ?? [];
+            var framing = resolved.Instance.Settings.GetValueOrDefault(PortalChrome.PortalSetting) is { } named && instances.Resolve(named) is { Manifest.Kind: AppKind.Portal } portal ? portal : null;
+            AppShell.Header? header = resolved.Manifest.Chrome == AppChrome.None || embed ? null
+                : framing is not null ? new AppShell.Header(PersonOf(session), [], PortalChrome.Look(instances, framing, session, null))
+                : HeaderOf(instances, session, instance);
+            await Write(context, AppShell.ViewPage(instance, view.Title ?? view.Name, view, header, origins));
+        });
+
+        app.MapGet("/apps/{instance}/" + CustomPages.Segment + "/{name}/_rows", async (HttpContext context, string instance, string name) =>
+        {
+            if (context.Request.Headers["X-DbData-Shell"] != "1") { await Text(context, 400, "Not a request from the shell page."); return; }
+            if (await OpenPageAsync(context, instance, name, fromScript: true) is not var (resolved, session, view)) return;
+            context.Response.Headers.CacheControl = "no-store";
+            async Task Json(int status, JsonObject body)
+            {
+                context.Response.StatusCode = status;
+                context.Response.ContentType = "application/json; charset=utf-8";
+                await context.Response.WriteAsync(body.ToJsonString());
+            }
+            var (values, problem) = CustomPages.Parameters(view, context.Request.Query.Select(q => KeyValuePair.Create(q.Key, q.Value.Select(v => v ?? "").ToArray())));
+            if (values is null) { await Json(400, new JsonObject { ["code"] = "invalid_parameter", ["message"] = problem }); return; }
+            if (pages is null) { await Json(501, new JsonObject { ["code"] = "not_run_here", ["message"] = "This host has nothing to run a page's queries: it is not a serving host." }); return; }
+            var answer = await pages.ResolveAsync(session, resolved, view, values, context.RequestAborted);
+            await Json(answer.Status, answer.Body);
         });
 
         app.MapGet("/apps/{instance}/{**path}", async (HttpContext context, string instance, string? path) =>

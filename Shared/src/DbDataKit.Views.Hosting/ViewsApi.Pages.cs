@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using DbDataKit.Apps;
 using DbDataKit.State;
 using DbDataKit.Views.Export;
 
@@ -85,6 +86,27 @@ public sealed partial class ViewsApi
             }
             catch (ExportException) { throw new OperationCanceledException(cancellationToken); }
         }
+    }
+
+    /// <summary>
+    /// The same export for an address's parameters (<c>p.name=value</c> of the route): they are read against the page's manifest entry (<see cref="CustomViewParameters.Read"/>), so a value is of the type the entry declares and a wrong one is a 400 <c>invalid</c>
+    /// in words. A page the host does not serve for this person is 404 first, whatever the parameters say.
+    /// </summary>
+    public async Task<ViewsAnswer> ExportPageAsync(ViewsPrincipal who, string instance, string name, string? format, IEnumerable<KeyValuePair<string, string[]>> query, string? clientAddress = null, string? traceId = null, CancellationToken cancellationToken = default)
+    {
+        var apps = options.CustomApps;
+        if (apps?.FindPage(instance, name) is { } found && apps.MayOpen(who, instance))
+        {
+            var (values, problem) = CustomViewParameters.Read(found.View, query);
+            if (values is null)
+            {
+                Record(who, ViewsAuditVerbs.Export, PageKind, $"{instance}.{name}", null, AuditEvent.Refused, Detail(traceId, ("format", format ?? "pdf"), ("code", "invalid")));
+                Interlocked.Increment(ref refused);
+                return ViewsAnswer.Error(400, "invalid", problem!);
+            }
+            return await ExportPageAsync(who, instance, name, format, values, clientAddress, traceId, cancellationToken).ConfigureAwait(false);
+        }
+        return await ExportPageAsync(who, instance, name, format, (IReadOnlyDictionary<string, JsonNode?>?)null, clientAddress, traceId, cancellationToken).ConfigureAwait(false);   // the refusal, audited, in the one place that words it
     }
 
     private static Dictionary<string, string> PageHeaders(string browser, int warnings, int? pages)

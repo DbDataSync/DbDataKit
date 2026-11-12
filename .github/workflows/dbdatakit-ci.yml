@@ -160,6 +160,10 @@ jobs:
           npm run typecheck -w @dbdatakit/view-app
           npm test -w @dbdatakit/view-app
           npm run build -w @dbdatakit/view-app
+      # The SDK's fixture app (a page and widgets registered with @dbdatakit/views-sdk), the app of the apps host's custom page story (`apps-pages.spec.ts`, plan 32 DBR33).
+      - name: Build the fixture app
+        working-directory: Shared/web
+        run: npm run build:fixture-app -w @dbdatakit/visuals
       - run: dotnet build DbDataKit.slnf -c Debug
       # A real Build server for the console to pair with (the pairing, the version and the health the console shows are its own).
       - uses: ./.github/actions/native-cache

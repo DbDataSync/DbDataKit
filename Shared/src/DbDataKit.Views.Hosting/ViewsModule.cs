@@ -27,6 +27,7 @@ namespace DbDataKit.Views.Hosting;
 /// POST /api/v1/dashboards/{name}/render   {parameters?, layout?, only?, viewport?: {width, height}, medium?} gives the rendered-widgets document
 /// POST /api/v1/views/preview              {document|text|widget, widget_id?, layout?, only?, parameters?} the rendered widgets of an unsaved draft, as the caller, stored nowhere (plan 32 DBR28)
 /// GET  /api/v1/dashboards/{name}/export?format=pdf&amp;layout=&amp;p.name=   the PDF (501 export_unavailable naming the setting when the host has no browser)
+/// GET  /api/v1/apps/{instance}/pages/{name}/export?format=pdf|png&amp;p.name=   a custom page of an app (plan 32 DBR33), exported as the person: the parameters are read against the page's manifest entry
 /// GET  /api/v1/dashboards/{name}/export?format=csv|xlsx|svg&amp;widget=&amp;layout=&amp;p.name=   a widget's rows (csv, xlsx: no browser), a dashboard's sheets (xlsx without widget), a chart's SVG
 /// GET  /api/v1/dashboards/{name}/print?layout=   the print page as HTML (the browser's own print)
 /// GET  /api/v1/views/print/{file}         print.js, print.css and the bundled fonts (no token: code, no data)
@@ -203,6 +204,10 @@ public sealed class ViewsModule(ViewsOptions options, ViewsPublications publishe
             return refusal ?? await api!.CatalogOpenAsync(who, body, trace, c.RequestAborted).ConfigureAwait(false);
         })));
 
+        // a custom page of an app (plan 32 DBR33): its export as the person, the parameters as `p.name=value` read against the manifest entry
+        routes.MapGet("/api/v1/apps/{instance}/pages/{name}/export", (Func<string, string, HttpContext, Task<IResult>>)((instance, name, c) =>
+            As(c, (who, trace) => api!.ExportPageAsync(who, instance, name, Query(c, "format"), PageParameters(c), c.Connection.RemoteIpAddress?.ToString(), trace, c.RequestAborted))));
+
         foreach (var kind in ViewDefinitions.Kinds)
         {
             var prefix = "/api/v1/" + ViewsApi.Collection(kind);
@@ -268,6 +273,10 @@ public sealed class ViewsModule(ViewsOptions options, ViewsPublications publishe
         }
         return values;
     }
+
+    /// <summary>A page's parameters from the address: <c>p.region=West</c>, repeated for a list; the manifest's declaration gives each its type.</summary>
+    private static List<KeyValuePair<string, string[]>> PageParameters(HttpContext c) =>
+        [.. c.Request.Query.Where(q => q.Key.StartsWith("p.", StringComparison.Ordinal) && q.Key.Length > 2).Select(q => KeyValuePair.Create(q.Key[2..], q.Value.Select(v => v ?? "").ToArray()))];
 
     private async Task<IResult> As(HttpContext context, Func<ViewsPrincipal, string, Task<ViewsAnswer>> call)
     {
