@@ -14,7 +14,6 @@ Flags: **OWNER** waits for a decision only the owner can take (the decision is n
 
 | Plan | Decision | Blocks |
 | --- | --- | --- |
-| [33](33-fewer-services.md) SC20e | A Build publish to a Gateway without a login in the Workspace: an offline `project publish --to gateway --out <folder>` that a Build server sends, or another way | Build publishing from the Workspace |
 | [33](33-fewer-services.md) SC21f | Data source adoption at a Store publish (a publish-time adopt, or plan 30's slot bindings) | Store publishing parity |
 | [22a](22a-gap-slices.md) QG2 | The rule language of access rules (our own expression or a DuckDB SQL subset) | GP01, GP02, GP11 to GP15, and with them FQ03 and FQ05 of [23a](23a-first-run-and-quality-slices.md) and the rules half of the serving cache (UC15) |
 | [UI06 of the editor-screen gaps](../ui-coverage.md) | Which store Sync's and Build's secrets overview compares their references with (Store and Workspace: whether their stores are listed at all) | the secrets overview for Sync, Build, Store and Workspace |
