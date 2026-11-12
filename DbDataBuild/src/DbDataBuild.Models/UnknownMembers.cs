@@ -11,7 +11,7 @@ namespace DbDataBuild.Models;
 public static class UnknownMembers
 {
     /// <summary>True when the model owns a key that asks for the row.</summary>
-    public static bool Wanted(ModelDefinition model) => model.Keys.Any(k => k.UnknownMember && k.Method == KeyMethods.Hash);
+    public static bool Wanted(ModelDefinition model) => model.Keys.Any(k => k.UnknownMember);
 
     /// <summary>The query with the unknown row added (the query itself when the model wants none).</summary>
     public static string Apply(ModelDefinition model, string query)

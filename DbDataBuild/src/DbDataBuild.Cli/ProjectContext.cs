@@ -75,7 +75,7 @@ internal sealed class ProjectContext
         if (!Lowering.Enabled) return (InputCompiler.Attach(this, built, Renderer.Render(built.Definition, authorSql, built.QueryFile, targets, queryParameters: parameters, natives: Lowering.NativeUsesFor(authorSql))), authorSql);
         var (lowered, error) = Lowering.Lower(built, authorSql, parameters, variant);
         if (lowered == null) return (new RenderResult([], [], [error!]), authorSql);
-        var result = Renderer.Render(built.Definition, lowered.Sql, built.QueryFile, targets, bodyFile: $"rendered/{lowered.ArtifactPath}", queryParameters: parameters, natives: Lowering.NativeUsesFor(lowered.Sql));
+        var result = Renderer.Render(built.Definition, lowered.Sql, built.QueryFile, targets, bodyFile: $"rendered/{lowered.ArtifactPath}", queryParameters: parameters, natives: Lowering.NativeUsesFor(lowered.Sql), keyTextSql: lowered.KeyTextSql);
         var files = result.Files.Append(new RenderedFile(lowered.ArtifactPath, lowered.ArtifactText)).OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
         return (InputCompiler.Attach(this, built, result with { Files = files }), lowered.Sql);
     }

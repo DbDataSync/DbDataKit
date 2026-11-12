@@ -42,7 +42,7 @@ public sealed record ColumnDefinition(string Name, string Type, bool Nullable = 
 /// A surrogate key a model owns (plan 25 section 1a): <see cref="Name"/> is also the name of the function queries call, and <see cref="From"/> names its arguments in order. They need not be columns of the model: a fact
 /// passes whatever columns it can see.
 /// </summary>
-/// <param name="Method"><see cref="KeyMethods.Hash"/> (the default).</param>
+/// <param name="Method"><see cref="KeyMethods.Hash"/> (the default): the key is a hash of its business key. <see cref="KeyMethods.KeyMap"/>: the key is an integer the target's own map table gives the business key, new ones on load, never reused.</param>
 /// <param name="UnknownMember">A call with a NULL argument returns the reserved "unknown" key instead of NULL.</param>
 /// <param name="History">Names the extra argument that makes a history version key (the valid-from); with <see cref="VersionKey"/>, the name of that key's function. The key itself is then the durable key.</param>
 public sealed record KeyDefinition(string Name, IReadOnlyList<string> From, string Method = KeyMethods.Hash, bool UnknownMember = false, string? History = null, string? VersionKey = null, int Line = 0);

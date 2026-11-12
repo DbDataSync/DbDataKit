@@ -13,9 +13,13 @@ public sealed record RenderedParameter(string Name, string Type, string Source, 
 public sealed record RenderedScript(string Text, string? ResolverText, IReadOnlyList<RenderedParameter> Parameters);
 
 /// <param name="TransformedBodyPrefix">The transpiled `WITH ddb_body AS (...)` text that ends where the loader's own final SELECT begins.</param>
+/// <param name="KeyMaps">The keys kept in a map (plan 25 K10) that the query calls: the script adds the new business keys to each map before the load reads it.</param>
 public sealed record LoadRequest(
     string Model, IReadOnlyList<ColumnDefinition> Columns, LoadOperation Operation,
-    string TransformedBodyPrefix, string? WatermarkColumnType, string? RangeColumnType);
+    string TransformedBodyPrefix, string? WatermarkColumnType, string? RangeColumnType, IReadOnlyList<KeyMapStep>? KeyMaps = null);
+
+/// <summary>One key map a load fills: <paramref name="Table"/> is the map table (`marts.customer_key_map`), <paramref name="Column"/> the column of the body that holds the business key's text, and <paramref name="TextPrefix"/> the body (`WITH ddb_body AS (...)`) in which each call of the key is that text.</summary>
+public sealed record KeyMapStep(string Table, string Column, string TextPrefix);
 
 /// <summary>Per-target statement assembly for the closed library of load strategies (DESIGN.md 6.6).</summary>
 public interface ILoader

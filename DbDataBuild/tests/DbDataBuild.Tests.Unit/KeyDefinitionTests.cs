@@ -27,6 +27,15 @@ public class KeyDefinitionTests
     }
 
     [Fact]
+    public void A_key_may_be_kept_in_a_map_in_the_target()
+    {
+        var (model, diags) = Load("keys:\n  customer_key: {from: [source_system, customer_id], method: key_map, unknown_member: true}\n");
+        Assert.Empty(diags);
+        Assert.Equal(KeyMethods.KeyMap, Assert.Single(model!.Keys).Method);
+        Assert.True(UnknownMembers.Wanted(model));
+    }
+
+    [Fact]
     public void A_history_key_names_its_version_key_and_valid_from()
     {
         var (model, diags) = Load("keys:\n  product_key: {from: [product_id], history: valid_from, version_key: product_version_key, unknown_member: true}\n");
@@ -43,7 +52,6 @@ public class KeyDefinitionTests
     [InlineData("keys:\n  k: {from: []}\n", "from")]
     [InlineData("keys:\n  Bad-Name: {from: [a]}\n", "not a valid key name")]
     [InlineData("keys:\n  k: {from: [a, a]}\n", "twice")]
-    [InlineData("keys:\n  k: {from: [a], method: key_map}\n", "K10")]
     [InlineData("keys:\n  k: {from: [a], method: random}\n", "random")]
     [InlineData("keys:\n  k: {from: [a], unknown_member: maybe}\n", "maybe")]
     [InlineData("keys:\n  k: {from: [a], history: valid_from}\n", "go together")]

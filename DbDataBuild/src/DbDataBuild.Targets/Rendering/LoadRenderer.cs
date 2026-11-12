@@ -44,7 +44,8 @@ public sealed class LoadRenderer(SupportMatrix matrix, MatrixLinter linter, Proj
     private const string LoadersBodyName = Loaders.LoaderBase.BodyName;
 
     /// <param name="bodyFile">Where <paramref name="bodySql"/> is committed when it is not the author's file (the lowered query), so findings point at what was checked.</param>
-    public RenderResult Render(ModelDefinition def, string bodySql, string queryFile, IReadOnlyList<string> targets, string? bodyFile = null, IReadOnlyList<QueryParameter>? queryParameters = null, IReadOnlyList<NativeUse>? natives = null)
+    /// <param name="keyTextSql">The same query lowered with each call of a key kept in a map (plan 25 K10) as the business key's text, for the step that adds new keys to the map; null when the query calls none.</param>
+    public RenderResult Render(ModelDefinition def, string bodySql, string queryFile, IReadOnlyList<string> targets, string? bodyFile = null, IReadOnlyList<QueryParameter>? queryParameters = null, IReadOnlyList<NativeUse>? natives = null, string? keyTextSql = null)
     {
         var files = new List<RenderedFile>();
         var reports = new List<OperationReport>();
@@ -79,7 +80,7 @@ public sealed class LoadRenderer(SupportMatrix matrix, MatrixLinter linter, Proj
                     continue;
                 }
 
-                var rendered = RenderOne(def, op, target, targetName, bodySql, bodyHash, queryFile, pair, diags, queryParameters ?? [], natives ?? []);
+                var rendered = RenderOne(def, op, target, targetName, bodySql, bodyHash, queryFile, pair, diags, queryParameters ?? [], natives ?? [], keyTextSql);
                 if (rendered == null)
                 {
                     reports.Add(new OperationReport(def.Name, targetName, op.Name, op.Strategy, op.IsDefault, "unsupported", findings));
@@ -155,51 +156,89 @@ public sealed class LoadRenderer(SupportMatrix matrix, MatrixLinter linter, Proj
 
     private sealed record Rendered(string Script, string? Resolver, IReadOnlyList<RenderedParameter> Parameters);
 
-    private Rendered? RenderOne(ModelDefinition def, LoadOperation op, ITarget target, string connection, string bodySql, string bodyHash, string queryFile, string pair, List<Diagnostic> diags, IReadOnlyList<QueryParameter> queryParameters, IReadOnlyList<NativeUse> natives)
+    private Rendered? RenderOne(ModelDefinition def, LoadOperation op, ITarget target, string connection, string bodySql, string bodyHash, string queryFile, string pair, List<Diagnostic> diags, IReadOnlyList<QueryParameter> queryParameters, IReadOnlyList<NativeUse> natives, string? keyTextSql = null)
     {
         // The body, as a CTE named ddb_body, transpiled by polyglot. The support matrix decides what is allowed: polyglot's own
         // `unsupportedLevel: raise` is not used because it misses constructs and also rejects supported ones (REGEXP_LIKE on SQL Server 2025).
-        var ruled = Rules.TargetRules.Apply(bodySql, target.Name, RewriteCatalog.For(config, def), config.TargetVersions.TryGetValue(connection, out var targetVersion) ? targetVersion : null);
-        bodySql = ruled.Sql;
-        var wrapped = $"WITH {LoadersBodyName} AS ({bodySql.Trim().TrimEnd(';').TrimEnd()})\nSELECT * FROM {LoadersBodyName}";
-        var (outcome, transpiled) = Rules.TargetRules.Transpile(wrapped, Dialects.Canonical, target.Dialect);
-        if (transpiled == null)
+        var policy = RewriteCatalog.For(config, def);
+        var rules = new List<string>();
+        (string Prefix, IReadOnlyList<QueryParameter> Parameters)? Transform(string sql, bool record)
         {
-            diags.Add(new Diagnostic(DiagnosticCatalog.PairUnsupported, new(queryFile, 0, 0), $"{pair} cannot be rendered: the transpiler reported: {outcome.Error}.",
-                Fix: "Rewrite the construct the transpiler names, or remove the target."));
+            var ruled = Rules.TargetRules.Apply(sql, target.Name, policy, config.TargetVersions.TryGetValue(connection, out var targetVersion) ? targetVersion : null);
+            if (record) rules.AddRange(ruled.Rules);
+            var wrapped = $"WITH {LoadersBodyName} AS ({ruled.Sql.Trim().TrimEnd(';').TrimEnd()})\nSELECT * FROM {LoadersBodyName}";
+            var (outcome, transpiled) = Rules.TargetRules.Transpile(wrapped, Dialects.Canonical, target.Dialect);
+            if (transpiled == null)
+            {
+                diags.Add(new Diagnostic(DiagnosticCatalog.PairUnsupported, new(queryFile, 0, 0), $"{pair} cannot be rendered: the transpiler reported: {outcome.Error}.",
+                    Fix: "Rewrite the construct the transpiler names, or remove the target."));
+                return null;
+            }
+            transpiled = Rules.TargetRules.Finish(transpiled, target.Name);
+            // T-SQL takes no column list after a table function; the lowered series names its column `value`, which is what SQL Server's is called
+            if (target.Dialect is "tsql" or "fabric")
+                transpiled = System.Text.RegularExpressions.Regex.Replace(transpiled, @"(GENERATE_SERIES\([^()]*\)) AS (\w+)\(value\)", "$1 AS $2", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var tail = transpiled.TrimEnd();
+            if (!tail.EndsWith(TailOfWrapper, StringComparison.Ordinal))
+                throw new InvalidOperationException($"The transpiled body of {pair} does not end with `{TailOfWrapper}`; the renderer cannot place its own statements. This is a tool bug.");
+            var head = tail[..(tail.Length - TailOfWrapper.Length)];
+            // each parameter the query uses as a value becomes a placeholder the plan fills in and apply binds: the value is never in the text
+            var (boundPrefix, usedParametersRaw, lostParameters) = QueryParameters.Bind(head, queryParameters);
+            head = boundPrefix;
+            IReadOnlyList<QueryParameter> used = usedParametersRaw;
+            // a native model this query reads is spliced in as a derived table, in the engine's own text (never transpiled), with placeholders of its own
+            var (splicedPrefix, nativeParameters) = NativeInline.Splice(head, natives, target.Name);
+            head = splicedPrefix;
+            used = [.. used, .. nativeParameters];
+            if (record)
+                foreach (var lost in lostParameters)
+                    diags.Add(new Diagnostic(DiagnosticCatalog.InvalidValue, new(queryFile, 0, 0), $"{pair}: `${{{lost.Key}}}` is not a value in the lowered query any more (DuckDB folded it into a constant), so it cannot be bound.",
+                        Fix: "Use the parameter as a plain value, in a comparison or a projection, not inside an expression DuckDB can evaluate at plan time."));
+            return (head, used);
+        }
+
+        // a key kept in a map (plan 25 K10) lives in a table of the engine, kept on SQL Server and PostgreSQL; the load adds the new business keys to the map first
+        var keyMaps = new List<KeyMapStep>();
+        if (KeyMapCalls.Holds(bodySql) && target.Name is not ("sqlserver" or "postgres"))
+        {
+            diags.Add(new Diagnostic(DiagnosticCatalog.PairUnsupported, new(queryFile, 0, 0), $"{pair} cannot be rendered: a key kept in a map (`method: key_map`) is kept on SQL Server and PostgreSQL, not on {target.Name}.",
+                Fix: "Use `method: hash` for the key, or remove the target."));
             return null;
         }
-        transpiled = Rules.TargetRules.Finish(transpiled, target.Name);
-        // T-SQL takes no column list after a table function; the lowered series names its column `value`, which is what SQL Server's is called
-        if (target.Dialect is "tsql" or "fabric")
-            transpiled = System.Text.RegularExpressions.Regex.Replace(transpiled, @"(GENERATE_SERIES\([^()]*\)) AS (\w+)\(value\)", "$1 AS $2", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        var tail = transpiled.TrimEnd();
-        if (!tail.EndsWith(TailOfWrapper, StringComparison.Ordinal))
-            throw new InvalidOperationException($"The transpiled body of {pair} does not end with `{TailOfWrapper}`; the renderer cannot place its own statements. This is a tool bug.");
-        var prefix = tail[..(tail.Length - TailOfWrapper.Length)];
-        // each parameter the query uses as a value becomes a placeholder the plan fills in and apply binds: the value is never in the text
-        var (boundPrefix, usedParametersRaw, lostParameters) = QueryParameters.Bind(prefix, queryParameters);
-        prefix = boundPrefix;
-        IReadOnlyList<QueryParameter> usedParameters = usedParametersRaw;
-        // a native model this query reads is spliced in as a derived table, in the engine's own text (never transpiled), with placeholders of its own
-        var (splicedPrefix, nativeParameters) = NativeInline.Splice(prefix, natives, target.Name);
-        prefix = splicedPrefix;
-        usedParameters = [.. usedParameters, .. nativeParameters];
-        foreach (var lost in lostParameters)
-            diags.Add(new Diagnostic(DiagnosticCatalog.InvalidValue, new(queryFile, 0, 0), $"{pair}: `${{{lost.Key}}}` is not a value in the lowered query any more (DuckDB folded it into a constant), so it cannot be bound.",
-                Fix: "Use the parameter as a plain value, in a comparison or a projection, not inside an expression DuckDB can evaluate at plan time."));
+        if (KeyMapCalls.Holds(bodySql) && keyTextSql == null)
+        {
+            diags.Add(new Diagnostic(DiagnosticCatalog.PairUnsupported, new(queryFile, 0, 0), $"{pair} cannot be rendered: the query calls a key kept in a map, and its text for the step that adds new keys was not made. This is a tool bug."));
+            return null;
+        }
+        var main = Transform(bodySql, record: true);
+        if (main == null) return null;
+        var prefix = main.Value.Prefix;
+        IReadOnlyList<QueryParameter> usedParameters = main.Value.Parameters;
+        if (keyTextSql != null && KeyMapCalls.Holds(bodySql))
+        {
+            var (selections, problem) = KeyMapCalls.Find(keyTextSql);
+            if (problem != null)
+            {
+                diags.Add(new Diagnostic(DiagnosticCatalog.PairUnsupported, new(queryFile, 0, 0), $"{pair} cannot be rendered: {problem}", Fix: "Select the call as a column of the query, `customer_key(...) AS customer_key`."));
+                return null;
+            }
+            var keyText = Transform(keyTextSql, record: false);
+            if (keyText == null) return null;
+            keyMaps.AddRange(selections.Select(m => new KeyMapStep(m.MapTable, m.Column, keyText.Value.Prefix)));
+        }
+        var ruledRules = rules;
 
         ColumnDefinition? Column(string? name) => name == null ? null : def.Columns.FirstOrDefault(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
         foreach (var k in op.Key.Select(Column).Where(c => c is { Nullable: true }))
             diags.Add(new Diagnostic(DiagnosticCatalog.KeyColumnNullable, new(queryFile, 0, 0), $"{pair}: key column `{k!.Name}` is nullable, so rows with a NULL key are never matched and would be inserted again on every load."));
 
-        var request = new LoadRequest(def.Name, def.Columns, op, prefix, Column(op.Watermark?.Column)?.Type, Column(op.Column)?.Type);
+        var request = new LoadRequest(def.Name, def.Columns, op, prefix, Column(op.Watermark?.Column)?.Type, Column(op.Column)?.Type, keyMaps);
         var script = target.Loader.Render(request);
         script = script with { Parameters = [.. script.Parameters, .. usedParameters.Select(p => new RenderedParameter(p.Placeholder, p.Type, "parameter", null))] };
 
-        var header = Header(def.Name, op.Name, connection, op.Strategy, bodyHash, script.Parameters, resolver: false, ruled.Rules, RewriteCatalog.For(config, def));
+        var header = Header(def.Name, op.Name, connection, op.Strategy, bodyHash, script.Parameters, resolver: false, ruledRules, RewriteCatalog.For(config, def));
         var text = header + script.Text;
-        var resolverText = script.ResolverText == null ? null : Header(def.Name, op.Name, connection, op.Strategy, bodyHash, script.Parameters, resolver: true, ruled.Rules, RewriteCatalog.For(config, def)) + script.ResolverText + "\n";
+        var resolverText = script.ResolverText == null ? null : Header(def.Name, op.Name, connection, op.Strategy, bodyHash, script.Parameters, resolver: true, ruledRules, RewriteCatalog.For(config, def)) + script.ResolverText + "\n";
 
         var before = diags.Count;
         int? version = config.TargetVersions.TryGetValue(connection, out var v) ? v : null;
