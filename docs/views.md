@@ -228,6 +228,17 @@ widgets:
   not an attribute of the catalog is the engine's `unknown_member` or `wrong_member_kind`, at the entry's `group` path. A group in a written query (`mode: explicit`) is `DBD-VIEW-007`. The shape (`DBD-106`, `DBD-104`): one level, five
   levels, a template naming `{3}` where the group has two, a field twice, a bad level format, a group in `y`, a `field` beside a `group`, `show` on a column entry or on a plain entry.
 
+### The editor's controls for entries and groups (DBR54)
+
+In the widget editor each entry of a well has **options** (a disclosure under it): a **measure** has its `alias`, a **Repeat this measure** button (a copy follows it with an alias nothing else has, `net_revenue_2`; one measure may be in a well
+as often as its aliases differ), its own **filters** (an attribute, an operator the field's type takes, a value or a parameter; the filters need the alias, and the derived request beside the wells shows `{measure, as, filters}` at once),
+and a chart channel's `title` or a column's `label`; an **attribute** entry (in a matrix's `values`, offered beside the measures when the field the catalog says is an attribute is put there, or a table column) has its **display**, an
+**icon map** (a value and an icon of the closed vocabulary, added and removed one at a time), the **many** policy (a matrix entry), its **link** (a choice among the document's declared links) and a matrix entry's label. Each change is
+a `setPath` of that entry, so it is one undo step, and what is wrong is said in the loaders' words as it is typed. The **document settings** hold the **field groups**: a group's levels (each with a date format, up, down, remove, one
+to add), its label and template, and the loaders' words about it; a group a widget names is not removed (the editor says which widget). A group is put in a well by the pick list (**Groups**; for the rows of a matrix also **Details of
+every row**). The pure parts (`entryParts.ts`, `wells.ts`) are `@dbdatakit/visuals` and are tested against the goldens: the chart of two series of one measure, the matrix with a status per month and the line over a group built through
+the controls are the golden widgets (`entryParts.test.ts`); the screens are `WidgetEditor.tsx` and `GroupEditor.tsx` of `@dbdatakit/views-editor` (`entries.test.tsx`, the story `views-editor-entries.spec.ts`, written and not run).
+
 ### Sorting by a click (DBR45)
 
 A viewer may sort a table or a matrix by clicking a header, **on screen only** (the host sets `sortable` on `DashboardView`; the print and export routes never do): a click sorts ascending, a second click reverses, a third gives the

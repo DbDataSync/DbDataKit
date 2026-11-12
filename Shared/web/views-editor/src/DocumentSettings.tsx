@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { NAME_PATTERN, diagnosticsFor, type ClientDiagnostic, type EditCommand, type ParameterDefinition, type ViewsDoc, type WidgetDoc } from '@dbdatakit/visuals'
+import { NAME_PATTERN, diagnosticsFor, type Catalog, type ClientDiagnostic, type EditCommand, type ParameterDefinition, type ViewsDoc, type WidgetDoc } from '@dbdatakit/visuals'
 
 import { LinkEditor } from './LinkEditor'
+import { GroupEditor } from './GroupEditor'
 
 type Apply = (command: EditCommand, group?: string) => void
 
@@ -24,7 +25,7 @@ function Problems({ diagnostics, testId }: { diagnostics: ClientDiagnostic[]; te
 const MARKS = ['bar', 'line', 'area', 'point', 'tick', 'rect']
 
 /** The document's refresh, its parameters and the properties of its widgets (title, label, mark, text): small forms over `setPath` and its siblings, each keystroke of one field one undo step. */
-export function DocumentSettings({ doc, diagnostics, apply }: { doc: ViewsDoc; diagnostics: ClientDiagnostic[]; apply: Apply }) {
+export function DocumentSettings({ doc, diagnostics, apply, catalog = null }: { doc: ViewsDoc; diagnostics: ClientDiagnostic[]; apply: Apply; catalog?: Catalog | null }) {
   const [newName, setNewName] = useState('')
   const [newType, setNewType] = useState<ParameterDefinition['type']>('string')
   const parameters = doc.parameters ?? []
@@ -80,6 +81,7 @@ export function DocumentSettings({ doc, diagnostics, apply }: { doc: ViewsDoc; d
       </div>
 
       <LinkEditor doc={doc} diagnostics={diagnostics} apply={apply} />
+      <GroupEditor doc={doc} catalog={catalog} apply={apply} />
 
       <div className="card" style={{ marginBottom: 12 }} data-testid="ed-widget-properties">
         <strong>Widget properties</strong>

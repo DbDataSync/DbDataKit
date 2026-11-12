@@ -85,6 +85,8 @@ export interface ViewsDoc {
   locale?: 'en' | 'de' | 'fr' | 'es' | 'it' | 'pt' | 'nl'
   /** The links the document declares by name (DBR35); a widget follows one with `on_click`. */
   links?: Record<string, LinkDoc>
+  /** The field groups the document declares (plan 32 DBR52): `{name: {fields, label, template}}`; a channel or an axis names one as `{group: name}`. */
+  groups?: Record<string, { fields: Array<string | { field: string; format?: unknown }>; label?: string; template?: string }>
   widgets: Record<string, WidgetDoc>
   layouts: LayoutDoc[]
   refresh?: { every: string }

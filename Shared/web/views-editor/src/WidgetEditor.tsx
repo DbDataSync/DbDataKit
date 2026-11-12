@@ -3,6 +3,7 @@ import {
   WIDGET_TYPES, WellError, WidgetView, bindingIssues, catalogRoles, defaultLimit, derivedQuery, describeDerivation, explicitQuery, filterEntry, filterProblems, memberProblem, operatorsFor, orderEntry, orderProblems,
   parameterValue, parseRequestText, parseValues, sortAt, wellFields, wellsOf,
   DATE_PRESETS, NUMBER_STYLES, draftOf, formatChannelCommand, formatChannelsOf, draftProblem, formatOf, formatSample, levelCommand, levelsOf, sortValue,
+  ICON_NAMES, entryChange, entryFilterChange, entryIconChange, entryProblems, entryRefs, groupDefsOf, linkNamesOf, type EntryRef,
   type AxisChannel, type FormatDraft, type Catalog, type CatalogMember, type ClientDiagnostic, type EditCommand, type RenderedWidget, type ViewsDoc, type WellChange, type WellSpec, type WidgetDoc, type WidgetOptionsDoc,
 } from '@dbdatakit/visuals'
 import { CUSTOM_FORMAT, FORMAT_PRESETS, formatChoice } from './editing'
@@ -128,13 +129,140 @@ function ChannelFormats({ id, widget, apply }: { id: string; widget: WidgetDoc; 
   )
 }
 
+/**
+ * The options of one entry of a well (plan 32 section 9h, DBR54): a **measure** may be repeated under an **alias** and narrowed by its own **filters** (DBR50: the same measure twice, `Repeat`); an **attribute** entry of a
+ * matrix's cell area or a table column has its **display** (text, icon, badge), its **icons** (a value to an icon of the closed vocabulary), the **many** policy of a matrix cell and the **link** it follows (DBR51). Every change is a
+ * `setPath` of the entry, so it is one undo step; what is wrong with the options is said in the loaders' words.
+ */
+function EntryOptions({ id, widget, doc, catalog, spec, entryRef, apply, repeat }: { id: string; widget: WidgetDoc; doc: ViewsDoc; catalog: Catalog | null; spec: WellSpec; entryRef: EntryRef; apply: Apply; repeat: () => void }) {
+  const entry = entryRef.entry as Record<string, unknown> | string
+  const o = (typeof entry === 'object' && entry !== null ? entry : {}) as Record<string, any>
+  const base = `ed-entry-${id}-${spec.id}-${entryRef.index}`
+  const [attribute, setAttribute] = useState('')
+  const [operator, setOperator] = useState('equals')
+  const [valueText, setValueText] = useState('')
+  const [parameter, setParameter] = useState('')
+  const [iconValue, setIconValue] = useState('')
+  const [iconName, setIconName] = useState<string>(ICON_NAMES[0])
+  const parameters = doc.parameters ?? []
+  const member = (catalog?.attributes ?? []).find((m) => m.name === attribute)
+  const set = (key: string, value: unknown) => { const c = entryChange(id, widget, entryRef, key, value); apply({ type: 'setPath', path: c.path, value: c.value }, `${id}:${spec.id}${entryRef.index}:${key}`) }
+  const problems = entryProblems(entry, widget.type === 'matrix')
+  const filters: any[] = Array.isArray(o.filters) ? o.filters : []
+  const links = linkNamesOf(doc)
+  const addFilter = () => {
+    const values = NO_VALUE.includes(operator) ? undefined : parameter !== '' ? parameterValue(parameter, parameters) : parseValues(valueText, member)
+    const c = entryFilterChange(id, widget, entryRef, { op: 'add', filter: { ...filterEntry(attribute, operator, values) } })
+    apply({ type: 'setPath', path: c.path, value: c.value })
+    setValueText('')
+  }
+  const icons = (o.icons ?? {}) as Record<string, string>
+  return (
+    <details data-testid={`${base}-options`} style={{ flexBasis: '100%', margin: '2px 0 4px 8px' }}>
+      <summary className="hint">options{o.alias ? ` (alias ${String(o.alias)})` : ''}{entryRef.attributeEntry && o.display ? ` (${String(o.display)})` : ''}</summary>
+      {entryRef.takesMeasure && (
+        <div data-testid={`${base}-measure`}>
+          <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label className="hint">alias <input aria-label={`Alias of ${entryRef.field}`} data-testid={`${base}-alias`} placeholder="open_revenue" style={{ width: 140 }} value={String(o.alias ?? '')} onChange={(e) => set('alias', e.target.value === '' ? undefined : e.target.value)} /></label>
+            {widget.type === 'chart' && <label className="hint">title <input aria-label={`Title of ${entryRef.field}`} data-testid={`${base}-title`} style={{ width: 120 }} value={String(o.title ?? '')} onChange={(e) => set('title', e.target.value === '' ? undefined : e.target.value)} /></label>}
+            {widget.type !== 'chart' && widget.type !== 'metric' && <label className="hint">label <input aria-label={`Label of ${entryRef.field}`} data-testid={`${base}-label`} style={{ width: 120 }} value={String(o.label ?? '')} onChange={(e) => set('label', e.target.value === '' ? undefined : e.target.value)} /></label>}
+            <button type="button" className="btn btn-sm" data-testid={`${base}-repeat`} onClick={repeat}>Repeat this measure</button>
+            {problems.alias && <span className="hint" role="alert" data-testid={`${base}-alias-problem`}>{problems.alias}</span>}
+          </div>
+          <div data-testid={`${base}-filters`}>
+            <span className="hint">filters of this measure only{filters.length > 0 && !o.alias ? ' (they need an alias)' : ''}</span>
+            <ul style={{ listStyle: 'none', margin: '2px 0', padding: 0 }}>
+              {filters.map((f, i) => (
+                <li key={i} data-testid={`${base}-filter-${i}`} className="row" style={{ gap: 6, alignItems: 'center' }}>
+                  <code>{String(f.attribute)}</code> <code>{String(f.operator)}</code> {f.values !== undefined && <code>{JSON.stringify(f.values)}</code>}
+                  <button type="button" className="btn btn-sm" data-testid={`${base}-filter-remove-${i}`} onClick={() => { const c = entryFilterChange(id, widget, entryRef, { op: 'remove', index: i }); apply({ type: 'setPath', path: c.path, value: c.value }) }}>Remove</button>
+                </li>
+              ))}
+            </ul>
+            <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <select aria-label="Attribute to filter this measure on" data-testid={`${base}-filter-attribute`} value={attribute} onChange={(e) => { setAttribute(e.target.value); setOperator('equals') }}>
+                <option value="">Attribute…</option>
+                {(catalog?.attributes ?? []).map((m) => <option key={m.name} value={m.name}>{m.label ? `${m.label} (${m.name})` : m.name}</option>)}
+              </select>
+              <select aria-label="Operator" data-testid={`${base}-filter-operator`} value={operator} onChange={(e) => setOperator(e.target.value)}>
+                {operatorsFor(member).map((x) => <option key={x} value={x}>{x}</option>)}
+              </select>
+              {!NO_VALUE.includes(operator) && (
+                <>
+                  <input aria-label="Value" data-testid={`${base}-filter-value`} placeholder="value, or a, b" disabled={parameter !== ''} value={valueText} onChange={(e) => setValueText(e.target.value)} />
+                  <select aria-label="Or a parameter" data-testid={`${base}-filter-parameter`} value={parameter} onChange={(e) => setParameter(e.target.value)}>
+                    <option value="">(a value)</option>
+                    {parameters.map((p) => <option key={p.name} value={p.name}>{`parameter ${p.name}`}</option>)}
+                  </select>
+                </>
+              )}
+              <button type="button" className="btn btn-sm" data-testid={`${base}-filter-add`} disabled={attribute === ''} onClick={addFilter}>Add filter</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {entryRef.attributeEntry && (
+        <div data-testid={`${base}-attribute`}>
+          <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label className="hint">display{' '}
+              <select aria-label={`Display of ${entryRef.field}`} data-testid={`${base}-display`} value={String(o.display ?? '')} onChange={(e) => set('display', e.target.value === '' ? undefined : e.target.value)}>
+                <option value="">(text)</option><option value="text">text</option><option value="icon">icon by value</option><option value="badge">badge</option>
+              </select>
+            </label>
+            {!entryRef.table && (
+              <label className="hint">several rows in a cell{' '}
+                <select aria-label={`Many policy of ${entryRef.field}`} data-testid={`${base}-many`} value={String(o.many ?? '')} onChange={(e) => set('many', e.target.value === '' ? undefined : e.target.value)}>
+                  <option value="">(mixed: a marker and the values)</option><option value="mixed">mixed</option><option value="first">first</option><option value="last">last</option><option value="count">count</option><option value="list">list</option>
+                </select>
+              </label>
+            )}
+            <label className="hint">link{' '}
+              <select aria-label={`Link of ${entryRef.field}`} data-testid={`${base}-link`} value={String(o.link ?? '')} onChange={(e) => set('link', e.target.value === '' ? undefined : e.target.value)}>
+                <option value="">(none)</option>
+                {links.map((l) => <option key={l} value={l}>{l}</option>)}
+                {typeof o.link === 'string' && !links.includes(o.link) && <option value={o.link}>{o.link} (not declared)</option>}
+              </select>
+            </label>
+            {!entryRef.table && <label className="hint">label <input aria-label={`Label of ${entryRef.field}`} data-testid={`${base}-label`} style={{ width: 120 }} value={String(o.label ?? '')} onChange={(e) => set('label', e.target.value === '' ? undefined : e.target.value)} /></label>}
+          </div>
+          {o.display === 'icon' || Object.keys(icons).length > 0 ? (
+            <div data-testid={`${base}-icons`}>
+              <span className="hint">the icon each value shows</span>
+              <ul style={{ listStyle: 'none', margin: '2px 0', padding: 0 }}>
+                {Object.entries(icons).map(([value, icon]) => (
+                  <li key={value} data-testid={`${base}-icon-${value}`} className="row" style={{ gap: 6, alignItems: 'center' }}>
+                    <code>{value}</code>
+                    <select aria-label={`Icon of ${value}`} data-testid={`${base}-icon-select-${value}`} value={icon} onChange={(e) => { const c = entryIconChange(id, widget, entryRef, value, e.target.value); apply({ type: 'setPath', path: c.path, value: c.value }) }}>
+                      {ICON_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                    <button type="button" className="btn btn-sm" data-testid={`${base}-icon-remove-${value}`} onClick={() => { const c = entryIconChange(id, widget, entryRef, value, undefined); apply({ type: 'setPath', path: c.path, value: c.value }) }}>Remove</button>
+                  </li>
+                ))}
+              </ul>
+              <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                <input aria-label="A value of the attribute" data-testid={`${base}-icon-value`} placeholder="Open" style={{ width: 120 }} value={iconValue} onChange={(e) => setIconValue(e.target.value)} />
+                <select aria-label="The icon" data-testid={`${base}-icon-new`} value={iconName} onChange={(e) => setIconName(e.target.value)}>{ICON_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}</select>
+                <button type="button" className="btn btn-sm" data-testid={`${base}-icon-add`} disabled={iconValue.trim() === ''} onClick={() => { const c = entryIconChange(id, widget, entryRef, iconValue.trim(), iconName); apply({ type: 'setPath', path: c.path, value: c.value }); setIconValue('') }}>Add icon</button>
+              </div>
+            </div>
+          ) : null}
+          {Object.entries(problems).filter(([k]) => k !== 'alias').map(([k, m]) => <div key={k} className="hint" role="alert" data-testid={`${base}-problem-${k}`}>{m}</div>)}
+        </div>
+      )}
+    </details>
+  )
+}
+
 const KIND_WORD = { measure: 'a measure', attribute: 'an attribute', either: 'a measure or an attribute' } as const
 
 /** One field well: its entries (each with a flag when the catalog lacks it), a pick list of the catalog's fields the well takes, a box to type a name, and a drop target for a field dragged from the catalog list. */
-function Well({ id, spec, widget, catalog, put, change }: { id: string; spec: WellSpec; widget: WidgetDoc; catalog: Catalog | null; put: (spec: WellSpec, field: string) => void; change: (spec: WellSpec, change: WellChange) => void }) {
+function Well({ id, spec, widget, doc, catalog, put, change, apply }: { id: string; spec: WellSpec; widget: WidgetDoc; doc: ViewsDoc; catalog: Catalog | null; put: (spec: WellSpec, field: string) => void; change: (spec: WellSpec, change: WellChange) => void; apply: Apply }) {
   const [typed, setTyped] = useState('')
   const roles = useMemo(() => (catalog ? catalogRoles(catalog) : null), [catalog])
   const fields = wellFields(widget, spec)
+  const refs = useMemo(() => entryRefs(widget, roles), [widget, roles])
+  const groups = Object.keys(groupDefsOf(doc))
+  const takesGroup = spec.kind !== 'measure' && !['y', 'tooltip', 'values'].includes(spec.id) && groups.length > 0
   const offered = catalog ? [...(spec.kind === 'attribute' ? [] : catalog.measures), ...(spec.kind === 'measure' ? [] : catalog.attributes)].filter((m) => !fields.includes(m.name)) : []
   const test = `ed-well-${id}-${spec.id}`
   return (
@@ -143,14 +271,17 @@ function Well({ id, spec, widget, catalog, put, change }: { id: string; spec: We
       <div><strong>{spec.label}</strong> <span className="hint">{KIND_WORD[spec.kind]}</span></div>
       <ul style={{ listStyle: 'none', margin: '4px 0', padding: 0 }}>
         {fields.map((f, i) => {
-          const problem = roles ? memberProblem(roles, f, spec.kind) : null
+          const isGroup = f.startsWith('@')
+          const problem = roles && !isGroup ? memberProblem(roles, f, spec.kind) : null
+          const entryRef = refs.find((r) => r.well === spec.id && r.index === i)
           return (
             <li key={`${f}-${i}`} data-testid={`${test}-entry-${i}`} className="row" style={{ gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-              <code>{f}</code>
+              <code>{isGroup ? `group ${f.slice(1).replace('#always', '')}${f.endsWith('#always') ? ' (details of every row)' : ''}` : f}</code>
               {problem && <span className="hint" role="alert" data-testid={`${test}-flag-${i}`}>{problem.code}: {problem.message}</span>}
               {spec.multiple && <button type="button" className="btn btn-sm" aria-label={`Move ${f} up`} data-testid={`${test}-up-${i}`} disabled={i === 0} onClick={() => change(spec, { op: 'move', from: i, to: i - 1 })}>Up</button>}
               {spec.multiple && <button type="button" className="btn btn-sm" aria-label={`Move ${f} down`} data-testid={`${test}-down-${i}`} disabled={i === fields.length - 1} onClick={() => change(spec, { op: 'move', from: i, to: i + 1 })}>Down</button>}
               <button type="button" className="btn btn-sm" aria-label={`Remove ${f}`} data-testid={`${test}-remove-${i}`} onClick={() => change(spec, { op: 'remove', index: i })}>Remove</button>
+              {entryRef && entryRef.kind !== 'group' && <EntryOptions id={id} widget={widget} doc={doc} catalog={catalog} spec={spec} entryRef={entryRef} apply={apply} repeat={() => change(spec, { op: 'repeat', index: i })} />}
             </li>
           )
         })}
@@ -162,6 +293,8 @@ function Well({ id, spec, widget, catalog, put, change }: { id: string; spec: We
             <option value="">Pick a field…</option>
             {spec.kind !== 'attribute' && <optgroup label="Measures">{offered.filter((m) => catalog.measures.includes(m)).map((m) => <option key={m.name} value={m.name}>{m.label ? `${m.label} (${m.name})` : m.name}</option>)}</optgroup>}
             {spec.kind !== 'measure' && <optgroup label="Attributes">{offered.filter((m) => catalog.attributes.includes(m)).map((m) => <option key={m.name} value={m.name}>{m.label ? `${m.label} (${m.name})` : m.name}</option>)}</optgroup>}
+            {takesGroup && <optgroup label="Groups">{groups.map((g) => <option key={g} value={`@${g}`}>{`group ${g}`}</option>)}</optgroup>}
+            {takesGroup && spec.id === 'rows' && widget.type === 'matrix' && <optgroup label="Details of every row">{groups.map((g) => <option key={g} value={`@${g}#always`}>{`details: ${g}`}</option>)}</optgroup>}
           </select>
         )}
         <input aria-label={`Type a field for ${spec.label}`} data-testid={`${test}-type`} placeholder="or type a name" style={{ width: 130 }} value={typed} onChange={(e) => setTyped(e.target.value)}
@@ -173,7 +306,8 @@ function Well({ id, spec, widget, catalog, put, change }: { id: string; spec: We
 
 function DerivedPanel({ id, widget, doc, catalog, apply }: { id: string; widget: WidgetDoc; doc: ViewsDoc; catalog: Catalog | null; apply: Apply }) {
   const roles = useMemo(() => (catalog ? catalogRoles(catalog) : null), [catalog])
-  const derivation = useMemo(() => (roles ? describeDerivation(id, widget, roles) : null), [id, widget, roles])
+  const groups = useMemo(() => groupDefsOf(doc), [doc])
+  const derivation = useMemo(() => (roles ? describeDerivation(id, widget, roles, groups) : null), [id, widget, roles, groups])
   const written = (widget as { query?: { semantic?: { request?: unknown } } }).query?.semantic?.request
   const writtenText = written === undefined ? '' : JSON.stringify(written, null, 2)
   const [text, setText] = useState(writtenText)
@@ -444,7 +578,7 @@ export function WidgetEditor({ id, widget, doc, components = [], catalog, catalo
             </div>
           )}
           <div className="row" style={{ gap: 8, flex: 1, flexWrap: 'wrap', alignItems: 'flex-start' }} data-testid={`ed-wells-${id}`}>
-            {specs.map((spec) => <Well key={spec.id} id={id} spec={spec} widget={widget} catalog={catalog} put={put} change={change} />)}
+            {specs.map((spec) => <Well key={spec.id} id={id} spec={spec} widget={widget} doc={doc} catalog={catalog} put={put} change={change} apply={apply} />)}
           </div>
         </div>
       )}

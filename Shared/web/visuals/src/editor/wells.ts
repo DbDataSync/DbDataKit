@@ -4,6 +4,7 @@ import type { CatalogRoles, ParameterBinding, Well } from '../views/derive'
 import { validateWidgets } from '../views/widgets'
 import type { Json } from '../views/common'
 import type { Op, Path } from './yamlEdit'
+import type { GroupDef } from '../views/groups'
 
 /**
  * The field wells of the widget editor (plan 32 DBR25), as pure functions of a widget: which wells a widget type has, what is in them, and the change a drop, a pick, a removal or a move makes. Nothing here draws.
@@ -45,7 +46,7 @@ const WELLS: Record<WidgetType, WellSpec[]> = {
   matrix: [
     { id: 'rows', label: 'rows', kind: 'attribute', multiple: true, path: ['encodings', 'rows'], shape: 'fields' },
     { id: 'columns', label: 'columns', kind: 'attribute', multiple: true, path: ['encodings', 'columns'], shape: 'fields' },
-    { id: 'values', label: 'values', kind: 'measure', multiple: true, path: ['encodings', 'values'], shape: 'objects' },
+    { id: 'values', label: 'values (measures, or attributes in the cells)', kind: 'either', multiple: true, path: ['encodings', 'values'], shape: 'objects', prefer: 'measure' },
   ],
   table: [{ id: 'columns', label: 'columns', kind: 'either', multiple: true, path: ['encodings', 'columns'], shape: 'objects', prefer: 'attribute' }],
   control: [{ id: 'attribute', label: 'list its values from', kind: 'attribute', multiple: false, path: ['values', 'attribute'], shape: 'field' }],
@@ -60,6 +61,7 @@ export const WIDGET_TYPES: readonly WidgetType[] = ['metric', 'chart', 'matrix',
 /** The wells of a widget type, in the order the derivation reads them. */
 export const wellsOf = (type: WidgetType): readonly WellSpec[] => WELLS[type] ?? []
 
+const clone = <T>(v: T): T => structuredClone(v)
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 // a matrix value may be an attribute in the cell area (`{attribute, display, ...}`, DBR51): its field is the attribute
 // a field group in a channel or an axis (`{group: name}`, DBR52) is `@name` in a well: it is kept, moved and removed like a field
@@ -67,7 +69,7 @@ const fieldOf = (node: unknown): string | undefined =>
   typeof node === 'string' && node.length > 0 ? node
   : isObject(node) && typeof node.field === 'string' && node.field.length > 0 ? node.field
   : isObject(node) && typeof node.attribute === 'string' && node.attribute.length > 0 ? node.attribute
-  : isObject(node) && typeof node.group === 'string' && node.group.length > 0 ? `@${node.group}`
+  : isObject(node) && typeof node.group === 'string' && node.group.length > 0 ? `@${node.group}${typeof node.show === 'string' ? `#${node.show}` : ''}`
   : undefined
 
 function getAt(raw: unknown, path: readonly string[]): unknown {
@@ -84,24 +86,12 @@ export function wellFields(widget: WidgetDoc, spec: WellSpec): string[] {
   return list.flatMap((item) => { const f = fieldOf(item); return f ? [f] : [] })
 }
 
-/** The value a well holds once its fields are `fields`, keeping what each entry carried (a column's label, a channel's own keys); undefined when it is empty. */
-function valueWith(widget: WidgetDoc, spec: WellSpec, fields: string[]): unknown {
-  if (fields.length === 0) return undefined
-  const node = getAt(widget, spec.path)
-  const old = (Array.isArray(node) ? node : [node]).filter(isObject).filter((o) => typeof o.field === 'string' || typeof o.attribute === 'string' || typeof o.group === 'string')
-  const entry = (field: string): unknown => {
-    const existing = old.find((o) => (o.field ?? o.attribute ?? (typeof o.group === 'string' ? `@${o.group}` : undefined)) === field)
-    return spec.shape === 'objects' ? existing ?? { field } : existing ?? field
-  }
-  if (spec.shape === 'field') return entry(fields[0]!)
-  if (spec.scalarWhenOne && fields.length === 1) return entry(fields[0]!)
-  return fields.map(entry)
-}
-
 export type WellChange =
   | { op: 'add'; field: string; index?: number }
   | { op: 'remove'; index: number }
   | { op: 'move'; from: number; to: number }
+  /** The same measure again (plan 32 DBR50): a copy of the entry at `index` follows it, with an `alias` of its own (the output name must differ), for the filters and the alias to be set on. */
+  | { op: 'repeat'; index: number }
   | { op: 'clear' }
 
 /** The refusals of a well change; `wrong_member_kind` carries the engine's words. */
@@ -114,6 +104,11 @@ export class WellError extends Error {
 export function changedFields(fields: string[], spec: WellSpec, change: WellChange, roles?: CatalogRoles): string[] {
   switch (change.op) {
     case 'clear': return []
+    case 'repeat':
+      if (change.index < 0 || change.index >= fields.length) throw new WellError('bad_position', `The well \`${spec.id}\` has no entry ${change.index + 1}.`)
+      if (spec.kind === 'attribute') throw new WellError('bad_field', `The well \`${spec.id}\` takes attributes: only a measure is put in again, under another alias.`)
+      if (spec.max !== undefined && fields.length >= spec.max) throw new WellError('bad_position', `The well \`${spec.id}\` takes at most ${spec.max} fields.`)
+      return [...fields.slice(0, change.index + 1), fields[change.index]!, ...fields.slice(change.index + 1)]
     case 'remove':
       if (change.index < 0 || change.index >= fields.length) throw new WellError('bad_position', `The well \`${spec.id}\` has no entry ${change.index + 1}.`)
       return fields.filter((_, i) => i !== change.index)
@@ -156,13 +151,73 @@ function nestedAxisRules(widget: WidgetDoc, spec: WellSpec, after: string[], cha
     throw new WellError('bad_field', 'A chart with a nested `x` has no `column`: the nested axis is drawn with the facet.')
 }
 
-/** The changes of the text a well change makes (none when nothing changes): the well's value set, or removed when it is empty. */
+/** The entries of a well as the document holds them, in order (a single entry is a list of one). */
+function entriesOf(widget: WidgetDoc, spec: WellSpec): unknown[] {
+  const node = getAt(widget, spec.path)
+  return node === undefined ? [] : Array.isArray(node) ? node : [node]
+}
+
+/** The entry a field makes in a well: the field, `{field}` where the entries are objects, a field group `{group}` (`@name`, `@name#always` for the details of the rows), or an attribute entry of a matrix's values. */
+function newEntry(spec: WellSpec, field: string, roles?: CatalogRoles): unknown {
+  if (field.startsWith('@')) {
+    const [name, show] = field.slice(1).split('#')
+    return show ? { group: name, show } : { group: name }
+  }
+  if (spec.shape === 'objects') return spec.id === 'values' && roles && roleOf(roles, field) === 'attribute' ? { attribute: field } : { field }
+  return field
+}
+
+/** The output names the entries of a well already give (an alias, else the field): the alias a repeated measure takes must be new. */
+function outputsOf(widget: WidgetDoc): Set<string> {
+  const out = new Set<string>()
+  for (const spec of wellsOf(widget.type)) for (const e of entriesOf(widget, spec)) { const f = fieldOf(e); if (f) out.add(isObject(e) && typeof e.alias === 'string' ? e.alias : f) }
+  return out
+}
+
+/** The alias a measure repeated gets: the last part of its name and the next number that no output has (`net_revenue_2`). */
+export function repeatedAlias(field: string, taken: Set<string>): string {
+  const base = (field.split('.').pop() ?? field).replace(/[^a-z0-9_]/gi, '_').toLowerCase().replace(/^[^a-z]+/, '') || 'measure'
+  for (let n = 2; ; n++) if (!taken.has(`${base}_${n}`)) return `${base}_${n}`
+}
+
+/** The value a well holds once its entries are `entries`: nothing when empty, the entry when the well takes one (or a list of one that is the field), else the list. */
+function wellValue(spec: WellSpec, entries: unknown[]): unknown {
+  if (entries.length === 0) return undefined
+  if (spec.shape === 'field') return entries[0]
+  if (spec.scalarWhenOne && entries.length === 1) return entries[0]
+  return entries
+}
+
+/** The changes of the text a well change makes (none when nothing changes): the well's value set, or removed when it is empty. A change is made on the entries themselves (an entry's alias, filters and format stay with it, and one measure may be there twice). */
 export function wellOps(widget: WidgetDoc, id: string, spec: WellSpec, change: WellChange, roles?: CatalogRoles): Op[] {
+  const entries = entriesOf(widget, spec)
   const before = wellFields(widget, spec)
   const after = changedFields(before, spec, change, roles)
   nestedAxisRules(widget, spec, after, change)
-  if (JSON.stringify(before) === JSON.stringify(after) && change.op !== 'add') return []
-  const value = valueWith(widget, spec, after)
+  let next: unknown[]
+  switch (change.op) {
+    case 'clear': next = []; break
+    case 'remove': next = entries.filter((_, i) => i !== change.index); break
+    case 'move': { next = [...entries]; const [moved] = next.splice(change.from, 1); next.splice(change.to, 0, moved); break }
+    case 'repeat': {
+      const source = entries[change.index]
+      const field = fieldOf(source)!
+      const copy = isObject(source) ? clone(source) : { field }
+      copy.alias = repeatedAlias(field, outputsOf(widget))
+      delete copy.filters
+      next = [...entries.slice(0, change.index + 1), copy, ...entries.slice(change.index + 1)]
+      break
+    }
+    case 'add': {
+      const field = change.field.trim()
+      const existing = entries.find((e) => fieldOf(e) === field)
+      if (!spec.multiple) next = [existing ?? newEntry(spec, field, roles)]
+      else if (before.includes(field)) next = entries
+      else { next = [...entries]; next.splice(Math.max(0, Math.min(entries.length, change.index ?? entries.length)), 0, newEntry(spec, field, roles)) }
+      break
+    }
+  }
+  const value = wellValue(spec, next)
   const path: Path = ['widgets', id, ...spec.path]
   if (value === undefined) {
     if (getAt(widget, spec.path) === undefined) return []
@@ -260,8 +315,8 @@ export interface Derivation {
 const REQUEST_PARTS = ['measures', 'attributes', 'filters', 'segments', 'order'] as const
 
 /** What the read-only panel shows of a widget: the derived request, its parameter bindings, and for each part of it the place of the document it comes from (`deriveRequest`'s `documentPath`). */
-export function describeDerivation(id: string, widget: WidgetDoc, roles: CatalogRoles): Derivation {
-  const derived = deriveRequest({ id, raw: widget as unknown as Json }, roles)
+export function describeDerivation(id: string, widget: WidgetDoc, roles: CatalogRoles, groups?: Record<string, GroupDef>): Derivation {
+  const derived = deriveRequest({ id, raw: widget as unknown as Json, groups }, roles)
   const issues = derived.issues.map((i) => ({ code: i.code, path: i.path, message: i.message, documentPath: i.path }))
   const query = (widget as { query?: unknown }).query
   if (!derived.request) {
@@ -281,8 +336,8 @@ export function describeDerivation(id: string, widget: WidgetDoc, roles: Catalog
 }
 
 /** The query written out (`mode: explicit`) from what the encodings derive: the semantic request as it stands, kept to be edited by hand. Refused with the derivation's words when it cannot be derived. */
-export function explicitQuery(id: string, widget: WidgetDoc, roles: CatalogRoles): Record<string, unknown> {
-  const d = describeDerivation(id, widget, roles)
+export function explicitQuery(id: string, widget: WidgetDoc, roles: CatalogRoles, groups?: Record<string, GroupDef>): Record<string, unknown> {
+  const d = describeDerivation(id, widget, roles, groups)
   const query = (widget as { query?: { model?: string; params?: unknown } }).query
   if (d.state !== 'request') throw new WellError('bad_field', d.issues[0]?.message ?? 'There is no derived request to write out.')
   const written: Record<string, unknown> = { mode: 'explicit', semantic: { model: query?.model ?? roles.model ?? '', request: (d.request as { query: unknown }).query } }
