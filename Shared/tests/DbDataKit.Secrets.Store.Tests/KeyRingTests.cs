@@ -27,6 +27,12 @@ public class KeyRingTests
     [Fact]
     public async Task Many_first_opens_at_once_make_exactly_one_key_and_agree_on_it()
     {
+        // the race is a matter of timing (a reader meets a file another opener is replacing): many rounds, each on a fresh directory
+        for (var round = 0; round < 12; round++) await OneRoundAsync();
+    }
+
+    private static async Task OneRoundAsync()
+    {
         using var t = new TempDir();
         const int openers = 16;
         using var start = new Barrier(openers);
