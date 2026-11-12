@@ -19,7 +19,14 @@ public sealed class GatewayDefinitionsManagement
 
     private readonly DefinitionsApi _api;
 
-    public GatewayDefinitionsManagement(StateDatabase state, IAuditLog? audit = null, TimeProvider? clock = null)
+    /// <summary>The hooks of the kinds whose publish does more than the registry's checks (plan 30 PB02): the Gateway's semantic models and data sources, with what the per-kind routes check and do.</summary>
+    public static IReadOnlyList<IDefinitionKindHook> HooksOf(StateDatabase state, GatewaySemanticModels semanticModels, PublishedSemanticModels models, GatewayDataSources dataSources)
+    {
+        var policy = new SignaturePolicy(new GroupSettings(state));
+        return [new SemanticModelKindHook(semanticModels, models, policy), new DataSourceKindHook(dataSources, policy)];
+    }
+
+    public GatewayDefinitionsManagement(StateDatabase state, IAuditLog? audit = null, TimeProvider? clock = null, IEnumerable<IDefinitionKindHook>? hooks = null)
     {
         var store = new DefinitionStore(state);
         var payloads = new PayloadStore(state);
@@ -29,7 +36,7 @@ public sealed class GatewayDefinitionsManagement
         var settings = new GroupSettings(state);
         _api = new DefinitionsApi(new DefinitionPublisher(state, kinds, payloads, ServingKinds.TargetType), store, kinds, payloads, settings, ServingKinds.TargetType,
             (verb, caller, kind, name, channel, outcome, _) => audit?.Append(new AuditEntry(time.GetUtcNow(), "api", "management", caller.ClientId ?? caller.Actor, caller.Actor, false, verb, $"{kind}/{name}" + (channel == "-" ? "" : "/" + channel), outcome, "")),
-            verifier: new TrustStoreVerifier(trust), policy: new SignaturePolicy(settings), trust: trust);
+            verifier: new TrustStoreVerifier(trust), policy: new SignaturePolicy(settings), trust: trust, hooks: hooks);
     }
 
     public static bool Handles(string route) => route.StartsWith(Prefix, StringComparison.Ordinal) && DefinitionsApi.Handles(route[Prefix.Length..]);
@@ -39,12 +46,15 @@ public sealed class GatewayDefinitionsManagement
         var entry = caller.Audit("", null, "", DateTimeOffset.UtcNow);
         var actor = entry.UserName ?? entry.UserId;
         var client = caller.Token is { IsConsole: false } token ? token.Client.Id : null;
-        return new DefinitionsCaller(actor, caller.Holds(ServerRole.Admin), caller.Holds(ServerRole.Publisher), caller.Holds(ServerRole.Viewer), client);
+        return new DefinitionsCaller(actor, caller.Holds(ServerRole.Admin), caller.Holds(ServerRole.Publisher), caller.Holds(ServerRole.Viewer), client) { Context = caller };
     }
 
-    public ManagementResult Handle(string method, string route, string? body, ManagementCaller caller)
+    public ManagementResult Handle(string method, string route, string? body, ManagementCaller caller) => HandleAsync(method, route, body, caller).GetAwaiter().GetResult();
+
+    /// <summary>The same for a host that awaits: a kind's hook may wait on a data source's test query.</summary>
+    public async Task<ManagementResult> HandleAsync(string method, string route, string? body, ManagementCaller caller, CancellationToken ct = default)
     {
-        var answer = _api.Handle(method, route[Prefix.Length..], body, CallerOf(caller));
+        var answer = await _api.HandleAsync(method, route[Prefix.Length..], body, CallerOf(caller), ct);
         return new ManagementResult(answer.Status, answer.Body);
     }
 
