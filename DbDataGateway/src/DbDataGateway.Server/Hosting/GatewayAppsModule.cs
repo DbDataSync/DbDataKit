@@ -53,7 +53,7 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
         if (certificate.Current is null)
             certificate.Set(CertificateProvider.Load(current, GatewayHost.ResolveDataDirectory(current), loggers.CreateLogger("Tls"), secrets: secrets, group: group));
 
-        var instances = new AppInstanceStore(new DefinitionStore(state));
+        var instances = new AppInstanceStore(ServingKinds.StoreOf(state));
         var bindings = new AppBindings(instances);
         Certificates = new AppCertificates(bindings, () => certificate.Current, reference => secrets.ResolveSecret("Gateway:Apps:Addresses", reference), message => loggers.CreateLogger("Apps").LogWarning("{Problem}", message));
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });

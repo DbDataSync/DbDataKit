@@ -189,3 +189,6 @@ export interface SemanticCatalogView {
   queries: CatalogQuery[]
   sources: { name: string; kind: string; fact_table: string; joins: string[] }[]
 }
+
+/** What a prune answers (plan 30 PB05): the versions removed or, in a dry run, the ones that would be, the candidates kept with the reason, and the files that go with them. */
+export interface PruneAnswer { kind: string; name: string; dry_run: boolean; remove: number[]; retained: { version: number; reason: string }[]; files: string[] }

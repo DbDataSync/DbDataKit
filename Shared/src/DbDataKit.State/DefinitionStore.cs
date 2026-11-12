@@ -31,13 +31,28 @@ public sealed partial class DefinitionStore(StateDatabase database) : IDefinitio
 
     private const string VersionColumns = "kind, name, version, hash, content, depends_on, published_by, published_at, note, format";
 
-    /// <summary>The older API's publish is the life cycle's publish with <see cref="PublishMode.Serve"/>, no registry and no dependency or slot checks (see <see cref="DefinitionPublisher"/>).</summary>
+    // the registry a publish goes through (plan 30 PB01); null is the compatibility mode
+    private DefinitionKinds? _kinds;
+    private string? _targetType;
+
+    /// <summary>
+    /// The same store with its <b>publishes</b> going through the registry <paramref name="kinds"/> (plan 30 PB01): the kind must be registered and list <paramref name="targetType"/>, its validator and format are checked, a
+    /// dependency must be active in the channel and a declared slot bound there. Switch, rollback and retire stay as they were (no registry), so a version stored before the registry can still be returned to.
+    /// </summary>
+    public DefinitionStore WithRegistry(DefinitionKinds kinds, string targetType) => new(database) { _kinds = kinds, _targetType = targetType };
+
+    /// <summary>Whether a publish through this store goes through a registry (<see cref="WithRegistry"/>): what a caller that writes <c>depends_on</c> asks, since a dependency must then be a definition the channel serves.</summary>
+    public bool UsesRegistry => _kinds is not null;
+
+    /// <summary>The older API's publish is the life cycle's publish with <see cref="PublishMode.Serve"/>; without <see cref="WithRegistry"/> no registry and no dependency or slot checks (see <see cref="DefinitionPublisher"/>).</summary>
     private DefinitionPublisher Publisher => new(database, kinds: null);
+
+    private DefinitionPublisher PublishingPublisher => new(database, _kinds, null, _targetType);
 
     /// <inheritdoc cref="DefinitionPublisher.Publish"/>
     /// <param name="format">The format of the content (24a UC01); 1 when not given. A publish is refused while a live instance of the group cannot read it.</param>
     public DefinitionVersion Publish(string kind, string name, string content, string by, IReadOnlyList<string>? dependsOn = null, string? note = null, string channel = Production, Func<string, string?>? validate = null, int format = DefinitionFormat.First) =>
-        Publisher.Publish(new PublishRequest(kind, name, content, by, channel, PublishMode.Serve, dependsOn, note, Format: format), validate).Version;
+        PublishingPublisher.Publish(new PublishRequest(kind, name, content, by, channel, PublishMode.Serve, dependsOn, note, Format: format), validate).Version;
 
     public DefinitionVersion Switch(string kind, string name, int version, string by, string channel = Production) =>
         Publisher.Switch(kind, name, version, by, channel);

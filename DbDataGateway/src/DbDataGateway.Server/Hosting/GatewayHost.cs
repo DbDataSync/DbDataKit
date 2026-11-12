@@ -181,7 +181,7 @@ public static class GatewayHost
             return loaded;
         });
         // the definitions published to the group, in its state (plan 20 O03): each instance follows them, so a publish through any of them, or by a publisher since stopped, is served by all
-        services.AddSingleton(sp => new DbDataKit.State.DefinitionStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
+        services.AddSingleton(sp => ServingKinds.StoreOf(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
         services.AddSingleton(sp => new PublishedSemanticModels(sp.GetRequiredService<DbDataKit.State.DefinitionStore>(), sp.GetRequiredService<SemanticModels>(),
             problem => sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataGateway.Semantic").LogWarning("{Problem}", problem)));
         // the data sources a client publishes to a group (O04b), written where the configuration reads them, which is then read again
