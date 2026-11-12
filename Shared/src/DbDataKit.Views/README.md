@@ -66,6 +66,10 @@ var selection = LayoutSelector.Select(doc, new LayoutContext(Width: 390, Height:
 
 A pure function: a named layout wins; otherwise the layouts whose `when` matches, the most specific first, ties by document order; otherwise the default. The goldens are shared with the TypeScript twin.
 
+## Agents' drafts (`AgentViewDrafts`, `UserViewDraftService`)
+
+What an agent's tools do (plan 32 section 7, DBR20), as pure functions and one service over the user store. `AgentViewDrafts.Validate` runs the loader of the kind, then refuses an explicit `semantic.sql` unless the host says the author may write one (`DraftOptions.AllowSql`), then the catalog check against the models the host passes; every refusal names the code, the path and the line of the indented JSON the draft is stored as. `AddLayout` adds a layout to a stored document (never the default) and `Pin` adds a widget and gives it a tile in the default layout (below the tiles of a reflow, a new block in the last section of a flow, below the tiles of a canvas); both check the whole result. `UserViewDraftService` stores a draft the person approved as a new version of **their** document (`UserViewStore.Save`), with `commit: false` only checking (what the runtime runs before it asks the person). A taken name or a stale version is a refusal in words. The tools themselves are `DbDataKit.Agents`'s `ViewDraftTools` and the Gateway's `mcp` module.
+
 ## Tests
 
 `DbDataKit.Views.Tests` runs the shared documents in `Shared/conformance/views` (the `@dbdatakit/visuals` suite runs the same files) and keeps the loader and the JSON Schemas equal.

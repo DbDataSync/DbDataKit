@@ -39,6 +39,12 @@ public sealed class AgentTool(string name, string description, Traits traits, Js
     /// <summary>The setting the tool's own author declared (an action that only adds a comment says <c>do-not-ask</c>); null means the one its traits give.</summary>
     public Prompting? DeclaredPrompting { get; init; }
 
+    /// <summary>
+    /// A check the runtime runs <b>before it asks the person</b> (after the arguments fit the schema): a tool that stores something the person approves (a draft) says here, in words, that what it was given cannot be stored, so the person is never asked to approve what
+    /// would be refused anyway. Null means the call goes on; an outcome is given back to the model as the tool's error and nothing runs.
+    /// </summary>
+    public Func<JsonObject, ToolOutcome?>? Precheck { get; init; }
+
     /// <summary>What kind of text the tool returns: data from outside (the default) or a skill's body, which is the agent's own instructions.</summary>
     public ToolResultKind ResultKind { get; init; } = ToolResultKind.Data;
 

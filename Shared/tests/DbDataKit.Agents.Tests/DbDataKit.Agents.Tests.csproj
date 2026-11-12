@@ -11,4 +11,9 @@
     <ProjectReference Include="..\..\src\DbDataKit.State.Engines\DbDataKit.State.Engines.csproj" />
     <Compile Include="..\DbDataKit.State.Tests\StateEngines.cs" Link="StateEngines.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- the documents of the dashboard tools (DBR20): the golden dashboard, and the good documents of the Views conformance set -->
+    <None Include="..\..\conformance\views\agent\*" LinkBase="conformance\views\agent" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\conformance\views\good\report-minimal.json" Link="conformance\views\good\report-minimal.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

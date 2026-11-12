@@ -227,6 +227,12 @@ public sealed class AgentRunner(IChatClient client, IReadOnlyList<AgentTool> too
             return (new Handled(tool.Name, tool.Source, $"The call to '{tool.Name}' was not run: the arguments do not fit its schema ({string.Join("; ", problems)}). The tool is described as: {tool.Description}", true, false), false);
         }
 
+        if (tool.Precheck?.Invoke(arguments) is { } refused)
+        {
+            record(AgentEventKinds.ToolRefused, turn, tool.Name, "refused before asking");
+            return (new Handled(tool.Name, tool.Source, refused.Text, true, false), false);
+        }
+
         var toolCall = new ToolCall(call.CallId, tool.Name, arguments);
         if (options.Gate is not null)
         {
