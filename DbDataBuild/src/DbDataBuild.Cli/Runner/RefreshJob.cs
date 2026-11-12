@@ -103,7 +103,7 @@ public sealed class RefreshJob : RunnerJob<RefreshInput, NoProgress, NoSlots>
         }
     }
 
-    private static (int Exit, JsonDocument Document) Invoke(string[] args, Func<string, string?> env)
+    internal static (int Exit, JsonDocument Document) Invoke(string[] args, Func<string, string?> env)
     {
         var output = new StringWriter { NewLine = "\n" };
         var error = new StringWriter { NewLine = "\n" };
@@ -124,7 +124,7 @@ public sealed class RefreshJob : RunnerJob<RefreshInput, NoProgress, NoSlots>
         return (exit, document);
     }
 
-    private static IEnumerable<string> Lines(JsonDocument document, string name) =>
+    internal static IEnumerable<string> Lines(JsonDocument document, string name) =>
         document.RootElement.TryGetProperty(name, out var lines) && lines.ValueKind == JsonValueKind.Array ? lines.EnumerateArray().Select(l => l.GetString() ?? "").ToList() : [];
 
     private static List<LoadResult> Results(JsonElement results) => results.EnumerateArray().Select(e =>
@@ -136,7 +136,7 @@ public sealed class RefreshJob : RunnerJob<RefreshInput, NoProgress, NoSlots>
     }).ToList();
 
     /// <summary>The diagnostics of the document as `code: title (what was found)`, which is what names a refused plan (DDB-450 for a plan that does not exist, DDB-447 for a structure the project does not expect).</summary>
-    private static string Describe(JsonDocument document) =>
+    internal static string Describe(JsonDocument document) =>
         document.RootElement.TryGetProperty("diagnostics", out var list) && list.ValueKind == JsonValueKind.Array
             ? string.Join("; ", list.EnumerateArray().Select(x => $"{x.GetProperty("code").GetString()}: {x.GetProperty("title").GetString()}{(x.TryGetProperty("found", out var found) && found.ValueKind == JsonValueKind.String ? " (" + found.GetString() + ")" : "")}"))
             : "";

@@ -17,7 +17,17 @@ public static class RunnerHost
         using var sigterm = PosixSignalRegistration.Create(PosixSignal.SIGTERM, context => { context.Cancel = true; cancel.Cancel(); });
         try
         {
-            await RemoteJobHost.RunAsync<RefreshJob>(cancel.Token, new RemoteRunOptions { Client = "DbDataBuild", AnyTaskName = true }).ConfigureAwait(false);   // a published project has one task per refresh plan (E07), each named for its plan; every one runs this job
+            var options = new RemoteRunOptions { Client = "DbDataBuild", AnyTaskName = true };
+            // a published project has one task per refresh plan (E07), each named `connection-plan`, and every one runs the refresh job; the operations package (plan 28c E21) names its tasks without a hyphen, so no plan is taken for one
+            switch (Environment.GetEnvironmentVariable(DbDataKit.Runner.Protocol.RunnerProtocolNames.TaskVariable))
+            {
+                case BuildOperations.ApplyPlan: await RemoteJobHost.RunAsync<ApplyPlanJob>(cancel.Token, options).ConfigureAwait(false); break;
+                case BuildOperations.Ack: await RemoteJobHost.RunAsync<AckJob>(cancel.Token, options).ConfigureAwait(false); break;
+                case BuildOperations.Seed: await RemoteJobHost.RunAsync<SeedJob>(cancel.Token, options).ConfigureAwait(false); break;
+                case CatchUpJob.TaskName: await RemoteJobHost.RunAsync<CatchUpJob>(cancel.Token, options).ConfigureAwait(false); break;
+                default: await RemoteJobHost.RunAsync<RefreshJob>(cancel.Token, options).ConfigureAwait(false); break;
+            }
+
             return 0;
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or ArgumentException or Grpc.Core.RpcException or RunnerProtocolException)
