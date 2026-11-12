@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { retailCatalog, type EditCommand, type ViewsDoc, type WidgetDoc } from '@dbdatakit/visuals'
+import { changedFields, retailCatalog, wellFields, wellsOf, type EditCommand, type ViewsDoc, type WidgetDoc } from '@dbdatakit/visuals'
+import { newWidget } from './editing'
 import { GroupEditor } from './GroupEditor'
 import { WidgetEditor } from './WidgetEditor'
 
@@ -48,6 +49,20 @@ describe('the entry controls', () => {
     // a chart's x takes the group but not as details (that is for the rows of a matrix)
     expect(editor('c', d)).toContain('<option value="@period">group period</option>')
     expect(editor('c', d)).not.toContain('details: ')
+  })
+})
+
+describe('a pick in a well that takes several entries', () => {
+  it('the new chart\'s x well gets a group after its first level: a pick adds an entry, it does not replace one', () => {
+    const base = doc({}, { groups: { period: { fields: ['date.year_month', 'products.category'] } } })
+    const start = newWidget('chart', base, 'retail_sales')
+    const x = wellsOf('chart').find((w) => w.id === 'x')!
+    expect(changedFields(wellFields(start, x), x, { op: 'add', field: '@period' })).toEqual(['customers.region', '@period'])
+    const d = doc({ c: start }, { groups: { period: { fields: ['date.year_month', 'products.category'] } } })
+    const out = editor('c', d)
+    expect(out).toContain('data-testid="ed-well-c-x-entry-0"')
+    expect(out).not.toContain('data-testid="ed-well-c-x-entry-1"')
+    expect(out).toContain('<option value="@period">group period</option>')
   })
 })
 
