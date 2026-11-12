@@ -31,6 +31,7 @@ public sealed partial class ExecutorHarness : IDisposable
             Redactor = Redactor,
             Limits = settings.Limits,
             MaxScratchBytes = settings.MaxScratchBytes,
+            ScratchSampleInterval = settings.ScratchSampleInterval,
             Logger = settings.Logger,
             ExitWait = settings.ExitWait,
             Slots = settings.Slots?.Invoke(Database, Redactor),
@@ -43,6 +44,9 @@ public sealed partial class ExecutorHarness : IDisposable
         public LimitOptions? Limits { get; set; }
 
         public long MaxScratchBytes { get; set; } = 1024L * 1024 * 1024;
+
+        /// <summary>How often the scratch size is read during a run; null: only after it (the tests that count on a run finishing before the first look).</summary>
+        public TimeSpan? ScratchSampleInterval { get; set; }
 
         public ILogger? Logger { get; set; }
 

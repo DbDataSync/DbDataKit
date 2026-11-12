@@ -16,7 +16,7 @@ namespace DbDataKit.Runner.Api;
 /// <item><c>PUT /api/v1/definitions/integration/{name}</c>: publish. Body: <c>manifest</c> (package/1 YAML), <c>artifacts</c> (<c>path</c>, <c>sha256</c>, <c>size</c>, <c>media_type</c>), <c>depends_on</c>, <c>channel</c>, <c>mode</c> (<c>serve</c> or <c>stage</c>), <c>expected_version</c>, <c>note</c>, <c>signature</c>.</item>
 /// <item><c>POST /api/v1/definitions/integration/{name}/activate|switch|rollback|retire</c>: body <c>channel</c> and <c>expected_version</c> (switch also <c>version</c>).</item>
 /// <item><c>PUT /api/v1/bindings/{channel}/integration/{name}</c>: body <c>slots</c> (slot to what it is bound to), optional <c>expected_revision</c>.</item>
-/// <item><c>GET /api/v1/definitions/integration[/{name}]</c>; <c>GET</c> and <c>PUT /api/v1/settings[/require_signatures]</c>.</item>
+/// <item><c>GET /api/v1/definitions/integration[/{name}]</c>; <c>GET</c> and <c>PUT /api/v1/settings[/require_signatures]</c>; <c>GET /api/v1/posture-choices</c> (the loosened defaults with their effect and the recorded choices) and <c>PUT /api/v1/posture-choices</c> (an administrator chooses with <c>confirm</c> or revokes, plan 28a R19).</item>
 /// </list>
 /// <b>Who.</b> A publisher (the role Publisher of a paired server client, with the owner rules of <see cref="OwnerScope"/>) uploads, publishes, stages and binds packages it created; it cannot change one another client or an administrator
 /// made. A viewer reads. An administrator does everything and activates, switches, rolls back and retires. A refused call is audited (<see cref="RunnerPublishing.AuditRefused"/>) and answers 403.
@@ -177,6 +177,34 @@ public static class RunnerPublishApi
             return Results.Json(new JsonObject { [RunnerPublishing.RequireSandboxRunSetting] = value });
         });
 
+        // the posture (plan 28a R19): a default loosened on purpose is a recorded choice with the effect shown. PUT {"setting", "scope" (a package or "*"), "confirm": true, "note"} chooses; {"setting", "scope", "revoke": true} takes it back. Administrator, audited by the guard (runner.posture.choose / .revoke).
+        app.MapPut($"{root}/posture-choices", async (HttpContext context) =>
+        {
+            var caller = callerOf(context);
+            if (Deny(caller, ServerRole.Admin, publishing, PostureGuard.ChooseVerb, PostureGuard.SettingKind, "-") is { } denied) return denied;
+            var body = await ReadBodyAsync(context);
+            if (body.Error is { } bad) return bad;
+            if (Text(body.Json!, "setting") is not { } settingName || PostureSetting.Find(settingName) is not { } setting)
+                return Error(400, $"setting is one of: {string.Join(", ", PostureSetting.All.Select(x => x.Name))}.");
+            if (Text(body.Json!, "scope") is not { } scope || (scope != RunnerModule.AllPackages && !PackageManifestValidator.NameRule.IsMatch(scope)))
+                return Error(400, $"scope is a package name or '{RunnerModule.AllPackages}' for every package.");
+            if (setting == PostureSetting.ProductionBindingOnNonProduction)
+                return Error(400, $"'{setting.Name}' is confirmed where the binding is made (a bind that shares a production connection names it), not here.");
+            var revoke = body.Json!["revoke"] is JsonValue r && r.TryGetValue<bool>(out var wanted) && wanted;
+            var note = Text(body.Json!, "note");
+            try
+            {
+                if (revoke)
+                    return publishing.Posture.Revoke(setting, scope, caller.Actor.Id, note)
+                        ? Results.Json(new JsonObject { ["setting"] = setting.Name, ["scope"] = scope, ["revoked"] = true })
+                        : Error(404, $"There is no choice of '{setting.Name}' for '{scope}'.");
+                var confirmed = body.Json!["confirm"] is JsonValue c && c.TryGetValue<bool>(out var yes) && yes;
+                var choice = publishing.Posture.Choose(setting, scope, caller.Actor.Id, note, confirmed);
+                return Results.Json(Choice(choice));
+            }
+            catch (PostureRefusedException ex) { return Error(409, ex.Message); }
+        });
+
         app.MapPut($"{root}/settings/require_signatures", async (HttpContext context) =>
         {
             if (Deny(callerOf(context), ServerRole.Admin, publishing, RunnerPublishing.SettingVerb, "setting", RunnerPublishing.RequireSignaturesSetting) is { } denied) return denied;
@@ -238,6 +266,17 @@ public static class RunnerPublishApi
             catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
         });
 
+        app.MapGet($"{root}/posture-choices", (HttpContext context) =>
+        {
+            if (Deny(caller(context), ServerRole.Viewer) is { } denied) return denied;
+            return Results.Json(new JsonObject
+            {
+                ["all_packages"] = RunnerModule.AllPackages,
+                ["settings"] = new JsonArray([.. PostureSetting.All.Select(x => (JsonNode)new JsonObject { ["name"] = x.Name, ["default"] = x.Default, ["effect"] = x.Effect })]),
+                ["choices"] = new JsonArray([.. publishing.Posture.Choices.List().Select(Choice)]),
+            });
+        });
+
         app.MapGet($"{root}/settings", (HttpContext context) =>
             Deny(caller(context), ServerRole.Viewer) is { } denied ? denied
                 : Results.Json(new JsonObject { [RunnerPublishing.RequireSignaturesSetting] = publishing.RequireSignatures, [RunnerPublishing.RequireSandboxRunSetting] = publishing.RequireSandboxRun, ["max_artifact_bytes"] = publishing.MaxArtifactBytes }));
@@ -292,6 +331,8 @@ public static class RunnerPublishApi
     }
 
     // ---- bodies
+
+    private static JsonNode Choice(PostureChoice c) => new JsonObject { ["setting"] = c.Setting, ["scope"] = c.Scope, ["chosen_by"] = c.ChosenBy, ["chosen_at"] = c.ChosenAt.UtcDateTime.ToString("O"), ["note"] = c.Note };
 
     private static IResult Error(int status, string message) => Results.Json(new { error = message }, statusCode: status);
 

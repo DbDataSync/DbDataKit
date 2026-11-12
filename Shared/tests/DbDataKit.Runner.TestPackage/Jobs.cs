@@ -227,6 +227,19 @@ public sealed class FillsScratch : RunnerJob<NoInput, NoProgress, NoSlots>
     }
 }
 
+/// <summary>Writes a lot into its scratch directory and then waits to be stopped (the runner stops it when the directory passes its limit).</summary>
+[RunnerTask("fills-scratch-and-waits")]
+public sealed class FillsScratchAndWaits : RunnerJob<NoInput, NoProgress, NoSlots>
+{
+    protected override async Task RunAsync(CancellationToken ct)
+    {
+        var scratch = Environment.GetEnvironmentVariable("DBDATAKIT_SCRATCH_DIR")!;
+        await File.WriteAllBytesAsync(Path.Combine(scratch, "big.bin"), new byte[3 * 1024 * 1024], ct);
+        Console.WriteLine("filled");
+        await Task.Delay(Timeout.Infinite, ct);
+    }
+}
+
 /// <summary>Writes into its scratch directory and then exits without an end message.</summary>
 [RunnerTask("fills-and-exits")]
 public sealed class FillsAndExits : RunnerJob<NoInput, NoProgress, NoSlots>

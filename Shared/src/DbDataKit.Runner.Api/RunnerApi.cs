@@ -21,6 +21,7 @@ namespace DbDataKit.Runner.Api;
 /// <item><c>.../tasks/{package}/{channel}/{task}/steps/{name}/payloads/{id}</c>: the file a completed step of that name kept as its streamed result (plan 28c E06e); 404 when it is not one of that task's or the retention removed it. A viewer reads it.</item>
 /// <item><c>.../tasks/{package}/{channel}/{task}/schedule</c>, <c>.../owner</c> and <c>.../decisions</c>: who schedules a task while a product's own scheduler is still in the picture (plan 28c E09), see <c>MapOwnership</c>.</item>
 /// <item><c>.../tasks/{package}/{channel}/{task}/checkpoints</c> (every checkpoint with its items), <c>.../checkpoints/{name}</c> (one, as a product reads it), <c>.../checkpoints/{name}/history[?key=&amp;limit=]</c> (its changes, newest first) and <c>POST .../checkpoints/{name}/rewind</c> with <c>{"history_id": n, "key": ""}</c>: back to what it was before that change, as a new version under the operator's name, audited as <c>runner.checkpoint.rewind</c> (409 when a run moved it meanwhile). An operator, for the reads too.</item>
+/// <item>The operator's answers (plan 28a R25): in-doubt steps and their resolution, dead letters (list, replay, discard), the units and steps of a run; see <see cref="RunnerOperatorApi"/>.</item>
 /// <item><c>POST /api/v1/tasks/{package}/{channel}/{task}/run</c> with an optional <c>{"inputs": {"name": "value"}}</c>: queues a run now (202 with its run id; 409 when one is queued or running already). <c>.../pause</c> and <c>.../resume</c>.</item>
 /// </list>
 /// </summary>
@@ -323,6 +324,8 @@ public static class RunnerApi
             });
         });
 
+        RunnerOperatorApi.Map(app, root, state, engine, (context, needed, verb, reference) => Deny(context, needed, verb, engine(), reference), ActorOf);
+
         MapOwnership(app, root, engine, context => Deny(context, ServerRole.Viewer), (context, verb, reference) => Deny(context, ServerRole.Operator, verb, engine(), reference), ActorOf);
     }
 
@@ -505,7 +508,7 @@ public static class RunnerApi
 
     private static string? Text(Microsoft.Extensions.Primitives.StringValues values) => values.Count == 0 || string.IsNullOrWhiteSpace(values[0]) ? null : values[0];
 
-    private static bool ParseTask(string package, string channel, string task, out TaskRef? reference, out IResult? bad)
+    internal static bool ParseTask(string package, string channel, string task, out TaskRef? reference, out IResult? bad)
     {
         reference = null;
         bad = null;

@@ -258,6 +258,22 @@ public sealed class ModuleWorkQueueStore(StateDatabase database, string service)
         });
 
     /// <summary>
+    /// Puts a claimed item back as Pending, not claimable before <paramref name="availableAt"/>, and keeps its run id and payload: the item waits (a held lock, an activation) and has not run, so it is the same run when it comes
+    /// back, and a caller that was given the run id still finds it. Only while <paramref name="workerId"/> still holds the item; false when it does not.
+    /// </summary>
+    public bool Defer(long id, string workerId, DateTimeOffset availableAt) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, $$"""
+                UPDATE {table:work_item} SET status = 'Pending', available_at = $available, claimed_at = NULL, claimed_by = NULL, lease_expires_at = NULL, cancel_requested_at = NULL
+                WHERE id = $id AND claimed_by = $worker AND {{Held}};
+                """);
+            cmd.Bind(database, "available", availableAt).Bind(database, "id", id).Bind(database, "worker", workerId);
+            return cmd.ExecuteNonQuery() == 1;
+        });
+
+    /// <summary>
     /// Gives a claimed item a new run id and payload without releasing it: for an item another worker's run left a record under (its lease ran out), so the new run has a record of its own. Only while
     /// <paramref name="workerId"/> holds the item; returns the new run id, or null.
     /// </summary>

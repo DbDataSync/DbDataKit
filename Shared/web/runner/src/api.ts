@@ -159,6 +159,34 @@ export interface TaskCheckpoint { name: string; items: CheckpointItem[] }
 /** One change in a checkpoint's history: a part went from `old` to `new` (null: it did not exist, or was removed), by a run or by an operator. */
 export interface CheckpointChange { id: number; part: string; type: string; old: string | null; new: string | null; version: number; run_id: string | null; actor: string | null; at: string }
 
+/** A step an earlier attempt began and left unanswered (`GET .../in-doubt`): it may or may not have done its work, and only a person can say. */
+export interface InDoubtStep { chain: string; name: string; key: string; attempt: number; started: string; note: string | null }
+
+/** What `POST .../steps/{name}/resolve` answers: the step is answered, and the run queued to go on when one was asked for. */
+export interface StepAnswer { task: string; step: string; resolved: boolean; happened: boolean; run_id: string | null; retry_queued: boolean }
+
+/** A record an outside system refused (`GET .../dead-letters`): why, how often, and whether a body was kept to send again. */
+export interface DeadLetterRecord { id: string; source: string; reason: string; attempts: number; status: string; first: string; last: string; resolved: string | null; has_body: boolean }
+
+export type DeadLetterStatus = 'open' | 'replayed' | 'discarded'
+
+/** One unit of a run's attempt chain (`GET /runs/{id}/units`). */
+export interface RunUnit { name: string; key: string; state: string; attempt: number; started: string; completed: string | null; duration_ms: number | null; rows: number | null; counts: Record<string, number>; error: string | null }
+
+export interface UnitsSummary { total: number; done: number; skipped: number; failed: number; running: number }
+
+export interface RunUnits { run_id: string; task: string; chain: string; summary: UnitsSummary; truncated: boolean; units: RunUnit[] }
+
+export interface RunStep { name: string; key: string; state: string; attempt: number; started: string; completed: string | null; note: string | null }
+
+/** A default the administrator may loosen (`GET /posture`): what it is today and what loosening it changes. */
+export interface PostureSettingInfo { name: string; default: string; effect: string }
+
+/** A recorded choice: who loosened which default, for one package or `*` (every package), and when. */
+export interface PostureChoiceRecord { setting: string; scope: string; chosen_by: string; chosen_at: string; note: string | null }
+
+export interface PostureState { all_packages: string; settings: PostureSettingInfo[]; choices: PostureChoiceRecord[] }
+
 const enc = encodeURIComponent
 
 export function runsQuery(filters: RunFilters, limit = 100): string {
@@ -205,6 +233,21 @@ export const runnerApi = {
     request<{ task: string; name: string; key: string; changes: CheckpointChange[] }>(`${taskPath(task)}/checkpoints/${enc(name)}/history?limit=50${key === '' ? '' : `&key=${enc(key)}`}`).then((r) => r.changes),
   /** Goes back to what the checkpoint was before one change of its history: a new version under the operator's name, audited. 409 when a run moved it meanwhile. */
   rewindCheckpoint: (task: TaskKey, name: string, historyId: number, key = '') => post<{ task: string; name: string; key: string; version: number | null }>(`${taskPath(task)}/checkpoints/${enc(name)}/rewind`, { history_id: historyId, key }),
+  /** The steps of the task an earlier attempt left in doubt, across its attempt chains. */
+  inDoubt: (task: TaskKey) => request<{ task: string; steps: InDoubtStep[] }>(`${taskPath(task)}/in-doubt`).then((r) => r.steps),
+  /** The operator's answer for an in-doubt step: it happened (with its result as JSON) or it did not; `retry` also queues a run to go on. Audited. 409 when the step is not waiting. */
+  resolveStep: (task: TaskKey, step: InDoubtStep, body: { happened: boolean; result?: unknown; retry: boolean }) =>
+    post<StepAnswer>(`${taskPath(task)}/steps/${enc(step.name)}/resolve`, { chain: step.chain, key: step.key, happened: body.happened, ...(body.happened ? { result: body.result ?? null } : {}), retry: body.retry }),
+  deadLetters: (task: TaskKey, status: DeadLetterStatus = 'open') => request<{ task: string; dead_letters: DeadLetterRecord[] }>(`${taskPath(task)}/dead-letters?status=${status}`).then((r) => r.dead_letters),
+  /** Sends a dead letter again: its body becomes an inbox item of the task, once, and a run is queued. 409 when it is not open. */
+  replayDeadLetter: (task: TaskKey, id: string) => post<{ id: string; replayed: boolean; inbox_item: string | null; run_queued: boolean }>(`${taskPath(task)}/dead-letters/${enc(id)}/replay`),
+  discardDeadLetter: (task: TaskKey, id: string) => post<{ id: string; discarded: boolean }>(`${taskPath(task)}/dead-letters/${enc(id)}/discard`),
+  /** The table of units of a run's attempt chain; 404 when the chain is not known any more. */
+  runUnits: (id: string) => request<RunUnits>(`/api/v1/runs/${enc(id)}/units`),
+  runSteps: (id: string) => request<{ run_id: string; steps: RunStep[] }>(`/api/v1/runs/${enc(id)}/steps`).then((r) => r.steps),
+  posture: () => request<PostureState>('/api/v1/posture-choices'),
+  /** An administrator loosens a default (`confirm` says they accepted the effect) or takes the choice back (`revoke`). Audited. */
+  choosePosture: (body: { setting: string; scope: string; confirm?: boolean; revoke?: boolean; note?: string }) => request<PostureChoiceRecord | { revoked: boolean }>('/api/v1/posture-choices', { method: 'PUT', body: JSON.stringify(body) }),
   pause: (task: TaskKey) => post<unknown>(`${taskPath(task)}/pause`),
   resume: (task: TaskKey) => post<unknown>(`${taskPath(task)}/resume`),
   definitions: () => request<{ definitions: DefinitionSummary[] }>('/api/v1/definitions/integration').then((r) => r.definitions),

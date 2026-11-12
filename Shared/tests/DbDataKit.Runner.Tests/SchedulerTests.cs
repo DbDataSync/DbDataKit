@@ -495,4 +495,32 @@ public sealed class SchedulerTests
         Assert.Null(item.ClaimedBy);
         Assert.Equal(RunOutcome.Stopped, h.Runs.LastRun("pkg/prod/job")!.Run.Outcome);
     }
+
+    /// <summary>Open work (28a, scheduler): a start that arrives while the previous run's lock is still held (between its item being finished and the lock being released) waits, and it must come back as the run the caller was given.</summary>
+    [Theory, MemberData(nameof(Engines))]
+    public async Task A_start_that_finds_the_run_lock_held_waits_and_then_runs_under_the_run_id_it_was_given(string engine)
+    {
+        using var h = new SchedulerHarness(engine);
+        h.Activate(Manifest(Package, Def("job", Schedule.Interval(TimeSpan.FromDays(30)))), "1");
+        h.SeedHandled("job");
+        var runner = new FakeRunner(h.Database);
+        var scheduler = h.NewScheduler(runner);
+        var job = new TaskRef(Package, Channel, "job");
+        var locks = new ModuleRunLockStore(h.Database, Service);
+
+        // the previous run's item is finished, its lock not yet released
+        Assert.True(locks.TryAcquire(Owner, RunnerScheduler.Kind, "job", Guid.NewGuid()));
+        var given = scheduler.RunNow(job, requestedBy: "alice");
+        Assert.NotNull(given);
+        await Tick(scheduler);
+        Assert.Empty(runner.Requests);
+
+        locks.Release(Owner, RunnerScheduler.Kind, "job");
+        h.Clock.Advance(TimeSpan.FromSeconds(6));                      // past the tick the item waits for
+        await Tick(scheduler);
+
+        var request = Assert.Single(runner.Requests);
+        Assert.Equal(given, request.RunId);                            // the run id RunNow returned is the run that happens: a caller that watches it finds it
+        Assert.NotNull(h.Runs.Get(given!.Value));
+    }
 }
