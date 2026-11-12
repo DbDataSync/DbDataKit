@@ -37,7 +37,7 @@ Status: **in progress** (proposed 2026-11-09; audited against the code 2026-11-1
 | JSON query request, relative periods, semantic SQL as input, saved queries in catalogs, a person's saved queries | 14, 19 J25 to J27 | **built** | `docs/semantic/query.md`; `DbDataKit.Semantic/QisEngine.Time.cs` (`last_complete`); `DbDataKit.Semantic/Sql/SemanticSqlTranslator.cs`; `docs/semantic/catalog.md` ("Saved queries"); `DbDataGateway.Server/State/SavedQueryStore.cs` (versions, sharing, lookup as the caller). The API a person saves through is the apps' and is not built |
 | Lineage graph with stable identities, console page with search by name | 18 | **built** | `Shared/src/DbDataKit.Lineage*`, `docs/lineage.md` |
 | Identity home: service accounts, directory groups mapped to multi-valued attributes | 22a GP04, 13a U20 | **built** | `DbDataKit.Identity/Directory.cs` (`MapExternalGroupToAttribute`), `IdentityAdminApi.cs`; Gateway screen `IdentityAdminPage.tsx` (`identity-service-account-add`, `identity-attribute-add`) |
-| Row and column access rules, grants entity | 22a GP01 to GP03, GP10 to GP15 | **not started** | deferred by the owner (22a QG2, 2026-11-07); where grants live is under review (the hold of 2026-11-08) |
+| Row and column access rules, grants entity | 22a GP01 to GP03, GP10 to GP15 | **not started** | decided by the owner on 2026-11-12 (22a QG2: rules are data in a rules table, column rules at describe time); the rows GP01, GP02 and GP10 to GP15 are rewritten and GP01 and GP02 come first |
 | DbDataStore: validated writes, history with the actor, audit, change requests approved at the edge | 15 | **built** | `Shared/src/DbDataKit.Store/ModelWriter.cs`, `DbDataGateway.Server/Serving/GroupStoreApi.cs` (202 and a change request); Store README |
 | DbDataStore permissions with field and row conditions for an action principal; extension models; documents with extraction (WebDAV); drafts | 15, 21 | **not started** | `git grep -il "extension model"` is empty; the serving layer's `webdav` module is "not built" in `docs/serving-layer.md`; no Store draft layer found |
 | Apps: instances, trust, app approval of exact bytes, app tokens, data route with scopes from the manifest | 26 | **built** | `docs/apps.md`; `GroupAppData`, the home's app tokens (AP19), kind `app-approval` |
@@ -387,7 +387,7 @@ Decision 61 is **proposed**, not decided. These rows exist so the editor-screen 
 | KN01 to KN03 | the back-end agent's bound knowledge (KN34), `knowledge check`, the knowledge editor |
 | KN07, KN11 | all search; the front-end agents' knowledge tools; the knowledge app |
 | GP31 (Workspace server, built; GP35 for the editors) | KN20, KN30, AG16, AX13, IX20, BK06: the **W** slices |
-| GP01 and GP11 to GP15 (deferred) | row and column filtering of knowledge (KN15), elevated reads of semantic models (not sliced) |
+| GP01, GP02 and GP10 to GP15 (QG2 decided 2026-11-12, not built) | row and column filtering of knowledge (KN15), elevated reads of semantic models (not sliced) |
 | AX06 | actions in apps, agents and MCP being served; AX09 |
 
 ## What can start now
@@ -403,7 +403,7 @@ Nothing here needs a slice that is not built: **KN00, AG01, KN01, KN04, IX01, IX
 | Risk | What reduces it |
 | --- | --- |
 | The Workspace server (22a GP32 to GP36 are left; GP30 and GP31 are built) is the long pole for seven slices | the **W** marking; the back-end agent waits for it (SD8, owner 2026-11-09) and the server comes first; knowledge collection (KN20) is the only knowledge slice that needs it |
-| Access rules are deferred (22a QG2), so "an agent cannot learn through knowledge what its user could not query" holds only at object level at first | SD9's default; the fail-closed rule; KN15 (values) waits for column rules |
+| Access rules are not built yet (22a QG2 decided 2026-11-12), so "an agent cannot learn through knowledge what its user could not query" holds only at object level at first | SD9's default; the fail-closed rule; KN15 (values) waits for column rules (GP13) |
 | Native libraries on both OSes: ONNX Runtime (KN06) and `sqlite-vec` (KN08) | each slice's done-when runs on Windows and Linux CI; the built-in model and SQLite vectors are the two optional paths, hosted providers and server engines are not blocked by them |
 | Provider SDK maturity (Anthropic's `IChatClient` was described as beta) | AG04 records the choice and keeps recorded responses; a provider that fails its recording does not block the others |
 | A tokenizer for each bound model for the budget (AG11) | SD15 |
