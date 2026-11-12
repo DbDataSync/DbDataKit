@@ -150,7 +150,15 @@ public sealed partial class DefinitionPublisher
             else
             {
                 var number = latest + 1;
-                Insert(connection, transaction, request, artifacts, hash, number, now, format);
+                try { Insert(connection, transaction, request, artifacts, hash, number, now, format); }
+                catch (Exception ex) when (_database.Dialect.IsUniqueViolation(ex))
+                {
+                    // another publisher, perhaps through another instance of the group, took this number between the check above and the insert: the version check is the key (plan 20 O19), so this is the same refusal
+                    transaction.Rollback();
+                    using var other = _database.OpenConnection();
+                    var actual = Latest(other, null, request.Kind, request.Name);
+                    throw new DefinitionConflictException($"The {request.Kind} '{request.Name}' is at version {actual}, not {request.ExpectedVersion ?? latest}: it was published since you looked. Read it again and publish again.", request.ExpectedVersion ?? latest, actual);
+                }
                 stored = _store.ReadVersion(connection, transaction, request.Kind, request.Name, number)!;
             }
 
@@ -690,7 +698,7 @@ public sealed partial class DefinitionPublisher
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
     }
 
-    private int Latest(DbConnection connection, DbTransaction transaction, string kind, string name)
+    private int Latest(DbConnection connection, DbTransaction? transaction, string kind, string name)
     {
         using var command = _database.Command(Module, connection, transaction, "SELECT MAX(version) FROM {table:definition_version} WHERE kind = $kind AND name = $name;");
         command.Bind(_database, "kind", kind).Bind(_database, "name", name);

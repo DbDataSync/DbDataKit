@@ -220,11 +220,32 @@ public static class GatewayHost
                 ServerVersion = typeof(GatewayHost).Assembly.GetName().Version?.ToString(3) ?? "1.0.0",
             }, sp.GetRequiredService<TimeProvider>());
         });
-        if (GatewayModules.Has(options, GatewayModules.FlightSql)) services.AddHostedService<FlightSqlModuleService>();
+        if (GatewayModules.Has(options, GatewayModules.FlightSql))
+        {
+            services.AddHostedService<FlightSqlModuleService>();
+            // the Flight module's own state first; when it is serving, the group's state database, which sessions and prepared statements need: without it Flight SQL still reads the hand-made data sources, so the line is degraded
+            services.AddSingleton<IReadinessProbe>(sp => new ServingModuleReadinessProbe(sp.GetRequiredService<FlightSqlModule>(), () =>
+                sp.GetRequiredService<FlightSqlModule>().Health() is { State: not ServingHealthState.Ok } own ? own : ServingModuleHealth.Of(true, false, sp.GetRequiredService<DbDataKit.State.StateDatabase>(), ServingHealthState.Degraded)));
+        }
         // the identity home (plan 20, O06): a listener and a web application of its own, only when asked for
-        if (GatewayModules.Has(options, GatewayModules.Identity)) services.AddHostedService<GatewayIdentityModule>();
-        if (GatewayModules.Has(options, GatewayModules.Apps)) services.AddHostedService<GatewayAppsModule>();
-        if (GatewayModules.Has(options, GatewayModules.Store)) services.AddHostedService<GatewayStoreModule>();
+        if (GatewayModules.Has(options, GatewayModules.Identity))
+        {
+            services.AddSingleton<GatewayIdentityModule>();
+            services.AddHostedService(sp => sp.GetRequiredService<GatewayIdentityModule>());
+            services.AddSingleton<IReadinessProbe>(sp => new ServingModuleReadinessProbe(sp.GetRequiredService<GatewayIdentityModule>()));
+        }
+        if (GatewayModules.Has(options, GatewayModules.Apps))
+        {
+            services.AddSingleton<GatewayAppsModule>();
+            services.AddHostedService(sp => sp.GetRequiredService<GatewayAppsModule>());
+            services.AddSingleton<IReadinessProbe>(sp => new ServingModuleReadinessProbe(sp.GetRequiredService<GatewayAppsModule>()));
+        }
+        if (GatewayModules.Has(options, GatewayModules.Store))
+        {
+            services.AddSingleton<GatewayStoreModule>();
+            services.AddHostedService(sp => sp.GetRequiredService<GatewayStoreModule>());
+            services.AddSingleton<IReadinessProbe>(sp => new ServingModuleReadinessProbe(sp.GetRequiredService<GatewayStoreModule>()));
+        }
         if (GatewayModules.Has(options, GatewayModules.Views))
         {
             services.AddSingleton<GatewayViewsModule>();
