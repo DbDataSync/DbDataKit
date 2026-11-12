@@ -33,6 +33,8 @@ public static class DbDataHostExtensions
 
         var services = builder.Services;
         services.AddSingleton(options);
+        // off (the default) registers nothing: no provider, no exporter, no listener (plan 22a GP28)
+        DbDataKit.Telemetry.SuiteTelemetry.Add(services, options.Telemetry, options.Product, options.Version);
         services.AddSingleton<IDrainCoordinator, DrainCoordinator>();
         services.AddHostedService<DrainOnStopService>();
         services.Configure<HostOptions>(h => h.ShutdownTimeout = options.DrainTimeout + TimeSpan.FromSeconds(15));
@@ -69,6 +71,7 @@ public static class DbDataHostExtensions
     public static IApplicationBuilder UseDbDataPipeline(this IApplicationBuilder app)
     {
         var options = app.ApplicationServices.GetRequiredService<DbDataHostOptions>();
+        if (options.Telemetry.Enabled) DbDataKit.Telemetry.RequestTelemetry.UseRequestTelemetry(app, options.Product);
         if (options.ForwardedHeaders.Enabled)
         {
             app.UseForwardedHeaders();

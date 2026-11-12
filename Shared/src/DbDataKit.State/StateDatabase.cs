@@ -221,6 +221,26 @@ public partial class StateDatabase
     }
 
     /// <summary>
+    /// The count of state commands made (plan 22a GP28), on the suite's meter family (<c>DbDataKit.*</c>, exported when telemetry is on): one per command, labelled by the statement's <b>name</b> (the module and the verb: <c>runs.select</c>) and the engine.
+    /// A statement has no name of its own in the code, so the name is made of those two: <b>never the text, a table, a column or a parameter</b>. With no listener the counter costs one check.
+    /// </summary>
+    public static readonly System.Diagnostics.Metrics.Counter<long> StateCommands = new System.Diagnostics.Metrics.Meter("DbDataKit.State").CreateCounter<long>("dbdatakit.state.commands", "{command}", "State commands, by statement name (module and verb); never text or parameters.");
+
+    private static readonly string[] Verbs = ["select", "insert", "update", "delete", "merge", "create", "alter", "drop", "with", "pragma"];
+
+    /// <summary>The name a command is counted under: <c>module.verb</c>, the verb from a fixed list (anything else is <c>other</c>) and the module a short identifier (anything else is <c>state</c>).</summary>
+    internal static string StatementName(string? module, string sql)
+    {
+        var text = sql.AsSpan().TrimStart();
+        var end = 0;
+        while (end < text.Length && char.IsAsciiLetter(text[end])) end++;
+        var verb = text[..end].ToString().ToLowerInvariant();
+        if (!Verbs.Contains(verb)) verb = "other";
+        var plain = module is { Length: > 0 and <= 40 } && module.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '.');
+        return (plain ? module! : "state") + "." + verb;
+    }
+
+    /// <summary>
     /// A command whose <c>$name</c> placeholders have been rewritten for this engine — what every
     /// store creates instead of calling <c>connection.CreateCommand()</c> directly.
     /// </summary>
@@ -234,6 +254,7 @@ public partial class StateDatabase
 
     private DbCommand Command(DbConnection connection, string sql, string? module)
     {
+        if (StateCommands.Enabled) StateCommands.Add(1, new KeyValuePair<string, object?>("statement", StatementName(module, sql)), new KeyValuePair<string, object?>("engine", Dialect.Engine));
         if (Layout is not null)
             sql = StateTemplates.Render(Layout.Render(sql, module), Dialect);
         var command = connection.CreateCommand();

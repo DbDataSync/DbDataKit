@@ -33,6 +33,30 @@ public sealed class TelemetryTests
     }
 
     [Fact]
+    public void The_section_is_loaded_from_a_settings_file_and_a_bad_file_is_named()
+    {
+        var directory = Directory.CreateTempSubdirectory("telemetry-load-").FullName;
+        try
+        {
+            var file = Path.Combine(directory, "server.yaml");
+            Assert.False(TelemetrySettings.Load(file).Enabled);                        // no file
+            File.WriteAllText(file, "listen: https://localhost:1\n");
+            Assert.False(TelemetrySettings.Load(file).Enabled);                        // no section
+            File.WriteAllText(file, "listen: https://localhost:1\ntelemetry:\n  enabled: true\n  endpoint: http://collector:4317\n  protocol: http\n  sampling_ratio: 0.5\n  instance_id: \"console-1\"\n");
+            var on = TelemetrySettings.Load(file);
+            Assert.Equal((true, "http", 0.5, "console-1"), (on.Enabled, on.Protocol, on.SamplingRatio, on.InstanceId));
+            File.WriteAllText(file, "telemetry:\n  enabled: true\n  exporter: otlp\n");
+            Assert.Contains(file + ": telemetry has no key `exporter`", Assert.Throws<TelemetrySettingsException>(() => TelemetrySettings.Load(file)).Message);
+            File.WriteAllText(file, "telemetry: yes\n");
+            Assert.Contains(file, Assert.Throws<TelemetrySettingsException>(() => TelemetrySettings.Load(file)).Message);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
     public void Off_creates_no_exporter_and_no_listener_on_any_source()
     {
         var services = new ServiceCollection();

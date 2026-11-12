@@ -36,10 +36,13 @@ public static class SuiteTelemetry
         ArgumentNullException.ThrowIfNull(settings);
         if (!settings.Enabled) return services;
         var resource = Resource(product, version, settings.InstanceId);
+        var capture = TelemetryCapture.Current;   // a test that asked to see what the host exports (TelemetryCapture.Start)
+        if (capture is not null) configureTracing ??= capture.ConfigureTracing;
+        if (capture is not null) configureMetrics ??= capture.ConfigureMetrics;
         services.AddOpenTelemetry()
             .WithTracing(t =>
             {
-                t.SetResourceBuilder(resource).AddSource(Name, Name + ".*").SetSampler(new TraceIdRatioBasedSampler(settings.SamplingRatio)).AddOtlpExporter(o => Configure(o, settings, "v1/traces"));
+                t.SetResourceBuilder(resource).AddProcessor(new AttributeScrubProcessor()).AddSource(Name, Name + ".*").SetSampler(new TraceIdRatioBasedSampler(settings.SamplingRatio)).AddOtlpExporter(o => Configure(o, settings, "v1/traces"));
                 configureTracing?.Invoke(t);
             })
             .WithMetrics(m =>

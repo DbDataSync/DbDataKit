@@ -37,6 +37,21 @@ describe('the server settings screen', () => {
     expect(find(tree({ check: check({ fields: { logSql: false } }) }), 'settings-log-sql')!.props.checked).toBe(false)
   })
 
+  it('shows the telemetry fields as the draft sets them, sends a change, and leaves the collector alone while it is off (plan 22a GP28)', () => {
+    const onField = vi.fn()
+    expect(find(tree(), 'settings-telemetry-enabled')!.props.checked).toBe(false)
+    expect(find(tree(), 'settings-telemetry-endpoint')!.props.disabled).toBe(true)
+    const on = check({ fields: { 'telemetry.enabled': true, 'telemetry.endpoint': 'http://collector:4317', 'telemetry.protocol': 'http' } })
+    expect(find(tree({ check: on }), 'settings-telemetry-endpoint')!.props.value).toBe('http://collector:4317')
+    expect(find(tree({ check: on }), 'settings-telemetry-endpoint')!.props.disabled).toBe(false)
+    expect(find(tree({ check: on }), 'settings-telemetry-protocol')!.props.value).toBe('http')
+    ;(find(tree({ onField }), 'settings-telemetry-enabled')!.props.onChange as (e: { target: { checked: boolean } }) => void)({ target: { checked: true } })
+    expect(onField).toHaveBeenCalledWith('telemetry.enabled', true)
+    ;(find(tree({ onField, check: on }), 'settings-telemetry-endpoint')!.props.onChange as (e: { target: { value: string } }) => void)({ target: { value: 'http://x:4317' } })
+    expect(onField).toHaveBeenCalledWith('telemetry.endpoint', 'http://x:4317')
+    expect(html()).toContain('never holds a secret')
+  })
+
   it('sends a change of a module as the list it would give, in the order of the known modules', () => {
     const onField = vi.fn()
     ;(find(tree({ onField, check: check({ fields: { modules: ['flightsql'] } }) }), 'settings-module-views')!.props.onChange as (e: { target: { checked: boolean } }) => void)({ target: { checked: true } })

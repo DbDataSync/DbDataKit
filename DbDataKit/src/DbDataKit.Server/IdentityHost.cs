@@ -147,6 +147,7 @@ public static class IdentityHost
         {
             host.Product = IdentityHostSettings.Product;
             host.ServiceName = "DbDataKitIdentity";
+            host.Telemetry = DbDataKit.Telemetry.TelemetrySettings.Load(serverYaml);   // the telemetry: section; off unless it says enabled (plan 22a GP28)
             host.Version = ConsoleHost.Version;
         });
         builder.WebHost.ConfigureKestrel(o => o.Listen(AddressOf(settings.Listen), settings.Listen.Port, listen => listen.UseHttps(certificate)));

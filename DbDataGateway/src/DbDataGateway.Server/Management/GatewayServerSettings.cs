@@ -31,7 +31,7 @@ public sealed partial class GatewayServerSettings(string configDirectory, Gatewa
 
     /// <summary>Top-level keys a running Gateway reads when it starts (listeners, certificates, the modules it mounts, the state it opens, the hosts it runs): a change to one takes effect at the next start.</summary>
     public static readonly IReadOnlyList<string> RestartKeys =
-        ["dataDirectory", "modules", "listen", "management", "tls", "identity", "apps", "store", "views", "rest", "state", "secrets", "compression", "worker", "hosting", "definitionPollSeconds"];
+        ["dataDirectory", "modules", "listen", "management", "tls", "identity", "apps", "store", "views", "rest", "state", "secrets", "compression", "worker", "hosting", "telemetry", "definitionPollSeconds"];
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly WriteGuard _guard = new();
@@ -103,6 +103,10 @@ public sealed partial class GatewayServerSettings(string configDirectory, Gatewa
                     ["views.export.mode"] = o.Views.Export.Mode,
                     ["views.export.path"] = o.Views.Export.Path,
                     ["logSql"] = o.LogSql,
+                    // OpenTelemetry (plan 22a GP28): off unless enabled; read at start. The sampling ratio and the instance id stay in the text.
+                    ["telemetry.enabled"] = o.Telemetry.Enabled,
+                    ["telemetry.endpoint"] = o.Telemetry.Endpoint ?? "",
+                    ["telemetry.protocol"] = o.Telemetry.Protocol,
                     // the scalar part of the semantic: section (plan 14a SL11); the hand-set models and the Analysis Services connections stay in the text
                     ["semantic.level"] = o.Semantic.Level,
                     ["semantic.combine.memoryMb"] = o.Semantic.Combine.MemoryMb,

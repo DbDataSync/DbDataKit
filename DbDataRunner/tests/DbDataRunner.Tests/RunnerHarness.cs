@@ -63,6 +63,9 @@ public sealed class RunnerHarness : IAsyncDisposable
 
     public RunnerSettings Settings { get; }
 
+    /// <summary>The running server's services (the telemetry test flushes its exporters through them).</summary>
+    public IServiceProvider Services => _app!.Services;
+
     public StateDatabase State { get; }
 
     public IReadOnlyList<string> Log => _log;

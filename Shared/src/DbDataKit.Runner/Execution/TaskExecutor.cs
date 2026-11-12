@@ -8,6 +8,7 @@ using DbDataKit.Runner.Limits;
 using DbDataKit.Runner.Protocol;
 using DbDataKit.Runner.Protocol.Server;
 using DbDataKit.State;
+using DbDataKit.Telemetry;
 using Microsoft.Extensions.Logging;
 
 namespace DbDataKit.Runner.Execution;
@@ -27,6 +28,9 @@ namespace DbDataKit.Runner.Execution;
 public sealed class TaskExecutor : ITaskRunner
 {
     private static readonly Task Never = new TaskCompletionSource().Task;
+
+    /// <summary>The product label of the runner's telemetry (plan 22a GP28).</summary>
+    public const string RunnerProduct = "dbdatarunner";
 
     private readonly StateDatabase _database;
     private readonly RunnerProtocolHost _host;
@@ -63,6 +67,9 @@ public sealed class TaskExecutor : ITaskRunner
         var clock = Stopwatch.StartNew();
         runs.Start(request.Task.ToString(), runId, package: request.Task.Package, packageVersion: request.PackageVersion, channel: request.Task.Channel, attempt: request.Attempt);
 
+        // plan 22a GP28: a task start is counted by the task's name, and the run is one span with its count, duration and outcome (never the failure's text or a task's output)
+        HostTelemetry.TaskStarted(RunnerProduct, request.Task.Task);
+        using var scope = HostTelemetry.StartRun(RunnerProduct, "task", request.Task.Task);
         var log = new OutputLogger(runs, runId, _options.Redactor, _options.MaxLogLineChars, _options.MaxLogLines);
         TaskRunResult? result = null;
         try
@@ -82,6 +89,9 @@ public sealed class TaskExecutor : ITaskRunner
                 var end = result?.End ?? new TaskEnd(TaskEndState.Failed, Failure: new TaskFailure(TaskFailureKind.Permanent, "The runner failed while it was running this task; see the runner's own log."));
                 var finish = end.ToRunFinish();
                 runs.Finish(runId, finish.Outcome, finish.Rows, finish.FailedItem, finish.Failure);
+                if (end.State is TaskEndState.Succeeded) scope.Succeeded();
+                else if (end.State is TaskEndState.Stopped) scope.Cancelled();
+                else scope.Failed();
             }
         }
     }
