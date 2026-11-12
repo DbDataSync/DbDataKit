@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="JsonSchema.Net" />
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\DbDataKit.Access\DbDataKit.Access.csproj" />
+  </ItemGroup>
+</Project>

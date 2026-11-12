@@ -81,6 +81,7 @@ public sealed partial class GatewayEntityModels
         Record(caller, "entity-model publish", name, created ? "created" : result.Changed ? "changed" : "unchanged");
         response["created"] = created;
         response["unchanged"] = !result.Changed;
+        if (ContentOf(context.Manifest) is { Model.Length: > 0 } content && DataModelLoader.Load(content.Model, name + ".yaml") is { Ok: true, Model: { } model } && AccessPublishNotes.Warnings(model.Access, readOnDataSource: false) is { } warnings) response["warnings"] = warnings;
         if (!_adopting.TryGetValue(context, out var dataSource)) return;
         adoptions?.Record(dataSource, Client(caller)!, Who(caller), name, "entity-model", _clock.GetUtcNow());
         Record(caller, "data-source adopt", dataSource, $"adopted by {Client(caller)} ({Who(caller)}) for the model {name}");

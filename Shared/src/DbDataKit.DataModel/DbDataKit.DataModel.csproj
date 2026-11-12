@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Access\DbDataKit.Access.csproj" />
     <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
     <ProjectReference Include="..\DbDataKit.Dialect.Abstractions\DbDataKit.Dialect.Abstractions.csproj" />
     <ProjectReference Include="..\DbDataKit.Quality\DbDataKit.Quality.csproj" />

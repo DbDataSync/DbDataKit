@@ -3,6 +3,7 @@
     <Project Path="benchmarks/DbDataKit.Transfer.Benchmarks/DbDataKit.Transfer.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/DbDataKit.Access/DbDataKit.Access.csproj" />
     <Project Path="src/DbDataKit.Apps.Build/DbDataKit.Apps.Build.csproj" />
     <Project Path="src/DbDataKit.Apps.Bundling/DbDataKit.Apps.Bundling.csproj" />
     <Project Path="src/DbDataKit.Apps.Manifest/DbDataKit.Apps.Manifest.csproj" />
@@ -188,6 +189,7 @@
     <Project Path="tests/DbDataKit.Lineage.Tests/DbDataKit.Lineage.Tests.csproj" />
     <Project Path="tests/DbDataKit.Lineage.Cli.Tests/DbDataKit.Lineage.Cli.Tests.csproj" />
     <Project Path="tests/DbDataKit.Backlog.Tests/DbDataKit.Backlog.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Access.Tests/DbDataKit.Access.Tests.csproj" />
     <Project Path="tests/DbDataKit.Quality.Tests/DbDataKit.Quality.Tests.csproj" />
     <Project Path="tests/DbDataKit.Quality.Evaluation.Tests/DbDataKit.Quality.Evaluation.Tests.csproj" />
     <Project Path="tests/DbDataKit.Quality.Runner.Tests/DbDataKit.Quality.Runner.Tests.csproj" />

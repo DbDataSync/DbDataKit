@@ -103,7 +103,7 @@ public sealed class AuthoredCatalog
     /// <summary>The catalog's name (<c>name:</c>).</summary>
     public string Name => _json["name"]!.GetValue<string>();
 
-    /// <summary>Every place the file names a model: bindings, measures and relationships.</summary>
+    /// <summary>Every place the file names a model: bindings, measures, relationships and the access section.</summary>
     public IReadOnlyList<ModelUse> ModelUses { get; }
 
     /// <summary>Every place the file names a source.</summary>
@@ -148,6 +148,16 @@ public sealed class AuthoredCatalog
             foreach (var e in errors) problems.Add(At(file, mapping, e));
             return null;
         }
+        if (mapping.Get(DbDataKit.Access.AccessSection.Key) is { } accessNode)
+        {
+            // the shape of the access section, with the file, line and column of what is wrong (what it names is checked against the generated tables when the model is compiled)
+            var accessDiagnostics = new List<ConfigDiagnostic>();
+            DbDataKit.Access.AccessSectionReader.Read(accessNode, file, accessDiagnostics);
+            foreach (var d in accessDiagnostics.Where(d => d.Severity == ConfigSeverity.Error))
+                problems.Add(new AuthoredProblem("invalid_access", file, Math.Max(1, d.Line), Math.Max(1, d.Column), d.Message + (d.Fix is null ? "" : " (" + d.Fix + ")")));
+            if (accessDiagnostics.Any(d => d.Severity == ConfigSeverity.Error)) return null;
+        }
+
         var (models, sourceUses) = Uses(mapping);
         return new AuthoredCatalog(file, mapping, json, models, sourceUses);
     }
@@ -198,7 +208,97 @@ public sealed class AuthoredCatalog
                 if (relationships.Items[i] is YamlMapping r)
                     foreach (var end in new[] { "from", "to" })
                         if (r.Get(end) is YamlScalar model) models.Add(new ModelUse(model.Value, null, $"$.relationships[{i}].{end}", model.Line, model.Column));
+        // the models the access section names (plan 22a GP01): the datasets it filters and its rules tables each become a generated table, on every source where the model is built
+        if (root.Get("access") is YamlMapping access)
+        {
+            void Use(YamlNode? node, string path)
+            {
+                if (node is YamlScalar name) models.Add(new ModelUse(name.Value, null, path, name.Line, name.Column));
+            }
+
+            if (access.Get("row") is YamlSequence rows)
+                for (var i = 0; i < rows.Items.Count; i++)
+                {
+                    if (rows.Items[i] is not YamlMapping row) continue;
+                    Use(row.Get("dataset"), $"$.access.row[{i}].dataset");
+                    if (row.Get("groups") is not YamlSequence groups) continue;
+                    for (var g = 0; g < groups.Items.Count; g++)
+                        if (groups.Items[g] is YamlMapping group && group.Get("rules") is YamlSequence rules)
+                            for (var r = 0; r < rules.Items.Count; r++)
+                                if (rules.Items[r] is YamlMapping rule) Use(rule.Get("table"), $"$.access.row[{i}].groups[{g}].rules[{r}].table");
+                }
+
+            if (access.Get("columns") is YamlSequence columns)
+                for (var i = 0; i < columns.Items.Count; i++)
+                    if (columns.Items[i] is YamlMapping column) Use(column.Get("dataset"), $"$.access.columns[{i}].dataset");
+        }
+
         return (models, sources);
+    }
+
+    /// <summary>
+    /// The access section as the catalog holds it: written once against models, it is cloned for every source where the model it filters is built, with that source's table names (<c>model</c>, or <c>model@source</c> where a model is on
+    /// several sources) and the rule and group ids ending in <c>.source</c> when there are several, so each source has rules of its own over its own rules table. A rules table that is not built on a source where its dataset is, is a problem
+    /// at the line where it is written.
+    /// </summary>
+    private JsonNode ExpandAccess(JsonObject access, List<GeneratedTable> tables, Func<string, string, string> tableName, List<AuthoredProblem> problems)
+    {
+        var expanded = (JsonObject)access.DeepClone();
+        string[] SourcesOf(string model) => [.. tables.Where(t => t.Model == model).Select(t => t.Source).Distinct().Order(StringComparer.Ordinal)];
+
+        if (access["row"] is JsonArray rows)
+        {
+            var result = new JsonArray();
+            for (var i = 0; i < rows.Count; i++)
+            {
+                if (rows[i] is not JsonObject row || row["dataset"]?.GetValue<string>() is not { } dataset) continue;
+                var sources = SourcesOf(dataset);
+                foreach (var source in sources)
+                {
+                    var copy = (JsonObject)row.DeepClone();
+                    copy["dataset"] = tableName(dataset, source);
+                    var groups = (JsonArray)copy["groups"]!;
+                    for (var g = 0; g < groups.Count; g++)
+                    {
+                        var group = (JsonObject)groups[g]!;
+                        if (sources.Length > 1) group["id"] = group["id"]!.GetValue<string>() + "." + source;
+                        var rules = (JsonArray)group["rules"]!;
+                        for (var r = 0; r < rules.Count; r++)
+                        {
+                            var rule = (JsonObject)rules[r]!;
+                            if (sources.Length > 1) rule["id"] = rule["id"]!.GetValue<string>() + "." + source;
+                            var model = rule["table"]!.GetValue<string>();
+                            if (tables.Any(t => t.Model == model && t.Source == source)) rule["table"] = tableName(model, source);
+                            else
+                            {
+                                var (line, column) = Locate($"$.access.row[{i}].groups[{g}].rules[{r}].table");
+                                problems.Add(new AuthoredProblem("rules_table_not_on_source", File, line, column, $"`{model}` is not built or mapped on `{source}`, where `{dataset}` is: a rules table is built in the same target as the table it filters."));
+                            }
+                        }
+                    }
+
+                    result.Add(copy);
+                }
+            }
+
+            expanded["row"] = result;
+        }
+
+        if (access["columns"] is JsonArray columns)
+        {
+            var result = new JsonArray();
+            foreach (var column in columns.OfType<JsonObject>())
+                foreach (var source in SourcesOf(column["dataset"]!.GetValue<string>()))
+                {
+                    var copy = (JsonObject)column.DeepClone();
+                    copy["dataset"] = tableName(column["dataset"]!.GetValue<string>(), source);
+                    result.Add(copy);
+                }
+
+            expanded["columns"] = result;
+        }
+
+        return expanded;
     }
 
     /// <summary>
@@ -283,6 +383,8 @@ public sealed class AuthoredCatalog
         foreach (var (_, measure) in json["measures"]!.AsObject())
             if (measure is JsonObject m && m["of"] is JsonObject of && m["source"] is JsonNode source)
                 of["table"] = TableName(of["table"]!.GetValue<string>(), source.GetValue<string>());
+        if (json["access"] is JsonObject accessSection) json["access"] = ExpandAccess(accessSection, tables, TableName, problems);
+        if (problems.Count > before) return null;
 
         // relationships are written between models and hold on every source where both are generated
         var relationships = new List<GeneratedRelationship>();

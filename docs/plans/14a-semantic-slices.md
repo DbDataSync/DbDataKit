@@ -68,7 +68,7 @@ Nothing below is sliced again; this is the map.
 | G11b `serves` edges | plan 18 | open | unchanged |
 | UC12 cache service, UC15 cache safety suite for the semantic module | plan 24a | open | unchanged |
 | FQ05 checks stored with the semantic package; FQ07 to FQ12 evaluating | plan 23a | FQ01 to FQ06 built | unchanged |
-| GP01, GP02, GP10 to GP15 access rules in the semantic package | plan 22a | deferred (owner, 2026-11-07) | unchanged |
+| GP01, GP02, GP10 to GP15 access rules in the semantic package | plan 22a | decided (owner, 2026-11-12: the `access` section of format 2 names rules tables; not built) | unchanged |
 | O11 calls to `semantic` in process from the `apps` module; O17 Entra on REST | plan 20 | open | unchanged (O17 needs J28) |
 | O16 XMLA sign-in | plan 20 | open | **deferred** (owner, 2026-11-09); its row says so |
 | AP12 dashboard blocks from the semantic layer in a portal home | plan 26 | open | unchanged |
@@ -94,7 +94,7 @@ Recorded decisions, treated as settled. Source in the last column.
 | D11 | REST is its own listener on the Gateway, off unless enabled, authenticated with the tokens the identity and apps modules mint; paging is `limit` only; Flight SQL keeps its own endpoints | J28 (owner, 2026-11-02) |
 | D12 | `semantic` for agents is written once in a shared library and mounted in the Gateway first; the password is never a flag an agent would put in a tool call | J15 (owner, 2026-10-31) |
 | D13 | Agents write requests, never plans; the planner makes the plan and `explain` shows it. Scopes: `session` and `personal` are per-user state, `shared` needs an owner's approval, `governed` means committed to the Build project | `docs/semantic/open-questions.md`, `architecture.md` |
-| D14 | Format 2 of the semantic package holds `cache` and `checks` only; `access` is deferred with the rule language | plan 24a UC03 (owner, 2026-11-07) |
+| D14 | Format 2 of the semantic package holds `cache` and `checks`, and `access` when 22a GP01 is built (QG2, 2026-11-12: rules are data in a rules table) | plan 24a UC03 (owner, 2026-11-07) |
 | D15 | Versions of a published definition are kept until an administrator prunes them through an API and a screen that show the current state | plan 30 decision 1 (owner, 2026-11-04) |
 | D16 | **MDX, XMLA and every extra protocol are low priority and deferred; plan 12 is to be re-reviewed later; plan 15 is low priority for now** | owner, 2026-11-09 |
 | D17 | **A feature that can be built and published has an editor screen or a documented exemption** | CLAUDE.md; owner, 2026-11-08 |

@@ -45,6 +45,45 @@ public static partial class MappedColumns
                 if (measure.Derived is null && measure.Dax is null && measure.Source == id) Add(def.Fact.Table, measure.Column);
         }
 
+        AddAccess(catalog, source, Add);
         return result;
+    }
+
+    /// <summary>
+    /// The tables and columns the catalog's access section (plan 22a GP01, GP02) reads on a source: each rules table with its subject column and the columns its rules match, and the filtered table with the columns the rules and the column rules
+    /// name. They are read at publish like every table the model reads, so a rules table that does not exist on the data source, or lacks a column, is refused naming it, and a rule is never published over a table nobody built.
+    /// </summary>
+    private static void AddAccess(Catalog catalog, string source, Action<string, string?> add)
+    {
+        if (catalog.Access is not { } access || catalog.Source["tables"] is not System.Text.Json.Nodes.JsonArray tables) return;
+        System.Text.Json.Nodes.JsonObject? Table(string name) => tables.OfType<System.Text.Json.Nodes.JsonObject>().FirstOrDefault(t => t["name"]?.GetValue<string>() == name);
+        bool OnSource(System.Text.Json.Nodes.JsonObject table) => SemanticModel.BaseSource(table["x_source"]?.GetValue<string>() ?? "") == source;
+
+        // the physical column behind a catalog column: the plain name its ANSI expression gives, or the catalog column's own name
+        string? Physical(System.Text.Json.Nodes.JsonObject table, string column)
+        {
+            var found = table["columns"]?.AsArray().OfType<System.Text.Json.Nodes.JsonObject>().FirstOrDefault(c => c["name"]?.GetValue<string>() == column);
+            var expression = found?["expression"]?["dialects"]?.AsArray().OfType<System.Text.Json.Nodes.JsonObject>().FirstOrDefault(d => d["dialect"]?.GetValue<string>() == "ANSI_SQL")?["expression"]?.GetValue<string>();
+            return expression is not null && Plain().IsMatch(expression) ? expression : column;
+        }
+
+        foreach (var dataset in access.Row)
+        {
+            if (Table(dataset.Dataset) is not { } filtered || !OnSource(filtered)) continue;
+            add(filtered["source"]!.GetValue<string>(), null);
+            foreach (var rule in dataset.Groups.SelectMany(g => g.Rules))
+            {
+                if (Table(rule.Table) is not { } rules) continue;
+                add(rules["source"]!.GetValue<string>(), Physical(rules, rule.Subject));
+                foreach (var pair in rule.Columns)
+                {
+                    add(filtered["source"]!.GetValue<string>(), Physical(filtered, pair.DatasetColumn));
+                    add(rules["source"]!.GetValue<string>(), Physical(rules, pair.RulesColumn));
+                }
+            }
+        }
+
+        foreach (var rule in access.Columns)
+            if (Table(rule.Dataset) is { } table && OnSource(table)) add(table["source"]!.GetValue<string>(), Physical(table, rule.Column));
     }
 }

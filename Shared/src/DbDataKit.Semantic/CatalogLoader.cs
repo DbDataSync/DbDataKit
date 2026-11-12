@@ -63,6 +63,8 @@ public static partial class CatalogLoader
             }
         }
 
+        ReadAccess(root, file ?? "catalog", errors);
+
         if (errors.Count > 0) throw new CatalogException(errors);
         return catalog!;
     }
@@ -77,6 +79,7 @@ public static partial class CatalogLoader
         errors = [];
         var doc = Build(json, errors);
         if (checksOfJson && json["checks"] is JsonArray section && errors.Count == 0) errors.AddRange(ChecksOf(section, json));
+        if (checksOfJson && errors.Count == 0) errors.AddRange(AccessOf(json));
         if (errors.Count > 0) throw new CatalogException(errors);
         return new Catalog(doc, json);
     }
