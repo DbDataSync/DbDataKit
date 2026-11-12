@@ -54,6 +54,8 @@ describe('publishing a semantic model', () => {
     expect(done).toContain('warehouse, finance')
     expect(html({ done: { proxy: 'gateway-one', model: 'sales', version: 1, created: true, data_sources: [] } })).toContain('now served')
     expect(html({ failure: new ApiError(400, 'The proxy refused publishing the model: Data source \'warehouse\' did not answer a test query.', null) })).toContain('did not answer a test query')
+    // plan 14a SL06: a column the data source lacks is named as table.column
+    expect(html({ failure: new ApiError(400, "The proxy refused publishing the model: The column 'dim_customer.region' of source 'sales' could not be read on data source 'warehouse'.", null) })).toContain('dim_customer.region')
     expect(html({ failure: new ApiError(403, 'This needs the approver role.', null) })).toContain('Publishing needs the approver role')
   })
 })
