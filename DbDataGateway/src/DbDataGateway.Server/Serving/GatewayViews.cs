@@ -87,9 +87,11 @@ public sealed class GatewayViewsPublishing(DefinitionStore store, StateDatabase 
 /// </summary>
 public sealed class GatewayViews
 {
-    public GatewayViews(DefinitionStore store, GatewayViewsPublishing publishing, IOptionsMonitor<GatewayOptions> options, HomeCallers homeCallers, StateDatabase state, ILoggerFactory loggers)
+    public GatewayViews(DefinitionStore store, GatewayViewsPublishing publishing, IOptionsMonitor<GatewayOptions> options, HomeCallers homeCallers, StateDatabase state, ILoggerFactory loggers, IReportExporter? exporter = null)
     {
         Publishing = publishing;
+        exporter ??= ExporterOf(options.CurrentValue.Views.Export, loggers);
+        CanExport = exporter is not null;
         this.homeCallers = homeCallers;
         this.options = options;
         Publications = new ViewsPublications(store, publishing.Publisher);
@@ -100,7 +102,7 @@ public sealed class GatewayViews
             UserViews = new UserViewStore(state),
             CacheTtl = TimeSpan.FromSeconds(options.CurrentValue.Views.CacheSeconds),
             MaxExportRows = options.CurrentValue.Views.MaxExportRows,
-            Exporter = ExporterOf(options.CurrentValue.Views.Export, loggers),
+            Exporter = exporter,
             PageAssets = options.CurrentValue.Views.Export.PageAssets,
             Resolver = new ResolverOptions { FrameOrigins = new LiveOrigins(() => options.CurrentValue.Views.FrameOrigins) },
         }, Publications, new Callers(this), new StateViewsAudit(new AuditLog(state, DbDataGateway.Server.State.GatewayState.ServiceId)), loggers);
@@ -144,6 +146,23 @@ public sealed class GatewayViews
         var home = await homeCallers.GetAsync(cancellationToken).ConfigureAwait(false);
         return Principal(HomePrincipals.Create(home, user, method, options.CurrentValue));
     }
+
+    /// <summary>Whether this instance has an exporter (<c>views.export</c> is on, or a host gave one): without it a subscription cannot be drawn and the subscriptions task does nothing.</summary>
+    public bool CanExport { get; }
+
+    /// <summary>
+    /// The person a subscription is drawn as (plan 32 DBR18): the identity home's enabled user of that subject id with the groups the home gives them now, <b>never the Gateway's own identity</b>. Null when the home does not know the subject, or the user is disabled
+    /// (the subscription then stops as lost access). A person who is only the console's has no home user and is lost access too.
+    /// </summary>
+    public async ValueTask<ViewsPrincipal?> SubscriberPrincipalAsync(string subject, CancellationToken cancellationToken)
+    {
+        var home = await homeCallers.GetAsync(cancellationToken).ConfigureAwait(false);
+        return home.UserOf(subject) is { } user ? Principal(HomePrincipals.Create(home, user, "subscription", options.CurrentValue)) : null;
+    }
+
+    /// <summary>The home user of a subject id as the subscription service addresses them (enabled ones only), or null.</summary>
+    public async ValueTask<UserRecord?> SubscriberAsync(string subject, CancellationToken cancellationToken) =>
+        (await homeCallers.GetAsync(cancellationToken).ConfigureAwait(false)).UserOf(subject);
 
     /// <summary>
     /// The caller behind a console's signed token: a person who signs in through the identity home is that home user (their groups decide which data sources they may read, as for any client of the Gateway); a person who is only the console's has

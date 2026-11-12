@@ -114,6 +114,37 @@ export async function reportsStory(page: Page) {
   }
   await page.emulateMedia({ media: 'screen' })
 
+  // The sheet scales to a narrow window (DBR14): at 1280 pixels the A4 sheet (794 wide) fits and has no scale; at 420 it is scaled by a transform to fit the frame (a factor between a third and 1, never a horizontal scroll of the page),
+  // the wrapper takes the scaled size, and the page's own pixels stay the unit (the guides are the same place and the over-width note stays away); in print the transform is gone.
+  await expect(page.getByTestId('vz-flow-fit')).not.toHaveAttribute('data-scale', /./)
+  const wideSheet = await page.getByTestId('vz-flow-sheet').evaluate((e) => e.getBoundingClientRect().width)
+  const wideGuides = await guides(page)
+  await page.setViewportSize({ width: 420, height: 800 })
+  const fit = page.getByTestId('vz-flow-fit')
+  await expect(fit).toHaveAttribute('data-scale', /^0\.\d+$/)
+  const factor = Number(await fit.getAttribute('data-scale'))
+  expect(factor).toBeGreaterThanOrEqual(1 / 3)
+  expect(factor).toBeLessThan(1)
+  const narrow = await page.evaluate(() => {
+    const sheet = document.querySelector('[data-testid="vz-flow-sheet"]') as HTMLElement
+    const wrapper = document.querySelector('[data-testid="vz-flow-fit"]') as HTMLElement
+    const scroll = document.querySelector('[data-testid="vz-flow-scroll"]') as HTMLElement
+    return { sheet: sheet.getBoundingClientRect().width, wrapper: wrapper.getBoundingClientRect().width, scroll: scroll.clientWidth, transform: getComputedStyle(sheet).transform, own: sheet.offsetWidth }
+  })
+  expect(narrow.own).toBe(794)                                                             // laid out in the page's own pixels
+  expect(narrow.sheet).toBeCloseTo(wideSheet * factor, 0)                                  // drawn scaled
+  expect(narrow.wrapper).toBeCloseTo(narrow.sheet, 0)                                      // the wrapper is as wide as what is drawn
+  expect(narrow.sheet).toBeLessThanOrEqual(narrow.scroll)                                  // the sheet fits the frame: no sideways scroll to read a line
+  expect(narrow.transform).not.toBe('none')
+  expect(await documentOverflow(page)).toEqual({ x: 0, y: 0 })
+  await expect(page.getByTestId('vz-flow-overwidth')).toHaveCount(0)
+  expect(await guides(page)).toHaveLength(wideGuides.length)
+  await page.emulateMedia({ media: 'print' })
+  expect(await page.getByTestId('vz-flow-sheet').evaluate((e) => getComputedStyle(e).transform)).toBe('none')
+  await page.emulateMedia({ media: 'screen' })
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await expect(page.getByTestId('vz-flow-fit')).not.toHaveAttribute('data-scale', /./)
+
   // The same dashboard shows as a one-page dashboard and, with ?layout=print, as a paginated report (the sample's print layout is a flow layout for the print medium).
   await page.setViewportSize({ width: 1366, height: 768 })
   await page.goto('/views/dashboards/retail-sales-today')
