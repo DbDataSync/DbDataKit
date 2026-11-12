@@ -325,6 +325,73 @@ jobs:
             docker push "$ref:latest"
           fi
 
+  # The Gateway image with PDF export (plan 32 DBR16, owner decision 2026-11-12): the variant tag <version>-export (and `latest-export` for a stable release) of ghcr.io/<owner>/dbdatagateway, the Gateway image
+  # plus the export layer (dist/export/Dockerfile: Chromium's shared libraries and the staged component, views.export on). The plain image stays small; this one is for a deployment that exports PDFs. The base is built here
+  # again (an image of the job above is not shared between jobs), the component is staged by dist/export_component.py, and the layer's own build fails when the browser cannot start. Untested until a release runs.
+  image-export:
+    needs: guard
+    if: ${{ !inputs.snapshot }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      VERSION: ${{ needs.guard.outputs.version }}
+      PRERELEASE: ${{ needs.guard.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.guard.outputs.sha }}
+      # a commit from before the export layer existed has no layer to build
+      - name: Is there an export layer in this commit
+        id: layer
+        run: |
+          if [ -f dist/export/Dockerfile ] && [ -f dist/export_component.py ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; fi
+      - if: ${{ steps.layer.outputs.present == 'true' && hashFiles('.github/actions/duckdb-cache/action.yml') != '' }}
+        uses: ./.github/actions/duckdb-cache
+        with:
+          rids: linux-x64
+      - if: ${{ steps.layer.outputs.present == 'true' && hashFiles('.github/actions/native-cache/action.yml') != '' }}
+        uses: ./.github/actions/native-cache
+        with:
+          rids: linux-x64
+      - if: ${{ steps.layer.outputs.present == 'true' }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Build the base image
+        if: ${{ steps.layer.outputs.present == 'true' }}
+        run: docker build -f DbDataGateway/Dockerfile -t dbdatagateway:release .
+      - name: Stage the export component
+        if: ${{ steps.layer.outputs.present == 'true' }}
+        run: |
+          scripts/fetch-chromium.sh linux-x64
+          scripts/fetch-fonts.sh all
+          (cd Shared/web && npm ci --workspace @dbdatakit/visuals --include-workspace-root --ignore-scripts && npm run build:print --workspace @dbdatakit/visuals)
+          python3 -I dist/export_component.py stage --rid linux-x64 --out .export-component
+      - name: Build the export layer
+        if: ${{ steps.layer.outputs.present == 'true' }}
+        run: docker build -f dist/export/Dockerfile --build-arg BASE_IMAGE=dbdatagateway:release -t dbdatagateway-export:release .
+      - name: The browser in the image starts and is the pinned one
+        if: ${{ steps.layer.outputs.present == 'true' }}
+        run: |
+          got="$(docker run --rm --entrypoint /opt/dbdatakit/export/.chromium/linux-x64/chrome-linux64/chrome dbdatagateway-export:release --no-sandbox --version | sed 's/[[:space:]]*$//')"
+          want="Google Chrome for Testing $(grep '^VERSION=' chromium.pin | cut -d= -f2)"
+          echo "got:  [$got]"; echo "want: [$want]"
+          test "$got" = "$want"
+      - name: Push
+        if: ${{ steps.layer.outputs.present == 'true' && !inputs.dry_run }}
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          ref="ghcr.io/$owner/dbdatagateway"
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker tag dbdatagateway-export:release "$ref:$VERSION-export"
+          docker push "$ref:$VERSION-export"
+          if [ "$PRERELEASE" != "true" ]; then
+            docker tag dbdatagateway-export:release "$ref:latest-export"
+            docker push "$ref:latest-export"
+          fi
+
   # The dry run's answer: every product kept its package, and its checksums list what is in it.
   suite-manifest:
     # The one Scoop manifest for every member (plan 33 section 6a, SC11); it pins each member's zip and hash, so it needs every member's release to exist.
@@ -349,7 +416,7 @@ jobs:
   verify:
     # The images job is skipped for a snapshot, so this cannot rely on the default (every need succeeded).
     if: ${{ inputs.dry_run && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
-    needs: [console, build, gateway, runner, store, workspace, sync, images]
+    needs: [console, build, gateway, runner, store, workspace, sync, images, image-export]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
