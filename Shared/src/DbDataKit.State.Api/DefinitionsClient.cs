@@ -133,6 +133,13 @@ public sealed class DefinitionsClient(IDefinitionsLink link, ConsoleSigningKey? 
         return SendAsync(HttpMethod.Put, $"bindings/{Uri.EscapeDataString(channel)}/{Uri.EscapeDataString(kind)}/{Uri.EscapeDataString(name)}", body, ct);
     }
 
+    /// <summary>Empties one slot of a definition in a channel (<c>DELETE bindings/{channel}/{kind}/{name}/{slot}</c>). A slot that was not bound is already empty (the group answers 404, which is not a failure here).</summary>
+    public async Task<DefinitionsAnswer> UnbindAsync(string channel, string kind, string name, string slot, CancellationToken ct = default)
+    {
+        var answer = await SendAsync(HttpMethod.Delete, $"bindings/{Uri.EscapeDataString(channel)}/{Uri.EscapeDataString(kind)}/{Uri.EscapeDataString(name)}/{Uri.EscapeDataString(slot)}", null, ct).ConfigureAwait(false);
+        return answer.Status == 404 ? new DefinitionsAnswer(200, new JsonObject { ["slot"] = slot, ["unbound"] = false }) : answer;
+    }
+
     private Task<DefinitionsAnswer> GetAsync(string path, CancellationToken ct) => SendAsync(HttpMethod.Get, path, null, ct);
 
     private async Task<DefinitionsAnswer> SendAsync(HttpMethod method, string path, JsonObject? body, CancellationToken ct)

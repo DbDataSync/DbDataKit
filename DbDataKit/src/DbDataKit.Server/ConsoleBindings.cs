@@ -220,6 +220,9 @@ public sealed class ConsoleBindings
         _audit.Record(new AuditEvent("system", "console", "bindings.posture.move", AuditEvent.Ok, ViaKind: "console", TargetKind: PostureGuard.SettingKind, TargetId: PostureSetting.ProductionBindingOnNonProduction.Name, Detail: JsonSerializer.Serialize(new { from = EarlierChoicesFileName, count = earlier?.Count ?? 0 })));
     }
 
+    /// <summary>Every choice of the console's own table (<c>bindings.posture_choice</c>), for the combined list of IX25.</summary>
+    public IReadOnlyList<PostureChoice> AllChoices() => _choices.List();
+
     /// <summary>Whether the production-in-non-production choice of a scope was recorded (confirmed by an administrator).</summary>
     public bool Confirmed(string scope) => ChoiceOf(scope) is not null;
 

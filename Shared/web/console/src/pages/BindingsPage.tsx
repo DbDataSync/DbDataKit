@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CodeEditor, ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { ConsoleShell } from '../ConsoleShell'
+import { BindingComparePanel, PostureListPanel } from './BindingCompare'
 import { agentsApi, type Diagnostic } from '../agents'
 import { deliveryApi } from '../delivery'
 import {
@@ -20,6 +21,8 @@ export function BindingsPage() {
       <div className="pane" data-testid="bindings-page">
         <div className="page-head"><h1 className="page-title">Bindings</h1><span className="page-note">Which connection each model, delivery channel and runner slot uses in each release channel.</span></div>
         <BindingsPanel />
+        <BindingComparePanel />
+        <PostureListPanel />
       </div>
     </ConsoleShell>
   )

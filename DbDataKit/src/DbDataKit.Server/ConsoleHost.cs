@@ -116,6 +116,7 @@ public static class ConsoleHost
         builder.Services.AddSingleton(sp => new ConsoleConnections(settings, sp.GetRequiredService<EncryptedFileSecretStore>()));
         builder.Services.AddSingleton(sp => new ConsoleBindings(settings, sp.GetRequiredService<ConsoleConnections>(), sp.GetRequiredService<AuditLog>(), sp.GetRequiredService<StateDatabase>()));
         builder.Services.AddSingleton<ConsoleRunnerBindings>();
+        builder.Services.AddSingleton<ConsoleBindingCompare>();   // plan 27a IX25: compare, adopt and publish of bindings and connections against a Runner or a Gateway, and the combined posture list
         builder.Services.AddSingleton<ConsolePromotions>();   // plan 30 PB06: a package promoted from one runner group to another as the signed-in person
         builder.Services.AddSingleton<ConsoleReleases>();   // plan 21 CH02: releases, one approval, run as the person who starts them
         builder.Services.AddSingleton<ConsoleModels>(sp => new ConsoleModels(settings, sp.GetRequiredService<ConsoleConnections>(), sp.GetRequiredService<ConsoleBindings>(), sp.GetRequiredService<ModelHttp>()));

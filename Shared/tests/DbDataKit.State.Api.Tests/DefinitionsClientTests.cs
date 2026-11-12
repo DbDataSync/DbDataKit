@@ -131,6 +131,24 @@ public sealed class DefinitionsClientTests : IDisposable
     }
 
     [Fact]
+    public async Task A_slot_is_bound_and_emptied_through_the_shared_route_and_emptying_a_slot_that_is_not_bound_is_not_a_failure()
+    {
+        var (api, _, _, policy) = Open();
+        policy.MarkTestGroup(true);
+        var client = new DefinitionsClient(new Link(api, Admin));
+        Assert.True((await client.PublishAsync(new DefinitionPublishRequest("model", "sales", "one", ExpectedVersion: 0))).Ok);
+
+        var bound = await client.BindAsync("prod", "model", "sales", new Dictionary<string, string> { ["model:default"] = "claude/claude-sonnet-4-5" });
+        Assert.True(bound.Ok, bound.Error);
+        Assert.Contains((await client.DescribeAsync("model", "sales")).Body["bindings"]!.AsArray(), b => (string)b!["slot"]! == "model:default" && (string)b["bound_to"]! == "claude/claude-sonnet-4-5" && (string)b["channel"]! == "prod");
+
+        var emptied = await client.UnbindAsync("prod", "model", "sales", "model:default");
+        Assert.True(emptied.Ok, emptied.Error);
+        Assert.DoesNotContain((await client.DescribeAsync("model", "sales")).Body["bindings"]!.AsArray(), b => (string)b!["slot"]! == "model:default");
+        Assert.True((await client.UnbindAsync("prod", "model", "sales", "model:default")).Ok);
+    }
+
+    [Fact]
     public async Task A_hook_waits_on_its_check_sees_the_body_and_adds_to_the_answer_and_its_refusal_keeps_its_words()
     {
         var (api, hook, _, policy) = Open();
