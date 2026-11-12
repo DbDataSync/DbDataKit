@@ -85,6 +85,34 @@ public sealed class ViewsExportTests : IDisposable
         return [.. document.GetPages().Select(p => string.Join(" ", p.GetWords().Select(w => w.Text)))];
     }
 
+    [Fact]
+    public async Task Margin_boxes_run_a_header_and_footer_on_every_page_in_the_real_browser()
+    {
+        var settings = TestBrowser.Settings();
+        await using var exporter = new ChromiumExporter(settings);
+        Assert.True((await exporter.CheckAsync(TestContext.Current.CancellationToken)).Available);
+        var paper = new PrintPaper("A4 portrait", 210, 297, new PageMargins(20, 15, 20, 15),
+            new JsonObject { ["left"] = "{title}", ["right"] = "{asof}" },
+            new JsonObject { ["left"] = "{viewer} \"quoted\" </style>", ["center"] = "{params.region}", ["right"] = "Page {page} of {pages}" });
+        var rule = PrintPages.MarginBoxRule(paper, "Quarterly summary", "2026-11-08T09:00:00Z", "ada", new JsonObject { ["region"] = "West" });
+        Assert.Contains("@bottom-right { content: \"Page \" counter(page) \" of \" counter(pages)", rule);
+        Assert.DoesNotContain("</style>", rule);
+        var rows = string.Concat(Enumerable.Range(1, 150).Select(i => $"<p>Line {i:000}</p>"));
+        var html = $"<!doctype html><html><head><meta charset=\"utf-8\"><style>{PrintPages.Rule(paper)}\n{rule}\nbody {{ font-family: sans-serif; margin: 0 }}</style></head><body>{rows}<script>window.__reportReady = true</script></body></html>";
+        var result = await exporter.ExportPdfAsync(new PrintJob("Quarterly summary", html, new Dictionary<string, PrintAsset>(), new PdfLayout(210, 297, paper.Margins, PreferCssPage: true)), TestContext.Current.CancellationToken);
+
+        var texts = PageTexts(result.Pdf);
+        Assert.True(texts.Length >= 2, "150 lines must make more than one page.");
+        for (var p = 0; p < texts.Length; p++)
+        {
+            Assert.Contains($"Page {p + 1} of {texts.Length}", texts[p]);
+            Assert.Contains("Quarterly summary", texts[p]);
+            Assert.Contains("2026-11-08 09:00 UTC", texts[p]);
+            Assert.Contains("West", texts[p]);
+            Assert.Contains("ada \"quoted\"", texts[p]);
+        }
+    }
+
     private static string RichReport(string title = "Quarterly summary") => """
         schemaVersion: 1
         kind: report

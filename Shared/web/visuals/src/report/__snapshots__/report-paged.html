@@ -25,7 +25,8 @@
   html, body, *:has(.vz-flow-outer) { display: block !important; position: static !important; width: auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; padding: 0 !important; margin: 0 !important; border: 0 !important; transform: none !important; }
   .vz-flow-outer { display: block !important; position: static !important; width: auto !important; height: auto !important; overflow: visible !important; background: none; }
   .vz-flow-scroll { overflow: visible !important; height: auto !important; padding: 0 !important; }
-  .vz-flow-sheet { width: auto !important; padding: 0 !important; box-shadow: none !important; background: none !important; min-height: 0 !important; }
+  .vz-flow-fit { width: auto !important; height: auto !important; margin: 0 !important; }
+  .vz-flow-sheet { transform: none !important; width: auto !important; padding: 0 !important; box-shadow: none !important; background: none !important; min-height: 0 !important; }
   .vz-flow-guide, .vz-flow-bar, .vz-flow-running, .vz-flow-note { display: none !important; }
 }</style>
 <div class="vz-flow-bar">
@@ -36,7 +37,8 @@
 </span>
 </div>
 <div class="vz-flow-scroll" data-testid="vz-flow-scroll">
-<div class="vz-flow-sheet" data-testid="vz-flow-sheet" style="width:793.7px;padding:75.59px 56.69px 75.59px 56.69px">
+<div class="vz-flow-fit" data-testid="vz-flow-fit">
+<div class="vz-flow-sheet" data-testid="vz-flow-sheet" style="transform-origin:0 0;width:793.7px;padding:75.59px 56.69px 75.59px 56.69px">
 <div class="vz-flow-running vz-flow-head" data-testid="vz-flow-header" style="top:0;height:75.59px;left:56.69px;right:56.69px">
 <span>Retail sales by month</span>
 <span>
@@ -293,6 +295,7 @@
 <span>Page 2 of 2</span>
 <span>
 </span>
+</div>
 </div>
 </div>
 </div>

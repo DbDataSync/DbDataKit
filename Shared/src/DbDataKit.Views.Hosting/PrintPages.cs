@@ -125,6 +125,56 @@ public static class PrintPages
         return $"<div style=\"box-sizing:border-box;width:100%;padding:0 {Mm(edge.Right)} 0 {Mm(edge.Left)};font-size:8px;color:#555;display:flex;justify-content:space-between;font-family:sans-serif\"><span style=\"flex:1;text-align:left\">{l}</span><span style=\"flex:1;text-align:center\">{c}</span><span style=\"flex:1;text-align:right\">{r}</span></div>";
     }
 
+    /// <summary>
+    /// The other way to run a header and footer (plan 32 section 4.3): CSS <c>@page</c> margin boxes (<c>@top-left</c> to <c>@bottom-right</c>) with <c>counter(page)</c> and <c>counter(pages)</c>, written into the page's own stylesheet instead of
+    /// the browser's templates. Chromium prints them from version 131 (checked here against a real PDF); the exporter still uses the templates unless a caller asks for this rule. Empty when the layout has no header or footer.
+    /// Text is written as CSS strings (a quote, a backslash or a newline cannot end one); the tokens are those of <see cref="RunningTemplate"/>.
+    /// </summary>
+    public static string MarginBoxRule(PrintPaper paper, string title, string? asOf, string? viewer, JsonObject parameters)
+    {
+        var boxes = new StringBuilder();
+        void Part(JsonObject? part, string edge)
+        {
+            if (part is null) return;
+            foreach (var key in new[] { "left", "center", "right" })
+            {
+                var text = part[key] is JsonValue v && v.TryGetValue<string>(out var s) ? s : "";
+                var pieces = new List<string>();
+                var last = 0;
+                foreach (Match m in Token.Matches(text))
+                {
+                    if (m.Index > last) pieces.Add(CssString(text[last..m.Index]));
+                    last = m.Index + m.Length;
+                    var t = m.Groups["t"].Value;
+                    pieces.Add(t switch
+                    {
+                        "title" => CssString(title),
+                        "page" => "counter(page)",
+                        "pages" => "counter(pages)",
+                        "asof" => CssString(FormatAsOf(asOf)),
+                        "viewer" => CssString(viewer ?? ""),
+                        _ when t.StartsWith("params.", StringComparison.Ordinal) => CssString(Describe(parameters[t[7..]])),
+                        _ => CssString(m.Value),
+                    });
+                }
+                if (last < text.Length) pieces.Add(CssString(text[last..]));
+                if (pieces.Count == 0) continue;
+                boxes.Append("  @").Append(edge).Append('-').Append(key).Append(" { content: ").Append(string.Join(' ', pieces)).Append("; font: 8px var(--font-sans, sans-serif); color: #555 }\n");
+            }
+        }
+        Part(paper.Header, "top");
+        Part(paper.Footer, "bottom");
+        return boxes.Length == 0 ? "" : $"@page {{\n{boxes}}}";
+    }
+
+    private static string CssString(string text)
+    {
+        var sb = new StringBuilder("\"");
+        foreach (var c in text)
+            sb.Append(c switch { '"' => "\\\"", '\\' => "\\\\", '\n' => "\\a ", '\r' => "", '<' => "\\3c ", _ => c.ToString() });
+        return sb.Append('"').ToString();
+    }
+
     private static string FormatAsOf(string? asOf)
     {
         if (asOf is null) return "";

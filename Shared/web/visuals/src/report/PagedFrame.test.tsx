@@ -9,7 +9,7 @@ import { DashboardView } from '../dashboard/DashboardView'
 import { sampleBundle } from '../testing/sampleBundle'
 import type { FlowLayoutDoc, ViewsDoc } from '../views/model'
 import type { RenderedWidget } from '../views/rendered'
-import { PagedFrame } from './PagedFrame'
+import { PagedFrame, fitScale } from './PagedFrame'
 import { ReportView } from './ReportView'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -140,5 +140,18 @@ describe('in a view', () => {
       else delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollWidth
       delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientWidth
     }
+  })
+
+  it('scales a sheet wider than its window to fit, and leaves one that fits alone', async () => {
+    expect(fitScale(1000, 680)).toBe(1)
+    expect(fitScale(0, 680)).toBe(1)
+    expect(fitScale(392, 680)).toBeCloseTo(0.529, 3)
+    expect(fitScale(100, 680)).toBeCloseTo(1 / 3, 5) // never smaller than a third
+    await act(async () => root.render(<PagedFrame document={report} layout={paged} box={{ width: 392, height: 700 }} theme="light" results={results} />))
+    expect(q('vz-flow-fit')!.getAttribute('data-scale')).not.toBeNull()
+    expect(q('vz-flow-sheet')!.style.transform).toMatch(/^scale\(0\.45/)
+    await act(async () => root.render(<PagedFrame document={report} layout={paged} box={box} theme="light" results={results} />))
+    expect(q('vz-flow-fit')!.getAttribute('data-scale')).toBeNull()
+    expect(q('vz-flow-sheet')!.style.transform).toBe('')
   })
 })
