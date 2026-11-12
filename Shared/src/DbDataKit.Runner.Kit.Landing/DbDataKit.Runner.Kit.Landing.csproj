@@ -2,7 +2,7 @@
   <PropertyGroup>
     <RootNamespace>DbDataKit.Runner.Kit.Landing</RootNamespace>
     <PackageId>DbDataKit.Runner.Kit.Landing</PackageId>
-    <Description>The kit's landing of rows (plan 27a IX11): rows from a file or an API into a staging table of a suite connection through DbDataKit.Transfer (the write gate, one transaction per batch, an idempotency key so a batch lands once), with the conversion of text to the table's types and a bad row reported with its position.</Description>
+    <Description>The kit's landing of rows (plan 27a IX11): rows from a file or an API into a staging table of a suite connection through DbDataKit.Transfer (the write gate, one transaction per batch, an idempotency key so a batch lands once), and rows into the tables of a DbDataStore model through the Store's own write path (every rule, history and audit), with the conversion of text to the table's types and a bad row reported with its position.</Description>
     <IsPackable>true</IsPackable>
     <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -11,5 +11,6 @@
     <None Include="README.md" Pack="true" PackagePath="/" />
     <ProjectReference Include="..\DbDataKit.Transfer\DbDataKit.Transfer.csproj" />
     <ProjectReference Include="..\DbDataKit.Runner.Kit.Formats\DbDataKit.Runner.Kit.Formats.csproj" />
+    <ProjectReference Include="..\DbDataKit.Store\DbDataKit.Store.csproj" />
   </ItemGroup>
 </Project>
