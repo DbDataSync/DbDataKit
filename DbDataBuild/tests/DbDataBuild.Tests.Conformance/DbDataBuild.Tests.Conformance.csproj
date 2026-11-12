@@ -43,6 +43,7 @@
     <ProjectReference Include="..\..\src\DbDataBuild.State\DbDataBuild.State.csproj" />
     <ProjectReference Include="..\..\src\DbDataBuild.Execution\DbDataBuild.Execution.csproj" />
     <ProjectReference Include="..\..\src\DbDataBuild.Cli\DbDataBuild.Cli.csproj" />
+    <DbDataKitReference Include="Runner.Kit.Testing" />   <!-- the kit's run simulator: the operation tasks of plan 28c E21 run in process against a real engine -->
     <!-- a real dbdatarunner server, in process, runs a refresh plan as a task (plan 28c, E01: RefreshOnRunnerConformanceTests) -->
     <ProjectReference Include="..\..\..\DbDataRunner\src\DbDataRunner.Server\DbDataRunner.Server.csproj" />
     <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">

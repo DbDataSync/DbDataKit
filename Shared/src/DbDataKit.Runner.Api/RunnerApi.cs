@@ -267,6 +267,7 @@ public static class RunnerApi
             if (Deny(context, ServerRole.Operator, RunnerControl.RunVerb, engine(), reference!) is { } denied) return denied;
             var inputs = new Dictionary<string, string>(StringComparer.Ordinal);
             var dryRun = false;
+            string? onBehalfOf = null;
             if (context.Request.ContentLength is null or > 0)
             {
                 // a body is optional; a client may send it without a length (chunked), so it is read, not asked about
@@ -284,6 +285,13 @@ public static class RunnerApi
                         if (dry is not JsonValue dryValue || !dryValue.TryGetValue<bool>(out dryRun)) return Results.BadRequest(new { error = "dry_run is true or false." });
                     }
 
+                    // a paired server that starts a run for a person it signed in names them (plan 28c E21); the run's record shows the person with the caller beside them
+                    if (body["on_behalf_of"] is { } person)
+                    {
+                        if (person is not JsonValue personValue || !personValue.TryGetValue<string>(out onBehalfOf) || onBehalfOf.Length > RunnerControl.MaxOnBehalfOf)
+                            return Results.BadRequest(new { error = $"on_behalf_of is the name of a person, text of at most {RunnerControl.MaxOnBehalfOf} characters." });
+                    }
+
                     if (body["inputs"] is { } given)
                     {
                         if (given is not JsonObject map) return Results.BadRequest(new { error = "inputs is an object of names and text values." });
@@ -295,7 +303,7 @@ public static class RunnerApi
 
             return Control(engine(), control =>
             {
-                var result = control.RunNow(reference!, inputs, ActorOf(context), dryRun);
+                var result = control.RunNow(reference!, inputs, ActorOf(context), dryRun, onBehalfOf);
                 return result.Queued
                     ? Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["run_id"] = result.RunId!.Value.ToString() }, statusCode: StatusCodes.Status202Accepted)
                     : Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["queued"] = false, ["error"] = $"{reference} is queued or running already." }, statusCode: StatusCodes.Status409Conflict);

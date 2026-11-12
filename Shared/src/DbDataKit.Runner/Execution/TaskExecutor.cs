@@ -340,6 +340,7 @@ public sealed class TaskExecutor : ITaskRunner
             if (request.RuntimeKey is { } key) environment[ExtractDirectoryVariable] = ExtractDirectoryOf(key);
         }
         environment[RunnerProtocolNames.TaskVariable] = request.Task.Task;
+        if (!string.IsNullOrWhiteSpace(request.RequestedBy)) environment[RunnerProtocolNames.RequestedByVariable] = request.RequestedBy;
         environment[RunnerProtocolNames.EndpointVariable] = _host.Endpoint.ToString();
         environment[RunnerProtocolNames.TokenVariable] = token;
 

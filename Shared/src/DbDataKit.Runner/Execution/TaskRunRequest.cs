@@ -45,6 +45,9 @@ public sealed record TaskRunRequest
     /// <summary>1 for the first run of the chain.</summary>
     public int Attempt { get; init; } = 1;
 
+    /// <summary>Who asked for the run by hand (plan 28c E21), as the run records it; null for a run nobody asked for. The executor puts it in the process's environment (<see cref="DbDataKit.Runner.Protocol.RunnerProtocolNames.RequestedByVariable"/>), so a task that writes under a person's name reads it.</summary>
+    public string? RequestedBy { get; init; }
+
     /// <summary>The task's inputs as text; the kit binds them to the job's input record.</summary>
     public IReadOnlyDictionary<string, string> Inputs { get; init; } = new Dictionary<string, string>();
 

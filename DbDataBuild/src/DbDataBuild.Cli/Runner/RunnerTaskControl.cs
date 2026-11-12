@@ -14,6 +14,9 @@ internal interface IRunnerTaskControl
     Task<string?> RunNowAsync(string package, string task, CancellationToken ct);
 
     Task<ClientTaskStatus?> StatusAsync(string package, string task, CancellationToken ct);
+
+    /// <summary>Queues a manual run of the task for a person (plan 28c E21): <paramref name="inputs"/> are the task's inputs, <paramref name="onBehalfOf"/> the person as the tracking tables should name them. The id of the run, or null when one is queued or running already.</summary>
+    Task<string?> RunForAsync(string package, string task, IReadOnlyDictionary<string, string> inputs, string onBehalfOf, CancellationToken ct) => throw new NotSupportedException("This runner control cannot start a run for a person.");
 }
 
 /// <summary>The runner a <see cref="ScheduleRunnerLink"/> names, spoken to through the paired client; pause, resume and run need the operator role of the pairing (a publisher's pairing is refused by the runner, and the refusal is what the caller is told).</summary>
@@ -24,6 +27,8 @@ internal sealed class ClientRunnerTaskControl(RunnerPublishClient client, Schedu
     public Task ResumeAsync(string package, string task, CancellationToken ct) => client.ResumeAsync(link.Server, null, package, link.Channel, task, null, ct);
 
     public Task<string?> RunNowAsync(string package, string task, CancellationToken ct) => client.RunNowAsync(link.Server, null, package, link.Channel, task, null, ct);
+
+    public Task<string?> RunForAsync(string package, string task, IReadOnlyDictionary<string, string> inputs, string onBehalfOf, CancellationToken ct) => client.RunNowAsync(link.Server, null, package, link.Channel, task, inputs, onBehalfOf, null, ct);
 
     public Task<ClientTaskStatus?> StatusAsync(string package, string task, CancellationToken ct) => client.TaskStatusAsync(link.Server, null, package, link.Channel, task, null, ct);
 

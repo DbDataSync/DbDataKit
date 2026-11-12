@@ -98,7 +98,7 @@ internal static class LoadSeedsCommand
             var runId = Guid.NewGuid();
             try
             {
-                using var log = new FileStatementLog(Path.Combine(root, InitCommand.StatementLogDir), spec.Name, runId);
+                using var log = new FileStatementLog(InitCommand.StatementLogPath(root, environment), spec.Name, runId);
                 output.WriteLine($"Statement log: {Path.GetRelativePath(root, log.Path)}");
                 var loaded = Task.Run(() => LoadAsync(write!, spec.Name, ddl, data, tables, replace, log, runId)).GetAwaiter().GetResult();
                 output.WriteLine($"Loaded {loaded.Count} table(s), {loaded.Sum(t => t.Rows)} row(s).");
