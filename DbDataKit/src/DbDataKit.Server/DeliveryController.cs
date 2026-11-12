@@ -35,7 +35,7 @@ public sealed class DeliveryController(ConsoleDelivery delivery) : ControllerBas
     private object View(SubscriptionRow s) => new
     {
         id = s.Id, name = s.Fields.Name, kind = s.Fields.Kind, view = s.Fields.ViewName, parameters = s.Fields.Parameters, layout = s.Fields.Layout, format = s.Fields.ExportFormat, widget = s.Fields.Widget, channel = s.Fields.Channel,
-        recipient = s.Fields.Recipient, schedule = new { cron = s.Fields.Cron, timeZone = s.Fields.TimeZone }, person = s.Person, personName = s.PersonName ?? delivery.Users.Get(s.Person)?.DisplayName ?? s.Person, owner = s.Owner,
+        recipient = s.Fields.Recipient, inlinePreview = s.Fields.InlinePreview, schedule = new { cron = s.Fields.Cron, timeZone = s.Fields.TimeZone }, person = s.Person, personName = s.PersonName ?? delivery.Users.Get(s.Person)?.DisplayName ?? s.Person, owner = s.Owner,
         status = s.Status, statusDetail = s.StatusDetail, nextRunAt = s.NextRunAt, lastRunAt = s.LastRunAt, lastOutcome = s.LastOutcome, lastDetail = s.LastDetail, version = s.Version,
         channelProblem = delivery.Channels.Find(s.Fields.Channel) is null ? $"The channel '{s.Fields.Channel}' is not configured." : null,
     };

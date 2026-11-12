@@ -18,13 +18,13 @@ public interface ISubscriberDirectory
 }
 
 /// <summary>What a subscription run asks the renderer for: the document, its parameters, the layout and format, and <b>who</b> it is rendered as.</summary>
-public sealed record SubscriptionRender(Guid SubscriptionId, string Subscriber, string Kind, string View, IReadOnlyDictionary<string, System.Text.Json.Nodes.JsonNode?> Parameters, string? Layout, string Format, string? Widget);
+public sealed record SubscriptionRender(Guid SubscriptionId, string Subscriber, string Kind, string View, IReadOnlyDictionary<string, System.Text.Json.Nodes.JsonNode?> Parameters, string? Layout, string Format, string? Widget, bool InlinePreview = false);
 
 /// <summary>What the renderer gave back.</summary>
 public abstract record RenderResult
 {
-    /// <summary>The document was rendered. <paramref name="Notes"/> are things a person should know (a widget that failed and is shown as an error block, a font that was missing).</summary>
-    public sealed record Rendered(byte[] Content, string MediaType, string FileName, string Title, string? Summary, string? Link, IReadOnlyList<string> Notes) : RenderResult;
+    /// <summary>The document was rendered. <paramref name="Notes"/> are things a person should know (a widget that failed and is shown as an error block, a font that was missing). <paramref name="Preview"/> is a PNG of the document when the request asked for one (<see cref="SubscriptionRender.InlinePreview"/>) and the renderer could make it.</summary>
+    public sealed record Rendered(byte[] Content, string MediaType, string FileName, string Title, string? Summary, string? Link, IReadOnlyList<string> Notes, byte[]? Preview = null) : RenderResult;
 
     /// <summary>The subscriber may not see this any more (the document refuses them, or they are no longer in the group that grants it). Nothing is sent; the subscription stops and says why.</summary>
     public sealed record AccessLost(string Reason) : RenderResult;
@@ -116,7 +116,7 @@ public sealed class SubscriptionService(SubscriptionStore store, DeliveryService
         if (recipient is null && channel.Kind == "email")
             return Done(SubscriptionOutcomes.Failed, $"{person.DisplayName} has no email address and the subscription names none; nothing was sent.", problem: "There is no address to send to: set the recipient or give the identity an email address.");
 
-        var rendered = await renderer.RenderAsync(new SubscriptionRender(row.Id, row.Person, f.Kind, f.ViewName, f.Parameters is null ? new Dictionary<string, System.Text.Json.Nodes.JsonNode?>() : f.Parameters.ToDictionary(p => p.Key, p => p.Value?.DeepClone()), f.Layout, f.ExportFormat, f.Widget), ct).ConfigureAwait(false);
+        var rendered = await renderer.RenderAsync(new SubscriptionRender(row.Id, row.Person, f.Kind, f.ViewName, f.Parameters is null ? new Dictionary<string, System.Text.Json.Nodes.JsonNode?>() : f.Parameters.ToDictionary(p => p.Key, p => p.Value?.DeepClone()), f.Layout, f.ExportFormat, f.Widget, f.InlinePreview), ct).ConfigureAwait(false);
         switch (rendered)
         {
             case RenderResult.AccessLost lost:
@@ -127,9 +127,19 @@ public sealed class SubscriptionService(SubscriptionStore store, DeliveryService
             case RenderResult.Rendered ok:
                 var notes = ok.Notes.Count == 0 ? "" : "\n\n" + string.Join("\n", ok.Notes.Select(n => "Note: " + n));
                 var text = $"{ok.Summary ?? $"The {f.Kind} {f.ViewName} is attached."}{notes}\n\nYou receive this because you subscribed to '{f.Name}' ({f.Cron}, {f.TimeZone}).";
-                var html = $"<p>{WebUtility.HtmlEncode(ok.Summary ?? $"The {f.Kind} {f.ViewName} is attached.")}</p>{(ok.Notes.Count == 0 ? "" : "<ul>" + string.Concat(ok.Notes.Select(n => "<li>" + WebUtility.HtmlEncode(n) + "</li>")) + "</ul>")}" +
+                var attachments = new List<DeliveryAttachment> { new(ok.FileName, ok.MediaType, ok.Content) };
+                var pictureHtml = "";
+                // the picture goes into an email's body (a content id the HTML names); Teams, Slack and the webhook cannot hold a file and show the link to the live view instead
+                if (ok.Preview is { Length: > 0 } picture && channel.Kind == "email")
+                {
+                    const string pictureId = "preview@dbdatakit";
+                    attachments.Add(new DeliveryAttachment("preview.png", "image/png", picture, pictureId));
+                    pictureHtml = $"<p><img src=\"cid:{pictureId}\" alt=\"{WebUtility.HtmlEncode(ok.Title)}\" style=\"max-width:100%;border:1px solid #ddd\"></p>";
+                }
+
+                var html = $"<p>{WebUtility.HtmlEncode(ok.Summary ?? $"The {f.Kind} {f.ViewName} is attached.")}</p>{(ok.Notes.Count == 0 ? "" : "<ul>" + string.Concat(ok.Notes.Select(n => "<li>" + WebUtility.HtmlEncode(n) + "</li>")) + "</ul>")}{pictureHtml}" +
                            $"<p style=\"color:#666\">You receive this because you subscribed to '{WebUtility.HtmlEncode(f.Name)}' ({WebUtility.HtmlEncode(f.Cron)}, {WebUtility.HtmlEncode(f.TimeZone)}).</p>";
-                var id = await delivery.SendAsync(new DeliveryRequest(f.Channel, ok.Title, recipient is null ? null : [recipient], text, html, ok.Link, [new DeliveryAttachment(ok.FileName, ok.MediaType, ok.Content)], $"subscription:{row.Id:D}", row.Person), ct).ConfigureAwait(false);
+                var id = await delivery.SendAsync(new DeliveryRequest(f.Channel, ok.Title, recipient is null ? null : [recipient], text, html, ok.Link, attachments, $"subscription:{row.Id:D}", row.Person), ct).ConfigureAwait(false);
                 return Done(SubscriptionOutcomes.Sent, $"{ok.FileName} ({ok.Content.Length} bytes) is in the outbox for {recipient ?? channel.Name}." + (ok.Notes.Count == 0 ? "" : " " + string.Join(" ", ok.Notes)), id);
             default:
                 throw new InvalidOperationException("an unknown render result");

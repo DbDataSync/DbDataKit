@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 namespace DbDataKit.State;
 
 /// <summary>What a person asked for, as the store keeps it. The strict reading of a request (<c>SubscriptionSpec</c> in <c>DbDataKit.Delivery</c>) happens before it gets here.</summary>
-public sealed record SubscriptionFields(string Name, string Kind, string ViewName, JsonObject? Parameters, string? Layout, string ExportFormat, string? Widget, string Channel, string? Recipient, string Cron, string TimeZone);
+public sealed record SubscriptionFields(string Name, string Kind, string ViewName, JsonObject? Parameters, string? Layout, string ExportFormat, string? Widget, string Channel, string? Recipient, string Cron, string TimeZone, bool InlinePreview = false);
 
 /// <summary>A subscription as the store holds it.</summary>
 public sealed record SubscriptionRow(Guid Id, SubscriptionFields Fields, string Person, string? PersonName, string Owner, string Status, string? StatusDetail, DateTimeOffset? NextRunAt, DateTimeOffset? LastRunAt,
@@ -30,7 +30,7 @@ public sealed class SubscriptionStore(StateDatabase database)
 {
     private const string Module = DeliveryModule.Name;
 
-    private const string Columns = "id, name, person, person_name, owner, kind, view_name, parameters, layout, export_format, widget, channel, recipient, cron, time_zone, status, status_detail, next_run_at, last_run_at, last_outcome, last_detail, created_at, updated_at, row_version";
+    private const string Columns = "id, name, person, person_name, owner, kind, view_name, parameters, layout, export_format, widget, channel, recipient, cron, time_zone, status, status_detail, next_run_at, last_run_at, last_outcome, last_detail, created_at, updated_at, row_version, inline_preview";
 
     /// <summary>Writes a subscription as <c>active</c>, due at <paramref name="nextRunAt"/> (the first time its schedule gives).</summary>
     public Guid Create(SubscriptionFields fields, string person, string? personName, string owner, DateTimeOffset nextRunAt)
@@ -44,7 +44,7 @@ public sealed class SubscriptionStore(StateDatabase database)
         {
             using var connection = database.OpenConnection();
             using var insert = database.Command(Module, connection,
-                $"INSERT INTO {{table:subscription}} ({Columns}) VALUES ($id, $name, $person, $person_name, $owner, $kind, $view, CAST($parameters AS {{{{json}}}}), $layout, $format, $widget, $channel, $recipient, $cron, $zone, 'active', NULL, $next, NULL, NULL, NULL, $now, $now, 1);");
+                $"INSERT INTO {{table:subscription}} ({Columns}) VALUES ($id, $name, $person, $person_name, $owner, $kind, $view, CAST($parameters AS {{{{json}}}}), $layout, $format, $widget, $channel, $recipient, $cron, $zone, 'active', NULL, $next, NULL, NULL, NULL, $now, $now, 1, $preview);");
             BindFields(insert, fields).Bind(database, "id", id).Bind(database, "person", person).Bind(database, "person_name", personName, System.Data.DbType.String).Bind(database, "owner", owner).Bind(database, "next", nextRunAt).Bind(database, "now", now);
             insert.ExecuteNonQuery();
         });
@@ -54,7 +54,7 @@ public sealed class SubscriptionStore(StateDatabase database)
     private DbCommand BindFields(DbCommand c, SubscriptionFields f) =>
         c.Bind(database, "name", f.Name).Bind(database, "kind", f.Kind).Bind(database, "view", f.ViewName).Bind(database, "parameters", f.Parameters?.ToJsonString(), System.Data.DbType.String)
             .Bind(database, "layout", f.Layout, System.Data.DbType.String).Bind(database, "format", f.ExportFormat).Bind(database, "widget", f.Widget, System.Data.DbType.String).Bind(database, "channel", f.Channel)
-            .Bind(database, "recipient", f.Recipient, System.Data.DbType.String).Bind(database, "cron", f.Cron).Bind(database, "zone", f.TimeZone);
+            .Bind(database, "recipient", f.Recipient, System.Data.DbType.String).Bind(database, "cron", f.Cron).Bind(database, "zone", f.TimeZone).Bind(database, "preview", f.InlinePreview ? 1 : 0);
 
     /// <summary>Replaces what a subscription asks for (a person's edit), and its next time; it is <c>active</c> again. False when another writer changed it first (<paramref name="expectedVersion"/>) or it is gone.</summary>
     public bool Update(Guid id, SubscriptionFields fields, DateTimeOffset nextRunAt, long expectedVersion) =>
@@ -62,7 +62,7 @@ public sealed class SubscriptionStore(StateDatabase database)
         {
             using var connection = database.OpenConnection();
             return database.UpdateVersioned(Module, connection, null, "subscription",
-                "name = $name, kind = $kind, view_name = $view, parameters = CAST($parameters AS {{json}}), layout = $layout, export_format = $format, widget = $widget, channel = $channel, recipient = $recipient, cron = $cron, time_zone = $zone, " +
+                "name = $name, kind = $kind, view_name = $view, parameters = CAST($parameters AS {{json}}), layout = $layout, export_format = $format, widget = $widget, channel = $channel, recipient = $recipient, cron = $cron, time_zone = $zone, inline_preview = $preview, " +
                 "status = 'active', status_detail = NULL, next_run_at = $next, updated_at = $now", "id = $id", expectedVersion,
                 c => BindFields(c, fields).Bind(database, "next", nextRunAt).Bind(database, "now", database.Time.GetUtcNow()).Bind(database, "id", id));
         });
@@ -173,7 +173,7 @@ public sealed class SubscriptionStore(StateDatabase database)
     private static string? Text(DbDataReader r, int i) => r.IsDBNull(i) ? null : r.GetString(i);
 
     private static SubscriptionRow Read(DbDataReader r) => new(r.Uuid(0),
-        new SubscriptionFields(r.GetString(1), r.GetString(5), r.GetString(6), Text(r, 7) is { } json ? JsonNode.Parse(json) as JsonObject : null, Text(r, 8), r.GetString(9), Text(r, 10), r.GetString(11), Text(r, 12), r.GetString(13), r.GetString(14)),
+        new SubscriptionFields(r.GetString(1), r.GetString(5), r.GetString(6), Text(r, 7) is { } json ? JsonNode.Parse(json) as JsonObject : null, Text(r, 8), r.GetString(9), Text(r, 10), r.GetString(11), Text(r, 12), r.GetString(13), r.GetString(14), InlinePreview: r.FieldCount > 24 && !r.IsDBNull(24) && Convert.ToInt32(r.GetValue(24), System.Globalization.CultureInfo.InvariantCulture) != 0),
         r.GetString(2), Text(r, 3), r.GetString(4), r.GetString(15), Text(r, 16), r.NullableTime(17), r.NullableTime(18), Text(r, 19), Text(r, 20), r.Time(21), r.Time(22), r.Int64(23));
 
     public SubscriptionRow? Find(Guid id) =>

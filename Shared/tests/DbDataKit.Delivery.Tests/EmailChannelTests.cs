@@ -87,6 +87,36 @@ public sealed class EmailChannelTests : IDisposable
         new(Guid.NewGuid(), "mail", to ?? ["ana@example.com", "bo@example.com"], subject, "Plain body\r\nline two", "<p>Html <b>body</b></p>", "https://console.example/views/sales?x=1&y=2", attachments, 1);
 
     [Fact]
+    public void An_inline_picture_is_part_of_the_body_with_its_content_id_and_a_download_stays_a_download()
+    {
+        byte[] png = [137, 80, 78, 71, 1, 2, 3];
+        var payload = new DeliveryPayload(Guid.NewGuid(), "mail", ["ana@example.com"], "Weekly sales", "Plain body", "<p>Body</p><p><img src=\"cid:preview@dbdatakit\"></p>", null,
+            [new DeliveryAttachment("sales.pdf", "application/pdf", [37, 80, 68, 70]), new DeliveryAttachment("preview.png", "image/png", png, "preview@dbdatakit")], 1);
+        var raw = MailMessageBuilder.Build(payload, new System.Net.Mail.MailAddress("noreply@example.com"), DateTimeOffset.UnixEpoch, "dbdatakit.test");
+        var message = MimePart.Parse(raw);
+        Assert.Equal("multipart/mixed", message.ContentType);
+        var related = message.Parts[0];
+        Assert.Equal("multipart/related", related.ContentType);
+        Assert.Equal("multipart/alternative", related.Parts[0].ContentType);       // the two bodies
+        var picture = related.Parts[1];
+        Assert.Equal("image/png", picture.ContentType);
+        Assert.Equal("<preview@dbdatakit>", picture.Headers["content-id"]);
+        Assert.StartsWith("inline", picture.Headers["content-disposition"]);
+        Assert.Equal(png, picture.Bytes);
+        var download = message.Parts[1];
+        Assert.StartsWith("attachment", download.Headers["content-disposition"]);
+        Assert.False(download.Headers.ContainsKey("content-id"));
+
+        // with nothing else attached the related part is the message itself
+        var only = MimePart.Parse(MailMessageBuilder.Build(payload with { Attachments = [payload.Attachments[1]] }, new System.Net.Mail.MailAddress("noreply@example.com"), DateTimeOffset.UnixEpoch, "dbdatakit.test"));
+        Assert.Equal("multipart/related", only.ContentType);
+        // a message with no HTML body has nowhere to show a picture: it is sent as a download
+        var plain = MimePart.Parse(MailMessageBuilder.Build(payload with { Html = null, Attachments = [payload.Attachments[1]] }, new System.Net.Mail.MailAddress("noreply@example.com"), DateTimeOffset.UnixEpoch, "dbdatakit.test"));
+        Assert.Equal("multipart/mixed", plain.ContentType);
+        Assert.StartsWith("attachment", plain.Parts[1].Headers["content-disposition"]);
+    }
+
+    [Fact]
     public async Task A_message_arrives_over_starttls_with_both_bodies_the_link_the_attachment_and_the_login_from_the_secrets_store()
     {
         var (server, trust) = TlsServer();

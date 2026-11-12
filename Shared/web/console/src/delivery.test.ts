@@ -31,6 +31,14 @@ describe('the subscribe form', () => {
     expect(f).toMatchObject({ name: 'Weekly sales', view: 'sales', layout: 'print', channel: 'mail', cron: '0 7 * * 1', timeZone: 'Europe/Berlin', parameters: '{"region":["east"]}' })
     expect(buildRequest(f)).toMatchObject({ body: { schedule: { cron: '0 7 * * 1', time_zone: 'Europe/Berlin' }, parameters: { region: ['east'] } } })
   })
+
+  it('asks for the inline picture only of a PDF, and gives it back when editing', () => {
+    expect(buildRequest(form({ inlinePreview: true }))).toMatchObject({ body: { inline_preview: true } })
+    expect(buildRequest(form({ inlinePreview: false }))).not.toHaveProperty('body.inline_preview')
+    expect(buildRequest(form({ format: 'xlsx', inlinePreview: true }))).not.toHaveProperty('body.inline_preview')   // a workbook has no pages
+    expect(formFromSubscription(subscription({ inlinePreview: true })).inlinePreview).toBe(true)
+    expect(formFromSubscription(subscription()).inlinePreview).toBe(false)
+  })
 })
 
 describe('what a person reads', () => {
