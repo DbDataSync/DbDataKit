@@ -6,6 +6,7 @@ import { crumbAddress, describeValue, drillAddress, readKiosk, readLayout, readP
 import { discoverSources, personalFor, pickSource, resolveLog, viewsClient, type ViewsSource } from '../viewsSource'
 import { isShared } from '../userViews'
 import { DashboardEditor } from './DashboardEditor'
+import { ExportButtons } from './ExportButtons'
 import { VersionsPanel } from './VersionsPanel'
 import { MyViewsPanel, PinPanel, SharedBy } from './MyViewsPanel'
 
@@ -225,6 +226,7 @@ function Board({ kind, name, document, source, keep, personal }: { kind: ViewKin
         {!isShared(name) && <Link to={withSource('?edit=1', keep)} className="btn btn-sm" data-testid="views-edit">Edit</Link>}
         {source.published && <button type="button" className="btn btn-sm" data-testid="views-versions" aria-expanded={showVersions} title="Who published each version, serve an earlier one, or remove it from the group" onClick={() => setShowVersions(!showVersions)}>Versions</button>}
         {personal && <PinPanel document={document} personal={personal} />}
+        <ExportButtons client={viewsClient(source.id)} kind={kind} name={name} document={document} layout={layout} parameters={parameters} />
         <button type="button" className="btn btn-sm" data-testid="views-kiosk" title="Show this board alone, filling the window" onClick={() => setSearch(writeKiosk(search, true))}>Kiosk</button>
         <label htmlFor="views-layout-select">Layout</label>
         <select id="views-layout-select" data-testid="views-layout-select" value={layout ?? ''} onChange={(e) => setSearch(writeLayout(search, e.target.value === '' ? null : e.target.value), { replace: true })}>

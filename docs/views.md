@@ -404,7 +404,7 @@ What needs the catalog (an encoded field the model does not have, an invalid req
 ### Format and freeze
 
 `dashboard/1` and `report/1` are **open** (unreleased) and share **one number**, `ViewsFormat.Current`: a new widget type, query form, layout type or selector condition is `/2` of both kinds in one change, and a document is
-written in the lowest number that can say it. `schemas/views-format.lock.json` records the number and the hashes of `core`, `dashboard` and `report`; a test fails when a schema changes without the lock (while the format
+written in the lowest number that can say it. `schemas/bundled/dashboard.schema.json` and `report.schema.json` are the same schemas as one file each (references inlined under the prefixes `core__`, `view__`, `vega_lite_subset__`), for an editor that reads one file; `python3 -I scripts/bundle_views_schemas.py` writes them, and a test of the scripts fails when they differ from the sources. `schemas/views-format.lock.json` records the number and the hashes of `core`, `dashboard` and `report`; a test fails when a schema changes without the lock (while the format
 is open the lock is edited with the schema; once frozen a change is the next number of both kinds).
 
 ## Resolving a layout

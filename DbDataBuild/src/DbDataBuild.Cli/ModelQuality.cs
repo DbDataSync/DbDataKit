@@ -1,6 +1,7 @@
 using DbDataBuild.Core;
 using DbDataBuild.Execution;
 using DbDataBuild.Models;
+using DbDataBuild.Semantic;
 using DbDataKit.Dialect;
 using DbDataKit.Lineage;
 using DbDataKit.Quality;
@@ -54,17 +55,28 @@ internal static class ModelQuality
 
         IReadOnlyList<string>? Resolve(string dataset) => parts.GetValueOrDefault(dataset) is { } known ? known : dataset.Contains("://", StringComparison.Ordinal) ? null : dialect.SplitQualifiedName(dataset);
         var open = QualityAccess.ReadOnlyOpener(read);
-        foreach (var model in built.Where(m => models.Contains(m.Name) && m.Checks.Count > 0).OrderBy(m => m.Name, StringComparer.Ordinal))
+        foreach (var model in built.Where(m => models.Contains(m.Name) && (m.Checks.Count > 0 || KeyChecksOf(m, "").Count > 0)).OrderBy(m => m.Name, StringComparer.Ordinal))
         {
             // the checks are about the model by its name (FQ02); the identity is what results and blocks are stored under
             var identity = identityOf[model.Name];
-            var checks = model.Checks.Select(c => c.Check with { Attachment = c.Check.Attachment with { Dataset = identity } }).ToList();
+            var checks = model.Checks.Select(c => c.Check with { Attachment = c.Check.Attachment with { Dataset = identity } }).Concat(KeyChecksOf(model, identity)).ToList();
             var keys = model.UniqueKey.Count > 0 ? model.UniqueKey : model.Grain;
             datasets.Add(new QualityDataset(identity, checks, dialect, open, Resolve, Aliases: [model.Name], KeyColumns: keys, LastLoadedAt: loadedAt));
         }
 
         return (new StaticQualitySource(datasets), identityOf.ToDictionary(p => p.Value, p => p.Key, StringComparer.Ordinal));
     }
+
+    /// <summary>
+    /// The collision guard of a model's hashed keys as framework checks (plan 25 K06b): a <c>unique</c> check with severity <c>block</c> on each key column (the version key of a key with history), so a repeated key value fails the refresh's checks
+    /// and blocks the model's dependents. Nobody writes these: they follow from <c>keys:</c>. A check the model's file already declares under the same id wins.
+    /// </summary>
+    internal static IReadOnlyList<CheckDefinition> KeyChecksOf(ModelDefinition model, string dataset) =>
+        model.Keys.Where(k => k.Method == KeyMethods.Hash).Select(k => KeyChecks.UniqueColumn(k, model.Columns)).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(column => model.Checks.All(c => c.Check.Id != KeyChecks.FrameworkCheckId(column)))
+            .Select(column => new CheckDefinition(KeyChecks.FrameworkCheckId(column), CheckKind.Unique, new CheckAttachment(dataset, [column]), NoParameters.Instance, CheckSeverity.Block, CheckOnError.Alert,
+                $"every value of `{column}` is on one row of `{model.Name}` (a repeat is a business key that appears twice, two business keys whose hashes collided, or a part that holds the separator U+001F)"))
+            .ToList();
 
     /// <summary>
     /// Evaluates and records. Never throws for a failure of the checks themselves (a check that cannot run is an <c>error</c> result); a state database that cannot be opened or written ends in <see cref="ModelQualityOutcome.Error"/>.

@@ -1,0 +1,6 @@
+{
+  "value": [
+    { "Id": "44444444-4444-4444-4444-444444444444", "Name": "Pipeline", "Path": "/Pipeline", "Type": "PowerBIReport", "ModifiedDate": "2026-11-01T09:00:00Z" },
+    { "Id": "55555555-5555-5555-5555-555555555555", "Name": "Archive", "Path": "/Sales/Archive", "Type": "Folder" }
+  ]
+}

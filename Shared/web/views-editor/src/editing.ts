@@ -10,7 +10,7 @@ export function modelOf(doc: ViewsDoc, fallback = 'retail_sales'): string {
 }
 
 /** A new widget of a type, valid and plain: a starting point to edit (the palette of DBR24; the wells of DBR25 choose the fields from the model's catalog). */
-export function newWidget(type: WidgetType, doc: ViewsDoc, fallbackModel?: string): WidgetDoc {
+export function newWidget(type: WidgetType, doc: ViewsDoc, fallbackModel?: string, components: readonly string[] = []): WidgetDoc {
   const query = { model: modelOf(doc, fallbackModel) }
   switch (type) {
     case 'metric': return { type, label: 'New metric', encodings: { value: 'sales.net_amount' }, query }
@@ -20,8 +20,12 @@ export function newWidget(type: WidgetType, doc: ViewsDoc, fallbackModel?: strin
     case 'text': return { type, text: 'Write a note.' }
     // an image is held by the hash of its bytes: until the publish slice uploads one this is the placeholder, and the editor says no bytes are recorded
     case 'image': return { type, hash: `sha256:${'0'.repeat(64)}`, media_type: 'image/png', alt: 'Describe the image' }
-    // a custom view is a component of the app's manifest (DBR30, in progress): the editor names a placeholder to be replaced
-    case 'custom': return { type, component: 'component-name' }
+    // a custom widget is a component the app registers (DBR30): the host lists them, and there is no placeholder to invent when it lists none
+    case 'custom': {
+      const component = components[0]
+      if (!component) throw new Error('A custom widget is a component of the app: this source lists none (register one with defineWidget and declare it under views in the manifest).')
+      return { type, component }
+    }
     case 'embed': return { type, title: 'Embedded report', url: 'https://reports.example.com/' }
     case 'control': {
       const parameter = doc.parameters?.[0]

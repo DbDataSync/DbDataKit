@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner, Link } from '@dbdatakit/shell'
 import { gatewayApi } from '../api'
+import { PruneBox } from './PruneBox'
 import { GatewayShell } from '../GatewayShell'
 import { ownerLabel, removeWarning, serveBlock, servedLabel, sortModels } from '../models'
 import type { EntityModelDetail, EntityModelRow, ModelVersionRow, SemanticModelDetail, SemanticModelRow } from '../types'
@@ -210,6 +211,10 @@ export function ModelsPage() {
             onOpen={(n) => { setOpened(n); setNotice(null) }} onServe={(name, version) => serve.mutate({ name, version })}
             onAskRemove={(n) => { setConfirming(n); setNotice(null) }} onRemove={(n) => retireSemantic.mutate(n)}
           />
+          {opened && semanticDetail.data && (
+            <PruneBox key={`${opened}:${semanticDetail.data.versions.length}`} kind="semantic-model" name={opened.toLowerCase()} versions={semanticDetail.data.versions.map((v) => v.version)} served={semanticDetail.data.current_version}
+              onDone={(a) => { setNotice({ text: `Pruned ${opened}: removed ${a.remove.length === 0 ? 'nothing' : a.remove.map((v) => `v${v}`).join(', ')}.`, bad: false }); void refresh() }} />
+          )}
         </Section>
         <Section title="Entity models" testId="models-entity" note="The master data models a DbDataStore server publishes here, so the group serves them with their rules.">
           <EntityModelsView

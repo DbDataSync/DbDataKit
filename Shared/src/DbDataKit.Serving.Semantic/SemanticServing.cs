@@ -102,7 +102,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
         if (document["kind"]?.GetValue<string>() == "describe") return DescribeAsync(context, model, text, cancellationToken);
         if (document["kind"]?.GetValue<string>() != "query") throw new ServingInvalidException("This server answers semantic queries ('kind': 'query'); registrations and the other request kinds are not served yet.");
         var limit = request.Asked?.MaxRows;
-        var provenance = new ServingProvenance(isSql ? text : Canonical(document, model.Name, text), null, context.Channel, SemanticModels.SourcePrefix + model.Name);
+        var provenance = new ServingProvenance(isSql ? text : Canonical(document, model.Name, text), VersionOf(model), context.Channel, SemanticModels.SourcePrefix + model.Name);
 
         if (explaining) return Task.Run<IServingAnswer>(() =>
         {
@@ -139,7 +139,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
         var attribute = request["attribute"]?.GetValue<string>() ?? throw new ServingInvalidException("A members request names an attribute: {\"kind\": \"members\", \"attribute\": \"customers.region\"}.");
         var search = request["search"]?.GetValue<string>();
         int? limit = request["limit"] is JsonValue v && v.TryGetValue<int>(out var n) ? n : null;
-        var provenance = new ServingProvenance(text, null, context.Channel, SemanticModels.SourcePrefix + model.Name);
+        var provenance = new ServingProvenance(text, VersionOf(model), context.Channel, SemanticModels.SourcePrefix + model.Name);
         return Task.Run<IServingAnswer>(() =>
         {
             var engine = new QisEngine(model.Catalog, new ServingSourceExecutor(inner, catalog, context, model, models, cancellationToken), new Validator(model.Catalog), models.Level);
@@ -156,7 +156,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
     {
         var objects = new List<ServingObject>();
         await foreach (var o in new SemanticCatalog(catalog, models).DescribeAsync(context, [], source: SemanticModels.SourcePrefix + model.Name, cancellationToken: cancellationToken).ConfigureAwait(false)) objects.Add(o);
-        return new DescribeAnswer(objects, new ServingProvenance(text, null, context.Channel, SemanticModels.SourcePrefix + model.Name));
+        return new DescribeAnswer(objects, new ServingProvenance(text, VersionOf(model), context.Channel, SemanticModels.SourcePrefix + model.Name));
     }
 
     public Task<ServingStatementInfo> PrepareAsync(ServingContext context, ServingRequest.Sql statement, CancellationToken cancellationToken = default)
@@ -191,6 +191,9 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
         try { return SemanticSqlRenderer.Render(document, model); }
         catch (Exception e) when (e is not OperationCanceledException) { return original; }
     }
+
+    /// <summary>The published version the request is pinned to (plan 20 O19): the model object was found once, when the request began, and everything the request does reads it, so a publish that lands while it runs changes the next request only.</summary>
+    private static string? VersionOf(SemanticModel model) => model.Version?.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     private SemanticModel Model(string source) => models.Find(source) ?? throw new ServingNotFoundException($"There is no semantic model '{source}'.");
 

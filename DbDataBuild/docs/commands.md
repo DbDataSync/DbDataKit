@@ -18,6 +18,8 @@ Generated from the command tree of `dbdatabuild` (`UPDATE_GOLDEN=1 dotnet test t
 | [`project show graph`](#project-show-graph) | `P→` | Offline only | Show the dependency graph (which table each model reads), column lineage, or a diagram of it; selectors pick the part to show |
 | [`project show metadata`](#project-show-metadata) | `P→` | Offline only | Print everything the tool knows about the project and its models (use --format json) |
 | [`project show semantic`](#project-show-semantic) | `P→` | Offline only | Show the semantic models of the project (semantic/): the connections they read, what each attribute and measure is bound to (connection, model, column), the generated physical layer, relationships and hierarchies |
+| [`dashboard new`](#dashboard-new) | `P⇒P` | Repo files only (no target connection) | Create a dashboard to start from in dashboards/: a reflow layout of twelve columns with one text widget, the Views editor's New made valid; an existing file is never overwritten |
+| [`report new`](#report-new) | `P⇒P` | Repo files only (no target connection) | Create a report to start from in reports/: an A4 paged layout with one section and one text widget, the Views editor's New made valid; an existing file is never overwritten |
 | [`dashboard validate`](#dashboard-validate) | `P→` | Offline only | Check the dashboard files of the project (dashboards/, or the files named) as the views loader reads them and against the project's semantic models: each finding has its file, line and column; a report file is refused as a report |
 | [`report validate`](#report-validate) | `P→` | Offline only | Check the report files of the project (reports/, or the files named) as the views loader reads them and against the project's semantic models: each finding has its file, line and column; a dashboard file is refused as a dashboard |
 | [`project show refresh`](#project-show-refresh) | `P→` | Offline only | Read the compiled refresh plans (offline): the plans of each connection, or one plan with its members in the order they run, the inputs each load takes and where each default comes from, what each load waits for (the dependency graph the loads file carries, with model kinds and depth), what was left out and the hashes |
@@ -288,6 +290,40 @@ Usage: `dbdatabuild project show semantic [models]... [options]`
 | Option | Meaning |
 |---|---|
 | `--project` `<path>` | Project root |
+
+## dashboard new
+
+Create a dashboard to start from in dashboards/: a reflow layout of twelve columns with one text widget, the Views editor's New made valid; an existing file is never overwritten.
+
+Effect: Repo files only (no target connection). Reads and writes: `P⇒P`.
+
+Usage: `dbdatabuild dashboard new <name> [options]`
+
+| Argument | Meaning |
+|---|---|
+| `name` | The file's name without its extension (sales-today): letters, digits, dashes and underscores |
+
+| Option | Meaning |
+|---|---|
+| `--project` `<path>` | Project root |
+| `--title` `<text>` | The title shown on the page (default: the name) |
+
+## report new
+
+Create a report to start from in reports/: an A4 paged layout with one section and one text widget, the Views editor's New made valid; an existing file is never overwritten.
+
+Effect: Repo files only (no target connection). Reads and writes: `P⇒P`.
+
+Usage: `dbdatabuild report new <name> [options]`
+
+| Argument | Meaning |
+|---|---|
+| `name` | The file's name without its extension (sales-today): letters, digits, dashes and underscores |
+
+| Option | Meaning |
+|---|---|
+| `--project` `<path>` | Project root |
+| `--title` `<text>` | The title shown on the page (default: the name) |
 
 ## dashboard validate
 

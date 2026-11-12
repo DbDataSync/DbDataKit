@@ -148,6 +148,7 @@ public static class GatewayManagementHost
                 (name, text) => app.Services.GetRequiredService<Secrets.SecretsRuntime>().ResolveConnectionString($"Gateway:DataSources:{name}:ConnectionString", text, app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue.DataSources[name].Provider),
                 app.Services.GetRequiredService<DbDataGateway.Server.State.TableReadRecorder>(), app.Services.GetRequiredService<DbDataGateway.Server.State.TableReadStore>(), instanceId),
             audit: audit,
+            definitions: new GatewayDefinitionsManagement(state, audit),
             serverSettings: new GatewayServerSettings(configDirectory, management, provider.ReloadNow, audit, git),
             entityModels: new GatewayEntityModels(app.Services.GetRequiredService<Serving.PublishedEntityModels>(),
                 () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue,
@@ -158,7 +159,7 @@ public static class GatewayManagementHost
                     var text = File.Exists(file) ? File.ReadAllText(file) : app.Services.GetRequiredService<Serving.PublishedDataSources>().Text(dataSource);
                     return text is null ? null : DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, dataSource + ".yaml").Definition?.ManagedBy;
                 }, audit, adoptions: adoptions),
-            apps: new GatewayApps(new DbDataKit.State.DefinitionStore(state), () => HomeApprovers.Open(state, app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue), audit,
+            apps: new GatewayApps(DbDataGateway.Server.Serving.ServingKinds.StoreOf(state), () => HomeApprovers.Open(state, app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue), audit,
                 appsAddress: () => { var current = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue; return GatewayModules.Has(current, GatewayModules.Apps) ? GatewayAppsModule.PublicUrlOf(current) : null; },
                 instanceSaved: name => AppClient(app, state, name, remove: false), instanceRemoved: name => AppClient(app, state, name, remove: true),
                 addressVerifier: new Serving.AppAddressVerifier(() => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue,
@@ -182,6 +183,16 @@ public static class GatewayManagementHost
 
         // the server upgrades itself when the console says so (plan 24a UC09); its own route wins over the catch-all below
         DbDataKit.Upgrade.UpgradeSetup.MapUpgrade(app, "dbdatagateway", GatewayHost.Version, "DbDataGateway", options.Management.Port, audit, () => [.. clients.All().Select(c => new DbDataKit.Upgrade.PeerGeneration(c.Name, c.Generation))]);
+        // the shared publish API's uploads (plan 30 PB02): streamed, so they are not the JSON calls below
+        var definitionsApi = new DbDataGateway.Server.Management.GatewayDefinitionsManagement(state, audit);
+        app.MapMethods($"{GatewayManagement.Prefix}/artifacts/{{sha256}}", ["HEAD", "PUT"], async (string sha256, HttpContext context) =>
+        {
+            var caller = new ManagementCaller(context.ManagementToken());
+            if (context.Request.Method == "HEAD")
+                return caller.Holds(ServerRole.Viewer) || caller.Holds(ServerRole.Publisher) ? (definitionsApi.HasArtifact(sha256) ? Results.Ok() : Results.NotFound()) : Results.StatusCode(StatusCodes.Status403Forbidden);
+            var result = await definitionsApi.StoreArtifactAsync(sha256, context.Request.Body, context.Request.ContentType, caller, context.RequestAborted);
+            return Results.Json(result.Body, statusCode: result.Status);
+        });
         app.MapMethods($"{GatewayManagement.Prefix}/{{**rest}}", ["GET", "POST", "PUT", "DELETE"], async (HttpContext context) =>
         {
             var caller = new ManagementCaller(context.ManagementToken());
@@ -211,7 +222,7 @@ public static class GatewayManagementHost
             if (!GatewayModules.Has(current, GatewayModules.Apps)) return;
             var clients = new DbDataKit.Identity.OidcClients(state);
             if (remove) Serving.AppInstanceClients.Remove(clients, instance);
-            else if (new DbDataKit.Apps.AppInstanceStore(new DbDataKit.State.DefinitionStore(state)) is var store && store.Get(instance) is { } saved)
+            else if (new DbDataKit.Apps.AppInstanceStore(DbDataGateway.Server.Serving.ServingKinds.StoreOf(state)) is var store && store.Get(instance) is { } saved)
                 Serving.AppInstanceClients.SyncRedirects(clients, saved, GatewayAppsModule.PublicUrlOf(current), current.Apps.Home.ClientId, store.List());
             else Serving.AppInstanceClients.Ensure(clients, instance, Serving.AppInstanceClients.CallbackOf(GatewayAppsModule.PublicUrlOf(current)));
         }

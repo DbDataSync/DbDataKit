@@ -36,6 +36,13 @@ public sealed class PostgresLoader : LoaderBase
         return columnType.Trim().Equals("DATE", StringComparison.OrdinalIgnoreCase) ? $"CAST({interval} AS DATE)" : interval;
     }
 
+    protected override string KeyMapEnsure(string table) =>
+        $"CREATE TABLE IF NOT EXISTS {table} ({Quote("key_value")} bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, {Quote("key_text")} text NOT NULL UNIQUE);";
+
+    protected override string KeyMapInsert(string table, string column, string textPrefix) =>
+        $"{textPrefix.TrimEnd()}\nINSERT INTO {table} ({Quote("key_text")}) SELECT DISTINCT {BodyName}.{Quote(column)} FROM {BodyName} WHERE {BodyName}.{Quote(column)} IS NOT NULL " +
+        $"AND NOT EXISTS (SELECT 1 FROM {table} AS m WHERE m.{Quote("key_text")} = {BodyName}.{Quote(column)}) ON CONFLICT ({Quote("key_text")}) DO NOTHING;";
+
     protected override string TypedLiteral(string logicalType, string literal)
     {
         var lit = Literal(literal);

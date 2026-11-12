@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@dbdatakit/shell'
-import { CheckView, DocumentsView, PublishViewsView, publishBlocker, viewDiagnostics, type DocumentsViewProps, type PublishViewsProps } from './ViewsTab'
+import { CheckView, DocumentsView, PublishViewsView, expectedVersionOf, publishBlocker, viewDiagnostics, type DocumentsViewProps, type PublishViewsProps } from './ViewsTab'
 import type { Diagnostic } from '../types'
 
 const edge = { name: 'edge', url: 'https://gateway:8485', instance_id: 'gw-1', paired_at: '2026-10-30T10:00:00Z' }
@@ -125,5 +125,19 @@ describe('the project check as the Views tab shows it', () => {
     expect(check([], { checked: false })).toContain('data-testid="build-views-check-idle"')
     expect(check([], { checked: false, pending: true })).toContain('data-testid="build-views-check-pending"')
     expect(check([finding('models/x.sql')])).toContain('data-testid="build-views-check-clean"')
+  })
+})
+
+describe('the version a re-publish expects', () => {
+  const answer = (version: string | null) => ({ proxy: 'edge', kind: 'dashboard' as const, name: 'today', version, created: false, unchanged: false, depends_on: null })
+
+  it('is the whole number the Gateway answered, so a change made elsewhere is refused', () => {
+    expect(expectedVersionOf(answer('3'))).toBe(3)
+  })
+
+  it('is nothing before a first publish or when the version is no number', () => {
+    expect(expectedVersionOf(undefined)).toBeUndefined()
+    expect(expectedVersionOf(answer(null))).toBeUndefined()
+    expect(expectedVersionOf(answer('v2'))).toBeUndefined()
   })
 })

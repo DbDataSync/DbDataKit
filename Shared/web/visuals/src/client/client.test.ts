@@ -441,3 +441,24 @@ describe('diagnosticsFromRefusal', () => {
     expect(diagnosticsFromRefusal('something went wrong')).toEqual([{ code: 'DBD-VIEW-SERVER', severity: 'error', path: '', message: 'something went wrong', file: undefined }])
   })
 })
+
+describe('exportFile (DBR17)', () => {
+  it('asks the export route for the format and the widget and takes the file the relay carries as base64', async () => {
+    const asked: string[] = []
+    const client = moduleClient({
+      baseUrl: 'https://m', fetch: (async (url: string) => {
+        asked.push(String(url))
+        return new Response(JSON.stringify({ file_name: 'rows.csv', content_type: 'text/csv', content_base64: btoa('a,b\n1,2\n') }), { status: 200, headers: { 'content-type': 'application/json' } })
+      }) as unknown as typeof fetch,
+    })
+    const file = await client.exportFile!({ kind: 'dashboard', name: 'sales' }, 'csv', { widget: 'grid', layout: 'wide', parameters: { year: 2026 } })
+    expect(asked[0]).toBe('https://m/api/v1/dashboards/sales/export?format=csv&layout=wide&widget=grid&p.year=2026')
+    expect(file.fileName).toBe('rows.csv')
+    expect(new TextDecoder().decode(file.bytes)).toBe('a,b\n1,2\n')
+  })
+
+  it('refuses in the module\'s words, a widget with no rows included', async () => {
+    const client = moduleClient({ baseUrl: 'https://m', fetch: (async () => new Response(JSON.stringify({ code: 'widget_not_tabular', message: 'The widget has no rows.' }), { status: 400 })) as unknown as typeof fetch })
+    await expect(client.exportFile!({ kind: 'dashboard', name: 'sales' }, 'csv', { widget: 'kpi' })).rejects.toThrow('The widget has no rows.')
+  })
+})

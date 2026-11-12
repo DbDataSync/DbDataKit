@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ownerLabel, removeWarning, serveBlock, servedLabel, sortModels } from './models'
+import { pruneCandidates, ownerLabel, removeWarning, serveBlock, servedLabel, sortModels } from './models'
 
 describe('where a model stands on this instance', () => {
   it('is serving, catching up, not yet served, or could not load', () => {
@@ -31,5 +31,13 @@ describe('words', () => {
     expect(removeWarning('entity', 'customers')).toContain('The Store still holds')
     expect(ownerLabel(null)).toBe('made by an administrator')
     expect(ownerLabel('build-1')).toContain('build-1')
+  })
+})
+
+describe('pruneCandidates', () => {
+  it('preselects all but the served version, the one before it and the three newest', () => {
+    expect(pruneCandidates([1, 2, 3, 4, 5, 6, 7, 8], 5)).toEqual([1, 2, 3])
+    expect(pruneCandidates([1, 2, 3], 3)).toEqual([])
+    expect(pruneCandidates([1, 2, 3, 4, 5, 6], null)).toEqual([1, 2, 3])
   })
 })

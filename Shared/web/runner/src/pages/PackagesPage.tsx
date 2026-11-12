@@ -11,6 +11,7 @@ import { BindingsCard } from './BindingsCard'
 import { PostureCard } from './PostureCard'
 import { PublishingSettings } from './PublishingSettings'
 import { PublishFromFiles } from './PublishFromFiles'
+import { PruneDialog } from './PruneDialog'
 
 /**
  * The activation of a staged version. When the progress migration the runner ran as a dry run would lose something, the dialog lists the losses and the person confirms them: the runner takes the confirmation only with the same list echoed back. When
@@ -59,6 +60,7 @@ type Pending =
   | { kind: 'activate'; staging: StagingInfo; active: number | null }
   | { kind: 'rollback' | 'retire'; head: ChannelHead }
   | { kind: 'switch'; head: ChannelHead; version: number }
+  | { kind: 'prune' }
 
 function PackageDetail({ detail, isAdmin }: { detail: DefinitionDetail; isAdmin: boolean }) {
   const client = useQueryClient()
@@ -119,7 +121,7 @@ function PackageDetail({ detail, isAdmin }: { detail: DefinitionDetail; isAdmin:
         )
       })}
 
-      <div className="page-head" style={{ marginTop: 24 }}><h2 className="page-title">Versions</h2></div>
+      <div className="page-head" style={{ marginTop: 24 }}><h2 className="page-title">Versions</h2>{isAdmin && <button type="button" className="btn btn-sm" onClick={() => setPending({ kind: 'prune' })} data-testid="runner-prune">Prune versions</button>}</div>
       <div className="card flush" data-testid="runner-versions">
         <div className="grid-head" style={{ gridTemplateColumns: '0.6fr 1.6fr 1.4fr 3fr 1.2fr', gap: 14 }}><span>Version</span><span>Published</span><span>By</span><span>Note</span><span /></div>
         {detail.versions.map((v) => (
@@ -146,6 +148,7 @@ function PackageDetail({ detail, isAdmin }: { detail: DefinitionDetail; isAdmin:
       {pending?.kind === 'activate' && <ActivateDialog name={detail.name} staging={pending.staging} active={pending.active} onDone={done} onCancel={() => setPending(null)} />}
       {pending?.kind === 'rollback' && <ConfirmDialog label="Roll back" text={`Serve version ${pending.head.previous} again on ${pending.head.channel}; the progress is put back as it was.`} go={() => runnerApi.rollback(detail.name, expected(pending.head))} onCancel={() => setPending(null)} onDone={done} />}
       {pending?.kind === 'retire' && <ConfirmDialog label="Retire" text={`Stop serving ${detail.name} on ${pending.head.channel}: its tasks leave the schedule.`} go={() => runnerApi.retire(detail.name, expected(pending.head))} onCancel={() => setPending(null)} onDone={done} />}
+      {pending?.kind === 'prune' && <PruneDialog name={detail.name} versions={detail.versions.map((v) => v.version)} heads={detail.channels} onCancel={() => setPending(null)} onDone={done} />}
       {pending?.kind === 'switch' && <ConfirmDialog label="Serve" text={`Serve version ${pending.version} on ${pending.head.channel}.`} go={() => runnerApi.switchTo(detail.name, { ...expected(pending.head), version: pending.version })} onCancel={() => setPending(null)} onDone={done} />}
     </div>
   )

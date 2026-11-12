@@ -179,6 +179,27 @@ public class SchemaTests
         }
     }
 
+    [Fact]
+    public void The_bundled_schemas_of_the_editors_judge_every_conformance_document_as_the_schemas_of_the_package_do()
+    {
+        var bundled = new[] { "dashboard", "report" }.ToDictionary(n => n, n => JsonSchema.FromText(File.ReadAllText(Path.Combine(Conformance.SchemaRoot, "bundled", n + ".schema.json"))));
+        var judged = 0;
+        foreach (var section in new[] { "good", "bad" })
+            foreach (var c in Conformance.Cases()[section]!.AsArray())
+            {
+                var file = c!["file"]!.GetValue<string>();
+                if (!file.EndsWith(".json", StringComparison.Ordinal)) continue;
+                var doc = JsonNode.Parse(Conformance.Read(file))!;
+                var kind = doc["kind"]?.GetValue<string>() ?? "dashboard";
+                if (kind is not ("dashboard" or "report")) continue;
+                EvaluationResults one;
+                lock (Gate) one = bundled[kind].Evaluate(doc, new EvaluationOptions { OutputFormat = OutputFormat.List });
+                Assert.True(one.IsValid == (Errors(kind, file).Count == 0), $"{file}: the bundle says {(one.IsValid ? "valid" : "invalid")}, the package's schema says the opposite");
+                judged++;
+            }
+        Assert.True(judged > 30, $"only {judged} documents were judged");
+    }
+
     private static List<string> Errors(string kind, string file)
     {
         var doc = JsonNode.Parse(Conformance.Read(file))!;

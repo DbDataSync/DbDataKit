@@ -232,6 +232,41 @@ public static class RunnerPublishApi
             return publishing.Describe(name) is { } found ? Results.Json(found) : Error(404, $"There is no integration '{name}'.");
         });
 
+        app.MapPost($"{root}/definitions/integration/{{name}}/prune", async (string name, HttpContext context) =>
+        {
+            var callerOf = caller(context);
+            if (Deny(callerOf, ServerRole.Admin, publishing, RunnerPublishing.PruneVerb, "package", name) is { } denied) return denied;
+            var body = await ReadBodyAsync(context, optional: true);
+            if (body.Error is { } bad) return bad;
+            var json = body.Json ?? new JsonObject();
+            if (!Int(json, "keep", out var keep, out var problem)) return Error(400, problem!);
+            List<int>? versions = null;
+            if (json["versions"] is JsonArray list)
+            {
+                versions = [];
+                foreach (var item in list)
+                {
+                    if (item is JsonValue value && value.TryGetValue<int>(out var number) && number > 0) versions.Add(number);
+                    else return Error(400, "versions is a list of version numbers.");
+                }
+            }
+            else if (json["versions"] is not null) return Error(400, "versions is a list of version numbers.");
+            var dryRun = json["dry_run"] is JsonValue flag && flag.TryGetValue<bool>(out var asked) ? asked : true;
+            if ((keep is null) == (versions is null)) return Error(400, "Say either keep (how many of the newest versions stay) or versions (which to remove): {\"keep\": 5, \"dry_run\": true}. A call that does not say dry_run is a dry run.");
+            try
+            {
+                var plan = publishing.Prune(name, keep, versions, dryRun, callerOf.Actor);
+                return Results.Json(new JsonObject
+                {
+                    ["name"] = name, ["dry_run"] = !plan.Done,
+                    ["remove"] = new JsonArray([.. plan.Remove.Select(v => (JsonNode)JsonValue.Create(v)!)]),
+                    ["retained"] = new JsonArray([.. plan.Retained.Select(r => (JsonNode)new JsonObject { ["version"] = r.Version, ["reason"] = r.Reason })]),
+                    ["files"] = new JsonArray([.. plan.Artifacts.Select(a => (JsonNode)JsonValue.Create(a)!)]),
+                });
+            }
+            catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
+        });
+
         app.MapPost($"{root}/definitions/integration/{{name}}/{{act}}", async (string name, string act, HttpContext context) =>
         {
             if (act is not ("activate" or "switch" or "rollback" or "retire")) return Error(404, $"There is no call '{act}'; the life cycle is activate, switch, rollback and retire.");

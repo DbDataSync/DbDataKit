@@ -114,6 +114,41 @@ public sealed class DefinitionPublisherTests : IDisposable
 
     [Theory]
     [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
+    public async Task Two_publishes_at_once_with_one_expected_version_leave_one_winner_and_a_refusal_with_the_current_version(string engine)
+    {
+        // plan 20 O19: two instances of a group publish at the same moment, each having looked at version 1; the shared state lets exactly one through
+        var location = _engines.Provision(engine);
+        DefinitionPublisher Instance()
+        {
+            var database = location.Open([DefinitionsModule.Module, PayloadStore.Module], new StateScope(Group: "main"));
+            return new DefinitionPublisher(database, Kinds(), new PayloadStore(database), null);
+        }
+        var first = Instance();
+        first.Bind("prod", "semantic-model", "sales", "warehouse", "conn:dw", "ada");
+        first.Publish(Serve("semantic-model", "sales", "one"));
+
+        for (var round = 0; round < 5; round++)
+        {
+            var latest = round + 1;
+            var instances = new[] { Instance(), Instance() };
+            using var gate = new Barrier(2);
+            var outcomes = instances.Select((publisher, i) => Task.Run(() =>
+            {
+                gate.SignalAndWait();
+                try { return (object)publisher.Publish(Serve("semantic-model", "sales", $"round {round} from {i}", expected: latest)); }
+                catch (DefinitionConflictException refused) { return refused; }
+            })).ToArray();
+            var results = await Task.WhenAll(outcomes);
+
+            Assert.Single(results, o => o is PublishResult);
+            var conflict = Assert.IsType<DefinitionConflictException>(Assert.Single(results, o => o is DefinitionConflictException));
+            Assert.Equal((latest, latest + 1), (conflict.Expected, conflict.Actual));
+            Assert.Equal(latest + 1, new DefinitionStore(location.Open([DefinitionsModule.Module], new StateScope(Group: "main"))).Versions("semantic-model", "sales").Count);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
     public void A_stale_expected_version_is_refused_and_changes_nothing(string engine)
     {
         var (publisher, database, _) = Open(engine);

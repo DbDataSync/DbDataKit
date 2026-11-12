@@ -2021,9 +2021,10 @@
                 }
               },
               "method": {
-                "description": "`hash` (the default). `key_map` is planned (K10) and refused for now.",
+                "description": "`hash` (the default): a hash of the business key. `key_map`: an integer from a map table in the target (`<owner schema>.<key>_map`), a new one for each new business key on load, never reused.",
                 "enum": [
-                  "hash"
+                  "hash",
+                  "key_map"
                 ]
               },
               "unknown_member": {

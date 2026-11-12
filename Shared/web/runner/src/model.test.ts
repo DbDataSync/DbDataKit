@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { runsQuery, type StagingInfo, type TaskStatus } from './api'
-import { activationBody, capabilityLines, connectionsOfTask, headText, isGone, outcomeText, taskState } from './model'
+import { pruneCandidates, activationBody, capabilityLines, connectionsOfTask, headText, isGone, outcomeText, taskState } from './model'
 
 const task = (over: Partial<TaskStatus> = {}): TaskStatus => ({
   package: 'sample', channel: 'dev', task: 'ok', version: 1, next_due: null, last_run: null, running: 0, queued: 0, next_attempt_at: null,
@@ -75,5 +75,13 @@ describe('activationBody', () => {
     const waiting = staging({ all_ready: false })
     expect(activationBody(waiting, 1, { confirmed: false, anyway: true, reason: '  ' })).toBeNull()
     expect(activationBody(waiting, 1, { confirmed: false, anyway: true, reason: ' runner 2 is being replaced ' })).toEqual({ channel: 'dev', expected_version: 1, anyway: true, reason: 'runner 2 is being replaced' })
+  })
+})
+
+describe('pruneCandidates', () => {
+  it('preselects all but what a channel holds and the three newest', () => {
+    const heads = [{ channel: 'prod', active: 2, previous: 1, staged: null }, { channel: 'test', active: 7, previous: null, staged: 8 }]
+    expect(pruneCandidates([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], heads)).toEqual([3, 4, 5, 6])
+    expect(pruneCandidates([1, 2, 3], heads)).toEqual([])
   })
 })

@@ -1,0 +1,2071 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Dashboard document (dashboard/1)",
+  "description": "A dashboard: the shared core (widgets, parameters, layouts, theme) plus refresh and kiosk. Its default layout is a fit layout (reflow or canvas); it may carry a flow print layout. The loader (DbDataKit.Views) is the authority; a test keeps the two equal. Bundled from Shared/web/visuals/schemas by scripts/bundle_views_schemas.py: edit the sources, not this file.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "kind",
+    "title",
+    "widgets",
+    "layouts"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "kind": {
+      "const": "dashboard"
+    },
+    "title": {
+      "$ref": "#/$defs/core__title"
+    },
+    "parameters": {
+      "$ref": "#/$defs/core__parameters"
+    },
+    "theme": {
+      "$ref": "#/$defs/core__theme"
+    },
+    "locale": {
+      "$ref": "#/$defs/core__locale"
+    },
+    "refresh": {
+      "type": "object",
+      "required": [
+        "every"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "every": {
+          "description": "A duration: 30s, 5m, 1h. The server's floor applies.",
+          "type": "string",
+          "pattern": "^[1-9][0-9]*[smh]$"
+        }
+      }
+    },
+    "kiosk": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "layout": {
+          "description": "The layout kiosk mode shows when none is named.",
+          "$ref": "#/$defs/core__name"
+        }
+      }
+    },
+    "links": {
+      "$ref": "#/$defs/core__links"
+    },
+    "widgets": {
+      "$ref": "#/$defs/core__widgets"
+    },
+    "layouts": {
+      "$ref": "#/$defs/core__layouts"
+    }
+  },
+  "$defs": {
+    "core__chart_channel": {
+      "description": "The Vega-Lite subset's channel object (its own definitions of field, type, sort, stack and title, referenced and not copied) and `format` (plan 32 DBR41): how the channel's values read on an axis, in a legend and in a tooltip. The subset and the QIS view (0.3) are unchanged: the format belongs to the widget vocabulary and the renderer maps it.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "$ref": "#/$defs/vega_lite_subset__channel/properties/field"
+        },
+        "type": {
+          "$ref": "#/$defs/vega_lite_subset__channel/properties/type"
+        },
+        "sort": {
+          "$ref": "#/$defs/vega_lite_subset__channel/properties/sort"
+        },
+        "stack": {
+          "$ref": "#/$defs/vega_lite_subset__channel/properties/stack"
+        },
+        "title": {
+          "$ref": "#/$defs/vega_lite_subset__channel/properties/title"
+        },
+        "format": {
+          "$ref": "#/$defs/core__format"
+        }
+      }
+    },
+    "core__chart_encodings": {
+      "description": "The channels of the Vega-Lite subset's encoding (the test compares the names).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/core__encoding_channel"
+            },
+            {
+              "$ref": "#/$defs/core__x_levels"
+            }
+          ]
+        },
+        "y": {
+          "$ref": "#/$defs/core__encoding_channel"
+        },
+        "color": {
+          "$ref": "#/$defs/core__encoding_channel"
+        },
+        "column": {
+          "$ref": "#/$defs/core__encoding_channel"
+        },
+        "row": {
+          "$ref": "#/$defs/core__encoding_channel"
+        },
+        "tooltip": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/core__encoding_channel"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/core__encoding_channel"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "core__drill": {
+      "type": "object",
+      "required": [
+        "to"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "to": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 1,
+          "additionalProperties": false,
+          "properties": {
+            "dashboard": {
+              "$ref": "#/$defs/core__name"
+            },
+            "report": {
+              "$ref": "#/$defs/core__name"
+            },
+            "view": {
+              "$ref": "#/$defs/core__name"
+            }
+          }
+        },
+        "with": {
+          "description": "Parameter name to a value: $field of the clicked row, $params.name, or a literal.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/core__name"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "core__encoding_channel": {
+      "description": "A chart channel: a field name, or the channel object (the subset's and `format`).",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/core__field"
+        },
+        {
+          "$ref": "#/$defs/core__chart_channel"
+        }
+      ]
+    },
+    "core__field": {
+      "description": "A field by logical name (orders.net_revenue) or by the alias of a query output.",
+      "type": "string",
+      "minLength": 1
+    },
+    "core__flow_break_block": {
+      "type": "object",
+      "required": [
+        "pagebreak"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "pagebreak": {
+          "const": true
+        }
+      }
+    },
+    "core__flow_row_block": {
+      "type": "object",
+      "required": [
+        "row"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "row": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "required": [
+              "widget",
+              "span"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "widget": {
+                "$ref": "#/$defs/core__name"
+              },
+              "span": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 12
+              }
+            }
+          }
+        },
+        "keep": {
+          "type": "boolean"
+        }
+      }
+    },
+    "core__flow_section": {
+      "type": "object",
+      "required": [
+        "blocks"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "$ref": "#/$defs/core__title"
+        },
+        "break": {
+          "enum": [
+            "before",
+            "after"
+          ]
+        },
+        "blocks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/core__flow_widget_block"
+              },
+              {
+                "$ref": "#/$defs/core__flow_row_block"
+              },
+              {
+                "$ref": "#/$defs/core__flow_break_block"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "core__flow_widget_block": {
+      "type": "object",
+      "required": [
+        "widget"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "widget": {
+          "$ref": "#/$defs/core__name"
+        },
+        "height": {
+          "description": "Millimetres.",
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 2000
+        },
+        "keep": {
+          "type": "boolean"
+        },
+        "repeat_header": {
+          "type": "boolean"
+        }
+      }
+    },
+    "core__format": {
+      "description": "How a metric or a table column shows its values (plan 32 section 9g): a named number preset (catalog takes the catalog's own format of the field), a number mapping {style: number | currency | percent | compact, decimals 0 to 10, currency (an ISO 4217 code, with style currency), grouping}, or a date mapping {date: year | quarter | month | month-year | date | datetime, or a pattern of the tokens yyyy yy Q MMMM MMM MM dd HH mm ss and literal text in single quotes}. The keys inside a mapping are checked by the loaders (DbDataKit.Views ViewFormat, src/views/format.ts), each with its own words, so the schema says only the two shapes.",
+      "type": [
+        "string",
+        "object"
+      ],
+      "examples": [
+        "catalog",
+        "full",
+        "compact",
+        "percent",
+        {
+          "style": "currency",
+          "currency": "EUR",
+          "decimals": 0
+        },
+        {
+          "date": "month-year"
+        }
+      ]
+    },
+    "core__layout": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/core__layout_reflow"
+        },
+        {
+          "$ref": "#/$defs/core__layout_canvas"
+        },
+        {
+          "$ref": "#/$defs/core__layout_flow"
+        }
+      ]
+    },
+    "core__layout_canvas": {
+      "type": "object",
+      "required": [
+        "name",
+        "type",
+        "canvas",
+        "tiles"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/core__name"
+        },
+        "type": {
+          "const": "canvas"
+        },
+        "default": {
+          "type": "boolean"
+        },
+        "when": {
+          "$ref": "#/$defs/core__selector"
+        },
+        "widget_options": {
+          "$ref": "#/$defs/core__widget_options"
+        },
+        "canvas": {
+          "type": "object",
+          "required": [
+            "width",
+            "height"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "width": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "height": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "unit": {
+              "enum": [
+                "px",
+                "mm",
+                "in"
+              ]
+            }
+          }
+        },
+        "overflow": {
+          "enum": [
+            "scale",
+            "scroll"
+          ]
+        },
+        "min_scale": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_scale": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "tiles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/core__tile_canvas"
+          }
+        }
+      }
+    },
+    "core__layout_flow": {
+      "type": "object",
+      "required": [
+        "name",
+        "type",
+        "sections"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/core__name"
+        },
+        "type": {
+          "const": "flow"
+        },
+        "default": {
+          "type": "boolean"
+        },
+        "when": {
+          "$ref": "#/$defs/core__selector"
+        },
+        "widget_options": {
+          "$ref": "#/$defs/core__widget_options"
+        },
+        "page": {
+          "$ref": "#/$defs/core__page"
+        },
+        "header": {
+          "$ref": "#/$defs/core__running_text"
+        },
+        "footer": {
+          "$ref": "#/$defs/core__running_text"
+        },
+        "cover": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "parameters": {
+              "type": "boolean"
+            }
+          }
+        },
+        "sections": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/core__flow_section"
+          }
+        }
+      }
+    },
+    "core__layout_reflow": {
+      "type": "object",
+      "required": [
+        "name",
+        "type",
+        "grid",
+        "tiles"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/core__name"
+        },
+        "type": {
+          "const": "reflow"
+        },
+        "default": {
+          "type": "boolean"
+        },
+        "when": {
+          "$ref": "#/$defs/core__selector"
+        },
+        "widget_options": {
+          "$ref": "#/$defs/core__widget_options"
+        },
+        "grid": {
+          "type": "object",
+          "required": [
+            "columns"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "columns": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 48
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        },
+        "tiles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/core__tile_reflow"
+          }
+        }
+      }
+    },
+    "core__layouts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/core__layout"
+      }
+    },
+    "core__link": {
+      "description": "One link of the shared vocabulary (plan 32 section 9f, DBR35): exactly one target (a dashboard, report, view, page or form of the same app instance), the values it is given (`with` for the first four; `new` prefilled defaults or `edit` the key of an existing row for a form), how the shell presents it (`as`), what re-runs when it closes or saves (`then`), the prefilled fields a form shows read-only (`lock`: a convenience of the screen, never a rule) and what an export draws (`print`, `image`). A prefilled value is a default and never authority: the target validates and the server enforces.",
+      "type": "object",
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "dashboard"
+          ]
+        },
+        {
+          "required": [
+            "report"
+          ]
+        },
+        {
+          "required": [
+            "view"
+          ]
+        },
+        {
+          "required": [
+            "page"
+          ]
+        },
+        {
+          "required": [
+            "form"
+          ]
+        }
+      ],
+      "properties": {
+        "dashboard": {
+          "$ref": "#/$defs/core__name"
+        },
+        "report": {
+          "$ref": "#/$defs/core__name"
+        },
+        "view": {
+          "$ref": "#/$defs/core__name"
+        },
+        "page": {
+          "$ref": "#/$defs/core__name"
+        },
+        "form": {
+          "$ref": "#/$defs/core__name"
+        },
+        "with": {
+          "description": "Parameters of a dashboard, report, view or page.",
+          "$ref": "#/$defs/core__link_values"
+        },
+        "new": {
+          "description": "A form that creates a row: the fields it starts with.",
+          "$ref": "#/$defs/core__link_values"
+        },
+        "edit": {
+          "description": "A form that changes an existing row: the key's values.",
+          "$ref": "#/$defs/core__link_values"
+        },
+        "as": {
+          "enum": [
+            "navigate",
+            "dialog",
+            "panel"
+          ],
+          "default": "navigate"
+        },
+        "then": {
+          "description": "What re-runs when the target closes or saves: refresh (the source widget's queries, the default after a form), none, or a list of widgets.",
+          "oneOf": [
+            {
+              "enum": [
+                "refresh",
+                "none"
+              ]
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100,
+              "items": {
+                "$ref": "#/$defs/core__name"
+              }
+            }
+          ]
+        },
+        "lock": {
+          "description": "Fields of the form that were given in `new` or `edit` and show read-only.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/core__link_value_name"
+          }
+        },
+        "print": {
+          "description": "What a PDF or print draws: hidden, normal (as on screen, no link behaviour) or link (a PDF hyperlink; the address is never printed as text). Not link where the target has no address of its own (dialog, panel).",
+          "enum": [
+            "hidden",
+            "normal",
+            "link"
+          ]
+        },
+        "image": {
+          "description": "The same for a PNG snapshot; link is drawn as normal there. Defaults to print.",
+          "enum": [
+            "hidden",
+            "normal",
+            "link"
+          ]
+        },
+        "label": {
+          "$ref": "#/$defs/core__title"
+        }
+      }
+    },
+    "core__link_value": {
+      "description": "A value passed to the target: $field of the clicked row ($orders.id), $params.name of the document, or a literal.",
+      "type": [
+        "string",
+        "number",
+        "boolean"
+      ]
+    },
+    "core__link_value_name": {
+      "description": "A parameter or field of the target (the target's own rule, so letters of either case).",
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+    },
+    "core__link_values": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/core__link_value_name"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/core__link_value"
+      }
+    },
+    "core__links": {
+      "type": "object",
+      "maxProperties": 100,
+      "propertyNames": {
+        "$ref": "#/$defs/core__name"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/core__link"
+      }
+    },
+    "core__locale": {
+      "description": "The language numbers and dates are written in: the separators of a number and the names of the months (plan 32 DBR46). A request may ask for another; the default is the server's, else en.",
+      "enum": [
+        "en",
+        "de",
+        "fr",
+        "es",
+        "it",
+        "pt",
+        "nl"
+      ]
+    },
+    "core__margin": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "core__matrix_axis": {
+      "description": "The attributes of a matrix axis, outermost first (plan 32 DBR41): each a field name, or `{field, format, sort}`: the format of the member labels at that level and the sort of the axis (the QIS view's own sort object, by sort_key, label or a measure). Only one level of an axis may carry a sort, which is the axis's sort.",
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/core__field"
+          },
+          {
+            "type": "object",
+            "required": [
+              "field"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "field": {
+                "$ref": "#/$defs/core__field"
+              },
+              "format": {
+                "$ref": "#/$defs/core__format"
+              },
+              "sort": {
+                "$ref": "#/$defs/view__sort"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "core__matrix_encodings": {
+      "description": "A QIS matrix view's own properties (everything but type and id), referenced from view.schema.json, except the axes and the values, which also take a format (matrix_axis, matrix_values; plan 32 DBR41).",
+      "type": "object",
+      "required": [
+        "values"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "rows": {
+          "$ref": "#/$defs/core__matrix_axis"
+        },
+        "columns": {
+          "$ref": "#/$defs/core__matrix_axis"
+        },
+        "values": {
+          "$ref": "#/$defs/core__matrix_values"
+        },
+        "values_on": {
+          "$ref": "#/$defs/view__matrix/properties/values_on"
+        },
+        "totals": {
+          "$ref": "#/$defs/view__matrix/properties/totals"
+        },
+        "sort": {
+          "$ref": "#/$defs/view__matrix/properties/sort"
+        },
+        "column_limit": {
+          "$ref": "#/$defs/view__matrix/properties/column_limit"
+        }
+      }
+    },
+    "core__matrix_values": {
+      "description": "The measures of a matrix: the QIS view's own `field`, `empty` and `label`, and a `format` that is a preset or a mapping (the view's own takes the presets only).",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "field"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "$ref": "#/$defs/core__field"
+          },
+          "empty": {
+            "$ref": "#/$defs/view__matrix/properties/values/items/properties/empty"
+          },
+          "format": {
+            "$ref": "#/$defs/core__format"
+          },
+          "label": {
+            "$ref": "#/$defs/view__matrix/properties/values/items/properties/label"
+          }
+        }
+      }
+    },
+    "core__medium": {
+      "enum": [
+        "screen",
+        "print",
+        "export"
+      ]
+    },
+    "core__min_size": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "w": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "h": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "core__name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+    },
+    "core__on_select": {
+      "type": "object",
+      "required": [
+        "set",
+        "from"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "set": {
+          "$ref": "#/$defs/core__name"
+        },
+        "from": {
+          "$ref": "#/$defs/core__field"
+        }
+      }
+    },
+    "core__page": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "size": {
+          "oneOf": [
+            {
+              "enum": [
+                "A3",
+                "A4",
+                "A5",
+                "Letter",
+                "Legal"
+              ]
+            },
+            {
+              "type": "object",
+              "required": [
+                "w",
+                "h"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "w": {
+                  "type": "number",
+                  "minimum": 50,
+                  "maximum": 2000
+                },
+                "h": {
+                  "type": "number",
+                  "minimum": 50,
+                  "maximum": 2000
+                }
+              }
+            }
+          ]
+        },
+        "orientation": {
+          "enum": [
+            "portrait",
+            "landscape"
+          ]
+        },
+        "margins": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "top": {
+              "$ref": "#/$defs/core__margin"
+            },
+            "right": {
+              "$ref": "#/$defs/core__margin"
+            },
+            "bottom": {
+              "$ref": "#/$defs/core__margin"
+            },
+            "left": {
+              "$ref": "#/$defs/core__margin"
+            }
+          }
+        }
+      }
+    },
+    "core__param_map": {
+      "description": "A request's parameter name and the document parameter that supplies it; a name not listed is supplied by the parameter of the same name.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/core__name"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/core__name"
+      }
+    },
+    "core__parameter": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/core__name"
+        },
+        "type": {
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ]
+        },
+        "for": {
+          "description": "The attribute the parameter is a value of (J25).",
+          "$ref": "#/$defs/core__field"
+        },
+        "many": {
+          "type": "boolean"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "default": {},
+        "label": {
+          "$ref": "#/$defs/core__title"
+        }
+      }
+    },
+    "core__parameters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/core__parameter"
+      }
+    },
+    "core__query": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/core__query_derived"
+        },
+        {
+          "$ref": "#/$defs/core__query_explicit_semantic"
+        },
+        {
+          "$ref": "#/$defs/core__query_explicit_saved"
+        },
+        {
+          "$ref": "#/$defs/core__query_explicit_store"
+        },
+        {
+          "$ref": "#/$defs/core__query_explicit_ref"
+        }
+      ]
+    },
+    "core__query_derived": {
+      "description": "The request is derived from the encodings (DeriveRequest, DBR03); the document holds the parts a person chooses beside them.",
+      "type": "object",
+      "required": [
+        "model"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "derived"
+        },
+        "model": {
+          "$ref": "#/$defs/core__name"
+        },
+        "filters": {
+          "type": "array"
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "order": {
+          "type": "array"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "totals": {
+          "type": "object"
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 1
+        },
+        "params": {
+          "$ref": "#/$defs/core__param_map"
+        }
+      }
+    },
+    "core__query_explicit_ref": {
+      "description": "An already run result (an assistant's answer): no query.",
+      "type": "object",
+      "required": [
+        "mode",
+        "ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "explicit"
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/core__field"
+          }
+        }
+      }
+    },
+    "core__query_explicit_saved": {
+      "type": "object",
+      "required": [
+        "mode",
+        "saved"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "explicit"
+        },
+        "saved": {
+          "$ref": "#/$defs/core__name"
+        },
+        "outputs": {
+          "description": "The saved query's declared outputs, when the file cannot see the saved query (the shape check of the binding).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/core__field"
+          }
+        },
+        "params": {
+          "$ref": "#/$defs/core__param_map"
+        }
+      }
+    },
+    "core__query_explicit_semantic": {
+      "type": "object",
+      "required": [
+        "mode",
+        "semantic"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "explicit"
+        },
+        "semantic": {
+          "type": "object",
+          "required": [
+            "model"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "$ref": "#/$defs/core__name"
+            },
+            "request": {
+              "description": "A semantic request as docs/semantic/query.md defines it; the engine validates it (the catalog check).",
+              "type": "object"
+            },
+            "sql": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "params": {
+          "$ref": "#/$defs/core__param_map"
+        }
+      }
+    },
+    "core__query_explicit_store": {
+      "type": "object",
+      "required": [
+        "mode",
+        "store"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "const": "explicit"
+        },
+        "store": {
+          "type": "object",
+          "required": [
+            "model",
+            "entity"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "$ref": "#/$defs/core__name"
+            },
+            "entity": {
+              "$ref": "#/$defs/core__name"
+            },
+            "columns": {
+              "description": "The columns the read returns, when the file lists them (the shape check of the binding).",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/core__field"
+              }
+            },
+            "filter": {
+              "type": "object"
+            },
+            "sort": {
+              "type": "array"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            }
+          }
+        },
+        "params": {
+          "$ref": "#/$defs/core__param_map"
+        }
+      }
+    },
+    "core__range": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "min": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "core__running_text": {
+      "description": "Text with {title} {page} {pages} {asof} {viewer} {params.name}.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "left": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "center": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "right": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "core__selector": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "$ref": "#/$defs/core__range"
+        },
+        "height": {
+          "$ref": "#/$defs/core__range"
+        },
+        "orientation": {
+          "enum": [
+            "portrait",
+            "landscape"
+          ]
+        },
+        "aspect": {
+          "$ref": "#/$defs/core__range"
+        },
+        "medium": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/core__medium"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/core__medium"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "core__table_column": {
+      "type": "object",
+      "required": [
+        "field"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "$ref": "#/$defs/core__field"
+        },
+        "label": {
+          "type": "string"
+        },
+        "format": {
+          "$ref": "#/$defs/core__format"
+        },
+        "align": {
+          "enum": [
+            "left",
+            "right",
+            "center"
+          ]
+        },
+        "width": {
+          "description": "A width hint in CSS pixels.",
+          "type": "integer",
+          "minimum": 20,
+          "maximum": 2000
+        }
+      }
+    },
+    "core__theme": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "font": {
+          "description": "sans, serif or mono: the bundled families (plan 32 section 4.6). A host font by name is added with the export settings (DBR15b).",
+          "enum": [
+            "sans",
+            "serif",
+            "mono"
+          ]
+        }
+      }
+    },
+    "core__tile_canvas": {
+      "type": "object",
+      "required": [
+        "widget",
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "widget": {
+          "$ref": "#/$defs/core__name"
+        },
+        "x": {
+          "type": "number",
+          "minimum": 0
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0
+        },
+        "w": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "h": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "layer": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20
+        },
+        "min": {
+          "$ref": "#/$defs/core__min_size"
+        }
+      }
+    },
+    "core__tile_reflow": {
+      "type": "object",
+      "required": [
+        "widget",
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "widget": {
+          "$ref": "#/$defs/core__name"
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "w": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "h": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "min": {
+          "$ref": "#/$defs/core__min_size"
+        }
+      }
+    },
+    "core__title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "core__widget": {
+      "description": "A widget by its type.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/core__widget_metric"
+        },
+        {
+          "$ref": "#/$defs/core__widget_chart"
+        },
+        {
+          "$ref": "#/$defs/core__widget_matrix"
+        },
+        {
+          "$ref": "#/$defs/core__widget_table"
+        },
+        {
+          "$ref": "#/$defs/core__widget_text"
+        },
+        {
+          "$ref": "#/$defs/core__widget_image"
+        },
+        {
+          "$ref": "#/$defs/core__widget_control"
+        },
+        {
+          "$ref": "#/$defs/core__widget_embed"
+        },
+        {
+          "$ref": "#/$defs/core__widget_custom"
+        }
+      ]
+    },
+    "core__widget_chart": {
+      "type": "object",
+      "required": [
+        "type",
+        "mark",
+        "encodings",
+        "query"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "chart"
+        },
+        "title": {
+          "$ref": "#/$defs/core__title"
+        },
+        "mark": {
+          "$ref": "#/$defs/vega_lite_subset__spec/properties/mark"
+        },
+        "encodings": {
+          "$ref": "#/$defs/core__chart_encodings"
+        },
+        "query": {
+          "$ref": "#/$defs/core__query"
+        },
+        "on_select": {
+          "$ref": "#/$defs/core__on_select"
+        },
+        "drill": {
+          "$ref": "#/$defs/core__drill"
+        },
+        "on_click": {
+          "description": "The name of a link of the document that a click on a mark or cell follows (instead of `drill`, which is the same thing written in place).",
+          "$ref": "#/$defs/core__name"
+        }
+      }
+    },
+    "core__widget_control": {
+      "type": "object",
+      "required": [
+        "type",
+        "parameter"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "control"
+        },
+        "title": {
+          "$ref": "#/$defs/core__title"
+        },
+        "parameter": {
+          "$ref": "#/$defs/core__name"
+        },
+        "control": {
+          "enum": [
+            "select",
+            "multiselect",
+            "date",
+            "daterange",
+            "number",
+            "toggle",
+            "text"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "values": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "attribute": {
+              "$ref": "#/$defs/core__field"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            }
+          }
+        }
+      }
+    },
+    "core__widget_custom": {
+      "description": "Code of an app (plan 32 section 9f, DBR30): a component the app's code registers with `defineWidget` of `@dbdatakit/views-sdk`, drawn in the app's sandboxed frame. The app's manifest declares what it needs (its queries and parameters); the document names the component, gives it the values of its parameters and lists the links it may open (a custom widget fires only a named link). Only an app's own host draws it.",
+      "type": "object",
+      "required": [
+        "type",
+        "component"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "custom"
+        },
+        "title": {
+          "$ref": "#/$defs/core__title"
+        },
+        "component": {
+          "description": "`<app>/<Export>`: the app's name, then the name its code registers.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}/[A-Za-z][A-Za-z0-9_]{0,63}$"
+        },
+        "params": {
+          "description": "The component's parameters by name: `$params.name` of the document or a literal (there is no clicked row).",
+          "$ref": "#/$defs/core__link_values"
+        },
+        "links": {
+          "description": "The links of the document the component may open with `open(name, row)`.",
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/core__name"
+          }
+        }
+      }
+    },
+    "core__widget_embed": {
+      "description": "An external report server's report (plan 32 DBR19, dashboards only: a report is paged and exported and refuses it, which the loaders say). Framed when the host approves the address's origin (an app instance's `frame` exception, plan 26 AP17), a link when it does not.",
+      "type": "object",
+      "required": [
+        "type",
+        "url"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "embed"
+        },
+        "title": {
+          "$ref": "#/$defs/core__title"
+        },
+        "url": {
+          "description": "An absolute https address, no credentials, no spaces, at most 2000 characters.",
+          "type": "string",
+          "pattern": "^https://[^\\s@/]+([/?#]\\S*)?$",
+          "maxLength": 2000
+        },
+        "with": {
+          "description": "Query-string pairs added to the address: a name to `$params.name` (a declared parameter, left out when it has no value) or a literal.",
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "link_text": {
+          "description": "The words of the link shown when the address is not framed.",
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "core__widget_image": {
+      "type": "object",
+      "required": [
+        "type",
+        "hash",
+        "media_type",
+        "alt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "image"
+        },
+        "title": {
+          "$ref": "#/$defs/core__title"
+        },
+        "hash": {
+          "description": "The image's bytes in the definition's artifacts, by SHA-256 (plan 30 payloads). Never a URL.",
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "media_type": {
+          "description": "A raster only: SVG can script and is refused.",
+          "enum": [
+            "image/png",
+            "image/jpeg",
+            "image/webp"
+          ]
+        },
+        "alt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "fit": {
+          "enum": [
+            "contain",
+            "cover"
+          ]
+        }
+      }
+    },
+    "core__widget_matrix": {
+      "type": "object",
+      "required": [
+        "type",
+        "encodings",
+        "query"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "matrix"
+        },
+        "title": {
+          "$ref": "#/$defs/core__title"
+        },
+        "encodings": {
+          "$ref": "#/$defs/core__matrix_encodings"
+        },
+        "query": {
+          "$ref": "#/$defs/core__query"
+        },
+        "on_select": {
+          "$ref": "#/$defs/core__on_select"
+        },
+        "drill": {
+          "$ref": "#/$defs/core__drill"
+        },
+        "on_click": {
+          "description": "The name of a link of the document that a click on a mark or cell follows (instead of `drill`, which is the same thing written in place).",
+          "$ref": "#/$defs/core__name"
+        }
+      }
+    },
+    "core__widget_metric": {
+      "type": "object",
+      "required": [
+        "type",
+        "encodings",
+        "query"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "metric"
+        },
+        "title": {
+          "$ref": "#/$defs/core__title"
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "format": {
+          "$ref": "#/$defs/core__format"
+        },
+        "encodings": {
+          "type": "object",
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/core__field"
+            },
+            "compare": {
+              "$ref": "#/$defs/core__field"
+            }
+          }
+        },
+        "query": {
+          "$ref": "#/$defs/core__query"
+        }
+      }
+    },
+    "core__widget_options": {
+      "description": "A layout restyles a widget only through these; it never changes a widget's type, encodings, query, formats or parameters.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/core__name"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "density": {
+            "enum": [
+              "compact",
+              "comfortable"
+            ]
+          },
+          "show_title": {
+            "type": "boolean"
+          },
+          "legend": {
+            "enum": [
+              "show",
+              "hide"
+            ]
+          }
+        }
+      }
+    },
+    "core__widget_table": {
+      "type": "object",
+      "required": [
+        "type",
+        "encodings",
+        "query"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "table"
+        },
+        "title": {
+          "$ref": "#/$defs/core__title"
+        },
+        "encodings": {
+          "type": "object",
+          "required": [
+            "columns"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "columns": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/core__table_column"
+              }
+            },
+            "sort": {
+              "$ref": "#/$defs/view__sort"
+            }
+          }
+        },
+        "query": {
+          "$ref": "#/$defs/core__query"
+        },
+        "drill": {
+          "$ref": "#/$defs/core__drill"
+        },
+        "on_click": {
+          "description": "The name of a link of the document that a click on a row follows.",
+          "$ref": "#/$defs/core__name"
+        }
+      }
+    },
+    "core__widget_text": {
+      "type": "object",
+      "required": [
+        "type",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "text"
+        },
+        "title": {
+          "$ref": "#/$defs/core__title"
+        },
+        "text": {
+          "description": "Markdown, the safe subset of the portal home: no raw HTML, no image, links only to a path on the host; {{params.name}} is substituted as text.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20000
+        }
+      }
+    },
+    "core__widgets": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/core__name"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/core__widget"
+      }
+    },
+    "core__x_levels": {
+      "description": "A nested axis (plan 32 DBR42): the levels of a bar or point chart's `x`, outermost first, at most three; each a field name or `{field, format, sort, title}`, `sort` being the QIS view's `{by, dir}` (sort_key, label, or a measure on the innermost level). A line or an area mark and a `column` channel are refused by the loaders (they need the mark and the other channels).",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/core__field"
+          },
+          {
+            "type": "object",
+            "required": [
+              "field"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "field": {
+                "$ref": "#/$defs/core__field"
+              },
+              "format": {
+                "$ref": "#/$defs/core__format"
+              },
+              "sort": {
+                "$ref": "#/$defs/view__sort"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "vega_lite_subset__channel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "quantitative",
+            "ordinal",
+            "nominal",
+            "temporal"
+          ]
+        },
+        "sort": {
+          "oneOf": [
+            {
+              "enum": [
+                "ascending",
+                "descending",
+                "sort_key",
+                null
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              }
+            }
+          ]
+        },
+        "stack": {
+          "enum": [
+            null,
+            true,
+            false,
+            "zero",
+            "center",
+            "normalize"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "vega_lite_subset__mark": {
+      "enum": [
+        "bar",
+        "line",
+        "area",
+        "point",
+        "rule",
+        "text"
+      ]
+    },
+    "vega_lite_subset__spec": {
+      "type": "object",
+      "required": [
+        "mark"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mark": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/vega_lite_subset__mark"
+            },
+            {
+              "type": "object",
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "type": {
+                  "$ref": "#/$defs/vega_lite_subset__mark"
+                },
+                "tooltip": {
+                  "type": "boolean"
+                },
+                "point": {
+                  "type": "boolean"
+                }
+              }
+            }
+          ]
+        },
+        "encoding": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/vega_lite_subset__channel"
+            },
+            "y": {
+              "$ref": "#/$defs/vega_lite_subset__channel"
+            },
+            "color": {
+              "$ref": "#/$defs/vega_lite_subset__channel"
+            },
+            "column": {
+              "$ref": "#/$defs/vega_lite_subset__channel"
+            },
+            "row": {
+              "$ref": "#/$defs/vega_lite_subset__channel"
+            },
+            "tooltip": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/vega_lite_subset__channel"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/vega_lite_subset__channel"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4000
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4000
+        }
+      }
+    },
+    "view__chart": {
+      "type": "object",
+      "required": [
+        "type",
+        "id",
+        "vega_lite"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "chart"
+        },
+        "id": {
+          "$ref": "#/$defs/view__id"
+        },
+        "vega_lite": {
+          "description": "A restricted subset of Vega-Lite: encodings only. The renderer supplies the data.",
+          "type": "object"
+        }
+      }
+    },
+    "view__field": {
+      "description": "A field of the result, by logical name (orders.net_revenue) or by the name of an alias or transform output.",
+      "type": "string",
+      "minLength": 1
+    },
+    "view__id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "view__matrix": {
+      "type": "object",
+      "required": [
+        "type",
+        "id",
+        "values"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "matrix"
+        },
+        "id": {
+          "$ref": "#/$defs/view__id"
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/view__field"
+          }
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/view__field"
+          }
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "field"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "field": {
+                "$ref": "#/$defs/view__field"
+              },
+              "empty": {
+                "enum": [
+                  "blank",
+                  "zero"
+                ]
+              },
+              "format": {
+                "enum": [
+                  "compact",
+                  "full",
+                  "percent"
+                ]
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "values_on": {
+          "enum": [
+            "columns",
+            "rows"
+          ]
+        },
+        "totals": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "rows": {
+              "type": "boolean"
+            },
+            "columns": {
+              "type": "boolean"
+            }
+          }
+        },
+        "sort": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "rows": {
+              "$ref": "#/$defs/view__sort"
+            },
+            "columns": {
+              "$ref": "#/$defs/view__sort"
+            }
+          }
+        },
+        "column_limit": {
+          "type": "object",
+          "required": [
+            "max",
+            "overflow"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "max": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "overflow": {
+              "enum": [
+                "error",
+                "truncate",
+                "top_n_other"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "view__sort": {
+      "type": "object",
+      "required": [
+        "by"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "by": {
+          "description": "sort_key (the order the result gives the members in), label, or a measure.",
+          "type": "string",
+          "minLength": 1
+        },
+        "dir": {
+          "enum": [
+            "asc",
+            "desc"
+          ]
+        }
+      }
+    }
+  }
+}

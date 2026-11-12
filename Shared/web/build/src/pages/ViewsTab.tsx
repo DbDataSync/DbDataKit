@@ -12,6 +12,12 @@ import { publishFailure } from './PublishTab'
 type ViewFileEntry = ReturnType<typeof viewFiles>[number]
 const keyOf = (f: { kind: ViewKind; name: string }) => `${f.kind}-${f.name}`
 
+/** The registry version a document was last published at in this session, as a whole number to send back as `expected_version` (the Gateway then refuses a publish when someone else changed the document since: its 409 `version_conflict` names the current version); undefined when nothing was published yet or the version is no number. */
+export function expectedVersionOf(answer: PublishViewAnswer | undefined): number | undefined {
+  const v = answer?.version
+  return v != null && /^[0-9]+$/.test(v) ? Number(v) : undefined
+}
+
 /** Why a document cannot be published right now, in the words the disabled button carries; null when it can. */
 export function publishBlocker(o: { proxies: PairedProxy[] | undefined; proxy: string; canPublish: boolean }): string | null {
   if (!o.canPublish) return 'Publishing needs the approver role on this server.'
@@ -249,7 +255,7 @@ export function ViewsTab() {
     setBusy(key)
     setFailed((d) => Object.fromEntries(Object.entries(d).filter(([k]) => k !== key)))
     try {
-      const answer = await buildApi.publishView(project, proxy, { kind: f.kind, name: f.name })
+      const answer = await buildApi.publishView(project, proxy, { kind: f.kind, name: f.name, ...(expectedVersionOf(done[key]) !== undefined ? { expected_version: expectedVersionOf(done[key]) } : {}) })
       setDone((d) => ({ ...d, [key]: answer }))
     } catch (e) {
       setFailed((d) => ({ ...d, [key]: e }))

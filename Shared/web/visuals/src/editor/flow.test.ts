@@ -12,7 +12,7 @@ import type { EditCommand } from './commands'
 import { edit, editAll, errorsOf, newDraft, undo } from './draft'
 import type { Draft } from './draft'
 import { diagnosticsFor, formTarget } from './diagnostics'
-import { newDocumentText } from './newDocument'
+import { emptyDocumentText as newDocumentText } from './emptyDocument.testing'
 import { runningTokens, unknownTokens } from './flow'
 
 const here = path.dirname(fileURLToPath(import.meta.url))

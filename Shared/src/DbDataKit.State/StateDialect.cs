@@ -170,6 +170,9 @@ public abstract class StateDialect
     /// </summary>
     public virtual bool ShouldRetry(Exception exception) => false;
 
+    /// <summary>True when the exception is the engine refusing a row because a unique or primary key already has it (two writers took the same number).</summary>
+    public virtual bool IsUniqueViolation(Exception exception) => false;
+
     // ---- What the module migrator needs (plan 29a Q02) ----
 
     /// <summary>The statement that creates a schema that does not exist yet; null on an engine with no schemas in a database (SQLite).</summary>

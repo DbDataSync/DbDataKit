@@ -135,10 +135,27 @@ public static class DefinitionsModule
             -- instance reads the current format of a kind and the one before it and refuses a newer one with a message; a publish is refused when a live instance of the group cannot read it.
             ALTER TABLE {table:definition_version} {{addcolumn}} format {{int}} NOT NULL DEFAULT 1;
             """,
+            """
+            -- Plan 30 PB03: the signature a publisher sent with a version (ed25519:<key id>:<signature>, over the manifest and the path and SHA-256 of every file) and the key id that verified it; both null for a
+            -- version stored unsigned. The group's trust store: the publisher keys a kind accepts, one row for each (kind, key id); a revoked key (revoked_at) refuses new versions and is kept as history.
+            ALTER TABLE {table:definition_version} {{addcolumn}} signature {{text}} NULL;
+            ALTER TABLE {table:definition_version} {{addcolumn}} signer {{key}} NULL;
+            CREATE TABLE {table:definition_publisher_key} (
+                kind        {{key}} NOT NULL,
+                key_id      {{key}} NOT NULL,
+                public_key  {{text}} NOT NULL,
+                label       {{text}} NULL,
+                added_by    {{key}} NOT NULL,
+                added_at    {{time}} NOT NULL,
+                revoked_at  {{time}} NULL,
+                revoked_by  {{key}} NULL,
+                PRIMARY KEY (kind, key_id)
+            );
+            """,
         ],
         // an instance that left the group: its status rows are history after the retention age
         retention: [new RetentionRule("definition_instance_status", "gone_at")],
-        // the fourth migration only adds a column with a default, which the code of version 3 never reads and whose inserts it leaves to the default (format 1): an instance of the previous version still works with it
+        // the fifth migration (signatures and the trust store) adds nullable columns and a table, which the code of version 4 never reads, so it is compatible as the fourth is; the fourth only adds a column with a default, which the code of version 3 never reads and whose inserts it leaves to the default (format 1): an instance of the previous version still works with it
         compatibleWithPrevious: 1);
 }
 

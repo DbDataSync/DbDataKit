@@ -12,6 +12,8 @@ export async function editorLinksStory(page: Page) {
   await page.getByTestId('rail-views').click()
   await page.getByTestId('views-tab-dashboards').click()
   await by(page, 'views-new').click()
+  // a new document starts with one text widget (`note`) so that it is valid as it stands; the story builds on an empty one
+  await page.getByTestId('ed-widget-remove-note').click()
   await by(page, 'ed-file-name').fill('links-board')
   await by(page, 'ed-title').fill('Links board')
   await by(page, 'ed-add-chart').click()

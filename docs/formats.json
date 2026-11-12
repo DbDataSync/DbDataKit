@@ -242,6 +242,16 @@
       "files": [ { "path": "Shared/src/DbDataKit.Runner.Kit.Testing/RecordedHttp.cs", "sha256": null } ]
     },
     {
+      "id": "report-catalog",
+      "title": "External report catalog snapshot (a machine-written document, schema_version 1)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 32 RC02: what the scheduled read of an external report server (SSRS, Power BI Report Server) keeps per channel: provider, then every folder and item with its parameters, export formats and policies, no read time. Written by DbDataKit.ReportCatalogs, never by a person. Open until the first release that holds it (24a D5).",
+      "version_source": { "file": "Shared/src/DbDataKit.ReportCatalogs/ReportCatalogSnapshot.cs", "pattern": "public const int Current = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.ReportCatalogs/ReportCatalogSnapshot.cs", "sha256": null } ]
+    },
+    {
       "id": "secret-key",
       "title": "Secret key backup (a YAML file, format: dbdata-secret-key, version N)",
       "current": 1,

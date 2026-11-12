@@ -31,11 +31,11 @@ A console calls servers and a server never calls a console. The serving layer is
 
 | Module | Serves | Status and where the code is |
 | --- | --- | --- |
-| `flightsql` | read-only data sources over Flight SQL | built: `DbDataKit.Serving.FlightSql`, the only `IServingModule` implementation |
+| `flightsql` | read-only data sources over Flight SQL | built: `DbDataKit.Serving.FlightSql` |
 | semantic | semantic queries and semantic SQL on the source `semantic:<model>` | built, not a listed module: `DbDataKit.Serving.Semantic` wraps the host's core services, configured by `semantic:` in `server.yaml` (see `docs/semantic/architecture.md`) |
 | `store` | DbDataStore entities over HTTP: reads now, as of a date, with history; validated writes; change requests in the group's state | built over HTTP (`GatewayStoreModule`, its own listener, the paths of a DbDataStore server); reads over Flight SQL not built |
 | `apps` | app front ends and their API: subpath instances, shell page, app tokens (the identity home's, by exchange), app storage, portals, data calls answered in process | built (`GatewayAppsModule`, `DbDataKit.Apps.*`, default port 8818); app code does not run in child processes |
-| `identity` | sign-in, the OpenID Connect provider (authorize, token, discovery, signing keys), passkeys, Entra and Windows upstream sign-in | built (`GatewayIdentityModule`, `DbDataKit.Identity`, default port 8817); a hosted web application rather than an `IServingModule` |
+| `identity` | sign-in, the OpenID Connect provider (authorize, token, discovery, signing keys), passkeys, Entra and Windows upstream sign-in | built (`GatewayIdentityModule`, `DbDataKit.Identity`, default port 8817); a hosted web application that reports its health as an `IServingModule` |
 | `views` | published dashboards and reports over REST, rendered as the caller, audited, with drain and health (plan 32 DBR11); and a person's own dashboards and reports (`/api/v1/my/...`, state module `user_views`, DBR12) | built as a library with its own listener: `DbDataKit.Views.Hosting` (`ViewsModule`); **not yet a name in `modules:`**, the Gateway host does not load it (it needs a listener setting and an `IViewsCallers` over the identity home's tokens), see `docs/views.md` |
 | `pgwire` | Postgres wire for semantic SQL | not built; deferred, low priority (owner, 2026-11-09; plan 14a) |
 | `xmla` | XMLA and MDX for Excel PivotTables | not built (only the recording forwarder, `DbDataKit.Tools.XmlaForwarder`); deferred, low priority (owner, 2026-11-09; plan 14a) |
@@ -45,7 +45,7 @@ A console calls servers and a server never calls a console. The serving layer is
 | `knowledge` | search, show and about over knowledge items, access-filtered; checks and embeds a knowledge project at staging and switches at activation (plan 27 sections 2.2, 2.6) | not built (plan 27a lane KN); no knowledge library, index or embedding connection exists, only the engine check for vector columns, see [knowledge.md](knowledge.md) |
 | `backlog` | the API of DbDataBacklog: work items, sprints, boards, over its own state module (plan 27 section 5.1) | not built (plan 27a lane BK) |
 
-Health per module is not wired into the host's `/health`: `IServingModule.Health()` exists; the `views` module reports its own at its listener's `/health` (plan 20 O18).
+Health per module is on the host's `/health` and `/health/ready`: each of `flightsql`, `identity`, `apps`, `store` and `views` is one component named after the module (`ServingModuleReadinessProbe`). A module that is not started is `Unhealthy`, one that drains is `Degraded`, and a group state database that does not answer turns `identity`, `apps` and `store` to `Unhealthy` and `flightsql` to `Degraded` (it still reads the hand-made sources); `views` reports its own causes (a version it cannot load) too.
 
 ## What keeps working when a back-end is down
 
@@ -57,7 +57,7 @@ Health per module is not wired into the host's `/health`: `IServingModule.Health
 | The console | everything an end user does | administration, approvals made in the console, monitoring views |
 | A serving instance | the others behind the load balancer | nothing, if the group has more than one instance |
 
-Tests for each row with the back-end stopped are not written yet (plan 20 O13); several of the rows are exercised by `GroupStateTests`, which run a done-when with no Store server or no Build.
+Tests of the rows with the back-end not running: `OutageTests` (Build, Sync and the console, on a serving instance of its own with nothing beside it) and `GroupStateTests` (the DbDataStore server, on SQL Server and PostgreSQL). The row for a stopped serving instance waits for the high-availability tests (plan 20 O05).
 
 ## High availability, groups and identity
 
@@ -81,9 +81,9 @@ Tests for each row with the back-end stopped are not written yet (plan 20 O13); 
 
 What a reader of the code should not assume; each is either a deliberate limit or owned by a slice of [plan 20](plans/20-serving-layer.md).
 
-- **Modules** (O01): only `flightsql` implements `IServingModule`; the identity home, the apps host and the store module are hosted web applications on their own listeners. Health per module is not on `/health` (O18).
+- **Modules** (O01): the identity home, the apps host and the store module implement `IServingModule` for its name, drain and health but start themselves as hosted services on their own listeners; `StartAsync(IServingServices)` is their ordinary start, they are not handed the core services.
 - **Identity keys** (O02b): `dbdatakit identity run` protects its signing keys with ASP.NET data protection keys in its own directory, so a group of those homes needs the folder copied (O06b). Entra's group overage (more than 200 groups) gives no groups; Windows on Linux with a keytab is built but untested, there being no KDC in the test environment; `identity run` does not offer the upstreams yet (O06b).
-- **Definitions** (O03): a request is not pinned to one version while it runs and its answer does not name the version; `expected_version` is checked per instance, so two publishes through two instances at once can both pass it (O19).
+- **Definitions** (O03, O19): a semantic request is pinned to the model version it found when it began and its answer names that version (`ServingProvenance.DefinitionVersion`); a raw SQL request on a published data source does not name a version yet. `expected_version` is checked in the shared state: two publishes at once from the same version leave one winner, and the other gets a `DefinitionConflictException` naming the current version (the unique key on the version number is the guard; tests on SQLite, SQL Server and PostgreSQL).
 - **Groups** (O04): Build, Sync and Store run once, they are not groups. Adopting a hand-made data source on a group keeps it the instance's own file. The console shows a group's data sources as the instance it reaches lists them (O20).
 - **Store publishing** (O10, O10b): permissions are not in `model/1` (row and column rules are plan 22a's access rules); publishing is a command, not the Store's management API or screens, and a model with instances cannot be published yet (the group serves a model's own copy only) (O10c).
 - **Semantic** (plan 14a): the combine runs in process under limits, not in a child process (SL27, conditional); semantic state is not in the Gateway's store (SL23, SL25).

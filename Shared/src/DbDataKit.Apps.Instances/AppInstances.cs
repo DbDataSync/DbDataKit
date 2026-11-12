@@ -119,7 +119,7 @@ public sealed class AppInstanceStore(DefinitionStore definitions)
         if (channel != DefinitionStore.Production && instance.Addresses.Count > 0) throw new AppInstanceException($"A {channel} instance is served at its subpath only; addresses are the production instance's.");
         if (channel == DefinitionStore.Production) instance = instance with { Addresses = AppAddresses.Check(instance, List(channel)) };
         AppAddresses.RequireForOrigin(instance, manifest, channel);
-        return definitions.Publish(InstanceKind, instance.Name, Write(instance), by, [$"{AppKind}:{instance.App}"], note, channel, format: instance.Addresses.Count > 0 ? AppAddresses.InstanceFormat : DefinitionFormat.First);
+        return definitions.Publish(InstanceKind, instance.Name, Write(instance), by, instance.Pin is null ? [$"{AppKind}:{instance.App}"] : [], note, channel, format: instance.Addresses.Count > 0 ? AppAddresses.InstanceFormat : DefinitionFormat.First);
     }
 
     public AppInstance? Get(string name, string channel = DefinitionStore.Production) =>
