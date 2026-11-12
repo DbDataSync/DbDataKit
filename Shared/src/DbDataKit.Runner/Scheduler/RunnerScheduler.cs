@@ -453,7 +453,7 @@ public sealed partial class RunnerScheduler
         // claimed just as an activation took hold of the package: the item goes back and waits, so the run starts on the version the activation leaves
         if (_holds.IsHeld(DefinitionVersionSource.Kind, taskRef.Package, taskRef.Channel))
         {
-            if (_queue.Reschedule(item.Id, worker, _time.GetUtcNow() + _options.Tick, payload.ToJson()) is null) running.LeaseLost = true;
+            if (!_queue.Defer(item.Id, worker, _time.GetUtcNow() + _options.Tick)) running.LeaseLost = true;
             return;
         }
 
@@ -557,7 +557,7 @@ public sealed partial class RunnerScheduler
             if (holder is { } other && other != item.RunId && other != earlierRunId)
             {
                 Report(taskRef.ToString(), $"The run lock of {taskRef} is held by run {other}; the item waits.");
-                if (_queue.Reschedule(item.Id, worker, _time.GetUtcNow() + _options.Tick, payload.ToJson()) is null) running.LeaseLost = true;
+                if (!_queue.Defer(item.Id, worker, _time.GetUtcNow() + _options.Tick)) running.LeaseLost = true;
                 return;
             }
 
@@ -566,7 +566,7 @@ public sealed partial class RunnerScheduler
             if (!lockTaken)
             {
                 Report(taskRef.ToString(), $"The run lock of {taskRef} was taken by another start; the item waits.");
-                if (_queue.Reschedule(item.Id, worker, _time.GetUtcNow() + _options.Tick, payload.ToJson()) is null) running.LeaseLost = true;
+                if (!_queue.Defer(item.Id, worker, _time.GetUtcNow() + _options.Tick)) running.LeaseLost = true;
                 return;
             }
         }
@@ -695,14 +695,21 @@ public sealed partial class RunnerScheduler
                     return;
                 }
 
+                // the run lock goes before the item is concluded: a start that arrives as soon as the item is finished finds the task free
+                ReleaseRunLock(lockTaken, owner, taskRef, item.RunId);
                 Conclude(item, payload, end, version, RetryPolicy.From(task.Limits, _options.RetryDefaults), started: true);
             }
         }
         finally
         {
             if (beat is not null) await StopBeating(beat, beatCts).ConfigureAwait(false);
-            if (lockTaken && _locks.Holder(owner, Kind, taskRef.Task) == item.RunId) _locks.Release(owner, Kind, taskRef.Task);
+            ReleaseRunLock(lockTaken, owner, taskRef, item.RunId);
         }
+    }
+
+    private void ReleaseRunLock(bool taken, string owner, TaskRef taskRef, Guid runId)
+    {
+        if (taken && _locks.Holder(owner, Kind, taskRef.Task) == runId) _locks.Release(owner, Kind, taskRef.Task);
     }
 
     /// <summary>The inputs a run is given, with the manifest's default for each declared input the run (a schedule, a trigger) gave no value for.</summary>
