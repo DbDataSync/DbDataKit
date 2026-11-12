@@ -61,7 +61,7 @@ With `unknown_member: true` the macro wraps the hash in `coalesce(..., 0)`, so e
 
 ## The uniqueness check
 
-Every key a model holds as a column gets a generated check per connection the model is on: `model.<model>.key.<column>.unique@<connection>`, a SELECT of the key values on more than one row (a NULL key is not a repeat; for a key with history the version key is checked, since the durable key repeats by design). `connection check` runs it (a failing check is DDB-601 and exit 1) and `project tests list --kind semantic` lists it. The message names the three causes: a business key that appears twice, two business keys whose hashes collided, a part that holds the separator. When plan 23's check framework exists this becomes one of its checks with severity `block`.
+Every key a model holds as a column gets a generated check per connection the model is on: `model.<model>.key.<column>.unique@<connection>`, a SELECT of the key values on more than one row (a NULL key is not a repeat; for a key with history the version key is checked, since the durable key repeats by design). `connection check` runs it (a failing check is DDB-601 and exit 1) and `project tests list --kind semantic` lists it. The message names the three causes: a business key that appears twice, two business keys whose hashes collided, a part that holds the separator. The same test is also a check of plan 23's framework with severity `block` (`key.<column>.unique`, added by `ModelQuality` to every model that owns a hashed key): a refresh given `--check-results` evaluates it with the model's own checks, records the result and blocks the dependents of a model whose key repeats.
 
 ## Not built
 
