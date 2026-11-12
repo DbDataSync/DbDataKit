@@ -222,6 +222,37 @@ public static class CliApp
                     cmd.Arguments.Add(lsTarget); cmd.Options.Add(lsProject); cmd.Options.Add(lsSeed); cmd.Options.Add(lsScale); cmd.Options.Add(lsReplace); cmd.Options.Add(lsApply);
                     cmd.SetAction(pr => Reported(pr, spec, (o, e) => LoadSeedsCommand.Run(spec, pr.GetValue(lsProject)!.FullName, pr.GetValue(lsTarget), pr.GetValue(lsSeed), pr.GetValue(lsScale), pr.GetValue(lsReplace), pr.GetValue(lsApply), o, e, environment ?? Environment.GetEnvironmentVariable)));
                     break;
+                case "connection key-map show":
+                    var kmsProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
+                    var kmsTarget = ConnectionArgument("Connection whose map to read", spec.Name);
+                    var kmsKey = new Argument<string?>("key") { Description = "The key kept in a map (declared `method: key_map`; the connection comes before it). Required", Arity = ArgumentArity.ZeroOrOne };
+                    GuardOptionLike(kmsKey, spec.Name);
+                    var kmsValue = new Option<long?>("--value") { Description = "Only the mapping with this integer" };
+                    var kmsText = new Option<string?>("--text") { Description = "Only the mapping with this business key, as stored (the parts joined by U+001F)" };
+                    var kmsPart = new Option<string[]>("--part") { Description = "Only the mapping with this business key, given part by part (repeat once per part; spaces at the ends are removed as the key does)", DefaultValueFactory = _ => [] };
+                    var kmsContains = new Option<string?>("--contains") { Description = "Only the mappings whose business key contains this text (compared as bytes)" };
+                    var kmsValues = new Option<bool>("--show-values") { Description = "Read and show the business keys: up to --limit mappings (without it only counts are read)" };
+                    var kmsLimit = new Option<int>("--limit") { Description = "With --show-values, how many mappings", DefaultValueFactory = _ => KeyMapCommand.DefaultLimit };
+                    cmd.Arguments.Add(kmsTarget); cmd.Arguments.Add(kmsKey); cmd.Options.Add(kmsProject); cmd.Options.Add(kmsValue); cmd.Options.Add(kmsText); cmd.Options.Add(kmsPart); cmd.Options.Add(kmsContains); cmd.Options.Add(kmsValues); cmd.Options.Add(kmsLimit);
+                    cmd.SetAction(pr => { var (kmsConn, kmsKeyName) = pr.GetValue(kmsKey) is { } k ? (pr.GetValue(kmsTarget), k) : (null, pr.GetValue(kmsTarget)); return Reported(pr, spec, (o, e) => KeyMapCommand.Show(spec, pr.GetValue(kmsProject)!.FullName, kmsConn, kmsKeyName, pr.GetValue(kmsValue), pr.GetValue(kmsText), pr.GetValue(kmsPart) ?? [], pr.GetValue(kmsContains), pr.GetValue(kmsValues), pr.GetValue(kmsLimit), o, e, environment ?? Environment.GetEnvironmentVariable)); });
+                    break;
+                case "connection key-map repair":
+                    var kmrProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
+                    var kmrTarget = ConnectionArgument("Connection whose map to repair", spec.Name);
+                    var kmrKey = new Argument<string?>("key") { Description = "The key kept in a map (declared `method: key_map`; the connection comes before it). Required", Arity = ArgumentArity.ZeroOrOne };
+                    GuardOptionLike(kmrKey, spec.Name);
+                    var kmrOperation = new Option<string?>("--operation") { Description = "add (a missing mapping: --value and the business key), set-text (replace the business key of --value), remove (delete the mapping of --value; refused while a table uses the integer, unless --force), reseed (raise the identity to the largest integer). Required" };
+                    kmrOperation.AcceptOnlyFromAmong(KeyMapOperations.Names.ToArray());
+                    var kmrValue = new Option<long?>("--value") { Description = "The integer of the mapping (1 or more; 0 is the reserved unknown member)" };
+                    var kmrText = new Option<string?>("--text") { Description = "The business key, as stored (the parts joined by U+001F); for add and set-text" };
+                    var kmrPart = new Option<string[]>("--part") { Description = "The business key given part by part (repeat once per part; spaces at the ends are removed as the key does); for add and set-text", DefaultValueFactory = _ => [] };
+                    var kmrReason = new Option<string?>("--reason") { Description = "Why: required with --apply, recorded in the repair log" };
+                    var kmrForce = new Option<bool>("--force") { Description = "remove: delete the mapping although a table holds its integer (recorded as forced)" };
+                    var kmrValues = new Option<bool>("--show-values") { Description = "Show the business keys in the report of what would change (without it only integers and lengths)" };
+                    var kmrApply = new Option<bool>("--apply") { Description = "Make the change on the write login and record it (default: a dry run: print the change, the rows it touches and the statements, and connect to nothing but the read login)" };
+                    cmd.Arguments.Add(kmrTarget); cmd.Arguments.Add(kmrKey); cmd.Options.Add(kmrProject); cmd.Options.Add(kmrOperation); cmd.Options.Add(kmrValue); cmd.Options.Add(kmrText); cmd.Options.Add(kmrPart); cmd.Options.Add(kmrReason); cmd.Options.Add(kmrForce); cmd.Options.Add(kmrValues); cmd.Options.Add(kmrApply);
+                    cmd.SetAction(pr => { var (kmrConn, kmrKeyName) = pr.GetValue(kmrKey) is { } k ? (pr.GetValue(kmrTarget), k) : (null, pr.GetValue(kmrTarget)); return Reported(pr, spec, (o, e) => KeyMapCommand.Repair(spec, pr.GetValue(kmrProject)!.FullName, kmrConn, kmrKeyName, pr.GetValue(kmrOperation), pr.GetValue(kmrValue), pr.GetValue(kmrText), pr.GetValue(kmrPart) ?? [], pr.GetValue(kmrReason), pr.GetValue(kmrForce), pr.GetValue(kmrValues), pr.GetValue(kmrApply), o, e, environment ?? Environment.GetEnvironmentVariable)); });
+                    break;
                 case "connection inspect":
                     var inspectProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
                     var inspectTarget = ConnectionArgument("Connection to inspect", spec.Name);

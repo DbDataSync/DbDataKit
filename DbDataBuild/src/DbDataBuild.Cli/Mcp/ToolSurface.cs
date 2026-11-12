@@ -16,6 +16,8 @@ internal sealed class ToolSurface
     {
         ["connection compare"] = ["--show-values"],
         ["connection check"] = ["--show-values"],
+        ["connection key-map show"] = ["--show-values"],
+        ["connection key-map repair"] = ["--show-values"],
         ["project sample"] = ["--data"],
         // the token in the agent's environment goes only to a Gateway the server is paired with: no address, no weaker certificate check, no other directory of pairings (plan 14a SL22)
         ["semantic describe"] = SemanticWithheld,
@@ -131,7 +133,7 @@ internal sealed class ToolSurface
                     if (on) argv.Add(o.Name);
                     break;
                 case OptionKind.Integer:
-                    if (v is not JsonValue n || !n.TryGetValue<int>(out var i)) { problem = $"`{name}` must be a whole number."; return false; }
+                    if (v is not JsonValue n || !n.TryGetValue<long>(out var i)) { problem = $"`{name}` must be a whole number."; return false; }
                     argv.Add(o.Name); argv.Add(i.ToString(System.Globalization.CultureInfo.InvariantCulture));
                     break;
                 case OptionKind.List:

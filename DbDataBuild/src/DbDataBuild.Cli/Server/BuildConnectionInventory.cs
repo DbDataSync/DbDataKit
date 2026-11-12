@@ -9,12 +9,12 @@ namespace DbDataBuild.Cli.Server;
 /// <list type="bullet">
 /// <item>the server itself, with the <c>read</c> login (plans, previews, reports, history);</item>
 /// <item>each scheduled refresh plan, with the <c>write</c> login (a refresh changes the target), unless the connection is read-only;</item>
-/// <item>the flows a person starts that write (<c>deploy --apply</c>, <c>ack</c>, seeds), with the <c>write</c> login: the write login stays in Build for them (ED16).</item>
+/// <item>the flows a person starts that write (<c>deploy --apply</c>, <c>ack</c>, seeds, <c>key-map repair --apply</c>), with the <c>write</c> login: the write login stays in Build for them (ED16).</item>
 /// </list>
 /// </summary>
 internal static class BuildConnectionInventory
 {
-    public static readonly string[] WriteFlows = ["deploy --apply", "ack", "seed"];
+    public static readonly string[] WriteFlows = ["deploy --apply", "ack", "seed", "key-map repair --apply"];
 
     public static IReadOnlyList<InventoryConnection> Of(IEnumerable<(string Id, string Root)> projects)
     {
