@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using DbDataKit.Serving;
 using DbDataKit.Serving.Semantic;
 using DbDataKit.State;
+using DbDataKit.Views;
 using DbDataKit.Web.Trust;
 using DbDataGateway.Server.Auth;
 using DbDataGateway.Server.Configuration;
@@ -164,7 +165,7 @@ public sealed class McpApprovals(StateDatabase state, Func<StoreCallers> callers
 public static class McpTools
 {
     /// <summary>The tools over the group's serving services, semantic models, published views and entity models.</summary>
-    public static IReadOnlyList<McpTool> Create(IServingServices serving, SemanticModels semantic, GroupStoreApi store, Func<GatewayViewsPublishing?> views, Func<StoreCallers> callers, IOptionsMonitor<GatewayOptions> options)
+    public static IReadOnlyList<McpTool> Create(IServingServices serving, SemanticModels semantic, GroupStoreApi store, Func<GatewayViewsPublishing?> views, Func<StoreCallers> callers, IOptionsMonitor<GatewayOptions> options, UserViewStore? userViews = null)
     {
         GatewayCaller CallerOf(McpCall call) =>
             callers().UserOf(call.Caller.UserId) is { } user
@@ -181,7 +182,7 @@ public static class McpTools
         static JsonObject Schema(JsonObject properties, params string[] required) => new() { ["type"] = "object", ["properties"] = properties, ["required"] = new JsonArray([.. required.Select(r => (JsonNode)r)]) };
         static JsonObject Text(string description) => new() { ["type"] = "string", ["description"] = description };
 
-        return
+        IReadOnlyList<McpTool> tools =
         [
             new("list_semantic_models", "The semantic models you may query: name, with what each offers through describe_semantic_model.", Schema([]), false, call =>
             {
@@ -209,6 +210,9 @@ public static class McpTools
                 Summary: arguments => $"Write {(arguments["changes"] as JsonArray)?.Count ?? 0} change(s) to the master data model '{arguments["model"]}'{(arguments["description"] is { } why ? ": " + why : "")}.",
                 Check: (caller, _) => caller.Holds(ServerRole.Author) || caller.Holds(ServerRole.Admin) ? null : "Writing master data needs the author role on this server."),
         ];
+        // the tools that build dashboards and reports (plan 32 DBR20): one reads, the others are drafts that wait for a person
+        return userViews is null ? tools : [.. tools, .. McpViewTools.Create(
+            caller => callers().UserOf(caller.UserId) is { } user ? new GatewayCaller(HomePrincipals.Create(callers(), user, "mcp", options.CurrentValue)) : null, semantic, userViews)];
     }
 
     private static string Argument(McpCall call, string name) =>
@@ -317,7 +321,7 @@ public sealed class McpServices
     public McpServices(IOptionsMonitor<GatewayOptions> options, StateDatabase state, SecretsRuntime secrets, IServingServices serving, SemanticModels semantic, PublishedEntityModels models, GatewayViewsPublishing views, HomeCallers homeCallers)
     {
         StoreCallers Callers() => homeCallers.GetAsync().AsTask().GetAwaiter().GetResult();
-        var tools = McpTools.Create(serving, semantic, GatewayStoreModule.ApiOf(options, state, secrets, models), () => views, Callers, options);
+        var tools = McpTools.Create(serving, semantic, GatewayStoreModule.ApiOf(options, state, secrets, models), () => views, Callers, options, new UserViewStore(state));
         Approvals = new McpApprovals(state, Callers, tools.ToDictionary(t => t.Name, StringComparer.Ordinal), TimeSpan.FromMinutes(options.CurrentValue.Mcp.ApprovalMinutes));
         Server = new McpServer(tools, Approvals, typeof(McpServices).Assembly.GetName().Version?.ToString() ?? "0");
     }
