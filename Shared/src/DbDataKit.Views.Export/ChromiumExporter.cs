@@ -122,6 +122,8 @@ public sealed class ChromiumExporter(ExportSettings settings, ILogger? logger = 
             var facts = Read(pdf);
             if (facts.Pages > settings.MaxPages) throw new ExportException("pages", $"the document has {facts.Pages} pages and an export is limited to {settings.MaxPages} (views.export.max_pages).");
             lock (drawn.Errors) foreach (var e in drawn.Errors.Take(5)) drawn.Warnings.Add("The page reported an error: " + e);
+            // the browser's build and the fonts it embedded are in the file itself (plan 32 DBR16), beside the title and the producer the browser wrote
+            pdf = PdfMetadata.Stamp(pdf, $"browser: {drawn.Version}; fonts: {string.Join(", ", facts.Fonts)}");
             return new ExportResult(pdf, facts.Pages, drawn.Version, [.. drawn.Warnings], facts.Fonts);
         }));
 
@@ -144,6 +146,21 @@ public sealed class ChromiumExporter(ExportSettings settings, ILogger? logger = 
             if (found[0] == "error") throw new ExportException("page", $"the chart '{chartId}' could not be drawn: {found[1]}");
             lock (drawn.Errors) foreach (var e in drawn.Errors.Take(5)) drawn.Warnings.Add("The page reported an error: " + e);
             return new SvgResult(found[1], drawn.Version, [.. drawn.Warnings]);
+        }));
+
+    public Task<PngResult> ExportPngAsync(PrintJob job, int maxHeight = 4000, CancellationToken cancellationToken = default) =>
+        GuardedAsync(cancellationToken, ct => RunAsync(job, ct, async drawn =>
+        {
+            var width = Math.Clamp((int)Math.Round(job.Layout.WidthMm / 25.4 * 96), 320, 2400);
+            // the page is the one the PDF is cut from: the print medium, at the paper's width, the whole of its content down to the limit
+            await Until(drawn.Page.EmulateMediaTypeAsync(MediaType.Print), ct).ConfigureAwait(false);
+            await Until(drawn.Page.SetViewportAsync(new ViewPortOptions { Width = width, Height = 800 }), ct).ConfigureAwait(false);
+            var height = await Until(drawn.Page.EvaluateFunctionAsync<int>("() => Math.ceil(Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0))"), ct).ConfigureAwait(false);
+            height = Math.Clamp(height, 1, Math.Max(1, maxHeight));
+            if (height >= maxHeight) drawn.Warnings.Add($"The picture shows the first {maxHeight} pixels of the page; the PDF has the rest.");
+            var png = await Until(drawn.Page.ScreenshotDataAsync(new ScreenshotOptions { Type = ScreenshotType.Png, Clip = new PuppeteerSharp.Media.Clip { X = 0, Y = 0, Width = width, Height = height }, CaptureBeyondViewport = true }), ct).ConfigureAwait(false);
+            lock (drawn.Errors) foreach (var e in drawn.Errors.Take(5)) drawn.Warnings.Add("The page reported an error: " + e);
+            return new PngResult(png, width, height, drawn.Version, [.. drawn.Warnings]);
         }));
 
     /// <summary>One export under the deadline and the host's concurrency limit: what <paramref name="work"/> does runs with the linked token.</summary>
