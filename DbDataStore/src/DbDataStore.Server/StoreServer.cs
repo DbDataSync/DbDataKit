@@ -6,6 +6,7 @@ using DbDataKit.Hosting;
 using DbDataKit.Hosting.Certificates;
 using DbDataKit.State.Api;
 using DbDataKit.Upgrade;
+using DbDataKit.Serving.Notify;
 using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -30,7 +31,7 @@ public static class StoreServer
 
     public static X509Certificate2 Certificate(string directory) => DirectoryCertificate.Load(directory);
 
-    public static WebApplication Build(StoreSettings settings, X509Certificate2 certificate, Action<string> log)
+    public static WebApplication Build(StoreSettings settings, X509Certificate2 certificate, Action<string> log, DataChangeNotifierOptions? notifyOptions = null)
     {
         if (settings.Listen.Scheme != Uri.UriSchemeHttps) throw new ArgumentException("A DbDataStore server listens on HTTPS only.", nameof(settings));
         var state = StoreState.Open(settings.Directory, settings.State);
@@ -57,6 +58,9 @@ public static class StoreServer
         // the expiry of idle previews (plan 21 CH07): the settings are read here so a wrong `previews:` section stops the server at start, naming the file
         var previews = PreviewSettings.Load(settings.ServerYaml);
         var storeConnections = new StoreConnections(settings.Directory);
+        // plan 24a UC13: an applied write tells the serving groups this server is paired with which entities changed, signed as the server; no pairing, nothing sent
+        var dataChanges = StoreDataChanges.Create(settings.Directory, storeConnections, log, notifyOptions);
+        builder.Services.AddSingleton(dataChanges);
         builder.Services.AddHostedService(_ => new StoreDraftSweeper(settings.Directory, storeConnections, new DbDataKit.State.NotificationFeedStore(state, StoreState.ServiceId), previews, () => PreviewSettings.Load(settings.ServerYaml), log));
 
         var app = builder.Build();
@@ -82,7 +86,7 @@ public static class StoreServer
         StoreModels.Map(app, settings.Directory);
         StoreModelHistory.Map(app, settings.Directory);
         StoreEvents.Map(app, settings.Directory);
-        StoreData.Map(app, settings.Directory, storeConnections);
+        StoreData.Map(app, settings.Directory, storeConnections, dataChanges);
         StoreQuality.Map(app, settings.Directory, storeConnections, state);
         return app;
     }

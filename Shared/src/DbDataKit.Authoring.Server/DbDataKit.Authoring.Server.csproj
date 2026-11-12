@@ -16,6 +16,7 @@
     <ProjectReference Include="..\DbDataKit.Apps.Manifest\DbDataKit.Apps.Manifest.csproj" />
     <ProjectReference Include="..\DbDataKit.Apps.Bundling\DbDataKit.Apps.Bundling.csproj" />
     <ProjectReference Include="..\DbDataKit.Config.Git\DbDataKit.Config.Git.csproj" />
+    <ProjectReference Include="..\DbDataKit.Catalog.Cache\DbDataKit.Catalog.Cache.csproj" />
     <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
     <ProjectReference Include="..\DbDataKit.DataModel\DbDataKit.DataModel.csproj" />
     <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />

@@ -88,11 +88,29 @@ public sealed class TaskExecutor : ITaskRunner
             {
                 var end = result?.End ?? new TaskEnd(TaskEndState.Failed, Failure: new TaskFailure(TaskFailureKind.Permanent, "The runner failed while it was running this task; see the runner's own log."));
                 var finish = end.ToRunFinish();
+                KeepLineage(request, runId, result);   // before the run is finished, so a run that shows as finished has its lineage kept
                 runs.Finish(runId, finish.Outcome, finish.Rows, finish.FailedItem, finish.Failure);
                 if (end.State is TaskEndState.Succeeded) scope.Succeeded();
                 else if (end.State is TaskEndState.Stopped) scope.Cancelled();
                 else scope.Failed();
             }
+        }
+    }
+
+    /// <summary>
+    /// Keeps what the task reported it read and wrote (plan 27a IX12) so the runner's lineage route can show the outside systems it touches. The run is over and its outcome stands: a state that cannot take the rows is a warning in the executor's log,
+    /// never an error of the run.
+    /// </summary>
+    private void KeepLineage(TaskRunRequest request, Guid runId, TaskRunResult? result)
+    {
+        if (result?.Lineage is not { Count: > 0 } lines) return;
+        try
+        {
+            new TaskLineageStore(_database).Record(request.Task.Package, request.Task.Channel, request.Task.Task, runId, lines.SelectMany(l => l.Reads), lines.SelectMany(l => l.Writes));
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or IOException or InvalidOperationException)
+        {
+            _options.Logger?.LogWarning("The lineage run {Run} of task {Task} reported could not be kept ({Type}).", runId, request.Task.Task, ex.GetType().Name);
         }
     }
 
@@ -112,6 +130,7 @@ public sealed class TaskExecutor : ITaskRunner
         TaskEnd? end = null;
         var endReceived = false;
         ChildExitReport? exit = null;
+        IReadOnlyList<LineageEntry>? reported = null;
         var killed = false;
         LimitExceeded? exceeded = null;
         LimitExceeded? scratchExceeded = null;
@@ -155,7 +174,9 @@ public sealed class TaskExecutor : ITaskRunner
             }
 
             exceeded = limits.ExceededInfo ?? scratchExceeded;
-            var taskEnd = _host.TelemetryOf(token)?.End;
+            var telemetry = _host.TelemetryOf(token);
+            reported = telemetry?.Lineage;
+            var taskEnd = telemetry?.End;
             if (taskEnd is not null)
             {
                 end = taskEnd;
@@ -202,7 +223,7 @@ public sealed class TaskExecutor : ITaskRunner
         }
 
         return new TaskRunResult(runId, end!, endReceived, exit?.ExitCode, killed, clock.Elapsed, log.StdoutLines, log.StderrLines, log.DroppedLines, log.TruncatedLines,
-            limits?.Enforcement ?? LimitEnforcement.None, limits?.CpuEnforcement ?? LimitEnforcement.None, limits?.Mechanism ?? "none", scratchBytes, scratchOver, inDoubt);
+            limits?.Enforcement ?? LimitEnforcement.None, limits?.CpuEnforcement ?? LimitEnforcement.None, limits?.Mechanism ?? "none", scratchBytes, scratchOver, inDoubt) { Lineage = reported is { Count: > 0 } ? reported : null };
     }
 
     /// <summary>

@@ -73,7 +73,7 @@ public class InformationSchemaCatalogReader : ICatalogReader
     protected virtual (string Sql, object?[] Args)? PrimaryKeyQuery(TableRef table)
     {
         var (where, args) = Where(table, "tc.table_catalog", "tc.table_schema", "tc.table_name");
-        return ("SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc "
+        return ("SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position, tc.table_name FROM information_schema.table_constraints tc "
             + "JOIN information_schema.key_column_usage kcu ON kcu.constraint_catalog = tc.constraint_catalog AND kcu.constraint_schema = tc.constraint_schema "
             + "AND kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema AND kcu.table_name = tc.table_name "
             + $"WHERE tc.constraint_type = 'PRIMARY KEY' AND {where} ORDER BY kcu.ordinal_position", args);
@@ -82,7 +82,7 @@ public class InformationSchemaCatalogReader : ICatalogReader
     protected virtual (string Sql, object?[] Args)? ForeignKeysQuery(TableRef table)
     {
         var (where, args) = Where(table, "kcu.table_catalog", "kcu.table_schema", "kcu.table_name");
-        return ("SELECT kcu.constraint_name, kcu.ordinal_position, kcu.column_name, kcu2.table_catalog, kcu2.table_schema, kcu2.table_name, kcu2.column_name, rc.update_rule, rc.delete_rule "
+        return ("SELECT kcu.constraint_name, kcu.ordinal_position, kcu.column_name, kcu2.table_catalog, kcu2.table_schema, kcu2.table_name, kcu2.column_name, rc.update_rule, rc.delete_rule, kcu.table_name "
             + "FROM information_schema.key_column_usage kcu "
             + "JOIN information_schema.referential_constraints rc ON rc.constraint_catalog = kcu.constraint_catalog AND rc.constraint_schema = kcu.constraint_schema AND rc.constraint_name = kcu.constraint_name "
             + "JOIN information_schema.key_column_usage kcu2 ON kcu2.constraint_catalog = rc.unique_constraint_catalog AND kcu2.constraint_schema = rc.unique_constraint_schema "
@@ -121,8 +121,7 @@ public class InformationSchemaCatalogReader : ICatalogReader
         var args = new List<object?>();
         if (table.Catalog is not null && UsesCatalogColumn) { conditions.Add($"{catalogColumn} = {{{args.Count}}}"); args.Add(table.Catalog); }
         if (table.Schema is not null) { conditions.Add($"{schemaColumn} = {{{args.Count}}}"); args.Add(table.Schema); }
-        conditions.Add($"{nameColumn} = {{{args.Count}}}");
-        args.Add(table.Name);
+        if (table.Name.Length > 0) { conditions.Add($"{nameColumn} = {{{args.Count}}}"); args.Add(table.Name); }     // no name: every table of the schema (ReadSchemaKeysAsync)
         return (string.Join(" AND ", conditions), [.. args]);
     }
 
@@ -300,15 +299,22 @@ public class InformationSchemaCatalogReader : ICatalogReader
     {
         if (PrimaryKeyQuery(table) is not var (sql, args)) return null;
         var rows = await QueryAsync(sql, args, cancellationToken).ConfigureAwait(false);
-        if (rows.Count == 0) return null;
-        return new KeyInfo(rows[0].Text(0), rows.OrderBy(r => r.Int(2) ?? 0).Select(r => r.Text(1)!).ToList());
+        return PrimaryKeyOf(rows);
     }
+
+    private static KeyInfo? PrimaryKeyOf(IReadOnlyList<CatalogRow> rows) =>
+        rows.Count == 0 ? null : new KeyInfo(rows[0].Text(0), rows.OrderBy(r => r.Int(2) ?? 0).Select(r => r.Text(1)!).ToList());
 
     protected virtual async Task<IReadOnlyList<ForeignKeyInfo>> ReadForeignKeysAsync(TableRef table, CancellationToken cancellationToken)
     {
         if (ForeignKeysQuery(table) is not var (sql, args)) return [];
         var rows = await QueryAsync(sql, args, cancellationToken).ConfigureAwait(false);
-        return rows.GroupBy(r => r.Text(0) ?? "").OrderBy(g => g.Key, StringComparer.Ordinal).Select(g =>
+        return ForeignKeysOf(rows);
+    }
+
+    /// <summary>The foreign keys of the rows of <see cref="ForeignKeysQuery"/> (of one table), by name. A reader whose query carries more than the standard columns overrides it.</summary>
+    protected virtual IReadOnlyList<ForeignKeyInfo> ForeignKeysOf(IEnumerable<CatalogRow> rows) =>
+        rows.GroupBy(r => r.Text(0) ?? "").OrderBy(g => g.Key, StringComparer.Ordinal).Select(g =>
         {
             var ordered = g.OrderBy(r => r.Int(1) ?? 0).ToList();
             var first = ordered[0];
@@ -316,6 +322,38 @@ public class InformationSchemaCatalogReader : ICatalogReader
                 new TableRef(first.Text(3), first.Text(4), first.Text(5) ?? "", TableKind.Table), ordered.Select(r => r.Text(6)!).ToList(),
                 Rule(first.Text(7)), Rule(first.Text(8)));
         }).ToList();
+
+    /// <summary>
+    /// Whether <see cref="PrimaryKeyQuery"/> and <see cref="ForeignKeysQuery"/> can be asked without a table name (an empty <see cref="TableRef.Name"/>) and then end each row with the table's name. All the readers of this library do; a subclass
+    /// whose queries do not says false and its keys are read table by table.
+    /// </summary>
+    protected virtual bool ReadsWholeSchemaKeys => true;
+
+    /// <inheritdoc cref="ICatalogReader.ReadSchemaKeysAsync"/>
+    public virtual async Task<SchemaKeys> ReadSchemaKeysAsync(string? catalog, string schema, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(schema);
+        if (!ReadsWholeSchemaKeys) return await SchemaKeysReader.PerTableAsync(this, catalog, schema, cancellationToken).ConfigureAwait(false);
+        var everything = new TableRef(catalog, schema, "");
+        var warnings = new List<string>();
+        var primaryKeys = new Dictionary<string, KeyInfo>(StringComparer.Ordinal);
+        var foreignKeys = new Dictionary<string, IReadOnlyList<ForeignKeyInfo>>(StringComparer.Ordinal);
+        bool pkOk = true, fkOk = Capabilities.ForeignKeys;
+        try
+        {
+            if (PrimaryKeyQuery(everything) is var (pkSql, pkArgs))
+                foreach (var g in (await QueryAsync(pkSql, pkArgs, cancellationToken).ConfigureAwait(false)).GroupBy(r => r.Text(r.Count - 1) ?? "", StringComparer.Ordinal))
+                    if (PrimaryKeyOf(g.ToList()) is { } key) primaryKeys[g.Key] = key;
+        }
+        catch (DbException ex) { pkOk = false; warnings.Add($"primary keys not read: {ex.Message}"); }
+        try
+        {
+            if (ForeignKeysQuery(everything) is var (fkSql, fkArgs))
+                foreach (var g in (await QueryAsync(fkSql, fkArgs, cancellationToken).ConfigureAwait(false)).GroupBy(r => r.Text(r.Count - 1) ?? "", StringComparer.Ordinal))
+                    foreignKeys[g.Key] = ForeignKeysOf(g);
+        }
+        catch (DbException ex) { fkOk = false; warnings.Add($"foreign keys not read: {ex.Message}"); }
+        return new SchemaKeys(primaryKeys, foreignKeys, pkOk, fkOk, warnings.Count == 0 ? null : warnings);
     }
 
     /// <summary>Null means the engine offers no way to read indexes.</summary>

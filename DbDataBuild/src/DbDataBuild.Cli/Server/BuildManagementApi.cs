@@ -44,7 +44,7 @@ internal static class BuildManagementApi
     /// <param name="projects">The projects served, read again on every call so one added or removed is served or gone at once.</param>
     /// <param name="commands">All the commands there are; each project is offered the read-only ones.</param>
     /// <param name="surfaceFor">Which of them a project is offered and how their inputs are checked; the read-only rules unless a test or a later slice says otherwise.</param>
-    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, DbDataKit.Authoring.Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null, ProxiesFile? proxies = null, ProxyPublisher? publisher = null, IPairingCodeStore? pairingCodes = null, string? clientName = null, ProjectCreator? creator = null, string? serverDirectory = null, Func<ScheduleRunnerLink, DbDataBuild.Cli.Runner.IRunnerTaskControl>? runnerControl = null, IAuditLog? audit = null, Func<ScheduleRunnerLink, DbDataBuild.Cli.Runner.IRunnerSchedule>? runnerSchedule = null, string? runnerClientDirectory = null)
+    public static void Map(IEndpointRouteBuilder app, ProjectsFile projects, IReadOnlyList<CommandInfo> commands, IProjectCommandRunner runner, Func<string, IReadOnlyList<CommandInfo>, ToolSurface>? surfaceFor = null, BuildScheduler? scheduler = null, DbDataKit.Authoring.Workspaces? workspaces = null, WarmSessionRunner? workspaceRunner = null, ProxiesFile? proxies = null, ProxyPublisher? publisher = null, IPairingCodeStore? pairingCodes = null, string? clientName = null, ProjectCreator? creator = null, string? serverDirectory = null, Func<ScheduleRunnerLink, DbDataBuild.Cli.Runner.IRunnerTaskControl>? runnerControl = null, IAuditLog? audit = null, Func<ScheduleRunnerLink, DbDataBuild.Cli.Runner.IRunnerSchedule>? runnerSchedule = null, string? runnerClientDirectory = null, BuildDataChanges? dataChanges = null)
     {
         surfaceFor ??= FullSurface;
         var specs = CommandSpecs.All.ToDictionary(s => s.Name);
@@ -421,6 +421,8 @@ internal static class BuildManagementApi
             try { document = JsonNode.Parse(result.Out); } catch (JsonException) { }
             // a refresh changes the target's data: who ran which plan, and how it ended, is in the server's audit log (a refusal for a missing role is recorded too, above)
             if (isRefresh) RecordRefresh(audit, context.ManagementToken(), projectId, arguments, result.Exit == 0 ? "ok" : $"exit {result.Exit}", argv.Contains("--dry-run") ? "dry run" : "");
+            // plan 24a UC13: what the refresh loaded is told to the serving groups (a dry run loaded nothing); in the background, so the answer to the caller is the same with or without a pairing
+            if (isRefresh && dataChanges is not null && !argv.Contains("--dry-run")) await dataChanges.RefreshCompletedAsync(projectRoot, null, result.Out, CancellationToken.None);
             return Results.Json(new JsonObject { ["exit"] = result.Exit, ["document"] = document, ["text"] = document is null ? (result.Out.Length > 0 ? result.Out : result.Err) : null });
         });
     }

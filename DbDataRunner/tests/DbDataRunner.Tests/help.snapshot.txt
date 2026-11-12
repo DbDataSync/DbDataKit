@@ -7,6 +7,7 @@ Commands:
   tasks    The scheduled tasks of the installed packages
   label    Labels on the runners of the group: an administrator's labels route tasks that require them; reported capabilities are labels too, read-only
   lineage  What feeds what: the lineage graph, the impact of a change, the provenance of a result
+  gateway  The serving groups this server tells when it finishes writing a dataset
   package  Packages in a runner: publish to a server's API as a paired publisher, or install into this runner's own state (the development path)
   state    The state database: where it is, whether it works, and the rights it needs
   service  Registration of 'server run' with Windows or systemd

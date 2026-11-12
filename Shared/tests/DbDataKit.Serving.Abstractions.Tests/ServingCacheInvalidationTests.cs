@@ -77,6 +77,23 @@ public class ServingCacheInvalidationTests
     }
 
     [Fact]
+    public async Task A_message_that_says_only_if_served_clears_nothing_for_a_dataset_the_host_does_not_serve_and_counts_it_apart()
+    {
+        var cache = await Filled(("orders", ["ds/orders"]), ("hr", ["ds/people"]));
+        var invalidator = new ServingCacheInvalidator(cache, dataset => dataset == "sqlserver://sql1/sales.dbo.orders" ? ["ds/orders"] : null, time: new Fixed(Now));
+
+        var ignored = invalidator.Apply(new DataChangedNotice("mysql://elsewhere/other", "sync", Now, OnlyIfServed: true));
+
+        Assert.Equal((0, false, true), (ignored.Removed, ignored.Everything, ignored.Ignored));
+        Assert.Equal(2, cache.Stats.Entries);
+        Assert.Equal((0L, 1L), (invalidator.Activity.Received, invalidator.Activity.Ignored));
+
+        var served = invalidator.Apply(new DataChangedNotice("sqlserver://sql1/sales.dbo.orders", "sync", Now, OnlyIfServed: true));
+        Assert.Equal((1, false), (served.Removed, served.Ignored));
+        Assert.Equal((1L, 1L), (invalidator.Activity.Received, invalidator.Activity.Ignored));
+    }
+
+    [Fact]
     public async Task A_change_while_a_query_runs_keeps_that_answer_out_of_the_cache()
     {
         var cache = new MemoryServingCache();

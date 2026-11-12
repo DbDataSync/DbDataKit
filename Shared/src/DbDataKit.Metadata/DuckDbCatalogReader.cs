@@ -33,8 +33,8 @@ public class DuckDbCatalogReader(DbConnection connection, ISqlDialect? dialect =
         var args = new List<object?>();
         if (t.Catalog is not null) { conditions.Add($"{catalogColumn} = {{{args.Count}}}"); args.Add(t.Catalog); }
         if (t.Schema is not null) { conditions.Add($"{schemaColumn} = {{{args.Count}}}"); args.Add(t.Schema); }
-        conditions.Add($"{nameColumn} = {{{args.Count}}}");
-        args.Add(t.Name);
+        if (t.Name.Length > 0) { conditions.Add($"{nameColumn} = {{{args.Count}}}"); args.Add(t.Name); }
+        else if (t.Catalog is null) conditions.Add($"{catalogColumn} = current_database()");     // a whole schema (ReadSchemaKeysAsync) of the current database: another database may have a schema of that name
         return (string.Join(" AND ", conditions), [.. args]);
     }
 
@@ -47,7 +47,7 @@ public class DuckDbCatalogReader(DbConnection connection, ISqlDialect? dialect =
     }
 
     private static string Unnested(string constraintType, string where) =>
-        "SELECT constraint_name, col, i FROM (SELECT constraint_name, unnest(constraint_column_names) AS col, unnest(range(1, len(constraint_column_names) + 1)) AS i "
+        "SELECT constraint_name, col, i, table_name FROM (SELECT constraint_name, table_name, unnest(constraint_column_names) AS col, unnest(range(1, len(constraint_column_names) + 1)) AS i "
         + $"FROM duckdb_constraints() WHERE constraint_type = '{constraintType}' AND {where})";
 
     protected override (string Sql, object?[] Args)? PrimaryKeyQuery(TableRef t)
@@ -60,26 +60,38 @@ public class DuckDbCatalogReader(DbConnection connection, ISqlDialect? dialect =
     {
         var (where, args) = Of(t);
         // duckdb_constraints reports the referenced table and its columns but not its schema: the referenced table is taken from the same schema.
-        return ("SELECT constraint_name, i, col, {c}, {s}, referenced_table, ref_col, 'NO ACTION', 'NO ACTION' FROM (SELECT constraint_name, referenced_table, "
+        // {c} and {s} stand for the referenced catalog and schema; they are literals taken from the table reference, quoted as DuckDB string literals.
+        string catalog = t.Catalog is null ? "NULL" : Literal(t.Catalog), schema = t.Schema is null ? "NULL" : Literal(t.Schema);
+        return ($"SELECT constraint_name, i, col, {catalog}, {schema}, referenced_table, ref_col, 'NO ACTION', 'NO ACTION', constraint_text, table_name FROM (SELECT constraint_name, table_name, constraint_text, referenced_table, "
             + "unnest(constraint_column_names) AS col, unnest(referenced_column_names) AS ref_col, unnest(range(1, len(constraint_column_names) + 1)) AS i "
             + $"FROM duckdb_constraints() WHERE constraint_type = 'FOREIGN KEY' AND {where}) ORDER BY constraint_name, i", args);
     }
 
-    protected override async Task<IReadOnlyList<ForeignKeyInfo>> ReadForeignKeysAsync(TableRef table, CancellationToken cancellationToken)
-    {
-        var (sql, args) = ForeignKeysQuery(table)!.Value;
-        // {c} and {s} stand for the referenced catalog and schema; they are literals taken from the table reference, quoted as DuckDB string literals.
-        sql = sql.Replace("{c}", table.Catalog is null ? "NULL" : Literal(table.Catalog), StringComparison.Ordinal)
-            .Replace("{s}", table.Schema is null ? "NULL" : Literal(table.Schema), StringComparison.Ordinal);
-        var rows = await QueryAsync(sql, args, cancellationToken).ConfigureAwait(false);
-        return rows.GroupBy(r => r.Text(0) ?? "").OrderBy(g => g.Key, StringComparer.Ordinal).Select(g =>
+    protected override IReadOnlyList<ForeignKeyInfo> ForeignKeysOf(IEnumerable<CatalogRow> rows) =>
+        rows.GroupBy(r => r.Text(0) ?? "").OrderBy(g => g.Key, StringComparer.Ordinal).Select(g =>
         {
             var ordered = g.OrderBy(r => r.Int(1) ?? 0).ToList();
             var first = ordered[0];
             return new ForeignKeyInfo(string.IsNullOrEmpty(g.Key) ? null : g.Key, ordered.Select(r => r.Text(2)!).ToList(),
-                new TableRef(first.Text(3), first.Text(4), first.Text(5) ?? "", TableKind.Table), ordered.Select(r => r.Text(6)!).ToList(),
+                new TableRef(first.Text(3), ReferencedSchema(first.Text(9), first.Text(5) ?? "", first.Text(4)), first.Text(5) ?? "", TableKind.Table), ordered.Select(r => r.Text(6)!).ToList(),
                 ReferentialAction.NoAction, ReferentialAction.NoAction);
         }).ToList();
+
+    /// <summary>
+    /// The schema a DuckDB foreign key points to, from the key's constraint text: what stands between <c>REFERENCES </c> and the referenced table's name (<c>s.</c> or <c>catalog.s.</c>), or the key's own schema when the text names none
+    /// (<c>duckdb_constraints()</c> has no column for it). DuckDB refuses a foreign key across schemas today, so the answer is the key's own schema; reading the text keeps it true if a later release allows more. A name with a dot in it
+    /// (quoted) cannot be told from a qualifier by its text; the part after the last dot is taken.
+    /// </summary>
+    public static string? ReferencedSchema(string? constraintText, string referencedTable, string? ownSchema)
+    {
+        if (constraintText == null) return ownSchema;
+        var start = constraintText.IndexOf("REFERENCES ", StringComparison.Ordinal);
+        var at = constraintText.LastIndexOf(referencedTable + "(", StringComparison.Ordinal);
+        if (start < 0 || at < 0 || at < start + 11) return ownSchema;
+        var qualifier = constraintText[(start + 11)..at].TrimEnd('.').Trim('"');
+        if (qualifier.Length == 0) return ownSchema;
+        var dot = qualifier.LastIndexOf('.');
+        return (dot < 0 ? qualifier : qualifier[(dot + 1)..]).Trim('"');
     }
 
     private string Literal(string text) => Dialect.Literal(text, CanonicalType.String());

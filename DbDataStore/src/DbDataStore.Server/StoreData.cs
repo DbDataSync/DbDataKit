@@ -119,11 +119,11 @@ public static class StoreData
     private static string? OutsideScope(ValidatedToken token, string model, IEnumerable<RowChange> changes) =>
         changes.Select(c => c.Entity).FirstOrDefault(entity => !TokenScope.Allows(token, model, entity, write: true));
 
-    public static void Map(IEndpointRouteBuilder app, string directory, StoreConnections connections)
+    public static void Map(IEndpointRouteBuilder app, string directory, StoreConnections connections, StoreDataChanges? dataChanges = null)
     {
         // the model's own copy, and each instance of it: the same routes under two prefixes
-        MapUnder(app, directory, connections, "/api/v1/models/{name}");
-        MapUnder(app, directory, connections, "/api/v1/models/{name}/instances/{instance}");
+        MapUnder(app, directory, connections, "/api/v1/models/{name}", dataChanges);
+        MapUnder(app, directory, connections, "/api/v1/models/{name}/instances/{instance}", dataChanges);
 
         // which instances a model has: a viewer lists them, an administrator registers and forgets them (forgetting never touches the data)
         app.MapGet("/api/v1/models/{name}/instances", async (string name, HttpContext context) =>
@@ -197,7 +197,7 @@ public static class StoreData
         });
     }
 
-    private static void MapUnder(IEndpointRouteBuilder app, string directory, StoreConnections connections, string prefix)
+    private static void MapUnder(IEndpointRouteBuilder app, string directory, StoreConnections connections, string prefix, StoreDataChanges? dataChanges)
     {
         app.MapGet(prefix + "/storage", async (string name, HttpContext context) =>
         {
@@ -441,6 +441,7 @@ public static class StoreData
                 await using var connection = await connections.OpenAsync(connectionName, context.RequestAborted);
                 await new ModelWriter(model!, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId).ApplyAsync(changes!, new WriteActor(token.SubjectId, token.SubjectName), context.RequestAborted);
                 StoreEvents.Record(directory, name, InstanceName(context), changes!, token, null, DateTimeOffset.UtcNow);
+                if (dataChanges is not null) await dataChanges.AppliedAsync(connectionName, schema, changes!.Select(c => c.Entity), ct: CancellationToken.None);   // plan 24a UC13: the serving groups hear which entities changed
                 return Results.Json(new { applied = changes!.Count });
             }
             catch (Exception ex) when (Known(ex)) { return Fail(ex); }
@@ -561,8 +562,8 @@ public static class StoreData
                 ? Results.Json(request.ToJson()) : Results.NotFound(new { error = "There is no such change request." });
         });
 
-        app.MapPost(prefix + "/requests/{id}/approve", (string name, string id, HttpContext context) => DecideAsync(directory, connections, name, id, context, approve: true));
-        app.MapPost(prefix + "/requests/{id}/reject", (string name, string id, HttpContext context) => DecideAsync(directory, connections, name, id, context, approve: false));
+        app.MapPost(prefix + "/requests/{id}/approve", (string name, string id, HttpContext context) => DecideAsync(directory, connections, name, id, context, approve: true, dataChanges));
+        app.MapPost(prefix + "/requests/{id}/reject", (string name, string id, HttpContext context) => DecideAsync(directory, connections, name, id, context, approve: false, dataChanges));
     }
 
     private static (List<RowChange>? Changes, IResult? Problem) ParseChanges(JsonArray list)
@@ -575,7 +576,7 @@ public static class StoreData
     /// Approving applies the proposed changes as they were, in one transaction, through the same writer (every rule, version check and audit row), with the approver as the audit's actor and the proposer named beside them;
     /// a request the rules or a newer version refuse stays pending and says why. Rejecting only records the decision. A decided request is not decided again.
     /// </summary>
-    private static async Task<IResult> DecideAsync(string directory, StoreConnections connections, string name, string id, HttpContext context, bool approve)
+    private static async Task<IResult> DecideAsync(string directory, StoreConnections connections, string name, string id, HttpContext context, bool approve, StoreDataChanges? dataChanges = null)
     {
         var (model, problem) = await ModelAsync(directory, name, context.Request.RouteValues["instance"] as string);
         if (problem is not null) return problem;
@@ -607,6 +608,7 @@ public static class StoreData
             var actor = new WriteActor(token.SubjectId, $"{token.SubjectName ?? token.SubjectId}, approving {request.ProposedByName ?? request.ProposedBy}'s change request {request.Id}");
             await new ModelWriter(model!, connection, connections.EngineOf(connectionName), schema: schema, instance: instanceId).ApplyAsync(changes!, actor, context.RequestAborted);
             StoreEvents.Record(directory, name, instance, changes!, token, request.Id, DateTimeOffset.UtcNow);
+            if (dataChanges is not null) await dataChanges.AppliedAsync(connectionName, schema, changes!.Select(c => c.Entity), request.Id, CancellationToken.None);   // plan 24a UC13
         }
         catch (Exception ex) when (Known(ex)) { return Fail(ex); }
         return Results.Json(StoreChangeRequests.Decide(directory, request, ChangeRequest.Approved, token, note, DateTimeOffset.UtcNow).ToJson(withChanges: false));

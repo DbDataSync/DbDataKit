@@ -5,6 +5,7 @@ import { consoleApi, instancesKey, type InstanceSummary } from '../api'
 import { PendingServers } from './PendingServers'
 import { Link } from 'react-router-dom'
 import { ConsoleShell } from '../ConsoleShell'
+import { linkDone, linkPurpose, linkableServers, publishesToGateway } from '../linkServers'
 import { offersState } from '../stateApi'
 import { availableKey, upgradeApi } from '../upgradeApi'
 
@@ -54,7 +55,7 @@ export function InstancesPage() {
   })
 
   const reachable = (instances.data ?? []).filter((i) => i.reachable)
-  const builds = reachable.filter((i) => i.product === 'dbdatabuild')
+  const linkers = linkableServers(reachable)
   const gateways = reachable.filter((i) => i.product === 'dbdatagateway')
 
   if (!isAdmin) {
@@ -137,17 +138,17 @@ export function InstancesPage() {
           </div>
         </div>
 
-        {builds.length > 0 && gateways.length > 0 && (
+        {linkers.length > 0 && gateways.length > 0 && (
           <div className="card" style={{ marginTop: 20 }} data-testid="link-card">
-            <div className="card-head"><span className="card-title">Link a Build server to a gateway</span></div>
+            <div className="card-head"><span className="card-title">Link a server to a gateway</span></div>
             <div className="card-body">
-              <span className="hint">Lets the Build server publish to the gateway. The console makes the pairing code and hands it over; nobody types it.</span>
-              <span className="hint" style={{ display: 'block', marginTop: 4 }} data-testid="link-trust">The Publisher role is high-trust: a linked Build server chooses the serving policy of the data sources it publishes (pass-through login, limits, statement check, batch size, compression), everything except <span className="mono">allow_writes</span> and <span className="mono">allowed_directories</span>, which a published definition never carries (a published data source is read-only). Link only a Build server whose operators you trust with that.</span>
+              <span className="hint" data-testid="link-purpose">{linkPurpose(linkers.find((i) => i.id === linkFrom)?.product)}</span>
+              {publishesToGateway(linkers.find((i) => i.id === linkFrom)?.product) && <span className="hint" style={{ display: 'block', marginTop: 4 }} data-testid="link-trust">The Publisher role is high-trust: a linked Build server chooses the serving policy of the data sources it publishes (pass-through login, limits, statement check, batch size, compression), everything except <span className="mono">allow_writes</span> and <span className="mono">allowed_directories</span>, which a published definition never carries (a published data source is read-only). Link only a Build server whose operators you trust with that.</span>}
               <ErrorBanner error={link.error} />
-              <Field label="Build server">
+              <Field label="Server">
                 <select className="input" value={linkFrom} onChange={(e) => { setLinkFrom(e.target.value); link.reset() }} data-testid="link-from-select">
                   <option value="">Choose…</option>
-                  {builds.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                  {linkers.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
                 </select>
               </Field>
               <Field label="Gateway">
@@ -159,7 +160,7 @@ export function InstancesPage() {
               <button type="button" className="btn btn-primary" disabled={link.isPending || !linkFrom || !linkTo} onClick={() => link.mutate()} data-testid="link-button">
                 {link.isPending ? 'Linking…' : 'Link'}
               </button>
-              {link.isSuccess && <div className="hint" data-testid="link-done">{link.data.from} can now publish to {link.data.to} as “{link.data.name}”.</div>}
+              {link.isSuccess && <div className="hint" data-testid="link-done">{linkDone(linkers.find((i) => i.id === linkFrom)?.product, link.data.from, link.data.to, link.data.name)}</div>}
             </div>
           </div>
         )}

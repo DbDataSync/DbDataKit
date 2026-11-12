@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbDataKit.Catalog.Cache</PackageId>
+    <RootNamespace>DbDataKit.Catalog</RootNamespace>
+    <Description>The catalog cache of a project draft (format catalog-cache/1, plan 33 SC20i): the tables and columns of a project's connections as one committed file with no secret and no row, its strict reader and its writer. The Workspace, Sync and Build read it so a tool with no network and no login can still plan from the shape of a database.</Description>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
+  </ItemGroup>
+</Project>

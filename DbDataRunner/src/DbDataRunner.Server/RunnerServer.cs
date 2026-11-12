@@ -7,6 +7,7 @@ using DbDataKit.Runner.Api;
 using DbDataKit.Hosting.Certificates;
 using DbDataKit.State;
 using DbDataKit.State.Api;
+using DbDataKit.Serving.Notify;
 using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -64,7 +65,9 @@ public static class RunnerServer
         var instanceId = InstanceId(state);
         // the runner's own encrypted store (plan 28c E20d): what a product sends with PUT /api/v1/secrets, the last provider of the chain connection slots resolve against
         var secretStore = new RunnerSecretStore(settings.Directory);
-        settings = settings with { SecretStore = settings.SecretStore ?? secretStore.Provider };
+        // plan 24a UC13: what a task's run reported writing is told to the serving groups this server is paired with (gateways.json), signed as the server itself; no pairing, nothing sent
+        var dataChanges = settings.DataChanges ?? RunnerDataChanges.Create(settings.Directory, secretStore, new LineLoggerProvider(log).CreateLogger("DbDataRunner.DataChanged"));
+        settings = settings with { SecretStore = settings.SecretStore ?? secretStore.Provider, DataChanges = dataChanges };
         var files = new PairingFiles(settings.ServerYaml, Group: state);
         var clients = files.Clients();
         var fingerprint = PairingProof.CertificateFingerprint(certificate);
@@ -119,6 +122,7 @@ public static class RunnerServer
         RunnerBindingTestApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>().Slots, "/api/v1", RunnerCallers.TokenResolver, RunnerConnectTest.Create(CatalogOf(settings, state)));   // UI08: try a slot's binding, up to the connection
         RunnerConnectionCopyApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);   // plan 27a IX23: the connections the console handed over (definition and secret references, never a value)
         RunnerGroupApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);
+        GatewayPairingApi.Map(app, "/api/v1", dataChanges.Pairings, () => Task.FromResult(RunnerDataChanges.Identity(secretStore)), () => dataChanges.Notifier, "DbDataRunner server");
         RunnerLineageApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);
         RunnerTrackingApi.Map(app, state, "/api/v1", RunnerCallers.TokenResolver);   // plan 28c E18: the runner's own copy of Build's tracking, and the resolve of its divergences
         return app;

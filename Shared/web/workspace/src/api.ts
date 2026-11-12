@@ -79,6 +79,22 @@ export interface LoweredResult { ok: boolean; diagnostics: CheckDiagnostic[]; fi
 /** One table of a run on generated rows: columns, the rows kept (`row_count` is complete), or the error that stopped it. */
 export interface SampleTable { name: string; kind: string; origin: string | null; columns: { name: string; type: string }[]; row_count: number; rows: (string | null)[][]; error: string | null; warnings: string[] }
 export interface SampleResult { ok: boolean; diagnostics: CheckDiagnostic[]; data: { tables: SampleTable[] } | null }
+/** One case of a script's test: what went in, what came out, and why when that is not obvious. */
+export interface ScriptCase { input: string; output: string | null; note: string | null }
+/** What `dbdatasync script test --json` printed, as the tool wrote it: `ok` is false when the script did not compile or threw, and `error` has the words. */
+export interface ScriptTest { name: string; kind: string; ok: boolean; source: string; cases: ScriptCase[]; log: string[]; error: string | null }
+/** One script of `config/scripts/`; `error` is why its manifest cannot be read. */
+export interface ScriptEntry { name: string; kind: string; language: string; error: string | null }
+/** The answer of a Sync draft's tool route: `ok` is false when the program did not answer (the findings say why), `data` is its document. */
+export interface ToolAnswer<T> { ok: boolean; diagnostics: CheckDiagnostic[]; data: T | null }
+/** One statement of a provisioning plan: what it does, the exact text a server would run, why, and where it runs (`database` or `table`). */
+export interface ProvisioningStep { title: string; command_text: string; rationale: string | null; scope: string }
+/** One side's plan: `state` is `satisfied` (nothing to do), `missing` (the steps change it), `unsupported` (the warnings say why) or `unknown` (a cache cannot say; the warnings say why). */
+export interface ProvisioningSide { action: string; state: 'satisfied' | 'missing' | 'unsupported' | 'unknown'; steps: ProvisioningStep[]; warnings: string[] }
+export interface ProvisioningEndpoint { connection: string; table: string }
+export interface ProvisioningMapping { mapping: string; source: ProvisioningEndpoint | null; target: ProvisioningEndpoint | null; source_plan: ProvisioningSide | null; target_plan: ProvisioningSide | null; excluded: string | null }
+/** What `dbdatasync provisioning plan --from-cache --json` printed: the plan of each mapping of a replication, made from the draft's catalog cache (no connection was opened). */
+export interface ProvisioningPlan { replication: string; cache_generated_at: string | null; cache_server: string | null; mappings: ProvisioningMapping[] }
 export interface SampleOptions { models?: string[]; rows?: number; seed?: number; limit?: number }
 
 const enc = encodeURIComponent
@@ -100,6 +116,16 @@ export const workspaceApi = {
   lowered: (project: string, id: string, path: string) => request<LoweredResult>(`${ws(project, id)}/lowered`, json({ path })),
   /** Models run on generated rows, offline: the same seed gives the same rows. */
   sample: (project: string, id: string, options: SampleOptions = {}) => request<SampleResult>(`${ws(project, id)}/sample`, json(options)),
+  /** The scripts of a Sync draft with the slot each fills (`dbdatasync script list`, on a copy). */
+  scripts: (project: string, id: string) => request<ToolAnswer<{ scripts: ScriptEntry[] }>>(`${ws(project, id)}/scripts`),
+  /** Compiles one script of a Sync draft and runs it against generated input, offline, on a copy (plan 33 SC22k). */
+  scriptTest: (project: string, id: string, name: string, rows = 5) => request<ToolAnswer<ScriptTest>>(`${ws(project, id)}/script-test`, json({ name, rows })),
+  /** The column lineage of a Build draft as `project show graph --columns` computes it, read only (plan 33 SC20h); with `column` (`model.column`) also what that column comes from and what is built from it. `data` is the tool's own document. */
+  lineage: (project: string, id: string, column?: string) => request<ToolAnswer<unknown>>(`${ws(project, id)}/lineage`, json(column ? { column } : {})),
+  /** The mapped models `project import --from-cache` would make of the draft's catalog cache for one connection (plan 33 SC20k): on a copy, nothing written; `data` is the tool's own document with the text of each file it wrote. With no `tables` it refreshes the descriptors the project has. */
+  importPreview: (project: string, id: string, connection: string, tables: string[] = []) => request<ToolAnswer<unknown>>(`${ws(project, id)}/import-preview`, json({ connection, ...(tables.length > 0 ? { tables } : {}) })),
+  /** The provisioning plan of one replication of a Sync draft, offline, from the draft's `catalog-cache.yaml` (plan 33 SC22j). Applying is the Sync server's. */
+  provisioningPlan: (project: string, id: string, replication: string) => request<ToolAnswer<ProvisioningPlan>>(`${ws(project, id)}/provisioning-plan`, json({ replication })),
   /** The commits in which one file changed (newest first), and its text as one of them committed it (plan 33 SC21e). */
   fileHistory: (project: string, id: string, path: string) => request<{ path: string; commits: Commit[] }>(`${ws(project, id)}/file-history/${filePath(path)}`).then((r) => r.commits),
   fileAt: (project: string, id: string, sha: string, path: string) => request<{ path: string; sha: string; content: string }>(`${ws(project, id)}/file-at/${enc(sha)}/${filePath(path)}`).then((r) => r.content),

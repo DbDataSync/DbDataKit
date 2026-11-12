@@ -154,6 +154,13 @@ public static class ServerProducts
         ("POST", "api/v1/projects/{p}/workspaces/{id}/compile", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/lowered", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/sample", ServerRole.Viewer),
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/import-preview", ServerRole.Viewer),   // plan 33 SC20k: the mapped models the catalog cache would make, on a copy
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/lineage", ServerRole.Viewer),   // plan 33 SC20h: the column lineage of a Build draft, read only
+        // plan 33 SC22k: a Sync draft's scripts (read) and the test of one (it runs the draft's C# in a child process, so the author's)
+        ("GET", "api/v1/projects/{p}/workspaces/{id}/scripts", ServerRole.Viewer),
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/script-test", ServerRole.Author),
+        // plan 33 SC22j: the provisioning plan of a Sync draft from its catalog cache (offline, read only)
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/provisioning-plan", ServerRole.Viewer),
         ("GET", "api/v1/app-build", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/builds", ServerRole.Author),
         ("GET", "api/v1/projects/{p}/workspaces/{id}/builds", ServerRole.Viewer),

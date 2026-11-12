@@ -27,6 +27,9 @@ dbdatarunner lineage impact <node> [--depth <n>] [--repo <server directory>] [--
 dbdatarunner lineage provenance <node> [--depth <n>] [--repo <server directory>] [--group <name>]
 dbdatarunner lineage where <definition> [--channel <channel>] [--repo <server directory>] [--group <name>]   # where is this deployed: channels, active and previous version, who activated and when, the runners ready or active
 dbdatarunner lineage on <runner> [--repo <server directory>] [--group <name>]   # what is deployed on a runner (an instance id or a host)
+dbdatarunner gateway add <name> --url <https address> --code <pairing code> [--repo <server directory>]   # pair this runner with a serving group (Gateway) as a server client: it then tells the group when a task wrote a dataset (plan 24a UC13); the Gateway's administrator makes the code with `dbdatagateway server pair --max-role publisher`
+dbdatarunner gateway list [--repo <server directory>]   # the serving groups this runner is paired with (`gateways.json` in the directory)
+dbdatarunner gateway remove <name> [--repo <server directory>]
 dbdatarunner lineage runs <definition> <version> [--repo <server directory>] [--group <name>]   # the runs that named a version
 dbdatarunner runs list [--package <name>] [--channel <name>] [--task <name>] [--outcome <outcome>] [--limit <n>] [--repo <server directory>]
 dbdatarunner state show [--offline] [--engine mssql|postgres] [--repo <server directory>]    # the state database: engine, namespaces, module versions, pending migrations; creates nothing
@@ -184,3 +187,12 @@ An **integration** is a package of the kind `integration` (the kind every packag
 | Posture choices and per-channel connection bindings | The rule that an outbound step in a non-production channel uses that channel's connection or is refused |
 
 **[`docs/integrations.md`](../docs/integrations.md) is the one page for integrations** (what one is, the package kinds, the manifest, authoring, build and test, publish, and what is built per part). A csx integration (C# files with `#r "nuget:"` lines) is built and tested with `dbdatarunner package build` and `package test`, which need only the .NET runtime, not the SDK; a compiled .NET project needs the SDK. Both are authored in a workspace as an `integration` project (IX20, IX24) or published by hand with `package publish`.
+
+## What a task reports it read and wrote
+
+A task says what it touched with the Kit's `run.Lineage(reads, writes)`: plain strings, kept per task in the runner's state (`task_lineage` of the `runner` module: one row per task, direction and name, with the run that said it last; a rerun adds no row). Two kinds of line have a meaning (plan 27a IX12, plan 24a UC13):
+
+- `external://<kind>/<name>` (for example `external://http-api/crm`, `external://sftp/exports`): an outside system. `GET /api/v1/lineage` (and `dbdatarunner lineage graph`) lays a job node under the task's package and an outside-system node for each one, so `lineage provenance` of a table the task wrote shows the API upstream. A task whose systems would close a circle with another's is left out and named in `problems`.
+- a dataset identity (`engine://server/database.schema.table`, what `LineageIdentity.Dataset` gives): when the run ends, the runner tells the serving groups it is paired with (`dbdatarunner gateway add`, the console's Link, or `POST /api/v1/gateways`) that the dataset changed, so a Gateway empties the cached answers that read it. The runner signs the message as itself with the role Publisher; a failed delivery never changes the run; with no pairing nothing is sent.
+
+Any other text is the task's own name for a table: it is kept and is not a node.

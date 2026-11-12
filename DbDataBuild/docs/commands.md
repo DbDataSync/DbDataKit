@@ -209,6 +209,7 @@ Usage: `dbdatabuild project import [connection] [tables]... [options]`
 | Option | Meaning |
 |---|---|
 | `--check` | CI: fail if a descriptor differs from the table it describes; writes nothing |
+| `--from-cache` `<text>` | Read the tables from this catalog cache (catalog-cache.yaml of a draft, relative to the project) instead of the connection: no connection is opened and no login is needed; the cache has no index and no foreign key, so none is written |
 | `--project` `<path>` | Project root |
 | `--write` | Write the new and changed mapped models under models/ (without it the command only shows the diff) |
 

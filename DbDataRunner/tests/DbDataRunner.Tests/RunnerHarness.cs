@@ -61,7 +61,7 @@ public sealed class RunnerHarness : IAsyncDisposable
     /// <summary>The runner engine of the running server.</summary>
     public RunnerEngine Engine => _app!.Services.GetRequiredService<RunnerEngine>();
 
-    public RunnerSettings Settings { get; }
+    public RunnerSettings Settings { get; set; }
 
     /// <summary>The running server's services (the telemetry test flushes its exporters through them).</summary>
     public IServiceProvider Services => _app!.Services;

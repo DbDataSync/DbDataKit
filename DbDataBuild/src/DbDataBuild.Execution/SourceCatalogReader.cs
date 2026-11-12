@@ -3,66 +3,14 @@ using System.Globalization;
 
 namespace DbDataBuild.Execution;
 
-/// <summary>What `import` reads beyond the shapes <see cref="CatalogReader"/> gives: which schema names exist, and each table's primary key (it seeds a new descriptor's grain). Read session only.</summary>
+/// <summary>
+/// What `import` reads beyond the shapes <see cref="CatalogReader"/> gives: which schema names exist, each table's primary key (it seeds a new descriptor's grain), its foreign keys and its indexes. Read session only. SQL Server, PostgreSQL and DuckDB
+/// are read by the shared catalog readers (<see cref="SharedCatalog"/>); what is written here is the standard-views SQL of an ODBC or Flight SQL source, the Flight SQL and ODBC metadata calls, and DuckDB's indexes.
+/// </summary>
 public static class SourceCatalogReader
 {
-    // sys and INFORMATION_SCHEMA are the engine's; db_* are the schema names of fixed database roles; guest is empty. pg_* are PostgreSQL's catalogs and temp schema names.
-    private const string SqlServerSchemas = "SELECT name FROM sys.schemas WHERE name NOT IN ('sys', 'INFORMATION_SCHEMA', 'guest') AND name NOT LIKE 'db[_]%' ORDER BY name";
-    private const string PostgresSchemas = "SELECT schema_name FROM information_schema.schemata WHERE schema_name <> 'information_schema' AND schema_name NOT LIKE 'pg\\_%' ORDER BY schema_name";
-
-    private const string SqlServerPrimaryKeys = @"
-SELECT o.name, col.name, ic.key_ordinal
-FROM sys.indexes i
-JOIN sys.objects o ON o.object_id = i.object_id
-JOIN sys.schemas s ON s.schema_id = o.schema_id
-JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
-JOIN sys.columns col ON col.object_id = ic.object_id AND col.column_id = ic.column_id
-WHERE i.is_primary_key = 1 AND ic.is_included_column = 0 AND o.type = 'U' AND s.name = @schema
-ORDER BY o.name, ic.key_ordinal";
-
-    private const string PostgresPrimaryKeys = @"
-SELECT t.relname, a.attname, k.ord
-FROM pg_index i
-JOIN pg_class t ON t.oid = i.indrelid
-JOIN pg_namespace n ON n.oid = t.relnamespace
-CROSS JOIN LATERAL unnest(i.indkey::int2[]) WITH ORDINALITY AS k(attnum, ord)
-JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
-WHERE i.indisprimary AND k.ord <= i.indnkeyatts AND n.nspname = @schema
-ORDER BY t.relname, k.ord";
-
-    // one row per column of a foreign key: its table, the key's name, the column, the referenced schema, table and column, and the position in the key
-    private const string SqlServerForeignKeys = @"
-SELECT o.name, fk.name, pc.name, rs.name, ro.name, rc.name, fkc.constraint_column_id
-FROM sys.foreign_keys fk
-JOIN sys.objects o ON o.object_id = fk.parent_object_id
-JOIN sys.schemas s ON s.schema_id = o.schema_id
-JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
-JOIN sys.columns pc ON pc.object_id = fkc.parent_object_id AND pc.column_id = fkc.parent_column_id
-JOIN sys.objects ro ON ro.object_id = fk.referenced_object_id
-JOIN sys.schemas rs ON rs.schema_id = ro.schema_id
-JOIN sys.columns rc ON rc.object_id = fkc.referenced_object_id AND rc.column_id = fkc.referenced_column_id
-WHERE s.name = @schema
-ORDER BY o.name, fk.name, fkc.constraint_column_id";
-
-    private const string PostgresForeignKeys = @"
-SELECT t.relname, c.conname, a.attname, rn.nspname, rt.relname, ra.attname, k.ord
-FROM pg_constraint c
-JOIN pg_class t ON t.oid = c.conrelid
-JOIN pg_namespace n ON n.oid = t.relnamespace
-JOIN pg_class rt ON rt.oid = c.confrelid
-JOIN pg_namespace rn ON rn.oid = rt.relnamespace
-CROSS JOIN LATERAL unnest(c.conkey, c.confkey) WITH ORDINALITY AS k(attnum, refnum, ord)
-JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
-JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = k.refnum
-WHERE c.contype = 'f' AND n.nspname = @schema
-ORDER BY t.relname, c.conname, k.ord";
-
-    // DuckDB: its own schemas are information_schema and pg_catalog (`main` is where tables go when no schema is named); the constraints come from duckdb_constraints(), parameters by position
-    private const string DuckDbSchemas = "SELECT schema_name FROM information_schema.schemata WHERE catalog_name = current_database() AND schema_name NOT IN ('information_schema', 'pg_catalog') ORDER BY schema_name";
-    private const string DuckDbPrimaryKeys = "SELECT table_name, array_to_string(constraint_column_names, chr(31)) FROM duckdb_constraints() WHERE constraint_type = 'PRIMARY KEY' AND database_name = current_database() AND schema_name = ? ORDER BY table_name";
     // duckdb_indexes(): the columns of an index are in the CREATE INDEX text (its `expressions` column is a VARCHAR that spells a list); ART indexes are ascending and cannot be INCLUDE-d
     private const string DuckDbIndexes = "SELECT table_name, index_name, is_unique, sql FROM duckdb_indexes() WHERE database_name = current_database() AND schema_name = ? ORDER BY table_name, index_name";
-    private const string DuckDbForeignKeys = "SELECT table_name, constraint_name, array_to_string(constraint_column_names, chr(31)), referenced_table, array_to_string(referenced_column_names, chr(31)), constraint_text FROM duckdb_constraints() WHERE constraint_type = 'FOREIGN KEY' AND database_name = current_database() AND schema_name = ? ORDER BY table_name, constraint_name";
 
     // A source known by its ODBC driver: the standard views. sys and pg_catalog are the engines' own and are left out whichever engine is behind the driver; every other schema name is the person's to select with the pattern.
     private const string AnsiSchemas = "SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'sys') ORDER BY schema_name";
@@ -109,8 +57,14 @@ ORDER BY kcu.table_name, kcu.constraint_name, kcu.ordinal_position";
             Task<IReadOnlyList<string>> ask() => ReadSchemaNamesAsync(read, ct);
             return target == "flightsql" ? await FlightSqlFallbackAsync(read, ask) : await ask();
         }
-        var rows = await read.QueryAsync(target == "duckdb" ? DuckDbSchemas : target == "postgres" ? PostgresSchemas : SqlServerSchemas, null, ct);
-        return rows.Select(r => (string)r[0]!).ToList();
+        // sys and INFORMATION_SCHEMA are the engine's; db_* are the schema names of fixed database roles; guest is empty. pg_* are PostgreSQL's catalogs and temp schema names. DuckDB has information_schema and pg_catalog.
+        var names = await SharedCatalog.ReadSchemaNamesAsync(read, target, ct);
+        return target switch
+        {
+            "duckdb" => names.Where(n => n is not ("information_schema" or "pg_catalog")).ToList(),
+            "postgres" => names.Where(n => n != "information_schema" && !n.StartsWith("pg_", StringComparison.Ordinal)).ToList(),
+            _ => names.Where(n => !(n.Equals("sys", StringComparison.OrdinalIgnoreCase) || n.Equals("INFORMATION_SCHEMA", StringComparison.OrdinalIgnoreCase) || n.Equals("guest", StringComparison.OrdinalIgnoreCase) || n.StartsWith("db_", StringComparison.OrdinalIgnoreCase))).ToList(),
+        };
     }
 
     private static async Task<IReadOnlyList<string>> ReadSchemaNamesAsync(ReadSession read, CancellationToken ct) =>
@@ -129,14 +83,19 @@ ORDER BY kcu.table_name, kcu.constraint_name, kcu.ordinal_position";
             return ansi.GroupBy(r => r[0]!.ToString()!, StringComparer.Ordinal)
                 .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.OrderBy(r => Convert.ToInt32(r[2], CultureInfo.InvariantCulture)).Select(r => r[1]!.ToString()!).ToList(), StringComparer.Ordinal);
         }
-        if (target == "duckdb")
-        {
-            var keys = await read.QueryAsync(DuckDbPrimaryKeys, [new GateParameter("schema", DbType.String, schema)], ct);
-            return keys.ToDictionary(r => (string)r[0]!, r => (IReadOnlyList<string>)((string)r[1]!).Split('\u001f').ToList(), StringComparer.Ordinal);
-        }
-        var rows = await read.QueryAsync(target == "postgres" ? PostgresPrimaryKeys : SqlServerPrimaryKeys, [new GateParameter("schema", DbType.String, schema)], ct);
-        return rows.GroupBy(r => (string)r[0]!, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.OrderBy(r => Convert.ToInt32(r[2], CultureInfo.InvariantCulture)).Select(r => (string)r[1]!).ToList(), StringComparer.Ordinal);
+        return (await KeysAsync(read, target, schema, ct)).PrimaryKeys;
+    }
+
+    /// <summary>
+    /// The primary keys and foreign keys of a schema together. SQL Server, PostgreSQL and DuckDB are read by the shared readers' schema-wide read (two queries for the schema, not two per table); a source known by its ODBC driver or a Flight SQL server
+    /// is read as before, key kind by key kind.
+    /// </summary>
+    public static async Task<(IReadOnlyDictionary<string, IReadOnlyList<string>> PrimaryKeys, IReadOnlyDictionary<string, IReadOnlyList<State.ForeignKeyShape>> ForeignKeys)> KeysAsync(ReadSession read, string target, string schema, CancellationToken ct = default)
+    {
+        if (IsAnsiSource(target)) return (await PrimaryKeysAsync(read, target, schema, ct), await ForeignKeysAsync(read, target, schema, ct));
+        var keys = await SharedCatalog.ReadKeysAsync(read, target, schema, ct);
+        return (keys.PrimaryKeys.ToDictionary(kv => kv.Key, kv => kv.Value.Columns, StringComparer.Ordinal),
+            keys.ForeignKeys.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<State.ForeignKeyShape>)kv.Value.Select(k => new State.ForeignKeyShape(k.Name ?? "", k.Columns, k.Referenced.Schema ?? schema, k.Referenced.Name, k.ReferencedColumns)).ToList(), StringComparer.Ordinal));
     }
 
     /// <summary>Foreign keys per table name of the schema name, columns in key order.</summary>
@@ -159,42 +118,15 @@ ORDER BY kcu.table_name, kcu.constraint_name, kcu.ordinal_position";
                 }).ToList(),
                 StringComparer.Ordinal);
         }
-        if (target == "duckdb")
-        {
-            // duckdb_constraints() has no column for the schema of the referenced table; its constraint text does (`FOREIGN KEY (a) REFERENCES s.p(id)`), and says none when the table is in the key's own schema.
-            // (DuckDB 1.5 refuses a foreign key across schemas, so today the answer is always the key's own schema; reading the text keeps it true if a later release allows more.)
-            var keys = await read.QueryAsync(DuckDbForeignKeys, [new GateParameter("schema", DbType.String, schema)], ct);
-            return keys.GroupBy(r => (string)r[0]!, StringComparer.Ordinal).ToDictionary(
-                table => table.Key,
-                table => (IReadOnlyList<State.ForeignKeyShape>)table.Select(r => new State.ForeignKeyShape((string)r[1]!, ((string)r[2]!).Split('\u001f').ToList(), DuckDbReferencedSchema(r[5] as string, (string)r[3]!, schema), (string)r[3]!, ((string)r[4]!).Split('\u001f').ToList())).ToList(),
-                StringComparer.Ordinal);
-        }
-        var rows = await read.QueryAsync(target == "postgres" ? PostgresForeignKeys : SqlServerForeignKeys, [new GateParameter("schema", DbType.String, schema)], ct);
-        return rows.GroupBy(r => (string)r[0]!, StringComparer.Ordinal).ToDictionary(
-            table => table.Key,
-            table => (IReadOnlyList<State.ForeignKeyShape>)table.GroupBy(r => (string)r[1]!, StringComparer.Ordinal).Select(fk =>
-            {
-                var ordered = fk.OrderBy(r => Convert.ToInt32(r[6], CultureInfo.InvariantCulture)).ToList();
-                return new State.ForeignKeyShape(fk.Key, ordered.Select(r => (string)r[2]!).ToList(), (string)ordered[0][3]!, (string)ordered[0][4]!, ordered.Select(r => (string)r[5]!).ToList());
-            }).ToList(),
-            StringComparer.Ordinal);
+        return (await KeysAsync(read, target, schema, ct)).ForeignKeys;
     }
 
     /// <summary>
     /// The schema a DuckDB foreign key points to, from the key's constraint text: what stands between `REFERENCES ` and the referenced table's name (`s.` or `catalog.s.`), or the key's own schema when the text names none.
     /// A name with a dot in it (quoted) cannot be told from a qualifier by its text; the part after the last dot is taken.
     /// </summary>
-    internal static string DuckDbReferencedSchema(string? constraintText, string referencedTable, string ownSchema)
-    {
-        if (constraintText == null) return ownSchema;
-        var start = constraintText.IndexOf("REFERENCES ", StringComparison.Ordinal);
-        var at = constraintText.LastIndexOf(referencedTable + "(", StringComparison.Ordinal);
-        if (start < 0 || at < 0 || at < start + 11) return ownSchema;
-        var qualifier = constraintText[(start + 11)..at].TrimEnd('.').Trim('"');
-        if (qualifier.Length == 0) return ownSchema;
-        var dot = qualifier.LastIndexOf('.');
-        return (dot < 0 ? qualifier : qualifier[(dot + 1)..]).Trim('"');
-    }
+    internal static string DuckDbReferencedSchema(string? constraintText, string referencedTable, string ownSchema) =>
+        DbDataKit.Metadata.DuckDbCatalogReader.ReferencedSchema(constraintText, referencedTable, ownSchema)!;
 
     /// <summary>
     /// The key columns of a DuckDB index from its `CREATE INDEX` text, or `&lt;expression&gt;` where a key is an expression (the importer says such an index was not exported). Null when the text is not a

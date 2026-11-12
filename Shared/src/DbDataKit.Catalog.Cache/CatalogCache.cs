@@ -1,10 +1,9 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
-using DbDataKit.Authoring;
 using DbDataKit.Config.Yaml;
 
-namespace DbDataKit.Authoring.Server;
+namespace DbDataKit.Catalog;
 
 /// <summary>One column of a cached table: its name and the type text the database gave, whether it accepts null and whether it is part of the primary key.</summary>
 public sealed record CacheColumn(string Name, string Type, bool Nullable, bool Key);
@@ -108,19 +107,6 @@ public static partial class CatalogCache
         var reader = new Reader(file, diagnostics);
         var cache = reader.ReadRoot(root);
         return new(diagnostics.Any(d => d.Severity == ConfigSeverity.Error) ? null : cache, diagnostics);
-    }
-
-    /// <summary>
-    /// The finding of the cache in a draft, as the kinds' check reports them: nothing when the draft has none (a cache is optional), the reader's findings (file, line) when it has one. Never throws for a damaged file.
-    /// </summary>
-    public static IReadOnlyList<ProjectDiagnostic> Check(string root)
-    {
-        var path = Path.Combine(root, FileName);
-        if (!File.Exists(path)) return [];
-        string text;
-        try { text = File.ReadAllText(path, new UTF8Encoding(false, true)); }
-        catch (Exception ex) when (ex is IOException or DecoderFallbackException) { return [new("error", "DBD-CAT-READ", $"{FileName} cannot be read: {ex.Message}", FileName)]; }
-        return [.. Load(text, FileName).Diagnostics.Select(d => new ProjectDiagnostic(d.Severity switch { ConfigSeverity.Error => "error", ConfigSeverity.Warning => "warning", _ => "info" }, d.Code, d.Message, FileName, d.Line > 0 ? d.Line : null))];
     }
 
     private sealed class Reader(string file, List<ConfigDiagnostic> diagnostics)
@@ -282,16 +268,5 @@ public static partial class CatalogCache
             else Fail(BadShape, map, path + ".columns", "`columns` is missing.");
             return name is null || kind is null ? null : new(schema, name, kind, columns);
         }
-    }
-}
-
-/// <summary>The check of a draft as the server runs it: the kind's own validators, then the catalog cache when the draft has one (every kind may carry it, so it is checked here and not in each kind).</summary>
-public static class DraftCheck
-{
-    public static async Task<IReadOnlyList<ProjectDiagnostic>> RunAsync(IProjectKind kind, string root, CancellationToken cancellationToken)
-    {
-        var found = await kind.CheckAsync(root, cancellationToken).ConfigureAwait(false);
-        var cache = CatalogCache.Check(root);
-        return cache.Count == 0 ? found : [.. found, .. cache];
     }
 }

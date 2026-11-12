@@ -7,6 +7,7 @@
   <ItemGroup>
     <PackageVersion Include="DbDataKit.Cli" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Config.Git" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Catalog.Cache" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Config.Yaml" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Hosting.Abstractions" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Hosting" Version="$(DbDataKitVersion)" />

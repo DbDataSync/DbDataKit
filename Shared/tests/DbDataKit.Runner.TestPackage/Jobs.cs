@@ -20,6 +20,18 @@ public sealed class Ok : RunnerJob<NoInput, NoProgress, NoSlots>
     }
 }
 
+/// <summary>Reports what it read and wrote with the Kit's run.Lineage: an outside system each way, a table of its own naming and a dataset identity (plan 27a IX12, plan 24a UC13).</summary>
+[RunnerTask("reports")]
+public sealed class Reports : RunnerJob<NoInput, NoProgress, NoSlots>
+{
+    protected override Task RunAsync(CancellationToken ct)
+    {
+        Run.Lineage(["external://http-api/crm", "crm.orders"], ["sqlserver://wh/Sales.dbo.orders", "external://sftp/exports", "orders_staging"]);
+        Console.WriteLine("reported");
+        return Task.CompletedTask;
+    }
+}
+
 public sealed class TallyProgress : Progress
 {
     [Checkpoint]

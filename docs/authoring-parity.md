@@ -12,10 +12,10 @@ Summary (counts of the features below):
 
 | Product | built | partly | missing | not planned | features |
 | --- | --- | --- | --- | --- | --- |
-| Build | 16 | 3 | 0 | 6 | 25 |
+| Build | 18 | 1 | 0 | 6 | 25 |
 | Store | 7 | 0 | 0 | 3 | 10 |
-| Sync | 12 | 3 | 3 | 3 | 21 |
-| All | 35 | 6 | 3 | 12 | 56 |
+| Sync | 13 | 4 | 1 | 3 | 21 |
+| All | 38 | 5 | 1 | 12 | 56 |
 
 ### Build
 
@@ -34,7 +34,7 @@ Summary (counts of the features below):
 | The lowered SQL of a model (rendered files per model) | `build/src/pages/PreviewPanel.tsx` | `workspace/src/pages/BuildCompilePanel.tsx` (`POST .../lowered`, read only) | built | SC20l |
 | Offline sample: a model run on generated rows (Sample tab) | `build/src/pages/DeployTabs.tsx` (`SampleTab`), `PreviewPanel.tsx` | `workspace/src/pages/BuildCompilePanel.tsx` (`POST .../sample`: rows, seed, models) | built | SC20l |
 | Preview of a table or model: its columns and types, with generated values (never the database's rows) | `build/src/pages/PreviewPanel.tsx` | `workspace/src/pages/CatalogPanel.tsx` (from the catalog cache, `catalogCache.ts`) | built | SC20k |
-| Import tables from a database into the project (list what is not mapped yet, write the files) | `build/src/pages/ImportPanel.tsx`, `DefinitionPanel.tsx` | `workspace/src/pages/CatalogPanel.tsx` lists the cached tables; writing model files from them is not built | partly | SC20k |
+| Import tables from a database into the project (list what is not mapped yet, write the files) | `build/src/pages/ImportPanel.tsx`, `DefinitionPanel.tsx` | `workspace/src/pages/CatalogPanel.tsx` lists the cached tables; `BuildImportPanel.tsx`, `buildImport.ts` write the model files from them (`project import --from-cache` on a copy, the files written through the file routes); the cache has no index and no foreign key, so a new descriptor has none and a committed one keeps its own | built | SC20k |
 | Project tests (metadata rules and model tests, violating rows) | `build/src/pages/TestsPanel.tsx` | none: the tests read the target database | not planned | SC20o |
 | Status of a target (every declared object, what a deploy would do) | `build/src/pages/DeployTabs.tsx` (`StatusTab`) | none: reads a target database | not planned | SC20o |
 | Refresh plans: the compiled plans and what each loads | `build/src/pages/DeployTabs.tsx` (`PlansTab`) | `workspace/src/pages/BuildPlanPanel.tsx` (`PlanView`: the plan files, how many loads) | built | SC20f |
@@ -45,7 +45,7 @@ Summary (counts of the features below):
 | Publish a semantic model to a Gateway | `build/src/pages/ModelPublish.tsx` | `workspace/src/pages/PublishForm.tsx`, `BuildsPanel.tsx` (a `gateway` target: the build's compiled semantic models, made offline by `dbdatabuild project publish --to gateway --out`, over the data sources the Gateway has under the connections' names) | built | SC20e |
 | Publish the project's data sources (connection, read login as a secret, grants) to a Gateway; hand a data source over | `build/src/pages/PublishTab.tsx` | none: it puts a login on a Gateway, and the Workspace holds none (D20, the option not taken); the offline publish names data sources the Gateway already has, which an administrator or Build's server makes | not planned | SC20e |
 | Dashboards and reports of a project: list, new, check, publish (Views tab) | `build/src/pages/ViewsTab.tsx` | `workspace/src/pages/BuildViewsPanel.tsx` (list, new, edit with `@dbdatakit/views-editor`, check findings; the wells offer the measures and dimensions of the draft's own `semantic/*.yml`, read offline); no publish to a Gateway (with SC20e) | partly | SC20n |
-| Lineage: the model graph; column lineage is the console's Lineage page, which reads Build servers | `build/src/pages/ProjectPage.tsx` (`GraphTab`); console Lineage page | `workspace/src/pages/BuildGraphPanel.tsx` (model level only) | partly | SC20h |
+| Lineage: the model graph; column lineage is the console's Lineage page, which reads Build servers | `build/src/pages/ProjectPage.tsx` (`GraphTab`); console Lineage page | `workspace/src/pages/BuildGraphPanel.tsx` (the model level), `BuildLineagePanel.tsx`, `buildLineage.ts` (the column level: `project show graph --columns` run on the draft, a column followed up and down with `--column`) | built | SC20h |
 
 ### Store
 
@@ -78,9 +78,9 @@ Summary (counts of the features below):
 | Primary key (natural key picked from the target columns) | `replication-detail/PrimaryKeyCard.tsx`, `naturalKey.ts` | `workspace/src/pages/MappingColumns.tsx` (picks from the cached columns), `syncSchemas.ts` | built | SC22g |
 | Transforms per column, the mapping's whole pipeline (Custom Transforms tab, mapping preview) | `replication-detail/MappingPipelineCard.tsx`, `MappingPreview.tsx`, `OverviewPanel.tsx` | `workspace/src/syncSchemas.ts`: the transform text of a column mapping, the `scripts` and `hooks` of the task and of a mapping as forms; no mapping preview (it reads rows) | partly | SC22i |
 | Segmenting strategies and the default segmenting of a reload | `replication-detail/SegmentingStrategiesCard.tsx`, `DefaultSegmentingCard.tsx`, `BulkLoadForm.tsx` | `workspace/src/syncSchemas.ts` (`segmentingStrategies` of the task, `defaultSegmenting` of a mapping; the bulk load itself is a run) | built | SC22i |
-| Provisioning: both sides' plan, preview, apply (DDL runs now) | `replication-detail/ProvisioningCard.tsx`, `ReplicationProvisioningPanel.tsx` | none | missing | SC22j |
+| Provisioning: both sides' plan, preview, apply (DDL runs now) | `replication-detail/ProvisioningCard.tsx`, `ReplicationProvisioningPanel.tsx` | `workspace/src/pages/SyncProvisioningPanel.tsx` (the plan of the target's create or alter from the catalog cache, `dbdatasync provisioning plan --from-cache --json` on a copy; a source that needs the live server says so; **apply** runs DDL and is the Sync server's) | partly | SC22j |
 | Quality checks of a replication (`checks:` seven kinds, severity, on_error) | `replication-detail/ReplicationChecksPanel.tsx`, `checkForms.ts`, `ChecksCard.tsx` | `workspace/src/syncSchemas.ts`, `qualitySchema.ts` (the task's `checks:` as a form from the shared `check/1` schema) | built | SC22k |
-| Scripts: the registry, write, compile, test against sample input, bind | `sync/src/pages/ScriptsPage.tsx`, `ScriptEditPage.tsx`, `script-edit/ScriptTestPanel.tsx` | none: the template has no scripts folder | missing | SC22k |
+| Scripts: the registry, write, compile, test against sample input, bind | `sync/src/pages/ScriptsPage.tsx`, `ScriptEditPage.tsx`, `script-edit/ScriptTestPanel.tsx` | `workspace/src/pages/SyncScriptsPanel.tsx`, `syncScripts.ts` (the template has `config/scripts/`; **New script** by slot; **Test** runs `dbdatasync script test --json` on a copy; binding is the task and mapping forms' `scripts`) | built | SC22k |
 | Library management (drivers and the platform a package is made for) | `sync/src/pages/ScriptsPage.tsx`, the console's connection library | none: `SyncPlatform` has no setting (SC22c open) | missing | SC22k |
 | Publish to a Runner (package check, channel, stage or serve, slots, bindings) | `sync/src/pages/RunnerPage.tsx`, `RunnerLinkCard.tsx`, `replication-detail/ReplicationRunnerPanel.tsx` | `workspace/src/pages/PublishForm.tsx` | built | SC22c |
 | Who runs the replication (`old`, `observe`, `runner`) and the handover | `replication-detail/ReplicationRunnerPanel.tsx` | none: no Sync scheduler stands behind a Workspace publish (SC22c) | not planned | SC22c |
@@ -102,4 +102,4 @@ Removing the standalone screens with these still `not planned` loses the feature
 
 Every `missing` and `partly` has a row in plan 33: SC20h (Build load graph), SC20k (cache-backed preview and import), SC20l (offline compile, lowered SQL and sample), SC20m (forms for model, connection and semantic files), SC20n (dashboards and reports of a project), SC20o (the decision on database-facing Build screens), SC21e (restore an earlier text), SC22f (error counts), SC22g (mapping columns from the cache), SC22h (connection test), SC22i (transform, segmenting and pipeline forms, the run login), SC22j (provisioning plan), SC22k (checks, scripts, library), SC22l (the decision on Sync's run and monitoring screens). The cache itself is SC20i (format, readers, checks) and SC20j (the paired Gateway's call that writes it: built; a Sync server's own call is not).
 
-**Audited 2026-11-12 (authoring pass 3).** Why the open rows are still open, each with its smallest design in its plan row: SC20h (column lineage needs `project show graph` run on the draft), SC20k (writing models from the cache needs a `--from-cache` mode of `project import`), SC22h (no Sync pairing: the Workspace pairs with Gateways and Runners; the Runner's slot binding test is the nearest paired call), SC22j (the planners read a live catalog: a `provisioning plan --from-cache` verb is the design), SC22k (`script test` exists as a verb; the route, the screen and the template folder are not built). SC20n's wells now offer the draft's own semantic model.
+**Audited 2026-11-12 (authoring pass 3).** Why the open rows are still open, each with its smallest design in its plan row: SC20h (built 2026-11-12: column lineage from `project show graph --columns` run on the draft, its shape read from the real tool), SC20k (built 2026-11-12: `project import --from-cache`, the route and the import form of the Catalog tab), SC22h (no Sync pairing: the Workspace pairs with Gateways and Runners; the Runner's slot binding test is the nearest paired call), SC22j (built 2026-11-12 as designed for the target side: `provisioning plan --from-cache`, the route and the Provisioning tab; the source's change-capture state is the live server's and is shown as not known), SC22k (built 2026-11-12: `script list|test --json`, the route, the template folder and the Scripts tab; the library and platform setting stays open with SC22c). SC20n's wells now offer the draft's own semantic model.

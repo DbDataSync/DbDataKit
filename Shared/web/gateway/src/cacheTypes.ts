@@ -16,6 +16,8 @@ export interface CacheSettingRow {
 }
 export interface CacheEvents {
   received: number
+  /** Changes heard about a dataset this Gateway does not serve (the producer sends `only_if_served`): nothing was cleared. Absent on a Gateway before the producers existed. */
+  ignored?: number
   cleared: number
   last_at: string | null
   last_product: string | null

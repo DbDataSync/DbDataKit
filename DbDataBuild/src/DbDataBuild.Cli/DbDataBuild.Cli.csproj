@@ -18,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <DbDataKitReference Include="Catalog.Cache" />   <!-- the catalog cache of a draft: project import reads it offline; plan 33, SC20k -->
     <DbDataKitReference Include="Cli" />
     <DbDataKitReference Include="Authoring" />   <!-- the workspace list, create, abandon and git calls, the same for every project kind; plan 22a, GP30 -->
     <DbDataKitReference Include="Monitoring" />
@@ -44,6 +45,7 @@
     <DbDataKitReference Include="Quality.Runner" />   <!-- the check evaluator, its run service and the quality state module: Build evaluates the checks of its models after a refresh; plan 23a, FQ09 -->
     <DbDataKitReference Include="Runner.Kit" />   <!-- the typed job surface: a refresh plan as a runner task; plan 28c, E01 -->
     <DbDataKitReference Include="Views" />   <!-- the loaders of dashboards and reports and their catalog check: project validate reads the dashboards/ and reports/ folders; plan 32, DBR29 -->
+    <DbDataKitReference Include="Serving.Notify" />   <!-- data.changed to the serving groups this server is paired with, after a refresh; plan 24a UC13 -->
     <DbDataKitReference Include="Lineage" />   <!-- the lineage graph and the identity of a dataset; plan 18, G05 -->
     <DbDataKitReference Include="Semantic.Cli" />   <!-- the semantic noun (describe, query, explain, members) on the server command line, over the shared Flight SQL client; plan 14a, SL22 -->
     <DbDataKitReference Include="Lineage.Cli" />   <!-- the lineage noun on the server command line; plan 18, G05 -->

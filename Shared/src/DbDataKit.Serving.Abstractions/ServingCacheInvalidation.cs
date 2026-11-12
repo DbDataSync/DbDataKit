@@ -12,7 +12,9 @@ namespace DbDataKit.Serving;
 /// <param name="Product">The product that made the change: <c>sync</c>, <c>build</c>, <c>store</c>, <c>runner</c> or what a site's own producer calls itself.</param>
 /// <param name="At">When the change was finished, as the producer says.</param>
 /// <param name="Run">The run, load or write that made it, for the audit (optional).</param>
-public sealed record DataChangedNotice(string Dataset, string Product, DateTimeOffset At, string? Run = null);
+/// <param name="OnlyIfServed">A producer that does not know what a serving group serves sends the message to every group it is paired with and sets this: a group whose lineage graph does not know the dataset then
+/// does nothing (it says <c>served: false</c>), instead of clearing its whole cache as it does for a message without it.</param>
+public sealed record DataChangedNotice(string Dataset, string Product, DateTimeOffset At, string? Run = null, bool OnlyIfServed = false);
 
 /// <summary>
 /// The <c>data.changed/1</c> message (24a UC13): a JSON object with <c>message</c>, <c>dataset</c>, <c>product</c> and optionally <c>run</c> and <c>at</c>, sent over the management channel a producer already has to the serving group (a signed
@@ -25,7 +27,7 @@ public static class DataChangedMessage
     /// <summary>The longest dataset identity or product name accepted.</summary>
     public const int MaxLength = 512;
 
-    private static readonly string[] Keys = ["message", "dataset", "product", "run", "at"];
+    private static readonly string[] Keys = ["message", "dataset", "product", "run", "at", "only_if_served"];
 
     public static string Write(DataChangedNotice notice)
     {
@@ -37,6 +39,7 @@ public static class DataChangedMessage
             ["at"] = notice.At.ToString("O", CultureInfo.InvariantCulture),
         };
         if (notice.Run is not null) json["run"] = notice.Run;
+        if (notice.OnlyIfServed) json["only_if_served"] = true;
         return json.ToJsonString();
     }
 
@@ -101,16 +104,28 @@ public static class DataChangedMessage
             return false;
         }
 
-        notice = new DataChangedNotice(dataset, product, at, run);
+        var onlyIfServed = false;
+        if (json["only_if_served"] is { } flag)
+        {
+            if (flag is not JsonValue fv || !fv.TryGetValue<bool>(out onlyIfServed))
+            {
+                problem = "`only_if_served` is true or false.";
+                return false;
+            }
+        }
+
+        notice = new DataChangedNotice(dataset, product, at, run, onlyIfServed);
         return true;
     }
 }
 
 /// <summary>What the cache learned of the data changes (24a UC13 and the risk note of the plan: "events not arriving" must be visible, so a long time-to-live is not a silent staleness).</summary>
-public sealed record ServingCacheActivity(long Received, long Cleared, DateTimeOffset? LastAt, string? LastProduct, string? LastDataset, long Manual, DateTimeOffset? LastManualAt);
+/// <param name="Ignored">Messages that said <c>only_if_served</c> about a dataset this host does not serve: heard, and nothing cleared (counted apart from <paramref name="Received"/>).</param>
+public sealed record ServingCacheActivity(long Received, long Cleared, DateTimeOffset? LastAt, string? LastProduct, string? LastDataset, long Manual, DateTimeOffset? LastManualAt, long Ignored = 0);
 
 /// <summary>What one data change did: the cache datasets it reached and how many entries went. <see cref="Datasets"/> is null when the notice named something the host cannot map, so the whole cache was cleared.</summary>
-public sealed record DataChangedOutcome(IReadOnlyList<string>? Datasets, int Removed, bool Everything);
+/// <param name="Ignored">The notice said <c>only_if_served</c> and the host does not serve the dataset: nothing was cleared.</param>
+public sealed record DataChangedOutcome(IReadOnlyList<string>? Datasets, int Removed, bool Everything, bool Ignored = false);
 
 /// <summary>
 /// The group's shared record of the epochs of the datasets (24a UC14, owner default: a state module that holds only a per-dataset epoch, never a row of data). Every instance bumps it when it clears a dataset and reads it
@@ -143,7 +158,7 @@ public sealed class ServingCacheInvalidator(IServingCache cache, Func<string, IR
     private readonly TimeProvider _time = time ?? TimeProvider.System;
     private readonly object _gate = new();
     private readonly Dictionary<string, long> _seen = new(StringComparer.Ordinal);
-    private long _received, _cleared, _manual;
+    private long _received, _cleared, _manual, _ignored;
     private DateTimeOffset? _lastAt, _lastManualAt;
     private string? _lastProduct, _lastDataset;
     private bool _started;
@@ -152,7 +167,7 @@ public sealed class ServingCacheInvalidator(IServingCache cache, Func<string, IR
     {
         get
         {
-            lock (_gate) return new ServingCacheActivity(_received, _cleared, _lastAt, _lastProduct, _lastDataset, _manual, _lastManualAt);
+            lock (_gate) return new ServingCacheActivity(_received, _cleared, _lastAt, _lastProduct, _lastDataset, _manual, _lastManualAt, _ignored);
         }
     }
 
@@ -163,6 +178,19 @@ public sealed class ServingCacheInvalidator(IServingCache cache, Func<string, IR
     public DataChangedOutcome Apply(DataChangedNotice notice)
     {
         var datasets = resolve(notice.Dataset);
+        if (datasets is null && notice.OnlyIfServed)
+        {
+            lock (_gate)
+            {
+                _ignored++;
+                _lastAt = _time.GetUtcNow();
+                _lastProduct = notice.Product;
+                _lastDataset = notice.Dataset;
+            }
+
+            return new DataChangedOutcome(null, 0, false, Ignored: true);
+        }
+
         var removed = 0;
         if (datasets is null)
         {

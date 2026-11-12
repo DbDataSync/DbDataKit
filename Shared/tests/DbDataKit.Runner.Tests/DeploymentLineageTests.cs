@@ -139,6 +139,53 @@ public sealed class DeploymentLineageTests
         Assert.Empty(graph.WhereDeployed(Name, "staging"));
     }
 
+    [Theory, MemberData(nameof(Engines))]
+    public void The_outside_systems_a_task_reported_are_nodes_beside_its_package_once_whatever_the_reruns_and_a_dataset_line_or_a_package_that_is_gone_adds_none(string engine)
+    {
+        using var rig = new Rig(engine);
+        rig.Publish("ada", PublishMode.Serve);
+        var store = new TaskLineageStore(rig.Database);
+        var run = Guid.NewGuid();
+        // the task reads an API and writes a table and a share; a rerun says the same; a table of its own naming and a dataset identity are not outside systems
+        for (var i = 0; i < 3; i++)
+            store.Record(Name, "prod", "pull", run, ["external://http-api/crm", "crm.orders"], ["sqlserver://wh/Sales.dbo.orders", "external://sftp/exports"]);
+        store.Record("gone", "prod", "pull", run, ["external://http-api/ghost"], []);       // its package is not deployed any more
+
+        var (graph, problems) = RunnerDeploymentLineage.BuildWithProblems(rig.Database, Group, Lease);
+
+        Assert.Empty(problems);
+        var api = LineageIdentity.ExternalSystem("http-api", "crm");
+        var share = LineageIdentity.ExternalSystem("sftp", "exports");
+        Assert.Equal([api, share], graph.Nodes.Where(n => n.Kind == NodeKind.ExternalSystem).Select(n => n.Id).Order());
+        var job = LineageIdentity.SuiteObject(Group, "task", $"{Name}/pull");
+        Assert.Contains(graph.Edges, e => e.From == api && e.To == job && e.Kind == EdgeKind.Reads);
+        Assert.Contains(graph.Edges, e => e.From == job && e.To == share && e.Kind == EdgeKind.Serves && e.Detail == "wrote to");
+        Assert.Contains(graph.Edges, e => e.From == DeploymentIds.Package(Group, Kind, Name) && e.To == job && e.Kind == EdgeKind.Deploys);
+        // what the API is upstream of, as `lineage provenance` asks: the share is downstream of the API through the task
+        Assert.Contains(share, graph.Impact(api).Reached.Select(r => r.Node.Id));
+        Assert.True(graph.Node(api)!.UnknownUpstream);
+        Assert.DoesNotContain(graph.Nodes, n => n.Id.Contains("ghost", StringComparison.Ordinal));
+        Assert.Equal(graph.Fingerprint(), LineageJson.Read(LineageJson.Write(graph)).Fingerprint());      // the wire form carries the kind
+        Assert.Equal(graph.Fingerprint(), RunnerDeploymentLineage.Build(rig.Database, Group, Lease).Fingerprint());   // asking again adds nothing
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public void Tasks_whose_outside_systems_would_close_a_circle_are_named_and_left_out_not_a_failure_of_the_graph(string engine)
+    {
+        using var rig = new Rig(engine);
+        rig.Publish("ada", PublishMode.Serve);
+        var store = new TaskLineageStore(rig.Database);
+        store.Record(Name, "prod", "a", Guid.NewGuid(), ["external://queue/x"], ["external://queue/y"]);
+        store.Record(Name, "prod", "b", Guid.NewGuid(), ["external://queue/y"], ["external://queue/x"]);
+
+        var (graph, problems) = RunnerDeploymentLineage.BuildWithProblems(rig.Database, Group, Lease);
+
+        var problem = Assert.Single(problems);
+        Assert.Contains($"{Name}/b", problem);
+        Assert.Contains(graph.Nodes, n => n.Id == LineageIdentity.SuiteObject(Group, "task", $"{Name}/a"));
+        Assert.DoesNotContain(graph.Nodes, n => n.Id == LineageIdentity.SuiteObject(Group, "task", $"{Name}/b"));
+    }
+
     [Fact]
     public void A_detail_survives_its_text_with_an_error_that_has_the_separator()
     {

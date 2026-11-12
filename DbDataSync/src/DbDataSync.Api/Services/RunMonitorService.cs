@@ -24,7 +24,8 @@ public sealed class RunMonitorService(
     LogWriter logWriter,
     IHubContext<RunHub> hub,
     DbDataSync.Api.Runner.RunnerRunStreamer runnerStream,
-    ILogger<RunMonitorService> logger) : BackgroundService
+    ILogger<RunMonitorService> logger,
+    DbDataSync.Api.Management.SyncDataChanges? dataChanges = null) : BackgroundService
 {
     private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(1);
     // Wider than TickInterval so a "recently ended" run is never missed due to ordinary tick jitter —
@@ -103,6 +104,8 @@ public sealed class RunMonitorService(
                 if (run is not null)
                     DbDataKit.Telemetry.HostTelemetry.RunEnded(DbDataSyncHost.ProductName, run.RunKind.ToString(), run.Status.ToString().ToLowerInvariant(),
                         run.StartedAtUtc is { } began && run.EndedAtUtc is { } ended ? ended - began : null);   // counts and durations by outcome, never the error text (plan 22a GP28)
+                // plan 24a UC13: a run that wrote rows is a dataset that changed; the serving groups this server is paired with are told in the background
+                if (run is not null) dataChanges?.RunCompleted(run);
                 await hub.Clients.Group(runId.ToString()).SendAsync(
                     "runCompleted",
                     new { runId, status = run?.Status.ToString(), run?.RowsRead, run?.RowsWritten, run?.ErrorSummary },

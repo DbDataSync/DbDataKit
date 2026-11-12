@@ -834,6 +834,144 @@
       "if": {
         "properties": {
           "command": {
+            "const": "gateway add"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_gateway_add"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "gateway add"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_gateway_add_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "gateway list"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_gateway_list"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "gateway list"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_gateway_list_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "gateway remove"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_gateway_remove"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "gateway remove"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_gateway_remove_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "health check"
           },
           "ok": {
@@ -1294,6 +1432,52 @@
       "if": {
         "properties": {
           "command": {
+            "const": "provisioning plan"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_provisioning_plan"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "provisioning plan"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_provisioning_plan_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "script list"
           },
           "ok": {
@@ -1331,7 +1515,7 @@
       "then": {
         "properties": {
           "data": {
-            "$ref": "#/$defs/data_script_list"
+            "$ref": "#/$defs/data_script_list_partial"
           }
         }
       }
@@ -1377,7 +1561,7 @@
       "then": {
         "properties": {
           "data": {
-            "$ref": "#/$defs/data_script_test"
+            "$ref": "#/$defs/data_script_test_partial"
           }
         }
       }
@@ -2694,6 +2878,123 @@
       "type": "object",
       "additionalProperties": false
     },
+    "data_gateway_add": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "instance_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "url",
+        "instance_id"
+      ]
+    },
+    "data_gateway_add_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "instance_id": {
+          "type": "string"
+        }
+      }
+    },
+    "data_gateway_list": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gateways": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "instance_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "url",
+              "instance_id"
+            ]
+          }
+        }
+      },
+      "required": [
+        "gateways"
+      ]
+    },
+    "data_gateway_list_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gateways": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "instance_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "url",
+              "instance_id"
+            ]
+          }
+        }
+      }
+    },
+    "data_gateway_remove": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "removed": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "removed"
+      ]
+    },
+    "data_gateway_remove_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "removed": {
+          "type": "string"
+        }
+      }
+    },
     "data_health_check": {
       "type": "object",
       "additionalProperties": false,
@@ -3214,13 +3515,715 @@
       "type": "object",
       "additionalProperties": false
     },
+    "data_provisioning_plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "replication": {
+          "type": "string"
+        },
+        "cache_generated_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cache_server": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mappings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "mapping": {
+                "type": "string"
+              },
+              "source": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "connection": {
+                        "type": "string"
+                      },
+                      "table": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "connection",
+                      "table"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "target": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "connection": {
+                        "type": "string"
+                      },
+                      "table": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "connection",
+                      "table"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "source_plan": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string"
+                      },
+                      "warnings": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "steps": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "title": {
+                              "type": "string"
+                            },
+                            "command_text": {
+                              "type": "string"
+                            },
+                            "rationale": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "scope": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "title",
+                            "command_text",
+                            "rationale",
+                            "scope"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "state",
+                      "warnings",
+                      "steps"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "target_plan": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string"
+                      },
+                      "warnings": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "steps": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "title": {
+                              "type": "string"
+                            },
+                            "command_text": {
+                              "type": "string"
+                            },
+                            "rationale": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "scope": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "title",
+                            "command_text",
+                            "rationale",
+                            "scope"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "state",
+                      "warnings",
+                      "steps"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "excluded": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "mapping",
+              "source",
+              "target",
+              "source_plan",
+              "target_plan",
+              "excluded"
+            ]
+          }
+        }
+      },
+      "required": [
+        "replication",
+        "cache_generated_at",
+        "cache_server",
+        "mappings"
+      ]
+    },
+    "data_provisioning_plan_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "replication": {
+          "type": "string"
+        },
+        "cache_generated_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cache_server": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mappings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "mapping": {
+                "type": "string"
+              },
+              "source": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "connection": {
+                        "type": "string"
+                      },
+                      "table": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "connection",
+                      "table"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "target": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "connection": {
+                        "type": "string"
+                      },
+                      "table": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "connection",
+                      "table"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "source_plan": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string"
+                      },
+                      "warnings": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "steps": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "title": {
+                              "type": "string"
+                            },
+                            "command_text": {
+                              "type": "string"
+                            },
+                            "rationale": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "scope": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "title",
+                            "command_text",
+                            "rationale",
+                            "scope"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "state",
+                      "warnings",
+                      "steps"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "target_plan": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string"
+                      },
+                      "warnings": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "steps": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "title": {
+                              "type": "string"
+                            },
+                            "command_text": {
+                              "type": "string"
+                            },
+                            "rationale": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "scope": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "title",
+                            "command_text",
+                            "rationale",
+                            "scope"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "state",
+                      "warnings",
+                      "steps"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "excluded": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "mapping",
+              "source",
+              "target",
+              "source_plan",
+              "target_plan",
+              "excluded"
+            ]
+          }
+        }
+      }
+    },
     "data_script_list": {
       "type": "object",
-      "additionalProperties": false
+      "additionalProperties": false,
+      "properties": {
+        "scripts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "language": {
+                "type": "string"
+              },
+              "error": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "kind",
+              "language",
+              "error"
+            ]
+          }
+        }
+      },
+      "required": [
+        "scripts"
+      ]
+    },
+    "data_script_list_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scripts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "language": {
+                "type": "string"
+              },
+              "error": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "kind",
+              "language",
+              "error"
+            ]
+          }
+        }
+      }
     },
     "data_script_test": {
       "type": "object",
-      "additionalProperties": false
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string"
+        },
+        "cases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "input": {
+                "type": "string"
+              },
+              "output": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "note": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "input",
+              "output",
+              "note"
+            ]
+          }
+        },
+        "log": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "ok",
+        "source",
+        "cases",
+        "log",
+        "error"
+      ]
+    },
+    "data_script_test_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string"
+        },
+        "cases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "input": {
+                "type": "string"
+              },
+              "output": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "note": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "input",
+              "output",
+              "note"
+            ]
+          }
+        },
+        "log": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
     },
     "data_secret_list": {
       "type": "object",

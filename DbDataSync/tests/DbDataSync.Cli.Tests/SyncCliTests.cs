@@ -21,7 +21,7 @@ public sealed class SyncCliTests
 
     [Fact]
     public void TheNounsAreTheSuiteGrammar() =>
-        Assert.Equal(["server", "service", "cert", "script", "secret", "library", "driver", "package", "config", "state", "lineage", "health", "ui"], SyncCli.Router().Nouns.Select(n => n.Name));
+        Assert.Equal(["server", "service", "cert", "script", "provisioning", "secret", "library", "driver", "package", "config", "state", "lineage", "gateway", "health", "ui"], SyncCli.Router().Nouns.Select(n => n.Name));
 
     /// <summary>Plan 28c, E14: <c>state show</c> lists the modules Sync's state is built from, each with the version this build has, and the version a database is at once it exists.</summary>
     [Fact]
@@ -58,7 +58,7 @@ public sealed class SyncCliTests
     [Fact]
     public async Task TheCheckedInMcpToolListIsCurrent()
     {
-        var server = new McpServer(SyncCli.Router(), new McpOptions(new HashSet<string>(["secret set", "secret remove", "library validate", "server pair", "server unpair"])), SyncCli.Program, "0");
+        var server = new McpServer(SyncCli.Router(), new McpOptions(new HashSet<string>(["secret set", "secret remove", "library validate", "server pair", "server unpair", "gateway add"])), SyncCli.Program, "0");
         var reply = (await server.HandleAsync(System.Text.Json.Nodes.JsonNode.Parse("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}""")!)).Single();
         string actual = reply["result"]!.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }).Replace("\r\n", "\n") + "\n";
         if (Environment.GetEnvironmentVariable("UPDATE_GOLDEN") == "1") File.WriteAllText(McpToolsPath(), actual);

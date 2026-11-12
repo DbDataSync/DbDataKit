@@ -18,7 +18,7 @@ public static class SyncCli
     public static readonly IReadOnlySet<string> Legacy = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "tool", "update", "launcher", "internal", "version" };
 
     /// <summary>What <c>ui mcp</c> never offers: nothing that sets a secret or loads an installed library, and nothing that is long-running or interactive (<see cref="McpOptions.Always"/>).</summary>
-    private static readonly string[] NotForAgents = ["secret set", "secret remove", "secret send", "library validate", "server pair", "server unpair"];
+    private static readonly string[] NotForAgents = ["secret set", "secret remove", "secret send", "library validate", "server pair", "server unpair", "gateway add"];
 
     public static NounRouter Router(string version = "0", Func<string, string?>? environment = null)
     {
@@ -60,8 +60,12 @@ public static class SyncCli
         ]),
         new Noun("script", "The .csx scripts of the configuration",
         [
-            Forward("list", "The scripts and the slot each fills", EffectClass.OfflineOnly, "[--repo <path>]", a => ScriptCommand.RunAsync(["list", .. a])),
-            Forward("test", "Run a script against generated sample input and show what it did", EffectClass.RepoFilesOnly, "<name> [--rows <n>] [--repo <path>]", a => ScriptCommand.RunAsync(["test", .. a])),
+            new Verb("list", "The scripts and the slot each fills (--json: one JSON document, for the Workspace)", EffectClass.OfflineOnly, "[--repo <path>] [--json]", (args, context) => RunScript("list", args, context), ScriptCommand.ListSchema),
+            new Verb("test", "Run a script against generated sample input and show what it did (--json: one JSON document, for the Workspace)", EffectClass.RepoFilesOnly, "<name> [--rows <n>] [--repo <path>] [--json]", (args, context) => RunScript("test", args, context), ScriptCommand.TestSchema),
+        ]),
+        new Noun("provisioning", "What a replication needs of its two databases",
+        [
+            new Verb("plan", "Plan the create or alter of the target tables of a replication offline, from the catalog cache of the repository (--from-cache; --json: one JSON document, for the Workspace). Applying is the server's", EffectClass.OfflineOnly, "<replication> --from-cache [--repo <path>] [--json]", async (args, context) => { using var _ = ContextScope.Enter(context); return await ProvisioningCommand.RunAsync(["plan", .. args], context.Data); }, ProvisioningCommand.PlanSchema),
         ]),
         new Noun("secret", "The encrypted secret store",
         [
@@ -98,6 +102,9 @@ public static class SyncCli
         ]),
         StateNoun(),
         LineageCommand.Noun(),
+        // plan 24a UC13: the serving groups this server tells when a run wrote rows
+        DbDataKit.Serving.Notify.GatewayNoun.Create(args => SyncDataChanges.PairingsIn(DbDataSyncRoot.Resolve(args)),
+            args => SyncDataChanges.IdentityIn(DbDataSync.Core.Secrets.SecretStore.OpenInRepository(DbDataSyncRoot.Resolve(args))), "DbDataSync server", "[--repo <path>]", "repo"),
         new Noun("health", "Is a running server answering",
         [
             new Verb("check", "Exit 0 when a running DbDataSync answers, 1 when it does not (what the container's health check runs)", EffectClass.OfflineOnly, "[--url <url>] [--repo <path>]",
@@ -139,6 +146,12 @@ public static class SyncCli
             using var _ = ContextScope.Enter(context);
             return await run(args);
         }, DataSchemas.None);
+
+    private static async Task<int> RunScript(string verb, string[] args, CliContext context)
+    {
+        using var _ = ContextScope.Enter(context);
+        return await ScriptCommand.RunAsync([verb, .. args], context.Data);
+    }
 
     private static Verb Cert(string name, string summary, EffectClass effect, string usage) =>
         Forward(name, summary, effect, usage, a => Task.FromResult(CertCommand.Run([name, .. a])));
