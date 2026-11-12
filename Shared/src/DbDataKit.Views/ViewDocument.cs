@@ -63,8 +63,14 @@ public sealed record ViewDocument(
     int? MaxRows,
     bool? CoverParameters,
     string? Locale = null,
-    IReadOnlyDictionary<string, ViewLink>? LinkMap = null)
+    IReadOnlyDictionary<string, ViewLink>? LinkMap = null,
+    IReadOnlyDictionary<string, ViewGroup>? GroupMap = null)
 {
+    /// <summary>The field groups the document declares (<c>groups</c>), by name; empty when it has none.</summary>
+    public IReadOnlyDictionary<string, ViewGroup> Groups => GroupMap ?? EmptyGroups;
+
+    private static readonly IReadOnlyDictionary<string, ViewGroup> EmptyGroups = new Dictionary<string, ViewGroup>();
+
     /// <summary>The links the document declares (<c>links</c>), by name; empty when it has none.</summary>
     public IReadOnlyDictionary<string, ViewLink> Links => LinkMap ?? EmptyLinks;
 

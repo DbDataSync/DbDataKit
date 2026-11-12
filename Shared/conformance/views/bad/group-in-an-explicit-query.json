@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "kind": "dashboard",
+  "title": "Groups",
+  "groups": {
+    "period": {
+      "fields": [
+        "orders.ordered_at_year",
+        {
+          "field": "orders.ordered_at_month",
+          "format": {
+            "date": "MMM"
+          }
+        }
+      ],
+      "label": "Period",
+      "template": "{2} {1}"
+    }
+  },
+  "widgets": {
+    "w": {
+      "type": "matrix",
+      "encodings": {
+        "rows": [
+          "region"
+        ],
+        "columns": [
+          {
+            "group": "period"
+          }
+        ],
+        "values": [
+          {
+            "field": "revenue"
+          }
+        ]
+      },
+      "query": {
+        "mode": "explicit",
+        "ref": "result.assistant_1",
+        "outputs": [
+          "region",
+          "revenue"
+        ]
+      }
+    }
+  },
+  "layouts": [
+    {
+      "name": "desk",
+      "type": "reflow",
+      "default": true,
+      "grid": {
+        "columns": 12
+      },
+      "tiles": [
+        {
+          "widget": "w",
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 6
+        }
+      ]
+    }
+  ]
+}

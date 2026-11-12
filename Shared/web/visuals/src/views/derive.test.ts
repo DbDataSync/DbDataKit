@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { deriveRequest, normaliseRequestPath } from './derive'
 import type { CatalogRoles } from './derive'
 import { validateWidgets } from './widgets'
+import { Issues } from './common'
+import { checkGroups } from './groups'
 
 /** The derivation goldens shared with the .NET suite (`DbDataKit.Views.Tests`, `DeriveTests`): `Shared/conformance/views/derive`. */
 const root = join(import.meta.dirname, '../../../../conformance/views/derive')
@@ -12,9 +14,12 @@ const cases = read('cases.json') as { catalogs: Record<string, CatalogRoles>; go
 const roles = cases.catalogs.sales_catalog!
 
 const widgetOf = (c: Record<string, any>, key = 'widgets') => {
-  // the same shape check the .NET loader makes before anything is derived
-  expect(validateWidgets(c[key], c.parameters)).toEqual([])
-  return { id: 'w', raw: c[key].w as Record<string, any> }
+  // the same shape check the .NET loader makes before anything is derived, over the document's groups when the golden has them
+  const issues = new Issues()
+  const groups = c.groups === undefined ? undefined : checkGroups(c.groups, issues)
+  expect(issues.list).toEqual([])
+  expect(validateWidgets(c[key], c.parameters, 'widgets', undefined, groups)).toEqual([])
+  return { id: 'w', raw: c[key].w as Record<string, any>, groups }
 }
 
 describe('the goldens of DeriveRequest', () => {

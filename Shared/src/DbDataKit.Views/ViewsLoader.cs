@@ -26,8 +26,8 @@ public static partial class ViewsLoader
     /// <summary>The keys each part accepts, by part name. The JSON Schema files have the same keys; a test keeps them equal.</summary>
     public static readonly IReadOnlyDictionary<string, string[]> Keys = new Dictionary<string, string[]>
     {
-        ["dashboard"] = ["schemaVersion", "kind", "title", "parameters", "theme", "locale", "refresh", "kiosk", "links", "widgets", "layouts"],
-        ["report"] = ["schemaVersion", "kind", "title", "parameters", "theme", "locale", "strict", "limits", "cover", "links", "widgets", "layouts"],
+        ["dashboard"] = ["schemaVersion", "kind", "title", "parameters", "theme", "locale", "refresh", "kiosk", "links", "groups", "widgets", "layouts"],
+        ["report"] = ["schemaVersion", "kind", "title", "parameters", "theme", "locale", "strict", "limits", "cover", "links", "groups", "widgets", "layouts"],
         ["parameter"] = ["name", "type", "for", "many", "required", "default", "label"],
         ["theme"] = ["font"],
         ["widget.metric"] = ["type", "title", "label", "format", "encodings", "query"],
@@ -44,11 +44,13 @@ public static partial class ViewsLoader
         ["encodings.matrix"] = ["rows", "columns", "values", "values_on", "totals", "sort", "column_limit"],
         ["encodings.table"] = ["columns", "sort"],
         ["table_column"] = ["field", "label", "format", "align", "width", "alias", "filters", "display", "icons", "link"],
-        ["channel"] = ["field", "type", "sort", "stack", "title", "format", "alias", "filters"],
+        ["channel"] = ["field", "type", "sort", "stack", "title", "format", "alias", "filters", "group"],
+        ["group"] = ["fields", "label", "template"],
+        ["group_level"] = ["field", "format"],
         ["measure_field"] = ["field", "alias", "label", "filters", "format"],
         ["matrix_value"] = ["field", "attribute", "empty", "format", "label", "alias", "filters", "display", "icons", "many", "link"],
         ["x_level"] = ["field", "format", "sort", "title"],
-        ["matrix_axis_entry"] = ["field", "format", "sort"],
+        ["matrix_axis_entry"] = ["field", "format", "sort", "group", "show"],
         ["mark"] = ["type", "tooltip", "point"],
         ["query.derived"] = ["mode", "model", "filters", "segments", "order", "limit", "totals", "timezone", "params"],
         ["query.semantic"] = ["mode", "semantic", "params"],
@@ -98,6 +100,7 @@ public static partial class ViewsLoader
         ["widgetType"] = ["metric", "chart", "matrix", "table", "text", "image", "control", "embed", "custom"],
         ["format"] = ["catalog", "full", "compact", "percent"],
         ["align"] = ["left", "right", "center"],
+        ["show"] = ["always"],
         ["display"] = ["text", "icon", "badge"],
         ["many"] = ["mixed", "first", "last", "count", "list"],
         ["icon"] = ["circle", "dot", "check", "cross", "warning", "info", "clock", "flag", "star", "pause", "play", "stop", "lock", "unlock", "arrow-up", "arrow-down", "arrow-right", "plus", "minus", "pin", "bell", "eye", "user", "tag"],
@@ -150,6 +153,18 @@ public static partial class ViewsLoader
     }
 
     /// <summary>
+    /// The field groups of a JSON object <c>{name: {fields, label, template}}</c> (the form of the shared goldens), read as a document's <c>groups</c> are; null with the diagnostics when one is wrong.
+    /// </summary>
+    public static (IReadOnlyDictionary<string, ViewGroup>? Groups, IReadOnlyList<ConfigDiagnostic> Diagnostics) LoadGroups(string text, string file)
+    {
+        var diags = new List<ConfigDiagnostic>();
+        var root = JsonInput.ReadByExtension(text, file, diags);
+        if (root is null || diags.HasErrors()) return (null, diags);
+        var groups = new Reader(file, diags, null).ReadGroupsRoot(root);
+        return (diags.HasErrors() ? null : groups, diags);
+    }
+
+    /// <summary>
     /// Reads a dashboard or a report.
     /// </summary>
     /// <param name="text">The file's text (YAML, or JSON when the file name ends in <c>.json</c>).</param>
@@ -176,14 +191,15 @@ public static partial class ViewsLoader
     /// <param name="file">The file's path, which diagnostics name.</param>
     /// <param name="parameters">The names of the parameters the widgets may use (a document declares them under <c>parameters</c>).</param>
     /// <param name="targets">The parameters of the documents a drill may lead to, as for <see cref="Load"/>; null skips that check.</param>
-    public static WidgetsLoadResult LoadWidgets(string text, string file, IEnumerable<string>? parameters = null, IReadOnlyDictionary<string, IReadOnlyList<ViewParameter>>? targets = null)
+    /// <param name="groups">The field groups the widgets may name (a document declares them under <c>groups</c>); null skips the check of a group's name and leaves the widgets without groups.</param>
+    public static WidgetsLoadResult LoadWidgets(string text, string file, IEnumerable<string>? parameters = null, IReadOnlyDictionary<string, IReadOnlyList<ViewParameter>>? targets = null, IReadOnlyDictionary<string, ViewGroup>? groups = null)
     {
         var diags = new List<ConfigDiagnostic>();
         var root = JsonInput.ReadByExtension(text, file, diags);
         if (root is null && !diags.HasErrors()) diags.Add(DefaultDiagnosticCatalog.Instance.Create(ViewsCodes.InvalidValue, file, 1, 1, "The file is empty.", "Write a mapping of widget id to widget."));
         if (root is null || diags.HasErrors()) return new(null, diags);
         var reader = new Reader(file, diags, targets);
-        var widgets = reader.ReadWidgetsRoot(root, parameters ?? []);
+        var widgets = reader.ReadWidgetsRoot(root, parameters ?? [], groups);
         return new(diags.HasErrors() ? null : widgets, diags);
     }
 

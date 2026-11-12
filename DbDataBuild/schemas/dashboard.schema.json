@@ -57,6 +57,9 @@
     "links": {
       "$ref": "#/$defs/core__links"
     },
+    "groups": {
+      "$ref": "#/$defs/core__groups"
+    },
     "widgets": {
       "$ref": "#/$defs/core__widgets"
     },
@@ -125,6 +128,10 @@
         },
         "filters": {
           "$ref": "#/$defs/core__measure_filters"
+        },
+        "group": {
+          "description": "A field group of the document (`groups`) used as this channel's one field, in place of `field` (plan 32 DBR52); `title` and `sort` (ascending, descending, sort_key) go with it, nothing else.",
+          "$ref": "#/$defs/core__name"
         }
       }
     },
@@ -361,6 +368,58 @@
           "date": "month-year"
         }
       ]
+    },
+    "core__group": {
+      "description": "A group of fields used as one (plan 32 section 9h, DBR52): two to four attributes, outermost first, each a field name or `{field, format}`; as a chart channel or a matrix axis it is one field with one member per combination of the levels, ordered by the levels in turn and labelled by `template` (`{1}` is the first level's text; the levels joined by a space when it is left out).",
+      "type": "object",
+      "required": [
+        "fields"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 4,
+          "items": {
+            "type": [
+              "string",
+              "object"
+            ],
+            "minLength": 1,
+            "required": [
+              "field"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "field": {
+                "$ref": "#/$defs/core__field"
+              },
+              "format": {
+                "$ref": "#/$defs/core__format"
+              }
+            }
+          }
+        },
+        "label": {
+          "$ref": "#/$defs/core__title"
+        },
+        "template": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "core__groups": {
+      "type": "object",
+      "maxProperties": 50,
+      "propertyNames": {
+        "$ref": "#/$defs/core__name"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/core__group"
+      }
     },
     "core__icon": {
       "description": "An icon of the closed vocabulary an attribute's value may show as (plan 32 DBR51): drawn from the bundled icon set, never by name from the page.",
@@ -754,32 +813,46 @@
       "maximum": 100
     },
     "core__matrix_axis": {
-      "description": "The attributes of a matrix axis, outermost first (plan 32 DBR41): each a field name, or `{field, format, sort}`: the format of the member labels at that level and the sort of the axis (the QIS view's own sort object, by sort_key, label or a measure). Only one level of an axis may carry a sort, which is the axis's sort.",
+      "description": "The attributes of a matrix axis, outermost first (plan 32 DBR41): each a field name, or `{field, format, sort}`: the format of the member labels at that level and the sort of the axis (the QIS view's own sort object, by sort_key, label or a measure). Only one level of an axis may carry a sort, which is the axis's sort. An entry may instead be a field group of the document (DBR52): `{group: name}` is the same combined field, `{group: name, show: always}` (rows only) the group's attributes shown as extra columns of every row.",
       "type": "array",
       "items": {
-        "oneOf": [
+        "type": [
+          "string",
+          "object"
+        ],
+        "minLength": 1,
+        "anyOf": [
           {
-            "$ref": "#/$defs/core__field"
-          },
-          {
-            "type": "object",
             "required": [
               "field"
-            ],
-            "additionalProperties": false,
-            "properties": {
-              "field": {
-                "$ref": "#/$defs/core__field"
-              },
-              "format": {
-                "$ref": "#/$defs/core__format"
-              },
-              "sort": {
-                "$ref": "#/$defs/view__sort"
-              }
-            }
+            ]
+          },
+          {
+            "required": [
+              "group"
+            ]
           }
-        ]
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "$ref": "#/$defs/core__field"
+          },
+          "format": {
+            "$ref": "#/$defs/core__format"
+          },
+          "sort": {
+            "$ref": "#/$defs/view__sort"
+          },
+          "group": {
+            "$ref": "#/$defs/core__name"
+          },
+          "show": {
+            "enum": [
+              "always"
+            ]
+          }
+        }
       }
     },
     "core__matrix_encodings": {

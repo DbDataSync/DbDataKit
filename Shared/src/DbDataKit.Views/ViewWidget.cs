@@ -19,8 +19,17 @@ public sealed record EncodedField(string Channel, string Field, string Path, int
 /// </summary>
 public sealed record WidgetQuery(string Form, bool Explicit, string? Model, JsonObject Raw);
 
-/// <summary>A widget: a type, its encodings and its query. <see cref="Raw"/> is the whole widget as JSON, in the order written.</summary>
-public sealed record ViewWidget(string Id, string Type, string? Title, IReadOnlyList<EncodedField> Fields, WidgetQuery? Query, JsonObject Raw, int Line, int Column);
+/// <summary>One level of a field group: the attribute, and the format its text reads under in the group's label.</summary>
+public sealed record GroupLevel(string Field, JsonNode? Format);
+
+/// <summary>
+/// A group of fields used as one (plan 32 section 9h, DBR52): two to four attributes, outermost first. As a chart channel or a matrix axis it is one field: one member per combination of the levels, ordered by the levels
+/// in turn, labelled by <see cref="Template"/> (the levels' texts, <c>{1}</c> to <c>{n}</c>; by default joined by a space).
+/// </summary>
+public sealed record ViewGroup(string Name, IReadOnlyList<GroupLevel> Levels, string? Label, string? Template, int Line);
+
+/// <summary>A widget: a type, its encodings and its query. <see cref="Raw"/> is the whole widget as JSON, in the order written. <see cref="Groups"/> are the groups of its document (null when the widget was read alone and no groups were given).</summary>
+public sealed record ViewWidget(string Id, string Type, string? Title, IReadOnlyList<EncodedField> Fields, WidgetQuery? Query, JsonObject Raw, int Line, int Column, IReadOnlyDictionary<string, ViewGroup>? Groups = null);
 
 /// <summary>The result of reading a widgets map alone: the widgets, or null when there is an error, and every diagnostic.</summary>
 public sealed class WidgetsLoadResult(IReadOnlyList<ViewWidget>? widgets, IReadOnlyList<ConfigDiagnostic> diagnostics)

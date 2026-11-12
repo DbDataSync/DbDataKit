@@ -40,6 +40,8 @@ describe('the wells of each widget type', () => {
       const c = read(g.file)
       const widget = c.widgets.w as WidgetDoc
       const inWells = new Set(wellsOf(widget.type).flatMap((spec) => wellFields(widget, spec)))
+      // a field group in a well (`@name`, DBR52) holds its levels
+      for (const name of [...inWells].filter((f) => f.startsWith('@'))) for (const level of c.groups[name.slice(1)].fields) inWells.add(typeof level === 'string' ? level : level.field)
       // a table's sort field, or the measure a nested axis's innermost level sorts by (DBR42), is asked for without being in a well
       const sortField = (widget as any).encodings?.sort?.by
       const xs = (widget as any).encodings?.x

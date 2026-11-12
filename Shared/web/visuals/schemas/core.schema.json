@@ -206,6 +206,29 @@
     "attribute_display": { "description": "How an attribute reads in a cell: text, an icon chosen by the value, or a badge.", "enum": ["text", "icon", "badge"] },
     "attribute_icons": { "description": "The icon each value of the attribute shows as (display: icon); a value the map does not list shows as text.", "type": "object", "minProperties": 1, "maxProperties": 100, "additionalProperties": { "$ref": "#/$defs/icon" } },
     "attribute_many": { "description": "What a matrix cell with several rows shows: mixed (a marker, the values in a tooltip; the default), first, last, count (the number of distinct values) or list (comma-joined, capped).", "enum": ["mixed", "first", "last", "count", "list"] },
+    "group": {
+      "description": "A group of fields used as one (plan 32 section 9h, DBR52): two to four attributes, outermost first, each a field name or `{field, format}`; as a chart channel or a matrix axis it is one field with one member per combination of the levels, ordered by the levels in turn and labelled by `template` (`{1}` is the first level's text; the levels joined by a space when it is left out).",
+      "type": "object",
+      "required": ["fields"],
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 4,
+          "items": {
+            "type": ["string", "object"],
+            "minLength": 1,
+            "required": ["field"],
+            "additionalProperties": false,
+            "properties": { "field": { "$ref": "#/$defs/field" }, "format": { "$ref": "#/$defs/format" } }
+          }
+        },
+        "label": { "$ref": "#/$defs/title" },
+        "template": { "type": "string", "minLength": 1, "maxLength": 200 }
+      }
+    },
+    "groups": { "type": "object", "maxProperties": 50, "propertyNames": { "$ref": "#/$defs/name" }, "additionalProperties": { "$ref": "#/$defs/group" } },
     "chart_channel": {
       "description": "The Vega-Lite subset's channel object (its own definitions of field, type, sort, stack and title, referenced and not copied), `format` (plan 32 DBR41: how the channel's values read on an axis, in a legend and in a tooltip) and, on a measure, `alias` and `filters` (DBR50). The subset and the QIS view (0.3) are unchanged: the format belongs to the widget vocabulary and the renderer maps it.",
       "type": "object",
@@ -218,7 +241,8 @@
         "title": { "$ref": "https://dbdatakit.invalid/visuals/vega-lite-subset.schema.json#/$defs/channel/properties/title" },
         "format": { "$ref": "#/$defs/format" },
         "alias": { "$ref": "#/$defs/alias" },
-        "filters": { "$ref": "#/$defs/measure_filters" }
+        "filters": { "$ref": "#/$defs/measure_filters" },
+        "group": { "description": "A field group of the document (`groups`) used as this channel's one field, in place of `field` (plan 32 DBR52); `title` and `sort` (ascending, descending, sort_key) go with it, nothing else.", "$ref": "#/$defs/name" }
       }
     },
     "encoding_channel": {
@@ -261,22 +285,20 @@
       }
     },
     "matrix_axis": {
-      "description": "The attributes of a matrix axis, outermost first (plan 32 DBR41): each a field name, or `{field, format, sort}`: the format of the member labels at that level and the sort of the axis (the QIS view's own sort object, by sort_key, label or a measure). Only one level of an axis may carry a sort, which is the axis's sort.",
+      "description": "The attributes of a matrix axis, outermost first (plan 32 DBR41): each a field name, or `{field, format, sort}`: the format of the member labels at that level and the sort of the axis (the QIS view's own sort object, by sort_key, label or a measure). Only one level of an axis may carry a sort, which is the axis's sort. An entry may instead be a field group of the document (DBR52): `{group: name}` is the same combined field, `{group: name, show: always}` (rows only) the group's attributes shown as extra columns of every row.",
       "type": "array",
       "items": {
-        "oneOf": [
-          { "$ref": "#/$defs/field" },
-          {
-            "type": "object",
-            "required": ["field"],
-            "additionalProperties": false,
-            "properties": {
-              "field": { "$ref": "#/$defs/field" },
-              "format": { "$ref": "#/$defs/format" },
-              "sort": { "$ref": "https://example.internal/qis/view.schema.json#/$defs/sort" }
-            }
-          }
-        ]
+        "type": ["string", "object"],
+        "minLength": 1,
+        "anyOf": [{ "required": ["field"] }, { "required": ["group"] }],
+        "additionalProperties": false,
+        "properties": {
+          "field": { "$ref": "#/$defs/field" },
+          "format": { "$ref": "#/$defs/format" },
+          "sort": { "$ref": "https://example.internal/qis/view.schema.json#/$defs/sort" },
+          "group": { "$ref": "#/$defs/name" },
+          "show": { "enum": ["always"] }
+        }
       }
     },
     "matrix_values": {

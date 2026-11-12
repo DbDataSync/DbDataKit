@@ -195,6 +195,39 @@ request cannot be asked at the cells' grain); a matrix of attributes only (`DBD-
 built; the glyphs are text characters every font has, with the cell's text as the accessible name), and a cell that names a link as a button **only when the host follows links**: `DashboardView` takes `onLink({name, widget, row, column?})`;
 without it the cell is plain text, which is what print and export draw: **the value prints, the link is dropped** (`print: hidden | normal | link` of the link says more; the PDF annotation of `print: link` is DBR37's, not built).
 
+### Field groups (DBR52)
+
+A **group** is an ordered list of attributes used as **one field**. It is declared once in the document and named where a field of an attribute role goes:
+
+```yaml
+groups:
+  period:
+    fields:
+      - orders.ordered_at_year
+      - {field: orders.ordered_at_month, format: {date: MMM}}
+    label: Period
+    template: "{2} {1}"          # the levels' texts: month, then year -> Mar 2026 (the default joins them with a space)
+widgets:
+  trend: {type: chart, mark: line, encodings: {x: {group: period, title: Period}, y: orders.net_revenue}, query: {model: sales}}
+  detail:
+    type: matrix
+    encodings:
+      rows: [customers.region, {group: details, show: always}]
+      columns: [{group: period}]
+      values: [{field: orders.net_revenue}]
+    query: {model: sales}
+```
+
+* **A group** has two to four `fields` (outermost first, each a name or `{field, format}`), an optional `label` and `template` (`{1}` to `{n}`). A group cannot hold a group; a field is listed once in it. Declared in both kinds.
+* **In a chart** (`x`, `color`, `column`, `row`; not `y` or `tooltip`) `{group: name}` is **one field**: `DeriveRequest` asks for its levels as attributes in order and, for `x`, orders by the levels in turn (calendar order whatever the
+  rows' arrival order); the answer's rows get one member key per combination, the member is labelled by the template, and the axis is **one** axis, so a line over a year-and-month group is one continuous line labelled `Mar 2026`.
+  A group channel takes a `title` and a `sort` (`ascending`, `descending`, `sort_key`) and no `field`, `format`, `alias`, `filters`, `type` or `stack`.
+* **In a matrix** an entry of `rows` or `columns` is `{group: name}` (the same combined field: one header per combination, a total rolls every level up together) or, in `rows` only, `{group: name, show: always}`: the group's attributes
+  (at or below the row's grain: an order's number, its customer) shown **as extra header columns of every row**, the request asking for them after the row's own fields. `show: drill` (a row that expands) is DBR55.
+* **Checks.** `DBD-VIEW-047`: a group the document does not declare. `DBD-VIEW-048`: a field in a group and also in another place of the same widget (an axis, a channel, a tooltip, another group), naming both places. A level that is
+  not an attribute of the catalog is the engine's `unknown_member` or `wrong_member_kind`, at the entry's `group` path. A group in a written query (`mode: explicit`) is `DBD-VIEW-007`. The shape (`DBD-106`, `DBD-104`): one level, five
+  levels, a template naming `{3}` where the group has two, a field twice, a bad level format, a group in `y`, a `field` beside a `group`, `show` on a column entry or on a plain entry.
+
 ### Sorting by a click (DBR45)
 
 A viewer may sort a table or a matrix by clicking a header, **on screen only** (the host sets `sortable` on `DashboardView`; the print and export routes never do): a click sorts ascending, a second click reverses, a third gives the
@@ -225,6 +258,7 @@ and sorts the rows loaded. The console's board sets `sortable`.
 | `DBD-VIEW-039` | a link to a dashboard, report, view, page or form the app does not have |
 | `DBD-VIEW-044` / `-045` | a name in a link's `with`, `new`, `edit` or `lock` that the target lacks; a value of the wrong type for it |
 | `DBD-VIEW-046` | `print: link` on a link shown in a dialog or panel (no address of its own) |
+| `DBD-VIEW-047` / `-048` | a field group the document does not declare; a field in a group and also in another place of the widget (DBR52) |
 | `DBD-VIEW-040` to `-043` | the derivation and the catalog check, [below](#deriving-the-request) (`-040` nothing to derive, `-041` no measure, `-042` totals twice or with nothing to roll up, `-043` a model the document does not depend on) |
 
 `ViewsLoader.LoadWidgets` (.NET) and `validateWidgets` (TypeScript) check a widgets map alone, as an assistant's answer, a portal block or a pin holds it. The shared documents and the expected code and path of each

@@ -67,6 +67,10 @@
     {
       "file": "good/dashboard-attribute-cells.json",
       "kind": "dashboard"
+    },
+    {
+      "file": "good/dashboard-groups.json",
+      "kind": "dashboard"
     }
   ],
   "bad": [
@@ -1312,6 +1316,123 @@
       "code": "DBD-106",
       "path": "widgets.w.encodings.columns[0].display",
       "line": 12,
+      "schema": false
+    },
+    {
+      "name": "group-with-one-field",
+      "file": "bad/group-with-one-field.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "groups.period.fields",
+      "line": 7,
+      "schema": true
+    },
+    {
+      "name": "group-with-five-fields",
+      "file": "bad/group-with-five-fields.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "groups.period.fields",
+      "line": 7,
+      "schema": true
+    },
+    {
+      "name": "group-unknown-key",
+      "file": "bad/group-unknown-key.json",
+      "as": "dashboard",
+      "code": "DBD-104",
+      "path": "groups.period.colour",
+      "line": 11,
+      "schema": true
+    },
+    {
+      "name": "group-template-names-a-missing-level",
+      "file": "bad/group-template-names-a-missing-level.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "groups.period.template",
+      "line": 11,
+      "schema": false
+    },
+    {
+      "name": "group-field-listed-twice",
+      "file": "bad/group-field-listed-twice.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "groups.period.fields",
+      "line": 7,
+      "schema": false
+    },
+    {
+      "name": "group-bad-level-format",
+      "file": "bad/group-bad-level-format.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "groups.period.fields[1].format.date",
+      "line": 12,
+      "schema": false
+    },
+    {
+      "name": "group-not-declared",
+      "file": "bad/group-not-declared.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-047",
+      "path": "widgets.w.encodings.x.group",
+      "line": 26,
+      "schema": false
+    },
+    {
+      "name": "group-in-y",
+      "file": "bad/group-in-y.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.y.group",
+      "line": 27,
+      "schema": false
+    },
+    {
+      "name": "group-channel-with-a-field",
+      "file": "bad/group-channel-with-a-field.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.x.field",
+      "line": 27,
+      "schema": false
+    },
+    {
+      "name": "group-in-an-explicit-query",
+      "file": "bad/group-in-an-explicit-query.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-007",
+      "path": "widgets.w.encodings",
+      "line": 21,
+      "schema": false
+    },
+    {
+      "name": "matrix-detail-group-on-the-columns",
+      "file": "bad/matrix-detail-group-on-the-columns.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.columns[0].show",
+      "line": 30,
+      "schema": false
+    },
+    {
+      "name": "matrix-detail-group-show-drill",
+      "file": "bad/matrix-detail-group-show-drill.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.rows[1].show",
+      "line": 28,
+      "schema": true
+    },
+    {
+      "name": "matrix-show-without-a-group",
+      "file": "bad/matrix-show-without-a-group.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.rows[0].show",
+      "line": 27,
       "schema": false
     }
   ],

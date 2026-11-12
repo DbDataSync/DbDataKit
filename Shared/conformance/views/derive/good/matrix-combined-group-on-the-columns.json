@@ -1,0 +1,66 @@
+{
+  "parameters": [],
+  "groups": {
+    "period": {
+      "fields": [
+        "orders.ordered_at_year",
+        {
+          "field": "orders.ordered_at_month",
+          "format": {
+            "date": "MMM"
+          }
+        }
+      ],
+      "label": "Period",
+      "template": "{2} {1}"
+    }
+  },
+  "widgets": {
+    "w": {
+      "type": "matrix",
+      "encodings": {
+        "rows": [
+          "customers.region"
+        ],
+        "columns": [
+          {
+            "group": "period"
+          }
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenue"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "attributes": [
+        "customers.region",
+        "orders.ordered_at_year",
+        "orders.ordered_at_month"
+      ],
+      "order": [
+        [
+          "orders.ordered_at_year",
+          "asc"
+        ],
+        [
+          "orders.ordered_at_month",
+          "asc"
+        ]
+      ],
+      "limit": 10000
+    }
+  }
+}

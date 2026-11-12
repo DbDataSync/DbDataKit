@@ -171,6 +171,26 @@
     {
       "name": "table-attribute-column-with-icons-and-a-link",
       "file": "good/table-attribute-column-with-icons-and-a-link.json"
+    },
+    {
+      "name": "chart-line-over-a-group",
+      "file": "good/chart-line-over-a-group.json"
+    },
+    {
+      "name": "chart-group-as-the-color",
+      "file": "good/chart-group-as-the-color.json"
+    },
+    {
+      "name": "matrix-combined-group-on-the-columns",
+      "file": "good/matrix-combined-group-on-the-columns.json"
+    },
+    {
+      "name": "matrix-combined-group-with-a-total-row",
+      "file": "good/matrix-combined-group-with-a-total-row.json"
+    },
+    {
+      "name": "matrix-detail-group-always",
+      "file": "good/matrix-detail-group-always.json"
     }
   ],
   "refused": [
@@ -241,6 +261,14 @@
     {
       "name": "alias-and-filters-on-an-attribute",
       "file": "refused/alias-and-filters-on-an-attribute.json"
+    },
+    {
+      "name": "group-and-an-axis-name-the-same-field",
+      "file": "refused/group-and-an-axis-name-the-same-field.json"
+    },
+    {
+      "name": "group-with-a-measure-level",
+      "file": "refused/group-with-a-measure-level.json"
     }
   ]
 }

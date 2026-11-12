@@ -19,9 +19,10 @@ public static partial class ViewsLoader
 
     private sealed partial class Reader
     {
-        public List<ViewWidget>? ReadWidgetsRoot(YamlNode root, IEnumerable<string> parameters)
+        public List<ViewWidget>? ReadWidgetsRoot(YamlNode root, IEnumerable<string> parameters, IReadOnlyDictionary<string, ViewGroup>? given = null)
         {
             foreach (var p in parameters) declared.Add(p);
+            groups = given;
             return ReadWidgets(root);
         }
 
@@ -106,8 +107,19 @@ public static partial class ViewsLoader
                     Diagnostics.Add(DefaultDiagnosticCatalog.Instance.Create(ViewsCodes.BadQuery, File, f.Line, f.Column,
                         $"`{f.Field}` is an attribute among the values of a matrix, which asks for the request at the cells' grain, but the query is written out (`mode: explicit`).",
                         "Drop `mode: explicit` and let the encodings derive the query.", f.Path));
-            return new ViewWidget(id, type, title, fields, query, ToObject(map), map.Line, map.Column);
+            // a group needs the request asked for its levels, which only a derived query does
+            if (query is { Explicit: true } && UsesGroup(map))
+                Diagnostics.Add(DefaultDiagnosticCatalog.Instance.Create(ViewsCodes.BadQuery, File, map.Line, map.Column,
+                    "A field group asks for its levels as attributes, but the query is written out (`mode: explicit`).", "Drop `mode: explicit` and let the encodings derive the query.", J(path, "encodings")));
+            return new ViewWidget(id, type, title, fields, query, ToObject(map), map.Line, map.Column, groups);
         }
+
+        private static bool UsesGroup(YamlNode node) => node switch
+        {
+            YamlMapping m => m.Entries.Any(e => (e.Key.Value == "group" && e.Value is YamlScalar) || (e.Key.Value != "query" && UsesGroup(e.Value))),
+            YamlSequence q => q.Items.Any(UsesGroup),
+            _ => false,
+        };
 
         private void Computing(YamlNode at, string path) =>
             Bad(ViewsCodes.ChartNotInSubset, at, path, $"`{at switch { YamlScalar s => s.Value, _ => "this" }}` isn't allowed in a chart: it fetches data or computes a value, and a chart only says what is drawn. Computation belongs in the widget's query.",
@@ -286,6 +298,13 @@ public static partial class ViewsLoader
             if (node is YamlScalar { Value.Length: > 0 } shorthand) { fields.Add(new(channel, shorthand.Value, path, node.Line, node.Column)); return; }
             if (node is not YamlMapping m) { Bad(ViewsCodes.InvalidValue, node, path, "A channel is a field name, or a mapping with `field`, `type`, `sort`, `stack` and `title`."); return; }
             CheckKeysAt(m, Keys["channel"], "a channel", path, e => { if (!ComputingKeys.Contains(e.Key.Value)) return false; Computing(e.Key, J(path, e.Key.Value)); return true; });
+            if (m.Get("group") is not null)
+            {
+                GroupChannel(channel, m, path);
+                if (m.Get("sort") is { } gs && !(gs is YamlScalar { Value: "ascending" or "descending" or "sort_key" })) Bad(ViewsCodes.InvalidValue, gs, J(path, "sort"), "A group's `sort` is ascending, descending or sort_key: the levels give the order.");
+                if (m.Get("title") is { } gt && gt is not YamlScalar) Bad(ViewsCodes.InvalidValue, gt, J(path, "title"), "A channel's `title` is text.");
+                return;
+            }
             if (m.Get("field") is { } f && Field(f, J(path, "field"), "A channel's `field`") is { } fv)
             {
                 var entry = new EncodedField(channel, fv, J(path, "field"), f.Line, f.Column);
@@ -315,10 +334,22 @@ public static partial class ViewsLoader
                 for (var i = 0; i < list.Items.Count; i++)
                 {
                     var ip = I(J(ep, axis), i);
-                    if (list.Items[i] is YamlMapping entry)
+                    if (list.Items[i] is YamlMapping { } groupEntry && groupEntry.Get("group") is not null)
+                    {
+                        // a field group on an axis (DBR52): the same combined field, or `{group, show: always}` the details of each row
+                        CheckKeysAt(groupEntry, ["group", "show"], $"a group entry of the {axis}", ip);
+                        if (Name(groupEntry.Get("group"), J(ip, "group"), "`group`") is { } gname) GroupKnown(gname, groupEntry.Get("group")!, J(ip, "group"));
+                        if (groupEntry.Get("show") is { } show)
+                        {
+                            Choice(show, J(ip, "show"), "`show`", Choices["show"]);
+                            if (axis != "rows") Bad(ViewsCodes.InvalidValue, show, J(ip, "show"), "A group's details go with the rows: `show` is for an entry of `rows`.");
+                        }
+                    }
+                    else if (list.Items[i] is YamlMapping entry)
                     {
                         // an axis attribute with a format and a sort (DBR41): `{field, format, sort}`
                         CheckKeysAt(entry, Keys["matrix_axis_entry"], $"an entry of the {axis}", ip);
+                        if (entry.Get("show") is { } stray) Bad(ViewsCodes.InvalidValue, stray, J(ip, "show"), "`show` belongs to a group entry (`group:`).");
                         if (Required(entry, "field", ip) is { } fn && Field(fn, J(ip, "field"), "`field`") is { } ff) fields.Add(new(axis, ff, J(ip, "field"), fn.Line, fn.Column));
                         if (entry.Get("format") is { } fmt) FormatValue(fmt, J(ip, "format"));
                         if (entry.Get("sort") is { } so)

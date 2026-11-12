@@ -1,5 +1,7 @@
 import { VIEW, isObject, join, at } from './common'
 import type { Json, ViewsIssue } from './common'
+import type { GroupDef } from './groups'
+import { GROUP_CONFLICT, UNKNOWN_GROUP } from './groups'
 
 /**
  * `deriveRequest` (plan 32 section 2.3, DBR03): a widget's encodings, with the catalog's roles, become the semantic request they need. The twin of `DeriveRequest.Derive` in `DbDataKit.Views` (.NET): the two run
@@ -20,7 +22,7 @@ export type CatalogRole = 'measure' | 'attribute' | 'unknown'
 export interface ParameterBinding { request: string; document: string }
 
 /** A widget as the derivation reads it: its id, and the widget as written (a `widgets` map's entry). */
-export interface DerivableWidget { id: string; raw: Json }
+export interface DerivableWidget { id: string; raw: Json; /** The groups of the widget's document (plan 32 DBR52). */ groups?: Record<string, GroupDef> }
 
 export interface DerivedRequest {
   /** The semantic request (the envelope of `docs/semantic/query.md`), or undefined when there are diagnostics. */
@@ -57,7 +59,7 @@ export function memberProblem(roles: CatalogRoles, field: string, well: Well): {
   return null
 }
 /** An encoded field: its name, its place, the well it goes to and, for the object form (DBR50), the entry (`alias`, `filters`) and its path. */
-interface Slot { field: string; path: string; well: Well; entry?: Json; entryPath?: string }
+interface Slot { field: string; path: string; well: Well; entry?: Json; entryPath?: string; group?: string }
 
 const isString = (v: unknown): v is string => typeof v === 'string' && v.length > 0
 
@@ -98,7 +100,14 @@ export function deriveRequest(widget: DerivableWidget, roles: CatalogRoles): Der
   }
 
   const encodings = isObject(raw.encodings) ? raw.encodings : {}
-  const slots = slotsOf(type, encodings, join(wp, 'encodings'))
+  const slots = slotsOf(type, encodings, join(wp, 'encodings'), widget.groups, issue)
+  // a field is in one place of a widget when a group is involved: the group's levels are the field's place, so a second place (an axis, a channel, a tooltip, another group) is refused naming both
+  const byField = new Map<string, Slot[]>()
+  for (const sl of slots) byField.set(sl.field, [...(byField.get(sl.field) ?? []), sl])
+  for (const [field, list] of byField)
+    if (list.length > 1 && list.some((sl) => sl.group !== undefined))
+      for (const again of list.slice(1).filter((sl) => sl.group !== undefined || list[0]!.group !== undefined))
+        issue(GROUP_CONFLICT, again.path, `${field} is in two places of the widget (${list[0]!.path} and ${again.path}), and one of them is a group: a field is in one place.`)
   const measures: { name: string; node: unknown }[] = []
   const attributes: string[] = []
 
@@ -152,6 +161,11 @@ export function deriveRequest(widget: DerivableWidget, roles: CatalogRoles): Der
     order.forEach((_, i) => origins.set(`query.order[${i}]`, `${wp}.query.order[${i}]`))
   } else if (type === 'chart' && Array.isArray(encodings.x) && encodings.x.length > 1) {
     order = nestedOrder(encodings.x, join(join(wp, 'encodings'), 'x'), origins, place, issue)
+  } else if (type === 'chart' && isObject(encodings.x) && encodings.x.group !== undefined) {
+    // a group on a chart's `x` (DBR52): its levels in turn, so a line over year and month is in calendar order whatever order the rows arrive in
+    order = groupOrder(slots.filter((sl) => sl.group !== undefined && sl.path === `${join(join(wp, 'encodings'), 'x')}.group`), encodings.x.sort === 'descending', origins)
+  } else if (type === 'matrix' && slots.some((sl) => sl.group !== undefined && (sl.path.includes('.rows[') || sl.path.includes('.columns[')))) {
+    order = groupOrder(slots.filter((sl) => sl.group !== undefined), false, origins)
   } else if (type === 'table' && isObject(encodings.sort) && isString(encodings.sort.by)) {
     const sortField = encodings.sort.by
     const direction = typeof encodings.sort.dir === 'string' ? encodings.sort.dir : 'asc'
@@ -163,7 +177,7 @@ export function deriveRequest(widget: DerivableWidget, roles: CatalogRoles): Der
 
   // ---- totals ----
   let totals: Json | undefined
-  if (type === 'matrix') totals = matrixTotals(encodings, (n) => roleOf(roles, n) === 'measure' || measures.some((m) => m.name === n), cellAttributes(encodings), wp, query, issue)
+  if (type === 'matrix') totals = matrixTotals(encodings, widget.groups, (n) => roleOf(roles, n) === 'measure' || measures.some((m) => m.name === n), cellAttributes(encodings), wp, query, issue)
   else if (isObject(query.totals)) {
     totals = structuredClone(query.totals)
     if (totals.subtotal_by === undefined && attributes.length > 0) totals = { subtotal_by: [...attributes], ...totals }
@@ -194,10 +208,19 @@ export function deriveRequest(widget: DerivableWidget, roles: CatalogRoles): Der
 
 // ---- the fields of each widget type, in the fixed order ----
 
-function slotsOf(type: string, encodings: Json, path: string): Slot[] {
+function slotsOf(type: string, encodings: Json, path: string, groups: Record<string, GroupDef> | undefined, refuse: (code: string, path: string, message: string) => void): Slot[] {
   const slots: Slot[] = []
+  // a field group in a channel or an axis (DBR52): its levels, outermost first, are the attributes it asks for
+  const group = (node: unknown, p: string): boolean => {
+    if (!isObject(node) || typeof node.group !== 'string') return false
+    const def = groups?.[node.group]
+    if (!def) { refuse(UNKNOWN_GROUP, `${p}.group`, `\`${node.group}\` is not a group of this document.`); return true }
+    for (const level of def.levels) slots.push({ field: level.field, path: `${p}.group`, well: 'attribute', group: node.group })
+    return true
+  }
   // a field name, or the object form (DBR50): `{field, alias, label, filters, format}` where a measure goes
   const entry = (node: unknown, p: string, well: Well) => {
+    if (group(node, p)) return
     if (isString(node)) slots.push({ field: node, path: p, well })
     else if (isObject(node) && isString(node.field)) slots.push({ field: node.field, path: join(p, 'field'), well, entry: node, entryPath: p })
   }
@@ -230,6 +253,29 @@ function slotsOf(type: string, encodings: Json, path: string): Slot[] {
       break
   }
   return slots
+}
+
+/** The fields of a matrix axis in order, a group expanded to its levels (DBR52); the twin of `DeriveRequest.AxisFields`. */
+export function axisFields(encodings: Json, axis: string, groups: Record<string, GroupDef> | undefined): string[] {
+  const list = encodings[axis]
+  if (!Array.isArray(list)) return []
+  const out: string[] = []
+  for (const n of list) {
+    if (isObject(n) && typeof n.group === 'string') { for (const l of groups?.[n.group]?.levels ?? []) out.push(l.field) }
+    else out.push(isObject(n) ? String(n.field ?? '') : String(n ?? ''))
+  }
+  return [...new Set(out)]
+}
+
+/** The `order` of the group levels a widget's slots hold, each level ascending (descending when asked). */
+function groupOrder(slots: Slot[], descending: boolean, origins: Map<string, string>): unknown[] | undefined {
+  const order: unknown[][] = []
+  for (const slot of slots) {
+    if (order.some((o) => o[0] === slot.field)) continue
+    origins.set(`query.order[${order.length}]`, slot.path)
+    order.push([slot.field, descending ? 'desc' : 'asc'])
+  }
+  return order.length > 0 ? order : undefined
 }
 
 // ---- a nested axis's order (DBR42) ----
@@ -277,10 +323,8 @@ export function cellAttributes(encodings: Json): string[] {
   return [...new Set(list.filter((a) => a.length > 0 && !onAxes.has(a)))]
 }
 
-function matrixTotals(encodings: Json, isMeasure: (name: string) => boolean, cellAttrs: string[], wp: string, query: Json, issue: (code: string, path: string, message: string) => void): Json | undefined {
-  // an axis entry is a field name or `{field, format, sort}` (DBR41)
-  const entryField = (n: unknown): string => (isObject(n) ? String(n.field ?? '') : String(n ?? ''))
-  const axis = (name: string): string[] => [...new Set(Array.isArray(encodings[name]) ? (encodings[name] as unknown[]).map(entryField) : [])]
+function matrixTotals(encodings: Json, groups: Record<string, GroupDef> | undefined, isMeasure: (name: string) => boolean, cellAttrs: string[], wp: string, query: Json, issue: (code: string, path: string, message: string) => void): Json | undefined {
+  const axis = (name: string): string[] => axisFields(encodings, name, groups)
   const rows = axis('rows')
   const columns = axis('columns')
   const totalsOf = isObject(encodings.totals) ? encodings.totals : {}

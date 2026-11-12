@@ -4,6 +4,8 @@ import {
 } from './common'
 import type { Json, ViewsIssue } from './common'
 import { checkFormat } from './format'
+import { UNKNOWN_GROUP, unknownGroup } from './groups'
+import type { GroupDef } from './groups'
 import { isLinkName, readLinkValues } from './links'
 import type { LinkValue } from './links'
 import coreSchema from '../../schemas/core.schema.json'
@@ -47,6 +49,8 @@ export interface Context {
   kind?: 'dashboard' | 'report'; declared: Set<string>; targets?: Record<string, DrillTarget[]>; widgetIds: Set<string> | null
   /** The `params` of the widget being read, which the markers in the filters of its encoded measures are mapped through. */
   queryParams?: Json
+  /** The groups the document declares, by name (plan 32 DBR52); undefined when widgets are read alone with none, which skips the check of a group's name. */
+  groups?: Record<string, GroupDef>
   /** The links the widgets name (`on_click`), collected for the document to resolve once it has read `links`. */
   clickRefs?: { name: string; path: string }[]
 }
@@ -55,9 +59,9 @@ export interface Context {
  * The shape check of a widgets map alone: the same checks a document runs on its `widgets`, for a map an assistant's answer, a portal block or a pin holds. `parameters` are the names the widgets may use.
  * What needs the catalog (an encoded field the model lacks) is the engine's to say at publish.
  */
-export function validateWidgets(widgets: unknown, parameters: string[] = [], base = 'widgets', targets?: Record<string, DrillTarget[]>): ViewsIssue[] {
+export function validateWidgets(widgets: unknown, parameters: string[] = [], base = 'widgets', targets?: Record<string, DrillTarget[]>, groups?: Record<string, GroupDef>): ViewsIssue[] {
   const issues = new Issues()
-  checkWidgets(widgets, { declared: new Set(parameters), widgetIds: null, targets }, issues, base)
+  checkWidgets(widgets, { declared: new Set(parameters), widgetIds: null, targets, groups }, issues, base)
   return issues.list
 }
 
@@ -80,6 +84,10 @@ export function checkWidgets(raw: unknown, context: Context, issues: Issues, bas
 /** An encoded field; `alias` and `filtered` are those of its object form (DBR50): the output of the field is its alias. */
 interface Encoded { channel: string; field: string; path: string; alias?: string; filtered?: boolean }
 const outputOf = (f: Encoded) => f.alias ?? f.field
+
+/** Whether a widget's encodings name a group anywhere (`{group: name}`). */
+const usesGroup = (node: unknown): boolean =>
+  Array.isArray(node) ? node.some(usesGroup) : isObject(node) ? Object.entries(node).some(([k, v]) => (k === 'group' && typeof v === 'string') || (k !== 'query' && usesGroup(v))) : false
 
 const DISPLAYS = ['text', 'icon', 'badge']
 const MANY = ['mixed', 'first', 'last', 'count', 'list']
@@ -133,6 +141,13 @@ function checkWidget(id: string, raw: unknown, path: string, context: Context, i
         const list = encodings?.[axis]
         if (Array.isArray(list)) list.forEach((f, i) => {
           if (typeof f === 'string') fields.push({ channel: axis, field: f, path: at(join(ep, axis), i) })
+          else if (isObject(f) && f.group !== undefined) {
+            // a field group on an axis (DBR52): the same combined field, or `{group, show: always}` the details of each row
+            const gp = at(join(ep, axis), i)
+            for (const key of Object.keys(f)) if (!['group', 'show'].includes(key)) issues.add('DBD-104', join(gp, key), `Unknown key \`${key}\` in a group entry of the ${axis}.`)
+            if (typeof f.group === 'string' && NAME.test(f.group) && context.groups !== undefined && context.groups[f.group] === undefined) issues.add(UNKNOWN_GROUP, join(gp, 'group'), unknownGroup(f.group, context.groups))
+            if (f.show !== undefined && axis !== 'rows') issues.add('DBD-106', join(gp, 'show'), "A group's details go with the rows: `show` is for an entry of `rows`.")
+          } else if (isObject(f) && f.show !== undefined) issues.add('DBD-106', join(at(join(ep, axis), i), 'show'), '`show` belongs to a group entry (`group:`).')
           else if (isObject(f) && typeof f.field === 'string') fields.push({ channel: axis, field: f.field, path: join(at(join(ep, axis), i), 'field') })
         })
         if (Array.isArray(list)) {
@@ -187,6 +202,8 @@ function checkWidget(id: string, raw: unknown, path: string, context: Context, i
       if (query.explicit && type === 'matrix')
         for (const f of fields.filter((f) => f.channel === 'values' && f.path.endsWith('.attribute')))
           issues.add(VIEW('007'), f.path, `\`${f.field}\` is an attribute among the values of a matrix, which asks for the request at the cells' grain, but the query is written out (\`mode: explicit\`).`)
+      if (query.explicit && usesGroup(raw))
+        issues.add(VIEW('007'), join(path, 'encodings'), 'A field group asks for its levels as attributes, but the query is written out (`mode: explicit`).')
       if (query.explicit)
         for (const f of fields.filter((f) => f.filtered))
           issues.add(VIEW('007'), f.path, `\`${f.field}\` carries \`filters\`, but the query is written out (\`mode: explicit\`) and says its own measures.`)
@@ -286,12 +303,24 @@ function chart(raw: Json, path: string, fields: Encoded[], context: Context, iss
       issues.add('DBD-106', join(ep, 'color'), 'A chart with several measures on `y` has no `color`: the series are the colors.')
     for (const [item, p] of items) {
       if (typeof item === 'string' && item.length > 0) fields.push({ channel, field: item, path: p })
-      else if (isObject(item)) {
+      else if (isObject(item) && item.group !== undefined) {
+        run(channelCheck, item, { kind: 'channel' }, p, issues)
+        groupChannel(channel, item, p, context, issues)
+      } else if (isObject(item)) {
         run(channelCheck, item, { kind: 'channel' }, p, issues)
         if (typeof item.field === 'string' && item.field.length > 0) fields.push(measureOptions(item, p, { channel, field: item.field, path: join(p, 'field') }, context, issues))
       } else issues.add('DBD-106', p, 'A channel is a field name, or a mapping with `field`, `type`, `sort`, `stack` and `title`.')
     }
   }
+}
+
+/** A chart channel that is a field group (`{group: name}` with a `title` and a `sort`, plan 32 DBR52): one field made of the group's levels; as `ViewsLoader.GroupChannel` reads it. */
+function groupChannel(channel: string, item: Json, p: string, context: Context, issues: Issues): void {
+  if (channel === 'y' || channel === 'tooltip') issues.add('DBD-106', join(p, 'group'), `A group is a set of attributes: it goes in \`x\`, \`color\`, \`column\` or \`row\`, not \`${channel}\`.`)
+  if (item.field !== undefined) issues.add('DBD-106', join(p, 'field'), 'A channel is a field or a group, not both.')
+  for (const bad of ['format', 'alias', 'filters', 'type', 'stack']) if (item[bad] !== undefined) issues.add('DBD-106', join(p, bad), `\`${bad}\` is not for a group: the group's own \`template\` and the levels' formats say how it reads.`)
+  if (item.sort !== undefined && !(typeof item.sort === 'string' && ['ascending', 'descending', 'sort_key'].includes(item.sort))) issues.add('DBD-106', join(p, 'sort'), "A group's `sort` is ascending, descending or sort_key: the levels give the order.")
+  if (typeof item.group === 'string' && NAME.test(item.group) && context.groups !== undefined && context.groups[item.group] === undefined) issues.add(UNKNOWN_GROUP, join(p, 'group'), unknownGroup(item.group, context.groups))
 }
 
 /**
