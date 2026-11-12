@@ -71,6 +71,18 @@ internal static class ServerLineage
     /// </summary>
     public static async Task<(LineageGraph Graph, List<string> Problems)> MergedAsync(string directory, string? only, CancellationToken token, string? instanceId = null)
     {
+        var (graph, problems, _) = await MergedWithRunsAsync(directory, only, token, instanceId, copy: null);
+        return (graph, problems);
+    }
+
+    /// <summary>
+    /// <see cref="MergedAsync"/> and the runs along its edges (plan 18, G06b): when the server holds a copy of the projects' tracking tables (<paramref name="copy"/>, plan 28c E16), the last run of each model's load is read from the copy's
+    /// <c>run_log</c> (no connection to a target is made) and laid along the load edges and the column edges into the model (<see cref="BuildLineage.Runs"/>). A connection whose tracking is not copied has no runs, and a project that cannot be read
+    /// is left out as before.
+    /// </summary>
+    public static async Task<(LineageGraph Graph, List<string> Problems, List<EdgeRun> Runs)> MergedWithRunsAsync(string directory, string? only, CancellationToken token, string? instanceId, DbDataKit.Tracking.Build.BuildTrackingStore? copy)
+    {
+        var runs = new List<EdgeRun>();
         var problems = new List<string>();
         var projects = new ProjectsFile(directory);
         var chosen = projects.All().Where(p => only is null || p.Id == only).OrderBy(p => p.Id, StringComparer.Ordinal).ToList();
@@ -80,14 +92,33 @@ internal static class ServerLineage
         {
             var root = projects.RootOf(project);
             if (!File.Exists(Path.Combine(root, "dbdatabuild.yml"))) { problems.Add($"Project '{project.Id}' is left out: it has no files at {root} (a remote project that was never cloned?)."); continue; }
-            try { var context = ProjectContext.Load(root); graphs.Add(BuildLineage.Design(context, BuildLineage.IdentityOf(context.Config, environment), instanceId ?? "local")); }
+            try
+            {
+                var context = ProjectContext.Load(root);
+                var design = BuildLineage.Design(context, BuildLineage.IdentityOf(context.Config, environment), instanceId ?? "local");
+                graphs.Add(design);
+                if (copy is not null) runs.AddRange(RunsFromCopy(root, context, design, copy, environment));
+            }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // the type says what went wrong and not the message, which can quote a value
                 problems.Add($"Project '{project.Id}' is left out: its lineage could not be built ({ex.GetType().Name}). `dbdatabuild project compile --project {root}` shows what is wrong with it.");
             }
         }
-        return (graphs.Count == 0 ? LineageGraph.Empty : LineageGraph.Merge(graphs), problems);
+        return (graphs.Count == 0 ? LineageGraph.Empty : LineageGraph.Merge(graphs), problems, runs);
+    }
+
+    /// <summary>The last loads of each tracked connection of the project, from the copy of its <c>run_log</c>, laid along the project's edges.</summary>
+    private static IEnumerable<EdgeRun> RunsFromCopy(string root, ProjectContext context, LineageGraph design, DbDataKit.Tracking.Build.BuildTrackingStore copy, Func<string, string?> environment)
+    {
+        var hooks = DbDataBuild.Models.HookEvents.All.Select(e => e.Name).ToList();
+        var identityOf = BuildLineage.IdentityOf(context.Config, environment);
+        foreach (var (connection, scope, login) in BuildTrackedConnections.Of(root, null, environment))
+        {
+            var documents = copy.Rows(DbDataBuild.Execution.BuildTrackingIdentity.For(login, scope), "run_log").Select(r => r.Document).ToList();
+            if (documents.Count == 0) continue;
+            foreach (var run in BuildLineage.Runs(design, context, connection, identityOf(connection), DbDataBuild.Execution.AuditLog.LastLoadsFromCopy(documents, hooks))) yield return run;
+        }
     }
 
     /// <summary>The logins the server stores (when it has a secret store; one is never made for this) over the process's environment.</summary>
