@@ -35,6 +35,8 @@ Two guardrails already hold **outside the model**, as the design wants: a Build 
 
 `Shared/src/DbDataKit.Agents` is the agent loop on `Microsoft.Extensions.AI` with no provider, host or screen (its README describes each piece). Built: the loop and the tools bound to command specs (AG03), prompting per action (AG07), limits and cost (AG08), the `agent/1` and `agent-policy/1` readers and `agent check` (AG09), context assembly, bound knowledge, the model's space, skills and model fallback (see the rows of plan 27a). Tested with a scripted fake model; nothing here calls a provider, and no host runs it yet (the back-end agent, AG14, waits for its host and the `agents` module).
 
+**Dashboards and reports** (plan 32 DBR20): `ViewDraftTools` offers `views_validate`, `dashboard_draft`, `report_draft`, `layout_add` and `view_pin` over `DbDataKit.Views`' strict loaders and catalog check; a draft is saved only as the person's own user document and only after the person approves (each time, after a check that spares them a draft that would be refused). The same five are tools of the Gateway's `mcp` module ([serving-layer.md](serving-layer.md)), the drafts waiting for a person there. No console agent offers them yet: the console holds no user-document store (it lives in a serving group), so a host adapter through the relay is what is missing.
+
 ## The console hosts back-end agents (plan 27a AG14 to AG17, AG29 to AG32)
 
 The console runs `DbDataKit.Agents` for back-end agents (`ConsoleAgents`, `AgentsController`, the page `Agents` of the console). What a person can do there today:

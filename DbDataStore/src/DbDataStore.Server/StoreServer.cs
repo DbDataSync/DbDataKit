@@ -61,7 +61,7 @@ public static class StoreServer
         // plan 24a UC13: an applied write tells the serving groups this server is paired with which entities changed, signed as the server; no pairing, nothing sent
         var dataChanges = StoreDataChanges.Create(settings.Directory, storeConnections, log, notifyOptions);
         builder.Services.AddSingleton(dataChanges);
-        builder.Services.AddHostedService(_ => new StoreDraftSweeper(settings.Directory, storeConnections, new DbDataKit.State.NotificationFeedStore(state, StoreState.ServiceId), previews, log));
+        builder.Services.AddHostedService(_ => new StoreDraftSweeper(settings.Directory, storeConnections, new DbDataKit.State.NotificationFeedStore(state, StoreState.ServiceId), previews, () => PreviewSettings.Load(settings.ServerYaml), log));
 
         var app = builder.Build();
         app.UseManagementApiVersion();
@@ -81,6 +81,7 @@ public static class StoreServer
         app.UseScopedTokens();
         app.UsePublishedModels(settings.Directory);
         Map(app, instanceId);
+        StoreNotifications.Map(app, new DbDataKit.State.NotificationFeedStore(state, StoreState.ServiceId));
         StoreLineage.Map(app, settings.Directory, instanceId, new StoreConnections(settings.Directory));
         StoreModels.Map(app, settings.Directory);
         StoreModelHistory.Map(app, settings.Directory);

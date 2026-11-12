@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.ReportCatalogs</RootNamespace>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <PackageId>DbDataKit.ReportCatalogs.Runner</PackageId>
+    <Description>The runner side of the report catalogs (plan 32 RC02): the system package report-catalogs whose task read reads each external catalog on a schedule and publishes a report-catalog/1 snapshot per channel when it changed.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.ReportCatalogs\DbDataKit.ReportCatalogs.csproj" />
+    <ProjectReference Include="..\DbDataKit.Runner\DbDataKit.Runner.csproj" />
+  </ItemGroup>
+</Project>

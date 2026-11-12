@@ -123,6 +123,7 @@
     <Project Path="src/DbDataKit.Views/DbDataKit.Views.csproj" />
     <Project Path="src/DbDataKit.Views.Export/DbDataKit.Views.Export.csproj" />
     <Project Path="src/DbDataKit.ReportCatalogs/DbDataKit.ReportCatalogs.csproj" />
+    <Project Path="src/DbDataKit.ReportCatalogs.Runner/DbDataKit.ReportCatalogs.Runner.csproj" />
     <Project Path="src/DbDataKit.Views.Hosting/DbDataKit.Views.Hosting.csproj" />
     <Project Path="src/DbDataKit.Web/DbDataKit.Web.csproj" />
   </Folder>

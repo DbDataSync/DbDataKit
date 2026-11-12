@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
-import { ErrorBanner, Link, useIsAdmin } from '@dbdatakit/shell'
+import { ErrorBanner, Link, useIsAdmin, useModule } from '@dbdatakit/shell'
 import { runnerApi, type ActivationAnswer, type ChannelHead, type DefinitionDetail, type StagingInfo } from '../api'
 import { activationBody, headText, needsAnyway, stagingRows } from '../model'
 import { RunnerShell } from '../RunnerShell'
@@ -12,6 +12,8 @@ import { PostureCard } from './PostureCard'
 import { PublishingSettings } from './PublishingSettings'
 import { PublishFromFiles } from './PublishFromFiles'
 import { PruneDialog } from './PruneDialog'
+import { PromoteDialog } from './PromoteDialog'
+import { hostedServer } from '../promote'
 
 /**
  * The activation of a staged version. When the progress migration the runner ran as a dry run would lose something, the dialog lists the losses and the person confirms them: the runner takes the confirmation only with the same list echoed back. When
@@ -61,9 +63,12 @@ type Pending =
   | { kind: 'rollback' | 'retire'; head: ChannelHead }
   | { kind: 'switch'; head: ChannelHead; version: number }
   | { kind: 'prune' }
+  | { kind: 'promote'; channel?: string; version?: number }
 
 function PackageDetail({ detail, isAdmin }: { detail: DefinitionDetail; isAdmin: boolean }) {
   const client = useQueryClient()
+  // promoting to another runner is the console's: its own app, standalone, has no other runner to reach (plan 30 PB06)
+  const here = hostedServer(useModule().apiBase)
   const [pending, setPending] = useState<Pending | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const refresh = () => client.invalidateQueries({ queryKey: ['runner'] })
@@ -88,6 +93,7 @@ function PackageDetail({ detail, isAdmin }: { detail: DefinitionDetail; isAdmin:
                 <div className="card-title">{head.channel}: <span data-testid="runner-channel-heads">{headText(head)}</span></div>
                 {isAdmin && (
                   <span className="row" style={{ gap: 8 }}>
+                    {here !== null && head.active !== null && <button type="button" className="btn btn-sm" onClick={() => setPending({ kind: 'promote', channel: head.channel, version: head.active ?? undefined })} data-testid="runner-promote">Promote to another runner</button>}
                     {head.previous !== null && <button type="button" className="btn btn-sm" onClick={() => setPending({ kind: 'rollback', head })} data-testid="runner-rollback">Roll back</button>}
                     {head.active !== null && <button type="button" className="btn btn-sm" onClick={() => setPending({ kind: 'retire', head })} data-testid="runner-retire">Retire</button>}
                   </span>
@@ -131,6 +137,7 @@ function PackageDetail({ detail, isAdmin }: { detail: DefinitionDetail; isAdmin:
               {isAdmin && detail.channels.filter((h) => h.active !== v.version).map((head) => (
                 <button key={head.channel} type="button" className="btn btn-sm" onClick={() => setPending({ kind: 'switch', head, version: v.version })} data-testid="runner-switch">Serve on {head.channel}</button>
               ))}
+              {isAdmin && here !== null && <button type="button" className="btn btn-sm" onClick={() => setPending({ kind: 'promote', version: v.version })} data-testid="runner-promote-version-button">Promote</button>}
             </span>
           </div>
         ))}
@@ -148,6 +155,7 @@ function PackageDetail({ detail, isAdmin }: { detail: DefinitionDetail; isAdmin:
       {pending?.kind === 'activate' && <ActivateDialog name={detail.name} staging={pending.staging} active={pending.active} onDone={done} onCancel={() => setPending(null)} />}
       {pending?.kind === 'rollback' && <ConfirmDialog label="Roll back" text={`Serve version ${pending.head.previous} again on ${pending.head.channel}; the progress is put back as it was.`} go={() => runnerApi.rollback(detail.name, expected(pending.head))} onCancel={() => setPending(null)} onDone={done} />}
       {pending?.kind === 'retire' && <ConfirmDialog label="Retire" text={`Stop serving ${detail.name} on ${pending.head.channel}: its tasks leave the schedule.`} go={() => runnerApi.retire(detail.name, expected(pending.head))} onCancel={() => setPending(null)} onDone={done} />}
+      {pending?.kind === 'promote' && here !== null && <PromoteDialog here={here} name={detail.name} channels={detail.channels.map((c) => c.channel)} versions={detail.versions.map((v) => v.version)} from={pending.channel} version={pending.version} onCancel={() => setPending(null)} onDone={() => void refresh()} />}
       {pending?.kind === 'prune' && <PruneDialog name={detail.name} versions={detail.versions.map((v) => v.version)} heads={detail.channels} onCancel={() => setPending(null)} onDone={done} />}
       {pending?.kind === 'switch' && <ConfirmDialog label="Serve" text={`Serve version ${pending.version} on ${pending.head.channel}.`} go={() => runnerApi.switchTo(detail.name, { ...expected(pending.head), version: pending.version })} onCancel={() => setPending(null)} onDone={done} />}
     </div>

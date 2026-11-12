@@ -46,7 +46,16 @@ public sealed class SubscriptionRenderer(ViewsApi api, ViewsPublications publish
             var title = published.For(request.Kind).Find(request.View)?.Document.Title ?? request.View;
             var link = options?.LinkTemplate?.Replace("{kind}", Uri.EscapeDataString(request.Kind), StringComparison.Ordinal).Replace("{name}", Uri.EscapeDataString(request.View), StringComparison.Ordinal);
             var summary = request.Format == "pdf" ? $"{title}, as you are allowed to see it, is attached as a PDF." : $"The rows of {title} are attached as {request.Format.ToUpperInvariant()}.";
-            return new RenderResult.Rendered(file.Content, file.ContentType, file.FileName ?? $"{request.View}.{request.Format}", title, summary, link, notes);
+            byte[]? preview = null;
+            if (request.InlinePreview && request.Format == "pdf")
+            {
+                // the same document, layout and person, drawn once more as a picture; when it cannot be, the PDF still goes and the message says the picture is missing
+                var picture = await api.ExportAsync(who, request.Kind, request.View, ViewsApi.PngFormat, request.Layout, null, request.Parameters, null, traceId, cancellationToken).ConfigureAwait(false);
+                if (picture.Status == 200 && picture.File is { } png) preview = png.Content;
+                else notes.Add($"The preview picture could not be made ({(picture.Body as System.Text.Json.Nodes.JsonObject)?["message"] ?? $"the export answered {picture.Status}"}); the PDF is attached.");
+            }
+
+            return new RenderResult.Rendered(file.Content, file.ContentType, file.FileName ?? $"{request.View}.{request.Format}", title, summary, link, notes, preview);
         }
 
         if (answer.Status is 403 or 404 && code is "denied" or "not_found")

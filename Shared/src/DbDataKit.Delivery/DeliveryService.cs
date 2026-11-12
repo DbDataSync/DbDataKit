@@ -46,7 +46,7 @@ public sealed class DeliveryService(DeliveryStore store, PayloadStore payloads, 
             using var writer = payloads.OpenWrite(new PayloadOptions(attachment.MediaType, DeliveryModule.Name, id.ToString("D"), request.OwnerPerson, Label: attachment.Name));
             writer.Write(attachment.Content);
             writer.Complete();
-            refs.Add(new AttachmentRef(writer.Id, attachment.Name, attachment.MediaType, attachment.Content.LongLength));
+            refs.Add(new AttachmentRef(writer.Id, attachment.Name, attachment.MediaType, attachment.Content.LongLength, attachment.ContentId));
         }
 
         store.Enqueue(new NewMessage(request.Channel, request.Subject, request.Recipients, request.Text, request.Html, request.Link, refs, request.Source, request.OwnerPerson, id, request.NotBefore, release == DbDataKit.State.DefinitionStore.Production ? null : release));
@@ -160,7 +160,7 @@ public sealed class DeliveryService(DeliveryStore store, PayloadStore payloads, 
             using var reader = payloads.OpenRead(attachment.Payload);
             using var memory = new MemoryStream();
             reader.CopyTo(memory);
-            list.Add(new DeliveryAttachment(attachment.Name, attachment.MediaType, memory.ToArray()));
+            list.Add(new DeliveryAttachment(attachment.Name, attachment.MediaType, memory.ToArray(), attachment.ContentId));
         }
 
         return list;

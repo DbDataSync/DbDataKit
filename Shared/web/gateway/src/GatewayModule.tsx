@@ -15,6 +15,7 @@ import { SavedQueriesPage } from './pages/SavedQueriesPage'
 import { SecretsPage } from './pages/SecretsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { TlsPage } from './pages/TlsPage'
+import { TrustPage } from './pages/TrustPage'
 
 function EditRoute() {
   const { name = '' } = useParams()
@@ -22,7 +23,7 @@ function EditRoute() {
   return <DataSourceEditPage key={name} name={name} isNew={isNew} />
 }
 
-/** The Gateway screens as a module of a host (plan 13, P08/P09): overview, data sources, users and sign-in, the identity home it serves, the apps it publishes (AP24), certificate, activity and the history of the configuration. */
+/** The Gateway screens as a module of a host (plan 13, P08/P09): overview, data sources, users and sign-in, the identity home it serves, the apps it publishes (AP24), the publishers it trusts (PB03), certificate, activity and the history of the configuration. */
 export function GatewayModule() {
   return (
     <Routes>
@@ -37,6 +38,7 @@ export function GatewayModule() {
       <Route path="/models/:name" element={<ModelBrowserPage />} />
       <Route path="/models/:name/explore" element={<ExplorerPage />} />
       <Route path="/saved-queries" element={<SavedQueriesPage />} />
+      <Route path="/trust" element={<TrustPage />} />
       <Route path="/cache" element={<CachePage />} />
       <Route path="/tls" element={<TlsPage />} />
       <Route path="/activity" element={<ActivityPage />} />

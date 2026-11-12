@@ -9,6 +9,7 @@ using DbDataKit.Config.Yaml;
 using DbDataKit.Runner;
 using DbDataKit.Secrets;
 using DbDataKit.Secrets.Store;
+using DbDataKit.State;
 using DbDataKit.Web.Trust;
 
 namespace DbDataKit.Runner.Client;
@@ -291,6 +292,26 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to promote {package} version {version} from {from} to {to}", ct);
         var answer = JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!;
         return new ClientPromoted(package, from, to, version, (string?)answer["state"] ?? "unknown", (string?)answer["message"] ?? "");
+    }
+
+    /// <summary>
+    /// Promotes a definition from one group to another (plan 30 PB06): the same version, read from the group paired under <paramref name="fromServer"/> and published to the one paired under <paramref name="toServer"/> in the channel the request names,
+    /// by <see cref="DefinitionPromoter"/> (the signature travels with it, files the target holds are not sent again, the target's bindings are <see cref="PromoteRequest.Bindings"/> and its own checks refuse an unbound slot or a dependency that is not
+    /// active there). Reading the source is a viewer's call, writing the target is the publisher's; both pairings are this machine's. Unlike <see cref="PromoteAsync"/> (one group, from a channel to the next) the two groups number their versions on their own.
+    /// </summary>
+    public async Task<Promotion> PromoteToGroupAsync(string fromServer, string? fromCode, string toServer, string? toCode, PromoteRequest request, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var from = await OpenAsync(fromServer, fromCode, log, ct);
+        using var to = await OpenAsync(toServer, toCode, log, ct);
+        try { return await new DefinitionPromoter().PromoteAsync(new GroupLink(from), new GroupLink(to), request, log, ct); }
+        catch (DefinitionPromotionException ex) { throw new RunnerClientException(ex.Message); }
+    }
+
+    private sealed class GroupLink(Link link) : IDefinitionsLink
+    {
+        public string Name => link.Runner.Name;
+
+        public Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, HttpContent? content, CancellationToken ct) => link.SendAsync(method, "api/v1/" + path, content, ct);
     }
 
     // ---- who schedules a task (plan 28c E09); these need the Operator role of the pairing, except reading

@@ -86,6 +86,8 @@ Verbs:
       Pair this machine with a runner as a publisher, using the single-use code its administrator made with 'server pair --max-role publisher'; the runner's certificate is pinned [Repo files only (no target connection)]
   package publish <manifest.yaml> <directory> --server <name or https address> --channel <name> [--code <code>] [--stage] [--expected-version <n>] [--client-dir <directory>]
       Publish a package to a runner's API: uploads only the files the runner does not have, then publishes the version (served at once, or staged with --stage) [Target writes (data only)]
+  package promote <package> --from-server <name or https address> --server <name or https address> --channel <name> [--from-channel <name>, default prod] [--version <n>] [--stage] [--bind <slot>=<connection>[,<slot>=<connection>...]] [--from-code <code>] [--code <code>] [--client-dir <directory>]
+      Promote a package to another runner group (plan 30 PB06): the same version, read from one runner and sent by hash to another (files it has are not sent again), published there in the channel asked with its signature, which the target's trust store must trust; the slots of that channel are the target's own (--bind) and an unbound one refuses naming it [Target writes (data only)]
   package require-signatures [on|off] [--repo <server directory>]
       Show, or with on or off set, whether this runner refuses a version that is not signed (plan 30 section 6.2; the signature check itself is not built yet, so 'on' refuses every publish) [Target writes (data only)]
   package require-sandbox-run [on|off] [--repo <server directory>]

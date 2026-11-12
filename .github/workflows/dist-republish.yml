@@ -95,7 +95,7 @@ jobs:
             tag=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
               --jq '[.[] | select(.draft == false and .prerelease == false and (.tag_name | startswith("dbdatakit/v")))][0].tag_name')
             if [ -z "$tag" ] || [ "$tag" = null ]; then
-              echo "::error::No stable dbdatakit release was found; pass version=<a suite version>."
+              echo "::error::No stable release of dbdatakit was found; pass version=<a suite version>."
               exit 1
             fi
             version="${tag#dbdatakit/v}"

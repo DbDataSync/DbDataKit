@@ -31,7 +31,7 @@ public sealed partial class GatewayServerSettings(string configDirectory, Gatewa
 
     /// <summary>Top-level keys a running Gateway reads when it starts (listeners, certificates, the modules it mounts, the state it opens, the hosts it runs): a change to one takes effect at the next start.</summary>
     public static readonly IReadOnlyList<string> RestartKeys =
-        ["dataDirectory", "modules", "listen", "management", "tls", "identity", "apps", "store", "views", "rest", "state", "secrets", "compression", "worker", "hosting", "telemetry", "definitionPollSeconds"];
+        ["dataDirectory", "modules", "listen", "management", "tls", "identity", "apps", "store", "views", "mcp", "rest", "state", "secrets", "compression", "worker", "hosting", "telemetry", "definitionPollSeconds"];
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly WriteGuard _guard = new();

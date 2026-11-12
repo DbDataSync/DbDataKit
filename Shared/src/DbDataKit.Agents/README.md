@@ -55,6 +55,10 @@ Each name in `subagents:` is a tool `agent_<name>` taking a `task` and the `cont
 
 `show_view` is how an agent returns a table, a matrix or a chart: a dashboard widget and its data inline. The host passes a check (`DbDataKit.Views`'s `AgentAnswerViews.Check`: the dashboards' own widget reader and closed Vega-Lite subset, the kinds of the agent's `output:`, every encoded field a column, no address anywhere). A refusal says what is wrong so the model can correct the call. A link in the answer's text is only text; nothing is fetched.
 
+## Dashboards and reports as drafts (`ViewDraftTools`)
+
+`views_validate`, `dashboard_draft`, `report_draft`, `layout_add` and `view_pin` (plan 32 DBR20): the agent writes a `dashboard/1` or `report/1` **as data**, the host's strict loaders and catalog check judge it exactly as they judge a person's file, and a refusal comes back with the code, path and line so the draft is corrected in the loop. The host implements `IViewDraftHost` (the console or a relay adapts `DbDataKit.Views`'s `UserViewDraftService`; this library does not reference Views). `views_validate` reads and never asks. The four that store are writes of definitions that **ask every time** and carry a `Precheck` (`AgentTool.Precheck`, run by the runtime after the schema check and before the approval): a draft that would be refused is told to the model and never put to the person; a denied approval stores nothing. Tested with the scripted model in `ViewDraftTests`.
+
 ## Publishing (`AgentDefinitions`)
 
 The kinds `agent`, `skill` and `agent-policy` for plan 30's registry: validators, the agent's model slot as a slot of the version (`model:<slot>`, so a promotion with it unbound in the channel is refused naming it), `skill:` and `agent:` dependencies, formats, target types. One version per publish, the instruction files by hash, the same content again changes nothing.

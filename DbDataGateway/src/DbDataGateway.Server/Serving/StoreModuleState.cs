@@ -85,7 +85,7 @@ public sealed class GroupChangeRequests(StateDatabase database)
 }
 
 /// <summary>Who called the store module: the identity home's user, whether as an agent (a service account), and the roles the home gives them on this group.</summary>
-public sealed record StoreCaller(string UserId, string? Name, bool IsAgent, ServerRole Roles, string? Via = null)
+public sealed record StoreCaller(string UserId, string? Name, bool IsAgent, ServerRole Roles, string? Via = null, bool Interactive = false)
 {
     /// <summary>How the audit names the caller: the person, and for a call made through a trusted app, the app, its version and the approval (plan 26 AP15, AP16).</summary>
     public string? AuditName
@@ -151,7 +151,13 @@ public sealed class StoreCallers(StateDatabase state, Func<string> serverId, Ope
     /// <summary>The names of the home groups the person is in.</summary>
     public IReadOnlyList<string> GroupsOf(string userId) => [.. new HomeDirectory(state).GroupsOf(userId).Select(g => g.Name)];
 
-    public StoreCaller? Authenticate(string? authorization) => Identify(authorization) is { } user ? CallerOf(user) : null;
+    public StoreCaller? Authenticate(string? authorization) =>
+        Identify(authorization) is { } user
+            ? CallerOf(user) with { Interactive = authorization!.StartsWith("Bearer ", StringComparison.Ordinal) && !authorization[7..].Trim().StartsWith("ddk_", StringComparison.Ordinal) }
+            : null;
+
+    /// <summary>The caller an enabled home user is now, with the roles the home gives them now (a call that runs later, for a person who asked earlier, is checked again as that person), or null.</summary>
+    public StoreCaller? CallerFor(string userId) => UserOf(userId) is { } user ? CallerOf(user) : null;
 
     private StoreCaller CallerOf(UserRecord user)
     {

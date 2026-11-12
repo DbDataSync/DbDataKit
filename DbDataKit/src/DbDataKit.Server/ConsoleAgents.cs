@@ -39,7 +39,7 @@ public interface IAgentToolSource
 /// </summary>
 public sealed class ConsoleToolSource : IAgentToolSource
 {
-    private static readonly HashSet<string> NotForAgents = new(StringComparer.Ordinal) { "user", "identity", "instance", "server", "state", "runner", "secret", "health" };
+    private static readonly HashSet<string> NotForAgents = new(StringComparer.Ordinal) { "user", "identity", "instance", "server", "state", "runner", "secret", "health", "release" };
 
     public NounRouter Router() => ConsoleCli.Router();
 

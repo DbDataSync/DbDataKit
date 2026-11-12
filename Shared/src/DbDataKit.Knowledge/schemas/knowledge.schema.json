@@ -57,6 +57,7 @@
           { "required": ["semantic-model"], "properties": { "semantic-model": { "type": "string" }, "measure": { "type": "string" }, "dimension": { "type": "string" } }, "additionalProperties": false },
           { "required": ["store-model"], "properties": { "store-model": { "type": "string" }, "field": { "type": "string" } }, "additionalProperties": false },
           { "required": ["connection"], "properties": { "connection": { "type": "string" } }, "additionalProperties": false },
+          { "required": ["report-catalog"], "properties": { "report-catalog": { "type": "string" }, "item": { "type": "string" } }, "additionalProperties": false },
           { "required": ["app"], "properties": { "app": { "type": "string" } }, "additionalProperties": false },
           { "required": ["integration"], "properties": { "integration": { "type": "string" } }, "additionalProperties": false },
           { "required": ["tag"], "properties": { "tag": { "type": "string" } }, "additionalProperties": false },

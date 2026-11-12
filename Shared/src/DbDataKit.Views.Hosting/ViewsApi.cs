@@ -338,6 +338,12 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
     /// <summary>The route the page and the browser load the print bundle and the fonts from (no authentication: code and fonts, no data).</summary>
     public const string PrintAssetRoute = "/api/v1/views/print/";
 
+    /// <summary>The picture of a document's layout (<c>format=png</c>, plan 32 DBR18): the preview a subscription's email shows inline. Not in <see cref="Formats"/> (the catalog lists what a person can download); the module answers it like the PDF.</summary>
+    public const string PngFormat = "png";
+
+    /// <summary>The tallest picture, in pixels (a long report is cut here and the picture says so in a warning).</summary>
+    public const int PreviewMaxHeight = 4000;
+
     /// <summary>The formats of a download (<c>format=</c>).</summary>
     public static readonly IReadOnlyList<string> Formats = ["pdf", "csv", "xlsx", "svg"];
 
@@ -360,12 +366,12 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
             if (found.View is not { } view) return found.Refusal!;
             var chosen = format ?? "pdf";
             var more = new (string, object?)[] { ("format", chosen), ("layout", layout), ("widget", widget) };
-            if (!Formats.Contains(chosen, StringComparer.Ordinal))
-                return Refuse(who, ViewsAuditVerbs.Export, kind, view, 400, "invalid", $"`format` is `pdf`, `csv`, `xlsx` or `svg`, not `{chosen}`.", traceId, more);
+            if (!Formats.Contains(chosen, StringComparer.Ordinal) && chosen != PngFormat)
+                return Refuse(who, ViewsAuditVerbs.Export, kind, view, 400, "invalid", $"`format` is `pdf`, `csv`, `xlsx`, `svg` or `png`, not `{chosen}`.", traceId, more);
             if (chosen is "csv" or "svg" && widget is null)
                 return Refuse(who, ViewsAuditVerbs.Export, kind, view, 400, "invalid", $"`format={chosen}` is one widget's: name it with `widget=<id>` (`xlsx` alone gives every table, matrix and chart of the layout).", traceId, more);
-            if (chosen == "pdf" && widget is not null)
-                return Refuse(who, ViewsAuditVerbs.Export, kind, view, 400, "invalid", "`widget` names one widget for `csv`, `xlsx` and `svg`; a PDF is the whole layout.", traceId, more);
+            if (chosen is "pdf" or PngFormat && widget is not null)
+                return Refuse(who, ViewsAuditVerbs.Export, kind, view, 400, "invalid", "`widget` names one widget for `csv`, `xlsx` and `svg`; a PDF or a picture (`png`) is the whole layout.", traceId, more);
             if (widget is not null && view.Document.Widget(widget) is null)
                 return Refuse(who, ViewsAuditVerbs.Export, kind, view, 404, "widget_not_found", $"The {kind} '{view.Name}' has no widget '{widget}'.", traceId, more);
 
@@ -403,6 +409,17 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
                     if (svg.Warnings.Count > 0) svgHeaders["X-DbData-Export-Warnings"] = svg.Warnings.Count.ToString(CultureInfo.InvariantCulture);
                     return Finish(who, ViewsAuditVerbs.Export, kind, view.Name, view.Version, AuditEvent.Ok, svgDetail,
                         new ViewsAnswer(200, new JsonObject(), svgHeaders, new ViewsFile(bytes, "image/svg+xml", $"{view.Name}-{widget}.svg")));
+                }
+
+                if (chosen == PngFormat)
+                {
+                    var picture = await exporter.ExportPngAsync(job, PreviewMaxHeight, cancellationToken).ConfigureAwait(false);
+                    var pictureHeaders = new Dictionary<string, string>(Definition(view)) { ["X-DbData-Export-Browser"] = picture.BrowserVersion };
+                    if (picture.Warnings.Count > 0) pictureHeaders["X-DbData-Export-Warnings"] = picture.Warnings.Count.ToString(CultureInfo.InvariantCulture);
+                    AddWidgetHeaders(pictureHeaders, p.Rendered["widgets"] as JsonObject);
+                    return Finish(who, ViewsAuditVerbs.Export, kind, view.Name, view.Version, AuditEvent.Ok,
+                        Detail(traceId, ("format", "png"), ("layout", p.Layout.Name), ("bytes", picture.Png.Length), ("width", picture.Width), ("height", picture.Height), ("browser", picture.BrowserVersion), ("mode", exporter.Availability.Mode), ("warnings", picture.Warnings.Count), ("parameters", parameterNames)),
+                        new ViewsAnswer(200, new JsonObject(), pictureHeaders, new ViewsFile(picture.Png, "image/png", $"{view.Name}-{p.Layout.Name}.png")));
                 }
 
                 var result = await exporter.ExportPdfAsync(job, cancellationToken).ConfigureAwait(false);

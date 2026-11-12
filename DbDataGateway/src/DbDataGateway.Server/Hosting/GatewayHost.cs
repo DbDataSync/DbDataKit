@@ -205,7 +205,8 @@ public static class GatewayHost
                 {
                     sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataGateway.Definitions").LogWarning("The published {Kind} '{Name}' version {Version} is not served here: {Message}", kind, name, version, ex.Message);
                     views?.Module.OnProblem(kind, name, version, ex);
-                });
+                },
+                gate: GatewayVersionGate.Create(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
         });
         services.AddHostedService<DbDataGateway.Server.State.DefinitionFollowerService>();
         // the result cache (plan 24a UC12 to UC14): in memory in this instance; off for every definition that does not say so; with a group's state the instances share their clears through per-dataset epochs (no row data in the state)
@@ -258,6 +259,19 @@ public static class GatewayHost
             services.AddHostedService(sp => sp.GetRequiredService<GatewayStoreModule>());
             services.AddSingleton<IReadinessProbe>(sp => new ServingModuleReadinessProbe(sp.GetRequiredService<GatewayStoreModule>()));
         }
+        if (GatewayModules.Has(options, GatewayModules.Mcp))
+        {
+            services.AddSingleton(sp => new McpServices(sp.GetRequiredService<IOptionsMonitor<GatewayOptions>>(), sp.GetRequiredService<DbDataKit.State.StateDatabase>(), sp.GetRequiredService<SecretsRuntime>(),
+                sp.GetRequiredService<IServingServices>(), sp.GetRequiredService<SemanticModels>(), sp.GetRequiredService<PublishedEntityModels>(), sp.GetRequiredService<GatewayViewsPublishing>(), sp.GetRequiredService<HomeCallers>()));
+            services.AddSingleton<GatewayMcpModule>();
+            services.AddHostedService(sp => sp.GetRequiredService<GatewayMcpModule>());
+            services.AddSingleton<IReadinessProbe>(sp => new ServingModuleReadinessProbe(sp.GetRequiredService<GatewayMcpModule>()));
+        }
+        // the drafts of previews and channels (plan 21 CH07) live where the store module or the apps host writes them: their expiry runs when either is on
+        if (GatewayModules.Has(options, GatewayModules.Store) || GatewayModules.Has(options, GatewayModules.Apps))
+            services.AddHostedService(sp => new GatewayDraftSweeper(
+                GatewayStoreModule.ApiOf(sp.GetRequiredService<IOptionsMonitor<GatewayOptions>>(), sp.GetRequiredService<DbDataKit.State.StateDatabase>(), sp.GetRequiredService<SecretsRuntime>(), sp.GetRequiredService<PublishedEntityModels>()),
+                sp.GetRequiredService<DbDataKit.Monitoring.INotificationFeed>(), () => sp.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue.Store, sp.GetRequiredService<ILoggerFactory>().CreateLogger("Previews")));
         // saved queries and requests over REST (plan 14a SL31): a listener of its own, only when asked for
         if (GatewayModules.Has(options, GatewayModules.Feeds))
         {
@@ -271,6 +285,8 @@ public static class GatewayHost
             services.AddSingleton<GatewayViewsModule>();
             services.AddHostedService(sp => sp.GetRequiredService<GatewayViewsModule>());
             services.AddSingleton<IReadinessProbe, ViewsReadinessProbe>();
+            services.AddSingleton<GatewaySubscriptions>();   // the views-export task in process (plan 32 DBR18): idle unless this instance can export
+            services.AddHostedService(sp => sp.GetRequiredService<GatewaySubscriptions>());
         }
 
         // The shared providers: one registry, one composer, one failure model per engine. With Gateway:LogDriverErrors the providers keep the

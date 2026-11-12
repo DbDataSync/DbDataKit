@@ -190,14 +190,25 @@ public static class GatewayManagementHost
         DbDataKit.Upgrade.UpgradeSetup.MapUpgrade(app, "dbdatagateway", GatewayHost.Version, "DbDataGateway", options.Management.Port, audit, () => [.. clients.All().Select(c => new DbDataKit.Upgrade.PeerGeneration(c.Name, c.Generation))]);
         // the shared publish API's uploads (plan 30 PB02): streamed, so they are not the JSON calls below
         var definitionsApi = new DbDataGateway.Server.Management.GatewayDefinitionsManagement(state, audit);
-        app.MapMethods($"{GatewayManagement.Prefix}/artifacts/{{sha256}}", ["HEAD", "PUT"], async (string sha256, HttpContext context) =>
+        app.MapMethods($"{GatewayManagement.Prefix}/artifacts/{{sha256}}", ["HEAD", "GET", "PUT"], async (string sha256, HttpContext context) =>
         {
             var caller = new ManagementCaller(context.ManagementToken());
+            if (context.Request.Method == "GET")
+                return caller.Holds(ServerRole.Viewer) || caller.Holds(ServerRole.Publisher) ? (definitionsApi.OpenArtifact(sha256) is { } stream ? Results.Stream(stream, "application/octet-stream") : Results.NotFound()) : Results.StatusCode(StatusCodes.Status403Forbidden);
             if (context.Request.Method == "HEAD")
                 return caller.Holds(ServerRole.Viewer) || caller.Holds(ServerRole.Publisher) ? (definitionsApi.HasArtifact(sha256) ? Results.Ok() : Results.NotFound()) : Results.StatusCode(StatusCodes.Status403Forbidden);
             var result = await definitionsApi.StoreArtifactAsync(sha256, context.Request.Body, context.Request.ContentType, caller, context.RequestAborted);
             return Results.Json(result.Body, statusCode: result.Status);
         });
+        // the approvals of the mcp module, for the console's inbox (plan 27a AG33): the person the token names answers, with the module's own rules
+        if (GatewayModules.Has(options, GatewayModules.Mcp))
+            app.MapMethods($"{GatewayMcpManagement.Prefix}/{{**rest}}", ["GET", "POST"], async (HttpContext context) =>
+            {
+                using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
+                var body = context.Request.Method == "POST" ? await reader.ReadToEndAsync(context.RequestAborted) : null;
+                var result = await GatewayMcpManagement.HandleAsync(app.Services.GetRequiredService<Serving.McpServices>().Approvals, context.ManagementToken(), context.Request.Method, context.Request.Path.Value! + context.Request.QueryString, body, context.RequestAborted);
+                return Results.Json(result.Body, statusCode: result.Status);
+            });
         app.MapMethods($"{GatewayManagement.Prefix}/{{**rest}}", ["GET", "POST", "PUT", "DELETE"], async (HttpContext context) =>
         {
             var caller = new ManagementCaller(context.ManagementToken());

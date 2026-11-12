@@ -503,6 +503,55 @@ public sealed class EmbeddedRunnerTests : IDisposable
         Assert.NotEqual(HttpStatusCode.Forbidden, (await rig.Call(new HttpMethod(route.Method), path, rig.Admin, body)).Status);
     }
 
+    // ---- promotion between groups (plan 30 PB06): the embedded runner answered in this process, the other group through the relay
+
+    [Theory]
+    [MemberData(nameof(Engines))]
+    public async Task A_package_is_promoted_from_the_embedded_runner_to_another_runner_and_back_as_the_signed_in_person(string engine)
+    {
+        var rig = await Start(engine);
+        var other = new FakeRunnerGroup();
+        await using var otherServer = await PairableServer.StartAsync(product: ServerProducts.Runner, instanceId: "runner-other", map: other.Map);
+        await rig.App.Services.GetRequiredService<ConsoleInstances>().PairAsync(otherServer.Url, otherServer.NewCodeWith(ServerRole.Admin | ServerRole.Operator), "Other runner", default);
+
+        // a version with a file is served on dev of the embedded runner
+        var bytes = System.Text.Encoding.UTF8.GetBytes("promoted bytes");
+        var sha = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
+        Assert.Equal(HttpStatusCode.OK, (await rig.Call(HttpMethod.Put, "/relay/console-runner/api/v1/artifacts/" + sha, rig.Admin, raw: bytes)).Status);
+        var manifest = Manifest("etl3", [("one", null)]);
+        var published = await rig.Call(HttpMethod.Put, "/relay/console-runner/api/v1/definitions/integration/etl3", rig.Admin,
+            new { manifest, channel = "dev", mode = "serve", artifacts = new[] { new { path = "notes.txt", sha256 = sha, size = bytes.Length } } });
+        Assert.Equal(HttpStatusCode.OK, published.Status);
+
+        // out: read from the embedded runner in this process, written to the other group over the relay
+        var out_ = await rig.Call(HttpMethod.Post, "/api/promotions", rig.Admin, new { from = "console-runner", to = "runner-other", name = "etl3", fromChannel = "dev", toChannel = "prod" });
+        Assert.Equal(HttpStatusCode.OK, out_.Status);
+        Assert.Equal(1, (int)out_.Body!["sourceVersion"]!);
+        Assert.Equal(1, (int)out_.Body["sent"]!);
+        Assert.Equal(bytes, other.Files[sha]);
+        Assert.Equal(manifest, other.Published["prod"].Manifest);
+        Assert.Equal(HttpStatusCode.Forbidden, (await rig.Call(HttpMethod.Post, "/api/promotions", rig.Viewer, new { from = "console-runner", to = "runner-other", name = "etl3", fromChannel = "dev", toChannel = "prod" })).Status);
+
+        // in: a version of the other group is written to the embedded runner (here, a channel it serves)
+        other.Versions[7] = (Manifest("etl4", [("one", null)]), [("data.bin", bytes)], null);
+        other.Active["test"] = 7;
+        var inward = await rig.Call(HttpMethod.Post, "/api/promotions", rig.Admin, new { from = "runner-other", to = "console-runner", name = "etl4", fromChannel = "test", toChannel = "dev", mode = "serve" });
+        Assert.Equal(HttpStatusCode.OK, inward.Status);
+        Assert.Equal(7, (int)inward.Body!["sourceVersion"]!);
+        Assert.Equal(0, (int)inward.Body["sent"]!);   // the embedded runner already holds the file by its hash
+        var (_, detail) = await rig.Call(HttpMethod.Get, "/relay/console-runner/api/v1/definitions/integration/etl4", rig.Viewer);
+        Assert.Equal(1, (int)detail!["channels"]![0]!["active"]!);
+
+        // the embedded runner records the person, through the console, as the actor of both
+        var audit = new AuditLog(rig.State, "dbdatakit").Read(new AuditQuery(VerbPrefix: "runner."));
+        Assert.Contains(audit, r => r.Entry.Verb == RunnerPublishing.PublishVerb && r.Entry.Outcome == AuditEvent.Ok && r.Entry.TargetId == "etl4/dev" && r.Entry.ViaKind == "console");
+
+        // a channel the embedded runner does not serve is refused in its own words
+        var refused = await rig.Call(HttpMethod.Post, "/api/promotions", rig.Admin, new { from = "runner-other", to = "console-runner", name = "etl4", fromChannel = "test", toChannel = "qa" });
+        Assert.True(refused.Status is HttpStatusCode.BadRequest or HttpStatusCode.Conflict or HttpStatusCode.Forbidden, $"{refused.Status}");
+        Assert.Contains("console's runner refused", (string)refused.Body!["error"]!);
+    }
+
     // ---- the stop
 
     [Theory]

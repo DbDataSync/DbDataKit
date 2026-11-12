@@ -8,11 +8,11 @@ using Microsoft.Extensions.Logging;
 namespace DbDataKit.Delivery.Tests;
 
 /// <summary>A channel a test scripts: what it answers and what it was given.</summary>
-public sealed class ScriptedChannel(string name, Func<DeliveryPayload, DeliveryResult> answer, int? limitPerMinute = null) : IDeliveryChannel
+public sealed class ScriptedChannel(string name, Func<DeliveryPayload, DeliveryResult> answer, int? limitPerMinute = null, string kind = "scripted") : IDeliveryChannel
 {
     public string Name { get; } = name;
 
-    public string Kind => "scripted";
+    public string Kind { get; } = kind;
 
     public int? LimitPerMinute { get; } = limitPerMinute;
 

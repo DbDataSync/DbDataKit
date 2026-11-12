@@ -62,6 +62,10 @@ To pass options through a pipe:
 `... | bash -s -- --version 2026.10.19.1200` and, in PowerShell,
 `& ([scriptblock]::Create((irm <url>))) -Version 2026.10.19.1200`.
 
+## The export component
+
+A host that exports PDFs (the Gateway, which hosts the views module and the subscription task) needs the pinned Chromium, the bundled fonts and the print page. They are not in any product zip (the browser alone is about 420 MB installed): `dist/export_component.py stage` builds the folder from a checkout and `verify` checks it against `chromium.pin`, `fonts.pin` and its own manifest (`dist/tests/test_export_component.py`); `dist/export/Dockerfile` is the same folder as an image layer over the Gateway's image. See `docs/views.md`, "The export component". Not yet in a release workflow.
+
 ## What the installers do
 
 Both find the newest **stable** release whose tag starts with `<product>/v` (GitHub's own "latest" is one marker for the whole repository

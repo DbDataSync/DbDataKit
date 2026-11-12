@@ -8,9 +8,10 @@ public static class GatewayModules
     public const string Apps = "apps";
     public const string Store = "store";
     public const string Views = "views";
+    public const string Mcp = "mcp";
     public const string Feeds = "feeds";
 
-    public static readonly IReadOnlyList<string> Known = [FlightSql, Identity, Apps, Store, Views, Feeds];
+    public static readonly IReadOnlyList<string> Known = [FlightSql, Identity, Apps, Store, Views, Mcp, Feeds];
 
     /// <summary>True when the instance serves the module: it is listed in <c>Modules</c>, or (for the identity home) <c>Identity.Enabled</c> is set.</summary>
     public static bool Has(GatewayOptions options, string module) =>

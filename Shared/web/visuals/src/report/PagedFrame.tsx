@@ -33,6 +33,15 @@ export interface PagedFrameProps {
 
 const px = (n: number) => `${n}px`
 
+/** The scroll area's padding on each side, in CSS pixels (styles.css `.vz-flow-scroll`). */
+const SCROLL_PADDING = 16
+
+/** The factor that fits a sheet of `sheetWidth` pixels into a container of `boxWidth`: 1 when it fits (and for a container not measured yet), never below a third (a smaller sheet cannot be read). */
+export function fitScale(boxWidth: number, sheetWidth: number): number {
+  if (!(boxWidth > 0) || !(sheetWidth > 0)) return 1
+  return Math.min(1, Math.max(1 / 3, (boxWidth - 2 * SCROLL_PADDING) / sheetWidth))
+}
+
 /** The widgets that need a box of their own height: a chart, a metric and an image have a declared (or default) height; the rest take the height of their content. */
 const fixedHeightMm = (widget: WidgetDoc | undefined, heightMm: number | undefined) => heightMm ?? (widget ? DEFAULT_HEIGHT_MM[widget.type] : undefined)
 
@@ -46,6 +55,10 @@ export function PagedFrame({ document, layout, box, theme, results, loading, par
   const plan = useMemo(() => layoutFlow(layout, document.widgets), [layout, document.widgets])
   const { page } = plan
   const content = useRef<HTMLDivElement>(null)
+  const sheet = useRef<HTMLDivElement>(null)
+  /** A sheet wider than its window is scaled to fit (a transform: the layout, the breaks and the measuring stay in the page's own pixels). */
+  const scale = fitScale(box.width, page.widthPx)
+  const [sheetHeight, setSheetHeight] = useState(0)
   const [measured, setMeasured] = useState<Record<string, Measured>>({})
   const [wide, setWide] = useState<string[]>([])
   const reported = useRef('')
@@ -58,17 +71,20 @@ export function PagedFrame({ document, layout, box, theme, results, loading, par
     if (!element) return
     const read = () => {
       const origin = element.getBoundingClientRect()
+      // the rectangles are as drawn, scaled: back to the page's own pixels
+      const unit = (n: number) => Math.round((n / scale) * 10) / 10
+      setSheetHeight(sheet.current?.offsetHeight ?? 0)
       const next: Record<string, Measured> = {}
       const over: string[] = []
       element.querySelectorAll<HTMLElement>('[data-flow-key]').forEach((el) => {
         const r = el.getBoundingClientRect()
-        const m: Measured = { top: Math.round((r.top - origin.top) * 10) / 10, height: Math.round(r.height * 10) / 10 }
+        const m: Measured = { top: unit(r.top - origin.top), height: unit(r.height) }
         const table = el.querySelector('table')
         if (table) {
-          m.header = Math.round((table.tHead?.getBoundingClientRect().height ?? 0) * 10) / 10
+          m.header = unit(table.tHead?.getBoundingClientRect().height ?? 0)
           m.rows = [...table.querySelectorAll('tbody > tr')].map((tr) => {
             const t = tr.getBoundingClientRect()
-            return { top: Math.round((t.top - origin.top) * 10) / 10, height: Math.round(t.height * 10) / 10 }
+            return { top: unit(t.top - origin.top), height: unit(t.height) }
           })
         }
         next[el.dataset.flowKey!] = m
@@ -87,7 +103,7 @@ export function PagedFrame({ document, layout, box, theme, results, loading, par
     const observer = new ResizeObserver(read)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [plan, results, box.width, theme, parameters])
+  }, [plan, results, box.width, theme, parameters, scale])
 
   useLayoutEffect(() => {
     const key = wide.join(' ')
@@ -176,7 +192,8 @@ export function PagedFrame({ document, layout, box, theme, results, loading, par
         </p>
       ) : null}
       <div className="vz-flow-scroll" data-testid="vz-flow-scroll">
-        <div className="vz-flow-sheet" data-testid="vz-flow-sheet" style={{ width: px(page.widthPx), padding: `${px(page.marginsPx.top)} ${px(page.marginsPx.right)} ${px(page.marginsPx.bottom)} ${px(page.marginsPx.left)}` }}>
+        <div className="vz-flow-fit" data-testid="vz-flow-fit" data-scale={scale < 1 ? scale.toFixed(3) : undefined} style={scale < 1 && sheetHeight > 0 ? { width: px(page.widthPx * scale), height: px(sheetHeight * scale), margin: '0 auto' } : undefined}>
+        <div ref={sheet} className="vz-flow-sheet" data-testid="vz-flow-sheet" style={{ transformOrigin: '0 0', transform: scale < 1 ? `scale(${scale})` : undefined, width: px(page.widthPx), padding: `${px(page.marginsPx.top)} ${px(page.marginsPx.right)} ${px(page.marginsPx.bottom)} ${px(page.marginsPx.left)}` }}>
           {head ? <RunningLine side="head" text={head} margins={page.marginsPx} testid="vz-flow-header" /> : null}
           <div ref={content} className="vz-flow-content" data-testid="vz-flow-content">
             {plan.cover ? (
@@ -202,6 +219,7 @@ export function PagedFrame({ document, layout, box, theme, results, loading, par
             ))}
           </div>
           {foot ? <RunningLine side="foot" text={foot} margins={page.marginsPx} testid="vz-flow-footer" /> : null}
+        </div>
         </div>
       </div>
     </div>

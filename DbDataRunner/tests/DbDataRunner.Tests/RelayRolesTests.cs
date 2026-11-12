@@ -23,6 +23,7 @@ public sealed class RelayRolesTests
         { "GET", $"/api/v1/instances/{Instance}/labels", ServerRole.Viewer },
         { "GET", "/api/v1/tasks/orders/dev/load/schedule", ServerRole.Viewer }, { "GET", "/api/v1/tasks/orders/dev/load/decisions", ServerRole.Viewer },
         { "HEAD", "/api/v1/artifacts/" + "a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1", ServerRole.Viewer },
+        { "GET", "/api/v1/artifacts/" + "a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1", ServerRole.Viewer }, { "GET", "/api/v1/definitions/integration/orders/versions/1", ServerRole.Viewer },
         { "POST", "/api/v1/tasks/orders/dev/load/run", ServerRole.Operator }, { "POST", "/api/v1/tasks/orders/dev/load/pause", ServerRole.Operator },
         { "POST", "/api/v1/tasks/orders/dev/load/resume", ServerRole.Operator }, { "PUT", "/api/v1/tasks/orders/dev/load/owner", ServerRole.Operator },
         { "POST", "/api/v1/definitions/integration/orders/activate", ServerRole.Admin }, { "POST", "/api/v1/definitions/integration/orders/switch", ServerRole.Admin },

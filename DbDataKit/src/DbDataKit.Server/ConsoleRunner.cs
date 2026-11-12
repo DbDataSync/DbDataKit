@@ -157,6 +157,7 @@ public sealed class ConsoleRunner : IHostedService, IAsyncDisposable
             CancellationGrace = _settings.CancellationGrace,
             TaskHostPath = _settings.TaskHostPath,
             WrapRunner = executor => new ConsoleTaskRunner(system, _settings.WrapRunner?.Invoke(executor) ?? executor),
+            VersionGate = RunnerVersionGate.Create(_state),   // plan 30 PB03: a signed version is verified against the trust store when it is prepared
         };
         _host = new RunnerHost(hostSettings, _state, _log);
         await _host.StartAsync(cancellationToken).ConfigureAwait(false);

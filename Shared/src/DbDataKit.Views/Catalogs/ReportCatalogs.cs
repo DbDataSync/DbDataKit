@@ -119,6 +119,18 @@ public sealed class ReportCatalogs
         return await provider.PermissionsAsync(viewer, id, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>The kinds of item each provider can make (plan 32 DBR19: create by kind): provider name to kinds; a provider that makes none is left out.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> CreatableKinds => providers.Where(p => p.CreatableKinds.Count > 0).ToDictionary(p => p.Provider, p => p.CreatableKinds);
+
+    /// <summary>Makes an empty item of <paramref name="kind"/> through the provider named; a provider that does not make that kind says <c>unsupported</c> naming the kinds it does.</summary>
+    public async Task<ReportCatalogItem> CreateAsync(ReportCatalogViewer viewer, string provider, string kind, string name, string? folder = null, CancellationToken cancellationToken = default)
+    {
+        var target = providers.FirstOrDefault(p => p.Provider == provider) ?? throw new ReportCatalogException("not_found", $"There is no catalog named '{provider}' here.");
+        if (!target.CreatableKinds.Contains(kind, StringComparer.Ordinal))
+            throw new ReportCatalogException("unsupported", $"The catalog '{provider}' does not make a '{kind}': {(target.CreatableKinds.Count == 0 ? "it makes nothing (its reports are made in its own tools)" : "it makes " + string.Join(", ", target.CreatableKinds.Select(k => $"'{k}'")))}.");
+        return await target.CreateAsync(viewer, kind, name, folder, cancellationToken).ConfigureAwait(false) with { Provider = target.Provider };
+    }
+
     /// <summary>Opens an item through its provider; an opening that frames is checked against the approved origins, and the opening's key is the merged one.</summary>
     public async Task<ReportCatalogOpening> OpenAsync(ReportCatalogViewer viewer, string key, IReadOnlyDictionary<string, string?>? parameters = null, string? layout = null, CancellationToken cancellationToken = default)
     {

@@ -42,6 +42,36 @@ public sealed class DraftTests
 
     private static ModelWriter Writer(Engines engines, DbDataKit.DataModel.DataModel model, string? draft = null) => new(model, engines.Connection, engines.Engine, draft: draft);
 
+    private sealed class RecordingFeed : DbDataKit.Monitoring.INotificationFeed
+    {
+        public List<(string Kind, string Message)> Raised { get; } = [];
+        public IReadOnlyList<DbDataKit.Monitoring.NotificationRecord> List(long? sinceId = null) => [];
+        public int UnreadCount(long? lastSeenId) => 0;
+        public long? GetCursor(string readerId) => null;
+        public void MarkSeen(string readerId, long lastSeenNotificationId) { }
+        public void Raise(string kind, string message, string? taskName = null, string? mappingName = null, Guid? runId = null) => Raised.Add((kind, message));
+        public int PruneNotifications(TimeSpan? maxAge) => 0;
+    }
+
+    [Theory, MemberData(nameof(Engines.Both), MemberType = typeof(Engines))]
+    public async Task The_shared_sweep_warns_once_removes_the_idle_draft_on_the_day_and_leaves_a_busy_one(string engine)
+    {
+        var (engines, model) = await OpenAsync(engine);
+        await using var _ = engines;
+        await Writer(engines, model, "old~preview").InsertAsync("product", Row(("sku", "A-1"), ("name", "Anvil")), Ada);
+        var now = DateTimeOffset.UtcNow;
+        var feed = new RecordingFeed();
+        var sweep = (int days, TimeSpan since) => DraftSweep.RunOnceAsync(Writer(engines, model), "price_book", feed, 30, 7, now.AddDays(days), since);
+
+        Assert.Equal(new DraftSweepResult(0, 0), await sweep(10, TimeSpan.FromHours(1)));
+        Assert.Equal(new DraftSweepResult(0, 1), await sweep(24, TimeSpan.FromDays(3)));
+        Assert.Equal(new DraftSweepResult(0, 0), await sweep(25, TimeSpan.FromHours(1)));   // the notice is sent once
+        Assert.Equal(new DraftSweepResult(1, 0), await sweep(31, TimeSpan.FromHours(1)));
+        Assert.Equal([DraftSweep.WarningKind, DraftSweep.RemovedKind], feed.Raised.Select(r => r.Kind));
+        Assert.Contains("old~preview", feed.Raised[0].Message);
+        Assert.Empty(await Writer(engines, model).DraftsAsync());
+    }
+
     private static async Task<long> CountAsync(Engines engines, string table)
     {
         await using var command = engines.Connection.CreateCommand();

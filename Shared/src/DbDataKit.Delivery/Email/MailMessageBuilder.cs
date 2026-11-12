@@ -9,7 +9,7 @@ namespace DbDataKit.Delivery.Email;
 public sealed class MailFormatException(string message) : Exception(message);
 
 /// <summary>
-/// Makes the RFC 5322 text of a <see cref="DeliveryPayload"/>: headers (From, To, Subject, Date, Message-Id, MIME-Version), then one part, or <c>multipart/alternative</c> for the two bodies, inside <c>multipart/mixed</c> when there are attachments.
+/// Makes the RFC 5322 text of a <see cref="DeliveryPayload"/>: headers (From, To, Subject, Date, Message-Id, MIME-Version), then one part, or <c>multipart/alternative</c> for the two bodies, inside <c>multipart/mixed</c> when there are attachments. An attachment with a content id (and an HTML body) is an inline picture: <c>multipart/related</c> around the body, the picture after it with <c>Content-ID</c> and <c>Content-Disposition: inline</c>.
 /// Every text part is UTF-8 in base64, so no line is too long and no byte needs a rule; a non-ASCII subject or file name is encoded as the RFCs say. A link is added to both bodies (as a line of text and as an anchor).
 /// </summary>
 public static class MailMessageBuilder
@@ -37,13 +37,16 @@ public static class MailMessageBuilder
         sb.Append("Message-ID: <").Append(payload.MessageId.ToString("N")).Append('@').Append(hostForIds).Append(">\r\n");
         sb.Append("MIME-Version: 1.0\r\n");
 
-        var mixed = payload.Attachments.Count > 0 ? "=_mixed_" + Guid.NewGuid().ToString("N") : null;
+        // a picture with a content id is part of the body (multipart/related: the HTML names it as cid:), the rest are downloads (multipart/mixed)
+        var inline = payload.Attachments.Where(a => a.ContentId is not null && html is not null).ToList();
+        var downloads = payload.Attachments.Except(inline).ToList();
+        var mixed = downloads.Count > 0 ? "=_mixed_" + Guid.NewGuid().ToString("N") : null;
         if (mixed is not null)
         {
             sb.Append($"Content-Type: multipart/mixed; boundary=\"{mixed}\"\r\n\r\n");
             sb.Append($"--{mixed}\r\n");
-            AppendBody(sb, text, html);
-            foreach (var attachment in payload.Attachments)
+            AppendBodyWithInline(sb, text, html, inline);
+            foreach (var attachment in downloads)
             {
                 sb.Append($"--{mixed}\r\n");
                 var name = SingleLine(attachment.Name, "attachment name");
@@ -57,10 +60,32 @@ public static class MailMessageBuilder
         }
         else
         {
-            AppendBody(sb, text, html);
+            AppendBodyWithInline(sb, text, html, inline);
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>The body, and with inline pictures a <c>multipart/related</c> around it: the body first, then each picture with its <c>Content-ID</c>.</summary>
+    private static void AppendBodyWithInline(StringBuilder sb, string? text, string? html, List<DeliveryAttachment> inline)
+    {
+        if (inline.Count == 0) { AppendBody(sb, text, html); return; }
+        var related = "=_related_" + Guid.NewGuid().ToString("N");
+        sb.Append($"Content-Type: multipart/related; type=\"{(text is not null ? "multipart/alternative" : "text/html")}\"; boundary=\"{related}\"\r\n\r\n");
+        sb.Append($"--{related}\r\n");
+        AppendBody(sb, text, html);
+        foreach (var picture in inline)
+        {
+            var id = SingleLine(picture.ContentId!, "content id");
+            sb.Append($"--{related}\r\n");
+            sb.Append($"Content-Type: {SingleLine(picture.MediaType, "media type")}; name=\"{AsciiName(picture.Name)}\"\r\n");
+            sb.Append("Content-Transfer-Encoding: base64\r\n");
+            sb.Append($"Content-ID: <{id}>\r\n");
+            sb.Append($"Content-Disposition: inline; filename=\"{AsciiName(picture.Name)}\"\r\n\r\n");
+            sb.Append(Base64(picture.Content)).Append("\r\n");
+        }
+
+        sb.Append($"--{related}--\r\n");
     }
 
     /// <summary>The body part(s) with their own Content-Type header; when it opens a message (no mixed wrapper) the headers are the message's.</summary>

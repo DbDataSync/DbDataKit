@@ -35,7 +35,8 @@ public interface IDefinitionSource
 /// <param name="subscribers">What serves each kind.</param>
 /// <param name="problem">Told when a subscriber could not use a version (the one it served before keeps serving): the kind, the name, the version and why.</param>
 /// <param name="channel">The channel this instance serves.</param>
-public sealed class DefinitionFollower(IDefinitionSource store, IEnumerable<IDefinitionSubscriber> subscribers, Action<string, string, int?, Exception> problem, string channel = DefinitionStore.Production)
+/// <param name="gate">What an instance checks of a version before it serves it (plan 30 PB03: the signature against the group's trust store): the sentence that refuses it, or null. A refused version is reported like one in a format the instance does not read, and the one served before keeps serving.</param>
+public sealed class DefinitionFollower(IDefinitionSource store, IEnumerable<IDefinitionSubscriber> subscribers, Action<string, string, int?, Exception> problem, string channel = DefinitionStore.Production, Func<DefinitionVersion, string?>? gate = null)
 {
     private readonly Dictionary<string, IDefinitionSubscriber> _byKind = subscribers.ToDictionary(s => s.Kind, StringComparer.Ordinal);
     private readonly object _gate = new();
@@ -88,6 +89,12 @@ public sealed class DefinitionFollower(IDefinitionSource store, IEnumerable<IDef
         if (current is not null && DefinitionFormat.Refusal(subscriber.Kind, name, current.Version, current.Format, subscriber.Formats, "this instance") is { } refusal)
         {
             problem(subscriber.Kind, name, current.Version, new DefinitionFormatException(refusal, subscriber.Kind, name, current.Format, subscriber.Formats));
+            return;
+        }
+
+        if (current is not null && gate?.Invoke(current) is { } refused)
+        {
+            problem(subscriber.Kind, name, current.Version, new VersionSignatureRefusedException(refused));
             return;
         }
 

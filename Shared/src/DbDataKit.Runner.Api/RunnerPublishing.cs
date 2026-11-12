@@ -100,7 +100,8 @@ public sealed partial class RunnerPublishing
         _instances = new RunnerInstances(state);
         _state = state;
         MaxArtifactBytes = maxArtifactBytes;
-        _verifier = verifier ?? new NoSignatureVerifier();
+        Trust = new DefinitionTrustStore(state);
+        _verifier = verifier ?? new DbDataKit.State.Api.TrustStoreVerifier(Trust);
         _payloads = new PayloadStore(state);
         _store = new DefinitionStore(state);
         Publisher = new DefinitionPublisher(state, RunnerPackages.Kinds(), _payloads, "runner");
@@ -113,13 +114,25 @@ public sealed partial class RunnerPublishing
 
     public DefinitionPublisher Publisher { get; }
 
+    /// <summary>The group's trust store of publisher keys (plan 30 PB03): what a signed version is checked against when <c>require_signatures</c> is on (and a signed version is checked against whenever it comes).</summary>
+    public DefinitionTrustStore Trust { get; }
+
+    private DbDataKit.State.Api.DefinitionsApi? _api;
+
+    /// <summary>
+    /// The shared publish API (plan 30 PB02) on this runner's state, with the <c>integration</c> kind's rules as its hook (<see cref="IntegrationKindHook"/>): the routes of <see cref="RunnerPublishApi"/> hand their calls to it.
+    /// Its audit is the runner's (<c>runner.package.*</c>), its owner rules are <see cref="OwnerScope"/>'s, its upload cap and payload owner are this runner's.
+    /// </summary>
+    public DbDataKit.State.Api.DefinitionsApi Api => _api ??= new DbDataKit.State.Api.DefinitionsApi(Publisher, _store, RunnerPackages.Kinds(), _payloads, _settings, "runner", AuditShared, null, MaxArtifactBytes, _verifier, null, Trust,
+        [new IntegrationKindHook(this)], PayloadOwner);
+
     /// <summary>
     /// A host's rule about the channels it serves (the console's embedded runner serves no production channel until an administrator chose it): says why a channel is refused, or null. Asked by every publish, activate, switch and
     /// rollback, which are refused with 403 and the message when it answers.
     /// </summary>
     public Func<string, string?>? ChannelRefusal { get; init; }
 
-    private void RequireChannelServed(string channel)
+    internal void RequireChannelServed(string channel)
     {
         if (ChannelRefusal?.Invoke(channel) is { } refusal) throw new RunnerPublishException(403, refusal);
     }
@@ -269,16 +282,26 @@ public sealed partial class RunnerPublishing
 
     // ---- publish
 
+    /// <summary>What a publish of <paramref name="manifest"/> checks before anything is stored: the names, the channel this host serves, and that the package's triggers make no loop across the channel's packages (plan 28a R13). Throws <see cref="RunnerPublishException"/>.</summary>
+    internal void CheckPublish(string name, string channel, string manifest)
+    {
+        if (!PackageManifestValidator.NameRule.IsMatch(name)) throw new RunnerPublishException(400, $"'{name}' is not a package name: use 1 to 64 lowercase letters, digits, '-' or '_', starting with a letter or digit.");
+        if (!PackageManifestValidator.NameRule.IsMatch(channel)) throw new RunnerPublishException(400, $"'{channel}' is not a channel name: use 1 to 64 lowercase letters, digits, '-' or '_', starting with a letter or digit.");
+        RequireChannelServed(channel);
+        if (PackageManifestReader.Load(manifest, $"{Kind}/{name}") is { Ok: true, Manifest: { } candidate })
+        {
+            try { ProjectionDocuments.RequireNoCycle(_projections.ListByChannel(channel), name, channel, ProjectionDocuments.RowsOf(candidate, "0")); }
+            catch (TriggerCycleException ex) { throw new RunnerPublishException(400, ex.Message); }
+        }
+    }
+
     /// <summary>Validates and stores the next version of an <c>integration</c> and serves or stages it. A served version replaces the channel's task projection; a staged one is not run until it is activated.</summary>
     public PublishOutcome Publish(PublishInput input, RunnerActor actor, string verb = PublishVerb)
     {
         var target = $"{input.Name}/{input.Channel}";
         try
         {
-            if (!PackageManifestValidator.NameRule.IsMatch(input.Name)) throw new RunnerPublishException(400, $"'{input.Name}' is not a package name: use 1 to 64 lowercase letters, digits, '-' or '_', starting with a letter or digit.");
-            if (!PackageManifestValidator.NameRule.IsMatch(input.Channel)) throw new RunnerPublishException(400, $"'{input.Channel}' is not a channel name: use 1 to 64 lowercase letters, digits, '-' or '_', starting with a letter or digit.");
-
-            RequireChannelServed(input.Channel);
+            CheckPublish(input.Name, input.Channel, input.Manifest);
             var refs = new List<ArtifactRef>();
             foreach (var file in input.Files)
             {
@@ -288,16 +311,7 @@ public sealed partial class RunnerPublishing
 
             // the signature (plan 30 section 6.2) is not verified in this slice: the default verifier records 'unsigned', and a group that requires signatures refuses what it cannot verify
             var verdict = _verifier.Verify(new VersionSignatureRequest(Kind, input.Name, input.Manifest, refs, input.Signature));
-            if (RequireSignatures && verdict.State != SignatureState.Verified)
-                throw new RunnerPublishException(403, $"This runner requires signed versions (require_signatures is on) and the {Kind} '{input.Name}' has no valid signature: the signature of its manifest, which lists every file's path and SHA-256, is missing"
-                    + (verdict.Message is null ? "" : $" ({verdict.Message})") + ". Publish it signed, or have an administrator turn require_signatures off.");
-
-            // a trigger loop across the packages of the channel is refused before anything is published, naming the loop (plan 28a R13)
-            if (PackageManifestReader.Load(input.Manifest, $"{Kind}/{input.Name}") is { Ok: true, Manifest: { } candidate })
-            {
-                try { ProjectionDocuments.RequireNoCycle(_projections.ListByChannel(input.Channel), input.Name, input.Channel, ProjectionDocuments.RowsOf(candidate, "0")); }
-                catch (TriggerCycleException ex) { throw new RunnerPublishException(400, ex.Message); }
-            }
+            if (RequireSignatures && verdict.State != SignatureState.Verified) throw new RunnerPublishException(403, UnsignedMessage(input.Name, verdict) + ".");
 
             PublishResult result;
             try
@@ -318,6 +332,11 @@ public sealed partial class RunnerPublishing
             throw;
         }
     }
+
+    /// <summary>The refusal of an unsigned version where <c>require_signatures</c> is on, without its closing full stop.</summary>
+    internal static string UnsignedMessage(string name, SignatureVerdict verdict) =>
+        $"This runner requires signed versions (require_signatures is on) and the {Kind} '{name}' has no valid signature: the signature of its manifest, which lists every file's path and SHA-256, is missing"
+        + (verdict.Message is null ? "" : $" ({verdict.Message})") + ". Publish it signed with a key an administrator trusts for integration, or have an administrator turn require_signatures off";
 
     // ---- life cycle
 
@@ -472,7 +491,7 @@ public sealed partial class RunnerPublishing
         _projections.Replace(name, channel, rows);
     }
 
-    private static IReadOnlyList<string> TasksOf(string manifestText) =>
+    internal static IReadOnlyList<string> TasksOf(string manifestText) =>
         PackageManifestReader.Load(manifestText, "manifest") is { Ok: true, Manifest: { } m } ? [.. m.Tasks.Select(t => t.Name)] : [];
 
     // ---- bindings
@@ -483,18 +502,7 @@ public sealed partial class RunnerPublishing
         var target = $"{name}/{channel}";
         try
         {
-            if (!PackageManifestValidator.NameRule.IsMatch(name)) throw new RunnerPublishException(400, $"'{name}' is not a package name.");
-            if (!PackageManifestValidator.NameRule.IsMatch(channel)) throw new RunnerPublishException(400, $"'{channel}' is not a channel name.");
-            if (slots.Count == 0) throw new RunnerPublishException(400, "The body names no slot: {\"slots\": {\"<slot>\": \"<what it is bound to>\"}}.");
-            foreach (var (slot, to) in slots)
-            {
-                if (!SlotRule().IsMatch(slot)) throw new RunnerPublishException(400, $"'{slot}' is not a slot name.");
-                if (string.IsNullOrWhiteSpace(to)) throw new RunnerPublishException(400, $"The slot '{slot}' must be bound to something.");
-            }
-
-            // plan 27a IX17: production's connection in a non-production channel is a confirmed, recorded choice, checked before anything is written
-            var needs = UnconfirmedAfter(name, channel, slots).Where(u => !Chosen(u.Scope) && confirm?.Contains(u.Scope, StringComparer.Ordinal) != true).ToList();
-            if (needs.Count > 0) throw new RunnerPostureConfirmationException(needs);
+            CheckBind(name, channel, slots, confirm);
             try
             {
                 foreach (var (slot, to) in slots.OrderBy(s => s.Key, StringComparer.Ordinal)) Publisher.Bind(channel, Kind, name, slot, to, actor.Id, expectedRevision);
@@ -513,6 +521,22 @@ public sealed partial class RunnerPublishing
         }
     }
 
+    /// <summary>What a bind checks before it writes: the names, and (plan 27a IX17) that production's connection is not shared with a non-production channel unless confirmed. Throws <see cref="RunnerPublishException"/> or <see cref="RunnerPostureConfirmationException"/>.</summary>
+    internal void CheckBind(string name, string channel, IReadOnlyDictionary<string, string> slots, IReadOnlyCollection<string>? confirm)
+    {
+        if (!PackageManifestValidator.NameRule.IsMatch(name)) throw new RunnerPublishException(400, $"'{name}' is not a package name.");
+        if (!PackageManifestValidator.NameRule.IsMatch(channel)) throw new RunnerPublishException(400, $"'{channel}' is not a channel name.");
+        if (slots.Count == 0) throw new RunnerPublishException(400, "The body names no slot: {\"slots\": {\"<slot>\": \"<what it is bound to>\"}}.");
+        foreach (var (slot, to) in slots)
+        {
+            if (!SlotRule().IsMatch(slot)) throw new RunnerPublishException(400, $"'{slot}' is not a slot name.");
+            if (string.IsNullOrWhiteSpace(to)) throw new RunnerPublishException(400, $"The slot '{slot}' must be bound to something.");
+        }
+
+        var needs = UnconfirmedAfter(name, channel, slots).Where(u => !Chosen(u.Scope) && confirm?.Contains(u.Scope, StringComparer.Ordinal) != true).ToList();
+        if (needs.Count > 0) throw new RunnerPostureConfirmationException(needs);
+    }
+
     public const string UnbindVerb = "runner.package.unbind";
 
     /// <summary>
@@ -524,13 +548,7 @@ public sealed partial class RunnerPublishing
         var target = $"{name}/{channel}";
         try
         {
-            if (!PackageManifestValidator.NameRule.IsMatch(name)) throw new RunnerPublishException(400, $"'{name}' is not a package name.");
-            if (!PackageManifestValidator.NameRule.IsMatch(channel)) throw new RunnerPublishException(400, $"'{channel}' is not a channel name.");
-            if (!SlotRule().IsMatch(slot)) throw new RunnerPublishException(400, $"'{slot}' is not a slot name.");
-            if (Publisher.HeadsOf(Kind, name).FirstOrDefault(h => h.Channel == channel) is { } head)
-                foreach (var version in new[] { head.Active, head.Staged }.OfType<int>().Distinct())
-                    if (_store.Get(Kind, name, version) is { } stored && PackageManifestReader.Load(stored.Content, $"{name}@{version}") is { Ok: true, Manifest: { } manifest } && manifest.Tasks.Any(t => t.Connections.Any(c => c.Name == slot)))
-                        throw new RunnerPublishException(409, $"The slot '{slot}' is declared by version {version} of '{name}', which channel '{channel}' serves or has staged: bind it to another connection instead of emptying it, or retire that version first.");
+            CheckUnbind(name, channel, slot);
             var removed = Publisher.Unbind(channel, Kind, name, slot, actor.Id);
             if (removed)
             {
@@ -545,6 +563,18 @@ public sealed partial class RunnerPublishing
             Record(UnbindVerb, actor, "package", target, AuditEvent.Refused, new { kind = Kind, name, channel, slot, status = ex.Status, reason = ex.Message });
             throw;
         }
+    }
+
+    /// <summary>What an unbind checks: the names, and that no version the channel serves or has staged declares the slot (its tasks could not run). Throws <see cref="RunnerPublishException"/>.</summary>
+    internal void CheckUnbind(string name, string channel, string slot)
+    {
+        if (!PackageManifestValidator.NameRule.IsMatch(name)) throw new RunnerPublishException(400, $"'{name}' is not a package name.");
+        if (!PackageManifestValidator.NameRule.IsMatch(channel)) throw new RunnerPublishException(400, $"'{channel}' is not a channel name.");
+        if (!SlotRule().IsMatch(slot)) throw new RunnerPublishException(400, $"'{slot}' is not a slot name.");
+        if (Publisher.HeadsOf(Kind, name).FirstOrDefault(h => h.Channel == channel) is { } head)
+            foreach (var version in new[] { head.Active, head.Staged }.OfType<int>().Distinct())
+                if (_store.Get(Kind, name, version) is { } stored && PackageManifestReader.Load(stored.Content, $"{name}@{version}") is { Ok: true, Manifest: { } manifest } && manifest.Tasks.Any(t => t.Connections.Any(c => c.Name == slot)))
+                    throw new RunnerPublishException(409, $"The slot '{slot}' is declared by version {version} of '{name}', which channel '{channel}' serves or has staged: bind it to another connection instead of emptying it, or retire that version first.");
     }
 
     /// <summary>The recorded choices of the posture setting <c>production_binding_on_non_production</c> for the bindings of runner slots (scope <c>bindings/runner/&lt;package&gt;/&lt;slot&gt;/&lt;channel&gt;</c>): the Runner's own <c>posture_choice</c> table, the same code as every other choice.</summary>
@@ -576,7 +606,7 @@ public sealed partial class RunnerPublishing
     }
 
     /// <summary>Records the choice of every unconfirmed binding the package has now (a bind that made one was refused unless an administrator confirmed it), and takes back the choices of bindings that no longer share production's connection.</summary>
-    private void ReconcilePosture(string name, RunnerActor actor, string? note)
+    internal void ReconcilePosture(string name, RunnerActor actor, string? note)
     {
         var setting = PostureSetting.ProductionBindingOnNonProduction;
         var now = Unconfirmed(Publisher.BindingsOf(Kind, name)).ToList();
@@ -693,6 +723,26 @@ public sealed partial class RunnerPublishing
     }
 
     // ---- audit
+
+    private static readonly Dictionary<string, string> SharedVerbs = new(StringComparer.Ordinal)
+    {
+        ["definition.publish"] = PublishVerb, ["definition.upload"] = UploadVerb, ["definition.bind"] = BindVerb, ["definition.unbind"] = UnbindVerb, ["definition.activate"] = ActivateVerb,
+        ["definition.switch"] = SwitchVerb, ["definition.rollback"] = RollbackVerb, ["definition.retire"] = RetireVerb, ["definition.prune"] = PruneVerb,
+    };
+
+    /// <summary>The shared API's audit callback as the runner's audit: its verbs (<c>runner.package.publish</c>), the target <c>package</c> with <c>name/channel</c> (an upload's target is the file's hash), the detail with the kind, name and channel.</summary>
+    private void AuditShared(string verb, DbDataKit.State.Api.DefinitionsCaller caller, string kind, string name, string channel, string outcome, object? detail)
+    {
+        var actor = caller.Context is RunnerCaller known ? known.Actor : new RunnerActor(caller.Actor, null, "api", caller.ClientId);
+        var (targetKind, targetId) = verb switch
+        {
+            "definition.upload" => ("artifact", name),
+            "definition.prune" => ("package", name),
+            _ => (name == "-" ? "setting" : "package", name == "-" ? kind : channel == "-" ? name : $"{name}/{channel}"),
+        };
+        var merged = Merge(new { kind = Kind, name, channel }, detail ?? new { });
+        Record(SharedVerbs.GetValueOrDefault(verb, verb), actor, targetKind, targetId, outcome == "ok" ? AuditEvent.Ok : AuditEvent.Refused, merged);
+    }
 
     /// <summary>Notes a call that a role or an owner rule refused: the call changed nothing.</summary>
     public void AuditRefused(string verb, RunnerActor actor, string targetKind, string targetId, string reason) =>

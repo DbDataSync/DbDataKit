@@ -1,4 +1,4 @@
-import { put, request } from '@dbdatakit/shell'
+import { put, request, type TrustApi, type TrustState } from '@dbdatakit/shell'
 import type { RenderedViewDocument } from '@dbdatakit/visuals'
 import type { InstanceRequest, NavigationRequest, PublishBody } from './appEditors'
 import type { CacheOverview } from './cacheTypes'
@@ -26,6 +26,17 @@ export const gatewayApi = {
   definitions: {
     prune: (kind: string, name: string, body: { versions: number[]; dry_run: boolean }) => request<PruneAnswer>(`${v1}/definitions/${enc(kind)}/${enc(name)}/prune`, { method: 'POST', body: JSON.stringify(body) }),
   },
+  /**
+   * The trust store of the serving kinds (plan 30 PB03): the publisher keys each kind trusts, whether signed versions are required for it, and the group's mode (`test` makes signatures optional everywhere an administrator has not
+   * said otherwise). Reads are for anyone who may read definitions; every change is an administrator's.
+   */
+  trust: {
+    get: (kind: string) => request<TrustState>(`${v1}/trust/${enc(kind)}`),
+    addKey: (kind: string, publicKey: string, label: string) => put<{ key_id: string }>(`${v1}/trust/${enc(kind)}/keys`, { public_key: publicKey, label: label || null }),
+    revoke: (kind: string, keyId: string) => request<{ revoked: boolean }>(`${v1}/trust/${enc(kind)}/${enc(keyId)}/revoke`, { method: 'POST' }),
+    setRequired: (kind: string, required: boolean) => put<{ required: boolean }>(`${v1}/settings/signatures/${enc(kind)}`, { required }),
+    setGroupMode: (mode: 'test' | 'production') => put<{ mode: string }>(`${v1}/settings/group`, { mode }),
+  } satisfies TrustApi,
   /** The paired server clients a data source can be handed to. */
   clients: () => request<{ clients: ServerClient[] }>(`${v1}/clients`).then((r) => r.clients),
   /** The models the group serves (plan 33 UE12): semantic models (versions, serve an earlier one, remove) and the entity models a DbDataStore publishes (versions, remove). The calls are an administrator's or a publisher's. */

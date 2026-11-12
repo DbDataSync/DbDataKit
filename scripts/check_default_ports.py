@@ -26,6 +26,7 @@ LISTENERS = [
     ("DbDataGateway apps", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r'public int Port \{ get; set; \} = (8818);', 1),
     ("DbDataGateway store module", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r'public int Port \{ get; set; \} = (8819);', 1),
     ("DbDataGateway views", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r'public int Port \{ get; set; \} = (8820);', 1),
+    ("DbDataGateway mcp", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r'public int Port \{ get; set; \} = (8822);', 1),
     ("DbDataGateway feeds (REST)", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r'public int Port \{ get; set; \} = (8821);', 1),
 ]
 

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "kind": "dashboard",
+  "title": "Revenue by region",
+  "widgets": {
+    "revenue": {
+      "type": "metric",
+      "label": "Revenue",
+      "encodings": { "value": "orders.net_revenue" },
+      "query": { "model": "sales" }
+    },
+    "by_region": {
+      "type": "chart",
+      "title": "Revenue by region",
+      "mark": "bar",
+      "encodings": { "x": "customers.region", "y": "orders.net_revenue" },
+      "query": { "model": "sales" }
+    }
+  },
+  "layouts": [
+    {
+      "name": "desk",
+      "type": "reflow",
+      "default": true,
+      "grid": { "columns": 12 },
+      "tiles": [
+        { "widget": "revenue", "x": 0, "y": 0, "w": 4, "h": 1 },
+        { "widget": "by_region", "x": 0, "y": 1, "w": 12, "h": 4 }
+      ]
+    },
+    {
+      "name": "print",
+      "type": "flow",
+      "when": { "medium": ["print", "export"] },
+      "page": { "size": "A4", "orientation": "portrait" },
+      "sections": [
+        { "title": "Revenue", "blocks": [ { "widget": "revenue" }, { "widget": "by_region" } ] }
+      ]
+    }
+  ]
+}

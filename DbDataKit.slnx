@@ -154,6 +154,7 @@
     <Project Path="Shared/src/DbDataKit.Views/DbDataKit.Views.csproj" />
     <Project Path="Shared/src/DbDataKit.Views.Export/DbDataKit.Views.Export.csproj" />
     <Project Path="Shared/src/DbDataKit.ReportCatalogs/DbDataKit.ReportCatalogs.csproj" />
+    <Project Path="Shared/src/DbDataKit.ReportCatalogs.Runner/DbDataKit.ReportCatalogs.Runner.csproj" />
     <Project Path="Shared/src/DbDataKit.Views.Hosting/DbDataKit.Views.Hosting.csproj" />
     <Project Path="Shared/src/DbDataKit.Web/DbDataKit.Web.csproj" />
   </Folder>

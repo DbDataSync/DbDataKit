@@ -28,6 +28,7 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
         ValidateApps(o, cx);
         ValidateStore(o, cx);
         ValidateViews(o, cx);
+        ValidateMcp(o, cx);
         ValidateRest(o, cx);
         ValidateCompression(o.Compression, "Compression", cx);
         ValidateDataSources(o, cx);
@@ -127,6 +128,27 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
             cx.Error("Store.Port", "The store module has its own port; it is the apps host's here.", $"Choose another port than {o.Apps.Port}.");
     }
 
+    private static void ValidateMcp(GatewayOptions o, IConfigValidationContext cx)
+    {
+        if (!GatewayModules.Has(o, GatewayModules.Mcp)) return;
+        if (!IPAddress.TryParse(o.Mcp.Address, out _))
+            cx.Error("Mcp.Address", $"`Address` is `{o.Mcp.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
+        if (o.Mcp.Port == o.Listen.Port && o.Listen.Port != 0 && GatewayModules.Has(o, GatewayModules.FlightSql))
+            cx.Error("Mcp.Port", "The mcp module has its own port; it is the Flight port here.", $"Choose another port than {o.Listen.Port}.");
+        if (o.Management.Enabled && o.Mcp.Port == o.Management.Port)
+            cx.Error("Mcp.Port", "The mcp module has its own port; it is the management API's here.", $"Choose another port than {o.Management.Port}.");
+        if (GatewayModules.Has(o, GatewayModules.Identity) && o.Mcp.Port == o.Identity.Port)
+            cx.Error("Mcp.Port", "The mcp module has its own port; it is the identity home's here.", $"Choose another port than {o.Identity.Port}.");
+        if (GatewayModules.Has(o, GatewayModules.Apps) && o.Mcp.Port == o.Apps.Port)
+            cx.Error("Mcp.Port", "The mcp module has its own port; it is the apps host's here.", $"Choose another port than {o.Apps.Port}.");
+        if (GatewayModules.Has(o, GatewayModules.Feeds) && o.Mcp.Port == o.Rest.Port)
+            cx.Error("Mcp.Port", "The mcp module has its own port; it is the feeds module's here.", $"Choose another port than {o.Rest.Port}.");
+        if (GatewayModules.Has(o, GatewayModules.Store) && o.Mcp.Port == o.Store.Port)
+            cx.Error("Mcp.Port", "The mcp module has its own port; it is the store module's here.", $"Choose another port than {o.Store.Port}.");
+        if (GatewayModules.Has(o, GatewayModules.Views) && o.Mcp.Port == o.Views.Port)
+            cx.Error("Mcp.Port", "The mcp module has its own port; it is the views module's here.", $"Choose another port than {o.Views.Port}.");
+    }
+
     private static void ValidateRest(GatewayOptions o, IConfigValidationContext cx)
     {
         if (!GatewayModules.Has(o, GatewayModules.Feeds)) return;
@@ -139,6 +161,7 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
         Clash(GatewayModules.Has(o, GatewayModules.Apps), o.Apps.Port, "the apps host's");
         Clash(GatewayModules.Has(o, GatewayModules.Store), o.Store.Port, "the store module's");
         Clash(GatewayModules.Has(o, GatewayModules.Views), o.Views.Port, "the views module's");
+        Clash(GatewayModules.Has(o, GatewayModules.Mcp), o.Mcp.Port, "the mcp module's");
         if (o.Rest.DefaultLimit > o.Rest.MaxRows)
             cx.Error("Rest.DefaultLimit", $"`DefaultLimit` is {o.Rest.DefaultLimit}, more than `MaxRows` ({o.Rest.MaxRows}).", "Set a default at or below the most a call may ask for.");
     }

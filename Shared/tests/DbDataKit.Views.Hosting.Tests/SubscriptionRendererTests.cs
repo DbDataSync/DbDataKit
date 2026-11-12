@@ -20,6 +20,13 @@ internal sealed class PageAsPdfExporter : IReportExporter
 
     public Task<SvgResult> ExportSvgAsync(PrintJob job, string chartId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
+    /// <summary>When true, a picture is "made": the PNG signature then the page's HTML, so a test can read what was composed for the picture as for the PDF.</summary>
+    public bool MakesPictures { get; init; }
+
+    public Task<PngResult> ExportPngAsync(PrintJob job, int maxHeight = 4000, CancellationToken cancellationToken = default) =>
+        MakesPictures ? Task.FromResult(new PngResult([137, 80, 78, 71, .. Encoding.UTF8.GetBytes(job.Html)], 794, 1123, "fake", []))
+                      : throw new ExportException("unavailable", "this exporter makes no pictures of a page.");
+
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
@@ -60,9 +67,9 @@ public sealed class SubscriptionRendererTests : IDisposable
         return folder;
     }
 
-    private async Task<(ViewsHarness H, SubscriptionRenderer Renderer)> StartAsync(bool exporter = true)
+    private async Task<(ViewsHarness H, SubscriptionRenderer Renderer)> StartAsync(bool exporter = true, bool pictures = false)
     {
-        var h = await ViewsHarness.StartAsync(engines, StateEngineIds.Sqlite, exporter: exporter ? new PageAsPdfExporter() : null, pageAssets: exporter ? PageAssets() : null);
+        var h = await ViewsHarness.StartAsync(engines, StateEngineIds.Sqlite, exporter: exporter ? new PageAsPdfExporter { MakesPictures = pictures } : null, pageAssets: exporter ? PageAssets() : null);
         h.PublishDataBoard();
         // the table about the category alone cannot be answered: the host refuses it, so the widget is an error entry and the others render
         h.Host.Before = (_, request) => request.Text.Contains("category", StringComparison.Ordinal) && !request.Text.Contains("region", StringComparison.Ordinal)
@@ -70,10 +77,42 @@ public sealed class SubscriptionRendererTests : IDisposable
         return (h, new SubscriptionRenderer(h.Module.Api!, h.Published, new TestPrincipals(h.Callers), new SubscriptionRendererOptions("https://console.example/views/{kind}/{name}")));
     }
 
-    private static SubscriptionRender Ask(string subscriber, string kind = "dashboard", string view = "rows", string format = "pdf", string? layout = null, string? widget = null) =>
-        new(Guid.NewGuid(), subscriber, kind, view, new Dictionary<string, JsonNode?>(), layout, format, widget);
+    private static SubscriptionRender Ask(string subscriber, string kind = "dashboard", string view = "rows", string format = "pdf", string? layout = null, string? widget = null, bool preview = false) =>
+        new(Guid.NewGuid(), subscriber, kind, view, new Dictionary<string, JsonNode?>(), layout, format, widget, preview);
 
     private static List<string> Rows(RenderResult.Rendered r) => [.. Encoding.UTF8.GetString(r.Content).Split("\r\n", StringSplitOptions.RemoveEmptyEntries).Skip(1).Select(l => l.Split(',')[0])];
+
+    [Fact]
+    public async Task A_subscription_that_asks_for_a_preview_gets_a_picture_drawn_as_the_subscriber_and_one_that_does_not_gets_none()
+    {
+        var (h, renderer) = await StartAsync(pictures: true);
+        await using var _ = h;
+        var plain = Assert.IsType<RenderResult.Rendered>(await renderer.RenderAsync(Ask("wendy"), default));
+        Assert.Null(plain.Preview);
+        var west = Assert.IsType<RenderResult.Rendered>(await renderer.RenderAsync(Ask("wendy", preview: true), default));
+        var east = Assert.IsType<RenderResult.Rendered>(await renderer.RenderAsync(Ask("erin", preview: true), default));
+        Assert.Equal(new byte[] { 137, 80, 78, 71 }, west.Preview![..4]);
+        Assert.NotEqual(west.Preview, east.Preview);                                          // each picture holds that person's rows
+        Assert.Contains("West", Encoding.UTF8.GetString(west.Preview!));
+        Assert.DoesNotContain("East", Encoding.UTF8.GetString(west.Preview!));
+        Assert.DoesNotContain(west.Notes, n => n.Contains("preview", StringComparison.OrdinalIgnoreCase));      // the denied widget is noted, the picture is not
+        // the picture is audited as the PDF is: as the subscriber, with its format
+        Assert.Contains(h.Audit.Read(new AuditQuery(Verb: "view.export", Limit: 100)), r => r.Entry.Detail?.Contains("\"png\"", StringComparison.Ordinal) == true);
+        // a picture is never made for rows: csv and xlsx have none
+        var csv = Assert.IsType<RenderResult.Rendered>(await renderer.RenderAsync(Ask("wendy", format: "csv", widget: "by_region", preview: true), default));
+        Assert.Null(csv.Preview);
+    }
+
+    [Fact]
+    public async Task A_preview_that_cannot_be_made_does_not_stop_the_pdf_and_the_message_says_so()
+    {
+        var (h, renderer) = await StartAsync();       // this exporter makes no pictures
+        await using var _ = h;
+        var result = Assert.IsType<RenderResult.Rendered>(await renderer.RenderAsync(Ask("wendy", preview: true), default));
+        Assert.Null(result.Preview);
+        Assert.NotEmpty(result.Content);
+        Assert.Contains(result.Notes, n => n.Contains("preview picture could not be made", StringComparison.Ordinal));
+    }
 
     [Fact]
     public async Task Two_subscribers_of_one_dashboard_with_different_rules_get_different_attachments_and_each_export_is_audited_as_that_person()

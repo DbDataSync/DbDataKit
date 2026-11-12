@@ -133,7 +133,7 @@ public sealed class KeyRing : IKeySource
         if (!File.Exists(path)) throw new KeyNotFoundException($"The key ring '{_directory}' has no key '{id}'.");
         VerifyPermissions(_directory);
         VerifyPermissions(path);
-        var content = File.ReadAllBytes(path);
+        var content = ReadShared(path);
         if (content.Length < Magic.Length + 2 || !content.AsSpan(0, Magic.Length).SequenceEqual(Magic))
             throw new InvalidDataException($"'{path}' is not a secret key file.");
         if (content[Magic.Length] != Format) throw new InvalidDataException($"'{path}' is key file format {content[Magic.Length]}; this build reads format {Format}.");
@@ -168,7 +168,7 @@ public sealed class KeyRing : IKeySource
         var path = Path.Combine(_directory, "active");
         if (!File.Exists(path)) return null;
         VerifyPermissions(path);
-        var id = File.ReadAllText(path, Encoding.UTF8).Trim();
+        var id = Encoding.UTF8.GetString(ReadShared(path)).Trim();
         return id.Length == 0 ? null : id;
     }
 
@@ -187,13 +187,39 @@ public sealed class KeyRing : IKeySource
         VerifyPermissions(_directory);
     }
 
+    /// <summary>Reads a file another opener may be replacing at this moment: opened with every sharing mode (a replacement is a move over it, which Windows refuses while a reader holds it without <c>Delete</c>), and tried again for a moment when it is still in use.</summary>
+    private static byte[] ReadShared(string path)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var memory = new MemoryStream();
+                stream.CopyTo(memory);
+                return memory.ToArray();
+            }
+            catch (IOException) when (attempt < 100 && File.Exists(path)) { Thread.Sleep(20); }
+        }
+    }
+
+    /// <summary>Publishes the finished temp file over the destination in one move; a reader that holds the destination at that instant is waited for, a moment at a time.</summary>
+    private static void MoveOver(string temp, string path)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try { File.Move(temp, path, overwrite: true); return; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && attempt < 100) { Thread.Sleep(20); }
+        }
+    }
+
     private void WriteAtomically(string path, byte[] content)
     {
         var temp = path + "." + Convert.ToHexString(RandomNumberGenerator.GetBytes(4)).ToLowerInvariant() + ".tmp";
         try
         {
             AclHelper.WriteAllBytesRestricted(temp, content, _identities);
-            File.Move(temp, path, overwrite: true);
+            MoveOver(temp, path);
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
     }

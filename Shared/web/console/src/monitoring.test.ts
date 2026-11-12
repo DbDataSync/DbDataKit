@@ -82,6 +82,29 @@ describe('loading the rows of a Gateway', () => {
   })
 })
 
+describe('loading the rows of a Store', () => {
+  const now = Date.parse('2026-10-30T12:00:00Z')
+  const store = server('st1', 'Store one', 'dbdatastore')
+
+  it('shows the Store feed (a preview ending, a preview removed) as events and survives a server without the route', async () => {
+    const feed = [
+      { id: 1, kind: 'PreviewExpiring', created: '2026-10-30T09:00:00Z', message: "The preview 'acme' ends on 2026-11-06" },
+      { id: 2, kind: 'PreviewRemoved', created: '2026-10-30T10:00:00Z', message: "The preview 'old' was removed" },
+    ]
+    const real = globalThis.fetch
+    globalThis.fetch = (async (url: string) => String(url).endsWith('/notifications')
+      ? new Response(JSON.stringify({ notifications: feed }), { status: 200, headers: { 'content-type': 'application/json' } })
+      : new Response('{}', { status: 404 })) as typeof fetch
+    try {
+      const { rows, problems } = await loadRows([store], now)
+      expect(problems).toEqual([])
+      expect(rows.map((r) => [r.product, r.subject, r.state])).toEqual([['dbdatastore', 'Preview removed', 'event'], ['dbdatastore', 'Preview ending', 'event']])
+    } finally { globalThis.fetch = real }
+    globalThis.fetch = (async () => new Response('{}', { status: 404 })) as typeof fetch
+    try { expect((await loadRows([store], now)).rows).toEqual([]) } finally { globalThis.fetch = real }
+  })
+})
+
 describe('certificate rows', () => {
   const sync2 = server('s2', 'Sync two', 'dbdatasync')
 
