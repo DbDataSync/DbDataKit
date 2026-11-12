@@ -121,6 +121,8 @@ internal static partial class ResultShaper
             {
                 if (entries[i] is JsonObject o && o["group"] is JsonValue gv && gv.TryGetValue<string>(out var name))
                 {
+                    // the details of a row that expands on request are not in the answer: the rows are asked for without them (DBR55)
+                    if (o["show"]?.GetValue<string>() == "drill") continue;
                     var group = GroupOf(widget, name, $"encodings.{axis}[{i}]");
                     var fields = group.Levels.Select(l => table.Resolve(l.Field) ?? throw Missing(widget, answer, l.Field, $"encodings.{axis}[{i}].group")).ToList();
                     if (o["show"] is not null)
@@ -190,5 +192,81 @@ internal static partial class ResultShaper
             replaced.Add(column);
             level["rolled_up"] = replaced;
         }
+    }
+}
+
+internal static partial class ResultShaper
+{
+    /// <summary>Whether a matrix has a row entry that expands on request (<c>{group, show: drill}</c>, plan 32 DBR55).</summary>
+    internal static bool HasDrillGroup(ViewWidget widget) =>
+        widget.Type == "matrix" && widget.Raw["encodings"]?["rows"] is JsonArray rows && rows.OfType<JsonObject>().Any(o => o["group"] is not null && o["show"]?.GetValue<string>() == "drill");
+
+    /// <summary>The widget as it is run to read the details of an expanded row: its <c>show: drill</c> groups say <c>always</c>, so the matrix shows the details as extra header columns of the rows, and it has no totals (the request has none).</summary>
+    internal static ViewWidget AsDetails(ViewWidget widget)
+    {
+        var raw = (JsonObject)widget.Raw.DeepClone();
+        (raw["encodings"] as JsonObject)?.Remove("totals");
+        foreach (var o in (raw["encodings"]?["rows"] as JsonArray ?? []).OfType<JsonObject>())
+            if (o["group"] is not null && o["show"]?.GetValue<string>() == "drill") o["show"] = "always";
+        return widget with { Raw = raw };
+    }
+
+    /// <summary>The rows' own fields of a matrix (the entries that are not groups), in order.</summary>
+    private static List<string> OwnRowFields(JsonObject encodings) =>
+        (encodings["rows"] as JsonArray ?? []).Where(e => !(e is JsonObject o && o["group"] is not null)).Select(e => Ref(e) ?? "").ToList();
+
+    /// <summary>
+    /// Marks each row of a rendered matrix that can expand (DBR55): <c>expandable</c> and <c>key</c>, the typed member values of the row's own fields as the answer gave them (what a request for its details filters by). Called
+    /// right after the engine's rendering, while the labels are still the members' own text.
+    /// </summary>
+    private static void MarkExpandable(JsonObject rendered, ViewWidget widget, AnswerRows answer)
+    {
+        var encodings = widget.Raw["encodings"] as JsonObject ?? [];
+        var fields = OwnRowFields(encodings).Select(n => answer.Table.Resolve(n)).ToList();
+        if (fields.Count == 0 || fields.Any(f => f is null) || rendered["rows"] is not JsonArray rows) return;
+        string Key(IEnumerable<string> labels) => string.Join('\u001f', labels);
+        var keys = new Dictionary<string, JsonArray>();
+        foreach (var row in answer.Table.Rows.Where(answer.Table.IsDetail))
+        {
+            var k = Key(fields.Select(f => ResultTable.Label(row[f!.Name])));
+            if (!keys.ContainsKey(k)) keys[k] = new JsonArray(fields.Select(f => row[f!.Name]?.DeepClone()).ToArray());
+        }
+        foreach (var row in rows.OfType<JsonObject>())
+        {
+            if (row["total"]?.GetValue<bool>() == true || row["other"]?.GetValue<bool>() == true) continue;
+            var labels = (row["labels"] as JsonArray ?? []).Select(l => l?.GetValue<string>() ?? "").Take(fields.Count);
+            if (keys.TryGetValue(Key(labels), out var key)) { row["expandable"] = true; row["key"] = key; }
+        }
+    }
+
+    /// <summary>
+    /// Puts the details of one expanded row into the base matrix (DBR55): the base row whose <c>key</c> is <paramref name="key"/> becomes <c>expanded</c>, and its <c>children</c> are the rows of the details matrix that begin with the
+    /// row's own labels, each with the labels after them and a cell for every column of the base matrix (an empty one where the details have none there).
+    /// </summary>
+    internal static void AttachDetails(JsonObject baseMatrix, JsonObject details, JsonArray key)
+    {
+        if (baseMatrix["rows"] is not JsonArray baseRows || details["rows"] is not JsonArray detailRows) return;
+        var row = baseRows.OfType<JsonObject>().FirstOrDefault(r => r["key"] is JsonArray k && JsonNode.DeepEquals(k, key));
+        if (row is null) return;
+        var own = key.Count;
+        var labels = (row["labels"] as JsonArray ?? []).Select(l => l?.GetValue<string>() ?? "").ToList();
+        var baseColumns = (baseMatrix["columns"] as JsonArray ?? []).OfType<JsonObject>().Select(c => string.Join('\u001f', (c["labels"] as JsonArray ?? []).Select(l => l?.GetValue<string>() ?? ""))).ToList();
+        var detailColumns = (details["columns"] as JsonArray ?? []).OfType<JsonObject>().Select(c => string.Join('\u001f', (c["labels"] as JsonArray ?? []).Select(l => l?.GetValue<string>() ?? ""))).ToList();
+        var children = new JsonArray();
+        foreach (var d in detailRows.OfType<JsonObject>())
+        {
+            if (d["total"]?.GetValue<bool>() == true || d["other"]?.GetValue<bool>() == true) continue;
+            var dl = (d["labels"] as JsonArray ?? []).Select(l => l?.GetValue<string>() ?? "").ToList();
+            if (dl.Count <= own || !dl.Take(own).SequenceEqual(labels.Take(own))) continue;
+            var cells = new JsonArray();
+            foreach (var column in baseColumns)
+            {
+                var at = detailColumns.IndexOf(column);
+                cells.Add(at >= 0 && d["cells"] is JsonArray dc && at < dc.Count && dc[at] is { } cell ? cell.DeepClone() : new JsonObject { ["v"] = null, ["text"] = "" });
+            }
+            children.Add(new JsonObject { ["labels"] = new JsonArray(dl.Skip(own).Select(l => (JsonNode)l).ToArray()), ["cells"] = cells });
+        }
+        row["expanded"] = true;
+        row["children"] = children;
     }
 }

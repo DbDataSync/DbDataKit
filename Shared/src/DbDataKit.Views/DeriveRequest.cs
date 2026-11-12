@@ -257,6 +257,40 @@ public static class DeriveRequest
         return new DerivedRequest(request, Bindings(q, query["params"] as JsonObject), origins, wp, []);
     }
 
+    /// <summary>
+    /// The request for the details of one expanded row (plan 32 DBR55): the widget's request with its <c>show: drill</c> groups asked for like <c>show: always</c> ones (their attributes after the row's own fields, the order by their
+    /// levels), no totals, and the row's own fields filtered to the row's member values <paramref name="key"/> (the rows' fields in order, as the base answer gave them, typed). Run as the viewer like any other request.
+    /// </summary>
+    public static DerivedRequest DeriveExpansion(ViewWidget widget, CatalogRoles roles, IReadOnlyList<JsonNode?> key, string file = "")
+    {
+        var wp = $"widgets.{widget.Id}";
+        var raw = (JsonObject)widget.Raw.DeepClone();
+        var encodings = raw["encodings"] as JsonObject ?? [];
+        var own = new List<string>();
+        if (encodings["rows"] is JsonArray rows)
+            foreach (var entry in rows)
+            {
+                if (entry is JsonObject o && o["group"] is not null) { if (o["show"]?.GetValue<string>() == "drill") o["show"] = "always"; }
+                else own.Add(entry is JsonObject f ? f["field"]?.GetValue<string>() ?? "" : entry?.GetValue<string>() ?? "");
+            }
+        var asked = Derive(widget with { Raw = raw }, roles, file);
+        if (asked.Request is null) return asked;
+        if (key.Count != own.Count)
+            return new DerivedRequest(null, [], new Dictionary<string, string>(), wp, [DefaultDiagnosticCatalog.Instance.Create(ViewsCodes.InvalidValue, file, widget.Line, widget.Column, $"A row names a value for each of the rows' fields ({own.Count}); this one names {key.Count}.", null, $"{wp}.encodings.rows")]);
+        var query = (JsonObject)asked.Request["query"]!;
+        query.Remove("totals");
+        var filters = query["filters"] as JsonArray ?? [];
+        for (var i = 0; i < own.Count; i++)
+            filters.Add(new JsonObject { ["attribute"] = own[i], ["operator"] = "equals", ["values"] = new JsonArray(key[i]?.DeepClone()) });
+        query["filters"] = filters;
+        // the keys in the order a derived request writes them, so the request (and its hash) is the one a hand-written equal would be
+        var ordered = new JsonObject();
+        foreach (var name in new[] { "measures", "attributes", "filters", "segments", "order", "limit", "totals", "timezone" })
+            if (query[name] is { } part) ordered[name] = part.DeepClone();
+        var envelope = (JsonObject)JsonNode.Parse(new JsonObject { ["spec_version"] = SpecVersion, ["kind"] = "query", ["query"] = ordered }.ToJsonString())!;
+        return new DerivedRequest(envelope, Bindings(ordered, widget.Query?.Raw["params"] as JsonObject), new Dictionary<string, string>(), wp, []);
+    }
+
     // ---- the fields of each widget type, in the fixed order ----
 
     private static List<Slot> Slots(string type, JsonObject encodings, string path, IReadOnlyDictionary<string, ViewGroup>? groups, Action<string, string, string> refuse)
@@ -266,6 +300,8 @@ public static class DeriveRequest
         bool Group(JsonNode? node, string p)
         {
             if (node is not JsonObject { } o || o["group"] is not JsonValue gv || !gv.TryGetValue<string>(out var name)) return false;
+            // the details of a row that expands on request (DBR55) are asked for when a row is expanded, never with the rows
+            if (o["show"] is JsonValue sv && sv.TryGetValue<string>(out var show) && show == "drill") return true;
             if (groups is null || !groups.TryGetValue(name, out var group)) { refuse(ViewsCodes.UnknownGroup, $"{p}.group", $"`{name}` is not a group of this document."); return true; }
             foreach (var level in group.Levels) slots.Add(new Slot(level.Field, $"{p}.group", Well.Attribute, Group: name));
             return true;
@@ -323,7 +359,7 @@ public static class DeriveRequest
         if (encodings[axis] is not JsonArray list) return result;
         foreach (var n in list)
         {
-            if (n is JsonObject o && o["group"] is JsonValue gv && gv.TryGetValue<string>(out var name)) { if (groups is not null && groups.TryGetValue(name, out var g)) result.AddRange(g.Levels.Select(l => l.Field)); }
+            if (n is JsonObject o && o["group"] is JsonValue gv && gv.TryGetValue<string>(out var name)) { if (o["show"] is JsonValue sv && sv.TryGetValue<string>(out var shown) && shown == "drill") continue; if (groups is not null && groups.TryGetValue(name, out var g)) result.AddRange(g.Levels.Select(l => l.Field)); }
             else result.Add(n is JsonObject f ? f["field"]?.GetValue<string>() ?? "" : n?.GetValue<string>() ?? "");
         }
         return [.. result.Distinct()];

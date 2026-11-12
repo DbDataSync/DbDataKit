@@ -191,6 +191,10 @@
     {
       "name": "matrix-detail-group-always",
       "file": "good/matrix-detail-group-always.json"
+    },
+    {
+      "name": "matrix-drill-group-is-not-asked-for-until-a-row-is-expanded",
+      "file": "good/matrix-drill-group-is-not-asked-for-until-a-row-is-expanded.json"
     }
   ],
   "refused": [

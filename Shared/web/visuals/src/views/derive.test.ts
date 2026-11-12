@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { deriveRequest, normaliseRequestPath } from './derive'
+import { deriveExpansion, deriveRequest, normaliseRequestPath } from './derive'
 import type { CatalogRoles } from './derive'
 import { validateWidgets } from './widgets'
 import { Issues } from './common'
@@ -73,5 +73,24 @@ describe('the rules the goldens cannot say alone', () => {
   it('a field of no role goes to the attributes of a chart and is refused as unknown', () => {
     const d = deriveRequest({ id: 'w', raw: { type: 'chart', mark: 'bar', encodings: { x: 'nope.x', y: 'orders.net_revenue' }, query: { model: 'sales_catalog' } } }, roles)
     expect(d.issues.map((i) => i.code)).toEqual(['unknown_member'])
+  })
+})
+
+describe('the request for one expanded row (DBR55)', () => {
+  const file = read('expansions.json') as unknown as { groups: Record<string, unknown>; widgets: Record<string, any>; cases: { name: string; key: unknown[]; request: unknown }[] }
+  for (const c of file.cases)
+    it(`${c.name} gives exactly the golden request`, () => {
+      const issues = new Issues()
+      const groups = checkGroups(file.groups, issues)
+      expect(issues.list).toEqual([])
+      const derived = deriveExpansion({ id: 'w', raw: file.widgets.w, groups }, roles, c.key)
+      expect(derived.issues).toEqual([])
+      expect(JSON.stringify(derived.request)).toBe(JSON.stringify(c.request))
+    })
+  it('refuses a key that does not name a value for each of the rows\' fields', () => {
+    const groups = checkGroups(file.groups, new Issues())
+    const derived = deriveExpansion({ id: 'w', raw: file.widgets.w, groups }, roles, ['West', 'extra'])
+    expect(derived.request).toBeUndefined()
+    expect(derived.issues[0]!.message).toContain('names a value for each of the rows')
   })
 })

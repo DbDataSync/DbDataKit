@@ -100,6 +100,26 @@ public class DeriveTests
     }
 
     [Fact]
+    public void The_request_for_an_expanded_row_is_the_golden_one()
+    {
+        var file = Case("expansions.json");
+        var read = ViewsLoader.LoadGroups(file["groups"]!.ToJsonString(), "expansions.json");
+        Assert.True(read.Groups is not null, Conformance.Describe(read.Diagnostics));
+        var widget = ViewsLoader.LoadWidgets(file["widgets"]!.ToJsonString(), "expansions.json", [], groups: read.Groups).Widgets!.Single();
+        foreach (var c in file["cases"]!.AsArray())
+        {
+            var key = c!["key"]!.AsArray().Select(k => k?.DeepClone()).ToList();
+            var derived = DeriveRequest.DeriveExpansion(widget, Roles(), key, "expansions.json");
+            Assert.True(derived.Ok, Conformance.Describe(derived.Diagnostics));
+            Assert.Equal(c["request"]!.ToJsonString(), derived.Request!.ToJsonString());
+            Assert.Empty(new SemanticRequestValidator(Cat).Validate(derived.Request!));
+        }
+        var refused = DeriveRequest.DeriveExpansion(widget, Roles(), [JsonValue.Create("West"), JsonValue.Create("extra")], "expansions.json");
+        Assert.Null(refused.Request);
+        Assert.Contains("names a value for each of the rows", refused.Diagnostics[0].Message);
+    }
+
+    [Fact]
     public void Some_goldens_have_a_hand_written_equivalent()
     {
         Assert.True(Conformance.Cases("derive/cases.json")["good"]!.AsArray().Count(g => Case(g!["file"]!.GetValue<string>())["equivalent"] is not null) >= 1);

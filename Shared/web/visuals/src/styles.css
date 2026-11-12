@@ -194,3 +194,9 @@ tr.vz-pointable:hover td, th.vz-pointable:hover, td.vz-pointable:hover { backgro
 .vz-mixed { font-style: italic; opacity: 0.75; border-bottom: 1px dotted currentColor; }
 .vz-cell-link { all: unset; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .vz-cell-link:focus-visible { outline: 2px solid var(--vz-accent); outline-offset: 1px; }
+
+/* a matrix row that expands on request (plan 32 DBR55): the toggle in the first label, the detail rows indented under it */
+.vz-expand { all: unset; cursor: pointer; display: inline-block; width: 1.2em; margin-right: 2px; text-align: center; }
+.vz-expand:focus-visible { outline: 2px solid var(--vz-accent); outline-offset: 1px; }
+tr.vz-child th, tr.vz-child td { background: var(--vz-head, transparent); font-size: 0.95em; }
+th.vz-child-pad { border-right: 0; }

@@ -71,6 +71,10 @@
     {
       "file": "good/dashboard-groups.json",
       "kind": "dashboard"
+    },
+    {
+      "file": "good/dashboard-drill-details.json",
+      "kind": "dashboard"
     }
   ],
   "bad": [
@@ -1418,8 +1422,8 @@
       "schema": false
     },
     {
-      "name": "matrix-detail-group-show-drill",
-      "file": "bad/matrix-detail-group-show-drill.json",
+      "name": "matrix-detail-group-show-unknown",
+      "file": "bad/matrix-detail-group-show-unknown.json",
       "as": "dashboard",
       "code": "DBD-106",
       "path": "widgets.w.encodings.rows[1].show",
@@ -1433,6 +1437,42 @@
       "code": "DBD-106",
       "path": "widgets.w.encodings.rows[0].show",
       "line": 27,
+      "schema": false
+    },
+    {
+      "name": "matrix-expanded-without-a-drill-group",
+      "file": "bad/matrix-expanded-without-a-drill-group.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.expanded",
+      "line": 29,
+      "schema": false
+    },
+    {
+      "name": "matrix-expanded-wrong-key-length",
+      "file": "bad/matrix-expanded-wrong-key-length.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.expanded[0]",
+      "line": 37,
+      "schema": false
+    },
+    {
+      "name": "matrix-expanded-not-a-list",
+      "file": "bad/matrix-expanded-not-a-list.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.expanded[0]",
+      "line": 37,
+      "schema": true
+    },
+    {
+      "name": "matrix-drill-group-beside-another-group",
+      "file": "bad/matrix-drill-group-beside-another-group.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.rows[1].show",
+      "line": 32,
       "schema": false
     }
   ],

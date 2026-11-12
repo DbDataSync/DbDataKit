@@ -137,6 +137,18 @@ function checkWidget(id: string, raw: unknown, path: string, context: Context, i
       break
     case 'chart': chart(raw, path, fields, context, issues); break
     case 'matrix':
+      if (raw.expanded !== undefined) expanded(raw, join(path, 'expanded'), issues)
+      {
+        // a row that expands (`show: drill`, DBR55) is made of the rows' plain fields, and the columns have no group either
+        const rows = encodings?.rows
+        const columns = encodings?.columns
+        const isGroup = (e: unknown): boolean => isObject(e) && e.group !== undefined
+        if (Array.isArray(rows)) {
+          const at0 = rows.findIndex((e) => isGroup(e) && (e as Json).show === 'drill')
+          if (at0 >= 0 && rows.some((e, i) => isGroup(e) && i !== at0)) issues.add('DBD-106', join(at(join(ep, 'rows'), at0), 'show'), "A row that expands (`show: drill`) is made of the rows' plain fields: the rows have no other group.")
+          else if (at0 >= 0 && Array.isArray(columns) && columns.some(isGroup)) issues.add('DBD-106', join(at(join(ep, 'rows'), at0), 'show'), 'A matrix with a row that expands (`show: drill`) has plain fields on its columns: no group.')
+        }
+      }
       for (const axis of ['rows', 'columns'] as const) {
         const list = encodings?.[axis]
         if (Array.isArray(list)) list.forEach((f, i) => {
@@ -312,6 +324,22 @@ function chart(raw: Json, path: string, fields: Encoded[], context: Context, iss
       } else issues.add('DBD-106', p, 'A channel is a field name, or a mapping with `field`, `type`, `sort`, `stack` and `title`.')
     }
   }
+}
+
+/**
+ * A matrix's `expanded` (plan 32 DBR55): the rows the document shows expanded, each the member values of the row's own fields, outermost first; it needs a rows entry `{group, show: drill}` (as `ViewsLoader.Expanded` reads it).
+ */
+function expanded(raw: Json, path: string, issues: Issues): void {
+  const list = raw.expanded
+  if (!Array.isArray(list)) return
+  const rows = isObject(raw.encodings) && Array.isArray(raw.encodings.rows) ? raw.encodings.rows : []
+  const isGroup = (e: unknown): boolean => isObject(e) && e.group !== undefined
+  if (!rows.some((e) => isGroup(e) && (e as Json).show === 'drill')) { issues.add('DBD-106', path, '`expanded` names rows of a matrix whose `rows` have an entry with `show: drill`.'); return }
+  const own = rows.filter((e) => !isGroup(e)).length
+  list.forEach((key, i) => {
+    if (!Array.isArray(key)) return
+    if (key.length !== own) issues.add('DBD-106', at(path, i), `An expanded row names a value for each of the rows' fields (${own}); this one names ${key.length}.`)
+  })
 }
 
 /** A chart channel that is a field group (`{group: name}` with a `title` and a `sort`, plan 32 DBR52): one field made of the group's levels; as `ViewsLoader.GroupChannel` reads it. */

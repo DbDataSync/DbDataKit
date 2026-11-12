@@ -69,6 +69,32 @@ export function normaliseRequestPath(path: string): string {
   return path.slice(2).split('/').filter(Boolean).reduce((acc, s) => acc + (/^\d+$/.test(s) ? `[${s}]` : `.${s}`), '$')
 }
 
+/**
+ * The request for the details of one expanded row (plan 32 DBR55; the twin of `DeriveRequest.DeriveExpansion`): the widget's request with its `show: drill` groups asked for like `show: always` ones, no totals, and the row's own
+ * fields filtered to the member values `key` (the rows' fields in order, typed).
+ */
+export function deriveExpansion(widget: DerivableWidget, roles: CatalogRoles, key: unknown[]): DerivedRequest {
+  const raw = structuredClone(widget.raw)
+  const rows = isObject(raw.encodings) && Array.isArray(raw.encodings.rows) ? raw.encodings.rows : []
+  const own: string[] = []
+  for (const entry of rows) {
+    if (isObject(entry) && entry.group !== undefined) { if (entry.show === 'drill') entry.show = 'always' }
+    else own.push(isObject(entry) ? String(entry.field ?? '') : String(entry ?? ''))
+  }
+  const asked = deriveRequest({ ...widget, raw }, roles)
+  if (!asked.request) return asked
+  if (key.length !== own.length) return { ...asked, request: undefined, issues: [{ code: 'DBD-106', severity: 'error', path: join(join('widgets', widget.id), 'encodings.rows'), message: `A row names a value for each of the rows' fields (${own.length}); this one names ${key.length}.` }] }
+  const query = (asked.request as { query: Json }).query
+  delete query.totals
+  const filters = Array.isArray(query.filters) ? query.filters : []
+  own.forEach((field, i) => filters.push({ attribute: field, operator: 'equals', values: [key[i]] }))
+  query.filters = filters
+  // the keys in the order a derived request writes them, so the request is the one a hand-written equal would be
+  const ordered: Json = {}
+  for (const name of ['measures', 'attributes', 'filters', 'segments', 'order', 'limit', 'totals', 'timezone']) if (query[name] !== undefined) ordered[name] = query[name]
+  return { ...asked, request: { spec_version: SPEC_VERSION, kind: 'query', query: ordered }, bindings: bindingsOf(ordered, isObject(widget.raw.query) && isObject(widget.raw.query.params) ? widget.raw.query.params : undefined) }
+}
+
 export function deriveRequest(widget: DerivableWidget, roles: CatalogRoles): DerivedRequest {
   const wp = join('widgets', widget.id)
   const issues: ViewsIssue[] = []
@@ -214,6 +240,8 @@ function slotsOf(type: string, encodings: Json, path: string, groups: Record<str
   // a field group in a channel or an axis (DBR52): its levels, outermost first, are the attributes it asks for
   const group = (node: unknown, p: string): boolean => {
     if (!isObject(node) || typeof node.group !== 'string') return false
+    // the details of a row that expands on request (DBR55) are asked for when a row is expanded, never with the rows
+    if (node.show === 'drill') return true
     const def = groups?.[node.group]
     if (!def) { refuse(UNKNOWN_GROUP, `${p}.group`, `\`${node.group}\` is not a group of this document.`); return true }
     for (const level of def.levels) slots.push({ field: level.field, path: `${p}.group`, well: 'attribute', group: node.group })
@@ -262,7 +290,7 @@ export function axisFields(encodings: Json, axis: string, groups: Record<string,
   if (!Array.isArray(list)) return []
   const out: string[] = []
   for (const n of list) {
-    if (isObject(n) && typeof n.group === 'string') { for (const l of groups?.[n.group]?.levels ?? []) out.push(l.field) }
+    if (isObject(n) && typeof n.group === 'string') { if (n.show !== 'drill') for (const l of groups?.[n.group]?.levels ?? []) out.push(l.field) }
     else out.push(isObject(n) ? String(n.field ?? '') : String(n ?? ''))
   }
   return [...new Set(out)]

@@ -75,6 +75,8 @@ export interface ResolveOptions {
   only?: string[]
   /** The viewer's sort of tables, by widget id (DBR45): the server runs those widgets with this `order` instead of the document's. A source that cannot (`sortsOnServer` is not true) ignores it. */
   order?: Record<string, ServerSort>
+  /** The rows a viewer expanded in a matrix with a `show: drill` group, by widget id (plan 32 DBR55): each the typed member values of the row's own fields. The server reads the details of each as the viewer; a source that cannot (`expandsOnServer` is not true) ignores it. */
+  expand?: Record<string, Array<Array<string | number | boolean | null>>>
   signal?: AbortSignal
 }
 
@@ -156,6 +158,8 @@ export interface ViewsClient {
   retire?(kind: ViewKind, name: string, expectedVersion?: number | null): Promise<void>
   /** True when `resolve` honours `order` (the module does; the fixtures hold recorded results and do not): a table the server cut is then sorted by a new run, not over the rows loaded. */
   sortsOnServer?: boolean
+  /** True when `resolve` honours `expand` (the module does; the fixtures hold recorded results and do not): a matrix row that can expand is then expanded by a new run of that widget. */
+  expandsOnServer?: boolean
   /** The PDF the exporter draws of the **published** document, as the caller (`GET .../export?format=pdf`; through the console's relay as JSON with the file in base64). Optional: the fixtures have no exporter. A host without a browser refuses with `unavailable` and the module's words, which name the `views.export` setting. */
   exportPdf?(ref: { kind: ViewKind; name: string }, options?: ExportOptions): Promise<ExportedFile>
   /** A download of the **published** document in any format of the export route (DBR17: `pdf`, `xlsx`, a widget's `csv` or `xlsx`, a chart's `svg`); `exportPdf` is `exportFile` with `format: 'pdf'`. Optional: the fixtures have no server. */

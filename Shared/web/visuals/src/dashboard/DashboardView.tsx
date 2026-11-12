@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { placedWidgets } from '../client/fixtureClient'
-import type { ServerSort, ViewsClient } from '../client/types'
+import type { ResolveOptions, ServerSort, ViewsClient } from '../client/types'
+import type { RenderedMatrix } from '../types'
 import { useTheme, type ThemeChoice } from '../theme'
 import type { ViewKind } from '../views/document'
 import type { Box, LayoutDoc, ParameterValue, ParameterValues, ViewsDoc } from '../views/model'
@@ -8,7 +9,7 @@ import type { RenderedWidget } from '../views/rendered'
 import { selectLayout, type LayoutSelection, type Medium } from '../views/selectLayout'
 import { PagedFrame } from '../report/PagedFrame'
 import { usePrintPreview } from '../report/PrintPreview'
-import type { CellLink } from '../widgets/WidgetView'
+import type { CellLink, RowExpand } from '../widgets/WidgetView'
 import { ErrorTile } from '../widgets/states'
 import { DashboardFrame } from './DashboardFrame'
 import { drillOf, onSelectOf, resolveDrill, rowOf, selectFrom, type Hit, type HitHow, type ResolvedDrill } from './interaction'
@@ -120,6 +121,8 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
   const [resolution, setResolution] = useState<Resolution | null>(null)
   // the viewer's sorts of tables the server cut (DBR45): kept for every later request of this view, never stored
   const sortsRef = useRef<Record<string, ServerSort>>({})
+  // the rows the viewer expanded in matrices (DBR55), by widget: kept for every later request of this view, never stored
+  const expandRef = useRef<NonNullable<ResolveOptions['expand']>>({})
   const [failure, setFailure] = useState<string | null>(null)
   const latest = useRef<Resolution | null>(null)
   useEffect(() => {
@@ -127,7 +130,7 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
     const controller = new AbortController()
     let current = true
     setFailure(null)
-    resolveLayout({ client, ref: { kind, name }, layout: chosenName, placed, parameters: values, previous: latest.current, document, order: sortsRef.current, signal: controller.signal }).then(
+    resolveLayout({ client, ref: { kind, name }, layout: chosenName, placed, parameters: values, previous: latest.current, document, order: sortsRef.current, expand: expandRef.current, signal: controller.signal }).then(
       (next) => {
         if (!current) return
         latest.current = next
@@ -166,7 +169,7 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
       run: async () => {
         const l = live.current
         if (!l.chosenName) return
-        const next = await resolveLayout({ client: l.client, ref: { kind: l.kind, name: l.name }, layout: l.chosenName, placed: l.placed, parameters: l.values, previous: latest.current, document: l.document, force: true, order: sortsRef.current })
+        const next = await resolveLayout({ client: l.client, ref: { kind: l.kind, name: l.name }, layout: l.chosenName, placed: l.placed, parameters: l.values, previous: latest.current, document: l.document, force: true, order: sortsRef.current, expand: expandRef.current })
         latest.current = next
         setResolution(next)
       },
@@ -201,6 +204,27 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
     )
   }
   const serverSorting = client.sortsOnServer ? serverSort : onServerSort
+
+  // a click on the toggle of a matrix row that can expand (DBR55): the widget runs again with the rows the viewer has open, the module reads the details of each as the viewer, the others keep what they show
+  const toggleExpand = (e: RowExpand) => {
+    const l = live.current
+    if (!l.chosenName) return
+    const open = (latest.current?.results[e.widget] as RenderedMatrix | undefined)?.rows?.flatMap((r) => (r.expanded && r.key ? [r.key] : [])) ?? []
+    const current = expandRef.current[e.widget] ?? open
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+    const next = e.expanded ? [...current.filter((k) => !same(k, e.key)), e.key] : current.filter((k) => !same(k, e.key))
+    expandRef.current = { ...expandRef.current, [e.widget]: next }
+    l.client.resolve({ kind: l.kind, name: l.name }, l.chosenName, l.values, { only: [e.widget], order: sortsRef.current, expand: expandRef.current }).then(
+      (fresh) => {
+        const base = latest.current
+        if (!base) return
+        const merged: Resolution = { ...base, results: { ...base.results, ...fresh.widgets }, asOfBy: { ...base.asOfBy, ...Object.fromEntries(Object.keys(fresh.widgets).map((id) => [id, fresh.as_of])) } }
+        latest.current = merged
+        setResolution(merged)
+      },
+      (err: unknown) => setNotice(`The row could not be ${e.expanded ? 'expanded' : 'collapsed'}: ${err instanceof Error ? err.message : String(err)}`),
+    )
+  }
 
   // pointing at a widget: a selection sets the parameter it names (the same change a control makes, so the dependents resolve again); a drill goes to the host
   const [notice, setNotice] = useState<string | null>(null)
@@ -266,6 +290,7 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
         sortable={sortable}
         onServerSort={serverSorting}
         onLink={onLink}
+        onExpand={client.expandsOnServer ? toggleExpand : undefined}
       />
     )
   return (

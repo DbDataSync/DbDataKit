@@ -223,7 +223,7 @@ widgets:
   rows' arrival order); the answer's rows get one member key per combination, the member is labelled by the template, and the axis is **one** axis, so a line over a year-and-month group is one continuous line labelled `Mar 2026`.
   A group channel takes a `title` and a `sort` (`ascending`, `descending`, `sort_key`) and no `field`, `format`, `alias`, `filters`, `type` or `stack`.
 * **In a matrix** an entry of `rows` or `columns` is `{group: name}` (the same combined field: one header per combination, a total rolls every level up together) or, in `rows` only, `{group: name, show: always}`: the group's attributes
-  (at or below the row's grain: an order's number, its customer) shown **as extra header columns of every row**, the request asking for them after the row's own fields. `show: drill` (a row that expands) is DBR55.
+  (at or below the row's grain: an order's number, its customer) shown **as extra header columns of every row**, the request asking for them after the row's own fields. `show: drill` (a row that expands on request) is described below.
 * **Checks.** `DBD-VIEW-047`: a group the document does not declare. `DBD-VIEW-048`: a field in a group and also in another place of the same widget (an axis, a channel, a tooltip, another group), naming both places. A level that is
   not an attribute of the catalog is the engine's `unknown_member` or `wrong_member_kind`, at the entry's `group` path. A group in a written query (`mode: explicit`) is `DBD-VIEW-007`. The shape (`DBD-106`, `DBD-104`): one level, five
   levels, a template naming `{3}` where the group has two, a field twice, a bad level format, a group in `y`, a `field` beside a `group`, `show` on a column entry or on a plain entry.
@@ -238,6 +238,32 @@ a `setPath` of that entry, so it is one undo step, and what is wrong is said in 
 to add), its label and template, and the loaders' words about it; a group a widget names is not removed (the editor says which widget). A group is put in a well by the pick list (**Groups**; for the rows of a matrix also **Details of
 every row**). The pure parts (`entryParts.ts`, `wells.ts`) are `@dbdatakit/visuals` and are tested against the goldens: the chart of two series of one measure, the matrix with a status per month and the line over a group built through
 the controls are the golden widgets (`entryParts.test.ts`); the screens are `WidgetEditor.tsx` and `GroupEditor.tsx` of `@dbdatakit/views-editor` (`entries.test.tsx`, the story `views-editor-entries.spec.ts`, written and not run).
+
+#### Drill detail groups: a row that expands (DBR55)
+
+`{group: name, show: drill}` in `rows` makes each row **expandable**: the rows are asked for **without** the group's attributes, and a click on a row's toggle reads that member's details.
+
+```yaml
+widgets:
+  orders:
+    type: matrix
+    encodings: {rows: [customers.region, {group: who, show: drill}], columns: [orders.status], values: [{field: orders.net_revenue}]}
+    query: {model: sales}
+    expanded: [[West]]            # what print and export show; a viewer's own choice replaces it on screen
+```
+
+* **The request** for a row's details is `DeriveRequest.DeriveExpansion` (and `deriveExpansion`, the same golden `derive/expansions.json`): the widget's request with the drill group asked for like `show: always` (its attributes after the
+  row's own fields, the order by their levels), **no totals**, and the row's own fields filtered to its member values (the row's typed `key`). It runs as the viewer, like every request, through the same cache.
+* **The rendered row** of an expandable matrix carries `expandable` and `key`; an expanded one carries `expanded` and `children` (the labels after the row's own, and a cell for every column of the matrix, empty where the details have
+  none). The resolver reads at most **20** expansions per widget (the rest are not read and `notice` says so); a member that is no longer a row is not expanded; the widget's cache key holds the expansions.
+* **Asking.** The module's render request takes `expand`: `{"orders": [["West"], ["East"]]}` (widget id to rows, each the list of the member values of the row's own fields; `DBD-VIEW`-less `400` when it is not that shape). A widget not
+  listed shows the rows its document's `expanded` names (matched to the base rows by the text of their values), which is what a print or an export draws. `ResolveOptions.expand` is the client's side, `expandsOnServer` says a source honours it
+  (the module does; the fixtures do not, and show no toggle).
+* **On screen.** The first label cell of an expandable row is a button with `aria-expanded` (`Expand West` / `Collapse West`, Enter and Space work, it is a button), and the details are rows under it, indented. `DashboardView` keeps the
+  viewer's open rows, sends them with every later request of the view and runs only that widget when one is toggled; two open rows keep their own details. `onExpand` of `MatrixGrid` and `WidgetView` is the hook for a host with another
+  way to read them.
+* **Refused** (`DBD-106`): `show: drill` beside another group in the rows or a group on the columns (the row's key is its plain fields' values); `expanded` without a `show: drill` entry, or a row that does not name a value for each of
+  the rows' own fields. A drill group in a written query is `DBD-VIEW-007`, as every group.
 
 ### Sorting by a click (DBR45)
 
@@ -595,7 +621,7 @@ listener, off unless enabled) or its routes can be mounted by a host (`ViewsModu
 | --- | --- |
 | `GET /api/v1/dashboards`, `GET /api/v1/reports` | `{items: [{name, title, version}]}` of what the caller may open |
 | `GET /api/v1/{dashboards,reports}/{name}` | `{kind, name, title, version, as_of, text, document, layouts: [{name, type, default}]}`: the file as published, the document as JSON, the version as text (the registry's number) and `as_of` (when that version was published) |
-| `POST /api/v1/{dashboards,reports}/{name}/render` | the `rendered-widgets` document of the layout in play; body `{parameters?, layout?, only?, viewport?: {width, height}, medium?}`; with no `layout`, `LayoutSelector` chooses for the viewport (the default layout without one); an unknown key is refused |
+| `POST /api/v1/{dashboards,reports}/{name}/render` | the `rendered-widgets` document of the layout in play; body `{parameters?, layout?, only?, order?, expand?, viewport?: {width, height}, medium?}` (`order`: a viewer's sort of a table, DBR45; `expand`: the rows a viewer expanded in a matrix with a `show: drill` group, DBR55); with no `layout`, `LayoutSelector` chooses for the viewport (the default layout without one); an unknown key is refused |
 | `POST /api/v1/views/preview` | the **live preview of an unsaved draft** (plan 32 DBR28), resolved as the caller and stored nowhere: body `{kind?, document \| text, layout?, only?, parameters?, viewport?, medium?}` for a whole document (the answer is the layout's `rendered-widgets`), or `{kind?, widget, widget_id?, document?: {parameters}, parameters?}` for one widget placed alone (the answer holds its entry); see the bullet below |
 | `GET .../{name}/export?format=pdf&layout=&p.name=` | a **PDF** (`application/pdf`, an attachment `name-layout.pdf`): the layout named, else the one the **print** medium selects (a print layout, or the default), resolved as the caller and drawn in the pinned Chromium; `p.region=West` (repeated for a list) sets a parameter. No exporter or browser: **501 `export_unavailable`** naming the setting; 413 `export_too_large` over `max_pages`, 504 `export_timeout`, 503 `export_busy`, 500 `export_failed` (the page said it could not be drawn). Audited with the format, layout, pages and the browser's version |
 | `GET .../{name}/export?format=csv\|xlsx\|svg&widget=&layout=&p.name=` | the **data exports** (DBR17), resolved as the caller for the layout chosen as above (`layout=wall` names another) and audited like the PDF (`view.export`, with `format`, `widget`, rows, bytes). **`csv`**: the rows of the table or matrix `widget` (or a chart's data) as the caller was shown them, RFC 4180 (comma, CRLF), UTF-8 **with a byte-order mark** (Excel needs it, every other reader skips it), the engine's values not the formatted text (a total row says "Total"), and a **text** cell or header starting with `=` `+` `-` `@`, a tab or a carriage return gets a leading apostrophe so a spreadsheet never runs it (a number is never changed). **`xlsx`**: with `widget` one sheet; without, a sheet for each table, matrix and chart the layout places (named by the widget id, safe and unique ignoring case; a control, text and image have no rows) and, first, a `Metrics` sheet with a row for each metric of the layout (`Widget, Label, Value, Compare, Change`; one metric named by `widget` is still refused, it has no rows), header bold and frozen, totals bold, text always text, never a formula. **`svg`**: the chart `widget` as the print page draws it, taken out of the browser (the module has no JavaScript of its own, so it needs the exporter like the PDF does; 501 `export_unavailable` otherwise). `csv` and `xlsx` need **no browser**; the Gateway sets the limit in `views: {maxExportRows}` (default 100,000, 1 to 10,000,000). A failed widget is its error block: an xlsx sheet of `code, message, path`, and for `csv` and `svg` a 422 `widget_failed` with the widget's code and words. Refused in words: 400 `invalid` (`csv` and `svg` need `widget`, `pdf` takes none, an unknown format), 404 `widget_not_found`, 400 `widget_not_placed` (the layout does not place it), `widget_not_tabular`, `widget_not_chart`, `nothing_tabular`, 413 `export_too_large` over `ViewsOptions.MaxExportRows` (100,000 rows in all, and the 1,048,575 of an xlsx sheet) |

@@ -314,6 +314,7 @@ internal static partial class ResultShaper
             spec["sort"] = sorts;
         }
         var rendered = Render(widget, answer, spec, "matrix");
+        if (HasDrillGroup(widget)) MarkExpandable(rendered, widget, answer);
         FormatMatrix(rendered, answer, encodings, axisFormats, valueFormats);
         if (cellPlan is not null) FillCellAttributes(rendered, cellPlan, answer);
         return rendered;

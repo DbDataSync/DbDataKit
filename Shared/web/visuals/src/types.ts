@@ -3,13 +3,27 @@ import type { AttributeCellParts } from './CellContent'
 /** A cell of a rendered table or matrix: the server's text, the number it stands for, and (an attribute's cell, plan 32 DBR51) the icon, badge, mixed marker, values and link it carries. */
 export type RenderedMatrixCell = { v?: number | null; text: string } & AttributeCellParts
 
+/**
+ * A row of a rendered matrix: its labels and cells, and (plan 32 DBR55) for a matrix with a `show: drill` group whether the row can be expanded (`expandable`, its typed `key`), is (`expanded`) and the detail rows under it
+ * (`children`: the labels after the row's own and a cell for every column of the matrix).
+ */
+export interface RenderedMatrixRow {
+  labels: string[]
+  total?: boolean
+  cells: RenderedMatrixCell[]
+  expandable?: boolean
+  expanded?: boolean
+  key?: Array<string | number | boolean | null>
+  children?: Array<{ labels: string[]; cells: RenderedMatrixCell[] }>
+}
+
 /** The shapes of a rendered view (`rendered-view.schema.json`), as `ViewRenderer.Render` in DbDataKit.Semantic gives them. */
 export interface RenderedMatrix {
   id: string
   type: 'matrix'
   notice?: string | null
   columns: Array<{ labels: string[]; total?: boolean; other?: boolean }>
-  rows: Array<{ labels: string[]; total?: boolean; cells: RenderedMatrixCell[] }>
+  rows: RenderedMatrixRow[]
 }
 
 export type DataValue = string | number | boolean | null

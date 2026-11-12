@@ -3,18 +3,11 @@
   "kind": "dashboard",
   "title": "Groups",
   "groups": {
-    "period": {
+    "details": {
       "fields": [
-        "orders.ordered_at_year",
-        {
-          "field": "orders.ordered_at_month",
-          "format": {
-            "date": "MMM"
-          }
-        }
-      ],
-      "label": "Period",
-      "template": "{2} {1}"
+        "customers.customer",
+        "products.category"
+      ]
     }
   },
   "widgets": {
@@ -24,9 +17,12 @@
         "rows": [
           "customers.region",
           {
-            "group": "period",
+            "group": "details",
             "show": "drill"
           }
+        ],
+        "columns": [
+          "orders.status"
         ],
         "values": [
           {
@@ -36,7 +32,10 @@
       },
       "query": {
         "model": "sales_catalog"
-      }
+      },
+      "expanded": [
+        "West"
+      ]
     }
   },
   "layouts": [

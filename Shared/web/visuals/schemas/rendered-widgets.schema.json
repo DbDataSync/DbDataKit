@@ -115,6 +115,14 @@
             "properties": {
               "labels": { "type": "array", "items": { "type": "string" } },
               "total": { "type": "boolean" },
+              "expandable": { "description": "A row whose details can be read on request (plan 32 DBR55): the matrix has a `show: drill` group, and `key` is what a request for the row's details filters by.", "type": "boolean" },
+              "expanded": { "description": "The row's details are shown under it (`children`).", "type": "boolean" },
+              "key": { "description": "The typed member values of the row's own fields, outermost first.", "type": "array", "items": { "type": ["string", "number", "boolean", "null"] } },
+              "children": {
+                "description": "The detail rows of an expanded row: the labels after the row's own, and a cell for every column of the matrix.",
+                "type": "array",
+                "items": { "type": "object", "required": ["labels", "cells"], "additionalProperties": false, "properties": { "labels": { "type": "array", "items": { "type": "string" } }, "cells": { "type": "array", "items": { "type": "object", "required": ["text"], "additionalProperties": false, "properties": { "v": { "type": ["number", "null"] }, "text": { "type": "string" }, "icon": { "$ref": "#/$defs/icon" }, "badge": { "type": "boolean" }, "mixed": { "type": "boolean" }, "values": { "type": "array", "maxItems": 20, "items": { "type": "string" } }, "link": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" } } } } } }
+              },
               "cells": { "type": "array", "items": { "type": "object", "required": ["text"], "additionalProperties": false, "properties": { "v": { "type": ["number", "null"] }, "text": { "type": "string" }, "icon": { "$ref": "#/$defs/icon" }, "badge": { "type": "boolean" }, "mixed": { "type": "boolean" }, "values": { "type": "array", "maxItems": 20, "items": { "type": "string" } }, "link": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" } } } }
             }
           }

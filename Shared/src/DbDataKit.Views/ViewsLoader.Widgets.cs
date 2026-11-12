@@ -74,7 +74,7 @@ public static partial class ViewsLoader
                     MetricEncodings(map, path, fields);
                     break;
                 case "chart": ChartEncodings(map, path, fields); break;
-                case "matrix": MatrixEncodings(map, path, fields); break;
+                case "matrix": MatrixEncodings(map, path, fields); if (map.Get("expanded") is { } ex) Expanded(ex, map, J(path, "expanded")); break;
                 case "table": TableEncodings(map, path, fields); break;
                 case "text": TextBody(map, path); break;
                 case "image": ImageBody(map, path); break;
@@ -261,6 +261,30 @@ public static partial class ViewsLoader
         /// <summary>The most measures a chart's <c>y</c> list names (plan 32 DBR50).</summary>
         public const int MaximumSeries = 8;
 
+        /// <summary>The most rows a matrix's <c>expanded</c> list names.</summary>
+        public const int MaximumExpanded = 50;
+
+        /// <summary>
+        /// A matrix's <c>expanded</c> (plan 32 DBR55): the rows the document shows expanded, each the member values of the row's own fields, outermost first (what a click on the row's toggle would expand). It needs an entry of
+        /// <c>rows</c> that says <c>show: drill</c>, and each entry names as many values as the rows have fields besides the group.
+        /// </summary>
+        private void Expanded(YamlNode node, YamlMapping widget, string path)
+        {
+            if (Seq(node, path, "`expanded`", widget, 1, MaximumExpanded) is not { } list) return;
+            var enc = widget.Get("encodings") as YamlMapping;
+            var rows = enc?.Get("rows") as YamlSequence;
+            var drills = rows?.Items.Count(i => i is YamlMapping m && m.Get("group") is not null && m.Get("show") is YamlScalar { Value: "drill" }) ?? 0;
+            if (drills == 0) { Bad(ViewsCodes.InvalidValue, node, path, "`expanded` names rows of a matrix whose `rows` have an entry with `show: drill`.", "Add `{group: name, show: drill}` to the rows, or drop `expanded`."); return; }
+            var own = rows!.Items.Count(i => !(i is YamlMapping m && m.Get("group") is not null));
+            for (var i = 0; i < list.Items.Count; i++)
+            {
+                var ip = I(path, i);
+                if (list.Items[i] is not YamlSequence key) { Bad(ViewsCodes.InvalidValue, list.Items[i], ip, "An expanded row is the list of its member values: `[West]`, `[2026, West]`."); continue; }
+                if (key.Items.Count != own) Bad(ViewsCodes.InvalidValue, key, ip, $"An expanded row names a value for each of the rows' fields ({own}); this one names {key.Items.Count}.");
+                else if (key.Items.Any(v => v is not YamlScalar)) Bad(ViewsCodes.InvalidValue, key, ip, "A member value is a plain value.");
+            }
+        }
+
         /// <summary>The most levels a chart's nested <c>x</c> lists (plan 32 section 9g, DBR42).</summary>
         public const int MaximumAxisLevels = 3;
 
@@ -360,6 +384,16 @@ public static partial class ViewsLoader
                     }
                     else if (Field(list.Items[i], ip, "A field") is { } f) fields.Add(new(axis, f, ip, list.Items[i].Line, list.Items[i].Column));
                 }
+            }
+            // a row that expands on request (DBR55) is made of the rows' own plain fields: its key is their member values
+            if (enc.Get("rows") is YamlSequence drillRows)
+            {
+                var drill = drillRows.Items.FirstOrDefault(i => i is YamlMapping m && m.Get("group") is not null && m.Get("show") is YamlScalar { Value: "drill" });
+                var drillIndex = drill is null ? -1 : drillRows.Items.Select((x, i) => (x, i)).First(t => ReferenceEquals(t.x, drill)).i;
+                if (drill is not null && drillRows.Items.Any(i => i is YamlMapping other && other.Get("group") is not null && !ReferenceEquals(i, drill)))
+                    Bad(ViewsCodes.InvalidValue, drill, J(I(J(ep, "rows"), drillIndex), "show"), "A row that expands (`show: drill`) is made of the rows' plain fields: the rows have no other group.");
+                if (drill is not null && enc.Get("columns") is YamlSequence cs && cs.Items.Any(i => i is YamlMapping gm && gm.Get("group") is not null))
+                    Bad(ViewsCodes.InvalidValue, drill, J(I(J(ep, "rows"), drillIndex), "show"), "A matrix with a row that expands (`show: drill`) has plain fields on its columns: no group.");
             }
             if (Required(enc, "values", ep) is { } vn && Seq(vn, J(ep, "values"), "`values`", enc, 1) is { } vals)
                 for (var i = 0; i < vals.Items.Count; i++)

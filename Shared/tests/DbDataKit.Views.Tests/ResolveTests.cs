@@ -1074,6 +1074,65 @@ public class ResolveTests
         Assert.Empty(Violations(r.ToJson()));
     }
 
+
+    // ---- drill detail groups (plan 32 DBR55) ----
+
+    private const string DrillWidgets = """
+          mx:
+            type: matrix
+            encodings:
+              rows: [customers.region, {group: detail, show: drill}]
+              columns: [date.year_month]
+              values: [{field: sales.net_amount}]
+              totals: {rows: true}
+            query: {model: retail_sales}
+            expanded: [[East]]
+        """;
+    private const string DrillGroups = "  detail: {fields: [products.product, products.category]}";
+
+    [Fact]
+    public async Task A_row_that_expands_is_asked_for_without_its_details_and_each_expansion_is_a_request_as_the_viewer_that_two_rows_keep_their_own()
+    {
+        var doc = GroupDoc(DrillWidgets, DrillGroups);
+        var serving = new RetailServing();
+        var resolver = Resolver(serving);
+
+        // the document's own list: East is expanded, the others are rows that can be
+        var r = await resolver.ResolveAsync(Viewer(), doc, "desk");
+        var mx = Ok(r, "mx");
+        var rows = mx["rows"]!.AsArray();
+        Assert.Equal(4 + 1, rows.Count);                                            // the regions and the total row: no details in the rows
+        Assert.All(rows.Where(x => x!["total"]?.GetValue<bool>() != true), x => Assert.True(x!["expandable"]!.GetValue<bool>()));
+        Assert.Equal(["East"], rows.Single(x => x!["expanded"]?.GetValue<bool>() == true)!["labels"]!.AsArray().Select(l => l!.GetValue<string>()));
+        Assert.Equal(2, serving.Received.Count);                                    // the rows, and the details of East
+        var east = rows.Single(x => x!["expanded"]?.GetValue<bool>() == true)!;
+        var children = east["children"]!.AsArray();
+        Assert.Equal(24, children.Count);                                           // a row per (product, category)
+        Assert.Equal(["Base Layer Bottom", "Apparel"], children[0]!["labels"]!.AsArray().Select(l => l!.GetValue<string>()));
+        Assert.Equal(mx["columns"]!.AsArray().Count, children[0]!["cells"]!.AsArray().Count);          // a cell for every column of the matrix
+        Assert.Equal(NetOf(l => l.Region == "East" && l.Product == "Base Layer Bottom" && l.YearMonth == 202601), children[0]!["cells"]![0]!["v"]!.GetValue<double>());
+        Assert.Equal("East", east["key"]![0]!.GetValue<string>());
+
+        // the details came from a request of their own, as the viewer, filtered to the row and with no totals
+        var asked = serving.Received.Last();
+        Assert.Equal("ana", asked.Context.Caller.Id);
+        var json = ((ServingRequest.Semantic)asked.Request).Json;
+        Assert.Contains("\"customers.region\"", json);
+        Assert.DoesNotContain("totals", json, StringComparison.Ordinal);
+
+        // the viewer's own list replaces the document's: two rows, each with its own details
+        var key = (JsonNode?)JsonValue.Create("West");
+        var chosen = await resolver.ResolveAsync(Viewer(), doc, "desk", expand: new Dictionary<string, IReadOnlyList<IReadOnlyList<JsonNode?>>> { ["mx"] = [[JsonValue.Create("West")], [JsonValue.Create("South")]] });
+        var opened = Ok(chosen, "mx")["rows"]!.AsArray().Where(x => x!["expanded"]?.GetValue<bool>() == true).Select(x => x!["labels"]![0]!.GetValue<string>()).ToList();
+        Assert.Equal(["West", "South"], opened);
+        _ = key;
+        Assert.NotEqual(r.CacheKeys["mx"], chosen.CacheKeys["mx"]);                 // the expansions are part of what the result is
+        // a row the viewer expanded that is not there (a region the sample lacks) is not expanded
+        var none = await resolver.ResolveAsync(Viewer(), doc, "desk", expand: new Dictionary<string, IReadOnlyList<IReadOnlyList<JsonNode?>>> { ["mx"] = [[JsonValue.Create("Nowhere")]] });
+        Assert.DoesNotContain(Ok(none, "mx")["rows"]!.AsArray(), x => x!["expanded"]?.GetValue<bool>() == true);
+        Assert.Empty(Violations(chosen.ToJson()));
+    }
+
     // ---- parameters ----
 
     [Fact]
