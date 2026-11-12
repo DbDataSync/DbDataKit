@@ -103,7 +103,7 @@ internal sealed class RunnerRig : IDisposable
         var cleanups = new List<Action>();
         var layout = DbDataKit.State.StateLayout.Create(
             engine,
-            [DbDataKit.State.ProgressModule.Module, DbDataKit.State.RunsModule.Module, DbDataKit.Scheduling.SchedulingModule.Module, DbDataKit.State.RunnerModule.Module, DbDataKit.State.DefinitionsModule.Module],
+            [DbDataKit.State.ProgressModule.Module, DbDataKit.State.RunsModule.Module, DbDataKit.Scheduling.SchedulingModule.Module, DbDataKit.State.RunnerModule.Module, DbDataKit.State.DefinitionsModule.Module, DbDataKit.State.Tracking.TrackingModule.Module],
             DbDataKit.State.StateScope.Standalone);
         KitDatabase database;
         if (engine == DbDataKit.State.StateEngineIds.Sqlite)
@@ -167,7 +167,7 @@ internal sealed class RunnerRig : IDisposable
     /// read-only view the task runs from, like a published version. The view is made of copies, not links: the .NET host resolves a link to the file it points at and looks for the runtime configuration and the
     /// dependencies beside <i>that</i>, so <c>dotnet engine.dll</c> does not start from a view of links (what Windows gets anyway; plan 28c E04 and E05 meet it again).
     /// </summary>
-    public async Task<TaskRunRequest> DrainRequestAsync(string source, string replication, int degreeOfParallelism = 1, Guid? runId = null, string chain = Chain, string? runtimeSource = null, bool runAll = false, TimeSpan? cancellationGrace = null, string? requests = null)
+    public async Task<TaskRunRequest> DrainRequestAsync(string source, string replication, int degreeOfParallelism = 1, Guid? runId = null, string chain = Chain, string? runtimeSource = null, bool runAll = false, TimeSpan? cancellationGrace = null, string? requests = null, IReadOnlyDictionary<string, string>? connectionHandles = null)
     {
         var cacheRoot = Directory.CreateTempSubdirectory("dbdatasync-e03-cache-").FullName;
         _cleanups.Add(() => Rewritable(cacheRoot));
@@ -187,6 +187,7 @@ internal sealed class RunnerRig : IDisposable
             CancellationGrace = cancellationGrace ?? TimeSpan.FromSeconds(30),
             RunId = runId ?? Database.NewId(),
             Chain = chain,
+            ConnectionHandles = connectionHandles ?? new Dictionary<string, string>(),
             Inputs = new Dictionary<string, string>
             {
                 ["replication"] = replication,

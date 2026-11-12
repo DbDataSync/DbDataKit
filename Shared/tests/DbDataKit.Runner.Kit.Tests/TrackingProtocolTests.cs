@@ -97,6 +97,36 @@ namespace DbDataKit.Runner.Kit.Tests
 
         [Theory]
         [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
+        public void Sync_units_travel_under_their_own_identities_in_the_shared_tracking_module_and_the_two_kinds_are_not_mixed(string engine)
+        {
+            using var h = new Harness(engine, remote: true);
+            using var run = new RawClient(h.Host.Endpoint, h.Grant("tracking-copier", handles: Handles));
+            run.Start();
+            const string unit = "syncunit:postgres://pg1/wh/orders@warehouse";
+            var write = (string identity, string stream, bool advance, long version) => new TrackingWriteRequest { Identity = identity, Stream = stream, Advance = advance, ExpectedVersion = version, Rows = { new TrackingRowMessage { Key = "u1", Order = 1, Document = "{\"unit_seq\":1}" } } };
+
+            Assert.True(run.Client.TrackingWrite(write(unit, SyncUnitCopy.Name, true, 0), run.Headers).Applied);
+            var state = run.Client.TrackingState(new TrackingStreamRef { Identity = unit, Stream = SyncUnitCopy.Name }, run.Headers);
+            Assert.Equal(1, state.Version);
+            Assert.False(run.Client.TrackingWrite(write(unit, SyncUnitCopy.Name, true, 0), run.Headers).Applied);   // the version moved: nothing written
+            Assert.Single(run.Client.TrackingTail(new TrackingTailRequest { Identity = unit, Stream = SyncUnitCopy.Name, Count = 5 }, run.Headers).Positions);
+            Assert.Empty(run.Client.TrackingUnsettled(new TrackingUnsettledRequest { Identity = unit, Stream = SyncUnitCopy.Name, Limit = 5 }, run.Headers).Rows);
+
+            // in the shared module, not Build's, and the divergence is the stream's
+            Assert.Equal(1, new StateTrackingStore(h.Database).Count(unit, SyncUnitCopy.Name));
+            var reply = run.Client.TrackingDivergence(new TrackingDivergenceRequest { Identity = unit, Stream = SyncUnitCopy.Name, Reason = "restored" }, run.Headers);
+            Assert.Equal(SyncUnitCopy.Name, reply.Divergence.Stream);
+
+            // the grant applies as for Build's, and a Build stream under a Sync identity (or the reverse) is refused
+            Assert.Equal(StatusCode.PermissionDenied, Assert.Throws<RpcException>(() => run.Client.TrackingWrite(write("syncunit:postgres://pg1/wh/orders@other", SyncUnitCopy.Name, true, 0), run.Headers)).StatusCode);
+            Assert.Equal(StatusCode.InvalidArgument, Assert.Throws<RpcException>(() => run.Client.TrackingWrite(write(unit, Stream, true, 0), run.Headers)).StatusCode);
+            Assert.Equal(StatusCode.InvalidArgument, Assert.Throws<RpcException>(() => run.Client.TrackingWrite(write("buildtracking:x@warehouse", SyncUnitCopy.Name, true, 0), run.Headers)).StatusCode);
+            Assert.Equal(StatusCode.InvalidArgument, Assert.Throws<RpcException>(() => run.Client.TrackingSnapshot(new TrackingSnapshotRequest { Identity = unit, Table = "object_info" }, run.Headers)).StatusCode);
+            Assert.Equal(0, new BuildTrackingStore(h.Database).Count("buildtracking:x@warehouse", Stream));
+        }
+
+        [Theory]
+        [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
         public void An_identity_must_end_with_a_connection_the_run_holds_and_a_stream_must_be_one_of_builds(string engine)
         {
             using var h = new Harness(engine, remote: true);

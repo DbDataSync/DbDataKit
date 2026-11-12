@@ -1,6 +1,7 @@
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
+using DbDataSync.Core.Config;
 using DbDataSync.Core.Sql;
 
 namespace DbDataSync.Drivers.Abstractions;
@@ -38,6 +39,12 @@ public sealed class TargetUnitState(UnitStateEngine engine)
     public const int MaxKeyLength = 450;
 
     public UnitStateEngine Engine { get; } = engine;
+
+    /// <summary>The state-table engine of a target driver (<c>DriverIds</c>), or null for a driver whose writers do not carry the table (Flight SQL, DuckDB, JDBC).</summary>
+    public static UnitStateEngine? EngineOf(string driverType) =>
+        driverType.Equals(DriverIds.MsSql, StringComparison.OrdinalIgnoreCase) ? UnitStateEngine.SqlServer
+        : driverType.Equals(DriverIds.Postgres, StringComparison.OrdinalIgnoreCase) ? UnitStateEngine.Postgres
+        : null;
 
     private string Qualified => $"{Schema}.{Table}";
 
