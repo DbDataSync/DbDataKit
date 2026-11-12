@@ -267,6 +267,17 @@ public sealed class Catalog
 {
     public CatalogDoc Doc { get; }
 
+    /// <summary>The row rules of the caller this catalog is used for (plan 22a GP11): set on a request's own copy (<see cref="Restricted"/>), never on the model's catalog, which is shared by every caller. Null when nothing filters.</summary>
+    public RowAccessPlan? RowAccess { get; private set; }
+
+    /// <summary>A copy of this catalog that filters every read of a table by <paramref name="plan"/>; the copy belongs to one request.</summary>
+    public Catalog Restricted(RowAccessPlan? plan)
+    {
+        var copy = Clone();
+        copy.RowAccess = plan is { Count: > 0 } ? plan : null;
+        return copy;
+    }
+
     /// <summary>The catalog document as validated, kept for export.</summary>
     public JsonObject Source { get; }
 
@@ -285,7 +296,17 @@ public sealed class Catalog
     public int Format => Source["cache"] is not null || Source["access"] is not null || Source["checks"] is not null ? 2 : 1;
 
     /// <summary>The <c>access</c> section (format 2, plan 22a GP01): row rules by rules table and column rules; null when the catalog has none. Checked at load.</summary>
-    public DbDataKit.Access.AccessSection? Access => CatalogLoader.ReadAccess(Source);
+    public DbDataKit.Access.AccessSection? Access => _accessRead ? _access : ReadAccessOnce();
+
+    private DbDataKit.Access.AccessSection? _access;
+    private bool _accessRead;
+
+    private DbDataKit.Access.AccessSection? ReadAccessOnce()
+    {
+        _access = CatalogLoader.ReadAccess(Source);
+        _accessRead = true;
+        return _access;
+    }
 
     /// <summary>The <c>cache</c> section (format 2), or null when the catalog has none: the cache is off. Values were checked at load.</summary>
     public DbDataKit.Config.Yaml.CacheSection? Cache => Source["cache"] is JsonObject cache ? CacheOf(cache) : null;
@@ -321,7 +342,7 @@ public sealed class Catalog
         Segments = Doc.Segments,
         Queries = Doc.Queries,
         Timezone = Doc.Timezone,
-    }, Source);
+    }, Source) { RowAccess = RowAccess };
 
     private string? _zone;
 

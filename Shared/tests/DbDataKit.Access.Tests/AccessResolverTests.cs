@@ -184,3 +184,46 @@ public sealed class AccessResolverTests
         Assert.Same(AccessDecision.None, resolver.Resolve(Caller("u1", "east"), empty));
     }
 }
+
+/// <summary>Plan 22a GP11 (QG2, QR1): the boolean tree a dataset's rules make for one caller.</summary>
+public sealed class RowPredicateTests
+{
+    private static RuleResolution Rule(string id, AccessEffect effect, params string[] names) =>
+        new(new RowRule(id, effect, "access", "who", SubjectKind.Group, [new RuleColumn("region", "region_code")]), names);
+
+    private static DatasetResolution Dataset(AccessMatch datasetMatch, params (AccessMatch Match, RuleResolution[] Rules)[] groups) =>
+        new(new DatasetRowRules("sales", datasetMatch, [.. groups.Select((g, i) => new RuleGroup("g" + i, g.Match, [.. g.Rules.Select(r => r.Rule)]))]),
+            [.. groups.Select((g, i) => new GroupResolution(new RuleGroup("g" + i, g.Match, [.. g.Rules.Select(r => r.Rule)]), g.Rules))], null);
+
+    [Fact]
+    public void A_caller_with_no_matching_include_rule_sees_no_row()
+        => Assert.IsType<RowPredicate.Never>(RowPredicate.Of(Dataset(AccessMatch.All, (AccessMatch.Any, [Rule("a", AccessEffect.Include)]))));
+
+    [Fact]
+    public void Include_rules_combine_by_the_group_and_excludes_always_subtract()
+    {
+        var any = RowPredicate.Of(Dataset(AccessMatch.All, (AccessMatch.Any, [Rule("a", AccessEffect.Include, "east"), Rule("b", AccessEffect.Include, "west"), Rule("x", AccessEffect.Exclude, "east")])));
+        var and = Assert.IsType<RowPredicate.And>(any);
+        Assert.IsType<RowPredicate.Or>(and.Items[0]);
+        Assert.IsType<RowPredicate.Not>(and.Items[1]);
+
+        var all = RowPredicate.Of(Dataset(AccessMatch.All, (AccessMatch.All, [Rule("a", AccessEffect.Include, "east"), Rule("b", AccessEffect.Include, "west")])));
+        Assert.Equal(2, Assert.IsType<RowPredicate.And>(all).Items.Count);
+
+        // an include rule the caller has no row for makes a `match all` group never hold, and a `match any` group holds by the others
+        Assert.IsType<RowPredicate.Never>(RowPredicate.Of(Dataset(AccessMatch.All, (AccessMatch.All, [Rule("a", AccessEffect.Include, "east"), Rule("b", AccessEffect.Include)]))));
+        Assert.IsType<RowPredicate.Rule>(RowPredicate.Of(Dataset(AccessMatch.All, (AccessMatch.Any, [Rule("a", AccessEffect.Include, "east"), Rule("b", AccessEffect.Include)]))));
+        // an exclude rule the caller has no row for removes nothing
+        Assert.IsType<RowPredicate.Rule>(RowPredicate.Of(Dataset(AccessMatch.All, (AccessMatch.Any, [Rule("a", AccessEffect.Include, "east"), Rule("x", AccessEffect.Exclude)]))));
+    }
+
+    [Fact]
+    public void Groups_combine_by_the_dataset()
+    {
+        var east = (AccessMatch.Any, new[] { Rule("a", AccessEffect.Include, "east") });
+        var none = (AccessMatch.Any, new[] { Rule("b", AccessEffect.Include) });
+        Assert.IsType<RowPredicate.Never>(RowPredicate.Of(Dataset(AccessMatch.All, east, none)));
+        Assert.IsType<RowPredicate.Rule>(RowPredicate.Of(Dataset(AccessMatch.Any, east, none)));
+        Assert.IsType<RowPredicate.Or>(RowPredicate.Of(Dataset(AccessMatch.Any, east, (AccessMatch.Any, [Rule("c", AccessEffect.Include, "west")]))));
+    }
+}

@@ -21,8 +21,10 @@ public sealed partial class QisEngine
         if (def.MemberList is { } listed) return listed.Order().ToList();
         var source = def.MembersFrom ?? cat.Doc.Sources.OrderBy(s => s.Value.Kind == "ssas" ? 1 : 0)
             .First(s => cat.Binding(attribute, s.Key) is not null).Key;
-        var table = def.MembersFrom is not null;
         var kind = cat.Doc.Sources[source].Kind;
+        // the dimension table the catalog names is read whole unless the access rules filter it (plan 22a GP11): then the members are the ones the filtered rows hold
+        var table = def.MembersFrom is not null && !(cat.Binding(attribute, source) is { Join: { } join } && cat.Doc.Sources[source].Joins.TryGetValue(join, out var joined) && cat.RowAccess?.For(source, joined.Table) is not null)
+            && !(cat.Binding(attribute, source) is { Join: null } && cat.RowAccess?.For(source, cat.Doc.Sources[source].Fact.Table) is not null);
         var native = kind switch
         {
             "ssas" => new NativeQuery("dax", DaxEmitter.BuildDax(cat, source, [attribute], [], [], [], null)),

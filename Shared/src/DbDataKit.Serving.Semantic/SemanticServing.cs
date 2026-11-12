@@ -81,6 +81,17 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
 
     private static string? CodeOf(string message) => SemanticRest.CodeOf(message);
 
+    /// <summary>
+    /// The catalog a request of this caller runs on (plan 22a GP11): the model's own when it has no row rules, else a copy that filters every read of a rules-bound table by the caller's rules. A model with rules on a host that cannot resolve them is
+    /// refused: rules are never ignored (D2).
+    /// </summary>
+    private Catalog CatalogFor(ServingContext context, SemanticModel model)
+    {
+        if (model.Catalog.Access is not { Row.Count: > 0 }) return model.Catalog;
+        if (models.Access is not { } access) throw new ServingDeniedException($"Model '{model.Name}' has access rules and this server cannot apply them, so it is not served.");
+        return model.Catalog.Restricted(access.PlanFor(context, model));
+    }
+
     private Task<IServingAnswer> RunModelAsync(ServingContext context, ServingRequest request, SemanticModel model, string text, bool isSql, RunNote? note, CancellationToken cancellationToken)
     {
         var explaining = false;
@@ -107,8 +118,10 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
         if (explaining) return Task.Run<IServingAnswer>(() =>
         {
             var scans = new List<ExplainedScan>();
-            var engine = new QisEngine(model.Catalog, new ServingSourceExecutor(inner, catalog, context, model, models, cancellationToken, scans), new Validator(model.Catalog), models.Level, rowCap: 1);
-            var result = engine.Run(document);
+            var engine = new QisEngine(CatalogFor(context, model), new ServingSourceExecutor(inner, catalog, context, model, models, cancellationToken, scans), new Validator(model.Catalog), models.Level, rowCap: 1);
+            Result result;
+            try { result = engine.Run(document); }
+            catch (RowAccessRefusedException refused) { throw new ServingDeniedException(refused.Message); }
             if (result.Status == "failed") throw new ServingInvalidException(Describe(result));
             if (note is not null) note.Plan = string.Join("\n", scans.Select(x => $"{x.Source} ({x.Engine}): {x.Text}"));
             return new ExplainAnswer(scans, provenance);
@@ -117,10 +130,11 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
         // The engine blocks on the host while it runs the scans, so it runs on a thread of its own
         return Task.Run<IServingAnswer>(() =>
         {
-            var engine = new QisEngine(model.Catalog, new ServingSourceExecutor(inner, catalog, context, model, models, cancellationToken), new Validator(model.Catalog), models.Level, rowCap: (int)Math.Min(limit ?? 1_000_000, 1_000_000));
+            var engine = new QisEngine(CatalogFor(context, model), new ServingSourceExecutor(inner, catalog, context, model, models, cancellationToken), new Validator(model.Catalog), models.Level, rowCap: (int)Math.Min(limit ?? 1_000_000, 1_000_000));
             Result result;
             try { result = engine.Run(document); }
             catch (SandboxLimitException stopped) { throw new ServingLimitException(stopped.Message, stopped.Limit); }
+            catch (RowAccessRefusedException refused) { throw new ServingDeniedException(refused.Message); }
             if (result.Status == "failed") throw new ServingInvalidException(Describe(result));
             return new SemanticAnswer(result, provenance);
         }, cancellationToken);
@@ -142,10 +156,11 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
         var provenance = new ServingProvenance(text, VersionOf(model), context.Channel, SemanticModels.SourcePrefix + model.Name);
         return Task.Run<IServingAnswer>(() =>
         {
-            var engine = new QisEngine(model.Catalog, new ServingSourceExecutor(inner, catalog, context, model, models, cancellationToken), new Validator(model.Catalog), models.Level);
+            var engine = new QisEngine(CatalogFor(context, model), new ServingSourceExecutor(inner, catalog, context, model, models, cancellationToken), new Validator(model.Catalog), models.Level);
             (List<string> members, bool truncated, List<DbDataKit.Semantic.Abstractions.QisError>? errors) result;
             try { result = engine.Members(attribute, search, limit); }
             catch (SandboxLimitException stopped) { throw new ServingLimitException(stopped.Message, stopped.Limit); }
+            catch (RowAccessRefusedException refused) { throw new ServingDeniedException(refused.Message); }
             if (result.errors is { Count: > 0 } failed) throw new ServingInvalidException(string.Join("; ", failed.Select(e => $"{e.Code}: {e.Message}")));
             return new MembersAnswer(result.members, result.truncated, provenance);
         }, cancellationToken);

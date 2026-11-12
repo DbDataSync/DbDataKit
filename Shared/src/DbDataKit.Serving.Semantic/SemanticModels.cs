@@ -40,6 +40,9 @@ public sealed class SemanticModels
     /// </summary>
     public Func<SemanticModel, string, ISourceExecutor, ISourceExecutor>? SsasExecutor { get; init; }
 
+    /// <summary>Resolves the row rules of the caller for a model that has them (plan 22a GP11); null when the host cannot, and such a model is then refused.</summary>
+    public ISemanticAccess? Access { get; set; }
+
     /// <summary>Where people keep saved queries of their own (J27); null when the host keeps none.</summary>
     public IUserSavedQueries? UserQueries { get; set; }
 
@@ -65,4 +68,11 @@ public sealed class SemanticModels
         _models.TryGetValue(source.StartsWith(SourcePrefix, StringComparison.OrdinalIgnoreCase) ? source[SourcePrefix.Length..] : source, out var model) ? model : null;
 
     public static bool IsModelSource(string source) => source.StartsWith(SourcePrefix, StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>What a host gives the semantic module to apply the access rules of a model (plan 22a GP10, GP11): the plan of the caller's row rules, from the resolver.</summary>
+public interface ISemanticAccess
+{
+    /// <summary>The caller's row rules on the model's catalog; an empty plan filters nothing. Never throws for a rule that cannot be resolved: the plan then refuses the table (D2).</summary>
+    DbDataKit.Semantic.RowAccessPlan PlanFor(ServingContext context, SemanticModel model);
 }
