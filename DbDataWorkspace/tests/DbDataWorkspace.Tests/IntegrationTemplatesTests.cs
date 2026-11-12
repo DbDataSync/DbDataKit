@@ -49,8 +49,17 @@ public sealed class IntegrationTemplatesTests
 
         public void Dispose()
         {
-            try { Directory.Delete(Root, recursive: true); }
-            catch (IOException) { /* a temp folder */ }
+            // Windows keeps a loaded assembly's file open (UnauthorizedAccessException) until its collectible load context is collected: a collection and another try; a temp folder that stays is not a failure
+            for (var attempt = 0; attempt < 5; attempt++)
+            {
+                try { Directory.Delete(Root, recursive: true); return; }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    Thread.Sleep(100);
+                }
+            }
         }
     }
 
