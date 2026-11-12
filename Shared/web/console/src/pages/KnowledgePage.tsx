@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { CodeEditor, ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
+import { CodeEditor, ErrorBanner, useAuthStatus, useIsAdmin } from '@dbdatakit/shell'
 import { ConsoleShell } from '../ConsoleShell'
 import { agentsApi, percent } from '../agents'
 import {
-  checkLine, contextLine, hitPlace, placeOf, reachLine, isPolicyItem, knowledgeApi, modesOffered, parseInPlay, policyItemId, policyItemText, refreshLine, searchModeLine, subjectSource, vectorPercent, vectorProgressLine, workActions, workWord,
+  checkLine, contextLine, hitPlace, placeOf, reachLine, isPolicyItem, knowledgeApi, modesOffered, parseInPlay, policyItemId, policyItemText, refreshLine, searchModeLine, subjectSource, vectorPercent, vectorProgressLine, verifiedLine, verifiedQueryId, verifiedQueryText, verifiedRuns, workActions, workWord,
   type ChunkPreview, type KnowledgeIndexState, type KnowledgeOverview, type Reach, type ScopePreview, type SearchMode, type SearchResult, type WorkItem,
 } from '../knowledge'
 
@@ -225,6 +225,7 @@ function ItemsTab({ overview }: { overview: KnowledgeOverview }) {
             </button>
           </div>
         ))}
+        {isAdmin && <NewVerifiedQuery onMade={(id) => setParams({ tab: 'items', item: `project/${id}` })} />}
         <ScopeBox />
       </div></div>
       <div style={{ flex: '1 1 520px', minWidth: 0 }}>
@@ -239,6 +240,16 @@ function ItemsTab({ overview }: { overview: KnowledgeOverview }) {
             </div>
             {isAdmin && <button type="button" className="btn btn-sm btn-primary" disabled={errors.length > 0 || save.isPending} onClick={() => save.mutate()} data-testid="item-save">Save</button>}
             {saved && <span className="hint" data-testid="item-saved"> Saved.</span>}
+            {preview?.preview.verified && (
+              <div className="card" style={{ marginTop: 12 }}><div className="card-body" data-testid="verified-preview">
+                <strong>A verified query</strong>{' '}
+                <span className="hint" data-testid="verified-line">{verifiedLine(preview.preview.verified)}</span>
+                <div className="hint">Asked of {preview.preview.verified.model}; it runs {verifiedRuns(preview.preview.verified)}, as whoever runs it, under their own rules. Only the questions are embedded.</div>
+                <ul data-testid="verified-questions">{preview.preview.verified.questions.map((q) => <li key={q}>{q}</li>)}</ul>
+                {preview.preview.verified.request && <pre className="mono" data-testid="verified-request" style={{ whiteSpace: 'pre-wrap' }}>{preview.preview.verified.request}</pre>}
+                {preview.preview.verified.semanticSql && <div><div className="hint">Semantic SQL, kept for reading (the request is the truth):</div><pre className="mono" data-testid="verified-sql" style={{ whiteSpace: 'pre-wrap' }}>{preview.preview.verified.semanticSql}</pre></div>}
+              </div></div>
+            )}
             {preview && (
               <div className="card" style={{ marginTop: 12 }}><div className="card-body" data-testid="chunk-preview" data-changed={preview.preview.changedChunks}>
                 <strong>How it will be split</strong>{' '}
@@ -265,6 +276,34 @@ function ItemsTab({ overview }: { overview: KnowledgeOverview }) {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+/** Starts a verified query as a file of the console's knowledge project from the question, the model and the request a person pastes; the strict reader's diagnostics then say what is still wrong (plan 27a KN21). */
+function NewVerifiedQuery({ onMade }: { onMade: (id: string) => void }) {
+  const client = useQueryClient()
+  const { data: status } = useAuthStatus()
+  const [question, setQuestion] = useState('')
+  const [model, setModel] = useState('')
+  const [request, setRequest] = useState('')
+  const make = useMutation({
+    mutationFn: async () => {
+      const id = verifiedQueryId(question)
+      await knowledgeApi.save('project', id, verifiedQueryText({ question, model, request, by: status?.displayName ?? status?.userId ?? 'an administrator', today: new Date().toISOString().slice(0, 10) }))
+      return id
+    },
+    onSuccess: async (id) => { await client.invalidateQueries({ queryKey: ['knowledge'] }); setQuestion(''); onMade(id) },
+  })
+  return (
+    <div style={{ marginTop: 16 }} data-testid="new-verified-query">
+      <strong>A verified query</strong>
+      <div className="hint">A question and the request that answers it, kept so that an agent finds it by how the question is asked. You are named as the person who verified it.</div>
+      <input value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="the question, as people ask it" aria-label="Question" data-testid="vq-question" style={{ width: '100%', margin: '4px 0' }} />
+      <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="the semantic model, for example Sales" aria-label="Model" data-testid="vq-model" style={{ width: '100%', margin: '4px 0' }} />
+      <textarea rows={3} value={request} onChange={(e) => setRequest(e.target.value)} placeholder='the request as JSON: {"kind":"query","query":{"measures":["revenue"],"limit":10}}' aria-label="Request" data-testid="vq-request" style={{ width: '100%', margin: '4px 0' }} />
+      <button type="button" className="btn btn-sm" disabled={!question.trim() || !model.trim() || make.isPending} onClick={() => make.mutate()} data-testid="vq-make">Start the item</button>
+      <ErrorBanner error={make.error} />
     </div>
   )
 }

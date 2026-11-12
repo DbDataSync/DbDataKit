@@ -1,4 +1,5 @@
 using DbDataKit.Knowledge;
+using DbDataKit.State.Snapshots;
 
 namespace DbDataKit.State.Tests;
 

@@ -67,7 +67,7 @@ public sealed class VerifiedQueryTests
     [Theory]
     [InlineData("questions", "Required key `questions`")]
     [InlineData("verified", "Required key `verified`")]
-    [InlineData("model", "Required key `model`")]
+    [InlineData("model", "`model` is the name of the semantic model")]
     public void A_missing_part_is_refused_naming_it(string key, string words)
     {
         var text = Item();
@@ -127,6 +127,21 @@ public sealed class VerifiedQueryTests
         Assert.Null(item.Verified.Request);
         var resolved = VerifiedQueries.Resolve(item.Verified, null);
         Assert.Equal("SELECT * FROM monthly_revenue", resolved.SavedQuerySql);
+    }
+
+    [Fact]
+    public void A_saved_query_may_name_its_model_before_a_slash_and_then_needs_no_model_key()
+    {
+        var text = Item(request: "saved-query: Finance/revenue_by_region@3").Replace("model: Sales\n", "", StringComparison.Ordinal);
+
+        var item = Load(text).Item!;
+
+        Assert.Equal("Finance", item.Verified!.Model);
+        Assert.Equal("revenue_by_region", item.Verified.SavedQuery);
+        Assert.Equal("3", item.Verified.SavedQueryVersion);
+        Assert.Equal("semantic-model:Finance", Assert.Single(item.About).Key);
+        // a model key that says another model is refused
+        Assert.Contains(Load(Item(request: "saved-query: Finance/revenue_by_region")).Diagnostics, d => d.Message.Contains("and `model` is Sales", StringComparison.Ordinal));
     }
 
     [Fact]

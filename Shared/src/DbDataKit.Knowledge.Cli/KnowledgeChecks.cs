@@ -41,6 +41,7 @@ public static class KnowledgeChecks
     /// <param name="ownerExists">Whether a group of the identity home exists; null checks no owner.</param>
     /// <param name="agents">The agents whose budget is checked; none checks none.</param>
     /// <param name="counter">How tokens are counted; the estimate of plan 27 SD15 by default.</param>
+    /// <param name="translate">Translates the semantic SQL of a verified query so it can be compared with its request (<c>DBD-KNW-051</c>, <c>-052</c>); null checks no SQL.</param>
     public static KnowledgeCheckReport Check(KnowledgeProject project, string sourceName, ISubjectCatalog? catalog, Func<string, bool>? ownerExists, IReadOnlyList<AgentBudgetInput> agents, ITokenCounter? counter = null, SqlToRequest? translate = null)
     {
         counter ??= EstimateCounter.Instance;

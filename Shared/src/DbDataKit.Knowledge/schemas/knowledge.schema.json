@@ -19,7 +19,7 @@
     "model": { "type": "string", "minLength": 1, "maxLength": 200, "description": "A verified query: the semantic model it is asked of." },
     "request": { "oneOf": [ { "type": "object", "required": ["kind", "query"], "properties": { "kind": { "const": "query" }, "query": { "type": "object", "required": ["measures"] } } }, { "type": "string" } ], "description": "A verified query: the pinned semantic request (the document `semantic query --request` takes), as a mapping or JSON text. The request is the truth." },
     "semantic-sql": { "type": "string", "minLength": 1, "description": "A verified query: the same query as semantic SQL, kept for reading. Translated into the request when there is no request; when both are given they must agree." },
-    "saved-query": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*(@\\S+)?$", "description": "A verified query: a saved query of the model's catalog, with the model version it was verified against after @ when pinned." },
+    "saved-query": { "type": "string", "pattern": "^([^/\\s@]+/)?[A-Za-z_][A-Za-z0-9_]*(@\\S+)?$", "description": "A verified query: a saved query of the model's catalog, with the model version it was verified against after @ when pinned." },
     "verified": {
       "type": "object",
       "additionalProperties": false,

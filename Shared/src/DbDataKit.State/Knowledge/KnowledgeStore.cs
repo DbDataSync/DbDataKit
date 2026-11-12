@@ -168,7 +168,7 @@ public sealed class KnowledgeStore(StateDatabase database)
             if (verified is not null)
             {
                 using var insert = database.Command(Module, connection, transaction,
-                    "INSERT INTO {table:verified_query} (channel, item_id, model, request, saved_query, saved_version, semantic_sql, verified_by, verified_at, model_version, status, status_note) VALUES ($channel, $id, $model, $request, $saved, $savedVersion, $sql, $by, $at, $version, $status, $note);");
+                    "INSERT INTO {table:verified_query} (channel, item_id, model, request, saved_query, saved_version, semantic_sql, verified_by, verified_on, model_version, status, status_note) VALUES ($channel, $id, $model, $request, $saved, $savedVersion, $sql, $by, $at, $version, $status, $note);");
                 insert.Bind(database, "channel", channel).Bind(database, "id", item.Id).Bind(database, "model", verified.Model).Bind(database, "request", verified.Request, System.Data.DbType.String)
                     .Bind(database, "saved", verified.SavedQuery, System.Data.DbType.String).Bind(database, "savedVersion", verified.SavedVersion, System.Data.DbType.String).Bind(database, "sql", verified.SemanticSql, System.Data.DbType.String)
                     .Bind(database, "by", verified.VerifiedBy).Bind(database, "at", verified.VerifiedAt).Bind(database, "version", verified.ModelVersion).Bind(database, "status", verified.Status).Bind(database, "note", verified.StatusNote, System.Data.DbType.String);
@@ -323,7 +323,7 @@ public sealed class KnowledgeStore(StateDatabase database)
             return (IReadOnlyList<StoredItem>)items;
         });
 
-    private const string VerifiedColumns = "model, request, saved_query, saved_version, semantic_sql, verified_by, verified_at, model_version, status, status_note";
+    private const string VerifiedColumns = "model, request, saved_query, saved_version, semantic_sql, verified_by, verified_on, model_version, status, status_note";
 
     private static StoredVerified ReadVerified(DbDataReader r, int at = 0) => new(r.GetString(at), r.IsDBNull(at + 1) ? null : r.GetString(at + 1), r.IsDBNull(at + 2) ? null : r.GetString(at + 2), r.IsDBNull(at + 3) ? null : r.GetString(at + 3),
         r.IsDBNull(at + 4) ? null : r.GetString(at + 4), r.GetString(at + 5), r.GetString(at + 6), r.GetString(at + 7), r.GetString(at + 8), r.IsDBNull(at + 9) ? null : r.GetString(at + 9));

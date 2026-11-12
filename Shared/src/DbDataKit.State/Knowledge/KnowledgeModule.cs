@@ -76,7 +76,7 @@ public static class KnowledgeModule
             saved_version {{key}} NULL,
             semantic_sql  {{text}} NULL,
             verified_by   {{key}} NOT NULL,
-            verified_at   {{key}} NOT NULL,
+            verified_on   {{key}} NOT NULL,
             model_version {{key}} NOT NULL,
             status        {{key}} NOT NULL,
             status_note   {{text}} NULL,

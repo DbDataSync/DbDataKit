@@ -147,7 +147,7 @@
       "current": 1,
       "previous": 1,
       "status": "open",
-      "note": "new with plan 27a KN01: role (reference, instruction, guardrail), about (subjects as the catalog names them), for (audience, agent, channel), owner, kind, chunking; folder defaults, nearest wins; a newer number is refused naming the file; verified queries are a kind of it, read from KN21 on",
+      "note": "new with plan 27a KN01: role (reference, instruction, guardrail), about (subjects as the catalog names them), for (audience, agent, channel), owner, kind, chunking; folder defaults, nearest wins; a newer number is refused naming the file; verified queries (kind: verified-query: questions, model, request, semantic-sql, saved-query, verified) are a kind of it since KN21; the number stays 1",
       "version_source": { "file": "Shared/src/DbDataKit.Knowledge/KnowledgeItemLoader.cs", "pattern": "public const int Version = (\\d+);" },
       "files": [ { "path": "Shared/src/DbDataKit.Knowledge/KnowledgeItemLoader.cs", "sha256": null } ]
     },

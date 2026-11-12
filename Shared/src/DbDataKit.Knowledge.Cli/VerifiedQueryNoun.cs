@@ -230,7 +230,7 @@ public static class VerifiedQueryNoun
         _ => value.ToJsonString(),
     };
 
-    private static (List<string> Parameters, string[] Rest) SplitParameters(string[] args)
+    private static (List<string> Parameters, string[] Others) SplitParameters(string[] args)
     {
         var parameters = new List<string>();
         var rest = new List<string>();

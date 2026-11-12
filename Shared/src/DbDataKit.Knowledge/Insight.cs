@@ -11,8 +11,16 @@ public sealed record DiagnosticView(string Code, string Severity, string File, i
 /// <summary>One chunk of an item as it will be split: where it sits (heading path), its size and whether it differs from the published version (plan 27a KN38).</summary>
 public sealed record ChunkView(string Id, IReadOnlyList<string> HeadingPath, int Tokens, int StartLine, bool Changed, string Text);
 
-/// <summary>An item as typed, read strictly, with how it would be chunked.</summary>
-public sealed record ChunkPreview(string? Title, string? Role, string? Owner, IReadOnlyList<DiagnosticView> Diagnostics, IReadOnlyList<ChunkView> Chunks, int ChangedChunks);
+/// <summary>What a screen shows of a verified query (KN21): its model, the questions that are embedded, the pinned request, the semantic SQL kept for reading, and who verified it against which version.</summary>
+public sealed record VerifiedPreview(string Model, IReadOnlyList<string> Questions, string? Request, string? SemanticSql, string? SavedQuery, string? SavedQueryVersion, string VerifiedBy, string VerifiedAt, string ModelVersion)
+{
+    private static readonly System.Text.Json.JsonSerializerOptions Indented = new() { WriteIndented = true };
+
+    public static VerifiedPreview Of(VerifiedQuery q) => new(q.Model, q.Questions, q.Request?.ToJsonString(Indented), q.SemanticSql, q.SavedQuery, q.SavedQueryVersion, q.Verified.By, q.Verified.At, q.Verified.ModelVersion);
+}
+
+/// <summary>An item as typed, read strictly, with how it would be chunked (and, for a verified query, what it pins).</summary>
+public sealed record ChunkPreview(string? Title, string? Role, string? Owner, IReadOnlyList<DiagnosticView> Diagnostics, IReadOnlyList<ChunkView> Chunks, int ChangedChunks, VerifiedPreview? Verified = null);
 
 /// <summary>An item that applies, in the order it would be given (plan 27a KN38), and why it does.</summary>
 public sealed record ScopedItem(string Id, string Title, string Role, int Rank, string Scope, string? Owner);
@@ -40,7 +48,7 @@ public static class KnowledgeInsight
             foreach (var chunk in Chunker.Split(published, options)) known.Add(chunk.Hash);
         var chunks = Chunker.Split(item, options)
             .Select(c => new ChunkView(c.Id, c.HeadingPath, options.Tokens(c.EmbeddedText), c.StartLine, publishedText is not null && !known.Contains(c.Hash), c.Text)).ToList();
-        return new ChunkPreview(item.Title, item.Role.ToString().ToLowerInvariant(), item.Owner, diagnostics, chunks, chunks.Count(c => c.Changed));
+        return new ChunkPreview(item.Title, item.Role.ToString().ToLowerInvariant(), item.Owner, diagnostics, chunks, chunks.Count(c => c.Changed), item.Verified is { } verified ? VerifiedPreview.Of(verified) : null);
     }
 
     /// <summary>What <see cref="ScopeMatcher"/> gives for what is in play, with the items it leaves out and the reason of each.</summary>

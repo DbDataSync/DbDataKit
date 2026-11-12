@@ -56,7 +56,7 @@ public static class KnowledgeItemLoader
     public const int MaximumSubjects = 50;
 
     /// <summary>The keys of an item's front matter. The JSON Schema has the same keys; a test keeps them equal.</summary>
-    public static readonly string[] ItemKeys = ["knowledge", "title", "role", "about", "for", "owner", "kind", "chunking", .. VerifiedKeys];
+    public static readonly string[] ItemKeys = ["knowledge", "title", "role", "about", "for", "owner", "kind", "chunking", "questions", "model", "request", "semantic-sql", "saved-query", "verified"];
 
     /// <summary>The keys only a <c>kind: verified-query</c> has (KN21).</summary>
     public static readonly string[] VerifiedKeys = ["questions", "model", "request", "semantic-sql", "saved-query", "verified"];
@@ -232,7 +232,6 @@ public static class KnowledgeItemLoader
                     else Bad(item, $"A question is one line of at most {MaximumQuestion} characters.");
                 }
             var model = map.Get("model") is YamlScalar { Value.Length: > 0 } m && m.Value.Length <= 200 && !m.Value.Any(char.IsControl) ? m.Value : null;
-            if (model is null) Add(map.Get("model") is null ? SharedCodes.MissingKey : BadItem, map.Get("model") ?? map, "`model` is the name of the semantic model the query is asked of.", "Add `model: Sales`.");
 
             JsonObject? request = null;
             if (map.Get("request") is { } rNode) request = Request(rNode);
@@ -245,16 +244,23 @@ public static class KnowledgeItemLoader
             string? saved = null, savedVersion = null;
             if (map.Get("saved-query") is { } savedNode)
             {
-                if (savedNode is YamlScalar { Value.Length: > 0 } sv && Regex.Match(sv.Value, "^([A-Za-z_][A-Za-z0-9_]*)(@(\\S+))?$") is { Success: true } hit)
+                if (savedNode is YamlScalar { Value.Length: > 0 } sv && Regex.Match(sv.Value, "^((?<model>[^/\\s@]+)/)?(?<name>[A-Za-z_][A-Za-z0-9_]*)(@(?<version>\\S+))?$") is { Success: true } hit)
                 {
-                    saved = hit.Groups[1].Value;
-                    savedVersion = hit.Groups[3].Success ? hit.Groups[3].Value : null;
+                    saved = hit.Groups["name"].Value;
+                    savedVersion = hit.Groups["version"].Success ? hit.Groups["version"].Value : null;
+                    if (hit.Groups["model"].Success)
+                    {
+                        if (model is not null && model != hit.Groups["model"].Value) Bad(savedNode, $"`saved-query` names a saved query of {hit.Groups["model"].Value}, and `model` is {model}.");
+                        model ??= hit.Groups["model"].Value;
+                    }
                 }
-                else Bad(savedNode, "`saved-query` is the name of a saved query of the model, with the version of the model it was verified against after an `@` when it is pinned (`monthly_revenue@4`).");
+                else Bad(savedNode, "`saved-query` is the name of a saved query of the model, with the model before a `/` and the version it was verified against after an `@` when it is pinned (`Sales/revenue_by_region@3`).");
                 if (map.Get("request") is not null || map.Get("semantic-sql") is not null) Bad(savedNode, "A verified query names a saved query, or has a request or semantic SQL, not both.");
             }
             else if (map.Get("request") is null && map.Get("semantic-sql") is null)
                 Add(SharedCodes.MissingKey, map, "A verified query needs the request that answers the question (`request:`), or semantic SQL (`semantic-sql:`), or a `saved-query:`.", "Add `request:` (the JSON `semantic query --request` takes).");
+
+            if (model is null) Add(map.Get("model") is null ? SharedCodes.MissingKey : BadItem, map.Get("model") ?? map, "`model` is the name of the semantic model the query is asked of.", "Add `model: Sales`.");
 
             Verification? verification = null;
             if (map.Get("verified") is not { } vNode) Add(SharedCodes.MissingKey, map, "Required key `verified` is missing: who verified the query, when and against which version of the model.", "Add `verified: { by: alice, at: 2026-11-01, model-version: \"4\" }`.");
@@ -302,7 +308,7 @@ public static class KnowledgeItemLoader
             YamlScalar { Quoted: false, Value: "null" or "~" or "" } => null,
             YamlScalar { Quoted: false, Value: "true" } => JsonValue.Create(true),
             YamlScalar { Quoted: false, Value: "false" } => JsonValue.Create(false),
-            YamlScalar { Quoted: false } n when long.TryParse(n.Value, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var l) => JsonValue.Create(l),
+            YamlScalar { Quoted: false } n when long.TryParse(n.Value, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var l) => l is >= int.MinValue and <= int.MaxValue ? JsonValue.Create((int)l) : JsonValue.Create(l),
             YamlScalar { Quoted: false } n when double.TryParse(n.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var d) => JsonValue.Create(d),
             YamlScalar x => JsonValue.Create(x.Value),
             _ => null,

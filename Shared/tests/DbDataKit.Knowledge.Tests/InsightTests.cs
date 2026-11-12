@@ -16,6 +16,25 @@ public sealed class InsightTests
 
     private static string Reference(string body) => $"---\nknowledge: 1\nrole: reference\nowner: data\nabout:\n  - build-project: sales\n---\n{body}";
 
+    // ---- KN21: a verified query on the item screen ----
+
+    [Fact]
+    public void A_verified_query_is_shown_with_its_questions_request_and_who_verified_it_and_only_the_questions_are_chunks()
+    {
+        var preview = KnowledgeInsight.Chunks(VerifiedQueryTests.Item(), "queries/revenue.md", "queries/revenue.md");
+
+        Assert.Empty(preview.Diagnostics);
+        var verified = preview.Verified!;
+        Assert.Equal("Sales", verified.Model);
+        Assert.Equal(2, verified.Questions.Count);
+        Assert.Contains("\"measures\"", verified.Request, StringComparison.Ordinal);
+        Assert.Equal(("alice", "2026-11-01", "4"), (verified.VerifiedBy, verified.VerifiedAt, verified.ModelVersion));
+        Assert.Single(preview.Chunks);
+        Assert.Contains("last quarter", preview.Chunks[0].Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Checked with finance", preview.Chunks[0].Text, StringComparison.Ordinal);
+        Assert.Null(KnowledgeInsight.Chunks(Reference(Long), "guide.md", "guide.md").Verified);
+    }
+
     // ---- KN38: how an item will be split ----
 
     [Fact]

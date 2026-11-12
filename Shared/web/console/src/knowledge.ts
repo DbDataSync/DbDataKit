@@ -26,7 +26,11 @@ export interface KnowledgeOverview {
 }
 
 export interface ChunkView { id: string; headingPath: string[]; tokens: number; startLine: number; changed: boolean; text: string }
-export interface ChunkPreview { title: string | null; role: string | null; owner: string | null; diagnostics: Diagnostic[]; chunks: ChunkView[]; changedChunks: number }
+/** What a verified query pins (plan 27a KN21): the model, the questions that are embedded, the request that runs, the SQL kept for reading, and who verified it against which model version. */
+export interface VerifiedPreview {
+  model: string; questions: string[]; request: string | null; semanticSql: string | null; savedQuery: string | null; savedQueryVersion: string | null; verifiedBy: string; verifiedAt: string; modelVersion: string
+}
+export interface ChunkPreview { title: string | null; role: string | null; owner: string | null; diagnostics: Diagnostic[]; chunks: ChunkView[]; changedChunks: number; verified?: VerifiedPreview | null }
 export interface Reach { agent: string; adds: number; used: number | null; budget: number | null; pushesOver: boolean }
 export interface ScopedItem { id: string; title: string; role: string; rank: number; scope: string; owner: string | null }
 export interface SkippedItem { id: string; title: string; role: string; reason: string }
@@ -157,6 +161,26 @@ export const policyItemText = (body: string, audience: 'everyone' | 'back-end' |
 export const policyItemId = (title: string): string => {
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
   return `policy/${slug || 'item'}.md`
+}
+
+/** A verified query in a line, as an answer from it would say it: "Verified by Maria on 2026-11-06 against version 4 of Sales." */
+export const verifiedLine = (v: VerifiedPreview): string => `Verified by ${v.verifiedBy} on ${v.verifiedAt} against version ${v.modelVersion} of ${v.model}.`
+
+/** What the verified query runs: the pinned request, or the saved query of the model it names (with its version when pinned). */
+export const verifiedRuns = (v: VerifiedPreview): string =>
+  v.savedQuery ? `the saved query ${v.model}/${v.savedQuery}${v.savedQueryVersion ? `@${v.savedQueryVersion}` : ''}` : 'the pinned request'
+
+/** The path of a new verified query from its first question: `queries/<words>.md`. */
+export const verifiedQueryId = (question: string): string => {
+  const slug = question.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/, '')
+  return `queries/${slug || 'question'}.md`
+}
+
+/** A new verified query as the form writes it: the question and model the person gave, the request they pasted (JSON text; a starting one when empty) and who verified it today. The strict reader's diagnostics say what is still wrong. */
+export function verifiedQueryText(input: { question: string; model: string; request: string; by: string; today: string; owner?: string }): string {
+  const question = input.question.trim().replace(/\s+/g, ' ')
+  const request = input.request.trim().length > 0 ? input.request.trim() : JSON.stringify({ kind: 'query', query: { measures: ['measure'], limit: 100 } })
+  return `---\nknowledge: 1\nkind: verified-query\ntitle: ${JSON.stringify(question)}\n${input.owner ? `owner: ${input.owner}\n` : ''}model: ${input.model.trim()}\nquestions:\n  - ${JSON.stringify(question)}\nrequest: ${JSON.stringify(request)}\nverified: { by: ${JSON.stringify(input.by)}, at: ${input.today}, model-version: "1" }\n---\nWhy this is the answer, and what it leaves out.\n`
 }
 
 /** The context report as lines a person reads: each part with its tokens and its share of the budget. */
