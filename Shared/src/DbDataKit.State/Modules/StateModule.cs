@@ -97,7 +97,7 @@ public sealed partial class StateModule
 
     /// <summary>
     /// How many versions back an instance can still work with the schema of this module (plan 29b U02, plan 24's N and N-1 rule): 0, the default, says an instance one version behind cannot, so a migration is refused while
-    /// one is live; 1 says the previous version still works (the migration only added what older code ignores). The module's author declares it, for every migration they append.
+    /// one is live; 1 says the previous version still works (the migration only added what older code ignores). The module's author declares it, for every migration they append, and `scripts/check_state_migrations.py` (plan 24a UC06) checks the declaration: the last N migrations of a module that says N may only add (a table, an index, a nullable or defaulted column); a removal or a rename needs a SQL comment line `-- Contract: <release> <what>` naming the release in which the previous code stopped using it.
     /// </summary>
     public int CompatibleWithPrevious { get; }
 
