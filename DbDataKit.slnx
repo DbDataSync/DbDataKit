@@ -44,6 +44,7 @@
     <Project Path="Shared/src/DbDataKit.Config.Git/DbDataKit.Config.Git.csproj" />
     <Project Path="Shared/src/DbDataKit.Config.Hosting/DbDataKit.Config.Hosting.csproj" />
     <Project Path="Shared/src/DbDataKit.Config.Testing/DbDataKit.Config.Testing.csproj" />
+    <Project Path="Shared/src/DbDataKit.Catalog.Cache/DbDataKit.Catalog.Cache.csproj" />
     <Project Path="Shared/src/DbDataKit.Config.Yaml/DbDataKit.Config.Yaml.csproj" />
     <Project Path="Shared/src/DbDataKit.DataModel/DbDataKit.DataModel.csproj" />
     <Project Path="Shared/src/DbDataKit.Config/DbDataKit.Config.csproj" />

@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 
-namespace DbDataKit.Authoring.Server;
+namespace DbDataKit.Catalog;
 
 /// <summary>The writing side of the catalog cache (plan 33 SC20j): what a paired Gateway answered to the read-only schema call becomes the file <c>catalog-cache.yaml</c> of a draft, and a refresh of one connection keeps the others as they were.</summary>
 public static partial class CatalogCache

@@ -18,6 +18,9 @@ public interface ISyncDraftTools
     Task<DraftToolResult> ScriptsAsync(string root, CancellationToken cancellationToken);
 
     Task<DraftToolResult> ScriptTestAsync(string root, string name, int rows, CancellationToken cancellationToken);
+
+    /// <summary>The plan of a replication's source and target tables from the draft's <c>catalog-cache.yaml</c> (plan 33 SC22j), offline: <c>provisioning plan --from-cache</c>.</summary>
+    Task<DraftToolResult> ProvisioningPlanAsync(string root, string replication, CancellationToken cancellationToken);
 }
 
 public sealed partial class SyncProjectKind : ISyncDraftTools
@@ -45,9 +48,10 @@ public sealed partial class SyncProjectKind : ISyncDraftTools
             try { data = JsonNode.Parse(result.Output.Replace(copy, ".", StringComparison.Ordinal)); }   // the copy's own path is no business of a screen
             catch (JsonException) { /* the program did not print a document: its words are the finding */ }
             if (data is JsonObject)
-                return new(result.Exit is 0 or 1, result.Exit is 0 or 1 ? [] : [Failed(result.Exit, result.Error)], data);
-            var said = FindingsOf(copy, result.Error, "DBD-WS-SYNC");
-            return new(false, said.Count > 0 ? said : [Failed(result.Exit, result.Error)], null);
+                return new(result.Exit is 0 or 1, result.Exit is 0 or 1 ? [] : [Failed(result.Exit, result.Error.Replace(copy, ".", StringComparison.Ordinal))], data);
+            var error = result.Error.Replace(copy, ".", StringComparison.Ordinal);
+            var said = FindingsOf(copy, error, "DBD-WS-SYNC");
+            return new(false, said.Count > 0 ? said : [Failed(result.Exit, error)], null);
         }
         finally
         {
@@ -61,4 +65,7 @@ public sealed partial class SyncProjectKind : ISyncDraftTools
 
     public Task<DraftToolResult> ScriptTestAsync(string root, string name, int rows, CancellationToken cancellationToken) =>
         RunJsonAsync(root, ["script", "test", name, "--rows", rows.ToString(CultureInfo.InvariantCulture)], cancellationToken);
+
+    public Task<DraftToolResult> ProvisioningPlanAsync(string root, string replication, CancellationToken cancellationToken) =>
+        RunJsonAsync(root, ["provisioning", "plan", replication, "--from-cache"], cancellationToken);
 }

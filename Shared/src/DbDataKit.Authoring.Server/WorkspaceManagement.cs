@@ -1,3 +1,4 @@
+using DbDataKit.Catalog;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DbDataKit.Authoring;
@@ -288,6 +289,20 @@ public static class WorkspaceManagement
             catch (Exception ex) when (ex is InvalidOperationException or FormatException) { return Results.Json(new { error = Shape }, statusCode: StatusCodes.Status400BadRequest); }
             if (!SyncProjectKind.IsName(name) || rows is < 1 or > 50) return Results.Json(new { error = Shape }, statusCode: StatusCodes.Status400BadRequest);
             try { return Results.Json(ToolJson(await tools.ScriptTestAsync(root, name!, rows, context.RequestAborted))); }
+            catch (ProjectKindUnavailableException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
+        });
+
+        // the plan of a Sync draft's provisioning from its catalog cache (plan 33 SC22j): offline, read only, the draft untouched; applying it is the Sync server's
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/provisioning-plan", async (string project, string id, HttpContext context) =>
+        {
+            if (SyncToolsOf(project, id, context, ServerRole.Viewer, out var tools, out var root) is { } refused) return refused;
+            var body = await Body(context);
+            const string Shape = "The body is a JSON object with the \"replication\" of the project to plan.";
+            string? replication;
+            try { replication = body?["replication"]?.GetValue<string>(); }
+            catch (Exception ex) when (ex is InvalidOperationException or FormatException) { return Results.Json(new { error = Shape }, statusCode: StatusCodes.Status400BadRequest); }
+            if (!SyncProjectKind.IsName(replication)) return Results.Json(new { error = Shape }, statusCode: StatusCodes.Status400BadRequest);
+            try { return Results.Json(ToolJson(await tools.ProvisioningPlanAsync(root, replication!, context.RequestAborted))); }
             catch (ProjectKindUnavailableException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
         });
 

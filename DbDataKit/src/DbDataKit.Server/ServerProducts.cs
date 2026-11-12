@@ -155,6 +155,8 @@ public static class ServerProducts
         // plan 33 SC22k: a Sync draft's scripts (read) and the test of one (it runs the draft's C# in a child process, so the author's)
         ("GET", "api/v1/projects/{p}/workspaces/{id}/scripts", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/script-test", ServerRole.Author),
+        // plan 33 SC22j: the provisioning plan of a Sync draft from its catalog cache (offline, read only)
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/provisioning-plan", ServerRole.Viewer),
         ("GET", "api/v1/app-build", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/builds", ServerRole.Author),
         ("GET", "api/v1/projects/{p}/workspaces/{id}/builds", ServerRole.Viewer),

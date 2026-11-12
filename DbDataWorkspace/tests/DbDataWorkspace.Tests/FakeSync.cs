@@ -41,6 +41,10 @@ internal static class FakeSync
               if grep -q 'not C#' "$code"; then echo "{\"name\":\"$word\",\"kind\":\"sqlColumnExpression\",\"ok\":false,\"source\":\"generated sample\",\"cases\":[],\"log\":[],\"error\":\"Script '$word' did not compile: (1,1) not C#\"}"; exit 1; fi
               echo "{\"name\":\"$word\",\"kind\":\"sqlColumnExpression\",\"ok\":true,\"source\":\"generated sample, ANSI quoting\",\"cases\":[{\"input\":\"Name -> Name (nvarchar(50))\",\"output\":\"UPPER(\\\"Name\\\")\",\"note\":null}],\"log\":[],\"error\":null}"; exit 0
             fi
+            if [ "$verb" = "provisioning plan" ]; then
+              if [ ! -e "$root/catalog-cache.yaml" ]; then echo "catalog-cache.yaml is not in $root: refresh the catalog cache of the project first (the Catalog tab of the workspace)." >&2; exit 1; fi
+              echo "{\"replication\":\"$word\",\"cache_generated_at\":\"2026-11-12T10:00:00Z\",\"cache_server\":\"prod-gateway\",\"mappings\":[{\"mapping\":\"orders\",\"source\":{\"connection\":\"source-db\",\"table\":\"dbo.Orders\"},\"target\":{\"connection\":\"target-db\",\"table\":\"public.orders\"},\"source_plan\":{\"action\":\"enableSourceChangeCapture\",\"state\":\"unknown\",\"steps\":[],\"warnings\":[\"needs the live server\"]},\"target_plan\":{\"action\":\"createTargetTable\",\"state\":\"missing\",\"steps\":[{\"title\":\"Create the table\",\"command_text\":\"CREATE TABLE public.orders (id bigint)\",\"rationale\":null,\"scope\":\"table\"}],\"warnings\":[]},\"excluded\":null}]}"; exit 0
+            fi
             bad=$(grep -rl 'sourceColumns: \[\]' "$root/config/replications" 2>/dev/null | head -1)
             if [ -n "$bad" ]; then echo "$bad: The metadata for the table mapping 'orders' (source) has not been cached; refresh the mapping's columns first." >&2; echo "Nothing was sent." >&2; exit 1; fi
             files=$(find "$root/config" -type f | wc -l)

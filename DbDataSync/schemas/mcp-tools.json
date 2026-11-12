@@ -162,6 +162,29 @@
       }
     },
     {
+      "name": "provisioning_plan",
+      "description": "Plan the create or alter of the target tables of a replication offline, from the catalog cache of the repository (--from-cache; --json: one JSON document, for the Workspace). Applying is the server's. [Offline only] Usage: provisioning plan <replication> --from-cache [--repo <path>] [--json]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
+      }
+    },
+    {
       "name": "secret_list",
       "description": "Whether each given reference is set, never the value. [Offline only] Usage: secret list [<ref> ...] [--repo <path>]",
       "inputSchema": {

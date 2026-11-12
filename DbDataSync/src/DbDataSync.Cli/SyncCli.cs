@@ -63,6 +63,10 @@ public static class SyncCli
             new Verb("list", "The scripts and the slot each fills (--json: one JSON document, for the Workspace)", EffectClass.OfflineOnly, "[--repo <path>] [--json]", (args, context) => RunScript("list", args, context), ScriptCommand.ListSchema),
             new Verb("test", "Run a script against generated sample input and show what it did (--json: one JSON document, for the Workspace)", EffectClass.RepoFilesOnly, "<name> [--rows <n>] [--repo <path>] [--json]", (args, context) => RunScript("test", args, context), ScriptCommand.TestSchema),
         ]),
+        new Noun("provisioning", "What a replication needs of its two databases",
+        [
+            new Verb("plan", "Plan the create or alter of the target tables of a replication offline, from the catalog cache of the repository (--from-cache; --json: one JSON document, for the Workspace). Applying is the server's", EffectClass.OfflineOnly, "<replication> --from-cache [--repo <path>] [--json]", async (args, context) => { using var _ = ContextScope.Enter(context); return await ProvisioningCommand.RunAsync(["plan", .. args], context.Data); }, ProvisioningCommand.PlanSchema),
+        ]),
         new Noun("secret", "The encrypted secret store",
         [
             Forward("set", "Store a secret under a dbdatakit:sync:... name", EffectClass.RepoFilesOnly, "<ref> <value> [--repo <path>]", a => Task.FromResult(SecretCommand.Run(["set", .. a]))),

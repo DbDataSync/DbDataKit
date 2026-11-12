@@ -31,6 +31,7 @@ public interface IDraftCompiler
     Task<DraftLoweredResult> LowerAsync(string root, string modelPath, CancellationToken cancellationToken);
 
     Task<DraftSampleResult> SampleAsync(string root, IReadOnlyList<string> modelPaths, int rows, int seed, int limit, CancellationToken cancellationToken);
+
 }
 
 public sealed partial class BuildProjectKind

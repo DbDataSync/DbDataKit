@@ -87,6 +87,14 @@ export interface ScriptTest { name: string; kind: string; ok: boolean; source: s
 export interface ScriptEntry { name: string; kind: string; language: string; error: string | null }
 /** The answer of a Sync draft's tool route: `ok` is false when the program did not answer (the findings say why), `data` is its document. */
 export interface ToolAnswer<T> { ok: boolean; diagnostics: CheckDiagnostic[]; data: T | null }
+/** One statement of a provisioning plan: what it does, the exact text a server would run, why, and where it runs (`database` or `table`). */
+export interface ProvisioningStep { title: string; command_text: string; rationale: string | null; scope: string }
+/** One side's plan: `state` is `satisfied` (nothing to do), `missing` (the steps change it), `unsupported` (the warnings say why) or `unknown` (a cache cannot say; the warnings say why). */
+export interface ProvisioningSide { action: string; state: 'satisfied' | 'missing' | 'unsupported' | 'unknown'; steps: ProvisioningStep[]; warnings: string[] }
+export interface ProvisioningEndpoint { connection: string; table: string }
+export interface ProvisioningMapping { mapping: string; source: ProvisioningEndpoint | null; target: ProvisioningEndpoint | null; source_plan: ProvisioningSide | null; target_plan: ProvisioningSide | null; excluded: string | null }
+/** What `dbdatasync provisioning plan --from-cache --json` printed: the plan of each mapping of a replication, made from the draft's catalog cache (no connection was opened). */
+export interface ProvisioningPlan { replication: string; cache_generated_at: string | null; cache_server: string | null; mappings: ProvisioningMapping[] }
 export interface SampleOptions { models?: string[]; rows?: number; seed?: number; limit?: number }
 
 const enc = encodeURIComponent
@@ -112,6 +120,8 @@ export const workspaceApi = {
   scripts: (project: string, id: string) => request<ToolAnswer<{ scripts: ScriptEntry[] }>>(`${ws(project, id)}/scripts`),
   /** Compiles one script of a Sync draft and runs it against generated input, offline, on a copy (plan 33 SC22k). */
   scriptTest: (project: string, id: string, name: string, rows = 5) => request<ToolAnswer<ScriptTest>>(`${ws(project, id)}/script-test`, json({ name, rows })),
+  /** The provisioning plan of one replication of a Sync draft, offline, from the draft's `catalog-cache.yaml` (plan 33 SC22j). Applying is the Sync server's. */
+  provisioningPlan: (project: string, id: string, replication: string) => request<ToolAnswer<ProvisioningPlan>>(`${ws(project, id)}/provisioning-plan`, json({ replication })),
   /** The commits in which one file changed (newest first), and its text as one of them committed it (plan 33 SC21e). */
   fileHistory: (project: string, id: string, path: string) => request<{ path: string; commits: Commit[] }>(`${ws(project, id)}/file-history/${filePath(path)}`).then((r) => r.commits),
   fileAt: (project: string, id: string, sha: string, path: string) => request<{ path: string; sha: string; content: string }>(`${ws(project, id)}/file-at/${enc(sha)}/${filePath(path)}`).then((r) => r.content),
