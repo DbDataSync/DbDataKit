@@ -58,7 +58,7 @@ public sealed class FormModel
             if (f.Kind == OptionKind.Flag) continue;
             if (f.Required && f.Items.Count == 0 && f.Kind == OptionKind.List || f.Required && f.Kind != OptionKind.List && f.Value.Trim().Length == 0)
                 problems.Add($"{f.Label} is required.");
-            if (f.Kind == OptionKind.Integer && f.Value.Trim().Length > 0 && !int.TryParse(f.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+            if (f.Kind == OptionKind.Integer && f.Value.Trim().Length > 0 && !long.TryParse(f.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
                 problems.Add($"{f.Label} must be a whole number.");
             if (f.Kind == OptionKind.Choice && f.Value.Trim().Length > 0 && f.Choices.Count > 0 && !f.Choices.Contains(f.Value.Trim()))
                 problems.Add($"{f.Label} must be one of: {string.Join(", ", f.Choices)}.");

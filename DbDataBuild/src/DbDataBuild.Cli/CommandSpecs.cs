@@ -17,6 +17,7 @@ public static class CommandGroups
         ["report"] = "Reports: the files of a project's reports/ folder",
         ["semantic"] = "Ask a published semantic model on a Gateway: what it offers, a query, what a query would run, the values of an attribute (as the person whose token is in DBDATAKIT_GATEWAY_TOKEN)",
         ["connection"] = "Work on a database the project is built on",
+        ["connection key-map"] = "The map of a key kept in the target (method: key_map): read it, and an administrator's audited repair of it",
         ["ui"] = "Interfaces: the terminal screens, the web page, the server for AI agents",
         ["help"] = "Reference: explain a diagnostic code, the support matrix, the dialects of read-only origins",
     };
@@ -63,6 +64,8 @@ public static class CommandSpecs
         new("connection compare", EffectClass.TargetReadOnly, "Compare the data of two tables, of one connection or across connections and engines (by digests): schemas, row counts and a key-based row diff (values are read only with --show-values)", true, "inspect", "C→"),
         new("connection check", EffectClass.TargetReadOnly, "Run the data checks generated from the semantic models (semantic/) against a connection: each hierarchy level has one parent per member, every key of a relationship exists on its one side, and the one side's keys are unique (counts only unless --show-values)", true, "inspect", "C→"),
         new("connection seed", EffectClass.TargetWrites, "Create the seeded tables (the mapped models) on a connection and fill them from the seeds (prints what it would do unless --apply)", true, "", "P⇒S"),
+        new("connection key-map show", EffectClass.TargetReadOnly, "Read the map of a key kept in the target (method: key_map): how many mappings it has, the largest integer and where the identity is; with --show-values the mappings, filtered by --value, --text, --part or --contains", true, "inspect", "C→"),
+        new("connection key-map repair", EffectClass.TargetWrites, "An administrator's repair of a key map, one explicit operation (add a missing mapping, set the text of a mapping, remove a mapping nothing uses, reseed the identity): a dry run unless --apply, which needs --reason, writes in one transaction and records who, when and before/after in the repair log beside the map", true, "", "C⇒D"),
         new("connection publish", EffectClass.TrackingTablesOnly, "Store the project and model metadata as JSON in the connection for introspection", true, "", "P⇒T"),
         new("semantic describe", EffectClass.OfflineOnly, "What a semantic model published to a paired Gateway offers: its dimensions, attributes, measures, hierarchies and saved queries (read as the person whose token is in DBDATAKIT_GATEWAY_TOKEN)", true, "", "—"),
         new("semantic query", EffectClass.OfflineOnly, "Run a semantic query on a published model: semantic SQL (--sql) or a request (--request, JSON); read as the caller, at most --max-rows rows", true, "", "—"),

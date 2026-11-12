@@ -756,6 +756,44 @@
       "if": {
         "properties": {
           "command": {
+            "const": "connection key-map show"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_connection_key_map_show"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "connection key-map repair"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_connection_key_map_repair"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "project show plan"
           }
         },
@@ -5491,6 +5529,210 @@
               "statements"
             ]
           }
+        }
+      }
+    },
+    "data_connection_key_map_show": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "table": {
+          "type": "string"
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "rows": {
+          "type": "integer"
+        },
+        "matching": {
+          "type": "integer"
+        },
+        "max_value": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "identity_last": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "identity_below_maximum": {
+          "type": "boolean"
+        },
+        "filtered": {
+          "type": "boolean"
+        },
+        "entries": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "type": "integer"
+              },
+              "text": {
+                "type": "string"
+              },
+              "parts": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "value",
+              "text",
+              "parts"
+            ]
+          }
+        }
+      }
+    },
+    "data_connection_key_map_repair": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "table": {
+          "type": "string"
+        },
+        "log_table": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set-text",
+            "remove",
+            "reseed"
+          ]
+        },
+        "value": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "forced": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor": {
+          "type": "string"
+        },
+        "applied": {
+          "type": "boolean"
+        },
+        "refused": {
+          "type": "string"
+        },
+        "uses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "table": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "rows": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "table",
+              "column"
+            ]
+          }
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "text_before": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "text_after": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "value"
+            ]
+          }
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "log_rows": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "rows_after": {
+          "type": "integer"
+        },
+        "identity_last_after": {
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       }
     },

@@ -295,7 +295,7 @@ public sealed class BuildServerWorkspacesTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, (await AsAda(HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/commit", """{"message":"Edit"}""")).StatusCode);
 
         // approving and applying, and anything that writes a target: refused, and the runner is not reached
-        foreach (var tool in new[] { "connection_deploy", "connection_refresh", "connection_init", "connection_seed" })
+        foreach (var tool in new[] { "connection_deploy", "connection_refresh", "connection_init", "connection_seed", "connection_key_map_repair" })
             Assert.Equal(HttpStatusCode.Forbidden, (await AsAda(HttpMethod.Post, Command(tool), "{}")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await AsAda(HttpMethod.Post, $"/api/v1/projects/sales/workspaces/{id}/merge")).StatusCode);
         Assert.Equal(4, runner.Roots.Count);
