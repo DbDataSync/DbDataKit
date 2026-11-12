@@ -78,7 +78,9 @@ public sealed class GatewayIdentityModule(
         var windows = current.Identity.Windows.Enabled ? new WindowsUpstream() : null;
         // what the approved manifest of an app instance allows: with it the home makes the instance's access token (plan 26 AP19)
         builder.Services.AddSingleton<DbDataKit.Identity.IAppGrants>(new DbDataKit.Apps.AppInstanceGrants(new DbDataKit.Apps.AppInstanceStore(new DbDataKit.State.DefinitionStore(state)), new DbDataKit.Apps.AppApprovalStore(new DbDataKit.State.DefinitionStore(state))));
-        builder.AddIdentityHome(new IdentityHomeOptions(publicUrl, directory, _ => state, _ => protector, Auth, Entra: entra, Windows: windows, Tokens: new AccessTokenPolicy(current.Identity.AccessTokenMaxDays)));
+        builder.AddIdentityHome(new IdentityHomeOptions(publicUrl, directory, _ => state, _ => protector, Auth, Entra: entra, Windows: windows, Tokens: new AccessTokenPolicy(current.Identity.AccessTokenMaxDays),
+            // the apps host's own client may trade a person's refresh token for an instance's token (plan 26 AP19)
+            AppHosts: id => !string.IsNullOrWhiteSpace(options.CurrentValue.Apps.Home.ClientId) && id == options.CurrentValue.Apps.Home.ClientId));
 
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy")).AllowAnonymous();

@@ -1,4 +1,5 @@
 using System.Text;
+using DbDataKit.Identity;
 using DbDataKit.State;
 using DbDataKit.Web.Trust;
 
@@ -11,24 +12,32 @@ namespace DbDataKit.Apps.Tests;
 public sealed class AppDataGatewayTests : IDisposable
 {
     private readonly string folder = Path.Combine(Path.GetTempPath(), "app-gateway-" + Guid.NewGuid().ToString("N")[..8]);
-    private readonly ConsoleIdentity host = new("dbdatagateway-apps", ConsoleSigningKey.Generate());
     private readonly Recorder data = new();
+    private readonly DefinitionStore definitions;
     private readonly AppInstanceStore instances;
+    private readonly AppApprovalStore approvals;
+    private readonly TestHome home;
+    private readonly UserRecord ada;
     private readonly AppDataGateway gateway;
-    private readonly AppSession session;
 
     public AppDataGatewayTests()
     {
         Directory.CreateDirectory(folder);
-        instances = new AppInstanceStore(new DefinitionStore(StateDatabase.OpenModules(Path.Combine(folder, "state.db"), [DefinitionsModule.Module])));
+        definitions = new DefinitionStore(StateDatabase.OpenModules(Path.Combine(folder, "state.db"), [DefinitionsModule.Module]));
+        instances = new AppInstanceStore(definitions);
+        approvals = new AppApprovalStore(definitions);
+        // the tokens are the identity home's: a real home (provider, keys, clients) that knows what each instance's approved manifest allows
+        home = new TestHome(new AppInstanceGrants(instances, approvals));
+        ada = home.Person("Ada", ("acme", ServerRole.Author), ("ask", ServerRole.Author), ("shop", ServerRole.Viewer), ("vault", ServerRole.Author), ("globex", ServerRole.Author));
+        foreach (var name in new[] { "acme", "ask", "shop", "vault", "globex" }) home.Instance(name);
         instances.PublishApp("schemaVersion: 1\nname: notes\nversion: 1.0.0\nentry: index.html\nroles: [viewer]\nmodels:\n  - model: territories\n    entities: {territory: [read, write], region: [read]}\n", "ada");
         instances.Save(new AppInstance("acme", "notes", Bindings: new Dictionary<string, string> { ["territories"] = "acme-data" }), "ada");
-        gateway = new AppDataGateway(instances, data, host);
-        session = new AppSessions().Create(new DbDataKit.Identity.HomeIdentity("user-7", "Ada", null, [], new Dictionary<string, IReadOnlyList<string>> { ["app:acme"] = ["author"] }));
+        gateway = new AppDataGateway(instances, data, home.Validator);
     }
 
     public void Dispose()
     {
+        home.Dispose();
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         try { Directory.Delete(folder, true); } catch (IOException) { }
     }
@@ -44,7 +53,7 @@ public sealed class AppDataGatewayTests : IDisposable
         }
     }
 
-    private string AppToken() => new AppTokenBroker(host.Issuer()).Issue(session, "acme").Token;
+    private string AppToken() => home.Token(ada, "acme");
 
     private Task<AppResponse> Call(string path, string? token, string method = "GET", string query = "", string body = "", string instance = "acme") =>
         gateway.ForwardAsync(instance, path, method, query, token is null ? null : "Bearer " + token, Encoding.UTF8.GetBytes(body), default);
@@ -60,7 +69,7 @@ public sealed class AppDataGatewayTests : IDisposable
         var call = Assert.Single(data.Seen);
         Assert.Null(call.Via);   // a sandboxed app has no approval to name
         Assert.Equal((AppDataRoute.Rows, "territories", "territory", "acme-data"), (call.Route, call.Model, call.Entity, call.Copy));   // the instance's binding chose the copy
-        Assert.Equal(("user-7", "Ada", "acme"), (call.SubjectId, call.SubjectName, call.App));
+        Assert.Equal((ada.Id, "Ada", "acme"), (call.SubjectId, call.SubjectName, call.App));
         Assert.Equal(["territories/territory:write", "territories/region:read"], call.Scope);
         Assert.Equal(ServerRole.Author, call.Roles & ServerRole.Author);
         Assert.Equal(("5", "10"), (call.Query["limit"], call.Query["offset"]));
@@ -104,9 +113,8 @@ public sealed class AppDataGatewayTests : IDisposable
         Assert.Equal("1.1.0", instances.Resolve("acme~preview")!.Manifest.Version);   // the preview channel's version
         Assert.Equal("1.0.0", instances.Resolve("acme")!.Manifest.Version);           // production's is untouched
         Assert.Null(instances.Resolve("acme~test"));
-        Assert.Equal(["author"], session.RolesOn("acme~preview"));                  // the roles on `acme` open its preview
-        var preview = new AppTokenBroker(host.Issuer()).Issue(session, "acme~preview");
-        Assert.Equal("app:acme~preview", preview.Audience);
+        var preview = (Token: home.Token(ada, "acme~preview"), Audience: "app:acme~preview");   // the roles on `acme` open its preview: the home's token for it names the preview as its audience
+        Assert.Equal(preview.Audience, home.Provider.Verify(preview.Token, "at+jwt")!["aud"]);
 
         Assert.Equal(200, (await Call("api/v1/models/territories/entities/territory/rows", preview.Token, instance: "acme~preview")).Status);
         var call = Assert.Single(data.Seen);
@@ -128,7 +136,7 @@ public sealed class AppDataGatewayTests : IDisposable
         const string manifest = "schemaVersion: 1\nname: notes\nversion: 1.1.0\nentry: index.html\nroles: [viewer]\nmodels:\n  - model: territories\n    entities: {territory: [read, write], region: [read]}\n";
         instances.PublishApp(manifest, "ada", "preview");
         instances.Save(new AppInstance("acme", "notes", Settings: new Dictionary<string, string> { [AppDataGateway.PreviewWritesSetting] = "true" }), "ada", "preview");
-        var preview = new AppTokenBroker(host.Issuer()).Issue(session, "acme~preview");
+        var preview = (Token: home.Token(ada, "acme~preview"), Audience: "app:acme~preview");
 
         // reads and writes of the preview carry the preview's id as the draft the answerer works in; a draft named by the app's own query is not the app's to choose
         Assert.Equal(200, (await Call("api/v1/models/territories/entities/territory/rows", preview.Token, query: "?draft=acme~other", instance: "acme~preview")).Status);
@@ -143,7 +151,7 @@ public sealed class AppDataGatewayTests : IDisposable
     {
         instances.PublishApp("schemaVersion: 1\nname: ask\nversion: 1.0.0\nentry: index.html\nroles: [viewer]\nmodels:\n  - model: territories\n    entities: {territory: [change request], region: [read]}\n", "ada");
         instances.Save(new AppInstance("ask", "ask"), "ada");
-        var token = new AppTokenBroker(host.Issuer()).Issue(new AppSessions().Create(new DbDataKit.Identity.HomeIdentity("user-7", "Ada", null, [], new Dictionary<string, IReadOnlyList<string>> { ["app:ask"] = ["author"] })), "ask").Token;
+        var token = home.Token(ada, "ask");
 
         Assert.Equal(200, (await Call("api/v1/models/territories/changes", token, "POST", body: "{\"changes\":[]}", instance: "ask")).Status);
         var call = Assert.Single(data.Seen);
@@ -187,18 +195,19 @@ public sealed class AppDataGatewayTests : IDisposable
     [Fact]
     public async Task A_trusted_apps_data_calls_stop_when_no_approval_stands_for_its_version()
     {
-        var definitions = new DefinitionStore(StateDatabase.OpenModules(Path.Combine(folder, "state.db"), [DefinitionsModule.Module]));
         instances.PublishApp("schemaVersion: 1\nname: vault\nversion: 1.0.0\nentry: index.html\nroles: [viewer]\ntrust: trusted\nmodels:\n  - model: territories\n    entities: {territory: [read]}\n", "ada");
         instances.Save(new AppInstance("acme", "vault"), "ada");
-        var approvals = new AppApprovalStore(definitions);
-        var gated = new AppDataGateway(instances, data, host, approvals: approvals);
-        Task<AppResponse> Read() => gated.ForwardAsync("acme", "api/v1/models/territories/entities/territory/rows", "GET", "", "Bearer " + AppToken(), [], default);
-
-        Assert.Equal(403, (await Read()).Status);
+        var gated = new AppDataGateway(instances, data, home.Validator, approvals: approvals);
+        var refresh = home.SignIn(ada);
+        // the home makes no token for a trusted app no approval stands for: there is nothing to present
+        Assert.Equal("invalid_grant", Assert.Throws<OAuthException>(() => home.Exchange(refresh, "acme")).Error);
         var approval = approvals.Approve("vault", 1, "grace");
+        var token = home.Exchange(refresh, "acme").AccessToken;
+        Task<AppResponse> Read() => gated.ForwardAsync("acme", "api/v1/models/territories/entities/territory/rows", "GET", "", "Bearer " + token, [], default);
+
         Assert.Equal(200, (await Read()).Status);
         approvals.Revoke(approval.Id, "grace");
-        Assert.Equal(403, (await Read()).Status);   // within the token's five minutes
+        Assert.Equal(403, (await Read()).Status);   // within the token's ten minutes: the host checks the approval on every call
         // the call that ran carries the approval for the servers' audit: the app, its version, the approver and the approval's id
         Assert.Equal(approval.AuditLabel, Assert.Single(data.Seen).Via);
         Assert.Contains("approved by grace", approval.AuditLabel);
@@ -221,15 +230,16 @@ public sealed class AppDataGatewayTests : IDisposable
         instances.PublishApp("schemaVersion: 1\nname: shop\nversion: 1.0.0\nentry: index.html\nroles: [viewer]\nsemantic: [sales, ops]\n", "ada");
         instances.Save(new AppInstance("shop", "shop"), "ada");
         var semantic = new SemanticRecorder();
-        var gated = new AppDataGateway(instances, data, host, semantic: semantic);
-        string Token(string instance) => new AppTokenBroker(host.Issuer()).Issue(new AppSessions().Create(new DbDataKit.Identity.HomeIdentity("user-7", "Ada", null, [], new Dictionary<string, IReadOnlyList<string>> { ["app:" + instance] = ["viewer"] })), instance).Token;
+        var gated = new AppDataGateway(instances, data, home.Validator, semantic: semantic);
+        string Token(string instance) => home.Token(ada, instance);
         Task<AppResponse> Send(string path, string method, string? token, string body = "") =>
             gated.ForwardAsync("shop", path, method, "", token is null ? null : "Bearer " + token, Encoding.UTF8.GetBytes(body), default);
 
         var list = await Send("api/v1/semantic/models", "GET", Token("shop"));
         Assert.Equal(200, list.Status);
         Assert.Equal("*", list.Headers["Access-Control-Allow-Origin"]);
-        Assert.Equal((AppSemanticRoute.Models, "shop", "user-7"), (semantic.Seen[0].Route, semantic.Seen[0].App, semantic.Seen[0].SubjectId));
+        Assert.Equal((AppSemanticRoute.Models, "shop", ada.Id), (semantic.Seen[0].Route, semantic.Seen[0].App, semantic.Seen[0].SubjectId));
+        Assert.Equal(ada.Id, semantic.Seen[0].SubjectId);
         Assert.Equal(["sales", "ops"], semantic.Seen[0].Allowed);
 
         Assert.Equal(200, (await Send("api/v1/semantic/models/sales/catalog", "GET", Token("shop"))).Status);
@@ -251,7 +261,7 @@ public sealed class AppDataGatewayTests : IDisposable
         Assert.Equal(asked, semantic.Seen.Count);
 
         // a host with no semantic models answers 404 for the route and still answers rows
-        var without = new AppDataGateway(instances, data, host);
+        var without = new AppDataGateway(instances, data, home.Validator);
         Assert.Equal(404, (await without.ForwardAsync("shop", "api/v1/semantic/models", "GET", "", "Bearer " + Token("shop"), [], default)).Status);
     }
 
@@ -262,12 +272,15 @@ public sealed class AppDataGatewayTests : IDisposable
         Assert.Equal(401, (await Call(Path, null)).Status);
         Assert.Equal(401, (await Call(Path, "not-a-token")).Status);
 
-        // a token signed by some other key, and a token for another instance's audience
-        var stranger = new ConsoleIdentity(host.Id, ConsoleSigningKey.Generate());
-        Assert.Equal(401, (await Call(Path, new AppTokenBroker(stranger.Issuer()).Issue(session, "acme").Token)).Status);
-        var other = new AppTokenBroker(host.Issuer()).Issue(new AppSessions().Create(session.Identity with { Roles = new Dictionary<string, IReadOnlyList<string>> { ["app:globex"] = ["author"] } }), "globex").Token;
-        Assert.Equal(401, (await Call(Path, other)).Status);
-        Assert.Equal(404, (await Call(Path, AppToken(), instance: "globex")).Status);   // no such instance
+        // a token of another home (signed by keys this host does not trust), and a token for another instance's audience
+        using var stranger = new TestHome(new AppInstanceGrants(instances, approvals));
+        stranger.Instance("acme");
+        var impostor = stranger.Person("Ada", ("acme", ServerRole.Author));
+        Assert.Equal(401, (await Call(Path, stranger.Token(impostor, "acme"))).Status);
+        instances.Save(new AppInstance("globex", "notes"), "ada");
+        Assert.Equal(401, (await Call(Path, home.Token(ada, "globex"))).Status);          // instance B's token is no good for instance A
+        Assert.Equal(401, (await Call(Path, home.Provider.Exchange(new TokenRequest("refresh_token", null, null, home.Host.ClientId, home.HostSecret, null, RefreshToken: home.SignIn(ada))).AccessToken)).Status);   // nor is a token the home made for the host's own client
+        Assert.Equal(404, (await Call(Path, AppToken(), instance: "initech")).Status);   // no such instance
         Assert.Empty(data.Seen);
     }
 }

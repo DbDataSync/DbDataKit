@@ -19,7 +19,7 @@ public static class AppsEndpoints
     public const string CallbackPath = "/apps/-/callback";
     public const string SessionCookie = "dbdata_apps";
 
-    public static IEndpointRouteBuilder MapApps(this IEndpointRouteBuilder app, AppInstanceStore instances, AppSite site, OpenIdClient client, AppSessions sessions, AppTokenBroker broker, AppDataGateway? data = null, AppStorage? storage = null, AppApprovalStore? approvals = null, Func<long>? storageCapBytes = null)
+    public static IEndpointRouteBuilder MapApps(this IEndpointRouteBuilder app, AppInstanceStore instances, AppSite site, OpenIdClient client, AppSessions sessions, AppDataGateway? data = null, AppStorage? storage = null, AppApprovalStore? approvals = null, Func<long>? storageCapBytes = null)
     {
         app.MapGet("/apps/{instance}/_app/{**path}", async (HttpContext context, string instance, string? path) =>
         {
@@ -52,7 +52,9 @@ public static class AppsEndpoints
             if (await sessions.FindAsync(context.Request.Cookies[SessionCookie], context.RequestAborted) is not { } session) { await Text(context, 401, "Sign in first."); return; }
             if (session.RolesOn(instance).Count == 0) { await Text(context, 403, "The identity home gives you no role on this app."); return; }
             if (Unapproved(approvals, resolved) is { } why) { await Text(context, 403, why); return; }
-            var token = broker.Issue(session, instance);
+            // the token is the identity home's, for this instance and this person: the host signs nothing (AP19)
+            var outcome = await sessions.TokenAsync(session, instance, context.RequestAborted);
+            if (outcome.Token is not { } token) { await Text(context, outcome.Status, outcome.Message ?? "No token."); return; }
             context.Response.Headers.CacheControl = "no-store";
             await context.Response.WriteAsJsonAsync(new { token = token.Token, expiresIn = token.ExpiresInSeconds, audience = token.Audience });
         });

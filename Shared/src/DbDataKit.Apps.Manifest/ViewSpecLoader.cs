@@ -57,7 +57,7 @@ public static class ViewSpecLoader
         ["sort"] = ["attribute", "direction"],
         ["section"] = ["title", "attributes"],
         ["attribute"] = ["attribute", "label"],
-        ["widget"] = ["kind", "title", "entity", "measure", "by", "columns", "limit"],
+        ["widget"] = ["kind", "title", "entity", "measure", "by", "columns", "limit", "url", "link_text"],
     };
 
     /// <summary>The values of each choice, by name.</summary>
@@ -67,7 +67,7 @@ public static class ViewSpecLoader
         ["paramType"] = ["string", "int", "bool", "date"],
         ["direction"] = ["asc", "desc"],
         ["mode"] = ["create", "edit"],
-        ["widgetKind"] = ["metric", "bar", "line", "table"],
+        ["widgetKind"] = ["metric", "bar", "line", "table", "embed"],
         ["aggregate"] = ["sum", "avg", "min", "max"],
     };
 
@@ -461,13 +461,31 @@ public static class ViewSpecLoader
             return new DashboardView(File, title, model.Value, widgets, declared, links, P(map), P(model));
         }
 
+        /// <summary>An <c>embed</c> widget (plan 26 AP17): a report of an external report server, framed when the host approves its origin and a link otherwise. It has no entity, no data and none of the figure's keys.</summary>
+        private ViewWidget? Embed(YamlMapping m, string? title)
+        {
+            var ok = title is not null;
+            foreach (var key in new[] { "entity", "measure", "by", "columns", "limit" })
+                if (m.Get(key) is { } stray) { Bad(stray, $"`{key}` is for a figure; an `embed` widget has a `url` and a `link_text`."); ok = false; }
+            var url = Scalar(m, "url", required: true, m);
+            var at = url is null ? P(m) : P(url);
+            if (url is not null && !SafeAddress(url.Value)) { Bad(url, "`url` is an absolute https address with no credentials, such as `https://reports.contoso.com/Reports/report/Sales`."); url = null; }
+            var text = m.Get("link_text") is null ? null : Line(m, "link_text", 200, false);
+            return ok && url is not null ? new ViewWidget(ViewWidgetKind.Embed, title!, "", ViewAggregate.Count, null, null, [], DefaultWidgetLimit, P(m), P(m), url.Value, text, at) : null;
+        }
+
+        private static bool SafeAddress(string value) =>
+            value.Length <= 2000 && !value.Any(c => char.IsWhiteSpace(c) || char.IsControl(c))
+            && Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && uri.UserInfo.Length == 0 && uri.Host.Length > 0;
+
         private ViewWidget? Widget(YamlNode item)
         {
             if (item is not YamlMapping m) { Bad(item, "A widget is a mapping with `kind`, `title` and `entity`."); return null; }
             CheckKeys(m, Keys["widget"], "a widget");
-            var kind = Pick<ViewWidgetKind>(m, "kind", "widgetKind", [ViewWidgetKind.Metric, ViewWidgetKind.Bar, ViewWidgetKind.Line, ViewWidgetKind.Table], null);
+            var kind = Pick<ViewWidgetKind>(m, "kind", "widgetKind", [ViewWidgetKind.Metric, ViewWidgetKind.Bar, ViewWidgetKind.Line, ViewWidgetKind.Table, ViewWidgetKind.Embed], null);
             if (m.Get("kind") is null) Add(SharedCodes.MissingKey, m, "Required key `kind` is missing.", $"Add `kind:` with one of: {string.Join(", ", Choices["widgetKind"])}.");
             var title = Line(m, "title", 200, required: true);
+            if (kind == ViewWidgetKind.Embed) return Embed(m, title);
             var entity = Entity(m, out var entityAt);
             var limit = Number(m, "limit", 1, MaximumWidgetLimit, DefaultWidgetLimit);
             var aggregate = ViewAggregate.Count;
@@ -475,6 +493,7 @@ public static class ViewSpecLoader
             var columns = new List<ViewAttribute>();
             var ok = kind is not null && title is not null && entity is not null;
 
+            if ((m.Get("url") ?? m.Get("link_text")) is { } stray) { Bad(stray, "`url` and `link_text` are for an `embed` widget."); ok = false; }
             if (kind is ViewWidgetKind.Metric or ViewWidgetKind.Bar or ViewWidgetKind.Line)
             {
                 if (m.Get("measure") is not { } mn) { Add(SharedCodes.MissingKey, m, "Required key `measure` is missing.", "Add `measure: count`, or `measure: {sum: attribute}`."); ok = false; }

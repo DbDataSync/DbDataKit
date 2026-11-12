@@ -202,14 +202,14 @@ public sealed class GroupStateTests : IAsyncLifetime
     private const string HomeUrl = "https://home.example.invalid";
 
     /// <summary>An instance that serves the identity home and the management API too, on ports of its own, at the group's one public address.</summary>
-    private async Task<(WebApplication App, int Management, int Identity)> ServingInstance(string dataDirectory, string[] state, params string[] more)
+    private async Task<(WebApplication App, int Management, int Identity)> ServingInstance(string dataDirectory, string[] state, string[]? more = null, bool homeAtLocalhost = false)
     {
         for (var attempt = 1; ; attempt++)
         {
             var (management, identity) = (FreePort(), FreePort());
             var app = Instance(dataDirectory, [.. state,
                 "--Gateway:Management:Enabled=true", "--Gateway:Management:Address=127.0.0.1", $"--Gateway:Management:Port={management}",
-                "--Gateway:Identity:Enabled=true", "--Gateway:Identity:Address=127.0.0.1", $"--Gateway:Identity:Port={identity}", $"--Gateway:Identity:PublicUrl={HomeUrl}", .. more]);
+                "--Gateway:Identity:Enabled=true", "--Gateway:Identity:Address=127.0.0.1", $"--Gateway:Identity:Port={identity}", $"--Gateway:Identity:PublicUrl={(homeAtLocalhost ? $"https://localhost:{identity}" : HomeUrl)}", .. more ?? []]);
             try
             {
                 await app.StartAsync();
@@ -922,8 +922,8 @@ public sealed class GroupStateTests : IAsyncLifetime
 
             var dir = Path.Combine(_root, "apps");
             var appsPort = FreePort();
-            var (app, management, _) = await ServingInstance(dir, [.. state, "--Gateway:DefinitionPollSeconds=1", "--Gateway:Modules:0=flightsql", "--Gateway:Modules:1=apps",
-                "--Gateway:Apps:Address=127.0.0.1", $"--Gateway:Apps:Port={appsPort}", "--Gateway:Apps:Home:ClientId=apps-host"]);
+            var (app, management, _) = await ServingInstance(dir, [.. state, "--Gateway:DefinitionPollSeconds=1", "--Gateway:Modules:0=flightsql", "--Gateway:Modules:1=apps", "--Gateway:Modules:2=identity",
+                "--Gateway:Apps:Address=127.0.0.1", $"--Gateway:Apps:Port={appsPort}", "--Gateway:Apps:Home:ClientId=apps-host"], homeAtLocalhost: true);
             var groupState = app.Services.GetRequiredService<StateDatabase>();
             await PublishEntityModelAsync(engine, database, management, dir, groupState, Model);
             for (var i = 0; i < 100 && (app.Services.GetRequiredService<PublishedEntityModels>().Find("territories") is null
@@ -935,10 +935,35 @@ public sealed class GroupStateTests : IAsyncLifetime
             instances.Save(new DbDataKit.Apps.AppInstance("acme", "notes", Bindings: new Dictionary<string, string> { ["territories"] = "default" }), "ada");
             instances.Save(new DbDataKit.Apps.AppInstance("globex", "notes", Bindings: new Dictionary<string, string> { ["territories"] = "globex-data" }), "ada");
 
-            // the tokens the shell's broker hands an app, for a person the home made an author or a viewer on the instance
-            var broker = new DbDataKit.Apps.AppTokenBroker(new ConsoleTokenIssuer(GatewayAppsModule.TokenIssuer, await GatewayAppsModule.SigningKeyAsync(new GatewayOptions { DataDirectory = dir }, default)));
-            string Token(string instance, string role) => broker.Issue(new DbDataKit.Apps.AppSessions().Create(new HomeIdentity("user-" + role, role == "author" ? "Grace" : "Linus", null, [],
-                new Dictionary<string, IReadOnlyList<string>> { ["app:" + instance] = [role] })), instance).Token;
+            // the tokens are the identity home's (plan 26 AP19): this test's provider shares the state and the signing keys of the home the identity module serves, trades a person's refresh token for the instance's access token as the apps
+            // host does, and the host checks the result against the keys the home publishes
+            var current = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue;
+            using var held = await SecretsRuntime.OpenStore(current).TryResolveAsync(SecretRef.Parse("secret:" + GatewayIdentityModule.SigningKeySecret), default);
+            Assert.NotNull(held);
+            var homeClients = new OidcClients(groupState);
+            var homeDirectory = new HomeDirectory(groupState);
+            var homeUsers = new IdentityUserStore(groupState);
+            const string Callback = "https://127.0.0.1/apps/-/callback";
+            var hostClient = homeClients.Register("Apps host", [Callback], confidential: false).Client;
+            foreach (var instance in new[] { "acme", "globex" }) AppInstanceClients.Ensure(homeClients, instance, Callback);
+            var provider = new OpenIdProvider(groupState, homeUsers, homeDirectory, homeClients, new SigningKeys(groupState, KeySigningKeyProtector.FromBase64(held!.RevealString())),
+                GatewayIdentityModule.PublicUrlOf(current).AbsoluteUri,
+                apps: new DbDataKit.Apps.AppInstanceGrants(instances, new DbDataKit.Apps.AppApprovalStore(new DefinitionStore(groupState))), appHosts: id => id == hostClient.ClientId);
+            var people = new Dictionary<string, UserRecord>();
+            string Token(string instance, string role)
+            {
+                if (!people.TryGetValue(role, out var user))
+                {
+                    people[role] = user = homeUsers.CreateUser(role == "author" ? "Grace" : "Linus", role + "@example.invalid", UserRole.Viewer);
+                    foreach (var name in new[] { "acme", "globex" }) homeDirectory.AssignApp(AssignmentSubject.User(user.Id), name, role == "author" ? ServerRole.Author : ServerRole.Viewer);
+                }
+                var verifier = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(48));
+                var challenge = Base64Url.EncodeToString(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
+                var authorized = provider.Authorize(new AuthorizeRequest(hostClient.ClientId, Callback, "code", "openid offline_access", "s", "n", challenge, "S256"), user.Id);
+                var code = System.Web.HttpUtility.ParseQueryString(new Uri(authorized.RedirectTo!).Query)["code"]!;
+                var refresh = provider.Exchange(new TokenRequest("authorization_code", code, Callback, hostClient.ClientId, null, verifier)).RefreshToken!;
+                return provider.Exchange(new TokenRequest(OpenIdProvider.TokenExchangeGrant, null, null, hostClient.ClientId, null, null, SubjectToken: refresh, Audience: "app:" + instance, SubjectTokenType: OpenIdProvider.RefreshTokenType)).AccessToken;
+            }
             var (author, viewer) = (Token("acme", "author"), Token("acme", "viewer"));
 
             async Task<(HttpStatusCode Status, JsonNode? Body)> Data(HttpMethod method, string path, string token, object? body = null, string instance = "acme")

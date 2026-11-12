@@ -25,6 +25,7 @@ public static class IdentityHomeState
 /// <param name="Entra">Sign people in through a Microsoft Entra ID tenant too (plan 20 O06b); null: not offered.</param>
 /// <param name="Windows">Sign people in with their Windows account too (Negotiate); null: not offered.</param>
 /// <param name="Tokens">How long personal access tokens may last here (plan 13a U20); null: 90 days by default, at most a year.</param>
+/// <param name="AppHosts">Whether a client (by id) is an apps host that may trade a person's refresh token for an app instance's access token (RFC 8693, plan 26 AP19); null: no client may.</param>
 public sealed record IdentityHomeOptions(
     Uri PublicUrl,
     string FirstRunDirectory,
@@ -34,7 +35,8 @@ public sealed record IdentityHomeOptions(
     bool InvitePage = true,
     EntraUpstream? Entra = null,
     WindowsUpstream? Windows = null,
-    AccessTokenPolicy? Tokens = null)
+    AccessTokenPolicy? Tokens = null,
+    Func<string, bool>? AppHosts = null)
 {
     /// <summary>The issuer written into every token: the public address without a path.</summary>
     public string Issuer => PublicUrl.GetLeftPart(UriPartial.Authority);
@@ -78,7 +80,7 @@ public static class IdentityHome
         services.AddSingleton(sp => new OidcClients(options.State(sp)));
         services.AddSingleton(sp => new SigningKeys(options.State(sp), options.Protector(sp)));
         services.AddSingleton(sp => new OpenIdProvider(options.State(sp), sp.GetRequiredService<IUserAccounts>(), sp.GetRequiredService<HomeDirectory>(),
-            sp.GetRequiredService<OidcClients>(), sp.GetRequiredService<SigningKeys>(), options.Issuer, sp.GetService<TimeProvider>(), sp.GetService<IAppGrants>(), sp.GetService<SessionSettings>()?.Length));
+            sp.GetRequiredService<OidcClients>(), sp.GetRequiredService<SigningKeys>(), options.Issuer, sp.GetService<TimeProvider>(), sp.GetService<IAppGrants>(), sp.GetService<SessionSettings>()?.Length, options.AppHosts));
         return builder;
     }
 
