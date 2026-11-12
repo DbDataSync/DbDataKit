@@ -90,7 +90,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | [18](18-lineage.md) G06b | Runs on column edges, a job node per load | |
 | [Build OPEN-ITEMS](../../DbDataBuild/docs/progress/OPEN-ITEMS.md) section S; [12](12-shared-tls-rollout.md) items 10 and 11; [Gateway README](../../DbDataGateway/README.md) Fabric (Not supported yet); [windows-test-install](../windows-test-install.md) | K1: Build's `SourceCatalogReader` (needs a schema-wide keys read in the shared readers first) and the ODBC and DuckDB opens; K2: Sync's `service`, `cert` and `secret` verbs on the shared commands (needs a Windows host); D11: Build's CLI on the shared router; F1: Fabric through the Gateway (needs a tenant) | D11 OWNER (deferred); K2 LOW (plan 12) |
 | [14a](14a-semantic-slices.md) SL03, SL10, SL22 | Build reads the registry; metadata documents with semantic models; the `semantic` noun | |
-| [27a](27a-knowledge-slices.md) AG01 | The suite-wide command-spec test with a golden of offered MCP tools | |
+| [27a](27a-knowledge-slices.md) AG01 | The suite-wide command-spec test with a golden of offered MCP tools: built (`CommandSurface`) and kept for the console; the other products add their own copy | PARTLY |
 
 ## Sync
 
