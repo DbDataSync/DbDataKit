@@ -77,7 +77,19 @@ public static partial class ViewsLoader
                 }
             }
 
+            var forWhat = m.Get("for") is { } fn ? Choice(fn, J(path, "for"), "`for`", Choices["actionFor"]) ?? "row" : "row";
+            var stage = m.Get("stage") is { } stn ? Flag(stn, J(path, "stage"), "`stage`") ?? false : false;
             var confirm = ReadConfirm(m, path, asks, operation);
+            if (confirm.Skip)
+            {
+                var cp = J(path, "confirm");
+                if (kind != "change" || operation != "edit") Bad(ViewsCodes.ActionModeInvalid, m.Get("confirm")!, cp, "`confirm: skip` lets a field edit apply at once, like a spreadsheet cell: it is never for a delete, an insert or a task.");
+                else if (asks.Count > 0) Bad(ViewsCodes.ActionModeInvalid, m.Get("confirm")!, cp, "`confirm: skip` has no popup to ask in: remove `ask`, or the `skip`.");
+                else if (stage) Bad(ViewsCodes.ActionModeInvalid, m.Get("confirm")!, cp, "`confirm: skip` applies at once and `stage: true` waits for the review: choose one.");
+                else if (forWhat == "selection") Bad(ViewsCodes.ActionModeInvalid, m.Get("confirm")!, cp, "`confirm: skip` is for one edit: a selection is reviewed once.");
+            }
+            if (stage && kind != "change") Bad(ViewsCodes.ActionModeInvalid, m.Get("stage")!, J(path, "stage"), "Only a `change` is staged: a task is confirmed once.");
+            if (forWhat == "selection" && (kind != "change" || operation == "insert")) Bad(ViewsCodes.ActionModeInvalid, m.Get("for")!, J(path, "for"), "`for: selection` applies an edit or a delete to each selected row; an insert has no row, and a task takes the clicked row.");
             var then = m.Get("then") is { } tn ? ReadActionThen(tn, J(path, "then")) : ("refresh", (IReadOnlyList<string>)[]);
             var print = m.Get("print") is { } pr ? Choice(pr, J(path, "print"), "`print`", Choices["linkPrint"]) : null;
             var image = m.Get("image") is { } im ? Choice(im, J(path, "image"), "`image`", Choices["linkPrint"]) : null;
@@ -85,7 +97,7 @@ public static partial class ViewsLoader
             if (print == "link") Bad(ViewsCodes.LinkNoAddress, m.Get("print")!, J(path, "print"), "`print: link` needs a target with an address of its own, and an action has none: its popup is the shell's.", "Use `print: normal` or `print: hidden`.");
 
             var target = kind == "change" ? $"{model}.{entity}" : $"{package}.{task}";
-            var definition = new ActionDefinition(kind, operation, model, entity, package, task, key2, version, set, confirm, asks);
+            var definition = new ActionDefinition(kind, operation, model, entity, package, task, key2, version, set, confirm, asks, forWhat, stage);
             return new ViewLink(name, kind, target, kind == "change" ? operation : "inputs", set, "dialog", then.Item1, then.Item2, [], print, image, label, m.Line, m.Column, definition);
         }
 
@@ -169,7 +181,8 @@ public static partial class ViewsLoader
         {
             if (m.Get("confirm") is not { } cn) return new ActionConfirm(null, [], null);
             var cp = J(path, "confirm");
-            if (Map(cn, cp, "`confirm`", cn) is not { } c) return new ActionConfirm(null, [], null);
+            if (cn is YamlScalar { Value: "skip" }) return new ActionConfirm(null, [], null, Skip: true);
+            if (Map(cn, cp, "`confirm` (the popup's words, or `skip`)", cn) is not { } c) return new ActionConfirm(null, [], null);
             CheckKeysAt(c, ["title", "show", "button"], "a confirmation", cp);
             string? title = null;
             if (c.Get("title") is { } tn && Text(tn, J(cp, "title"), "`title`", 300) is { } t)

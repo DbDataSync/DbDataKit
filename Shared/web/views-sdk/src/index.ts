@@ -35,7 +35,12 @@ export interface ViewProps {
   size: { width: number; height: number | 'auto' }
   mode: ViewMode
   links: Record<string, HostLinkInfo>
+  /** What is staged in the shell's pending set (plan 32 DBR53b), read-only: show an edited value from it. The set is the shell's, not the widget's. */
+  pending?: PendingSummary[]
 }
+
+/** One staged change as a widget may read it. */
+export interface PendingSummary { link: string; entity: string; operation: 'insert' | 'edit' | 'delete'; key: string; writes: Record<string, string> }
 
 export type ViewComponent = ComponentType<ViewProps>
 
@@ -72,6 +77,9 @@ export type ToHost =
   | { type: 'views:error'; message: string }
   | { type: 'views:setParam'; name: string; value: Scalar | Scalar[] | null }
   | { type: 'views:open'; link: string; row: Row }
+  | { type: 'views:stage'; link: string; row: Row; answers: Record<string, string> }
+  | { type: 'views:submit' }
+  | { type: 'views:discard' }
   | { type: 'views:size'; height: number }
 
 /** What the host sends the code: the props, again on every change, and that a dialog or panel it opened has closed (`saved` when a form saved). */
@@ -162,6 +170,24 @@ export function useOpen(): (link: string, row: Row) => void {
 export function useRequest(): (link: string, row: Row) => void {
   const { port, mode, props } = host()
   return (link, row) => { if (mode === 'screen' && props.links[link]?.action === true) port.send({ type: 'views:open', link, row }) }
+}
+
+/**
+ * `stage(link, row, answers?)`: stages a change of an **action** link in the shell's pending set (plan 32 DBR53b) instead of asking: thirty edits are thirty calls of this and one review. Nothing is sent; `answers` are the
+ * values of the link's `ask` fields. Does nothing in print and image mode, or for a link that is not an action.
+ */
+export function useStage(): (link: string, row: Row, answers?: Record<string, string>) => void {
+  const { port, mode, props } = host()
+  return (link, row, answers = {}) => { if (mode === 'screen' && props.links[link]?.action === true) port.send({ type: 'views:stage', link, row, answers }) }
+}
+
+/** What the shell has staged, read-only (empty when nothing is). The set belongs to the shell: the code cannot change or confirm it. */
+export function usePending(): PendingSummary[] { return host().props.pending ?? [] }
+
+/** `submit()` **opens the shell's review** of the pending set; it cannot confirm: only the person's click in the shell's popup sends the set. `discard()` empties the set. */
+export function useBatch(): { submit(): void; discard(): void } {
+  const { port, mode } = host()
+  return { submit: () => { if (mode === 'screen') port.send({ type: 'views:submit' }) }, discard: () => { if (mode === 'screen') port.send({ type: 'views:discard' }) } }
 }
 
 /** The link a dialog or panel last closed for, and whether a form saved: the view may draw again. */

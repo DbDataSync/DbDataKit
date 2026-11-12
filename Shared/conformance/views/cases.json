@@ -1622,6 +1622,105 @@
       "path": "links.close-order.change.where",
       "line": 28,
       "schema": true
+    },
+    {
+      "name": "action-skip-on-a-delete",
+      "file": "bad/action-skip-on-a-delete.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-066",
+      "path": "links.drop-order.confirm",
+      "line": 102,
+      "schema": false
+    },
+    {
+      "name": "action-skip-on-a-task",
+      "file": "bad/action-skip-on-a-task.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-066",
+      "path": "links.rerun-load.confirm",
+      "line": 117,
+      "schema": false
+    },
+    {
+      "name": "action-skip-with-an-ask",
+      "file": "bad/action-skip-with-an-ask.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-066",
+      "path": "links.quick.confirm",
+      "line": 134,
+      "schema": false
+    },
+    {
+      "name": "action-skip-and-stage",
+      "file": "bad/action-skip-and-stage.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-066",
+      "path": "links.quick.confirm",
+      "line": 134,
+      "schema": false
+    },
+    {
+      "name": "action-skip-for-a-selection",
+      "file": "bad/action-skip-for-a-selection.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-066",
+      "path": "links.quick.confirm",
+      "line": 134,
+      "schema": false
+    },
+    {
+      "name": "action-stage-a-task",
+      "file": "bad/action-stage-a-task.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-066",
+      "path": "links.rerun-load.stage",
+      "line": 121,
+      "schema": false
+    },
+    {
+      "name": "action-selection-for-an-insert",
+      "file": "bad/action-selection-for-an-insert.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-066",
+      "path": "links.new-order.for",
+      "line": 93,
+      "schema": false
+    },
+    {
+      "name": "action-selection-for-a-task",
+      "file": "bad/action-selection-for-a-task.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-066",
+      "path": "links.rerun-load.for",
+      "line": 121,
+      "schema": false
+    },
+    {
+      "name": "action-for-is-row-or-selection",
+      "file": "bad/action-for-is-row-or-selection.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "links.close-order.for",
+      "line": 39,
+      "schema": true
+    },
+    {
+      "name": "action-stage-is-a-flag",
+      "file": "bad/action-stage-is-a-flag.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "links.close-order.stage",
+      "line": 39,
+      "schema": true
+    },
+    {
+      "name": "action-confirm-is-a-map-or-skip",
+      "file": "bad/action-confirm-is-a-map-or-skip.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "links.close-order.confirm",
+      "line": 29,
+      "schema": true
     }
   ],
   "warnings": [

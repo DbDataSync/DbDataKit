@@ -118,6 +118,55 @@
         "title": "Run the {{customers.region}} load now"
       },
       "print": "hidden"
+    },
+    "quick": {
+      "change": {
+        "model": "sales",
+        "entity": "orders",
+        "edit": {
+          "key": "$orders.id",
+          "version": "$orders.version"
+        },
+        "set": {
+          "flag": true
+        }
+      },
+      "confirm": "skip"
+    },
+    "stage-units": {
+      "change": {
+        "model": "sales",
+        "entity": "orders",
+        "edit": {
+          "key": "$orders.id",
+          "version": "$orders.version"
+        },
+        "set": {
+          "units": "$ask.units"
+        }
+      },
+      "ask": {
+        "units": {
+          "type": "integer"
+        }
+      },
+      "stage": true
+    },
+    "close-selected": {
+      "change": {
+        "model": "sales",
+        "entity": "orders",
+        "edit": {
+          "key": "$orders.id",
+          "version": "$orders.version"
+        },
+        "set": {
+          "status": "Closed"
+        }
+      },
+      "for": "selection",
+      "stage": true,
+      "label": "Close the selected orders"
     }
   },
   "widgets": {

@@ -33,7 +33,12 @@ export interface ViewProps {
   size: { width: number; height: number | 'auto' }
   mode: ViewMode
   links: Record<string, HostLinkInfo>
+  /** What is staged in the shell's pending set, read-only: a widget shows an edited value from it (the set is the shell's). */
+  pending?: PendingSummary[]
 }
+
+/** One staged change as a widget may read it: the entity, the row's key as text, the link that staged it and the values it writes. */
+export interface PendingSummary { link: string; entity: string; operation: 'insert' | 'edit' | 'delete'; key: string; writes: Record<string, string> }
 
 /** What the code sends the host. */
 export type ToHost =
@@ -42,6 +47,12 @@ export type ToHost =
   | { type: 'views:error'; message: string }
   | { type: 'views:setParam'; name: string; value: Scalar | Scalar[] | null }
   | { type: 'views:open'; link: string; row: Row }
+  /** Stage a change in the shell's pending set (DBR53b): the link and the row, and what the person typed for the link's `ask` fields. Nothing is sent to the server. */
+  | { type: 'views:stage'; link: string; row: Row; answers: Record<string, string> }
+  /** Open the review of the pending set. It cannot confirm: only the person's click in the shell's popup submits. */
+  | { type: 'views:submit' }
+  /** Discard the pending set. */
+  | { type: 'views:discard' }
   | { type: 'views:size'; height: number }
 
 /** What the host sends the code. */
@@ -78,6 +89,20 @@ export function readToHost(data: unknown): ToHost | null {
       if (entries.length > MAX_ROW_KEYS) return null
       return { type: 'views:open', link: m.link, row: Object.fromEntries(entries.filter(([, v]) => v === null || isScalar(v))) as Row }
     }
+    case 'views:stage': {
+      if (typeof m.link !== 'string' || m.link.length > 100) return null
+      const row = m.row === undefined ? {} : m.row
+      if (typeof row !== 'object' || row === null || Array.isArray(row)) return null
+      const entries = Object.entries(row as Record<string, unknown>)
+      if (entries.length > MAX_ROW_KEYS) return null
+      const typed = m.answers === undefined ? {} : m.answers
+      if (typeof typed !== 'object' || typed === null || Array.isArray(typed)) return null
+      const answers = Object.entries(typed as Record<string, unknown>)
+      if (answers.length > 20 || !answers.every(([, v]) => typeof v === 'string' && v.length <= MAX_TEXT)) return null
+      return { type: 'views:stage', link: m.link, row: Object.fromEntries(entries.filter(([, v]) => v === null || isScalar(v))) as Row, answers: Object.fromEntries(answers) as Record<string, string> }
+    }
+    case 'views:submit': return { type: 'views:submit' }
+    case 'views:discard': return { type: 'views:discard' }
     default: return null
   }
 }

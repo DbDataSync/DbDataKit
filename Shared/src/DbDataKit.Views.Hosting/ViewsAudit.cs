@@ -24,6 +24,14 @@ public static class ViewsAuditVerbs
     public const string Print = "view.print";
     public const string Preview = "view.preview";
 
+    // an action of a link (plan 32 DBR53): who, through what, the document, version, link and widget, what kind of action and its outcome; never a value
+    public const string Action = "view.action";
+    public const string ActionForecast = "view.action.forecast";
+
+    // a staged set submitted as one batch (plan 32 DBR53b): the batch id, the number of lines and changes, the model and entities; never a value
+    public const string Batch = "view.batch";
+    public const string BatchForecast = "view.batch.forecast";
+
     // a person's own documents (plan 32 DBR12): the target is `<owner>/<name>@<version>`; the text of a document and a parameter's value are never recorded
     public const string MyList = "view.my.list";
     public const string MyOpen = "view.my.open";

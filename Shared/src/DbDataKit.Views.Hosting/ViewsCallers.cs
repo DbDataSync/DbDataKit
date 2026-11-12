@@ -6,7 +6,11 @@ namespace DbDataKit.Views.Hosting;
 /// What an app's token narrows a caller to (plan 32 section 5 item 1: the apps host calls the module with the app's scoped token, "which narrows"): the app instance, and the semantic models its approved manifest names
 /// (<c>semantic: [sales]</c>). A document that queries a model outside the list is not opened or rendered for the app, whatever the person behind it may do; the person's rows are still the serving core's to decide.
 /// </summary>
-public sealed record ViewsAppScope(string Instance, IReadOnlyCollection<string> Models)
+/// <param name="Instance">The app instance.</param>
+/// <param name="Models">The semantic models its manifest lists.</param>
+/// <param name="Writes">The entities its manifest gives <c>write</c> or <c>change request</c>, as <c>model/entity</c>: an action's <c>change</c> may touch only these (plan 32 DBR53); null carries no write scope, so no change.</param>
+/// <param name="Label">What the audit says the app is: its name and version as the approval gives them (<c>sales-portal 3</c>); the instance when null.</param>
+public sealed record ViewsAppScope(string Instance, IReadOnlyCollection<string> Models, IReadOnlyCollection<string>? Writes = null, string? Label = null)
 {
     public bool Allows(string model) => Models.Contains(model, StringComparer.OrdinalIgnoreCase);
 }

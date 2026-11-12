@@ -3,7 +3,7 @@
   "status": "open",
   "note": "The shared core is versioned with both kinds (plan 32 section 3.1). While status is open the lock is updated with the schema; once frozen a schema change is the next number of both kinds. The hashes are of the files with line ends as LF.",
   "sha256": {
-    "core": "f6e3c012f89892a57177563586c06d749157dcbae3321fa70d30ff90acd1a318",
+    "core": "796d99c196f298191bcbcc9cb6ce1d145bcc77245805b2f2800cc10544b1425b",
     "dashboard": "a39662d1a84a79ce9b493f36497eefeffbc8b77552cff87c6943fbd2a0c67f8d",
     "report": "02ce1ea5cd3f856d94ff17d1ea6f03358f6283596b91a3937393fef7166e2b53"
   }

@@ -62,7 +62,7 @@ public static partial class ViewsLoader
         ["on_select"] = ["set", "from"],
         ["drill"] = ["to", "with"],
         ["drill.to"] = ["dashboard", "report", "view"],
-        ["link"] = ["dashboard", "report", "view", "page", "form", "change", "task", "confirm", "ask", "with", "new", "edit", "as", "then", "lock", "print", "image", "label"],
+        ["link"] = ["dashboard", "report", "view", "page", "form", "change", "task", "confirm", "ask", "for", "stage", "with", "new", "edit", "as", "then", "lock", "print", "image", "label"],
         ["control.values"] = ["attribute", "limit"],
         ["layout.common"] = ["name", "type", "default", "when", "widget_options"],
         ["layout.reflow"] = ["grid", "tiles"],
@@ -123,6 +123,7 @@ public static partial class ViewsLoader
         ["linkPrint"] = ["hidden", "normal", "link"],
         ["linkTarget"] = ["dashboard", "report", "view", "page", "form"],
         ["linkAction"] = ["change", "task"],
+        ["actionFor"] = ["row", "selection"],
         ["askType"] = ["string", "number", "integer", "boolean", "date"],
     };
 

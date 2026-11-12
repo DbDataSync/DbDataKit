@@ -17,7 +17,8 @@ export const MAX_ASKS = 20
 
 export interface ActionAsk { name: string; label: string; type: AskType; choices: string[]; required: boolean; default?: string }
 export interface ActionConfirmDoc { title?: string; show?: string[]; button?: string }
-export interface ActionConfirm { title?: string; show: string[]; button?: string }
+/** The popup's words; `skip` (a field edit only) says there is no popup: the edit applies at once like a spreadsheet cell, with the Store's history as the undo. */
+export interface ActionConfirm { title?: string; show: string[]; button?: string; skip?: boolean }
 
 /** The `change` and `task` of a link as written. */
 export interface ChangeDoc {
@@ -40,6 +41,10 @@ export interface ActionInfo {
   set: Record<string, LinkValue>
   confirm: ActionConfirm
   ask: Record<string, ActionAsk>
+  /** `selection`: the action applies to each selected row of a table or a matrix and is reviewed once (DBR53b); `row` (the default): one clicked row. */
+  for: 'row' | 'selection'
+  /** A click on the link stages the change in the shell's pending set instead of opening a popup of its own (DBR53b). */
+  stage: boolean
 }
 
 const PLACEHOLDER = /\{\{\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\}\}/g
@@ -63,6 +68,10 @@ export function checkAction(raw: Record<string, unknown>, kind: ActionKind, othe
     if (raw[key] !== undefined) issues.add('DBD-106', join(path, key), `\`${key}\` does not belong to an action: its popup is the shell's, and what it changes is under \`${kind}\`.`)
 
   const asks = readAsks(raw, path, issues)
+  let forWhat: 'row' | 'selection' = 'row'
+  if (raw.for !== undefined) { if (raw.for === 'row' || raw.for === 'selection') forWhat = raw.for; else issues.add('DBD-106', join(path, 'for'), '`for` is one of: row, selection.') }
+  let stage = false
+  if (raw.stage !== undefined) { if (typeof raw.stage === 'boolean') stage = raw.stage; else issues.add('DBD-106', join(path, 'stage'), '`stage` is true or false.') }
   const values = (node: unknown, p: string, into: Record<string, LinkValue>) => {
     if (!isObject(node)) { issues.add('DBD-106', p, "An action's values must be a mapping."); return }
     for (const [name, value] of Object.entries(node)) {
@@ -112,6 +121,15 @@ export function checkAction(raw: Record<string, unknown>, kind: ActionKind, othe
   }
 
   const confirm = readConfirm(raw, path, asks, issues)
+  if (confirm.skip) {
+    const cp = join(path, 'confirm')
+    if (kind !== 'change' || operation !== 'edit') issues.add(VIEW('066'), cp, '`confirm: skip` lets a field edit apply at once, like a spreadsheet cell: it is never for a delete, an insert or a task.')
+    else if (Object.keys(asks).length > 0) issues.add(VIEW('066'), cp, '`confirm: skip` has no popup to ask in: remove `ask`, or the `skip`.')
+    else if (stage) issues.add(VIEW('066'), cp, '`confirm: skip` applies at once and `stage: true` waits for the review: choose one.')
+    else if (forWhat === 'selection') issues.add(VIEW('066'), cp, '`confirm: skip` is for one edit: a selection is reviewed once.')
+  }
+  if (stage && kind !== 'change') issues.add(VIEW('066'), join(path, 'stage'), 'Only a `change` is staged: a task is confirmed once.')
+  if (forWhat === 'selection' && (kind !== 'change' || operation === 'insert')) issues.add(VIEW('066'), join(path, 'for'), '`for: selection` applies an edit or a delete to each selected row; an insert has no row, and a task takes the clicked row.')
 
   let thenKind: ActionLinkRead['thenKind'] = 'refresh'
   const thenWidgets: string[] = []
@@ -143,7 +161,7 @@ export function checkAction(raw: Record<string, unknown>, kind: ActionKind, othe
   }
   if (print === 'link') issues.add(VIEW('046'), join(path, 'print'), "`print: link` needs a target with an address of its own, and an action has none: its popup is the shell's.")
 
-  const action: ActionInfo = { kind, operation, model, entity, package: pkg, task, key, version, set, confirm, ask: asks }
+  const action: ActionInfo = { kind, operation, model, entity, package: pkg, task, key, version, set, confirm, ask: asks, for: forWhat, stage }
   return { action, thenKind, thenWidgets, print, image, label }
 }
 
@@ -231,7 +249,8 @@ function readConfirm(raw: Record<string, unknown>, path: string, asks: Record<st
   const empty: ActionConfirm = { show: [] }
   if (raw.confirm === undefined) return empty
   const cp = join(path, 'confirm')
-  if (!isObject(raw.confirm)) { issues.add('DBD-106', cp, '`confirm` must be a mapping.'); return empty }
+  if (raw.confirm === 'skip') return { show: [], skip: true }
+  if (!isObject(raw.confirm)) { issues.add('DBD-106', cp, '`confirm` must be a mapping (the popup\'s words) or `skip`.'); return empty }
   for (const k of Object.keys(raw.confirm)) if (!['title', 'show', 'button'].includes(k)) issues.add('DBD-104', join(cp, k), `Unknown key \`${k}\` in a confirmation.`)
   const placeholder = (name: string, p: string) => {
     if (name.startsWith('ask.') && !(name.slice(4) in asks)) issues.add(VIEW('064'), p, `\`${name}\` names a field the action does not ask for.`)

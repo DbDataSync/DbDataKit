@@ -16,6 +16,8 @@ namespace DbDataGateway.Server.Management;
 /// GET  /api/v1/dashboards/{name} | /reports/{name} the document as published
 /// POST /api/v1/dashboards/{name}/render           the rendered widgets, as the person the console vouches for
 /// GET  /api/v1/dashboards/{name}/export?format=&amp;layout=&amp;widget=&amp;p.name=   a download as the person, as JSON <c>{file_name, content_type, size, content_base64, headers}</c> (the relay carries JSON only; DBR27's print preview); the module's own refusals, 501 <c>export_unavailable</c> when the host has no browser for a PDF
+/// POST /api/v1/dashboards/{name}/actions/{link}[/forecast]   runs (or forecasts) an action link's change or task as that person (DBR53; viewer to call, the Store's own roles decide the write)
+/// POST /api/v1/dashboards/{name}/batches[/forecast]   submits (or forecasts) a staged set of changes as one batch, as that person (DBR53b)
 /// POST /api/v1/views/preview                      the live preview of an unsaved draft (DBR28), as that person, stored nowhere (viewer; the module's own checks refuse what a publish would refuse)
 /// PUT  /api/v1/dashboards/{name} | /reports/{name} {text, expected_version?, note?} publishes it to the group (author, publisher or administrator)
 /// GET  /api/v1/dashboards/{name}/versions | /reports/{name}/versions   {name, kind, active, previous, versions: [{version, published_by, published_at, note, active, depends_on}]} (the same roles as publishing; no document text)
@@ -53,7 +55,11 @@ public sealed class GatewayViewsManagement(GatewayViewsPublishing publishing, Ga
         var kind = parts[0] == "reports" ? ViewDefinitions.Report : ViewDefinitions.Dashboard;
         var name = parts.Length > 1 ? Uri.UnescapeDataString(parts[1]) : null;
         var action = parts.Length > 2 ? parts[2] : null;
-        if (parts.Length > 3 || (action is not null && action is not ("render" or "export" or "versions" or "switch" or "rollback"))) return Problem(404, "not_found", "There is no such call.");
+        // an action link of a document (plan 32 DBR53): .../{name}/actions/{link}[/forecast]
+        var isAction = action == "actions" && parts.Length is 4 or 5 && (parts.Length == 4 || parts[4] == "forecast");
+        // a staged set as one batch (DBR53b): .../{name}/batches[/forecast]
+        var isBatch = action == "batches" && parts.Length is 3 or 4 && (parts.Length == 3 || parts[3] == "forecast");
+        if (!isAction && !isBatch && (parts.Length > 3 || (action is not null && action is not ("render" or "export" or "versions" or "switch" or "rollback")))) return Problem(404, "not_found", "There is no such call.");
 
         if (name is not null && action is null && method == "PUT") return Publish(kind, name, body, caller);
         // the lifecycle of a published document is the author's, as publishing is
@@ -77,6 +83,26 @@ public sealed class GatewayViewsManagement(GatewayViewsPublishing publishing, Ga
         if (api is null) return Problem(503, "unavailable", "The views module has not started.");
         var trace = System.Diagnostics.Activity.Current?.TraceId.ToString();
         ViewsAnswer answer;
+        if (isBatch)
+        {
+            if (method != "POST") return Problem(405, "invalid", "A batch is sent with POST.");
+            JsonObject? sent;
+            try { sent = string.IsNullOrWhiteSpace(body) ? null : JsonNode.Parse(body) as JsonObject ?? throw new JsonException("The body must be a JSON object."); }
+            catch (JsonException ex) { return Problem(400, "invalid", $"The body is not JSON: {ex.Message}"); }
+            var batch = parts.Length == 4 ? await api.ForecastBatchAsync(who, kind, name!, sent, trace, cancellationToken) : await api.RunBatchAsync(who, kind, name!, sent, trace, cancellationToken);
+            return new ManagementResult(batch.Status, batch.Body);
+        }
+        if (isAction)
+        {
+            if (method != "POST") return Problem(405, "invalid", "An action is sent with POST.");
+            var link = Uri.UnescapeDataString(parts[3]);
+            if (parts.Length == 5) { var forecast = await api.ForecastActionAsync(who, kind, name!, link, trace, cancellationToken); return new ManagementResult(forecast.Status, forecast.Body); }
+            JsonObject? sent;
+            try { sent = string.IsNullOrWhiteSpace(body) ? null : JsonNode.Parse(body) as JsonObject ?? throw new JsonException("The body must be a JSON object."); }
+            catch (JsonException ex) { return Problem(400, "invalid", $"The body is not JSON: {ex.Message}"); }
+            var done = await api.RunActionAsync(who, kind, name!, link, sent, trace, cancellationToken);
+            return new ManagementResult(done.Status, done.Body);
+        }
         switch (method, name, action)
         {
             case ("GET", null, null): answer = api.List(who, kind, trace); break;

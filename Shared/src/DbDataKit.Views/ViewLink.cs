@@ -25,12 +25,12 @@ public sealed record ViewLink(string Name, string TargetKind, string Target, str
 public sealed record ActionAsk(string Name, string Label, string Type, IReadOnlyList<string> Choices, bool Required, string? Default);
 
 /// <summary>What the confirmation popup says, in the declaration's words (never the widget's): a <see cref="Title"/> with <c>{{field}}</c> placeholders over the row, the fields it <see cref="Show"/>, and the <see cref="Button"/>'s text.</summary>
-public sealed record ActionConfirm(string? Title, IReadOnlyList<string> Show, string? Button);
+public sealed record ActionConfirm(string? Title, IReadOnlyList<string> Show, string? Button, bool Skip = false);
 
 /// <summary>
 /// The <c>change</c> or <c>task</c> of an action link (plan 32 section 9h part 4, DBR53). A <c>change</c> is an <see cref="Operation"/> (<c>insert</c>, <c>edit</c>, <c>delete</c>) on <see cref="Entity"/> of the Store model
 /// <see cref="Model"/>: <see cref="Key"/> names the row (one value for a one-field key under the name <c>key</c>, or the key's fields by name) with its <see cref="Version"/> (null: the version at the moment of the call), <see cref="Set"/>
-/// the values written (an insert's values are in <see cref="Set"/> too). A <c>task</c> (<see cref="Operation"/> <c>run</c>) runs <see cref="Task"/> of <see cref="Package"/> with <see cref="Set"/> as its inputs.
+/// the values written (an insert's values are in <see cref="Set"/> too). <see cref="For"/> is <c>row</c> or <c>selection</c> (each selected row, reviewed once); <see cref="Stage"/> says a click stages the change in the shell's pending set instead of opening a popup (plan 32 DBR53b); <c>Confirm.Skip</c> applies a field edit at once. A <c>task</c> (<see cref="Operation"/> <c>run</c>) runs <see cref="Task"/> of <see cref="Package"/> with <see cref="Set"/> as its inputs.
 /// </summary>
 public sealed record ActionDefinition(string Kind, string Operation, string? Model, string? Entity, string? Package, string? Task, IReadOnlyDictionary<string, LinkValue> Key, LinkValue? Version,
-    IReadOnlyDictionary<string, LinkValue> Set, ActionConfirm Confirm, IReadOnlyDictionary<string, ActionAsk> Ask);
+    IReadOnlyDictionary<string, LinkValue> Set, ActionConfirm Confirm, IReadOnlyDictionary<string, ActionAsk> Ask, string For = "row", bool Stage = false);

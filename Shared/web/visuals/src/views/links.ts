@@ -14,7 +14,7 @@ export const LINK_AS = ['navigate', 'dialog', 'panel'] as const
 export type LinkAs = (typeof LINK_AS)[number]
 export const LINK_PRINT = ['hidden', 'normal', 'link'] as const
 export type LinkPrint = (typeof LINK_PRINT)[number]
-export const LINK_KEYS = ['dashboard', 'report', 'view', 'page', 'form', 'change', 'task', 'confirm', 'ask', 'with', 'new', 'edit', 'as', 'then', 'lock', 'print', 'image', 'label']
+export const LINK_KEYS = ['dashboard', 'report', 'view', 'page', 'form', 'change', 'task', 'confirm', 'ask', 'for', 'stage', 'with', 'new', 'edit', 'as', 'then', 'lock', 'print', 'image', 'label']
 export const MAX_LINKS = 100
 
 /** A parameter or field of a link's target, as an app check tells it: a type (the core's names, plus `date`), whether it is a list, and whether the link must give it. */
@@ -27,7 +27,7 @@ export interface LinkValue { kind: 'literal' | 'field' | 'param' | 'ask'; text: 
 export interface LinkDoc {
   dashboard?: string; report?: string; view?: string; page?: string; form?: string
   /** An action (DBR53): an insert, edit or delete of a Store row, or a runner task, with the popup's `confirm` words and the `ask` fields (`views/actions.ts`). */
-  change?: unknown; task?: unknown; confirm?: unknown; ask?: unknown
+  change?: unknown; task?: unknown; confirm?: unknown | 'skip'; ask?: unknown; for?: 'row' | 'selection'; stage?: boolean
   with?: Record<string, string | number | boolean>; new?: Record<string, string | number | boolean>; edit?: Record<string, string | number | boolean>
   as?: LinkAs; then?: 'refresh' | 'none' | string[]; lock?: string[]; print?: LinkPrint; image?: LinkPrint; label?: string
 }

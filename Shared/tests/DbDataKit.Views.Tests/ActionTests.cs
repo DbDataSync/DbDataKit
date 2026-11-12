@@ -15,9 +15,11 @@ public class ActionTests
     public void A_document_declares_actions_that_change_a_row_or_run_a_task()
     {
         var links = Good().Links;
-        Assert.Equal(["close-order", "set-status", "new-order", "drop-order", "rerun-load"], links.Keys);
-        Assert.Equal([("change", "sales.orders", "edit"), ("change", "sales.orders", "edit"), ("change", "sales.orders", "insert"), ("change", "sales.orders", "delete"), ("task", "nightly.load", "run")],
+        Assert.Equal(["close-order", "set-status", "new-order", "drop-order", "rerun-load", "quick", "stage-units", "close-selected"], links.Keys);
+        Assert.Equal([("change", "sales.orders", "edit"), ("change", "sales.orders", "edit"), ("change", "sales.orders", "insert"), ("change", "sales.orders", "delete"), ("task", "nightly.load", "run"), ("change", "sales.orders", "edit"), ("change", "sales.orders", "edit"), ("change", "sales.orders", "edit")],
             links.Values.Select(l => (l.TargetKind, l.Target, l.Action!.Operation)));
+        Assert.Equal([("row", false, false), ("row", false, false), ("row", false, false), ("row", false, false), ("row", false, false), ("row", false, true), ("row", true, false), ("selection", true, false)],
+            links.Values.Select(l => (l.Action!.For, l.Action.Stage, l.Action.Confirm.Skip)).Select(t => (t.For, t.Stage, t.Skip)));
         Assert.All(links.Values, l => Assert.False(l.HasAddress));
         var close = links["close-order"].Action!;
         Assert.Equal(("sales", "orders"), (close.Model, close.Entity));

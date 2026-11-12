@@ -15,6 +15,10 @@ describe('the good document of actions', () => {
     const links = Object.fromEntries(Object.entries(doc.links as Record<string, LinkDoc>).map(([n, l]) => [n, describeLink(n, l)]))
     expect(Object.values(links).map((l: LinkInfo) => [l.targetKind, l.target, l.action?.operation, l.hasAddress])).toEqual([
       ['change', 'sales.orders', 'edit', false], ['change', 'sales.orders', 'edit', false], ['change', 'sales.orders', 'insert', false], ['change', 'sales.orders', 'delete', false], ['task', 'nightly.load', 'run', false],
+      ['change', 'sales.orders', 'edit', false], ['change', 'sales.orders', 'edit', false], ['change', 'sales.orders', 'edit', false],
+    ])
+    expect(Object.values(links).map((l: LinkInfo) => [l.action!.for, l.action!.stage, l.action!.confirm.skip === true])).toEqual([
+      ['row', false, false], ['row', false, false], ['row', false, false], ['row', false, false], ['row', false, false], ['row', false, true], ['row', true, false], ['selection', true, false],
     ])
     expect(links['close-order']!.thenKind).toBe('refresh')
     expect(links['set-status']!.thenKind).toBe('widgets')

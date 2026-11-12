@@ -867,10 +867,29 @@
           "$ref": "#/$defs/core__action_task"
         },
         "confirm": {
-          "$ref": "#/$defs/core__action_confirm"
+          "description": "The words of the shell's confirmation popup, or `skip`: a field edit that applies at once, like a spreadsheet cell (plan 32 DBR53b).",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/core__action_confirm"
+            },
+            {
+              "const": "skip"
+            }
+          ]
         },
         "ask": {
           "$ref": "#/$defs/core__action_ask"
+        },
+        "for": {
+          "description": "An action applies to the clicked row (the default) or to each selected row, reviewed once (DBR53b).",
+          "enum": [
+            "row",
+            "selection"
+          ]
+        },
+        "stage": {
+          "description": "A click stages the change in the shell's pending set instead of opening a popup of its own (DBR53b).",
+          "type": "boolean"
         },
         "with": {
           "description": "Parameters of a dashboard, report, view or page.",
