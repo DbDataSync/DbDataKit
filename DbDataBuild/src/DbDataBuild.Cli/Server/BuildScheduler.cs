@@ -176,6 +176,7 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
     {
         var parts = item.Subject.Split('/', 2);
         var started = clock.GetUtcNow();
+        using var telemetry = DbDataKit.Telemetry.HostTelemetry.StartRun("dbdatabuild", Kind, item.Subject);   // plan 22a GP28: counted, timed, and an outcome; never the command line
         _queue.MarkRunning(item.Id);
         _jobs.SaveStarted(project.Id, item.Subject, started);
         using var beating = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -206,6 +207,9 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
             await heartbeat;
         }
 
+        if (exit == 0) telemetry.Succeeded();
+        else if (cancellationToken.IsCancellationRequested) telemetry.Cancelled();
+        else telemetry.Failed();
         if (exit == 0) _queue.MarkDone(item.Id);
         else
         {

@@ -136,6 +136,7 @@ public static class GatewayHost
         {
             host.Product = "dbdatagateway";
             host.Version = Version;
+            host.Telemetry = options.Telemetry.ToSettings("server.yaml");   // off unless telemetry.enabled (plan 22a GP28)
             host.DrainTimeout = TimeSpan.FromSeconds(Math.Max(0, options.Hosting.DrainSeconds));
             host.Limits.MaxConcurrentRequests = Math.Max(1, options.Hosting.MaxConcurrentRequests);
             host.Limits.RequestTimeout = TimeSpan.FromDays(7);

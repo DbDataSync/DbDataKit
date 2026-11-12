@@ -85,6 +85,9 @@ public sealed class GatewayOptions
     public WorkerOptions Worker { get; set; } = new();
     public HostingOptions Hosting { get; set; } = new();
 
+    /// <summary>OpenTelemetry (plan 22a GP28): off unless <c>enabled</c>. The keys are those of <c>DbDataKit.Telemetry</c>'s section in the Gateway's own spelling.</summary>
+    public TelemetryOptions Telemetry { get; set; } = new();
+
     /// <summary>Named back-end connections clients can target. Clients never send connection strings.</summary>
     public Dictionary<string, DataSourceOptions> DataSources { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -489,6 +492,34 @@ public sealed class IdentityEntraOptions
 public sealed class IdentityWindowsOptions
 {
     public bool Enabled { get; set; }
+}
+
+/// <summary>The <c>telemetry</c> section (plan 22a GP28); <see cref="ToSettings"/> hands it to <c>DbDataKit.Telemetry</c>, which checks the values and names the key it refuses.</summary>
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class TelemetryOptions
+{
+    public bool Enabled { get; set; }
+
+    /// <summary>The OTLP endpoint (http or https); the exporter's own default when unset.</summary>
+    public string? Endpoint { get; set; }
+
+    /// <summary><c>grpc</c> or <c>http</c>.</summary>
+    public string Protocol { get; set; } = "grpc";
+
+    /// <summary>0 to 1: the share of traces kept.</summary>
+    public double SamplingRatio { get; set; } = 1.0;
+
+    /// <summary><c>service.instance.id</c>; the machine name when unset.</summary>
+    public string? InstanceId { get; set; }
+
+    public DbDataKit.Telemetry.TelemetrySettings ToSettings(string source)
+    {
+        if (!Enabled) return DbDataKit.Telemetry.TelemetrySettings.Off;
+        var section = new System.Text.Json.Nodes.JsonObject { ["enabled"] = true, ["protocol"] = Protocol, ["sampling_ratio"] = SamplingRatio };
+        if (Endpoint is not null) section["endpoint"] = Endpoint;
+        if (InstanceId is not null) section["instance_id"] = InstanceId;
+        return DbDataKit.Telemetry.TelemetrySettings.Read(section, source);
+    }
 }
 
 [ConfigSchema(Naming = KeyNaming.Verbatim)]

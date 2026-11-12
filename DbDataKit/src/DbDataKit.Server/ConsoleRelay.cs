@@ -91,6 +91,7 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
     {
         using var request = new HttpRequestMessage(method, new Uri(instance.Url, path));
         request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, await TokenForAsync(instance, userId, userName, role, ct));
+        DbDataKit.Telemetry.HostTelemetry.Inject(request.Headers);   // the trace goes on at the server (W3C traceparent; plan 22a GP29); nothing when telemetry is off
         if (body is not null) request.Content = System.Net.Http.Json.JsonContent.Create(body);
         try
         {
@@ -194,6 +195,7 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
         var forwarded = product == ServerProducts.Workspace ? ServerProducts.EscapedPath(path) : path;
         using var request = new HttpRequestMessage(new HttpMethod(context.Request.Method), new Uri(instance.Url, forwarded + context.Request.QueryString));
         request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, token);
+        DbDataKit.Telemetry.HostTelemetry.Inject(request.Headers);   // the trace goes on at the server (W3C traceparent; plan 22a GP29); nothing when telemetry is off
         foreach (var name in ForwardedRequestHeaders.Where(n => n != "Content-Type"))
             if (context.Request.Headers.TryGetValue(name, out var values)) request.Headers.TryAddWithoutValidation(name, (IEnumerable<string>)values.ToArray()!);
         if (context.Request.ContentLength is > 0 || context.Request.Headers.ContainsKey("Transfer-Encoding"))

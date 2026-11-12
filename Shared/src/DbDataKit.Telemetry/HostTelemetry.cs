@@ -41,6 +41,17 @@ public static class HostTelemetry
         return new RunScope(product, kind, span);
     }
 
+    /// <summary>A run that a host only observes (Sync sees a worker's runs in its state database): counted when first seen.</summary>
+    public static void RunStarted(string product, string kind) => RunStarts.Add(1, new TagList { { ProductTag, Name(product) }, { KindTag, Name(kind) } });
+
+    /// <summary>A run that a host only observes ended: counted by outcome (<c>succeeded</c>, <c>failed</c>, <c>cancelled</c>), with its duration when known.</summary>
+    public static void RunEnded(string product, string kind, string outcome, TimeSpan? duration = null)
+    {
+        var tags = new TagList { { ProductTag, Name(product) }, { KindTag, Name(kind) }, { OutcomeTag, outcome is "succeeded" or "failed" or "cancelled" ? outcome : "failed" } };
+        Runs.Add(1, tags);
+        if (duration is { } d) RunDuration.Record(d.TotalMilliseconds, tags);
+    }
+
     /// <summary>The runner starts a task: counted by the task's name.</summary>
     public static void TaskStarted(string product, string task) => TaskStarts.Add(1, new TagList { { ProductTag, Name(product) }, { NameTag, Name(task) } });
 

@@ -77,6 +77,7 @@ public static class RunnerServer
         {
             host.Product = RunnerSettings.Product;
             host.ServiceName = RunnerService.RegistrationName;
+            host.Telemetry = DbDataKit.Telemetry.TelemetrySettings.Load(settings.ServerYaml);   // the telemetry: section; off unless it says enabled (plan 22a GP28)
             host.Version = Version;
         });
         // stopping waits for the running tasks to take their cancellation, and then for the processes to go

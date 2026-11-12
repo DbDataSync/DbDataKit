@@ -47,6 +47,7 @@ public static class ConsoleHost
         {
             host.Product = ConsoleSettings.Product;
             host.ServiceName = ConsoleService.RegistrationName;
+            host.Telemetry = DbDataKit.Telemetry.TelemetrySettings.Load(settings.SettingsPath);   // the telemetry: section; off unless it says enabled (plan 22a GP28)
             host.Version = Version;
         });
         if (settings.AnnounceListen is { } announce && (announce.Scheme != Uri.UriSchemeHttp || announce.Port == settings.Listen.Port))
