@@ -95,6 +95,7 @@ const keys = {
   metrics: (replicationName: string, window: string) =>
     ['replications', replicationName, 'metrics', window] as const,
   replicationLag: (replicationName: string) => ['replications', replicationName, 'lag'] as const,
+  replicationTracking: (replicationName: string) => ['replications', replicationName, 'tracking'] as const,
   bulkLoads: (replicationName: string) => ['replications', replicationName, 'bulk-loads'] as const,
   bulkLoadHistory: (replicationName: string) =>
     ['replications', replicationName, 'bulk-loads', 'history'] as const,
@@ -920,6 +921,15 @@ export function useReplicationLag(replicationName: string | undefined) {
     queryFn: () => api.replications.lag(replicationName!),
     enabled: !!replicationName,
     refetchInterval: MONITORING_REFRESH_MS,
+  })
+}
+
+/** Where a replication keeps its tracking state, the mode that applies and why (plan 28c E17). */
+export function useReplicationTracking(replicationName: string | undefined) {
+  return useQuery({
+    queryKey: keys.replicationTracking(replicationName ?? ''),
+    queryFn: () => api.replications.tracking(replicationName!),
+    enabled: !!replicationName,
   })
 }
 

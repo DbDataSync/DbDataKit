@@ -255,6 +255,27 @@ export interface ReplicationTaskConfig {
   /** What every table mapping under this replication reads next, unless the mapping says otherwise.
    * Null means nobody has said, which resolves to `InitialLoad` — see phase 100/102. */
   defaultReadIntent?: ReadIntent | null
+  /** Where the tracking state lives (plan 28c E17): absent is the default. */
+  tracking?: TrackingConfig | null
+}
+
+/** The `tracking:` section of a replication file: `mode` target, state or both; `primary` only for both. */
+export interface TrackingConfig {
+  mode: 'target' | 'state' | 'both' | null
+  primary?: 'target' | 'state' | null
+}
+
+/** `GET /api/replications/{name}/tracking`: what was asked, what applies and why. */
+export interface ReplicationTrackingStatus {
+  requestedMode: string
+  requestedPrimary: string | null
+  effectiveMode: string
+  effectivePrimary: string | null
+  defaulted: boolean
+  reason: string
+  targetDriver: string | null
+  targetCanHoldState: boolean
+  targetWritersBuilt: boolean
 }
 
 /** One side of a table mapping as configured: null connection/database inherit the replication's
