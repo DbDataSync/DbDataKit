@@ -10,6 +10,7 @@
     <None Include="README.md" Pack="true" PackagePath="/" />
     <ProjectReference Include="..\DbDataKit.Quality.Evaluation\DbDataKit.Quality.Evaluation.csproj" />
     <ProjectReference Include="..\DbDataKit.Runner\DbDataKit.Runner.csproj" />
+    <ProjectReference Include="..\DbDataKit.Delivery\DbDataKit.Delivery.csproj" />
     <ProjectReference Include="..\DbDataKit.Connections\DbDataKit.Connections.csproj" />
   </ItemGroup>
 </Project>

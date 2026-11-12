@@ -9,7 +9,7 @@ public sealed record CheckRunReport(CheckDefinition Check, CheckEvaluation Evalu
 public sealed record DatasetRunReport(string Dataset, IReadOnlyList<CheckRunReport> Checks);
 
 /// <summary>What one run of the service did.</summary>
-public sealed record QualityRunReport(IReadOnlyList<DatasetRunReport> Datasets)
+public sealed record QualityRunReport(IReadOnlyList<DatasetRunReport> Datasets, IReadOnlyList<string>? AlertProblems = null)
 {
     public IEnumerable<CheckRunReport> Checks => Datasets.SelectMany(d => d.Checks);
 
@@ -36,7 +36,7 @@ public sealed class UnknownDatasetException(string name) : Exception($"The datas
 /// same transaction (the store's rules: a <c>block</c> check blocks while its latest result is <c>fail</c>; an error blocks only with <c>on_error: block</c> and lifts nothing). The shared command (<c>quality run</c>) and the runner task use this one service, so they
 /// cannot differ. A <c>row_count_change</c> check is compared with the previous successful evaluation of the same check (<see cref="QualityStore.Baseline"/>, QF3), and the first evaluation only records.
 /// </summary>
-public sealed class QualityRunService(IQualitySource source, QualityStore store, EvaluationLimits? limits = null, TimeProvider? time = null)
+public sealed class QualityRunService(IQualitySource source, QualityStore store, EvaluationLimits? limits = null, TimeProvider? time = null, IQualityAlerts? alerts = null)
 {
     /// <summary>Evaluates and records. <paramref name="dataset"/> is a dataset's identity or one of its names; null is every dataset of the source. <paramref name="runId"/> is stored with each result (the runner's run, Build's tracking id).</summary>
     /// <exception cref="UnknownDatasetException">A named dataset is not in the source.</exception>
@@ -47,6 +47,7 @@ public sealed class QualityRunService(IQualitySource source, QualityStore store,
         if (dataset is not null && selected.Count == 0) throw new UnknownDatasetException(dataset);
 
         var reports = new List<DatasetRunReport>();
+        var problems = new List<string>();
         foreach (var one in selected)
         {
             ct.ThrowIfCancellationRequested();
@@ -66,15 +67,36 @@ public sealed class QualityRunService(IQualitySource source, QualityStore store,
             {
                 var check = one.Checks[i];
                 var result = results[i];
+                var previous = alerts is null ? null : store.Status(one.Identity, check.Id);
                 var status = store.Record(new CheckResultRecord(check.Id, one.Identity, Outcome(result.Status), result.EvaluatedAt, result.Measured, result.Threshold, result.SampleKeys, runId,
                     CheckNames.Name(check.Severity), CheckNames.Name(check.OnError), result.Message, result.Observed));
                 checks.Add(new CheckRunReport(check, result, status.Blocking));
+                if (alerts is not null && AlertFor(one, check, result, previous, status) is { } alert)
+                {
+                    try { await alerts.SendAsync(alert, ct).ConfigureAwait(false); }
+                    catch (Exception ex) when (ex is not OperationCanceledException) { problems.Add($"{check.Id} ({one.Identity}): the alert was not sent: {ex.Message}"); }
+                }
             }
 
             reports.Add(new DatasetRunReport(one.Identity, checks));
         }
 
-        return new QualityRunReport(reports);
+        return new QualityRunReport(reports, problems);
+    }
+
+    /// <summary>
+    /// The alert this evaluation makes, if any (plan 23a FQ13): one when the check turned unhealthy (a fail or an error after a pass, or after nothing) or went from an error to a fail, one when it passes after it was not passing, none otherwise: a check that fails twice alerts once.
+    /// An evaluation older than the stored status (another evaluator finished later) changed nothing and alerts nothing.
+    /// </summary>
+    private static QualityAlert? AlertFor(QualityDataset dataset, CheckDefinition check, CheckEvaluation result, CheckStatusRow? previous, CheckStatusRow now)
+    {
+        var outcome = Outcome(result.Status);
+        if (now.EvaluatedAt != result.EvaluatedAt || now.LastResultId == previous?.LastResultId) return null;
+        if (outcome == CheckOutcome.Pass)
+            return previous is { Outcome: not CheckOutcome.Pass } ? new QualityAlert(QualityAlertKind.Recovered, dataset.Identity, check, result, previous.Outcome, now.Blocking, dataset.Owners ?? []) : null;
+        if (previous?.Outcome == outcome) return null;
+        if (previous?.Outcome == CheckOutcome.Fail && outcome == CheckOutcome.Error) return null;   // still not healthy, and the failure was alerted
+        return new QualityAlert(QualityAlertKind.Failed, dataset.Identity, check, result, previous?.Outcome, now.Blocking, dataset.Owners ?? []);
     }
 
     private static CheckOutcome Outcome(EvaluationStatus status) => status switch
