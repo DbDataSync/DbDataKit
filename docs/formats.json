@@ -240,6 +240,17 @@
       "note": "new with plan 27a IX15: the exchanges an outside API gave, as JSON with the entries in the order they are asked (request method, address and optionally body; response status, headers and body, written as text, inline JSON or base64), replayed by RecordedHttp in DbDataKit.Runner.Kit.Testing so a job is tested with no network; a request with no entry fails the test naming it; a credential (a response header such as Set-Cookie or Authorization, a user name or a credential-named parameter in an address) makes the file unreadable, naming the entry",
       "version_source": { "file": "Shared/src/DbDataKit.Runner.Kit.Testing/RecordedHttp.cs", "pattern": "Schema = \"http-recording/(\\d+)\";" },
       "files": [ { "path": "Shared/src/DbDataKit.Runner.Kit.Testing/RecordedHttp.cs", "sha256": null } ]
+    },
+    {
+      "id": "secret-key",
+      "title": "Secret key backup (a YAML file, format: dbdata-secret-key, version N)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 22a GP21: the data keys of the secret store, each sealed with AES-256-GCM under a key derived from a passphrase (PBKDF2-SHA256, 600000 rounds, a random salt, the key id as associated data), the id of the active key and nothing about the machine, written by `secret key-backup` and read by `secret key-restore` (a key that DPAPI bound to another machine or user is re-keyed to this one); a wrong passphrase, a changed file or a key moved to another id is refused before anything is stored; never put in git",
+      "version_source": { "file": "Shared/src/DbDataKit.Secrets.Store/SecretKeyBackup.cs", "pattern": "public const int FormatVersion = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.Secrets.Store/SecretKeyBackup.cs", "sha256": null } ]
     }
   ]
 }
+
