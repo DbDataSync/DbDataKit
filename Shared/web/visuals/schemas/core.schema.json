@@ -165,7 +165,7 @@
       "type": "object",
       "additionalProperties": false,
       "oneOf": [
-        { "required": ["dashboard"] }, { "required": ["report"] }, { "required": ["view"] }, { "required": ["page"] }, { "required": ["form"] }
+        { "required": ["dashboard"] }, { "required": ["report"] }, { "required": ["view"] }, { "required": ["page"] }, { "required": ["form"] }, { "required": ["change"] }, { "required": ["task"] }
       ],
       "properties": {
         "dashboard": { "$ref": "#/$defs/name" },
@@ -173,6 +173,12 @@
         "view": { "$ref": "#/$defs/name" },
         "page": { "$ref": "#/$defs/name" },
         "form": { "$ref": "#/$defs/name" },
+        "change": { "$ref": "#/$defs/action_change" },
+        "task": { "$ref": "#/$defs/action_task" },
+        "confirm": { "description": "The words of the shell's confirmation popup, or `skip`: a field edit that applies at once, like a spreadsheet cell (plan 32 DBR53b).", "oneOf": [{ "$ref": "#/$defs/action_confirm" }, { "const": "skip" }] },
+        "ask": { "$ref": "#/$defs/action_ask" },
+        "for": { "description": "An action applies to the clicked row (the default) or to each selected row, reviewed once (DBR53b).", "enum": ["row", "selection"] },
+        "stage": { "description": "A click stages the change in the shell's pending set instead of opening a popup of its own (DBR53b).", "type": "boolean" },
         "with": { "description": "Parameters of a dashboard, report, view or page.", "$ref": "#/$defs/link_values" },
         "new": { "description": "A form that creates a row: the fields it starts with.", "$ref": "#/$defs/link_values" },
         "edit": { "description": "A form that changes an existing row: the key's values.", "$ref": "#/$defs/link_values" },
@@ -182,6 +188,67 @@
         "print": { "description": "What a PDF or print draws: hidden, normal (as on screen, no link behaviour) or link (a PDF hyperlink; the address is never printed as text). Not link where the target has no address of its own (dialog, panel).", "enum": ["hidden", "normal", "link"] },
         "image": { "description": "The same for a PNG snapshot; link is drawn as normal there. Defaults to print.", "enum": ["hidden", "normal", "link"] },
         "label": { "$ref": "#/$defs/title" }
+      }
+    },
+    "action_change": {
+      "description": "An action (plan 32 section 9h, DBR53): an insert, an edit or a delete of a Store row, made as the viewer after the shell's confirmation popup. The Store decides whether it applies or waits for approval. `edit` and `delete` name the row (`key`: one value, or the key's fields by name) and, optionally, the `version` it was read at; `set` is what an edit writes, `insert` the values of a new row. A value is `$field` of the clicked row, `$params.name`, `$ask.name` (what the person fills in) or a literal.",
+      "type": "object",
+      "required": ["model", "entity"],
+      "additionalProperties": false,
+      "properties": {
+        "model": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,127}$" },
+        "entity": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$" },
+        "insert": { "$ref": "#/$defs/link_values" },
+        "edit": { "$ref": "#/$defs/action_row" },
+        "delete": { "$ref": "#/$defs/action_row" },
+        "set": { "$ref": "#/$defs/link_values" }
+      }
+    },
+    "action_row": {
+      "type": "object",
+      "required": ["key"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "description": "One value (a one-field key) or the key's fields by name.", "oneOf": [{ "$ref": "#/$defs/link_value" }, { "$ref": "#/$defs/link_values" }] },
+        "version": { "$ref": "#/$defs/link_value" }
+      }
+    },
+    "action_task": {
+      "description": "Run a runner task now, under the viewer's role on the runner, with `inputs`.",
+      "type": "object",
+      "required": ["package", "task"],
+      "additionalProperties": false,
+      "properties": {
+        "package": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,127}$" },
+        "task": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,127}$" },
+        "inputs": { "$ref": "#/$defs/link_values" }
+      }
+    },
+    "action_confirm": {
+      "description": "The words of the shell's confirmation popup: the declaration's, never the widget's. `title` has {{field}} placeholders over the clicked row (or {{ask.name}}); `show` lists row fields shown beside the values to be written.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "show": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$" } },
+        "button": { "type": "string", "minLength": 1, "maxLength": 40 }
+      }
+    },
+    "action_ask": {
+      "description": "Fields the person fills in the popup before confirming; referenced as `$ask.name` in the action's values.",
+      "type": "object",
+      "maxProperties": 20,
+      "propertyNames": { "$ref": "#/$defs/link_value_name" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "label": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "type": { "enum": ["string", "number", "integer", "boolean", "date"] },
+          "choices": { "type": "array", "minItems": 1, "maxItems": 200, "items": { "type": "string", "minLength": 1, "maxLength": 200 } },
+          "required": { "type": "boolean" },
+          "default": { "type": ["string", "number", "boolean"] }
+        }
       }
     },
     "links": { "type": "object", "maxProperties": 100, "propertyNames": { "$ref": "#/$defs/name" }, "additionalProperties": { "$ref": "#/$defs/link" } },

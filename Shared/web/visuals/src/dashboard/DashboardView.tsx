@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { CustomViewsContext, type CustomViewsContextValue, type CustomViewsHost } from '../custom/CustomWidgetFrame'
+import type { PendingSummary } from '../custom/protocol'
+import { ActionDialog, type OpenAction } from '../links/ActionDialog'
+import { PendingBar, PendingReview } from '../links/PendingReview'
+import { DEFAULT_PENDING_LIMIT, createPendingStore, lineMarksRow, stagedFrom } from '../links/pending'
+import { clientActionHost, newIdempotencyKey, type ActionHost, type ActionOutcome, type BatchOutcome } from '../links/actions'
+import { resolveAction } from '../views/actions'
 import { LinkSurface, type OpenSurface } from '../links/LinkSurface'
 import { surfaceAddress, thenWidgets } from '../links/surface'
 import { describeLink, linkValues, type LinkInfo, type LinkScalar } from '../views/links'
@@ -87,6 +93,15 @@ export interface DashboardViewProps {
    * through `navigate`, and after a save `then` resolves the source widget (or the ones it names) again. Without it, and without `onLink`, a link does nothing.
    */
   linkHost?: LinkHost
+  /**
+   * What runs an action link (plan 32 DBR53): a click on a link with a `change` or a `task` opens the shell's confirmation popup (`ActionDialog`, in the declaration's words), and a confirmed call goes to the host, which
+   * sends it to the server as the viewer. Without it the views client's own `runAction` is used (the module's `POST .../actions/{link}`); with neither (and without `onLink`) an action link does nothing but say so.
+   */
+  actionHost?: ActionHost
+  /** Most changes a pending set holds (plan 32 DBR53b, a setting; default 1,000). */
+  pendingLimit?: number
+  /** The pending set changed: the number of changes staged and not yet submitted. A host that routes pages uses it to ask before the person leaves (the page itself asks before it is closed or reloaded). */
+  onPendingChange?: (count: number) => void
   /** A link a widget followed was resolved: the host opens it itself (`linkHost`'s surfaces are then not used). Without a handler a link does nothing. */
   onLink?: (event: LinkEvent) => void
   /** A dialog or panel a custom widget opened has closed (`saved` when a form saved): the widget is told. */
@@ -132,7 +147,7 @@ function useBox(given: Box | undefined) {
  * the widgets both layouts place. A widget that fails shows its own error; a failure of the call itself shows once, for the page. A canvas layout is drawn by `layoutCanvas` (DBR07), scaled or scrolled in the same container; a flow layout is the work of its own engine (DBR14):
  * until then a note says so.
  */
-export function DashboardView({ kind = 'dashboard', name, document, client, layout: requested, medium, box: given, theme = 'auto', parameters, onParameterChange, onSelect, onDrill, sortable = false, onServerSort, customViews, linkHost, onLink, onCellLink, closedLink, viewer, onPrintPreview, kiosk = false, refreshFloorMs, clock, visibility, random, timeZone }: DashboardViewProps) {
+export function DashboardView({ kind = 'dashboard', name, document, client, layout: requested, medium, box: given, theme = 'auto', parameters, onParameterChange, onSelect, onDrill, sortable = false, onServerSort, customViews, linkHost, actionHost: givenActionHost, pendingLimit = DEFAULT_PENDING_LIMIT, onPendingChange, onLink, onCellLink, closedLink, viewer, onPrintPreview, kiosk = false, refreshFloorMs, clock, visibility, random, timeZone }: DashboardViewProps) {
   const layout = requested ?? (kiosk ? document.kiosk?.layout : undefined)
   const resolvedTheme = useTheme(theme)
   const { ref, box } = useBox(given)
@@ -265,12 +280,67 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
 
   // pointing at a widget: a selection sets the parameter it names (the same change a control makes, so the dependents resolve again); a drill goes to the host
   const [notice, setNotice] = useState<string | null>(null)
-  const follows = linkHost !== undefined || onLink !== undefined
+  // the host's own, else the client's (the module's actions route, or the fixtures' recorded ones)
+  const actionHost: ActionHost | undefined = useMemo(() => givenActionHost ?? clientActionHost(client, { kind, name }), [givenActionHost, client, kind, name])
+  const follows = linkHost !== undefined || onLink !== undefined || actionHost !== undefined
   const interactive = onDrill !== undefined || Object.values(document.widgets).some((w) => onSelectOf(w) !== null || (follows && clickOf(w) !== null))
   // a link followed (DBR36): the values for the row, the target's address, and what the host does with it: its own handler, a navigation, or the shell's dialog or panel
   const [surface, setSurface] = useState<{ widget: string; link: LinkInfo; open: OpenSurface } | null>(null)
   const [closedHere, setClosedHere] = useState<CustomViewsContextValue['closed']>(null)
+  const [action, setAction] = useState<OpenAction | null>(null)
+  // the pending set (DBR53b): the changes staged here and not yet submitted. It is the shell's, never the widget's; one review submits it
+  const pending = useMemo(() => createPendingStore(), [])
+  const pendingLines = useSyncExternalStore(pending.subscribe, pending.get)
+  const [reviewing, setReviewing] = useState(false)
+  // a row of a table that has a staged change is marked (the cell's own value stays: the staged value is in the review and what a widget reads of `pending`)
+  const markedRow = (widget: string, fields: Record<string, unknown>) => pendingLines.some((l) => l.widget === widget && lineMarksRow(l, fields))
+  const pendingRef = useRef(pendingLines)
+  pendingRef.current = pendingLines
+  // what a widget may read of the set (never the request that would be sent)
+  const pendingSummary = useMemo<PendingSummary[]>(() => pendingLines.map((l) => ({ link: l.link, entity: l.entity, operation: l.operation, key: l.key.map((k) => k.value).join(', '), writes: Object.fromEntries(l.writes.map((w) => [w.name, w.value])) })), [pendingLines])
+  useEffect(() => { onPendingChange?.(pendingLines.length) }, [pendingLines.length, onPendingChange])
+  useEffect(() => {
+    if (pendingLines.length === 0) return
+    const ask = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', ask)
+    return () => window.removeEventListener('beforeunload', ask)
+  }, [pendingLines.length])
+  const stageLink = (widget: string, link: LinkInfo, row: Row, answers: Record<string, string | undefined> = {}) => {
+    const a = link.action!
+    const resolved = resolveAction(link.name, { action: a, label: link.label }, row, values, answers)
+    const rowKey = Object.entries(a.key).flatMap(([name, v]) => (v.kind === 'field' ? [{ field: v.text, value: resolved.key.find((k) => k.name === name)?.value ?? '' }] : []))
+    const staged = stagedFrom(resolved, { link: link.name, widget, row, parameters: values, answers }, rowKey)
+    const result = pending.stage(staged, pendingLimit)
+    setNotice(result.ok ? null : result.message)
+  }
+  // `confirm: skip`: a field edit applies at once, like a spreadsheet cell (the Store's history is the undo); a refusal is a notice
+  const applyAtOnce = async (widget: string, link: LinkInfo, row: Row) => {
+    const resolved = resolveAction(link.name, { action: link.action!, label: link.label }, row, values, {})
+    if (resolved.missing.length > 0) { setNotice(`The row does not give ${resolved.missing.join(', ')}, so this cannot be sent.`); return }
+    let outcome: ActionOutcome
+    try { outcome = await actionHost!.run({ link: link.name, widget, row, parameters: values, answers: {}, idempotencyKey: newIdempotencyKey() }) }
+    catch (e) { outcome = { status: 'failed', message: e instanceof Error ? e.message : String(e) } }
+    if (outcome.status === 'applied' || outcome.status === 'waiting' || outcome.status === 'started') {
+      setNotice(outcome.status === 'waiting' ? 'Waiting for approval: the change is kept as a request and nothing has changed yet.' : null)
+      const again = thenWidgets(link, widget, true).filter((w) => w in (latest.current?.results ?? {}))
+      if (again.length > 0) resolveOnly(again)
+    } else setNotice(outcome.message)
+  }
+  const submitted = (_outcome: BatchOutcome, widgets: string[]) => {
+    const ids = widgets.filter((w) => w in (latest.current?.results ?? {}))
+    if (ids.length > 0) resolveOnly(ids)
+  }
   const follow = (widget: string, link: LinkInfo, row: Row) => {
+    if (link.action) {
+      const event: LinkEvent = { widget, link, values: linkValues(link, row, values), route: null, address: null, row }
+      if (onLink) { onLink(event); return }
+      if (!actionHost) { setNotice(`The link \`${link.name}\` is an action, and this host cannot run actions.`); return }
+      const action = link.action
+      if (action.stage || action.for === 'selection') { stageLink(widget, link, row); return }
+      if (action.confirm.skip) { void applyAtOnce(widget, link, row); return }
+      setAction({ widget, link: link as OpenAction['link'], row })
+      return
+    }
     const route = linkHost?.route(link) ?? customViews?.route?.(link) ?? null
     const linked = linkValues(link, row, values)
     const address = route === null ? null : surfaceAddress(route, linked, link.lock)
@@ -280,6 +350,14 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
     if (address === null) { setNotice(`The link \`${link.name}\` leads to the ${link.targetKind} \`${link.target}\`, which this host has no address for.`); return }
     if (link.as === 'navigate') { linkHost.navigate?.(address, event); return }
     setSurface({ widget, link, open: { as: link.as, label: link.label ?? `${link.targetKind}: ${link.target}`, address } })
+  }
+  // an action was accepted (applied, waiting for approval, or started): the popup says so and stays until it is closed; what `then` names resolves again at once, but not after a plain cancel
+  const actionDone = (_outcome: ActionOutcome) => {
+    const open = action
+    if (!open) return
+    const again = thenWidgets(open.link, open.widget, true).filter((w) => w in (latest.current?.results ?? {}))
+    if (again.length > 0) resolveOnly(again)
+    setClosedHere({ widget: open.widget, link: open.link.name, saved: true })
   }
   const closeSurface = (saved: boolean) => {
     const open = surface
@@ -303,6 +381,16 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
       },
       (e: unknown) => setNotice(`The page could not refresh after the change: ${e instanceof Error ? e.message : String(e)}`),
     )
+  }
+  // a cell that names a link (DBR51): the row the cell is in is what the link reads its values from
+  const cellLink = (c: CellLink) => {
+    const widget = document.widgets[c.widget]
+    const doc = document.links?.[c.name]
+    const row = rowOf(widget, latest.current?.results[c.widget], widget?.type === 'matrix' ? { kind: 'matrix', row: c.row, column: c.column } : { kind: 'row', index: c.row })
+    setNotice(null)
+    if (!doc) setNotice(`The widget \`${c.widget}\` follows the link \`${c.name}\`, which the document does not declare.`)
+    else if (!row) setNotice('That cell has no row to take values from.')
+    else follow(c.widget, describeLink(c.name, doc), row)
   }
   const hit = (id: string, at: Hit, how: HitHow) => {
     const widget = document.widgets[id]
@@ -346,11 +434,15 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
       scheme: resolvedTheme,
       setParam: (parameter, value) => { setNotice(null); change(parameter, value) },
       open: (widget, link, row) => { setNotice(null); follow(widget, link, row as Row) },
+      stage: (widget, link, row, answers) => { setNotice(null); if (link.action) stageLink(widget, link, row as Row, answers); else setNotice(`The link \`${link.name}\` is not an action, so it cannot be staged.`) },
+      review: () => { if (pendingRef.current.length > 0) setReviewing(true) },
+      discard: () => pending.clear(),
+      pending: pendingSummary,
       notice: setNotice,
       closed: closedLink ?? closedHere,
     }
     // `change` keeps the document's own parameters when none are given; the key stands for the values; `follow` reads the latest through the refs and state it closes over each render
-  }, [customViews, linkHost, document, valuesKey, medium, resolvedTheme, onLink, closedLink, closedHere, change])
+  }, [customViews, linkHost, document, valuesKey, medium, resolvedTheme, onLink, closedLink, closedHere, change, pendingSummary])
 
   const preview = usePrintPreview({ client, kind, name, layout: chosenName, parameters: values })
   const [maximized, setMaximized] = useState<string | null>(null)
@@ -389,11 +481,12 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
         canFollow={follows}
         sortable={sortable}
         onServerSort={serverSorting}
-        onLink={onCellLink}
+        onLink={onCellLink ?? (follows ? cellLink : undefined)}
+        marked={pendingLines.length > 0 ? markedRow : undefined}
         onExpand={client.expandsOnServer ? toggleExpand : undefined}
       />
     )
-  const modalOpen = surface?.open.as === 'dialog'
+  const modalOpen = surface?.open.as === 'dialog' || action !== null || reviewing
   const framed = (
     <div ref={ref} className="vz-dashboard-host" inert={modalOpen ? true : undefined} data-testid="vz-dashboard-host" data-measuring={box ? undefined : ''} data-kiosk={kiosk ? '' : undefined} data-refresh={refreshing ? (refreshState?.paused ? 'paused' : refreshState?.stale ? 'stale' : 'on') : undefined} data-refresh-runs={refreshState?.runs} style={given ? { width: given.width, height: given.height } : { width: '100%', height: '100%' }}>
       {failure ? <ErrorTile code="resolve_failed" message={failure} /> : null}
@@ -410,6 +503,9 @@ export function DashboardView({ kind = 'dashboard', name, document, client, layo
     <>
       {framed}
       {surface ? <LinkSurface key={surface.open.address} surface={surface.open} onClose={closeSurface} /> : null}
+      <PendingBar lines={pendingLines} onReview={() => setReviewing(true)} onDiscard={() => pending.clear()} />
+      {reviewing && actionHost ? <PendingReview store={pending} host={actionHost} onClose={() => setReviewing(false)} onSubmitted={submitted} /> : null}
+      {action && actionHost ? <ActionDialog key={`${action.widget}:${action.link.name}`} open={action} parameters={values} host={actionHost} onDone={actionDone} onCancel={() => setAction(null)} /> : null}
     </>
   )
   return custom ? <CustomViewsContext.Provider value={custom}>{shown}</CustomViewsContext.Provider> : shown

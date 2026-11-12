@@ -87,6 +87,12 @@ public static class ViewsCodes
     public const string UnknownGroup = "DBD-VIEW-047";
     /// <summary>A field that is in a group and also in another place of the same widget (an axis, a channel, another group): a field is in one place.</summary>
     public const string GroupConflict = "DBD-VIEW-048";
+    /// <summary>An action's title, `show` or value names `ask.x` for a field the action does not ask for.</summary>
+    public const string ActionAskUnknown = "DBD-VIEW-064";
+    /// <summary>An action changes an entity, or runs a task, that the app's manifest does not allow (the `change` needs `write` or `change request` for the entity).</summary>
+    public const string ActionNotAllowed = "DBD-VIEW-065";
+    /// <summary>An action's <c>confirm: skip</c>, <c>stage</c> or <c>for: selection</c> where it cannot be: skip only for a field edit with no <c>ask</c>, stage only for a change, a selection only for an edit or a delete.</summary>
+    public const string ActionModeInvalid = "DBD-VIEW-066";
     /// <summary>A model the document depends on is not pinned, has no such version, or does not load; or a model its widgets query is not a dependency (publishing, DBR10).</summary>
     public const string DependencyMissing = "DBD-VIEW-060";
     /// <summary>A saved query a widget runs is in none of the models the document depends on.</summary>

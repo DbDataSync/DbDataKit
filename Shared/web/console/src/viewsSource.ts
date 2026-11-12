@@ -1,5 +1,6 @@
 import { catalogDiagnostics, fixtureClient, moduleClient, retailCatalog, storedDocuments, type FixtureBundle, type RenderedWidgets, type ViewKind, type ViewsClient } from '@dbdatakit/visuals'
 import { consoleApi, type InstanceSummary } from './api'
+import { actionsSample } from './viewsActionsSample'
 import { isPersonal, personalClient, personalId, serverOf, type PersonalClient } from './userViews'
 
 /**
@@ -138,7 +139,9 @@ export function personalViewsClient(source: string): PersonalClient {
 let client: ViewsClient | null = null
 
 function fixtureViewsClient(): ViewsClient {
-  const bundle = bundleFrom(documents, recorded)
+  const base = bundleFrom(documents, recorded)
+  // the retail sample, and the sample of actions with the answers a Store would give (plan 32 DBR53)
+  const bundle: FixtureBundle = { documents: { ...base.documents, ...actionsSample.documents }, results: { ...base.results, ...actionsSample.results }, actions: actionsSample.actions, batches: actionsSample.batches }
   // what the editor saves stays in the browser's storage (this viewer's convenience, until a real store answers): a reload opens the saved file, and a second tab sees it
   let storage: Storage | null = null
   try { storage = window.localStorage } catch { /* blocked: this visit's memory */ }

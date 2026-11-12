@@ -1,3 +1,4 @@
+import type { ActionOutcome, BatchOutcome, BatchProblem } from '../links/actions'
 import type { ViewKind } from '../views/document'
 import type { RenderedWidgets } from '../views/rendered'
 import { validateText } from './text'
@@ -41,6 +42,45 @@ const CONTENT_TYPES: Record<ExportFormat, string> = { pdf: 'application/pdf', cs
 const collection = (kind: ViewKind) => (kind === 'dashboard' ? 'dashboards' : 'reports')
 const fromStatus = (status: number): ViewsClientErrorCode =>
   status === 404 ? 'not_found' : status === 409 ? 'version_conflict' : status === 400 || status === 422 ? 'invalid' : status === 401 || status === 403 ? 'denied' : 'unavailable'
+
+/** The module's answer to an action as the popup's outcome: its own `status` for 200, 202, 409, 422, 403 and 502; a refusal of the request itself (`400 invalid`, `missing_values`, `invalid_answer`) is a refusal in the module's words; a missing or unreachable module is a failure. */
+export function actionOutcome(status: number, json: Record<string, unknown> | null): ActionOutcome {
+  const text = (v: unknown) => (typeof v === 'string' ? v : undefined)
+  const message = text(json?.message) ?? text(json?.error)
+  switch (json?.status) {
+    case 'applied': return { status: 'applied', ...(message ? { message } : {}) }
+    case 'waiting': return { status: 'waiting', ...(text(json.request_id) ? { requestId: text(json.request_id) } : {}), ...(message ? { message } : {}) }
+    case 'started': return { status: 'started', ...(text(json.run_id) ? { runId: text(json.run_id) } : {}), ...(message ? { message } : {}) }
+    case 'conflict': return { status: 'conflict', message: message ?? 'The row was changed by someone else.' }
+    case 'refused': return { status: 'refused', message: message ?? 'The model refused the change.', violations: Array.isArray(json.violations) ? (json.violations as Array<Record<string, unknown>>).map((v) => ({ ...(text(v.rule) ? { rule: text(v.rule) } : {}), ...(text(v.attribute) ? { attribute: text(v.attribute) } : {}), message: text(v.message) ?? '' })) : [] }
+    case 'denied': return { status: 'denied', message: message ?? 'You may not do this.' }
+    case 'failed': return { status: 'failed', message: message ?? 'It could not be done.' }
+  }
+  if (status === 401 || status === 403) return { status: 'denied', message: message ?? 'You may not do this.' }
+  if (status === 400) return { status: 'refused', message: message ?? 'The request was refused.' }
+  return { status: 'failed', message: message ?? (status === 0 ? 'The views module could not be reached.' : `The views module answered ${status}.`) }
+}
+
+/** The module's answer to a batch as the review's outcome: its own `status` (200 applied, 202 waiting, 409, 422, 403, 502) with `problems` by line; a refusal of the request itself (`400 two_models`, `limit`...) is a refusal in the module's words. */
+export function batchOutcome(status: number, json: Record<string, unknown> | null): BatchOutcome {
+  const text = (v: unknown) => (typeof v === 'string' ? v : undefined)
+  const message = text(json?.message) ?? text(json?.error)
+  const count = typeof json?.count === 'number' ? json.count : 0
+  const problems: BatchProblem[] = Array.isArray(json?.problems)
+    ? (json!.problems as Array<Record<string, unknown>>).map((p) => ({ line: typeof p.line === 'number' ? p.line : null, ...(text(p.rule) ? { rule: text(p.rule) } : {}), ...(text(p.attribute) ? { attribute: text(p.attribute) } : {}), message: text(p.message) ?? '' }))
+    : []
+  switch (json?.status) {
+    case 'applied': return { status: 'applied', count, ...(message ? { message } : {}) }
+    case 'waiting': return { status: 'waiting', count, ...(text(json.request_id) ? { requestId: text(json.request_id) } : {}), ...(message ? { message } : {}) }
+    case 'conflict': return { status: 'conflict', message: message ?? 'A row was changed by someone else.', problems }
+    case 'refused': return { status: 'refused', message: message ?? 'The model refused the changes, so none was made.', problems }
+    case 'denied': return { status: 'denied', message: message ?? 'You may not do this.', problems }
+    case 'failed': return { status: 'failed', message: message ?? 'It could not be done.', problems }
+  }
+  if (status === 401 || status === 403) return { status: 'denied', message: message ?? 'You may not do this.', problems: [] }
+  if (status === 400) return { status: 'refused', message: message ?? 'The request was refused.', problems: [] }
+  return { status: 'failed', message: message ?? (status === 0 ? 'The views module could not be reached.' : `The views module answered ${status}.`), problems: [] }
+}
 
 export function moduleClient(options: ModuleClientOptions): ViewsClient {
   const base = options.baseUrl.replace(/\/+$/, '')
@@ -113,7 +153,54 @@ export function moduleClient(options: ModuleClientOptions): ViewsClient {
   }
 
 
+  /** One call of the action routes: the module's own answer whatever the status (a conflict, a refusal and a denial are the popup's to show), never a thrown refusal. */
+  async function actionCall(path: string, body: unknown, signal?: AbortSignal): Promise<{ status: number; json: Record<string, unknown> | null }> {
+    const extra = options.headers ? await options.headers() : {}
+    let response: Response
+    try {
+      response = await doFetch(`${base}${path}`, { method: 'POST', headers: { accept: 'application/json', 'content-type': 'application/json', ...extra }, body: JSON.stringify(body), signal })
+    } catch (e) {
+      if (signal?.aborted) throw e
+      return { status: 0, json: { message: `The views module could not be reached: ${e instanceof Error ? e.message : String(e)}` } }
+    }
+    let json: Record<string, unknown> | null = null
+    try { json = JSON.parse(await response.text()) as Record<string, unknown> } catch { /* not JSON */ }
+    return { status: response.status, json: json !== null && typeof json === 'object' ? json : null }
+  }
+
   return {
+    async runAction(ref, request) {
+      const { status, json } = await actionCall(`/api/v1/${collection(ref.kind)}/${segment(ref.name)}/actions/${segment(request.link)}`, {
+        widget: request.widget, row: request.row, parameters: request.parameters, answers: Object.fromEntries(Object.entries(request.answers).filter(([, v]) => v !== undefined)), idempotency_key: request.idempotencyKey,
+      })
+      return actionOutcome(status, json)
+    },
+
+    async runBatch(ref, request) {
+      const { status, json } = await actionCall(`/api/v1/${collection(ref.kind)}/${segment(ref.name)}/batches`, {
+        lines: request.lines.map((l) => ({ link: l.link, widget: l.widget, row: l.row, parameters: l.parameters, answers: Object.fromEntries(Object.entries(l.answers).filter(([, v]) => v !== undefined)) })),
+        idempotency_key: request.idempotencyKey,
+      })
+      return batchOutcome(status, json)
+    },
+
+    async forecastBatch(ref, request, signal) {
+      const { status, json } = await actionCall(`/api/v1/${collection(ref.kind)}/${segment(ref.name)}/batches/forecast`, {
+        lines: request.lines.map((l) => ({ link: l.link, widget: l.widget, row: l.row, parameters: l.parameters, answers: Object.fromEntries(Object.entries(l.answers).filter(([, v]) => v !== undefined)) })),
+        idempotency_key: request.idempotencyKey,
+      }, signal)
+      const will = json?.will
+      if (status !== 200 || (will !== 'apply' && will !== 'wait')) return null
+      return { will, ...(typeof json?.note === 'string' ? { note: json.note } : {}) }
+    },
+
+    async forecastAction(ref, link, signal) {
+      const { status, json } = await actionCall(`/api/v1/${collection(ref.kind)}/${segment(ref.name)}/actions/${segment(link)}/forecast`, {}, signal)
+      const will = json?.will
+      if (status !== 200 || (will !== 'apply' && will !== 'wait' && will !== 'run')) return null
+      return { will, ...(typeof json?.note === 'string' ? { note: json.note } : {}) }
+    },
+
     async list(kind) {
       const kinds: ViewKind[] = kind ? [kind] : ['dashboard', 'report']
       const all = await Promise.all(kinds.map(async (k) => (await call<{ items: Array<{ name: string; title: string }> }>('GET', `/api/v1/${collection(k)}`)).items.map((i): DocumentSummary => ({ name: i.name, title: i.title, kind: k }))))

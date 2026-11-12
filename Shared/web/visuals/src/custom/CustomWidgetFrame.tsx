@@ -4,7 +4,7 @@ import type { Box, CustomDoc, ParameterDefinition, ParameterValue, ParameterValu
 import type { RenderedCustom } from '../views/rendered'
 import { EmptyTile, ErrorTile } from '../widgets/states'
 import { createFrameHost, type FrameHost, type FrameState } from './controller'
-import { hostLinkInfo, readToHost, themeTokens, type Row, type ViewMode, type ViewProps } from './protocol'
+import { hostLinkInfo, readToHost, themeTokens, type PendingSummary, type Row, type ViewMode, type ViewProps } from './protocol'
 
 /**
  * What a host gives so custom widgets can be drawn (plan 32 DBR31): where the code of an app is served from. The host that serves the app (the apps shell, a Workspace preview) says; a host that serves none leaves
@@ -36,6 +36,14 @@ export interface CustomViewsContextValue {
   setParam(name: string, value: ParameterValue): void
   /** A link the code followed for a row: the dashboard resolves its target and values. */
   open(widget: string, link: LinkInfo, row: Row): void
+  /** The code staged a change (DBR53b): the shell resolves the link and adds it to the pending set. */
+  stage?(widget: string, link: LinkInfo, row: Row, answers: Record<string, string>): void
+  /** The code asked to review the set: the shell opens its review. */
+  review?(): void
+  /** The code asked to discard the set. */
+  discard?(): void
+  /** The staged changes as the widget may read them. */
+  pending?: PendingSummary[]
   notice(message: string): void
   /** A dialog or panel the code opened has closed (a new object each time). */
   closed: { widget: string; link: string; saved: boolean } | null
@@ -58,6 +66,7 @@ export function CustomWidgetFrame({ id, widget, result, box }: CustomWidgetFrame
 }
 
 const NO_PARAMS: ViewProps['params'] = {}
+const NO_PENDING: PendingSummary[] = []
 const exportOf = (component: string) => component.slice(component.lastIndexOf('/') + 1)
 
 function Frame({ ctx, src, id, widget, result, box }: CustomWidgetFrameProps & { ctx: CustomViewsContextValue; src: string }) {
@@ -87,7 +96,8 @@ function Frame({ ctx, src, id, widget, result, box }: CustomWidgetFrameProps & {
     size: { width: box?.width ?? 0, height: box?.height ?? 'auto' },
     mode: ctx.medium,
     links,
-  }), [result.data, params, ctx.scheme, ctx.medium, box?.width, box?.height, links])
+    pending: ctx.pending ?? NO_PENDING,
+  }), [result.data, params, ctx.scheme, ctx.medium, box?.width, box?.height, links, ctx.pending])
   const latestProps = useRef(props)
   latestProps.current = props
 
@@ -106,6 +116,12 @@ function Frame({ ctx, src, id, widget, result, box }: CustomWidgetFrameProps & {
         const doc = live.current.links?.[link]
         if (doc) live.current.open(id, describeLink(link, doc), row)
       },
+      onStage: (link, row, answers) => {
+        const doc = live.current.links?.[link]
+        if (doc) live.current.stage?.(id, describeLink(link, doc), row, answers)
+      },
+      onSubmit: () => live.current.review?.(),
+      onDiscard: () => live.current.discard?.(),
       onState: (s) => { setState(s); live.current.host.onFrameState?.(id, s) },
       onSize: (h) => live.current.host.onFrameSize?.(id, h),
       onNotice: (m) => live.current.notice(m),

@@ -8,6 +8,8 @@ using DbDataKit.Views.Hosting;
 using DbDataKit.Web.Trust;
 using DbDataGateway.Server.Auth;
 using DbDataGateway.Server.Configuration;
+using DbDataGateway.Server.Hosting;
+using DbDataGateway.Server.Secrets;
 using Microsoft.Extensions.Options;
 
 namespace DbDataGateway.Server.Serving;
@@ -87,7 +89,7 @@ public sealed class GatewayViewsPublishing(DefinitionStore store, StateDatabase 
 /// </summary>
 public sealed class GatewayViews
 {
-    public GatewayViews(DefinitionStore store, GatewayViewsPublishing publishing, IOptionsMonitor<GatewayOptions> options, HomeCallers homeCallers, StateDatabase state, ILoggerFactory loggers, IReportExporter? exporter = null)
+    public GatewayViews(DefinitionStore store, GatewayViewsPublishing publishing, IOptionsMonitor<GatewayOptions> options, HomeCallers homeCallers, StateDatabase state, ILoggerFactory loggers, SecretsRuntime secrets, PublishedEntityModels entityModels, IReportExporter? exporter = null)
     {
         Publishing = publishing;
         exporter ??= ExporterOf(options.CurrentValue.Views.Export, loggers);
@@ -104,6 +106,8 @@ public sealed class GatewayViews
             MaxExportRows = options.CurrentValue.Views.MaxExportRows,
             Exporter = exporter,
             PageAssets = options.CurrentValue.Views.Export.PageAssets,
+            // an action link's change is made by the group's Store as the viewer (plan 32 DBR53); no runner is connected to a Gateway, so a `task` says so
+            Actions = new GroupViewsActions(GatewayStoreModule.ApiOf(options, state, secrets, entityModels), homeCallers),
             CustomApps = new GatewayCustomViewApps(() => new DbDataKit.Apps.AppInstanceStore(store),
                 () => options.CurrentValue.Modules.Contains(GatewayModules.Apps) ? DbDataGateway.Server.Hosting.GatewayAppsModule.PublicUrlOf(options.CurrentValue) : null),
             Resolver = new ResolverOptions { FrameOrigins = new LiveOrigins(() => options.CurrentValue.Views.FrameOrigins) },

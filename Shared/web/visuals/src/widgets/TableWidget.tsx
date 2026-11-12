@@ -20,7 +20,7 @@ export function FitNotice({ text, onMaximize, label }: { text: string; onMaximiz
  * A table widget: the rows of its result as the server formatted them, a total row where the result has one. Given the box of its body it shows **the rows that fit** and says "12 of 40 rows" with an action
  * that maximizes the tile (`onMaximize`); `maximized` shows every row and the widget scrolls. A cut at the server's limit (`total_rows`) is told the same way.
  */
-export function TableWidget({ id, widget, result, box, maximized = false, onMaximize, onRow, sortable = false, onServerSort, onLink }: {
+export function TableWidget({ id, widget, result, box, maximized = false, onMaximize, onRow, sortable = false, onServerSort, onLink, marked }: {
   id: string
   widget: TableDoc
   result: RenderedTable
@@ -35,8 +35,16 @@ export function TableWidget({ id, widget, result, box, maximized = false, onMaxi
   onServerSort?: (field: string | null, dir: SortDirection | null) => void
   /** A cell that names a link of the document (plan 32 DBR51) was clicked: the link's name and the row's index in `result.rows`. Without it such a cell is plain text. */
   onLink?: (link: string, row: number) => void
+  /** Whether the row (its values by column field) has a staged change (plan 32 DBR53b): the row is drawn marked. */
+  marked?: (fields: Record<string, unknown>) => boolean
 }) {
   const [sort, setSort] = useState<ViewerSort | null>(null)
+  const isMarked = (row: RenderedTable['rows'][number]) => {
+    if (!marked || row.total) return false
+    const fields: Record<string, unknown> = {}
+    result.columns.forEach((c, i) => { const cell = row.cells[i]; if (cell) fields[c.field] = cell.v !== undefined ? cell.v : cell.text })
+    return marked(fields)
+  }
   const total = result.rows.length
   const last = result.rows[total - 1]
   const hasTotalRow = last?.total === true
@@ -87,7 +95,8 @@ export function TableWidget({ id, widget, result, box, maximized = false, onMaxi
             return (
               <tr
                 key={index}
-                className={[row.total ? 'vz-total' : '', pointable ? 'vz-pointable' : ''].filter(Boolean).join(' ') || undefined}
+                className={[row.total ? 'vz-total' : '', pointable ? 'vz-pointable' : '', isMarked(row) ? 'vz-pending-marked' : ''].filter(Boolean).join(' ') || undefined}
+                data-pending={isMarked(row) ? '' : undefined}
                 tabIndex={pointable ? 0 : undefined}
                 onClick={pointable ? (e: MouseEvent) => onRow(index, e) : undefined}
                 onKeyDown={pointable ? (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRow(index, e) } } : undefined}

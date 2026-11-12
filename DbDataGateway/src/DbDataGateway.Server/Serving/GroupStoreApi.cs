@@ -37,6 +37,24 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
         return (served, null);
     }
 
+    /// <summary>The key attributes of an entity of a published model, or the problem (an action's single `key` value needs a one-field key).</summary>
+    public (IReadOnlyList<string>? Key, StoreAnswer? Problem) KeyOf(string name, string entity)
+    {
+        var (served, missing) = Served(name, entity);
+        return missing is not null ? (null, missing) : (served!.Model.Entity(entity)!.Key, null);
+    }
+
+    /// <summary>
+    /// Whether a change by this caller to the model would wait for approval, and who decides (plan 32 DBR53: the confirmation popup says so before the person confirms): an agent's write when the model asks agents to request,
+    /// anyone's when the model's <c>approval</c> asks for a person. Null when the model is not published here.
+    /// </summary>
+    public (bool Waits, string Who)? Forecast(StoreCaller caller, string name)
+    {
+        if (models.Find(name) is not { } served) return null;
+        var waits = ChangeApproval.Needs(served.Model, caller.IsAgent);
+        return (waits, ChangeApproval.AdministratorDecides(served.Model) ? "an administrator" : "an author or an administrator");
+    }
+
     public StoreAnswer List(StoreCaller caller)
     {
         if (Needs(caller, ServerRole.Viewer) is { } denied) return denied;

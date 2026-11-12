@@ -129,6 +129,23 @@ public class AppViewDocumentsTests
         Assert.Contains("`nowhere`", d.Message);
     }
 
+    private const string CloseLink = "  go: {report: regional, with: {region: $customers.region}}\n  close: {change: {model: territories, entity: territory, edit: {key: $territory.id}, set: {name: Closed}}, confirm: {title: \"Close {{territory.name}}\"}}";
+
+    [Fact]
+    public void An_action_that_changes_an_entity_the_manifest_lists_with_write_passes_and_without_it_is_refused()
+    {
+        var links = "links:\n" + CloseLink;
+        Assert.Empty(Run(Overview(links: links).Replace("on_click: go", "on_click: close")));
+        var found = Run(Overview(links: links.Replace("entity: territory", "entity: place")).Replace("on_click: go", "on_click: close"));
+        var d = Assert.Single(found);
+        Assert.Equal(ViewsCodes.ActionNotAllowed, d.Code);
+        Assert.Contains("territories.place", d.Message);
+        var readOnly = Run(Overview(links: links).Replace("on_click: go", "on_click: close"), Manifest.Replace("territory: [read, write]", "territory: [read]"));
+        Assert.Contains(readOnly, d => d.Code == ViewsCodes.ActionNotAllowed);
+        var propose = Run(Overview(links: links).Replace("on_click: go", "on_click: close"), Manifest.Replace("territory: [read, write]", "territory: [read, change request]"));
+        Assert.Empty(propose);
+    }
+
     [Fact]
     public void A_link_to_a_report_the_app_lacks_or_with_a_name_it_lacks_is_refused()
     {

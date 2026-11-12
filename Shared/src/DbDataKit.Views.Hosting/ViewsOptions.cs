@@ -63,5 +63,17 @@ public sealed class ViewsOptions
     /// <summary>The merged report catalog (plan 32 RC03): our own dashboards and reports (<see cref="ViewsCatalog"/>) beside the external report servers' (the host adds a provider per <c>report-catalog</c> connection). Null leaves <c>/api/v1/catalog</c> answering 404 and saying why.</summary>
     public ReportCatalogs? Catalogs { get; init; }
 
+    /// <summary>What runs an action link's change or task as the viewer (plan 32 DBR53): in the Gateway the group's Store. Null leaves the action routes answering 501 `actions_unavailable`.</summary>
+    public IViewsActions? Actions { get; init; }
+
+    /// <summary>The most changes a staged set holds (plan 32 DBR53b, a setting): a batch with more lines is refused before anything is derived.</summary>
+    public int MaxBatchChanges { get; init; } = 1000;
+
+    /// <summary>The largest batch request body: a set of 1,000 staged rows with their values is a few hundred kilobytes.</summary>
+    public int MaxBatchBytes { get; init; } = 4 * 1024 * 1024;
+
+    /// <summary>How long a finished action's answer is kept for its idempotency key: a call repeated with the key in this time gets the same answer and does nothing again.</summary>
+    public TimeSpan ActionRetention { get; init; } = TimeSpan.FromMinutes(10);
+
     public TimeProvider Time { get; init; } = TimeProvider.System;
 }
