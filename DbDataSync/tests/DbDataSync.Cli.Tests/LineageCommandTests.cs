@@ -12,7 +12,7 @@ public sealed class LineageCommandTests : IDisposable
     private static readonly GitAuthor Author = new("Test", "test@example.com");
     private readonly string _root = Directory.CreateTempSubdirectory("dbdatasync-lineage-cli-").FullName;
 
-    public void Dispose() => Directory.Delete(_root, recursive: true);
+    public void Dispose() => GitTempDirectory.DeleteRecursively(_root);   // a git repository has read-only object files (Windows refuses to delete them)
 
     private void Seed()
     {
