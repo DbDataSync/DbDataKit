@@ -39,7 +39,7 @@ public sealed class AppAddressingTests : IAsyncLifetime
         names.AddDnsName(name);
         request.CertificateExtensions.Add(names.Build());
         using var made = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(30));
-        return X509CertificateLoader.LoadPkcs12(made.Export(X509ContentType.Pfx, "pw"), "pw");
+        return X509CertificateLoader.LoadPkcs12(made.Export(X509ContentType.Pfx, "pw"), "pw", X509KeyStorageFlags.Exportable);
     }
 
     public async ValueTask InitializeAsync()

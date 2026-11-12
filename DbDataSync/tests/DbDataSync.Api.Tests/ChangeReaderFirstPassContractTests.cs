@@ -272,7 +272,7 @@ public sealed class ChangeReaderFirstPassContractTests
             return Activator.CreateInstance(type)!;
 
         if (type == typeof(TriggerAuditReader))
-            return Activator.CreateInstance(type, MsSqlDialect.Instance, null)!;
+            return Activator.CreateInstance(type, MsSqlDialect.Instance, null, null)!;   // the install check (CW02) is the third, optional, parameter
 
         if (type == typeof(WatermarkReader))
             return Activator.CreateInstance(type, MsSqlDialect.Instance, null)!;
