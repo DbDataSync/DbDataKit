@@ -73,7 +73,7 @@ public class SqlServerCatalogReader(DbConnection connection, ISqlDialect? dialec
     {
         string p = Prefix(t.Catalog);
         var (where, args) = Of(t);
-        return ("SELECT i.name, c.name, ic.key_ordinal "
+        return ("SELECT i.name, c.name, ic.key_ordinal, o.name "
             + $"FROM {p}sys.indexes i JOIN {p}sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id "
             + $"JOIN {p}sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
             + $"JOIN {p}sys.objects o ON o.object_id = i.object_id JOIN {p}sys.schemas s ON s.schema_id = o.schema_id "
@@ -87,7 +87,7 @@ public class SqlServerCatalogReader(DbConnection connection, ISqlDialect? dialec
         // The referenced table lives in the same database as the foreign key, which is the catalog named on the table.
         object?[] args = t.Catalog is null ? rawArgs : [.. rawArgs, t.Catalog];
         string db = t.Catalog is null ? "DB_NAME()" : "{" + rawArgs.Length + "}";
-        return ($"SELECT fk.name, fkc.constraint_column_id, pc.name, {db}, rs.name, ro.name, rc.name, fk.update_referential_action_desc, fk.delete_referential_action_desc "
+        return ($"SELECT fk.name, fkc.constraint_column_id, pc.name, {db}, rs.name, ro.name, rc.name, fk.update_referential_action_desc, fk.delete_referential_action_desc, po.name "
             + $"FROM {p}sys.foreign_keys fk JOIN {p}sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id "
             + $"JOIN {p}sys.objects po ON po.object_id = fk.parent_object_id JOIN {p}sys.schemas ps ON ps.schema_id = po.schema_id "
             + $"JOIN {p}sys.columns pc ON pc.object_id = fkc.parent_object_id AND pc.column_id = fkc.parent_column_id "

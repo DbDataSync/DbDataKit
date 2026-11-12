@@ -198,6 +198,26 @@ public sealed class OdbcCatalogReader : ICatalogReader, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// The keys of one schema on the session's one connection: one SQLTables call, then SQLPrimaryKeys and SQLForeignKeys once per table (ODBC has no call for the keys of a whole schema). No columns and no indexes are read.
+    /// A driver without either function says so in the flags, as it does for a table's shape.
+    /// </summary>
+    public async Task<SchemaKeys> ReadSchemaKeysAsync(string? catalog, string schema, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(schema);
+        var crawl = await session.CrawlAsync(catalog, schema, new OdbcCrawlOptions { TableTypes = "TABLE", IncludeColumns = false, IncludeIndexes = false }, cancellationToken).ConfigureAwait(false);
+        var warnings = new List<string>();
+        Truncation(crawl.Tables, warnings);
+        Truncation(crawl.PrimaryKeys, warnings);
+        Truncation(crawl.ForeignKeys, warnings);
+        var inSchema = crawl.Tables.Where(t => string.Equals(t.Schema, schema, StringComparison.Ordinal)).Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+        var primaryKeys = crawl.PrimaryKeys.Where(k => inSchema.Contains(k.Table) && string.Equals(k.Schema, schema, StringComparison.Ordinal))
+            .GroupBy(k => k.Table, StringComparer.Ordinal).ToDictionary(g => g.Key, g => Key(g.First())!, StringComparer.Ordinal);
+        var foreignKeys = crawl.ForeignKeys.Where(k => inSchema.Contains(k.Table) && string.Equals(k.Schema, schema, StringComparison.Ordinal))
+            .GroupBy(k => k.Table, StringComparer.Ordinal).ToDictionary(g => g.Key, g => (IReadOnlyList<ForeignKeyInfo>)g.Select(ForeignKey).ToList(), StringComparer.Ordinal);
+        return new SchemaKeys(primaryKeys, foreignKeys, crawl.PrimaryKeysSupported, crawl.ForeignKeysSupported, warnings.Count == 0 ? null : warnings);
+    }
+
     private static void Truncation<T>(IReadOnlyList<T> result, List<string> warnings)
     {
         if (result.GetTruncation() is { } t && !warnings.Contains(Message(t))) warnings.Add(Message(t));

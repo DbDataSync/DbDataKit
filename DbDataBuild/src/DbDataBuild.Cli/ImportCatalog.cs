@@ -36,9 +36,15 @@ internal sealed class LiveImportCatalog(ReadSession read, string engine) : IImpo
 
     public Task<IReadOnlyDictionary<string, ObjectShape>> ObjectsAsync(string schema) => CatalogReader.ReadObjectsAsync(read, engine, schema);
 
-    public Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> PrimaryKeysAsync(string schema) => SourceCatalogReader.PrimaryKeysAsync(read, engine, schema);
+    // the primary keys and the foreign keys of a schema are one read of the shared readers (two queries for the schema), asked for once whichever is wanted first
+    private readonly Dictionary<string, Task<(IReadOnlyDictionary<string, IReadOnlyList<string>> PrimaryKeys, IReadOnlyDictionary<string, IReadOnlyList<ForeignKeyShape>> ForeignKeys)>> keys = new(StringComparer.Ordinal);
 
-    public Task<IReadOnlyDictionary<string, IReadOnlyList<ForeignKeyShape>>> ForeignKeysAsync(string schema) => SourceCatalogReader.ForeignKeysAsync(read, engine, schema);
+    private Task<(IReadOnlyDictionary<string, IReadOnlyList<string>> PrimaryKeys, IReadOnlyDictionary<string, IReadOnlyList<ForeignKeyShape>> ForeignKeys)> KeysOf(string schema) =>
+        keys.TryGetValue(schema, out var asked) ? asked : keys[schema] = SourceCatalogReader.KeysAsync(read, engine, schema);
+
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> PrimaryKeysAsync(string schema) => (await KeysOf(schema)).PrimaryKeys;
+
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<ForeignKeyShape>>> ForeignKeysAsync(string schema) => (await KeysOf(schema)).ForeignKeys;
 
     public Task<IReadOnlyDictionary<string, IReadOnlyList<PhysicalItem>>?> IndexesAsync(string schema) => SourceCatalogReader.IndexesAsync(read, engine, schema);
 

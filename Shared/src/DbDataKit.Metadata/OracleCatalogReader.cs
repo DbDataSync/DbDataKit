@@ -53,7 +53,7 @@ public class OracleCatalogReader(DbConnection connection, ISqlDialect? dialect =
     protected override (string Sql, object?[] Args)? PrimaryKeyQuery(TableRef t)
     {
         var (where, args) = Where(t, "", "c.owner", "c.table_name");
-        return ("SELECT c.constraint_name, cc.column_name, cc.position FROM all_constraints c "
+        return ("SELECT c.constraint_name, cc.column_name, cc.position, c.table_name FROM all_constraints c "
             + "JOIN all_cons_columns cc ON cc.owner = c.owner AND cc.constraint_name = c.constraint_name "
             + $"WHERE c.constraint_type = 'P' AND {where} ORDER BY cc.position", args);
     }
@@ -61,7 +61,7 @@ public class OracleCatalogReader(DbConnection connection, ISqlDialect? dialect =
     protected override (string Sql, object?[] Args)? ForeignKeysQuery(TableRef t)
     {
         var (where, args) = Where(t, "", "c.owner", "c.table_name");
-        return ("SELECT c.constraint_name, cc.position, cc.column_name, NULL, r.owner, r.table_name, rc.column_name, 'NO ACTION', c.delete_rule "
+        return ("SELECT c.constraint_name, cc.position, cc.column_name, NULL, r.owner, r.table_name, rc.column_name, 'NO ACTION', c.delete_rule, c.table_name "
             + "FROM all_constraints c JOIN all_cons_columns cc ON cc.owner = c.owner AND cc.constraint_name = c.constraint_name "
             + "JOIN all_constraints r ON r.owner = c.r_owner AND r.constraint_name = c.r_constraint_name "
             + "JOIN all_cons_columns rc ON rc.owner = r.owner AND rc.constraint_name = r.constraint_name AND rc.position = cc.position "

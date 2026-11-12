@@ -71,6 +71,12 @@ public interface ICatalogReader
         return shapes;
     }
 
+    /// <summary>
+    /// The primary keys and foreign keys of every table of one schema. The default lists the schema's tables and reads each one's shape (the per-table read, so a product that does not know this member keeps working); readers that can read the keys of
+    /// a whole schema in one query each (SQL Server, PostgreSQL, MySQL and MariaDB, Oracle, DuckDB) override it, and the ODBC reader reads them on its one session (ODBC has no call for a whole schema's keys, one call per table).
+    /// </summary>
+    Task<SchemaKeys> ReadSchemaKeysAsync(string? catalog, string schema, CancellationToken cancellationToken = default) => SchemaKeysReader.PerTableAsync(this, catalog, schema, cancellationToken);
+
     /// <summary>Result column names and types of a query without fetching rows. The strategy used is in <see cref="QueryShape.Strategy"/>.</summary>
     /// <exception cref="NotSupportedException">The reader has no way to describe a query on this server.</exception>
     /// <exception cref="InvalidOperationException">The read-only policy refused the text.</exception>
