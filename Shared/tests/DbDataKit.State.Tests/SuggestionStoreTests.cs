@@ -55,6 +55,7 @@ public sealed class SuggestionStoreTests : IDisposable
         var his = Add(store, "sam", "finance-data", "margin.md");
         clock.Advance(TimeSpan.FromMinutes(1));
         var other = Add(store, "sam", "sales-ops", "orders.md");
+        clock.Advance(TimeSpan.FromMinutes(1));
         var noOwner = Add(store, "sam", null, "new.md");
 
         Assert.Equal([mine.Id], store.Visible("maria", []).Select(s => s.Id));
