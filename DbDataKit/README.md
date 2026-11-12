@@ -110,6 +110,8 @@ What it runs: the tasks of packages published to a channel it serves, each **in 
 
 **Production is an administrator's recorded choice.** Until then publishing or activating into the production channel (`prod`) is refused with a message that names the choice, and the runner serves no production channel. `dbdatakit runner accept-production --yes [--note <text>]` records it (audited: who and when; so does `POST /api/embedded-runner/accept-production` with `{"confirmed": true}` for an administrator) and the console then logs, and the runner screens show, the warning that **production schedules stop when the console stops**. `dbdatakit runner revoke-production` takes it back.
 
+**Releases** (plan 21 CH02) are the console's: ordered promotions of runner packages with one approval, made, approved, started and resumed on the Releases screen or `api/releases` as the signed-in person (the approval needs the administrator role on every item's server). `dbdatakit release list` and `dbdatakit release show <id>` read them.
+
 In the web app the runner is the first entry of the Servers page (id `console-runner`, flagged `embedded`, never paired and not forgettable) and opens the same runner screens as a `dbdatarunner`: the calls are the runner's own management API, served in the console at `/api/embedded-runner/...` and at `/relay/console-runner/api/v1/...` for people signed in (a viewer reads, an administrator runs, pauses, resumes, activates, switches, rolls back and retires); every other call under that id is 403. Stopping the console stops the runner: running tasks are cancelled, given their grace period, and no run is left running. The task host is published beside the console (`taskhost/`) as it is beside `dbdatarunner`.
 
 ## What is served

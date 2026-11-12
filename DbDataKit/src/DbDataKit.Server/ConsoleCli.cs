@@ -31,6 +31,7 @@ public static class ConsoleCli
         SetupNoun(environment),
         BundleNoun(environment),
         RunnerNoun(environment),
+        ReleaseNoun(environment),
         StateNoun(environment, configureMove),
         IdentityCli.Noun(environment),
         KnowledgeCli(environment),
@@ -294,6 +295,47 @@ public static class ConsoleCli
         context.Data["pending"] = pending;
         await context.Out.WriteLineAsync(pending.Count == 0 ? "The new key is the console's key." : "Run 'instance rotate-key' again when those servers can be reached; the old key keeps working for them.");
         return pending.Count == 0 ? CliExit.Ok : CliExit.Failure;
+    }
+
+    // ---- release ----
+
+    private static Noun ReleaseNoun(Func<string, string?>? environment) => new("release", "The releases of the console (plan 21 CH02): ordered promotions with one approval. Approving, starting and resuming need a signed-in person with the roles on each server: they are the console's API and its Releases screen",
+    [
+        new Verb("list", "The releases: name, state, where it stopped", EffectClass.OfflineOnly, "[--repo <console directory>]",
+            (args, context) => ReleaseAsync(args, context, environment, show: false),
+            DataSchemas.Object([("releases", DataSchemas.ListOf(DataSchemas.Object([("id", DataSchemas.String), ("name", DataSchemas.String), ("state", DataSchemas.String), ("items", DataSchemas.Integer), ("stoppedReason", DataSchemas.String)], "id", "name", "state", "items")))], "releases")),
+        new Verb("show", "One release with its items, their state and the error of the one that failed", EffectClass.OfflineOnly, "<id> [--repo <console directory>]",
+            (args, context) => ReleaseAsync(args, context, environment, show: true),
+            DataSchemas.Object([("id", DataSchemas.String), ("name", DataSchemas.String), ("state", DataSchemas.String), ("approvedBy", DataSchemas.String), ("stoppedReason", DataSchemas.String),
+                ("items", DataSchemas.ListOf(DataSchemas.Object([("position", DataSchemas.Integer), ("target", DataSchemas.String), ("name", DataSchemas.String), ("version", DataSchemas.Integer), ("fromChannel", DataSchemas.String), ("toChannel", DataSchemas.String), ("state", DataSchemas.String), ("error", DataSchemas.String)], "position", "target", "name", "version", "fromChannel", "toChannel", "state")))], "id", "name", "state", "items")),
+    ]);
+
+    private static async Task<int> ReleaseAsync(string[] args, CliContext context, Func<string, string?>? environment, bool show)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" });
+        var usage = show ? "Usage: release show <id> [--repo <console directory>]" : "Usage: release list [--repo <console directory>]";
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count != (show ? 1 : 0)) { await context.Error.WriteLineAsync(usage); return CliExit.Usage; }
+        var store = new ReleaseStore(OpenState(parsed, environment));
+        if (!show)
+        {
+            var all = store.List();
+            if (all.Count == 0) await context.Out.WriteLineAsync("No release yet. They are made on the console's Releases screen.");
+            foreach (var r in all) await context.Out.WriteLineAsync($"{r.Name}  {r.State}  {r.Items.Count} item(s){(r.StoppedReason is null ? "" : "  " + r.StoppedReason)}  id {r.Id}");
+            context.Data["releases"] = all.Select(r => new Dictionary<string, object?> { ["id"] = r.Id, ["name"] = r.Name, ["state"] = r.State, ["items"] = r.Items.Count, ["stoppedReason"] = r.StoppedReason }).ToList();
+            return CliExit.Ok;
+        }
+
+        if (store.Get(parsed.Words[0]) is not { } release) { await context.Error.WriteLineAsync($"There is no release '{parsed.Words[0]}'."); return CliExit.Failure; }
+        await context.Out.WriteLineAsync($"{release.Name}  {release.State}{(release.ApprovedBy is null ? "" : "  approved by " + release.ApprovedBy)}");
+        foreach (var i in release.Items) await context.Out.WriteLineAsync($"  {i.Describe()}  {i.State}{(i.Error is null ? "" : ": " + i.Error)}");
+        if (release.StoppedReason is not null) await context.Out.WriteLineAsync(release.StoppedReason);
+        context.Data["id"] = release.Id;
+        context.Data["name"] = release.Name;
+        context.Data["state"] = release.State;
+        context.Data["approvedBy"] = release.ApprovedBy;
+        context.Data["stoppedReason"] = release.StoppedReason;
+        context.Data["items"] = release.Items.Select(i => new Dictionary<string, object?> { ["position"] = i.Position, ["target"] = i.Target, ["name"] = i.Name, ["version"] = i.Version, ["fromChannel"] = i.FromChannel, ["toChannel"] = i.ToChannel, ["state"] = i.State, ["error"] = i.Error }).ToList();
+        return CliExit.Ok;
     }
 
     // ---- runner ----
