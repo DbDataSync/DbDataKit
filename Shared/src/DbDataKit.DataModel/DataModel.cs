@@ -58,10 +58,10 @@ public enum InstanceMode { None, Schema, Connection, Column }
 /// <summary>
 /// A model: entities with attributes, keys, references and rules, stored on the named connection. <c>SchemaVersion</c> is the format the file is written in (<c>schemaVersion</c>): 1, or 2 when it may carry the sections
 /// <c>cache</c> and <c>checks</c> (plan 24a D5 and UC03); the published definition's format is this number. <c>Cache</c> is the <c>cache:</c> section (format 2), null when the file has none: the cache is off.
-/// <c>Checks</c> is the <c>checks:</c> section (format 2: the <c>check/1</c> entries of <c>DbDataKit.Quality</c>, 23a FQ01), null when the file has none.
+/// <c>Access</c> is the <c>access:</c> section (format 2, plan 22a GP01): row rules over rules tables and column rules, null when the file has none. <c>Checks</c> is the <c>checks:</c> section (format 2: the <c>check/1</c> entries of <c>DbDataKit.Quality</c>, 23a FQ01), null when the file has none.
 /// </summary>
 public sealed record DataModel(string Name, string? Title, string Connection, ApprovalLevel Approval, IReadOnlyList<ModelEntity> Entities, InstanceMode Instances = InstanceMode.None, AgentWrites Agents = AgentWrites.Request,
-    int SchemaVersion = 1, CacheSection? Cache = null, IReadOnlyList<CheckDefinition>? Checks = null)
+    int SchemaVersion = 1, CacheSection? Cache = null, IReadOnlyList<CheckDefinition>? Checks = null, DbDataKit.Access.AccessSection? Access = null)
 {
     /// <summary>The format id of the current version of the file; a file of the version before (<see cref="PreviousFormatId"/>) is read as well.</summary>
     public const string FormatId = "model/2";

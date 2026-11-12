@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
+using DbDataKit.Access;
 using DbDataKit.Semantic;
 using DbDataKit.Semantic.Abstractions;
 using DbDataKit.Semantic.Sql;
@@ -41,7 +42,10 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
             _ => (null, "", false),
         };
         if (model is null) return await inner.RunAsync(context, request, cancellationToken).ConfigureAwait(false);
-        if (models.Runs is not { } runs) return await RunModelAsync(context, request, model, text, isSql, null, cancellationToken).ConfigureAwait(false);
+        // what this caller sees of the model (plan 22a GP13): the catalog without the columns they must not see, the others masked
+        var (seen, view) = SemanticColumnAccess.For(model, context.Caller);
+        model = seen;
+        if (models.Runs is not { } runs) return await RunModelAsync(context, request, model, view, text, isSql, null, cancellationToken).ConfigureAwait(false);
 
         // a record of every statement on a model (SL23): written when it ends, however it ends; a record that cannot be written never fails the statement
         var note = new RunNote();
@@ -61,7 +65,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
         }
         try
         {
-            var answer = await RunModelAsync(context, request, model, text, isSql, note, cancellationToken).ConfigureAwait(false);
+            var answer = await RunModelAsync(context, request, model, view, text, isSql, note, cancellationToken).ConfigureAwait(false);
             Write("complete", null, null, answer);
             return answer;
         }
@@ -81,7 +85,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
 
     private static string? CodeOf(string message) => SemanticRest.CodeOf(message);
 
-    private Task<IServingAnswer> RunModelAsync(ServingContext context, ServingRequest request, SemanticModel model, string text, bool isSql, RunNote? note, CancellationToken cancellationToken)
+    private Task<IServingAnswer> RunModelAsync(ServingContext context, ServingRequest request, SemanticModel model, CatalogColumnView view, string text, bool isSql, RunNote? note, CancellationToken cancellationToken)
     {
         var explaining = false;
         if (isSql && text.TrimStart().StartsWith("EXPLAIN ", StringComparison.OrdinalIgnoreCase)) { explaining = true; text = text.TrimStart()[8..]; }
@@ -98,7 +102,8 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
             note.Kind = explaining ? "explain" : document["kind"]?.GetValue<string>();
             note.Document = document.DeepClone() as JsonObject;
         }
-        if (document["kind"]?.GetValue<string>() == "members") return MembersAsync(context, model, document, text, cancellationToken);
+        SemanticColumnAccess.RefuseProbing(document, view);
+        if (document["kind"]?.GetValue<string>() == "members") return MembersAsync(context, model, view, document, text, cancellationToken);
         if (document["kind"]?.GetValue<string>() == "describe") return DescribeAsync(context, model, text, cancellationToken);
         if (document["kind"]?.GetValue<string>() != "query") throw new ServingInvalidException("This server answers semantic queries ('kind': 'query'); registrations and the other request kinds are not served yet.");
         var limit = request.Asked?.MaxRows;
@@ -122,7 +127,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
             try { result = engine.Run(document); }
             catch (SandboxLimitException stopped) { throw new ServingLimitException(stopped.Message, stopped.Limit); }
             if (result.Status == "failed") throw new ServingInvalidException(Describe(result));
-            return new SemanticAnswer(result, provenance);
+            return new SemanticAnswer(result, provenance, HashMasking.Of(view, models, model.Name));
         }, cancellationToken);
     }
 
@@ -134,7 +139,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
     /// <c>{"kind": "members", "attribute": "customers.region", "search": "ea", "limit": 50}</c>: the distinct values of an attribute to choose a parameter's value from, one column <c>member</c>. They are read through the host as the caller, so the caller sees
     /// only what their access reaches; a catalog that lists its members (<c>members</c>) answers without a read.
     /// </summary>
-    private Task<IServingAnswer> MembersAsync(ServingContext context, SemanticModel model, JsonObject request, string text, CancellationToken cancellationToken)
+    private Task<IServingAnswer> MembersAsync(ServingContext context, SemanticModel model, CatalogColumnView view, JsonObject request, string text, CancellationToken cancellationToken)
     {
         var attribute = request["attribute"]?.GetValue<string>() ?? throw new ServingInvalidException("A members request names an attribute: {\"kind\": \"members\", \"attribute\": \"customers.region\"}.");
         var search = request["search"]?.GetValue<string>();
@@ -147,7 +152,8 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
             try { result = engine.Members(attribute, search, limit); }
             catch (SandboxLimitException stopped) { throw new ServingLimitException(stopped.Message, stopped.Limit); }
             if (result.errors is { Count: > 0 } failed) throw new ServingInvalidException(string.Join("; ", failed.Select(e => $"{e.Code}: {e.Message}")));
-            return new MembersAnswer(result.members, result.truncated, provenance);
+            var shown = HashMasking.Of(view, models, model.Name) is { } masking && masking.Covers(attribute) ? result.members.Select(m => masking.Apply(attribute, m)).ToList() : result.members;
+            return new MembersAnswer(shown, result.truncated, provenance);
         }, cancellationToken);
     }
 
@@ -162,7 +168,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
     public Task<ServingStatementInfo> PrepareAsync(ServingContext context, ServingRequest.Sql statement, CancellationToken cancellationToken = default)
     {
         if (!SemanticModels.IsModelSource(statement.Source)) return inner.PrepareAsync(context, statement, cancellationToken);
-        var model = Model(statement.Source);
+        var model = SemanticColumnAccess.For(Model(statement.Source), context.Caller).Model;
         var text = statement.Text.TrimStart();
         var isSql = !text.StartsWith('{');
         if (isSql && text.StartsWith("EXPLAIN ", StringComparison.OrdinalIgnoreCase)) text = text[8..];
@@ -291,7 +297,8 @@ internal sealed class SemanticCatalog(IServingCatalog inner, SemanticModels mode
             yield break;
         }
 
-        var model = models.Find(source) ?? throw new ServingNotFoundException($"There is no semantic model '{source}'.");
+        var found = models.Find(source) ?? throw new ServingNotFoundException($"There is no semantic model '{source}'.");
+        var (model, view) = SemanticColumnAccess.For(found, context.Caller);
         var doc = model.Catalog.Doc;
         var name = model.Name;
         yield return new ServingObject(ServingObjectKind.Model, [name]);
@@ -316,7 +323,11 @@ internal sealed class SemanticCatalog(IServingCatalog inner, SemanticModels mode
         {
             yield return new ServingObject(ServingObjectKind.Dimension, [name, dimension], def.Label);
             foreach (var (key, attribute) in doc.Attributes.Where(a => a.Key.StartsWith(dimension + ".", StringComparison.Ordinal)))
-                yield return new ServingObject(ServingObjectKind.Column, [name, dimension, key[(dimension.Length + 1)..]], Properties: new Dictionary<string, string> { ["type"] = attribute.Type });
+            {
+                var properties = new Dictionary<string, string> { ["type"] = attribute.Type };
+                if (view.Treated.TryGetValue(key, out var treatment)) properties["access"] = treatment.ToString();   // masked or null for this caller: described, with its type, and answered as such
+                yield return new ServingObject(ServingObjectKind.Column, [name, dimension, key[(dimension.Length + 1)..]], Properties: properties);
+            }
         }
         foreach (var (measure, def) in doc.Measures.Where(m => m.Value.Base is null && m.Value.Shift is null && m.Value.Window is null && m.Value.Index is null))
         {

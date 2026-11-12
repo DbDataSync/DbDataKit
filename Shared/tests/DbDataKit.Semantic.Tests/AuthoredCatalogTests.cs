@@ -1,3 +1,4 @@
+using DbDataKit.Access;
 using DbDataKit.Semantic.Authoring;
 
 namespace DbDataKit.Semantic.Tests;
@@ -73,6 +74,75 @@ public sealed class AuthoredCatalogTests
         var fact = result.Catalog.Doc.Sources["warehouse"];
         Assert.Equal("marts.fct_sales", fact.Fact.Table);
         Assert.Single(result.Relationships);
+    }
+
+    private static PhysicalTable Rules => new("rules.region_access", [new("who", "String"), new("region_code", "String")], ["who"]);
+
+    private const string Access = """
+        access:
+          row:
+            - dataset: marts.dim_customer
+              groups:
+                - id: by_region
+                  rules:
+                    - {id: r1, effect: include, table: rules.region_access, subject: who, columns: {region: region_code}}
+          columns:
+            - {subject: interns, dataset: marts.dim_customer, column: region, treatment: hide}
+        """;
+
+    [Fact]
+    public void The_access_section_names_models_and_the_rules_table_becomes_a_generated_table()
+    {
+        var layer = new Layer(("marts.fct_sales", "warehouse", Fact), ("marts.dim_customer", "warehouse", Customers), ("rules.region_access", "warehouse", Rules));
+        var (result, problems) = Compile(Model + "\n" + Access, layer);
+        Assert.Empty(problems);
+        Assert.Contains("rules.region_access", result!.Tables.Select(t => t.Name));
+        var access = result.Catalog.Access!;
+        Assert.Equal(2, result.Catalog.Format);
+        Assert.Equal("marts.dim_customer", access.Row.Single().Dataset);
+        Assert.Equal("rules.region_access", access.Row.Single().Groups.Single().Rules.Single().Table);
+        Assert.Equal(ColumnTreatment.Hide, access.Columns.Single().Treatment);
+    }
+
+    [Fact]
+    public void A_model_on_two_sources_gets_rules_of_its_own_on_each()
+    {
+        var layer = new Layer(("marts.fct_sales", "warehouse", Fact), ("marts.dim_customer", "warehouse", Customers), ("marts.dim_customer", "reporting", Customers), ("marts.fct_sales", "reporting", Fact),
+            ("rules.region_access", "warehouse", Rules), ("rules.region_access", "reporting", Rules));
+        var yaml = Model.Replace("warehouse: {table: marts.dim_customer, column: region}", "warehouse: {table: marts.dim_customer, column: region}\n          reporting: {table: marts.dim_customer, column: region}") + "\n  orders.revenue_reporting: {type: number, source: reporting, agg: sum, of: {table: marts.fct_sales, column: amount}}\n" + Access;
+        var (result, problems) = Compile(yaml, layer);
+        Assert.Empty(problems);
+        var access = result!.Catalog.Access!;
+        Assert.Equal(["marts.dim_customer@reporting", "marts.dim_customer@warehouse"], access.Row.Select(r => r.Dataset).Order());
+        Assert.Equal(["rules.region_access@reporting", "rules.region_access@warehouse"], access.Row.SelectMany(r => r.Groups).SelectMany(g => g.Rules).Select(r => r.Table).Order());
+        Assert.Equal(["r1.reporting", "r1.warehouse"], access.Row.SelectMany(r => r.Groups).SelectMany(g => g.Rules).Select(r => r.Id).Order());
+        Assert.Equal(2, access.Columns.Count);
+    }
+
+    [Fact]
+    public void A_rules_table_that_is_not_a_model_or_not_built_where_its_dataset_is_a_problem_at_its_line()
+    {
+        var yaml = Model + "\n" + Access;
+        var (read, problems) = Read(yaml);
+        Assert.NotNull(read);
+        Assert.Null(read.Compile(Standard, problems));
+        var unknown = Assert.Single(problems);
+        Assert.Equal(("unknown_model", LineOf(yaml, "table: rules.region_access")), (unknown.Code, unknown.Line));
+
+        problems.Clear();
+        var onlyOnReporting = new Layer(("marts.fct_sales", "warehouse", Fact), ("marts.dim_customer", "warehouse", Customers), ("rules.region_access", "reporting", Rules));
+        Assert.Null(read.Compile(onlyOnReporting, problems));
+        Assert.Contains(problems, p => p.Code is "rules_table_not_on_source" or "unknown_access_table" or "invalid_access");
+    }
+
+    [Fact]
+    public void A_bad_access_section_is_a_problem_at_the_line_it_is_written()
+    {
+        var yaml = Model + "\naccess:\n  row:\n    - dataset: marts.dim_customer\n      groups:\n        - id: g\n          rules:\n            - {id: r, effect: exclude, table: rules.region_access, subject: who, columns: {region: region_code}}\n";
+        var (read, problems) = Read(yaml);
+        Assert.Null(read);
+        var problem = problems.First(p => p.Code is "invalid_access" or "semantic_schema_invalid" || p.Message.Contains("include", StringComparison.Ordinal));
+        Assert.True(problem.Line >= LineOf(yaml, "access:"), problem.ToString());
     }
 
     private const string SavedQueries = """

@@ -138,6 +138,23 @@ public sealed class GatewayCacheTests : IDisposable
     }
 
     [Fact]
+    public void The_plan_of_a_model_with_column_rules_holds_the_callers_treatments_so_callers_who_see_other_things_never_share_an_entry()
+    {
+        // plan 22a GP13: the key's access part is what the caller's groups do to the model's columns
+        var models = Models("cache:\n  enabled: true\n  ttl: 10m\n  scope: rules\naccess:\n  columns:\n    - { subject: interns, dataset: dim_customer, column: customer, treatment: mask }\n    - { subject: auditors, dataset: dim_customer, column: customer, treatment: hide }",
+            new Dictionary<string, string> { ["ssas_finance"] = "finance" });
+        var request = new ServingRequest.SemanticSql(SemanticModels.SourcePrefix + models.All.Single().Name, "SELECT 1");
+        var policy = PolicyOf(Options(("sqlserver_sales", Source()), ("finance", Source())), models);
+        string? Access(GatewayCaller caller) => policy.PlanFor(new ServingContext(caller), request)!.Access;
+
+        Assert.Equal("-", Access(Person("a")));
+        Assert.Equal(Access(Person("b", "interns")), Access(Person("c", "Interns", "staff")));
+        Assert.NotEqual(Access(Person("a")), Access(Person("b", "interns")));
+        Assert.NotEqual(Access(Person("b", "interns")), Access(Person("d", "auditors")));
+        Assert.Equal(Access(Person("d", "auditors")), Access(Person("e", "interns", "auditors")));   // hide beats mask: the same treatment as the auditor alone
+    }
+
+    [Fact]
     public void A_semantic_model_is_cached_when_its_catalog_says_so_and_every_source_it_reads_may_be_shared()
     {
         // the sample model reads sqlserver_sales and, for its returns, ssas_finance, which this Gateway serves from a data source of its own called finance

@@ -73,6 +73,7 @@ public sealed partial class GatewaySemanticModels
         Record(caller, "semantic-model publish", name, created ? "created" : result.Changed ? "changed" : "unchanged");
         response["created"] = created;
         response["unchanged"] = !result.Changed;
+        if (WarningsOf(context.Manifest) is { } warnings) response["warnings"] = warnings;
         if (!_asked.TryGetValue(context, out var adoption) || (adoption.Adopted.Count == 0 && adoption.BoundUsed.Count == 0)) return;
         foreach (var dataSource in adoption.BoundUsed)
         {
@@ -86,6 +87,12 @@ public sealed partial class GatewaySemanticModels
         }
         if (adoption.Adopted.Count > 0) response["adopted"] = new JsonArray([.. adoption.Adopted.Select(a => (JsonNode?)a)]);
         if (adoption.BoundUsed.Count > 0) response["slots_used"] = new JsonArray([.. adoption.BoundUsed.Select(a => (JsonNode?)a)]);
+    }
+
+    private static JsonArray? WarningsOf(string manifest)
+    {
+        try { return PublishedSemanticModels.ContentOf(manifest) is { Catalog.Length: > 0 } content ? AccessPublishNotes.Warnings(CatalogLoader.LoadText(content.Catalog).Access, readOnDataSource: true) : null; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
     }
 
     /// <summary>The checks around binding a slot of a model (plan 33 SW01): the data source of the same name, one of this Gateway's, made by the binding client or bound by an administrator.</summary>

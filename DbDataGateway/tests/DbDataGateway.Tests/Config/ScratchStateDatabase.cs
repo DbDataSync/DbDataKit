@@ -43,6 +43,23 @@ internal sealed class ScratchStateDatabase : IDisposable
     /// <summary><c>mssql</c> or <c>postgres</c>.</summary>
     public string Engine { get; }
 
+    /// <summary>The state database over the scratch database with its real password (a test that opens the state itself, with the modules it needs, as the group's state).</summary>
+    public DbDataKit.State.StateDatabase OpenState(params DbDataKit.State.StateModule[] modules)
+    {
+        lock (Registration)
+            DbDataKit.State.StateDialectRegistry.Default.RegisterLibraryBackedEngines(libraryId => libraryId switch
+            {
+                DbDataKit.State.MsSqlStateDialect.LibraryId => SqlClientFactory.Instance,
+                DbDataKit.State.PostgresStateDialect.LibraryId => NpgsqlFactory.Instance,
+                _ => throw new InvalidOperationException($"no provider for '{libraryId}'"),
+            });
+        var engine = Engine == "mssql" ? DbDataKit.State.StateEngineIds.MsSql : DbDataKit.State.StateEngineIds.Postgres;
+        var real = Engine == "mssql" ? new SqlConnectionStringBuilder(_admin) { InitialCatalog = _name }.ConnectionString : new NpgsqlConnectionStringBuilder(_admin) { Database = _name }.ConnectionString;
+        return new DbDataKit.State.StateDatabase(engine, real, DbDataKit.State.StateLayout.Create(engine, modules, new DbDataKit.State.StateScope(Group: "main")));
+    }
+
+    private static readonly object Registration = new();
+
     public string Connection { get; }
 
     /// <summary>Reads the one variable the connection refers to; everything else is unset.</summary>

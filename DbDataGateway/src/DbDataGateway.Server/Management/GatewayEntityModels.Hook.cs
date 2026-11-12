@@ -90,6 +90,7 @@ public sealed partial class GatewayEntityModels
         Record(caller, "entity-model publish", name, created ? "created" : result.Changed ? "changed" : "unchanged");
         response["created"] = created;
         response["unchanged"] = !result.Changed;
+        if (ContentOf(context.Manifest) is { Model.Length: > 0 } content && DataModelLoader.Load(content.Model, name + ".yaml") is { Ok: true, Model: { } model } && AccessPublishNotes.Warnings(model.Access, readOnDataSource: false) is { } warnings) response["warnings"] = warnings;
         if (_slotUsed.TryGetValue(context, out var used))
         {
             adoptions?.Record(used, Client(caller)!, Who(caller), name, "entity-model (slot)", _clock.GetUtcNow());

@@ -17,7 +17,7 @@ internal sealed class SemanticAnswer : IServingAnswer
 
     private readonly RecordBatch _batch;
 
-    public SemanticAnswer(Result result, ServingProvenance provenance)
+    public SemanticAnswer(Result result, ServingProvenance provenance, HashMasking? masking = null)
     {
         Provenance = provenance;
         var fields = new List<Field>();
@@ -30,6 +30,8 @@ internal sealed class SemanticAnswer : IServingAnswer
                 var name = column!["name"]!.GetValue<string>();
                 var type = column["type"]?.GetValue<string>();
                 var values = rows.Select(r => r.TryGetValue(name, out var v) ? v : null).ToList();
+                if (masking is not null && column["x_binding"]?.GetValue<string>() is { } binding && masking.Covers(binding))
+                    values = values.Select(v => v is null ? null : (object)masking.Apply(binding, Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture) ?? "")).ToList();
                 var (array, arrowType) = Build(type, values, column["x_scale"] is JsonValue scale && scale.TryGetValue<int>(out var s) ? s : null);
                 fields.Add(new Field(name, arrowType, true));
                 arrays.Add(array);
