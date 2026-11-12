@@ -2,7 +2,7 @@ import { adminApi } from '@dbdatakit/admin'
 import { ApiError, put, request, shellApi } from '@dbdatakit/shell'
 import type {
   OwnerView, OwnershipChange, ReplicationOwner, RunnerLink, RunnerPackageView, ReplicationSetPublication, PublishRunnerRequest,
-  ReplicationChecks,
+  ReplicationChecks, ReplicationTrackingStatus,
   CheckForm,
   ApplyResult,
   BulkLoadBatchProgress,
@@ -197,6 +197,8 @@ export const api = {
     // Every mapping's lag and the range across them, in one call — see phase 86. The per-mapping
     // endpoint below still exists for a caller that wants exactly one.
     lag: (name: string) => request<ReplicationLag>(`/api/replications/${encodeURIComponent(name)}/lag`),
+    // Where the tracking state lives and why (plan 28c E17).
+    tracking: (name: string) => request<ReplicationTrackingStatus>(`/api/replications/${encodeURIComponent(name)}/tracking`),
     bulkLoads: (name: string, limit?: number) =>
       request<BulkLoadBatchProgress[]>(
         `/api/replications/${encodeURIComponent(name)}/bulk-loads${limit ? `?limit=${limit}` : ''}`,

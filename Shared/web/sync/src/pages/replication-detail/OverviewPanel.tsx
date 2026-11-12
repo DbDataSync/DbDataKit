@@ -8,6 +8,7 @@ import { EndpointsCard } from './EndpointsCard'
 import { InheritableToggle } from '../../components/InheritableToggle'
 import { ReadIntentSetting } from '../../components/ReadIntentSetting'
 import { ScheduleCard } from './ScheduleCard'
+import { TrackingCard } from './TrackingCard'
 import { ReconcileConfigCard } from './ReconcileConfigCard'
 import { ScriptBindingsCard } from '../../components/ScriptBindings'
 import { SegmentingStrategiesCard } from './SegmentingStrategiesCard'
@@ -75,6 +76,8 @@ export function OverviewPanel({ replicationName, draft, setDraft, enabled }: {
         {/* Between the endpoints and the sub-tabs since phase 103 — it left the detail rail, where
             it used to be one of three cards shown on every tab regardless of which one was open. */}
         <ScheduleCard draft={draft} enabled={enabled} onChange={setDraft} />
+
+        <TrackingCard replicationName={replicationName} draft={draft} onChange={setDraft} />
 
         <SubTabs base={base} tabs={TABS} testId="overview-subtabs" />
 
