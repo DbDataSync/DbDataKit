@@ -36,7 +36,7 @@ public sealed class AlertTests
     public void The_module_follows_the_conventions_and_the_rules_default_to_off()
     {
         Assert.Empty(StateConventions.Violations(DeliveryModule.Module));
-        using var h = new DeliveryHarness("sqlite");
+        using var h = new DeliveryHarness(StateEngineIds.Sqlite);
         var rules = new AlertStore(h.Database).Rules();
         Assert.Equal(AlertKinds.All, rules.Select(r => r.Kind));
         Assert.All(rules, r => Assert.False(r.Enabled));
@@ -186,7 +186,7 @@ public sealed class AlertTests
     [Fact]
     public async Task A_cooldown_hook_replaces_the_rules_for_the_readings_it_names_and_leaves_the_others()
     {
-        using var h = new DeliveryHarness("sqlite");
+        using var h = new DeliveryHarness(StateEngineIds.Sqlite);
         var channel = new ScriptedChannel("ops", _ => DeliveryResult.Sent());
         var store = new AlertStore(h.Database);
         store.SetRule(AlertKinds.LateData, true, "ops", [], 60, null, 0);
@@ -205,7 +205,7 @@ public sealed class AlertTests
     {
         using var engines = new StateEngines();
         var clock = new StateTestClock(DeliveryHarness.Start);
-        var agents = new AgentStore(engines.Provision("sqlite").Open([AgentsModule.Module], time: clock));
+        var agents = new AgentStore(engines.Provision(StateEngineIds.Sqlite).Open([AgentsModule.Module], time: clock));
         var id = agents.RequestApproval(null, "ana", "reporter", "1", "console", "publish", "Publish the sales model", "{\"secret\": \"S3NT1NEL\"}", "writes");
         var source = new ApprovalAlertSource(agents, clock, TimeSpan.FromHours(1));
         Assert.Empty(await source.ReadAsync(default));
