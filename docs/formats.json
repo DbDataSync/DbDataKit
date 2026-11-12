@@ -87,7 +87,7 @@
       "current": 2,
       "previous": 1,
       "status": "open",
-      "note": "gains the checks section (plan 23a FQ04); Sync reads 1 and 2 (a file of 1 loads as it is) and every save writes 2 (plan 33 SC50); open until the first release that holds it (24a D5). CW02b adds the optional `reconcile.afterEveryPasses` (a number, absent is off) and no version; CW01 adds no key and no version: `changeProcessing.writer` may be left out (the default for the reader is named when the file is read: ChangeApply behind an incremental reader, DeleteInsert behind a reload reader) and the writer kind `ChangeApply` is a new value of an existing key; an older Sync reads a file that names it and fails the run naming the unknown writer kind, and a file without a writer is not readable by it",
+      "note": "gains the checks section (plan 23a FQ04); Sync reads 1 and 2 (a file of 1 loads as it is) and every save writes 2 (plan 33 SC50); open until the first release that holds it (24a D5). E17 adds the optional `tracking:` section (`mode`, `primary`) and no version (a file without it loads as the default; a misspelled key is refused by the strict loader); CW02b adds the optional `reconcile.afterEveryPasses` (a number, absent is off) and no version; CW01 adds no key and no version: `changeProcessing.writer` may be left out (the default for the reader is named when the file is read: ChangeApply behind an incremental reader, DeleteInsert behind a reload reader) and the writer kind `ChangeApply` is a new value of an existing key; an older Sync reads a file that names it and fails the run naming the unknown writer kind, and a file without a writer is not readable by it",
       "version_source": { "file": "DbDataSync/src/DbDataSync.Core/Config/ConfigSchema.cs", "pattern": "public const int TaskCurrent = (\\d+);" },
       "files": [ { "path": "DbDataSync/src/DbDataSync.Core/Config/ReplicationTaskConfig.cs", "sha256": null } ]
     },
@@ -172,6 +172,36 @@
       "files": [ { "path": "Shared/src/DbDataKit.Agents/AgentPolicy.cs", "sha256": null } ]
     },
     {
+      "id": "knowledge-project",
+      "title": "Published knowledge project (the definition kind knowledge-project, manifest knowledge-project.yml, knowledge-project: N)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 27a KN10: one version per publish, each Markdown file and _knowledge.yml an artifact by hash; the items inside are knowledge/1",
+      "version_source": { "file": "Shared/src/DbDataKit.Knowledge.Cli/KnowledgeDefinitions.cs", "pattern": "public const int Version = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.Knowledge.Cli/KnowledgeDefinitions.cs", "sha256": null } ]
+    },
+    {
+      "id": "build-metadata",
+      "title": "Published Build metadata (the definition kind build-metadata, manifest build-metadata.yml, build-metadata: N; the file metadata.json holds Build's metadata documents of a project on a connection)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 27a KN13: data only, served at once; the knowledge module renders an item per model and per column from it",
+      "version_source": { "file": "Shared/src/DbDataKit.Knowledge.Cli/BuildMetadataDefinitions.cs", "pattern": "public const int Version = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.Knowledge.Cli/BuildMetadataDefinitions.cs", "sha256": null } ]
+    },
+    {
+      "id": "embedding-model",
+      "title": "Published embedding model files (the definition kind embedding-model, manifest embedding-model.yml, embedding-model: N)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 27a KN06: the files of a built-in model, exactly the catalog's, each with the catalog's hash",
+      "version_source": { "file": "Shared/src/DbDataKit.Knowledge.Onnx/ModelFiles.cs", "pattern": "public const int Version = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.Knowledge.Onnx/ModelFiles.cs", "sha256": null } ]
+    },
+    {
       "id": "bindings",
       "title": "Bindings of slots to connections per release channel (bindings.yml, bindings: N)",
       "current": 1,
@@ -220,6 +250,17 @@
       "note": "new with plan 32 RC02: what the scheduled read of an external report server (SSRS, Power BI Report Server) keeps per channel: provider, then every folder and item with its parameters, export formats and policies, no read time. Written by DbDataKit.ReportCatalogs, never by a person. Open until the first release that holds it (24a D5).",
       "version_source": { "file": "Shared/src/DbDataKit.ReportCatalogs/ReportCatalogSnapshot.cs", "pattern": "public const int Current = (\\d+);" },
       "files": [ { "path": "Shared/src/DbDataKit.ReportCatalogs/ReportCatalogSnapshot.cs", "sha256": null } ]
+    },
+    {
+      "id": "secret-key",
+      "title": "Secret key backup (a YAML file, format: dbdata-secret-key, version N)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 22a GP21: the data keys of the secret store, each sealed with AES-256-GCM under a key derived from a passphrase (PBKDF2-SHA256, 600000 rounds, a random salt, the key id as associated data), the id of the active key and nothing about the machine, written by `secret key-backup` and read by `secret key-restore` (a key that DPAPI bound to another machine or user is re-keyed to this one); a wrong passphrase, a changed file or a key moved to another id is refused before anything is stored; never put in git",
+      "version_source": { "file": "Shared/src/DbDataKit.Secrets.Store/SecretKeyBackup.cs", "pattern": "public const int FormatVersion = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.Secrets.Store/SecretKeyBackup.cs", "sha256": null } ]
     }
   ]
 }
+

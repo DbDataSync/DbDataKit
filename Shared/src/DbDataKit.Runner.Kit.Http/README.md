@@ -13,6 +13,8 @@ await foreach (var page in http.PagesAsync("orders", new CursorPaging { ItemsPat
 }
 ```
 
+In a task, an `http` slot: `OutsideHttp.Open(grant, run)` from what `Slot<object>.OpenAsync` gave (the runner resolved the connection's secrets on its side and handed them over for the run), or `Slot<OutsideHttp>("api", kind: "http")`, which the task host fills. The sign-in is the connection's (API key, basic, OAuth 2 client credentials or authorization code, client certificate); a dry run refuses writes. A rotated OAuth refresh token is not written back from a task.
+
 A test, or any code that has its own client, uses `new OutsideHttp(httpClient, options)`.
 
 ## What a call does

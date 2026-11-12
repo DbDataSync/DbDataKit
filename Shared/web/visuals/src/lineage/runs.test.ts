@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { projectLineage } from './project'
-import { runLabel, runsOfLinks, type LineageRunDoc } from './runs'
+import { runLabel, runsOfLinks, runState, type LineageRunDoc } from './runs'
 import type { LineageGraphDoc } from './types'
 
 const crm = 'sqlserver://sql01/crm.dbo.customers'
@@ -49,5 +49,19 @@ describe('runsOfLinks (plan 18 G10b)', () => {
     expect(runLabel('derives', undefined)).toBe('derives')
     expect(runLabel('replicates', { outcome: 'failed', at: '2026-11-10T08:00:00+00:00', rows: null, failed: 1, total: 1 })).toBe('replicates · failed 2026-11-10 08:00')
     expect(runLabel('derives', { outcome: 'succeeded', at: '2026-11-10T09:00:00+00:00', rows: 7, failed: 0, total: 1 })).toBe('derives · ok 2026-11-10 09:00')
+  })
+})
+
+describe('late and fresh (plan 18 G10b)', () => {
+  it('is late when a run folded into the line is overdue, failed beats late and a run that is not late is fresh', () => {
+    const links = projectLineage(graph).links
+    const replicates = links.find((l) => l.kind === 'replicates')!
+    const late = runsOfLinks(graph, links, [{ ...run(crm, warehouse, 'replicates', 'succeeded', '2026-11-10T08:00:00+00:00'), late: true }]).get(replicates.id)!
+    expect(late).toMatchObject({ outcome: 'succeeded', late: true })
+    expect(runState(late)).toBe('late')
+    expect(runLabel('replicates', late)).toBe('replicates · late, last ok 2026-11-10 08:00')
+    expect(runState({ ...late, outcome: 'failed' })).toBe('failed')
+    const fresh = runsOfLinks(graph, links, [run(crm, warehouse, 'replicates', 'succeeded', '2026-11-10T08:00:00+00:00')]).get(replicates.id)!
+    expect(runState(fresh)).toBe('fresh')
   })
 })

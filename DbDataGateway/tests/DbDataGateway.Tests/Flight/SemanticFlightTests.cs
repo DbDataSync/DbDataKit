@@ -220,6 +220,26 @@ public sealed class SemanticFlightTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task TheSharedFlightSessionBuildUsesDescribesQueriesAndExplainsAsThePersonAndARevokedTokenIsRefused()
+    {
+        // plan 14a SL22: Build has no Flight client of its own; FlightSemanticSession is the shared one, here against a real Gateway
+        await using (var session = new DbDataKit.Semantic.Cli.FlightSemanticSession(new Uri(_address), _tokens["alice"]))
+        {
+            var described = await session.RunAsync("sales_catalog", """{"kind": "describe"}""", 1000, CancellationToken.None);
+            Assert.Contains(described.Rows, r => r.Any(v => Equals(v, "orders.net_revenue") || Equals(v, "net_revenue")));
+            var answered = await session.RunAsync("sales_catalog", Request, 100, CancellationToken.None);
+            Assert.Equal("complete", answered.Notes["qis.status"]);
+            Assert.Equal(2, answered.Rows.Count);
+            Assert.NotEmpty(answered.Columns);
+            var explained = await session.RunAsync("sales_catalog", Request.Replace("\"kind\": \"query\"", "\"kind\": \"explain\""), 100, CancellationToken.None);
+            Assert.NotEmpty(explained.Rows);
+        }
+
+        await using (var asBob = new DbDataKit.Semantic.Cli.FlightSemanticSession(new Uri(_address), _tokens["bob"]))
+            Assert.Equal(StatusCode.PermissionDenied, (await Rpc.ExpectAsync(() => asBob.RunAsync("sales_catalog", Request, 100, CancellationToken.None))).StatusCode);
+    }
+
+    [Fact]
     public async Task TheSemanticCommandsDescribeQueryExplainAndListMembersAsTheUser()
     {
         var described = await SemanticCli("describe", "sales_catalog");

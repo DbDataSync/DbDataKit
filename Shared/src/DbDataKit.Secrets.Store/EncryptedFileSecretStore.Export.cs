@@ -115,6 +115,14 @@ public sealed partial class EncryptedFileSecretStore
         }
     }
 
+    /// <summary>Backs up the key ring's data keys under a passphrase (<see cref="SecretKeyBackup"/>).</summary>
+    public int BackupKeys(string path, SecretValue passphrase) =>
+        _keys is KeyRing ring ? SecretKeyBackup.Backup(ring, path, passphrase) : throw new NotSupportedException("The key of this store is provided from outside (secrets.keyFile); back it up where it is provided.");
+
+    /// <summary>Restores the keys of a backup into the key ring (<see cref="SecretKeyBackup"/>).</summary>
+    public Task<SecretKeyRestoreResult> RestoreKeysAsync(string path, SecretValue passphrase, bool activate = false, CancellationToken ct = default) =>
+        _keys is KeyRing ring ? SecretKeyBackup.RestoreAsync(ring, path, passphrase, activate, ct) : throw new NotSupportedException("The key of this store is provided from outside (secrets.keyFile); restore it where it is provided.");
+
     private static void RequirePassphrase(SecretValue passphrase)
     {
         if (passphrase.Length < SecretExport.MinimumPassphraseLength)

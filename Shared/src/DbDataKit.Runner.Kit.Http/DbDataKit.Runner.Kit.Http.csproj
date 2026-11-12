@@ -10,5 +10,6 @@
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
     <ProjectReference Include="..\DbDataKit.Connections.Http\DbDataKit.Connections.Http.csproj" />
+    <ProjectReference Include="..\DbDataKit.Runner.Kit\DbDataKit.Runner.Kit.csproj" />
   </ItemGroup>
 </Project>

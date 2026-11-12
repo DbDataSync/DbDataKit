@@ -1,6 +1,6 @@
 import type { LineageGraphDoc } from '@dbdatakit/visuals'
 import { describe, expect, it } from 'vitest'
-import { checkLine, checkStatusOf, exactCard, findCards, serverNote, withoutDeployments } from './lineage'
+import { checkLine, checkStatusOf, exactCard, findCards, serverNote, usageLine, withoutDeployments } from './lineage'
 
 describe('withoutDeployments', () => {
   it('drops the deployment nodes and the edges that touch them, and keeps the flow of data', () => {
@@ -85,5 +85,21 @@ describe('checks on a node (plan 23a FQ16)', () => {
     const blocks = [{ node: 'n', name: 'n', checks: ['fresh'], since: null, stops: [{ id: 'm', name: 'marts.dim', kind: 'dataset', depth: 1 }, { id: 's', name: 'dim served', kind: 'serving', depth: 2 }] }]
     expect(checkLine(node('blocked', { check_blocking_ids: 'fresh,unique' }), blocks)).toBe('2 checks, 1 failing, blocked by fresh, unique; stops 2: marts.dim, dim served')
     expect(checkLine(node('blocked', { check_blocking_ids: 'fresh' }), [])).toContain('nothing depends on it')
+  })
+})
+
+describe('usageLine', () => {
+  const table = (properties?: Record<string, string>) => ({ id: 't', kind: 'dataset', name: 't', unknown_upstream: false, properties })
+
+  it('says how often a table was read, when last and by whom, and names the readers only when the Gateway sent their names', () => {
+    expect(usageLine(table({ reads: '7', last_read: '2026-11-12T09:30:00Z', reader_count: '2', readers: 'ada, cy' }))).toBe('Read 7 times · last 2026-11-12 09:30 UTC · read by ada, cy')
+    expect(usageLine(table({ reads: '1', last_read: '2026-11-12T09:30:00Z', reader_count: '1' }))).toBe('Read 1 time · last 2026-11-12 09:30 UTC · 1 reader')
+    expect(usageLine(table({ reads: '3', reader_count: '2' }))).toBe('Read 3 times · 2 readers')
+  })
+
+  it('has nothing to say of a node that nothing read or that has no summary', () => {
+    expect(usageLine(table())).toBeNull()
+    expect(usageLine(table({ reads: '0' }))).toBeNull()
+    expect(usageLine(table({ reads: 'many' }))).toBeNull()
   })
 })

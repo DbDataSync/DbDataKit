@@ -20,7 +20,7 @@ public class SecretNounTests
 
     [Fact]
     public void The_noun_has_the_shared_verbs() =>
-        Assert.Equal(["set", "list", "delete", "check", "rotate-key", "export", "import", "protect"],
+        Assert.Equal(["set", "list", "delete", "check", "rotate-key", "export", "key-backup", "key-restore", "import", "protect"],
             Make().Router.Nouns.Single().Verbs.Select(v => v.Name));
 
     [Fact]

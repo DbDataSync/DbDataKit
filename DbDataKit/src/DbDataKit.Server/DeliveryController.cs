@@ -107,6 +107,49 @@ public sealed class DeliveryController(ConsoleDelivery delivery) : ControllerBas
     public IActionResult Requeue(Guid id) =>
         delivery.Outbox.Requeue(id) ? Ok(new { message = View(delivery.Outbox.Find(id)!) }) : Refuse(409, "not_parked", "Only a parked (dead) message can be sent again.");
 
+    // ---- alerts (plan 22a GP16) ----
+
+    /// <summary>The body of an alert rule edit: whether the kind is on, the delivery channel and recipients (no channel: the notification feed only), the cool-down in minutes, the release channel, and the version the editor read (0 for a rule nobody wrote yet).</summary>
+    public sealed record AlertRuleBody(bool Enabled, string? Channel, IReadOnlyList<string>? Recipients, int? CooldownMinutes, string? ReleaseChannel, long Version);
+
+    private static object View(AlertRule r) => new { kind = r.Kind, title = AlertKinds.Title(r.Kind), enabled = r.Enabled, channel = r.Channel, recipients = r.Recipients, cooldownMinutes = r.CooldownMinutes, releaseChannel = r.ReleaseChannel, version = r.Version };
+
+    /// <summary>The alert rules (every kind of the fixed set, off until set), what is failing now and has been told, and the channels a rule may name. Nobody reads the recipients but an administrator.</summary>
+    [HttpGet("alerts")]
+    [Authorize(Policies.Admin)]
+    public IActionResult Alerts() =>
+        Ok(new
+        {
+            rules = delivery.Alerts.Rules().Select(View),
+            failing = delivery.Alerts.States(failingOnly: true).Select(s => new { source = s.Source, kind = s.Kind, recipient = s.Recipient == AlertStateRow.ChannelRecipient ? null : s.Recipient, lastSentAt = s.LastSentAt, message = s.LastMessage }),
+            channels = delivery.Channels.Names,
+            releaseChannels = delivery.ReleaseChannels,
+        });
+
+    /// <summary>Sets one rule. A channel that is not configured, an address that is not one and a stale version are refused with the reason.</summary>
+    [HttpPut("alerts/{kind}")]
+    [Authorize(Policies.Admin)]
+    public IActionResult SetAlert(string kind, [FromBody] AlertRuleBody body)
+    {
+        if (!AlertKinds.All.Contains(kind)) return Refuse(404, "not_found", $"There is no kind of alert '{kind}' ({string.Join(", ", AlertKinds.All)}).");
+        var channel = string.IsNullOrWhiteSpace(body.Channel) ? null : body.Channel.Trim();
+        if (channel is not null && delivery.Channels.Find(channel) is null && !delivery.Channels.Names.Contains(channel, StringComparer.OrdinalIgnoreCase))
+            return Refuse(400, "unknown_channel", $"The channel '{channel}' is not configured ({(delivery.Channels.Names.Count == 0 ? "no channel is bound yet: bind one on this page" : "channels: " + string.Join(", ", delivery.Channels.Names))}).");
+        var recipients = (body.Recipients ?? []).Select(r => r.Trim()).Where(r => r.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (recipients.FirstOrDefault(r => !System.Net.Mail.MailAddress.TryCreate(r, out _) || !r.Contains('@')) is { } bad) return Refuse(400, "invalid", $"'{bad}' is not an email address.");
+        if (recipients.Count > 0 && channel is null) return Refuse(400, "invalid", "Recipients need a channel; with no channel the alert is shown in the notification feed only.");
+        try
+        {
+            return delivery.Alerts.SetRule(kind, body.Enabled, channel, recipients, body.CooldownMinutes ?? AlertRule.DefaultCooldownMinutes, string.IsNullOrWhiteSpace(body.ReleaseChannel) ? null : body.ReleaseChannel.Trim(), body.Version)
+                ? Ok(new { rule = View(delivery.Alerts.Rules().Single(r => r.Kind == kind)) })
+                : Refuse(409, "stale", "Another administrator changed this rule first; reload it.");
+        }
+        catch (ArgumentException e)
+        {
+            return Refuse(400, "invalid", e.Message);
+        }
+    }
+
     // ---- subscriptions ----
 
     /// <summary>The subscriptions: a person's own, or with <c>all=true</c> (an administrator) everyone's.</summary>

@@ -5,6 +5,7 @@ using System.Text.Json;
 using DbDataKit.Connections;
 using DbDataKit.Connections.Http;
 using DbDataKit.Dialect;
+using DbDataKit.Runner.Kit;
 using DbDataKit.Secrets;
 
 namespace DbDataKit.Runner.Kit.Http;
@@ -111,6 +112,39 @@ public sealed class OutsideHttp : IDisposable
     /// </summary>
     public static OutsideHttp Open(ConnectionDefinition definition, ISecretResolver secrets, OutsideHttpOptions? options = null, HttpConnectionOptions? connection = null) =>
         new(HttpConnections.Create(definition, secrets, connection), (options ?? new OutsideHttpOptions()) with { Connection = definition.Name });
+
+    /// <summary>
+    /// The client of an <c>http</c> slot (plan 27a IX10): what <c>Slot&lt;object&gt;.OpenAsync</c> gave (a <see cref="ConnectionGrant"/>) made into a client signed in as the connection says (API key, basic, OAuth 2 client credentials or authorization code, client certificate), inside this task.
+    /// The runner resolved every secret of the connection on its side and handed them over for this run only (<see cref="ConnectionGrant.HttpSecrets"/>); none is in the manifest or the log. A dry run (<see cref="ConnectionGrant.DryRun"/>, or <paramref name="run"/>) refuses writes and tells <c>run.WouldDo</c> what it would have sent.
+    /// A rotated OAuth 2 refresh token is not written back to the runner's store from a task.
+    /// </summary>
+    public static OutsideHttp Open(ConnectionGrant grant, IRun? run = null, OutsideHttpOptions? options = null, HttpConnectionOptions? connection = null)
+    {
+        ArgumentNullException.ThrowIfNull(grant);
+        if (grant.HttpDefinition is not { Length: > 0 } text)
+            throw new InvalidOperationException($"The slot '{grant.Slot}' is bound to the connection '{grant.Connection}', which is not an http connection the runner handed over a definition for (engine '{grant.Engine}'): bind the slot to a connection of kind http.");
+        var loaded = ConnectionDefinitionLoader.LoadHttpConnection(text, $"the connection '{grant.Connection}'");
+        if (!loaded.Ok) throw new InvalidOperationException($"The connection '{grant.Connection}' bound to the slot '{grant.Slot}' cannot be used: {string.Join("; ", loaded.Diagnostics.Select(d => d.ToString()))}");
+        var o = options ?? new OutsideHttpOptions();
+        if (grant.DryRun || run?.DryRun == true) o = o with { DryRun = true };
+        if (run is not null && o.OnWouldSend is null) o = o with { OnWouldSend = run.WouldDo };
+        return Open(loaded.Definition!, new GrantSecrets(grant.HttpSecrets), o, connection);
+    }
+
+    /// <summary>Makes the <see cref="OutsideHttp"/> of a slot typed <see cref="OutsideHttp"/>: set as <c>RemoteRunOptions.SlotFactory</c> (the task host does), so <c>Slot&lt;OutsideHttp&gt;.OpenAsync</c> returns the client. Any other slot type gets the grant, as before.</summary>
+    public static object SlotFactory(ConnectionGrant grant, Type type)
+    {
+        if (type == typeof(OutsideHttp)) return Open(grant);
+        if (type.IsAssignableFrom(typeof(ConnectionGrant))) return grant;
+        throw new InvalidOperationException($"The slot '{grant.Slot}' is typed {type.Name}; the runner hands out a {nameof(ConnectionGrant)}, and a client of an http connection is an {nameof(OutsideHttp)}.");
+    }
+
+    /// <summary>The secrets the runner handed a task, by the reference as written; nothing else resolves.</summary>
+    private sealed class GrantSecrets(IReadOnlyDictionary<string, string> values) : ISecretResolver
+    {
+        public ValueTask<SecretValue> ResolveAsync(SecretRef reference, CancellationToken ct = default) =>
+            values.TryGetValue(reference.ToString(), out var value) ? ValueTask.FromResult(SecretValue.From(value)) : throw new SecretNotFoundException(reference.ToString());
+    }
 
     /// <summary>The same for a connection file: loaded with the typed loader of HTTP connections (<see cref="ConnectionDefinitionLoader.LoadHttpConnection"/>), which refuses a file of another kind naming it. A file with errors is an <see cref="ArgumentException"/> that lists them.</summary>
     public static OutsideHttp OpenYaml(string yaml, string file, ISecretResolver secrets, OutsideHttpOptions? options = null, HttpConnectionOptions? connection = null)

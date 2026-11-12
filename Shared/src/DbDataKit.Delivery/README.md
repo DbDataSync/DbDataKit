@@ -108,6 +108,17 @@ A person subscribes to a dashboard or a report on a schedule: `SubscriptionSpec.
 - **The schedule is the runner's.** `ClaimDue` takes the active subscriptions whose `next_run_at` has come and moves each to its next time by a guarded update (two runners take a subscription once; a runner that was down takes it once, not once per missed time). The cron is read in the subscription's time zone, so 07:00 stays 07:00 across a daylight change (Berlin 06:00 UTC before 2026-03-29, 05:00 after; New York 12:00 UTC before 2026-03-08, 11:00 after). The runner task that calls `RunDueAsync` every minute is `views-export` (plan 32 DBR18).
 - The runs of a subscription are kept 90 days (`subscription_run`); the subscription itself goes only when a person removes it.
 
+## Alerts (plan 22a GP16)
+
+`AlertService` turns what `IAlertSource`s say is wrong into messages by the rules of `AlertStore` (`alert_rule`, `alert_state` of the `delivery` module, migration 4). The kinds are fixed (`AlertKinds`: `failed-run`, `late-data`, `approvals-waiting`, `expiring-preview`); a kind is **off until an administrator turns it on** (nothing is sent or remembered for a kind that is off), and a rule names a delivery channel, optional addresses, a cool-down and a release channel.
+
+- **Once, then after the cool-down.** A source is told when it starts failing; while it keeps failing it stays quiet until the cool-down has passed, then it is told again. The cool-down is per source **and recipient** (`alert_state`), so adding a recipient tells only that one.
+- **One "recovered".** A source that was told and is not failing any more gets one `Recovered` message per recipient and its row says `ok`; later passes say nothing.
+- **No channel: the feed only.** A rule with no channel raises the alert in the notification feed (`Alert`, `AlertRecovered`) and sends no message; a told alert is raised in the feed in either case.
+- **A source that cannot be read** ends the pass with the reason (`AlertRunResult.Problems`) and tells nothing as recovered; a channel that is not configured or not bound is a problem of the pass and nothing is remembered, so the next pass tries again.
+- **Sources.** `HealthAlertSource` maps `HealthEvaluator` findings (failed run; overdue, lagging and failed checks as late data); `RunHistoryAlertSource` reads the last run of each job in the `runs` module. Approvals and previews have no source yet: a host registers its own `IAlertSource`.
+- The console runs the pass every minute (`ConsoleAlertSender`) and edits the rules on the Delivery page, tab Alerts (`/api/delivery/alerts`).
+
 ## Opening the module
 
 A host opens `DeliveryModule.Module` (install scope; it depends on `payloads`) with its other modules. The console does (`ConsoleState.Modules`): it reads the `delivery:` section of `settings.yaml` in its directory (which connection each channel name uses in each release channel; the connections are its own `connections/<name>.yml`), runs the sender as a hosted service and serves `/api/delivery` and the Delivery page (channels with a test send, subscriptions, the outbox). The console cannot draw a document, so a subscription is rendered by the process that runs the views module with the `views-export` task (`DbDataKit.Delivery.Runner`), over the same state; the console's "send now" is offered only when a process registers an `ISubscriptionRenderer`.

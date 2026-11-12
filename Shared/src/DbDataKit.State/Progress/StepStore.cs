@@ -304,6 +304,20 @@ public sealed class StepStore(StateDatabase database, ProgressKey key, StepOptio
         });
     }
 
+    /// <summary>The task's steps that wait for an operator's answer (state <c>in_doubt</c>), across every attempt chain, oldest first (plan 28a R25): what the console lists so a person can say whether each happened.</summary>
+    public IReadOnlyList<StepRecord> ListInDoubt() =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection,
+                $"SELECT {Columns} FROM {{table:step_result}} WHERE package = $package AND channel = $channel AND task = $task AND state = 'in_doubt' ORDER BY started_at, id;");
+            cmd.Bind(database, "package", key.Package).Bind(database, "channel", key.Channel).Bind(database, "task", key.Task);
+            using var reader = cmd.ExecuteReader();
+            var steps = new List<StepRecord>();
+            while (reader.Read()) steps.Add(Map(reader));
+            return (IReadOnlyList<StepRecord>)steps;
+        });
+
     /// <summary>One step, or null.</summary>
     public StepRecord? Get(string chain, string name, string stepKey) =>
         database.Retry(() =>

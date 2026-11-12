@@ -32,6 +32,7 @@ public static class ConsoleCli
         RunnerNoun(environment),
         StateNoun(environment, configureMove),
         IdentityCli.Noun(environment),
+        KnowledgeCli(environment),
         ConsoleService.Noun(ConsoleServiceEnvironment.Real()),
         HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl),
     ], ConsoleHost.Version, () => DbDataKit.State.SuiteEnvironment.OldNameProblem(environment));
@@ -369,6 +370,43 @@ public static class ConsoleCli
         ConsoleState.ModulesFor(DefaultRunner(environment)), ConsoleState.ScopeFor(DefaultRunner(environment)), ["engine", "repo"], "[--engine mssql|postgres] [--repo <console directory>]") { ConfigureMove = configureMove });
 
     // ---- user ----
+
+    /// <summary>
+    /// <c>knowledge check|orphans|context</c> over the two projects in the console's directory (plan 27a KN17): the same checks the Knowledge page shows, with the agents' budgets read from the agent files in the directory. The index commands (<c>search</c>, <c>show</c>, <c>about</c>,
+    /// <c>index</c>) need a running index and a caller, so they come with the serving layer's <c>knowledge</c> module; <c>--repo</c> names the console's directory.
+    /// </summary>
+    private static Noun KnowledgeCli(Func<string, string?>? environment)
+    {
+        var directory = new AsyncLocal<string?>();
+        string Directory_() => directory.Value ?? ConsoleSettings.DefaultDirectory(environment);
+        ConsoleKnowledge Knowledge() => new(ConsoleDirectory(Directory_()));
+        ConsoleAgents Agents(ConsoleKnowledge knowledge) => new(ConsoleDirectory(Directory_()), null!, new NoAgentModels(), new ConsoleToolSource(), knowledge);
+        var host = new DbDataKit.Knowledge.Cli.KnowledgeHost
+        {
+            Projects = () => [.. new[] { "install", "project" }.Select(n => Knowledge().Folder(n)!).Where(f => Directory.Exists(f.Path)).Select(f => new DbDataKit.Knowledge.Cli.CheckTarget(f.Project, f.Name))],
+            FromFolder = path => new DbDataKit.Knowledge.Cli.CheckTarget(DbDataKit.Knowledge.KnowledgeProject.Load(path), Path.GetFileName(Path.GetFullPath(path)) == "install-knowledge" ? "install" : "project"),
+            Catalog = () => Knowledge() is { HasCatalog: true } k ? k.Catalog : null,
+            Agents = () => { var k = Knowledge(); return Agents(k).BudgetInputs(); },
+            Context = (agent, inPlay) => { var k = Knowledge(); return Agents(k).ContextFor(agent, inPlay); },
+        };
+        var noun = DbDataKit.Knowledge.Cli.KnowledgeNoun.Create(host);
+        // every verb takes --repo, the console's directory, as the other nouns of this command line do
+        return new Noun(noun.Name, noun.Summary, [.. noun.Verbs.Select(v => v with
+        {
+            Usage = v.Usage + " [--repo <console directory>]",
+            Run = (args, context) =>
+            {
+                var rest = new List<string>();
+                for (var i = 0; i < args.Length; i++)
+                    if (args[i] == "--repo" && i + 1 < args.Length) directory.Value = Path.GetFullPath(args[++i]);
+                    else if (args[i].StartsWith("--repo=", StringComparison.Ordinal)) directory.Value = Path.GetFullPath(args[i]["--repo=".Length..]);
+                    else rest.Add(args[i]);
+                return v.Run([.. rest], context);
+            },
+        })]);
+    }
+
+    private static ConsoleSettings ConsoleDirectory(string directory) => new(Path.GetFullPath(directory), new Uri(ConsoleSettings.DefaultListen));
 
     private static Noun UserNoun(Func<string, string?>? environment) => new("user", "The people who can sign in to the console",
     [

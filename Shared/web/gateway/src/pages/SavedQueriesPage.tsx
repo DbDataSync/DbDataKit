@@ -4,7 +4,7 @@ import { ApiError, ErrorBanner, Link } from '@dbdatakit/shell'
 import { gatewayApi } from '../api'
 import { GatewayShell } from '../GatewayShell'
 import type { SavedQueryRow, SavedQueryVersionRow } from '../runTypes'
-import { granteeLine, granteesText, merged, openLink, ownerLabel, parseGrantees, queryText, rowKey, saveBody } from '../savedQueries'
+import { granteeLine, granteesText, merged, openLink, ownerLabel, parseGrantees, promotedEntry, queryText, rowKey, saveBody } from '../savedQueries'
 
 const wrap = { whiteSpace: 'normal', overflowWrap: 'anywhere' } as const
 const when = (iso: string | undefined) => (iso ? new Date(iso).toLocaleString() : '-')
@@ -31,6 +31,8 @@ export interface ManagerProps {
 /** What a person does with one saved query of their own: edit (every save is a version), restore an earlier version, share with a person, a group or everyone, delete. A shared one is read here and run from the explorer. */
 export function SavedQueryManager(p: ManagerProps) {
   const parsed = parseGrantees(p.shares)
+  const [promoted, setPromoted] = useState(false)
+  const entry = promotedEntry({ ...p.row, description: p.description.trim() || null }, p.text)
   return (
     <div className="card" data-testid="sq-manager" style={{ marginTop: 12 }}>
       <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -41,6 +43,16 @@ export function SavedQueryManager(p: ManagerProps) {
       <input aria-label="Description" data-testid="sq-description" style={{ width: '100%', margin: '6px 0' }} value={p.description} readOnly={!p.row.own} placeholder="what it answers" onChange={(e) => p.onDescription(e.target.value)} />
       {p.problem && <div role="alert" className="hint" style={wrap} data-testid="sq-problem">{p.problem}</div>}
       {p.notice && <div role="status" className="hint" data-testid="sq-notice">{p.notice}</div>}
+      <div className="row" style={{ gap: 8, margin: '6px 0' }}>
+        <button type="button" className="btn btn-sm" data-testid="sq-promote" onClick={() => setPromoted(!promoted)}>{promoted ? 'Hide the model entry' : 'Promote to the model'}</button>
+      </div>
+      {promoted && (
+        <div data-testid="sq-promote-panel">
+          <div className="hint" style={wrap}>Paste this under <span className="mono">queries:</span> in the model's semantic file (<span className="mono">semantic/{p.row.model}.yml</span>) in the Build project, compile and publish: the query is then the model's own and everyone who may query the model can run it. This saved query stays until you delete it.</div>
+          <textarea aria-label="The model entry" data-testid="sq-promote-text" readOnly rows={8} style={{ width: '100%', fontFamily: 'var(--mono)', fontSize: 12 }} value={entry} />
+          <button type="button" className="btn btn-sm" data-testid="sq-promote-copy" onClick={() => void navigator.clipboard?.writeText(entry)}>Copy</button>
+        </div>
+      )}
       {p.row.own ? (
         <>
           <div className="row" style={{ gap: 8, marginBottom: 12 }}>

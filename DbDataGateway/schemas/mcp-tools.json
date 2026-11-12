@@ -395,6 +395,75 @@
       }
     },
     {
+      "name": "lineage_graph",
+      "description": "Every node and edge of the graph. [Offline only] Usage: lineage graph [--kind <kind>] [--repo <path>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
+      }
+    },
+    {
+      "name": "lineage_impact",
+      "description": "What a node feeds, downstream. [Offline only] Usage: lineage impact <node> [--depth <n>] [--repo <path>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
+      }
+    },
+    {
+      "name": "lineage_provenance",
+      "description": "What feeds a node, upstream. [Offline only] Usage: lineage provenance <node> [--depth <n>] [--repo <path>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
+      }
+    },
+    {
       "name": "health_check",
       "description": "Exit 0 when the running gateway answers /health/live (for a container's HEALTHCHECK). [Offline only] Usage: health check [--url <url>]",
       "inputSchema": {

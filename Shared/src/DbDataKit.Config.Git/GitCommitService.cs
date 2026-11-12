@@ -66,8 +66,23 @@ public sealed class GitCommitService
     /// (which is what every diff and history API here speaks) back into a file on disk with.</summary>
     public string RepositoryRoot => _repositoryRoot;
 
+    /// <summary>Raised after each commit that recorded something, outside the write lock: a <see cref="GitRemotePusher"/> hangs its <c>Notify</c> here (plan 22a GP19). A handler that throws never fails the commit.</summary>
+    public event Action? Committed;
+
     /// <summary>The new commit's sha, or null when there was nothing to record.</summary>
     public string? CommitChanges(IReadOnlyCollection<string> absoluteFilePaths, string message, GitAuthor author)
+    {
+        var sha = CommitLocked(absoluteFilePaths, message, author);
+        if (sha is not null)
+        {
+            try { Committed?.Invoke(); }
+            catch (Exception) { /* a push that cannot be asked for is the pusher's to show; the commit is made */ }
+        }
+
+        return sha;
+    }
+
+    private string? CommitLocked(IReadOnlyCollection<string> absoluteFilePaths, string message, GitAuthor author)
     {
         lock (_writeLock)
         {

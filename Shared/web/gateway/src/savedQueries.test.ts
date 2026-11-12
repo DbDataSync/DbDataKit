@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SavedQueryRow } from './runTypes'
-import { granteeLine, merged, openLink, ownerLabel, parseGrantees, queryText, saveBody } from './savedQueries'
+import { granteeLine, merged, openLink, ownerLabel, parseGrantees, promotedEntry, queryText, saveBody } from './savedQueries'
 
 const row = (over: Partial<SavedQueryRow> = {}): SavedQueryRow => ({ model: 'shop', name: 'q', owner: 'ada@example.org', owner_name: 'Ada', own: true, description: null, sql: 'SELECT 1', request: null, parameters: {}, ...over })
 
@@ -29,5 +29,13 @@ describe('saved queries words', () => {
   it('lists a person\'s own first and each query once', () => {
     const rows = merged([[row({ name: 'b', own: false, owner: 'cy@x.org' })], [row({ name: 'a' }), row({ name: 'b', own: false, owner: 'cy@x.org' })]])
     expect(rows.map((r) => `${r.name}:${r.own}`)).toEqual(['a:true', 'b:false'])
+  })
+  it("writes a saved query as the entry of the model's queries: SQL as a block, a request and the parameters as flow mappings", () => {
+    // the same text the Gateway's PromotedEntryTests loads as a catalog and runs
+    expect(promotedEntry(row({ name: 'revenue_by_region', description: 'Net revenue by region', sql: 'SELECT customers.region, MEASURE(orders.net_revenue)\nFROM sales_catalog\nWHERE date.fiscal_quarter = :quarter GROUP BY ALL LIMIT 100;', parameters: { quarter: { for: 'date.fiscal_quarter', type: 'string', default: 'FY27-Q1' } } }))).toBe(
+      'queries:\n  revenue_by_region:\n    description: "Net revenue by region"\n    sql: |-\n      SELECT customers.region, MEASURE(orders.net_revenue)\n      FROM sales_catalog\n      WHERE date.fiscal_quarter = :quarter GROUP BY ALL LIMIT 100\n    parameters: {"quarter":{"for":"date.fiscal_quarter","type":"string","default":"FY27-Q1"}}\n')
+    expect(promotedEntry(row({ name: 'r', sql: null, request: { kind: 'query' } }))).toBe('queries:\n  r:\n    request: {"kind":"query"}\n')
+    // the text in the box (an edit not saved yet) is what is promoted
+    expect(promotedEntry(row({ name: 'r' }), 'SELECT 2')).toContain('      SELECT 2')
   })
 })

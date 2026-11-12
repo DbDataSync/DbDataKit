@@ -4,12 +4,31 @@ import type { Diagnostic, SettingsCheck, SettingsEdit, SettingsFields } from './
 export const MODULES = ['flightsql', 'identity', 'apps', 'store', 'views'] as const
 
 /** The fields of the form, by the setting path the Gateway edits and reports them under. */
-export type FieldKey = 'modules' | 'views.cacheSeconds' | 'views.export.mode' | 'views.export.path' | 'logSql'
+export type FieldKey = 'modules' | 'views.cacheSeconds' | 'views.export.mode' | 'views.export.path' | 'logSql' | SemanticFieldKey
+
+/** The numbers of the `semantic:` section the form edits (plan 14a SL11); the hand-set models and the Analysis Services connections are edited in the text. */
+export type SemanticFieldKey = 'semantic.level' | 'semantic.combine.memoryMb' | 'semantic.combine.timeoutSeconds' | 'semantic.combine.maxInputRows'
+
+export interface SemanticNumber { key: SemanticFieldKey; label: string; hint: string; min: number; max: number; fallback: number }
+
+export const SEMANTIC_NUMBERS: SemanticNumber[] = [
+  { key: 'semantic.level', label: 'Adoption level', hint: 'What the engine executes itself (0 to 5); what a level cannot execute comes back as remaining steps. 5 is the default.', min: 0, max: 5, fallback: 5 },
+  { key: 'semantic.combine.memoryMb', label: 'Combine memory (MB)', hint: 'What one combine, the step that joins the results of several scans, may use.', min: 16, max: 1048576, fallback: 1024 },
+  { key: 'semantic.combine.timeoutSeconds', label: 'Combine time (seconds)', hint: 'How long one combine may run.', min: 1, max: 86400, fallback: 60 },
+  { key: 'semantic.combine.maxInputRows', label: 'Combine input rows', hint: 'Rows, over all the scans a combine loads, above which it is refused.', min: 1, max: 2000000000, fallback: 5000000 },
+]
+
+/** The whole number a semantic field holds, or null when what was typed is not a whole number in the field's range (the Gateway checks again). */
+export function semanticNumber(field: SemanticNumber, text: string): number | null {
+  if (!/^\d{1,10}$/.test(text.trim())) return null
+  const n = Number(text.trim())
+  return n >= field.min && n <= field.max ? n : null
+}
 
 /** The form field a diagnostic's key (`Views.CacheSeconds`, `Modules[1]`) belongs to, or null when it is not one of the form's: it is then listed with the file. */
 export function fieldOf(diagnostic: Pick<Diagnostic, 'key'>): FieldKey | null {
   const key = (diagnostic.key ?? '').replace(/\[\d+\]/g, '').toLowerCase()
-  const known: FieldKey[] = ['modules', 'views.cacheSeconds', 'views.export.mode', 'views.export.path', 'logSql']
+  const known: FieldKey[] = ['modules', 'views.cacheSeconds', 'views.export.mode', 'views.export.path', 'logSql', ...SEMANTIC_NUMBERS.map((f) => f.key)]
   return known.find((f) => f.toLowerCase() === key) ?? null
 }
 
@@ -77,4 +96,5 @@ export const shown = (fields: SettingsFields | undefined) => ({
   exportMode: fields?.['views.export.mode'] ?? '',
   exportPath: fields?.['views.export.path'] ?? '',
   logSql: fields?.logSql ?? true,
+  semantic: Object.fromEntries(SEMANTIC_NUMBERS.map((f) => [f.key, fields?.[f.key] ?? f.fallback])) as Record<SemanticFieldKey, number>,
 })

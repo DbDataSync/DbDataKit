@@ -56,6 +56,21 @@ describe('the server settings screen', () => {
     expect(html({ cacheText: '60' })).not.toContain('settings-cache-problem')
   })
 
+  it('sends a semantic number only when it is a whole number in its range, keeps what was typed, and shows the Gateway\'s error beside the field', () => {
+    const onField = vi.fn(); const onSemanticText = vi.fn()
+    const change = (id: string, value: string) => (find(tree({ onField, onSemanticText }), id)!.props.onChange as (e: { target: { value: string } }) => void)({ target: { value } })
+    change('settings-semantic-combine-memoryMb', '512')
+    expect(onField).toHaveBeenCalledWith('semantic.combine.memoryMb', 512)
+    onField.mockClear()
+    change('settings-semantic-combine-memoryMb', '4')
+    expect(onField).not.toHaveBeenCalled()
+    expect(onSemanticText).toHaveBeenCalledWith('semantic.combine.memoryMb', '4')
+    expect(html({ semanticText: { 'semantic.combine.memoryMb': '4' } })).toContain('settings-semantic-combine-memoryMb-problem')
+    expect(html()).toContain('value="1024"')
+    expect(html({ check: check({ valid: false, diagnostics: [diag('Semantic.Level', 'Value 9 is above the maximum 5.')] }) })).toContain('Value 9 is above the maximum 5.')
+    expect(html()).toContain('server.yaml tab')
+  })
+
   it('shows the validator\'s errors beside the field they belong to, and the rest with the file and line', () => {
     const text = html({ check: check({ valid: false, diagnostics: [diag('Views.CacheSeconds', 'Value 99999 is above the maximum 3600.'), diag('Tls.Mode', 'Not a mode.')] }) })
     expect(text).toContain('data-testid="settings-error-views.cacheSeconds"')

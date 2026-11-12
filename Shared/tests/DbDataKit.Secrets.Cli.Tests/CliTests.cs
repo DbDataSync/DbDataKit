@@ -34,6 +34,8 @@ internal sealed class MemoryStore : ISecretStore, ISecretResolver, ISecretAdmin
         Task.FromResult<IReadOnlyList<SecretInfo>>(Data.Keys.Order().Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).Select(k => new SecretInfo(SecretName.Parse(k), new DateTimeOffset(2026, 10, 21, 12, 30, 0, TimeSpan.Zero), "k1")).ToList());
     public Task<KeyRotationResult> RotateKeyAsync(Action<string>? checkpoint = null, CancellationToken ct = default) { Admin.Add("rotate"); return Task.FromResult(new KeyRotationResult("k2", ["k1"], Data.Count, false)); }
     public Task<int> ExportAsync(string path, SecretValue passphrase, string prefix = "", CancellationToken ct = default) { Admin.Add($"export {path} prefix={prefix} pass={passphrase.RevealString()}"); return Task.FromResult(Data.Count); }
+    public int BackupKeys(string path, SecretValue passphrase) { Admin.Add($"key-backup {path} pass={passphrase.RevealString()}"); return 1; }
+    public Task<SecretKeyRestoreResult> RestoreKeysAsync(string path, SecretValue passphrase, bool activate = false, CancellationToken ct = default) { Admin.Add($"key-restore {path} activate={activate} pass={passphrase.RevealString()}"); return Task.FromResult(new SecretKeyRestoreResult(["k1"], [], "k1")); }
     public Task<SecretImportResult> ImportAsync(string path, SecretValue passphrase, bool overwrite = false, CancellationToken ct = default) { Admin.Add($"import {path} overwrite={overwrite} pass={passphrase.RevealString()}"); return Task.FromResult(new SecretImportResult(2, 1, overwrite ? 1 : 0)); }
     public ValueTask<SecretValue> ResolveAsync(SecretRef r, CancellationToken ct = default) =>
         r.Kind == SecretRefKind.Secret && Data.TryGetValue(r.Target, out var v) ? ValueTask.FromResult(SecretValue.From(v))
@@ -216,6 +218,23 @@ public class CliTests
         Assert.Single(store.Admin);
 
         Assert.Equal(2, cli.Execute(["export", "out.yaml", "hunter2hunter2"], new FakeConsole()));      // a second positional is not a passphrase
+    }
+
+    [Fact]
+    public void KeyBackup_AsksForThePassphraseTwice_And_KeyRestore_Once_NeverOnTheCommandLine()
+    {
+        var (cli, store, con) = Make();
+        con.Prompts.Enqueue("a passphrase of length"); con.Prompts.Enqueue("a passphrase of length");
+        Assert.Equal(0, cli.Execute(["key-backup", "keys.yaml"], con));
+        Assert.Contains("never put the file in git", con.All);
+        Assert.DoesNotContain("a passphrase of length", con.All);
+
+        var restore = new FakeConsole();
+        restore.Prompts.Enqueue("a passphrase of length");
+        Assert.Equal(0, cli.Execute(["key-restore", "keys.yaml", "--activate"], restore));
+        Assert.Equal(["key-backup keys.yaml pass=a passphrase of length", "key-restore keys.yaml activate=True pass=a passphrase of length"], store.Admin);
+        Assert.Equal(2, cli.Execute(["key-backup"], new FakeConsole()));
+        Assert.Equal(2, cli.Execute(["key-restore", "a.yaml", "hunter2hunter2"], new FakeConsole()));
     }
 
     [Fact]

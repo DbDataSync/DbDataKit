@@ -165,7 +165,15 @@ public sealed class RunnerSlotResolver(DefinitionPublisher publisher, IConnectio
             await RevealAsync(slot, connection, sign.CertificatePasswordSecret, ct).ConfigureAwait(false);
         }
 
-        foreach (var (_, reference) in definition.EndpointSecrets) await RevealAsync(slot, connection, reference, ct).ConfigureAwait(false);
+        // every reference of the definition, resolved here and handed over by the reference as written: the task signs in inside its own process (OAuth, a client certificate, an API key in a query) and the manifest and the log never see a value
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (_, reference) in ConnectionSecretReferences.Of(definition))
+        {
+            var parsed = SecretRef.TryParse(reference, out var r) ? r : null;
+            if (parsed is null || await RevealAsync(slot, connection, reference, ct).ConfigureAwait(false) is not { } value) continue;
+            values[parsed.ToString()] = value;
+        }
+
         return new ConnectionGrant
         {
             Slot = slot,
@@ -180,6 +188,8 @@ public sealed class RunnerSlotResolver(DefinitionPublisher publisher, IConnectio
             User = sign?.User ?? sign?.ClientId,
             Password = password,
             Token = key,
+            HttpDefinition = catalog.Text(connection),
+            HttpSecrets = values,
         };
     }
 

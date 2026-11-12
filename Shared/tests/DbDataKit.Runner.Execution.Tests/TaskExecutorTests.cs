@@ -363,6 +363,22 @@ public sealed class TaskExecutorTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(h.ScratchRoot));
     }
 
+    [Theory, MemberData(nameof(Engines))]
+    public async Task A_task_that_fills_its_scratch_directory_while_it_runs_is_stopped_and_the_run_ends_as_a_limit_exceeded(string engine)
+    {
+        using var h = new ExecutorHarness(engine, s => { s.MaxScratchBytes = 1024 * 1024; s.ScratchSampleInterval = TimeSpan.FromMilliseconds(100); });
+        var request = await h.SampleRequest("fills-scratch-and-waits");
+
+        var result = await h.Executor.RunAsync(request).WaitAsync(TimeSpan.FromSeconds(60));
+
+        Assert.Equal(TaskEndState.Failed, result.End.State);
+        Assert.Equal(TaskFailureKind.LimitExceeded, result.End.Failure!.Kind);
+        Assert.Contains("scratch", result.End.Failure.Message);
+        Assert.True(result.ScratchOverLimit);
+        Assert.Contains(h.Log(request.RunId!.Value), l => l.Level == "Error" && l.Message.Contains("scratch directory held", StringComparison.Ordinal) && l.Message.Contains("was stopped", StringComparison.Ordinal));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(h.ScratchRoot));
+    }
+
     // ---- kinds
 
     [Theory, MemberData(nameof(Engines))]

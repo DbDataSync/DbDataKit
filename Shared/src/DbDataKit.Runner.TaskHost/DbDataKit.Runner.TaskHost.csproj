@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\DbDataKit.Runner.Kit\DbDataKit.Runner.Kit.csproj" />
+    <ProjectReference Include="..\DbDataKit.Runner.Kit.Http\DbDataKit.Runner.Kit.Http.csproj" />
     <ProjectReference Include="..\DbDataKit.Runner.Protocol\DbDataKit.Runner.Protocol.csproj" />
     <ProjectReference Include="..\DbDataKit.Hosting.Children\DbDataKit.Hosting.Children.csproj" />
   </ItemGroup>

@@ -47,6 +47,27 @@ public static class ConnectionKeywords
     /// <summary>Drivers the tool lists but does not have yet; a connection of one is refused with a message that says so.</summary>
     public static bool IsBuilt(string driver) => driver is "sqlserver" or "postgres" or "fabric" or "duckdb" or "odbc" or "flightsql";
 
+    /// <summary>
+    /// The engines the suite's registry says Build builds on or reads (`build_target` or `build_origin`, built at least as far as unverified): the claim the lists above are held to by a test (plan 14a SL03,
+    /// adapter first: the lists stay Build's own and keep their order), and the source of what an engine the lists do not have is told.
+    /// </summary>
+    public static IReadOnlyList<string> RegistryEngines { get; } =
+    [
+        .. DbDataKit.Connections.Descriptor.EngineRegistry.Builtin.Engines
+            .Where(e => e.Role(DbDataKit.Connections.Descriptor.EngineRoles.BuildTarget).Status >= DbDataKit.Connections.Descriptor.EngineSupport.Unverified
+                     || e.Role(DbDataKit.Connections.Descriptor.EngineRoles.BuildOrigin).Status >= DbDataKit.Connections.Descriptor.EngineSupport.Unverified)
+            .Select(e => e.Id).Order(StringComparer.Ordinal),
+    ];
+
+    /// <summary>For a word the lists do not have: what the registry says of an engine of that name, or null when it is not one of the suite's.</summary>
+    public static string? RegistryNote(string word)
+    {
+        var engine = DbDataKit.Connections.Descriptor.EngineRegistry.Builtin.Find(word);
+        if (engine is null) return null;
+        var notes = new[] { engine.Role(DbDataKit.Connections.Descriptor.EngineRoles.BuildTarget), engine.Role(DbDataKit.Connections.Descriptor.EngineRoles.BuildOrigin) }.Select(r => r.Note).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+        return $"`{word}` is not a keyword of `engine`: it is {engine.DisplayName}, an engine of the suite that Build does not build on or read yet" + (notes.Count == 0 ? "." : $" ({string.Join("; ", notes)}).");
+    }
+
     /// <summary>Splits the text of `engine` into words: separated by spaces and/or commas.</summary>
     public static IReadOnlyList<string> Words(string text) => text.Split([' ', ',', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
@@ -62,7 +83,7 @@ public static class ConnectionKeywords
         var repeated = words.GroupBy(w => w, StringComparer.Ordinal).FirstOrDefault(g => g.Count() > 1);
         if (repeated != null) return (null, $"`{repeated.Key}` is repeated in `engine`.", $"Say each keyword once. {choices}");
         var unknown = words.FirstOrDefault(w => w != ReadOnlyKeyword && !Drivers.Contains(w) && !BuiltInDialects.Contains(w) && !userDialects.Contains(w));
-        if (unknown != null) return (null, $"`{unknown}` is not a keyword of `engine`.", $"Keywords: {choices} A dialect of your own is declared under `dialects:`.");
+        if (unknown != null) return (null, RegistryNote(unknown) ?? $"`{unknown}` is not a keyword of `engine`.", $"Keywords: {choices} A dialect of your own is declared under `dialects:`.");
 
         var readOnly = words.Contains(ReadOnlyKeyword);
         var rest = words.Where(w => w != ReadOnlyKeyword).ToList();

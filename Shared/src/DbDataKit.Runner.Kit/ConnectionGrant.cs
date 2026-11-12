@@ -46,9 +46,20 @@ public sealed class ConnectionGrant
 
     public string? Token { get; init; }
 
+    /// <summary>
+    /// An <c>http</c> connection (plan 27a IX10): the connection's definition text as the runner keeps it, with secret <b>references</b> only; <c>DbDataKit.Runner.Kit.Http</c> makes the signed-in client from it (<c>OutsideHttp.Open(grant)</c>). Null for a database.
+    /// </summary>
+    public string? HttpDefinition { get; init; }
+
+    /// <summary>The secrets <see cref="HttpDefinition"/> names, resolved on the runner and keyed by the reference as written (<c>secret:name</c>). Held in memory for the run; never logged, never in a manifest.</summary>
+    public IReadOnlyDictionary<string, string> HttpSecrets { get; init; } = new Dictionary<string, string>();
+
+    /// <summary>The run is a dry run: a client made from this grant refuses writes and lists them (<c>OutsideHttpOptions.DryRun</c>).</summary>
+    public bool DryRun { get; init; }
+
     public override string ToString() => $"connection '{Connection}' for slot '{Slot}' ({Role} login, secrets withheld)";
 
-    internal static ConnectionGrant From(ResolveConnectionReply reply, string slot) => new()
+    internal static ConnectionGrant From(ResolveConnectionReply reply, string slot, bool dryRun = false) => new()
     {
         Slot = slot,
         Connection = reply.Connection,
@@ -64,17 +75,20 @@ public sealed class ConnectionGrant
         Password = reply.HasPassword ? reply.Password : null,
         ConnectionStringSecret = reply.HasConnectionStringSecret ? reply.ConnectionStringSecret : null,
         Token = reply.HasToken ? reply.Token : null,
+        HttpDefinition = reply.HasHttpDefinition ? reply.HttpDefinition : null,
+        HttpSecrets = reply.HttpSecrets.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal),
+        DryRun = dryRun,
     };
 
     /// <summary>The opener a remote run uses when the host gives none: asks the runner for the slot's connection and its login, and makes the handle with <paramref name="factory"/> (null: the grant itself).</summary>
-    internal static SlotOpener Opener(RunnerApi.RunnerApiClient client, Metadata headers, Func<ConnectionGrant, Type, object>? factory) =>
+    internal static SlotOpener Opener(RunnerApi.RunnerApiClient client, Metadata headers, Func<ConnectionGrant, Type, object>? factory, bool dryRun = false) =>
         async (slot, type, ct) =>
         {
             ConnectionGrant grant;
             try
             {
                 var reply = await client.ResolveConnectionAsync(new ResolveConnectionRequest { Slot = slot, Role = "default" }, headers, cancellationToken: ct).ResponseAsync.ConfigureAwait(false);
-                grant = From(reply, slot);
+                grant = From(reply, slot, dryRun);
             }
             catch (RpcException ex)
             {

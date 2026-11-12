@@ -5,6 +5,8 @@ import { runnerApi, type OwnerBody, type TaskDecision, type TaskSchedule, type T
 import { decisionSummary, effectiveOwner, openOwnerForm, ownerBlock, ownerBody, ownerLabel, OWNERS, ownerText, parseInputs, type Owner, type OwnerForm } from '../ownership'
 import { taskKey } from '../model'
 import { CheckpointsCard } from './CheckpointsCard'
+import { DeadLettersCard } from './DeadLettersCard'
+import { InDoubtCard } from './InDoubtCard'
 import { when } from './format'
 
 export interface TaskPanelViewProps {
@@ -137,6 +139,8 @@ export function TaskPanel({ task, canAct }: { task: TaskStatus; canAct: boolean 
       onForm={(next) => { setForm(next); setMoved(null); move.reset() }} onInputs={(text) => { setInputs(text); run.reset() }}
       onMove={(body) => { setMoved(null); move.mutate(body) }} onRun={(values) => { setMoved(null); run.mutate(values) }}
     />
+    <InDoubtCard task={task} canAct={canAct} />
+    <DeadLettersCard task={task} canAct={canAct} />
     <CheckpointsCard task={task} canAct={canAct} />
     </>
   )

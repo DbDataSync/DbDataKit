@@ -6,6 +6,7 @@ using DbDataKit.Delivery;
 using DbDataKit.Secrets;
 using DbDataKit.State;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace DbDataKit.Server;
 
@@ -120,6 +121,8 @@ public sealed class ConsoleDelivery
         CanRender = renderer is not null;
         Runner = new SubscriptionService(Subscriptions, Service, renderer ?? new ConsoleNoRenderer(), new ConsoleSubscriberDirectory(users), Time, null, notifications);
         Users = users;
+        Alerts = new AlertStore(state);
+        AlertRunner = new AlertService(Alerts, Service, [new RunHistoryAlertSource(new RunStore(state, "console"), Time), new ApprovalAlertSource(new AgentStore(state), Time)], notifications, Time);
     }
 
     public ChannelKinds Kinds { get; }
@@ -157,6 +160,12 @@ public sealed class ConsoleDelivery
     public DeliveryService Service { get; }
 
     public SubscriptionService Runner { get; }
+
+    /// <summary>The alert rules and what was last sent (plan 22a GP16).</summary>
+    public AlertStore Alerts { get; }
+
+    /// <summary>Turns the install's failed runs into messages by the rules; <see cref="ConsoleAlertSender"/> runs it every minute.</summary>
+    public AlertService AlertRunner { get; }
 
     public IUserAccounts Users { get; }
 
@@ -222,5 +231,29 @@ public sealed class ConsoleDeliverySender(ConsoleDelivery delivery) : Background
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await delivery.Service.RunAsync(stoppingToken).ConfigureAwait(false);
+    }
+}
+
+/// <summary>Runs the alert service every minute (plan 22a GP16): what is failing is told once per rule's cool-down, a recovery once. It does nothing for a kind whose rule is off, so an install that set no rule sends and records nothing.</summary>
+public sealed class ConsoleAlertSender(ConsoleDelivery delivery, Microsoft.Extensions.Logging.ILogger<ConsoleAlertSender>? log = null) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+        try
+        {
+            do
+            {
+                try
+                {
+                    var result = await delivery.AlertRunner.RunOnceAsync(stoppingToken).ConfigureAwait(false);
+                    foreach (var problem in result.Problems) log?.LogWarning("Alerts: {Problem}", problem);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+                catch (Exception ex) { log?.LogWarning("Alerts: the pass failed: {Message}", ex.Message); }
+            }
+            while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false));
+        }
+        catch (OperationCanceledException) { }
     }
 }

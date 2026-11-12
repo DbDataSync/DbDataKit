@@ -5,13 +5,13 @@ import { CodeEditor, ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { ConsoleShell } from '../ConsoleShell'
 import { agentsApi, percent } from '../agents'
 import {
-  contextLine, hitPlace, isPolicyItem, knowledgeApi, modesOffered, parseInPlay, policyItemId, policyItemText, refreshLine, searchModeLine, subjectSource, vectorPercent, vectorProgressLine, workActions, workWord,
+  checkLine, contextLine, hitPlace, placeOf, reachLine, isPolicyItem, knowledgeApi, modesOffered, parseInPlay, policyItemId, policyItemText, refreshLine, searchModeLine, subjectSource, vectorPercent, vectorProgressLine, workActions, workWord,
   type ChunkPreview, type KnowledgeIndexState, type KnowledgeOverview, type Reach, type ScopePreview, type SearchMode, type SearchResult, type WorkItem,
 } from '../knowledge'
 
-type Tab = 'overview' | 'search' | 'worklist' | 'items' | 'install'
+type Tab = 'overview' | 'search' | 'worklist' | 'items' | 'check' | 'install'
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'overview', label: 'Index and context' }, { id: 'search', label: 'Search and index' }, { id: 'worklist', label: 'Worklists' }, { id: 'items', label: 'Items and preview' }, { id: 'install', label: 'Install knowledge' },
+  { id: 'overview', label: 'Index and context' }, { id: 'search', label: 'Search and index' }, { id: 'worklist', label: 'Worklists' }, { id: 'items', label: 'Items and preview' }, { id: 'check', label: 'Check' }, { id: 'install', label: 'Install knowledge' },
 ]
 
 /**
@@ -41,9 +41,40 @@ export function KnowledgePage() {
         {overview.data && tab === 'search' && <SearchTab />}
         {overview.data && tab === 'worklist' && <WorklistTab overview={overview.data} />}
         {overview.data && tab === 'items' && <ItemsTab overview={overview.data} />}
+        {overview.data && tab === 'check' && <CheckTab />}
         {overview.data && tab === 'install' && <InstallTab overview={overview.data} />}
       </div>
     </ConsoleShell>
+  )
+}
+
+// ---- KN10, KN17 ----
+function CheckTab() {
+  const check = useQuery({ queryKey: ['knowledge', 'check'], queryFn: knowledgeApi.check })
+  return (
+    <div data-testid="knowledge-check">
+      <p className="hint">What a publish would check, before it is made: every file with the strict reader, every subject against what exists, every owner, and for each agent a project reaches what it adds to the text the agent is always given, against its budget. The command line says the same: <span className="mono">dbdatakit knowledge check</span>. A project is published with <span className="mono">knowledge publish</span> to the serving group; it is refused, naming file and line, with any error shown here.</p>
+      <div><button type="button" className="btn btn-sm" onClick={() => check.refetch()} disabled={check.isFetching} data-testid="check-run">Check again</button></div>
+      <ErrorBanner error={check.error} />
+      {check.data?.projects.length === 0 && <div className="empty" data-testid="check-empty">There is no knowledge project to check yet. Make the install project on the Install knowledge tab, or put files in the <span className="mono">knowledge</span> folder.</div>}
+      {check.data?.projects.map((p) => (
+        <div key={p.name} className="card" style={{ margin: '12px 0' }} data-testid="check-project" data-project={p.name} data-ok={p.ok}>
+          <div className="card-body">
+            <strong>{p.name === 'install' ? 'Install knowledge' : 'Knowledge'}</strong> <span className={p.ok ? 'hint' : 'error-text'} data-testid="check-verdict">{checkLine(p)}</span>
+            {p.diagnostics.map((d, i) => (
+              <div key={i} style={{ margin: '6px 0' }} data-testid="check-diagnostic" data-code={d.code} data-severity={d.severity}>
+                <span className="mono">{placeOf(d)}</span> <span className="hint">{d.severity} {d.code}</span>
+                <div>{d.message}{d.fix ? ` ${d.fix}` : ''}</div>
+              </div>
+            ))}
+            {p.reaches.map((r) => (
+              <div key={r.agent} className={r.pushesOver ? 'error-text' : 'hint'} style={{ margin: '4px 0' }} data-testid="check-reach" data-agent={r.agent} data-over={r.pushesOver}>{reachLine(r)}</div>
+            ))}
+            {p.reaches.length === 0 && p.diagnostics.length === 0 && <div className="hint">No agent is given anything of this project always, and nothing is wrong with it.</div>}
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }
 

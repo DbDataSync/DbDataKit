@@ -93,7 +93,7 @@ namespace DbDataKit.Runner.TaskHost
 
             try
             {
-                await RemoteJobHost.RunAsync(job, endpoint, token, cancel.Token).ConfigureAwait(false);
+                await RemoteJobHost.RunAsync(job, endpoint, token, cancel.Token, new RemoteRunOptions { SlotFactory = DbDataKit.Runner.Kit.Http.OutsideHttp.SlotFactory }).ConfigureAwait(false);
                 return ExitCodes.Ended;
             }
             catch (OperationCanceledException) when (cancel.IsCancellationRequested)

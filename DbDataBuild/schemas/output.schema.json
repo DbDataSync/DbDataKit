@@ -5676,6 +5676,30 @@
                     },
                     "role": {
                       "type": "string"
+                    },
+                    "origin": {
+                      "description": "Where the relationship comes from: `file` (the semantic file wrote it) or `foreign_key` (a model's `foreign_keys:`, J29).",
+                      "enum": [
+                        "file",
+                        "foreign_key"
+                      ]
+                    },
+                    "declared_at": {
+                      "description": "The model file and line of the foreign key a relationship came from; absent for one the semantic file wrote.",
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "file": {
+                          "type": "string"
+                        },
+                        "line": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "file",
+                        "line"
+                      ]
                     }
                   },
                   "required": [
@@ -5684,7 +5708,8 @@
                     "to",
                     "from_columns",
                     "to_columns",
-                    "source"
+                    "source",
+                    "origin"
                   ]
                 }
               },

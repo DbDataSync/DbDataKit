@@ -426,4 +426,42 @@ public sealed class ConsoleDeliveryTests : IAsyncLifetime
         Assert.Contains("Channels are connections now", view!["diagnostics"]!.ToJsonString());
         Assert.Contains("bindings.yml", view["diagnostics"]!.ToJsonString());
     }
+
+    [Fact]
+    public async Task Alert_rules_are_set_by_an_administrator_with_a_reason_for_every_refusal_and_a_failed_run_alerts_once()
+    {
+        Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Get, "/api/delivery/alerts", viewer)).Status);
+        var (status, body) = await Call(HttpMethod.Get, "/api/delivery/alerts", admin);
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal(["failed-run", "late-data", "approvals-waiting", "expiring-preview"], body!["rules"]!.AsArray().Select(r => (string)r!["kind"]!));
+        Assert.All(body["rules"]!.AsArray(), r => Assert.False((bool)r!["enabled"]!));
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Put, "/api/delivery/alerts/failed-run", viewer, new { enabled = true, channel = "hook", version = 0 })).Status);
+        Assert.Equal(HttpStatusCode.NotFound, (await Call(HttpMethod.Put, "/api/delivery/alerts/mood", admin, new { enabled = true, version = 0 })).Status);
+        var unknown = await Call(HttpMethod.Put, "/api/delivery/alerts/failed-run", admin, new { enabled = true, channel = "nowhere", version = 0 });
+        Assert.Equal(HttpStatusCode.BadRequest, unknown.Status);
+        Assert.Contains("'nowhere' is not configured", (string)unknown.Body!["error"]!);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Call(HttpMethod.Put, "/api/delivery/alerts/failed-run", admin, new { enabled = true, channel = "hook", recipients = new[] { "not an address" }, version = 0 })).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Call(HttpMethod.Put, "/api/delivery/alerts/failed-run", admin, new { enabled = true, recipients = new[] { "ops@example.com" }, version = 0 })).Status);
+
+        var set = await Call(HttpMethod.Put, "/api/delivery/alerts/failed-run", admin, new { enabled = true, channel = "hook", cooldownMinutes = 30, version = 0 });
+        Assert.Equal(HttpStatusCode.OK, set.Status);
+        Assert.Equal(1, (long)set.Body!["rule"]!["version"]!);
+        Assert.Equal(HttpStatusCode.Conflict, (await Call(HttpMethod.Put, "/api/delivery/alerts/failed-run", admin, new { enabled = false, channel = "hook", version = 0 })).Status);
+
+        // a failed run in the run history is told once through the channel, not every pass
+        var state = app.Services.GetRequiredService<StateDatabase>();
+        var runs = new RunStore(state, "test");
+        var id = runs.Start("nightly-load");
+        runs.Finish(id, DbDataKit.Monitoring.RunOutcome.Failed, failure: new DbDataKit.Monitoring.RunFailure("Permanent", "the source is gone"));
+        var alerts = app.Services.GetRequiredService<ConsoleDelivery>();
+        Assert.Equal(1, (await alerts.AlertRunner.RunOnceAsync()).Sent);
+        Assert.Equal(0, (await alerts.AlertRunner.RunOnceAsync()).Sent);
+        await alerts.Service.RunOnceAsync();
+        var message = Assert.Single(alerts.Outbox.List(source: "alert:failed-run"));
+        Assert.Contains("nightly-load", message.BodyText);
+        Assert.Equal("sent", message.Status);
+        var after = await Call(HttpMethod.Get, "/api/delivery/alerts", admin);
+        Assert.Equal("failed:nightly-load", (string)after.Body!["failing"]![0]!["source"]!);
+    }
 }

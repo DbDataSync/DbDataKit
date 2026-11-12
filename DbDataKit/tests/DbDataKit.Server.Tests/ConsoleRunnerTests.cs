@@ -62,6 +62,17 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         server.MapGet("/api/v1/instances", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { all = c.Request.Query["all"].ToString(), instances = Array.Empty<object>() })));
         server.MapGet("/api/v1/runs", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { query = c.Request.QueryString.Value, runs = Array.Empty<object>() })));
         server.MapGet("/api/v1/runs/{id}", (HttpContext c, string id) => Needs(c, ServerRole.Viewer, () => Results.Json(new { id })));
+        server.MapGet("/api/v1/posture-choices", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { settings = Array.Empty<object>(), choices = Array.Empty<object>() })));
+        server.MapPut("/api/v1/posture-choices", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { chosen = true })));
+        server.MapGet("/api/v1/runs/{id}/units", (HttpContext c, string id) => Needs(c, ServerRole.Viewer, () => Results.Json(new { run_id = id, units = Array.Empty<object>() })));
+        server.MapGet("/api/v1/runs/{id}/steps", (HttpContext c, string id) => Needs(c, ServerRole.Viewer, () => Results.Json(new { run_id = id, steps = Array.Empty<object>() })));
+        server.MapGet("/api/v1/tasks/{package}/{channel}/{task}/in-doubt", (HttpContext c) => Needs(c, ServerRole.Operator, () => Results.Json(new { steps = Array.Empty<object>() })));
+        server.MapGet("/api/v1/tasks/{package}/{channel}/{task}/dead-letters", (HttpContext c) => Needs(c, ServerRole.Operator, () => Results.Json(new { dead_letters = Array.Empty<object>() })));
+        server.MapGet("/api/v1/tasks/{package}/{channel}/{task}/checkpoints", (HttpContext c) => Needs(c, ServerRole.Operator, () => Results.Json(new { checkpoints = Array.Empty<object>() })));
+        server.MapGet("/api/v1/tasks/{package}/{channel}/{task}/checkpoints/{name}/history", (HttpContext c) => Needs(c, ServerRole.Operator, () => Results.Json(new { changes = Array.Empty<object>() })));
+        server.MapPost("/api/v1/tasks/{package}/{channel}/{task}/steps/{name}/resolve", (HttpContext c) => Needs(c, ServerRole.Operator, () => Results.Json(new { resolved = true })));
+        server.MapPost("/api/v1/tasks/{package}/{channel}/{task}/dead-letters/{id}/{act}", (HttpContext c) => Needs(c, ServerRole.Operator, () => Results.Json(new { done = true })));
+        server.MapPost("/api/v1/tasks/{package}/{channel}/{task}/checkpoints/{name}/rewind", (HttpContext c) => Needs(c, ServerRole.Operator, () => Results.Json(new { version = 1 })));
         server.MapGet("/api/v1/runs/{id}/logs", (HttpContext c, string id) => Needs(c, ServerRole.Viewer, () => Results.Json(new { run = id, lines = Array.Empty<object>() })));
         server.MapGet("/api/v1/definitions/integration", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { kind = "integration", definitions = Array.Empty<object>() })));
         server.MapGet("/api/v1/definitions/integration/{name}", (HttpContext c, string name) => Needs(c, ServerRole.Viewer, () => Results.Json(new { name })));
@@ -245,12 +256,18 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         ("GET", "api/v1/instances/{id}/labels", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/tasks/{name}/{name}/{name}/schedule", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/tasks/{name}/{name}/{name}/decisions", ServerRole.Viewer, ServerRole.None),
         ("HEAD", "api/v1/artifacts/{sha}", ServerRole.Viewer, ServerRole.Publisher),
+        ("GET", "api/v1/posture-choices", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}/units", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}/steps", ServerRole.Viewer, ServerRole.None),
+        ("GET", "api/v1/tasks/{name}/{name}/{name}/in-doubt", ServerRole.Operator, ServerRole.None), ("GET", "api/v1/tasks/{name}/{name}/{name}/dead-letters", ServerRole.Operator, ServerRole.None),
+        ("GET", "api/v1/tasks/{name}/{name}/{name}/checkpoints", ServerRole.Operator, ServerRole.None), ("GET", "api/v1/tasks/{name}/{name}/{name}/checkpoints/{name}/history", ServerRole.Operator, ServerRole.None),
         ("POST", "api/v1/tasks/{name}/{name}/{name}/run", ServerRole.Operator, ServerRole.None), ("POST", "api/v1/tasks/{name}/{name}/{name}/pause", ServerRole.Operator, ServerRole.None),
         ("POST", "api/v1/tasks/{name}/{name}/{name}/resume", ServerRole.Operator, ServerRole.None), ("PUT", "api/v1/tasks/{name}/{name}/{name}/owner", ServerRole.Operator, ServerRole.None),
+        ("POST", "api/v1/tasks/{name}/{name}/{name}/steps/{name}/resolve", ServerRole.Operator, ServerRole.None), ("POST", "api/v1/tasks/{name}/{name}/{name}/dead-letters/{name}/replay", ServerRole.Operator, ServerRole.None),
+        ("POST", "api/v1/tasks/{name}/{name}/{name}/dead-letters/{name}/discard", ServerRole.Operator, ServerRole.None), ("POST", "api/v1/tasks/{name}/{name}/{name}/checkpoints/{name}/rewind", ServerRole.Operator, ServerRole.None),
         ("POST", "api/v1/definitions/integration/{name}/activate", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/definitions/integration/{name}/switch", ServerRole.Admin, ServerRole.None),
         ("POST", "api/v1/definitions/integration/{name}/rollback", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/definitions/integration/{name}/retire", ServerRole.Admin, ServerRole.None),
         ("PUT", "api/v1/artifacts/{sha}", ServerRole.Admin, ServerRole.Publisher), ("PUT", "api/v1/definitions/integration/{name}", ServerRole.Admin, ServerRole.Publisher),
         ("PUT", "api/v1/bindings/{name}/integration/{name}", ServerRole.Admin, ServerRole.Publisher), ("DELETE", "api/v1/bindings/{name}/integration/{name}/{name}", ServerRole.Admin, ServerRole.Publisher), ("POST", "api/v1/bindings/{name}/integration/{name}/test", ServerRole.Admin, ServerRole.None), ("PUT", "api/v1/settings/require_signatures", ServerRole.Admin, ServerRole.None), ("PUT", "api/v1/settings/require_sandbox_run", ServerRole.Admin, ServerRole.None),
+        ("PUT", "api/v1/posture-choices", ServerRole.Admin, ServerRole.None),
         ("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/tracking/divergences/{id}/resolve", ServerRole.Admin, ServerRole.None),
         ("POST", "api/v1/state/maintenance", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/state/move", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/upgrade", ServerRole.Admin, ServerRole.None),
     ];

@@ -55,3 +55,17 @@ export function checkLine(node: LineageNodeDoc, blocks: LineageBlock[] | undefin
   return `${of}, ${failing} failing, blocked by ${(node.properties?.check_blocking_ids ?? '').split(',').join(', ')}; ` +
     (stops.length === 0 ? 'nothing depends on it' : `stops ${stops.length}: ${names.slice(0, 5).join(', ')}${names.length > 5 ? ', ...' : ''}`)
 }
+
+/**
+ * What the Gateway has counted of a table (plan 18 G08): how many statements read it, when the last one did and who. Null for a node that has no summary. The names of the readers come only to an administrator
+ * (the Gateway sends `readers` to one and `reader_count` to everyone); what is counted is statements that name the table, found in their text, and never one record per query.
+ */
+export function usageLine(node: LineageNodeDoc): string | null {
+  const reads = Number(node.properties?.reads ?? 0)
+  if (!Number.isFinite(reads) || reads <= 0) return null
+  const last = node.properties?.last_read ? ` · last ${node.properties.last_read.slice(0, 16).replace('T', ' ')} UTC` : ''
+  const count = Number(node.properties?.reader_count ?? 0)
+  const names = node.properties?.readers
+  const who = names ? ` · read by ${names}` : count > 0 ? ` · ${count} reader${count === 1 ? '' : 's'}` : ''
+  return `Read ${reads} time${reads === 1 ? '' : 's'}${last}${who}`
+}

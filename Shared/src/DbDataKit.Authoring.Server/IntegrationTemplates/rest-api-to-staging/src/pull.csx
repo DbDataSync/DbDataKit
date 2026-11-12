@@ -110,6 +110,8 @@ public static class Outside
     /// </summary>
     public static OutsideHttp Open(ConnectionGrant grant, IRun run)
     {
+        // a connection of kind http: the runner handed over its definition and secrets, and the kit signs in as it says (API key, basic, OAuth 2, client certificate)
+        if (grant.HttpDefinition is not null) return OutsideHttp.Open(grant, run, new OutsideHttpOptions { Limit = (5, TimeSpan.FromSeconds(1)) });
         var address = grant.ConnectionString ?? (grant.Host is null ? throw new InvalidOperationException($"The connection '{grant.Connection}' has no address.") : $"https://{grant.Host}{(grant.Port is { } port ? ":" + port : "")}/");
         var client = new HttpClient { BaseAddress = new Uri(address.EndsWith('/') ? address : address + "/") };
         if (grant.Token is { Length: > 0 } token) client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);

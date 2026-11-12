@@ -4,6 +4,7 @@ using DbDataKit.Agents;
 using DbDataKit.Cli;
 using DbDataKit.Config.Yaml;
 using DbDataKit.Knowledge;
+using DbDataKit.Knowledge.Cli;
 using AgentAnswerViews = DbDataKit.Views.AgentAnswerViews;
 using DbDataKit.State;
 using Microsoft.Extensions.AI;
@@ -11,7 +12,7 @@ using Microsoft.Extensions.AI;
 namespace DbDataKit.Server;
 
 /// <summary>The model bound to an agent's slot for a channel: the client, its name, its price and its window.</summary>
-public sealed record BoundModel(IChatClient Client, string Model, ModelPrice? Price, int WindowTokens);
+public sealed record BoundModel(IChatClient Client, string Model, ModelPrice? Price, int WindowTokens, IReadOnlyDictionary<string, ModelPrice?>? Prices = null);
 
 /// <summary>Which model an agent's slot is bound to (plan 27a AG05: model providers are connections, bound per channel; not built, so by default none is).</summary>
 public interface IAgentModels
@@ -260,6 +261,28 @@ public sealed class ConsoleAgents
         return new AgentDetail(name, relative, yaml, diagnostics, prompting, space, skillViews, definition.Instructions, [.. definition.Tools.Select(t => t.ToolName)], bound is not null);
     }
 
+    /// <summary>
+    /// What <c>knowledge check</c> and the check of a publish need of each agent that reads (plan 27a KN10, KN17): the tokens of what it is given before any knowledge (its instructions, tool definitions and skill descriptions), the window of the model its slot is bound to
+    /// (128,000 when none is) and the knowledge it draws on.
+    /// </summary>
+    public IReadOnlyList<AgentBudgetInput> BudgetInputs()
+    {
+        var inputs = new List<AgentBudgetInput>();
+        if (!Directory.Exists(AgentsFolder)) return inputs;
+        var sources = Knowledge.Sources();
+        var allSkills = Skills();
+        foreach (var directory in Directory.EnumerateDirectories(AgentsFolder).OrderBy(d => d, StringComparer.Ordinal))
+        {
+            var name = Path.GetFileName(directory);
+            var file = Path.Combine(directory, "agent.yml");
+            if (!AgentDefinitionLoader.IsName(name) || !File.Exists(file) || AgentDefinitionLoader.Load(File.ReadAllText(file), $"agents/{name}/agent.yml").Definition is not { } definition) continue;
+            var chosen = allSkills.Where(s => definition.Skills.Contains(s.Skill.Name, StringComparer.Ordinal)).Select(s => s.Skill.Offer);
+            var fixedParts = ModelSpace.AlwaysGiven(Instructions(name, definition), ToolsFor(definition), chosen, [], BoundKnowledge.Empty);
+            inputs.Add(new AgentBudgetInput(definition, fixedParts.Sum(p => EstimateCounter.Instance.Count(p.Text)), _models.For(definition.ModelSlot, null)?.WindowTokens ?? 128_000, sources));
+        }
+        return inputs;
+    }
+
     /// <summary>Saves an agent's file when it reads without an error; the diagnostics come back either way.</summary>
     public (bool Saved, AgentDetail Detail) Save(string name, string yaml)
     {
@@ -283,11 +306,7 @@ public sealed class ConsoleAgents
         return parts;
     }
 
-    private static IReadOnlyList<InPlay> ScopesInPlay(AgentDefinition definition)
-    {
-        var types = new Dictionary<string, string> { ["semantic-models"] = "semantic-model", ["store-models"] = "store-model", ["build-projects"] = "build-project", ["connections"] = "connection", ["apps"] = "app", ["integrations"] = "integration" };
-        return [.. definition.Scopes.Where(s => !s.All && types.ContainsKey(s.Kind)).SelectMany(s => s.Names.Select(n => new InPlay(new KnowledgeSubject(types[s.Kind], [n.Split(':')[0].Split('.')[0]]), Whole: true)))];
-    }
+    private static IReadOnlyList<InPlay> ScopesInPlay(AgentDefinition definition) => AgentScopes.InPlay(definition);
 
     /// <summary>What the agent would be given for what is in play (the keys of subjects, such as <c>semantic-model:Sales/measure:revenue</c>), in order, with each part's tokens and share of the always-given budget (plan 27a KN28; the same as <c>knowledge context</c> will print).</summary>
     public ContextReport? ContextFor(string agentName, IEnumerable<string> inPlayKeys)
@@ -394,6 +413,7 @@ public sealed class ConsoleAgents
             Log = log,
             Approver = _desk.ApproverFor(id),
             Price = model.Price,
+            PriceOf = name => model.Prices is { } prices && prices.TryGetValue(name, out var price) ? price : model.Price,
             Model = model.Model,
             Ledger = new StateUsageLedger(_store),
             AfterCall = tracker.Observe,

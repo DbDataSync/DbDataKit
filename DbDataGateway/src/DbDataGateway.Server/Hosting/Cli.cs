@@ -51,6 +51,7 @@ public static class Cli
         QueryNoun(),
         DbDataKit.Semantic.Cli.SemanticNoun.Create(GatewaySemanticSession.ConnectAsync, GatewaySemanticSession.Options, GatewaySemanticSession.Flags, GatewaySemanticSession.Usage),
         DataSourceNoun(),
+        LineageCommand.Noun(),
         HealthNoun(),
         UiNoun.Create(self, Program, GatewayHost.Version, NotForAgents),
     ], GatewayHost.Version, () => DbDataKit.State.SuiteEnvironment.OldNameProblem(environment));

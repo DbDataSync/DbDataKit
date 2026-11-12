@@ -104,6 +104,9 @@ public sealed class TaskExecutor : ITaskRunner
         ChildExitReport? exit = null;
         var killed = false;
         LimitExceeded? exceeded = null;
+        LimitExceeded? scratchExceeded = null;
+        Task? scratchWatch = null;
+        using var scratchStop = new CancellationTokenSource();
         long scratchBytes = 0;
         var scratchOver = false;
         try
@@ -127,6 +130,7 @@ public sealed class TaskExecutor : ITaskRunner
             (limits, limited) = ApplyLimits(child, limitSpec);
             log.Note("Information", Describe(request, child.ProcessId, timeout, limitSpec, limits));
 
+            scratchWatch = _options.ScratchSampleInterval is { } sample && sample > TimeSpan.Zero ? WatchScratchAsync(child, scratch, sample, scratchStop.Token, over => scratchExceeded = over) : null;
             var monitor = await MonitorAsync(child, token, timeout, request.CancellationGrace, ct).ConfigureAwait(false);
             exit = monitor.Exit;
             killed = monitor.Killed;
@@ -140,7 +144,7 @@ public sealed class TaskExecutor : ITaskRunner
                 log.Note("Warning", "The process's output did not end within 5 seconds of the process; a child of the task may still hold it open.");
             }
 
-            exceeded = limits.ExceededInfo;
+            exceeded = limits.ExceededInfo ?? scratchExceeded;
             var taskEnd = _host.TelemetryOf(token)?.End;
             if (taskEnd is not null)
             {
@@ -181,12 +185,42 @@ public sealed class TaskExecutor : ITaskRunner
                 await child.DisposeAsync().ConfigureAwait(false);
             }
 
+            await scratchStop.CancelAsync().ConfigureAwait(false);
+            if (scratchWatch is not null) await scratchWatch.ConfigureAwait(false);
             if (token is not null) _host.Unregister(token);
             (scratchBytes, scratchOver) = CheckAndRemoveScratch(scratch, log);
         }
 
         return new TaskRunResult(runId, end!, endReceived, exit?.ExitCode, killed, clock.Elapsed, log.StdoutLines, log.StderrLines, log.DroppedLines, log.TruncatedLines,
             limits?.Enforcement ?? LimitEnforcement.None, limits?.CpuEnforcement ?? LimitEnforcement.None, limits?.Mechanism ?? "none", scratchBytes, scratchOver, inDoubt);
+    }
+
+    /// <summary>
+    /// Stops a task that fills its scratch directory while it runs (plan 28a R27): the size of the directory is read every <paramref name="interval"/> and the process tree is killed when it passes the limit, with the run ending as a
+    /// limit exceeded (<c>scratch</c>). The size is read by walking the directory, so a task can write more than the limit between two looks: like the memory watchdog, this is watched, not an operating-system quota.
+    /// </summary>
+    private async Task WatchScratchAsync(ChildProcess child, string scratch, TimeSpan interval, CancellationToken token, Action<LimitExceeded> exceeded)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(interval);
+            while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
+            {
+                if (child.Exited.IsCompleted) return;
+                long bytes;
+                try { bytes = SizeOf(scratch); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { continue; }
+                if (bytes <= _options.MaxScratchBytes) continue;
+                exceeded(new LimitExceeded("scratch", _options.MaxScratchBytes, bytes,
+                    $"The task's scratch directory held {bytes:N0} bytes, over the limit of {_options.MaxScratchBytes:N0}; the task was stopped."));
+                try { child.Kill(); }
+                catch (Exception ex) when (ex is InvalidOperationException or Win32Exception) { /* gone already */ }
+                return;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 
     private readonly record struct Monitored(ChildExitReport Exit, bool TimedOut, bool CancelRequested, bool Killed);
@@ -450,7 +484,7 @@ public sealed class TaskExecutor : ITaskRunner
                 over = bytes > _options.MaxScratchBytes;
                 if (over)
                 {
-                    var message = $"The task's scratch directory held {bytes:N0} bytes at the end of the run, over the limit of {_options.MaxScratchBytes:N0}. The limit is checked after the run; stopping a task that fills the disk during the run needs an operating-system quota.";
+                    var message = $"The task's scratch directory held {bytes:N0} bytes at the end of the run, over the limit of {_options.MaxScratchBytes:N0}. A task that is still running when it passes the limit is stopped (the scratch limit is watched every {_options.ScratchSampleInterval?.TotalSeconds:0.##} s while it runs); this one was over at the end.";
                     log.Note("Warning", message);
                     _options.Logger?.LogWarning("{Message}", message);
                 }

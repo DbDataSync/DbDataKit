@@ -185,14 +185,14 @@ Each builds with `dbdatarunner package build` and passes `package test` with not
 **What a template does not do for you** (each is said in the generated README and in the code where it matters):
 
 - Open the database connection of the `staging` slot: that needs the engine's driver, which a csx build does not carry offline (add `#r "nuget: Npgsql, <version>"`).
-- Sign in to the API with OAuth 2 or a client certificate: the runner hands a task today the address, a token or a login of the bound connection (`ConnectionGrant`), which the template turns into a client; joining `DbDataKit.Connections.Http` to `ResolveConnection` is the open half of IX10.
+- Sign in to the API: the runner hands the task its copy of the `http` connection's definition and the secrets resolved on the runner (`ConnectionGrant.HttpDefinition`, `HttpSecrets`), and `OutsideHttp.Open(grant, run)` signs in as it says (API key, basic, OAuth 2 client credentials or authorization code, client certificate); the template uses it. A rotated OAuth refresh token is not written back from a task.
 - Reach a share other than a folder the Runner's machine can read: SFTP, FTPS, SMB and object storage (IX04 to IX06) implement the template's three-call `IShare`.
 
 ## 10. Where this differs from the designs
 
 - Plan 27 section 4.1 names a `.csx` script kind next to a compiled project. Roslyn's script model (top-level statements, `Submission#0`) cannot name its own types from a test or the manifest, so a csx *project* is a set of C# files compiled as a library (section 2). Scripts remain what tests are written as.
 - Plan 28 says "a `.csx` script published compiled": that is what this does, in a build step that is not the Runner's (the Runner still never compiles).
-- A task cannot open an `http` slot with its sign-in today (section 9): `ConnectionGrant` is database-shaped. The `connection/2` `http` kind and its client exist; the join through the Runner is IX10. The REST template works from what the grant has.
+- A task opens an `http` slot with its sign-in (IX10, 2026-11-12): `Slot<object>` gives the `ConnectionGrant`, `OutsideHttp.Open(grant, run)` the client; `Slot<OutsideHttp>("api", kind: "http")` gives the client itself. The limits are in the IX10 row of plan 27a.
 - `DbDataRunner/README.md` listed the outside-system connection kinds as not built; IX01 and IX02 built `http`, so that table is corrected with this page.
 - Plan 27a IX20 says "build with the .NET SDK in a sandboxed child process"; the owner's direction of 2026-11-11 (csx without the SDK) changes that to "SDK only for the compiled kind".
 

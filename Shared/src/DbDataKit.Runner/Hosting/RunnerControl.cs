@@ -23,6 +23,12 @@ public sealed record RunnerActor(string Id, string? Name, string ViaKind, string
 /// <summary>What <see cref="RunnerControl.RunNow"/> did: the run id of the item queued, or that one is queued or running already.</summary>
 public sealed record RunNowResult(bool Queued, Guid? RunId);
 
+/// <summary>What <see cref="RunnerControl.ResolveStep"/> did: whether the step was waiting for an answer, and the run queued afterwards when the operator asked for one (<see cref="RunId"/> is null when none was, or one is queued already).</summary>
+public sealed record StepResolution(bool Resolved, Guid? RunId, bool RetryQueued);
+
+/// <summary>What <see cref="RunnerControl.ReplayDeadLetter"/> did: <see cref="Replayed"/> false when the letter is not open (replayed or discarded already, or not the task's); otherwise the inbox item it became and whether the task was queued for it.</summary>
+public sealed record DeadLetterReplay(bool Replayed, Guid? InboxItem, bool Queued, bool HadBody);
+
 /// <summary>A task named in a call is not one this runner serves (not in the projection of a channel it serves, or its row cannot be read).</summary>
 public sealed class UnknownTaskException(string message) : InvalidOperationException(message);
 
@@ -38,6 +44,9 @@ public sealed class RunnerControl
     public const string ResumeVerb = "runner.task.resume";
     public const string OwnerVerb = "runner.task.owner";
     public const string RewindVerb = "runner.checkpoint.rewind";
+    public const string ResolveStepVerb = "runner.step.resolve";
+    public const string ReplayVerb = "runner.deadletter.replay";
+    public const string DiscardVerb = "runner.deadletter.discard";
     public const string TargetKind = "task";
 
     private readonly RunnerScheduler _scheduler;
@@ -109,6 +118,76 @@ public sealed class RunnerControl
         Record(RewindVerb, task, actor, new { checkpoint = name, key = itemKey, history_id = historyId, from_version = before?.Version, to_version = after?.Version, from = Parts(before), to = Parts(after) },
             rewound ? AuditEvent.Ok : AuditEvent.Failed);
         return rewound;
+    }
+
+    /// <summary>
+    /// The operator's answer for a step an earlier attempt left in doubt (plan 28a R25): it <paramref name="happened"/> (then <paramref name="resultJson"/> is its result, JSON, <c>null</c> for no value) or it did not; the step is then
+    /// complete or failed, so the next attempt of the chain reuses the result or runs the step. With <paramref name="retry"/> a run of the task is queued as well. Audited as <c>runner.step.resolve</c> (the names of what was answered, never the result).
+    /// Throws <see cref="ArgumentException"/> when the result is not allowed (too large, not JSON).
+    /// </summary>
+    public StepResolution ResolveStep(TaskRef task, string chain, string name, string stepKey, bool happened, string? resultJson, bool retry, RunnerActor actor)
+    {
+        var steps = new StepStore(State, new ProgressKey(task.Package, task.Channel, task.Task));
+        bool resolved;
+        try { resolved = steps.Get(chain, name, stepKey) is { State: StepState.InDoubt or StepState.Started } && steps.Resolve(chain, name, stepKey, happened, resultJson, null, actor.Display); }
+        catch (Exception ex) when (ex is ArgumentException or StepResultTooLargeException or JsonException)
+        {
+            Record(ResolveStepVerb, task, actor, new { chain, step = name, key = stepKey, happened, reason = ex.Message }, AuditEvent.Failed);
+            throw new ArgumentException(ex.Message, ex);
+        }
+
+        Guid? runId = null;
+        if (resolved && retry)
+        {
+            var started = Translate(() => _scheduler.RunNow(task, new Dictionary<string, string>(), actor.Display));
+            runId = started;
+        }
+
+        Record(ResolveStepVerb, task, actor, new { chain, step = name, key = stepKey, happened, retry, run_id = runId }, resolved ? AuditEvent.Ok : AuditEvent.Failed);
+        return new StepResolution(resolved, runId, runId is not null);
+    }
+
+    /// <summary>
+    /// Sends a dead letter again (plan 28a R25): its body becomes an inbox item of the same task (the letter's id is the item's id, so it is one item however often this is called), the letter is marked replayed and a run of the task is
+    /// queued to take it. A letter that is not open is not replayed. Audited as <c>runner.deadletter.replay</c>.
+    /// </summary>
+    public DeadLetterReplay ReplayDeadLetter(TaskRef task, Guid id, RunnerActor actor)
+    {
+        var progress = new ProgressStore(State, new ProgressKey(task.Package, task.Channel, task.Task));
+        if (progress.DeadLetters(DeadLetter.Open).FirstOrDefault(l => l.Id == id) is not { } letter)
+        {
+            Record(ReplayVerb, task, actor, new { dead_letter = id, reason = "not open" }, AuditEvent.Failed);
+            return new DeadLetterReplay(false, null, false, false);
+        }
+
+        if (progress.InboxRecords(1000).All(i => i.Id != id))
+        {
+            Guid? body = null;
+            if (letter.BodyPayload is { } original)
+            {
+                var payloads = new PayloadStore(State);
+                using var read = payloads.OpenRead(original);
+                using var writer = payloads.OpenWrite(new PayloadOptions("application/octet-stream", ProgressModule.Name, id.ToString("D"), "dead-letter-replay"));
+                read.CopyTo(writer);
+                writer.Complete();
+                body = writer.Id;
+            }
+
+            progress.Receive(letter.Source, signatureOk: true, id, body);
+        }
+
+        progress.MarkDeadLetterReplayed(id);
+        var queued = Triggers.TriggerWebhook(task);
+        Record(ReplayVerb, task, actor, new { dead_letter = id, source = letter.Source, attempts = letter.Attempts, queued }, AuditEvent.Ok);
+        return new DeadLetterReplay(true, id, queued, letter.BodyPayload is not null);
+    }
+
+    /// <summary>An operator decides a dead letter is not worth sending (plan 28a R25). False when it is not open. Audited as <c>runner.deadletter.discard</c>.</summary>
+    public bool DiscardDeadLetter(TaskRef task, Guid id, RunnerActor actor)
+    {
+        var discarded = new ProgressStore(State, new ProgressKey(task.Package, task.Channel, task.Task)).DiscardDeadLetter(id);
+        Record(DiscardVerb, task, actor, new { dead_letter = id }, discarded ? AuditEvent.Ok : AuditEvent.Failed);
+        return discarded;
     }
 
     /// <summary>Who schedules the task, and who set that and why (null: nobody set it, the runner schedules it).</summary>

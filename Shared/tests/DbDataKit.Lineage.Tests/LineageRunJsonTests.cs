@@ -26,6 +26,39 @@ public class LineageRunJsonTests
     }
 
     [Fact]
+    public void Late_is_written_only_when_it_is_true_and_a_document_without_it_reads_as_not_late()
+    {
+        var written = LineageJson.WriteRuns([new EdgeRun("a", "b", EdgeKind.Derives, At, RunOutcome.Succeeded, Late: true), new EdgeRun("b", "c", EdgeKind.Derives, At, RunOutcome.Succeeded)]);
+        Assert.True((bool)written[0]!["late"]!);
+        Assert.False(((JsonObject)written[1]!).ContainsKey("late"));
+        var back = LineageJson.ReadRuns(new JsonObject { ["runs"] = JsonNode.Parse(written.ToJsonString()) });
+        Assert.Equal([true, false], back.Select(r => r.Late));
+    }
+
+    [Fact]
+    public void Freshness_marks_an_edge_late_by_the_overdue_rule_of_monitoring_and_leaves_one_with_no_expectation_alone()
+    {
+        var now = new DateTimeOffset(2026, 11, 10, 9, 0, 0, TimeSpan.Zero);
+        var clock = new FakeClock(now);
+        var runs = new[]
+        {
+            new EdgeRun("a", "b", EdgeKind.Replicates, now.AddMinutes(-10), RunOutcome.Succeeded),      // every 5 minutes: ten minutes ago is late
+            new EdgeRun("b", "c", EdgeKind.Replicates, now.AddMinutes(-2), RunOutcome.Succeeded),       // two minutes ago is not
+            new EdgeRun("c", "d", EdgeKind.Replicates, now.AddDays(-9), RunOutcome.Failed),             // no expectation: nothing to be late at
+        };
+
+        var marked = LineageFreshness.Mark(runs, r => r.From == "c" ? null : TimeSpan.FromMinutes(5), clock);
+
+        Assert.Equal([true, false, false], marked.Select(r => r.Late));
+        Assert.Equal(runs.Select(r => r.At), marked.Select(r => r.At));
+    }
+
+    private sealed class FakeClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    [Fact]
     public void A_document_without_runs_has_none_and_a_graph_still_reads_with_runs_in_it()
     {
         var graph = new LineageGraph([new("a", NodeKind.Dataset, "a"), new("b", NodeKind.Dataset, "b")], [new("a", "b", EdgeKind.Replicates, Granularity.Table, Confidence.Declared)]);

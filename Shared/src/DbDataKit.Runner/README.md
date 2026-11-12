@@ -25,7 +25,7 @@ The runner's engine: it schedules and runs the tasks of published packages, each
 * At the start of a retry the started steps of the dead run are marked in doubt (`InDoubtReconciler`) before the job begins.
 * The task host exits 0 when the end message was sent, 64 for a bad environment, 65 for a package failure, 66 when the runner is unreachable or refused, 67 when the parent is gone (parent-death monitor), 68 when asked to stop, 1 otherwise. It loads the package into its own `AssemblyLoadContext` (dependencies through the package's `deps.json`, or by file name beside it); everything the host, the kit and the protocol reference comes from the host's own context, so a copy of the kit inside a package is never loaded.
 
-Not enforced: the scratch size limit during the run (checked after it). Output lines are counted and bounded; stdout and stderr reach the run's log.
+The scratch size limit (`MaxScratchBytes`, 1 GiB) is watched while the task runs: the executor reads the directory every `ScratchSampleInterval` (2 s) and kills a task that passed it, the run ending as a limit exceeded (`scratch`); like the memory watchdog it is watched, not an operating-system quota, and the check after the run still warns. A launch command that is a file of the package is made executable before the start (`MakeExecutable`), so an executable package runs by its own path. Output lines are counted and bounded; stdout and stderr reach the run's log.
 
 ## Triggers
 

@@ -95,6 +95,29 @@ public sealed class KeyRing : IKeySource
         finally { CryptographicOperations.ZeroMemory(key); }
     }
 
+    /// <summary>
+    /// Stores a key that was made elsewhere (a restored backup, plan 22a GP21) under its own id, protected by this host's protector. A ring that already has the id is refused: a restore never replaces a key.
+    /// It becomes the active key when <paramref name="activate"/> says so or the ring has none.
+    /// </summary>
+    public void AddKey(string id, ReadOnlySpan<byte> key, bool activate)
+    {
+        ValidateId(id);
+        if (key.Length != KeyLength) throw new ArgumentException($"A key is {KeyLength * 8} bits.", nameof(key));
+        EnsureDirectory();
+        if (File.Exists(KeyPath(id))) throw new InvalidOperationException($"The key ring '{_directory}' already has the key '{id}'; a restore never replaces a key.");
+        var blob = _protector.Protect(key);
+        var content = new byte[Magic.Length + 2 + blob.Length];
+        Magic.CopyTo(content, 0);
+        content[Magic.Length] = Format;
+        content[Magic.Length + 1] = _protector.Kind;
+        blob.CopyTo(content, Magic.Length + 2);
+        WriteAtomically(KeyPath(id), content);
+        if (activate || ReadActive() is null) Activate(id);
+    }
+
+    /// <summary>The id of the active key, or null when the ring has none.</summary>
+    public string? ActiveKeyIdOrNull => ReadActive();
+
     /// <summary>Makes <paramref name="id"/> the key new values are encrypted with.</summary>
     public void Activate(string id)
     {
@@ -115,7 +138,7 @@ public sealed class KeyRing : IKeySource
             throw new InvalidDataException($"'{path}' is not a secret key file.");
         if (content[Magic.Length] != Format) throw new InvalidDataException($"'{path}' is key file format {content[Magic.Length]}; this build reads format {Format}.");
         if (content[Magic.Length + 1] != _protector.Kind)
-            throw new InvalidDataException($"'{path}' was written by key protection kind {content[Magic.Length + 1]}, but this host uses {_protector.Description} (kind {_protector.Kind}). A key file made on another machine or by another protection cannot be read here.");
+            throw new InvalidDataException($"'{path}' was written by key protection kind {content[Magic.Length + 1]}, but this host uses {_protector.Description} (kind {_protector.Kind}). A key file made on another machine or by another protection cannot be read here. " + SecretKeyBackup.RekeyHint);
         var key = _protector.Unprotect(content.AsSpan(Magic.Length + 2));
         if (key.Length != KeyLength) { CryptographicOperations.ZeroMemory(key); throw new InvalidDataException($"'{path}' does not hold a {KeyLength * 8}-bit key."); }
         return key;

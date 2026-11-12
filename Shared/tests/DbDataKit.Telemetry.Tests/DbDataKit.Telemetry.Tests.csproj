@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="OpenTelemetry.Exporter.InMemory" />
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\DbDataKit.Telemetry\DbDataKit.Telemetry.csproj" />
+  </ItemGroup>
+</Project>

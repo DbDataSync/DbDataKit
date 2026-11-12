@@ -17,12 +17,15 @@
     <DbDataKitReference Include="Semantic.Cli" />   <!-- the semantic noun of the command line; plan 19, J15 -->
     <DbDataKitReference Include="Serving.Semantic" />   <!-- semantic requests and semantic SQL over the data sources; plan 19, J10 -->
     <DbDataKitReference Include="Semantic.Ssas" />   <!-- Analysis Services sources of a semantic model (Windows only at run time); plan 19, J16 -->
+    <DbDataKitReference Include="Connections.Descriptor" />   <!-- the engine registry: what a data source naming another engine is told; plan 14a, SL02 -->
     <DbDataKitReference Include="Connections.Abstractions" />   <!-- connection/1, the data source format; plan 13, E02 -->
     <DbDataKitReference Include="Connections.SqlServer" />
     <DbDataKitReference Include="Connections.FlightSql" />   <!-- an upstream Flight SQL server as a data source; plan 13a, P12 -->
     <DbDataKitReference Include="Connections.Postgres" />   <!-- PostgreSQL data sources; plan 13a, P12 -->
     <DbDataKitReference Include="Connections.DuckDb" />
     <DbDataKitReference Include="Store" />   <!-- the master data models a DbDataStore server publishes to the group, and their write path; plan 20 O10, O08 -->
+    <DbDataKitReference Include="Lineage" />   <!-- the Gateway's part of the lineage graph; plan 18, G08 -->
+    <DbDataKitReference Include="Lineage.Cli" />   <!-- the lineage noun; plan 18, G08 -->
     <DbDataKitReference Include="Config.Yaml" />
     <DbDataKitReference Include="Config" />
     <DbDataKitReference Include="Config.Hosting" />

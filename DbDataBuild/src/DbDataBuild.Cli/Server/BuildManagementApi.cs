@@ -71,9 +71,17 @@ internal static class BuildManagementApi
             {
                 var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
                 if (!decision.Allowed) return Results.Json(new { error = $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
-                var (graph, problems) = await ServerLineage.MergedAsync(serverDirectory, null, context.RequestAborted, BuildServer.InstanceId(Path.Combine(serverDirectory, "server.yaml")));
+                // the last load of each model comes from the server's copy of the tracking tables (plan 18, G06b); without one, or when it cannot be read, the graph has no runs and says why
+                DbDataKit.Tracking.Build.BuildTrackingStore? copy = null;
+                string? copyProblem = null;
+                try { copy = new DbDataKit.Tracking.Build.BuildTrackingStore(BuildSchedulerSchema.Open(serverDirectory)); }
+                catch (Exception ex) when (ex is not OperationCanceledException) { copyProblem = $"The copy of the tracking tables cannot be read ({ex.GetType().Name}), so the graph has no runs."; }
+                var (graph, problems, runs) = await ServerLineage.MergedWithRunsAsync(serverDirectory, null, context.RequestAborted, BuildServer.InstanceId(Path.Combine(serverDirectory, "server.yaml")), copy);
+                if (copyProblem is not null) problems.Add(copyProblem);
                 var document = DbDataKit.Lineage.LineageJson.Write(graph);
                 document["problems"] = new System.Text.Json.Nodes.JsonArray(problems.Select(p => (System.Text.Json.Nodes.JsonNode)System.Text.Json.Nodes.JsonValue.Create(p)!).ToArray());
+                var edges = graph.Edges.Select(e => e.Key).ToHashSet(StringComparer.Ordinal);
+                document["runs"] = DbDataKit.Lineage.LineageJson.WriteRuns(runs.Where(r => edges.Contains(r.EdgeKey)).GroupBy(r => r.EdgeKey, StringComparer.Ordinal).Select(g => g.OrderByDescending(r => r.At).First()));
                 return Results.Json(document);
             });
 

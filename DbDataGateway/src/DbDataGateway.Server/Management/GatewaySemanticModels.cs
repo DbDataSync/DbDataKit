@@ -229,23 +229,30 @@ public sealed class GatewaySemanticModels(
             {
                 return $"Data source '{dataSource}' (for source '{source}') did not answer a test query.";
             }
-            // every table the source's facts and joins name, so a mapping to the wrong database is refused here and not at the first query
-            var tables = parsed.Doc.Sources.Where(s => SemanticModel.BaseSource(s.Key) == source)
-                .SelectMany(s => s.Value.Joins.Values.Select(j => j.Table).Append(s.Value.Fact.Table))
-                .Where(t => !string.IsNullOrWhiteSpace(t)).Distinct(StringComparer.OrdinalIgnoreCase);
-            foreach (var table in tables)
+            // every table the source's facts and joins name, and every column its bindings and measures name, so a mapping to the wrong database
+            // is refused here and not at the first query (plan 14a SL06): one empty SELECT per table, and the column named when one is missing
+            async Task<bool> ReadsAsync(string sql)
             {
-                if (table.Contains(';')) return $"The table '{table}' of source '{source}' is not a table name.";
                 try
                 {
                     var resolved = catalog().Resolve(new GatewayPrincipal("management", "management", ["*"]), dataSource);
-                    await using var result = await resolved.Executor.ExecuteQueryAsync(new DbDataGateway.Data.QueryRequest("SELECT 1 FROM " + table + " WHERE 1 = 0", 1, 15), cancellationToken);
+                    await using var result = await resolved.Executor.ExecuteQueryAsync(new DbDataGateway.Data.QueryRequest(sql, 1, 15), cancellationToken);
                     await foreach (var _ in result.ReadBatchesAsync(cancellationToken)) break;
+                    return true;
                 }
-                catch (Exception ex) when (ex is Grpc.Core.RpcException or DbDataKit.Connections.ConnectionFailureException)
-                {
-                    return $"The table '{table}' of source '{source}' could not be read on data source '{dataSource}'.";
-                }
+                catch (Exception ex) when (ex is Grpc.Core.RpcException or DbDataKit.Connections.ConnectionFailureException) { return false; }
+            }
+
+            foreach (var (table, columns) in MappedColumns.Of(parsed, source))
+            {
+                if (table.Contains(';')) return $"The table '{table}' of source '{source}' is not a table name.";
+                if (!await ReadsAsync("SELECT 1 FROM " + table + " WHERE 1 = 0")) return $"The table '{table}' of source '{source}' could not be read on data source '{dataSource}'.";
+                if (columns.Count == 0 || await ReadsAsync($"SELECT {string.Join(", ", columns)} FROM {table} WHERE 1 = 0")) continue;
+                // one of them is missing: say which, so the refusal names table.column
+                foreach (var column in columns)
+                    if (!await ReadsAsync($"SELECT {column} FROM {table} WHERE 1 = 0"))
+                        return $"The column '{table}.{column}' of source '{source}' could not be read on data source '{dataSource}'.";
+                return $"The columns of table '{table}' of source '{source}' could not be read together on data source '{dataSource}'.";
             }
         }
         foreach (var extra in sources.Keys.Concat(ssas.Keys).Where(k => !parsed.Doc.Sources.ContainsKey(k) && !parsed.Doc.Sources.Keys.Any(id => SemanticModel.BaseSource(id) == k)).Distinct())

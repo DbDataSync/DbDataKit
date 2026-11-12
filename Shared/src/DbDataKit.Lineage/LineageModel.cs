@@ -3,7 +3,7 @@ using System.Text;
 
 namespace DbDataKit.Lineage;
 
-public enum NodeKind { Dataset, Column, Job, SemanticMember, Serving, Consumer, Deployment }
+public enum NodeKind { Dataset, Column, Job, SemanticMember, Serving, Consumer, Deployment, ExternalSystem }
 
 /// <summary>How data moves along an edge; the edge runs from the upstream object to the downstream one.</summary>
 public enum EdgeKind { Replicates, Derives, Copies, Binds, Serves, Extracts, Reads, Promotes, Deploys, Runs }
@@ -22,6 +22,12 @@ public enum RunOutcome { Succeeded, Failed }
 public sealed record LineageNode(string Id, NodeKind Kind, string Name, bool UnknownUpstream = false, IReadOnlyDictionary<string, string>? Properties = null)
 {
     public IReadOnlyDictionary<string, string> PropertyMap => Properties ?? new Dictionary<string, string>();
+
+    /// <summary>The description its definition gives it (<see cref="LineageDescriptions"/>), or null: never an empty string.</summary>
+    public string? Description => Properties is not null && Properties.TryGetValue(LineageDescriptions.DescriptionKey, out var d) && !string.IsNullOrWhiteSpace(d) ? d : null;
+
+    /// <summary>The owner its definition names, or null.</summary>
+    public string? Owner => Properties is not null && Properties.TryGetValue(LineageDescriptions.OwnerKey, out var o) && !string.IsNullOrWhiteSpace(o) ? o : null;
 }
 
 /// <summary>Data flowing from <paramref name="From"/> to <paramref name="To"/>. <paramref name="Detail"/> is the kind's own word (the transform of a <c>derives</c>: identity, expression, aggregate).</summary>
@@ -36,8 +42,11 @@ public sealed record LineageEdge(string From, string To, EdgeKind Kind, Granular
     internal static string Hash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
 }
 
-/// <summary>What happened along an edge when it ran: when, how it ended and how many rows moved (null when the product does not count).</summary>
-public sealed record EdgeRun(string From, string To, EdgeKind Kind, DateTimeOffset At, RunOutcome Outcome, long? Rows = null)
+/// <summary>
+/// What happened along an edge when it ran: when, how it ended and how many rows moved (null when the product does not count). <paramref name="Late"/> says the edge is overdue by its product's own expectation of how often it runs
+/// (<see cref="LineageFreshness"/>, the rule <c>Overdue</c> of <c>DbDataKit.Monitoring</c>); it is worked out when a server answers and is not stored.
+/// </summary>
+public sealed record EdgeRun(string From, string To, EdgeKind Kind, DateTimeOffset At, RunOutcome Outcome, long? Rows = null, bool Late = false)
 {
     public string EdgeKey => $"{From}\n{To}\n{Kind}";
 }

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Knowledge.Onnx</RootNamespace>
+    <PackageId>DbDataKit.Knowledge.Onnx</PackageId>
+    <Description>The built-in embedding model of the knowledge index (plan 27a KN06): a small sentence-embedding model run in process with ONNX Runtime and its WordPiece tokenizer as an IEmbeddingGenerator, with the catalog of the models offered (each with its licence), their files checked by hash and kept as the files of a published artifact so an offline install gets them from its own state.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+    <PackageReference Include="Microsoft.ML.Tokenizers" />
+    <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
+    <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,6 +1,17 @@
-// Helper child for the limits tests. Commands: idle | alloc MEGABYTES (touches that much memory in 8 MB steps, 50 ms apart, then idles).
+// Helper child for the limits tests. Commands: idle | grandchild MEGABYTES (starts a child of its own that allocates, prints its pid as `grandchild <pid>` and stays small itself) | alloc MEGABYTES (touches that much memory in 8 MB steps, 50 ms apart, then idles).
 var cmd = args.Length > 0 ? args[0] : "idle";
 var held = new List<byte[]>();
+if (cmd == "grandchild")
+{
+    var start = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false };
+    start.ArgumentList.Add(System.Reflection.Assembly.GetExecutingAssembly().Location);
+    start.ArgumentList.Add("alloc");
+    start.ArgumentList.Add(args[1]);
+    var grandchild = System.Diagnostics.Process.Start(start)!;
+    Console.Out.WriteLine($"grandchild {grandchild.Id}");
+    Console.Out.Flush();
+}
+
 if (cmd == "alloc")
 {
     var megabytes = int.Parse(args[1], System.Globalization.CultureInfo.InvariantCulture);

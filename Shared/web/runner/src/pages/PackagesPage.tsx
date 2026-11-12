@@ -8,6 +8,7 @@ import { RunnerShell } from '../RunnerShell'
 import { when } from './format'
 import { ConfirmDialog, Modal } from './Dialogs'
 import { BindingsCard } from './BindingsCard'
+import { PostureCard } from './PostureCard'
 import { PublishingSettings } from './PublishingSettings'
 import { PublishFromFiles } from './PublishFromFiles'
 import { PruneDialog } from './PruneDialog'
@@ -166,6 +167,7 @@ export function PackagesPage() {
         <div className="page-head"><h1 className="page-title">{name ?? 'Packages'}</h1></div>
         <ErrorBanner error={list.error ?? detail.error} />
         {!name && <PublishingSettings canEdit={isAdmin} />}
+        {!name && <PostureCard canEdit={isAdmin} />}
         {!name && <PublishFromFiles canPublish={isAdmin} />}
         {!name && list.isSuccess && list.data.length === 0 && <div className="empty" data-testid="runner-no-packages">No package has been published to this runner.</div>}
         {!name && (list.data ?? []).map((p) => (
