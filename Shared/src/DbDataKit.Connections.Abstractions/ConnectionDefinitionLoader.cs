@@ -162,7 +162,7 @@ public static class ConnectionDefinitionLoader
         }
         if (d.Engine.Length == 0) Err(SharedCodes.MissingKey, "engine", "Required key `engine` is missing: a database connection says which engine it is.", "Add `engine: postgres` (or sqlserver, mysql, oracle, duckdb, odbc, flightsql).");
         foreach (var (key, present) in new[] { ("endpoint", d.Endpoint is not null), ("sign_in", d.SignIn is not null), ("test_path", d.TestPath is not null), ("model_provider", d.ModelProvider is not null),
-            ("endpoint_secrets", d.EndpointSecrets.Count > 0), ("webhook", d.Webhook is not null), ("smtp", d.Smtp is not null), ("file_server", d.FileServer is not null) })
+            ("endpoint_secrets", d.EndpointSecrets.Count > 0), ("webhook", d.Webhook is not null), ("smtp", d.Smtp is not null), ("file_server", d.FileServer is not null), ("object_store", d.ObjectStore is not null) })
             if (present) Err(BadOutside, key, $"`{key}` belongs to an outside kind (`http`, `model-provider`, `smtp`), not to a database.", "Remove it, or say `kind: http` (and drop the database keys).");
 
         var logins = new (string Path, LoginSpec? Spec)[] { ("auth", d.Auth), ("read_login", d.ReadLogin), ("write_login", d.WriteLogin) };
@@ -295,12 +295,13 @@ public static class ConnectionDefinitionLoader
         else
         {
             if (d.Smtp is not null) Err("smtp", "`smtp` belongs to the kind `smtp`.", "Remove it, or say `kind: smtp`.");
-            if (d.FileServer is not null) Err("file_server", "`file_server` belongs to the kinds `sftp`, `scp` and `ftps`.", "Remove it, or say `kind: sftp`.");
+            if (d.FileServer is not null) Err("file_server", "`file_server` belongs to the kinds `sftp`, `scp`, `ftps` and `smb`.", "Remove it, or say `kind: sftp`.");
+            if (d.ObjectStore is not null && !ConnectionKinds.IsObjectStore(d.KindName)) Err("object_store", "`object_store` belongs to the kinds `s3` and `azure-blob`.", "Remove it, or say `kind: s3`.");
             string? endpoint = d.Endpoint ?? (d.ModelProvider is { Provider: var p } ? ModelProviderSpec.DefaultEndpoint(p) : null);
             if (endpoint is null)
             {
                 if (d.EndpointSecrets.Count > 0) Err("endpoint_secrets", "`endpoint_secrets` binds the placeholders of `endpoint`, and there is none.", "Write the address as a template: `endpoint: https://hooks.example.com/services/{token}`.");
-                Err("endpoint", d.KindName == ConnectionKinds.Http ? "A `http` connection needs an `endpoint`." : "A model provider of this kind has no default address: write `endpoint`.", "Write the address, such as `endpoint: https://api.example.com/v1`; a secret part of it is a `{placeholder}` bound in `endpoint_secrets`.");
+                Err("endpoint", d.KindName == ConnectionKinds.Http ? "A `http` connection needs an `endpoint`." : ConnectionKinds.IsObjectStore(d.KindName) ? $"A `{d.KindName}` connection needs an `endpoint`: the address of the service (`https://s3.eu-west-1.amazonaws.com`, `https://account.blob.core.windows.net`)." : "A model provider of this kind has no default address: write `endpoint`.", "Write the address, such as `endpoint: https://api.example.com/v1`; a secret part of it is a `{placeholder}` bound in `endpoint_secrets`.");
             }
             else if (EndpointTemplate.IsHidden(endpoint))
             {
@@ -329,6 +330,13 @@ public static class ConnectionDefinitionLoader
             CheckModelProvider();
         }
         else if (d.Webhook is not null) Err("webhook", "`webhook` belongs to the kind `http`.", "Remove it.");
+        if (ConnectionKinds.IsObjectStore(d.KindName))
+        {
+            if (d.TestPath is not null) Err("test_path", "`test_path` belongs to the kind `http`; Test of an object store lists the bucket.", "Remove it.");
+            if (d.ModelProvider is not null) Err("model_provider", "`model_provider` belongs to the kind `model-provider`.", "Remove it.");
+            CheckObjectStore();
+        }
+
         if (!d.Tls.Verify) diags.Add(Diag(TlsOptOut, file, src, "tls.verify", "Certificate verification is off for this connection.", null, ConfigSeverity.Warning));
         if (d.Tls.TrustServerCertificate) diags.Add(Diag(TlsOptOut, file, src, "tls.trust_server_certificate", "The server certificate is trusted without verification.", null, ConfigSeverity.Warning));
         if (!d.Tls.Encrypt) diags.Add(Diag(TlsOptOut, file, src, "tls.encrypt", "Encryption is off for this connection.", null, ConfigSeverity.Warning));
@@ -387,6 +395,23 @@ public static class ConnectionDefinitionLoader
                         if (url is not null && !IsSafeAddress(url)) Err("sign_in." + key, $"`{key}` is an http or https address with no user name, password or query in it.");
                     NoOthers(("key_secret", s.KeySecret is not null), ("user", s.User is not null), ("password_secret", s.PasswordSecret is not null), ("certificate_file", s.CertificateFile is not null), ("certificate_secret", s.CertificateSecret is not null));
                     break;
+                case "access_key":
+                    if (d.KindName != ConnectionKinds.S3) Err("sign_in.method", "`access_key` signs in to the kind `s3`.", "Use another method for this kind.");
+                    Needs("user", !string.IsNullOrWhiteSpace(s.User));
+                    Needs("password_secret", s.PasswordSecret is not null);
+                    NoOthers(("key_secret", s.KeySecret is not null), ("token_url", s.TokenUrl is not null), ("client_secret_secret", s.ClientSecretSecret is not null), ("certificate_file", s.CertificateFile is not null));
+                    break;
+                case "shared_key":
+                    if (d.KindName != ConnectionKinds.AzureBlob) Err("sign_in.method", "`shared_key` signs in to the kind `azure-blob`.", "Use another method for this kind.");
+                    Needs("user", !string.IsNullOrWhiteSpace(s.User));
+                    Needs("key_secret", s.KeySecret is not null);
+                    NoOthers(("password_secret", s.PasswordSecret is not null), ("token_url", s.TokenUrl is not null), ("client_secret_secret", s.ClientSecretSecret is not null), ("certificate_file", s.CertificateFile is not null));
+                    break;
+                case "sas_token":
+                    if (d.KindName != ConnectionKinds.AzureBlob) Err("sign_in.method", "`sas_token` signs in to the kind `azure-blob`.", "Use another method for this kind.");
+                    Needs("key_secret", s.KeySecret is not null);
+                    NoOthers(("user", s.User is not null), ("password_secret", s.PasswordSecret is not null), ("token_url", s.TokenUrl is not null), ("client_secret_secret", s.ClientSecretSecret is not null), ("certificate_file", s.CertificateFile is not null));
+                    break;
                 case "kerberos":
                     if (d.KindName != ConnectionKinds.Smb) Err("sign_in.method", "`kerberos` signs in to the kind `smb`.", "Use another method for this kind.");
                     NoOthers(("key_secret", s.KeySecret is not null), ("user", s.User is not null), ("password_secret", s.PasswordSecret is not null), ("token_url", s.TokenUrl is not null), ("client_secret_secret", s.ClientSecretSecret is not null), ("certificate_file", s.CertificateFile is not null), ("certificate_secret", s.CertificateSecret is not null));
@@ -430,6 +455,22 @@ public static class ConnectionDefinitionLoader
             var method = d.SignIn?.Method ?? "none";
             if (w.Format == "signed" && method != "signed_webhook") Err("sign_in.method", "A `signed` webhook is signed with the shared secret: `sign_in: { method: signed_webhook, key_secret: ... }`.", "Store the shared secret and write its reference.");
             if (w.Format is "slack" or "teams" && method != "none") Err("sign_in.method", $"A `{w.Format}` webhook takes no sign-in: the token is in its address (a placeholder of `endpoint`).", "Remove `sign_in`.");
+        }
+
+        void CheckObjectStore()
+        {
+            if (d.ObjectStore is not { } o) { Err("object_store", $"A `{d.KindName}` connection needs an `object_store` section: the {(d.KindName == ConnectionKinds.S3 ? "bucket" : "container")}.", "Write `object_store: { bucket: my-bucket }`."); return; }
+            var s3 = d.KindName == ConnectionKinds.S3;
+            if (string.IsNullOrWhiteSpace(o.Bucket) || o.Bucket.Any(c => char.IsWhiteSpace(c) || c is '/' or '\\' or '?' or '#' or ':')) Err("object_store.bucket", $"`bucket` is the name of the {(s3 ? "bucket" : "container")}, nothing else.");
+            if (o.Prefix.StartsWith('/') || o.Prefix.Split('/').Contains("..") || o.Prefix.Any(char.IsControl)) Err("object_store.prefix", "`prefix` is a folder in the bucket (`incoming/`): not starting with `/`, no `..`.");
+            if (!s3 && (o.PathStyle || o.Region != "us-east-1")) Err("object_store", "`region` and `path_style` belong to the kind `s3`.", "Remove them.");
+            if (d.Endpoint is { } address && !EndpointTemplate.IsHidden(address) && Uri.TryCreate(address, UriKind.Absolute, out var addressUri) && (addressUri.Query.Length > 1 || addressUri.Fragment.Length > 1))
+                Err("endpoint", "The address of an object store has no query or fragment: a key or token is `sign_in` (a SAS token is `sign_in.key_secret`).", "Remove everything from the `?`.");
+            var method = d.SignIn?.Method ?? "none";
+            if (s3 && method is not ("access_key" or "none")) Err("sign_in.method", $"An `s3` connection signs in with `access_key` (the access key id as `user`, the secret access key as `password_secret`), or `none` for a public bucket, not `{method}`.");
+            if (!s3 && method is not ("shared_key" or "sas_token" or "none")) Err("sign_in.method", $"An `azure-blob` connection signs in with `shared_key` (the account name as `user`, the account key as `key_secret`), `sas_token` (the token as `key_secret`), or `none` for a public container, not `{method}`.");
+            if (d.Endpoint is { } ep && !EndpointTemplate.IsHidden(ep) && Uri.TryCreate(ep, UriKind.Absolute, out var uri) && uri.Scheme == "http" && !IsLoopbackHost(uri.Host) && method != "none")
+                Warn("endpoint", "The address is plain http: the keys sign each request, but the data and the signature travel in clear text.", null, TlsOptOut);
         }
 
         void CheckFileServer()
@@ -582,7 +623,7 @@ public static class ConnectionKindGroups
     public static ConnectionKindGroup Of(ConnectionDefinition d) => d.KindName switch
     {
         ConnectionKinds.Smtp => ConnectionKindGroup.Delivery,
-        ConnectionKinds.Sftp or ConnectionKinds.Scp or ConnectionKinds.Ftps or ConnectionKinds.Smb => ConnectionKindGroup.FileStore,
+        ConnectionKinds.Sftp or ConnectionKinds.Scp or ConnectionKinds.Ftps or ConnectionKinds.Smb or ConnectionKinds.S3 or ConnectionKinds.AzureBlob => ConnectionKindGroup.FileStore,
         ConnectionKinds.Http => d.Webhook is not null ? ConnectionKindGroup.Delivery : ConnectionKindGroup.Http,
         ConnectionKinds.ModelProvider => d.ModelProvider?.Purpose == "embeddings" ? ConnectionKindGroup.Embedding : ConnectionKindGroup.Model,
         _ => ConnectionKindGroup.Database,
@@ -600,7 +641,7 @@ public static class ConnectionKindGroups
         if (group.HasFlag(ConnectionKindGroup.Model)) names.Add("chat model provider");
         if (group.HasFlag(ConnectionKindGroup.Embedding)) names.Add("embedding model provider");
         if (group.HasFlag(ConnectionKindGroup.Http)) names.Add("HTTP API (`kind: http`)");
-        if (group.HasFlag(ConnectionKindGroup.FileStore)) names.Add("file store (`kind: sftp`, `scp`, `ftps`, `smb`)");
+        if (group.HasFlag(ConnectionKindGroup.FileStore)) names.Add("file store (`kind: sftp`, `scp`, `ftps`, `smb`, `s3`, `azure-blob`)");
         return names.Count == 0 ? "none" : string.Join(" or ", names);
     }
 

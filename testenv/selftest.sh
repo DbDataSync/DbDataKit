@@ -60,6 +60,8 @@ out="$(t sftp --dotenv)"
 check "sftp: its port, user, folder and the key file of the cache" '[[ "$out" == *"DBDATAKIT_TEST_SFTP_PORT=13022"* && "$out" == *"DBDATAKIT_TEST_SFTP_USER=foo"* && "$out" == *"DBDATAKIT_TEST_SFTP_ROOT=/upload"* && "$out" == *"DBDATAKIT_TEST_SFTP_KEY_FILE="*"/sftp/client_ed25519"* && "$out" != *FTPS* ]]'
 out="$(t ssh --dotenv)"
 check "ssh: its port, user and folder, and nothing of sftp" '[[ "$out" == *"DBDATAKIT_TEST_SSH_PORT=13023"* && "$out" == *"DBDATAKIT_TEST_SSH_ROOT=/config"* && "$out" != *SFTP* ]]'
+out="$(t "s3 azurite" --dotenv)"
+check "s3 and azurite: endpoints, the bucket and container, the emulator's account" '[[ "$out" == *"DBDATAKIT_TEST_S3_ENDPOINT=http://127.0.0.1:13090"* && "$out" == *"DBDATAKIT_TEST_S3_BUCKET=dbkit"* && "$out" == *"DBDATAKIT_TEST_AZURITE_ENDPOINT=http://127.0.0.1:13100/devstoreaccount1"* && "$out" == *"DBDATAKIT_TEST_AZURITE_ACCOUNT=devstoreaccount1"* ]]'
 out="$(t ftps --dotenv)"
 check "ftps: its port and user, and nothing of sftp" '[[ "$out" == *"DBDATAKIT_TEST_FTPS_PORT=13021"* && "$out" == *"DBDATAKIT_TEST_FTPS_USER=foo"* && "$out" != *SFTP* ]]'
 

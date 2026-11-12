@@ -110,7 +110,7 @@ public sealed class GrantsSpec
 [ConfigSchema(Naming = KeyNaming.SnakeCase, Description = "How a connection of an outside kind signs in (connection/2).")]
 public sealed class SignInSpec
 {
-    [ConfigKey(Pattern = "none|api_key|basic|oauth2_client_credentials|oauth2_authorization_code|client_certificate|signed_webhook|ssh_key|kerberos")]
+    [ConfigKey(Pattern = "none|api_key|basic|oauth2_client_credentials|oauth2_authorization_code|client_certificate|signed_webhook|ssh_key|kerberos|access_key|shared_key|sas_token")]
     public string Method { get; set; } = "none";
 
     /// <summary>api_key: where the key goes, <c>header</c> or <c>query</c>.</summary>
@@ -156,6 +156,26 @@ public sealed class SignInSpec
 
     /// <summary>... and, when the key is encrypted, the reference of its passphrase.</summary>
     public string? PassphraseSecret { get; set; }
+}
+
+/// <summary>
+/// The <c>object_store:</c> section of a connection of kind <c>s3</c> or <c>azure-blob</c> (plan 27a IX06; <c>connection/2</c>, additive): the bucket (S3) or container (Azure), a folder prefix every path is under, and for S3 the region and the style of the address. The address of the service is the connection's <c>endpoint</c>.
+/// </summary>
+[ConfigSchema(Naming = KeyNaming.SnakeCase, Description = "An object store (connection/2, kinds s3 and azure-blob).")]
+public sealed class ObjectStoreSpec
+{
+    /// <summary>The S3 bucket or the Azure container.</summary>
+    [ConfigKey(Required = true)]
+    public string Bucket { get; set; } = "";
+
+    /// <summary>A folder in the bucket every path is under (<c>incoming/</c>); none: the whole bucket.</summary>
+    public string Prefix { get; set; } = "";
+
+    /// <summary>s3: the region that signs the request (<c>us-east-1</c> by default; an S3-compatible server usually accepts the default).</summary>
+    public string Region { get; set; } = "us-east-1";
+
+    /// <summary>s3: the bucket is in the path (<c>https://host/bucket/key</c>, what S3-compatible servers expect) and not in the host name (<c>https://bucket.host/key</c>, what Amazon's own endpoints expect).</summary>
+    public bool PathStyle { get; set; }
 }
 
 /// <summary>
@@ -319,10 +339,22 @@ public static class ConnectionKinds
     /// <summary>A Windows file share (SMB, plan 27a IX05), signed in to with the Windows identity of the process (Kerberos). It works on a Windows host only.</summary>
     public const string Smb = "smb";
 
-    public static readonly string[] All = [Database, Http, ModelProvider, Smtp, Sftp, Scp, Ftps, Smb];
+    /// <summary>Amazon S3 and the servers that speak its API (MinIO, Ceph, ...); plan 27a IX06, decision SD13.</summary>
+    public const string S3 = "s3";
+
+    /// <summary>Azure Blob Storage; plan 27a IX06, decision SD13.</summary>
+    public const string AzureBlob = "azure-blob";
+
+    public static readonly string[] All = [Database, Http, ModelProvider, Smtp, Sftp, Scp, Ftps, Smb, S3, AzureBlob];
 
     /// <summary>The kinds that are a file store (<see cref="ConnectionKindGroup.FileStore"/>): they have a <c>file_server</c> section and no <c>endpoint</c>.</summary>
     public static bool IsFileServer(string? kind) => kind is Sftp or Scp or Ftps or Smb;
+
+    /// <summary>The kinds that are an object store (<c>s3</c>, <c>azure-blob</c>): an <c>endpoint</c> and an <c>object_store</c> section.</summary>
+    public static bool IsObjectStore(string? kind) => kind is S3 or AzureBlob;
+
+    /// <summary>Every kind that keeps files (<see cref="ConnectionKindGroup.FileStore"/>).</summary>
+    public static bool IsFileStore(string? kind) => IsFileServer(kind) || IsObjectStore(kind);
 
     public static bool IsKnown(string? kind) => kind is not null && All.Contains(kind, StringComparer.Ordinal);
 }
@@ -381,8 +413,11 @@ public sealed class ConnectionDefinition
     /// <summary>The mail server (kind <c>smtp</c>).</summary>
     public SmtpSpec? Smtp { get; set; }
 
-    /// <summary>The file server (kinds <c>sftp</c>, <c>scp</c>, <c>ftps</c>; plan 27a IX04).</summary>
+    /// <summary>The file server (kinds <c>sftp</c>, <c>scp</c>, <c>ftps</c>, <c>smb</c>; plan 27a IX04, IX05).</summary>
     public FileServerSpec? FileServer { get; set; }
+
+    /// <summary>The bucket or container (kinds <c>s3</c> and <c>azure-blob</c>; plan 27a IX06).</summary>
+    public ObjectStoreSpec? ObjectStore { get; set; }
 
     /// <summary>How an outside kind signs in; null: it does not.</summary>
     public SignInSpec? SignIn { get; set; }

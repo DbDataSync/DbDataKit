@@ -2,7 +2,7 @@
 # The shared test engines (docs/ci-and-testing.md): start, stop, and print the connection variables every suite needs.
 #
 #   testenv/testenv.sh up mssql postgres         start the engines and wait until they are healthy (`up` alone: the seven everyday ones;
-#                                                `up all`: also the slow ones, mssql2025 spark bigquery flight flight-tls, the file servers sftp ssh ftps, and the
+#                                                `up all`: also the slow ones, mssql2025 spark bigquery flight flight-tls, the file servers sftp ssh ftps, the object stores s3 azurite, and the
 #                                                previous releases mssql2022 postgres16)
 #   testenv/testenv.sh down                      stop and remove them (and their data)
 #   testenv/testenv.sh status                    list the engines that are running
@@ -51,7 +51,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 compose=(docker compose -f "$here/docker-compose.yml")
 password="${DBDATAKIT_TEST_PASSWORD:-DbKit_Test_Pw1}"
 host=127.0.0.1
-engines_all=(mssql mssql-target postgres postgres-logical mysql mariadb oracle mssql2025 spark bigquery flight flight-tls mssql2022 postgres16 sftp ssh ftps)
+engines_all=(mssql mssql-target postgres postgres-logical mysql mariadb oracle mssql2025 spark bigquery flight flight-tls mssql2022 postgres16 sftp ssh ftps s3 azurite)
 engines_default=(mssql mssql-target postgres postgres-logical mysql mariadb oracle)   # what `up` with no engine named starts
 cache="${DBDATAKIT_TEST_CACHE:-$HOME/.cache/dbdatakit-testenv}"
 
@@ -167,6 +167,19 @@ canonical() {
     echo "DBDATAKIT_TEST_SSH_PASSWORD=$password"
     echo "DBDATAKIT_TEST_SSH_ROOT=/config"
   fi
+  if grep -qx s3 <<<"$up"; then
+    echo "DBDATAKIT_TEST_S3_ENDPOINT=http://$host:13090"
+    echo "DBDATAKIT_TEST_S3_ACCESS_KEY=dbkit-access-key"
+    echo "DBDATAKIT_TEST_S3_SECRET_KEY=$password"
+    echo "DBDATAKIT_TEST_S3_BUCKET=dbkit"
+  fi
+  if grep -qx azurite <<<"$up"; then
+    # the emulator's well-known account (public, documented by Microsoft: it protects nothing)
+    echo "DBDATAKIT_TEST_AZURITE_ENDPOINT=http://$host:13100/devstoreaccount1"
+    echo "DBDATAKIT_TEST_AZURITE_ACCOUNT=devstoreaccount1"
+    echo "DBDATAKIT_TEST_AZURITE_KEY=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+    echo "DBDATAKIT_TEST_AZURITE_CONTAINER=dbkit"
+  fi
   if grep -qx ftps <<<"$up"; then
     echo "DBDATAKIT_TEST_FTPS_HOST=$host"
     echo "DBDATAKIT_TEST_FTPS_PORT=13021"
@@ -224,6 +237,8 @@ wait_ready() {
     bigquery) wait_until 60 "the BigQuery emulator" curl -fs "http://$host:9050/bigquery/v2/projects/ddb/datasets" ;;
     flight) wait_until 90 "Flight SQL" logged flight "SQLFlite server - started" ;;
     flight-tls) wait_until 90 "Flight SQL (TLS)" logged flight-tls "SQLFlite server - started" ;;
+    s3) wait_until 90 "the S3 mock" curl -fs "http://$host:13090/" ;;
+    azurite) wait_until 60 "Azurite" curl -s -o /dev/null "http://$host:13100/" ;;
   esac
 }
 

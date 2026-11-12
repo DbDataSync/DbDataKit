@@ -19,7 +19,8 @@ An **integration** is ordinary code that moves data between the suite and a syst
 | Kit services for outside systems: file formats (CSV, TSV, JSON, JSON Lines, XML, fixed width, Excel, Parquet, gzip, zip, OpenPGP) and the HTTP client with paging, rate limits and retries | **built** (IX08 to IX10; `DbDataKit.Runner.Kit.Formats`, `DbDataKit.Runner.Kit.Http`) |
 | SFTP, SCP and FTPS as connections (`DbDataKit.Connections.Files`: list, read, write without a partial file, host-key and certificate pinning) | **built** (IX04) |
 | SMB with Windows sign-in (Kerberos), `smb` connections: the interface and a Windows-only implementation | **built, proven on Linux for everything but the share itself** (IX05) |
-| Kit services for outside systems: object storage | **not built** (IX06) |
+| Object storage: `s3` (Amazon and S3-compatible servers) and `azure-blob`, signed without an SDK | **built** (IX06) |
+| The file connections feed the file trigger | **not built** (IX07) |
 | Landing helpers: rows into a staging table through `DbDataKit.Transfer` and into DbDataStore's tables through the Store's write path, idempotent | **built** (IX11; `DbDataKit.Runner.Kit.Landing`; the Store route is in process, not through the Store's HTTP API; files into DbDataStore documents wait for plan 15's documents) |
 | Change detection with no change feed (a row-hash snapshot kept as a checkpoint, compared with the next run) | **built** (IX13; `DbDataKit.Runner.Kit.Changes`) |
 | Refused-record listing and replay (the kit's surface over the dead letters; the runner's API and screens are plan 28a R25) | **built** in the kit (IX14; `RefusedRecords`) |

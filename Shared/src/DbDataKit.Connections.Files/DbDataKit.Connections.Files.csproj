@@ -11,6 +11,7 @@
     <PackageReference Include="FluentFTP" />
     <PackageReference Include="SSH.NET" />
     <ProjectReference Include="..\DbDataKit.Connections.Abstractions\DbDataKit.Connections.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections.Http\DbDataKit.Connections.Http.csproj" />
     <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
     <InternalsVisibleTo Include="DbDataKit.Connections.Files.Tests" />
   </ItemGroup>

@@ -91,7 +91,7 @@ internal static class Support
     }
 
     /// <summary>What every file store keeps (plan 27a IX04): write, list, read, replace, delete; a missing file is a permanent not-found; a path that leaves the root is refused; and a file being written is not seen under its name, only when it is whole.</summary>
-    public static async Task ContractAsync(IFileStore store, IFileStore observer, string folder, bool canList = true)
+    public static async Task ContractAsync(IFileStore store, IFileStore observer, string folder, bool canList = true, bool partFile = true)
     {
         var name = $"{folder}/hello-{Guid.NewGuid():N}.txt";
         await store.WriteAsync(name, Bytes("hello"));
@@ -118,7 +118,8 @@ internal static class Support
             var writing = store.WriteAsync(whole, stalled);
             await stalled.HalfWritten.WaitAsync(TimeSpan.FromSeconds(30));
             Assert.DoesNotContain(await observer.ListAsync(folder), e => e.Path == whole);
-            Assert.Contains(await observer.ListAsync(folder, includeTemporary: true), e => e.Path == whole + FileNames.PartSuffix);
+            // a store that writes through a .part file shows it to a reader that asks for temporary names; an object store puts the object whole, so there is nothing to show
+            if (partFile) Assert.Contains(await observer.ListAsync(folder, includeTemporary: true), e => e.Path == whole + FileNames.PartSuffix);
             await Assert.ThrowsAsync<ConnectionFailureException>(() => observer.OpenReadAsync(whole));
             stalled.Finish();
             await writing.WaitAsync(TimeSpan.FromSeconds(30));

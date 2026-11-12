@@ -7,6 +7,8 @@ The clients of the places a connection can keep files (plan 27a IX04 to IX06), b
 | `sftp` | SFTP over SSH | SSH.NET | yes | the host key's fingerprint, `file_server.host_keys` |
 | `scp` | SCP over SSH (the file moved into place with `mv`, a folder made with `mkdir -p`) | SSH.NET | **no** (`Unsupported`: use `sftp` to list) | the host key, as `sftp` |
 | `smb` | a Windows share, signed in to as the Windows identity of the process (Kerberos); Windows only | `System.IO` over `\\host\share` | yes | Windows (the server's name; Kerberos proves it) |
+| `s3` | the S3 API: Amazon and S3-compatible servers (MinIO, Ceph), signed with Signature Version 4, no SDK | `HttpClient` | yes (a folder is a key prefix) | TLS (`tls.ca_file`, `tls.verify`) |
+| `azure-blob` | Azure Blob Storage, signed with Shared Key or a SAS token, no SDK | `HttpClient` | yes (a folder is a blob-name prefix) | TLS |
 | `ftps` | FTP with TLS, explicit (AUTH TLS) or implicit | FluentFTP | yes | the certificate's SHA-256, `file_server.certificate_sha256`, or `tls.ca_file`, or the machine's roots |
 
 ## The connection file
@@ -38,6 +40,18 @@ sign_in: { method: kerberos }                                                   
 ```
 
 `SmbFileStore` reaches the UNC path with `System.IO`; Windows asks the domain controller for a Kerberos ticket for the server's **name** (an address makes it fall back to NTLM: the file reader says so as a warning) and signs and encrypts as the server's policy says. On a host that is not Windows, `FileStores.OpenAsync` is the classified failure `smb-needs-windows` (kind Unsupported) and **Test** says so in words. `SmbFailures` classifies what Windows reports by its numbers (a failed logon, no logon server, a Kerberos ticket that could not be had: a rejected login; a clock skew; an unreachable server or share: the network; access denied: a permission); `PathFileStore` is the same store over any folder, which is what Linux tests exercise. Only a Windows host in a domain proves the ticket and the share themselves.
+
+## Object storage (plan 27a IX06, decision SD13: S3-compatible and Azure Blob)
+
+```yaml
+kind: s3                                   # or azure-blob
+endpoint: https://s3.eu-west-1.amazonaws.com   # a MinIO or Ceph server: its address, and object_store.path_style: true
+object_store: { bucket: reports, prefix: incoming/, region: eu-west-1 }   # azure-blob: bucket is the container
+sign_in: { method: access_key, user: AKIA..., password_secret: secret:dbdatakit:server:connection:reports:password }
+# azure-blob: { method: shared_key, user: <account>, key_secret: ... }  or  { method: sas_token, key_secret: <the token> }
+```
+
+Every request is one HTTP call signed by the library itself (`AwsSigV4`, `AzureSharedKey`): the signers are checked against the examples Amazon documents (with their known signatures) and, for Azure, against Azurite, which verifies every Shared Key signature. The key is a secret reference; the address has no query. A folder is a key prefix (a listing uses the delimiter and follows the continuation token); `object_store.prefix` is the folder every path is under. An object is put **whole in one request, so it exists under its name only when complete** (no `.part`): the body is buffered in memory, so a single object is limited by memory and by 5 GB for S3 (multipart upload is not built). A missing object, bucket or container is the permanent failure `NotFound`; `403` is a rejected login when the service's own code says the key or signature is wrong (`InvalidAccessKeyId`, `SignatureDoesNotMatch`, `AuthenticationFailed`), else a missing permission; `429` and `5xx` are temporary. A delete of an S3 object that is not there succeeds (as S3's does); on Azure it is `NotFound`. `http` to a server that is not this machine is a warning. Google Cloud Storage is not in scope (SD13).
 
 ## Pinning: a changed server is refused by name
 

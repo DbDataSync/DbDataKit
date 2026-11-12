@@ -15,6 +15,8 @@ public static class FileStores
             ConnectionKinds.Scp => Open(ScpFileStore.OpenAsync(definition, secrets, ct)),
             ConnectionKinds.Ftps => Open(FtpsFileStore.OpenAsync(definition, secrets, ct)),
             ConnectionKinds.Smb => SmbFileStore.OpenAsync(definition, secrets, ct),
+            ConnectionKinds.S3 => Open(S3FileStore.OpenAsync(definition, secrets, ct)),
+            ConnectionKinds.AzureBlob => Open(AzureBlobFileStore.OpenAsync(definition, secrets, ct)),
             _ => throw new ArgumentException($"A connection of kind `{definition.KindName}` is not a file store this library opens.", nameof(definition)),
         };
 
@@ -49,7 +51,7 @@ public static class FileStoreTester
         var clock = Stopwatch.StartNew();
         FileTestResult Done(bool ok, bool? reached, string signIn, string message, ConnectionFailureKind? kind = null) => new(ok, reached, signIn, message, kind, kind is { } k && ConnectionFailure.IsTemporaryKind(k), clock.ElapsedMilliseconds);
         var server = definition.FileServer;
-        var where = server is null ? definition.Name : definition.KindName == ConnectionKinds.Smb ? SmbFileStore.UncPath(definition) : $"{server.Host}:{server.Port ?? DefaultPort(definition)}";
+        var where = server is null ? definition.Name : definition.KindName == ConnectionKinds.Smb ? SmbFileStore.UncPath(definition) : definition.ObjectStore is { } objectStore ? $"{definition.KindName}://{objectStore.Bucket}" : $"{server.Host}:{server.Port ?? DefaultPort(definition)}";
         var pinned = server is not null && (server.HostKeys.Count > 0 || server.CertificateSha256.Count > 0);
         try
         {

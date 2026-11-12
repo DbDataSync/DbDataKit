@@ -45,7 +45,7 @@ describe('outside connections (plan 27a IX01)', () => {
   })
 
   it('starts a webhook or a mail server from its own template and labels the secret parts of an address', () => {
-    expect(NEW_CHOICES.map((c) => [c.id, c.kind, c.flavor ?? null])).toEqual([['http', 'http', null], ['model-provider', 'model-provider', null], ['smtp', 'smtp', null], ['sftp', 'sftp', null], ['scp', 'scp', null], ['ftps', 'ftps', null], ['smb', 'smb', null], ['slack', 'http', 'slack'], ['teams', 'http', 'teams'], ['oauth', 'http', 'oauth'], ['signed', 'http', 'signed']])
+    expect(NEW_CHOICES.map((c) => [c.id, c.kind, c.flavor ?? null])).toEqual([['http', 'http', null], ['model-provider', 'model-provider', null], ['smtp', 'smtp', null], ['sftp', 'sftp', null], ['scp', 'scp', null], ['ftps', 'ftps', null], ['smb', 'smb', null], ['s3', 's3', null], ['azure-blob', 'azure-blob', null], ['slack', 'http', 'slack'], ['teams', 'http', 'teams'], ['oauth', 'http', 'oauth'], ['signed', 'http', 'signed']])
     expect(secretLabel('key')).toBe('API key')
     expect(secretLabel('token', 'endpoint_secrets.token')).toBe('Secret part {token} of the address')
     expect(secretLabel('endpoint', 'endpoint')).toBe('The whole address (a secret)')
@@ -64,7 +64,8 @@ describe('outside connections (plan 27a IX01)', () => {
   })
 
   it('knows the file servers: their labels, the key they sign in with and which kinds Test can try (plan 27a IX04)', () => {
-    expect(['http', 'smtp', 'sftp', 'scp', 'ftps', 'smb'].every(canTest)).toBe(true)
+    expect(['http', 'smtp', 'sftp', 'scp', 'ftps', 'smb', 's3', 'azure-blob'].every(canTest)).toBe(true)
+    expect(outsideDetail({ ...crm, kind: 's3', endpoint: 's3://reports/incoming/ at https://s3.example.com', signIn: 'access_key' })).toBe('s3://reports/incoming/ at https://s3.example.com, access key (AWS Signature V4)')
     expect(outsideDetail({ ...crm, kind: 'smb', endpoint: 'smb://fs01/data/incoming', signIn: 'kerberos' })).toBe('smb://fs01/data/incoming, Windows sign-in (Kerberos)')
     expect(canTest('model-provider')).toBe(false)
     expect(canTest(null)).toBe(false)
