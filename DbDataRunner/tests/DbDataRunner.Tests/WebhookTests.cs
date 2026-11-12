@@ -64,7 +64,7 @@ public sealed class WebhookTests
         Assert.Single(Inbox(h).InboxRecords());                                       // the replay made no item
         var entries = h.Audit.Read(new AuditQuery(Verb: "runner.webhook.receive")).Select(e => e.Entry).ToList();
         Assert.Equal([AuditEvent.Ok, AuditEvent.Refused], entries.OrderBy(e => e.Outcome == AuditEvent.Ok ? 0 : 1).Select(e => e.Outcome).ToArray());
-        Assert.Contains(entries, e => e.Detail!.Contains("\"replays\":1", StringComparison.Ordinal));
+        Assert.Contains(entries, e => e.Detail!.Replace(" ", "").Contains("\"replays\":1", StringComparison.Ordinal));
         Assert.DoesNotContain(entries, e => (e.Detail ?? "").Contains("4711", StringComparison.Ordinal));
 
         var other = Encoding.UTF8.GetBytes("""{"order":"another-order"}""");

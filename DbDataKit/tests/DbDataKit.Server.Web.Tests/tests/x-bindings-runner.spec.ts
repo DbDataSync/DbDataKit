@@ -60,18 +60,16 @@ test('a runner slot is bound to a console connection, its copy is compared with 
   await page.reload()
   await expect(page.getByTestId(prod)).toHaveAttribute('data-copy', 'stale')
 
-  // a dev channel on production's connection is asked first, then sent with the confirmation and a note
+  // the runner's slot already has a dev channel (its tasks declare it), so it is only given a connection: a dev channel on production's connection is asked first, then sent with the confirmation and a note
   await page.getByTestId('binding-edit-orders/api').click()
-  await page.getByTestId('binding-new-release-orders/api').fill('dev')
-  await page.getByTestId('binding-new-release-add-orders/api').click()
   await page.getByTestId('binding-select-orders/api-dev-0').fill('crm')
   await page.getByTestId('binding-save-orders/api').click()
   await expect(page.getByTestId('binding-confirm-orders/api')).toContainText('production')
   await page.getByTestId('binding-confirm-note-orders/api').fill('the dev crm is the live one this week')
   await page.getByTestId('binding-save-orders/api').click()
-  await expect.poll(() => calls.length).toBe(3)
-  expect(calls[2].path).toBe('/api/bindings/runner/console-runner/orders/api')
-  expect(calls[2].body.confirm).toEqual(['bindings/runner/orders/api/dev'])
-  expect(calls[2].body.note).toBe('the dev crm is the live one this week')
-  expect(calls[2].body.channels).toEqual({ prod: 'crm', dev: 'crm' })
+  await expect.poll(() => calls.length).toBe(2)   // the console asks for the confirmation itself (production's connection in a dev channel), so only the confirmed save reaches the runner
+  expect(calls[1].path).toBe('/api/bindings/runner/console-runner/orders/api')
+  expect(calls[1].body.confirm).toEqual(['bindings/runner/orders/api/dev'])
+  expect(calls[1].body.note).toBe('the dev crm is the live one this week')
+  expect(calls[1].body.channels).toEqual({ prod: 'crm', dev: 'crm' })
 })
