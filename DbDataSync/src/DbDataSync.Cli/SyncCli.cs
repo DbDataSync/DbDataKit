@@ -18,7 +18,7 @@ public static class SyncCli
     public static readonly IReadOnlySet<string> Legacy = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "tool", "update", "launcher", "internal", "version" };
 
     /// <summary>What <c>ui mcp</c> never offers: nothing that sets a secret or loads an installed library, and nothing that is long-running or interactive (<see cref="McpOptions.Always"/>).</summary>
-    private static readonly string[] NotForAgents = ["secret set", "secret remove", "secret send", "library validate", "server pair", "server unpair"];
+    private static readonly string[] NotForAgents = ["secret set", "secret remove", "secret send", "library validate", "server pair", "server unpair", "gateway add"];
 
     public static NounRouter Router(string version = "0", Func<string, string?>? environment = null)
     {
@@ -98,6 +98,9 @@ public static class SyncCli
         ]),
         StateNoun(),
         LineageCommand.Noun(),
+        // plan 24a UC13: the serving groups this server tells when a run wrote rows
+        DbDataKit.Serving.Notify.GatewayNoun.Create(args => SyncDataChanges.PairingsIn(DbDataSyncRoot.Resolve(args)),
+            args => SyncDataChanges.IdentityIn(DbDataSync.Core.Secrets.SecretStore.OpenInRepository(DbDataSyncRoot.Resolve(args))), "DbDataSync server", "[--repo <path>]", "repo"),
         new Noun("health", "Is a running server answering",
         [
             new Verb("check", "Exit 0 when a running DbDataSync answers, 1 when it does not (what the container's health check runs)", EffectClass.OfflineOnly, "[--url <url>] [--repo <path>]",

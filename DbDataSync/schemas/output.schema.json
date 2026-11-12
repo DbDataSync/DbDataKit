@@ -834,6 +834,144 @@
       "if": {
         "properties": {
           "command": {
+            "const": "gateway add"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_gateway_add"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "gateway add"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_gateway_add_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "gateway list"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_gateway_list"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "gateway list"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_gateway_list_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "gateway remove"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_gateway_remove"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "gateway remove"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_gateway_remove_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "health check"
           },
           "ok": {
@@ -2693,6 +2831,123 @@
     "data_driver_uninstall": {
       "type": "object",
       "additionalProperties": false
+    },
+    "data_gateway_add": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "instance_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "url",
+        "instance_id"
+      ]
+    },
+    "data_gateway_add_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "instance_id": {
+          "type": "string"
+        }
+      }
+    },
+    "data_gateway_list": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gateways": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "instance_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "url",
+              "instance_id"
+            ]
+          }
+        }
+      },
+      "required": [
+        "gateways"
+      ]
+    },
+    "data_gateway_list_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gateways": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "instance_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "url",
+              "instance_id"
+            ]
+          }
+        }
+      }
+    },
+    "data_gateway_remove": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "removed": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "removed"
+      ]
+    },
+    "data_gateway_remove_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "removed": {
+          "type": "string"
+        }
+      }
     },
     "data_health_check": {
       "type": "object",

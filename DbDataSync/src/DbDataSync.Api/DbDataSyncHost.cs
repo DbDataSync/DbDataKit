@@ -124,6 +124,16 @@ public static class DbDataSyncHost
         builder.Services.AddSingleton(sp => CertificateOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
 
         builder.Services.AddSingleton(sp => SecretStore.OpenInRepository(sp.GetRequiredService<ApiOptions>().RepoRoot));
+        // plan 24a UC13: a run that wrote rows tells the serving groups this server is paired with (gateways.json), signed as the server itself; no pairing, nothing sent
+        builder.Services.AddSingleton(sp =>
+        {
+            var pairings = DbDataSync.Api.Management.SyncDataChanges.PairingsIn(sp.GetRequiredService<ApiOptions>().RepoRoot);
+            var secrets = sp.GetRequiredService<SecretStore>();
+            return new DbDataKit.Serving.Notify.DataChangeNotifier(DbDataSync.Api.Management.SyncDataChanges.Product, pairings,
+                ct => DbDataSync.Api.Management.SyncDataChanges.IdentityIn(secrets).GetOrCreateAsync(ct), sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataSync.DataChanged"));
+        });
+        builder.Services.AddSingleton(sp => new DbDataSync.Api.Management.SyncDataChanges(sp.GetRequiredService<ConfigRepository>(), DbDataSync.Api.Management.SyncDataChanges.PairingsIn(sp.GetRequiredService<ApiOptions>().RepoRoot),
+            sp.GetRequiredService<DbDataKit.Serving.Notify.DataChangeNotifier>(), sp.GetRequiredService<ILogger<DbDataSync.Api.Management.SyncDataChanges>>()));
 
         // One GitCommitService per process, not one per consumer — its own doc comment explains why:
         // the in-process write lock that makes concurrent commits safe only holds if every writer to

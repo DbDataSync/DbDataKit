@@ -441,6 +441,29 @@
       }
     },
     {
+      "name": "gateway_list",
+      "description": "The serving groups this server is paired with. [Offline only] Usage: gateway list [--repo <path>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
+      }
+    },
+    {
       "name": "health_check",
       "description": "Exit 0 when a running DbDataSync answers, 1 when it does not (what the container's health check runs). [Offline only] Usage: health check [--url <url>] [--repo <path>]",
       "inputSchema": {
