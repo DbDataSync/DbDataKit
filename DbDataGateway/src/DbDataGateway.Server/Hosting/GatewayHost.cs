@@ -246,6 +246,11 @@ public static class GatewayHost
             services.AddHostedService(sp => sp.GetRequiredService<GatewayStoreModule>());
             services.AddSingleton<IReadinessProbe>(sp => new ServingModuleReadinessProbe(sp.GetRequiredService<GatewayStoreModule>()));
         }
+        // the drafts of previews and channels (plan 21 CH07) live where the store module or the apps host writes them: their expiry runs when either is on
+        if (GatewayModules.Has(options, GatewayModules.Store) || GatewayModules.Has(options, GatewayModules.Apps))
+            services.AddHostedService(sp => new GatewayDraftSweeper(
+                GatewayStoreModule.ApiOf(sp.GetRequiredService<IOptionsMonitor<GatewayOptions>>(), sp.GetRequiredService<DbDataKit.State.StateDatabase>(), sp.GetRequiredService<SecretsRuntime>(), sp.GetRequiredService<PublishedEntityModels>()),
+                sp.GetRequiredService<DbDataKit.Monitoring.INotificationFeed>(), () => sp.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue.Store, sp.GetRequiredService<ILoggerFactory>().CreateLogger("Previews")));
         if (GatewayModules.Has(options, GatewayModules.Views))
         {
             services.AddSingleton<GatewayViewsModule>();

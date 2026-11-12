@@ -74,3 +74,5 @@ compression: { mode: arrow, codec: zstd, level: 3, allowClientOverride: true }
 #     - catalog: semantic/sales.yaml
 #       sources: { sqlserver_sales: warehouse }
 #       ssas: { ssas_finance: "Data Source=ssas01;Catalog=Finance;Password=env:SSAS_PASSWORD" }   # Windows only; this connection is the server's, not the caller's
+
+# store: { idleDays: 30, noticeDays: 7 }   # a preview's or channel's draft with no write for idleDays is removed with its writes, after a notice noticeDays before (notification feed)

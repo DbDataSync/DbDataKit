@@ -319,6 +319,14 @@ public sealed class StoreModuleOptions
 
     [ConfigKey(Min = 1, Max = 65535)]
     public int Port { get; set; } = 8819;
+
+    /// <summary>Days without a write after which a preview's or channel's draft is removed with its writes (plan 21 CH07; <c>store.idleDays</c>). The store module and the apps host's previews write into the same drafts.</summary>
+    [ConfigKey(Min = 1, Max = 3650)]
+    public int IdleDays { get; set; } = 30;
+
+    /// <summary>Days before that removal on which a notice goes into the notification feed (<c>store.noticeDays</c>); it is never longer than the idle time less a day.</summary>
+    [ConfigKey(Min = 0, Max = 365)]
+    public int NoticeDays { get; set; } = 7;
 }
 
 /// <summary>The <c>views</c> module (plan 32, DBR11b): where it listens. Published dashboards and reports are read and rendered here, as the identity home's people, through the models published to the group.</summary>
