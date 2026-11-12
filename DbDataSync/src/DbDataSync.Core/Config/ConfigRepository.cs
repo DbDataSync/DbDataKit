@@ -327,6 +327,7 @@ public sealed class ConfigRepository
         ConfigValidation.ValidateScheduling(task.Scheduling, task.Name);
         ConfigValidation.ValidateChangeProcessing(task.ChangeProcessing, task.Name);
         ValidateHooks(task.Hooks);
+        TrackingResolution.Validate(task.Tracking, task.Name);
 
         var path = ConfigPaths.TaskFile(_configRoot, task.Name);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);

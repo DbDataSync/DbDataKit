@@ -117,6 +117,11 @@ public sealed class ReplicationTaskConfig
     public string? Notes { get; set; }
 
     /// <summary>
+    /// Where this replication's tracking state lives (plan 28c E17): the optional <c>tracking:</c> section, null when the file has none (the default, <see cref="TrackingResolution.Resolve"/>).
+    /// </summary>
+    public TrackingConfig? Tracking { get; set; }
+
+    /// <summary>
     /// The checks stored with this replication (plan 23a FQ04, format 2): the <c>checks:</c> section of <c>task.yaml</c>, each about a dataset the replication writes (its lineage identity, or the target table's name), freshness first.
     /// Read by <see cref="ConfigRepository.LoadReplicationTask"/> through <c>DbDataKit.Quality.CheckSection</c>; empty when the file has none. Nothing here evaluates them (FQ10).
     /// <para>
