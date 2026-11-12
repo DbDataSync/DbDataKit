@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using DbDataKit.Apps;
+using DbDataKit.Delivery;
 using DbDataKit.State;
 using DbDataKit.State.Tests;
 using DbDataKit.Views.Export;
@@ -57,6 +58,8 @@ public sealed class CustomViewExportTests : IDisposable
         private readonly Dictionary<string, CustomView> views = AppManifestLoader.Load(Manifest).Manifest!.CustomViews.ToDictionary(v => "sales-portal/" + v.Export);
         public CustomView? Find(string component) => views.GetValueOrDefault(component);
         public CustomAppFiles? Files(string component) => views.ContainsKey(component) ? new CustomAppFiles("sales-portal", files) : null;
+        public CustomPageApp? FindPage(string instance, string name) => instance == "sales-portal" && views.Values.FirstOrDefault(v => v.Name == name && v.Kind == CustomViewKind.Page) is { } v ? new CustomPageApp(instance, v, Files("sales-portal/" + v.Export)!) : null;
+        public bool MayOpen(ViewsPrincipal who, string instance) => who.Caller.Roles.Contains("analyst");
         public CustomView View(string export) => views["sales-portal/" + export];
     }
 
@@ -211,6 +214,70 @@ public sealed class CustomViewExportTests : IDisposable
         using var pdf = PdfDocument.Open(result.Pdf);
         Assert.Equal(210 / 25.4 * 72, pdf.GetPage(1).Width, 0.8);   // A4 portrait from the manifest's page
         Assert.Empty(result.Warnings);
+    }
+
+    private sealed class Principals(TestCallers callers) : ISubscriberPrincipals
+    {
+        public Task<ViewsPrincipal?> ForAsync(string subscriber, CancellationToken cancellationToken) => Task.FromResult<ViewsPrincipal?>(subscriber switch
+        {
+            "alice" => callers.Tokens["all"], "wendy" => callers.Tokens["west"], "bob" => callers.Tokens["bob"], _ => null,
+        });
+    }
+
+    private static SubscriptionRender Ask(string subscriber, string view = "sales-portal.regional", bool preview = false, string format = "pdf") =>
+        new(Guid.NewGuid(), subscriber, "page", view, new Dictionary<string, JsonNode?>(), null, format, null, preview);
+
+    [Fact]
+    public async Task A_subscription_to_a_custom_page_delivers_the_pdf_as_the_subscriber_with_their_own_rows_a_picture_and_one_link()
+    {
+        var (h, exporter, _) = await StartAsync(Board(GridBoard, GridTile));
+        await using var _1 = h;
+        await using var _2 = exporter;
+        var renderer = new SubscriptionRenderer(h.Module.Api!, h.Published, new Principals(h.Callers), new SubscriptionRendererOptions(PageLinkTemplate: "https://apps.example/apps/{instance}/_views/{name}"));
+
+        var all = Assert.IsType<RenderResult.Rendered>(await renderer.RenderAsync(Ask("alice", preview: true), TestContext.Current.CancellationToken));
+        var west = Assert.IsType<RenderResult.Rendered>(await renderer.RenderAsync(Ask("wendy"), TestContext.Current.CancellationToken));
+        Assert.Equal("application/pdf", all.MediaType);
+        var allText = string.Join(" ", PageTexts(all.Content));
+        var westText = string.Join(" ", PageTexts(west.Content));
+        Assert.Equal(3, PageTexts(all.Content).Length);          // the page's three sections are three pages
+        Assert.Contains("East", allText);
+        Assert.Contains("West", westText);
+        Assert.DoesNotContain("East", westText);                  // the rows differ for two subscribers with different access: each page was resolved as its subscriber
+        Assert.Equal("https://apps.example/apps/sales-portal/_views/regional", all.Link);     // one link, to the live view
+        Assert.Equal(new byte[] { 137, 80, 78, 71 }, all.Preview![..4]);                     // the inline picture is the same page drawn once more
+        Assert.Null(west.Preview);
+        // audited as the subscriber, as a page
+        Assert.Contains(h.Audit.Read(new AuditQuery(Verb: "view.export", Limit: 100)), r => r.Entry.TargetKind == "page" && r.Entry.TargetId == "sales-portal.regional" && r.Entry.ActorId == "u-west");
+    }
+
+    [Fact]
+    public async Task A_subscriber_who_may_not_open_the_instance_or_a_page_that_is_gone_loses_access_and_a_page_that_cannot_be_drawn_fails_and_tells_why()
+    {
+        var (h, exporter, _) = await StartAsync(Board(GridBoard, GridTile));
+        await using var _1 = h;
+        await using var _2 = exporter;
+        var renderer = new SubscriptionRenderer(h.Module.Api!, h.Published, new Principals(h.Callers));
+        Assert.IsType<RenderResult.AccessLost>(await renderer.RenderAsync(Ask("bob"), TestContext.Current.CancellationToken));              // no role the instance's reading rule accepts
+        Assert.IsType<RenderResult.AccessLost>(await renderer.RenderAsync(Ask("alice", "sales-portal.nothing"), TestContext.Current.CancellationToken));
+        Assert.IsType<RenderResult.AccessLost>(await renderer.RenderAsync(Ask("nobody"), TestContext.Current.CancellationToken));
+        var notNamed = Assert.IsType<RenderResult.Failed>(await renderer.RenderAsync(Ask("alice", "regional"), TestContext.Current.CancellationToken));
+        Assert.Contains("<instance>.<name>", notNamed.Reason);
+
+        // a query the core refuses for this person: no page is made (the subscription loses access, as for a denied widget)
+        h.Host.Before = (_, _) => throw new DbDataKit.Serving.ServingDeniedException("Source 'warehouse' is not available.");
+        Assert.IsType<RenderResult.AccessLost>(await renderer.RenderAsync(Ask("alice"), TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public void A_subscription_of_kind_page_is_a_pdf_of_an_instance_and_a_name()
+    {
+        JsonObject Spec(string view, string format = "pdf", string? extra = null) => JsonNode.Parse($$"""{"name":"x","kind":"page","view":"{{view}}","format":"{{format}}","channel":"mail","schedule":{"cron":"0 7 * * 1","time_zone":"UTC"}{{extra}}}""")!.AsObject();
+        Assert.Equal("page", SubscriptionSpec.Read(Spec("sales-portal.regional"), "test").Fields.Kind);
+        Assert.Contains("<instance>.<name>", Assert.Throws<SubscriptionSpecException>(() => SubscriptionSpec.Read(Spec("regional"), "test")).Message);
+        Assert.Contains("`pdf`", Assert.Throws<SubscriptionSpecException>(() => SubscriptionSpec.Read(Spec("a.b", "xlsx"), "test")).Message);
+        Assert.Contains("no layouts", Assert.Throws<SubscriptionSpecException>(() => SubscriptionSpec.Read(Spec("a.b", extra: ",\"layout\":\"print\""), "test")).Message);
+        Assert.Contains("`page`", Assert.Throws<SubscriptionSpecException>(() => SubscriptionSpec.Read(JsonNode.Parse("""{"name":"x","kind":"other","view":"a","channel":"mail","schedule":{"cron":"0 7 * * 1","time_zone":"UTC"}}""")!.AsObject(), "test")).Message);
     }
 
     [Fact]

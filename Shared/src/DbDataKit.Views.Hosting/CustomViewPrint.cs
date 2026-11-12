@@ -21,7 +21,16 @@ public interface ICustomViewApps
 {
     CustomView? Find(string component);
     CustomAppFiles? Files(string component);
+
+    /// <summary>A custom <b>page</b> of an app instance by the view's name (the address <c>/apps/&lt;instance&gt;/_views/&lt;name&gt;</c>): its manifest entry, its files and the app they come from; null for a name the instance does not have, or one that is a widget.</summary>
+    CustomPageApp? FindPage(string instance, string name) => null;
+
+    /// <summary>Whether this person may open the instance at all (the reading rule of an app: any role on it). A host that cannot say refuses, so a page is never exported for a person nobody checked.</summary>
+    bool MayOpen(ViewsPrincipal who, string instance) => false;
 }
+
+/// <summary>A custom page and what draws it: the instance it is addressed through, its manifest entry and the app's built files.</summary>
+public sealed record CustomPageApp(string Instance, CustomView View, CustomAppFiles Files);
 
 /// <summary>
 /// Custom views in the print page (plan 32 section 9f, DBR32). **A widget** is drawn in its box by a frame: the app's built files are served from the exporter's one-shot origin under <c>_app/&lt;app&gt;/</c> (so a frame loads nothing from outside, and

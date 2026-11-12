@@ -107,3 +107,14 @@ describe('the alert rules', () => {
     expect([cooldownWords(45), cooldownWords(120), cooldownWords(2880)]).toEqual(['45 minutes', '2 hours', '2 days'])
   })
 })
+
+describe('a subscription to a custom page (plan 32 DBR34)', () => {
+  it('is named instance.page, is a PDF and has no layout or widget', () => {
+    const built = buildRequest(form({ kind: 'page', view: 'sales-portal.regional-detail', layout: 'print', widget: 'w' }))
+    expect(built).toEqual({ body: expect.objectContaining({ kind: 'page', view: 'sales-portal.regional-detail', format: 'pdf' }) })
+    expect('body' in built && 'layout' in built.body).toBe(false)
+    expect(buildRequest(form({ kind: 'page', view: 'regional-detail' }))).toEqual({ error: expect.stringContaining('<app instance>.<page name>') })
+    expect(buildRequest(form({ kind: 'page', view: 'a.b', format: 'xlsx' }))).toEqual({ error: expect.stringContaining('PDF') })
+    expect(buildRequest(form({ kind: 'page', view: '' }))).toEqual({ error: expect.stringContaining('Name the page') })
+  })
+})
