@@ -577,6 +577,98 @@ public sealed class TriggerTests
         Assert.Equal(("store_change", "waiting for a change source (not built)"), (status.Kind, status.State));
     }
 
+    /// <summary>A change feed in memory: what the Store's <c>GET /api/v1/events</c> says, with a sequence over every model.</summary>
+    private sealed class FakeFeed : IStoreChangeSource
+    {
+        private readonly List<StoreChange> _changes = [];
+        public long First { get; set; } = 1;
+
+        public void Write(string model, string entity, string by = "ada", string? changeId = null) =>
+            _changes.Add(new StoreChange(_changes.Count + (long)First, changeId ?? $"c{_changes.Count + First}", model, [entity], by));
+
+        public Task<long> LatestAsync(string model, CancellationToken ct) => Task.FromResult(_changes.Count == 0 ? 0 : _changes[^1].Sequence);
+
+        public Task<StoreChangePage> ReadAsync(string model, long after, int limit, CancellationToken ct)
+        {
+            var found = _changes.Where(c => c.Sequence > after).Take(limit).ToList();
+            var missed = _changes.Count > 0 && after > 0 && First > after + 1;
+            var last = found.Count == 0 ? after : found[^1].Sequence;
+            return Task.FromResult(new StoreChangePage(found, missed ? Math.Max(last, First - 1) : last, missed));       // a reader that was behind is brought up to what the feed still has
+        }
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public async Task A_store_change_to_the_entity_starts_the_task_once_whatever_the_number_of_changes_and_other_changes_do_not(string engine)
+    {
+        using var h = new TriggerHarness(engine);
+        h.Activate(Manifest(Def("sync", TaskTrigger.OnStoreChange("orders", "order"))));
+        var feed = new FakeFeed();
+        feed.Write("orders", "order", changeId: "history-before");                  // made before the trigger was seen: not followed
+        var runner = new FakeRunner(h.Database);
+        var scheduler = h.NewScheduler(runner, triggers: new TriggerOptions { StoreChanges = feed });
+
+        await h.Tick(scheduler);
+        Assert.Empty(runner.Requests);
+        var status = Assert.Single(scheduler.Triggers.Statuses());
+        Assert.Equal(("store_change", "following the changes of orders"), (status.Kind, status.State));
+        Assert.Empty(scheduler.Status().Problems);
+
+        feed.Write("orders", "customer");                                           // another entity of the model
+        feed.Write("billing", "order");                                             // another model
+        await h.Tick(scheduler);
+        await h.Tick(scheduler);
+        Assert.Empty(runner.Requests);
+
+        feed.Write("orders", "order", changeId: "c-first");
+        feed.Write("orders", "order", changeId: "c-second");
+        await h.Tick(scheduler);
+        await h.Tick(scheduler);
+        Assert.Single(runner.Requests);                                             // two changes seen in one look: one run
+        await h.Tick(scheduler);
+        await h.Tick(scheduler);
+        Assert.Single(runner.Requests);                                             // and the same changes are not seen again
+
+        feed.Write("orders", "order");
+        await h.Tick(scheduler);
+        await h.Tick(scheduler);
+        Assert.Equal(2, runner.Requests.Count);
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public async Task A_store_change_the_task_made_itself_does_not_start_it_again_a_paused_task_drops_it_and_a_feed_that_lost_changes_starts_it_once(string engine)
+    {
+        using var h = new TriggerHarness(engine);
+        h.Activate(Manifest(Def("sync", TaskTrigger.OnStoreChange("orders", null))));
+        var feed = new FakeFeed();
+        var runner = new FakeRunner(h.Database);
+        var scheduler = h.NewScheduler(runner, triggers: new TriggerOptions { StoreChanges = feed });
+        await h.Tick(scheduler);
+
+        // the landing of the task wrote it: starting the task again would be a loop
+        feed.Write("orders", "order", by: "task:pkg/sync");
+        await h.Tick(scheduler);
+        await h.Tick(scheduler);
+        Assert.Empty(runner.Requests);
+
+        // a paused task is not started by a change, and the change is not kept for later
+        scheduler.Pause(new TaskRef("pkg", "prod", "sync"), "ada");
+        feed.Write("orders", "order");
+        await h.Tick(scheduler);
+        await h.Tick(scheduler);
+        Assert.Empty(runner.Requests);
+        scheduler.Resume(new TaskRef("pkg", "prod", "sync"));
+        await h.Tick(scheduler);
+        await h.Tick(scheduler);
+        Assert.Empty(runner.Requests);
+
+        // the feed dropped what the trigger had not read: it cannot know, so the task runs once
+        feed.Write("orders", "order");
+        feed.First = 10;
+        await h.Tick(scheduler);
+        await h.Tick(scheduler);
+        Assert.Single(runner.Requests);
+    }
+
     // ---- cycles
 
     [Theory, MemberData(nameof(Engines))]

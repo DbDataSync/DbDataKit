@@ -21,6 +21,12 @@ public sealed class TriggerOptions
     /// <summary>At most this many new files are queued by one look at a folder (the rest are found at the next). Default 100.</summary>
     public int FileBatch { get; init; } = 100;
 
+    /// <summary>Where a <c>store_change</c> trigger learns of the changes of a DbDataStore model (plan 27a IX19). Null: this runner has no source, and the trigger says so in the status.</summary>
+    public IStoreChangeSource? StoreChanges { get; init; }
+
+    /// <summary>At most this many changes are read in one look at the feed (the rest are read at the next). Default 500.</summary>
+    public int StoreBatch { get; init; } = 500;
+
     /// <summary>Where a connection slot's folder is. Null: this runner has none, and a file trigger says so in the status.</summary>
     public IFileSourceProvider? FileSources { get; init; }
 
@@ -29,6 +35,7 @@ public sealed class TriggerOptions
         if (MaxChainDepth < 1) throw new ArgumentException("The chain depth is at least 1.", nameof(MaxChainDepth));
         if (FilePoll <= TimeSpan.Zero) throw new ArgumentException("The file poll is above zero.", nameof(FilePoll));
         if (FileSettle < TimeSpan.Zero) throw new ArgumentException("The file settle time is not negative.", nameof(FileSettle));
+        if (StoreBatch < 1) throw new ArgumentException("A look reads at least one change.", nameof(StoreBatch));
         if (FileBatch < 1) throw new ArgumentException("A look queues at least one file.", nameof(FileBatch));
     }
 }
