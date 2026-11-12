@@ -51,6 +51,16 @@ public static class LineageIdentity
         return $"suite://{instanceId}/{kind}/{name}";
     }
 
+    /// <summary>
+    /// A system outside the suite that a task reads from or writes to (an API, a file share, a message queue; plan 27a IX12): <c>external://&lt;kind&gt;/&lt;name&gt;</c>, both lower-cased and trimmed, so the same system named twice, or by a rerun, is one node.
+    /// </summary>
+    public static string ExternalSystem(string kind, string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(kind);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        return $"external://{kind.Trim().ToLowerInvariant()}/{name.Trim().ToLowerInvariant()}";
+    }
+
     private static IdentifierRules Rules(string engine)
     {
         // an engine with no dialect of its own (flightsql, jdbc, odbc) keeps the case it is given

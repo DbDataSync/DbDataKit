@@ -3,7 +3,7 @@ using System.Text;
 
 namespace DbDataKit.Lineage;
 
-public enum NodeKind { Dataset, Column, Job, SemanticMember, Serving, Consumer, Deployment }
+public enum NodeKind { Dataset, Column, Job, SemanticMember, Serving, Consumer, Deployment, ExternalSystem }
 
 /// <summary>How data moves along an edge; the edge runs from the upstream object to the downstream one.</summary>
 public enum EdgeKind { Replicates, Derives, Copies, Binds, Serves, Extracts, Reads, Promotes, Deploys, Runs }
