@@ -111,6 +111,7 @@ public sealed partial class BuildServerProxyTests : IAsyncLifetime
                 return Results.Json(new { reference = "secret:dbdatakit:gateway:managed-x:" + name });
             }
             if (path.StartsWith("/api/v1/dashboards/", StringComparison.Ordinal) || path.StartsWith("/api/v1/reports/", StringComparison.Ordinal)) return ViewsAnswer(body);       // plan 32 DBR29 (BuildServerProxyViewsTests)
+            if (path.EndsWith("/rollback", StringComparison.Ordinal)) return Results.Json(rollbackAnswerIs.Body, statusCode: rollbackAnswerIs.Status);
             if (path.StartsWith("/api/v1/semantic-models/", StringComparison.Ordinal))
                 return context.Request.Method == "GET" ? Results.Json(new { error = "none" }, statusCode: 404)
                     : modelAnswer == HttpStatusCode.OK ? Results.Json(new { version = 1, created = true }) : Results.Json(new { error = "The catalog does not load, so nothing was published." }, statusCode: (int)modelAnswer);

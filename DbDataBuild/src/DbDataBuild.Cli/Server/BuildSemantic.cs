@@ -7,7 +7,7 @@ namespace DbDataBuild.Cli.Server;
 /// The <c>semantic</c> noun in Build (plan 14a SL22): <c>dbdatabuild semantic describe|query|explain|members &lt;model&gt; --gateway &lt;paired name&gt;</c>, the same four verbs and documents the Gateway has (the shared
 /// <see cref="SemanticNoun"/>), so an agent in a Build project asks what a published model offers, runs a request and reads the plan before it writes a view over it. The Gateway is one this server is paired with
 /// (<c>server proxy add</c>): its host comes from the pairing, the Flight port is 8815 unless <c>--flight-port</c> or <c>--address</c> says another. The credential is a personal access token or access token of the Gateway's
-/// identity home in <c>DBDATAKIT_GATEWAY_TOKEN</c>, never a flag, and the statement runs as the person it names.
+/// identity home in <c>DBDATAKIT_GATEWAY_TOKEN</c>, never a flag, and the statement runs as the person it names. <c>publish</c> and <c>rollback</c> (SL30, <see cref="BuildSemanticPublish"/>) are Build's own and use the server's pairing instead.
 /// </summary>
 internal static class BuildSemantic
 {
@@ -20,7 +20,7 @@ internal static class BuildSemantic
     /// <summary>How a session is opened; the tests put a stand-in session here (the command is the shared noun, the connection is the only part that is Build's).</summary>
     internal static SemanticConnect Connect { get; set; } = ConnectAsync;
 
-    public static Noun Noun() => SemanticNoun.Create((arguments, context) => Connect(arguments, context), Options, Flags, Usage);
+    public static Noun Noun() => BuildSemanticPublish.With(SemanticNoun.Create((arguments, context) => Connect(arguments, context), Options, Flags, Usage));
 
     public static Task<ISemanticSession> ConnectAsync(CliArgs arguments, CliContext context)
     {
