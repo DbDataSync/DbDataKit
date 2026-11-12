@@ -39,7 +39,11 @@ public sealed class GatewayAccess(DataSourceCatalog sources, Func<GatewayOptions
     public AccessDecision DecisionFor(ServingCaller caller, SemanticModel model) =>
         model.Catalog.Access is { IsEmpty: false } section ? Resolver.Resolve(CallerOf(caller), new AccessScope(GatewayCachePolicy.ModelPrefix + model.Name, section, table => TableKey(model, table), new Subjects(this, model))) : AccessDecision.None;
 
-    public RowAccessPlan PlanFor(ServingContext context, SemanticModel model) => RowAccessPlan.Build(model.Catalog, DecisionFor(context.Caller, model));
+    /// <summary>
+    /// The plan of the caller's row rules on the catalog of <paramref name="model"/>, which may be the caller's column view of a registered model (plan 22a GP13): the decision (the ledger keys, the rules tables read, the fingerprint the cache keys on) is made for the registered
+    /// model, so it is the same whatever the caller's column treatments; the plan is built on the catalog given, whose tables read as that catalog writes them, so it filters exactly what the request reads.
+    /// </summary>
+    public RowAccessPlan PlanFor(ServingContext context, SemanticModel model) => RowAccessPlan.Build(model.Catalog, DecisionFor(context.Caller, models().Find(model.Name) ?? model));
 
     /// <summary>The identity of a rules table in the state: the serving source and the physical table, as the model's catalog says them.</summary>
     internal static string TableKey(SemanticModel model, string tableName)
