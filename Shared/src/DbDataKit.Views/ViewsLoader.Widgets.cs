@@ -204,6 +204,8 @@ public static partial class ViewsLoader
                 {
                     if (series.Items.Count is 0 or > MaximumSeries) Bad(ViewsCodes.InvalidValue, series, cp, $"A `y` list names 1 to {MaximumSeries} measures.");
                     else for (var i = 0; i < series.Items.Count; i++) Channel("y", series.Items[i], I(cp, i), fields);
+                    if (series.Items.Count > 1 && enc.Get("color") is { } color)
+                        Bad(ViewsCodes.InvalidValue, color, J(ep, "color"), "A chart with several measures on `y` has no `color`: the series are the colors.", "Move the field into `column` or `row`, or keep one measure on `y`.");
                 }
                 else Channel(e.Key.Value, e.Value, cp, fields);
             }

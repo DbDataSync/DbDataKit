@@ -732,6 +732,116 @@ public class ResolveTests
         Assert.Equal(["top"], Used("s"));
     }
 
+
+    // ---- filtered and repeated measures (plan 32 DBR50) ----
+
+    private static double NetOf(Func<RetailServing.Line, bool> where, Func<RetailServing.Line, double>? pick = null) => Math.Round(RetailServing.Lines.Where(where).Sum(pick ?? (l => l.Net)), 4);
+
+    [Fact]
+    public async Task The_same_measure_twice_with_two_filter_sets_is_two_columns_of_a_table_and_a_matrix_and_the_totals_add_up()
+    {
+        var doc = Doc("""
+              t:
+                type: table
+                encodings:
+                  columns:
+                    - {field: products.category, label: Category}
+                    - {field: sales.net_amount, alias: east_net, label: East, filters: [{attribute: customers.region, operator: equals, values: [East]}]}
+                    - {field: sales.net_amount, alias: west_net, label: West, filters: [{attribute: customers.region, operator: equals, values: [West]}]}
+                    - {field: sales.net_amount, label: All}
+                query: {model: retail_sales, totals: {grand_total: true}}
+              mx:
+                type: matrix
+                encodings:
+                  rows: [products.category]
+                  columns: [customers.region]
+                  values:
+                    - {field: sales.net_amount, label: All}
+                    - {field: sales.net_amount, alias: east_net, label: East, filters: [{attribute: customers.region, operator: equals, values: [East]}]}
+                  totals: {rows: true}
+                query: {model: retail_sales}
+            """);
+        var r = await Resolver(new RetailServing()).ResolveAsync(Viewer(), doc, "desk");
+        var t = Ok(r, "t");
+        Assert.Equal(["Category", "East", "West", "All"], t["columns"]!.AsArray().Select(c => c!["label"]!.GetValue<string>()));
+        var rows = t["rows"]!.AsArray();
+        var apparel = rows.Single(x => x!["cells"]![0]!["v"]?.GetValue<string>() == "Apparel")!["cells"]!;
+        Assert.Equal(NetOf(l => l.Category == "Apparel" && l.Region == "East"), apparel[1]!["v"]!.GetValue<double>());
+        Assert.Equal(NetOf(l => l.Category == "Apparel" && l.Region == "West"), apparel[2]!["v"]!.GetValue<double>());
+        Assert.Equal(NetOf(l => l.Category == "Apparel"), apparel[3]!["v"]!.GetValue<double>());
+        // the grand total row is the engine's, per entry: each filtered column totals its own lines
+        var total = rows.Single(x => x!["total"]?.GetValue<bool>() == true)!["cells"]!;
+        Assert.Equal(NetOf(l => l.Region == "East"), total[1]!["v"]!.GetValue<double>());
+        Assert.Equal(NetOf(l => l.Region == "West"), total[2]!["v"]!.GetValue<double>());
+        Assert.Equal(NetOf(_ => true), total[3]!["v"]!.GetValue<double>());
+
+        var mx = Ok(r, "mx");
+        // each region column holds the unfiltered value and the East-filtered one side by side; the total row is the engine's, so the filtered value is the region's own lines or nothing
+        var totalRow = mx["rows"]!.AsArray().Single(x => x!["total"]?.GetValue<bool>() == true)!["cells"]!;
+        int Column(string region, string value) => mx["columns"]!.AsArray().ToList().FindIndex(c => c!["labels"]![0]!.GetValue<string>() == region && c["labels"]![1]!.GetValue<string>() == value);
+        Assert.Equal(NetOf(l => l.Region == "East"), totalRow[Column("East", "All")]!["v"]!.GetValue<double>());
+        Assert.Equal(NetOf(l => l.Region == "East"), totalRow[Column("East", "East")]!["v"]!.GetValue<double>());
+        Assert.Equal(NetOf(l => l.Region == "West"), totalRow[Column("West", "All")]!["v"]!.GetValue<double>());
+        Assert.Equal(0, totalRow[Column("West", "East")]!["v"]!.GetValue<double>());   // the East-filtered value of the West column has no lines
+        Assert.Empty(Violations(r.ToJson()));
+    }
+
+    [Fact]
+    public async Task A_metric_filtered_by_a_parameter_and_a_chart_of_two_series_of_one_measure_draw_what_the_filters_say()
+    {
+        var doc = Doc("""
+              m:
+                type: metric
+                encodings:
+                  value: {field: sales.net_amount, alias: chosen, filters: [{attribute: customers.region, operator: equals, values: {param: region}}]}
+                  compare: sales.net_amount
+                query: {model: retail_sales}
+              plain:
+                type: metric
+                encodings: {value: sales.units}
+                query: {model: retail_sales}
+              ch:
+                type: chart
+                mark: bar
+                encodings:
+                  x: products.category
+                  y:
+                    - {field: sales.net_amount, alias: east_net, title: East, filters: [{attribute: customers.region, operator: equals, values: [East]}]}
+                    - {field: sales.net_amount, alias: west_net, title: West, filters: [{attribute: customers.region, operator: equals, values: [West]}]}
+                query: {model: retail_sales}
+            """, "[{name: region, type: string, default: East}]");
+        var serving = new RetailServing();
+        var resolver = Resolver(serving);
+        var r = await resolver.ResolveAsync(Viewer(), doc, "desk");
+        var m = Ok(r, "m");
+        Assert.Equal(NetOf(l => l.Region == "East"), m["value"]!["v"]!.GetValue<double>());
+        Assert.Equal(NetOf(_ => true), m["compare"]!["v"]!.GetValue<double>());
+
+        var spec = Ok(r, "ch")["vega_lite"]!;
+        var values = spec["data"]!["values"]!.AsArray();
+        Assert.Equal(4 * 2, values.Count);                                               // four categories, two series each
+        Assert.Equal("series", spec["encoding"]!["color"]!["field"]!.GetValue<string>());
+        Assert.Equal("value", spec["encoding"]!["y"]!["field"]!.GetValue<string>());
+        Assert.Equal(["East", "West"], values.Select(v => v!["series"]!.GetValue<string>()).Distinct());
+        Assert.Equal(NetOf(l => l.Category == "Apparel" && l.Region == "West"), values.Single(v => v!["products_category"]!.GetValue<string>() == "Apparel" && v["series"]!.GetValue<string>() == "West")!["value"]!.GetValue<double>());
+        Assert.Empty(Violations(r.ToJson()));
+
+        // a changed parameter runs again only the widgets that read it: the metric, not the plain one or the chart
+        Assert.Equal(["region"], [.. WidgetResolver.UsedParameters(doc.Widget("m")!)]);
+        Assert.Empty(WidgetResolver.UsedParameters(doc.Widget("ch")!));
+        var west = await resolver.ResolveAsync(Viewer(), doc, "desk", new Dictionary<string, JsonNode?> { ["region"] = "West" }, ["m"]);
+        Assert.Equal(NetOf(l => l.Region == "West"), west.Widgets["m"]["value"]!["v"]!.GetValue<double>());
+        Assert.Equal(["m"], west.Widgets.Keys);
+    }
+
+    [Fact]
+    public void A_chart_with_several_measures_on_y_and_a_color_is_refused_by_the_loader()
+    {
+        // DBD-106 at the color: the series are the colors (the resolver refuses it too for a document that skipped the loader)
+        var loaded = ViewsLoader.LoadWidgets("{\"ch\":{\"type\":\"chart\",\"mark\":\"bar\",\"encodings\":{\"x\":\"products.category\",\"y\":[\"sales.net_amount\",\"sales.units\"],\"color\":\"customers.region\"},\"query\":{\"model\":\"retail_sales\"}}}", "w.json");
+        Assert.Contains(loaded.Diagnostics, d => d.Code == "DBD-106" && d.KeyPath == "widgets.ch.encodings.color");
+    }
+
     // ---- parameters ----
 
     [Fact]

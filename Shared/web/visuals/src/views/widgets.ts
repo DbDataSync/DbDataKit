@@ -240,6 +240,8 @@ function chart(raw: Json, path: string, fields: Encoded[], context: Context, iss
     if (channel === 'x' && Array.isArray(value)) { nestedAxis(value, cp, mark, encodings, join(ep, 'column'), fields, issues); continue }
     const items: [unknown, string][] = (channel === 'tooltip' || channel === 'y') && Array.isArray(value) ? value.map((v, i) => [v, at(cp, i)]) : [[value, cp]]
     if (channel === 'y' && Array.isArray(value) && (value.length === 0 || value.length > 8)) issues.add('DBD-106', cp, 'A `y` list names 1 to 8 measures.')
+    if (channel === 'y' && Array.isArray(value) && value.length > 1 && encodings.color !== undefined)
+      issues.add('DBD-106', join(ep, 'color'), 'A chart with several measures on `y` has no `color`: the series are the colors.')
     for (const [item, p] of items) {
       if (typeof item === 'string' && item.length > 0) fields.push({ channel, field: item, path: p })
       else if (isObject(item)) {

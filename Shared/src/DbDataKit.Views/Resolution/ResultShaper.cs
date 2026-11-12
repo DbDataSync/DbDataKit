@@ -141,6 +141,14 @@ internal static partial class ResultShaper
 {
     private const string TotalLabel = "Total";
 
+    /// <summary>
+    /// The name an encoded field has in the answer (plan 32 DBR50): a field name, or the object form's <c>alias</c> (the output of a filtered or repeated measure) and else its <c>field</c>.
+    /// </summary>
+    internal static string? Ref(JsonNode? node) =>
+        node is JsonValue v && v.TryGetValue<string>(out var name) ? name
+        : node is JsonObject o ? (o["alias"] is JsonValue a && a.TryGetValue<string>(out var alias) && alias.Length > 0 ? alias : o["field"] is JsonValue f && f.TryGetValue<string>(out var field) ? field : null)
+        : null;
+
     // ---- metric ----
 
     public static JsonObject Metric(ViewWidget widget, AnswerRows answer)
@@ -148,11 +156,11 @@ internal static partial class ResultShaper
         var encodings = widget.Raw["encodings"] as JsonObject ?? [];
         var preset = widget.Raw["format"];
         var row = answer.Table.Rows.FirstOrDefault(answer.Table.IsDetail);
-        var value = Number(widget, answer, encodings["value"]?.GetValue<string>(), "encodings.value", row, preset);
+        var value = Number(widget, answer, Ref(encodings["value"]), "encodings.value", row, FormatOf(encodings["value"], preset));
         var result = new JsonObject { ["type"] = "metric", ["value"] = value?.Node };
-        if (encodings["compare"] is JsonValue compare && compare.TryGetValue<string>(out var compareField))
+        if (Ref(encodings["compare"]) is { } compareField)
         {
-            var other = Number(widget, answer, compareField, "encodings.compare", row, preset);
+            var other = Number(widget, answer, compareField, "encodings.compare", row, FormatOf(encodings["compare"], preset));
             var node = other?.Node;
             if (node is not null && value?.V is { } v && other?.V is { } c && c != 0)
             {
@@ -169,6 +177,9 @@ internal static partial class ResultShaper
         }
         return result;
     }
+
+    /// <summary>The format of an entry in its object form (DBR50), else the one the widget has.</summary>
+    private static JsonNode? FormatOf(JsonNode? entry, JsonNode? fallback) => entry is JsonObject o && o["format"] is { } f ? f : fallback;
 
     private sealed record Num(JsonObject Node, double? V);
 
@@ -189,7 +200,7 @@ internal static partial class ResultShaper
         var resolved = new List<(JsonObject Spec, ResultField Field, JsonNode? Preset)>();
         for (var i = 0; i < columns.Count; i++)
         {
-            var name = columns[i]["field"]!.GetValue<string>();
+            var name = Ref(columns[i])!;
             var field = table.Resolve(name) ?? throw Missing(widget, answer, name, $"encodings.columns[{i}].field");
             resolved.Add((columns[i], field, columns[i]["format"]));
         }
@@ -197,7 +208,7 @@ internal static partial class ResultShaper
         var header = new JsonArray();
         foreach (var (spec, field, _) in resolved)
         {
-            var column = new JsonObject { ["field"] = spec["field"]!.GetValue<string>(), ["label"] = spec["label"]?.GetValue<string>() ?? spec["field"]!.GetValue<string>() };
+            var column = new JsonObject { ["field"] = Ref(spec)!, ["label"] = spec["label"]?.GetValue<string>() ?? Ref(spec)! };
             column["align"] = spec["align"]?.GetValue<string>() ?? (field.Kind == "measure" ? "right" : "left");
             header.Add(column);
         }
@@ -270,6 +281,10 @@ internal static partial class ResultShaper
                 foreach (var entry in values)
                 {
                     var copy = entry is JsonObject o ? (JsonObject)o.DeepClone() : new JsonObject();
+                    // the engine's matrix reads the column of the answer: a filtered or repeated measure is the column its alias names (DBR50)
+                    if (Ref(copy) is { } output) copy["field"] = output;
+                    copy.Remove("alias");
+                    copy.Remove("filters");
                     var format = copy["format"];
                     valueFormats.Add(format);
                     // a preset the engine knows stays with the engine; the catalog's own format is what `full` reads, and a mapping is applied to the cells afterwards
@@ -321,7 +336,7 @@ internal static partial class ResultShaper
         if (!localized && !valueFormats.Any(f => f is JsonObject)) return;
         var count = valueFormats.Count;
         var onRows = encodings["values_on"]?.GetValue<string>() == "rows";
-        var valueFields = (encodings["values"] as JsonArray ?? []).Select(v => v?["field"]).ToList();
+        var valueFields = (encodings["values"] as JsonArray ?? []).Select(v => Ref(v) is { } name ? (JsonNode)JsonValue.Create(name) : null).ToList();
         var rows = rendered["rows"] as JsonArray ?? [];
         for (var r = 0; r < rows.Count; r++)
         {
@@ -344,6 +359,15 @@ internal static partial class ResultShaper
         var formats = new Dictionary<string, JsonNode>();
         // a list of one level is the plain channel
         if (encodings["x"] is JsonArray { Count: 1 } oneLevel) { encodings = (JsonObject)encodings.DeepClone(); encodings["x"] = oneLevel[0]?.DeepClone(); }
+        // a list of one measure on `y` is the plain channel; several are one series each (DBR50): the answer is folded into a `series` and a `value` column before the engine draws it
+        if (encodings["y"] is JsonArray { Count: 1 } oneSeries) { encodings = (JsonObject)encodings.DeepClone(); encodings["y"] = oneSeries[0]?.DeepClone(); }
+        if (encodings["y"] is JsonArray { Count: > 1 } series)
+        {
+            if (encodings["color"] is not null)
+                throw new WidgetProblem(ViewsCodes.InvalidValue, "A chart with several measures on `y` has no `color`: the series are the colors.", $"widgets.{widget.Id}.encodings.color",
+                    ["Move the field into `column` or `row`, or keep one measure on `y`."]);
+            (answer, encodings) = FoldSeries(widget, answer, encodings, series);
+        }
         // a nested `x` (DBR42): the innermost level is the engine's `x`, the outermost its `column`; the levels are drawn after the engine has resolved them
         var nested = ReadNestedLevels(encodings);
         foreach (var (channel, value) in encodings)
@@ -362,6 +386,10 @@ internal static partial class ResultShaper
             else if (value is JsonObject o)
             {
                 var channelSpec = (JsonObject)o.DeepClone();
+                // a filtered or repeated measure is the column its alias names (DBR50); the engine's subset knows neither key
+                if (Ref(channelSpec) is { } outputName) channelSpec["field"] = outputName;
+                channelSpec.Remove("alias");
+                channelSpec.Remove("filters");
                 if (channelSpec["type"] is null && channelSpec["field"] is JsonValue fv && fv.TryGetValue<string>(out var f)) channelSpec["type"] = ScaleType(answer.Table, f);
                 if (channelSpec["format"] is { } format) formats[channel] = format.DeepClone();
                 else if (channelSpec["field"] is JsonValue cf && cf.TryGetValue<string>(out var cfield) && CatalogDate(answer.Table, cfield)) formats[channel] = JsonValue.Create("catalog");
@@ -378,7 +406,7 @@ internal static partial class ResultShaper
             var list = new JsonArray();
             foreach (var tip in tips)
             {
-                var name = tip is JsonValue tv && tv.TryGetValue<string>(out var s) ? s : tip?["field"]?.GetValue<string>();
+                var name = Ref(tip);
                 if (name is null) continue;
                 var column = answer.Table.Resolve(name) ?? throw Missing(widget, answer, name, "encodings.tooltip");
                 list.Add(new JsonObject { ["field"] = column.Name, ["type"] = ScaleType(answer.Table, name) });
@@ -390,6 +418,51 @@ internal static partial class ResultShaper
         FormatChart(rendered, answer, formats, tipFormats);
         if (nested is not null) DrawNestedAxis(widget, rendered, answer, nested);
         return rendered;
+    }
+
+    /// <summary>
+    /// Several measures on a chart's <c>y</c> (plan 32 DBR50) are one series each: every row of the answer becomes one row per measure, in a <c>series</c> column (the entry's <c>title</c>, else its alias or field) and a
+    /// <c>value</c> column, and the chart is drawn with <c>y: value</c>, <c>color: series</c> (the series keep the order of the list). The totals' level column is kept, so a total row stays a total. The axis takes
+    /// the entries' format when they all have the same one. Returns the folded answer and the encodings to draw.
+    /// </summary>
+    private static (AnswerRows Answer, JsonObject Encodings) FoldSeries(ViewWidget widget, AnswerRows answer, JsonObject encodings, JsonArray series)
+    {
+        var entries = new List<(string Output, string Label, ResultField Field, JsonNode? Format, string? Title)>();
+        for (var i = 0; i < series.Count; i++)
+        {
+            var name = Ref(series[i]) ?? throw new WidgetProblem(ViewsCodes.InvalidValue, "A `y` list names measures.", $"widgets.{widget.Id}.encodings.y[{i}]");
+            var field = answer.Table.Resolve(name) ?? throw Missing(widget, answer, name, $"encodings.y[{i}].field");
+            var title = series[i] is JsonObject o ? o["title"]?.GetValue<string>() : null;
+            entries.Add((field.Name, title ?? name, field, series[i] is JsonObject so ? so["format"]?.DeepClone() : null, title));
+        }
+        var drop = entries.Select(e => e.Output).ToHashSet();
+        var result = new JsonObject();
+        var descriptor = (JsonObject)answer.Result["descriptor"]!.DeepClone();
+        var fields = descriptor["schema"]!["fields"]!.AsArray();
+        for (var i = fields.Count - 1; i >= 0; i--) if (drop.Contains(fields[i]!["name"]!.GetValue<string>())) fields.RemoveAt(i);
+        fields.Add(new JsonObject { ["name"] = "series", ["type"] = "string", ["x_kind"] = "attribute", ["x_binding"] = "series" });
+        fields.Add(new JsonObject { ["name"] = "value", ["type"] = "number", ["x_kind"] = "measure", ["x_binding"] = "value", ["x_additivity"] = "additive" });
+        result["descriptor"] = descriptor;
+        var rows = new JsonArray();
+        foreach (var row in answer.Table.Rows)
+            foreach (var entry in entries)
+            {
+                var copy = new JsonObject();
+                foreach (var (key, value) in row) if (!drop.Contains(key)) copy[key] = value?.DeepClone();
+                copy["series"] = entry.Label;
+                copy["value"] = row[entry.Output]?.DeepClone();
+                rows.Add(copy);
+            }
+        result["rows"] = rows;
+        var folded = new AnswerRows(result, new ResultTable(result)).WithLocale(answer.Locale);
+
+        var next = (JsonObject)encodings.DeepClone();
+        var same = entries.Select(e => e.Field.Binding ?? e.Field.Name).Distinct().ToList();
+        var y = new JsonObject { ["field"] = "value", ["type"] = "quantitative", ["title"] = same.Count == 1 ? entries[0].Title ?? same[0] : "Value" };
+        if (entries.Select(e => e.Format?.ToJsonString()).Distinct().Count() == 1 && entries[0].Format is { } format) y["format"] = format.DeepClone();
+        next["y"] = y;
+        next["color"] = new JsonObject { ["field"] = "series", ["type"] = "nominal", ["title"] = "Series", ["sort"] = new JsonArray(entries.Select(e => (JsonNode)e.Label).ToArray()) };
+        return (folded, next);
     }
 
     /// <summary>

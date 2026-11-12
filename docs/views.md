@@ -138,7 +138,7 @@ encodings:
 
 A measure may be written as an **object** where a name was: `{field, alias, label, filters, format}`. It is how the **same measure is put in a visual several times** with different filters (two series, two matrix
 value columns, two metrics, two table columns): in a metric's `value` and `compare`, a chart channel (`y`, `color`, `tooltip`...; the channel object's `title` names it, as before), a matrix `values` entry and a table column.
-A chart's `y` may be a **list** (one to eight entries, one series each); its entries are drawn as the series of one chart.
+A chart's `y` may be a **list** (one to eight entries, one series each); the answer is folded into a `series` and a `value` column and drawn as one chart whose color is the series (the series keep the list's order and are named by the entry's `title`, else its alias or field; a `color` beside several measures is refused, `DBD-106`).
 
 ```yaml
 encodings:

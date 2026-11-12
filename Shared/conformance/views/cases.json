@@ -1201,6 +1201,15 @@
       "path": "widgets.w.encodings.y",
       "line": 11,
       "schema": true
+    },
+    {
+      "name": "y-list-with-a-color",
+      "file": "bad/y-list-with-a-color.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.color",
+      "line": 15,
+      "schema": false
     }
   ],
   "warnings": [

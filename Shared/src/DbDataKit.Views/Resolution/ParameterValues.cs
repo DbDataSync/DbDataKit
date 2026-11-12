@@ -144,6 +144,8 @@ internal sealed partial class ParameterValues
                 }
             }
             foreach (var (key, child) in query) if (key != "params") Walk(child);
+            // the filters of an encoded measure (DBR50) are part of the request the encodings derive: their markers are parameters the widget reads
+            if (raw["encodings"] is { } encodings) Walk(encodings);
             // a saved query's arguments, and the markers of a written semantic SQL (`:name`), are named by the map and by the text
             if (query["saved"] is not null && map is not null) foreach (var (_, target) in map) if (target is JsonValue t && t.TryGetValue<string>(out var doc)) used.Add(doc);
             if (query["semantic"]?["sql"] is JsonValue sql && sql.TryGetValue<string>(out var sqlText)) foreach (var marker in SqlMarkerNames(sqlText)) used.Add(Document(marker));
