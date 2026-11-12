@@ -2,6 +2,7 @@ import type { ViewKind } from '../views/document'
 import type { ParameterValues, ViewsDoc } from '../views/model'
 import type { RenderedWidget, RenderedWidgets } from '../views/rendered'
 import type { Catalog } from '../views/catalog'
+import type { ActionForecast, ActionOutcome, ActionRequest, BatchOutcome, BatchRequest } from '../links/actions'
 import { textVersion, validateText } from './text'
 import { ViewsClientError } from './types'
 import type { ClientDiagnostic, DocumentSummary, OpenedDocument, PreviewRequest, ResolveOptions, SaveResult, ValidationResult, ViewsClient } from './types'
@@ -17,6 +18,13 @@ export interface FixtureBundle {
   results?: Record<string, Record<string, RenderedWidget>>
   /** Image data URIs by hash (`sha256:...`). */
   images?: Record<string, string>
+  /**
+   * What running an action link answers, by `kind/name` and link name (plan 32 DBR53): the outcome a recorded run gives, or a function of the request (a fixture that conflicts on a stale version, or says waiting). A document
+   * with none has no `runAction`, so its action links say the host cannot run them.
+   */
+  actions?: Record<string, Record<string, { forecast?: ActionForecast; outcome: ActionOutcome | ((request: ActionRequest, calls: number) => ActionOutcome) }>>
+  /** What submitting a pending set answers, by `kind/name` (plan 32 DBR53b): the outcome, or a function of the batch (a fixture that refuses a line). A document with none has no `runBatch`. */
+  batches?: Record<string, { forecast?: ActionForecast; outcome: BatchOutcome | ((request: BatchRequest) => BatchOutcome) }>
 }
 
 /** What the fixture client keeps its documents in: a `Map` does, and so does a store that outlives the page (the console keeps saved documents in the browser's storage). */
@@ -97,7 +105,41 @@ export function fixtureClient(bundle: FixtureBundle, options: FixtureClientOptio
     }
   }
 
+  const runs = new Map<string, ActionOutcome>()
+  const batchRuns = new Map<string, BatchOutcome>()
+  let calls = 0
   return {
+    // a fixture runs actions only when its bundle records some (otherwise the host cannot run them, and says so)
+    ...(bundle.actions ? {
+      async runAction(ref, request) {
+        const recorded = bundle.actions?.[key(ref.kind, ref.name)]?.[request.link]
+        if (!recorded) return { status: 'failed', message: `The fixture source has no recorded action \`${request.link}\`.` }
+        // one key is one call, as the module does it: a repeat of a finished call has the same answer
+        const kept = runs.get(request.idempotencyKey)
+        if (kept) return kept
+        calls++
+        const outcome = typeof recorded.outcome === 'function' ? recorded.outcome(request, calls) : recorded.outcome
+        if (outcome.status === 'applied' || outcome.status === 'waiting' || outcome.status === 'started') runs.set(request.idempotencyKey, outcome)
+        return outcome
+      },
+
+      async forecastAction(ref, link) {
+        return bundle.actions?.[key(ref.kind, ref.name)]?.[link]?.forecast ?? null
+      },
+    } : {}),
+    ...(bundle.batches ? {
+      async runBatch(ref: { kind: ViewKind; name: string }, request: BatchRequest): Promise<BatchOutcome> {
+        const recorded = bundle.batches?.[key(ref.kind, ref.name)]
+        if (!recorded) return { status: 'failed', message: `The fixture source has no recorded batch for ${key(ref.kind, ref.name)}.`, problems: [] }
+        const kept = batchRuns.get(request.idempotencyKey)
+        if (kept) return kept
+        const outcome = typeof recorded.outcome === 'function' ? recorded.outcome(request) : recorded.outcome
+        if (outcome.status === 'applied' || outcome.status === 'waiting') batchRuns.set(request.idempotencyKey, outcome)
+        return outcome
+      },
+      async forecastBatch(ref: { kind: ViewKind; name: string }): Promise<ActionForecast | null> { return bundle.batches?.[key(ref.kind, ref.name)]?.forecast ?? null },
+    } : {}),
+
     async list(kind) {
       return [...documents.entries()]
         .filter(([k]) => kind === undefined || k.startsWith(`${kind}/`))

@@ -4,6 +4,8 @@ export type EditErrorCode =
   | 'not_flow' | 'bad_index' | 'last_section' | 'bad_value'
   // the link editor (DBR38)
   | 'unknown_link' | 'not_a_form' | 'not_clickable'
+  // the action links (DBR53)
+  | 'not_an_action' | 'nothing_to_set'
 
 /** What a command refuses with: a code a form can act on and a sentence a person can read. */
 export class EditError extends Error {

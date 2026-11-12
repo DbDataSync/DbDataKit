@@ -30,6 +30,8 @@ internal sealed class TestCallers : IViewsCallers
         ["app-sales"] = new(West, new ViewsAppScope("portal", ["sales_catalog"])),
         ["app-other"] = new(West, new ViewsAppScope("budget", ["other_model"])),
         ["app-none"] = new(All, new ViewsAppScope("empty", [])),
+        // an app that may change the orders (its manifest gives `write` for sales/orders) and one that has the dashboard's model but no write scope
+        ["app-writes"] = new(West, new ViewsAppScope("portal", ["sales_catalog"], ["sales/orders"], "sales-portal 3")),
     };
 
     public ValueTask<ViewsPrincipal?> AuthenticateAsync(string? authorization, string? clientAddress, CancellationToken cancellationToken) =>
@@ -77,7 +79,7 @@ internal sealed class ViewsHarness : IAsyncDisposable
 
     public static string ModelContent => new JsonObject { ["catalog"] = CatalogText }.ToJsonString();
 
-    public static async Task<ViewsHarness> StartAsync(StateEngines engines, string engine, TimeSpan? cacheTtl = null, IViewsAudit? audit = null, bool publish = true, bool useModuleClock = false, bool follow = true, IReportExporter? exporter = null, string? pageAssets = null, long? maxExportRows = null, bool personalDocuments = true, IReadOnlyList<IReportCatalogProvider>? externalCatalogs = null, IEnumerable<string>? frameOrigins = null, ICustomViewApps? customApps = null)
+    public static async Task<ViewsHarness> StartAsync(StateEngines engines, string engine, TimeSpan? cacheTtl = null, IViewsAudit? audit = null, bool publish = true, bool useModuleClock = false, bool follow = true, IReportExporter? exporter = null, string? pageAssets = null, long? maxExportRows = null, bool personalDocuments = true, IReadOnlyList<IReportCatalogProvider>? externalCatalogs = null, IEnumerable<string>? frameOrigins = null, ICustomViewApps? customApps = null, IViewsActions? actions = null)
     {
         var h = new ViewsHarness();
         var database = engines.Provision(engine).Open([DefinitionsModule.Module, PayloadStore.Module, AuditModule.Module, UserViewsModule.Module], new StateScope(Group: "main"), time: h.Clock);
@@ -98,7 +100,7 @@ internal sealed class ViewsHarness : IAsyncDisposable
             Catalogs = catalogs,
             CacheTtl = cacheTtl ?? TimeSpan.Zero, Time = useModuleClock ? h.ModuleClock : TimeProvider.System, Follow = follow, PollInterval = TimeSpan.FromHours(1), DrainTimeout = TimeSpan.FromSeconds(20),
             Resolver = new ResolverOptions { WidgetTimeout = TimeSpan.FromSeconds(20) }, Exporter = exporter, PageAssets = pageAssets, MaxExportRows = maxExportRows ?? 100_000,
-            UserViews = personalDocuments ? h.UserViews : null, CustomApps = customApps,
+            UserViews = personalDocuments ? h.UserViews : null, CustomApps = customApps, Actions = actions,
         };
         var theAudit = audit ?? new StateViewsAudit(h.Audit);
         var options = externalCatalogs is null ? Options(null) : Options(new ReportCatalogs([new ViewsCatalog(h.Published, Options(null), theAudit), .. externalCatalogs], frameOrigins));

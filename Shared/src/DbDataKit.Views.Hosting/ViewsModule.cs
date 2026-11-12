@@ -25,6 +25,8 @@ namespace DbDataKit.Views.Hosting;
 /// GET  /api/v1/dashboards                 {items: [{name, title, version}]}          (and /api/v1/reports)
 /// GET  /api/v1/dashboards/{name}          {kind, name, title, version, as_of, text, document, layouts: [{name, type, default}]}
 /// POST /api/v1/dashboards/{name}/render   {parameters?, layout?, only?, viewport?: {width, height}, medium?} gives the rendered-widgets document
+/// POST /api/v1/dashboards/{name}/actions/{link}   {widget, row, parameters?, answers?, idempotency_key} runs an action link's change or task as the caller (plan 32 DBR53); .../forecast says what will happen
+/// POST /api/v1/dashboards/{name}/batches   {lines: [{link, widget, row, parameters?, answers?}], idempotency_key} submits a staged set as one batch, one transaction (DBR53b); .../batches/forecast says what will happen
 /// POST /api/v1/views/preview              {document|text|widget, widget_id?, layout?, only?, parameters?} the rendered widgets of an unsaved draft, as the caller, stored nowhere (plan 32 DBR28)
 /// GET  /api/v1/dashboards/{name}/export?format=pdf&amp;layout=&amp;p.name=   the PDF (501 export_unavailable naming the setting when the host has no browser)
 /// GET  /api/v1/dashboards/{name}/export?format=csv|xlsx|svg&amp;widget=&amp;layout=&amp;p.name=   a widget's rows (csv, xlsx: no browser), a dashboard's sheets (xlsx without widget), a chart's SVG
@@ -212,6 +214,22 @@ public sealed class ViewsModule(ViewsOptions options, ViewsPublications publishe
                 As(c, (who, trace) => api!.ExportAsync(who, kind, name, Query(c, "format"), Query(c, "layout"), Query(c, "widget"), Parameters(c), c.Connection.RemoteIpAddress?.ToString(), trace, c.RequestAborted))));
             routes.MapGet(prefix + "/{name}/print", (Func<string, HttpContext, Task<IResult>>)((name, c) =>
                 As(c, (who, trace) => api!.PrintPageAsync(who, kind, name, Query(c, "layout"), Parameters(c), c.Connection.RemoteIpAddress?.ToString(), trace, c.RequestAborted))));
+            routes.MapPost(prefix + "/{name}/actions/{link}", (Func<string, string, HttpContext, Task<IResult>>)((name, link, c) => As(c, async (who, trace) =>
+            {
+                var (body, refusal) = await ReadBodyAsync(c, options.MaxBodyBytes, "An action request").ConfigureAwait(false);
+                return refusal ?? await api!.RunActionAsync(who, kind, name, link, body, trace, c.RequestAborted).ConfigureAwait(false);
+            })));
+            routes.MapPost(prefix + "/{name}/batches", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, async (who, trace) =>
+            {
+                var (body, refusal) = await ReadBodyAsync(c, options.MaxBatchBytes, "A batch request").ConfigureAwait(false);
+                return refusal ?? await api!.RunBatchAsync(who, kind, name, body, trace, c.RequestAborted).ConfigureAwait(false);
+            })));
+            routes.MapPost(prefix + "/{name}/batches/forecast", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, async (who, trace) =>
+            {
+                var (body, refusal) = await ReadBodyAsync(c, options.MaxBatchBytes, "A batch request").ConfigureAwait(false);
+                return refusal ?? await api!.ForecastBatchAsync(who, kind, name, body, trace, c.RequestAborted).ConfigureAwait(false);
+            })));
+            routes.MapPost(prefix + "/{name}/actions/{link}/forecast", (Func<string, string, HttpContext, Task<IResult>>)((name, link, c) => As(c, (who, trace) => api!.ForecastActionAsync(who, kind, name, link, trace, c.RequestAborted))));
             routes.MapPost(prefix + "/{name}/render", (Func<string, HttpContext, Task<IResult>>)((name, c) => As(c, async (who, trace) =>
             {
                 var (body, refusal) = await ReadBodyAsync(c, options.MaxBodyBytes, "A render request").ConfigureAwait(false);

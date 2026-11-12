@@ -1,12 +1,13 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { HostLink, PageBreak, ViewHost, definePage, defineWidget, linkHref, linkValues, registered, registeredNames, themeStyle, useView } from './index'
+import { HostLink, PageBreak, ViewHost, definePage, defineWidget, linkHref, linkValues, registered, registeredNames, themeStyle, useRequest, useView } from './index'
 import type { HostLinkInfo, HostPort, ToHost, ViewProps } from './index'
 
 const links: Record<string, HostLinkInfo> = {
   'region-page': { route: '/views/regional.yaml', as: 'navigate', values: { region: { kind: 'field', text: 'customers.region' }, year: { kind: 'param', text: 'year' }, top: { kind: 'literal', text: '10', value: 10 } }, print: 'link' },
   'order-form': { route: '/views/orders.yaml', as: 'dialog', values: { customer: { kind: 'field', text: 'customers.id' } }, print: 'hidden' },
+  'close-order': { route: null, as: 'dialog', values: {}, action: true },
   'open-arrow': { route: '/views/orders.yaml', as: 'navigate', values: {} },
 }
 const props = (mode: ViewProps['mode']): ViewProps => ({ data: {}, params: { year: 2026 }, theme: { scheme: 'light', tokens: { 'sui-text': '#111' } }, size: { width: 400, height: 'auto' }, mode, links })
@@ -76,5 +77,21 @@ describe('the rest', () => {
   })
   it('the props are the host\'s', () => {
     expect(render('print', () => createElement('b', null, String(useView().size.height)))).toBe('<b>auto</b>')
+  })
+})
+
+describe('an action is requested, never composed', () => {
+  const fire = (mode: ViewProps['mode'], name: string) => {
+    const p = port()
+    renderToStaticMarkup(createElement(ViewHost, { port: p, props: props(mode), children: createElement(() => { useRequest()(name, { 'orders.id': 1 }); return null }) }))
+    return p.sent
+  }
+  it('sends only the link name and the row, so the shell words the popup', () => {
+    expect(fire('screen', 'close-order')).toEqual([{ type: 'views:open', link: 'close-order', row: { 'orders.id': 1 } }])
+  })
+  it('does nothing in print, for a link that is not an action, or for a link the document lacks', () => {
+    expect(fire('print', 'close-order')).toEqual([])
+    expect(fire('screen', 'order-form')).toEqual([])
+    expect(fire('screen', 'nope')).toEqual([])
   })
 })

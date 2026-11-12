@@ -5,7 +5,7 @@ import type { InstanceSummary } from './api'
 describe('the fixture source of the Views page', () => {
   it('holds the retail sample bundle: both documents, valid, with the recorded result of every widget the desk layout places', async () => {
     const client = viewsClient()
-    expect((await client.list()).map((d) => `${d.kind}/${d.name}`)).toEqual(['report/retail-sales-monthly', 'dashboard/retail-sales-today'])
+    expect((await client.list()).map((d) => `${d.kind}/${d.name}`)).toEqual(['dashboard/retail-order-actions', 'report/retail-sales-monthly', 'dashboard/retail-sales-today'])
     const opened = await client.open('dashboard', 'retail-sales-today')
     expect(opened.diagnostics.filter((d) => d.severity === 'error')).toEqual([])
     resolveLog.clear()

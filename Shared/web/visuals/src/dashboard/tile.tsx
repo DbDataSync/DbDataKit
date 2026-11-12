@@ -29,6 +29,8 @@ export interface TileContext {
   onServerSort?: (widget: string, field: string | null, dir: 'asc' | 'desc' | null) => void
   /** A cell that names a link of the document was clicked (plan 32 DBR51). */
   onLink?: (link: CellLink) => void
+  /** Whether a table row has a staged change (plan 32 DBR53b): the widget's id and the row's values by field. */
+  marked?: (widget: string, fields: Record<string, unknown>) => boolean
   /** A matrix row that can expand was toggled (plan 32 DBR55). */
   onExpand?: (expand: RowExpand) => void
 }
@@ -58,6 +60,7 @@ export function tileView(c: TileContext, id: string, box: Box, isMaximized: bool
       sortable={c.sortable}
       onServerSort={c.onServerSort}
       onLink={c.onLink}
+      marked={c.marked}
       onExpand={c.onExpand}
     />
   )

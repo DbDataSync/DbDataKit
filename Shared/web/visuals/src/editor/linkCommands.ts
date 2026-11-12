@@ -21,14 +21,25 @@ export type LinkCommand =
   | { type: 'setLinkValue'; name: string; param: string; value: string | number | boolean | undefined }
   /** `edit` instead of `new` on a form: the values move to the other group. */
   | { type: 'setFormMode'; name: string; mode: 'new' | 'edit' }
-  /** `as`, `then`, `print`, `image` or `label`; undefined removes it. */
-  | { type: 'setLinkOption'; name: string; key: 'as' | 'then' | 'print' | 'image' | 'label'; value: unknown }
+  /** `as`, `then`, `print`, `image` or `label` (and an action's `stage` and `for`); undefined removes it. */
+  | { type: 'setLinkOption'; name: string; key: 'as' | 'then' | 'print' | 'image' | 'label' | 'stage' | 'for'; value: unknown }
+  /** A new action link (plan 32 DBR53): a `change` (an insert, an edit or a delete of a Store row) or a `task`, with the values it writes; the popup's words are set after. */
+  | { type: 'addActionLink'; name: string; action: NewAction }
+  /** The popup's words of an action link (`title`, `button`) or `skip` (a field edit applies at once, `confirm: skip`); undefined removes it. */
+  | { type: 'setActionConfirm'; name: string; key: 'title' | 'button' | 'skip'; value: string | boolean | undefined }
+  /** One value an action writes (`set` of an edit, `insert`, a task's `inputs`): `$field` of the clicked row, `$params.name`, `$ask.name` or a literal; undefined removes it. */
+  | { type: 'setActionValue'; name: string; field: string; value: string | number | boolean | undefined }
   /** Locks or unlocks one field of a form link. */
   | { type: 'setLinkLock'; name: string; field: string; locked: boolean }
   /** The link a widget follows on a click; undefined removes it. */
   | { type: 'setOnClick'; widget: string; link: string | undefined }
 
-export const LINK_COMMANDS: ReadonlySet<string> = new Set(['addLink', 'removeLink', 'renameLink', 'setLinkTarget', 'setLinkValue', 'setFormMode', 'setLinkOption', 'setLinkLock', 'setOnClick'])
+/** What `addActionLink` is made of: the change's model and entity and what it does to the row, or the task's package and name. */
+export type NewAction =
+  | { kind: 'change'; model: string; entity: string; operation: 'edit' | 'insert' | 'delete'; /** The row's key as a value (`$orders.id`); not for an insert. */ key?: string; /** The row's version as a value (`$orders.version`). */ version?: string; /** What an edit sets or an insert gives. */ values?: Record<string, string | number | boolean> }
+  | { kind: 'task'; package: string; task: string; inputs?: Record<string, string | number | boolean> }
+
+export const LINK_COMMANDS: ReadonlySet<string> = new Set(['addActionLink', 'setActionConfirm', 'setActionValue', 'addLink', 'removeLink', 'renameLink', 'setLinkTarget', 'setLinkValue', 'setFormMode', 'setLinkOption', 'setLinkLock', 'setOnClick'])
 
 const NAME = /^[a-z][a-z0-9_-]{0,63}$/
 
@@ -58,6 +69,57 @@ export function linkOps(doc: ViewsDoc, command: LinkCommand): Op[] {
       if (!NAME.test(command.name)) throw new EditError('bad_name', `\`${command.name}\` is not a name for a link: lower-case letters, digits, \`_\` or \`-\`, starting with a letter.`)
       if ((doc.links as Record<string, unknown> | undefined)?.[command.name]) throw new EditError('name_taken', `There is already a link named \`${command.name}\`.`)
       return [{ op: 'set', path: ['links', command.name], value: written(command.link as Record<string, unknown>) }]
+    }
+    case 'addActionLink': {
+      if (!NAME.test(command.name)) throw new EditError('bad_name', `\`${command.name}\` is not a name for a link: lower-case letters, digits, \`_\` or \`-\`, starting with a letter.`)
+      if ((doc.links as Record<string, unknown> | undefined)?.[command.name]) throw new EditError('name_taken', `There is already a link named \`${command.name}\`.`)
+      const a = command.action
+      let body: Record<string, unknown>
+      if (a.kind === 'task') {
+        if (a.package.length === 0 || a.task.length === 0) throw new EditError('bad_name', 'A task link names its package and its task.')
+        body = { task: { package: a.package, task: a.task, ...(a.inputs && Object.keys(a.inputs).length > 0 ? { inputs: a.inputs } : {}) } }
+      } else {
+        if (a.model.length === 0 || a.entity.length === 0) throw new EditError('bad_name', 'A change link names its model and its entity.')
+        const change: Record<string, unknown> = { model: a.model, entity: a.entity }
+        if (a.operation === 'insert') change.insert = a.values ?? {}
+        else {
+          if (!a.key) throw new EditError('bad_name', `A ${a.operation} names the row by its key: give a value such as \`$orders.id\`.`)
+          change[a.operation] = { key: a.key, ...(a.version ? { version: a.version } : {}) }
+          if (a.operation === 'edit') change.set = a.values ?? {}
+        }
+        body = { change }
+      }
+      return [{ op: 'set', path: ['links', command.name], value: written(body) }]
+    }
+    case 'setActionConfirm': {
+      const link = linkOf(doc, command.name) as Record<string, unknown>
+      if (link.change === undefined && link.task === undefined) throw new EditError('not_an_action', `The link \`${command.name}\` is not an action.`)
+      if (command.key === 'skip') {
+        if (command.value === true) return link.confirm === 'skip' ? [] : [{ op: 'set', path: ['links', command.name, 'confirm'], value: 'skip' }]
+        return link.confirm === 'skip' ? [{ op: 'remove', path: ['links', command.name, 'confirm'] }] : []
+      }
+      const confirm: Record<string, unknown> = typeof link.confirm === 'object' && link.confirm !== null ? { ...(link.confirm as Record<string, unknown>) } : {}
+      if (command.value === undefined || command.value === '') delete confirm[command.key]
+      else confirm[command.key] = command.value
+      if (Object.keys(confirm).length === 0) return link.confirm === undefined ? [] : [{ op: 'remove', path: ['links', command.name, 'confirm'] }]
+      return [{ op: 'set', path: ['links', command.name, 'confirm'], value: confirm }]
+    }
+    case 'setActionValue': {
+      const link = linkOf(doc, command.name) as Record<string, unknown>
+      const change = link.change as Record<string, unknown> | undefined
+      const task = link.task as Record<string, unknown> | undefined
+      if (!change && !task) throw new EditError('not_an_action', `The link \`${command.name}\` is not an action.`)
+      const section = task ? 'inputs' : change!.insert !== undefined ? 'insert' : change!.delete !== undefined ? '' : 'set'
+      if (section === '') throw new EditError('nothing_to_set', 'A delete writes no value.')
+      const holder = (task ?? change) as Record<string, unknown>
+      const values = { ...((holder[section] as Record<string, unknown> | undefined) ?? {}) }
+      if (command.value === undefined) { if (!(command.field in values)) return []; delete values[command.field] }
+      else {
+        if (!/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(command.field)) throw new EditError('bad_name', `\`${command.field}\` is not a field name.`)
+        values[command.field] = command.value
+      }
+      const path = ['links', command.name, task ? 'task' : 'change', section]
+      return Object.keys(values).length === 0 && section === 'inputs' ? [{ op: 'remove', path }] : [{ op: 'set', path, value: values }]
     }
     case 'removeLink': {
       linkOf(doc, command.name)

@@ -24,6 +24,11 @@ export interface FrameHostOptions {
   openable: ReadonlySet<string>
   onSetParam(name: string, value: ParameterValue): void
   onOpen(link: string, row: Row): void
+  /** The code asked to stage a change (DBR53b): the link must be one the widget lists. */
+  onStage?(link: string, row: Row, answers: Record<string, string>): void
+  /** The code asked to open the review of the pending set; it cannot submit. */
+  onSubmit?(): void
+  onDiscard?(): void
   onState(state: FrameState): void
   /** The content's height in CSS pixels, as the frame reports it. */
   onSize?(height: number): void
@@ -73,6 +78,12 @@ export function createFrameHost(o: FrameHostOptions): FrameHost {
           if (!o.openable.has(message.link)) { o.onNotice?.(`The view asked to open \`${message.link}\`, which the widget does not list under \`links\`.`); return }
           o.onOpen(message.link, message.row)
           return
+        case 'views:stage':
+          if (!o.openable.has(message.link)) { o.onNotice?.(`The view asked to stage \`${message.link}\`, which the widget does not list under \`links\`.`); return }
+          o.onStage?.(message.link, message.row, message.answers)
+          return
+        case 'views:submit': o.onSubmit?.(); return
+        case 'views:discard': o.onDiscard?.(); return
       }
     },
     sendProps() { if (started) o.post({ type: 'views:props', props: o.props() }) },

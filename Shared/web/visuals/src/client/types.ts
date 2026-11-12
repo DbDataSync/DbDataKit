@@ -1,4 +1,5 @@
 import type { Catalog } from '../views/catalog'
+import type { ActionForecast, ActionOutcome, ActionRequest, BatchOutcome, BatchRequest } from '../links/actions'
 import type { ViewKind } from '../views/document'
 import type { ParameterValues, ViewsDoc, WidgetDoc } from '../views/model'
 import type { RenderedWidget, RenderedWidgets } from '../views/rendered'
@@ -168,6 +169,17 @@ export interface ViewsClient {
   preview(request: PreviewRequest): Promise<RenderedWidget>
   /** An unsaved document as the caller would see it, in one call (plan 32 DBR28). Optional: a source with no server (the fixture source) leaves the editor to ask `preview` for each widget. A document the server would refuse to publish rejects with `invalid`, its diagnostics placed in the text. */
   previewDocument?(request: DocumentPreviewRequest): Promise<RenderedWidgets>
+  /**
+   * Runs an action link of the **published** document as the viewer (plan 32 DBR53: `POST .../actions/{link}`): the module derives the change or the task from the document, so the request names the link and carries the clicked row,
+   * the parameters and what the person typed. The answer is the outcome, never a rejection for a refusal (a conflict, the Store's broken rules and a denial are outcomes the popup shows). Optional: the fixtures run none unless a bundle gives them.
+   */
+  runAction?(ref: { kind: ViewKind; name: string }, request: ActionRequest): Promise<ActionOutcome>
+  /** What will happen for this viewer if the action is confirmed (`POST .../actions/{link}/forecast`): applies at once, waits for approval, or a task runs; null when the source cannot say. */
+  forecastAction?(ref: { kind: ViewKind; name: string }, link: string, signal?: AbortSignal): Promise<ActionForecast | null>
+  /** Submits the staged changes of the **published** document as one batch as the viewer (plan 32 DBR53b: `POST .../batches`): one transaction in the Store, or one change request of all of them. Optional like `runAction`. */
+  runBatch?(ref: { kind: ViewKind; name: string }, request: BatchRequest): Promise<BatchOutcome>
+  /** What will happen to a set for this viewer (`POST .../batches/forecast` with the same lines, which name the model): applies together or waits for approval as one request. */
+  forecastBatch?(ref: { kind: ViewKind; name: string }, request: BatchRequest, signal?: AbortSignal): Promise<ActionForecast | null>
   /** The catalog of a semantic model (the Proxy's `GET /api/v1/semantic-models/{name}`, Build's compile): what the editor's field wells offer. Optional: a source without one leaves the wells to typed names. */
   catalog?(model: string): Promise<Catalog>
 }

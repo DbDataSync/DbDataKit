@@ -190,6 +190,14 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | `DBD-CONN-009` ``grants` is a section of format 2`, or a Build connection file refused with `DDB-620` naming `connections/<name>.yaml` | the file says `schema: connection/1` and has `grants` | write `schema: connection/2` (Build's editor does it when it adds the first group and goes back to `connection/1` when the last is removed) |
 | a Gateway refuses a data source file: ``grants` and `extensions.gateway.groups` both say who may use the data source` | the definition names the people in two places | keep `grants`; a hand-made file uses one place or the other, never both |
 
+### Dashboards and reports (plan 32 goldens)
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| a new `bad/*.json` case fails `LoaderTests` with `Expected: 0, Actual: <n>` (the line) or `SchemaTests` with `invalid under the schema but the case says the schema cannot tell: set "schema": true` | the case in `Shared/conformance/views/cases.json` was written with `line: 0` and `schema: false`; the .NET loader checks the line of its diagnostic and the schema test checks whether the JSON Schema also refuses the file (the TypeScript suite checks only the code and the path) | run `DbDataKit.Views.Tests` once, take the line from the failure, set `schema: true` where the schema's `required`/`additionalProperties`/`oneOf` really refuses the file, and change `views-format.lock.json`'s hash of `core.schema.json` in the same commit (`sha256sum` of the file) |
+| a console story that opens a fixture dashboard finds the action popup missing (`vz-action` never appears) and the page says "this host cannot run actions" | `DashboardView` takes the views client's `runAction` as its host; a `fixtureClient` has one only when its bundle records `actions` (or `batches`), so a bundle with none runs no action | record the answers a Store would give in the bundle (`FixtureBundle.actions`, `batches`; the console's sample is `viewsActionsSample.ts`) |
+| a vitest of the shell's popup finds the click does nothing in a document whose link has `stage: true` | a `stage` link adds a line to the pending set instead of opening the popup (`pending.test.tsx`); the bar `vz-pending-bar` and the review `vz-pending` are what to look for | assert the bar, not `vz-action` |
+
 ### Console screens with an editor
 
 | Signature | Cause | Fix |
