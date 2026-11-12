@@ -13,7 +13,11 @@ public sealed class DefinitionsRefusalException(int status, string message) : Ex
 }
 
 /// <summary>What a hook sees of a publish after the API parsed it, checked the roles and the owner rules, and before it verifies the signature and stores the version.</summary>
-public sealed record PublishHookContext(string Kind, string Name, string Channel, string Manifest, IReadOnlyList<ArtifactRef> Files, DefinitionsCaller Caller);
+public sealed record PublishHookContext(string Kind, string Name, string Channel, string Manifest, IReadOnlyList<ArtifactRef> Files, DefinitionsCaller Caller)
+{
+    /// <summary>The request body as sent (a kind reads the fields it adds to it, such as the Gateway's <c>adopt</c>); never null from the API.</summary>
+    public JsonObject Body { get; init; } = [];
+}
 
 /// <summary>What a hook sees of a life-cycle call (<c>activate</c>, <c>switch</c>, <c>rollback</c>, <c>retire</c>) the API authorised: the parsed body, the version a <c>switch</c> names, and <c>expected_version</c>.</summary>
 public sealed record LifecycleHookContext(string Kind, string Name, string Channel, string Act, int? ExpectedVersion, int? Version, JsonObject Body, DefinitionsCaller Caller);
@@ -48,6 +52,19 @@ public interface IDefinitionKindHook
 
     /// <summary>Before a version is signature-checked and stored: names, the trigger loop. Throws to refuse.</summary>
     void BeforePublish(PublishHookContext context) { }
+
+    /// <summary>The same as <see cref="BeforePublish"/> for a check that waits on something (the Gateway asks a data source a test query); the API calls this one, which by default calls <see cref="BeforePublish"/>.</summary>
+    Task BeforePublishAsync(PublishHookContext context, CancellationToken ct)
+    {
+        BeforePublish(context);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Who owns the definition when the group's settings hold no owner for it (the Gateway's models and data sources carry <c>managed_by</c> in what they publish, and the per-kind routes that predate the API stamp it); null when the host keeps none.</summary>
+    string? OwnerOf(string name) => null;
+
+    /// <summary>Before a definition is described or one of its versions is read: a host with rules of its own about who reads which one (the Gateway's owner rules) throws to refuse.</summary>
+    void BeforeRead(string name, DefinitionsCaller caller) { }
 
     /// <summary>After a version is stored: what the host does with it (a served version replaces the channel's task projection), and what it adds to the answer.</summary>
     void AfterPublish(PublishHookContext context, PublishResult result, JsonObject response) { }

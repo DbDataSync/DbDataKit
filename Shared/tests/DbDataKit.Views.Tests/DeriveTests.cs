@@ -26,7 +26,14 @@ public class DeriveTests
 
     private static ViewWidget Widget(JsonNode c, string key = "widgets")
     {
-        var result = ViewsLoader.LoadWidgets(c[key]!.ToJsonString(), "derive.json", Parameters(c));
+        IReadOnlyDictionary<string, ViewGroup>? groups = null;
+        if (c["groups"] is { } declared)
+        {
+            var read = ViewsLoader.LoadGroups(declared.ToJsonString(), "derive.json");
+            Assert.True(read.Groups is not null, Conformance.Describe(read.Diagnostics));
+            groups = read.Groups;
+        }
+        var result = ViewsLoader.LoadWidgets(c[key]!.ToJsonString(), "derive.json", Parameters(c), groups: groups);
         Assert.True(result.Ok, Conformance.Describe(result.Diagnostics));
         return result.Widgets!.Single();
     }
@@ -93,6 +100,26 @@ public class DeriveTests
     }
 
     [Fact]
+    public void The_request_for_an_expanded_row_is_the_golden_one()
+    {
+        var file = Case("expansions.json");
+        var read = ViewsLoader.LoadGroups(file["groups"]!.ToJsonString(), "expansions.json");
+        Assert.True(read.Groups is not null, Conformance.Describe(read.Diagnostics));
+        var widget = ViewsLoader.LoadWidgets(file["widgets"]!.ToJsonString(), "expansions.json", [], groups: read.Groups).Widgets!.Single();
+        foreach (var c in file["cases"]!.AsArray())
+        {
+            var key = c!["key"]!.AsArray().Select(k => k?.DeepClone()).ToList();
+            var derived = DeriveRequest.DeriveExpansion(widget, Roles(), key, "expansions.json");
+            Assert.True(derived.Ok, Conformance.Describe(derived.Diagnostics));
+            Assert.Equal(c["request"]!.ToJsonString(), derived.Request!.ToJsonString());
+            Assert.Empty(new SemanticRequestValidator(Cat).Validate(derived.Request!));
+        }
+        var refused = DeriveRequest.DeriveExpansion(widget, Roles(), [JsonValue.Create("West"), JsonValue.Create("extra")], "expansions.json");
+        Assert.Null(refused.Request);
+        Assert.Contains("names a value for each of the rows", refused.Diagnostics[0].Message);
+    }
+
+    [Fact]
     public void Some_goldens_have_a_hand_written_equivalent()
     {
         Assert.True(Conformance.Cases("derive/cases.json")["good"]!.AsArray().Count(g => Case(g!["file"]!.GetValue<string>())["equivalent"] is not null) >= 1);
@@ -105,7 +132,7 @@ public class DeriveTests
         Assert.Equal(["chart", "matrix", "metric", "table"], widgets.Select(w => w["type"]!.GetValue<string>()).Distinct().Order());
         foreach (var channel in new[] { "x", "y", "color", "column", "tooltip" }) Assert.Contains(widgets, w => w["encodings"]?[channel] is not null);
         foreach (var key in new[] { "compare", "totals", "column_limit", "sort" }) Assert.Contains(widgets, w => w["encodings"]?[key] is not null);
-        Assert.Equal(["DBD-106", "DBD-VIEW-040", "DBD-VIEW-041", "DBD-VIEW-042", "unknown_member", "wrong_member_kind"],
+        Assert.Equal(["alias_required", "DBD-106", "DBD-VIEW-040", "DBD-VIEW-041", "DBD-VIEW-042", "DBD-VIEW-048", "duplicate_measure", "unknown_member", "wrong_member_kind"],
             Conformance.Cases("derive/cases.json")["refused"]!.AsArray().SelectMany(r => Case(r!["file"]!.GetValue<string>())["refusal"]!.AsArray().Select(d => d!["code"]!.GetValue<string>())).Distinct().Order());
     }
 

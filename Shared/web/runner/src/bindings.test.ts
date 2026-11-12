@@ -33,6 +33,27 @@ describe('the slots of a channel', () => {
   })
 })
 
+describe('a read slot', () => {
+  const d = detail({
+    slots: [
+      { channel: 'prod', slot: 'source', kind: 'sqlserver', access: 'read', tasks: ['load'], versions: [2] },
+      { channel: 'test', slot: 'source', kind: 'sqlserver', access: 'read', tasks: ['load'], versions: [2] },
+      { channel: 'test', slot: 'target', kind: 'postgres', tasks: ['load'], versions: [2] },
+    ],
+    bindings: [{ channel: 'prod', slot: 'source', bound_to: 'erp', revision: 3 }, { channel: 'prod', slot: 'target', bound_to: 'wh', revision: 1 }],
+  })
+  it('a channel that binds nothing shows production\'s binding as inherited and does not count it unbound; a write slot does not inherit', () => {
+    const rows = slotRows(d, 'test')
+    expect(rows.map((r) => [r.slot, r.access, r.boundTo, r.inheritedFrom])).toEqual([['source', 'read', null, 'erp'], ['target', 'write', null, null]])
+    expect(unboundSlots(rows)).toEqual(['target'])
+  })
+  it('production and a channel with its own binding inherit nothing', () => {
+    expect(slotRows(d, 'prod')[0].inheritedFrom).toBeNull()
+    const own = { ...d, bindings: [...d.bindings, { channel: 'test', slot: 'source', bound_to: 'erp-test', revision: 1 }] }
+    expect(slotRows(own, 'test')[0]).toMatchObject({ boundTo: 'erp-test', inheritedFrom: null })
+  })
+})
+
 describe('what was changed', () => {
   const rows = slotRows(detail(), 'prod')
   it('counts a slot only when the trimmed text differs from what is bound', () => {

@@ -54,8 +54,8 @@ public static class PrintPages
     public static string Rule(PrintPaper p) =>
         $"@page {{ size: {p.CssSize}; margin: {Mm(p.Margins.Top)} {Mm(p.Margins.Right)} {Mm(p.Margins.Bottom)} {Mm(p.Margins.Left)} }}";
 
-    /// <summary>The page. <paramref name="assetBase"/> is where <c>print.js</c>, <c>print.css</c> and the fonts are loaded from: <c>""</c> for the exporter (its own origin) and the module's asset route for a browser.</summary>
-    public static string Html(PublishedView view, ViewLayout layout, PrintPaper paper, JsonObject rendered, JsonObject parameters, string? viewer, BundledFonts? fonts, string assetBase)
+    /// <summary>The page. <paramref name="customFrames"/> maps a custom widget's component to the address of the app page that draws it (<see cref="CustomViewPrint.Frames"/>). <paramref name="assetBase"/> is where <c>print.js</c>, <c>print.css</c> and the fonts are loaded from: <c>""</c> for the exporter (its own origin) and the module's asset route for a browser.</summary>
+    public static string Html(PublishedView view, ViewLayout layout, PrintPaper paper, JsonObject rendered, JsonObject parameters, string? viewer, BundledFonts? fonts, string assetBase, IReadOnlyDictionary<string, string>? customFrames = null)
     {
         var payload = new JsonObject
         {
@@ -75,12 +75,15 @@ public static class PrintPages
             ["document"] = view.DocumentJson(),
             ["rendered"] = rendered,
         };
+        // the app files that draw custom widgets (DBR32): each component's page, relative to this page, served from the same one-shot origin
+        if (customFrames is { Count: > 0 })
+            payload["custom"] = new JsonObject { ["frames"] = new JsonObject(customFrames.Select(f => KeyValuePair.Create(f.Key, (JsonNode?)JsonValue.Create(f.Value)))) };
         // the JSON sits in a script block that is not run: nothing in a value can close it
         var json = payload.ToJsonString(new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })
             .Replace("<", "\\u003c", StringComparison.Ordinal).Replace("\u2028", "\\u2028", StringComparison.Ordinal).Replace("\u2029", "\\u2029", StringComparison.Ordinal);
         var html = new StringBuilder();
         html.Append("<!doctype html>\n<html lang=\"en\" data-medium=\"print\"><head><meta charset=\"utf-8\"><title>").Append(WebUtility.HtmlEncode(view.Document.Title)).Append("</title>\n")
-            .Append("<meta name=\"viewport\" content=\"width=device-width\">\n<style>\n").Append(fonts?.FontFaceCss(assetBase) ?? "").Append(Rule(paper)).Append('\n')
+            .Append("<meta name=\"viewport\" content=\"width=device-width\">\n<link rel=\"icon\" href=\"data:,\">\n<style>\n").Append(fonts?.FontFaceCss(assetBase) ?? "").Append(Rule(paper)).Append('\n')
             .Append(":root { --font-sans: \"DbDataKit Sans\", sans-serif; --font-serif: \"DbDataKit Serif\", serif; --font-mono: \"DbDataKit Mono\", monospace }\n")
             .Append("html, body { margin: 0; padding: 0; background: #fff }\n</style>\n")
             .Append("<link rel=\"stylesheet\" href=\"").Append(assetBase).Append("print.css\"></head>\n<body>\n<div id=\"root\"></div>\n")

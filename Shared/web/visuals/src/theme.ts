@@ -18,6 +18,9 @@ const PALETTES: Record<Theme, Palette> = {
   dark: { text: '#e6edf3', muted: '#9da7b3', grid: '#30363d', axis: '#6e7681', categories: ['#56B4E9', '#F0B429', '#2FC79A', '#FF7F50', '#E08BC0', '#7CC6F5', '#D4B106', '#9AA4B2'] },
 }
 
+/** The colours of a theme: what the chart configuration is made of, and what a custom view's theme tokens are made of (DBR31), so both draw in the same ink. */
+export const chartPalette = (theme: Theme): Readonly<Palette> => PALETTES[theme]
+
 /**
  * The Vega-Lite configuration of a theme. A chart's colours cannot come from CSS variables (Vega writes them as SVG attributes), so each theme names them. This is
  * the renderer's own configuration, never part of a view document: a spec cannot set a `config`, which the subset leaves out.

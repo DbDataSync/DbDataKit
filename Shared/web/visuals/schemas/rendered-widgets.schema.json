@@ -24,7 +24,7 @@
     "widget": {
       "oneOf": [
         { "$ref": "#/$defs/metric" }, { "$ref": "#/$defs/table" }, { "$ref": "#/$defs/matrix" }, { "$ref": "#/$defs/chart" },
-        { "$ref": "#/$defs/text" }, { "$ref": "#/$defs/image" }, { "$ref": "#/$defs/control" }, { "$ref": "#/$defs/embed" }, { "$ref": "#/$defs/error" }
+        { "$ref": "#/$defs/text" }, { "$ref": "#/$defs/image" }, { "$ref": "#/$defs/control" }, { "$ref": "#/$defs/embed" }, { "$ref": "#/$defs/custom" }, { "$ref": "#/$defs/error" }
       ]
     },
     "metric": {
@@ -81,7 +81,7 @@
               "total": { "type": "boolean", "description": "A total row is a row of the result and says so." },
               "cells": {
                 "type": "array",
-                "items": { "type": "object", "required": ["text"], "additionalProperties": false, "properties": { "v": { "$ref": "#/$defs/value" }, "text": { "type": "string" } } }
+                "items": { "type": "object", "required": ["text"], "additionalProperties": false, "properties": { "v": { "$ref": "#/$defs/value" }, "text": { "type": "string" }, "icon": { "$ref": "#/$defs/icon" }, "badge": { "type": "boolean" }, "mixed": { "type": "boolean" }, "values": { "type": "array", "maxItems": 20, "items": { "type": "string" } }, "link": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" } } }
               }
             }
           }
@@ -115,12 +115,21 @@
             "properties": {
               "labels": { "type": "array", "items": { "type": "string" } },
               "total": { "type": "boolean" },
-              "cells": { "type": "array", "items": { "type": "object", "required": ["text"], "additionalProperties": false, "properties": { "v": { "type": ["number", "null"] }, "text": { "type": "string" } } } }
+              "expandable": { "description": "A row whose details can be read on request (plan 32 DBR55): the matrix has a `show: drill` group, and `key` is what a request for the row's details filters by.", "type": "boolean" },
+              "expanded": { "description": "The row's details are shown under it (`children`).", "type": "boolean" },
+              "key": { "description": "The typed member values of the row's own fields, outermost first.", "type": "array", "items": { "type": ["string", "number", "boolean", "null"] } },
+              "children": {
+                "description": "The detail rows of an expanded row: the labels after the row's own, and a cell for every column of the matrix.",
+                "type": "array",
+                "items": { "type": "object", "required": ["labels", "cells"], "additionalProperties": false, "properties": { "labels": { "type": "array", "items": { "type": "string" } }, "cells": { "type": "array", "items": { "type": "object", "required": ["text"], "additionalProperties": false, "properties": { "v": { "type": ["number", "null"] }, "text": { "type": "string" }, "icon": { "$ref": "#/$defs/icon" }, "badge": { "type": "boolean" }, "mixed": { "type": "boolean" }, "values": { "type": "array", "maxItems": 20, "items": { "type": "string" } }, "link": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" } } } } } }
+              },
+              "cells": { "type": "array", "items": { "type": "object", "required": ["text"], "additionalProperties": false, "properties": { "v": { "type": ["number", "null"] }, "text": { "type": "string" }, "icon": { "$ref": "#/$defs/icon" }, "badge": { "type": "boolean" }, "mixed": { "type": "boolean" }, "values": { "type": "array", "maxItems": 20, "items": { "type": "string" } }, "link": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" } } } }
             }
           }
         }
       }
     },
+    "icon": { "description": "An icon of the closed vocabulary (plan 32 DBR51): the same names as the core's `icon`, which a test keeps equal.", "enum": ["circle", "dot", "check", "cross", "warning", "info", "clock", "flag", "star", "pause", "play", "stop", "lock", "unlock", "arrow-up", "arrow-down", "arrow-right", "plus", "minus", "pin", "bell", "eye", "user", "tag"] },
     "d3_format": { "type": "string", "pattern": "^\\$?,?\\.[0-9]{1,2}~?[fs%]$" },
     "chart": {
       "type": "object",
@@ -182,6 +191,26 @@
         "origin": { "type": ["string", "null"], "description": "Scheme, host and port of the address." },
         "framed": { "type": "boolean", "description": "True when the host approves the origin to be framed; otherwise the widget is a link." },
         "link_text": { "type": "string" }
+      }
+    },
+    "custom": {
+      "type": "object",
+      "required": ["type", "component", "data"],
+      "additionalProperties": false,
+      "description": "A custom widget (DBR31): the rows of the queries its manifest entry declares, run as the viewer, by the query's name. The code draws them in a frame; it never fetches.",
+      "properties": {
+        "type": { "const": "custom" },
+        "component": { "type": "string", "description": "<app>/<Export>, as the document names it." },
+        "params": { "type": "object", "description": "The values the widget's parameters have now (a literal or a document parameter's value); those with no value are left out." },
+        "data": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["columns", "rows"],
+            "additionalProperties": false,
+            "properties": { "columns": { "type": "array", "items": { "type": "string" } }, "rows": { "type": "array", "items": { "type": "object" } } }
+          }
+        }
       }
     },
     "control": {

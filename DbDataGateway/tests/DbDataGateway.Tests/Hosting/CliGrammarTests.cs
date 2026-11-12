@@ -32,6 +32,7 @@ public sealed class CliGrammarTests
               identity    The identity home this gateway serves: register consoles and apps, invite people, give them roles
               apps        The apps host this gateway serves: its apps, instances and navigation sets
               views       The dashboards and reports this gateway's group serves: publish a document, list what is served
+              export      The PDF export component: install it from the release (the pinned Chromium, the bundled fonts, the print page) and show its state
               config      The server's own configuration
               state       The state database: where it is, whether it works, and the rights it needs
               query       A client for smoke-testing a running gateway

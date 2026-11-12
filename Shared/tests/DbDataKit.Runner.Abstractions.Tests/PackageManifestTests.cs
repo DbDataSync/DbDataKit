@@ -338,6 +338,24 @@ public sealed class PackageManifestTests
     }
 
     [Fact]
+    public void A_connection_slot_says_it_is_only_read_and_a_slot_that_says_nothing_is_written_to()
+    {
+        var m = Valid(Edited("      - { name: inbox, kind: folder }\n", "      - { name: inbox, kind: folder, access: read }\n      - { name: target, kind: postgres, access: write }\n"));
+
+        Assert.Equal([SlotAccess.Write, SlotAccess.Read, SlotAccess.Write], m.Tasks[0].Connections.Select(c => c.Access));
+        var text = PackageManifestWriter.Write(m);
+        Assert.Contains("access: read", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("access: write", text, StringComparison.Ordinal);
+        Assert.Equal(m.Tasks[0].Connections, Valid(text).Tasks[0].Connections);
+    }
+
+    [Fact]
+    public void An_access_that_is_neither_read_nor_write_is_refused_naming_the_file_and_the_key()
+    {
+        AssertRefused(Edited("      - { name: inbox, kind: folder }\n", "      - { name: inbox, kind: folder, access: readonly }\n"), "tasks[0].connections[1].access", "read, write");
+    }
+
+    [Fact]
     public void An_injection_form_the_runner_does_not_know_is_refused_naming_the_slot_and_the_forms()
     {
         AssertRefused(Edited("      - { name: inbox, kind: folder }\n", "      - { name: inbox, kind: folder, env: DBDATAKIT_ANYTHING }\n"), "tasks[0].connections[1].env", "sync-secret, build-login");

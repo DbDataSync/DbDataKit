@@ -38,11 +38,11 @@ public class ResolveTests
         return loaded.Document!;
     }
 
-    private static ViewDocument Doc(string widgets, string parameters = "[]", string kind = "dashboard")
+    private static ViewDocument Doc(string widgets, string parameters = "[]", string kind = "dashboard", string links = "")
     {
         var ids = Regex.Matches(widgets, @"^  ([a-z][a-z0-9_-]*):", RegexOptions.Multiline).Select(m => m.Groups[1].Value).ToList();
         var tiles = string.Join("\n", ids.Select((id, i) => $"      - {{widget: {id}, x: 0, y: {i * 2}, w: 12, h: 2}}"));
-        var yaml = $"schemaVersion: 1\nkind: {kind}\ntitle: Test\nparameters: {parameters}\nwidgets:\n{widgets}\nlayouts:\n  - name: desk\n    type: reflow\n    default: true\n    grid: {{columns: 12, rows: {ids.Count * 2}}}\n    tiles:\n{tiles}\n";
+        var yaml = $"schemaVersion: 1\nkind: {kind}\ntitle: Test\nparameters: {parameters}\n{(links.Length > 0 ? "links:\n" + links + "\n" : "")}widgets:\n{widgets}\nlayouts:\n  - name: desk\n    type: reflow\n    default: true\n    grid: {{columns: 12, rows: {ids.Count * 2}}}\n    tiles:\n{tiles}\n";
         var loaded = ViewsLoader.Load(yaml, "test.yaml");
         Assert.True(loaded.Ok, Conformance.Describe(loaded.Diagnostics) + "\n" + yaml);
         return loaded.Document!;
@@ -730,6 +730,407 @@ public class ResolveTests
         Assert.Empty(Used("n"));
         Assert.Equal(["top"], Used("t"));
         Assert.Equal(["top"], Used("s"));
+    }
+
+
+    // ---- filtered and repeated measures (plan 32 DBR50) ----
+
+    private static double NetOf(Func<RetailServing.Line, bool> where, Func<RetailServing.Line, double>? pick = null) => Math.Round(RetailServing.Lines.Where(where).Sum(pick ?? (l => l.Net)), 4);
+
+    [Fact]
+    public async Task The_same_measure_twice_with_two_filter_sets_is_two_columns_of_a_table_and_a_matrix_and_the_totals_add_up()
+    {
+        var doc = Doc("""
+              t:
+                type: table
+                encodings:
+                  columns:
+                    - {field: products.category, label: Category}
+                    - {field: sales.net_amount, alias: east_net, label: East, filters: [{attribute: customers.region, operator: equals, values: [East]}]}
+                    - {field: sales.net_amount, alias: west_net, label: West, filters: [{attribute: customers.region, operator: equals, values: [West]}]}
+                    - {field: sales.net_amount, label: All}
+                query: {model: retail_sales, totals: {grand_total: true}}
+              mx:
+                type: matrix
+                encodings:
+                  rows: [products.category]
+                  columns: [customers.region]
+                  values:
+                    - {field: sales.net_amount, label: All}
+                    - {field: sales.net_amount, alias: east_net, label: East, filters: [{attribute: customers.region, operator: equals, values: [East]}]}
+                  totals: {rows: true}
+                query: {model: retail_sales}
+            """);
+        var r = await Resolver(new RetailServing()).ResolveAsync(Viewer(), doc, "desk");
+        var t = Ok(r, "t");
+        Assert.Equal(["Category", "East", "West", "All"], t["columns"]!.AsArray().Select(c => c!["label"]!.GetValue<string>()));
+        var rows = t["rows"]!.AsArray();
+        var apparel = rows.Single(x => x!["cells"]![0]!["v"]?.GetValue<string>() == "Apparel")!["cells"]!;
+        Assert.Equal(NetOf(l => l.Category == "Apparel" && l.Region == "East"), apparel[1]!["v"]!.GetValue<double>());
+        Assert.Equal(NetOf(l => l.Category == "Apparel" && l.Region == "West"), apparel[2]!["v"]!.GetValue<double>());
+        Assert.Equal(NetOf(l => l.Category == "Apparel"), apparel[3]!["v"]!.GetValue<double>());
+        // the grand total row is the engine's, per entry: each filtered column totals its own lines
+        var total = rows.Single(x => x!["total"]?.GetValue<bool>() == true)!["cells"]!;
+        Assert.Equal(NetOf(l => l.Region == "East"), total[1]!["v"]!.GetValue<double>());
+        Assert.Equal(NetOf(l => l.Region == "West"), total[2]!["v"]!.GetValue<double>());
+        Assert.Equal(NetOf(_ => true), total[3]!["v"]!.GetValue<double>());
+
+        var mx = Ok(r, "mx");
+        // each region column holds the unfiltered value and the East-filtered one side by side; the total row is the engine's, so the filtered value is the region's own lines or nothing
+        var totalRow = mx["rows"]!.AsArray().Single(x => x!["total"]?.GetValue<bool>() == true)!["cells"]!;
+        int Column(string region, string value) => mx["columns"]!.AsArray().ToList().FindIndex(c => c!["labels"]![0]!.GetValue<string>() == region && c["labels"]![1]!.GetValue<string>() == value);
+        Assert.Equal(NetOf(l => l.Region == "East"), totalRow[Column("East", "All")]!["v"]!.GetValue<double>());
+        Assert.Equal(NetOf(l => l.Region == "East"), totalRow[Column("East", "East")]!["v"]!.GetValue<double>());
+        Assert.Equal(NetOf(l => l.Region == "West"), totalRow[Column("West", "All")]!["v"]!.GetValue<double>());
+        Assert.Equal(0, totalRow[Column("West", "East")]!["v"]!.GetValue<double>());   // the East-filtered value of the West column has no lines
+        Assert.Empty(Violations(r.ToJson()));
+    }
+
+    [Fact]
+    public async Task A_metric_filtered_by_a_parameter_and_a_chart_of_two_series_of_one_measure_draw_what_the_filters_say()
+    {
+        var doc = Doc("""
+              m:
+                type: metric
+                encodings:
+                  value: {field: sales.net_amount, alias: chosen, filters: [{attribute: customers.region, operator: equals, values: {param: region}}]}
+                  compare: sales.net_amount
+                query: {model: retail_sales}
+              plain:
+                type: metric
+                encodings: {value: sales.units}
+                query: {model: retail_sales}
+              ch:
+                type: chart
+                mark: bar
+                encodings:
+                  x: products.category
+                  y:
+                    - {field: sales.net_amount, alias: east_net, title: East, filters: [{attribute: customers.region, operator: equals, values: [East]}]}
+                    - {field: sales.net_amount, alias: west_net, title: West, filters: [{attribute: customers.region, operator: equals, values: [West]}]}
+                query: {model: retail_sales}
+            """, "[{name: region, type: string, default: East}]");
+        var serving = new RetailServing();
+        var resolver = Resolver(serving);
+        var r = await resolver.ResolveAsync(Viewer(), doc, "desk");
+        var m = Ok(r, "m");
+        Assert.Equal(NetOf(l => l.Region == "East"), m["value"]!["v"]!.GetValue<double>());
+        Assert.Equal(NetOf(_ => true), m["compare"]!["v"]!.GetValue<double>());
+
+        var spec = Ok(r, "ch")["vega_lite"]!;
+        var values = spec["data"]!["values"]!.AsArray();
+        Assert.Equal(4 * 2, values.Count);                                               // four categories, two series each
+        Assert.Equal("series", spec["encoding"]!["color"]!["field"]!.GetValue<string>());
+        Assert.Equal("value", spec["encoding"]!["y"]!["field"]!.GetValue<string>());
+        Assert.Equal(["East", "West"], values.Select(v => v!["series"]!.GetValue<string>()).Distinct());
+        Assert.Equal(NetOf(l => l.Category == "Apparel" && l.Region == "West"), values.Single(v => v!["products_category"]!.GetValue<string>() == "Apparel" && v["series"]!.GetValue<string>() == "West")!["value"]!.GetValue<double>());
+        Assert.Empty(Violations(r.ToJson()));
+
+        // a changed parameter runs again only the widgets that read it: the metric, not the plain one or the chart
+        Assert.Equal(["region"], [.. WidgetResolver.UsedParameters(doc.Widget("m")!)]);
+        Assert.Empty(WidgetResolver.UsedParameters(doc.Widget("ch")!));
+        var west = await resolver.ResolveAsync(Viewer(), doc, "desk", new Dictionary<string, JsonNode?> { ["region"] = "West" }, ["m"]);
+        Assert.Equal(NetOf(l => l.Region == "West"), west.Widgets["m"]["value"]!["v"]!.GetValue<double>());
+        Assert.Equal(["m"], west.Widgets.Keys);
+    }
+
+    [Fact]
+    public void A_chart_with_several_measures_on_y_and_a_color_is_refused_by_the_loader()
+    {
+        // DBD-106 at the color: the series are the colors (the resolver refuses it too for a document that skipped the loader)
+        var loaded = ViewsLoader.LoadWidgets("{\"ch\":{\"type\":\"chart\",\"mark\":\"bar\",\"encodings\":{\"x\":\"products.category\",\"y\":[\"sales.net_amount\",\"sales.units\"],\"color\":\"customers.region\"},\"query\":{\"model\":\"retail_sales\"}}}", "w.json");
+        Assert.Contains(loaded.Diagnostics, d => d.Code == "DBD-106" && d.KeyPath == "widgets.ch.encodings.color");
+    }
+
+
+    // ---- attributes in the cell area (plan 32 DBR51) ----
+
+    private const string Links = "  open-it: {form: orders, edit: {id: $products.category}, as: dialog, print: hidden}";
+
+    private static JsonObject MatrixCell(JsonObject matrix, string row, int cell) =>
+        matrix["rows"]!.AsArray().Single(r => r!["labels"]![0]!.GetValue<string>() == row)!["cells"]![cell]!.AsObject();
+
+    [Fact]
+    public async Task An_attribute_in_the_cells_shows_its_value_where_one_row_exists_and_the_many_policy_where_several_do_and_the_measure_is_not_added_across_it()
+    {
+        var doc = Doc("""
+              one:
+                type: matrix
+                encodings:
+                  rows: [products.product]
+                  columns: [date.year_month]
+                  values:
+                    - {field: sales.net_amount, label: Net}
+                    - {attribute: products.category, label: Category}
+                query: {model: retail_sales}
+              mixed:
+                type: matrix
+                encodings:
+                  rows: [products.category]
+                  columns: [date.year_month]
+                  values:
+                    - {attribute: customers.region, label: Regions}
+                    - {field: sales.net_amount, label: Net}
+                query: {model: retail_sales}
+              first:
+                type: matrix
+                encodings: {rows: [products.category], columns: [date.year_month], values: [{attribute: customers.region, many: first}, {field: sales.units}]}
+                query: {model: retail_sales}
+              last:
+                type: matrix
+                encodings: {rows: [products.category], columns: [date.year_month], values: [{attribute: customers.region, many: last}, {field: sales.units}]}
+                query: {model: retail_sales}
+              count:
+                type: matrix
+                encodings: {rows: [products.category], columns: [date.year_month], values: [{attribute: customers.region, many: count}, {field: sales.units}]}
+                query: {model: retail_sales}
+              list:
+                type: matrix
+                encodings: {rows: [products.category], columns: [date.year_month], values: [{attribute: customers.region, many: list}, {field: sales.units}]}
+                query: {model: retail_sales}
+            """);
+        var r = await Resolver(new RetailServing()).ResolveAsync(Viewer(), doc, "desk");
+
+        // one row in the cell: a product has one category, so every cell shows it, and the measure beside it is the cell's own
+        var one = Ok(r, "one");
+        var jacket = MatrixCell(one, "Trail Jacket", 0);
+        Assert.Equal(NetOf(l => l.Product == "Trail Jacket" && l.YearMonth == 202601), jacket["v"]!.GetValue<double>());
+        var category = MatrixCell(one, "Trail Jacket", 1);
+        Assert.Equal("Apparel", category["text"]!.GetValue<string>());
+        Assert.Null(category["mixed"]);
+        Assert.Equal(["Net", "Category"], one["columns"]!.AsArray().Take(2).Select(c => c!["labels"]!.AsArray().Last()!.GetValue<string>()));
+
+        // several rows in the cell: four regions sell Apparel every month, in the order the answer gave them (the sample's regions: West, Central, East, South)
+        var mixed = Ok(r, "mixed");
+        var cell = MatrixCell(mixed, "Apparel", 0);
+        Assert.True(cell["mixed"]!.GetValue<bool>());
+        Assert.Equal(["West", "Central", "East", "South"], cell["values"]!.AsArray().Select(v => v!.GetValue<string>()));
+        // the measure is the cell's, not the sum of four rows of the answer's detail
+        Assert.Equal(NetOf(l => l.Category == "Apparel" && l.YearMonth == 202601), MatrixCell(mixed, "Apparel", 1)["v"]!.GetValue<double>());
+        Assert.Equal("West", MatrixCell(Ok(r, "first"), "Apparel", 0)["text"]!.GetValue<string>());
+        Assert.Equal("South", MatrixCell(Ok(r, "last"), "Apparel", 0)["text"]!.GetValue<string>());
+        var count = MatrixCell(Ok(r, "count"), "Apparel", 0);
+        Assert.Equal((4, "4"), (count["v"]!.GetValue<int>(), count["text"]!.GetValue<string>()));
+        Assert.Equal("West, Central, East, South", MatrixCell(Ok(r, "list"), "Apparel", 0)["text"]!.GetValue<string>());
+        Assert.Empty(Violations(r.ToJson()));
+    }
+
+    [Fact]
+    public async Task The_totals_of_a_matrix_with_an_attribute_among_its_values_leave_the_attribute_cells_empty_and_keep_the_measures_totals()
+    {
+        var doc = Doc("""
+              mx:
+                type: matrix
+                encodings:
+                  rows: [products.category]
+                  columns: [customers.region]
+                  values:
+                    - {field: sales.net_amount, label: Net}
+                    - {attribute: products.product, many: count, label: Products}
+                  totals: {rows: true, columns: true}
+                query: {model: retail_sales}
+            """);
+        var r = await Resolver(new RetailServing()).ResolveAsync(Viewer(), doc, "desk");
+        var mx = Ok(r, "mx");
+        var total = mx["rows"]!.AsArray().Single(x => x!["total"]?.GetValue<bool>() == true)!["cells"]!.AsArray();
+        int Column(string region, string value) => mx["columns"]!.AsArray().ToList().FindIndex(c => c!["labels"]![0]!.GetValue<string>() == region && c["labels"]!.AsArray().Last()!.GetValue<string>() == value);
+        // the total row: the net of the region, and nothing for the products
+        Assert.Equal(NetOf(l => l.Region == "East"), total[Column("East", "Net")]!["v"]!.GetValue<double>());
+        Assert.Equal("", total[Column("East", "Products")]!["text"]!.GetValue<string>());
+        // a detail cell: Apparel in the East has 9 products, counted; the same in the total column is empty
+        var apparel = mx["rows"]!.AsArray().Single(x => x!["labels"]![0]!.GetValue<string>() == "Apparel")!["cells"]!.AsArray();
+        Assert.Equal(9, apparel[Column("East", "Products")]!["v"]!.GetValue<int>());
+        var totalColumn = mx["columns"]!.AsArray().ToList().FindIndex(c => c!["total"]?.GetValue<bool>() == true);
+        Assert.Equal("", apparel[totalColumn + 1]!["text"]!.GetValue<string>());
+        Assert.Empty(Violations(r.ToJson()));
+    }
+
+    [Fact]
+    public async Task An_attribute_draws_as_an_icon_chosen_by_its_value_a_badge_or_a_link_and_a_table_column_does_the_same()
+    {
+        var doc = Doc("""
+              mx:
+                type: matrix
+                encodings:
+                  rows: [products.product]
+                  columns: [date.year_month]
+                  values:
+                    - {attribute: products.category, display: icon, icons: {Apparel: star, Footwear: flag}, link: open-it}
+                    - {field: sales.units}
+                query: {model: retail_sales, filters: [{attribute: date.year_month, operator: equals, values: [202601]}]}
+              tb:
+                type: table
+                encodings:
+                  columns:
+                    - {field: products.category, display: icon, icons: {Apparel: star}, link: open-it}
+                    - {field: customers.region, display: badge}
+                    - {field: sales.units}
+                query: {model: retail_sales, limit: 5}
+            """, links: Links);
+        var r = await Resolver(new RetailServing()).ResolveAsync(Viewer(), doc, "desk");
+        var jacket = MatrixCell(Ok(r, "mx"), "Trail Jacket", 0);
+        Assert.Equal(("Apparel", "star", "open-it"), (jacket["text"]!.GetValue<string>(), jacket["icon"]!.GetValue<string>(), jacket["link"]!.GetValue<string>()));
+        var boot = MatrixCell(Ok(r, "mx"), "Hiking Boot", 0);
+        Assert.Equal("flag", boot["icon"]!.GetValue<string>());
+        // a value the map does not name shows as text, with no icon
+        Assert.Null(MatrixCell(Ok(r, "mx"), "Daypack 22L", 0)["icon"]);
+
+        var tb = Ok(r, "tb");
+        var first = tb["rows"]![0]!["cells"]!;
+        Assert.Equal("star", first[0]!["icon"]!.GetValue<string>());
+        Assert.Equal("open-it", first[0]!["link"]!.GetValue<string>());
+        Assert.True(first[1]!["badge"]!.GetValue<bool>());
+        Assert.Null(first[2]!["icon"]);
+        Assert.Empty(Violations(r.ToJson()));
+    }
+
+
+    // ---- field groups (plan 32 DBR52) ----
+
+    private static ViewDocument GroupDoc(string widgets, string groups)
+    {
+        var ids = Regex.Matches(widgets, @"^  ([a-z][a-z0-9_-]*):", RegexOptions.Multiline).Select(m => m.Groups[1].Value).ToList();
+        var tiles = string.Join("\n", ids.Select((id, i) => $"      - {{widget: {id}, x: 0, y: {i * 2}, w: 12, h: 2}}"));
+        var yaml = $"schemaVersion: 1\nkind: dashboard\ntitle: Test\ngroups:\n{groups}\nwidgets:\n{widgets}\nlayouts:\n  - name: desk\n    type: reflow\n    default: true\n    grid: {{columns: 12, rows: {ids.Count * 2}}}\n    tiles:\n{tiles}\n";
+        var loaded = ViewsLoader.Load(yaml, "groups.yaml");
+        Assert.True(loaded.Ok, Conformance.Describe(loaded.Diagnostics) + "\n" + yaml);
+        return loaded.Document!;
+    }
+
+    [Fact]
+    public async Task A_group_in_a_chart_is_one_field_with_one_member_per_combination_labelled_by_its_template_and_ordered_by_its_levels()
+    {
+        var doc = GroupDoc("""
+              line:
+                type: chart
+                mark: line
+                encodings: {x: {group: where, title: Where}, y: sales.net_amount}
+                query: {model: retail_sales}
+              bar:
+                type: chart
+                mark: bar
+                encodings: {x: customers.region, y: sales.net_amount, color: {group: what}}
+                query: {model: retail_sales}
+            """, """
+              where: {fields: [customers.region, products.category], template: "{2} in {1}"}
+              what: {fields: [products.category, products.product]}
+            """);
+        var r = await Resolver(new RetailServing()).ResolveAsync(Viewer(), doc, "desk");
+        var line = Ok(r, "line")["vega_lite"]!;
+        Assert.Equal("ordinal", line["encoding"]!["x"]!["type"]!.GetValue<string>());
+        Assert.Equal("Where", line["encoding"]!["x"]!["title"]!.GetValue<string>());
+        Assert.Equal("__group_where", line["encoding"]!["x"]!["field"]!.GetValue<string>());
+        var members = line["encoding"]!["x"]!["sort"]!.AsArray().Select(m => m!.GetValue<string>()).ToList();
+        Assert.Equal(16, members.Count);                                           // four regions, four categories
+        Assert.Equal("Accessories in Central", members[0]);                        // by the levels in turn: the first region, then its categories
+        Assert.Equal("Outdoor in Central", members[3]);
+        Assert.Equal(members, members.Distinct());
+        var values = line["data"]!["values"]!.AsArray();
+        Assert.Equal(NetOf(l => l.Region == "East" && l.Category == "Footwear"), values.Single(v => v!["__group_where"]!.GetValue<string>() == "Footwear in East")!["sales_net_amount"]!.GetValue<double>());
+
+        var bar = Ok(r, "bar")["vega_lite"]!;
+        Assert.Equal("Accessories Beanie", bar["encoding"]!["color"]!["sort"]![0]!.GetValue<string>());      // the default template joins the levels with a space
+        Assert.Empty(Violations(r.ToJson()));
+    }
+
+    [Fact]
+    public async Task A_group_on_a_matrix_axis_is_one_attribute_and_its_total_rolls_every_level_up_together_and_details_are_extra_header_columns()
+    {
+        var doc = GroupDoc("""
+              mx:
+                type: matrix
+                encodings:
+                  rows: [customers.region]
+                  columns: [{group: what}]
+                  values: [{field: sales.net_amount}]
+                  totals: {rows: true}
+                query: {model: retail_sales}
+              details:
+                type: matrix
+                encodings:
+                  rows: [products.category, {group: detail, show: always}]
+                  columns: [date.year_month]
+                  values: [{field: sales.units}]
+                  totals: {rows: true}
+                query: {model: retail_sales}
+            """, """
+              what: {fields: [products.category, products.product]}
+              detail: {fields: [products.product, customers.region]}
+            """);
+        var r = await Resolver(new RetailServing()).ResolveAsync(Viewer(), doc, "desk");
+        var mx = Ok(r, "mx");
+        Assert.Equal(24, mx["columns"]!.AsArray().Count);                          // one column per product, one header level: the group's label
+        Assert.Equal("Accessories Beanie", mx["columns"]![0]!["labels"]![0]!.GetValue<string>());
+        var total = mx["rows"]!.AsArray().Single(x => x!["total"]?.GetValue<bool>() == true)!["cells"]!.AsArray();
+        Assert.Equal(NetOf(l => l.Product == "Beanie"), total[0]!["v"]!.GetValue<double>());
+        Assert.Equal(4 + 1, mx["rows"]!.AsArray().Count);
+
+        var d = Ok(r, "details");
+        var rows = d["rows"]!.AsArray();
+        Assert.Equal(24 * 4 + 1, rows.Count);                                      // a row per (category, product, region) and the total row; no subtotal of the details alone
+        Assert.Equal(["Accessories", "Beanie", "Central"], rows[0]!["labels"]!.AsArray().Select(l => l!.GetValue<string>()));
+        Assert.True(rows[^1]!["total"]!.GetValue<bool>());
+        Assert.Equal(RetailServing.Lines.Where(l => l.YearMonth == 202601).Sum(l => l.Units), rows[^1]!["cells"]![0]!["v"]!.GetValue<long>());
+        Assert.Empty(Violations(r.ToJson()));
+    }
+
+
+    // ---- drill detail groups (plan 32 DBR55) ----
+
+    private const string DrillWidgets = """
+          mx:
+            type: matrix
+            encodings:
+              rows: [customers.region, {group: detail, show: drill}]
+              columns: [date.year_month]
+              values: [{field: sales.net_amount}]
+              totals: {rows: true}
+            query: {model: retail_sales}
+            expanded: [[East]]
+        """;
+    private const string DrillGroups = "  detail: {fields: [products.product, products.category]}";
+
+    [Fact]
+    public async Task A_row_that_expands_is_asked_for_without_its_details_and_each_expansion_is_a_request_as_the_viewer_that_two_rows_keep_their_own()
+    {
+        var doc = GroupDoc(DrillWidgets, DrillGroups);
+        var serving = new RetailServing();
+        var resolver = Resolver(serving);
+
+        // the document's own list: East is expanded, the others are rows that can be
+        var r = await resolver.ResolveAsync(Viewer(), doc, "desk");
+        var mx = Ok(r, "mx");
+        var rows = mx["rows"]!.AsArray();
+        Assert.Equal(4 + 1, rows.Count);                                            // the regions and the total row: no details in the rows
+        Assert.All(rows.Where(x => x!["total"]?.GetValue<bool>() != true), x => Assert.True(x!["expandable"]!.GetValue<bool>()));
+        Assert.Equal(["East"], rows.Single(x => x!["expanded"]?.GetValue<bool>() == true)!["labels"]!.AsArray().Select(l => l!.GetValue<string>()));
+        Assert.Equal(2, serving.Received.Count);                                    // the rows, and the details of East
+        var east = rows.Single(x => x!["expanded"]?.GetValue<bool>() == true)!;
+        var children = east["children"]!.AsArray();
+        Assert.Equal(24, children.Count);                                           // a row per (product, category)
+        Assert.Equal(["Base Layer Bottom", "Apparel"], children[0]!["labels"]!.AsArray().Select(l => l!.GetValue<string>()));
+        Assert.Equal(mx["columns"]!.AsArray().Count, children[0]!["cells"]!.AsArray().Count);          // a cell for every column of the matrix
+        Assert.Equal(NetOf(l => l.Region == "East" && l.Product == "Base Layer Bottom" && l.YearMonth == 202601), children[0]!["cells"]![0]!["v"]!.GetValue<double>());
+        Assert.Equal("East", east["key"]![0]!.GetValue<string>());
+
+        // the details came from a request of their own, as the viewer, filtered to the row and with no totals
+        var asked = serving.Received.Last();
+        Assert.Equal("ana", asked.Context.Caller.Id);
+        var json = ((ServingRequest.Semantic)asked.Request).Json;
+        Assert.Contains("\"customers.region\"", json);
+        Assert.DoesNotContain("totals", json, StringComparison.Ordinal);
+
+        // the viewer's own list replaces the document's: two rows, each with its own details
+        var key = (JsonNode?)JsonValue.Create("West");
+        var chosen = await resolver.ResolveAsync(Viewer(), doc, "desk", expand: new Dictionary<string, IReadOnlyList<IReadOnlyList<JsonNode?>>> { ["mx"] = [[JsonValue.Create("West")], [JsonValue.Create("South")]] });
+        var opened = Ok(chosen, "mx")["rows"]!.AsArray().Where(x => x!["expanded"]?.GetValue<bool>() == true).Select(x => x!["labels"]![0]!.GetValue<string>()).ToList();
+        Assert.Equal(["West", "South"], opened);
+        _ = key;
+        Assert.NotEqual(r.CacheKeys["mx"], chosen.CacheKeys["mx"]);                 // the expansions are part of what the result is
+        // a row the viewer expanded that is not there (a region the sample lacks) is not expanded
+        var none = await resolver.ResolveAsync(Viewer(), doc, "desk", expand: new Dictionary<string, IReadOnlyList<IReadOnlyList<JsonNode?>>> { ["mx"] = [[JsonValue.Create("Nowhere")]] });
+        Assert.DoesNotContain(Ok(none, "mx")["rows"]!.AsArray(), x => x!["expanded"]?.GetValue<bool>() == true);
+        Assert.Empty(Violations(chosen.ToJson()));
     }
 
     // ---- parameters ----

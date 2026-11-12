@@ -25,7 +25,7 @@ public sealed class SubscriptionSpecException(string message) : Exception(messag
 /// </summary>
 public sealed record SubscriptionSpec(SubscriptionFields Fields)
 {
-    public static IReadOnlyList<string> Kinds { get; } = ["dashboard", "report"];
+    public static IReadOnlyList<string> Kinds { get; } = ["dashboard", "report", "page"];
 
     public static IReadOnlyList<string> Formats { get; } = ["pdf", "csv", "xlsx"];
 
@@ -44,11 +44,19 @@ public sealed record SubscriptionSpec(SubscriptionFields Fields)
         var name = Required(json, "name", source);
         if (name.Length > 120 || name.Any(char.IsControl)) throw new SubscriptionSpecException($"{source}: name is a line of at most 120 characters.");
         var kind = Required(json, "kind", source);
-        if (!Kinds.Contains(kind)) throw new SubscriptionSpecException($"{source}: kind is `dashboard` or `report`, not `{kind}`.");
+        if (!Kinds.Contains(kind)) throw new SubscriptionSpecException($"{source}: kind is `dashboard`, `report` or `page` (a custom page of an app), not `{kind}`.");
         var view = Ident(Required(json, "view", source), "view", source);
         var layout = Optional(json, "layout", source) is { } l ? Ident(l, "layout", source) : null;
         var format = Optional(json, "format", source) ?? "pdf";
         if (!Formats.Contains(format)) throw new SubscriptionSpecException($"{source}: format is `pdf`, `csv` or `xlsx`, not `{format}`.");
+        if (kind == "page")
+        {
+            // a custom page (plan 32 DBR34): `view` is `<instance>.<name>` of the app instance and the page's name; it is a PDF (with the picture beside it on request), has no layout of its own and no widget rows
+            if (!view.Contains('.', StringComparison.Ordinal) || view.StartsWith('.') || view.EndsWith('.')) throw new SubscriptionSpecException($"{source}: the view of a `page` is `<instance>.<name>`: the app instance and the page's name, joined by a dot.");
+            if (format != "pdf") throw new SubscriptionSpecException($"{source}: a `page` is delivered as a `pdf` (`inline_preview` adds its picture), not `{format}`.");
+            if (layout is not null) throw new SubscriptionSpecException($"{source}: a custom `page` has no layouts: leave `layout` out.");
+            if (Optional(json, "widget", source) is not null) throw new SubscriptionSpecException($"{source}: `widget` is for `csv` and `xlsx` of a dashboard or report; a `page` is a PDF.");
+        }
         var widget = Optional(json, "widget", source) is { } w ? Ident(w, "widget", source) : null;
         if (format == "csv" && widget is null) throw new SubscriptionSpecException($"{source}: format `csv` is one widget's rows: name it with `widget`.");
         if (format == "pdf" && widget is not null) throw new SubscriptionSpecException($"{source}: `widget` is for `csv` and `xlsx`; a PDF is the whole layout.");

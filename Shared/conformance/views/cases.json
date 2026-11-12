@@ -59,6 +59,22 @@
     {
       "file": "good/dashboard-custom.json",
       "kind": "dashboard"
+    },
+    {
+      "file": "good/dashboard-filtered-measures.json",
+      "kind": "dashboard"
+    },
+    {
+      "file": "good/dashboard-attribute-cells.json",
+      "kind": "dashboard"
+    },
+    {
+      "file": "good/dashboard-groups.json",
+      "kind": "dashboard"
+    },
+    {
+      "file": "good/dashboard-drill-details.json",
+      "kind": "dashboard"
     }
   ],
   "bad": [
@@ -1134,6 +1150,330 @@
       "path": "widgets.grid.query",
       "line": 47,
       "schema": true
+    },
+    {
+      "name": "measure-alias-not-a-name",
+      "file": "bad/measure-alias-not-a-name.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.value.alias",
+      "line": 11,
+      "schema": true
+    },
+    {
+      "name": "measure-filters-not-a-list",
+      "file": "bad/measure-filters-not-a-list.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.value.filters",
+      "line": 12,
+      "schema": true
+    },
+    {
+      "name": "measure-filters-undeclared-parameter",
+      "file": "bad/measure-filters-undeclared-parameter.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-008",
+      "path": "widgets.w.encodings.value.filters[0].values[0].param",
+      "line": 18,
+      "schema": false
+    },
+    {
+      "name": "measure-unknown-key",
+      "file": "bad/measure-unknown-key.json",
+      "as": "dashboard",
+      "code": "DBD-104",
+      "path": "widgets.w.encodings.value.colour",
+      "line": 11,
+      "schema": true
+    },
+    {
+      "name": "measure-filters-in-an-explicit-query",
+      "file": "bad/measure-filters-in-an-explicit-query.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-007",
+      "path": "widgets.w.encodings.value.field",
+      "line": 10,
+      "schema": false
+    },
+    {
+      "name": "measure-alias-is-the-output-of-an-explicit-query",
+      "file": "bad/measure-alias-is-the-output-of-an-explicit-query.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-005",
+      "path": "widgets.w.encodings.value.field",
+      "line": 10,
+      "schema": false
+    },
+    {
+      "name": "y-list-over-eight",
+      "file": "bad/y-list-over-eight.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.y",
+      "line": 11,
+      "schema": true
+    },
+    {
+      "name": "y-list-with-a-color",
+      "file": "bad/y-list-with-a-color.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.color",
+      "line": 15,
+      "schema": false
+    },
+    {
+      "name": "matrix-value-with-field-and-attribute",
+      "file": "bad/matrix-value-with-field-and-attribute.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.values[0].field",
+      "line": 17,
+      "schema": false
+    },
+    {
+      "name": "matrix-attribute-icon-display-without-icons",
+      "file": "bad/matrix-attribute-icon-display-without-icons.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.values[0].display",
+      "line": 18,
+      "schema": false
+    },
+    {
+      "name": "matrix-attribute-icons-without-the-icon-display",
+      "file": "bad/matrix-attribute-icons-without-the-icon-display.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.values[0].icons",
+      "line": 19,
+      "schema": false
+    },
+    {
+      "name": "matrix-attribute-icon-outside-the-vocabulary",
+      "file": "bad/matrix-attribute-icon-outside-the-vocabulary.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.values[0].icons.Open",
+      "line": 20,
+      "schema": true
+    },
+    {
+      "name": "matrix-attribute-many-unknown",
+      "file": "bad/matrix-attribute-many-unknown.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.values[0].many",
+      "line": 18,
+      "schema": true
+    },
+    {
+      "name": "matrix-attribute-with-an-alias",
+      "file": "bad/matrix-attribute-with-an-alias.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.values[0].alias",
+      "line": 18,
+      "schema": false
+    },
+    {
+      "name": "matrix-attribute-values-on-rows",
+      "file": "bad/matrix-attribute-values-on-rows.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.values_on",
+      "line": 23,
+      "schema": false
+    },
+    {
+      "name": "matrix-attribute-link-not-declared",
+      "file": "bad/matrix-attribute-link-not-declared.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-036",
+      "path": "widgets.w.encodings.values[0].link",
+      "line": 18,
+      "schema": false
+    },
+    {
+      "name": "matrix-attribute-in-an-explicit-query",
+      "file": "bad/matrix-attribute-in-an-explicit-query.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-007",
+      "path": "widgets.w.encodings.values[0].attribute",
+      "line": 14,
+      "schema": false
+    },
+    {
+      "name": "table-column-many",
+      "file": "bad/table-column-many.json",
+      "as": "dashboard",
+      "code": "DBD-104",
+      "path": "widgets.w.encodings.columns[0].many",
+      "line": 12,
+      "schema": true
+    },
+    {
+      "name": "table-column-icon-display-without-icons",
+      "file": "bad/table-column-icon-display-without-icons.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.columns[0].display",
+      "line": 12,
+      "schema": false
+    },
+    {
+      "name": "group-with-one-field",
+      "file": "bad/group-with-one-field.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "groups.period.fields",
+      "line": 7,
+      "schema": true
+    },
+    {
+      "name": "group-with-five-fields",
+      "file": "bad/group-with-five-fields.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "groups.period.fields",
+      "line": 7,
+      "schema": true
+    },
+    {
+      "name": "group-unknown-key",
+      "file": "bad/group-unknown-key.json",
+      "as": "dashboard",
+      "code": "DBD-104",
+      "path": "groups.period.colour",
+      "line": 11,
+      "schema": true
+    },
+    {
+      "name": "group-template-names-a-missing-level",
+      "file": "bad/group-template-names-a-missing-level.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "groups.period.template",
+      "line": 11,
+      "schema": false
+    },
+    {
+      "name": "group-field-listed-twice",
+      "file": "bad/group-field-listed-twice.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "groups.period.fields",
+      "line": 7,
+      "schema": false
+    },
+    {
+      "name": "group-bad-level-format",
+      "file": "bad/group-bad-level-format.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "groups.period.fields[1].format.date",
+      "line": 12,
+      "schema": false
+    },
+    {
+      "name": "group-not-declared",
+      "file": "bad/group-not-declared.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-047",
+      "path": "widgets.w.encodings.x.group",
+      "line": 26,
+      "schema": false
+    },
+    {
+      "name": "group-in-y",
+      "file": "bad/group-in-y.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.y.group",
+      "line": 27,
+      "schema": false
+    },
+    {
+      "name": "group-channel-with-a-field",
+      "file": "bad/group-channel-with-a-field.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.x.field",
+      "line": 27,
+      "schema": false
+    },
+    {
+      "name": "group-in-an-explicit-query",
+      "file": "bad/group-in-an-explicit-query.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-007",
+      "path": "widgets.w.encodings",
+      "line": 21,
+      "schema": false
+    },
+    {
+      "name": "matrix-detail-group-on-the-columns",
+      "file": "bad/matrix-detail-group-on-the-columns.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.columns[0].show",
+      "line": 30,
+      "schema": false
+    },
+    {
+      "name": "matrix-detail-group-show-unknown",
+      "file": "bad/matrix-detail-group-show-unknown.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.rows[1].show",
+      "line": 28,
+      "schema": true
+    },
+    {
+      "name": "matrix-show-without-a-group",
+      "file": "bad/matrix-show-without-a-group.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.rows[0].show",
+      "line": 27,
+      "schema": false
+    },
+    {
+      "name": "matrix-expanded-without-a-drill-group",
+      "file": "bad/matrix-expanded-without-a-drill-group.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.expanded",
+      "line": 29,
+      "schema": false
+    },
+    {
+      "name": "matrix-expanded-wrong-key-length",
+      "file": "bad/matrix-expanded-wrong-key-length.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.expanded[0]",
+      "line": 37,
+      "schema": false
+    },
+    {
+      "name": "matrix-expanded-not-a-list",
+      "file": "bad/matrix-expanded-not-a-list.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.expanded[0]",
+      "line": 37,
+      "schema": true
+    },
+    {
+      "name": "matrix-drill-group-beside-another-group",
+      "file": "bad/matrix-drill-group-beside-another-group.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.rows[1].show",
+      "line": 32,
+      "schema": false
     }
   ],
   "warnings": [

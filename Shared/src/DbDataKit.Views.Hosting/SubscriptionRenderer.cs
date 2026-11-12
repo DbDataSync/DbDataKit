@@ -12,8 +12,8 @@ public interface ISubscriberPrincipals
     Task<ViewsPrincipal?> ForAsync(string subscriber, CancellationToken cancellationToken);
 }
 
-/// <summary>Where the renderer's links point: a template with <c>{kind}</c> and <c>{name}</c> (for example <c>https://console.example/views/{kind}/{name}</c>); null puts no link in the message.</summary>
-public sealed record SubscriptionRendererOptions(string? LinkTemplate = null);
+/// <summary>Where the renderer's links point: a template with <c>{kind}</c> and <c>{name}</c> (for example <c>https://console.example/views/{kind}/{name}</c>), and for a custom page one with <c>{instance}</c> and <c>{name}</c> (for example <c>https://apps.example/apps/{instance}/_views/{name}</c>); null puts no link in the message.</summary>
+public sealed record SubscriptionRendererOptions(string? LinkTemplate = null, string? PageLinkTemplate = null);
 
 /// <summary>
 /// The <see cref="ISubscriptionRenderer"/> over the views module (plan 22a GP17, plan 32 DBR18): a subscription is exported by <see cref="ViewsApi.ExportAsync"/> <b>as the subscriber</b> (the principal comes from <see cref="ISubscriberPrincipals"/>),
@@ -32,7 +32,12 @@ public sealed class SubscriptionRenderer(ViewsApi api, ViewsPublications publish
         if (who is null) return new RenderResult.AccessLost("the identity home does not know this person, or the identity is disabled, so the document cannot be rendered as them.");
 
         var traceId = $"subscription-{request.SubscriptionId:N}";
-        var answer = await api.ExportAsync(who, request.Kind, request.View, request.Format, request.Layout, request.Widget, request.Parameters, null, traceId, cancellationToken).ConfigureAwait(false);
+        // a custom page (plan 32 DBR34): `view` is `<instance>.<name>`, exported as the subscriber like a document (their rows, their audit row); there is no layout, widget or CSV of a page
+        var dot = request.Kind == ViewsApi.PageKind ? request.View.IndexOf('.', StringComparison.Ordinal) : -1;
+        if (request.Kind == ViewsApi.PageKind && dot < 0) return new RenderResult.Failed("invalid", $"a custom page is named `<instance>.<name>`, not '{request.View}'.");
+        var answer = request.Kind == ViewsApi.PageKind
+            ? await api.ExportPageAsync(who, request.View[..dot], request.View[(dot + 1)..], request.Format, request.Parameters, null, traceId, cancellationToken).ConfigureAwait(false)
+            : await api.ExportAsync(who, request.Kind, request.View, request.Format, request.Layout, request.Widget, request.Parameters, null, traceId, cancellationToken).ConfigureAwait(false);
         var code = answer.Body is System.Text.Json.Nodes.JsonObject body ? (string?)body["code"] : null;
         var message = answer.Body is System.Text.Json.Nodes.JsonObject b2 ? (string?)b2["message"] : null;
 
@@ -43,14 +48,18 @@ public sealed class SubscriptionRenderer(ViewsApi api, ViewsPublications publish
             if (failed.Count > 0 && failed.Count == total && failed.All(f => f.Code == "denied"))
                 return new RenderResult.AccessLost($"every widget of the {request.Kind} '{request.View}' is denied to this person ({string.Join(", ", failed.Select(f => f.Id))}).");
             var notes = failed.Select(f => $"The widget '{f.Id}' could not be resolved ({f.Code}); its place shows the error." ).ToList();
-            var title = published.For(request.Kind).Find(request.View)?.Document.Title ?? request.View;
-            var link = options?.LinkTemplate?.Replace("{kind}", Uri.EscapeDataString(request.Kind), StringComparison.Ordinal).Replace("{name}", Uri.EscapeDataString(request.View), StringComparison.Ordinal);
+            var title = request.Kind == ViewsApi.PageKind ? request.View : published.For(request.Kind).Find(request.View)?.Document.Title ?? request.View;
+            var link = request.Kind == ViewsApi.PageKind
+                ? options?.PageLinkTemplate?.Replace("{instance}", Uri.EscapeDataString(request.View[..dot]), StringComparison.Ordinal).Replace("{name}", Uri.EscapeDataString(request.View[(dot + 1)..]), StringComparison.Ordinal)
+                : options?.LinkTemplate?.Replace("{kind}", Uri.EscapeDataString(request.Kind), StringComparison.Ordinal).Replace("{name}", Uri.EscapeDataString(request.View), StringComparison.Ordinal);
             var summary = request.Format == "pdf" ? $"{title}, as you are allowed to see it, is attached as a PDF." : $"The rows of {title} are attached as {request.Format.ToUpperInvariant()}.";
             byte[]? preview = null;
             if (request.InlinePreview && request.Format == "pdf")
             {
                 // the same document, layout and person, drawn once more as a picture; when it cannot be, the PDF still goes and the message says the picture is missing
-                var picture = await api.ExportAsync(who, request.Kind, request.View, ViewsApi.PngFormat, request.Layout, null, request.Parameters, null, traceId, cancellationToken).ConfigureAwait(false);
+                var picture = request.Kind == ViewsApi.PageKind
+                    ? await api.ExportPageAsync(who, request.View[..dot], request.View[(dot + 1)..], ViewsApi.PngFormat, request.Parameters, null, traceId, cancellationToken).ConfigureAwait(false)
+                    : await api.ExportAsync(who, request.Kind, request.View, ViewsApi.PngFormat, request.Layout, null, request.Parameters, null, traceId, cancellationToken).ConfigureAwait(false);
                 if (picture.Status == 200 && picture.File is { } png) preview = png.Content;
                 else notes.Add($"The preview picture could not be made ({(picture.Body as System.Text.Json.Nodes.JsonObject)?["message"] ?? $"the export answered {picture.Status}"}); the PDF is attached.");
             }

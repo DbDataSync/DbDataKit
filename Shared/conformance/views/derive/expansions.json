@@ -1,0 +1,86 @@
+{
+  "groups": {
+    "details": {
+      "fields": [
+        "customers.customer",
+        "products.category"
+      ]
+    }
+  },
+  "widgets": {
+    "w": {
+      "type": "matrix",
+      "encodings": {
+        "rows": [
+          "customers.region",
+          {
+            "group": "details",
+            "show": "drill"
+          }
+        ],
+        "columns": [
+          "orders.status"
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenue"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "a row expanded",
+      "key": [
+        "West"
+      ],
+      "request": {
+        "spec_version": "0.3",
+        "kind": "query",
+        "query": {
+          "measures": [
+            "orders.net_revenue"
+          ],
+          "attributes": [
+            "customers.region",
+            "customers.customer",
+            "products.category",
+            "orders.status"
+          ],
+          "filters": [
+            {
+              "attribute": "customers.region",
+              "operator": "equals",
+              "values": [
+                "West"
+              ]
+            }
+          ],
+          "order": [
+            [
+              "customers.region",
+              "asc"
+            ],
+            [
+              "customers.customer",
+              "asc"
+            ],
+            [
+              "products.category",
+              "asc"
+            ],
+            [
+              "orders.status",
+              "asc"
+            ]
+          ],
+          "limit": 10000
+        }
+      }
+    }
+  ]
+}

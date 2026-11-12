@@ -1,5 +1,7 @@
 import { VIEW, isObject, join, at } from './common'
 import type { Json, ViewsIssue } from './common'
+import type { GroupDef } from './groups'
+import { GROUP_CONFLICT, UNKNOWN_GROUP } from './groups'
 
 /**
  * `deriveRequest` (plan 32 section 2.3, DBR03): a widget's encodings, with the catalog's roles, become the semantic request they need. The twin of `DeriveRequest.Derive` in `DbDataKit.Views` (.NET): the two run
@@ -20,7 +22,7 @@ export type CatalogRole = 'measure' | 'attribute' | 'unknown'
 export interface ParameterBinding { request: string; document: string }
 
 /** A widget as the derivation reads it: its id, and the widget as written (a `widgets` map's entry). */
-export interface DerivableWidget { id: string; raw: Json }
+export interface DerivableWidget { id: string; raw: Json; /** The groups of the widget's document (plan 32 DBR52). */ groups?: Record<string, GroupDef> }
 
 export interface DerivedRequest {
   /** The semantic request (the envelope of `docs/semantic/query.md`), or undefined when there are diagnostics. */
@@ -56,7 +58,8 @@ export function memberProblem(roles: CatalogRoles, field: string, well: Well): {
   if (well === 'attribute' && role === 'measure') return { code: 'wrong_member_kind', message: `${field} is a measure, not a attribute.` }
   return null
 }
-interface Slot { field: string; path: string; well: Well }
+/** An encoded field: its name, its place, the well it goes to and, for the object form (DBR50), the entry (`alias`, `filters`) and its path. */
+interface Slot { field: string; path: string; well: Well; entry?: Json; entryPath?: string; group?: string }
 
 const isString = (v: unknown): v is string => typeof v === 'string' && v.length > 0
 
@@ -64,6 +67,32 @@ const isString = (v: unknown): v is string => typeof v === 'string' && v.length 
 export function normaliseRequestPath(path: string): string {
   if (!path.startsWith('$/')) return path.startsWith('$.') || path === '$' ? path : `$.${path}`
   return path.slice(2).split('/').filter(Boolean).reduce((acc, s) => acc + (/^\d+$/.test(s) ? `[${s}]` : `.${s}`), '$')
+}
+
+/**
+ * The request for the details of one expanded row (plan 32 DBR55; the twin of `DeriveRequest.DeriveExpansion`): the widget's request with its `show: drill` groups asked for like `show: always` ones, no totals, and the row's own
+ * fields filtered to the member values `key` (the rows' fields in order, typed).
+ */
+export function deriveExpansion(widget: DerivableWidget, roles: CatalogRoles, key: unknown[]): DerivedRequest {
+  const raw = structuredClone(widget.raw)
+  const rows = isObject(raw.encodings) && Array.isArray(raw.encodings.rows) ? raw.encodings.rows : []
+  const own: string[] = []
+  for (const entry of rows) {
+    if (isObject(entry) && entry.group !== undefined) { if (entry.show === 'drill') entry.show = 'always' }
+    else own.push(isObject(entry) ? String(entry.field ?? '') : String(entry ?? ''))
+  }
+  const asked = deriveRequest({ ...widget, raw }, roles)
+  if (!asked.request) return asked
+  if (key.length !== own.length) return { ...asked, request: undefined, issues: [{ code: 'DBD-106', severity: 'error', path: join(join('widgets', widget.id), 'encodings.rows'), message: `A row names a value for each of the rows' fields (${own.length}); this one names ${key.length}.` }] }
+  const query = (asked.request as { query: Json }).query
+  delete query.totals
+  const filters = Array.isArray(query.filters) ? query.filters : []
+  own.forEach((field, i) => filters.push({ attribute: field, operator: 'equals', values: [key[i]] }))
+  query.filters = filters
+  // the keys in the order a derived request writes them, so the request is the one a hand-written equal would be
+  const ordered: Json = {}
+  for (const name of ['measures', 'attributes', 'filters', 'segments', 'order', 'limit', 'totals', 'timezone']) if (query[name] !== undefined) ordered[name] = query[name]
+  return { ...asked, request: { spec_version: SPEC_VERSION, kind: 'query', query: ordered }, bindings: bindingsOf(ordered, isObject(widget.raw.query) && isObject(widget.raw.query.params) ? widget.raw.query.params : undefined) }
 }
 
 export function deriveRequest(widget: DerivableWidget, roles: CatalogRoles): DerivedRequest {
@@ -97,21 +126,59 @@ export function deriveRequest(widget: DerivableWidget, roles: CatalogRoles): Der
   }
 
   const encodings = isObject(raw.encodings) ? raw.encodings : {}
-  const slots = slotsOf(type, encodings, join(wp, 'encodings'))
-  const measures: string[] = []
+  const slots = slotsOf(type, encodings, join(wp, 'encodings'), widget.groups, issue)
+  // a field is in one place of a widget when a group is involved: the group's levels are the field's place, so a second place (an axis, a channel, a tooltip, another group) is refused naming both
+  const byField = new Map<string, Slot[]>()
+  for (const sl of slots) byField.set(sl.field, [...(byField.get(sl.field) ?? []), sl])
+  for (const [field, list] of byField)
+    if (list.length > 1 && list.some((sl) => sl.group !== undefined))
+      for (const again of list.slice(1).filter((sl) => sl.group !== undefined || list[0]!.group !== undefined))
+        issue(GROUP_CONFLICT, again.path, `${field} is in two places of the widget (${list[0]!.path} and ${again.path}), and one of them is a group: a field is in one place.`)
+  const measures: { name: string; node: unknown }[] = []
   const attributes: string[] = []
 
-  const place = (field: string, path: string, well: Well) => {
+  const placeEntry = (slot: Slot) => {
+    const { field, path, well, entry, entryPath } = slot
+    // a name that an entry already gives the output (an alias) is that output: a sort or an order may name it
+    if (entry === undefined && measures.some((m) => m.name === field)) return
     const role = roleOf(roles, field)
     const problem = memberProblem(roles, field, well)
     if (problem) issue(problem.code, path, problem.message)
     const toMeasures = well === 'measure' || (well === 'either' && role === 'measure')
-    const list = toMeasures ? measures : attributes
-    if (list.includes(field)) return
-    list.push(field)
-    origins.set(`query.${toMeasures ? 'measures' : 'attributes'}[${list.length - 1}]`, path)
+    const alias = entry && typeof entry.alias === 'string' && entry.alias.length > 0 && entry.alias !== field ? entry.alias : undefined
+    const filters = entry && Array.isArray(entry.filters) && entry.filters.length > 0 ? entry.filters : undefined
+    if (!toMeasures) {
+      if (alias !== undefined || filters !== undefined)
+        issue('wrong_member_kind', filters !== undefined ? `${entryPath}.filters` : `${entryPath}.alias`, `${field} is an attribute: only a measure takes \`alias\` and \`filters\`.`)
+      if (attributes.includes(field)) return
+      attributes.push(field)
+      origins.set(`query.attributes[${attributes.length - 1}]`, path)
+      return
+    }
+    // the object form (DBR50): the engine's own rule, in its words
+    if (filters !== undefined && alias === undefined) issue('alias_required', `${entryPath}.filters`, "A measure with its own filters needs an 'as' alias, so it can't be mistaken for the unfiltered measure.")
+    let node: unknown = field
+    if (alias !== undefined || filters !== undefined) {
+      const o: Json = { measure: field }
+      if (alias !== undefined) o.as = alias
+      if (filters !== undefined) o.filters = structuredClone(filters)
+      node = o
+    }
+    const name = alias ?? field
+    const at = measures.findIndex((m) => m.name === name)
+    if (at >= 0) {
+      if (JSON.stringify(measures[at]!.node) !== JSON.stringify(node)) issue('duplicate_measure', alias !== undefined ? `${entryPath}.alias` : path, `${name} is listed more than once: give one of the entries an \`alias\`.`)
+      return
+    }
+    measures.push({ name, node })
+    origins.set(`query.measures[${measures.length - 1}]`, path)
+    if (entry !== undefined) {
+      if (alias !== undefined) origins.set(`query.measures[${measures.length - 1}].as`, `${entryPath}.alias`)
+      if (filters !== undefined) origins.set(`query.measures[${measures.length - 1}].filters`, `${entryPath}.filters`)
+    }
   }
-  for (const s of slots) place(s.field, s.path, s.well)
+  const place = (field: string, path: string, well: Well) => placeEntry({ field, path, well })
+  for (const s of slots) placeEntry(s)
 
   // ---- order: the query's own, else a table's sort ----
   let order: unknown[] | undefined
@@ -120,18 +187,24 @@ export function deriveRequest(widget: DerivableWidget, roles: CatalogRoles): Der
     order.forEach((_, i) => origins.set(`query.order[${i}]`, `${wp}.query.order[${i}]`))
   } else if (type === 'chart' && Array.isArray(encodings.x) && encodings.x.length > 1) {
     order = nestedOrder(encodings.x, join(join(wp, 'encodings'), 'x'), origins, place, issue)
+  } else if (type === 'chart' && isObject(encodings.x) && encodings.x.group !== undefined) {
+    // a group on a chart's `x` (DBR52): its levels in turn, so a line over year and month is in calendar order whatever order the rows arrive in
+    order = groupOrder(slots.filter((sl) => sl.group !== undefined && sl.path === `${join(join(wp, 'encodings'), 'x')}.group`), encodings.x.sort === 'descending', origins)
+  } else if (type === 'matrix' && slots.some((sl) => sl.group !== undefined && (sl.path.includes('.rows[') || sl.path.includes('.columns[')))) {
+    // a matrix with a group (DBR52): the rows' attributes then the columns', each ascending, the group's levels in place
+    order = groupOrder(slots.filter((sl) => sl.path.includes('.rows[') || sl.path.includes('.columns[')), false, origins)
   } else if (type === 'table' && isObject(encodings.sort) && isString(encodings.sort.by)) {
     const sortField = encodings.sort.by
     const direction = typeof encodings.sort.dir === 'string' ? encodings.sort.dir : 'asc'
     const sortPath = join(join(wp, 'encodings'), 'sort.by')
-    if (!measures.includes(sortField) && !attributes.includes(sortField)) place(sortField, sortPath, 'either')
+    if (!measures.some((m) => m.name === sortField) && !attributes.includes(sortField)) place(sortField, sortPath, 'either')
     order = [[sortField, direction]]
     origins.set('query.order[0]', sortPath)
   }
 
   // ---- totals ----
   let totals: Json | undefined
-  if (type === 'matrix') totals = matrixTotals(encodings, roles, wp, query, issue)
+  if (type === 'matrix') totals = matrixTotals(encodings, widget.groups, (n) => roleOf(roles, n) === 'measure' || measures.some((m) => m.name === n), cellAttributes(encodings), wp, query, issue)
   else if (isObject(query.totals)) {
     totals = structuredClone(query.totals)
     if (totals.subtotal_by === undefined && attributes.length > 0) totals = { subtotal_by: [...attributes], ...totals }
@@ -142,7 +215,7 @@ export function deriveRequest(widget: DerivableWidget, roles: CatalogRoles): Der
 
   // ---- the request, its keys in the order the .NET twin writes them ----
   const written = typeof query.limit === 'number' && Number.isInteger(query.limit) ? Math.min(query.limit, MAXIMUM_LIMIT) : defaultLimit(type)
-  const q: Json = { measures }
+  const q: Json = { measures: measures.map((m) => m.node) }
   if (attributes.length > 0) q.attributes = attributes
   if (Array.isArray(query.filters) && query.filters.length > 0) {
     q.filters = structuredClone(query.filters)
@@ -162,42 +235,76 @@ export function deriveRequest(widget: DerivableWidget, roles: CatalogRoles): Der
 
 // ---- the fields of each widget type, in the fixed order ----
 
-function slotsOf(type: string, encodings: Json, path: string): Slot[] {
+function slotsOf(type: string, encodings: Json, path: string, groups: Record<string, GroupDef> | undefined, refuse: (code: string, path: string, message: string) => void): Slot[] {
   const slots: Slot[] = []
-  const one = (channel: string, well: Well) => { const v = encodings[channel]; if (isString(v)) slots.push({ field: v, path: join(path, channel), well }) }
-  const channel = (node: unknown, p: string) => {
-    if (isString(node)) slots.push({ field: node, path: p, well: 'either' })
-    else if (isObject(node) && isString(node.field)) slots.push({ field: node.field, path: join(p, 'field'), well: 'either' })
+  // a field group in a channel or an axis (DBR52): its levels, outermost first, are the attributes it asks for
+  const group = (node: unknown, p: string): boolean => {
+    if (!isObject(node) || typeof node.group !== 'string') return false
+    // the details of a row that expands on request (DBR55) are asked for when a row is expanded, never with the rows
+    if (node.show === 'drill') return true
+    const def = groups?.[node.group]
+    if (!def) { refuse(UNKNOWN_GROUP, `${p}.group`, `\`${node.group}\` is not a group of this document.`); return true }
+    for (const level of def.levels) slots.push({ field: level.field, path: `${p}.group`, well: 'attribute', group: node.group })
+    return true
+  }
+  // a field name, or the object form (DBR50): `{field, alias, label, filters, format}` where a measure goes
+  const entry = (node: unknown, p: string, well: Well) => {
+    if (group(node, p)) return
+    if (isString(node)) slots.push({ field: node, path: p, well })
+    else if (isObject(node) && isString(node.field)) slots.push({ field: node.field, path: join(p, 'field'), well, entry: node, entryPath: p })
   }
   switch (type) {
-    case 'metric': one('value', 'measure'); one('compare', 'measure'); break
+    case 'metric': entry(encodings.value, join(path, 'value'), 'measure'); entry(encodings.compare, join(path, 'compare'), 'measure'); break
     case 'chart':
       for (const c of CHART_CHANNELS) {
         const v = encodings[c]
-        if (c === 'tooltip' && Array.isArray(v)) v.forEach((item, i) => channel(item, at(join(path, c), i)))
+        // the tooltip's list and a `y` of several measures (one series each)
+        if ((c === 'tooltip' || c === 'y') && Array.isArray(v)) v.forEach((item, i) => entry(item, at(join(path, c), i), 'either'))
         // a nested axis (DBR42): every level is an attribute, outermost first
-        else if (c === 'x' && Array.isArray(v)) v.forEach((level, i) => {
-          if (isString(level)) slots.push({ field: level, path: at(join(path, c), i), well: 'attribute' })
-          else if (isObject(level) && isString(level.field)) slots.push({ field: level.field, path: join(at(join(path, c), i), 'field'), well: 'attribute' })
-        })
-        else channel(v, join(path, c))
+        else if (c === 'x' && Array.isArray(v)) v.forEach((level, i) => entry(level, at(join(path, c), i), 'attribute'))
+        else entry(v, join(path, c), 'either')
       }
       break
     case 'matrix':
       for (const axis of ['rows', 'columns'] as const) {
         const list = encodings[axis]
-        if (Array.isArray(list)) list.forEach((f, i) => {
-          if (typeof f === 'string') slots.push({ field: f, path: at(join(path, axis), i), well: 'attribute' })
-          else if (isObject(f) && typeof f.field === 'string') slots.push({ field: f.field, path: join(at(join(path, axis), i), 'field'), well: 'attribute' })
-        })
+        if (Array.isArray(list)) list.forEach((f, i) => entry(f, at(join(path, axis), i), 'attribute'))
       }
-      if (Array.isArray(encodings.values)) encodings.values.forEach((v, i) => { if (isObject(v) && typeof v.field === 'string') slots.push({ field: v.field, path: join(at(join(path, 'values'), i), 'field'), well: 'measure' }) })
+      if (Array.isArray(encodings.values)) encodings.values.forEach((v, i) => {
+        if (!isObject(v)) return
+        // an attribute in the cell area (DBR51) is asked for at the cells' grain, after the axes
+        if (isString(v.attribute)) slots.push({ field: v.attribute, path: join(at(join(path, 'values'), i), 'attribute'), well: 'attribute' })
+        else entry(v, at(join(path, 'values'), i), 'measure')
+      })
       break
     case 'table':
-      if (Array.isArray(encodings.columns)) encodings.columns.forEach((c, i) => { if (isObject(c) && typeof c.field === 'string') slots.push({ field: c.field, path: join(at(join(path, 'columns'), i), 'field'), well: 'either' }) })
+      if (Array.isArray(encodings.columns)) encodings.columns.forEach((c, i) => { if (isObject(c)) entry(c, at(join(path, 'columns'), i), 'either') })
       break
   }
   return slots
+}
+
+/** The fields of a matrix axis in order, a group expanded to its levels (DBR52); the twin of `DeriveRequest.AxisFields`. */
+export function axisFields(encodings: Json, axis: string, groups: Record<string, GroupDef> | undefined): string[] {
+  const list = encodings[axis]
+  if (!Array.isArray(list)) return []
+  const out: string[] = []
+  for (const n of list) {
+    if (isObject(n) && typeof n.group === 'string') { if (n.show !== 'drill') for (const l of groups?.[n.group]?.levels ?? []) out.push(l.field) }
+    else out.push(isObject(n) ? String(n.field ?? '') : String(n ?? ''))
+  }
+  return [...new Set(out)]
+}
+
+/** The `order` of the group levels a widget's slots hold, each level ascending (descending when asked). */
+function groupOrder(slots: Slot[], descending: boolean, origins: Map<string, string>): unknown[] | undefined {
+  const order: unknown[][] = []
+  for (const slot of slots) {
+    if (order.some((o) => o[0] === slot.field)) continue
+    origins.set(`query.order[${order.length}]`, slot.path)
+    order.push([slot.field, descending ? 'desc' : 'asc'])
+  }
+  return order.length > 0 ? order : undefined
 }
 
 // ---- a nested axis's order (DBR42) ----
@@ -234,10 +341,19 @@ function nestedOrder(levels: unknown[], xPath: string, origins: Map<string, stri
 
 // ---- a matrix's totals ----
 
-function matrixTotals(encodings: Json, roles: CatalogRoles, wp: string, query: Json, issue: (code: string, path: string, message: string) => void): Json | undefined {
-  // an axis entry is a field name or `{field, format, sort}` (DBR41)
+/**
+ * The attributes of a matrix's cell area (DBR51; the twin of `DeriveRequest.CellAttributes`): the `attribute` entries of `values` that are not already on an axis, asked for at the cells' grain and rolled up last in the
+ * request's totals, so the answer holds the cell's own row (the attribute rolled up) beside the rows that say which values the cell has.
+ */
+export function cellAttributes(encodings: Json): string[] {
   const entryField = (n: unknown): string => (isObject(n) ? String(n.field ?? '') : String(n ?? ''))
-  const axis = (name: string): string[] => [...new Set(Array.isArray(encodings[name]) ? (encodings[name] as unknown[]).map(entryField) : [])]
+  const onAxes = new Set(['rows', 'columns'].flatMap((a) => (Array.isArray(encodings[a]) ? (encodings[a] as unknown[]).map(entryField) : [])))
+  const list = Array.isArray(encodings.values) ? (encodings.values as unknown[]).map((v) => (isObject(v) && isString(v.attribute) ? v.attribute : '')) : []
+  return [...new Set(list.filter((a) => a.length > 0 && !onAxes.has(a)))]
+}
+
+function matrixTotals(encodings: Json, groups: Record<string, GroupDef> | undefined, isMeasure: (name: string) => boolean, cellAttrs: string[], wp: string, query: Json, issue: (code: string, path: string, message: string) => void): Json | undefined {
+  const axis = (name: string): string[] => axisFields(encodings, name, groups)
   const rows = axis('rows')
   const columns = axis('columns')
   const totalsOf = isObject(encodings.totals) ? encodings.totals : {}
@@ -246,19 +362,19 @@ function matrixTotals(encodings: Json, roles: CatalogRoles, wp: string, query: J
   // sorting an axis by a measure reads each member's value in the axis total (the view's `sort_needs_totals`), so the request asks for that total too
   const sort = isObject(encodings.sort) ? encodings.sort : {}
   const axisSort = (name: string): unknown => sort[name] ?? (Array.isArray(encodings[name]) ? (encodings[name] as unknown[]).map((n) => (isObject(n) ? n.sort : undefined)).find((x) => x !== undefined) : undefined)
-  const byMeasure = (name: string) => { const s = axisSort(name); return isObject(s) && typeof s.by === 'string' && roleOf(roles, s.by) === 'measure' }
+  const byMeasure = (name: string) => { const s = axisSort(name); return isObject(s) && typeof s.by === 'string' && isMeasure(s.by) }
   const needRow = wantRow || (byMeasure('columns') && rows.length > 0)
   const needColumn = wantColumn || (byMeasure('rows') && columns.length > 0)
-  if (!needRow && !needColumn) return undefined
+  if (!needRow && !needColumn && cellAttrs.length === 0) return undefined
 
   if (query.totals !== undefined) { issue(VIEW('042'), `${wp}.query.totals`, "A matrix's totals are made from its encodings (`totals`, and a sort by a measure); the query asks for them too."); return undefined }
   if (wantRow && rows.length === 0) { issue(VIEW('042'), `${wp}.encodings.totals.rows`, 'A total row needs at least one row field to roll up.'); return undefined }
   if (wantColumn && columns.length === 0) { issue(VIEW('042'), `${wp}.encodings.totals.columns`, 'A total column needs at least one column field to roll up.'); return undefined }
 
-  const all = [...rows, ...columns]
+  const all = [...rows, ...columns, ...cellAttrs]
   if (needRow && needColumn) return { subtotal_by: all, grand_total: true, cube: true }
-  // a roll-up takes the innermost attribute first: the axis to roll up goes last
-  return needRow ? { subtotal_by: [...columns, ...rows] } : { subtotal_by: all }
+  // a roll-up takes the innermost attribute first: the axis to roll up goes last, and the attributes of the cell area after it
+  return needRow || !needColumn ? { subtotal_by: [...columns, ...rows, ...cellAttrs] } : { subtotal_by: all }
 }
 
 // ---- parameter markers ----

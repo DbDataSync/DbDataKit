@@ -40,6 +40,8 @@ Generated from the command tree of `dbdatabuild` (`UPDATE_GOLDEN=1 dotnet test t
 | [`connection compare`](#connection-compare) | `C→` | Target read-only | Compare the data of two tables, of one connection or across connections and engines (by digests): schemas, row counts and a key-based row diff (values are read only with --show-values) |
 | [`connection check`](#connection-check) | `C→` | Target read-only | Run the data checks generated from the semantic models (semantic/) against a connection: each hierarchy level has one parent per member, every key of a relationship exists on its one side, and the one side's keys are unique (counts only unless --show-values) |
 | [`connection seed`](#connection-seed) | `P⇒S` | Target writes (DDL and/or data, as the plan states) | Create the seeded tables (the mapped models) on a connection and fill them from the seeds (prints what it would do unless --apply) |
+| [`connection key-map show`](#connection-key-map-show) | `C→` | Target read-only | Read the map of a key kept in the target (method: key_map): how many mappings it has, the largest integer and where the identity is; with --show-values the mappings, filtered by --value, --text, --part or --contains |
+| [`connection key-map repair`](#connection-key-map-repair) | `C⇒D` | Target writes (DDL and/or data, as the plan states) | An administrator's repair of a key map, one explicit operation (add a missing mapping, set the text of a mapping, remove a mapping nothing uses, reseed the identity): a dry run unless --apply, which needs --reason, writes in one transaction and records who, when and before/after in the repair log beside the map |
 | [`connection publish`](#connection-publish) | `P⇒T` | Tracking tables only | Store the project and model metadata as JSON in the connection for introspection |
 | [`semantic describe`](#semantic-describe) | `—` | Offline only | What a semantic model published to a paired Gateway offers: its dimensions, attributes, measures, hierarchies and saved queries (read as the person whose token is in DBDATAKIT_GATEWAY_TOKEN) |
 | [`semantic query`](#semantic-query) | `—` | Offline only | Run a semantic query on a published model: semantic SQL (--sql) or a request (--request, JSON); read as the caller, at most --max-rows rows |
@@ -717,6 +719,54 @@ Usage: `dbdatabuild connection seed [connection] [options]`
 | `--replace` | Drop and recreate a seeded table that already exists (default: stop at the first table that exists) |
 | `--scale` `<number>` | The variable `scale` the seeds read, usually how many of the main entity (default: the project's own) |
 | `--seed` `<number>` | The variable `seed` the seeds read: the same seed and scale give the same rows |
+
+## connection key-map show
+
+Read the map of a key kept in the target (method: key_map): how many mappings it has, the largest integer and where the identity is; with --show-values the mappings, filtered by --value, --text, --part or --contains.
+
+Effect: Target read-only. Reads and writes: `C→`. Lane: inspect.
+
+Usage: `dbdatabuild connection key-map show [connection] [key] [options]`
+
+| Argument | Meaning |
+|---|---|
+| `connection` | Connection whose map to read (default: the project's only default connection) |
+| `key` | The key kept in a map (declared `method: key_map`; the connection comes before it). Required |
+
+| Option | Meaning |
+|---|---|
+| `--contains` `<text>` | Only the mappings whose business key contains this text (compared as bytes) |
+| `--limit` `<number>` | With --show-values, how many mappings |
+| `--part` `<text ...>` | Only the mapping with this business key, given part by part (repeat once per part; spaces at the ends are removed as the key does) |
+| `--project` `<path>` | Project root |
+| `--show-values` | Read and show the business keys: up to --limit mappings (without it only counts are read) |
+| `--text` `<text>` | Only the mapping with this business key, as stored (the parts joined by U+001F) |
+| `--value` `<int64>` | Only the mapping with this integer |
+
+## connection key-map repair
+
+An administrator's repair of a key map, one explicit operation (add a missing mapping, set the text of a mapping, remove a mapping nothing uses, reseed the identity): a dry run unless --apply, which needs --reason, writes in one transaction and records who, when and before/after in the repair log beside the map.
+
+Effect: Target writes (DDL and/or data, as the plan states). Reads and writes: `C⇒D`.
+
+Usage: `dbdatabuild connection key-map repair [connection] [key] [options]`
+
+| Argument | Meaning |
+|---|---|
+| `connection` | Connection whose map to repair (default: the project's only default connection) |
+| `key` | The key kept in a map (declared `method: key_map`; the connection comes before it). Required |
+
+| Option | Meaning |
+|---|---|
+| `--apply` | Make the change on the write login and record it (default: a dry run: print the change, the rows it touches and the statements, and connect to nothing but the read login) |
+| `--force` | remove: delete the mapping although a table holds its integer (recorded as forced) |
+| `--operation` `<text>` | add (a missing mapping: --value and the business key), set-text (replace the business key of --value), remove (delete the mapping of --value; refused while a table uses the integer, unless --force), reseed (raise the identity to the largest integer). Required |
+| `--part` `<text ...>` | The business key given part by part (repeat once per part; spaces at the ends are removed as the key does); for add and set-text |
+| `--project` `<path>` | Project root |
+| `--reason` `<text>` | Why: required with --apply, recorded in the repair log |
+| `--show-values` | Show the business keys in the report of what would change (without it only integers and lengths) |
+| `--text` `<text>` | The business key, as stored (the parts joined by U+001F); for add and set-text |
+| `--value` `<int64>` | The integer of the mapping (1 or more; 0 is the reserved unknown member) |
 
 ## connection publish
 

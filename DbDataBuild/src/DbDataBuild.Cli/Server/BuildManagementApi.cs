@@ -138,8 +138,8 @@ internal static class BuildManagementApi
                     impact = c.Impact.ToString(),               // what the call touches (None, RepoFiles, TrackingTables, TargetData, Target): the console's agents map it to traits
                     write_flag = c.WriteFlag,                   // the flag that makes a RepoFiles command change files (`--write`), null when it always does
                     input_schema = surface.Describe(c)["inputSchema"]!.DeepClone(),   // the same JSON Schema of the inputs the MCP server offers
-                    role = specs.TryGetValue(c.Name, out var spec) ? ManagementAuthorization.RoleFor(spec.Effect).ToString().ToLowerInvariant() : null,
-                    allowed = specs.TryGetValue(c.Name, out var s) && ManagementAuthorization.Authorize(token, s, projectId).Allowed,
+                    role = specs.TryGetValue(c.Name, out var spec) ? RoleOf(spec).ToString().ToLowerInvariant() : null,
+                    allowed = specs.TryGetValue(c.Name, out var s) && ManagementAuthorization.Authorize(token, RoleOf(s), projectId).Allowed,
                 }),
             });
         });
@@ -382,10 +382,11 @@ internal static class BuildManagementApi
             if (!surface.Tools.TryGetValue(tool, out var command) || !specs.TryGetValue(command.Name, out var spec))
                 return Results.Json(new { error = $"`{tool}` is not a command this server runs." }, statusCode: StatusCodes.Status404NotFound);
 
-            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), spec, projectId);
+            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), RoleOf(spec), projectId);
             if (!decision.Allowed)
             {
                 if (command.Name == "connection refresh") RecordRefresh(audit, context.ManagementToken(), projectId, null, "refused: needs the " + decision.Needed.ToString().ToLowerInvariant() + " role", "");
+                if (command.Name == KeyMapRepairCommand) RecordKeyMapRepair(audit, context.ManagementToken(), projectId, null, "refused: needs the admin role");
                 return Results.Json(new { error = $"`{command.Name}` needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
             }
 
@@ -411,6 +412,9 @@ internal static class BuildManagementApi
                 if (!writing.Allowed) return Results.Json(new { error = $"Writing the project's files with `{command.Name}` needs the author role." }, statusCode: StatusCodes.Status403Forbidden);
             }
 
+            // plan 25 K10: every applied key-map repair is in the server's audit log, with the operation, the integer and the reason; the repair log in the database has the same person as "who" (the command is handed their name)
+            var isKeyMapRepair = command.Name == KeyMapRepairCommand && argv.Contains("--apply");
+
             // UE09: a refresh run from a screen evaluates the checks stored with the models that loaded and records the results where the console reads them, this server's own directory (the option is withheld from a caller, so
             // no one names another place). A dry run evaluates nothing.
             var isRefresh = command.Name == "connection refresh";
@@ -419,6 +423,7 @@ internal static class BuildManagementApi
             var result = await commandRunner.RunAsync(argv, projectRoot, ActorOf(context.ManagementToken()), context.RequestAborted);
             JsonNode? document = null;
             try { document = JsonNode.Parse(result.Out); } catch (JsonException) { }
+            if (isKeyMapRepair) RecordKeyMapRepair(audit, context.ManagementToken(), projectId, arguments, result.Exit == 0 ? "ok" : $"exit {result.Exit}");
             // a refresh changes the target's data: who ran which plan, and how it ended, is in the server's audit log (a refusal for a missing role is recorded too, above)
             if (isRefresh) RecordRefresh(audit, context.ManagementToken(), projectId, arguments, result.Exit == 0 ? "ok" : $"exit {result.Exit}", argv.Contains("--dry-run") ? "dry run" : "");
             // plan 24a UC13: what the refresh loaded is told to the serving groups (a dry run loaded nothing); in the background, so the answer to the caller is the same with or without a pairing
@@ -426,6 +431,24 @@ internal static class BuildManagementApi
             return Results.Json(new JsonObject { ["exit"] = result.Exit, ["document"] = document, ["text"] = document is null ? (result.Out.Length > 0 ? result.Out : result.Err) : null });
         });
     }
+    private const string KeyMapRepairCommand = "connection key-map repair";
+
+    /// <summary>
+    /// The role a command needs: the one its effect class gives (<see cref="ManagementAuthorization.RoleFor"/>), except the repair of a key map, which is an administrator's whether it is a dry run or applied (owner decision of 2026-11-12:
+    /// only the Build write login writes a map, and an administrator may repair one in an emergency). It is not the approver's: an approver applies plans, which a repair is not.
+    /// </summary>
+    internal static ServerRole RoleOf(CommandSpec spec) => spec.Name == KeyMapRepairCommand ? ServerRole.Admin : ManagementAuthorization.RoleFor(spec.Effect);
+
+    /// <summary>The audit line of an applied key-map repair (plan 25 K10): <c>keymap.repair</c> on <c>project/connection/key</c>, with the operation, the integer and the reason as the caller gave them, by the person the console vouched for.</summary>
+    private static void RecordKeyMapRepair(IAuditLog? audit, ValidatedToken token, string project, JsonObject? arguments, string outcome)
+    {
+        if (audit is null) return;
+        string Named(string name) => arguments?[name] is JsonValue v ? v.ToString() : "";
+        var detail = $"operation {Named("operation")}, value {Named("value")}, reason: {Named("reason")}{(arguments?["force"] is JsonValue f && f.TryGetValue<bool>(out var forced) && forced ? " (forced)" : "")}";
+        audit.Append(new AuditEntry(TimeProvider.System.GetUtcNow(), "command", "dbdatabuild server", token.SubjectId, token.SubjectName ?? token.SubjectId, false, "keymap.repair",
+            $"{project}/{(Named("connection").Length > 0 ? Named("connection") : "(default connection)")}/{Named("key")}", outcome, detail));
+    }
+
     /// <summary>The audit line of a refresh run through the commands route: <c>refresh.run</c> on <c>project/connection/plan</c> (the plan is <c>default</c> when none was named), by the person the console vouched for.</summary>
     private static void RecordRefresh(IAuditLog? audit, ValidatedToken token, string project, JsonObject? arguments, string outcome, string detail)
     {

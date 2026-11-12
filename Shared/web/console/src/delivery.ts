@@ -64,7 +64,7 @@ export interface DeliveryAttempt { number: number; sender: string; outcome: stri
 export interface Subscription {
   id: string
   name: string
-  kind: 'dashboard' | 'report'
+  kind: 'dashboard' | 'report' | 'page'
   view: string
   parameters: Record<string, unknown> | null
   layout: string | null
@@ -93,7 +93,7 @@ export interface SubscriptionRun { outcome: string; detail: string | null; start
 /** What the subscribe form holds, as typed. */
 export interface SubscriptionForm {
   name: string
-  kind: 'dashboard' | 'report'
+  kind: 'dashboard' | 'report' | 'page'
   view: string
   format: 'pdf' | 'csv' | 'xlsx'
   widget: string
@@ -112,12 +112,14 @@ export const emptyForm = (channel = ''): SubscriptionForm => ({ name: '', kind: 
 /** The request the API reads strictly, from the form; a problem the form can see for itself is returned as words (the server checks the rest, in its own). */
 export function buildRequest(form: SubscriptionForm): { body: Record<string, unknown> } | { error: string } {
   if (form.name.trim() === '') return { error: 'Give the subscription a name.' }
-  if (form.view.trim() === '') return { error: `Name the ${form.kind} to subscribe to.` }
+  if (form.view.trim() === '') return { error: form.kind === 'page' ? 'Name the page to subscribe to: <app instance>.<page name>.' : `Name the ${form.kind} to subscribe to.` }
+  if (form.kind === 'page' && !/^[^.]+\.[^.]+/.test(form.view.trim())) return { error: 'A custom page is named <app instance>.<page name>, for example sales-portal.regional-detail.' }
+  if (form.kind === 'page' && form.format !== 'pdf') return { error: 'A custom page is delivered as a PDF (tick the preview to add its picture to an email).' }
   if (form.channel === '') return { error: 'Choose a delivery channel.' }
   if (form.format === 'csv' && form.widget.trim() === '') return { error: 'A CSV is one widget’s rows: name the widget.' }
   const body: Record<string, unknown> = { name: form.name.trim(), kind: form.kind, view: form.view.trim(), format: form.format, channel: form.channel, schedule: { cron: form.cron.trim(), time_zone: form.timeZone.trim() || 'UTC' } }
   if (form.widget.trim() !== '' && form.format !== 'pdf') body.widget = form.widget.trim()
-  if (form.layout.trim() !== '' && form.format === 'pdf') body.layout = form.layout.trim()
+  if (form.layout.trim() !== '' && form.format === 'pdf' && form.kind !== 'page') body.layout = form.layout.trim()
   if (form.recipient.trim() !== '') body.recipient = form.recipient.trim()
   if (form.inlinePreview && form.format === 'pdf') body.inline_preview = true
   if (form.parameters.trim() !== '') {

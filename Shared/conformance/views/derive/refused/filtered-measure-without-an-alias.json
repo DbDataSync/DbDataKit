@@ -1,0 +1,33 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "metric",
+      "encodings": {
+        "value": {
+          "field": "orders.net_revenue",
+          "filters": [
+            {
+              "attribute": "orders.status",
+              "operator": "equals",
+              "values": [
+                "Open",
+                "Pending"
+              ]
+            }
+          ]
+        }
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "refusal": [
+    {
+      "code": "alias_required",
+      "path": "widgets.w.encodings.value.filters",
+      "message": "A measure with its own filters needs an 'as' alias, so it can't be mistaken for the unfiltered measure."
+    }
+  ]
+}

@@ -130,6 +130,9 @@ internal sealed partial class ParameterValues
         // an embed's `with` values: `$params.name` reads a parameter
         if (raw["with"] is JsonObject embedWith && raw["url"] is not null)
             foreach (var (_, v) in embedWith) if (v is JsonValue ev && ev.TryGetValue<string>(out var et) && et.StartsWith("$params.", StringComparison.Ordinal)) used.Add(et[8..]);
+        // a custom widget's `params`: `$params.name` reads a document parameter
+        if (raw["component"] is not null && raw["params"] is JsonObject customParams)
+            foreach (var (_, v) in customParams) if (v is JsonValue cv && cv.TryGetValue<string>(out var ct) && ct.StartsWith("$params.", StringComparison.Ordinal)) used.Add(ct[8..]);
         if (raw["query"] is JsonObject query)
         {
             var map = query["params"] as JsonObject;
@@ -144,6 +147,8 @@ internal sealed partial class ParameterValues
                 }
             }
             foreach (var (key, child) in query) if (key != "params") Walk(child);
+            // the filters of an encoded measure (DBR50) are part of the request the encodings derive: their markers are parameters the widget reads
+            if (raw["encodings"] is { } encodings) Walk(encodings);
             // a saved query's arguments, and the markers of a written semantic SQL (`:name`), are named by the map and by the text
             if (query["saved"] is not null && map is not null) foreach (var (_, target) in map) if (target is JsonValue t && t.TryGetValue<string>(out var doc)) used.Add(doc);
             if (query["semantic"]?["sql"] is JsonValue sql && sql.TryGetValue<string>(out var sqlText)) foreach (var marker in SqlMarkerNames(sqlText)) used.Add(Document(marker));

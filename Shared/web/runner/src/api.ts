@@ -83,7 +83,8 @@ export interface InstanceStagingStatus { instance: string; channel: string; vers
 export interface DefinitionEvent { id: number; action: string; channel: string | null; version: number | null; actor: string | null; at: string; note: string | null }
 
 /** A connection slot a channel's served or staged version declares (`slots` of the definition detail): its kind, the tasks that use it and the versions that declare it. */
-export interface SlotRequirement { channel: string; slot: string; kind: string; tasks: string[]; versions: number[] }
+/** `access` is the manifest's `access: read|write` (plan 21 CH03): a read slot a channel leaves unbound is served from production's binding. Absent from an older runner: write. */
+export interface SlotRequirement { channel: string; slot: string; kind: string; access?: 'read' | 'write'; tasks: string[]; versions: number[] }
 
 /** What `POST /api/v1/bindings/{channel}/integration/{name}/test` answers: the step that failed or, when `ok`, the last one tried (`binding`, `connection`, `login`, `connect`), in words, and whether a connection was really opened. */
 export interface SlotTestAnswer { slot: string; bound_to: string | null; ok: boolean; step: 'binding' | 'connection' | 'login' | 'connect'; message: string; connected: boolean }

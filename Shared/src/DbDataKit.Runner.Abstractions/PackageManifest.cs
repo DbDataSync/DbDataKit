@@ -87,9 +87,10 @@ public sealed record TaskInput(string Name, ProgressType Type = ProgressType.Tex
 
 /// <summary>
 /// A place in the task where a connection is plugged in. The package says what kind of connection it needs; a channel's binding says which one (plan 30). <see cref="Env"/> names how the runner puts the bound login into the
-/// task's environment (one of <see cref="SlotEnvironmentFormats"/>; plan 28c section 6); null: the task asks for it through the protocol's <c>ResolveConnection</c> and the runner writes no variable.
+/// task's environment (one of <see cref="SlotEnvironmentFormats"/>; plan 28c section 6); null: the task asks for it through the protocol's <c>ResolveConnection</c> and the runner writes no variable. <see cref="Access"/> is the manifest's optional <c>access: read|write</c> (plan 21 CH03): a
+/// <see cref="SlotAccess.Read"/> slot is served from production's binding in a channel that has none of its own; a slot that says nothing is <see cref="SlotAccess.Write"/>, which a channel must bind itself.
 /// </summary>
-public sealed record ConnectionSlot(string Name, string Kind, string? Env = null);
+public sealed record ConnectionSlot(string Name, string Kind, string? Env = null, SlotAccess Access = SlotAccess.Write);
 
 /// <summary>
 /// The forms in which the runner may inject a bound login into a task process (plan 28c section 6, ED11). A registry, not free text: a package picks a name, and the runner writes the variables of that form, so a package cannot make the

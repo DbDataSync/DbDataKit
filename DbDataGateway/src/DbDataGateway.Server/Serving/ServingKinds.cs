@@ -19,9 +19,9 @@ public static class ServingKinds
 
     public static DefinitionKinds Register(DefinitionKinds kinds)
     {
-        kinds.Register(new DefinitionKind(PublishedSemanticModels.DefinitionKind, [TargetType], PublishMode.Serve) { Formats = DefinitionFormats.Of(2), Validator = ValidateModel });
-        kinds.Register(new DefinitionKind(PublishedDataSources.DefinitionKind, [TargetType], PublishMode.Serve) { Formats = DefinitionFormats.Of(ConnectionDefinition.CurrentVersion), Validator = ValidateDataSource });
-        kinds.Register(new DefinitionKind(PublishedEntityModels.DefinitionKind, [TargetType], PublishMode.Serve) { Formats = DefinitionFormats.Of(DataModelLoader.Version), Validator = ValidateEntityModel });
+        kinds.Register(new DefinitionKind(PublishedSemanticModels.DefinitionKind, [TargetType], PublishMode.Serve) { Formats = DefinitionFormats.Of(2), Validator = ValidateModel, FormatOf = ModelFormat });
+        kinds.Register(new DefinitionKind(PublishedDataSources.DefinitionKind, [TargetType], PublishMode.Serve) { Formats = DefinitionFormats.Of(ConnectionDefinition.CurrentVersion), Validator = ValidateDataSource, FormatOf = text => ConnectionDefinitionLoader.FormatOfText(text) });
+        kinds.Register(new DefinitionKind(PublishedEntityModels.DefinitionKind, [TargetType], PublishMode.Serve) { Formats = DefinitionFormats.Of(DataModelLoader.Version), Validator = ValidateEntityModel, FormatOf = EntityModelFormat });
         return DbDataKit.Apps.AppDefinitions.Register(kinds);
     }
 
@@ -30,6 +30,19 @@ public static class ServingKinds
 
     /// <summary>The store over the group's state whose publishes go through <see cref="All"/>.</summary>
     public static DefinitionStore StoreOf(StateDatabase state) => new DefinitionStore(state).WithRegistry(All, TargetType);
+
+    // what the format of a manifest is when a publish (the shared API) does not say: what the per-kind routes record, read from the content
+    private static int? ModelFormat(string manifest)
+    {
+        try { return PublishedSemanticModels.ContentOf(manifest) is { } content ? CatalogLoader.LoadText(content.Catalog, "semantic-model").Format : null; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
+    }
+
+    private static int? EntityModelFormat(string manifest)
+    {
+        try { return JsonSerializer.Deserialize<PublishedEntityModels.Content>(manifest, Json) is { Model: { Length: > 0 } model } ? DataModelLoader.Load(model, "model.yaml").Model?.SchemaVersion : null; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
+    }
 
     private static string? ValidateModel(DefinitionCandidate candidate)
     {

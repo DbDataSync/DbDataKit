@@ -1,7 +1,7 @@
 import type { Theme } from '../theme'
 import type { Box, LayoutDoc, ParameterDefinition, ParameterValue, ParameterValues, ViewsDoc } from '../views/model'
 import type { RenderedWidget } from '../views/rendered'
-import { WidgetView } from '../widgets/WidgetView'
+import { WidgetView, type CellLink, type RowExpand } from '../widgets/WidgetView'
 import type { Hit, HitHow } from './interaction'
 
 /** What every layout engine's frame needs to draw one widget: shared by `DashboardFrame` and `CanvasFrame`, so a tile is the same in both. */
@@ -21,10 +21,16 @@ export interface TileContext {
   stale?: boolean
   /** The host follows a `drill` (default yes). */
   canDrill?: boolean
+  /** The host follows an `on_click` link (DBR36): a widget with one is pointable. */
+  canFollow?: boolean
   /** Viewers sort a table or a matrix by clicking a header (plan 32 DBR45): on screen only, never stored; the print and export routes do not set it. */
   sortable?: boolean
   /** A table the server cut: the host runs it again with `order` (widget, column field, direction; null, null for the document's order). */
   onServerSort?: (widget: string, field: string | null, dir: 'asc' | 'desc' | null) => void
+  /** A cell that names a link of the document was clicked (plan 32 DBR51). */
+  onLink?: (link: CellLink) => void
+  /** A matrix row that can expand was toggled (plan 32 DBR55). */
+  onExpand?: (expand: RowExpand) => void
 }
 
 export function tileView(c: TileContext, id: string, box: Box, isMaximized: boolean) {
@@ -48,8 +54,11 @@ export function tileView(c: TileContext, id: string, box: Box, isMaximized: bool
       asOf={c.asOf?.[id]}
       stale={c.stale}
       canDrill={c.canDrill}
+      canFollow={c.canFollow}
       sortable={c.sortable}
       onServerSort={c.onServerSort}
+      onLink={c.onLink}
+      onExpand={c.onExpand}
     />
   )
 }

@@ -8,6 +8,7 @@ name: DbDataGateway release
 # It releases the newest commit on main, or `sha` (which must be on main), and only if that exact commit has a green "DbDataGateway CI" run.
 # It packages the Windows zip (a Windows job: self-contained, with the 32-bit ODBC worker) and the linux-x64 zip (an Ubuntu job, DbDataGateway/scripts/package.sh:
 # framework-dependent like the Runner's, no worker), builds the Windows installer from the Windows zip (dbdatagateway-v<version>-win-x64.msi, dist/msi.py, on Ubuntu),
+# builds the export component (dbdatagateway-export-v<version>-<rid>.zip per platform, an optional asset the product downloads on request: dist/README.md),
 # tags the commit dbdatagateway/v<version> and publishes a GitHub Release in THIS repository (both zips, msi, one SHA256SUMS, and the standard install.ps1 /
 # Scoop manifest, bound by .github/actions/publish-dist from DbDataGateway/dist.json). No branch is pushed or merged: a release is a tag and its
 # assets. Built-in GITHUB_TOKEN only.
@@ -223,10 +224,61 @@ jobs:
           path: DbDataGateway/artifacts/release/dbdatagateway-v*.zip
           if-no-files-found: error
 
+  # The export component (plan 32 DBR16, owner decision 2026-11-12): the pinned Chromium, the bundled fonts and the print page, one zip per platform
+  # (dbdatagateway-export-v<version>-<rid>.zip, about 420 MB installed), a release asset of its own beside the product zips. It is built on Ubuntu for both
+  # platforms (the fetch scripts download and hash-check either browser there; dist/export_component.py only copies, verifies and zips), and the release job's
+  # SHA256SUMS lists it. `dbdatagateway export install` (and the console's button) downloads the zip for its platform and checks it against that file and the
+  # pins inside it. Untested until a release runs.
+  package-export:
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: .
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [win-x64, linux-x64]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.package.outputs.sha }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Fetch the pinned Chromium and the bundled fonts
+        run: |
+          scripts/fetch-chromium.sh ${{ matrix.rid }}
+          scripts/fetch-fonts.sh all
+
+      - name: Build the print page
+        working-directory: Shared/web
+        run: |
+          npm ci --workspace @dbdatakit/visuals --include-workspace-root --ignore-scripts
+          npm run build:print --workspace @dbdatakit/visuals
+
+      - name: Stage, verify and zip the component
+        env:
+          VERSION: ${{ needs.package.outputs.version }}
+        run: |
+          mkdir -p artifacts-export
+          python3 -I dist/export_component.py stage --rid "${{ matrix.rid }}" --out "$RUNNER_TEMP/export" --zip "$PWD/artifacts-export/dbdatagateway-export-v$VERSION-${{ matrix.rid }}.zip"
+          ls -l artifacts-export
+
+      # The name matches the release job's pattern (dbdatagateway-package*), so the zip lands in assets/ beside the product zips and under their SHA256SUMS.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dbdatagateway-package-export-${{ matrix.rid }}
+          path: artifacts-export/dbdatagateway-export-v*.zip
+          if-no-files-found: error
+
   # Ubuntu, because the installer is built with wixl (apt) and the rest is shell. Nothing is tagged or published until the package and the
   # installer both exist: a tag is a claim that this version shipped, so a failed run leaves nothing to clean up.
   release:
-    needs: [package, package-linux]
+    needs: [package, package-linux, package-export]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:

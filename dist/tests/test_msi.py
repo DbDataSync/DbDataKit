@@ -95,6 +95,28 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(step.text, 'ANNOUNCEURL AND NOT Installed')
         self.assertNotIn("Remove-Item", command)
 
+    def test_a_product_with_an_export_component_installs_it_on_request_before_the_service_starts(self):
+        text, _ = self.source(meta=dict(META, exportComponent=True), version="2026.11.12.1000")
+        root = self.root(text)
+        actions = {a.get("Id"): a for a in root.iter("{%s}CustomAction" % NS["w"])}
+        plain, sourced = actions["InstallPdfExport"], actions["InstallPdfExportFrom"]
+        self.assertEqual(plain.get("ExeCommand"), "export install --version 2026.11.12.1000")
+        self.assertEqual(sourced.get("ExeCommand"), 'export install --version 2026.11.12.1000 --source "[EXPORTSOURCE]"')
+        for action in (plain, sourced):
+            self.assertEqual((action.get("Execute"), action.get("Impersonate"), action.get("Return")), ("deferred", "no", "ignore"))   # a failed download never undoes the install
+            self.assertTrue(action.get("FileKey"))                                                                                   # the product's own program
+        steps = {c.get("Action"): c for c in root.iter("{%s}Custom" % NS["w"])}
+        self.assertEqual(steps["InstallPdfExport"].text, "ADDPDFEXPORT AND NOT EXPORTSOURCE")
+        self.assertEqual(steps["InstallPdfExportFrom"].text, "ADDPDFEXPORT AND EXPORTSOURCE")
+        # after the service is registered and before an upgrade starts it again, so the one start reads views.export
+        self.assertLess(int(steps["RegisterService"].get("Sequence")), int(steps["InstallPdfExport"].get("Sequence")))
+        self.assertLess(int(steps["InstallPdfExportFrom"].get("Sequence")), int(steps["StartService"].get("Sequence")))
+
+    def test_a_product_without_an_export_component_has_no_such_action(self):
+        text, _ = self.source()
+        self.assertNotIn("PDFEXPORT", text)
+        self.assertNotIn("EXPORTSOURCE", text)
+
     def test_a_product_that_does_not_announce_has_no_such_action(self):
         text, _ = self.source()
         self.assertNotIn("ANNOUNCEURL", text)

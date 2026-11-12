@@ -84,7 +84,7 @@ export function fixtureClient(bundle: FixtureBundle, options: FixtureClientOptio
     switch (widget.type) {
       case 'text': return { type: 'text' }
       case 'embed': return { type: 'embed', url: widget.url, framed: false, ...(widget.link_text ? { link_text: widget.link_text } : {}) }
-      case 'custom': return error('custom_not_drawn', `The widget \`${id}\` is code of an app (${widget.component}); only the app's own host draws it.`)
+      case 'custom': return recorded?.type === 'custom' || recorded?.type === 'error' ? recorded : error('custom_not_drawn', `The widget \`${id}\` is code of an app (${widget.component}); only the app's own host draws it.`)
       case 'image': {
         const src = bundle.images?.[widget.hash] ?? (recorded?.type === 'image' ? recorded.src : undefined)
         return src ? { type: 'image', src } : error(NO_RECORDED_IMAGE, `The fixture source has no bytes for the image ${widget.hash}.`)

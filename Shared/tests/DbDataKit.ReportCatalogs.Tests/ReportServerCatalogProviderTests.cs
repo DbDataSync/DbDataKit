@@ -187,6 +187,17 @@ public sealed class ReportCatalogConnectionTests
         Assert.Throws<ArgumentException>(() => ReportCatalogConnections.Create(ConnectionDefinitionLoader.LoadConnectionOfAnyKind("schema: connection/2\nkind: http\nname: x\nendpoint: https://a.example.com\n", "x.yml").Definition!, secrets));
     }
 
+    [Fact]
+    public async Task An_integrated_connection_holds_no_secret_and_reads_without_an_authorization_header()
+    {
+        var yaml = "schema: connection/2\nkind: report-catalog\nname: reports\nendpoint: https://reports.example.com/Reports\nreport_catalog: { provider: ssrs }\nsign_in: { method: integrated }\n";
+        var d = ConnectionDefinitionLoader.LoadConnectionOfAnyKind(yaml, "connections/reports.yml").Definition!;
+        string? auth = "unset";
+        using var connection = ReportCatalogConnections.Create(d, new DbDataKit.Secrets.SecretResolverChain([]), new DbDataKit.Connections.Http.HttpConnectionOptions(InnerHandler: new AuthCapture(new ReportServerStub { Answer = _ => (HttpStatusCode.OK, """{"value":[]}""") }, a => auth = a)));
+        Assert.Empty(await connection.Provider.BrowseAsync(new ReportCatalogViewer(new ServingCaller("a", "A", new HashSet<string>(), new Dictionary<string, string>())), new ReportCatalogQuery()));
+        Assert.Null(auth);   // the Windows handshake is the platform handler's, not a header this code writes
+    }
+
     private sealed class AuthCapture(HttpMessageHandler inner, Action<string?> seen) : DelegatingHandler(inner)
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

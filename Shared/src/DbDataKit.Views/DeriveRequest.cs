@@ -105,7 +105,8 @@ public static class DeriveRequest
 
     private enum Well { Either, Measure, Attribute }
 
-    private sealed record Slot(string Field, string Path, Well Well);
+    /// <summary>An encoded field: its name, its place, the well it goes to and, for the object form (DBR50), the entry (<c>alias</c>, <c>filters</c>) and its path.</summary>
+    private sealed record Slot(string Field, string Path, Well Well, JsonObject? Entry = null, string EntryPath = "", string? Group = null);
 
     public static DerivedRequest Derive(ViewWidget widget, CatalogRoles roles, string file = "")
     {
@@ -124,15 +125,24 @@ public static class DeriveRequest
         { diagnostics.Add(Diag(ViewsCodes.NothingToDerive, $"{wp}.query", "This query is written out (`mode: explicit`), so the encodings do not drive it and there is nothing to derive.", "Use the query's own request, or drop `mode: explicit` and the written query.")); return Refused(); }
 
         var encodings = widget.Raw["encodings"] as JsonObject ?? [];
-        var slots = Slots(widget.Type, encodings, $"{wp}.encodings");
+        var slots = Slots(widget.Type, encodings, $"{wp}.encodings", widget.Groups, (code, path, message) => diagnostics.Add(Diag(code, path, message)));
+        // a field is in one place of a widget when a group is involved: the group's levels are the field's place, so a second place (an axis, a channel, a tooltip, another group) is refused naming both
+        foreach (var g in slots.GroupBy(sl => sl.Field).Where(g => g.Count() > 1 && g.Any(sl => sl.Group is not null)))
+            foreach (var again in g.Skip(1).Where(sl => sl.Group is not null || g.First().Group is not null))
+                diagnostics.Add(Diag(ViewsCodes.GroupConflict, again.Path, $"{g.Key} is in two places of the widget ({g.First().Path} and {again.Path}), and one of them is a group: a field is in one place."));
         var query = widget.Query.Raw;
 
-        var measures = new List<string>();
+        var measures = new List<(string Name, JsonNode Node)>();
         var attributes = new List<string>();
         var origins = new Dictionary<string, string>();
 
-        void Place(string field, string path, Well well)
+        void Place(string field, string path, Well well) => PlaceEntry(new Slot(field, path, well));
+
+        void PlaceEntry(Slot slot)
         {
+            var (field, path, well, entry, entryPath, _) = slot;
+            // a name that an entry already gives the output (an alias) is that output: a sort or an order may name it
+            if (entry is null && measures.Any(m => m.Name == field)) return;
             var role = roles.Of(field);
             // the words are the engine's own (Validator.CheckMember), so a field well and the engine refuse in one voice
             if (role == CatalogRole.Unknown)
@@ -142,13 +152,44 @@ public static class DeriveRequest
             else if (well == Well.Attribute && role == CatalogRole.Measure)
                 diagnostics.Add(Diag("wrong_member_kind", path, $"{field} is a measure, not a attribute."));
             var toMeasures = well == Well.Measure || (well == Well.Either && role == CatalogRole.Measure);
-            var list = toMeasures ? measures : attributes;
-            if (list.Contains(field)) return;
-            list.Add(field);
-            origins[$"query.{(toMeasures ? "measures" : "attributes")}[{list.Count - 1}]"] = path;
+            var alias = entry?["alias"] is JsonValue av && av.TryGetValue<string>(out var a) && a.Length > 0 && a != field ? a : null;
+            var filters = entry?["filters"] is JsonArray { Count: > 0 } f ? f : null;
+            if (!toMeasures)
+            {
+                if (alias is not null || filters is not null)
+                    diagnostics.Add(Diag("wrong_member_kind", filters is not null ? $"{entryPath}.filters" : $"{entryPath}.alias", $"{field} is an attribute: only a measure takes `alias` and `filters`."));
+                if (attributes.Contains(field)) return;
+                attributes.Add(field);
+                origins[$"query.attributes[{attributes.Count - 1}]"] = path;
+                return;
+            }
+            // the object form (DBR50): the engine's own rule, in its words, so the editor and the engine refuse in one voice
+            if (filters is not null && alias is null)
+                diagnostics.Add(Diag("alias_required", $"{entryPath}.filters", "A measure with its own filters needs an 'as' alias, so it can't be mistaken for the unfiltered measure."));
+            JsonNode node = alias is null && filters is null ? JsonValue.Create(field)! : new JsonObject { ["measure"] = field };
+            if (node is JsonObject o)
+            {
+                if (alias is not null) o["as"] = alias;
+                if (filters is not null) o["filters"] = filters.DeepClone();
+            }
+            var name = alias ?? field;
+            var at = measures.FindIndex(m => m.Name == name);
+            if (at >= 0)
+            {
+                if (!JsonNode.DeepEquals(measures[at].Node, node))
+                    diagnostics.Add(Diag("duplicate_measure", alias is not null ? $"{entryPath}.alias" : path, $"{name} is listed more than once: give one of the entries an `alias`."));
+                return;
+            }
+            measures.Add((name, node));
+            origins[$"query.measures[{measures.Count - 1}]"] = path;
+            if (entry is not null)
+            {
+                if (alias is not null) origins[$"query.measures[{measures.Count - 1}].as"] = $"{entryPath}.alias";
+                if (filters is not null) origins[$"query.measures[{measures.Count - 1}].filters"] = $"{entryPath}.filters";
+            }
         }
 
-        foreach (var s in slots) Place(s.Field, s.Path, s.Well);
+        foreach (var s in slots) PlaceEntry(s);
 
         // ---- order: the query's own, else a table's sort ----
         JsonArray? order = null;
@@ -159,18 +200,24 @@ public static class DeriveRequest
         }
         else if (widget.Type == "chart" && encodings["x"] is JsonArray { Count: > 1 } xLevels)
             order = NestedOrder(xLevels, $"{wp}.encodings.x", origins, Place, diagnostics, Diag);
+        // a group on a chart's `x` (DBR52): its levels in turn, so a line over year and month is in calendar order whatever order the rows arrive in
+        else if (widget.Type == "chart" && encodings["x"] is JsonObject { } xGroup && xGroup["group"] is not null)
+            order = GroupOrder(slots.Where(sl => sl.Group is not null && sl.Path == $"{wp}.encodings.x.group"), xGroup["sort"]?.GetValue<string>() == "descending", origins);
+        // a matrix with a group (DBR52): the rows' attributes then the columns', each ascending, the group's levels in place, so a combined member and a details column read in order
+        else if (widget.Type == "matrix" && slots.Any(sl => sl.Group is not null && (sl.Path.Contains(".rows[", StringComparison.Ordinal) || sl.Path.Contains(".columns[", StringComparison.Ordinal))))
+            order = GroupOrder(slots.Where(sl => sl.Path.Contains(".rows[", StringComparison.Ordinal) || sl.Path.Contains(".columns[", StringComparison.Ordinal)), false, origins);
         else if (widget.Type == "table" && encodings["sort"] is JsonObject { } sort && sort["by"] is JsonValue by && by.TryGetValue<string>(out var sortField))
         {
             var direction = sort["dir"] is JsonValue d && d.TryGetValue<string>(out var dir) ? dir : "asc";
             var sortPath = $"{wp}.encodings.sort.by";
-            if (!measures.Contains(sortField) && !attributes.Contains(sortField)) Place(sortField, sortPath, Well.Either);
+            if (!measures.Any(m => m.Name == sortField) && !attributes.Contains(sortField)) Place(sortField, sortPath, Well.Either);
             order = [new JsonArray(sortField, direction)];
             origins["query.order[0]"] = sortPath;
         }
 
         // ---- totals ----
         JsonObject? totals = null;
-        if (widget.Type == "matrix") totals = MatrixTotals(encodings, roles, wp, query, diagnostics, Diag);
+        if (widget.Type == "matrix") totals = MatrixTotals(encodings, widget.Groups, n => roles.Of(n) == CatalogRole.Measure || measures.Any(m => m.Name == n), CellAttributes(encodings), wp, query, diagnostics, Diag);
         else if (query["totals"] is JsonObject qt)
         {
             totals = (JsonObject)qt.DeepClone();
@@ -188,7 +235,7 @@ public static class DeriveRequest
 
         // ---- the request ----
         var limit = query["limit"] is JsonValue lv && Whole(lv) is { } written2 ? (int)Math.Min(written2, MaximumLimit) : DefaultLimit(widget.Type);
-        var q = new JsonObject { ["measures"] = new JsonArray(measures.Select(m => (JsonNode)m).ToArray()) };
+        var q = new JsonObject { ["measures"] = new JsonArray(measures.Select(m => m.Node).ToArray()) };
         if (attributes.Count > 0) q["attributes"] = new JsonArray(attributes.Select(a => (JsonNode)a).ToArray());
         if (query["filters"] is JsonArray { Count: > 0 } filters)
         {
@@ -210,61 +257,126 @@ public static class DeriveRequest
         return new DerivedRequest(request, Bindings(q, query["params"] as JsonObject), origins, wp, []);
     }
 
+    /// <summary>
+    /// The request for the details of one expanded row (plan 32 DBR55): the widget's request with its <c>show: drill</c> groups asked for like <c>show: always</c> ones (their attributes after the row's own fields, the order by their
+    /// levels), no totals, and the row's own fields filtered to the row's member values <paramref name="key"/> (the rows' fields in order, as the base answer gave them, typed). Run as the viewer like any other request.
+    /// </summary>
+    public static DerivedRequest DeriveExpansion(ViewWidget widget, CatalogRoles roles, IReadOnlyList<JsonNode?> key, string file = "")
+    {
+        var wp = $"widgets.{widget.Id}";
+        var raw = (JsonObject)widget.Raw.DeepClone();
+        var encodings = raw["encodings"] as JsonObject ?? [];
+        var own = new List<string>();
+        if (encodings["rows"] is JsonArray rows)
+            foreach (var entry in rows)
+            {
+                if (entry is JsonObject o && o["group"] is not null) { if (o["show"]?.GetValue<string>() == "drill") o["show"] = "always"; }
+                else own.Add(entry is JsonObject f ? f["field"]?.GetValue<string>() ?? "" : entry?.GetValue<string>() ?? "");
+            }
+        var asked = Derive(widget with { Raw = raw }, roles, file);
+        if (asked.Request is null) return asked;
+        if (key.Count != own.Count)
+            return new DerivedRequest(null, [], new Dictionary<string, string>(), wp, [DefaultDiagnosticCatalog.Instance.Create(ViewsCodes.InvalidValue, file, widget.Line, widget.Column, $"A row names a value for each of the rows' fields ({own.Count}); this one names {key.Count}.", null, $"{wp}.encodings.rows")]);
+        var query = (JsonObject)asked.Request["query"]!;
+        query.Remove("totals");
+        var filters = query["filters"] as JsonArray ?? [];
+        for (var i = 0; i < own.Count; i++)
+            filters.Add(new JsonObject { ["attribute"] = own[i], ["operator"] = "equals", ["values"] = new JsonArray(key[i]?.DeepClone()) });
+        query["filters"] = filters;
+        // the keys in the order a derived request writes them, so the request (and its hash) is the one a hand-written equal would be
+        var ordered = new JsonObject();
+        foreach (var name in new[] { "measures", "attributes", "filters", "segments", "order", "limit", "totals", "timezone" })
+            if (query[name] is { } part) ordered[name] = part.DeepClone();
+        var envelope = (JsonObject)JsonNode.Parse(new JsonObject { ["spec_version"] = SpecVersion, ["kind"] = "query", ["query"] = ordered }.ToJsonString())!;
+        return new DerivedRequest(envelope, Bindings(ordered, widget.Query?.Raw["params"] as JsonObject), new Dictionary<string, string>(), wp, []);
+    }
+
     // ---- the fields of each widget type, in the fixed order ----
 
-    private static List<Slot> Slots(string type, JsonObject encodings, string path)
+    private static List<Slot> Slots(string type, JsonObject encodings, string path, IReadOnlyDictionary<string, ViewGroup>? groups, Action<string, string, string> refuse)
     {
         var slots = new List<Slot>();
-        void One(string channel, Well well)
+        // a field group in a channel or an axis (DBR52): its levels, outermost first, are the attributes it asks for
+        bool Group(JsonNode? node, string p)
         {
-            if (encodings[channel] is JsonValue v && v.TryGetValue<string>(out var f) && f.Length > 0) slots.Add(new(f, $"{path}.{channel}", well));
+            if (node is not JsonObject { } o || o["group"] is not JsonValue gv || !gv.TryGetValue<string>(out var name)) return false;
+            // the details of a row that expands on request (DBR55) are asked for when a row is expanded, never with the rows
+            if (o["show"] is JsonValue sv && sv.TryGetValue<string>(out var show) && show == "drill") return true;
+            if (groups is null || !groups.TryGetValue(name, out var group)) { refuse(ViewsCodes.UnknownGroup, $"{p}.group", $"`{name}` is not a group of this document."); return true; }
+            foreach (var level in group.Levels) slots.Add(new Slot(level.Field, $"{p}.group", Well.Attribute, Group: name));
+            return true;
         }
-        void Channel(JsonNode? node, string p)
+        // a field name, or the object form (DBR50): `{field, alias, label, filters, format}` where a measure goes
+        void Entry(JsonNode? node, string p, Well well)
         {
-            if (node is JsonValue v && v.TryGetValue<string>(out var f) && f.Length > 0) slots.Add(new(f, p, Well.Either));
-            else if (node is JsonObject o && o["field"] is JsonValue fv && fv.TryGetValue<string>(out var name) && name.Length > 0) slots.Add(new(name, $"{p}.field", Well.Either));
+            if (Group(node, p)) return;
+            if (node is JsonValue v && v.TryGetValue<string>(out var f) && f.Length > 0) slots.Add(new(f, p, well));
+            else if (node is JsonObject o && o["field"] is JsonValue fv && fv.TryGetValue<string>(out var name) && name.Length > 0) slots.Add(new(name, $"{p}.field", well, o, p));
         }
         switch (type)
         {
-            case "metric": One("value", Well.Measure); One("compare", Well.Measure); break;
+            case "metric": Entry(encodings["value"], $"{path}.value", Well.Measure); Entry(encodings["compare"], $"{path}.compare", Well.Measure); break;
             case "chart":
                 foreach (var c in ChartChannels)
                 {
-                    if (c == "tooltip" && encodings[c] is JsonArray list) { for (var i = 0; i < list.Count; i++) Channel(list[i], $"{path}.tooltip[{i}]"); }
+                    // the tooltip's list and a `y` of several measures (one series each)
+                    if ((c == "tooltip" || c == "y") && encodings[c] is JsonArray list) { for (var i = 0; i < list.Count; i++) Entry(list[i], $"{path}.{c}[{i}]", Well.Either); }
                     // a nested axis (DBR42): every level is an attribute, outermost first
                     else if (c == "x" && encodings[c] is JsonArray levels)
                     {
-                        for (var i = 0; i < levels.Count; i++)
-                        {
-                            if (levels[i] is JsonValue lv && lv.TryGetValue<string>(out var lf) && lf.Length > 0) slots.Add(new(lf, $"{path}.x[{i}]", Well.Attribute));
-                            else if (levels[i] is JsonObject lo && lo["field"] is JsonValue lfv && lfv.TryGetValue<string>(out var lname) && lname.Length > 0) slots.Add(new(lname, $"{path}.x[{i}].field", Well.Attribute));
-                        }
+                        for (var i = 0; i < levels.Count; i++) Entry(levels[i], $"{path}.x[{i}]", Well.Attribute);
                     }
-                    else Channel(encodings[c], $"{path}.{c}");
+                    else Entry(encodings[c], $"{path}.{c}", Well.Either);
                 }
                 break;
             case "matrix":
                 foreach (var axis in new[] { "rows", "columns" })
                     if (encodings[axis] is JsonArray fields)
-                        for (var i = 0; i < fields.Count; i++)
-                        {
-                            if (fields[i] is JsonValue v && v.TryGetValue<string>(out var f)) slots.Add(new(f, $"{path}.{axis}[{i}]", Well.Attribute));
-                            else if (fields[i] is JsonObject entry && entry["field"] is JsonValue ev && ev.TryGetValue<string>(out var ef)) slots.Add(new(ef, $"{path}.{axis}[{i}].field", Well.Attribute));
-                        }
+                        for (var i = 0; i < fields.Count; i++) Entry(fields[i], $"{path}.{axis}[{i}]", Well.Attribute);
                 if (encodings["values"] is JsonArray values)
                     for (var i = 0; i < values.Count; i++)
-                        if (values[i] is JsonObject o && o["field"] is JsonValue fv && fv.TryGetValue<string>(out var name)) slots.Add(new(name, $"{path}.values[{i}].field", Well.Measure));
+                    {
+                        // an attribute in the cell area (DBR51) is asked for at the cells' grain, after the axes
+                        if (values[i] is JsonObject { } entry && entry["attribute"] is JsonValue av && av.TryGetValue<string>(out var attribute) && attribute.Length > 0) slots.Add(new(attribute, $"{path}.values[{i}].attribute", Well.Attribute));
+                        else if (values[i] is JsonObject) Entry(values[i], $"{path}.values[{i}]", Well.Measure);
+                    }
                 break;
             case "table":
                 if (encodings["columns"] is JsonArray columns)
                     for (var i = 0; i < columns.Count; i++)
-                        if (columns[i] is JsonObject o && o["field"] is JsonValue fv && fv.TryGetValue<string>(out var name)) slots.Add(new(name, $"{path}.columns[{i}].field", Well.Either));
+                        if (columns[i] is JsonObject) Entry(columns[i], $"{path}.columns[{i}]", Well.Either);
                 break;
         }
         return slots;
     }
 
     // ---- a nested axis's order (DBR42) ----
+
+    /// <summary>The fields of a matrix axis in order, a group expanded to its levels (plan 32 DBR52); an entry is a field name, <c>{field, format, sort}</c> or <c>{group, show}</c>.</summary>
+    internal static List<string> AxisFields(JsonObject encodings, string axis, IReadOnlyDictionary<string, ViewGroup>? groups)
+    {
+        var result = new List<string>();
+        if (encodings[axis] is not JsonArray list) return result;
+        foreach (var n in list)
+        {
+            if (n is JsonObject o && o["group"] is JsonValue gv && gv.TryGetValue<string>(out var name)) { if (o["show"] is JsonValue sv && sv.TryGetValue<string>(out var shown) && shown == "drill") continue; if (groups is not null && groups.TryGetValue(name, out var g)) result.AddRange(g.Levels.Select(l => l.Field)); }
+            else result.Add(n is JsonObject f ? f["field"]?.GetValue<string>() ?? "" : n?.GetValue<string>() ?? "");
+        }
+        return [.. result.Distinct()];
+    }
+
+    /// <summary>The <c>order</c> of the group levels a widget's slots hold, each level ascending (descending when asked), so a combined member is ordered by its levels in turn.</summary>
+    private static JsonArray? GroupOrder(IEnumerable<Slot> slots, bool descending, Dictionary<string, string> origins)
+    {
+        var order = new JsonArray();
+        foreach (var slot in slots)
+        {
+            if (order.Any(o => o![0]!.GetValue<string>() == slot.Field)) continue;
+            origins[$"query.order[{order.Count}]"] = slot.Path;
+            order.Add(new JsonArray(slot.Field, descending ? "desc" : "asc"));
+        }
+        return order.Count > 0 ? order : null;
+    }
 
     /// <summary>The widest a nested <c>x</c> may be before the shaper cuts the members and says so: 200 member combinations.</summary>
     public const int LeafLimit = 200;
@@ -304,21 +416,32 @@ public static class DeriveRequest
 
     // ---- a matrix's totals ----
 
-    private static JsonObject? MatrixTotals(JsonObject encodings, CatalogRoles roles, string wp, JsonObject query, List<ConfigDiagnostic> diagnostics, Func<string, string, string, string?, ConfigDiagnostic> diag)
+    /// <summary>
+    /// The attributes of a matrix's cell area (DBR51): the <c>attribute</c> entries of <c>values</c> that are not already on an axis (an axis attribute is the same in every row of its cell). They are asked for at the cells' grain, and
+    /// rolled up <b>last</b> in the request's totals, so the answer holds the cell's own row (the attribute rolled up: every measure as the engine adds it) beside the rows that say which values the cell has.
+    /// </summary>
+    internal static List<string> CellAttributes(JsonObject encodings)
     {
-        // an axis entry is a field name or `{field, format, sort}` (DBR41)
         static string EntryField(JsonNode? n) => n is JsonObject o ? o["field"]?.GetValue<string>() ?? "" : n?.GetValue<string>() ?? "";
-        List<string> Axis(string name) => encodings[name] is JsonArray a ? a.Select(EntryField).Distinct().ToList() : [];
+        var onAxes = new HashSet<string>(new[] { "rows", "columns" }.SelectMany(a => encodings[a] is JsonArray l ? l.Select(EntryField) : []));
+        return encodings["values"] is JsonArray values
+            ? [.. values.OfType<JsonObject>().Select(o => o["attribute"] is JsonValue v && v.TryGetValue<string>(out var a) ? a : null).OfType<string>().Where(a => a.Length > 0 && !onAxes.Contains(a)).Distinct()]
+            : [];
+    }
+
+    private static JsonObject? MatrixTotals(JsonObject encodings, IReadOnlyDictionary<string, ViewGroup>? groups, Func<string, bool> isMeasure, List<string> cellAttributes, string wp, JsonObject query, List<ConfigDiagnostic> diagnostics, Func<string, string, string, string?, ConfigDiagnostic> diag)
+    {
+        List<string> Axis(string name) => AxisFields(encodings, name, groups);
         JsonNode? AxisSort(string axis) => encodings["sort"]?[axis] ?? (encodings[axis] is JsonArray a ? a.OfType<JsonObject>().Select(o => o["sort"]).FirstOrDefault(x => x is not null) : null);
         var rows = Axis("rows");
         var columns = Axis("columns");
         var wantRow = encodings["totals"]?["rows"]?.GetValue<bool>() ?? false;      // a total row: the row fields rolled up, the column fields kept
         var wantColumn = encodings["totals"]?["columns"]?.GetValue<bool>() ?? false;
         // sorting an axis by a measure reads each member's value in the axis total (the view's `sort_needs_totals`), so the request asks for that total too
-        bool ByMeasure(string axis) => AxisSort(axis)?["by"] is JsonValue v && v.TryGetValue<string>(out var by) && roles.Of(by) == CatalogRole.Measure;
+        bool ByMeasure(string axis) => AxisSort(axis)?["by"] is JsonValue v && v.TryGetValue<string>(out var by) && isMeasure(by);
         var needRow = wantRow || (ByMeasure("columns") && rows.Count > 0);
         var needColumn = wantColumn || (ByMeasure("rows") && columns.Count > 0);
-        if (!needRow && !needColumn) return null;
+        if (!needRow && !needColumn && cellAttributes.Count == 0) return null;
 
         if (query["totals"] is not null)
         { diagnostics.Add(diag(ViewsCodes.TotalsConflict, $"{wp}.query.totals", "A matrix's totals are made from its encodings (`totals`, and a sort by a measure); the query asks for them too.", "Remove `totals` from the query.")); return null; }
@@ -327,12 +450,12 @@ public static class DeriveRequest
         if (wantColumn && columns.Count == 0)
         { diagnostics.Add(diag(ViewsCodes.TotalsConflict, $"{wp}.encodings.totals.columns", "A total column needs at least one column field to roll up.", null)); return null; }
 
-        string[] all = [.. rows, .. columns];
+        string[] all = [.. rows, .. columns, .. cellAttributes];
         if (needRow && needColumn)
             return new JsonObject { ["subtotal_by"] = Array(all), ["grand_total"] = true, ["cube"] = true };
-        // a roll-up takes the innermost attribute first: the axis to roll up goes last
-        return needRow
-            ? new JsonObject { ["subtotal_by"] = Array([.. columns, .. rows]) }
+        // a roll-up takes the innermost attribute first: the axis to roll up goes last, and the attributes of the cell area after it
+        return needRow || !needColumn
+            ? new JsonObject { ["subtotal_by"] = Array([.. columns, .. rows, .. cellAttributes]) }
             : new JsonObject { ["subtotal_by"] = Array(all) };
     }
 

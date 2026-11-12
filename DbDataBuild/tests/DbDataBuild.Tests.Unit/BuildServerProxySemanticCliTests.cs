@@ -29,7 +29,7 @@ public sealed partial class BuildServerProxyTests
         var data = JsonNode.Parse(result.Out)!["data"]!;
         Assert.Equal(("edge", "retail_sales", 1), ((string)data["gateway"]!, (string)data["model"]!, (int)data["version"]!));
         Assert.Equal(["sqlserver"], data["data_sources"]!.AsArray().Select(d => (string)d!));
-        var put = seen.Single(r => r.Method == "PUT" && r.Path == "/api/v1/semantic-models/retail_sales");
+        var put = seen.Single(r => r.Method == "PUT" && r.Path == "/api/v1/definitions/semantic-model/retail_sales");
         Assert.Equal("cli:" + Environment.UserName, put.Token.SubjectId);
         Assert.True(put.Token.Roles.HasFlag(DbDataKit.Web.Trust.ServerRole.Publisher));
         Assert.DoesNotContain(seen, r => r.Body.Contains("WRITE-pw-77f"));         // the write login never leaves, as in the Publish tab

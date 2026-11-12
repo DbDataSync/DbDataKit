@@ -241,7 +241,7 @@ export function DashboardEditor({ kind, name, host }: { kind: ViewKind; name: st
               preview={(widget) => client.preview({ widget, widgetId: selected, kind, draft: doc, document: draft.name || undefined }) as Promise<RenderedWidget>} />
           )}
 
-          <DocumentSettings doc={doc} diagnostics={draft.validation.diagnostics} apply={apply} />
+          <DocumentSettings doc={doc} diagnostics={draft.validation.diagnostics} apply={apply} catalog={catalog?.catalog ?? null} />
 
           <div className="card" data-testid="ed-layouts">
             <strong>Layouts</strong>

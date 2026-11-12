@@ -80,6 +80,12 @@ public sealed class ResolverOptions
     /// </summary>
     public IReadOnlyCollection<string> FrameOrigins { get; init; } = [];
 
+    /// <summary>
+    /// The custom views of the app the host serves (plan 32 DBR31): a custom widget's <c>component</c> (<c>&lt;app&gt;/&lt;Export&gt;</c>) to the manifest's entry that declares its queries. Null, or a component it does not know: a custom widget is an error entry
+    /// (this host has no app to draw it).
+    /// </summary>
+    public Func<string, DbDataKit.Apps.CustomView?>? CustomViews { get; init; }
+
     /// <summary>The bytes of an image by hash (<c>sha256:...</c>), from the published definition's artifacts; null when it has none.</summary>
     public Func<string, byte[]?>? ImageBytes { get; init; }
 

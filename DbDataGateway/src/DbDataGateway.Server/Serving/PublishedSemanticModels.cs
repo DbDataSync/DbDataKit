@@ -28,8 +28,18 @@ public sealed partial class PublishedSemanticModels(DefinitionStore store, Seman
     private readonly ConcurrentDictionary<string, int> _served = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, (int Version, string Reason)> _failed = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>A version's content in the store: the catalog and what serves it.</summary>
-    private sealed record Content(string Catalog, string? ManagedBy, Dictionary<string, string> Sources, Dictionary<string, string> Ssas);
+    /// <summary>A version's content in the store: the catalog and what serves it. It is also the manifest of the shared publish API (<c>camelCase</c>: <c>catalog</c>, <c>managedBy</c>, <c>sources</c>, <c>ssas</c>), so a client that publishes through <c>PUT /api/v1/definitions/semantic-model/{name}</c> sends exactly this.</summary>
+    public sealed record Content(string Catalog, string? ManagedBy, Dictionary<string, string> Sources, Dictionary<string, string> Ssas);
+
+    /// <summary>The content a manifest of the shared API carries, or null when it is not one.</summary>
+    public static Content? ContentOf(string manifest)
+    {
+        try { return JsonSerializer.Deserialize<Content>(manifest, Json); }
+        catch (JsonException) { return null; }
+    }
+
+    /// <summary>The owner a model's current version names in its content (<c>managed_by</c>), null for a model made by an administrator or none.</summary>
+    public string? OwnerOf(string name) => Current(name) is { } number ? Version(name, number)?.ManagedBy : null;
 
     public string Kind => DefinitionKind;
 

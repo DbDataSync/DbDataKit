@@ -321,6 +321,95 @@ class BindTests(DistTestCase):
         self.assertIn("not bound", r.stderr)
 
 
+RECORDER = b"#!/bin/sh\necho \"$@\" > \"$EXPORT_LOG\"\nexit \"${EXPORT_EXIT:-0}\"\n"
+
+
+class ExportComponentOptionTests(unittest.TestCase):
+    """The installer option that adds the PDF export component (plan 32 DBR16, owner decision 2026-11-12): the installers call the product's own `export install` for the release they installed;
+    nothing downloads or verifies the component in a script of ours. A fake program records what it was asked."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = pathlib.Path(tempfile.mkdtemp(prefix="dist-export-"))
+        cls.gh = FakeGitHub()
+        cls.gh.add_release("widget", "2026.2.2.0200", exe_payload=RECORDER)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.gh.close()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def bound(self, **extra):
+        out = pathlib.Path(tempfile.mkdtemp(prefix="bound-", dir=self.tmp))
+        bind(out, meta=dict(META, **extra))
+        return out
+
+    def install(self, out, *args, exit_code="0"):
+        home = pathlib.Path(tempfile.mkdtemp(prefix="home-", dir=self.tmp))
+        log = home / "export-args"
+        env = {**os.environ, "HOME": str(home), "XDG_DATA_HOME": str(home / "data"), "EXPORT_LOG": str(log), "EXPORT_EXIT": exit_code}
+        r = subprocess.run(["bash", str(out / "install.sh"), "--api-base", self.gh.base, *args], capture_output=True, text=True, env=env)
+        return home, log, r
+
+    def test_the_flag_is_bound_into_both_installers(self):
+        on, off = self.bound(exportComponent=True), self.bound()
+        self.assertIn("EXPORT_COMPONENT=1", (on / "install.sh").read_text())
+        self.assertIn("ExportComponent = $true", (on / "install.ps1").read_text())
+        self.assertIn("EXPORT_COMPONENT=0", (off / "install.sh").read_text())
+        self.assertIn("ExportComponent = $false", (off / "install.ps1").read_text())
+
+    def test_the_powershell_installer_has_the_option_and_calls_the_product(self):
+        text = (DIST / "install.ps1").read_text()
+        self.assertIn("[switch]$WithPdfExport", text)
+        self.assertIn("[string]$ExportSource", text)
+        self.assertIn("@('export', 'install', '--version', $releaseVersion)", text)
+        self.assertIn("'--source', $ExportSource", text)
+
+    @unittest.skipIf(os.name == "nt", "install.sh is for Linux and macOS")
+    def test_with_pdf_export_runs_the_products_own_install_for_this_release_and_without_it_nothing_runs(self):
+        out = self.bound(exportComponent=True)
+        home, log, r = self.install(out, "--with-pdf-export")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(log.read_text().strip(), "export install --version 2026.2.2.0200")
+        self.assertIn("Adding PDF export", r.stdout)
+        home, log, r = self.install(out)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse(log.exists())
+
+    @unittest.skipIf(os.name == "nt", "install.sh is for Linux and macOS")
+    def test_an_export_source_is_passed_on_and_is_refused_without_the_option(self):
+        out = self.bound(exportComponent=True)
+        home, log, r = self.install(out, "--with-pdf-export", "--export-source", "/srv/releases/files")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(log.read_text().strip(), "export install --version 2026.2.2.0200 --source /srv/releases/files")
+        home, log, r = self.install(out, "--export-source", "/srv/releases/files")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("--export-source goes with --with-pdf-export", r.stderr)
+        self.assertFalse((home / "data" / "widget").exists())      # refused before anything was installed
+
+    @unittest.skipIf(os.name == "nt", "install.sh is for Linux and macOS")
+    def test_a_failed_export_install_fails_the_script_in_words_after_the_product_is_installed(self):
+        home, log, r = self.install(self.bound(exportComponent=True), "--with-pdf-export", exit_code="3")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("is installed, but its PDF export was not", r.stderr)
+        self.assertIn("export install --version 2026.2.2.0200", r.stderr)
+        self.assertTrue((home / "data" / "widget" / "widget").exists())
+
+    @unittest.skipIf(os.name == "nt", "install.sh is for Linux and macOS")
+    def test_a_product_without_the_component_ignores_the_option_and_says_so(self):
+        home, log, r = self.install(self.bound(), "--with-pdf-export")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("has no PDF export component", r.stderr)
+        self.assertFalse(log.exists())
+
+    @unittest.skipIf(os.name == "nt", "install.sh is for Linux and macOS")
+    def test_a_dry_run_says_what_would_follow(self):
+        home, log, r = self.install(self.bound(exportComponent=True), "--dry-run", "--with-pdf-export", "--export-source", "/srv/f")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("widget export install --version 2026.2.2.0200 --source /srv/f", r.stdout)
+        self.assertFalse(log.exists())
+
+
 @unittest.skipIf(os.name == "nt", "install.sh is for Linux and macOS")
 class BashInstallerTests(DistTestCase):
     def run_sh(self, home, *args):

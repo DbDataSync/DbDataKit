@@ -68,7 +68,7 @@ public class SchemaTests
         parts.Remove("layout.reflow"); parts.Remove("layout.canvas"); parts.Remove("layout.flow");
         foreach (var (part, keys) in parts) Assert.True(ViewsLoader.Keys[part].Order().SequenceEqual(keys), $"{part}: loader {string.Join(",", ViewsLoader.Keys[part].Order())} / schema {string.Join(",", keys)}");
         var known = parts.Keys.Concat(["range", "layout.common", "layout.reflow", "layout.canvas", "layout.flow"]).Order().ToArray();
-        Assert.Equal(ViewsLoader.Keys.Keys.Where(k => !k.StartsWith("widget.") && !k.StartsWith("encodings.") && !k.StartsWith("query.") && k is not ("parameter" or "table_column" or "channel" or "matrix_axis_entry" or "x_level" or "mark" or "semantic" or "store" or "on_select" or "drill" or "drill.to" or "control.values")).Order(), known);
+        Assert.Equal(ViewsLoader.Keys.Keys.Where(k => !k.StartsWith("widget.") && !k.StartsWith("encodings.") && !k.StartsWith("query.") && k is not ("parameter" or "table_column" or "measure_field" or "matrix_value" or "group" or "group_level" or "channel" or "matrix_axis_entry" or "x_level" or "mark" or "semantic" or "store" or "on_select" or "drill" or "drill.to" or "control.values")).Order(), known);
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public class SchemaTests
             Assert.Equal(ViewsFormat.Current, At(Load(kind), "properties/schemaVersion")["const"]!.GetValue<int>());
         }
         // what the kinds share is the same definition in both: the title, the parameters, the theme, the widgets and the layouts
-        foreach (var shared in new[] { "title", "parameters", "theme", "locale", "links", "widgets", "layouts" })
+        foreach (var shared in new[] { "title", "parameters", "theme", "locale", "links", "groups", "widgets", "layouts" })
             Assert.Equal(At(Load("dashboard"), $"properties/{shared}/$ref")!.GetValue<string>(), At(Load("report"), $"properties/{shared}/$ref")!.GetValue<string>());
         Assert.Equal(ViewsFormat.Current, ViewsFormat.Previous);
     }

@@ -19,9 +19,10 @@ public static partial class ViewsLoader
 
     private sealed partial class Reader
     {
-        public List<ViewWidget>? ReadWidgetsRoot(YamlNode root, IEnumerable<string> parameters)
+        public List<ViewWidget>? ReadWidgetsRoot(YamlNode root, IEnumerable<string> parameters, IReadOnlyDictionary<string, ViewGroup>? given = null)
         {
             foreach (var p in parameters) declared.Add(p);
+            groups = given;
             return ReadWidgets(root);
         }
 
@@ -38,6 +39,9 @@ public static partial class ViewsLoader
             }
             return list;
         }
+
+        /// <summary>The <c>params</c> of the widget being read, which the markers in the filters of its encoded measures are mapped through.</summary>
+        private YamlMapping? widgetParams;
 
         private ViewWidget? ReadWidget(string id, YamlNode node)
         {
@@ -59,6 +63,7 @@ public static partial class ViewsLoader
             });
 
             var fields = new List<EncodedField>();
+            widgetParams = (map.Get("query") as YamlMapping)?.Get("params") as YamlMapping;
             WidgetQuery? query = null;
             HashSet<string>? outputs = null;
             switch (type)
@@ -69,7 +74,7 @@ public static partial class ViewsLoader
                     MetricEncodings(map, path, fields);
                     break;
                 case "chart": ChartEncodings(map, path, fields); break;
-                case "matrix": MatrixEncodings(map, path, fields); break;
+                case "matrix": MatrixEncodings(map, path, fields); if (map.Get("expanded") is { } ex) Expanded(ex, map, J(path, "expanded")); break;
                 case "table": TableEncodings(map, path, fields); break;
                 case "text": TextBody(map, path); break;
                 case "image": ImageBody(map, path); break;
@@ -86,12 +91,35 @@ public static partial class ViewsLoader
                 if (type != "metric") ReadOnClick(map, path);
             }
             if (query is { Explicit: true } && outputs is not null)
-                foreach (var f in fields.Where(f => !outputs.Contains(f.Field)))
+                foreach (var f in fields.Where(f => !outputs.Contains(f.Output)))
                     Diagnostics.Add(DefaultDiagnosticCatalog.Instance.Create(ViewsCodes.FieldNotInQuery, File, f.Line, f.Column,
-                        $"`{f.Field}` is encoded as {f.Channel} but is not an output of the query (it gives {string.Join(", ", outputs.Order())}).",
+                        $"`{f.Output}` is encoded as {f.Channel} but is not an output of the query (it gives {string.Join(", ", outputs.Order())}).",
                         "Name an output of the query, or add the field to it.", f.Path));
-            return new ViewWidget(id, type, title, fields, query, ToObject(map), map.Line, map.Column);
+            // a written query says its own measures: the filters of an encoded measure are how a derived request is told, so there they have no meaning
+            if (query is { Explicit: true })
+                foreach (var f in fields.Where(f => f.Filtered))
+                    Diagnostics.Add(DefaultDiagnosticCatalog.Instance.Create(ViewsCodes.BadQuery, File, f.Line, f.Column,
+                        $"`{f.Field}` carries `filters`, but the query is written out (`mode: explicit`) and says its own measures.",
+                        "Put the filters in the query's own measure, or drop `mode: explicit` and let the encodings derive the query.", f.Path));
+            // an attribute in a matrix's cells needs the request asked at the cells' grain, which only a derived query does
+            if (query is { Explicit: true } && type == "matrix")
+                foreach (var f in fields.Where(f => f.Channel == "values" && f.Path.EndsWith(".attribute", StringComparison.Ordinal)))
+                    Diagnostics.Add(DefaultDiagnosticCatalog.Instance.Create(ViewsCodes.BadQuery, File, f.Line, f.Column,
+                        $"`{f.Field}` is an attribute among the values of a matrix, which asks for the request at the cells' grain, but the query is written out (`mode: explicit`).",
+                        "Drop `mode: explicit` and let the encodings derive the query.", f.Path));
+            // a group needs the request asked for its levels, which only a derived query does
+            if (query is { Explicit: true } && UsesGroup(map))
+                Diagnostics.Add(DefaultDiagnosticCatalog.Instance.Create(ViewsCodes.BadQuery, File, map.Line, map.Column,
+                    "A field group asks for its levels as attributes, but the query is written out (`mode: explicit`).", "Drop `mode: explicit` and let the encodings derive the query.", J(path, "encodings")));
+            return new ViewWidget(id, type, title, fields, query, ToObject(map), map.Line, map.Column, groups);
         }
+
+        private static bool UsesGroup(YamlNode node) => node switch
+        {
+            YamlMapping m => m.Entries.Any(e => (e.Key.Value == "group" && e.Value is YamlScalar) || (e.Key.Value != "query" && UsesGroup(e.Value))),
+            YamlSequence q => q.Items.Any(UsesGroup),
+            _ => false,
+        };
 
         private void Computing(YamlNode at, string path) =>
             Bad(ViewsCodes.ChartNotInSubset, at, path, $"`{at switch { YamlScalar s => s.Value, _ => "this" }}` isn't allowed in a chart: it fetches data or computes a value, and a chart only says what is drawn. Computation belongs in the widget's query.",
@@ -116,9 +144,84 @@ public static partial class ViewsLoader
         {
             if (Encodings(widget, path, "metric") is not { } enc) return;
             var ep = J(path, "encodings");
-            if (Required(enc, "value", ep) is { } v && Field(v, J(ep, "value"), "`value`") is { } vf) fields.Add(new("value", vf, J(ep, "value"), v.Line, v.Column));
-            if (enc.Get("compare") is { } c && Field(c, J(ep, "compare"), "`compare`") is { } cf) fields.Add(new("compare", cf, J(ep, "compare"), c.Line, c.Column));
+            if (Required(enc, "value", ep) is { } v) MeasureField("value", v, J(ep, "value"), "`value`", fields);
+            if (enc.Get("compare") is { } c) MeasureField("compare", c, J(ep, "compare"), "`compare`", fields);
         }
+
+        /// <summary>
+        /// A measure well's entry (a metric's <c>value</c> and <c>compare</c>): a field name, or the object form <c>{field, alias, label, filters, format}</c> (plan 32 section 9h, DBR50): the same measure put in a
+        /// visual again under another <c>alias</c>, narrowed by its own <c>filters</c>.
+        /// </summary>
+        private void MeasureField(string channel, YamlNode node, string path, string what, List<EncodedField> fields)
+        {
+            if (node is not YamlMapping m)
+            {
+                if (Field(node, path, what) is { } f) fields.Add(new(channel, f, path, node.Line, node.Column));
+                return;
+            }
+            CheckKeysAt(m, Keys["measure_field"], $"the object form of {what}", path);
+            if (Required(m, "field", path) is not { } fn || Field(fn, J(path, "field"), "`field`") is not { } field) return;
+            fields.Add(MeasureOptions(m, path, new EncodedField(channel, field, J(path, "field"), fn.Line, fn.Column)));
+        }
+
+        /// <summary>The keys that make an entry a filtered or repeated measure: <c>alias</c>, <c>label</c> (when the object form has one), <c>filters</c>. Returns the field with what it says.</summary>
+        private EncodedField MeasureOptions(YamlMapping m, string path, EncodedField field)
+        {
+            string? alias = null;
+            if (m.Get("alias") is { } an)
+            {
+                if (an is YamlScalar { Value: var av } && AliasRule.IsMatch(av)) alias = av;
+                else Bad(ViewsCodes.InvalidValue, an, J(path, "alias"), "`alias` is a new snake_case name for the output: lower-case letters, digits and '_', starting with a letter (at most 64).");
+            }
+            var filtered = false;
+            if (m.Get("filters") is { } fn)
+            {
+                if (Seq(fn, J(path, "filters"), "`filters`", m, 1, MaximumMeasureFilters) is { } list)
+                {
+                    for (var i = 0; i < list.Items.Count; i++)
+                        if (list.Items[i] is not YamlMapping) Bad(ViewsCodes.InvalidValue, list.Items[i], I(J(path, "filters"), i), "A filter is a mapping: `{attribute, operator, values}` (or `and` / `or` of filters).");
+                    CheckMarkers(list, J(path, "filters"), widgetParams);
+                    filtered = true;
+                }
+            }
+            if (m.Get("label") is { } lb && lb is not YamlScalar) Bad(ViewsCodes.InvalidValue, lb, J(path, "label"), "`label` is text.");
+            if (m.Get("format") is { } fmt) FormatValue(fmt, J(path, "format"));
+            return field with { Alias = alias, Filtered = filtered };
+        }
+
+        /// <summary>
+        /// How an attribute shows in a cell (plan 32 section 9h, DBR51): <c>display</c> (text, icon or badge), <c>icons</c> (a value-to-icon map of the closed vocabulary, the one an icon display draws by), <c>many</c> (what a matrix cell
+        /// with several rows shows; a matrix entry only) and <c>link</c> (a named link of the document the cell follows). An icon display needs its map and a map needs the icon display.
+        /// </summary>
+        private void AttributeOptions(YamlMapping m, string path, bool matrix)
+        {
+            string? display = null;
+            if (m.Get("display") is { } dn) display = Choice(dn, J(path, "display"), "`display`", Choices["display"]);
+            if (m.Get("icons") is { } ic && Map(ic, J(path, "icons"), "`icons`", m) is { } icons)
+            {
+                if (icons.Entries.Count is 0 or > MaximumIcons) Bad(ViewsCodes.InvalidValue, icons, J(path, "icons"), $"`icons` maps 1 to {MaximumIcons} values to icons.");
+                foreach (var e in icons.Entries)
+                {
+                    if (e.Value is not YamlScalar { Value: var icon } || !Choices["icon"].Contains(icon)) Bad(ViewsCodes.InvalidValue, e.Value, J(J(path, "icons"), e.Key.Value), $"An icon is one of: {string.Join(", ", Choices["icon"])}.");
+                }
+                if (display is not null && display != "icon") Bad(ViewsCodes.InvalidValue, ic, J(path, "icons"), "`icons` belong to `display: icon`.", "Say `display: icon`, or drop `icons`.");
+            }
+            else if (display == "icon" && m.Get("icons") is null) Bad(ViewsCodes.InvalidValue, m.Get("display")!, J(path, "display"), "`display: icon` needs `icons`: the icon each value shows.");
+            if (m.Get("many") is { } mn)
+            {
+                if (!matrix) Bad(ViewsCodes.InvalidValue, mn, J(path, "many"), "`many` is for an attribute entry of a matrix: a table row has one value.");
+                else Choice(mn, J(path, "many"), "`many`", Choices["many"]);
+            }
+            if (m.Get("link") is { } ln && Name(ln, J(path, "link"), "`link`") is { } link) linkRefs.Add((link, ln, J(path, "link")));
+        }
+
+        /// <summary>The most values one icon map lists.</summary>
+        public const int MaximumIcons = 100;
+
+        /// <summary>A filtered measure's own filters, at most (the engine's grammar is checked by the catalog check).</summary>
+        public const int MaximumMeasureFilters = 50;
+
+        private static readonly Regex AliasRule = new("^[a-z][a-z0-9_]{0,63}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         private void ChartEncodings(YamlMapping widget, string path, List<EncodedField> fields)
         {
@@ -143,7 +246,42 @@ public static partial class ViewsLoader
                     for (var i = 0; i < list.Items.Count; i++) Channel(e.Key.Value, list.Items[i], I(cp, i), fields);
                 }
                 else if (e.Key.Value == "x" && e.Value is YamlSequence levels) NestedAxis(levels, cp, markType, enc, J(ep, "column"), fields);
+                // several measures on `y` (DBR50): one series each, told apart by their aliases when one measure is there twice
+                else if (e.Key.Value == "y" && e.Value is YamlSequence series)
+                {
+                    if (series.Items.Count is 0 or > MaximumSeries) Bad(ViewsCodes.InvalidValue, series, cp, $"A `y` list names 1 to {MaximumSeries} measures.");
+                    else for (var i = 0; i < series.Items.Count; i++) Channel("y", series.Items[i], I(cp, i), fields);
+                    if (series.Items.Count > 1 && enc.Get("color") is { } color)
+                        Bad(ViewsCodes.InvalidValue, color, J(ep, "color"), "A chart with several measures on `y` has no `color`: the series are the colors.", "Move the field into `column` or `row`, or keep one measure on `y`.");
+                }
                 else Channel(e.Key.Value, e.Value, cp, fields);
+            }
+        }
+
+        /// <summary>The most measures a chart's <c>y</c> list names (plan 32 DBR50).</summary>
+        public const int MaximumSeries = 8;
+
+        /// <summary>The most rows a matrix's <c>expanded</c> list names.</summary>
+        public const int MaximumExpanded = 50;
+
+        /// <summary>
+        /// A matrix's <c>expanded</c> (plan 32 DBR55): the rows the document shows expanded, each the member values of the row's own fields, outermost first (what a click on the row's toggle would expand). It needs an entry of
+        /// <c>rows</c> that says <c>show: drill</c>, and each entry names as many values as the rows have fields besides the group.
+        /// </summary>
+        private void Expanded(YamlNode node, YamlMapping widget, string path)
+        {
+            if (Seq(node, path, "`expanded`", widget, 1, MaximumExpanded) is not { } list) return;
+            var enc = widget.Get("encodings") as YamlMapping;
+            var rows = enc?.Get("rows") as YamlSequence;
+            var drills = rows?.Items.Count(i => i is YamlMapping m && m.Get("group") is not null && m.Get("show") is YamlScalar { Value: "drill" }) ?? 0;
+            if (drills == 0) { Bad(ViewsCodes.InvalidValue, node, path, "`expanded` names rows of a matrix whose `rows` have an entry with `show: drill`.", "Add `{group: name, show: drill}` to the rows, or drop `expanded`."); return; }
+            var own = rows!.Items.Count(i => !(i is YamlMapping m && m.Get("group") is not null));
+            for (var i = 0; i < list.Items.Count; i++)
+            {
+                var ip = I(path, i);
+                if (list.Items[i] is not YamlSequence key) { Bad(ViewsCodes.InvalidValue, list.Items[i], ip, "An expanded row is the list of its member values: `[West]`, `[2026, West]`."); continue; }
+                if (key.Items.Count != own) Bad(ViewsCodes.InvalidValue, key, ip, $"An expanded row names a value for each of the rows' fields ({own}); this one names {key.Items.Count}.");
+                else if (key.Items.Any(v => v is not YamlScalar)) Bad(ViewsCodes.InvalidValue, key, ip, "A member value is a plain value.");
             }
         }
 
@@ -184,7 +322,19 @@ public static partial class ViewsLoader
             if (node is YamlScalar { Value.Length: > 0 } shorthand) { fields.Add(new(channel, shorthand.Value, path, node.Line, node.Column)); return; }
             if (node is not YamlMapping m) { Bad(ViewsCodes.InvalidValue, node, path, "A channel is a field name, or a mapping with `field`, `type`, `sort`, `stack` and `title`."); return; }
             CheckKeysAt(m, Keys["channel"], "a channel", path, e => { if (!ComputingKeys.Contains(e.Key.Value)) return false; Computing(e.Key, J(path, e.Key.Value)); return true; });
-            if (m.Get("field") is { } f && Field(f, J(path, "field"), "A channel's `field`") is { } fv) fields.Add(new(channel, fv, J(path, "field"), f.Line, f.Column));
+            if (m.Get("group") is not null)
+            {
+                GroupChannel(channel, m, path);
+                if (m.Get("sort") is { } gs && !(gs is YamlScalar { Value: "ascending" or "descending" or "sort_key" })) Bad(ViewsCodes.InvalidValue, gs, J(path, "sort"), "A group's `sort` is ascending, descending or sort_key: the levels give the order.");
+                if (m.Get("title") is { } gt && gt is not YamlScalar) Bad(ViewsCodes.InvalidValue, gt, J(path, "title"), "A channel's `title` is text.");
+                return;
+            }
+            if (m.Get("field") is { } f && Field(f, J(path, "field"), "A channel's `field`") is { } fv)
+            {
+                var entry = new EncodedField(channel, fv, J(path, "field"), f.Line, f.Column);
+                fields.Add(MeasureOptions(m, path, entry));
+            }
+            else MeasureOptions(m, path, new EncodedField(channel, "", path, m.Line, m.Column));
             if (m.Get("type") is { } t) Choice(t, J(path, "type"), "A channel's `type`", Choices["fieldType"], ViewsCodes.ChartNotInSubset);
             if (m.Get("sort") is { } s)
             {
@@ -195,7 +345,6 @@ public static partial class ViewsLoader
             if (m.Get("stack") is { } st && !(st is YamlScalar { Value: var v } && (v is "null" or "~" or "" or "true" or "false" or "zero" or "center" or "normalize")))
                 Bad(ViewsCodes.InvalidValue, st, J(path, "stack"), "A channel's `stack` is null, true, false, zero, center or normalize.");
             if (m.Get("title") is { } ti && ti is not YamlScalar) Bad(ViewsCodes.InvalidValue, ti, J(path, "title"), "A channel's `title` is text.");
-            if (m.Get("format") is { } fm) FormatValue(fm, J(path, "format"));
         }
 
         private void MatrixEncodings(YamlMapping widget, string path, List<EncodedField> fields)
@@ -209,10 +358,22 @@ public static partial class ViewsLoader
                 for (var i = 0; i < list.Items.Count; i++)
                 {
                     var ip = I(J(ep, axis), i);
-                    if (list.Items[i] is YamlMapping entry)
+                    if (list.Items[i] is YamlMapping { } groupEntry && groupEntry.Get("group") is not null)
+                    {
+                        // a field group on an axis (DBR52): the same combined field, or `{group, show: always}` the details of each row
+                        CheckKeysAt(groupEntry, ["group", "show"], $"a group entry of the {axis}", ip);
+                        if (Name(groupEntry.Get("group"), J(ip, "group"), "`group`") is { } gname) GroupKnown(gname, groupEntry.Get("group")!, J(ip, "group"));
+                        if (groupEntry.Get("show") is { } show)
+                        {
+                            Choice(show, J(ip, "show"), "`show`", Choices["show"]);
+                            if (axis != "rows") Bad(ViewsCodes.InvalidValue, show, J(ip, "show"), "A group's details go with the rows: `show` is for an entry of `rows`.");
+                        }
+                    }
+                    else if (list.Items[i] is YamlMapping entry)
                     {
                         // an axis attribute with a format and a sort (DBR41): `{field, format, sort}`
                         CheckKeysAt(entry, Keys["matrix_axis_entry"], $"an entry of the {axis}", ip);
+                        if (entry.Get("show") is { } stray) Bad(ViewsCodes.InvalidValue, stray, J(ip, "show"), "`show` belongs to a group entry (`group:`).");
                         if (Required(entry, "field", ip) is { } fn && Field(fn, J(ip, "field"), "`field`") is { } ff) fields.Add(new(axis, ff, J(ip, "field"), fn.Line, fn.Column));
                         if (entry.Get("format") is { } fmt) FormatValue(fmt, J(ip, "format"));
                         if (entry.Get("sort") is { } so)
@@ -224,16 +385,42 @@ public static partial class ViewsLoader
                     else if (Field(list.Items[i], ip, "A field") is { } f) fields.Add(new(axis, f, ip, list.Items[i].Line, list.Items[i].Column));
                 }
             }
+            // a row that expands on request (DBR55) is made of the rows' own plain fields: its key is their member values
+            if (enc.Get("rows") is YamlSequence drillRows)
+            {
+                var drill = drillRows.Items.FirstOrDefault(i => i is YamlMapping m && m.Get("group") is not null && m.Get("show") is YamlScalar { Value: "drill" });
+                var drillIndex = drill is null ? -1 : drillRows.Items.Select((x, i) => (x, i)).First(t => ReferenceEquals(t.x, drill)).i;
+                if (drill is not null && drillRows.Items.Any(i => i is YamlMapping other && other.Get("group") is not null && !ReferenceEquals(i, drill)))
+                    Bad(ViewsCodes.InvalidValue, drill, J(I(J(ep, "rows"), drillIndex), "show"), "A row that expands (`show: drill`) is made of the rows' plain fields: the rows have no other group.");
+                if (drill is not null && enc.Get("columns") is YamlSequence cs && cs.Items.Any(i => i is YamlMapping gm && gm.Get("group") is not null))
+                    Bad(ViewsCodes.InvalidValue, drill, J(I(J(ep, "rows"), drillIndex), "show"), "A matrix with a row that expands (`show: drill`) has plain fields on its columns: no group.");
+            }
             if (Required(enc, "values", ep) is { } vn && Seq(vn, J(ep, "values"), "`values`", enc, 1) is { } vals)
                 for (var i = 0; i < vals.Items.Count; i++)
                 {
                     var vp = I(J(ep, "values"), i);
                     if (Map(vals.Items[i], vp, "A value", vals) is not { } vm) continue;
-                    CheckKeysAt(vm, ["field", "empty", "format", "label"], "a matrix value", vp);
-                    if (Required(vm, "field", vp) is { } fn && Field(fn, J(vp, "field"), "`field`") is { } f) fields.Add(new("values", f, J(vp, "field"), fn.Line, fn.Column));
+                    CheckKeysAt(vm, Keys["matrix_value"], "a matrix value", vp);
+                    if (vm.Get("attribute") is { } an)
+                    {
+                        // an attribute in the cell area (DBR51): shown at the cells' grain, by the one-row rule
+                        if (vm.Get("field") is not null) Bad(ViewsCodes.InvalidValue, vm.Get("field")!, J(vp, "field"), "A value is a measure (`field`) or an attribute (`attribute`), not both.");
+                        else if (Field(an, J(vp, "attribute"), "`attribute`") is { } attribute)
+                        {
+                            fields.Add(new("values", attribute, J(vp, "attribute"), an.Line, an.Column));
+                            AttributeOptions(vm, vp, true);
+                            foreach (var bad in new[] { "alias", "filters" })
+                                if (vm.Get(bad) is { } b) Bad(ViewsCodes.InvalidValue, b, J(vp, bad), $"`{bad}` belongs to a measure: an attribute has no aggregate to narrow or name.");
+                            if (enc.Get("values_on") is YamlScalar { Value: "rows" } rowsOn) Bad(ViewsCodes.InvalidValue, rowsOn, J(ep, "values_on"), "A matrix with an attribute among its values lists the values across the columns: `values_on: rows` is not available.");
+                        }
+                    }
+                    else
+                    {
+                        foreach (var bad in new[] { "display", "icons", "many", "link" })
+                            if (vm.Get(bad) is { } b) Bad(ViewsCodes.InvalidValue, b, J(vp, bad), $"`{bad}` belongs to an attribute entry (`attribute:`); this value is a measure.");
+                        if (Required(vm, "field", vp) is { } fn && Field(fn, J(vp, "field"), "`field`") is { } f) fields.Add(MeasureOptions(vm, vp, new EncodedField("values", f, J(vp, "field"), fn.Line, fn.Column)));
+                    }
                     if (vm.Get("empty") is { } em) Choice(em, J(vp, "empty"), "`empty`", ["blank", "zero"]);
-                    if (vm.Get("format") is { } fmt) FormatValue(fmt, J(vp, "format"));
-                    if (vm.Get("label") is { } lb && lb is not YamlScalar) Bad(ViewsCodes.InvalidValue, lb, J(vp, "label"), "`label` is text.");
                 }
             if (enc.Get("values_on") is { } vo) Choice(vo, J(ep, "values_on"), "`values_on`", ["columns", "rows"]);
             if (enc.Get("totals") is { } tn && Map(tn, J(ep, "totals"), "`totals`", enc) is { } tm)
@@ -272,9 +459,8 @@ public static partial class ViewsLoader
                     var cp = I(J(ep, "columns"), i);
                     if (Map(cols.Items[i], cp, "A column", cols) is not { } cm) continue;
                     CheckKeysAt(cm, Keys["table_column"], "a table column", cp);
-                    if (Required(cm, "field", cp) is { } fn && Field(fn, J(cp, "field"), "`field`") is { } f) fields.Add(new("columns", f, J(cp, "field"), fn.Line, fn.Column));
-                    if (cm.Get("label") is { } lb && lb is not YamlScalar) Bad(ViewsCodes.InvalidValue, lb, J(cp, "label"), "`label` is text.");
-                    if (cm.Get("format") is { } fmt) FormatValue(fmt, J(cp, "format"));
+                    if (Required(cm, "field", cp) is { } fn && Field(fn, J(cp, "field"), "`field`") is { } f) fields.Add(MeasureOptions(cm, cp, new EncodedField("columns", f, J(cp, "field"), fn.Line, fn.Column)));
+                    AttributeOptions(cm, cp, false);
                     if (cm.Get("align") is { } al) Choice(al, J(cp, "align"), "`align`", Choices["align"]);
                     if (cm.Get("width") is { } wd) Whole(wd, J(cp, "width"), "`width` (a hint in CSS pixels)", 20, 2000);
                 }

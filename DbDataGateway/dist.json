@@ -15,12 +15,13 @@
   },
   "windowsScope": "machine",
   "announces": true,
+  "exportComponent": true,
   "service": {
     "name": "dbdatagateway",
     "register": "service install --name {name}",
     "unregister": "service uninstall --name {name}"
   },
-  "notes": "Settings live in %ProgramData%\\DbDataKit\\gateway\\config (server.yaml, gateway/, connections/). The state database is a SQLite file in the data directory (the 'service' topology, no setup); for a group or install database see: dbdatagateway state init. Registering the Windows service needs an elevated prompt: dbdatagateway service install. On Linux the data directory is /var/lib/dbdatakit/gateway; print a systemd unit with: dbdatagateway service unit --exec <path to dbdatagateway>",
+  "notes": "Settings live in %ProgramData%\\DbDataKit\\gateway\\config (server.yaml, gateway/, connections/). The state database is a SQLite file in the data directory (the 'service' topology, no setup); for a group or install database see: dbdatagateway state init. Registering the Windows service needs an elevated prompt: dbdatagateway service install. On Linux the data directory is /var/lib/dbdatakit/gateway; print a systemd unit with: dbdatagateway service unit --exec <path to dbdatagateway>. PDF export of dashboards and reports is a separate component (about 420 MB, a release asset): add it with 'dbdatagateway export install' (or the installer option: install.sh --with-pdf-export, install.ps1 -WithPdfExport, msiexec ... ADDPDFEXPORT=1) or the Install button on the console's Server settings screen for this Gateway, then restart the service",
   "msi": {
     "upgradeCode": "B47E1D90-2A6C-4F83-8D15-C3E9A5B07F26"
   }

@@ -22,7 +22,7 @@ shares are part of the **query**, run on the server as the viewer.
 | `text` | `text` | markdown, **no raw HTML, no image, links only to a path on the host** (`/docs/x`); `{{params.name}}` is substituted as text |
 | `image` | `hash: sha256:<64 hex>`, `media_type` (`image/png image/jpeg image/webp`), `alt`, `fit` | held in the definition's artifacts by hash; **no URL, no SVG** |
 | `control` | `parameter`, `control` (`select multiselect date daterange number toggle text`), `label`, `values: {attribute, limit}` | edits one parameter; no query |
-| `custom` | `component` (`<app>/<Export>`), `params` (a declared parameter's value: `$params.name` or a literal; no row field), `links` (the document's links it may open, by name) | code of an app, drawn by the app's own host in its sandboxed frame; what it declares (queries, parameters) is in the app's manifest ([apps.md](apps.md), "Custom views"); a document with one is checked against the manifest by `app validate`; the console's Views page shows a placeholder |
+| `custom` | `component` (`<app>/<Export>`), `params` (a declared parameter's value: `$params.name` or a literal; no row field), `links` (the document's links it may open, by name) | code of an app, drawn by the app's own host in its sandboxed frame; what it declares (queries, parameters) is in the app's manifest ([apps.md](apps.md), "Custom views"); a document with one is checked against the manifest by `app validate`; a host that serves the app draws it in a sandboxed frame ([Custom widgets on screen](#custom-widgets-on-screen)); the console's Views page, which serves no app, shows a placeholder |
 | `embed` | `url` (an absolute https address, no credentials), `with` (query-string pairs: a name to `$params.name` or a literal), `link_text` | an external report server's report (plan 32 DBR19, plan 26 AP17), **dashboards only**: a report refuses it (`DBD-VIEW-038`). See [An embedded report](#an-embedded-report-dbr19) |
 
 ### An embedded report (DBR19)
@@ -134,6 +134,137 @@ encodings:
 * **Limits, stated:** an inner level sorted by a measure has **one** order for the whole axis (the first group's), not one per group; a third level is joined into the group label, not drawn as a third header row; the
   PDF is drawn from the same rendered chart by the same client code, so it carries the group headers (not checked here: the exporter's tests need Chromium and fonts).
 
+### Filtered and repeated measures (DBR50)
+
+A measure may be written as an **object** where a name was: `{field, alias, label, filters, format}`. It is how the **same measure is put in a visual several times** with different filters (two series, two matrix
+value columns, two metrics, two table columns): in a metric's `value` and `compare`, a chart channel (`y`, `color`, `tooltip`...; the channel object's `title` names it, as before), a matrix `values` entry and a table column.
+A chart's `y` may be a **list** (one to eight entries, one series each); the answer is folded into a `series` and a `value` column and drawn as one chart whose color is the series (the series keep the list's order and are named by the entry's `title`, else its alias or field; a `color` beside several measures is refused, `DBD-106`).
+
+```yaml
+encodings:
+  columns:
+    - customers.region
+    - {field: orders.net_revenue, alias: open_revenue, label: Open, filters: [{attribute: orders.status, operator: equals, values: [Open, Pending]}]}
+    - {field: orders.net_revenue, alias: completed_revenue, label: Completed, filters: [{attribute: orders.status, operator: equals, values: [{param: status}]}]}
+    - {field: orders.net_revenue, label: All}
+```
+
+* `DeriveRequest` writes the request's `measures` entry in the engine's own form, `{measure, as, filters}` (the widget's `alias` is the request's `as`); an entry with neither is the plain name. The **output** of an entry is its
+  alias, so a matrix's sort, a table's `sort.by`, `order` and an explicit query's outputs name the **alias** (`DBD-VIEW-005` says `open_revenue` is not an output, not `orders.net_revenue`).
+* The checks are the engine's, in its codes and words, at the document's path: `alias_required` (filters with no alias, at `filters`), `duplicate_measure` (one output name twice with different definitions, at the second entry; the
+  same entry twice is asked once), `wrong_member_kind` (`alias` or `filters` on an attribute), then the catalog check's `filter_member_not_in_source`, `alias_invalid` (an alias that is a catalog member name) and the rest.
+  The loaders refuse an alias that is not a snake_case name (`DBD-106` at `alias`), `filters` that are not a list of mappings (one to fifty), a marker of an undeclared parameter in them (`DBD-VIEW-008`), and `filters` on an
+  entry of a **written** query (`DBD-VIEW-007`: the query says its own measures).
+* A filter value may be `{param: name}`; a filter on a parameter the viewer left unset drops out of that entry, as it does from the query's filters (the request, and so the cache key, differ only for the entries that use it).
+
+### Attributes in the cell area (DBR51)
+
+A matrix's `values` entry may be an **attribute** where a measure was: it changes with the column headers like a measure does, and shows that attribute's value for each cell.
+
+```yaml
+encodings:
+  rows: [customers.region]
+  columns: [orders.ordered_at_month]
+  values:
+    - {field: orders.net_revenue, label: Revenue}
+    - {attribute: orders.status, display: icon, icons: {Open: circle, Completed: check}, many: mixed, link: set-status, label: Status}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `attribute` | the catalog attribute shown (instead of `field`; an entry is one or the other); `format` reads it as it reads an axis member (a date format on a date attribute) |
+| `display` | `text` (default), `icon` (the icon `icons` names for the value; a value the map does not list shows as text) or `badge` |
+| `icons` | value to icon, from a **closed vocabulary** of 24 names (`circle dot check cross warning info clock flag star pause play stop lock unlock arrow-up arrow-down arrow-right plus minus pin bell eye user tag`); an icon display needs it and it needs the icon display |
+| `many` | what a cell with several values shows: `mixed` (default: the text `Mixed`, a marker, the values in a tooltip), `first` or `last` (in the order of the answer), `count` (the number of distinct values, also the cell's `v`), `list` (comma-joined, five at most, then `…`) |
+| `link` | a named link of the document (`links`, [below](#links-one-vocabulary-for-a-click-plan-32-section-9f-dbr35)) that a click on the cell follows; a cell with no text has none |
+
+**The one-row rule.** An attribute is well defined only where a cell holds one row. `DeriveRequest` asks for the attribute **at the cells' grain** (after the axes) and rolls it up **last** in the request's totals, so the answer holds,
+for each cell, the **rows that name its values** and the **cell's own row with the attribute rolled up**, whose measures are the engine's: a measure shown beside an attribute is **never added across the attribute's values** by the
+view, so a cell with four values still holds one honest number. The shaper reads the values from the detail rows, gives the engine's matrix a synthetic measure in the attribute's place (so the grid, its labels, its totals and its
+column limit are the engine's own), and fills each attribute cell: one value is shown as `display` says, several by `many`, none is empty. **A total row or column, and an Other column, leave an attribute cell empty**: there is no one value.
+An attribute that is already on an axis adds nothing to the request (it is the same in every row of its cell). Every policy can be said, so there is no refusal for a `many` the cell cannot show; the engine's own refusals of the request (a
+cube too wide, an unknown member) land on the entry's `attribute` path.
+
+**Refused** (`DBD-106` at the key unless said): `field` and `attribute` together; `alias` or `filters` on an attribute (they belong to a measure); `display: icon` without `icons`, `icons` without it, an icon outside the vocabulary,
+`many` outside the five; `values_on: rows` with an attribute among the values; a `link` the document does not declare (`DBD-VIEW-036`); an attribute entry in a matrix over a **written** query (`DBD-VIEW-007`: the
+request cannot be asked at the cells' grain); a matrix of attributes only (`DBD-VIEW-041`, a request needs a measure).
+
+**A table column** takes the same `display`, `icons` and `link` (a table row has one value, so no `many`).
+
+**Rendering.** A rendered cell carries `icon`, `badge`, `mixed`, `values` and `link` beside `text` (`rendered-widgets.schema.json`). The client draws an icon as a glyph of the closed set (the bundled icon font of DBR37 is not
+built; the glyphs are text characters every font has, with the cell's text as the accessible name), and a cell that names a link as a button **only when the host follows links**: `DashboardView` takes `onLink({name, widget, row, column?})`;
+without it the cell is plain text, which is what print and export draw: **the value prints, the link is dropped** (`print: hidden | normal | link` of the link says more; the PDF annotation of `print: link` is DBR37's, not built).
+
+### Field groups (DBR52)
+
+A **group** is an ordered list of attributes used as **one field**. It is declared once in the document and named where a field of an attribute role goes:
+
+```yaml
+groups:
+  period:
+    fields:
+      - orders.ordered_at_year
+      - {field: orders.ordered_at_month, format: {date: MMM}}
+    label: Period
+    template: "{2} {1}"          # the levels' texts: month, then year -> Mar 2026 (the default joins them with a space)
+widgets:
+  trend: {type: chart, mark: line, encodings: {x: {group: period, title: Period}, y: orders.net_revenue}, query: {model: sales}}
+  detail:
+    type: matrix
+    encodings:
+      rows: [customers.region, {group: details, show: always}]
+      columns: [{group: period}]
+      values: [{field: orders.net_revenue}]
+    query: {model: sales}
+```
+
+* **A group** has two to four `fields` (outermost first, each a name or `{field, format}`), an optional `label` and `template` (`{1}` to `{n}`). A group cannot hold a group; a field is listed once in it. Declared in both kinds.
+* **In a chart** (`x`, `color`, `column`, `row`; not `y` or `tooltip`) `{group: name}` is **one field**: `DeriveRequest` asks for its levels as attributes in order and, for `x`, orders by the levels in turn (calendar order whatever the
+  rows' arrival order); the answer's rows get one member key per combination, the member is labelled by the template, and the axis is **one** axis, so a line over a year-and-month group is one continuous line labelled `Mar 2026`.
+  A group channel takes a `title` and a `sort` (`ascending`, `descending`, `sort_key`) and no `field`, `format`, `alias`, `filters`, `type` or `stack`.
+* **In a matrix** an entry of `rows` or `columns` is `{group: name}` (the same combined field: one header per combination, a total rolls every level up together) or, in `rows` only, `{group: name, show: always}`: the group's attributes
+  (at or below the row's grain: an order's number, its customer) shown **as extra header columns of every row**, the request asking for them after the row's own fields. `show: drill` (a row that expands on request) is described below.
+* **Checks.** `DBD-VIEW-047`: a group the document does not declare. `DBD-VIEW-048`: a field in a group and also in another place of the same widget (an axis, a channel, a tooltip, another group), naming both places. A level that is
+  not an attribute of the catalog is the engine's `unknown_member` or `wrong_member_kind`, at the entry's `group` path. A group in a written query (`mode: explicit`) is `DBD-VIEW-007`. The shape (`DBD-106`, `DBD-104`): one level, five
+  levels, a template naming `{3}` where the group has two, a field twice, a bad level format, a group in `y`, a `field` beside a `group`, `show` on a column entry or on a plain entry.
+
+### The editor's controls for entries and groups (DBR54)
+
+In the widget editor each entry of a well has **options** (a disclosure under it): a **measure** has its `alias`, a **Repeat this measure** button (a copy follows it with an alias nothing else has, `net_revenue_2`; one measure may be in a well
+as often as its aliases differ), its own **filters** (an attribute, an operator the field's type takes, a value or a parameter; the filters need the alias, and the derived request beside the wells shows `{measure, as, filters}` at once),
+and a chart channel's `title` or a column's `label`; an **attribute** entry (in a matrix's `values`, offered beside the measures when the field the catalog says is an attribute is put there, or a table column) has its **display**, an
+**icon map** (a value and an icon of the closed vocabulary, added and removed one at a time), the **many** policy (a matrix entry), its **link** (a choice among the document's declared links) and a matrix entry's label. Each change is
+a `setPath` of that entry, so it is one undo step, and what is wrong is said in the loaders' words as it is typed. The **document settings** hold the **field groups**: a group's levels (each with a date format, up, down, remove, one
+to add), its label and template, and the loaders' words about it; a group a widget names is not removed (the editor says which widget). A group is put in a well by the pick list (**Groups**; for the rows of a matrix also **Details of
+every row** and **Details of a row that expands**, DBR55). The pure parts (`entryParts.ts`, `wells.ts`) are `@dbdatakit/visuals` and are tested against the goldens: the chart of two series of one measure, the matrix with a status per month and the line over a group built through
+the controls are the golden widgets (`entryParts.test.ts`); the screens are `WidgetEditor.tsx` and `GroupEditor.tsx` of `@dbdatakit/views-editor` (`entries.test.tsx`, the story `views-editor-entries.spec.ts`, written and not run).
+
+#### Drill detail groups: a row that expands (DBR55)
+
+`{group: name, show: drill}` in `rows` makes each row **expandable**: the rows are asked for **without** the group's attributes, and a click on a row's toggle reads that member's details.
+
+```yaml
+widgets:
+  orders:
+    type: matrix
+    encodings: {rows: [customers.region, {group: who, show: drill}], columns: [orders.status], values: [{field: orders.net_revenue}]}
+    query: {model: sales}
+    expanded: [[West]]            # what print and export show; a viewer's own choice replaces it on screen
+```
+
+* **The request** for a row's details is `DeriveRequest.DeriveExpansion` (and `deriveExpansion`, the same golden `derive/expansions.json`): the widget's request with the drill group asked for like `show: always` (its attributes after the
+  row's own fields, the order by their levels), **no totals**, and the row's own fields filtered to its member values (the row's typed `key`). It runs as the viewer, like every request, through the same cache.
+* **The rendered row** of an expandable matrix carries `expandable` and `key`; an expanded one carries `expanded` and `children` (the labels after the row's own, and a cell for every column of the matrix, empty where the details have
+  none). The resolver reads at most **20** expansions per widget (the rest are not read and `notice` says so); a member that is no longer a row is not expanded; the widget's cache key holds the expansions.
+* **Asking.** The module's render request takes `expand`: `{"orders": [["West"], ["East"]]}` (widget id to rows, each the list of the member values of the row's own fields; `DBD-VIEW`-less `400` when it is not that shape). A widget not
+  listed shows the rows its document's `expanded` names (matched to the base rows by the text of their values), which is what a print or an export draws. `ResolveOptions.expand` is the client's side, `expandsOnServer` says a source honours it
+  (the module does; the fixtures do not, and show no toggle).
+* **On screen.** The first label cell of an expandable row is a button with `aria-expanded` (`Expand West` / `Collapse West`, Enter and Space work, it is a button), and the details are rows under it, indented. `DashboardView` keeps the
+  viewer's open rows, sends them with every later request of the view and runs only that widget when one is toggled; two open rows keep their own details. `onExpand` of `MatrixGrid` and `WidgetView` is the hook for a host with another
+  way to read them.
+* **Refused** (`DBD-106`): `show: drill` beside another group in the rows or a group on the columns (the row's key is its plain fields' values); `expanded` without a `show: drill` entry, or a row that does not name a value for each of
+  the rows' own fields. A drill group in a written query is `DBD-VIEW-007`, as every group.
+
 ### Sorting by a click (DBR45)
 
 A viewer may sort a table or a matrix by clicking a header, **on screen only** (the host sets `sortable` on `DashboardView`; the print and export routes never do): a click sorts ascending, a second click reverses, a third gives the
@@ -164,6 +295,7 @@ and sorts the rows loaded. The console's board sets `sortable`.
 | `DBD-VIEW-039` | a link to a dashboard, report, view, page or form the app does not have |
 | `DBD-VIEW-044` / `-045` | a name in a link's `with`, `new`, `edit` or `lock` that the target lacks; a value of the wrong type for it |
 | `DBD-VIEW-046` | `print: link` on a link shown in a dialog or panel (no address of its own) |
+| `DBD-VIEW-047` / `-048` | a field group the document does not declare; a field in a group and also in another place of the widget (DBR52) |
 | `DBD-VIEW-040` to `-043` | the derivation and the catalog check, [below](#deriving-the-request) (`-040` nothing to derive, `-041` no measure, `-042` totals twice or with nothing to roll up, `-043` a model the document does not depend on) |
 
 `ViewsLoader.LoadWidgets` (.NET) and `validateWidgets` (TypeScript) check a widgets map alone, as an assistant's answer, a portal block or a pin holds it. The shared documents and the expected code and path of each
@@ -193,6 +325,7 @@ a refusal of the engine lands on the field or the filter the person wrote.
 
 | Code | Meaning |
 | --- | --- |
+| `alias_required` / `duplicate_measure` | a measure with `filters` and no `alias`; one output name twice with different definitions (DBR50, above) |
 | `unknown_member` | an encoded field the catalog has no member of (the engine's code and words: `customers.regon is not a catalog member.`) |
 | `wrong_member_kind` | a dimension in a measure well (`customers.region is a attribute, not a measure.`) or a measure in a matrix axis, in the engine's words |
 | `DBD-VIEW-040` | nothing to derive: a widget with no query (`text`, `image`, `control`) or an explicit query (its encodings do not drive it) |
@@ -488,7 +621,7 @@ listener, off unless enabled) or its routes can be mounted by a host (`ViewsModu
 | --- | --- |
 | `GET /api/v1/dashboards`, `GET /api/v1/reports` | `{items: [{name, title, version}]}` of what the caller may open |
 | `GET /api/v1/{dashboards,reports}/{name}` | `{kind, name, title, version, as_of, text, document, layouts: [{name, type, default}]}`: the file as published, the document as JSON, the version as text (the registry's number) and `as_of` (when that version was published) |
-| `POST /api/v1/{dashboards,reports}/{name}/render` | the `rendered-widgets` document of the layout in play; body `{parameters?, layout?, only?, viewport?: {width, height}, medium?}`; with no `layout`, `LayoutSelector` chooses for the viewport (the default layout without one); an unknown key is refused |
+| `POST /api/v1/{dashboards,reports}/{name}/render` | the `rendered-widgets` document of the layout in play; body `{parameters?, layout?, only?, order?, expand?, viewport?: {width, height}, medium?}` (`order`: a viewer's sort of a table, DBR45; `expand`: the rows a viewer expanded in a matrix with a `show: drill` group, DBR55); with no `layout`, `LayoutSelector` chooses for the viewport (the default layout without one); an unknown key is refused |
 | `POST /api/v1/views/preview` | the **live preview of an unsaved draft** (plan 32 DBR28), resolved as the caller and stored nowhere: body `{kind?, document \| text, layout?, only?, parameters?, viewport?, medium?}` for a whole document (the answer is the layout's `rendered-widgets`), or `{kind?, widget, widget_id?, document?: {parameters}, parameters?}` for one widget placed alone (the answer holds its entry); see the bullet below |
 | `GET .../{name}/export?format=pdf&layout=&p.name=` | a **PDF** (`application/pdf`, an attachment `name-layout.pdf`): the layout named, else the one the **print** medium selects (a print layout, or the default), resolved as the caller and drawn in the pinned Chromium; `p.region=West` (repeated for a list) sets a parameter. No exporter or browser: **501 `export_unavailable`** naming the setting; 413 `export_too_large` over `max_pages`, 504 `export_timeout`, 503 `export_busy`, 500 `export_failed` (the page said it could not be drawn). Audited with the format, layout, pages and the browser's version |
 | `GET .../{name}/export?format=csv\|xlsx\|svg&widget=&layout=&p.name=` | the **data exports** (DBR17), resolved as the caller for the layout chosen as above (`layout=wall` names another) and audited like the PDF (`view.export`, with `format`, `widget`, rows, bytes). **`csv`**: the rows of the table or matrix `widget` (or a chart's data) as the caller was shown them, RFC 4180 (comma, CRLF), UTF-8 **with a byte-order mark** (Excel needs it, every other reader skips it), the engine's values not the formatted text (a total row says "Total"), and a **text** cell or header starting with `=` `+` `-` `@`, a tab or a carriage return gets a leading apostrophe so a spreadsheet never runs it (a number is never changed). **`xlsx`**: with `widget` one sheet; without, a sheet for each table, matrix and chart the layout places (named by the widget id, safe and unique ignoring case; a control, text and image have no rows) and, first, a `Metrics` sheet with a row for each metric of the layout (`Widget, Label, Value, Compare, Change`; one metric named by `widget` is still refused, it has no rows), header bold and frozen, totals bold, text always text, never a formula. **`svg`**: the chart `widget` as the print page draws it, taken out of the browser (the module has no JavaScript of its own, so it needs the exporter like the PDF does; 501 `export_unavailable` otherwise). `csv` and `xlsx` need **no browser**; the Gateway sets the limit in `views: {maxExportRows}` (default 100,000, 1 to 10,000,000). A failed widget is its error block: an xlsx sheet of `code, message, path`, and for `csv` and `svg` a 422 `widget_failed` with the widget's code and words. Refused in words: 400 `invalid` (`csv` and `svg` need `widget`, `pdf` takes none, an unknown format), 404 `widget_not_found`, 400 `widget_not_placed` (the layout does not place it), `widget_not_tabular`, `widget_not_chart`, `nothing_tabular`, 413 `export_too_large` over `ViewsOptions.MaxExportRows` (100,000 rows in all, and the 1,048,575 of an xlsx sheet) |
@@ -529,6 +662,7 @@ A person subscribes to a dashboard or a report (`DbDataKit.Delivery`: `Subscript
 - **The layout.** A subscription's `layout` is a named layout and wins; with none, the export rule of the layout selection (the print medium) applies, as for a person pressing Export.
 - **A failed widget** is in the PDF as its error block and the message names it (`X-DbData-Export-Widgets-Failed` of the export, `id=code`). A subscriber for whom **every** widget of the layout is denied, a document the module refuses (403, 404) and an identity the host cannot act as lose access: nothing is sent, the subscription stops, and the subscriber and the owner are told.
 - **The inline picture.** A PDF subscription may set `inline_preview: true` (the console's subscription form has the choice). The renderer then asks the module for the same document once more as `format=png` (`ViewsApi.PngFormat`: the print page's picture at the paper's width, the print medium, as tall as its content up to `PreviewMaxHeight` = 4,000 pixels, audited as `view.export` with `format: png`, as the subscriber) and `RenderResult.Rendered.Preview` carries it. **An email** shows it in the message: the picture is an attachment with a content id (`DeliveryAttachment.ContentId`, `preview@dbdatakit`), the HTML body names it as `cid:`, and `MailMessageBuilder` writes it as `multipart/related` beside the body, not among the downloads. **Teams, Slack and the webhook** cannot hold a file: they get no picture and the message's link to the live view (they already say an attachment is not included). A picture that cannot be made (a host whose exporter has no `png`) does not stop the PDF: the message carries a note.
+- **A custom page** (DBR34): a subscription of kind `page` has `view: <instance>.<name>` (the app instance and the view's name in the manifest; neither contains a dot), is a `pdf` (`inline_preview` adds the picture of the same page, drawn once more by `ExportPngAsync`) and has no layout or widget. The renderer calls `ViewsApi.ExportPageAsync` **as the subscriber**: the queries the manifest entry declares run as that person (two subscribers with different access get different rows), the app's page is drawn as the top-level document (`CustomViewPrint.Page`, DBR32) and audited as `view.export` of kind `page`, target `<instance>.<name>`. The message carries one link to the live view (`SubscriptionRendererOptions.PageLinkTemplate`, with `{instance}` and `{name}`). A custom widget inside a dashboard or report needs nothing of its own: the subscription is the dashboard's, and the export draws the widget with the subscriber's rows (DBR32). **Failures send nothing:** a person without a role on the instance, a page the host does not serve and a query the serving core denies lose access (the subscription stops, the owner is told); a page that cannot be drawn (a view that failed or never said it was ready, no browser, a deadline) is a failed render in the module's words and the owner is told, as for any subscription. `ICustomViewApps` (`FindPage`, `MayOpen`) is what a host gives; the Gateway's `GatewayCustomViewApps` reads the group's app versions (`AppInstanceStore`) and takes **any role on the instance's server** as the reading rule (a stricter per-instance check is the apps host's to add).
 - **No exporter or no browser** is `RenderResult.Failed("unavailable")` in the module's own words (they name `views.export`); the task then fails and the subscription shows the same problem.
 - **Where it runs:** in the process that has this module and the install's state: the Gateway (`GatewaySubscriptions`, a hosted service that runs the task every minute over the Gateway's state, whose `delivery` and `runs` modules are install scope, so a group's SQL Server or PostgreSQL state is the one the console keeps the subscriptions in). It claims nothing unless the instance can export (`views.export`). **The Gateway has no delivery channels of its own** (a channel name is the console's binding and connection) **and needs none:** a subscription stores the **kind** of its channel (`subscription.channel_kind`, migration 6 of the `delivery` module; the console writes it when the subscription is saved and its sender keeps it current), the Gateway draws the document as the subscriber, decides the message by that kind (an email gets the inline picture) and writes it to the **shared outbox** (`EnqueueOnlyChannels`, no connection or secret, no sender of its own); the console's sender claims it and sends it through its own channel, keeps the retries and the dead letters. This needs the console and the Gateway on one state (a group's SQL Server or PostgreSQL). A host that registers real `IDeliveryChannels` (a test) also sends the outbox in the Gateway. A runner on another machine calling the module over HTTP for a subscriber is not built (plan 22a, open).
 
@@ -541,6 +675,13 @@ export/  chromium.pin  fonts.pin  .chromium/<rid>/...  .fonts/<family>/...(+ OFL
 ```
 
 `python3 dist/export_component.py stage --rid linux-x64 --out <dir> [--zip <file>]` makes it from a checkout whose fetch scripts have run (`scripts/fetch-chromium.sh`, `scripts/fetch-fonts.sh`, `npm run build:print -w @dbdatakit/visuals`), and `export_component.py verify <dir> --rid linux-x64` checks any copy: the browser executable, every font file and licence against the pins and the print files against `export-component.json`; a changed byte fails naming the file. The Gateway is pointed at the folder with `views.export`: `mode: pinned`, `pin: <dir>/chromium.pin`, `page_assets: <dir>/print`, `fonts: {directory: <dir>/.fonts, pin: <dir>/fonts.pin}` (a host that installs the folder over its program folder needs only `mode` and `page_assets`: the pins are found above the program). The container layer is `dist/export/Dockerfile` (`docker build -f dist/export/Dockerfile --build-arg BASE_IMAGE=dbdatagateway -t dbdatagateway-export .`): it adds Chromium's shared libraries, the staged component under `/opt/dbdatakit/export`, the settings as environment variables, `HOST_FONT_PACKAGES` only for host fonts the image promises in `views.export.fonts.required` (none by default), and fails the build when the browser cannot start. The runner process of a Gateway needs nothing more: the `views-export` task runs inside the Gateway, so it uses the Gateway's `views.export`.
+
+**Getting it onto a host (owner decision 2026-11-12): a release asset and an install in the product, never a script a person runs.** `dist/export_component.py` is a build-time tool only; the Gateway's release (`dbdatagateway-release.yml`, job `package-export`) runs it for `win-x64` and `linux-x64` and attaches `dbdatagateway-export-v<version>-<rid>.zip` beside the product zips, listed in the release's `SHA256SUMS`; no product zip or MSI contains it. A host installs it itself:
+
+- `dbdatagateway export install [--version <release>] [--source <folder or https address>] [--dir <folder>] [--force]` downloads the zip of this platform from the release of **this program's version** (the print page and the program are one release; `--version` names another), refuses an archive whose SHA-256 is not the one the release's `SHA256SUMS` lists, extracts it into `export-component` in the data directory (not the program folder, so an upgrade keeps it), verifies the result as `export_component.py verify` does (the browser, every font and licence against the pins inside it, the print files against the manifest: a changed file is refused naming it and nothing is installed), moves it into place (an older one goes aside first) and sets `views.export` (`mode: pinned`, `pin`, `pageAssets`, `fonts.directory`, `fonts.pin`) in `server.yaml`. `export status` says whether it is installed, whole and in use. The views module reads `views.export` when the gateway starts, so a restart follows an install; in a container set `views.export.noSandbox: true`.
+- **Where the files come from:** the release's GitHub download address by default (the repository of `DBDATAKIT_UPGRADE_REPO`); `--source` or `DBDATAKIT_EXPORT_RELEASE_BASE` names a folder holding the release's files (`SHA256SUMS` and the zip, or the mirror layout `dbdatagateway/v<version>/`; a `file://` address works too) or an https address that serves them, for a host with no internet; `DBDATAKIT_UPGRADE_MIRROR` (the console's and the servers' upgrade mirror) is read when neither is set. What is trusted is the release's `SHA256SUMS` from that source and the pins inside the zip.
+- **Installers and the image:** `install.sh --with-pdf-export`, `install.ps1 -WithPdfExport` and `msiexec ... ADDPDFEXPORT=1` call `export install` for the release they installed (`dist/README.md`); the suite release also builds the image variant `ghcr.io/<owner>/dbdatagateway:<version>-export` (`latest-export` for a stable release): the Gateway image plus `dist/export/Dockerfile` with the component and `views.export` on.
+- **In the console:** the **Server settings** screen of the Gateway has a card, "PDF export component": when it is not installed it says so and offers **Install**, which calls `POST /api/v1/views/export/install` (administrator only, audited as `export.install` with its outcome) and runs the same installer in the Gateway, showing the step and the megabytes and, on a refusal, the Gateway's words naming the file. A finished install sets `views.export` as a commit of the configuration by the person and says a restart is needed. The release address is the host's, never the caller's. `GET /api/v1/views/export` is the card's state.
 
 ### The report catalog (plan 32 DBR19, section 9e)
 
@@ -560,10 +701,13 @@ Our own provider does not make items yet (it would save a person's own document,
 `DefinitionStoreSnapshotSink`); a failing read leaves the served version and the run says which catalog and why. `SnapshotCatalogProvider` serves a person the snapshot **filtered by what the report server's policies say about their names** (`ReportCatalogAccess`; the names are the external groups the sign-in recorded in the identity home, the same values
 `HomeDirectory.MapExternalGroup` maps to roles, from `ReportCatalogNames.For`): a person with no mapped policy lists nothing, an item they may not see is `not_found`, and only **open** goes to the report server's provider (the address with the parameters filled in; an export format is the parameter `rs:Format` and answers a `link` to the file).
 The same snapshot is generated knowledge (`GeneratedCatalogKnowledge`, subject `report-catalog` narrowed by `item`; `ReportCatalogKnowledge.MayRead` answers the access with the same filter), so a search for a report's title finds an external report beside a dashboard, each marked with its catalog.
+**Our own documents are knowledge too**: `ReportCatalogKnowledge.RenderProviderAsync(ViewsCatalog, version, channel)` reads the catalog as the service viewer (`ReportCatalogReader`) and renders one item per published dashboard and report (`generated:report-catalog:views/dashboard/sales`, subject `report-catalog: views` narrowed by `item`). Who finds an item is asked of the catalog **per person**, not of the snapshot: `ReportCatalogKnowledgeAccess` (an `IAsyncKnowledgeAccess`, `DbDataKit.Knowledge`) says a person may read the item when `ViewsCatalog.FindAsync` gives them the document, so an app's model narrowing hides it and an unknown person finds none; `KnowledgeSearch.SearchAsync` with that access applies it after the normal check (`ViewsKnowledgeTests`). The catalog's permissions for a folder are the same stated "unknown" as a document's (the snapshot reader asks for every entry).
 
 **The routes** (`ViewsApi.Catalog.cs`, on the module's listener or a host's routes; `ViewsOptions.Catalogs` null answers 404 saying so): `GET /api/v1/catalog?folder=&search=&types=` (items by key, `unavailable` providers, `creatable` kinds), `GET /api/v1/catalog/item?key=` (item, parameters, exports, permissions), `POST /api/v1/catalog/open {key, parameters?, layout?, format?}`
 (`{mode: document|frame|link, ...}`) and `POST /api/v1/catalog/create {provider, kind, name, folder?}` (201, or 501 `unsupported`). Browse and open are audited (`view.list`, `view.open` with `catalog` and the key, never a value). The console's **Catalog** tab of Views is the report browser (`docs/ui-editors.md`). Not built: the Gateway relaying these routes and
-setting `Catalogs` from its `report-catalog` connections (the host half), the app manifest's `catalogs` list, the instance's `frame` origins reaching the merge, the Windows sign-in of the report server (NTLM or Negotiate: the connection signs in with basic, an API key, OAuth 2 or a client certificate).
+setting `Catalogs` from its `report-catalog` connections (the host half), the app manifest's `catalogs` list, the instance's `frame` origins reaching the merge, rendering a report for a person with their own Windows identity (the embedded frame signs the person in in their browser; the `report-catalog` connection's Windows sign-in, below, is the service account that **reads** the catalog only).
+
+**The Windows sign-in of the catalog** (`sign_in.method: windows` or `integrated` on a `report-catalog` connection; NTLM or Negotiate over HTTP through `HttpClientHandler`'s credentials): `windows` is `user` (`DOMAIN\account` or `account@domain`) and `password_secret` (a reference; the password is never in the file); `integrated` has no key at all and signs in as the identity the host process runs as, so that account must be given a role (Browser reads the catalog) on the report server's folders. The credential is offered for NTLM and Negotiate only, never Basic. On **Linux** Negotiate and NTLM need the GSSAPI packages on the host (Debian and Ubuntu `libgssapi-krb5-2` and `gss-ntlmssp`; Red Hat `krb5-libs` and `gssntlmssp`), and `integrated` there is a Kerberos ticket of the service account (`kinit` or a keytab); the connection's Test says so when the server answers 401. Not verified against a real SSRS or PBIRS, nor on a Windows host (plan 32 RC01).
 
 ### In a Build project (plan 32 DBR29)
 
@@ -658,7 +802,7 @@ widgets:
 
 **Publish checks.** Everything above is checked where the document is read. What needs the app is checked when the loader is given the `targets` of the app (`dashboard:name`, `report:name`, `view:name`, `page:name`, `form:name`, each with its parameters or, for a form, its fields and its key as required; `app validate` makes them, DBR13): the target exists in the app (`DBD-VIEW-039`), every name in `with`, `new`, `edit` and `lock` is the target's own (`DBD-VIEW-044`), each value fits the type of the parameter or field (`DBD-VIEW-045`: the same type, an integer for a number, a string for a date, a list only for a list; a `$field` of the row is not checked, its type is the catalog's), a required parameter (an edit form's key) that is not given is an error naming the link (`DBD-VIEW-037`), and `print: link` where the target has no address of its own (`as` is `dialog` or `panel`) is refused (`DBD-VIEW-046`). A widget names only links the document declares (`DBD-VIEW-036`).
 
-In TypeScript the same checks are `checkLinks` of `@dbdatakit/visuals`, with the pure parts a host and the exporter use: `describeLink`, `linkValues(link, row, params)` (what a click carries; a value that has nothing is left out, never the text `undefined`), `linkQuery` (the values as the route's query string) and `printTreatment(link, meaning, medium)`. The refusals are cases of `conformance/views`, run by both languages. A report's links are read the same way; what the viewer's shell does with `as` and `then` is [DBR36](plans/32-dashboards-and-reports.md), and what the exporter draws for `print` is DBR37.
+In TypeScript the same checks are `checkLinks` of `@dbdatakit/visuals`, with the pure parts a host and the exporter use: `describeLink`, `linkValues(link, row, params)` (what a click carries; a value that has nothing is left out, never the text `undefined`), `linkQuery` (the values as the route's query string) and `printTreatment(link, meaning, medium)`. The refusals are cases of `conformance/views`, run by both languages. A report's links are read the same way; what the viewer's shell does with `as` and `then` is [below](#the-shells-dialog-and-panel-dbr36), and what the exporter draws for `print` is DBR37.
 
 ## Interaction: cross-filter, drill, refresh and kiosk
 
@@ -685,3 +829,35 @@ test, Playwright's clock drives the page's own. The interval starts again when t
 **Kiosk (`kiosk: {layout: wall}`, address `?mode=kiosk`)**: the board alone in the whole window, none of the console's chrome (no rail, header or toolbar), the document's kiosk layout (`?layout=` still wins; a window-size selector
 does not), no maximize action, refresh and cross-filter as usual. A canvas layout (a wall) is scaled as one picture to the window. In a corner, faint until the pointer or the keyboard comes near, are **Exit kiosk** (Escape does the same)
 and, after a drill, **Back**. The toolbar's Kiosk button turns it on. Rotating several boards (`?rotate=a,b&every=60`) is a host feature not built yet.
+
+## Custom widgets on screen (plan 32 section 9f, DBR31)
+
+A `custom` widget is drawn by **code of the app** in a frame the host makes (`<iframe sandbox="allow-scripts">`: an opaque origin, no cookies, no storage, no reach into the page; the page loads from the app's own built files). The code never fetches. The host:
+
+1. **resolves the widget as the viewer.** `WidgetResolver` runs the queries the app's manifest entry declares for the component (`views:` entry with `queries:`; a `semantic` request or a Store read) through the same serving core every widget uses, so access, limits and audit are the host's. The widget's `params` (a literal or `$params.name`) bind the request's `{param: name}` markers as a standard widget's do (a filter whose marker has no value drops out). The result is `{type: custom, component, params, data: {<query>: {columns, rows}}}` (`rendered-widgets` schema); two viewers with different access get different rows. A query that fails (denied, over a limit) makes the whole widget an error entry with the core's own code and words, naming the query ("The query `by_region` of `sales-portal/RegionGrid`: ..."); the other widgets still draw. A component the host serves no manifest for, or a `page` placed as a widget, is `custom_not_served`. `ResolverOptions.CustomViews` is how the host that serves the app gives the manifest entry (`component` to `CustomView`).
+2. **passes the rows into the frame** (`views:init`, then `views:props` whenever the rows, the parameters, the size or the theme change). The theme is `--sui-*` tokens made from the chart palette.
+3. **answers what the frame asks, by the document's rules.** `readToHost` reads only the SDK's shapes (`views:hello`, `views:ready`, `views:error`, `views:size`, `views:setParam`, `views:open`) and only from this frame's window. `setParam` is a **cross-filter**: it must name a parameter the document declares, of its type (otherwise a notice and nothing changes), and it changes the parameter exactly as a control does, so only the widgets that use it resolve again (a custom widget uses a parameter through its `params`). `open(link, row)` must name a link in the widget's `links` list; the host resolves the target and the values (`linkValues`, the same rule as for a standard widget) and gives them to the page's `onLink` handler.
+4. **shows the failure.** A view that sends `views:error`, a render error in it (the SDK's frame runtime turns it into `views:error`), or a frame that sends no `views:hello` within 15 s draws an **error tile**; nothing else on the page is touched.
+
+In TypeScript: `DashboardView` takes `customViews` (a `CustomViewsHost`: `frameSrc(component)` is the address of the app's page that mounts views, `route(link)` the address of a link's target), `onLink` and `closedLink` (a dialog the widget opened closed; the widget is told with `views:closed`). Without `customViews` a custom widget draws "Drawn by the app that owns it". In the app, the entry calls `startViewFrame()` of `@dbdatakit/views-sdk` after its `defineWidget` calls: in a document whose address fragment is `#view=<Export>&mode=<screen|print|image>` it waits for the host's `views:init`, mounts the registered component and returns true (the entry must then not mount the app's own screens); anywhere else it does nothing and returns false.
+
+**What the host that serves the app must add** (the apps host, plan 26; not in this module): the address of the built page the frame loads (`CustomViewsHost.frameSrc`) with the app's own policy (the frame is served from the app's files, `default-src 'self'`), a `ResolverOptions.CustomViews` that finds the `CustomView` of the app instance's manifest, and the view's route for `route`. Run a custom view from the Workspace's preview the same way.
+
+### Custom views in the export (DBR32)
+
+The print page serves the app's built files **from the exporter's one-shot origin** (`http://print.localhost/`, in memory, no network; a request to anything else is blocked and named in the export's warnings), so a custom view prints from the same bytes the app was approved with.
+
+- **A widget** in a dashboard or report is drawn in its box by the same sandboxed frame as on screen, in the `print` mode. `ViewsOptions.CustomApps` (an `ICustomViewApps`: the manifest entry of a component, and the app's built files and the page that mounts views) is what the apps host gives the module; the module adds the files under `_app/<app>/`, puts the component's page address in the print page's JSON (`custom.frames`), and the **rows are embedded as JSON** in the same block (the rendered widgets, resolved as the person who exports). The page is drawn when every frame has called `ready()` (it waits for `document.fonts.ready` first, so page breaks are those of the fonts) and the SDK sends the content's final height with it. The export is **refused, naming the widget**, when its query failed, its code called `fail(...)` or threw, it never said it was ready (30 s), the host has no files for its component, or **its content is taller than a page** (`The custom widget `tall` (...) is taller than a page: its content is 6000px high and a page holds 900px`). Chromium fragments an iframe's box across pages instead of keeping it whole (measured, `CustomViewExportTests`), so a widget taller than a page can only be printed cut; make it shorter or make it a `page`.
+- **A page** is the top-level document: `CustomViewPrint.Page(view, files, resolved, paper, title, fonts)` takes the app's page, embeds `{name, props}` as JSON (`<script id="dbdatakit-view-init" type="application/json">`; `<` is escaped, so a value cannot close the block), adds the paper's `@page` rule from the manifest's `page: {size, orientation}` (A4 portrait with 20 mm and 15 mm margins by default) and the bundled fonts, and serves the app's files at the origin's root. `startViewFrame()` of the SDK finds the block and mounts the view at once with no host (`views:*` messages go nowhere); `<PageBreak/>` is `break-after: page`; Chromium paginates it like any document (three sections with `PageBreak` are three pages). `WidgetResolver.ResolveCustomViewAsync` gives a page its rows as the viewer; the route that serves and exports a page is DBR33.
+- **Fonts and requests.** The bundled families are on the page (`@font-face`); an app's own font files are among its files and load from the origin; a font that falls back to a host font prints with the host's (the export warns only for fonts the administrator did not list). A frame's files are served with `Access-Control-Allow-Origin: *` (an opaque-origin frame loads module scripts with CORS).
+
+## The shell's dialog and panel (DBR36)
+
+A link whose `as` is `dialog` or `panel` opens its target **inside the page**, in a frame of its own, instead of navigating. `DashboardView` takes a `linkHost` (`route(link)`: the address of the link's target inside the app, from the apps host that knows its pages and forms; `navigate(address, event)`: how a navigating link goes there). With it:
+
+- **Following a link.** A click on a mark, row or cell of a widget with an `on_click` (a widget with an `on_select` too selects on a click and follows the link on Alt+click, as for a `drill`), or a custom widget's `open(link, row)` for a link it lists, reads the link, takes its values from the row (`linkValues`) and opens the target at `route?values&_lock=<names>`: the link's values in the query string, sorted, and the field names its `lock` lists. A target with no address in the host is a notice, not a dead click. A host that wants to open links itself passes `onLink` (the event has the link, the values and the address) and the built-in surface is not used.
+- **A dialog** (`role="dialog"`, `aria-modal`) is modal: the page behind it is `inert`, a scrim and a Close button close it, Escape closes it. **A panel** (`role="complementary"`) is a side sheet that leaves the page usable. Each holds the target in a **sandboxed frame of its own** (`sandbox="allow-scripts allow-forms"`: an opaque origin, no cookies of the page, no reach into it); focus moves to the Close button when it opens and **returns to the element that had it** (a custom widget's frame included) when it closes.
+- **What comes back.** The target frame says `{type: 'views:saved'}` when its write was accepted (the surface closes, and remembers it saved) or `{type: 'views:close'}`; only those two shapes, only from that frame's window. **`then`**: after a save `then: refresh` (the default of a form) resolves the widget the click came from again, `then: [widgets]` those, `none` nothing; a close without a save never refreshes. A custom widget is told with `views:closed` (`{link, saved}`, SDK `useClosed`).
+- **Locked fields.** `lock: [status]` puts `_lock=status` in the target's address: the target's form shows those fields read-only (the apps host's form view reads `_lock`). It is the form's courtesy and never the authority: the Store still refuses a value that was not allowed to change, however the request was made.
+
+**What the apps host must add** (session A's `AppShell`, `ViewsApp`; not in this module): the `route` for each target kind (`page`, `form`, `view`, `dashboard`, `report`) in the instance, a form view that reads the query's values as its starting values and `_lock`, and its `views:saved` / `views:close` messages to the parent page when a write was accepted or the person cancels; and the page must let its own frames be framed by the app's pages (`frame-src 'self'`).

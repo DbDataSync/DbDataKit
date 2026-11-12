@@ -52,7 +52,7 @@ internal static class TuiCommand
         private static OptionInfo Describe(Option o)
         {
             var type = o.ValueType;
-            var kind = type == typeof(bool) ? OptionKind.Flag : type == typeof(int) || type == typeof(int?) ? OptionKind.Integer
+            var kind = type == typeof(bool) ? OptionKind.Flag : type == typeof(int) || type == typeof(int?) || type == typeof(long) || type == typeof(long?) ? OptionKind.Integer
                 : type == typeof(DirectoryInfo) || type == typeof(FileInfo) ? OptionKind.Path : type == typeof(string[]) ? OptionKind.List : OptionKind.Text;
             string? def = o.HasDefaultValue ? o.GetDefaultValue() switch { null => null, string[] a => string.Join(",", a), var v => v.ToString() } : null;
             // the connections are the project's own, so a form takes the name as text (the target chooser lists them); the options with a closed set of values say them
@@ -71,7 +71,7 @@ internal static class TuiCommand
         {
             "project compile" or "project update" => "!--check",
             "project model update" or "project import" => "--write",
-            "connection init" or "connection seed" => "--apply",
+            "connection init" or "connection seed" or "connection key-map repair" => "--apply",
             "connection deploy" => "--apply-plan|--yes|--ack",
             "connection refresh" => "!--dry-run",
             _ => null,

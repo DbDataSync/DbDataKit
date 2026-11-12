@@ -15,6 +15,8 @@ public static partial class ViewsLoader
 
         private ViewKind kind;
         private readonly List<ViewParameter> parameters = [];
+        /// <summary>The field groups of the document (or the ones a widgets map is given), by name; null when a widgets map is read alone with none.</summary>
+        private IReadOnlyDictionary<string, ViewGroup>? groups;
 
         // ---- the document ----
 
@@ -91,6 +93,7 @@ public static partial class ViewsLoader
                 }
             }
 
+            if (map.Get("groups") is { } gr) groups = ReadGroups(gr);
             var widgets = map.Get("widgets") is { } w ? ReadWidgets(w) : MissingList<ViewWidget>(map, "widgets");
             if (map.Get("links") is { } lk) ReadLinks(lk, widgets);
             ResolveLinkRefs();
@@ -103,7 +106,7 @@ public static partial class ViewsLoader
 
             CheckDocument(map, widgets, layouts, kioskLayout, kioskNode);
             if (Diagnostics.HasErrors()) return null;
-            return new ViewDocument(kind, title, parameters, widgets, layouts, font, refresh, kioskLayout, strict, pages, rows, cover, locale, links);
+            return new ViewDocument(kind, title, parameters, widgets, layouts, font, refresh, kioskLayout, strict, pages, rows, cover, locale, links, groups);
         }
 
         private string? MissingKey(YamlMapping map, string key)

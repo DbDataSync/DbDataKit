@@ -21,6 +21,7 @@
     },
     "cover": { "description": "Defaults for a flow layout that has no cover of its own.", "type": "object", "additionalProperties": false, "properties": { "parameters": { "type": "boolean" } } },
     "links": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/links" },
+    "groups": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/groups" },
     "widgets": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/widgets" },
     "layouts": { "$ref": "https://dbdatakit.invalid/visuals/core.schema.json#/$defs/layouts" }
   }

@@ -128,10 +128,12 @@ export function moduleClient(options: ModuleClientOptions): ViewsClient {
     },
 
     sortsOnServer: true,
+    expandsOnServer: true,
 
     resolve(ref, layout, parameters, resolveOptions = {}) {
       const order = resolveOptions.order && Object.keys(resolveOptions.order).length > 0 ? { order: resolveOptions.order } : {}
-      return call<RenderedWidgets>('POST', `/api/v1/${collection(ref.kind)}/${segment(ref.name)}/render`, { parameters, layout, ...(resolveOptions.only ? { only: resolveOptions.only } : {}), ...order }, resolveOptions.signal)
+      const expand = resolveOptions.expand && Object.keys(resolveOptions.expand).length > 0 ? { expand: resolveOptions.expand } : {}
+      return call<RenderedWidgets>('POST', `/api/v1/${collection(ref.kind)}/${segment(ref.name)}/render`, { parameters, layout, ...(resolveOptions.only ? { only: resolveOptions.only } : {}), ...order, ...expand }, resolveOptions.signal)
     },
 
     exportPdf: (ref, exportOptions = {}) => exportFile(ref, 'pdf', exportOptions),

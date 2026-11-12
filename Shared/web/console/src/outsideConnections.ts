@@ -17,7 +17,7 @@ export const KIND_MEANING: Record<OutsideKind, string> = {
   smb: 'A Windows file share (SMB): list, read and write files as the Windows identity of the process that runs the work (Kerberos, no secret). Works on a Windows host only; name the server by its DNS name.',
   s3: 'Amazon S3 or any server that speaks its API (MinIO, Ceph): a bucket, an optional folder, and the access key id and secret access key (the secret kept as a secret). A missing object is a permanent failure.',
   'azure-blob': 'Azure Blob Storage: a container, an optional folder, and the account key or a SAS token kept as a secret. A missing blob is a permanent failure.',
-  'report-catalog': 'An external report server, SQL Server Reporting Services or Power BI Report Server: the address of its web portal and the service account the catalog is read with (a secret reference). The report catalog lists its reports beside our own.',
+  'report-catalog': 'An external report server, SQL Server Reporting Services or Power BI Report Server: the address of its web portal and how the catalog is read: a Windows sign-in (NTLM or Negotiate) with a user and a password held as a secret, or as the account the service runs as (integrated, no password in the file), or basic, an API key, OAuth 2 or a certificate. The report catalog lists its reports beside our own.',
   smtp: 'A mail server that delivery channels send mail through: its host, how the connection is protected (STARTTLS or TLS), the sender address and the login as a secret reference.',
 }
 
@@ -42,7 +42,7 @@ export const NEW_CHOICES: NewChoice[] = [
 ]
 
 export const SIGN_IN_LABEL: Record<string, string> = {
-  none: 'no sign-in', api_key: 'API key', basic: 'user and password', oauth2_client_credentials: 'OAuth 2 client credentials', oauth2_authorization_code: 'OAuth 2 consent (authorization code)', client_certificate: 'client certificate', ssh_key: 'SSH private key', kerberos: 'Windows sign-in (Kerberos)', access_key: 'access key (AWS Signature V4)', shared_key: 'account key (Shared Key)', sas_token: 'SAS token', signed_webhook: 'signed webhook (HMAC)',
+  none: 'no sign-in', api_key: 'API key', basic: 'user and password', oauth2_client_credentials: 'OAuth 2 client credentials', oauth2_authorization_code: 'OAuth 2 consent (authorization code)', client_certificate: 'client certificate', ssh_key: 'SSH private key', kerberos: 'Windows sign-in (Kerberos)', windows: 'Windows sign-in (NTLM or Negotiate, user and password)', integrated: 'Windows sign-in as the service account (integrated)', access_key: 'access key (AWS Signature V4)', shared_key: 'account key (Shared Key)', sas_token: 'SAS token', signed_webhook: 'signed webhook (HMAC)',
 }
 
 /** What a typed secret is called on the screen, by the field it is kept under; the name of a placeholder of the address is its own label. */

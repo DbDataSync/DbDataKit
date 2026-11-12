@@ -1,0 +1,3 @@
+# The export layer needs only the staged component (dist/export_component.py stage --out .export-component), nothing else of the repository.
+*
+!.export-component

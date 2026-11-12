@@ -33,7 +33,7 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
     private readonly ConcurrentDictionary<string, (string? Product, DateTimeOffset At)> _products = new(StringComparer.Ordinal);
     private static readonly TimeSpan ProductAge = TimeSpan.FromMinutes(5);
 
-    private async Task<string?> ProductOfAsync(RegisteredInstance instance, CancellationToken ct)
+    public async Task<string?> ProductOfAsync(RegisteredInstance instance, CancellationToken ct)
     {
         if (_products.TryGetValue(instance.InstanceId, out var known) && DateTimeOffset.UtcNow - known.At < ProductAge) return known.Product;
         var status = await instances.StatusAsync(instance, ct);
@@ -125,7 +125,7 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
         if (!(path.StartsWith("api/", StringComparison.Ordinal)) || path.Split('/').Any(s => s is ".." or ".")) return Failure(400, "Only the server's api/... calls are relayed.");
         var product = await ProductOfAsync(instance, ct);
         if (!ServerProducts.Relayable(product, method.Method, path)) return Failure(403, ServerProducts.RefusalFor(product, instance.Name));
-        if (product == ServerProducts.Runner && ServerProducts.RunnerRouteOf(method.Method, path) is { } wanted)
+        if (ServerProducts.RouteOf(product, method.Method, path) is { } wanted)
         {
             var held = HeldOn(instance, userId, role).Roles;
             if (!wanted.Allows(held))
@@ -198,7 +198,7 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
             return;
         }
         // the person makes the call with their own roles (owner decision of 2026-11-08): a call the person's roles do not cover is refused here, before the runner is asked; the runner checks the same roles again from the token
-        if (product == ServerProducts.Runner && ServerProducts.RunnerRouteOf(context.Request.Method, path) is { } wanted)
+        if (ServerProducts.RouteOf(product, context.Request.Method, path) is { } wanted)
         {
             var held = HeldOn(instance, userId, role).Roles;
             if (!wanted.Allows(held))

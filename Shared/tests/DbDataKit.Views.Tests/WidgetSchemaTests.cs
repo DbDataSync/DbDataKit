@@ -48,7 +48,7 @@ public class WidgetSchemaTests
             ["widget.control"] = Props(At(core, "$defs/widget_control")), ["widget.custom"] = Props(At(core, "$defs/widget_custom")),
             ["encodings.metric"] = Props(At(core, "$defs/widget_metric/properties/encodings")), ["encodings.chart"] = Props(At(core, "$defs/chart_encodings")),
             ["encodings.matrix"] = Props(At(core, "$defs/matrix_encodings")), ["encodings.table"] = Props(At(core, "$defs/widget_table/properties/encodings")),
-            ["table_column"] = Props(At(core, "$defs/table_column")), ["channel"] = Props(At(core, "$defs/chart_channel")), ["mark"] = Props(At(subset, "$defs/spec/properties/mark/oneOf/1")),
+            ["table_column"] = Props(At(core, "$defs/table_column")), ["measure_field"] = Props(At(core, "$defs/measure_field")), ["group"] = Props(At(core, "$defs/group")), ["group_level"] = Props(At(core, "$defs/group/properties/fields/items")), ["matrix_value"] = Props(At(core, "$defs/matrix_values/items")), ["channel"] = Props(At(core, "$defs/chart_channel")), ["mark"] = Props(At(subset, "$defs/spec/properties/mark/oneOf/1")),
             ["query.derived"] = Props(At(core, "$defs/query_derived")), ["query.semantic"] = Props(At(core, "$defs/query_explicit_semantic")), ["query.saved"] = Props(At(core, "$defs/query_explicit_saved")),
             ["query.store"] = Props(At(core, "$defs/query_explicit_store")), ["query.ref"] = Props(At(core, "$defs/query_explicit_ref")),
             ["semantic"] = Props(At(core, "$defs/query_explicit_semantic/properties/semantic")), ["store"] = Props(At(core, "$defs/query_explicit_store/properties/store")),
@@ -91,15 +91,16 @@ public class WidgetSchemaTests
         Assert.Equal("#/$defs/matrix_axis", encodings["properties"]!["rows"]!["$ref"]!.GetValue<string>());
         Assert.Equal("#/$defs/matrix_axis", encodings["properties"]!["columns"]!["$ref"]!.GetValue<string>());
         Assert.Equal("#/$defs/matrix_values", encodings["properties"]!["values"]!["$ref"]!.GetValue<string>());
-        Assert.Equal(Props(At(view, "$defs/matrix/properties/values/items")), Props(At(core, "$defs/matrix_values/items")));
+        // a matrix value is the view's own keys, the object form of a measure (DBR50: alias, filters) and an attribute in the cell area (DBR51)
+        Assert.Equal(Props(At(view, "$defs/matrix/properties/values/items")).Concat(["alias", "filters", "attribute", "display", "icons", "many", "link"]).Order(), Props(At(core, "$defs/matrix_values/items")));
         Assert.Equal(["values"], matrix["required"]!.AsArray().Select(v => v!.GetValue<string>()).Where(v => v is not ("type" or "id")));
         Assert.Equal(["values"], encodings["required"]!.AsArray().Select(v => v!.GetValue<string>()));
         // the chart: the channels are the subset's, and so are the mark and the channel object
         Assert.Equal(Props(At(subset, "$defs/spec/properties/encoding")), Props(At(core, "$defs/chart_encodings")));
         Assert.Equal($"{subsetId}#/$defs/spec/properties/mark", At(core, "$defs/widget_chart/properties/mark")["$ref"]!.GetValue<string>());
         Assert.Equal("#/$defs/chart_channel", At(core, "$defs/encoding_channel/oneOf/1")["$ref"]!.GetValue<string>());
-        // the channel object is the subset's, field, type, sort, stack and title by reference, plus the format
-        Assert.Equal(new[] { "field", "format", "sort", "stack", "title", "type" }, Props(At(core, "$defs/chart_channel")).ToArray());
+        // the channel object is the subset's, field, type, sort, stack and title by reference, plus the format and, on a measure, alias and filters (DBR50)
+        Assert.Equal(new[] { "alias", "field", "filters", "format", "group", "sort", "stack", "title", "type" }, Props(At(core, "$defs/chart_channel")).ToArray());
         foreach (var p in Props(At(subset, "$defs/channel"))) Assert.Equal($"{subsetId}#/$defs/channel/properties/{p}", At(core, "$defs/chart_channel")["properties"]![p]!["$ref"]!.GetValue<string>());
         Assert.Equal($"{viewId}#/$defs/sort", At(core, "$defs/widget_table/properties/encodings/properties/sort")["$ref"]!.GetValue<string>());
     }

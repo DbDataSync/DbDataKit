@@ -4,6 +4,7 @@ import type { Box } from '../views/model'
 import { useState, type KeyboardEvent, type MouseEvent } from 'react'
 import { ariaSort, nextSort, sortedOrder, type SortDirection, type ViewerSort } from './clickSort'
 import { rowsThatFit } from './density'
+import { CellContent } from '../CellContent'
 
 /** The "12 of 40" line of a table or matrix that does not fit its tile, and the action that gives it the whole container (plan 32 section 3.3 item 1): nothing is hidden silently. */
 export function FitNotice({ text, onMaximize, label }: { text: string; onMaximize?: () => void; label: string }) {
@@ -19,7 +20,7 @@ export function FitNotice({ text, onMaximize, label }: { text: string; onMaximiz
  * A table widget: the rows of its result as the server formatted them, a total row where the result has one. Given the box of its body it shows **the rows that fit** and says "12 of 40 rows" with an action
  * that maximizes the tile (`onMaximize`); `maximized` shows every row and the widget scrolls. A cut at the server's limit (`total_rows`) is told the same way.
  */
-export function TableWidget({ id, widget, result, box, maximized = false, onMaximize, onRow, sortable = false, onServerSort }: {
+export function TableWidget({ id, widget, result, box, maximized = false, onMaximize, onRow, sortable = false, onServerSort, onLink }: {
   id: string
   widget: TableDoc
   result: RenderedTable
@@ -32,6 +33,8 @@ export function TableWidget({ id, widget, result, box, maximized = false, onMaxi
   sortable?: boolean
   /** When the server cut the result at its limit, the host runs the query again with `order` for this column (null, null: the document's order) and the notice says the sort is the server's. Without it the loaded rows are sorted. */
   onServerSort?: (field: string | null, dir: SortDirection | null) => void
+  /** A cell that names a link of the document (plan 32 DBR51) was clicked: the link's name and the row's index in `result.rows`. Without it such a cell is plain text. */
+  onLink?: (link: string, row: number) => void
 }) {
   const [sort, setSort] = useState<ViewerSort | null>(null)
   const total = result.rows.length
@@ -89,7 +92,7 @@ export function TableWidget({ id, widget, result, box, maximized = false, onMaxi
                 onClick={pointable ? (e: MouseEvent) => onRow(index, e) : undefined}
                 onKeyDown={pointable ? (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRow(index, e) } } : undefined}
               >
-                {row.cells.map((cell, c) => <td key={c} className={align(c)}>{cell.text}</td>)}
+                {row.cells.map((cell, c) => <td key={c} className={align(c)}><CellContent cell={cell} onLink={onLink && !row.total ? (name) => onLink(name, index) : undefined} /></td>)}
               </tr>
             )
           })}

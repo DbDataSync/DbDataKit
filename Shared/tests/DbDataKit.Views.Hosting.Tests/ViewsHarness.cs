@@ -77,7 +77,7 @@ internal sealed class ViewsHarness : IAsyncDisposable
 
     public static string ModelContent => new JsonObject { ["catalog"] = CatalogText }.ToJsonString();
 
-    public static async Task<ViewsHarness> StartAsync(StateEngines engines, string engine, TimeSpan? cacheTtl = null, IViewsAudit? audit = null, bool publish = true, bool useModuleClock = false, bool follow = true, IReportExporter? exporter = null, string? pageAssets = null, long? maxExportRows = null, bool personalDocuments = true, IReadOnlyList<IReportCatalogProvider>? externalCatalogs = null, IEnumerable<string>? frameOrigins = null)
+    public static async Task<ViewsHarness> StartAsync(StateEngines engines, string engine, TimeSpan? cacheTtl = null, IViewsAudit? audit = null, bool publish = true, bool useModuleClock = false, bool follow = true, IReportExporter? exporter = null, string? pageAssets = null, long? maxExportRows = null, bool personalDocuments = true, IReadOnlyList<IReportCatalogProvider>? externalCatalogs = null, IEnumerable<string>? frameOrigins = null, ICustomViewApps? customApps = null)
     {
         var h = new ViewsHarness();
         var database = engines.Provision(engine).Open([DefinitionsModule.Module, PayloadStore.Module, AuditModule.Module, UserViewsModule.Module], new StateScope(Group: "main"), time: h.Clock);
@@ -98,7 +98,7 @@ internal sealed class ViewsHarness : IAsyncDisposable
             Catalogs = catalogs,
             CacheTtl = cacheTtl ?? TimeSpan.Zero, Time = useModuleClock ? h.ModuleClock : TimeProvider.System, Follow = follow, PollInterval = TimeSpan.FromHours(1), DrainTimeout = TimeSpan.FromSeconds(20),
             Resolver = new ResolverOptions { WidgetTimeout = TimeSpan.FromSeconds(20) }, Exporter = exporter, PageAssets = pageAssets, MaxExportRows = maxExportRows ?? 100_000,
-            UserViews = personalDocuments ? h.UserViews : null,
+            UserViews = personalDocuments ? h.UserViews : null, CustomApps = customApps,
         };
         var theAudit = audit ?? new StateViewsAudit(h.Audit);
         var options = externalCatalogs is null ? Options(null) : Options(new ReportCatalogs([new ViewsCatalog(h.Published, Options(null), theAudit), .. externalCatalogs], frameOrigins));

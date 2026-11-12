@@ -20,7 +20,7 @@ tasks:
       - store_change: { model: orders, entity: order }
       - manual: true
     inputs:      [ { name: since, type: date, default: "2024-01-01" } ]
-    connections: [ { name: inbox, kind: folder } ]         # every slot a trigger uses is declared here
+    connections: [ { name: inbox, kind: folder }, { name: erp, kind: sqlserver, access: read } ]   # every slot a trigger uses is declared here; access: read|write (default write)
     progress:                                              # see the DbDataKit.State README, progress across versions
       checkpoints: [ { name: orders, per: [customer], parts: [ { name: modified, type: time }, { name: id, type: int } ] } ]
       state:       [ { name: last_file, type: text } ]
@@ -31,6 +31,8 @@ tasks:
     units:    [ { name: customer, item: Customer } ]
     counters: [rows]
 ```
+
+**Connection access** (plan 21 CH03, an optional key of a connection slot, added to `package/1` in place by the owner's decision of 2026-11-12). `access: read` says the task only reads the connection: in a release channel other than `prod` that binds nothing for the slot, the runner serves production's binding (the resolution is `DefinitionPublisher.ResolveSlots`; publish, stage, activate and switch all use it). A slot that says nothing, or `write`, must be bound in every channel and is refused naming slot and channel otherwise. A name two tasks declare is read only when every task says read. Any other value is an error naming the file and `connections[i].access`. `ConnectionSlot.Access` carries it; the package's `slots` in `GET /api/v1/definitions/integration/{name}` say `access` and the Runner's bindings card shows a read slot and the binding it inherits.
 
 **Runtime packages** (plan 28c E04, a newer feature of `package/1`). An engine is published once as a *runtime package* and many *definition packages* name it:
 

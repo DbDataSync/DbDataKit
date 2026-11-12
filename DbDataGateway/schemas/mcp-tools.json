@@ -162,6 +162,29 @@
       }
     },
     {
+      "name": "export_status",
+      "description": "Is the export component installed here, whole, and does views.export point at it. [Offline only] Usage: export status [--repo <data directory>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
+      }
+    },
+    {
       "name": "config_check",
       "description": "Validate the configuration (exit 0 valid, 2 invalid). [Offline only] Usage: config check [--file F]",
       "inputSchema": {

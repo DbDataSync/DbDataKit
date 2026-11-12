@@ -41,7 +41,7 @@ public class McpServerTests : IDisposable
     public void Commands_that_change_a_target_are_not_offered_unless_the_operator_allowed_them()
     {
         var names = Server().ToolNames;
-        foreach (var write in new[] { "connection_refresh", "connection_seed", "connection_init", "connection_publish" }) Assert.DoesNotContain(write, names);
+        foreach (var write in new[] { "connection_refresh", "connection_seed", "connection_init", "connection_publish", "connection_key_map_repair" }) Assert.DoesNotContain(write, names);
         foreach (var read in new[] { "project_compile", "connection_deploy", "project_show_graph", "project_show_metadata", "project_tests_run", "help_code", "connection_compare" }) Assert.Contains(read, names);
         Assert.DoesNotContain("ui_terminal", names);
         Assert.DoesNotContain("ui_mcp", names);

@@ -41,9 +41,9 @@ public sealed partial class GatewayEntityModels(PublishedEntityModels models, Fu
 
     private static bool IsAdministrator(ManagementCaller caller) => caller.Holds(ServerRole.Admin);
 
-    private static string? Client(ManagementCaller caller) => IsAdministrator(caller) ? null : OwnerScope.Stamp(caller.Token!);
+    internal static string? Client(ManagementCaller caller) => IsAdministrator(caller) ? null : OwnerScope.Stamp(caller.Token!);
 
-    private ManagementResult? Scope(ManagementCaller caller, ObjectAction action, string name)
+    internal ManagementResult? Scope(ManagementCaller caller, ObjectAction action, string name)
     {
         if (IsAdministrator(caller)) return null;
         var owner = models.Current(name) is { } current ? PublishedEntityModels.Parse(current).ManagedBy : null;
@@ -165,9 +165,9 @@ public sealed partial class GatewayEntityModels(PublishedEntityModels models, Fu
         return ManagementResult.Ok(new JsonObject { ["name"] = name, ["removed"] = true });
     }
 
-    private string Who(ManagementCaller caller) { var entry = caller.Audit("", null, "", _clock.GetUtcNow()); return entry.UserName ?? entry.UserId; }
+    internal string Who(ManagementCaller caller) { var entry = caller.Audit("", null, "", _clock.GetUtcNow()); return entry.UserName ?? entry.UserId; }
 
-    private ManagementResult Refused(ManagementCaller caller, string name, string error, JsonArray? diagnostics = null, JsonObject? extra = null)
+    internal ManagementResult Refused(ManagementCaller caller, string name, string error, JsonArray? diagnostics = null, JsonObject? extra = null)
     {
         Record(caller, "entity-model publish", name, "invalid");
         var body = new JsonObject { ["error"] = error, ["valid"] = false };
@@ -176,7 +176,7 @@ public sealed partial class GatewayEntityModels(PublishedEntityModels models, Fu
         return new ManagementResult(400, body);
     }
 
-    private void Record(ManagementCaller caller, string command, string target, string outcome) => audit.Append(caller.Audit(command, target, outcome, _clock.GetUtcNow()));
+    internal void Record(ManagementCaller caller, string command, string target, string outcome) => audit.Append(caller.Audit(command, target, outcome, _clock.GetUtcNow()));
 
     [GeneratedRegex("^[a-z0-9][a-z0-9_-]{0,63}$")]
     private static partial Regex NamePattern();

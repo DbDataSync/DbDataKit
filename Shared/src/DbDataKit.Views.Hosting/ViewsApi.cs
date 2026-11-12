@@ -98,7 +98,7 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
     /// <param name="clientAddress">Where the call came from, carried to the serving core.</param>
     /// <param name="traceId">The trace the call belongs to, carried to the serving core and the audit.</param>
     /// <param name="cancellationToken">Stops the resolution (a client that went away).</param>
-    /// <param name="body">The request: <c>parameters</c> (by document parameter name), <c>layout</c> (omitted: chosen for <c>viewport</c> and <c>medium</c>, else the default), <c>only</c> (widget ids to resolve: the ones a changed parameter touches), <c>order</c> (a viewer's sort of a table the row limit cut, by widget id: <c>{"sales": {"by": "orders.revenue", "dir": "desc"}}</c>, DBR45).</param>
+    /// <param name="body">The request: <c>parameters</c> (by document parameter name), <c>layout</c> (omitted: chosen for <c>viewport</c> and <c>medium</c>, else the default), <c>only</c> (widget ids to resolve: the ones a changed parameter touches), <c>order</c> (a viewer's sort of a table the row limit cut, by widget id: <c>{"sales": {"by": "orders.revenue", "dir": "desc"}}</c>, DBR45), <c>expand</c> (the rows a viewer expanded in a matrix with a <c>show: drill</c> group, by widget id, DBR55).</param>
     public async Task<ViewsAnswer> RenderAsync(ViewsPrincipal who, string kind, string name, JsonObject? body, string? clientAddress = null, string? traceId = null, CancellationToken cancellationToken = default)
     {
         if (Enter() is not { } work) return Draining();
@@ -125,6 +125,19 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
         return result;
     }
 
+    /// <summary>A render request's <c>expand</c> (plan 32 DBR55): an object of widget id to the rows expanded, each the list of the member values of the row's own fields, at most <see cref="WidgetResolver.MaximumExpansions"/> rows.</summary>
+    private static Dictionary<string, IReadOnlyList<IReadOnlyList<JsonNode?>>> ReadExpand(JsonNode node)
+    {
+        const string Shape = "`expand` must be an object of widget ids to lists of rows, each row the list of its member values: `{\"orders\": [[\"West\"], [\"East\"]]}`.";
+        var result = new Dictionary<string, IReadOnlyList<IReadOnlyList<JsonNode?>>>(StringComparer.Ordinal);
+        foreach (var (id, value) in node as JsonObject ?? throw new ArgumentException(Shape))
+        {
+            if (value is not JsonArray rows || rows.Count > WidgetResolver.MaximumExpansions) throw new ArgumentException(Shape);
+            result[id] = rows.Select(r => r is JsonArray key && key.All(v => v is null or JsonValue) ? (IReadOnlyList<JsonNode?>)key.Select(v => v?.DeepClone()).ToList() : throw new ArgumentException(Shape)).ToList();
+        }
+        return result;
+    }
+
     /// <summary>The render of a document already found: a published one (the module's cache, the definition header) or a person's own (<paramref name="isPublished"/> false: no cache, no header, the audit says whose it is).</summary>
     private async Task<ViewsAnswer> RenderViewAsync(ViewsPrincipal who, string kind, PublishedView view, JsonObject? body, string verb, string? clientAddress, string? traceId, CancellationToken cancellationToken, bool isPublished)
     {
@@ -132,13 +145,15 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
         List<string>? only = null;
         string? layout = null;
         Dictionary<string, WidgetOrder>? orders = null;
+        Dictionary<string, IReadOnlyList<IReadOnlyList<JsonNode?>>>? expands = null;
         LayoutContext viewport = new();
         try
         {
             foreach (var key in body?.Select(p => p.Key) ?? [])
-                if (key is not ("parameters" or "layout" or "only" or "viewport" or "medium" or "order"))
-                    throw new ArgumentException($"Unknown key `{key}`: a render request has `parameters`, `layout`, `only`, `order`, `viewport` and `medium`.");
+                if (key is not ("parameters" or "layout" or "only" or "viewport" or "medium" or "order" or "expand"))
+                    throw new ArgumentException($"Unknown key `{key}`: a render request has `parameters`, `layout`, `only`, `order`, `expand`, `viewport` and `medium`.");
             if (body?["order"] is { } ord) orders = ReadOrders(ord);
+            if (body?["expand"] is { } exp) expands = ReadExpand(exp);
             if (body?["parameters"] is { } p) parameters = (p as JsonObject ?? throw new ArgumentException("`parameters` must be an object of values by parameter name.")).ToDictionary(x => x.Key, x => x.Value?.DeepClone());
             if (body?["only"] is { } o) only = (o as JsonArray ?? throw new ArgumentException("`only` must be a list of widget ids.")).Select(x => x is JsonValue v && v.TryGetValue<string>(out var s) ? s : throw new ArgumentException("`only` must be a list of widget ids.")).ToList();
             if (body?["layout"] is { } l) layout = l is JsonValue lv && lv.TryGetValue<string>(out var ls) ? ls : throw new ArgumentException("`layout` must be a layout's name.");
@@ -159,7 +174,7 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
         try
         {
             var resolver = view.Resolver(services.Queries, Basis(cached: isPublished), services.Entities);
-            var rendered = await resolver.ResolveAsync(context, view.Document, picked.Name, parameters, only, cancellationToken, orders).ConfigureAwait(false);
+            var rendered = await resolver.ResolveAsync(context, view.Document, picked.Name, parameters, only, cancellationToken, orders, expand: expands).ConfigureAwait(false);
             var errors = rendered.Widgets.Where(w => rendered.Failed(w.Key)).Select(w => (w.Value["code"]?.GetValue<string>() ?? "error")).ToList();
             var detail = Detail(traceId, ("layout", picked.Name), ("widgets", rendered.Widgets.Count), ("errors", errors.Count), ("error_codes", errors.Distinct().Order(StringComparer.Ordinal).ToList()),
                 ("parameters", parameters?.Keys.Order(StringComparer.Ordinal).ToList()), ("only", only));
@@ -385,8 +400,12 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
             if (prepared.Refusal is not null) return prepared.Refusal;
             var p = prepared.Page!;
             var asOf = p.Rendered["as_of"]?.GetValue<string>();
-            var page = PrintPages.Html(view, p.Layout, p.Paper, p.Rendered, p.Parameters, who.Caller.Id, exporter!.Fonts, "");
-            var job = new PrintJob(view.Document.Title, page, pageAssets!,
+            // custom widgets (DBR32): the app files that draw them are served to the page from the exporter's own origin
+            var jobAssets = new Dictionary<string, PrintAsset>(pageAssets!, StringComparer.Ordinal);
+            var components = ((p.Rendered["widgets"] as JsonObject)?.Select(w => w.Value as JsonObject).Where(n => n?["type"]?.GetValue<string>() == "custom").Select(n => n!["component"]!.GetValue<string>()).ToList()) ?? [];
+            var frames = options.CustomApps is { } customApps && components.Count > 0 ? CustomViewPrint.Frames(components, customApps, jobAssets) : null;
+            var page = PrintPages.Html(view, p.Layout, p.Paper, p.Rendered, p.Parameters, who.Caller.Id, exporter!.Fonts, "", frames);
+            var job = new PrintJob(view.Document.Title, page, jobAssets,
                 new PdfLayout(p.Paper.WidthMm, p.Paper.HeightMm, p.Paper.Margins,
                     PrintPages.RunningTemplate(p.Paper.Header, p.Paper, view.Document.Title, asOf, who.Caller.Id, p.Parameters),
                     PrintPages.RunningTemplate(p.Paper.Footer, p.Paper, view.Document.Title, asOf, who.Caller.Id, p.Parameters), PreferCssPage: true));
@@ -663,7 +682,7 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
         return new ResolverOptions
         {
             MaxWidgets = b.MaxWidgets, MaxRows = b.MaxRows, MaxParallelism = b.MaxParallelism, WidgetTimeout = b.WidgetTimeout, Time = options.Time, MaxImageBytes = b.MaxImageBytes,
-            ModelSourcePrefix = b.ModelSourcePrefix, FrameOrigins = b.FrameOrigins, Cache = cached ? cache : null,
+            ModelSourcePrefix = b.ModelSourcePrefix, FrameOrigins = b.FrameOrigins, Cache = cached ? cache : null, CustomViews = options.CustomApps is { } apps ? apps.Find : b.CustomViews,
             OnUnexpected = (id, e) =>
             {
                 b.OnUnexpected?.Invoke(id, e);

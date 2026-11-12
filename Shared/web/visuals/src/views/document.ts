@@ -7,6 +7,7 @@ import { checkWidgets } from './widgets'
 import type { Context, DrillTarget, WidgetInfo } from './widgets'
 import { MINIMUMS } from './limits'
 import { checkLinks, resolveLinkRefs } from './links'
+import { checkGroups } from './groups'
 import type { LinkInfo } from './links'
 
 /**
@@ -35,6 +36,7 @@ function top(schema: unknown): ValidateFunction {
   const properties = copy.properties as Json
   properties.widgets = {}
   properties.links = {}
+  properties.groups = {}
   properties.layouts = {}
   return ajv.compile({ ...copy, $defs: defs })
 }
@@ -112,7 +114,7 @@ export function validateViewsDocument(document: unknown, options: ViewsOptions =
 
   run(topChecks[fileKind], document, { kind: 'top', of: fileKind }, '', issues)
   const declared = parameters(document.parameters, issues)
-  const context: Context = { kind: fileKind, declared, targets: options.targets, widgetIds: null, clickRefs: [] }
+  const context: Context = { kind: fileKind, declared, targets: options.targets, widgetIds: null, clickRefs: [], groups: document.groups === undefined ? {} : checkGroups(document.groups, issues) }
   const widgets = document.widgets === undefined ? null : checkWidgets(document.widgets, context, issues)
   if (widgets) context.widgetIds = new Set(widgets.map((w) => w.id))
   let links: Record<string, LinkInfo> = {}

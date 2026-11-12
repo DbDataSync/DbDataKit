@@ -1,0 +1,82 @@
+{
+  "parameters": [],
+  "groups": {
+    "details": {
+      "fields": [
+        "customers.customer",
+        "products.category"
+      ],
+      "label": "Details"
+    }
+  },
+  "widgets": {
+    "w": {
+      "type": "matrix",
+      "encodings": {
+        "rows": [
+          "customers.region",
+          {
+            "group": "details",
+            "show": "always"
+          }
+        ],
+        "columns": [
+          "orders.status"
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenue"
+          }
+        ],
+        "totals": {
+          "rows": true
+        }
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue"
+      ],
+      "attributes": [
+        "customers.region",
+        "customers.customer",
+        "products.category",
+        "orders.status"
+      ],
+      "order": [
+        [
+          "customers.region",
+          "asc"
+        ],
+        [
+          "customers.customer",
+          "asc"
+        ],
+        [
+          "products.category",
+          "asc"
+        ],
+        [
+          "orders.status",
+          "asc"
+        ]
+      ],
+      "limit": 10000,
+      "totals": {
+        "subtotal_by": [
+          "orders.status",
+          "customers.region",
+          "customers.customer",
+          "products.category"
+        ]
+      }
+    }
+  }
+}

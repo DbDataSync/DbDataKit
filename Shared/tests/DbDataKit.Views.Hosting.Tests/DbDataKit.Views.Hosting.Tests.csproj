@@ -7,6 +7,7 @@
     <PackageReference Include="Apache.Arrow" />
     <PackageReference Include="PdfPig" />
     <ProjectReference Include="..\..\src\DbDataKit.Views.Hosting\DbDataKit.Views.Hosting.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.ReportCatalogs\DbDataKit.ReportCatalogs.csproj" />
     <!-- the semantic module over a host that runs SQL: the engine answers a widget's request from the host's data -->
     <ProjectReference Include="..\..\src\DbDataKit.Serving.Semantic\DbDataKit.Serving.Semantic.csproj" />
     <!-- the state database of every engine: the same throwaway database per engine the State tests use -->

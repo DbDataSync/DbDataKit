@@ -29,7 +29,7 @@ describe('the wells of each widget type', () => {
     expect(WIDGET_TYPES).toHaveLength(8)
     expect(wellsOf('metric').map((w) => w.id)).toEqual(['value', 'compare'])
     expect(wellsOf('chart').map((w) => w.id)).toEqual(['x', 'y', 'color', 'column', 'row', 'tooltip'])
-    expect(wellsOf('matrix').map((w) => [w.id, w.kind])).toEqual([['rows', 'attribute'], ['columns', 'attribute'], ['values', 'measure']])
+    expect(wellsOf('matrix').map((w) => [w.id, w.kind])).toEqual([['rows', 'attribute'], ['columns', 'attribute'], ['values', 'either']])
     expect(wellsOf('table').map((w) => w.id)).toEqual(['columns'])
     expect(wellsOf('control').map((w) => w.id)).toEqual(['attribute'])
     expect(wellsOf('text')).toEqual([])
@@ -40,12 +40,15 @@ describe('the wells of each widget type', () => {
       const c = read(g.file)
       const widget = c.widgets.w as WidgetDoc
       const inWells = new Set(wellsOf(widget.type).flatMap((spec) => wellFields(widget, spec)))
+      // a field group in a well (`@name`, DBR52) holds its levels
+      for (const name of [...inWells].filter((f) => f.startsWith('@'))) for (const level of c.groups[name.slice(1).split('#')[0]].fields) inWells.add(typeof level === 'string' ? level : level.field)
       // a table's sort field, or the measure a nested axis's innermost level sorts by (DBR42), is asked for without being in a well
       const sortField = (widget as any).encodings?.sort?.by
       const xs = (widget as any).encodings?.x
       const levelSort = Array.isArray(xs) ? xs.map((l: any) => l?.sort?.by) : []
-      const q = c.request.query as { measures: string[]; attributes?: string[] }
-      for (const f of [...q.measures, ...(q.attributes ?? [])]) if (f !== sortField && !(levelSort ?? []).includes(f) && !((widget as any).query?.order ?? []).some((o: unknown[]) => o[0] === f)) expect(inWells.has(f), f).toBe(true)
+      const q = c.request.query as { measures: (string | { measure: string })[]; attributes?: string[] }
+      // a filtered or aliased measure (DBR50) is asked for as `{measure, as, filters}`: its field is in the well
+      for (const f of [...q.measures.map((m) => (typeof m === 'string' ? m : m.measure)), ...(q.attributes ?? [])]) if (f !== sortField && !(levelSort ?? []).includes(f) && !((widget as any).query?.order ?? []).some((o: unknown[]) => o[0] === f)) expect(inWells.has(f), f).toBe(true)
     })
 })
 

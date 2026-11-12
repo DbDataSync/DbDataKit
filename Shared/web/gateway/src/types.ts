@@ -173,6 +173,15 @@ export interface ServerSettings { text: string; version: string | null; masked: 
 export interface SettingsFields { modules?: string[]; 'views.cacheSeconds'?: number; 'views.export.mode'?: string | null; 'views.export.path'?: string | null; logSql?: boolean; 'telemetry.enabled'?: boolean; 'telemetry.endpoint'?: string | null; 'telemetry.protocol'?: string; 'semantic.level'?: number; 'semantic.combine.memoryMb'?: number; 'semantic.combine.timeoutSeconds'?: number; 'semantic.combine.maxInputRows'?: number; 'rest.port'?: number; 'rest.defaultLimit'?: number; 'rest.maxRows'?: number }
 export interface SettingsCheck { valid: boolean; diagnostics: Diagnostic[]; fields: SettingsFields; changed: string[]; restart_keys: string[]; problems: string[] }
 export interface SettingsEdit { set?: Record<string, string | number | boolean>; remove?: string[]; list?: Record<string, string[]> }
+/**
+ * The export component of this Gateway (plan 32 DBR16, `GET /api/v1/views/export`): the pinned Chromium, the bundled fonts and the print page, a release asset the Install button downloads and checks. `install` is the background install:
+ * idle, running (with the step and the bytes of the archive), done (`restart_needed`) or failed (the refusal in words).
+ */
+export interface ExportInstallProgress { state: 'idle' | 'running' | 'done' | 'failed'; step: string; bytes: number; total: number; message: string | null; restart_needed: boolean }
+export interface ExportComponentState {
+  platform: string | null; supported: boolean; installed: boolean; whole: boolean; directory: string; release: string | null; chromium: string | null; fonts: string | null; mode: string | null; configured: boolean
+  problems: string[]; summary: string; install: ExportInstallProgress
+}
 export interface SettingsWritten { version: string; changed: string[]; restart_keys: string[]; restart_needed: boolean; commit: string | null }
 
 /** What a model's catalog says (`GET /api/v1/semantic-models/{name}/catalog`, plan 14a SL12): no data source and no connection. */

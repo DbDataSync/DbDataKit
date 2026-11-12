@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, Link, useIsAdmin } from '@dbdatakit/shell'
 import { gatewayApi } from '../api'
 import { GatewayShell } from '../GatewayShell'
+import { ExportComponentCard } from './ExportComponentCard'
 import { MODULES, SEMANTIC_NUMBERS, cacheSeconds, editFor, groupDiagnostics, placeOf, restartText, saveState, semanticNumber, shown, toggleModule, type FieldKey, type SemanticNumber } from '../settings'
 import type { Diagnostic, SettingsCheck, SettingsWritten } from '../types'
 
@@ -36,6 +37,8 @@ export interface SettingsViewProps {
   onNote: (note: string) => void
   onSave: () => void
   onReload: () => void
+  /** The card of the PDF export component (it reads and installs on its own, so the settings view stays stateless). */
+  exportCard?: ReactNode
 }
 
 /** One whole-number field of the `semantic:` section: what is typed is kept (by the page) until it is a number in range, and the Gateway is asked only then. Stateless, as the other fields are. */
@@ -116,6 +119,7 @@ export function SettingsView(p: SettingsViewProps) {
                 </div>
                 <FieldErrors field="views.export.mode" items={grouped.byField['views.export.mode']} />
                 <FieldErrors field="views.export.path" items={grouped.byField['views.export.path']} />
+                {p.exportCard}
                 <fieldset style={{ border: 0, padding: 0, margin: '12px 0' }} data-testid="settings-semantic">
                   <legend className="card-title">Semantic models</legend>
                   {SEMANTIC_NUMBERS.map((f) => <SemanticNumberField key={f.key} field={f} value={values.semantic[f.key]} disabled={!p.allowed || !p.check} items={grouped.byField[f.key]} typed={p.semanticText?.[f.key]} onField={p.onField} onTyped={(k, t) => p.onSemanticText?.(k, t)} />)}
@@ -241,6 +245,7 @@ export function SettingsPage() {
         onCacheText={setCacheText}
         onNote={setNote}
         onSave={() => write.mutate()}
+        exportCard={<ExportComponentCard />}
         onReload={() => { setDraft(null); setStale(false); setRefusal(null); setCacheText(null); void queryClient.invalidateQueries({ queryKey: ['gateway', 'settings'] }) }}
       />
     </GatewayShell>
