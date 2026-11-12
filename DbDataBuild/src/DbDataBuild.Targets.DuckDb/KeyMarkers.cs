@@ -16,27 +16,36 @@ public static unsafe class KeyMarkers
 {
     private static readonly Regex Name = new(@"\bddb_key_([tidm]+)\s*\(", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
+    // the markers of a key kept in a map: `ddb_keymap_ti_customer_key('marts', a, b)` reads the key, `ddb_keytext_ti_customer_key('marts', a, b)` is the text of the business key (see SurrogateKey.KeyMapMarkerName)
+    private static readonly Regex MapName = new(@"\b(ddb_key(?:map|text)_([tidm]+)_[A-Za-z_][A-Za-z0-9_]*)\s*\(", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
     /// <summary>Registers every marker the statements call (none: nothing is registered).</summary>
     public static void Register(DuckDBConnection connection, IEnumerable<string> statements)
     {
-        foreach (var codes in statements.SelectMany(s => Name.Matches(s).Select(m => m.Groups[1].Value.ToLowerInvariant())).Distinct(StringComparer.Ordinal))
-            RegisterOne(connection, codes);
+        var texts = statements.ToList();
+        foreach (var codes in texts.SelectMany(s => Name.Matches(s).Select(m => m.Groups[1].Value.ToLowerInvariant())).Distinct(StringComparer.Ordinal))
+            RegisterOne(connection, "ddb_key_" + codes, codes, withSchema: false, returnsText: false);
+        foreach (var marker in texts.SelectMany(s => MapName.Matches(s).Select(m => (Name: m.Groups[1].Value, Codes: m.Groups[2].Value.ToLowerInvariant()))).DistinctBy(m => m.Name.ToLowerInvariant()))
+            RegisterOne(connection, marker.Name.ToLowerInvariant(), marker.Codes, withSchema: true, returnsText: marker.Name.StartsWith("ddb_keytext_", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static void RegisterOne(DuckDBConnection connection, string codes)
+    private static void RegisterOne(DuckDBConnection connection, string name, string codes, bool withSchema, bool returnsText)
     {
         var function = NativeMethods.ScalarFunction.DuckDBCreateScalarFunction();
         try
         {
-            NativeMethods.ScalarFunction.DuckDBScalarFunctionSetName(function, "ddb_key_" + codes);
+            NativeMethods.ScalarFunction.DuckDBScalarFunctionSetName(function, name);
+            if (withSchema)
+                using (var schema = NativeMethods.LogicalType.DuckDBCreateLogicalType(DuckDBType.Varchar))
+                    NativeMethods.ScalarFunction.DuckDBScalarFunctionAddParameter(function, schema);          // the owner's schema name, which says where the map is
             foreach (var code in codes)
                 using (var type = NativeMethods.LogicalType.DuckDBCreateLogicalType(code switch { 't' => DuckDBType.Varchar, 'i' => DuckDBType.BigInt, 'd' => DuckDBType.Date, _ => DuckDBType.Timestamp }))
                     NativeMethods.ScalarFunction.DuckDBScalarFunctionAddParameter(function, type);
-            using (var returns = NativeMethods.LogicalType.DuckDBCreateLogicalType(DuckDBType.BigInt)) NativeMethods.ScalarFunction.DuckDBScalarFunctionSetReturnType(function, returns);
+            using (var returns = NativeMethods.LogicalType.DuckDBCreateLogicalType(returnsText ? DuckDBType.Varchar : DuckDBType.BigInt)) NativeMethods.ScalarFunction.DuckDBScalarFunctionSetReturnType(function, returns);
             NativeMethods.ScalarFunction.DuckDBScalarFunctionSetFunction(function, &Run);
             NativeMethods.ScalarFunction.DuckDBScalarFunctionSetVolatile(function);                       // never folded: the call stays in the plan
             if (!DuckDBStateExtensions.IsSuccess(NativeMethods.ScalarFunction.DuckDBRegisterScalarFunction(connection.NativeConnection, function)))
-                throw new InvalidOperationException($"DuckDB refused to register the key marker ddb_key_{codes}");
+                throw new InvalidOperationException($"DuckDB refused to register the key marker {name}");
         }
         finally { NativeMethods.ScalarFunction.DuckDBDestroyScalarFunction(ref function); }
     }

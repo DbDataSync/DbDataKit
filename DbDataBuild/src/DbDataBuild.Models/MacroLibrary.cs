@@ -9,10 +9,10 @@ namespace DbDataBuild.Models;
 /// <param name="Name">As written, with its schema name when it has one (`finance.net`).</param>
 /// <param name="Calls">The other macros its text calls, by name.</param>
 /// <param name="Uses">The types of the project its text mentions.</param>
-public sealed record MacroDefinition(string Name, bool IsType, string Sql, string File, int Line, IReadOnlyList<string> Calls, IReadOnlyList<string> Uses, string? PlanningSql = null)
+public sealed record MacroDefinition(string Name, bool IsType, string Sql, string File, int Line, IReadOnlyList<string> Calls, IReadOnlyList<string> Uses, string? PlanningSql = null, string? KeyTextSql = null)
 {
     /// <summary>The statement for a binding that lowers the query: a surrogate key calls its marker function there (see KeyMarkers) instead of expanding to DuckDB's hash. The text itself everywhere else.</summary>
-    public string SqlFor(bool planning) => planning ? PlanningSql ?? Sql : Sql;
+    public string SqlFor(bool planning, bool keyText = false) => planning ? (keyText ? KeyTextSql : null) ?? PlanningSql ?? Sql : Sql;
 
     public string ShortName => Name[(Name.LastIndexOf('.') + 1)..];
     public string? SchemaName => Name.Contains('.') ? Name[..Name.LastIndexOf('.')] : null;
@@ -104,6 +104,16 @@ public sealed class MacroLibrary
                     var markerCall = SurrogateKey.MarkerName(parts.Select(p => p.Type).ToList()) + "(" + string.Join(", ", parts.Select(p => $"CAST({p.Expression} AS {p.Type switch { KeyPartType.Text => "VARCHAR", KeyPartType.Integer => "BIGINT", KeyPartType.Date => "DATE", _ => "TIMESTAMP" }})")) + ")";
                     // unknown_member: a NULL part gives the reserved key instead of NULL (COALESCE, which every engine writes the same way)
                     var (open, close) = key.UnknownMember ? ("coalesce(", $", {SurrogateKey.UnknownKey})") : ("", "");
+                    if (key.Method == KeyMethods.KeyMap)
+                    {
+                        // a key kept in a map (K10): its value is in a table of the target, so DuckDB cannot compute it and a query that runs here (`sample`, `test`) is refused; lowering sees the marker that reads the map,
+                        // and the step that adds new keys sees the marker that stands for the key's text
+                        var schema = SurrogateKey.KeyMapTable(model.Name, name).Schema.Replace("'", "''");
+                        string Marker(bool asText) => SurrogateKey.KeyMapMarkerName(parts.Select(p => p.Type).ToList(), name, asText) + "('" + schema + "', " + string.Join(", ", parts.Select(p => $"CAST({p.Expression} AS {p.Type switch { KeyPartType.Text => "VARCHAR", KeyPartType.Integer => "BIGINT", KeyPartType.Date => "DATE", _ => "TIMESTAMP" }})")) + ")";
+                        generated.Add(new MacroDefinition(name, false, head + $"CAST(error('The key {name} is kept in a map in the target (method: key_map), which DuckDB does not have, so a query that calls it cannot run here.') AS BIGINT)", file, key.Line, [], [],
+                            head + open + Marker(false) + close, head + Marker(true)));
+                        continue;
+                    }
                     generated.Add(new MacroDefinition(name, false, head + open + SurrogateKey.Sql("duckdb", parts) + close, file, key.Line, [], [], head + open + markerCall + close));
                 }
             }
@@ -282,7 +292,7 @@ public sealed class MacroLibrary
     }
 
     /// <summary>The statements for a binding of these queries: only what they reach, callees before callers. <paramref name="planning"/>: the binding is one that lowers the query, where a surrogate key stays a call of its marker.</summary>
-    public DuckPrelude PreludeFor(IEnumerable<string> sqlTexts, bool planning = false)
+    public DuckPrelude PreludeFor(IEnumerable<string> sqlTexts, bool planning = false, bool keyText = false)
     {
         var closure = Closure(sqlTexts);
         if (closure.Count == 0) return DuckPrelude.Empty;
@@ -297,7 +307,7 @@ public sealed class MacroLibrary
             ordered.Add(d);
         }
         foreach (var d in closure) Place(d);
-        return new DuckPrelude(schemas, ordered.Where(d => d.IsType).Select(d => d.Sql).ToList(), ordered.Where(d => !d.IsType).Select(d => d.SqlFor(planning)).ToList());
+        return new DuckPrelude(schemas, ordered.Where(d => d.IsType).Select(d => d.Sql).ToList(), ordered.Where(d => !d.IsType).Select(d => d.SqlFor(planning, keyText)).ToList());
     }
 
     /// <summary>A hash of the macros (and types) a set of queries reaches: a change to one changes what every query that reaches it expands to, so it is part of those queries' definition hash.</summary>

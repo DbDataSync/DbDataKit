@@ -30,6 +30,12 @@ public abstract partial class LoaderBase : ILoader
     protected abstract string SubtractDuration(string expression, LoadDuration duration, string columnType);
     protected abstract string TypedLiteral(string logicalType, string literal);
 
+    /// <summary>The statement that creates a key map (plan 25 K10) when it is not there: an integer `key_value` the engine counts up (never reused) and the business key's text `key_text`, one row per text.</summary>
+    protected abstract string KeyMapEnsure(string table);
+
+    /// <summary>The statement that adds the business keys <paramref name="textPrefix"/> selects as <paramref name="column"/> to a key map, the ones it has not got yet. Two loads adding the same key at once end with one row.</summary>
+    protected abstract string KeyMapInsert(string table, string column, string textPrefix);
+
     /// <summary>SchemaName-qualified, quoted target table of a model (`marts.fct_orders` becomes [marts].[fct_orders]).</summary>
     protected string Table(string model)
     {
@@ -105,6 +111,11 @@ public abstract partial class LoaderBase : ILoader
                 throw new InvalidOperationException($"Unknown strategy {op.Strategy}.");
         }
 
+        foreach (var map in r.KeyMaps ?? [])
+        {
+            statements.Add(KeyMapEnsure(Table(map.Table)));
+            statements.Add(KeyMapInsert(Table(map.Table), map.Column, map.TextPrefix));
+        }
         statements.Add(StageStatement(r.TransformedBodyPrefix, colList, where));
         switch (op.Strategy)
         {

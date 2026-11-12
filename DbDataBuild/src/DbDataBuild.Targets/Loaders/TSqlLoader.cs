@@ -29,6 +29,18 @@ public class TSqlLoader : LoaderBase
     protected override string SubtractDuration(string expression, LoadDuration d, string columnType) =>
         $"DATEADD({d.Unit.ToString().ToUpperInvariant()}, -{d.Amount}, {expression})";
 
+    // The text is compared as bytes (a binary collation), so two business keys that differ only in case or accent are two keys, as they are for a hash; the lookup of a query puts the same collation on its side.
+    // IGNORE_DUP_KEY makes a second load adding the same text at the same moment end quietly with one row. 850 characters is what a unique index can hold.
+    protected override string KeyMapEnsure(string table) =>
+        $"IF OBJECT_ID(N'{table.Replace("'", "''")}', N'U') IS NULL\nCREATE TABLE {table} ({Quote("key_value")} BIGINT IDENTITY(1, 1) NOT NULL PRIMARY KEY, {Quote("key_text")} NVARCHAR(850) COLLATE Latin1_General_100_BIN2 NOT NULL UNIQUE WITH (IGNORE_DUP_KEY = ON));";
+
+    protected override string KeyMapInsert(string table, string column, string textPrefix)
+    {
+        var text = $"{BodyName}.{Quote(column)} COLLATE Latin1_General_100_BIN2";
+        return $"{textPrefix.TrimEnd()}\nINSERT INTO {table} ({Quote("key_text")}) SELECT DISTINCT {text} FROM {BodyName} WHERE {BodyName}.{Quote(column)} IS NOT NULL " +
+               $"AND NOT EXISTS (SELECT 1 FROM {table} AS m WHERE m.{Quote("key_text")} = {text});";
+    }
+
     protected override string TypedLiteral(string logicalType, string literal)
     {
         var lit = Literal(literal);

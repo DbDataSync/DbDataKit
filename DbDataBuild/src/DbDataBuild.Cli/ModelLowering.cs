@@ -10,7 +10,8 @@ namespace DbDataBuild.Cli;
 /// <summary>A model's lowered query and the committed artifact that shows it.</summary>
 /// <param name="ArtifactPath">Relative to rendered/, `lowered/&lt;model&gt;/lowered.sql`.</param>
 /// <param name="ArtifactText">The file: a header naming its source, hashes and the DuckDB version, then the query.</param>
-internal sealed record LoweredModel(string Sql, LoweredQuery Query, string ArtifactPath, string ArtifactText, string Hash);
+/// <param name="KeyTextSql">The query lowered again with each call of a key kept in a map (plan 25 K10) as the business key's text, for the load step that adds new keys to the map; null when the query calls none. Not committed: the rendered load script carries what it becomes.</param>
+internal sealed record LoweredModel(string Sql, LoweredQuery Query, string ArtifactPath, string ArtifactText, string Hash, string? KeyTextSql = null);
 
 /// <summary>
 /// The lowering stage (docs/research/duckdb-plan-lowering): DuckDB binds each model query against an empty schema built from the declared columns of everything
@@ -158,6 +159,9 @@ internal sealed class ModelLowering(IReadOnlyList<ModelDefinition> models, IRead
     {
         var key = built.Definition.Name + "\0" + sql;
         if (duckDbCache.TryGetValue(key, out var hit)) return hit;
+        // a key kept in a map is a table of the target, which DuckDB does not have: a query that calls one is refused here (`sample`, `test`)
+        if ((macros ?? MacroLibrary.Empty).Closure([sql]).FirstOrDefault(d => d.KeyTextSql != null) is { } kept)
+            return duckDbCache[key] = (null, $"The key {kept.Name} is kept in a map in the target (method: key_map), which DuckDB does not have, so a query that calls it cannot run here.");
         sql = UnknownMembers.Apply(built.Definition, sql);
         var upstream = UpstreamFor(built.Definition.Name, sql, restrict: true);
         var prelude = (macros ?? MacroLibrary.Empty).PreludeFor([sql]);
@@ -273,6 +277,25 @@ internal sealed class ModelLowering(IReadOnlyList<ModelDefinition> models, IRead
         }
         catch (LoweringException ex) { return (null, Fail(ex.Kind != "unsupported" ? "DuckDB could not bind the query: " + ex.Message.Split('\n')[0] : ex.Message)); }
 
+        string? keyTextSql = null;
+        if ((macros ?? MacroLibrary.Empty).Closure([authorSql]).Any(d => d.KeyTextSql != null))
+        {
+            // the same query where each call of a key kept in a map is the text of its business key, without the unknown row (which has no business key): the load adds those texts to the map before it reads it
+            var textPrelude = (macros ?? MacroLibrary.Empty).PreludeFor([writtenSql], planning: true, keyText: true);
+            const string hint = " (a key kept in a map, `method: key_map`, is selected as a column, `customer_key(...) AS customer_key`: its new business keys are added to the map from that column, so a call in an expression, a join or a filter is refused)";
+            var textUpstream = UpstreamFor(name, writtenSql, restrict);
+            var (textJson, textError) = QueryDescriber.SerializePlan(textUpstream, writtenSql, textPrelude);
+            if (textJson == null) return (null, Fail((textError ?? "DuckDB returned no plan for the key texts") + hint));
+            try
+            {
+                PlanLowerer.ThrowIfError(textJson);
+                var textDescribed = QueryDescriber.Describe(textUpstream, writtenSql, textPrelude);
+                if (!textDescribed.Ok) return (null, Fail((textDescribed.Error ?? "DuckDB could not describe the query for the key texts") + hint));
+                keyTextSql = PlanLowerer.Lower(textJson, textDescribed.Columns!.Select(c => c.Name).ToList(), GrainOf, policy).Sql;
+            }
+            catch (LoweringException ex) { return (null, Fail((ex.Kind != "unsupported" ? "DuckDB could not bind the query for the key texts: " + ex.Message.Split('\n')[0] : ex.Message) + hint)); }
+        }
+
         duckDbVersion ??= QueryDescriber.DuckDbVersion();
         var (authorHash, _) = AstHasher.Hash(writtenSql);
         var sb = new StringBuilder();
@@ -283,6 +306,6 @@ internal sealed class ModelLowering(IReadOnlyList<ModelDefinition> models, IRead
         if (!policy.IsDefault) sb.Append($"-- rewrites off: {policy.Describe()}\n");
         sb.Append(QueryParameters.BackToReferences(query.Sql, parameters)).Append('\n');
         var text = sb.ToString();
-        return (new LoweredModel(query.Sql, query, ArtifactPathFor(name, variant), text, DbDataKit.Schema.Hashing.ScriptHash(text)), null);
+        return (new LoweredModel(query.Sql, query, ArtifactPathFor(name, variant), text, DbDataKit.Schema.Hashing.ScriptHash(text), keyTextSql), null);
     }
 }

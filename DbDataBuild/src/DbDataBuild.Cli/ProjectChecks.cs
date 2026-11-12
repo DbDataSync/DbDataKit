@@ -41,11 +41,13 @@ internal static class ProjectChecks
                 // with lowering on, the matrix lint and the transpile work on the lowered query (what actually runs), and findings point at its committed artifact
                 var body = sql;
                 string? bodyFile = null;
+                string? keyTextSql = null;
                 if (lowering is { Enabled: true })
                 {
                     var (lowered, error) = lowering.Lower(built, sql, built.QueryParameterList(root, config), variant);
                     if (lowered == null) { diagnostics.Add(error!); continue; }
                     body = lowered.Sql;
+                    keyTextSql = lowered.KeyTextSql;
                     bodyFile = $"rendered/{lowered.ArtifactPath}";
                 }
                 // each target is linted on the query it will actually get: the lowered one with that target's rules applied
@@ -55,7 +57,7 @@ internal static class ProjectChecks
                 if (config.LintSlices) diagnostics.AddRange(SliceAdvice(built, variantTargets, body));
                 if (config.LintSlices && lowering != null) diagnostics.AddRange(SliceSourceAdvice(built, variantTargets, body, lowering));
                 if (lowering != null && !built.Definition.LintIgnore.Contains(DiagnosticCatalog.StringsCompareDifferently.Code)) diagnostics.AddRange(StringProfileAdvice(built, variantTargets, config, lowering, body));
-                diagnostics.AddRange(renderer.Render(built.Definition, body, built.QueryFile, variantTargets, bodyFile, built.QueryParameterList(root, config), lowering?.NativeUsesFor(body) ?? []).Diagnostics.Where(d => d.Code != DiagnosticCatalog.SqlParseFailure.Code));
+                diagnostics.AddRange(renderer.Render(built.Definition, body, built.QueryFile, variantTargets, bodyFile, built.QueryParameterList(root, config), lowering?.NativeUsesFor(body) ?? [], keyTextSql).Diagnostics.Where(d => d.Code != DiagnosticCatalog.SqlParseFailure.Code));
             }
             diagnostics.AddRange(NameLengths(built, config, targets));
             foreach (var target in targets) HookLoader.Load(built, config, target, projectRoot ?? Directory.GetCurrentDirectory(), diagnostics);   // missing or unparseable hook scripts

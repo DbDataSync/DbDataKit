@@ -182,9 +182,38 @@ public static partial class TargetRules
     /// <summary>A call of a surrogate key (plan 25) reaches the transpiled text as `ddb_key_ti(a, b)`, one letter per argument; the engine's text of the key is written over the arguments as they now stand.</summary>
     private static string ExpandKeyMarkers(string text, string target)
     {
+        if (text.Contains("ddb_keymap_", StringComparison.OrdinalIgnoreCase) || text.Contains("ddb_keytext_", StringComparison.OrdinalIgnoreCase)) text = ExpandKeyMapMarkers(text, target);
         if (!text.Contains("ddb_key_", StringComparison.OrdinalIgnoreCase)) return text;
         foreach (var name in System.Text.RegularExpressions.Regex.Matches(text, @"\bddb_key_[tidm]+(?=\s*\()", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Select(m => m.Value.ToLowerInvariant()).Distinct().ToList())
             text = ExpandMarker(text, name, a => DbDataKit.Dialect.SurrogateKey.FromMarker(target, name, a) ?? throw new InvalidOperationException($"The key marker {name} was given {a.Length} arguments. This is a tool bug."));
+        return text;
+    }
+
+    /// <summary>
+    /// A call of a key kept in a map (plan 25 K10): `ddb_keymap_ti_customer_key('marts', a, b)` is a read of the key from the map table `marts.customer_key_map` by the business key's text, NULL when the business key has no key (yet) or a part is NULL;
+    /// `ddb_keytext_...` is that text itself, which the step that adds new keys to the map selects. The first argument is the owner's schema name as a text literal.
+    /// </summary>
+    private static string ExpandKeyMapMarkers(string text, string target)
+    {
+        foreach (var name in System.Text.RegularExpressions.Regex.Matches(text, @"\bddb_key(?:map|text)_[tidm]+_\w+(?=\s*\()", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Select(m => m.Value.ToLowerInvariant()).Distinct().ToList())
+        {
+            var marker = DbDataKit.Dialect.SurrogateKey.ParseKeyMapMarker(name) ?? throw new InvalidOperationException($"The key marker {name} is not one. This is a tool bug.");
+            text = ExpandMarker(text, name, a =>
+            {
+                if (a.Length != marker.Types.Count + 1) throw new InvalidOperationException($"The key marker {name} was given {a.Length} arguments. This is a tool bug.");
+                var literal = System.Text.RegularExpressions.Regex.Match(a[0], @"^N?'((?:[^']|'')*)'$");
+                if (!literal.Success) throw new InvalidOperationException($"The first argument of the key marker {name} is not a text literal. This is a tool bug.");
+                var parts = a.Skip(1).Select((x, i) => new DbDataKit.Dialect.KeyPart(x, marker.Types[i])).ToList();
+                var business = DbDataKit.Dialect.SurrogateKey.TextSql(target, parts);
+                if (marker.AsText) return business;
+                var (schema, table) = DbDataKit.Dialect.SurrogateKey.KeyMapTable(literal.Groups[1].Value.Replace("''", "'") + ".x", marker.KeyName);
+                var quote = (string id) => DbDataBuild.Models.SharedQuoting.Quote(target, id);
+                var map = (schema.Length == 0 ? "" : quote(schema) + ".") + quote(table);
+                // SQL Server: the map's text is binary-collated, so the business text is put in that collation explicitly (a column's own collation would otherwise clash with it)
+                var text = target == "sqlserver" ? $"({business}) COLLATE Latin1_General_100_BIN2" : business;
+                return $"(SELECT m.{quote("key_value")} FROM {map} AS m WHERE m.{quote("key_text")} = {text})";
+            });
+        }
         return text;
     }
 
