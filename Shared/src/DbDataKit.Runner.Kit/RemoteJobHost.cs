@@ -92,7 +92,9 @@ public static class RemoteJobHost
             throw new ArgumentException($"The run is for the task '{info.Task}' and {jobType.Name} declares the task '{taskName}'; the runner started the wrong job.", nameof(jobType));
 
         var probe = (RunnerJobBase)(Activator.CreateInstance(jobType, nonPublic: true) ?? throw new InvalidOperationException($"{jobType.Name} cannot be created."));
-        var input = InputBinder.FromStrings(probe.InputType, info.Inputs);
+        // the reserved input of a dry run is the runner's word to the kit, not an input of the job
+        var dryRun = info.Inputs.TryGetValue(RunnerProtocol.DryRunInput, out var dryText) && string.Equals(dryText, "true", StringComparison.OrdinalIgnoreCase);
+        var input = InputBinder.FromStrings(probe.InputType, info.Inputs.Where(i => i.Key != RunnerProtocol.DryRunInput).ToDictionary(i => i.Key, i => i.Value));
 
         await using var backend = new GrpcRunBackend(client, headers, info);
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -116,7 +118,7 @@ public static class RemoteJobHost
             }
         }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
 
-        var settings = new RunSettings(options.Hooks, options.MaxParallelism, Guid.CreateVersion7);
+        var settings = new RunSettings(options.Hooks, options.MaxParallelism, Guid.CreateVersion7, dryRun);
         var run = JobRunner.ExecuteAsync(jobType, backend, settings, options.SlotOpener ?? ConnectionGrant.Opener(client, headers, options.SlotFactory), input, cancel.Token);
         try
         {

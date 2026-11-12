@@ -117,6 +117,7 @@ public abstract class RunnerJob<TInput, TProgress, TSlots> : RunnerJobBase
     protected async Task SaveProgressAsync(CancellationToken ct)
     {
         var binder = Context.Progress ?? throw new InvalidOperationException("The job has no progress to save.");
+        if (Context.Settings.DryRun) return;                         // a dry run keeps nothing: the progress stays where the last real run left it
         await Context.BeforeProgressSaveAsync(Interlocked.Increment(ref _saves), ct).ConfigureAwait(false);
         if (!await binder.SaveAsync(null, ct).ConfigureAwait(false))
             throw new ProgressConflictException("A checkpoint of this task moved since the run read it (another run got there first, or it was rewound); this run stops without saving.");

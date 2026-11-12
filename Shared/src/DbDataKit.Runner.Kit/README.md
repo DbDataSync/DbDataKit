@@ -47,6 +47,10 @@ public sealed class DailyDrop : RunnerJob<DailyDropInput, NoProgress, DailyDropS
 * **Typed by:** input by a record whose properties are the manifest's `inputs`; progress by the `Progress` class (a change between versions is planned by the progress migration, `DbDataKit.State` README); connections by `Slot<T>` members (binding a slot to a connection of another kind fails at staging); recovery by the call's type state; inbox items by `Inbox<T>()` (a body that does not parse as `T` is a dead letter, not a crash).
 * **An analyzer** (`DbDataKit.Runner.Kit.Analyzers`) adds what the type system cannot: `DBKR001` two steps with one name in a job, `DBKR002` a step used inside another step.
 
+## Dry run
+
+`Run.DryRun` is true in a run started with `tasks run --dry-run` (and in `RunSimulator(dryRun: true)`; the runner's reserved input `dbdatakit.dry_run` is taken out before the input is bound). The kit's own parts keep nothing: `SaveProgressAsync` does nothing and the run's progress is not saved, `Files.ClaimAsync` claims without writing the ledger (so every file is claimed) and `FileClaim.CompleteAsync` says what it would have marked, `Inbox<T>().TakeAsync` returns null (an item is handed out once), and a refused record is listed instead of kept. `Run.WouldDo(text)` writes the log line `Dry run, would: <text>` (item `dry-run`); the first line of the run's log says it is a dry run. The kit's clients take the word from the job: `OutsideHttpOptions { DryRun = Run.DryRun, OnWouldSend = Run.WouldDo }` refuses a request that is not a GET, HEAD or OPTIONS and lists it; a `WriteGate` made with `DryRun` runs no statement. A job that writes in a way of its own guards it with `if (Run.DryRun)`.
+
 ## Steps
 
 A step is identified by `(task, name, key)` within one **attempt chain** (the work item and its retries). A different key is a different step; a step that ran with a key never runs again with it in the same chain. Steps are the smallest piece: a step may not contain another (refused at run time naming both); a step inside a unit has the unit's key in its identity; names are fixed strings, keys are the variable part.

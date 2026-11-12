@@ -1,0 +1,16 @@
+{
+  "schema": "http-recording/1",
+  "entries": [
+    {
+      "request": { "method": "GET", "url": "https://api.example.test/v1/orders" },
+      "response": { "status": 200, "json": { "items": [
+        { "id": 1, "customer": "Ada", "total": 12.50, "placed_at": "2026-11-01T09:30:00Z" },
+        { "id": 2, "customer": "Bob", "total": 99.00, "placed_at": "2026-11-01T10:15:00Z" } ], "next_cursor": "p2" } }
+    },
+    {
+      "request": { "method": "GET", "url": "https://api.example.test/v1/orders?cursor=p2" },
+      "response": { "status": 200, "json": { "items": [
+        { "id": 3, "customer": "Cy", "total": 5.25, "placed_at": "2026-11-02T08:00:00Z" } ], "next_cursor": null } }
+    }
+  ]
+}

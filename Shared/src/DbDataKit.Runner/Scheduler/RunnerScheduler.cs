@@ -822,10 +822,12 @@ public sealed partial class RunnerScheduler
     /// A manual start (R13's "by hand"): queues one item of the task with <paramref name="inputs"/>, apart from its schedule and also when it is paused (a person asked). Returns the run id, or null when a run of it is already queued or
     /// running (and it does not allow overlap). Throws when the task is not in the projection of a channel this loop serves, or its row is broken.
     /// </summary>
-    public Guid? RunNow(TaskRef task, IReadOnlyDictionary<string, string>? inputs = null, string? requestedBy = null)
+    public Guid? RunNow(TaskRef task, IReadOnlyDictionary<string, string>? inputs = null, string? requestedBy = null, bool dryRun = false)
     {
         ArgumentNullException.ThrowIfNull(task);
         var served = Find(task);
+        // a dry run (plan 27a IX16) is a manual run whose inputs carry the reserved word; the task process takes it out again before the job's input is bound
+        if (dryRun) inputs = new Dictionary<string, string>(inputs ?? new Dictionary<string, string>(), StringComparer.Ordinal) { [RunnerProtocol.DryRunInput] = "true" };
         return TryEnqueue(served, WorkPayload.ManualTrigger, inputs, requestedBy);
     }
 

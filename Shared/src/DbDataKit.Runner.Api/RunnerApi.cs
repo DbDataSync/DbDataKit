@@ -265,6 +265,7 @@ public static class RunnerApi
             if (!ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
             if (Deny(context, ServerRole.Operator, RunnerControl.RunVerb, engine(), reference!) is { } denied) return denied;
             var inputs = new Dictionary<string, string>(StringComparer.Ordinal);
+            var dryRun = false;
             if (context.Request.ContentLength is null or > 0)
             {
                 // a body is optional; a client may send it without a length (chunked), so it is read, not asked about
@@ -277,6 +278,11 @@ public static class RunnerApi
                     try { parsed = JsonNode.Parse(text); }
                     catch (System.Text.Json.JsonException) { return Results.BadRequest(new { error = "The body is not JSON." }); }
                     if (parsed is not JsonObject body) return Results.BadRequest(new { error = "The body is a JSON object, such as {\"inputs\": {\"name\": \"value\"}}." });
+                    if (body["dry_run"] is { } dry)
+                    {
+                        if (dry is not JsonValue dryValue || !dryValue.TryGetValue<bool>(out dryRun)) return Results.BadRequest(new { error = "dry_run is true or false." });
+                    }
+
                     if (body["inputs"] is { } given)
                     {
                         if (given is not JsonObject map) return Results.BadRequest(new { error = "inputs is an object of names and text values." });
@@ -288,7 +294,7 @@ public static class RunnerApi
 
             return Control(engine(), control =>
             {
-                var result = control.RunNow(reference!, inputs, ActorOf(context));
+                var result = control.RunNow(reference!, inputs, ActorOf(context), dryRun);
                 return result.Queued
                     ? Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["run_id"] = result.RunId!.Value.ToString() }, statusCode: StatusCodes.Status202Accepted)
                     : Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["queued"] = false, ["error"] = $"{reference} is queued or running already." }, statusCode: StatusCodes.Status409Conflict);

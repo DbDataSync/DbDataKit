@@ -125,10 +125,18 @@ public static partial class RunnerWebhooks
             signature = verdicts.Values.Any(v => v) ? "ok" : "invalid";
         }
 
-        var receipt = await receiver.ReceiveAsync(package, channel, source, signatureOk, body, context.RequestAborted).ConfigureAwait(false);
-        var accepted = receipt.Deliveries.Count(d => d.SignatureOk);
+        // a signed body that arrives again is a replay (the serving layer, a trusted client, judges its own senders); it makes no item
+        var receipt = await receiver.ReceiveAsync(package, channel, source, signatureOk, body, refuseReplays: token is null, context.RequestAborted).ConfigureAwait(false);
+        var replays = receipt.Deliveries.Count(d => d.Replay);
+        var accepted = receipt.Deliveries.Count(d => d.SignatureOk && !d.Replay);
         Record(audit, token, source, target, accepted > 0 ? AuditEvent.Ok : AuditEvent.Refused,
-            new { signature, bytes = body.Length, tasks = receipt.Deliveries.Select(d => d.Task.Task).ToArray(), accepted, refused = receipt.Deliveries.Count - accepted });
+            new { signature, bytes = body.Length, tasks = receipt.Deliveries.Select(d => d.Task.Task).ToArray(), accepted, replays, refused = receipt.Deliveries.Count - accepted - replays });
+
+        if (accepted == 0 && replays > 0)
+        {
+            await Json(context, StatusCodes.Status409Conflict, new { error = $"This body was received before for the source '{source}' (within {WebhookReceiver.ReplayWindow.TotalHours:0} hours) and was not taken again: a replay." });
+            return;
+        }
 
         if (accepted == 0)
         {
@@ -144,7 +152,7 @@ public static partial class RunnerWebhooks
             ["signature"] = signature,
             ["deliveries"] = new JsonArray(receipt.Deliveries.Select(d => (JsonNode)new JsonObject
             {
-                ["task"] = d.Task.Task, ["item_id"] = d.ItemId.ToString(), ["signature_ok"] = d.SignatureOk, ["queued"] = d.Queued,
+                ["task"] = d.Task.Task, ["item_id"] = d.ItemId.ToString(), ["signature_ok"] = d.SignatureOk, ["queued"] = d.Queued, ["replay"] = d.Replay,
             }).ToArray()),
         });
     }

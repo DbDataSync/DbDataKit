@@ -82,6 +82,15 @@ public interface IRun
 
     /// <summary>What this job reads and writes, for lineage (plan 28b section 3). Sent to the runner (one-way); recorded nowhere durable yet (the lineage slice gives it a place).</summary>
     void Lineage(IEnumerable<string> reads, IEnumerable<string> writes);
+
+    /// <summary>
+    /// True when this run is a dry run (plan 27a IX16, <c>tasks run --dry-run</c>): it reads the outside system and writes nothing. The kit's own parts already behave (progress is not saved, the file ledger and the inbox are not
+    /// changed, a refused record is listed instead of kept); a job gives its clients the same word: <c>OutsideHttpOptions.DryRun</c>, a <c>WriteGate</c> with <c>DryRun</c>. A job that writes through code of its own is not guarded.
+    /// </summary>
+    bool DryRun { get; }
+
+    /// <summary>Says in the run's log what a dry run would have sent or written (nothing is written by this call but the log line); a job calls it where it skips a write because <see cref="DryRun"/> is true.</summary>
+    void WouldDo(string what);
 }
 
 /// <summary>The inbox of a job (plan 28b section 7): what the serving layer received for the task, handed out exactly once.</summary>
@@ -94,6 +103,13 @@ public sealed class Inbox<T>
     /// <summary>The next received item, parsed as <typeparamref name="T"/>, or null when none waits. A body that does not parse becomes a dead letter and the next item is taken.</summary>
     public async Task<InboxItem<T>?> TakeAsync(CancellationToken ct)
     {
+        if (_run.Settings.DryRun)
+        {
+            // an item is handed out once: taking one would be a write, and peeking is not offered, so a dry run sees an empty inbox and says so
+            _run.Run.WouldDo("take the next inbox item (a dry run takes none)");
+            return null;
+        }
+
         while (true)
         {
             ct.ThrowIfCancellationRequested();
@@ -170,6 +186,8 @@ public sealed class Files
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connection);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
+        // a dry run leaves the ledger as it is, so it cannot tell a content it has seen: every file is claimed (and a rerun of the real run is what skips the seen ones)
+        if (_run.Settings.DryRun) return new FileClaim(_run, connection, path, hash);
         var seen = await _run.Backend.ClaimFileAsync(connection, path, size, modified, hash, ct).ConfigureAwait(false);
         return seen ? null : new FileClaim(_run, connection, path, hash);
     }
@@ -195,7 +213,12 @@ public sealed class FileClaim
     public string Hash { get; }
 
     /// <summary>Marks the file processed, with a word for how it went (<c>done</c> by default).</summary>
-    public Task CompleteAsync(string outcome = "done", CancellationToken ct = default) => _run.Backend.MarkFileProcessedAsync(Connection, Hash, outcome, ct);
+    public Task CompleteAsync(string outcome = "done", CancellationToken ct = default)
+    {
+        if (!_run.Settings.DryRun) return _run.Backend.MarkFileProcessedAsync(Connection, Hash, outcome, ct);
+        _run.Run.WouldDo($"mark the file '{Path}' processed ({outcome}) in the file ledger");
+        return Task.CompletedTask;
+    }
 }
 
 /// <summary>How a step ended, as the run reports it (the stored state is <see cref="StepState"/>).</summary>

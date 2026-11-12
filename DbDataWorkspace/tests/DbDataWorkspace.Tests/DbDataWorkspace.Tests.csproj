@@ -10,6 +10,8 @@
     <Using Include="Xunit" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\..\src\DbDataWorkspace.Server\DbDataWorkspace.Server.csproj" />
+    <DbDataKitReference Include="Runner.Packaging" />   <!-- the build and test code of dbdatarunner package build|test, which the integration templates are proven with (IX21) -->
+    <DbDataKitReference Include="Runner.Kit.Testing" />
     <!-- the vendored package store the Gateway's app build tests use (one helper for both: made from the web workspace once per run, or DBDATAKIT_TEST_APP_STORE) -->
     <Compile Include="..\..\..\DbDataGateway\tests\DbDataGateway.Tests\Support\AppStoreSupport.cs" Link="Support\AppStoreSupport.cs" />
   </ItemGroup>

@@ -30,3 +30,7 @@ A test, or any code that has its own client, uses `new OutsideHttp(httpClient, o
 ## Bodies and downloads
 
 `SendAsync`/`GetAsync` read the response whole up to `MaxBufferedBytes` (64 MiB; a larger one is refused with the advice to stream); `OpenReadAsync` gives a download as a stream, classified and retried until the headers are in, for a streaming step (`DbDataKit.Runner.Kit`) and the readers of `DbDataKit.Runner.Kit.Formats`.
+
+## Dry run
+
+`OutsideHttpOptions.DryRun` (a job gives `Run.DryRun`) makes the client send **reads only** (GET, HEAD, OPTIONS): any other request is not sent, is added to `OutsideHttp.WouldSend` and told to `OnWouldSend` (a job gives `Run.WouldDo`) as one line with the method, the address **without its query** (a query can carry a key), the size of the body and the idempotency key, never the body or a header, and is answered with 204 and no body. A download opened with `OpenReadAsync` is a GET and goes out. A job that sends through a client of its own is not guarded.

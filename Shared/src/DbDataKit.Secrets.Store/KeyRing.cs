@@ -157,7 +157,10 @@ public sealed class KeyRing : IKeySource
 
     private void EnsureDirectory()
     {
-        AclHelper.EnsureRestrictedDirectory(_directory, _identities);
+        // Setting the access list of a directory propagates to the files in it, and a thread that opens the ring while another one is making its first key must not see a key file in the middle of that: the access list is
+        // set when the directory is new or has drifted, not at every open
+        if (!System.IO.Directory.Exists(_directory) || !AclHelper.Verify(_directory, _identities).InSync)
+            AclHelper.EnsureRestrictedDirectory(_directory, _identities);
         VerifyPermissions(_directory);
     }
 

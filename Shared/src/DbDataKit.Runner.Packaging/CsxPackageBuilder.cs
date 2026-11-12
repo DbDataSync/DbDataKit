@@ -139,7 +139,7 @@ public static class CsxPackageBuilder
         var reference = ReferencePack();
         if (framework.Count == 0)
             return PackageBuildResult.Failed("The runtime's assemblies were not found.", [.. diagnostics, BuildDiagnostic.Error("DBD-INT-RUNTIME", "The shared framework (Microsoft.NETCore.App) of the .NET runtime was not found next to this program or in DOTNET_ROOT, so there is nothing to compile against.")]);
-        var references = (reference?.Values ?? framework.Values).Concat(KitReferences()).Concat(closure.Compile.Values).Distinct(StringComparer.OrdinalIgnoreCase).Select(p => (MetadataReference)MetadataReference.CreateFromFile(p)).ToList();
+        var references = (reference?.Values ?? framework.Values).Concat(KitReferences()).Concat(LibraryReferences()).Concat(closure.Compile.Values).Distinct(StringComparer.OrdinalIgnoreCase).Select(p => (MetadataReference)MetadataReference.CreateFromFile(p)).ToList();
         var compilation = CSharpCompilation.Create(assemblyName, trees, references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, optimizationLevel: OptimizationLevel.Release, nullableContextOptions: NullableContextOptions.Enable, deterministic: true, allowUnsafe: false));
 
@@ -169,6 +169,14 @@ public static class CsxPackageBuilder
         var assemblyPath = Path.Combine(filesFolder, launchAssembly.Replace('/', Path.DirectorySeparatorChar));
         File.WriteAllBytes(assemblyPath, bytes);
         written.Add(launchAssembly);
+        // the kit's libraries for integrations (HTTP, file formats, landing) are not in the task host: they travel beside the job, with what they stand on
+        foreach (var path in LibraryReferences().OrderBy(p => Path.GetFileName(p), StringComparer.OrdinalIgnoreCase))
+        {
+            var relative = "bin/" + Path.GetFileName(path);
+            if (written.Contains(relative, StringComparer.OrdinalIgnoreCase) || closure.Managed.ContainsKey(Path.GetFileNameWithoutExtension(path))) continue;
+            File.Copy(path, Path.Combine(filesFolder, relative.Replace('/', Path.DirectorySeparatorChar)), overwrite: true);
+            written.Add(relative);
+        }
         foreach (var (_, path) in closure.Managed.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase))
         {
             var relative = "bin/" + Path.GetFileName(path);
@@ -211,7 +219,7 @@ public static class CsxPackageBuilder
         finally { context.Unload(); }
     }
 
-    internal static bool Shared(string name) => AssemblyLoadContext.Default.Assemblies.Any(a => string.Equals(a.GetName().Name, name, StringComparison.OrdinalIgnoreCase));
+    internal static bool Shared(string name) => AssemblyLoadContext.Default.Assemblies.Any(a => string.Equals(a.GetName().Name, name, StringComparison.OrdinalIgnoreCase)) || LibraryNames().Contains(name);
 
     private static BuildDiagnostic ToDiagnostic(Diagnostic diagnostic)
     {
@@ -278,22 +286,32 @@ public static class CsxPackageBuilder
 
     /// <summary>The kit and what its public surface stands on, as files: <c>DbDataKit.Runner.Kit</c> and every assembly outside the shared framework that it references, transitively.</summary>
 #pragma warning disable IL3000 // Assembly.Location is empty in a single-file app; an assembly without a file is skipped below (Length == 0), so the empty string is handled
-    public static IReadOnlyList<string> KitReferences(params Assembly[] also)
+    public static IReadOnlyList<string> KitReferences(params Assembly[] also) => [.. Walk([typeof(RunnerJobBase).Assembly, .. also], new HashSet<string>()).Values];
+
+    /// <summary>
+    /// The kit's libraries for integrations (plan 27a IX21): the HTTP client with paging (<c>DbDataKit.Runner.Kit.Http</c>), the file formats and the landing helpers, with what they stand on, as files, less what the kit itself provides. A csx integration compiles against
+    /// them and they are copied beside the job in <c>bin/</c> (the task host carries only the kit), so a job and its tests agree on their types.
+    /// </summary>
+    public static IReadOnlyList<string> LibraryReferences() => [.. Walk(LibraryRoots, new HashSet<string>(HostAssemblyNames(), StringComparer.OrdinalIgnoreCase)).Values];
+
+    private static Assembly[] LibraryRoots => [typeof(Kit.Http.OutsideHttp).Assembly, typeof(Kit.Formats.DelimitedReader).Assembly, typeof(Kit.Landing.StagingLander).Assembly];
+
+    private static IReadOnlySet<string> LibraryNames() => LibraryReferences().Select(p => Path.GetFileNameWithoutExtension(p)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    private static Dictionary<string, string> Walk(IEnumerable<Assembly> roots, ISet<string> skip)
     {
         var found = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var queue = new Queue<Assembly>();
-        queue.Enqueue(typeof(RunnerJobBase).Assembly);
-        foreach (var assembly in also) queue.Enqueue(assembly);
+        var queue = new Queue<Assembly>(roots);
         while (queue.TryDequeue(out var assembly))
         {
             var name = assembly.GetName().Name!;
-            if (assembly.IsDynamic || assembly.Location.Length == 0 || found.ContainsKey(name) || assembly.Location.Contains($"{Path.DirectorySeparatorChar}shared{Path.DirectorySeparatorChar}Microsoft.", StringComparison.Ordinal)) continue;
+            if (assembly.IsDynamic || assembly.Location.Length == 0 || skip.Contains(name) || found.ContainsKey(name) || assembly.Location.Contains($"{Path.DirectorySeparatorChar}shared{Path.DirectorySeparatorChar}Microsoft.", StringComparison.Ordinal)) continue;
             found[name] = assembly.Location;
             foreach (var reference in assembly.GetReferencedAssemblies())
                 try { queue.Enqueue(Assembly.Load(reference)); }
                 catch (Exception ex) when (ex is FileNotFoundException or FileLoadException or BadImageFormatException) { /* not needed to compile against */ }
         }
-        return [.. found.Values];
+        return found;
     }
 #pragma warning restore IL3000
 

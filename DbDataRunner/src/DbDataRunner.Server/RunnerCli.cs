@@ -1,3 +1,4 @@
+using DbDataKit.Runner.Connections;
 using DbDataKit.Runner.Api;
 using DbDataKit.Runner.Client;
 using System.Globalization;
@@ -214,9 +215,9 @@ public static class RunnerCli
         new Verb("list", "The tasks of the channels this runner serves: version, next due, the last run, whether paused, and a problem with the task's row", EffectClass.OfflineOnly, Where,
             (args, context) => TasksListAsync(args, context, environment),
             DataSchemas.Object([("tasks", DataSchemas.ListOf(DataSchemas.Object([("task", DataSchemas.String), ("version", DataSchemas.String), ("paused", DataSchemas.Boolean)], "task", "version", "paused")))], "tasks")),
-        new Verb("run", "Queue a run of the task now, apart from its schedule (a running server runs it); inputs are name=value words", EffectClass.TargetDataWrites,
-            $"<package>/<channel>/<task> [name=value ...] {Where}", (args, context) => TaskActAsync("run", args, context, environment),
-            DataSchemas.Object([("task", DataSchemas.String), ("queued", DataSchemas.Boolean), ("run_id", DataSchemas.String)], "task", "queued")),
+        new Verb("run", "Queue a run of the task now, apart from its schedule (a running server runs it); inputs are name=value words; with --dry-run the task reads what it reads and nothing is written or sent, and the log lists what would have been", EffectClass.TargetDataWrites,
+            $"<package>/<channel>/<task> [name=value ...] [--dry-run] {Where}", (args, context) => TaskActAsync("run", args, context, environment),
+            DataSchemas.Object([("task", DataSchemas.String), ("queued", DataSchemas.Boolean), ("run_id", DataSchemas.String), ("dry_run", DataSchemas.Boolean)], "task", "queued")),
         new Verb("pause", "Stop the task from being queued at its scheduled times (a run going is not touched; run-now still works)", EffectClass.TargetDataWrites,
             $"<package>/<channel>/<task> {Where}", (args, context) => TaskActAsync("pause", args, context, environment),
             DataSchemas.Object([("task", DataSchemas.String), ("paused", DataSchemas.Boolean)], "task", "paused")),
@@ -250,8 +251,8 @@ public static class RunnerCli
 
     private static async Task<int> TaskActAsync(string act, string[] args, CliContext context, Func<string, string?>? environment)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" });
-        var usage = act == "run" ? $"Usage: tasks run <package>/<channel>/<task> [name=value ...] {Where}" : $"Usage: tasks {act} <package>/<channel>/<task> {Where}";
+        var parsed = CliArgs.Parse(args, act == "run" ? new HashSet<string> { "dry-run" } : new HashSet<string>(), new HashSet<string> { "repo" });
+        var usage = act == "run" ? $"Usage: tasks run <package>/<channel>/<task> [name=value ...] [--dry-run] {Where}" : $"Usage: tasks {act} <package>/<channel>/<task> {Where}";
         if (parsed.Unknown.Count > 0 || parsed.Words.Count == 0 || (act != "run" && parsed.Words.Count != 1))
         {
             await context.Error.WriteLineAsync(usage);
@@ -283,12 +284,14 @@ public static class RunnerCli
             switch (act)
             {
                 case "run":
-                    var result = control.RunNow(task, inputs, actor);
+                    var dry = parsed.Has("dry-run");
+                    var result = control.RunNow(task, inputs, actor, dry);
                     context.Data["task"] = task.ToString();
                     context.Data["queued"] = result.Queued;
+                    context.Data["dry_run"] = dry;
                     context.Data["run_id"] = result.RunId?.ToString();
                     await context.Out.WriteLineAsync(result.Queued
-                        ? $"Queued {task} (run {result.RunId}). A running server starts it within a few seconds."
+                        ? $"Queued {(dry ? "a dry run of " : "")}{task} (run {result.RunId}). A running server starts it within a few seconds.{(dry ? " The log of the run lists what it would have sent; nothing is written." : "")}"
                         : $"{task} is queued or running already; nothing was queued.");
                     return result.Queued ? CliExit.Ok : CliExit.Failure;
                 case "pause":
@@ -323,6 +326,12 @@ public static class RunnerCli
         new Verb("require-signatures", "Show, or with on or off set, whether this runner refuses a version that is not signed (plan 30 section 6.2; the signature check itself is not built yet, so 'on' refuses every publish)", EffectClass.TargetDataWrites,
             $"[on|off] {Where}", (args, context) => PackageRequireSignaturesAsync(args, context, environment),
             DataSchemas.Object([("require_signatures", DataSchemas.Boolean)], "require_signatures")),
+        new Verb("require-sandbox-run", "Show, or with on or off set, whether a version reaches production only after a sandbox run: a run that succeeded in a channel other than prod, where its connections are bound to that channel's own (plan 27a IX16; a dry run does not count)", EffectClass.TargetDataWrites,
+            $"[on|off] {Where}", (args, context) => PackageRequireSandboxRunAsync(args, context, environment),
+            DataSchemas.Object([("require_sandbox_run", DataSchemas.Boolean)], "require_sandbox_run")),
+        new Verb("allow-production-binding", "Choose, as an explicit and recorded act, that a channel other than prod uses the connection prod uses for a slot of the package (plan 27a IX17): what the task sends or writes there reaches production's far side. Without --confirm nothing changes; --revoke takes the choice back", EffectClass.TargetDataWrites,
+            $"<package> <slot> <channel> [--confirm] [--revoke] [--note <text>] {Where}", (args, context) => PackageAllowProductionBindingAsync(args, context, environment),
+            DataSchemas.Object([("package", DataSchemas.String), ("slot", DataSchemas.String), ("channel", DataSchemas.String), ("allowed", DataSchemas.Boolean)], "package", "slot", "channel", "allowed")),
         new Verb("install", "Put a package into this runner's own state, served at once: reads a package/1 manifest and a directory of files, stores them, makes them the channel's active version and replaces the channel's task schedule", EffectClass.TargetDataWrites,
             $"<manifest.yaml> <directory> [--channel <name>] {Where}", (args, context) => PackageInstallAsync(args, context, environment),
             DataSchemas.Object([("package", DataSchemas.String), ("channel", DataSchemas.String), ("version", DataSchemas.Integer), ("changed", DataSchemas.Boolean), ("files", DataSchemas.Integer), ("tasks", DataSchemas.StringList)], "package", "channel", "version", "changed")),
@@ -435,6 +444,65 @@ public static class RunnerCli
             await context.Error.WriteLineAsync(ex.Message);
             return CliExit.Failure;
         }
+    }
+
+    private static async Task<int> PackageAllowProductionBindingAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string> { "confirm", "revoke" }, new HashSet<string> { "repo", "note" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 3)
+        {
+            await context.Error.WriteLineAsync($"Usage: package allow-production-binding <package> <slot> <channel> [--confirm] [--revoke] [--note <text>] {Where}");
+            return CliExit.Usage;
+        }
+
+        var (package, slot, channel) = (parsed.Words[0], parsed.Words[1], parsed.Words[2]);
+        if (channel == "prod")
+        {
+            await context.Error.WriteLineAsync("prod is the channel that uses production's connection; the choice is for another channel.");
+            return CliExit.Usage;
+        }
+
+        var guard = new PostureGuard(OpenState(parsed, environment), RunnerNames.ServiceId);
+        var scope = RunnerPublishing.PostureScope(package, slot, channel);   // the one record: the bind-time confirmation and the Bindings page write the same scope
+        var actor = RunnerActor.Local().Id;
+        context.Data["package"] = package;
+        context.Data["slot"] = slot;
+        context.Data["channel"] = channel;
+        if (parsed.Has("revoke"))
+        {
+            var revoked = guard.Revoke(PostureSetting.ProductionBindingOnNonProduction, scope, actor, parsed.Get("note"));
+            context.Data["allowed"] = false;
+            await context.Out.WriteLineAsync(revoked ? $"Taken back: {channel} no longer may use production's connection for {slot} of {package}." : $"There was no choice for {slot} of {package} in {channel}.");
+            return CliExit.Ok;
+        }
+
+        if (!parsed.Has("confirm"))
+        {
+            context.Data["allowed"] = false;
+            await context.Error.WriteLineAsync($"{PostureSetting.ProductionBindingOnNonProduction.Effect} Nothing was changed. To accept this for {slot} of {package} in {channel}, run again with --confirm.");
+            return CliExit.Failure;
+        }
+
+        guard.Choose(PostureSetting.ProductionBindingOnNonProduction, scope, actor, parsed.Get("note"), confirmed: true);
+        context.Data["allowed"] = true;
+        await context.Out.WriteLineAsync($"Recorded: {channel} may use production's connection for {slot} of {package} (by {actor}, audited).");
+        return CliExit.Ok;
+    }
+
+    private static async Task<int> PackageRequireSandboxRunAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 1 || (parsed.Words.Count == 1 && parsed.Words[0] is not ("on" or "off")))
+        {
+            await context.Error.WriteLineAsync($"Usage: package require-sandbox-run [on|off] {Where}");
+            return CliExit.Usage;
+        }
+
+        var publishing = new RunnerPublishing(OpenState(parsed, environment));
+        if (parsed.Words.Count == 1) publishing.SetRequireSandboxRun(parsed.Words[0] == "on", RunnerActor.Local());
+        await context.Out.WriteLineAsync($"A sandbox run is {(publishing.RequireSandboxRun ? "required: a version is promoted to prod only after a run of it succeeded in another channel" : "not required: a version may be promoted to prod without one")}.");
+        context.Data["require_sandbox_run"] = publishing.RequireSandboxRun;
+        return CliExit.Ok;
     }
 
     private static async Task<int> PackageRequireSignaturesAsync(string[] args, CliContext context, Func<string, string?>? environment)

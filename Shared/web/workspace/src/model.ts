@@ -1,4 +1,4 @@
-import type { AdoptionRequest, WorkspaceEvent } from './api'
+import type { AdoptionRequest, ProjectKindInfo, ProjectTemplateInfo, WorkspaceEvent } from './api'
 
 const NAME = /^[a-z0-9][a-z0-9_-]{0,31}$/
 
@@ -12,6 +12,12 @@ export function nameProblem(name: string, what: 'workspace' | 'project'): string
   if (!isName(name)) return 'Lower-case letters, digits, "-" and "_", starting with a letter or digit.'
   return null
 }
+
+/** The starting points the chosen kind offers besides the empty project (none for a kind that has no templates, or a kind the server does not list). */
+export const templatesOf = (kinds: readonly ProjectKindInfo[] | undefined, kind: string): readonly ProjectTemplateInfo[] => kinds?.find((k) => k.name === kind)?.templates ?? []
+
+/** The template to send with a new project: what was chosen when the kind offers it, else none (changing the kind drops a choice the new kind does not have). */
+export const templateToSend = (kinds: readonly ProjectKindInfo[] | undefined, kind: string, template: string): string | undefined => (templatesOf(kinds, kind).some((t) => t.name === template) ? template : undefined)
 
 /** What the create button of a form is: whether it may be pressed, and why not when it may not. */
 export function createState(input: { name: string; canWrite: boolean; busy: boolean; what: 'workspace' | 'project'; taken?: readonly string[] }): { enabled: boolean; why: string | null } {

@@ -39,7 +39,8 @@ For a slot that sends or writes (a delivery channel, a runner slot), a **non-pro
 * Moving the slot to its own (sandbox) connection takes the choice back.
 * `*` with no `prod` entry binds production's connection for every other release channel and is the same case, scoped `.../*`; **a delivery `*` that binds production's connection is flagged like an explicit entry** (owner default, 2026-11-11). A runner binds per channel and has no `*`.
 * The Runner compares a channel with production's binding of the same slot, whichever is bound last: binding `dev` to what `prod` uses, or moving `prod` onto what `dev` already uses, needs the confirmation; a bind that needs none is not blocked by one that does (the screen's answer lists what is left to confirm, and the channels that needed none are bound).
-* What is **not** built: a hand-edited `bindings.yml` is checked by the screen (it shows "nobody confirmed it") but not refused at send time; the enforcement at send time for a runner's outbound steps (a bind is checked, a task's call is not).
+* What is **not** built: a hand-edited `bindings.yml` is checked by the screen (it shows "nobody confirmed it") but not refused at send time; a task's own outbound call is held to the rule only at the start of its run (see below), not per call.
+* **The runner's backstop (IX17).** Besides the bind-time confirmation, the runner checks when a run starts (`RunnerSlotResolver.Handles`): a task in a channel other than `prod` is refused the connection `prod` binds the same slot to unless the **same** `runner.posture_choice` record exists (scope `bindings/runner/<package>/<slot>/<channel>`). `dbdatarunner package allow-production-binding <package> <slot> <channel> --confirm|--revoke` writes and revokes that record through the same guard as the Bindings page; there is no second mechanism.
 
 ## The file: `bindings.yml` (format `bindings: 1`)
 

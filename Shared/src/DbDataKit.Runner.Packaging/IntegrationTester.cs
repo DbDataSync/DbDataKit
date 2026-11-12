@@ -70,7 +70,7 @@ public static class IntegrationTester
             foreach (var (key, value) in build.Closure.Managed) closure.Managed[key] = value;
             closure.Managed[Path.GetFileNameWithoutExtension(build.AssemblyPath!)] = build.AssemblyPath!;
             var hostReferences = CsxPackageBuilder.KitReferences(typeof(RunSimulator<>).Assembly, typeof(IntegrationTester).Assembly)
-                .Append(build.AssemblyPath!).Concat(build.Closure.Compile.Values).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                .Concat(CsxPackageBuilder.LibraryReferences()).Append(build.AssemblyPath!).Concat(build.Closure.Compile.Values).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             var compiler = new CsxCompiler(new CsxCompilerOptions
             {
                 CacheDirectory = Path.Combine(options.CacheDirectory, "csx"),

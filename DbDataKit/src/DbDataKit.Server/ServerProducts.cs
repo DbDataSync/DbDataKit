@@ -85,6 +85,7 @@ public static class ServerProducts
         new("DELETE", "api/v1/bindings/{name}/integration/{name}/{name}", ServerRole.Admin, ServerRole.Publisher),   // IX23: empty a slot's channel
         new("POST", "api/v1/bindings/{name}/integration/{name}/test", ServerRole.Admin),                    // UI08: try a slot's binding (never a value in the answer)
         new("PUT", "api/v1/settings/require_signatures", ServerRole.Admin),                                // UE08
+        new("PUT", "api/v1/settings/require_sandbox_run", ServerRole.Admin),                               // IX16
         new("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin),                                      // UE11
         new("POST", "api/v1/tracking/divergences/{id}/resolve", ServerRole.Admin),                         // E18: archive or reset the runner's copy from the common point (audited by the runner)
         new("POST", "api/v1/state/maintenance", ServerRole.Admin),                                         // 29b C05: put it into maintenance (it claims nothing new and reports idle) or out of it; audited by the runner

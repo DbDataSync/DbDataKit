@@ -70,6 +70,9 @@ public sealed partial class RunnerPublishing
 
     public const string RequireSignaturesSetting = "require_signatures";
 
+    /// <summary>The administrator's requirement that a version reaches production only after a sandbox run (plan 27a IX16).</summary>
+    public const string RequireSandboxRunSetting = "require_sandbox_run";
+
     /// <summary>The default size cap of one uploaded file: 512 MiB.</summary>
     public const long DefaultMaxArtifactBytes = 512L * 1024 * 1024;
 
@@ -142,6 +145,48 @@ public sealed partial class RunnerPublishing
         if (current is null) _settings.Put(RequireSignaturesSetting, text);
         else if (current != text) _settings.Put(RequireSignaturesSetting, text, current);
         Record(SettingVerb, actor, "setting", RequireSignaturesSetting, AuditEvent.Ok, new { value });
+    }
+
+    /// <summary>
+    /// The administrator's requirement (plan 27a IX16): a version is promoted to production (<c>activate</c> or <c>switch</c> on <c>prod</c>) only after it has had a <b>sandbox run</b>, a run that succeeded in a channel other than production, where its connection
+    /// slots are bound to the channel's own (sandbox) connections. Shared by the group, kept in the state, recorded with who and when in the audit. A <b>dry run</b> does not count: it changes nothing and proves only that the reads work.
+    /// </summary>
+    public bool RequireSandboxRun => _settings.Get(RequireSandboxRunSetting) == "true";
+
+    public void SetRequireSandboxRun(bool value, RunnerActor actor)
+    {
+        var text = value ? "true" : "false";
+        var current = _settings.Get(RequireSandboxRunSetting);
+        if (current is null) _settings.Put(RequireSandboxRunSetting, text);
+        else if (current != text) _settings.Put(RequireSandboxRunSetting, text, current);
+        Record(SettingVerb, actor, "setting", RequireSandboxRunSetting, AuditEvent.Ok, new { value });
+    }
+
+    /// <summary>The channels' names that are production: the one the definitions call production.</summary>
+    private static bool IsProduction(string channel) => string.Equals(channel, DefinitionStore.Production, StringComparison.Ordinal);
+
+    /// <summary>
+    /// True when the version has a sandbox run: a run of the package at that version that succeeded in a channel other than production and was not a dry run. Looked up in the run history, so there is nothing else to keep (and a version whose runs the
+    /// retention removed needs a new one).
+    /// </summary>
+    public bool HasSandboxRun(string name, int version)
+    {
+        var runs = new RunStore(_state, RunnerNames.EngineService);
+        var text = version.ToString(CultureInfo.InvariantCulture);
+        foreach (var run in runs.Read(new RunQuery(RunnerNames.EngineService, Outcome: Monitoring.RunOutcome.Succeeded, Limit: 500, Package: name)))
+        {
+            if (run.PackageVersion != text || run.Channel is null || IsProduction(run.Channel)) continue;
+            if (runs.Logs(run.Id, null, 20).Any(l => l.Item == "dry-run" && l.Message.StartsWith("This is a dry run", StringComparison.Ordinal))) continue;
+            return true;
+        }
+
+        return false;
+    }
+
+    private void RequireSandboxRunFor(string name, string channel, int version)
+    {
+        if (!RequireSandboxRun || !IsProduction(channel) || HasSandboxRun(name, version)) return;
+        throw new RunnerPublishException(409, $"Version {version} of '{name}' has had no sandbox run, and this runner requires one before a version reaches production: run its tasks in another channel (tasks run {name}/<channel>/<task>), where its connections are bound to the channel's own, and promote it when a run has succeeded (a dry run does not count). An administrator can turn the requirement off ({RequireSandboxRunSetting}).");
     }
 
     // ---- ownership (OwnerScope: a publisher changes only the packages it created)
@@ -296,6 +341,7 @@ public sealed partial class RunnerPublishing
                 confirmed = true;
             }
 
+            RequireSandboxRunFor(name, channel, preview.Version);
             var outcome = await Activator.ActivateAsync(name, channel, new ActivationRequest(options.Anyway ? ActivationMode.Anyway : ActivationMode.Administrator, actor.Id, LiveInstanceIds(), confirmed, options.Reason, expectedVersion), ct).ConfigureAwait(false);
             return Settled(name, outcome, anywayHint: !options.Anyway);
         }, o => new { version = o.Version, state = o.State.ToString(), anyway = options?.Anyway ?? false, confirmed_losses = o.Losses.ToArray(), busy_tasks = o.BusyTasks.ToArray() }, rebuild: false);
@@ -305,6 +351,7 @@ public sealed partial class RunnerPublishing
         ActAsync(SwitchVerb, name, channel, actor, async () =>
         {
             options ??= new ActivateOptions();
+            RequireSandboxRunFor(name, channel, version);
             var outcome = await Activator.SwitchAsync(name, channel, version, new ActivationRequest(ActivationMode.Administrator, actor.Id, LiveInstanceIds(), options.ConfirmLosses, null, expectedVersion), ct).ConfigureAwait(false);
             return Settled(name, outcome, anywayHint: false);
         }, o => new { version = o.Version, state = o.State.ToString(), confirmed_losses = o.Losses.ToArray(), busy_tasks = o.BusyTasks.ToArray() }, rebuild: false);
@@ -504,7 +551,7 @@ public sealed partial class RunnerPublishing
     public PostureGuard Posture { get; }
 
     /// <summary>The scope of the choice for one slot of a package in a channel.</summary>
-    public static string PostureScope(string package, string slot, string channel) => $"bindings/runner/{package}/{slot}/{channel}";
+    public static string PostureScope(string package, string slot, string channel) => DbDataKit.Runner.Connections.RunnerSlotResolver.ProductionBindingScope(package, slot, channel);
 
     private bool Chosen(string scope) => Posture.Choices.List(scope).Any(c => c.Setting == PostureSetting.ProductionBindingOnNonProduction.Name);
 

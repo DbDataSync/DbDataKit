@@ -45,6 +45,30 @@ public sealed class RunnerCliTests : IDisposable
     }
 
     [Fact]
+    public async Task Production_s_connection_in_another_channel_is_a_recorded_choice_nothing_changes_without_confirm_and_prod_is_not_a_channel_for_it()
+    {
+        var (noConfirm, _, noConfirmError) = await Run("package", "allow-production-binding", "orders", "dst", "dev");
+        Assert.Equal(CliExit.Failure, noConfirm);
+        Assert.Contains("Nothing was changed", noConfirmError);
+        Assert.Contains("--confirm", noConfirmError);
+
+        var (prod, _, _) = await Run("package", "allow-production-binding", "orders", "dst", "prod", "--confirm");
+        Assert.Equal(CliExit.Usage, prod);
+
+        var (chosen, said, _) = await Run("package", "allow-production-binding", "orders", "dst", "dev", "--confirm", "--note", "load test");
+        Assert.Equal(CliExit.Ok, chosen);
+        Assert.Contains("Recorded: dev may use production's connection for dst of orders", said);
+        var state = RunnerState.Open(_directory);
+        Assert.True(new PostureChoices(state).IsChosen("bindings/runner/orders/dst/dev", "production_binding_on_non_production"));
+        Assert.False(new PostureChoices(state).IsChosen("bindings/runner/orders/dst/test", "production_binding_on_non_production"));
+
+        var (revoked, back, _) = await Run("package", "allow-production-binding", "orders", "dst", "dev", "--revoke");
+        Assert.Equal(CliExit.Ok, revoked);
+        Assert.Contains("Taken back", back);
+        Assert.False(new PostureChoices(state).IsChosen("bindings/runner/orders/dst/dev", "production_binding_on_non_production"));
+    }
+
+    [Fact]
     public void The_help_of_every_noun_is_a_snapshot()
     {
         var file = Path.Combine(AppContext.BaseDirectory, "help.snapshot.txt");

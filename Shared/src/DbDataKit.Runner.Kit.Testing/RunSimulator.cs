@@ -97,7 +97,7 @@ public sealed class RunSimulator<TJob> : IDisposable
     /// <param name="maxParallelism">The most a unit loop may run at once, whatever the job asks (1 makes a test deterministic).</param>
     /// <param name="package">The package name progress is kept under.</param>
     /// <param name="channel">The channel name progress is kept under.</param>
-    public RunSimulator(object? input = null, SlotOpener? slots = null, StepOptions? steps = null, int? maxParallelism = null, string package = "simulator", string channel = "test")
+    public RunSimulator(object? input = null, SlotOpener? slots = null, StepOptions? steps = null, int? maxParallelism = null, string package = "simulator", string channel = "test", bool dryRun = false)
     {
         _input = input;
         _directory = Directory.CreateTempSubdirectory("dbdatakit-sim-");
@@ -108,6 +108,7 @@ public sealed class RunSimulator<TJob> : IDisposable
             SlotOpener = slots,
             Steps = steps,
             MaxParallelism = maxParallelism,
+            DryRun = dryRun,
             Hooks = new RunnerHooks
             {
                 BeforeStepBody = BeforeStepBody,

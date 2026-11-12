@@ -167,6 +167,16 @@ public static class RunnerPublishApi
             catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
         });
 
+        app.MapPut($"{root}/settings/require_sandbox_run", async (HttpContext context) =>
+        {
+            if (Deny(callerOf(context), ServerRole.Admin, publishing, RunnerPublishing.SettingVerb, "setting", RunnerPublishing.RequireSandboxRunSetting) is { } denied) return denied;
+            var body = await ReadBodyAsync(context);
+            if (body.Error is { } bad) return bad;
+            if (body.Json!["value"] is not JsonValue v || !v.TryGetValue<bool>(out var value)) return Error(400, "The body is {\"value\": true} or {\"value\": false}.");
+            publishing.SetRequireSandboxRun(value, callerOf(context).Actor);
+            return Results.Json(new JsonObject { [RunnerPublishing.RequireSandboxRunSetting] = value });
+        });
+
         app.MapPut($"{root}/settings/require_signatures", async (HttpContext context) =>
         {
             if (Deny(callerOf(context), ServerRole.Admin, publishing, RunnerPublishing.SettingVerb, "setting", RunnerPublishing.RequireSignaturesSetting) is { } denied) return denied;
@@ -265,7 +275,7 @@ public static class RunnerPublishApi
 
         app.MapGet($"{root}/settings", (HttpContext context) =>
             Deny(caller(context), ServerRole.Viewer) is { } denied ? denied
-                : Results.Json(new JsonObject { [RunnerPublishing.RequireSignaturesSetting] = publishing.RequireSignatures, ["max_artifact_bytes"] = publishing.MaxArtifactBytes }));
+                : Results.Json(new JsonObject { [RunnerPublishing.RequireSignaturesSetting] = publishing.RequireSignatures, [RunnerPublishing.RequireSandboxRunSetting] = publishing.RequireSandboxRun, ["max_artifact_bytes"] = publishing.MaxArtifactBytes }));
     }
 
     /// <summary>The administrator's words of an activation: <c>confirm_losses</c> with the list echoed in <c>losses</c>, <c>anyway</c> and its <c>reason</c>.</summary>

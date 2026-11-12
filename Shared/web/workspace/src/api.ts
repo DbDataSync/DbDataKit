@@ -43,7 +43,9 @@ export interface BuildReadiness {
 export interface PublishTarget { name: string; gateway: string | null; product?: string | null; accepts?: boolean | null; can_publish: boolean }
 
 /** A kind of project the server hosts (`GET /api/v1/project-kinds`) and what it publishes as, to which product (plan 33 SC20). */
-export interface ProjectKindInfo { name: string; title: string; description: string; buildable: boolean; produces?: boolean; publishes: { product: string; what: string; description: string }[] }
+/** A starting point for a new project of a kind besides its plain one (plan 27a IX21): ordinary code the author then owns. */
+export interface ProjectTemplateInfo { name: string; title: string; description: string }
+export interface ProjectKindInfo { name: string; title: string; description: string; buildable: boolean; produces?: boolean; templates?: ProjectTemplateInfo[]; publishes: { product: string; what: string; description: string }[] }
 /** One finding of a kind's check of a draft: a code, a severity, and the file and line when the validator names a place. */
 export interface CheckDiagnostic { severity: 'error' | 'warning' | 'info'; code: string; message: string; file: string | null; line: number | null }
 export interface CheckResult { kind: string; ok: boolean; diagnostics: CheckDiagnostic[] }
@@ -89,7 +91,7 @@ const json = (body: unknown): RequestInit => ({ method: 'POST', body: JSON.strin
 /** The Workspace server's calls through the console's relay, as the signed-in person; the server checks the role on every call. */
 export const workspaceApi = {
   projects: () => request<{ projects: ProjectSummary[] }>('/api/v1/projects').then((r) => r.projects),
-  createProject: (id: string, title: string | null, kind?: string) => request<ProjectSummary>('/api/v1/projects', json({ id, ...(title ? { title } : {}), ...(kind && kind !== 'app' ? { kind } : {}) })),
+  createProject: (id: string, title: string | null, kind?: string, template?: string) => request<ProjectSummary>('/api/v1/projects', json({ id, ...(title ? { title } : {}), ...(kind && kind !== 'app' ? { kind } : {}), ...(template ? { template } : {}) })),
   projectKinds: () => request<{ kinds: ProjectKindInfo[] }>('/api/v1/project-kinds').then((r) => r.kinds),
   check: (project: string, id: string) => request<CheckResult>(`${ws(project, id)}/check`),
   /** Compiles the draft on a copy, offline (plan 33 SC20l): what `project compile` would write into `rendered/`, shown against what is committed; nothing in the draft changes. */

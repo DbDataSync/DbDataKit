@@ -63,11 +63,11 @@ public sealed class RunnerControl
     /// <summary>The triggers of this runner's tasks (plan 28a R13): what a webhook arrival asks to queue, and what the status reports.</summary>
     public DbDataKit.Runner.Triggers.TriggerEngine Triggers => _scheduler.Triggers;
 
-    /// <summary>Queues a run of the task apart from its schedule (also when it is paused). Throws <see cref="UnknownTaskException"/> for a task this runner does not serve.</summary>
-    public RunNowResult RunNow(TaskRef task, IReadOnlyDictionary<string, string>? inputs, RunnerActor actor)
+    /// <summary>Queues a run of the task apart from its schedule (also when it is paused). With <paramref name="dryRun"/> it is a dry run: the job reads and nothing it keeps changes, the kit refuses writes and lists what it would have sent (plan 27a IX16), and the run does not start the tasks that follow it. Throws <see cref="UnknownTaskException"/> for a task this runner does not serve.</summary>
+    public RunNowResult RunNow(TaskRef task, IReadOnlyDictionary<string, string>? inputs, RunnerActor actor, bool dryRun = false)
     {
-        var runId = Translate(() => _scheduler.RunNow(task, inputs, actor.Display));
-        Record(RunVerb, task, actor, new { run_id = runId, queued = runId is not null, inputs = inputs?.Keys.Order(StringComparer.Ordinal).ToArray() ?? [] });
+        var runId = Translate(() => _scheduler.RunNow(task, inputs, actor.Display, dryRun));
+        Record(RunVerb, task, actor, new { run_id = runId, queued = runId is not null, dry_run = dryRun, inputs = inputs?.Keys.Order(StringComparer.Ordinal).ToArray() ?? [] });
         return new RunNowResult(runId is not null, runId);
     }
 

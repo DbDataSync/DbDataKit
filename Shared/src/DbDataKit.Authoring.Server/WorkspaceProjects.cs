@@ -39,9 +39,11 @@ public sealed partial class WorkspaceProjects(string directory, WorkspaceStore s
     /// Makes a new project: the folder <c>projects/&lt;id&gt;</c> becomes a git repository with a first commit in the person's name, and is hosted from then on. Nothing is overwritten: an id that is taken, or a folder that is already
     /// there and not empty, is refused. An app project starts as the app template (plan 22a GP32, `DbDataKit.Apps.AppTemplate`), any other kind with a README; the attributes file is in both.
     /// </summary>
-    public WorkspaceProjectRow Create(string id, string kind, string? title, GitAuthor author, string createdBy)
+    public WorkspaceProjectRow Create(string id, string kind, string? title, GitAuthor author, string createdBy, string? template = null)
     {
         CheckId(id, kind);
+        if (template is not null && Kinds.Find(kind)!.Templates.All(t => t.Name != template))
+            throw new WorkspaceProjectException($"The {kind} kind has no template called '{template}' ({(Kinds.Find(kind)!.Templates.Count == 0 ? "it has none" : string.Join(", ", Kinds.Find(kind)!.Templates.Select(t => t.Name)))}).", 400);
         lock (gate)
         {
             if (store.FindProject(id) is not null) throw new WorkspaceProjectException($"This server already hosts a project called '{id}'.", 409);
@@ -52,11 +54,11 @@ public sealed partial class WorkspaceProjects(string directory, WorkspaceStore s
             {
                 var projectKind = Kinds.Require(kind);
                 // a new project starts as its kind's template (an app: the app template, plan 22a GP32), named for the project; made before the folder, so a kind that cannot make it leaves nothing behind
-                IReadOnlyList<ProjectKindFile> template;
-                try { template = projectKind.Template(id, title); }
+                IReadOnlyList<ProjectKindFile> files;
+                try { files = projectKind.Template(id, title, template); }
                 catch (ProjectKindUnavailableException ex) { throw new WorkspaceProjectException(ex.Message, 409); }
                 Directory.CreateDirectory(folder);
-                foreach (var file in template)
+                foreach (var file in files)
                 {
                     var target = Path.Combine(folder, file.Path.Replace('/', Path.DirectorySeparatorChar));
                     Directory.CreateDirectory(Path.GetDirectoryName(target)!);

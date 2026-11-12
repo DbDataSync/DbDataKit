@@ -4,6 +4,12 @@ namespace DbDataKit.Runner;
 public static class RunnerProtocol
 {
     public const string V1 = "dbdatakit.runner.v1";
+
+    /// <summary>
+    /// The reserved input that makes a run a dry run (plan 27a IX16): the runner puts it among a run's inputs (<c>tasks run --dry-run</c>), and the kit takes it out again before the job's input is bound. It is not a valid
+    /// input name (a manifest's inputs are identifiers), so it can never be one an author declared.
+    /// </summary>
+    public const string DryRunInput = "dbdatakit.dry_run";
 }
 
 /// <summary>

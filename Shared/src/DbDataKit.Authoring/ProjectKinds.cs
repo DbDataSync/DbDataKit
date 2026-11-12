@@ -20,7 +20,7 @@ public sealed record ProjectPublishRoute(string Product, string What, string Des
 
 /// <summary>
 /// A kind of project the Workspace hosts (plan 33 SC20a): an app today, a Build project, a Store model and a Sync replication set beside it. A kind is a row of a registry, not a code path: it says what a new project starts as
-/// (<see cref="Template"/>), how a draft of it is checked (<see cref="CheckAsync"/>, with the same validators the standalone product uses) and what it publishes as and where (<see cref="Publishes"/>). The server's calls (list the
+/// (<see cref="Template(string, string?)"/>), how a draft of it is checked (<see cref="CheckAsync"/>, with the same validators the standalone product uses) and what it publishes as and where (<see cref="Publishes"/>). The server's calls (list the
 /// kinds, make a project, check a draft, publish) read these and know no kind by name.
 /// </summary>
 public interface IProjectKind
@@ -44,6 +44,13 @@ public interface IProjectKind
     /// <summary>The files of a new project <paramref name="id"/> (titled <paramref name="title"/> when given).</summary>
     IReadOnlyList<ProjectKindFile> Template(string id, string? title);
 
+    /// <summary>The starting points a new project of this kind can be made from besides its plain one (plan 27a IX21: templates generate ordinary code the author then owns). None by default.</summary>
+    IReadOnlyList<ProjectTemplate> Templates => [];
+
+    /// <summary>The files of a new project made from the starting point <paramref name="template"/> (one of <see cref="Templates"/>); null is the plain one, <see cref="Template(string, string?)"/>.</summary>
+    IReadOnlyList<ProjectKindFile> Template(string id, string? title, string? template) =>
+        template is null ? Template(id, title) : throw new ArgumentException($"The {Name} kind has no template called '{template}'.", nameof(template));
+
     /// <summary>True when the kind makes something to publish from a draft (<see cref="ProduceAsync"/>): a package of tasks for a Runner, the models of a Store. An app is bundled instead (<see cref="Buildable"/>).</summary>
     bool Produces => false;
 
@@ -56,6 +63,9 @@ public interface IProjectKind
     /// <summary>Checks the draft in <paramref name="root"/> and returns what is wrong with it; empty means it is sound. Never throws for a damaged file: that is a diagnostic.</summary>
     Task<IReadOnlyList<ProjectDiagnostic>> CheckAsync(string root, CancellationToken cancellationToken);
 }
+
+/// <summary>A starting point a screen offers for a new project of a kind: its name (what the API says), a title and what it generates.</summary>
+public sealed record ProjectTemplate(string Name, string Title, string Description);
 
 /// <summary>The kinds a server hosts, by name, in the order they were added.</summary>
 public sealed class ProjectKinds

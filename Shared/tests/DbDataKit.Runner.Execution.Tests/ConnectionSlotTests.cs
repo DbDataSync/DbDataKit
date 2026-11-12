@@ -186,6 +186,44 @@ public sealed class ConnectionSlotTests : IDisposable
         Assert.Equal(new Dictionary<string, string> { ["ro"] = "ro_db", ["plain"] = "src_db" }, handles);
     }
 
+    // ---- production's connection in another channel (plan 27a IX17)
+
+    [Theory, MemberData(nameof(Engines))]
+    public void A_channel_other_than_prod_is_refused_the_connection_prod_uses_unless_an_administrator_chose_it_and_a_connection_of_its_own_is_never_in_question(string engine)
+    {
+        using var h = Harness(engine);
+        var rig = RigFor(h);
+        var posture = new PostureChoices(h.Database);
+        var resolver = new RunnerSlotResolver(rig.Publisher, new InMemoryConnectionCatalog(new[] { "src_db", "a_db", "dst_db", "ro_db" }.Select(Catalogued)),
+            new SecretResolverChain([new EnvSecretProvider(n => Secrets.GetValueOrDefault(n))]), posture: posture);
+        var dev = new TaskRef(Package, "dev", "run");
+        ConnectionSlot[] slots = [new("dst", "sqlserver", null)];
+
+        // prod and dev bind the one connection: what dev sends or writes would reach production's far side
+        rig.Bind("prod", "dst", "dst_db");
+        rig.Bind("dev", "dst", "dst_db");
+        var refused = Assert.Throws<SlotResolutionException>(() => resolver.Handles(dev, slots));
+        Assert.Contains("'dst_db'", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("'dst'", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("allow-production-binding", refused.Message, StringComparison.Ordinal);
+        // prod itself is what it is
+        Assert.Equal("dst_db", resolver.Handles(new TaskRef(Package, "prod", "run"), slots)["dst"]);
+
+        // the administrator's recorded choice (for this package, slot and channel only) lets it run
+        posture.Record(RunnerSlotResolver.ProductionBindingScope(Package, "dst", "dev"), PostureSetting.ProductionBindingOnNonProduction.Name, "ada", "load test against prod");
+        Assert.Equal("dst_db", resolver.Handles(dev, slots)["dst"]);
+        Assert.Throws<SlotResolutionException>(() => resolver.Handles(new TaskRef(Package, "test", "run"), slots).Count.ToString());   // another channel (unbound) is refused as ever
+
+        // a channel with a connection of its own is not in question; a read-only connection is held to the rule as the bind-time check holds it
+        rig.Bind("dev", "dst", "a_db");
+        posture.Revoke(RunnerSlotResolver.ProductionBindingScope(Package, "dst", "dev"), PostureSetting.ProductionBindingOnNonProduction.Name);
+        Assert.Equal("a_db", resolver.Handles(dev, slots)["dst"]);
+        ConnectionSlot[] ro = [new("ro", "sqlserver", null)];
+        rig.Bind("prod", "ro", "ro_db");
+        rig.Bind("dev", "ro", "ro_db");
+        Assert.Throws<SlotResolutionException>(() => resolver.Handles(dev, ro));        // read-only is not exempt: the rule is the one the bind refuses first
+    }
+
     // ---- ResolveConnection's facts
 
     [Theory, MemberData(nameof(Engines))]

@@ -1,0 +1,15 @@
+schema: package/1
+name: {{package}}
+launch: { kind: assembly, assembly: bin/{{package}}.dll }
+built_against: { dotnet: "10.0", kit: "1", protocol: dbdatakit.runner.v1 }
+tasks:
+  - name: pull-orders
+    entry: { type: RestPull.PullOrders }
+    schedule: { every: 1h }
+    triggers:
+      - manual: true
+    connections: [ { name: api, kind: http }, { name: staging, kind: database } ]
+    progress:
+      state: [ { name: cursor, type: text } ]
+    limits: { timeout: 30m, attempts: 3 }
+    counters: [pages, items, landed]

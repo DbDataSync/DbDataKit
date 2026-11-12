@@ -22,7 +22,7 @@ internal sealed class CountScope(CountScope? parent)
 }
 
 /// <summary>What the kit's logic needs besides the backend: where a test makes the process die, the cap on units at once, and how a new id is made. In-process it comes from the <see cref="RunnerEnvironment"/>; remotely, from the options of <see cref="RemoteJobHost"/>.</summary>
-internal sealed record RunSettings(RunnerHooks? Hooks, int? MaxParallelism, Func<Guid> NewId);
+internal sealed record RunSettings(RunnerHooks? Hooks, int? MaxParallelism, Func<Guid> NewId, bool DryRun = false);
 
 /// <summary>The step a body is running in, so a step called inside it is refused naming both.</summary>
 internal sealed record StepFrame(string Name, string Key);
@@ -53,7 +53,7 @@ internal sealed class RunContext
         Settings = settings;
         Root = new CountScope(null);
         Log = new RunLogger(backend);
-        Run = new RunFacade(backend.Identity, Log, backend);
+        Run = new RunFacade(backend.Identity, Log, backend, settings.DryRun);
     }
 
     public IRunBackend Backend { get; }
@@ -169,7 +169,8 @@ internal sealed class RunContext
     /// <summary>Stores a body (an inbox item that does not parse, a record the job refused) as a dead letter and counts a rejected record, which ends the run <c>CompletedWithFailures</c>.</summary>
     public async Task RejectBodyAsync(string source, byte[] body, string reason, Guid id, CancellationToken ct)
     {
-        await Backend.AddDeadLetterAsync(source, reason, body, id, ct).ConfigureAwait(false);
+        if (Settings.DryRun) Run.WouldDo($"keep the record ({source}) as a dead letter: {reason}");
+        else await Backend.AddDeadLetterAsync(source, reason, body, id, ct).ConfigureAwait(false);
         Interlocked.Increment(ref _rejected);
         NoteFailedItem($"dead letter {id}");
         Backend.Log("Warning", $"Rejected a record ({source}): {reason}", id.ToString("D"));
@@ -192,8 +193,14 @@ internal sealed class RunContext
     public Task AfterUnitBodyAsync(string name, string key, CancellationToken ct) => Settings.Hooks?.AfterUnitBody?.Invoke(name, key, ct) ?? Task.CompletedTask;
 }
 
-internal sealed class RunFacade(RunIdentity identity, ILogger log, IRunBackend backend) : IRun
+internal sealed class RunFacade(RunIdentity identity, ILogger log, IRunBackend backend, bool dryRun = false) : IRun
 {
+    public bool DryRun => dryRun;
+
+    public void WouldDo(string what) => backend.Log("Information", $"Dry run, would: {what}", DryRunItem);
+
+    public const string DryRunItem = "dry-run";
+
     public Guid Id => identity.RunId;
 
     public int Attempt => identity.Attempt;

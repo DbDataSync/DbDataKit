@@ -102,6 +102,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         server.MapPost("/api/v1/bindings/{channel}/integration/{name}/test", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { ok = true })));
         server.MapPut("/api/v1/bindings/{channel}/integration/{name}", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Ok()));
         server.MapPut("/api/v1/settings/require_signatures", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Ok()));
+        server.MapPut("/api/v1/settings/require_sandbox_run", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Ok()));
         // what a product reports and the serving layer calls: a console never reaches these, whoever is signed in
         server.MapPut("/api/v1/settings/max_artifact_bytes", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Ok()));
         server.MapPost("/api/v1/webhooks/{package}/{channel}/{source}", (HttpContext c) => Needs(c, ServerRole.Operator, () => Results.Ok()));
@@ -249,9 +250,9 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         ("POST", "api/v1/definitions/integration/{name}/activate", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/definitions/integration/{name}/switch", ServerRole.Admin, ServerRole.None),
         ("POST", "api/v1/definitions/integration/{name}/rollback", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/definitions/integration/{name}/retire", ServerRole.Admin, ServerRole.None),
         ("PUT", "api/v1/artifacts/{sha}", ServerRole.Admin, ServerRole.Publisher), ("PUT", "api/v1/definitions/integration/{name}", ServerRole.Admin, ServerRole.Publisher),
-        ("PUT", "api/v1/bindings/{name}/integration/{name}", ServerRole.Admin, ServerRole.Publisher), ("DELETE", "api/v1/bindings/{name}/integration/{name}/{name}", ServerRole.Admin, ServerRole.Publisher), ("POST", "api/v1/bindings/{name}/integration/{name}/test", ServerRole.Admin, ServerRole.None), ("PUT", "api/v1/settings/require_signatures", ServerRole.Admin, ServerRole.None),
-        ("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/tracking/divergences/{id}/resolve", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/upgrade", ServerRole.Admin, ServerRole.None),
-        ("POST", "api/v1/state/maintenance", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/state/move", ServerRole.Admin, ServerRole.None),
+        ("PUT", "api/v1/bindings/{name}/integration/{name}", ServerRole.Admin, ServerRole.Publisher), ("DELETE", "api/v1/bindings/{name}/integration/{name}/{name}", ServerRole.Admin, ServerRole.Publisher), ("POST", "api/v1/bindings/{name}/integration/{name}/test", ServerRole.Admin, ServerRole.None), ("PUT", "api/v1/settings/require_signatures", ServerRole.Admin, ServerRole.None), ("PUT", "api/v1/settings/require_sandbox_run", ServerRole.Admin, ServerRole.None),
+        ("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/tracking/divergences/{id}/resolve", ServerRole.Admin, ServerRole.None),
+        ("POST", "api/v1/state/maintenance", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/state/move", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/upgrade", ServerRole.Admin, ServerRole.None),
     ];
 
     public static TheoryData<string> Rows => [.. ServerProducts.RunnerRoutes.Select(r => $"{r.Method} {r.Pattern}")];

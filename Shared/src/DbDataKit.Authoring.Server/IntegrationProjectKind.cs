@@ -64,6 +64,20 @@ public sealed partial class IntegrationProjectKind(RunnerTool runner, DotnetTool
 
     private static readonly UTF8Encoding Utf8 = new(false, true);
 
+    /// <summary>The starting points beside the plain one (plan 27a IX21). They generate ordinary code, which the author then owns: there is no engine behind a template and nothing keeps a project tied to it.</summary>
+    public IReadOnlyList<ProjectTemplate> Templates { get; } =
+    [
+        new("rest-api-to-staging", "Pull pages from a REST API into a staging table", "A task that reads an API page by page (cursor paging, retries, a rate limit) and lands each page in a staging table once, with the API's answers recorded for tests that need no network."),
+        new("csv-files-from-share", "Pick up CSV files from a share", "A task that picks up the finished CSV files of a folder, lands their rows in a staging table once per content and moves them aside, with a fake share for tests that need no share."),
+    ];
+
+    public IReadOnlyList<ProjectKindFile> Template(string id, string? title, string? template)
+    {
+        if (template is null) return Template(id, title);
+        if (Templates.All(t => t.Name != template)) throw new ArgumentException($"The integration kind has no template called '{template}'.", nameof(template));
+        return IntegrationTemplates.Files(template, id, title);
+    }
+
     public IReadOnlyList<ProjectKindFile> Template(string id, string? title)
     {
         var package = PackageArtifacts.NameOf(id);

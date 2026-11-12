@@ -15,7 +15,7 @@ An **integration** is ordinary code that moves data between the suite and a syst
 | **csx integrations built with no .NET SDK**: `package build` and `package test` (this page, section 6) | **built** (IX20, `DbDataKit.Runner.Packaging`) |
 | The `integration` project kind in the Workspace server: template, check, build in a child process (tests run first), publish to a Runner | **built** (IX20, `IntegrationProjectKind`; 9 tests in `WorkspaceIntegrationKindTests`, one against the real `dbdatarunner`); compiled .NET projects build only where the SDK is installed (tested with a stand-in `dotnet`, not a real project build) |
 | The integration editor in the Workspace's web screens (manifest as form and text, code files, run tests, publish) | **built, minimal** (IX24, `IntegrationPanel.tsx`: manifest as form and YAML, tasks, code and tests listed with their errors, new task, run the tests as a build, publish on the Builds tab; vitest 12 tests; the Playwright story `integration-editor.spec.ts` is written and not run) |
-| Project templates "pull pages from a REST API" and "pick up CSV files from a share" | **not built** (IX21): skipped, see section 9; the kind's own starter template (one task, one test) is built |
+| Project templates "pull pages from a REST API into a staging table" and "pick up CSV files from a share" | **built** (IX21; the Workspace's New project offers them; section 9) |
 | Kit services for outside systems: file formats (CSV, TSV, JSON, JSON Lines, XML, fixed width, Excel, Parquet, gzip, zip, OpenPGP) and the HTTP client with paging, rate limits and retries | **built** (IX08 to IX10; `DbDataKit.Runner.Kit.Formats`, `DbDataKit.Runner.Kit.Http`) |
 | SFTP, SCP and FTPS as connections (`DbDataKit.Connections.Files`: list, read, write without a partial file, host-key and certificate pinning) | **built** (IX04) |
 | SMB with Windows sign-in (Kerberos), `smb` connections: the interface and a Windows-only implementation | **built, proven on Linux for everything but the share itself** (IX05) |
@@ -27,10 +27,10 @@ An **integration** is ordinary code that moves data between the suite and a syst
 | Outbound patterns: a table, view, query or DbDataStore entity sent to an API or a file, resumable, nothing sent when nothing changed, with idempotency keys | **built** (IX22; `DbDataKit.Runner.Kit.Outbound`; no semantic-query source yet) |
 | Lineage nodes for outside systems | **not built** (IX12) |
 | Recorded HTTP responses and a fake file share for tests | **built** (IX15; `RecordedHttp` and `FakeFileShare` in `DbDataKit.Runner.Kit.Testing`; the recording format `http-recording/1` is in `docs/formats.json`) |
-| Dry run (`--dry-run`, the kit refuses writes) and the sandbox run before promotion | **not built** (IX16) |
-| Outbound steps in a non-production channel use the channel's connection or are refused | **not built** (IX17) |
+| Dry run (`--dry-run`, the kit refuses writes) and the sandbox run before promotion | **built** (IX16; section 8) |
+| Outbound steps in a non-production channel use the channel's connection or are refused | **built** for the runner (IX17; section 8); the console's delivery channels are held to it when set on the Bindings page, not yet when a file is edited by hand |
 | OAuth 2 authorization code (consent once on the console, the refresh token a secret, refresh, revoke, an unhealthy connection when the provider revoked the grant) | **built** (IX03; `OAuthAuthorizationCode`, the Authorize and Disconnect buttons of the Connections screen) |
-| The serving layer's end of webhooks, the DbDataStore change trigger | **not built** (IX18, IX19) |
+| The serving layer's end of webhooks (IX18: the runner's end refuses replays, built; the Gateway's public endpoint is not), the DbDataStore change trigger (IX19: the engine's half is built, a Store feed client is not) | **partly built** |
 | Notebooks | **parked**; no row is built |
 | Agents in integrations and agents that write them | **not built** (AG27; plan 27 section 4.9) |
 | Approval of a trusted integration version by an administrator before it serves | **not built** (plan 27 section 4.7; the Runner stages a version and an administrator activates it, which is the approval point today) |
@@ -165,27 +165,34 @@ It validates the manifest, stages the version, and when every instance is ready 
 
 ## 8. Dry run and sandbox rules
 
-**Not built** (IX16, IX17), and written here as decided so that code written now does not have to change:
+**Built** (IX16, IX17; the runner's side is in [`DbDataRunner/README.md`](../DbDataRunner/README.md)):
 
-- A **dry run** (`tasks run --dry-run`) runs the task so that it reads the outside system and the kit refuses writes; it lists what it would have sent. A job that writes through its own HTTP client bypasses the kit's guard: the guarantee holds for the kit's clients and landing helpers only.
-- A **sandbox run** goes against the channel's sandbox connection before a version is promoted; an administrator may require it (a recorded setting).
-- In a **non-production channel** an outbound step uses the connection bound for that channel or is refused naming the slot.
-- Until then the safeguard is the channel binding itself: a slot of a preview channel is bound to a sandbox connection by the person who binds it.
+- A **dry run** (`tasks run <task> --dry-run`) runs the task so that it reads the outside system and the kit refuses writes. The job sees `Run.DryRun`; progress is not saved, the file ledger and the inbox are not changed, `OutsideHttpOptions.DryRun` refuses a request that is not a read, a `WriteGate` with `DryRun` runs no statement, and the run's log lists what it would have done (`Dry run, would: ...`). A job tells its own clients: `new OutsideHttp(client, new OutsideHttpOptions { DryRun = Run.DryRun, OnWouldSend = Run.WouldDo })`, and calls `Run.WouldDo(...)` where it skips a write of its own. **A job that writes through its own HTTP client or code bypasses the kit's guard: the guarantee holds for the kit's clients and landing helpers only.** A dry run starts no task that follows it. Test a job's dry run with `new RunSimulator<Job>(dryRun: true)`.
+- A **sandbox run** is a run that succeeded in a channel other than `prod`, where the slots are bound to that channel's own (sandbox) connections. An administrator may require one before a version is promoted (`package require-sandbox-run on`): `activate` and `switch` on `prod` then refuse a version that has had none (a dry run does not count).
+- In a **non-production channel** a task is refused the connection `prod` binds the same slot to when its run starts, unless an administrator recorded the choice (`package allow-production-binding`); a slot with no binding in the channel is refused naming the slot. The manifest does not say which slots send, so every slot whose connection is not read-only is held to the rule.
 
 ## 9. Templates
 
-Templates generate ordinary code an author then owns (plan 27 section 4.1: "templates, not an engine"). The `integration` kind's own starter (**built**) is a minimal task with a test that builds and passes with no edits (the real-program test of `WorkspaceIntegrationKindTests` proves it). The two named templates, "pull pages from a REST API into a staging table" and "pick up CSV files from a share" (IX21), are **not built**, for two reasons found while looking:
+Templates generate ordinary code an author then owns (plan 27 section 4.1: "templates, not an engine"): nothing ties a project to its template once it is made. The `integration` kind offers three starting points in New project (`--template` on `project create`, `template` in the API): the plain one (one task and one test), and (**built**, IX21):
 
-- They stand on kit pieces that were missing when the row was looked at and now exist: a CSV reader (IX08), the HTTP helpers with paging and per-connection rate limits (IX10) and landing into a staging table (IX11). The file share half still lacks its client (SFTP, FTPS, SMB: IX04 to IX06).
-- An `http` connection slot cannot yet be opened with its sign-in: `ConnectionGrant` (what `Slot<T>.OpenAsync` returns for the default slot type) carries host, port, database, a login and a token, and has no endpoint or sign-in method; `DbDataKit.Connections.Http` (IX02) signs requests in from a `connection/2` file, but nothing hands it to a task through the Runner's `ResolveConnection`. IX10 is the row that joins them.
+| Template | What it generates |
+| --- | --- |
+| `rest-api-to-staging` | the task `pull-orders`: `OutsideHttp` with cursor paging (retries, rate limit, failure classes), each page landed by `StagingLander` under the cursor it was asked with, the cursor kept as progress; slots `api` (kind `http`) and `staging` (a database); tests that read the API's answers from `tests/recordings/orders.json` and land into a `MemoryWarehouse` |
+| `csv-files-from-share` | the task `pick-up-csv`: finished files only, a content seen before skipped (`Files.ClaimAsync`), `DelimitedReader`, `StagingLander` under the file's hash, bad records collected, the file moved to `/done`; slots `share` (kind `folder`) and `staging`; tests over a `FakeFileShare` and a `MemoryWarehouse` |
 
-They can be built now for the REST half, as csx templates (`IntegrationProjectKind.Template` takes a template name then) with the recorded-response tests of IX15.
+Each builds with `dbdatarunner package build` and passes `package test` with nothing edited, and with no network and no database (`IntegrationTemplatesTests` proves it with the real build and test code). The templates are files in `Shared/src/DbDataKit.Authoring.Server/IntegrationTemplates/`. A csx project can use the kit's libraries for integrations (`DbDataKit.Runner.Kit.Http`, `.Formats`, `.Landing`): the build compiles against them and copies them, with what they stand on, into the package's `bin/`.
+
+**What a template does not do for you** (each is said in the generated README and in the code where it matters):
+
+- Open the database connection of the `staging` slot: that needs the engine's driver, which a csx build does not carry offline (add `#r "nuget: Npgsql, <version>"`).
+- Sign in to the API with OAuth 2 or a client certificate: the runner hands a task today the address, a token or a login of the bound connection (`ConnectionGrant`), which the template turns into a client; joining `DbDataKit.Connections.Http` to `ResolveConnection` is the open half of IX10.
+- Reach a share other than a folder the Runner's machine can read: SFTP, FTPS, SMB and object storage (IX04 to IX06) implement the template's three-call `IShare`.
 
 ## 10. Where this differs from the designs
 
 - Plan 27 section 4.1 names a `.csx` script kind next to a compiled project. Roslyn's script model (top-level statements, `Submission#0`) cannot name its own types from a test or the manifest, so a csx *project* is a set of C# files compiled as a library (section 2). Scripts remain what tests are written as.
 - Plan 28 says "a `.csx` script published compiled": that is what this does, in a build step that is not the Runner's (the Runner still never compiles).
-- A task cannot open an `http` slot with its sign-in today (section 9): `ConnectionGrant` is database-shaped. The `connection/2` `http` kind and its client exist; the join through the Runner is IX10.
+- A task cannot open an `http` slot with its sign-in today (section 9): `ConnectionGrant` is database-shaped. The `connection/2` `http` kind and its client exist; the join through the Runner is IX10. The REST template works from what the grant has.
 - `DbDataRunner/README.md` listed the outside-system connection kinds as not built; IX01 and IX02 built `http`, so that table is corrected with this page.
 - Plan 27a IX20 says "build with the .NET SDK in a sandboxed child process"; the owner's direction of 2026-11-11 (csx without the SDK) changes that to "SDK only for the compiled kind".
 

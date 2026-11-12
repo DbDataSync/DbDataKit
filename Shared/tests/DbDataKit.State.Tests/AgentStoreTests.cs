@@ -231,7 +231,8 @@ public sealed class AgentStoreTests : IDisposable
         using (var connection = database.OpenConnection())
         {
             using var command = database.Command(AgentsModule.Name, connection, "SELECT secret_hash FROM {table:agent_token};");
-            Assert.DoesNotContain(secret[(secret.LastIndexOf('_') + 1)..], Convert.ToString(command.ExecuteScalar()));
+            // the part after "ddka_<id>_": the secret itself may contain '_' (base64url), so the last '_' is not where it starts
+            Assert.DoesNotContain(secret[("ddka_" + row.Id + "_").Length..], Convert.ToString(command.ExecuteScalar()));
         }
         Assert.False(store.RevokeToken(row.Id, "grace"));      // another person's token is not theirs to revoke
         clock.Advance(TimeSpan.FromDays(11));

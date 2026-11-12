@@ -20,7 +20,11 @@ public sealed class CsxPackageBuilderTests
         Assert.True(File.Exists(Path.Combine(output, "package.yaml")));
         Assert.True(File.Exists(Path.Combine(output, "files", "bin", "greeting.dll")));
         Assert.True(File.Exists(Path.Combine(output, "files", "bin", "Greeter.dll")), "the package's run-time assembly travels beside the job");
-        Assert.Equal(["bin/Greeter.dll", "bin/greeting.dll"], result.Files!.Order(StringComparer.Ordinal).ToArray());
+        // the kit's libraries for integrations (HTTP, formats, landing, with what they stand on) travel beside the job; nothing else does
+        var library = CsxPackageBuilder.LibraryReferences().Select(p => "bin/" + Path.GetFileName(p)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("bin/DbDataKit.Runner.Kit.Http.dll", library);
+        Assert.Equal(["bin/Greeter.dll", "bin/greeting.dll"], result.Files!.Where(f => !library.Contains(f)).Order(StringComparer.Ordinal).ToArray());
+        Assert.All(library, f => Assert.Contains(f, result.Files!, StringComparer.OrdinalIgnoreCase));
         // the manifest the runner reads is the one that was written
         Assert.True(PackageManifestReader.LoadFile(Path.Combine(output, "package.yaml")).Ok);
         // the packages are pinned beside the project

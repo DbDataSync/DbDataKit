@@ -22,7 +22,7 @@ namespace DbDataKit.Runner.Triggers;
 /// to exactly one run. The engine also looks at the inbox every tick, so an item that arrived while the task was running or paused is not lost.</item>
 /// <item><b>File arrival.</b> Every <c>poll</c> the engine lists the folder of the trigger's connection slot (<see cref="IFileSource"/>), hashes each new-looking file with a bounded buffer and asks the ledger: one run for each content
 /// the ledger has not seen; the ledger note and the item are one transaction. A file that arrives twice runs once, a changed file (another hash) runs again. Marking the file processed stays the task's (<c>Files.Claim</c>).</item>
-/// <item><b>Store change</b> is declared in the model and has no source yet: the trigger is reported as <c>waiting for a change source (not built)</c> and never fires. <b>By hand</b> is <see cref="RunnerScheduler.RunNow"/>.</item>
+/// <item><b>Store change</b> follows a change feed (<see cref="IStoreChangeSource"/>, <see cref="TriggerOptions.StoreChanges"/>) with a cursor, once per look; with no source the trigger is reported as <c>waiting for a change source (not built)</c> and never fires. <b>By hand</b> is <see cref="RunnerScheduler.RunNow"/>.</item>
 /// </list>
 /// A paused task is not started by a trigger: its after-run events are dropped (as a schedule's times are), its webhooks and files wait for it.
 /// </summary>
@@ -118,8 +118,7 @@ public sealed class TriggerEngine
                                 await WatchFiles(pass, task, trigger, ct).ConfigureAwait(false);
                                 break;
                             case TriggerKind.StoreChange:
-                                pass.Status(task, "store_change", $"store:{trigger.Model}{(trigger.Entity is null ? "" : ":" + trigger.Entity)}", NotBuilt, null);
-                                pass.Problem(task, $"The store_change trigger (model '{trigger.Model}'{(trigger.Entity is null ? "" : $", entity '{trigger.Entity}'")}): {NotBuilt}.");
+                                await WatchStoreAsync(pass, task, trigger, ct).ConfigureAwait(false);
                                 break;
                             default:
                                 pass.Status(task, "manual", "manual", "by hand", null);
@@ -168,6 +167,87 @@ public sealed class TriggerEngine
 
         public void Status(TaskRef task, string kind, string id, string state, DateTimeOffset? lastFired, string? problem = null) =>
             Statuses.Add(new TriggerStatus(task, kind, id, state, lastFired, problem));
+    }
+
+    // ---- a store change (plan 27a IX19)
+
+    /// <summary>
+    /// A <c>store_change</c> trigger follows the change feed of a DbDataStore model (<see cref="IStoreChangeSource"/>) from the moment it is first seen, with a cursor (the feed's sequence) kept like the cursor of an after-run trigger. The changes seen in one
+    /// look that are to the model (and, when the trigger names one, touch the entity) queue the task <b>once</b>, whatever their number; the cursor moves past everything looked at, in the same transaction as the item, so two runners queue it once. A change the
+    /// task wrote itself (its <see cref="StoreChange.By"/> is <c>task:&lt;package&gt;/&lt;task&gt;</c>, the actor a job's landing uses) does not start it again; a feed that dropped events the trigger had not seen starts it once, since it cannot know. A paused task
+    /// drops the changes, as a schedule's times are dropped. A host with no source says so in the status and the problems, as before.
+    /// </summary>
+    private async Task WatchStoreAsync(Pass pass, TaskRef task, TaskTrigger trigger, CancellationToken ct)
+    {
+        var id = $"store:{trigger.Model}{(trigger.Entity is null ? "" : ":" + trigger.Entity)}";
+        if (_options.StoreChanges is not { } source)
+        {
+            pass.Status(task, "store_change", id, NotBuilt, null);
+            pass.Problem(task, $"The store_change trigger (model '{trigger.Model}'{(trigger.Entity is null ? "" : $", entity '{trigger.Entity}'")}): {NotBuilt}.");
+            return;
+        }
+
+        var model = trigger.Model!;
+        var state = _states.Get(task.Package, task.Channel, task.Task, id);
+        var cursorText = state?.Cursor;
+        if (cursorText is null)
+        {
+            // first sight of the trigger: it follows the changes made from now on, not the history
+            var latest = (await source.LatestAsync(model, ct).ConfigureAwait(false)).ToString(CultureInfo.InvariantCulture);
+            if (!_states.TryAdvance(task.Package, task.Channel, task.Task, id, null, latest, null))
+            {
+                pass.Status(task, "store_change", id, $"following the changes of {model}", state?.LastFiredAt);
+                return;     // another runner set it first; the next pass reads it
+            }
+
+            cursorText = latest;
+        }
+
+        if (!long.TryParse(cursorText, NumberStyles.None, CultureInfo.InvariantCulture, out var cursor))
+        {
+            var latest = (await source.LatestAsync(model, ct).ConfigureAwait(false)).ToString(CultureInfo.InvariantCulture);
+            pass.Problem(task, $"The cursor of the trigger '{id}' is not readable ('{cursorText}'); it is reset to the newest change.");
+            _states.Set(task.Package, task.Channel, task.Task, id, state?.LastFiredAt, latest);
+            return;
+        }
+
+        var page = await source.ReadAsync(model, cursor, _options.StoreBatch, ct).ConfigureAwait(false);
+        var self = $"task:{task.Package}/{task.Task}";
+        var wanted = page.Changes.Where(c => c.Sequence > cursor && string.Equals(c.Model, model, StringComparison.Ordinal)
+            && (trigger.Entity is null || c.Entities.Contains(trigger.Entity, StringComparer.Ordinal)) && !string.Equals(c.By, self, StringComparison.Ordinal)).ToList();
+        var next = Math.Max(cursor, page.Last).ToString(CultureInfo.InvariantCulture);
+        var lastFired = state?.LastFiredAt;
+        if (wanted.Count == 0 && !page.Missed)
+        {
+            if (next != cursorText) _states.TryAdvance(task.Package, task.Channel, task.Task, id, cursorText, next, lastFired);
+            pass.Status(task, "store_change", id, $"following the changes of {model}", lastFired);
+            return;
+        }
+
+        if (_host.IsPaused(task))
+        {
+            _states.TryAdvance(task.Package, task.Channel, task.Task, id, cursorText, next, lastFired);
+            pass.Skipped += Math.Max(1, wanted.Count);
+            _log?.LogInformation("{Task} is paused: {Count} change(s) of {Model} do not start it.", task, wanted.Count, model);
+            pass.Status(task, "store_change", id, $"following the changes of {model} (paused)", lastFired);
+            return;
+        }
+
+        var said = page.Missed && wanted.Count == 0 ? $"the change feed of {model} dropped changes this trigger had not seen"
+            : wanted.Count == 1 ? $"change {wanted[0].ChangeId} of {model}" : $"{wanted.Count} changes of {model}, the last {wanted[^1].ChangeId}";
+        var expected = cursorText;
+        var start = new TriggerStart("store_change", $"store:{next}", 0, said,
+            AlsoWrite: (connection, transaction, _) =>
+            {
+                if (!_states.TryAdvance(connection, transaction, task.Package, task.Channel, task.Task, id, expected, next, pass.Now)) throw new TriggerClaimLostException();
+            });
+        TriggerEnqueueResult result;
+        try { result = _host.Enqueue(task, start); }
+        catch (TriggerClaimLostException) { pass.Status(task, "store_change", id, $"following the changes of {model} (waiting)", lastFired); return; }
+
+        if (result.Outcome == TriggerEnqueueOutcome.Queued) { lastFired = pass.Now; pass.Queued.Add(task); }
+        else if (result.Outcome == TriggerEnqueueOutcome.Unavailable) pass.Problem(task, result.Problem ?? "The task cannot be started.");
+        pass.Status(task, "store_change", id, result.Outcome == TriggerEnqueueOutcome.Queued ? $"following the changes of {model}" : $"following the changes of {model} (waiting)", lastFired);
     }
 
     // ---- after a run
@@ -229,6 +309,14 @@ public sealed class TriggerEngine
 
             if (!trigger.Outcomes.Contains(run.Run.Outcome))
             {
+                if (!_states.TryAdvance(task.Package, task.Channel, task.Task, id, expected, next, lastFired)) { held = true; break; }
+                cursorText = next;
+                continue;
+            }
+
+            if (IsDryRun(run))
+            {
+                // a dry run changed nothing and does not start what follows a real run (plan 27a IX16)
                 if (!_states.TryAdvance(task.Package, task.Channel, task.Task, id, expected, next, lastFired)) { held = true; break; }
                 cursorText = next;
                 continue;
@@ -319,6 +407,10 @@ public sealed class TriggerEngine
     }
 
     /// <summary>How deep in a chain of triggered runs the finished run was: the depth its item carried, 0 when it has none (a schedule's, a manual run's, one whose item retention removed).</summary>
+    /// <summary>The work item of the run was a dry run (its inputs carry the reserved word).</summary>
+    private bool IsDryRun(StoredRun run) =>
+        _queue.FindByRun(run.Id) is { } item && WorkPayload.TryParse(item.PayloadJson, out _) is { } payload && payload.Inputs.ContainsKey(RunnerProtocol.DryRunInput);
+
     private int DepthOf(StoredRun run) =>
         _queue.FindByRun(run.Id) is { } item && WorkPayload.TryParse(item.PayloadJson, out _) is { } payload ? payload.TriggerDepth : 0;
 
