@@ -440,16 +440,18 @@ public sealed class ReplicationPairsTests : IAsyncLifetime
     private async Task ClearOldUnitsAsync()
     {
         await using var connection = _target.Open();
-        await ChangeApplyTargets.ExecuteAsync(connection, _target.DriverType == DriverIds.MsSql
-            ? $"IF OBJECT_ID(N'dbdatasync.unit', N'U') IS NOT NULL DELETE FROM dbdatasync.unit WHERE replication_name = '{Replication}'"
-            : $"DO $$ BEGIN IF to_regclass('dbdatasync.unit') IS NOT NULL THEN DELETE FROM dbdatasync.unit WHERE replication_name = '{Replication}'; END IF; END $$");
+        var state = new TargetUnitState(TargetUnitState.EngineOf(_target.DriverType)!.Value);
+        if (!await state.ExistsAsync(connection, CancellationToken.None)) return;
+        await ChangeApplyTargets.ExecuteAsync(connection, $"DELETE FROM {state.Qualified} WHERE replication_name = '{Replication}'");
     }
+
+    private string UnitTable => new TargetUnitState(TargetUnitState.EngineOf(_target.DriverType)!.Value).Qualified;
 
     private async Task<string> DumpUnitsAsync()
     {
         await using var connection = _target.Open();
         await using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT unit_seq, mapping, watermark_key, watermark_before, watermark_after, rows_staged, committed_at FROM dbdatasync.unit WHERE replication_name = '{Replication}' ORDER BY unit_seq";
+        command.CommandText = $"SELECT unit_seq, mapping, watermark_key, watermark_before, watermark_after, rows_staged, committed_at FROM {UnitTable} WHERE replication_name = '{Replication}' ORDER BY unit_seq";
         var lines = new List<string>();
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync()) lines.Add(string.Join(" | ", Enumerable.Range(0, reader.FieldCount).Select(i => reader.IsDBNull(i) ? "null" : Convert.ToString(reader.GetValue(i), CultureInfo.InvariantCulture))));
@@ -460,7 +462,7 @@ public sealed class ReplicationPairsTests : IAsyncLifetime
     {
         await using var connection = _target.Open();
         await using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT COUNT(*) FROM dbdatasync.unit WHERE replication_name = '{Replication}'";
+        command.CommandText = $"SELECT COUNT(*) FROM {UnitTable} WHERE replication_name = '{Replication}'";
         return Convert.ToInt64(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
     }
 
@@ -472,6 +474,9 @@ public sealed class ReplicationPairsTests : IAsyncLifetime
     [Theory]
     [InlineData("sqlserver", "postgres")]
     [InlineData("postgres", "sqlserver")]
+    [InlineData("sqlserver", "mysql")]
+    [InlineData("postgres", "mariadb")]
+    [InlineData("sqlserver", "oracle")]
     public async Task A_runner_owned_replication_keeping_its_state_on_the_target_is_followed_into_the_runners_state_and_a_restored_target_is_a_divergence_there(string source, string target)
     {
         await SetUpAsync(source, target);
@@ -504,7 +509,7 @@ public sealed class ReplicationPairsTests : IAsyncLifetime
 
         // the target is restored to a backup taken before its newest unit: the copy holds a unit the table does not
         await using (var connection = _target.Open())
-            await ChangeApplyTargets.ExecuteAsync(connection, $"DELETE FROM dbdatasync.unit WHERE unit_seq = (SELECT newest FROM (SELECT MAX(unit_seq) AS newest FROM dbdatasync.unit WHERE replication_name = '{Replication}') latest)");
+            await ChangeApplyTargets.ExecuteAsync(connection, $"DELETE FROM {UnitTable} WHERE unit_seq = (SELECT newest FROM (SELECT MAX(unit_seq) AS newest FROM {UnitTable} WHERE replication_name = '{Replication}') latest)");
         await InsertAsync(4, "four", 4m);
         await DrainAsync(RunMode.Runner);
         var open = Assert.Single(new StateTrackingDivergences(_rig.Database).List(identity), d => d.IsOpen);

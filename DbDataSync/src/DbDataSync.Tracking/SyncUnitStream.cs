@@ -24,7 +24,7 @@ public static class SyncUnitStream
 
     /// <summary>The identity a replication's units are copied under: which target (engine, server, database), which replication and which connection of Sync, so that a development copy of a target is never the same set of rows.</summary>
     public static string Identity(UnitStateEngine engine, string server, string database, string connection, string replication) =>
-        $"syncunit:{(engine == UnitStateEngine.SqlServer ? "sqlserver" : "postgres")}://{server}/{database}/{replication}@{connection}";
+        $"syncunit:{TargetUnitState.EngineWord(engine)}://{server}/{database}/{replication}@{connection}";
 
     /// <summary>The replication an identity of this stream is for (the part between the last <c>/</c> and the <c>@</c>).</summary>
     public static string ReplicationOf(string identity) => SyncUnitCopy.ReplicationOf(identity);
