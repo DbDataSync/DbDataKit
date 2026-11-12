@@ -32,6 +32,7 @@ namespace DbDataKit.Views.Hosting;
 /// GET  /api/v1/views/print/{file}         print.js, print.css and the bundled fonts (no token: code, no data)
 /// GET  /api/v1/my/views?scope=mine|shared|all   a person's own dashboards and reports, and the ones shared with them (plan 32 DBR12); under /api/v1/my/dashboards/{name} and /reports/{name}:
 ///      GET ?owner= (open), PUT {text, expected_version?} (save), DELETE, POST /render?owner=, GET /history[?version=], POST /restore {version, expected_version}, GET|PUT /shares, GET /promote ({path, text}, a file the views loader reads)
+/// GET  /api/v1/catalog[?folder=&amp;search=&amp;types=], GET /api/v1/catalog/item?key=, POST /api/v1/catalog/open {key, parameters?, layout?, format?}   the merged report catalog (plan 32 RC03, see <see cref="ViewsApi"/>)
 /// GET  /health, /health/ready, /health/live
 /// </code>
 /// A refusal is <c>{code, message}</c> with its status: 400 invalid, 401 unauthenticated, 403 denied (an app's token narrowed past the document's models), 404 not_found, 413 too large, 500, 501 export_unavailable, 503 draining.
@@ -187,6 +188,20 @@ public sealed class ViewsModule(ViewsOptions options, ViewsPublications publishe
         })));
 
         MapMine(routes);
+
+        // the merged report catalog (plan 32 RC03): our own documents and the external report servers', filtered for the person
+        routes.MapGet("/api/v1/catalog", (Func<HttpContext, Task<IResult>>)(c => As(c, (who, trace) => api!.CatalogBrowseAsync(who, Query(c, "folder"), Query(c, "search"), Query(c, "types"), trace, c.RequestAborted))));
+        routes.MapGet("/api/v1/catalog/item", (Func<HttpContext, Task<IResult>>)(c => As(c, (who, trace) => api!.CatalogItemAsync(who, Query(c, "key"), trace, c.RequestAborted))));
+        routes.MapPost("/api/v1/catalog/create", (Func<HttpContext, Task<IResult>>)(c => As(c, async (who, trace) =>
+        {
+            var (body, refusal) = await ReadBodyAsync(c, options.MaxBodyBytes, "A create request").ConfigureAwait(false);
+            return refusal ?? await api!.CatalogCreateAsync(who, body, trace, c.RequestAborted).ConfigureAwait(false);
+        })));
+        routes.MapPost("/api/v1/catalog/open", (Func<HttpContext, Task<IResult>>)(c => As(c, async (who, trace) =>
+        {
+            var (body, refusal) = await ReadBodyAsync(c, options.MaxBodyBytes, "An open request").ConfigureAwait(false);
+            return refusal ?? await api!.CatalogOpenAsync(who, body, trace, c.RequestAborted).ConfigureAwait(false);
+        })));
 
         foreach (var kind in ViewDefinitions.Kinds)
         {
