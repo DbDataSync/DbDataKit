@@ -8,6 +8,8 @@
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
     <ProjectReference Include="..\DbDataKit.Views\DbDataKit.Views.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections.Http\DbDataKit.Connections.Http.csproj" />
+    <ProjectReference Include="..\DbDataKit.Knowledge\DbDataKit.Knowledge.csproj" />
     <InternalsVisibleTo Include="DbDataKit.ReportCatalogs.Tests" />
   </ItemGroup>
 </Project>

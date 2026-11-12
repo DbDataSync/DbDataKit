@@ -8,6 +8,7 @@
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
     <ProjectReference Include="..\DbDataKit.DataModel\DbDataKit.DataModel.csproj" />
+    <ProjectReference Include="..\DbDataKit.Monitoring\DbDataKit.Monitoring.csproj" />   <!-- the notification feed of the preview expiry; plan 21 CH07 -->
     <ProjectReference Include="..\DbDataKit.Lineage\DbDataKit.Lineage.csproj" />   <!-- an entity model in the lineage graph; plan 18, G12 -->
   </ItemGroup>
 </Project>

@@ -55,6 +55,7 @@ export default function App() {
       <Route path="/views" element={<ViewsPage />} />
       <Route path="/views/dashboards" element={<ViewsPage area="dashboards" />} />
       <Route path="/views/dashboards/:name" element={<ViewsPage area="dashboards" />} />
+      <Route path="/views/catalog" element={<ViewsPage area="catalog" />} />
       <Route path="/views/reports" element={<ViewsPage area="reports" />} />
       <Route path="/views/reports/:name" element={<ViewsPage area="reports" />} />
       <Route path="/agents" element={<AgentsPage />} />

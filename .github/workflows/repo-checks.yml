@@ -76,6 +76,7 @@ jobs:
       - run: python3 -I scripts/check_ui_editors.py
       - run: python3 -I scripts/check_plans.py
       - run: python3 -I scripts/check_formats.py
+      - run: python3 -I scripts/check_state_migrations.py
       - run: python3 -I scripts/check_duckdb_cache.py
       - run: python3 -I scripts/check_native_cache.py
       - run: python3 -I scripts/check_env_names.py
@@ -202,3 +203,18 @@ jobs:
       - name: PowerShell 7 (a second run finds every family current)
         shell: pwsh
         run: ./scripts/fetch-fonts.ps1 all
+
+  # Plan 24a UC07 (QU9): this build against the latest stable release of each product, N and N-1: the compatibility generation of each side and
+  # every format of docs/formats.json, read from the release's tag. Needs the tags, so a full checkout. The matrix is the run's summary.
+  compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - run: python3 -I scripts/check_compatibility.py --matrix | tee compatibility-matrix.json
+      - if: always()
+        run: |
+          { echo '### Compatibility matrix (this build against the latest stable release of each product)'; echo '```json'; cat compatibility-matrix.json; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

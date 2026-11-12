@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using DbDataKit.Config.Yaml;
 
@@ -55,7 +56,10 @@ public static class KnowledgeItemLoader
     public const int MaximumSubjects = 50;
 
     /// <summary>The keys of an item's front matter. The JSON Schema has the same keys; a test keeps them equal.</summary>
-    public static readonly string[] ItemKeys = ["knowledge", "title", "role", "about", "for", "owner", "kind", "chunking"];
+    public static readonly string[] ItemKeys = ["knowledge", "title", "role", "about", "for", "owner", "kind", "chunking", "questions", "model", "request", "semantic-sql", "saved-query", "verified"];
+
+    /// <summary>The keys only a <c>kind: verified-query</c> has (KN21).</summary>
+    public static readonly string[] VerifiedKeys = ["questions", "model", "request", "semantic-sql", "saved-query", "verified"];
 
     /// <summary>The keys of <c>defaults:</c> in a folder file (an item's own title and kind are never a default).</summary>
     public static readonly string[] DefaultKeys = ["role", "about", "for", "owner", "chunking"];
@@ -65,8 +69,11 @@ public static class KnowledgeItemLoader
 
     public static readonly string[] Roles = ["reference", "instruction", "guardrail"];
 
-    /// <summary>The kinds of item. Verified queries (KN21) are a kind of this format and are read from that slice on.</summary>
-    public static readonly string[] Kinds = ["item"];
+    /// <summary>The kinds of item: an item, and a verified query (KN21), a question and the request that answers it, verified by a person.</summary>
+    public static readonly string[] Kinds = ["item", VerifiedQueries.Kind];
+
+    public const int MaximumQuestions = 20;
+    public const int MaximumQuestion = 500;
 
     /// <summary>The subject types, each with the keys that may narrow it (plan 27 section 3.5c item 3).</summary>
     public static readonly IReadOnlyDictionary<string, string[]> SubjectTypes = new Dictionary<string, string[]>
@@ -75,6 +82,7 @@ public static class KnowledgeItemLoader
         ["semantic-model"] = ["measure", "dimension"],
         ["store-model"] = ["field"],
         ["connection"] = [],
+        ["report-catalog"] = ["item"],
         ["app"] = [],
         ["integration"] = [],
         ["tag"] = [],
@@ -172,10 +180,19 @@ public static class KnowledgeItemLoader
             PolicyKeys(map);
             CheckKeys(map, ItemKeys.Concat(PolicySettings), "a knowledge item");
             if (map.Get("kind") is { } kind && !(kind is YamlScalar { Value: var k } && Kinds.Contains(k)))
-                Bad(kind, $"`{(kind as YamlScalar)?.Value}` is not a kind of item this program reads.", "Use `item`, or leave `kind` out (verified queries are read from plan 27a KN21 on).");
+                Bad(kind, $"`{(kind as YamlScalar)?.Value}` is not a kind of item this program reads.", $"Use one of: {string.Join(", ", Kinds)}, or leave `kind` out.");
+            var verifiedKind = map.Get("kind") is YamlScalar { Value: VerifiedQueries.Kind };
+            if (!verifiedKind)
+                foreach (var entry in map.Entries.Where(e => VerifiedKeys.Contains(e.Key.Value)))
+                    Bad(entry.Key, $"`{entry.Key.Value}` belongs to a verified query.", "Add `kind: verified-query`, or remove the key.");
 
             var own = ReadFields(map);
             var role = own.Role ?? chain.Select(c => c.Role).FirstOrDefault(r => r is not null);
+            if (verifiedKind)
+            {
+                role ??= KnowledgeRole.Reference;
+                if (role != KnowledgeRole.Reference) Bad(map.Get("role") ?? map, "A verified query is found by search like a reference and never always given: its role is `reference`.");
+            }
             if (role is null) Add(SharedCodes.MissingKey, map, "Required key `role` is missing (and no `_knowledge.yml` above gives one).", $"Add `role:` with one of: {string.Join(", ", Roles)}.");
             var about = own.About ?? chain.Select(c => c.About).FirstOrDefault(a => a is not null);
             var implied = about is null && impliedAbout is not null;
@@ -185,13 +202,118 @@ public static class KnowledgeItemLoader
             var chunking = own.Chunking ?? chain.Select(c => c.Chunking).FirstOrDefault(c => c is not null) ?? ChunkingSetting.Default;
 
             var title = Title(map, body);
-            if (role is null || title is null) return null;
+            VerifiedQuery? verified = null;
+            if (verifiedKind)
+            {
+                verified = ReadVerified(map, body);
+                if (own.About is null && !chain.Any(c => c.About is not null) && verified is not null) { about = [new KnowledgeSubject("semantic-model", [verified.Model])]; implied = true; }
+            }
+            if (role is null || title is null || (verifiedKind && verified is null)) return null;
             if (role != KnowledgeRole.Reference && own.ChunkingNode is { } node)
                 Diagnostics.Add(new ConfigDiagnostic(ChunkingIgnored, ConfigSeverity.Warning, File, node.Line, node.Column, $"An {role.ToString()!.ToLowerInvariant()} is always given whole; its `chunking` is ignored.", "Remove `chunking`."));
             if (role != KnowledgeRole.Reference && owner is null)
                 Diagnostics.Add(new ConfigDiagnostic(NoOwner, ConfigSeverity.Warning, File, 1, 1, $"An {role.ToString()!.ToLowerInvariant()} changes what agents do and needs an owner who approves changes to it.", "Add `owner:` with a group of the identity home, here or as a default in `_knowledge.yml`."));
+            // the question texts are what is embedded and found (the notes are for people)
+            if (verified is not null)
+                return new KnowledgeItem(id, File, title, role.Value, about, implied, audience, owner, ChunkingSetting.None, "- " + string.Join("\n- ", verified.Questions), bodyLine, HashOf(fullText), verified);
             return new KnowledgeItem(id, File, title, role.Value, about, implied, audience, owner, role == KnowledgeRole.Reference ? chunking : ChunkingSetting.None, body, bodyLine, HashOf(fullText));
         }
+
+        // the keys of a verified query (KN21): the questions (what is embedded), the model, the pinned request and/or its semantic SQL or a saved query of the model, and who verified it
+        private VerifiedQuery? ReadVerified(YamlMapping map, string body)
+        {
+            var before = Diagnostics.Count;
+            var questions = new List<string>();
+            if (map.Get("questions") is not { } qNode) Add(SharedCodes.MissingKey, map, "Required key `questions` is missing: the questions this query answers, as people ask them (they are what is searched).", "Add `questions:` with one to twenty questions.");
+            else if (qNode is not YamlSequence { Items.Count: > 0 } seq || seq.Items.Count > MaximumQuestions) Bad(qNode, $"`questions` is a list of one to {MaximumQuestions} questions.");
+            else
+                foreach (var item in seq.Items)
+                {
+                    if (item is YamlScalar { Value.Length: > 0 } q && q.Value.Length <= MaximumQuestion && !q.Value.Any(char.IsControl)) questions.Add(q.Value);
+                    else Bad(item, $"A question is one line of at most {MaximumQuestion} characters.");
+                }
+            var model = map.Get("model") is YamlScalar { Value.Length: > 0 } m && m.Value.Length <= 200 && !m.Value.Any(char.IsControl) ? m.Value : null;
+
+            JsonObject? request = null;
+            if (map.Get("request") is { } rNode) request = Request(rNode);
+            string? sql = null;
+            if (map.Get("semantic-sql") is { } sNode)
+            {
+                if (sNode is YamlScalar { Value.Length: > 0 } sql0) sql = sql0.Value.Trim();
+                else Bad(sNode, "`semantic-sql` is the query as semantic SQL (kept for reading; the request is the truth).");
+            }
+            string? saved = null, savedVersion = null;
+            if (map.Get("saved-query") is { } savedNode)
+            {
+                if (savedNode is YamlScalar { Value.Length: > 0 } sv && Regex.Match(sv.Value, "^((?<model>[^/\\s@]+)/)?(?<name>[A-Za-z_][A-Za-z0-9_]*)(@(?<version>\\S+))?$") is { Success: true } hit)
+                {
+                    saved = hit.Groups["name"].Value;
+                    savedVersion = hit.Groups["version"].Success ? hit.Groups["version"].Value : null;
+                    if (hit.Groups["model"].Success)
+                    {
+                        if (model is not null && model != hit.Groups["model"].Value) Bad(savedNode, $"`saved-query` names a saved query of {hit.Groups["model"].Value}, and `model` is {model}.");
+                        model ??= hit.Groups["model"].Value;
+                    }
+                }
+                else Bad(savedNode, "`saved-query` is the name of a saved query of the model, with the model before a `/` and the version it was verified against after an `@` when it is pinned (`Sales/revenue_by_region@3`).");
+                if (map.Get("request") is not null || map.Get("semantic-sql") is not null) Bad(savedNode, "A verified query names a saved query, or has a request or semantic SQL, not both.");
+            }
+            else if (map.Get("request") is null && map.Get("semantic-sql") is null)
+                Add(SharedCodes.MissingKey, map, "A verified query needs the request that answers the question (`request:`), or semantic SQL (`semantic-sql:`), or a `saved-query:`.", "Add `request:` (the JSON `semantic query --request` takes).");
+
+            if (model is null) Add(map.Get("model") is null ? SharedCodes.MissingKey : BadItem, map.Get("model") ?? map, "`model` is the name of the semantic model the query is asked of.", "Add `model: Sales`.");
+
+            Verification? verification = null;
+            if (map.Get("verified") is not { } vNode) Add(SharedCodes.MissingKey, map, "Required key `verified` is missing: who verified the query, when and against which version of the model.", "Add `verified: { by: alice, at: 2026-11-01, model-version: \"4\" }`.");
+            else if (vNode is not YamlMapping vm) Bad(vNode, "`verified` is a mapping with `by`, `at` and `model-version`.");
+            else
+            {
+                CheckKeys(vm, ["by", "at", "model-version"], "`verified`");
+                string? Field(string key) => vm.Get(key) is YamlScalar { Value.Length: > 0 } f && f.Value.Length <= 200 && !f.Value.Any(char.IsControl) ? f.Value : null;
+                var by = Field("by");
+                var at = Field("at");
+                var version = Field("model-version");
+                if (by is null) Bad(vm.Get("by") ?? vm, "`verified.by` names the person who verified the query.");
+                if (at is null || !DateTimeOffset.TryParse(at, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out _)) Bad(vm.Get("at") ?? vm, "`verified.at` is the date (or date and time) it was verified, such as 2026-11-01.");
+                if (version is null) Bad(vm.Get("model-version") ?? vm, "`verified.model-version` is the version of the model it was verified against (quote a number).");
+                if (by is not null && at is not null && version is not null) verification = new Verification(by, at, version);
+            }
+            if (Diagnostics.Skip(before).Any(d => d.Severity == ConfigSeverity.Error) || verification is null || model is null || questions.Count == 0) return null;
+            return new VerifiedQuery(questions, model, request, sql, saved, savedVersion, verification, body.Trim());
+        }
+
+        // the pinned request: the envelope `semantic query --request` takes, written as a mapping or as a JSON text
+        private JsonObject? Request(YamlNode node)
+        {
+            JsonObject? request = null;
+            try
+            {
+                request = node switch
+                {
+                    YamlScalar { Value.Length: > 0 } text => JsonNode.Parse(text.Value) as JsonObject,
+                    YamlMapping => ToJson(node) as JsonObject,
+                    _ => null,
+                };
+            }
+            catch (System.Text.Json.JsonException) { }
+            if (request is null) { Bad(node, "`request` is the semantic request: a mapping, or JSON text, with `kind: query` and a `query` that has `measures`."); return null; }
+            if (request["kind"]?.GetValue<string>() != "query" || request["query"] is not JsonObject query || query["measures"] is not JsonArray { Count: > 0 })
+            { Bad(node, "`request` has `kind: query` and a `query` with at least one entry in `measures`.", "The same document `semantic query --request` takes."); return null; }
+            return request;
+        }
+
+        private static JsonNode? ToJson(YamlNode node) => node switch
+        {
+            YamlMapping m => new JsonObject(m.Entries.Select(e => new KeyValuePair<string, JsonNode?>(e.Key.Value, ToJson(e.Value)))),
+            YamlSequence s => new JsonArray([.. s.Items.Select(ToJson)]),
+            YamlScalar { Quoted: false, Value: "null" or "~" or "" } => null,
+            YamlScalar { Quoted: false, Value: "true" } => JsonValue.Create(true),
+            YamlScalar { Quoted: false, Value: "false" } => JsonValue.Create(false),
+            YamlScalar { Quoted: false } n when long.TryParse(n.Value, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var l) => l is >= int.MinValue and <= int.MaxValue ? JsonValue.Create((int)l) : JsonValue.Create(l),
+            YamlScalar { Quoted: false } n when double.TryParse(n.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var d) => JsonValue.Create(d),
+            YamlScalar x => JsonValue.Create(x.Value),
+            _ => null,
+        };
 
         public FolderDefaults? ReadFolder(YamlNode root)
         {

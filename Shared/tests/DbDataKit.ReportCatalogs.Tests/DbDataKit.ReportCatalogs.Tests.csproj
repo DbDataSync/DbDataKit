@@ -1,7 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <Using Include="Xunit" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Npgsql" />
     <ProjectReference Include="..\..\src\DbDataKit.ReportCatalogs\DbDataKit.ReportCatalogs.csproj" />
+    <!-- the registry sink is tested on the state database of every engine, as the views kinds are -->
+    <ProjectReference Include="..\..\src\DbDataKit.ReportCatalogs.Runner\DbDataKit.ReportCatalogs.Runner.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.State.Engines\DbDataKit.State.Engines.csproj" />
+    <Compile Include="..\DbDataKit.State.Tests\StateEngines.cs" Link="StateEngines.cs" />
     <!-- the fake provider of the catalog tests: it passes the same contract as the report server's -->
     <Compile Include="..\DbDataKit.Views.Tests\FakeCatalogProvider.cs" Link="FakeCatalogProvider.cs" />
     <!-- the answers of the report server's REST API the provider is tested against (written from the API's documentation; see answers/README.md) -->

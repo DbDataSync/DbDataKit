@@ -6,6 +6,8 @@ using DbDataKit.State;
 using DbDataKit.Web.Trust;
 using DbDataGateway.Server.Auth;
 using DbDataGateway.Server.Configuration;
+using DbDataGateway.Server.Hosting;
+using DbDataGateway.Server.Secrets;
 using Microsoft.Extensions.Options;
 
 namespace DbDataGateway.Server.Serving;
@@ -307,4 +309,20 @@ public sealed class McpServer(IReadOnlyList<McpTool> tools, McpApprovals approva
     private static JsonObject Result(JsonNode id, JsonNode result) => new() { ["jsonrpc"] = "2.0", ["id"] = id, ["result"] = result };
 
     private static JsonObject Error(JsonNode? id, int code, string message) => new() { ["jsonrpc"] = "2.0", ["id"] = id, ["error"] = new JsonObject { ["code"] = code, ["message"] = message } };
+}
+
+/// <summary>The tools, the approvals and the protocol of the <c>mcp</c> module, made once per process: the module's listener and the management API's approval routes (the console's inbox, plan 27a AG33) answer from the same ones.</summary>
+public sealed class McpServices
+{
+    public McpServices(IOptionsMonitor<GatewayOptions> options, StateDatabase state, SecretsRuntime secrets, IServingServices serving, SemanticModels semantic, PublishedEntityModels models, GatewayViewsPublishing views, HomeCallers homeCallers)
+    {
+        StoreCallers Callers() => homeCallers.GetAsync().AsTask().GetAwaiter().GetResult();
+        var tools = McpTools.Create(serving, semantic, GatewayStoreModule.ApiOf(options, state, secrets, models), () => views, Callers, options);
+        Approvals = new McpApprovals(state, Callers, tools.ToDictionary(t => t.Name, StringComparer.Ordinal), TimeSpan.FromMinutes(options.CurrentValue.Mcp.ApprovalMinutes));
+        Server = new McpServer(tools, Approvals, typeof(McpServices).Assembly.GetName().Version?.ToString() ?? "0");
+    }
+
+    public McpApprovals Approvals { get; }
+
+    public McpServer Server { get; }
 }

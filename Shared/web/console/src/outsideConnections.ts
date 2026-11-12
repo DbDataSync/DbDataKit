@@ -2,10 +2,10 @@ import { request } from '@dbdatakit/shell'
 import type { Diagnostic } from './agents'
 
 /** The kinds of connection the console keeps itself (plan 27a IX01): an API, a model provider, and (the delivery channels, plan 22a GP18) a mail server. A database connection is kept by the Sync or Gateway server that uses it. A webhook is an `http` connection with a `webhook:` section. */
-export const OUTSIDE_KINDS = ['http', 'model-provider', 'smtp', 'sftp', 'scp', 'ftps', 'smb', 's3', 'azure-blob'] as const
+export const OUTSIDE_KINDS = ['http', 'model-provider', 'smtp', 'sftp', 'scp', 'ftps', 'smb', 's3', 'azure-blob', 'report-catalog'] as const
 export type OutsideKind = (typeof OUTSIDE_KINDS)[number]
 
-export const KIND_LABEL: Record<string, string> = { database: 'database', http: 'API (http)', 'model-provider': 'model provider', smtp: 'mail server (smtp)', sftp: 'file server (SFTP)', scp: 'file server (SCP)', ftps: 'file server (FTPS)', smb: 'Windows share (SMB)', s3: 'object storage (S3)', 'azure-blob': 'object storage (Azure Blob)' }
+export const KIND_LABEL: Record<string, string> = { database: 'database', http: 'API (http)', 'model-provider': 'model provider', smtp: 'mail server (smtp)', sftp: 'file server (SFTP)', scp: 'file server (SCP)', ftps: 'file server (FTPS)', smb: 'Windows share (SMB)', s3: 'object storage (S3)', 'azure-blob': 'object storage (Azure Blob)', 'report-catalog': 'report server (SSRS, Power BI)' }
 
 /** What each kind is, in a sentence the new-connection form shows. */
 export const KIND_MEANING: Record<OutsideKind, string> = {
@@ -17,6 +17,7 @@ export const KIND_MEANING: Record<OutsideKind, string> = {
   smb: 'A Windows file share (SMB): list, read and write files as the Windows identity of the process that runs the work (Kerberos, no secret). Works on a Windows host only; name the server by its DNS name.',
   s3: 'Amazon S3 or any server that speaks its API (MinIO, Ceph): a bucket, an optional folder, and the access key id and secret access key (the secret kept as a secret). A missing object is a permanent failure.',
   'azure-blob': 'Azure Blob Storage: a container, an optional folder, and the account key or a SAS token kept as a secret. A missing blob is a permanent failure.',
+  'report-catalog': 'An external report server, SQL Server Reporting Services or Power BI Report Server: the address of its web portal and the service account the catalog is read with (a secret reference). The report catalog lists its reports beside our own.',
   smtp: 'A mail server that delivery channels send mail through: its host, how the connection is protected (STARTTLS or TLS), the sender address and the login as a secret reference.',
 }
 
@@ -33,6 +34,7 @@ export const NEW_CHOICES: NewChoice[] = [
   { id: 'smb', label: KIND_LABEL.smb, kind: 'smb', meaning: KIND_MEANING.smb },
   { id: 's3', label: KIND_LABEL.s3, kind: 's3', meaning: KIND_MEANING.s3 },
   { id: 'azure-blob', label: KIND_LABEL['azure-blob'], kind: 'azure-blob', meaning: KIND_MEANING['azure-blob'] },
+  { id: 'report-catalog', label: KIND_LABEL['report-catalog'], kind: 'report-catalog', meaning: KIND_MEANING['report-catalog'] },
   { id: 'slack', label: 'webhook: Slack', kind: 'http', flavor: 'slack', meaning: 'A Slack incoming webhook (Block Kit). Its address carries a token: paste it once and only the template stays in the file.' },
   { id: 'teams', label: 'webhook: Teams', kind: 'http', flavor: 'teams', meaning: 'A Teams Workflows webhook (Adaptive Card). The flow and the signature in its address are secret parts: paste the address once.' },
   { id: 'oauth', label: 'API: OAuth 2 consent', kind: 'http', flavor: 'oauth', meaning: 'An API that a person signs in to once (OAuth 2 authorization code): press Authorize, give consent at the provider, and the refresh token is kept as a secret; the connection then refreshes its own access tokens.' },
@@ -78,7 +80,7 @@ export function consentReturn(search: string): ConsentReturn | null {
 }
 
 /** The kinds the Test button can try: an API, a mail server, a file server. */
-export const canTest = (kind: string | null): boolean => kind === 'http' || kind === 'smtp' || kind === 'sftp' || kind === 'scp' || kind === 'ftps' || kind === 'smb' || kind === 's3' || kind === 'azure-blob'
+export const canTest = (kind: string | null): boolean => kind === 'http' || kind === 'smtp' || kind === 'sftp' || kind === 'scp' || kind === 'ftps' || kind === 'smb' || kind === 's3' || kind === 'azure-blob' || kind === 'report-catalog'
 
 /** Whether a connection signs in with a person's consent (so the screen shows Authorize and Disconnect). */
 export const needsConsent = (c: Pick<OutsideConnection, 'signIn'>): boolean => c.signIn === 'oauth2_authorization_code'

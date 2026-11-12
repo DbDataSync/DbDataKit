@@ -40,6 +40,8 @@ public sealed class ChangeApplyWriter(SqlDialect dialect, ITableCatalog catalog,
 {
     public string Kind => GenericDriverKinds.ChangeApply;
 
+    public bool SupportsUnitState => true;
+
     public bool SupportsReconciliation => false;
 
     public IReadOnlyList<ParameterDescriptor> Parameters { get; } = [ApplyBatch.Descriptor];
@@ -90,6 +92,7 @@ public sealed class ChangeApplyWriter(SqlDialect dialect, ITableCatalog catalog,
                 () => RunAsync(targetConnection, transaction, statements.Insert, ranges, cancellationToken),
                 cancellationToken);
 
+            await UnitStateScope.BeforeCommitAsync(targetConnection, transaction, cancellationToken);   // plan 28c E17: the unit's state row, same transaction
             await transaction.CommitAsync(cancellationToken);
             return new WriteResult(affected);
         }

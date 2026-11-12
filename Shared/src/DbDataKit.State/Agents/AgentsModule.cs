@@ -154,6 +154,52 @@ public static class AgentsModule
         CREATE INDEX {index:memory_by_person} ON {table:memory}(person, kind);
         CREATE INDEX {index:memory_by_work} ON {table:memory}(work_ref);
         """,
+        """
+        -- Evaluation sets (plan 27a AG23): a run of an agent's cases against a channel's bindings. agent_version is the version of the agent that was run, model the model that answered, knowledge_versions the items and versions it was
+        -- given (JSON), trigger_kind who started it (manual or schedule), score the mean of the cases (0 to 1), passed and total the cases, cost what the run cost. evaluation_case has one row per case: its score, whether it passed, the answer,
+        -- the result of each check as JSON (a check of the suite or the judgement of the judge model, shown as such), the tokens and cost, and a problem when the case could not be run.
+        CREATE TABLE {table:evaluation_run} (
+            id                 {{key}} PRIMARY KEY,
+            agent              {{key}} NOT NULL,
+            agent_version      {{key}} NOT NULL,
+            channel            {{key}} NOT NULL,
+            model              {{key}} NULL,
+            knowledge_versions {{text}} NOT NULL,
+            trigger_kind       {{key}} NOT NULL,
+            score              {{decimal}} NOT NULL,
+            passed             {{int}} NOT NULL,
+            total              {{int}} NOT NULL,
+            cost               {{decimal}} NOT NULL,
+            started_at         {{time}} NOT NULL,
+            finished_at        {{time}} NOT NULL
+        );
+        CREATE INDEX {index:evaluation_run_by_agent} ON {table:evaluation_run}(agent, channel, started_at);
+
+        CREATE TABLE {table:evaluation_case} (
+            run_id        {{key}} NOT NULL,
+            case_name     {{key}} NOT NULL,
+            task          {{text}} NOT NULL,
+            score         {{decimal}} NOT NULL,
+            passed        {{int}} NOT NULL,
+            answer        {{text}} NOT NULL,
+            checks        {{text}} NOT NULL,
+            input_tokens  {{int}} NOT NULL,
+            output_tokens {{int}} NOT NULL,
+            cost          {{decimal}} NOT NULL,
+            problem       {{text}} NULL,
+            PRIMARY KEY (run_id, case_name)
+        );
+
+        -- The lowest score an agent's evaluation may have before a promotion to a channel (a recorded choice, who set it and when); no row: no minimum.
+        CREATE TABLE {table:evaluation_minimum} (
+            agent      {{key}} NOT NULL,
+            channel    {{key}} NOT NULL,
+            minimum    {{decimal}} NOT NULL,
+            set_by     {{key}} NOT NULL,
+            set_at     {{time}} NOT NULL,
+            PRIMARY KEY (agent, channel)
+        );
+        """,
     ];
 
     private static StateModule Make(StateScopeKind scope) => new(Name, scope, Migrations, retention: [new RetentionRule("turn_text", "created_at", TextDays)]);

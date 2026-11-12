@@ -9,6 +9,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\DbDataKit.Runner.Abstractions\DbDataKit.Runner.Abstractions.csproj" />
     <ProjectReference Include="..\DbDataKit.Web\DbDataKit.Web.csproj" />
+    <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
     <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
     <ProjectReference Include="..\DbDataKit.Secrets\DbDataKit.Secrets.csproj" />
     <ProjectReference Include="..\DbDataKit.Secrets.Store\DbDataKit.Secrets.Store.csproj" />

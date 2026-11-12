@@ -12,18 +12,20 @@ namespace DbDataKit.Web.Trust;
 /// host name is not enough, the whole address to use (<see cref="ConsoleAnnouncer.AdvertiseVariable"/>). The console reaches the server by name when the name resolves for it, so a server that gets a new IP address stays paired;
 /// when it does not resolve, the console uses the address the announcement came from.
 /// </summary>
-public sealed record Announcement(string Product, string InstanceId, string Name, int Port, string? Host, string? Url, string Code, DateTimeOffset Expires);
+public sealed record Announcement(string Product, string InstanceId, string Name, int Port, string? Host, string? Url, string Code, DateTimeOffset Expires, string? BundleToken = null);
 
 /// <summary>
 /// A server that offers itself to a console (plan 13a, L03): when <see cref="UrlVariable"/> names a console's announce address (a private port of the console, reachable only on the network the two share, such as a compose network; the console
 /// listens on the port of the same variable, so one setting shared by a whole compose file is all there is) and this server has
 /// no console paired, it repeats an <see cref="Announcement"/> every <see cref="Interval"/> until one is. The console lists the server as pending; nothing is paired until an administrator confirms it there, and the code it carries expires in minutes and works once.
 /// </summary>
-public sealed class ConsoleAnnouncer(string product, string instanceId, string name, Func<int?> port, Uri? advertise, Uri console, IPairedClientStore clients, IPairingCodeStore codes, TimeProvider? clock = null, string? hostName = null)
+public sealed class ConsoleAnnouncer(string product, string instanceId, string name, Func<int?> port, Uri? advertise, Uri console, IPairedClientStore clients, IPairingCodeStore codes, TimeProvider? clock = null, string? hostName = null, string? bundleTokenFile = null)
 {
     public const string UrlVariable = "DBDATAKIT_ANNOUNCE_URL";
     public const string AdvertiseVariable = "DBDATAKIT_ADVERTISE_URL";
     public const string NameVariable = "DBDATAKIT_INSTANCE_NAME";
+    /// <summary>The file that holds the single-machine bundle's token (plan 23a FQ18, D8): a server installed beside its console puts the token in its announcement and the console pairs with it by itself; read at every announcement, so a rotated token is used at once.</summary>
+    public const string BundleTokenFileVariable = "DBDATAKIT_BUNDLE_TOKEN_FILE";
     public const string Path = "/announce";
     public static readonly TimeSpan Interval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(10);
@@ -39,7 +41,7 @@ public sealed class ConsoleAnnouncer(string product, string instanceId, string n
         if (!Uri.TryCreate(environment(UrlVariable), UriKind.Absolute, out var console) || console.Scheme is not ("http" or "https")) return null;
         // optional: the address the console should use when the one it sees the announcement come from is not it (a gateway or published port in between)
         Uri? advertise = Uri.TryCreate(environment(AdvertiseVariable), UriKind.Absolute, out var given) && given.Scheme == Uri.UriSchemeHttps ? given : null;
-        return new ConsoleAnnouncer(product, instanceId, environment(NameVariable) is { Length: > 0 } named ? named : product, port, advertise, console, clients, codes);
+        return new ConsoleAnnouncer(product, instanceId, environment(NameVariable) is { Length: > 0 } named ? named : product, port, advertise, console, clients, codes, bundleTokenFile: environment(BundleTokenFileVariable));
     }
 
     /// <summary>Tells the console once, unless a console is paired already. Returns whether the console took the announcement.</summary>
@@ -51,13 +53,21 @@ public sealed class ConsoleAnnouncer(string product, string instanceId, string n
         // a new code when the one held is about to lapse, or the server's waiting codes were cancelled (five wrong codes cancel them all)
         if (_code is null || _code.ExpiresAt - now < Renew || codes.Pending() == 0)
             _code = codes.Create(ServerRole.Admin, null, Lifetime);
-        var announcement = new Announcement(product, instanceId, name, listening, hostName ?? System.Net.Dns.GetHostName(), advertise?.AbsoluteUri.TrimEnd('/'), _code.Code, _code.ExpiresAt);
+        var announcement = new Announcement(product, instanceId, name, listening, hostName ?? System.Net.Dns.GetHostName(), advertise?.AbsoluteUri.TrimEnd('/'), _code.Code, _code.ExpiresAt, ReadBundleToken());
         try
         {
             using var response = await http.PostAsJsonAsync(new Uri(console, Path), announcement, Json, cancellationToken).ConfigureAwait(false);
             return response.IsSuccessStatusCode;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { return false; }
+    }
+
+    /// <summary>The bundle token, or null when no file is named or it cannot be read (the announcement then simply waits for an administrator, as any other).</summary>
+    private string? ReadBundleToken()
+    {
+        if (string.IsNullOrWhiteSpace(bundleTokenFile)) return null;
+        try { return File.ReadAllText(bundleTokenFile).Trim() is { Length: > 0 } token ? token : null; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
     }
 
     internal async Task RunAsync(CancellationToken stopping)

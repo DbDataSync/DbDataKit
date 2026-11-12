@@ -40,9 +40,52 @@ public static class RunnerPublishApi
         return Error(403, $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role.");
     }
 
+    /// <summary>The caller as the shared API sees it: a paired client's token carries its id, which the owner rules read; a person signed in to a console (no token) is an administrator or reads, and has no publisher role to use.</summary>
+    private static DbDataKit.State.Api.DefinitionsCaller Shared(RunnerCaller caller) =>
+        new(caller.Actor.Id, caller.Roles.HasFlag(ServerRole.Admin), caller.Token is not null && caller.Roles.HasFlag(ServerRole.Publisher), ServerRoles.Allows(caller.Roles, ServerRole.Viewer), caller.Token is { } token ? OwnerScope.Stamp(token) : null) { Context = caller };
+
     /// <summary>
-    /// The calls that upload, publish, bind and set (<c>HEAD</c> and <c>PUT artifacts</c>, <c>PUT definitions</c>, <c>PUT bindings</c>, <c>PUT settings/require_signatures</c>) under <paramref name="prefix"/>, for whoever <paramref name="callerOf"/> says is calling.
-    /// A paired client with a token keeps the owner rules of <see cref="OwnerScope"/>; a person signed in to a console (no token) is an administrator, who is not limited by owner, or reads, and a reader publishes nothing.
+    /// Hands a call to the shared API (<see cref="RunnerPublishing.Api"/>), which holds the roles, the owner rules and, for <c>integration</c>, the runner's rules as a kind hook (<see cref="IntegrationKindHook"/>); <paramref name="route"/> is relative to <c>/api/v1</c>.
+    /// A life-cycle call may name its channel in the query.
+    /// </summary>
+    private static async Task<IResult> Forward(RunnerPublishing publishing, HttpContext context, RunnerCaller caller, string method, string route, bool hasBody = true, bool optionalBody = false)
+    {
+        string? text = null;
+        if (hasBody)
+        {
+            if (context.Request.ContentLength is > MaxJsonBytes) return Error(413, $"The body is larger than {MaxJsonBytes / (1024 * 1024)} MB.");
+            using var reader = new StreamReader(context.Request.Body);
+            text = await reader.ReadToEndAsync(context.RequestAborted);
+            if (text.Length > MaxJsonBytes) return Error(413, $"The body is larger than {MaxJsonBytes / (1024 * 1024)} MB.");
+            if (string.IsNullOrWhiteSpace(text) && !optionalBody) return Error(400, "The body is a JSON object.");
+            if (optionalBody && Text(context.Request.Query["channel"]) is { } queried)
+            {
+                JsonObject? json = null;
+                try { json = string.IsNullOrWhiteSpace(text) ? [] : JsonNode.Parse(text) as JsonObject; }
+                catch (System.Text.Json.JsonException) { }
+                if (json is not null && json["channel"] is null)
+                {
+                    json["channel"] = queried;
+                    text = json.ToJsonString();
+                }
+            }
+        }
+
+        var result = await publishing.Api.HandleAsync(method, route, text, Shared(caller), context.RequestAborted);
+        return Results.Json(result.Body, statusCode: result.Status);
+    }
+
+    /// <summary>A route handler that answers with the result of <paramref name="handler"/>: a lambda of only the context that returns a task of a result would be taken for a request delegate, which drops the result and answers an empty 200 (ASP0016).</summary>
+    private static Delegate Handler(Func<HttpContext, Task<IResult>> handler) => handler;
+
+    private static string Esc(string part) => Uri.EscapeDataString(part);
+
+    private const string Integration = RunnerPublishing.Kind;
+
+    /// <summary>
+    /// The calls that upload, publish, bind and set (<c>HEAD</c> and <c>PUT artifacts</c>, <c>PUT definitions</c>, <c>PUT bindings</c>, the trust store's keys, <c>PUT settings/require_signatures</c>) under <paramref name="prefix"/>, for whoever <paramref name="callerOf"/> says is calling.
+    /// A paired client with a token keeps the owner rules of <see cref="OwnerScope"/>; a person signed in to a console (no token) is an administrator, who is not limited by owner, or reads, and a reader publishes nothing. The calls are the shared API's
+    /// (<see cref="DbDataKit.State.Api.DefinitionsApi"/>) with the runner's rules as the hook of the <c>integration</c> kind.
     /// </summary>
     public static void MapWrite(IEndpointRouteBuilder app, RunnerPublishing publishing, string prefix, RunnerCallerResolver callerOf)
     {
@@ -54,118 +97,41 @@ public static class RunnerPublishApi
             return publishing.HasArtifact(sha256) ? Results.Ok() : Results.NotFound();
         });
 
+        // a stored file by hash, for a promotion to another group (plan 30 PB06): the same callers that may ask whether the runner has it
+        app.MapGet($"{root}/artifacts/{{sha256}}", (string sha256, HttpContext context) =>
+        {
+            var effective = callerOf(context).Roles;
+            if (!effective.HasFlag(ServerRole.Publisher) && !ServerRoles.Allows(effective, ServerRole.Viewer)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+            return publishing.Api.OpenArtifact(sha256) is { } stream ? Results.Stream(stream, "application/octet-stream") : Results.NotFound();
+        });
+
         app.MapPut($"{root}/artifacts/{{sha256}}", async (string sha256, HttpContext context) =>
         {
-            var token = callerOf(context);
-            var actor = token.Actor;
-            if (!RunnerPublishing.IsSha256(sha256)) return Error(400, $"'{sha256}' is not a SHA-256: write 64 hexadecimal digits.");
-            if (Authorize(publishing, token, ObjectAction.Create, null, RunnerPublishing.UploadVerb, "artifact", sha256.ToLowerInvariant()) is { } denied) return denied;
+            var caller = callerOf(context);
             if (context.Request.ContentLength is { } length && length > publishing.MaxArtifactBytes)
                 return Error(413, $"The file named {sha256} is {length} bytes, more than the cap of {publishing.MaxArtifactBytes}.");
             context.Features.Get<IHttpMaxRequestBodySizeFeature>()?.MaxRequestBodySize = publishing.MaxArtifactBytes;
             var media = context.Request.ContentType is { Length: > 0 } type && !type.StartsWith("application/octet-stream", StringComparison.OrdinalIgnoreCase) ? type : null;
             try
             {
-                var stored = await publishing.StoreArtifactAsync(sha256, context.Request.Body, media, actor, context.RequestAborted);
-                return Results.Json(new JsonObject { ["sha256"] = stored.Sha256, ["size"] = stored.Size, ["already_stored"] = stored.Already });
+                var stored = await publishing.Api.StoreArtifactAsync(sha256, context.Request.Body, media, Shared(caller), context.RequestAborted);
+                return Results.Json(stored.Body, statusCode: stored.Status);
             }
-            catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
             catch (Microsoft.AspNetCore.Http.BadHttpRequestException ex) when (ex.StatusCode == 413) { return Error(413, $"The file named {sha256} is larger than the cap of {publishing.MaxArtifactBytes} bytes."); }
         }).DisableRequestTimeout();
 
-        app.MapPut($"{root}/definitions/integration/{{name}}", async (string name, HttpContext context) =>
-        {
-            var token = callerOf(context);
-            var actor = token.Actor;
-            var body = await ReadBodyAsync(context);
-            if (body.Error is { } bad) return bad;
-            var input = ParsePublish(name, body.Json!, out var problem);
-            if (input is null) return Error(400, problem!);
+        app.MapPut($"{root}/definitions/{Integration}/{{name}}", (string name, HttpContext context) =>
+            Forward(publishing, context, callerOf(context), "PUT", $"definitions/{Integration}/{Esc(name)}"));
 
-            var exists = publishing.Exists(name);
-            var owned = new ManagedObject(publishing.Owner(name));
-            if (Authorize(publishing, token, exists ? ObjectAction.Change : ObjectAction.Create, owned, RunnerPublishing.PublishVerb, "package", $"{name}/{input.Channel}") is { } denied) return denied;
-            // the first publisher of a package owns it (an administrator who creates one leaves it to administrators)
-            if (!exists && !IsAdmin(token) && !publishing.ClaimOwner(name, OwnerScope.Stamp(token.Token!)))
-            {
-                publishing.AuditRefused(RunnerPublishing.PublishVerb, actor, "package", $"{name}/{input.Channel}", "the package belongs to another client");
-                return Error(403, $"The integration '{name}' belongs to another publisher.");
-            }
+        app.MapPut($"{root}/bindings/{{channel}}/{Integration}/{{name}}", (string channel, string name, HttpContext context) =>
+            Forward(publishing, context, callerOf(context), "PUT", $"bindings/{Esc(channel)}/{Integration}/{Esc(name)}"));
 
-            try
-            {
-                var outcome = publishing.Publish(input, actor);
-                return Results.Json(new JsonObject
-                {
-                    ["kind"] = RunnerPublishing.Kind, ["name"] = outcome.Package, ["channel"] = outcome.Channel, ["version"] = outcome.Version, ["changed"] = outcome.Changed,
-                    ["mode"] = outcome.Mode.ToString().ToLowerInvariant(), ["signature"] = outcome.Signature, ["tasks"] = new JsonArray([.. outcome.Tasks.Select(t => (JsonNode)JsonValue.Create(t)!)]),
-                });
-            }
-            catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
-        });
+        app.MapDelete($"{root}/bindings/{{channel}}/{Integration}/{{name}}/{{slot}}", (string channel, string name, string slot, HttpContext context) =>
+            Forward(publishing, context, callerOf(context), "DELETE", $"bindings/{Esc(channel)}/{Integration}/{Esc(name)}/{Esc(slot)}", hasBody: false));
 
-        app.MapPut($"{root}/bindings/{{channel}}/integration/{{name}}", async (string channel, string name, HttpContext context) =>
-        {
-            var token = callerOf(context);
-            var body = await ReadBodyAsync(context);
-            if (body.Error is { } bad) return bad;
-            if (body.Json!["slots"] is not JsonObject slotsNode) return Error(400, "The body is {\"slots\": {\"<slot>\": \"<what it is bound to>\"}}.");
-            var slots = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (var (slot, value) in slotsNode)
-            {
-                if (value is not JsonValue v || !v.TryGetValue<string>(out var to)) return Error(400, $"The slot '{slot}' is bound to a text.");
-                slots[slot] = to;
-            }
-
-            if (!Int(body.Json, "expected_revision", out var revision, out var problem)) return Error(400, problem!);
-            // the slots of a package's first version are bound before it exists (a version that declares an unbound slot is refused): the binder then owns the name, as its first publisher would
-            var exists = publishing.Exists(name);
-            var owned = new ManagedObject(publishing.Owner(name));
-            if (Authorize(publishing, token, exists || owned.ManagedBy is not null ? ObjectAction.Change : ObjectAction.Create, owned, RunnerPublishing.BindVerb, "package", $"{name}/{channel}") is { } denied) return denied;
-            if (!exists && owned.ManagedBy is null && !IsAdmin(token) && !publishing.ClaimOwner(name, OwnerScope.Stamp(token.Token!)))
-            {
-                publishing.AuditRefused(RunnerPublishing.BindVerb, token.Actor, "package", $"{name}/{channel}", "the package belongs to another client");
-                return Error(403, $"The integration '{name}' belongs to another publisher.");
-            }
-
-            List<string>? confirm = null;
-            if (body.Json["confirm"] is JsonArray confirmed)
-            {
-                if (confirmed.Any(x => x is not JsonValue v || !v.TryGetValue<string>(out _))) return Error(400, "confirm is the list of scopes the answer to a refused bind named.");
-                confirm = [.. confirmed.Select(x => (string)x!)];
-            }
-
-            try
-            {
-                var bindings = publishing.Bind(name, channel, slots, revision, token.Actor, confirm, Text(body.Json, "note"));
-                return Results.Json(new JsonObject
-                {
-                    ["name"] = name, ["channel"] = channel,
-                    ["bindings"] = new JsonArray([.. bindings.Select(b => (JsonNode)new JsonObject { ["slot"] = b.Slot, ["bound_to"] = b.BoundTo, ["revision"] = b.Revision })]),
-                });
-            }
-            catch (RunnerPostureConfirmationException ex)
-            {
-                return Results.Json(new JsonObject
-                {
-                    ["error"] = ex.Message, ["setting"] = PostureSetting.ProductionBindingOnNonProduction.Name,
-                    ["needsConfirmation"] = new JsonArray([.. ex.Needs.Select(n => (JsonNode)new JsonObject { ["scope"] = n.Scope, ["slot"] = n.Slot, ["release"] = n.Release, ["connection"] = n.Connection, ["effect"] = n.Effect })]),
-                }, statusCode: StatusCodes.Status409Conflict);
-            }
-            catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
-        });
-
-        app.MapDelete($"{root}/bindings/{{channel}}/integration/{{name}}/{{slot}}", (string channel, string name, string slot, HttpContext context) =>
-        {
-            var token = callerOf(context);
-            var owned = new ManagedObject(publishing.Owner(name));
-            if (Authorize(publishing, token, ObjectAction.Change, owned, RunnerPublishing.UnbindVerb, "package", $"{name}/{channel}") is { } denied) return denied;
-            try
-            {
-                return publishing.Unbind(name, channel, slot, token.Actor) ? Results.Json(new JsonObject { ["name"] = name, ["channel"] = channel, ["slot"] = slot, ["unbound"] = true }) : Error(404, $"The slot '{slot}' of '{name}' is not bound in channel '{channel}'.");
-            }
-            catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
-        });
+        // the trust store: the publisher keys that sign integrations (an administrator adds, rotates by adding the new key and revoking the old, plan 30 PB03)
+        app.MapPut($"{root}/trust/{Integration}/keys", Handler(context => Forward(publishing, context, callerOf(context), "PUT", $"trust/{Integration}/keys")));
+        app.MapPost($"{root}/trust/{Integration}/{{keyId}}/revoke", (string keyId, HttpContext context) => Forward(publishing, context, callerOf(context), "POST", $"trust/{Integration}/{Esc(keyId)}/revoke", hasBody: false));
 
         app.MapPut($"{root}/settings/require_sandbox_run", async (HttpContext context) =>
         {
@@ -217,89 +183,24 @@ public static class RunnerPublishApi
     }
 
     /// <summary>
-    /// The read and life-cycle calls (list and describe the packages, <c>GET settings</c>, activate, switch, rollback and retire) under <paramref name="prefix"/>, for whoever <paramref name="caller"/> says is calling. The calls that
+    /// The read and life-cycle calls (list and describe the packages, <c>GET settings</c>, <c>GET trust</c>, activate, switch, rollback, retire and prune) under <paramref name="prefix"/>, for whoever <paramref name="caller"/> says is calling. The calls that
     /// upload, publish, bind and set are for publishing clients and are not here.
     /// </summary>
     public static void MapReadAndLifecycle(IEndpointRouteBuilder app, RunnerPublishing publishing, string prefix, RunnerCallerResolver caller)
     {
         var root = prefix.TrimEnd('/');
-        app.MapGet($"{root}/definitions/integration", (HttpContext context) =>
-            Deny(caller(context), ServerRole.Viewer) is { } denied ? denied : Results.Json(publishing.List()));
+        app.MapGet($"{root}/definitions/{Integration}", Handler(context => Forward(publishing, context, caller(context), "GET", $"definitions/{Integration}", hasBody: false)));
 
-        app.MapGet($"{root}/definitions/integration/{{name}}", (string name, HttpContext context) =>
-        {
-            if (Deny(caller(context), ServerRole.Viewer) is { } denied) return denied;
-            return publishing.Describe(name) is { } found ? Results.Json(found) : Error(404, $"There is no integration '{name}'.");
-        });
+        app.MapGet($"{root}/definitions/{Integration}/{{name}}", (string name, HttpContext context) => Forward(publishing, context, caller(context), "GET", $"definitions/{Integration}/{Esc(name)}", hasBody: false));
 
-        app.MapPost($"{root}/definitions/integration/{{name}}/prune", async (string name, HttpContext context) =>
-        {
-            var callerOf = caller(context);
-            if (Deny(callerOf, ServerRole.Admin, publishing, RunnerPublishing.PruneVerb, "package", name) is { } denied) return denied;
-            var body = await ReadBodyAsync(context, optional: true);
-            if (body.Error is { } bad) return bad;
-            var json = body.Json ?? new JsonObject();
-            if (!Int(json, "keep", out var keep, out var problem)) return Error(400, problem!);
-            List<int>? versions = null;
-            if (json["versions"] is JsonArray list)
-            {
-                versions = [];
-                foreach (var item in list)
-                {
-                    if (item is JsonValue value && value.TryGetValue<int>(out var number) && number > 0) versions.Add(number);
-                    else return Error(400, "versions is a list of version numbers.");
-                }
-            }
-            else if (json["versions"] is not null) return Error(400, "versions is a list of version numbers.");
-            var dryRun = json["dry_run"] is JsonValue flag && flag.TryGetValue<bool>(out var asked) ? asked : true;
-            if ((keep is null) == (versions is null)) return Error(400, "Say either keep (how many of the newest versions stay) or versions (which to remove): {\"keep\": 5, \"dry_run\": true}. A call that does not say dry_run is a dry run.");
-            try
-            {
-                var plan = publishing.Prune(name, keep, versions, dryRun, callerOf.Actor);
-                return Results.Json(new JsonObject
-                {
-                    ["name"] = name, ["dry_run"] = !plan.Done,
-                    ["remove"] = new JsonArray([.. plan.Remove.Select(v => (JsonNode)JsonValue.Create(v)!)]),
-                    ["retained"] = new JsonArray([.. plan.Retained.Select(r => (JsonNode)new JsonObject { ["version"] = r.Version, ["reason"] = r.Reason })]),
-                    ["files"] = new JsonArray([.. plan.Artifacts.Select(a => (JsonNode)JsonValue.Create(a)!)]),
-                });
-            }
-            catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
-        });
+        // one version whole (manifest, files, signature), which a promotion to another group publishes there (plan 30 PB06)
+        app.MapGet($"{root}/definitions/{Integration}/{{name}}/versions/{{version}}", (string name, string version, HttpContext context) =>
+            Forward(publishing, context, caller(context), "GET", $"definitions/{Integration}/{Esc(name)}/versions/{Esc(version)}", hasBody: false));
 
-        app.MapPost($"{root}/definitions/integration/{{name}}/{{act}}", async (string name, string act, HttpContext context) =>
-        {
-            if (act is not ("activate" or "switch" or "rollback" or "retire")) return Error(404, $"There is no call '{act}'; the life cycle is activate, switch, rollback and retire.");
-            var callerOf = caller(context);
-            var verb = act switch { "activate" => RunnerPublishing.ActivateVerb, "switch" => RunnerPublishing.SwitchVerb, "rollback" => RunnerPublishing.RollbackVerb, _ => RunnerPublishing.RetireVerb };
-            var body = await ReadBodyAsync(context, optional: true);
-            if (body.Error is { } bad) return bad;
-            var json = body.Json ?? new JsonObject();
-            var channel = Text(json, "channel") ?? Text(context.Request.Query["channel"]) ?? DefinitionStore.Production;
-            if (Deny(callerOf, ServerRole.Admin, publishing, verb, "package", $"{name}/{channel}") is { } denied) return denied;
-            if (!Int(json, "expected_version", out var expected, out var problem)) return Error(400, problem!);
-            var actor = callerOf.Actor;
-            try
-            {
-                switch (act)
-                {
-                    case "activate":
-                        if (!Options(json, out var options, out problem)) return Error(400, problem!);
-                        return Activation(name, channel, await publishing.ActivateAsync(name, channel, expected, actor, options, context.RequestAborted));
-                    case "switch":
-                        if (!Int(json, "version", out var version, out problem) || version is null) return Error(400, problem ?? "switch names the version: {\"channel\": \"prod\", \"version\": 3}.");
-                        if (!Options(json, out var switchOptions, out problem)) return Error(400, problem!);
-                        return Activation(name, channel, await publishing.SwitchAsync(name, channel, version.Value, expected, actor, switchOptions, context.RequestAborted));
-                    case "rollback":
-                        if (!Options(json, out var rollbackOptions, out problem)) return Error(400, problem!);
-                        return Activation(name, channel, await publishing.RollbackAsync(name, channel, expected, actor, rollbackOptions, context.RequestAborted));
-                    default:
-                        var retired = publishing.Retire(name, channel, expected, actor);
-                        return Results.Json(new JsonObject { ["name"] = name, ["channel"] = channel, ["retired"] = retired });
-                }
-            }
-            catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
-        });
+        app.MapGet($"{root}/trust/{Integration}", Handler(context => Forward(publishing, context, caller(context), "GET", $"trust/{Integration}", hasBody: false)));
+
+        app.MapPost($"{root}/definitions/{Integration}/{{name}}/{{act}}", (string name, string act, HttpContext context) =>
+            Forward(publishing, context, caller(context), "POST", $"definitions/{Integration}/{Esc(name)}/{Esc(act)}", optionalBody: true));
 
         app.MapGet($"{root}/posture-choices", (HttpContext context) =>
         {
@@ -315,54 +216,6 @@ public static class RunnerPublishApi
         app.MapGet($"{root}/settings", (HttpContext context) =>
             Deny(caller(context), ServerRole.Viewer) is { } denied ? denied
                 : Results.Json(new JsonObject { [RunnerPublishing.RequireSignaturesSetting] = publishing.RequireSignatures, [RunnerPublishing.RequireSandboxRunSetting] = publishing.RequireSandboxRun, ["max_artifact_bytes"] = publishing.MaxArtifactBytes }));
-    }
-
-    /// <summary>The administrator's words of an activation: <c>confirm_losses</c> with the list echoed in <c>losses</c>, <c>anyway</c> and its <c>reason</c>.</summary>
-    private static bool Options(JsonObject json, out ActivateOptions options, out string? problem)
-    {
-        options = new ActivateOptions();
-        problem = null;
-        var confirm = false;
-        var anyway = false;
-        if (json["confirm_losses"] is { } c && !(c is JsonValue cv && cv.TryGetValue(out confirm))) { problem = "confirm_losses is true or false."; return false; }
-        if (json["anyway"] is { } a && !(a is JsonValue av && av.TryGetValue(out anyway))) { problem = "anyway is true or false."; return false; }
-        List<string>? losses = null;
-        if (json["losses"] is { } l)
-        {
-            if (l is not JsonArray list || list.Any(x => x is not JsonValue v || !v.TryGetValue<string>(out _))) { problem = "losses is the list of texts the activation named."; return false; }
-            losses = [.. list.Select(x => (string)x!)];
-        }
-
-        options = new ActivateOptions(confirm, losses, anyway, Text(json, "reason"));
-        return true;
-    }
-
-    /// <summary>200 when the version moved; 202 when the activation is still waiting for the runs in flight (the busy tasks are named; ask again).</summary>
-    private static IResult Activation(string name, string channel, DbDataKit.Runner.Staging.ActivationOutcome outcome)
-    {
-        var body = new JsonObject
-        {
-            ["name"] = name, ["channel"] = channel, ["active"] = outcome.Version, ["state"] = outcome.State.ToString().ToLowerInvariant(), ["message"] = outcome.Message,
-            ["losses"] = new JsonArray([.. outcome.Losses.Select(l => (JsonNode)JsonValue.Create(l)!)]),
-            ["busy_tasks"] = new JsonArray([.. outcome.BusyTasks.Select(t => (JsonNode)JsonValue.Create(t)!)]),
-        };
-        return Results.Json(body, statusCode: outcome.Activated ? StatusCodes.Status200OK : StatusCodes.Status202Accepted);
-    }
-
-    // ---- authorization
-
-    private static bool IsAdmin(RunnerCaller caller) => caller.Roles.HasFlag(ServerRole.Admin);
-
-    /// <summary>The owner rules of a publisher (create; change only what the client created); an administrator is not limited. Null when allowed, the 403 (audited) otherwise.</summary>
-    private static IResult? Authorize(RunnerPublishing publishing, RunnerCaller caller, ObjectAction action, ManagedObject? target, string verb, string targetKind, string targetId)
-    {
-        // a client's token carries its id, which the owner rules read; a person signed in to a console has none and is an administrator (owner rules do not limit one) or has no right to publish
-        var decision = caller.Token is { } token ? OwnerScope.Authorize(token, action, target)
-            : caller.Roles.HasFlag(ServerRole.Admin) ? AuthorizationDecision.Allow(ServerRole.Admin, caller.Roles)
-            : AuthorizationDecision.Deny(ServerRole.Publisher, caller.Roles, "publishing needs the publisher role (or admin) and the call holds neither");
-        if (decision.Allowed) return null;
-        publishing.AuditRefused(verb, caller.Actor, targetKind, targetId, decision.Reason ?? "the role is not enough");
-        return Error(403, "This needs the publisher role, and for an existing package it must be one this client created, or the admin role.");
     }
 
     // ---- bodies
@@ -407,46 +260,5 @@ public static class RunnerPublishApi
 
         problem = $"{key} is a whole number.";
         return false;
-    }
-
-    private static PublishInput? ParsePublish(string name, JsonObject json, out string? problem)
-    {
-        problem = null;
-        if (Text(json, "manifest") is not { } manifest) { problem = "The body names the manifest: {\"manifest\": \"<package/1 YAML>\", \"artifacts\": [...], \"channel\": \"prod\", \"mode\": \"serve\"}."; return null; }
-        var files = new List<PublishFile>();
-        if (json["artifacts"] is { } artifacts)
-        {
-            if (artifacts is not JsonArray list) { problem = "artifacts is a list of {path, sha256, size, media_type}."; return null; }
-            foreach (var item in list)
-            {
-                if (item is not JsonObject file || Text(file, "path") is not { } path || Text(file, "sha256") is not { } sha)
-                {
-                    problem = "Every artifact names its path and sha256.";
-                    return null;
-                }
-
-                long size = 0;
-                if (file["size"] is JsonValue s && !s.TryGetValue(out size)) { problem = $"The size of '{path}' is a whole number of bytes."; return null; }
-                files.Add(new PublishFile(path, sha, size, Text(file, "media_type")));
-            }
-        }
-
-        PublishMode? mode = null;
-        if (Text(json, "mode") is { } modeText)
-        {
-            if (!Enum.TryParse<PublishMode>(modeText, ignoreCase: true, out var parsed) || !Enum.IsDefined(parsed)) { problem = $"'{modeText}' is not a mode: serve or stage."; return null; }
-            mode = parsed;
-        }
-
-        List<string>? depends = null;
-        if (json["depends_on"] is { } dependsNode)
-        {
-            if (dependsNode is not JsonArray list || list.Any(d => d is not JsonValue v || !v.TryGetValue<string>(out _))) { problem = "depends_on is a list of kind:name@version texts."; return null; }
-            depends = [.. list.Select(d => (string)d!)];
-        }
-
-        if (!Int(json, "expected_version", out var expected, out problem)) return null;
-        if (!Int(json, "format", out var format, out problem)) return null;
-        return new PublishInput(name, manifest, files, Text(json, "channel") ?? DefinitionStore.Production, mode, depends, expected, Text(json, "note"), Text(json, "signature"), format);
     }
 }

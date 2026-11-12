@@ -1,3 +1,4 @@
+using DbDataKit.Connections;
 using System.Net;
 using System.Text;
 using DbDataKit.ReportCatalogs;
@@ -163,5 +164,35 @@ public sealed class ReportServerCatalogProviderTests
     {
         Assert.Equal("https://reports.example.com/ReportServer", new ReportServerOptions(new Uri("https://reports.example.com/Reports/")).UrlAccess.AbsoluteUri.TrimEnd('/'));
         Assert.Equal("https://x.example.com/rs", new ReportServerOptions(new Uri("https://x.example.com/portal"), ReportServerAddress: new Uri("https://x.example.com/rs")).UrlAccess.AbsoluteUri.TrimEnd('/'));
+    }
+}
+
+/// <summary>Plan 32 RC01: the provider of a <c>report-catalog</c> connection signs in as the connection says.</summary>
+public sealed class ReportCatalogConnectionTests
+{
+    [Fact]
+    public async Task The_provider_of_a_connection_reads_the_portal_signed_in_as_the_service_account()
+    {
+        var yaml = "schema: connection/2\nkind: report-catalog\nname: reports\nendpoint: https://reports.example.com/Reports\nreport_catalog: { provider: pbirs, name: sales }\nsign_in: { method: basic, user: svc, password_secret: env:CAT_PW }\n";
+        var d = ConnectionDefinitionLoader.LoadConnectionOfAnyKind(yaml, "connections/reports.yml").Definition!;
+        var secrets = new DbDataKit.Secrets.SecretResolverChain([new DbDataKit.Secrets.EnvSecretProvider(n => n == "CAT_PW" ? "s3cret" : null)]);
+        string? auth = null;
+        var stub = new ReportServerStub { Answer = _ => (HttpStatusCode.OK, """{"value":[]}""") };
+        var asked = new AuthCapture(stub, a => auth = a);
+        using var connection = ReportCatalogConnections.Create(d, secrets, new DbDataKit.Connections.Http.HttpConnectionOptions(InnerHandler: asked));
+        Assert.Equal("sales", connection.Provider.Provider);
+        Assert.Empty(await connection.Provider.BrowseAsync(new ReportCatalogViewer(new ServingCaller("a", "A", new HashSet<string>(), new Dictionary<string, string>())), new ReportCatalogQuery()));
+        Assert.Equal("Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes("svc:s3cret")), auth);
+        Assert.Contains(stub.Asked, a => a.StartsWith("https://reports.example.com/Reports/api/v2.0/CatalogItems", StringComparison.Ordinal));
+        Assert.Throws<ArgumentException>(() => ReportCatalogConnections.Create(ConnectionDefinitionLoader.LoadConnectionOfAnyKind("schema: connection/2\nkind: http\nname: x\nendpoint: https://a.example.com\n", "x.yml").Definition!, secrets));
+    }
+
+    private sealed class AuthCapture(HttpMessageHandler inner, Action<string?> seen) : DelegatingHandler(inner)
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            seen(request.Headers.Authorization?.ToString());
+            return base.SendAsync(request, cancellationToken);
+        }
     }
 }

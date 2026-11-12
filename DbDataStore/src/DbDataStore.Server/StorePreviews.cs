@@ -40,17 +40,14 @@ public sealed record PreviewSettings(int IdleDays = DraftExpiry.DefaultIdleDays,
     }
 }
 
-/// <summary>What one pass of the expiry did: the drafts it removed and the notices it sent.</summary>
-public sealed record DraftSweepResult(int Removed, int Warned);
-
 /// <summary>
 /// The expiry of idle previews on this server (plan 21 CH07): walks every model's copies, removes the drafts idle for <see cref="PreviewSettings.IdleDays"/> and puts a notice in the notification feed for each draft that came within
 /// <see cref="PreviewSettings.NoticeDays"/> of that since the previous pass (so a notice is sent once, not on every pass). The clock is a parameter, so a test injects the day.
 /// </summary>
 public static class StoreDraftSweep
 {
-    public const string WarningKind = "PreviewExpiring";
-    public const string RemovedKind = "PreviewRemoved";
+    public const string WarningKind = DraftSweep.WarningKind;
+    public const string RemovedKind = DraftSweep.RemovedKind;
 
     public static async Task<DraftSweepResult> RunOnceAsync(string directory, StoreConnections connections, INotificationFeed feed, PreviewSettings settings, DateTimeOffset now, TimeSpan sincePrevious, CancellationToken cancellationToken = default)
     {
@@ -69,24 +66,9 @@ public static class StoreDraftSweep
                 {
                     await using var connection = await connections.OpenAsync(connectionName, cancellationToken);
                     var writer = new ModelWriter(model, connection, connections.EngineOf(connectionName), schema: schema, instance: instance);
-                    var drafts = await writer.DraftsAsync(cancellationToken);
-                    var plan = DraftExpiry.Plan(drafts, now, settings.IdleDays, settings.NoticeDays);
-                    foreach (var draft in plan.Warn)
-                    {
-                        var noticeAt = draft.LastAt.AddDays(settings.IdleDays - Math.Min(settings.NoticeDays, settings.IdleDays - 1));
-                        if (noticeAt <= now - sincePrevious) continue;
-                        feed.Raise(WarningKind, $"The preview '{draft.Id}' of the model '{name}' has had no write since {draft.LastAt:yyyy-MM-dd} and is removed with its draft on {draft.LastAt.AddDays(settings.IdleDays):yyyy-MM-dd}; write to it to keep it.", mappingName: name);
-                        warned++;
-                    }
-                    if (plan.Remove.Count > 0)
-                    {
-                        await writer.DiscardDraftsAsync(plan.Remove.Select(d => d.Id), cancellationToken);
-                        foreach (var draft in plan.Remove)
-                        {
-                            feed.Raise(RemovedKind, $"The preview '{draft.Id}' of the model '{name}' was removed with its draft: it had no write for {settings.IdleDays} days.", mappingName: name);
-                            removed++;
-                        }
-                    }
+                    var one = await DraftSweep.RunOnceAsync(writer, name, feed, settings.IdleDays, settings.NoticeDays, now, sincePrevious, WarningKind, RemovedKind, cancellationToken);
+                    removed += one.Removed;
+                    warned += one.Warned;
                 }
                 catch (Exception ex) when (ex is StoreConnectionException or StorageException) { /* a copy that cannot be reached is tried again at the next pass */ }
             }
@@ -95,10 +77,22 @@ public static class StoreDraftSweep
     }
 }
 
-/// <summary>Runs <see cref="StoreDraftSweep"/> an hour after start and every hour after, with the settings as <c>server.yaml</c> has them at start.</summary>
-public sealed class StoreDraftSweeper(string directory, StoreConnections connections, INotificationFeed feed, PreviewSettings settings, Action<string> log) : BackgroundService
+/// <summary>
+/// Runs <see cref="StoreDraftSweep"/> an hour after start and every hour after. <paramref name="load"/> is asked for the settings at each pass, so an edit of <c>previews:</c> in <c>server.yaml</c> takes effect without a restart;
+/// a section that no longer parses is logged and the last good settings are kept (the start reads it once as well, so a wrong section still stops the server).
+/// </summary>
+public sealed class StoreDraftSweeper(string directory, StoreConnections connections, INotificationFeed feed, PreviewSettings initial, Func<PreviewSettings> load, Action<string> log) : BackgroundService
 {
     public static readonly TimeSpan Interval = TimeSpan.FromHours(1);
+    private PreviewSettings _current = initial;
+
+    /// <summary>The settings now in the file; the last good ones when the file cannot be read.</summary>
+    public PreviewSettings Reload()
+    {
+        try { _current = load(); }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException) { log($"Preview expiry keeps its settings: {ex.Message}"); }
+        return _current;
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -109,6 +103,7 @@ public sealed class StoreDraftSweeper(string directory, StoreConnections connect
             {
                 try
                 {
+                    var settings = Reload();
                     var result = await StoreDraftSweep.RunOnceAsync(directory, connections, feed, settings, DateTimeOffset.UtcNow, Interval, stoppingToken);
                     if (result.Removed + result.Warned > 0) log($"Preview expiry: {result.Removed} removed, {result.Warned} warned.");
                 }

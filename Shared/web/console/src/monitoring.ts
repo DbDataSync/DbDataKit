@@ -86,18 +86,18 @@ export function buildRow(server: InstanceSummary, project: string, job: BuildJob
   return { owner, runner: job.runner ? { server: job.runner.server, channel: job.runner.channel, error: job.runner.error ?? null } : undefined, key: `${server.id}/${project}/${job.connection}/${job.plan}`, server: server.id, serverName: server.name, product: 'dbdatabuild', kind: 'plan', subject: `${project}: ${job.connection}/${job.plan}`, state, detail, held: job.paused === true, target: { project, connection: job.connection, plan: job.plan } }
 }
 
-/** What a Gateway's notification feed says: `GET /api/v1/notifications` (a failed-login lockout, a refused statement, a limit reached). */
+/** What a server's notification feed says (a Gateway's and a Store's, the same shape; the Store's: a preview about to expire or removed): `GET /api/v1/notifications` (a failed-login lockout, a refused statement, a limit reached). */
 export interface GatewayNotification { id: number; kind: string; created: string; message: string }
 
 /** Notices older than this are history, not something to look at now. */
 export const NOTICE_WINDOW_MS = 24 * 60 * 60 * 1000
 
 /** The Gateway's own words for its notification kinds. A kind this view does not know is shown as it came. */
-const noticeTitle: Record<string, string> = { LoginLockedOut: 'Login locked out', StatementRefused: 'Statement refused', LimitReached: 'Limit reached' }
+const noticeTitle: Record<string, string> = { LoginLockedOut: 'Login locked out', StatementRefused: 'Statement refused', LimitReached: 'Limit reached', PreviewExpiring: 'Preview ending', PreviewRemoved: 'Preview removed' }
 
-/** One notice of a Gateway as a row. It has no buttons: a notice is something that happened, not something that runs. */
+/** One notice of a Gateway or a Store as a row. It has no buttons: a notice is something that happened, not something that runs. */
 export function gatewayRow(server: InstanceSummary, notice: GatewayNotification): MonitorRow {
-  return { key: `${server.id}/notice/${notice.id}`, server: server.id, serverName: server.name, product: 'dbdatagateway', kind: 'event', subject: noticeTitle[notice.kind] ?? notice.kind, state: 'event', detail: notice.message, held: false, target: null }
+  return { key: `${server.id}/notice/${notice.id}`, server: server.id, serverName: server.name, product: productOf(server.product), kind: 'event', subject: noticeTitle[notice.kind] ?? notice.kind, state: 'event', detail: notice.message, held: false, target: null }
 }
 
 /** What a Gateway says in `GET /api/v1/certificate`, and what a Sync server says in `GET /api/admin/certificate` (its `certificate` and `expiryWarningDays`): the figures the certificate screens show, read here so that an expiry is seen before a login fails. */
@@ -226,7 +226,12 @@ export async function loadRows(servers: InstanceSummary[], now: number = Date.no
           request<{ instances: RunnerInstanceRow[] }>(relay(server, '/api/v1/instances?all=true')),
         ])
         rows.push(...status.tasks.map((t) => runnerTaskRow(server, t)), ...group.instances.filter((i) => i.live === false).map((i) => runnerGoneRow(server, i)))
-      } else if (server.product === 'dbdatastore' || server.product === 'dbdataworkspace') {
+      } else if (server.product === 'dbdatastore') {
+        await certificateOf(server, rows)
+        // the Store's own feed (the preview expiry's notices): a server that predates the route shows none, and its other rows still show
+        const feed = await request<{ notifications: GatewayNotification[] }>(relay(server, '/api/v1/notifications')).then((f) => f.notifications ?? [], () => [])
+        rows.push(...feed.filter((n) => now - Date.parse(n.created) <= NOTICE_WINDOW_MS).reverse().slice(0, 20).map((n) => gatewayRow(server, n)))
+      } else if (server.product === 'dbdataworkspace') {
         await certificateOf(server, rows)
       }
     } catch (error) {

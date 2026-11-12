@@ -604,17 +604,20 @@ public abstract class StoreDataTests(string engine) : IAsyncLifetime
         var now = DateTimeOffset.UtcNow;
 
         var early = await StoreDraftSweep.RunOnceAsync(directory, connections, feed, settings, now.AddDays(10), TimeSpan.FromHours(1));
-        Assert.Equal(new DraftSweepResult(0, 0), early);
+        Assert.Equal(new DbDataKit.Store.DraftSweepResult(0, 0), early);
 
         var notice = await StoreDraftSweep.RunOnceAsync(directory, connections, feed, settings, now.AddDays(24), TimeSpan.FromDays(3));
-        Assert.Equal(new DraftSweepResult(0, 1), notice);
+        Assert.Equal(new DbDataKit.Store.DraftSweepResult(0, 1), notice);
         Assert.Equal([StoreDraftSweep.WarningKind], feed.List().Select(n => n.Kind).ToArray());
-        Assert.Equal(new DraftSweepResult(0, 0), await StoreDraftSweep.RunOnceAsync(directory, connections, feed, settings, now.AddDays(25), TimeSpan.FromHours(1)));   // the notice is sent once
+        Assert.Equal(new DbDataKit.Store.DraftSweepResult(0, 0), await StoreDraftSweep.RunOnceAsync(directory, connections, feed, settings, now.AddDays(25), TimeSpan.FromHours(1)));   // the notice is sent once
 
         var day = await StoreDraftSweep.RunOnceAsync(directory, connections, feed, settings, now.AddDays(31), TimeSpan.FromHours(1));
         Assert.Equal(1, day.Removed);
         Assert.Empty((await Json(await send(HttpMethod.Get, "/api/v1/models/territories/drafts", null, ServerRole.Viewer)))["drafts"]!.AsArray());
         Assert.Contains(StoreDraftSweep.RemovedKind, feed.List().Select(n => n.Kind));
+        // the console reads the same feed over the management API
+        var served = await Json(await send(HttpMethod.Get, "/api/v1/notifications", null, ServerRole.Viewer));
+        Assert.Equal([StoreDraftSweep.WarningKind, StoreDraftSweep.RemovedKind], served["notifications"]!.AsArray().Select(n => (string)n!["kind"]!).ToArray());
     }
 
     [Fact]

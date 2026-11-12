@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dbdatakit:schemas:evaluation:1",
+  "title": "evaluation/1: a case of an agent's evaluation set",
+  "description": "A file tests/evaluation/<name>.yml of an agent (plan 27a AG23): the task the agent is given, fixtures that go with it, and what a good result is. The reader (EvaluationCaseLoader) is the authority; a test keeps this file's keys equal to the reader's.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["evaluation", "task", "expect"],
+  "properties": {
+    "evaluation": { "const": 1, "description": "The format number." },
+    "name": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$", "maxLength": 100, "description": "Left out, the file's name." },
+    "task": { "type": "string", "minLength": 1, "maxLength": 4000, "description": "What the agent is asked." },
+    "fixtures": { "type": "object", "maxProperties": 20, "additionalProperties": { "type": "string", "minLength": 1 }, "description": "Named texts that go with the task." },
+    "pass-at": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "default": 1, "description": "The score at which the case counts as passed." },
+    "expect": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "description": "What a good result is. The suite decides every check but the rubric, which a judge model reads against the written text.",
+      "items": {
+        "type": "object",
+        "minProperties": 1,
+        "maxProperties": 1,
+        "properties": {
+          "tools-called": { "oneOf": [ { "type": "string" }, { "type": "array", "minItems": 1, "items": { "type": "string" } } ] },
+          "tools-not-called": { "oneOf": [ { "type": "string" }, { "type": "array", "minItems": 1, "items": { "type": "string" } } ] },
+          "answer-contains": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "answer-matches": { "type": "string", "minLength": 1, "description": "A regular expression." },
+          "rows-match-verified-query": { "type": "string", "minLength": 1, "description": "The id of a verified query: the rows of the agent's query are compared with its rows." },
+          "check": { "type": "string", "minLength": 1, "maxLength": 500, "description": "A check the host knows by name, such as workspace-compiles." },
+          "rubric": { "type": "string", "minLength": 1, "maxLength": 2000, "description": "Free text judged by the judge model." }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

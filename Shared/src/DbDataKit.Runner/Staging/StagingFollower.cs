@@ -26,6 +26,9 @@ public sealed class StagingOptions
     /// <summary>The platform this runner is (<see cref="RuntimePlatforms.Current"/> when null). A runtime package for another platform is not fetched here; a definition's runtime is the one of this platform.</summary>
     public string? Platform { get; init; }
 
+    /// <summary>What this instance checks of a version before it prepares it (plan 30 PB03: its signature against the group's trust store): the sentence that refuses it, or null. Null: nothing is checked here.</summary>
+    public Func<DefinitionVersion, string?>? Gate { get; init; }
+
     public ILogger? Logger { get; init; }
 }
 
@@ -159,6 +162,9 @@ public sealed class StagingFollower
 
         // a version in a format this runner does not read is refused naming the kind, the name and both numbers (24a UC01)
         if (DefinitionFormat.Refusal(Kind, name, version, definition.Format, _publisher.FormatsOf(Kind), "this runner") is { } unreadable) throw new StagingFailedException(unreadable);
+
+        // a signature that does not hold, or an unsigned version where signatures are required, is not prepared (plan 30 PB03)
+        if (_options.Gate?.Invoke(definition) is { } unsigned) throw new StagingFailedException(unsigned);
 
         // the manifest again, as this runner reads it (R01's reader and validator)
         var load = PackageManifestReader.Load(definition.Content, $"{Kind}/{name}@{version}");

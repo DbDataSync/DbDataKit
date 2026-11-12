@@ -77,7 +77,7 @@ internal sealed class ViewsHarness : IAsyncDisposable
 
     public static string ModelContent => new JsonObject { ["catalog"] = CatalogText }.ToJsonString();
 
-    public static async Task<ViewsHarness> StartAsync(StateEngines engines, string engine, TimeSpan? cacheTtl = null, IViewsAudit? audit = null, bool publish = true, bool useModuleClock = false, bool follow = true, IReportExporter? exporter = null, string? pageAssets = null, long? maxExportRows = null, bool personalDocuments = true)
+    public static async Task<ViewsHarness> StartAsync(StateEngines engines, string engine, TimeSpan? cacheTtl = null, IViewsAudit? audit = null, bool publish = true, bool useModuleClock = false, bool follow = true, IReportExporter? exporter = null, string? pageAssets = null, long? maxExportRows = null, bool personalDocuments = true, IReadOnlyList<IReportCatalogProvider>? externalCatalogs = null, IEnumerable<string>? frameOrigins = null)
     {
         var h = new ViewsHarness();
         var database = engines.Provision(engine).Open([DefinitionsModule.Module, PayloadStore.Module, AuditModule.Module, UserViewsModule.Module], new StateScope(Group: "main"), time: h.Clock);
@@ -93,12 +93,15 @@ internal sealed class ViewsHarness : IAsyncDisposable
 
         var catalog = Catalog.Load(Path.Combine(AppContext.BaseDirectory, "conformance", "catalog.yaml"));
         var services = new HostedServices(h.Host).WithSemantic(new SemanticModels().Add(catalog, new Dictionary<string, string> { ["sqlserver_sales"] = "warehouse" }));
-        var options = new ViewsOptions
+        ViewsOptions Options(ReportCatalogs? catalogs) => new()
         {
+            Catalogs = catalogs,
             CacheTtl = cacheTtl ?? TimeSpan.Zero, Time = useModuleClock ? h.ModuleClock : TimeProvider.System, Follow = follow, PollInterval = TimeSpan.FromHours(1), DrainTimeout = TimeSpan.FromSeconds(20),
             Resolver = new ResolverOptions { WidgetTimeout = TimeSpan.FromSeconds(20) }, Exporter = exporter, PageAssets = pageAssets, MaxExportRows = maxExportRows ?? 100_000,
             UserViews = personalDocuments ? h.UserViews : null,
         };
+        var theAudit = audit ?? new StateViewsAudit(h.Audit);
+        var options = externalCatalogs is null ? Options(null) : Options(new ReportCatalogs([new ViewsCatalog(h.Published, Options(null), theAudit), .. externalCatalogs], frameOrigins));
         h.Module = new ViewsModule(options, h.Published, h.Callers, audit ?? new StateViewsAudit(h.Audit));
         await h.Module.StartAsync(services);
         return h;

@@ -138,6 +138,24 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
         }, cancellationToken);
     }
 
+    /// <summary>
+    /// One pass of the expiry of idle previews over every published model's drafts (plan 21 CH07): the drafts of the store module and of the apps host's previews are the same rows, so one pass covers both. A model whose database cannot be
+    /// reached is left for the next pass.
+    /// </summary>
+    public async Task<DraftSweepResult> SweepDraftsAsync(DbDataKit.Monitoring.INotificationFeed feed, int idleDays, int noticeDays, DateTimeOffset now, TimeSpan sincePrevious, CancellationToken cancellationToken)
+    {
+        int removed = 0, warned = 0;
+        foreach (var served in models.All)
+            await WithWriter(served, async writer =>
+            {
+                var one = await DraftSweep.RunOnceAsync(writer, served.Model.Name, feed, idleDays, noticeDays, now, sincePrevious, cancellationToken: cancellationToken);
+                removed += one.Removed;
+                warned += one.Warned;
+                return StoreAnswer.Ok(new JsonObject());
+            }, cancellationToken);
+        return new DraftSweepResult(removed, warned);
+    }
+
     /// <summary>The drafts the model has in this group: a viewer lists them.</summary>
     public async Task<StoreAnswer> DraftsAsync(StoreCaller caller, string name, CancellationToken cancellationToken)
     {

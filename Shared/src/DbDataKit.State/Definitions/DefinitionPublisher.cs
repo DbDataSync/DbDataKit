@@ -18,6 +18,17 @@ public sealed record DefinitionHead(string Kind, string Name, string Channel, in
 /// <summary>What a slot is bound to in a channel.</summary>
 public sealed record DefinitionBinding(string Channel, string Kind, string Name, string Slot, string BoundTo, int Revision, string BoundBy, DateTimeOffset BoundAt);
 
+/// <summary>Where a slot's binding in a channel comes from (plan 21 CH03): the channel's own, production's (a read slot the channel did not override), or nowhere.</summary>
+public enum SlotSource
+{
+    Own,
+    Inherited,
+    Missing,
+}
+
+/// <summary>One slot of a version as a channel sees it: what it is bound to and whether that is the channel's own binding or production's, which a read slot inherits.</summary>
+public sealed record ResolvedSlot(string Slot, SlotAccess Access, string? BoundTo, SlotSource Source, string Channel);
+
 /// <summary>A publish: the manifest and files of the next version, where it goes and how.</summary>
 /// <param name="Manifest">What the version is, as text (the kind's format); stored as the version's content.</param>
 /// <param name="Mode">Null takes the kind's default.</param>
@@ -624,22 +635,54 @@ public sealed partial class DefinitionPublisher
         }
     }
 
+    /// <summary>
+    /// How each slot of a version resolves in a channel (plan 21 CH03): its own binding when it has one; production's when the slot is a <see cref="SlotAccess.Read"/> slot and the channel is not production (reads are inherited, writes
+    /// never); otherwise missing. The console's table of connections by channel marks each cell by <see cref="ResolvedSlot.Source"/>.
+    /// </summary>
+    public IReadOnlyList<ResolvedSlot> ResolveSlots(string kind, string name, string channel, string manifest)
+    {
+        var slots = (_kinds?.Require(kind).SlotsFor(manifest)) ?? [];
+        if (slots.Count == 0) return [];
+        return _database.Retry(() =>
+        {
+            using var connection = _database.OpenConnection();
+            return Resolve(connection, null, kind, name, channel, slots);
+        });
+    }
+
+    private IReadOnlyList<ResolvedSlot> Resolve(DbConnection connection, DbTransaction? transaction, string kind, string name, string channel, IReadOnlyList<DefinitionSlot> slots)
+    {
+        var own = BoundTo(connection, transaction, channel, kind, name);
+        var production = channel == DefinitionStore.Production ? own : BoundTo(connection, transaction, DefinitionStore.Production, kind, name);
+        return [.. slots.Select(s =>
+            own.TryGetValue(s.Name, out var mine) ? new ResolvedSlot(s.Name, s.Access, mine, SlotSource.Own, channel)
+            : s.Access == SlotAccess.Read && channel != DefinitionStore.Production && production.TryGetValue(s.Name, out var inherited) ? new ResolvedSlot(s.Name, s.Access, inherited, SlotSource.Inherited, DefinitionStore.Production)
+            : new ResolvedSlot(s.Name, s.Access, null, SlotSource.Missing, channel))];
+    }
+
+    private Dictionary<string, string> BoundTo(DbConnection connection, DbTransaction? transaction, string channel, string kind, string name)
+    {
+        var bound = new Dictionary<string, string>(StringComparer.Ordinal);
+        using var command = _database.Command(Module, connection, transaction, "SELECT slot, bound_to FROM {table:definition_binding} WHERE channel = $channel AND kind = $kind AND name = $name;");
+        command.Bind(_database, "channel", channel).Bind(_database, "kind", kind).Bind(_database, "name", name);
+        using var reader = command.ExecuteReader();
+        while (reader.Read()) bound[reader.GetString(0)] = reader.GetString(1);
+        return bound;
+    }
+
     private void CheckSlots(DbConnection connection, DbTransaction transaction, string kind, string name, string channel, DefinitionVersion version)
     {
         if (_kinds is null) return;
         var slots = _kinds.Require(kind).SlotsFor(version.Content);
         if (slots.Count == 0) return;
-        var bound = new HashSet<string>(StringComparer.Ordinal);
-        using (var command = _database.Command(Module, connection, transaction, "SELECT slot FROM {table:definition_binding} WHERE channel = $channel AND kind = $kind AND name = $name;"))
-        {
-            command.Bind(_database, "channel", channel).Bind(_database, "kind", kind).Bind(_database, "name", name);
-            using var reader = command.ExecuteReader();
-            while (reader.Read()) bound.Add(reader.GetString(0));
-        }
-
-        var unbound = slots.Where(s => !bound.Contains(s.Name)).Select(s => $"'{s.Name}'").ToList();
-        if (unbound.Count > 0)
-            throw new PublishRefusedException(PublishRefusal.UnboundSlot, $"The {kind} '{name}' version {version.Version} needs {(unbound.Count == 1 ? "the slot" : "the slots")} {string.Join(", ", unbound)} bound in channel '{channel}', and {(unbound.Count == 1 ? "it has" : "they have")} no binding there.");
+        var unbound = Resolve(connection, transaction, kind, name, channel, slots).Where(r => r.Source == SlotSource.Missing).ToList();
+        if (unbound.Count == 0) return;
+        var names = string.Join(", ", unbound.Select(r => $"'{r.Slot}'"));
+        var message = $"The {kind} '{name}' version {version.Version} needs {(unbound.Count == 1 ? "the slot" : "the slots")} {names} bound in channel '{channel}', and {(unbound.Count == 1 ? "it has" : "they have")} no binding there.";
+        // a write slot (and a slot that does not say it is only read) is never inherited from production
+        if (channel != DefinitionStore.Production && unbound.Where(r => r.Access == SlotAccess.Write).Select(r => $"'{r.Slot}'").ToList() is { Count: > 0 } writes)
+            message += $" No write binding in this channel: {string.Join(", ", writes)} {(writes.Count == 1 ? "is" : "are")} not declared `access: read`, and a write is never inherited from production.";
+        throw new PublishRefusedException(PublishRefusal.UnboundSlot, message);
     }
 
     private List<DefinitionArtifact> ResolveArtifacts(IReadOnlyList<ArtifactRef> refs)

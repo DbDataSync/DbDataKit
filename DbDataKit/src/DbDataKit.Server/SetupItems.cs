@@ -38,7 +38,7 @@ public sealed partial class SetupItems(StateDatabase database)
     private static partial Regex ItemPattern { get; }
 
     /// <summary>The ids of the checklist, in the order it shows them. The screen has the words; the ids are the contract.</summary>
-    public static IReadOnlyList<string> Known { get; } = ["sign-in", "servers", "connections", "git-remotes", "delivery-channels", "build-project"];
+    public static IReadOnlyList<string> Known { get; } = ["sign-in", "servers", "connections", "git-remotes", "delivery-channels", "quality-alerts", "build-project"];
 
     public static bool IsKnown(string item) => ItemPattern.IsMatch(item) && Known.Contains(item);
 

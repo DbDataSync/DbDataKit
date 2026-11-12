@@ -8,6 +8,7 @@ import {
   type AgentDetail, type Approval, type AuditRow, type ConversationView, type Diagnostic, type MadeToken, type PolicyChange, type ProviderTest, type ProviderView, type MemoryItem, againstLimit } from '../agents'
 import { outsideApi } from '../outsideConnections'
 import { BindingsPanel } from './BindingsPage'
+import { EvaluationPanel } from './EvaluationPanel'
 import { SETTINGS, TRAITS, emptyPolicy, policyFromYaml, policyToYaml, settingLabel, settingMeaning, type PolicyForm, type Setting } from '../policyForm'
 
 type Tab = 'chat' | 'inbox' | 'record' | 'agents' | 'models' | 'policy'
@@ -643,6 +644,7 @@ function AgentEditor({ name }: { name: string }) {
           </div>
         ))}
       </div></div>
+      <EvaluationPanel name={name} />
     </div>
   )
 }
