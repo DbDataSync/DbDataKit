@@ -1,6 +1,7 @@
 import { put, request } from '@dbdatakit/shell'
 import type { RenderedViewDocument } from '@dbdatakit/visuals'
 import type { InstanceRequest, NavigationRequest, PublishBody } from './appEditors'
+import type { CacheOverview } from './cacheTypes'
 import type { ReplayResult, RunDetail, RunResult, RunRow, SavedQueryRow, SavedQueryVersionRow } from './runTypes'
 import type {
   AdoptAnswer, PruneAnswer, SemanticCatalogView, EntityModelDetail, EntityModelRow, SemanticModelDetail, SemanticModelRow, AppApprovals, AppCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SecretWritten, SecretsList, ServerSettings, SettingsCheck, SettingsEdit, SettingsWritten, SessionRow, TestResult, WriteDataSourceResult,
@@ -136,6 +137,11 @@ export const gatewayApi = {
     check: (text: string) => request<SettingsCheck>(`${v1}/config/server.yaml/check`, { method: 'POST', body: JSON.stringify({ text }) }),
     edit: (text: string, change: SettingsEdit) => request<{ text: string }>(`${v1}/config/server.yaml/edit`, { method: 'POST', body: JSON.stringify({ text, ...change }) }).then((r) => r.text),
     write: (text: string, expectedVersion: string | null, note: string) => put<SettingsWritten>(`${v1}/config/server.yaml`, { text, expected_version: expectedVersion, note: note || undefined }),
+  },
+  /** The result cache of this instance (plan 24a UC16): read for a viewer; a clear (one dataset, or all) is an administrator's. */
+  cache: {
+    read: () => request<CacheOverview>(`${v1}/cache`),
+    clear: (body: { dataset: string } | { all: true }) => request<{ cleared: number }>(`${v1}/cache/invalidate`, { method: 'POST', body: JSON.stringify(body) }),
   },
   history: {
     list: () => request<{ commits: CommitRow[] }>(`${v1}/config/history`).then((r) => r.commits),

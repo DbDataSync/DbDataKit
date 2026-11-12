@@ -678,6 +678,22 @@ public sealed class DataSourceOptions
 
     /// <summary>Overrides the global compression settings for this data source.</summary>
     public CompressionOptions? Compression { get; set; }
+
+    /// <summary>The result cache for this data source (the <c>cache</c> section of a <c>connection/2</c> definition, plan 24a UC03 and UC13). Absent is off: nothing of this data source is ever stored.</summary>
+    public DataSourceCacheOptions? Cache { get; set; }
+}
+
+/// <summary>The <c>cache</c> section of a data source as the Gateway runs on it; the same words as the definition's section (<c>CacheSpec</c>).</summary>
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class DataSourceCacheOptions
+{
+    public bool Enabled { get; set; }
+
+    /// <summary>A whole number and a unit (<c>90s</c>, <c>5m</c>, <c>2h</c>), at most <c>24h</c>.</summary>
+    public string Ttl { get; set; } = "5m";
+
+    /// <summary>caller | rules | shared.</summary>
+    public string Scope { get; set; } = "caller";
 }
 
 /// <summary>How <see cref="DataSourceOptions.Classifier"/> treats statement text on read-only sources.</summary>

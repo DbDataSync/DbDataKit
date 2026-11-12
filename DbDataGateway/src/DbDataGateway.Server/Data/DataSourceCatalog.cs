@@ -51,6 +51,16 @@ public sealed class DataSourceCatalog(
             new DuckDbProvider(new DuckDbSandboxOptions { AllowedDirectories = [.. source.AllowedDirectories] }, redactor: redactor, includeRawFailures: raw));
     }
 
+    /// <summary>
+    /// Whether the caller may use the named data source: the same rule <see cref="Resolve"/> applies, without opening anything. The result cache asks it before it answers from an entry another caller made (plan 24a UC12: a hit
+    /// must never be a way around a grant).
+    /// </summary>
+    public bool MayUse(GatewayPrincipal principal, string name)
+    {
+        if (!options.CurrentValue.DataSources.TryGetValue(name, out var source)) return false;
+        return principal.HomeUserId is not null ? DataSourceAccess.HomeMayUse(source, principal.HomeGroups) : principal.CanUse(name);
+    }
+
     public ResolvedDataSource Resolve(GatewayPrincipal principal, string? requested)
     {
         var configured = options.CurrentValue.DataSources;

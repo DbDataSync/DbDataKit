@@ -41,7 +41,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | [28c](28c-engines-on-runner.md) E18 | Switch-primary as an action, not a refusal | PARTLY |
 | [28a](28a-runner-slices.md) R25 | Operator screens for in-doubt steps, dead letters and the table of units | PARTLY: checkpoints built |
 | [27a](27a-knowledge-slices.md) AG15, AG18, AG21, AG29, KN28, IX23 | The chat over a real model, providers and usage, fallback lists, the knowledge screens' remainder, the outside-connection form per kind (begun, its row does not say so) | PARTLY |
-| [27a](27a-knowledge-slices.md) AX14, KN25 to KN27, KN29, KN33, BK03, BK04 | Approvals and grants of actions, the knowledge components and app, chunking defaults, the backlog and board, sprints | not built |
+| [27a](27a-knowledge-slices.md) AX14, KN25 to KN27, KN29, KN33, BK03, BK04 | Approvals and grants of actions, the knowledge components and app, chunking defaults, the backlog's app and its browser proof (the console hosts the screens, partly built) | not built |
 | [Identity README](../../Shared/src/DbDataKit.Identity/README.md) "Not yet run on a real host"; [ui-coverage](../ui-coverage.md) "Open gaps" | V1: Windows sign-in on a domain-joined host and Entra sign-in on a tenant (all of it runs with fakes in CI); UI06: the secrets overview of Sync, Build, Store and Workspace; the editor-screen run-time evidence (stories not run, Windows runs, the Store's engine paths) | V1 needs a domain-joined host and an Entra tenant; UI06 OWNER |
 
 ## Gateway (serving layer, semantic layer, views, apps host)
@@ -54,7 +54,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | [14a](14a-semantic-slices.md) SL25 to SL27 | Ad hoc registrations and review, the combine in a child process | OWNER ("not yet") |
 | [20](20-serving-layer.md) O05, O08b, O10c, O11 to O14b | HA in CI; entities over Flight SQL; Store publishing from its API; app code in child processes and the `mcp` module; the outage tests (the instance row); the rename's vocabulary in Build and Store | O10c PARTLY |
 | [26](26-app-publishing.md) AP08, AP17, AP19, AP27, AP30, Z12b | A Playwright story and DNS-challenge verification; the per-app origin and a Windows run; the swap of the apps host onto the home's app tokens; the apps host's stories run; portal home blocks; Store instance remainders | PARTLY |
-| [24a](24a-upgrade-and-cache-slices.md) UC12 to UC15 | The result cache: service and key, expiry on `data.changed`, time-to-live and shared store, the safety conformance suite | UC15 needs the rules (OWNER, QG2) |
+| [24a](24a-upgrade-and-cache-slices.md) UC13 (producers), UC15 | The producers of `data.changed` (a Build load, a Sync run, a DbDataStore write, a Runner task send the message to the paired Gateway; the Gateway side, the time-to-live and the shared epochs are built); the safety conformance suite | UC15 needs the rules (OWNER, QG2) |
 | [32](32-dashboards-and-reports.md) DBR13, DBR14, DBR16 to DBR20, DBR23, DBR29, RC01 to RC05 | The rest of apps and portals, the PDF exporter's dist component, scheduled delivery's remainder, the embed widget's report-server run, report catalogs (the connection kind, the registry sink, the runner task, the front end) | PARTLY each |
 | [32](32-dashboards-and-reports.md) DBR31 to DBR34, DBR36, DBR42, DBR50 to DBR55 | Custom views in the shell (frames, dialogs, panels, scheduled custom views), the nested axis in print, filtered and repeated measures, attributes in the matrix, field groups, actions with a confirmation popup and batches of changes | not built (9h is design only) |
 | [22a](22a-gap-slices.md) GP01, GP02, GP11 to GP15 | Access rules end to end | OWNER (QG2) |
@@ -110,7 +110,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | [21](21-channels-and-previews.md) CH02 to CH06 | The Store's part of releases and inherited reads | |
 | [26](26-app-publishing.md) Z12b, Z13b | Shared entities in `column` mode, instance-scoped tokens and roles, retype and mode moves, the consumer refusal | |
 | [18](18-lineage.md) G12 | The Store's documents, extractions and promotions (the Store has none yet); the apps host's own graph | |
-| [27a](27a-knowledge-slices.md) EA03, EA04, BK01, BK02 | Orphaned attributes, both kinds in search, the backlog module | not built |
+| [27a](27a-knowledge-slices.md) EA03, EA04, BK02 | Orphaned attributes, both kinds in search, the backlog's serving module (the state module and library, BK01, are built) | not built |
 | [20](20-serving-layer.md) O08b | Entities as Flight SQL sources | |
 
 ## Shared and cross-cutting
