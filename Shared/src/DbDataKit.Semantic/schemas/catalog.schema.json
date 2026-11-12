@@ -410,6 +410,12 @@
             "Opaque"
           ]
         },
+        "scale": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 38,
+          "description": "For a Decimal column: the scale the source declares (DECIMAL(18, 2) is 2). A measure over such a column keeps it in the answer (Arrow decimal128 with this scale, plan 14a SL09); a column with none gets the engine's default."
+        },
         "ai_context": {}
       }
     },
