@@ -402,6 +402,15 @@ public static class CliApp
                     cmd.Arguments.Add(semNames); cmd.Options.Add(semProject);
                     cmd.SetAction(pr => Reported(pr, spec, (o, e) => SemanticShowCommand.Run(spec, pr.GetValue(semProject)!.FullName, pr.GetValue(semNames) ?? [], o, e)));
                     break;
+                case "dashboard new":
+                case "report new":
+                    var vnKind = spec.Name.StartsWith("report", StringComparison.Ordinal) ? DbDataKit.Views.ViewKind.Report : DbDataKit.Views.ViewKind.Dashboard;
+                    var vnName = new Argument<string>("name") { Description = "The file's name without its extension (sales-today): letters, digits, dashes and underscores" };
+                    var vnTitle = new Option<string?>("--title") { Description = "The title shown on the page (default: the name)" };
+                    var vnProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
+                    cmd.Arguments.Add(vnName); cmd.Options.Add(vnTitle); cmd.Options.Add(vnProject);
+                    cmd.SetAction(pr => Reported(pr, spec, (o, e) => ViewNewCommand.Run(spec, vnKind, pr.GetValue(vnProject)!.FullName, pr.GetValue(vnName)!, pr.GetValue(vnTitle), o, e)));
+                    break;
                 case "dashboard validate":
                 case "report validate":
                     var viewKind = spec.Name.StartsWith("report", StringComparison.Ordinal) ? DbDataKit.Views.ViewKind.Report : DbDataKit.Views.ViewKind.Dashboard;

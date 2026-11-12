@@ -31,7 +31,7 @@ export {
   FIXTURE_AS_OF, NO_RECORDED_IMAGE, NO_RECORDED_RESULT, ViewsClientError, diagnosticsFromRefusal, fixtureClient, moduleClient, placedWidgets, textVersion, validateText,
 } from './client'
 export type {
-  ClientDiagnostic, DocumentMap, DocumentPreviewRequest, ExportOptions, ExportedFile, ServerSort, DocumentSummary, DocumentVersion, DocumentVersions, LifecycleResult, FixtureBundle, FixtureClientOptions, ModuleClientOptions, OpenedDocument, PreviewRequest, ResolveOptions, SaveResult, ValidationResult, ViewsClient, ViewsClientErrorCode,
+  ClientDiagnostic, DocumentMap, DocumentPreviewRequest, ExportFormat, ExportOptions, ExportedFile, ServerSort, DocumentSummary, DocumentVersion, DocumentVersions, LifecycleResult, FixtureBundle, FixtureClientOptions, ModuleClientOptions, OpenedDocument, PreviewRequest, ResolveOptions, SaveResult, ValidationResult, ViewsClient, ViewsClientErrorCode,
 } from './client'
 export { MetricTile } from './widgets/MetricTile'
 export { FitNotice, TableWidget } from './widgets/TableWidget'
