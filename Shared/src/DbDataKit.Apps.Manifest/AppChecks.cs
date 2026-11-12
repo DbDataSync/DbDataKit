@@ -31,7 +31,7 @@ public static partial class AppChecks
         if (manifest.Portal is not { } portal) return found;
         var mounted = portal.Mounts.Select(m => m.App).ToHashSet(StringComparer.Ordinal);
         foreach (var path in portal.Home)
-            if (read(path) is { } text) found.AddRange(HomeViewLoader.Load(text, path, mounted).Diagnostics);
+            if (read(path) is { } text) found.AddRange(HomeViewLoader.Load(text, path, mounted, file => read(file) is not null, manifest.Roles.ToHashSet(StringComparer.Ordinal)).Diagnostics);
         return found;
     }
 

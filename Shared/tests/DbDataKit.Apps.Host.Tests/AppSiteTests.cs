@@ -136,6 +136,18 @@ public sealed class AppSiteTests : IDisposable
     }
 
     [Fact]
+    public void A_portal_serves_the_files_of_its_package_but_has_no_page_of_its_own()
+    {
+        store.PublishApp(new AppPackage("schemaVersion: 1\nname: acme-portal\nversion: 1.0.0\nkind: portal\nportal:\n  mounts: []\n", new Dictionary<string, byte[]> { ["assets/banner.png"] = [1, 2, 3] }), "ada");
+        store.Save(new AppInstance("p", "acme-portal"), "ada");
+        var file = new AppSite(store).Get("p", "assets/banner.png");
+        Assert.Equal((200, "image/png"), (file.Status, file.ContentType));
+        Assert.Equal([1, 2, 3], file.Body);
+        Assert.Equal(404, new AppSite(store).Get("p", "").Status);
+        Assert.Equal(404, new AppSite(store).Get("p", "assets/missing.png").Status);
+    }
+
+    [Fact]
     public void A_document_with_its_own_base_is_left_alone()
     {
         var html = Bytes("<html><head><base href=\"/x/\"></head></html>");

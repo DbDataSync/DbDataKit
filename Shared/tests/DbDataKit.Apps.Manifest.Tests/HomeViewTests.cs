@@ -12,6 +12,7 @@ public sealed class HomeViewTests : IDisposable
     public void Dispose() { try { Directory.Delete(folder, true); } catch (IOException) { } }
 
     private static readonly IReadOnlySet<string> Mounted = new HashSet<string> { "sales", "hr" };
+    private static readonly IReadOnlySet<string> Roles = new HashSet<string> { "staff", "viewer" };
 
     private const string Good = """
         schemaVersion: 1
@@ -43,7 +44,14 @@ public sealed class HomeViewTests : IDisposable
 
     [Theory]
     [InlineData("schemaVersion: 1\nblocks:\n  - script: alert(1)\n", HomeViewLoader.BadHomeView, 3, "is not a block")]
-    [InlineData("schemaVersion: 1\nblocks:\n  - text: ok\n  - dashboard: sales-by-region\n", HomeViewLoader.BadHomeView, 4, "not in this version")]
+    [InlineData("schemaVersion: 1\nblocks:\n  - text: ok\n  - dashboard: sales-by-region\n", HomeViewLoader.BadHomeView, 4, "`dashboard` is a mapping")]
+    [InlineData("schemaVersion: 1\nblocks:\n  - dashboard: {app: finance}\n", HomeViewLoader.UnknownTileApp, 3, "`finance` is not mounted")]
+    [InlineData("schemaVersion: 1\nblocks:\n  - dashboard: {app: sales, view: ../x.yaml}\n", HomeViewLoader.BadHomeView, 3, "path of a view file")]
+    [InlineData("schemaVersion: 1\nblocks:\n  - dashboard: {app: sales, height: 5}\n", HomeViewLoader.BadHomeView, 3, "from 120 to 1200")]
+    [InlineData("schemaVersion: 1\nblocks:\n  - text: hi\n    roles: [ghost]\n", HomeViewLoader.UnknownRole, 4, "`ghost` is not a role of this portal")]
+    [InlineData("schemaVersion: 1\nblocks:\n  - image: {file: assets/nope.png, alt: x}\n", HomeViewLoader.MissingHomeFile, 3, "is not in the portal")]
+    [InlineData("schemaVersion: 1\nblocks:\n  - image: {file: /etc/passwd, alt: x}\n", HomeViewLoader.BadHomeView, 3, "no leading")]
+    [InlineData("schemaVersion: 1\nblocks:\n  - table: {columns: [a, b], rows: [[1]]}\n", HomeViewLoader.BadHomeView, 3, "2 cells")]
     [InlineData("schemaVersion: 2\nblocks: []\n", HomeViewLoader.BadHomeView, 1, "schemaVersion")]
     [InlineData("schemaVersion: 1\nblocks:\n  - links:\n      - label: x\n        href: javascript:alert(1)\n", HomeViewLoader.UnsafeHomeText, 5, "not a link")]
     [InlineData("schemaVersion: 1\nblocks:\n  - links:\n      - label: x\n        href: //evil.example/x\n", HomeViewLoader.UnsafeHomeText, 5, "not a link")]
@@ -54,13 +62,50 @@ public sealed class HomeViewTests : IDisposable
     [InlineData("schemaVersion: 1\nblocks:\n  - tiles: some\n", HomeViewLoader.BadHomeView, 3, "`all`")]
     public void A_problem_is_a_diagnostic_with_the_file_the_line_and_a_code_in_the_series(string yaml, string code, int line, string says)
     {
-        var load = HomeViewLoader.Load(yaml, "views/home.yaml", Mounted);
+        var load = HomeViewLoader.Load(yaml, "views/home.yaml", Mounted, file => file == "assets/ok.png", Roles);
         Assert.False(load.Ok);
         var found = Assert.Single(load.Diagnostics, d => d.Code == code);
         Assert.StartsWith("DBD-APP-", found.Code);
         Assert.Equal("views/home.yaml", found.Path);
         Assert.Equal(line, found.Line);
         Assert.Contains(says, found.Message);
+    }
+
+    [Fact]
+    public void Dashboard_image_and_table_blocks_read_and_any_block_may_carry_roles()
+    {
+        const string yaml = """
+            schemaVersion: 1
+            blocks:
+              - dashboard: {app: sales, view: views/board.yaml, height: 420}
+                roles: [staff]
+              - dashboard: {app: hr}
+              - image: {file: assets/ok.png, alt: The logo, width: 200}
+              - table:
+                  columns: [Team, Lead]
+                  rows:
+                    - [Sales, Ada]
+                    - [HR, Grace]
+                roles: [viewer, staff]
+              - text: Hello
+            """;
+        var load = HomeViewLoader.Load(yaml, "views/home.yaml", Mounted, file => file == "assets/ok.png", Roles);
+        Assert.True(load.Ok, string.Join('\n', load.Diagnostics));
+        var blocks = load.View!.Blocks;
+        var first = Assert.IsType<HomeDashboard>(blocks[0]);
+        Assert.Equal(("sales", "views/board.yaml", 420), (first.App, first.View, first.Height));
+        Assert.Equal(["staff"], first.Roles);
+        var second = Assert.IsType<HomeDashboard>(blocks[1]);
+        Assert.Null(second.View);
+        Assert.Equal(HomeViewLoader.DefaultDashboardHeight, second.Height);
+        Assert.Null(second.Roles);
+        var image = Assert.IsType<HomeImage>(blocks[2]);
+        Assert.Equal(("assets/ok.png", "The logo", (int?)200), (image.File, image.Alt, image.Width));
+        var table = Assert.IsType<HomeTable>(blocks[3]);
+        Assert.Equal(["Team", "Lead"], table.Columns);
+        Assert.Equal(["HR", "Grace"], table.Rows[1]);
+        Assert.Equal(["viewer", "staff"], table.Roles);
+        Assert.Null(blocks[4].Roles);
     }
 
     [Fact]
