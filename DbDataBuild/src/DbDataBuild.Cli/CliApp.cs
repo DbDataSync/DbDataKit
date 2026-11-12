@@ -430,6 +430,34 @@ public static class CliApp
                     cmd.Options.Add(matrixRewrites);
                     cmd.SetAction(pr => Reported(pr, spec, (o, e) => PrintMatrix(spec, pr.GetValue(matrixRewrites), o, e)));
                     break;
+                case "semantic describe":
+                case "semantic query":
+                case "semantic explain":
+                case "semantic members":
+                    {
+                        var verb = spec.Path[1];
+                        var smModel = new Argument<string>("model") { Description = "The published semantic model (its name on the Gateway)" };
+                        cmd.Arguments.Add(smModel);
+                        Argument<string>? smAttribute = null;
+                        if (verb == "members") { smAttribute = new Argument<string>("attribute") { Description = "The attribute whose values to list (dimension.attribute)" }; cmd.Arguments.Add(smAttribute); }
+                        var smSql = verb is "query" or "explain" ? new Option<string?>("--sql") { Description = "Semantic SQL (FROM names the model); give --sql or --request" } : null;
+                        var smRequest = verb is "query" or "explain" ? new Option<string?>("--request") { Description = "A semantic request as a JSON object; give --sql or --request" } : null;
+                        var smMaxRows = verb is "query" or "explain" or "describe" ? new Option<int?>("--max-rows") { Description = "At most this many rows are read (default 100, at most 10000)" } : null;
+                        var smSearch = verb == "members" ? new Option<string?>("--search") { Description = "Only the values that contain this text" } : null;
+                        var smLimit = verb == "members" ? new Option<int?>("--limit") { Description = "At most this many values (default: the Gateway's)" } : null;
+                        var smGateway = new Option<string?>("--gateway") { Description = "A Gateway this Build server is paired with (`server proxy list`); its host is used, with the Flight port" };
+                        var smAddress = new Option<string?>("--address") { Description = "The Gateway's Flight SQL address, https://host:8815, instead of --gateway" };
+                        var smPort = new Option<int?>("--flight-port") { Description = "The Gateway's Flight SQL port with --gateway (default 8815)" };
+                        var smCa = new Option<string?>("--ca-file") { Description = "A PEM file with the certificate authority the Gateway's certificate is checked against" };
+                        var smInsecure = new Option<bool>("--insecure") { Description = "Do not check the Gateway's certificate (a test Gateway only)" };
+                        var smServerDir = new Option<string?>("--server-dir") { Description = "The Build server's directory, where its pairings are (default: the server's default directory)" };
+                        foreach (var o in new Option?[] { smSql, smRequest, smMaxRows, smSearch, smLimit }.OfType<Option>()) cmd.Options.Add(o);
+                        foreach (var o in new Option[] { smGateway, smAddress, smPort, smCa, smInsecure, smServerDir }) cmd.Options.Add(o);
+                        cmd.SetAction(pr => Reported(pr, spec, (o, e) => SemanticCommand.Run(spec, verb, pr.GetValue(smModel)!, smAttribute is null ? null : pr.GetValue(smAttribute),
+                            smSql is null ? null : pr.GetValue(smSql), smRequest is null ? null : pr.GetValue(smRequest), smMaxRows is null ? null : pr.GetValue(smMaxRows), smSearch is null ? null : pr.GetValue(smSearch), smLimit is null ? null : pr.GetValue(smLimit),
+                            new SemanticCommand.Connection(pr.GetValue(smGateway), pr.GetValue(smAddress), pr.GetValue(smPort), pr.GetValue(smCa), pr.GetValue(smInsecure), pr.GetValue(smServerDir)), o, e)));
+                        break;
+                    }
                 case "help dialects":
                     cmd.SetAction(pr => Reported(pr, spec, (o, e) => HelpDialects.Run(spec, o)));
                     break;

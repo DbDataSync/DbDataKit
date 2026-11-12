@@ -39,6 +39,10 @@ Generated from the command tree of `dbdatabuild` (`UPDATE_GOLDEN=1 dotnet test t
 | [`connection check`](#connection-check) | `C→` | Target read-only | Run the data checks generated from the semantic models (semantic/) against a connection: each hierarchy level has one parent per member, every key of a relationship exists on its one side, and the one side's keys are unique (counts only unless --show-values) |
 | [`connection seed`](#connection-seed) | `P⇒S` | Target writes (DDL and/or data, as the plan states) | Create the seeded tables (the mapped models) on a connection and fill them from the seeds (prints what it would do unless --apply) |
 | [`connection publish`](#connection-publish) | `P⇒T` | Tracking tables only | Store the project and model metadata as JSON in the connection for introspection |
+| [`semantic describe`](#semantic-describe) | `—` | Offline only | What a semantic model published to a paired Gateway offers: its dimensions, attributes, measures, hierarchies and saved queries (read as the person whose token is in DBDATAKIT_GATEWAY_TOKEN) |
+| [`semantic query`](#semantic-query) | `—` | Offline only | Run a semantic query on a published model: semantic SQL (--sql) or a request (--request, JSON); read as the caller, at most --max-rows rows |
+| [`semantic explain`](#semantic-explain) | `—` | Offline only | What a semantic query would run on the sources, one row per scan, without running it |
+| [`semantic members`](#semantic-members) | `—` | Offline only | The values an attribute of a published model takes, to choose a parameter's value from |
 | [`ui terminal`](#ui-terminal) | `—` | Offline only | Interactive terminal interface: choose, plan and run operations (each action it runs declares its own effect) |
 | [`ui mcp`](#ui-mcp) | `—` | Offline only | Model Context Protocol server on standard input and output: the commands as tools for an AI agent, the agent kit as resources (each tool it offers declares its own effect; commands that change a connection are offered only with --allow-writes) |
 | [`help code`](#help-code) | `—` | Offline only | Long-form explanation of a diagnostic code |
@@ -693,6 +697,100 @@ Usage: `dbdatabuild connection publish [connection] [models]... [options]`
 | Option | Meaning |
 |---|---|
 | `--project` `<path>` | Project root |
+
+## semantic describe
+
+What a semantic model published to a paired Gateway offers: its dimensions, attributes, measures, hierarchies and saved queries (read as the person whose token is in DBDATAKIT_GATEWAY_TOKEN).
+
+Effect: Offline only. Reads and writes: `—`.
+
+Usage: `dbdatabuild semantic describe <model> [options]`
+
+| Argument | Meaning |
+|---|---|
+| `model` | The published semantic model (its name on the Gateway) |
+
+| Option | Meaning |
+|---|---|
+| `--address` `<text>` | The Gateway's Flight SQL address, https://host:8815, instead of --gateway |
+| `--ca-file` `<text>` | A PEM file with the certificate authority the Gateway's certificate is checked against |
+| `--flight-port` `<number>` | The Gateway's Flight SQL port with --gateway (default 8815) |
+| `--gateway` `<text>` | A Gateway this Build server is paired with (`server proxy list`); its host is used, with the Flight port |
+| `--insecure` | Do not check the Gateway's certificate (a test Gateway only) |
+| `--max-rows` `<number>` | At most this many rows are read (default 100, at most 10000) |
+| `--server-dir` `<text>` | The Build server's directory, where its pairings are (default: the server's default directory) |
+
+## semantic query
+
+Run a semantic query on a published model: semantic SQL (--sql) or a request (--request, JSON); read as the caller, at most --max-rows rows.
+
+Effect: Offline only. Reads and writes: `—`.
+
+Usage: `dbdatabuild semantic query <model> [options]`
+
+| Argument | Meaning |
+|---|---|
+| `model` | The published semantic model (its name on the Gateway) |
+
+| Option | Meaning |
+|---|---|
+| `--address` `<text>` | The Gateway's Flight SQL address, https://host:8815, instead of --gateway |
+| `--ca-file` `<text>` | A PEM file with the certificate authority the Gateway's certificate is checked against |
+| `--flight-port` `<number>` | The Gateway's Flight SQL port with --gateway (default 8815) |
+| `--gateway` `<text>` | A Gateway this Build server is paired with (`server proxy list`); its host is used, with the Flight port |
+| `--insecure` | Do not check the Gateway's certificate (a test Gateway only) |
+| `--max-rows` `<number>` | At most this many rows are read (default 100, at most 10000) |
+| `--request` `<text>` | A semantic request as a JSON object; give --sql or --request |
+| `--server-dir` `<text>` | The Build server's directory, where its pairings are (default: the server's default directory) |
+| `--sql` `<text>` | Semantic SQL (FROM names the model); give --sql or --request |
+
+## semantic explain
+
+What a semantic query would run on the sources, one row per scan, without running it.
+
+Effect: Offline only. Reads and writes: `—`.
+
+Usage: `dbdatabuild semantic explain <model> [options]`
+
+| Argument | Meaning |
+|---|---|
+| `model` | The published semantic model (its name on the Gateway) |
+
+| Option | Meaning |
+|---|---|
+| `--address` `<text>` | The Gateway's Flight SQL address, https://host:8815, instead of --gateway |
+| `--ca-file` `<text>` | A PEM file with the certificate authority the Gateway's certificate is checked against |
+| `--flight-port` `<number>` | The Gateway's Flight SQL port with --gateway (default 8815) |
+| `--gateway` `<text>` | A Gateway this Build server is paired with (`server proxy list`); its host is used, with the Flight port |
+| `--insecure` | Do not check the Gateway's certificate (a test Gateway only) |
+| `--max-rows` `<number>` | At most this many rows are read (default 100, at most 10000) |
+| `--request` `<text>` | A semantic request as a JSON object; give --sql or --request |
+| `--server-dir` `<text>` | The Build server's directory, where its pairings are (default: the server's default directory) |
+| `--sql` `<text>` | Semantic SQL (FROM names the model); give --sql or --request |
+
+## semantic members
+
+The values an attribute of a published model takes, to choose a parameter's value from.
+
+Effect: Offline only. Reads and writes: `—`.
+
+Usage: `dbdatabuild semantic members <model> <attribute> [options]`
+
+| Argument | Meaning |
+|---|---|
+| `model` | The published semantic model (its name on the Gateway) |
+| `attribute` | The attribute whose values to list (dimension.attribute) |
+
+| Option | Meaning |
+|---|---|
+| `--address` `<text>` | The Gateway's Flight SQL address, https://host:8815, instead of --gateway |
+| `--ca-file` `<text>` | A PEM file with the certificate authority the Gateway's certificate is checked against |
+| `--flight-port` `<number>` | The Gateway's Flight SQL port with --gateway (default 8815) |
+| `--gateway` `<text>` | A Gateway this Build server is paired with (`server proxy list`); its host is used, with the Flight port |
+| `--insecure` | Do not check the Gateway's certificate (a test Gateway only) |
+| `--limit` `<number>` | At most this many values (default: the Gateway's) |
+| `--search` `<text>` | Only the values that contain this text |
+| `--server-dir` `<text>` | The Build server's directory, where its pairings are (default: the server's default directory) |
 
 ## ui terminal
 

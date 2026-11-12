@@ -29,14 +29,14 @@ internal static class BuildManagementApi
 {
     /// <summary>The commands a read-only server offers: those that change nothing, not even the project's own files.</summary>
     public static ToolSurface ReadOnlySurface(string projectRoot, IEnumerable<CommandInfo> all) =>
-        new(projectRoot, all.Where(c => c.Impact == Impact.None), withholdWriteFlags: true);
+        new(projectRoot, all.Where(c => c.Impact == Impact.None && !SemanticCommand.IsSemantic(c.Name)), withholdWriteFlags: true);
 
     /// <summary>
     /// The commands a server offers by default: all of them but the ones that start a user interface on the server's own terminal or browser. Whether a call may run is the role its effect class needs, checked on every call; the
     /// options that show values and the paths outside the project stay refused. A server started with <c>--read-only</c> offers <see cref="ReadOnlySurface"/> instead.
     /// </summary>
     public static ToolSurface FullSurface(string projectRoot, IEnumerable<CommandInfo> all) =>
-        new(projectRoot, all.Where(c => c.Name is not ("ui terminal" or "ui mcp")), alsoWithheld: ["connection refresh --check-results"]);
+        new(projectRoot, all.Where(c => c.Name is not ("ui terminal" or "ui mcp") && !SemanticCommand.IsSemantic(c.Name)), alsoWithheld: ["connection refresh --check-results"]);
 
     /// <summary>The person a call is for, as the tracking tables record them: "Ada via Main console".</summary>
     internal static string ActorOf(ValidatedToken token) => $"{token.SubjectName ?? token.SubjectId} via {token.Client.Name}";
