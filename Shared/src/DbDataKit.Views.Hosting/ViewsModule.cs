@@ -207,7 +207,8 @@ public sealed class ViewsModule(ViewsOptions options, ViewsPublications publishe
         })));
 
         // a custom page of an app (plan 32 DBR33): its export as the person, the parameters as `p.name=value` read against the manifest entry
-        routes.MapGet("/api/v1/apps/{instance}/pages/{name}/export", (Func<string, string, HttpContext, Task<IResult>>)((instance, name, c) =>
+        var pageExportRoute = "/api/v1/apps/{instance}/pages/{name}/export";   // not a literal: the route-handler analyzer throws on a cold build of this one (ci-lessons)
+        routes.MapGet(pageExportRoute, (Func<string, string, HttpContext, Task<IResult>>)((instance, name, c) =>
             As(c, (who, trace) => api!.ExportPageAsync(who, instance, name, Query(c, "format"), PageParameters(c), c.Connection.RemoteIpAddress?.ToString(), trace, c.RequestAborted))));
 
         foreach (var kind in ViewDefinitions.Kinds)
