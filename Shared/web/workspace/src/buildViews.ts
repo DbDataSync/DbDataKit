@@ -1,4 +1,5 @@
-import { FileRefusal, FOLDERS, type FilesApi } from '@dbdatakit/build/files'
+import { FileRefusal, FOLDERS, semanticModelName, type FilesApi } from '@dbdatakit/build/files'
+import { parseYaml } from '@dbdatakit/shell'
 import type { CheckDiagnostic } from './api'
 
 /** The calls of a draft's files that the dashboards and reports of a project need; `workspaceApi` answers them, a test answers them in memory. */
@@ -54,3 +55,22 @@ export function draftFilesApi(draft: DraftFiles): FilesApi {
 /** The findings of a check about dashboards and reports: the files of those folders, errors and warnings. */
 export const viewFindings = (diagnostics: readonly CheckDiagnostic[]): CheckDiagnostic[] =>
   diagnostics.filter((d) => d.severity !== 'info' && d.file !== null && (d.file.startsWith(`${FOLDERS.dashboard}/`) || d.file.startsWith(`${FOLDERS.report}/`)))
+
+/** The semantic files among the paths of a draft (`semantic/*.yml`). */
+export const semanticPaths = (paths: readonly string[]): string[] => paths.filter((p) => /^semantic\/.+\.ya?ml$/.test(p))
+
+/**
+ * The model a dashboard's wells draw their fields from, read from the draft's own semantic file (plan 33 SC20n): the file `semantic/*.yml` is a catalog without its physical layer, so its `measures` and `dimensions`
+ * are the members the editor offers, with the names a query uses (`customers.region`). Offline: nothing is compiled or run, and a model that does not compile is the draft check's to report. Returns the file as an object with its name,
+ * the shape `catalogFromModel` reads; throws when no semantic file of the draft is named `model`.
+ */
+export async function semanticModelOf(draft: Pick<DraftFiles, 'read'>, paths: readonly string[], model: string): Promise<unknown> {
+  for (const path of semanticPaths(paths)) {
+    const text = await draft.read(path)
+    if (text === null || semanticModelName(text) !== model) continue
+    const parsed = parseYaml(text)
+    if (parsed.errors.length > 0 || typeof parsed.value !== 'object' || parsed.value === null) throw new Error(`${path} is not valid YAML (${parsed.errors[0] ?? 'not a mapping'}): fix it in the Files tab.`)
+    return { ...(parsed.value as Record<string, unknown>), name: model }
+  }
+  throw new Error(`The draft has no semantic model named '${model}' in semantic/.`)
+}

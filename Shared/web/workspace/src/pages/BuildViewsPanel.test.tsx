@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { workspaceViewsClient } from '@dbdatakit/build/files'
 import { ViewsClientError } from '@dbdatakit/visuals'
 import type { CheckDiagnostic } from '../api'
-import { draftFilesApi, versionOf, viewFindings, type DraftFiles } from '../buildViews'
+import { draftFilesApi, semanticModelOf, versionOf, viewFindings, type DraftFiles } from '../buildViews'
 import { ViewDocumentsView, viewDocumentsOf } from './BuildViewsPanel'
 
 /** A draft in memory: the files by path. */
@@ -70,5 +70,37 @@ describe('the views client over a draft', () => {
     await client.delete('report', 'q')
     expect(draft.files.has('reports/q.yaml')).toBe(false)
     await expect(client.open('report', 'q')).rejects.toMatchObject({ code: 'not_found' })
+  })
+})
+
+const semanticFile = `version: "0.3"
+name: retail_sales
+measures:
+  sales.net_amount: {type: number, label: Net sales, bindings: {default: {table: marts.fct, column: net}}}
+dimensions:
+  customers:
+    attributes:
+      region: {type: string, synonyms: [customer region]}
+      signed_up: {type: date, time: true}
+`
+
+describe('the model catalog of the wells, from the draft\'s own semantic files', () => {
+  it('gives the editor the measures and the dimension attributes the file declares, named as a query names them', async () => {
+    const draft = memory({ 'semantic/sales.yml': semanticFile, 'semantic/other.yml': 'name: other\nmeasures: {x.y: {}}\n' })
+    const client = workspaceViewsClient(draftFilesApi(draft), { catalog: (model) => semanticModelOf(draft, [...draft.files.keys()], model) })
+    const catalog = await client.catalog!('retail_sales')
+    expect(catalog.model).toBe('retail_sales')
+    expect(catalog.measures.map((m) => [m.name, m.label])).toEqual([['sales.net_amount', 'Net sales']])
+    expect(catalog.attributes.map((a) => a.name)).toEqual(['customers.region', 'customers.signed_up'])
+    expect(catalog.attributes[0]!.label).toBe('customer region')
+    expect(catalog.attributes[1]!.time).toBe(true)
+  })
+  it('says which model is missing and which file is not YAML, and a file with no members has no catalog', async () => {
+    const draft = memory({ 'semantic/bad.yml': 'name: bad\nmeasures: [unclosed\n', 'semantic/empty.yml': 'name: empty\n' })
+    const paths = [...draft.files.keys()]
+    await expect(semanticModelOf(draft, paths, 'nope')).rejects.toThrow("no semantic model named 'nope'")
+    await expect(semanticModelOf(draft, paths, 'bad')).rejects.toThrow('semantic/bad.yml is not valid YAML')
+    const client = workspaceViewsClient(draftFilesApi(draft), { catalog: (model) => semanticModelOf(draft, paths, model) })
+    await expect(client.catalog!('empty')).rejects.toMatchObject({ code: 'bad_response' })
   })
 })

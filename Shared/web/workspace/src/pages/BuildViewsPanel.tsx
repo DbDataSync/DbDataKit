@@ -5,7 +5,7 @@ import { FOLDERS, semanticModelName, viewFileOf, workspaceViewsClient } from '@d
 import { clientStore, type ViewKind } from '@dbdatakit/visuals'
 import { DashboardEditor, type EditorHost } from '@dbdatakit/views-editor'
 import { workspaceApi, type CheckDiagnostic } from '../api'
-import { draftFilesApi, viewFindings, type DraftFiles } from '../buildViews'
+import { draftFilesApi, semanticModelOf, semanticPaths, viewFindings, type DraftFiles } from '../buildViews'
 import { findingsKey } from './SyncSetPanel'
 
 /** The dashboards and reports among the paths of a draft: dashboards first, each in name order. */
@@ -56,13 +56,13 @@ export function BuildViewsPanel({ project, id, paths, canWrite }: { project: str
   const [editing, setEditing] = useState<{ kind: ViewKind; name: string | null } | null>(null)
   const documents = viewDocumentsOf(paths)
   const check = useMutation({ mutationFn: () => workspaceApi.check(project, id) })
-  const semantic = paths.filter((p) => /^semantic\/.+\.ya?ml$/.test(p))
+  const semantic = semanticPaths(paths)
   const models = useQuery({
     queryKey: ['workspace', 'semantic-names', project, id, semantic],
     enabled: semantic.length > 0,
     queryFn: async () => (await Promise.all(semantic.map(async (p) => semanticModelName(await workspaceApi.readFile(project, id, p).catch(() => ''))))).filter((n): n is string => n !== null),
   })
-  const viewsClient = useMemo(() => workspaceViewsClient(draftFilesApi(draftOf(project, id)), {}), [project, id])
+  const viewsClient = useMemo(() => workspaceViewsClient(draftFilesApi(draftOf(project, id)), { catalog: (model) => semanticModelOf(draftOf(project, id), paths, model) }), [project, id, paths])
   const host = useMemo<EditorHost>(() => ({
     client: viewsClient,
     store: clientStore(viewsClient),
@@ -101,7 +101,7 @@ export function BuildViewsPanel({ project, id, paths, canWrite }: { project: str
             <ErrorBanner error={check.error} />
             {findings && findings.length === 0 && <div className="hint" data-testid="wsp-views-clean">The check found nothing to fix in the dashboards and reports.</div>}
             {(findings ?? []).map((d, i) => <div key={i} className={d.severity === 'error' ? 'error' : 'hint'} data-testid="wsp-views-finding" data-code={d.code}>{d.file}{d.line ? `:${d.line}` : ''} {d.code}: {d.message}</div>)}
-            <div className="hint" style={{ marginTop: 10 }}>The editor has no model catalog here (it comes from a running Build server); the wells take typed field names. Publishing a dashboard to a Gateway stays with Build's Views tab, as the project's data sources do (SC20e).</div>
+            <div className="hint" style={{ marginTop: 10 }}>The wells offer the measures and dimensions of the draft's own semantic files (read from the files as typed, nothing compiled: a model that does not compile is the check's to say). Publishing a dashboard to a Gateway stays with Build's Views tab, as the project's data sources do (SC20e).</div>
           </>}
     </div>
   )
