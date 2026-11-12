@@ -68,6 +68,8 @@ public static class ServerProducts
         new("GET", "api/v1/tasks/{name}/{name}/{name}/schedule", ServerRole.Viewer),                       // UE06
         new("GET", "api/v1/tasks/{name}/{name}/{name}/decisions", ServerRole.Viewer),                      // UE06
         new("HEAD", "api/v1/artifacts/{sha}", ServerRole.Viewer, ServerRole.Publisher),                    // UE10: does the runner have this file
+        new("GET", "api/v1/artifacts/{sha}", ServerRole.Viewer),                                           // PB06: a file by hash, which the console reads from one group to send to another
+        new("GET", "api/v1/definitions/integration/{name}/versions/{name}", ServerRole.Viewer),             // PB06: one version whole (manifest, files, dependencies, signature), what a promotion publishes in another group
         new("GET", "api/v1/posture-choices", ServerRole.Viewer),                                                    // R19: the loosened defaults with their effect and the recorded choices
         new("GET", "api/v1/runs/{id}/units", ServerRole.Viewer),                                            // R25: the table of units of a run
         new("GET", "api/v1/runs/{id}/steps", ServerRole.Viewer),                                            // R25: the steps of its attempt chain

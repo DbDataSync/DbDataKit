@@ -111,6 +111,51 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
         }
     }
 
+    /// <summary>What the person holds on <paramref name="instance"/> (what <see cref="RelayAsync"/> checks a relayed call against): the lower of their role here and what the server lets this console grant, or what the identity home says.</summary>
+    public ServerRole RolesHeldOn(RegisteredInstance instance, string userId, UserRole role) => HeldOn(instance, userId, role).Roles;
+
+    /// <summary>
+    /// A call to a registered server as the signed-in person that keeps the answer a stream (plan 30 PB06: a promotion reads a package's files from one group and sends them to another, so neither the body sent nor the one read can be held as JSON in memory).
+    /// <paramref name="path"/> is the server's own (<c>api/v1/...</c>, no leading slash); <paramref name="content"/> goes as it is. The caller disposes the response. The relay's rules are the same as for a screen's call: a runner takes only the calls of
+    /// <see cref="ServerProducts.RunnerRoutes"/>, and only for a person who holds the role the row asks for (the runner asks again). A server that does not answer is a 502 response with its words, never an exception.
+    /// </summary>
+    public async Task<HttpResponseMessage> SendAsAsync(RegisteredInstance instance, string userId, string? userName, UserRole role, HttpMethod method, string path, HttpContent? content, CancellationToken ct)
+    {
+        if (!(path.StartsWith("api/", StringComparison.Ordinal)) || path.Split('/').Any(s => s is ".." or ".")) return Failure(400, "Only the server's api/... calls are relayed.");
+        var product = await ProductOfAsync(instance, ct);
+        if (!ServerProducts.Relayable(product, method.Method, path)) return Failure(403, ServerProducts.RefusalFor(product, instance.Name));
+        if (product == ServerProducts.Runner && ServerProducts.RunnerRouteOf(method.Method, path) is { } wanted)
+        {
+            var held = HeldOn(instance, userId, role).Roles;
+            if (!wanted.Allows(held))
+            {
+                var holds = held == ServerRole.None ? "nothing" : string.Join(" and ", ServerRoles.Names(ServerRoles.Close(held)));
+                return Failure(403, $"This needs the {wanted.Needs} role on {instance.Name}, and you hold {holds} there.");
+            }
+        }
+
+        var upload = method == HttpMethod.Put && path.StartsWith("api/v1/artifacts/", StringComparison.Ordinal);
+        using var request = new HttpRequestMessage(method, new Uri(instance.Url, path));
+        request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, await TokenForAsync(instance, userId, userName, role, ct));
+        request.Content = content;
+        try
+        {
+            return await ClientFor(instance, upload ? RelayCall.Upload : RelayCall.Call).SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        }
+        catch (IncompatibleServerException ex)
+        {
+            return Failure(502, ex.Message);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            log.LogWarning("{Server} did not answer a {Method} {Path}: {Reason}", instance.Name, method, path, ex.GetType().Name);
+            return Failure(502, $"{instance.Name} did not answer.");
+        }
+    }
+
+    private static HttpResponseMessage Failure(int status, string error) =>
+        new((System.Net.HttpStatusCode)status) { Content = System.Net.Http.Json.JsonContent.Create(new { error }) };
+
     /// <inheritdoc />
     async Task<(int Status, System.Text.Json.Nodes.JsonNode? Body)> IBuildRelay.CallAsync(string server, RelayPerson person, HttpMethod method, string path, object? body, CancellationToken ct)
     {

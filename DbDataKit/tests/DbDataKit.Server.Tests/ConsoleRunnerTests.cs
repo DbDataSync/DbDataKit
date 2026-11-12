@@ -106,6 +106,8 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         server.MapGet("/api/v1/tasks/{package}/{channel}/{task}/schedule", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { owner = "runner" })));
         server.MapGet("/api/v1/tasks/{package}/{channel}/{task}/decisions", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { decisions = Array.Empty<object>() })));
         server.MapMethods("/api/v1/artifacts/{sha}", ["HEAD"], (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.NotFound()));
+        server.MapGet("/api/v1/artifacts/{sha}", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Bytes([1, 2, 3], "application/octet-stream")));
+        server.MapGet("/api/v1/definitions/integration/{name}/versions/{n}", (HttpContext c, string name, string n) => Needs(c, ServerRole.Viewer, () => Results.Json(new { name, version = n })));
         server.MapPut("/api/v1/tasks/{package}/{channel}/{task}/owner", (HttpContext c) => Needs(c, ServerRole.Operator, () => Results.Json(new { owner = "runner" })));
         server.MapPut("/api/v1/instances/{id}/labels", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { added = Array.Empty<string>() })));
         server.MapPut("/api/v1/artifacts/{sha}", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Ok()));
@@ -256,6 +258,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         ("GET", "api/v1/instances/{id}/labels", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/tasks/{name}/{name}/{name}/schedule", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/tasks/{name}/{name}/{name}/decisions", ServerRole.Viewer, ServerRole.None),
         ("HEAD", "api/v1/artifacts/{sha}", ServerRole.Viewer, ServerRole.Publisher),
+        ("GET", "api/v1/artifacts/{sha}", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/definitions/integration/{name}/versions/{name}", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/posture-choices", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}/units", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}/steps", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/tasks/{name}/{name}/{name}/in-doubt", ServerRole.Operator, ServerRole.None), ("GET", "api/v1/tasks/{name}/{name}/{name}/dead-letters", ServerRole.Operator, ServerRole.None),
         ("GET", "api/v1/tasks/{name}/{name}/{name}/checkpoints", ServerRole.Operator, ServerRole.None), ("GET", "api/v1/tasks/{name}/{name}/{name}/checkpoints/{name}/history", ServerRole.Operator, ServerRole.None),
@@ -376,7 +379,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
     [InlineData("HEAD", "api/v1/status")]                                 // HEAD is only the artifact route
     [InlineData("HEAD", "api/v1/artifacts/0123456789abcdef")]
     [InlineData("HEAD", "api/v1/definitions/integration/sample")]
-    [InlineData("GET", "api/v1/artifacts/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")]   // an artifact is not read through a console
+    [InlineData("GET", "api/v1/artifacts/0123456789abcdef")]   // only a whole hash is a row (PB06: a promotion reads a file by its 64 digits)
     public async Task A_call_that_is_not_a_row_of_the_table_is_refused_for_an_administrator_as_a_console_is_not_their_client(string method, string path)
     {
         var response = await Send(new HttpMethod(method), Relay(path), admin, method is "PUT" or "POST" or "PATCH" ? "{}" : null);

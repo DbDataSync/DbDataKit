@@ -17,7 +17,7 @@ let apiBase = ''
 
 /**
  * Where this app's `/api/...` calls and `/hubs/...` connections go. A product's own app calls its own server (`''`); a module hosted by the console calls the server it manages through the console's relay
- * (`/relay/<server>`). The sign-in and notification calls always go to the host the app is served by, whatever the base: who is signed in is the console's answer, not a managed server's.
+ * (`/relay/<server>`). The sign-in and notification calls, the host's list of servers and its promotions (plan 30 PB06, a package moved between two servers by the console) always go to the host the app is served by, whatever the base: who is signed in is the console's answer, not a managed server's.
  */
 export function setApiBase(base: string) {
   apiBase = base.replace(/\/+$/, '')
@@ -28,7 +28,7 @@ export function currentApiBase() {
   return apiBase
 }
 
-const HOST_OWN = ['/api/auth', '/api/notifications']
+const HOST_OWN = ['/api/auth', '/api/notifications', '/api/instances', '/api/promotions']
 
 export function apiUrl(path: string): string {
   if (!apiBase || !(path.startsWith('/api/') || path.startsWith('/hubs/')) || HOST_OWN.some((own) => path === own || path.startsWith(own + '/') || path.startsWith(own + '?'))) return path
