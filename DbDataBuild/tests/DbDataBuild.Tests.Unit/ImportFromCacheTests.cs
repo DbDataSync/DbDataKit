@@ -163,11 +163,10 @@ public class ImportFromCacheTests : IDisposable
         Assert.Equal(1, exitEngine);
         Assert.Contains("says `warehouse` is `sqlserver`", errEngine + Said(docEngine));
 
-        Project("odbc");
-        Write("catalog-cache.yaml", PostgresCache.Replace("engine: postgres", "engine: odbc"));
-        var (exitOdbc, docOdbc, errOdbc) = Run("warehouse", "src.*", "--from-cache", "catalog-cache.yaml");
-        Assert.Equal(1, exitOdbc);
-        Assert.Contains("only a connection can load", errOdbc + Said(docOdbc));
+        // an odbc or flightsql source maps its types through its dialect's `types:`, which only a connection can load: the command refuses it (the same check, by engine)
+        Assert.False(CachedImportCatalog.Supports("odbc"));
+        Assert.False(CachedImportCatalog.Supports("flightsql"));
+        Assert.All(new[] { "sqlserver", "postgres", "duckdb" }, e => Assert.True(CachedImportCatalog.Supports(e)));
     }
 
     [Theory]
