@@ -25,7 +25,7 @@ public static class GatewayState
     public static IReadOnlyList<StateModule> Modules { get; } =
     [
         IdentityModule.Module, NotificationsModule.Module, AuditModule.Module,
-        DefinitionsModule.Module, AppStorageModule.Module, DbDataKit.Web.Trust.TrustModule.Module, ServingModule.Module, UserViewsModule.Module, SemanticRunsModule.Module, TableReadsModule.Module, PayloadStore.Module, AgentsModule.Module,
+        DefinitionsModule.Module, AppStorageModule.Module, DbDataKit.Web.Trust.TrustModule.Module, ServingModule.Module, UserViewsModule.Module, SemanticRunsModule.Module, TableReadsModule.Module, ServingCacheEpochModule.Module, PayloadStore.Module, AgentsModule.Module,
         DeliveryModule.Module, RunsModule.Module,   // scheduled delivery (plan 32 DBR18): the subscriptions the Gateway draws, the outbox it hands them to and the runs of its task
     ];
 

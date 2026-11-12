@@ -18,7 +18,8 @@ public sealed class AppAddressesTests : IDisposable
 {
     private readonly string folder = Path.Combine(Path.GetTempPath(), "gw-addresses-" + Guid.NewGuid().ToString("N")[..8]);
     private readonly Dictionary<string, string> secrets = [];
-    private readonly GatewayOptions options = new() { Apps = { Domain = "apps.test", Addresses = ["203.0.113.10"] } };
+    private readonly GatewayOptions options = new() { InstanceId = "gw-test-1", Apps = { Domain = "apps.test", Addresses = ["203.0.113.10"] } };
+    private readonly Dictionary<string, string[]> txt = [];
     private readonly Dictionary<string, IPAddress[]> dns = new() { ["sales.contoso.test"] = [IPAddress.Parse("203.0.113.10")], ["elsewhere.contoso.test"] = [IPAddress.Parse("198.51.100.7")], ["here.contoso.test"] = [IPAddress.Parse("10.1.2.3")] };
     private readonly AppAddressVerifier verifier;
 
@@ -27,7 +28,7 @@ public sealed class AppAddressesTests : IDisposable
         Directory.CreateDirectory(folder);
         verifier = new AppAddressVerifier(() => options, reference => secrets.GetValueOrDefault(reference),
             (host, _) => dns.TryGetValue(host, out var found) ? Task.FromResult<IReadOnlyList<IPAddress>>(found) : throw new System.Net.Sockets.SocketException(11001),
-            () => [IPAddress.Parse("10.1.2.3")]);
+            () => [IPAddress.Parse("10.1.2.3")], resolveTxt: (name, _) => Task.FromResult<IReadOnlyList<string>>(txt.GetValueOrDefault(name) ?? []));
         secrets["secret:cert-sales"] = Pfx("sales.contoso.test", "pw");
         secrets["secret:cert-sales-pw"] = "pw";
     }
@@ -77,6 +78,81 @@ public sealed class AppAddressesTests : IDisposable
         dns["here.contoso.test"] = [IPAddress.Parse("10.1.2.3")];
         secrets["secret:cert-here"] = Pfx("here.contoso.test", "pw");
         Assert.Null(await Verify(Instance("acme", Custom("here.contoso.test", "secret:cert-here", "secret:cert-sales-pw"))));    // one of this machine's own
+    }
+
+    [Fact]
+    public async Task A_custom_domain_that_does_not_resolve_here_is_accepted_when_its_challenge_record_holds_the_value_and_refused_with_the_record_to_create_when_not()
+    {
+        var record = verifier.Challenge("acme", "Nowhere.Contoso.Test.");
+        Assert.Equal("_dbdatakit-challenge.nowhere.contoso.test", record.Name);
+        Assert.Equal("TXT", record.Type);
+        Assert.StartsWith(AppDomainChallenge.ValuePrefix, record.Value);
+        Assert.Equal(record, verifier.Challenge("acme", "nowhere.contoso.test"));                               // the same every time: the editor shows it before the record exists
+        Assert.NotEqual(record.Value, verifier.Challenge("other", "nowhere.contoso.test").Value);               // per instance
+        Assert.NotEqual(record.Value, verifier.Challenge("acme", "elsewhere.contoso.test").Value);              // per name
+
+        var refused = await Verify(Instance("acme", Custom("nowhere.contoso.test")));
+        Assert.Contains("does not resolve", refused);
+        Assert.Contains($"create the TXT record {record.Name} with the value {record.Value}", refused);          // the refusal says what to create
+
+        txt[record.Name] = ["v=spf1 -all", "somebody else's text"];
+        Assert.Contains("does not resolve", await Verify(Instance("acme", Custom("nowhere.contoso.test"))));     // other records prove nothing
+        txt[record.Name] = ["v=spf1 -all", record.Value.Replace("0", "1").Replace("a", "b")];
+        Assert.Contains("does not resolve", await Verify(Instance("acme", Custom("nowhere.contoso.test"))));     // a wrong value proves nothing
+        txt[record.Name] = ["note", record.Value];
+        secrets["secret:cert-nowhere"] = Pfx("nowhere.contoso.test", "pw");
+        Assert.Null(await Verify(Instance("acme", Custom("nowhere.contoso.test", "secret:cert-nowhere", "secret:cert-sales-pw"))));   // proved, so accepted
+        secrets["secret:cert-nowhere"] = Pfx("wrong.contoso.test", "pw");
+        Assert.Contains("is not for that name", await Verify(Instance("acme", Custom("nowhere.contoso.test", "secret:cert-nowhere", "secret:cert-sales-pw"))));   // the certificate is still checked
+        Assert.Contains("does not resolve", await Verify(Instance("other", Custom("nowhere.contoso.test"))));    // another instance cannot use acme's record
+    }
+
+    [Fact]
+    public async Task Verify_says_which_proof_holds_and_what_to_create_otherwise()
+    {
+        var host = "nowhere.contoso.test";
+        var before = await verifier.CheckAsync("acme", host, CancellationToken.None);
+        Assert.False(before.Verified);
+        Assert.Null(before.Via);
+        Assert.Contains("does not hold " + before.Record.Value, before.Reason);
+        Assert.Contains("does not resolve", before.Reason);
+
+        txt[before.Record.Name] = [before.Record.Value];
+        var proved = await verifier.CheckAsync("acme", host, CancellationToken.None);
+        Assert.True(proved.Verified);
+        Assert.Equal("challenge", proved.Via);
+        Assert.Null(proved.Reason);
+
+        var resolving = await verifier.CheckAsync("acme", "sales.contoso.test", CancellationToken.None);
+        Assert.True(resolving.Verified);
+        Assert.Equal("address", resolving.Via);                                                                  // a name that already points here needs no record
+
+        var under = await verifier.CheckAsync("acme", "acme.apps.test", CancellationToken.None);
+        Assert.False(under.Verified);
+        Assert.Contains("bind it as a subdomain", under.Reason);
+    }
+
+    [Fact]
+    public void A_dns_answer_with_txt_records_is_read_and_a_failure_or_an_unknown_name_is_not_a_record()
+    {
+        byte[] Answer(ushort id, int code, params string[][] records)
+        {
+            var bytes = new List<byte> { (byte)(id >> 8), (byte)id, 0x81, (byte)(0x80 | code), 0, 1, 0, (byte)records.Length, 0, 0, 0, 0 };
+            foreach (var label in "_dbdatakit-challenge.x.test".Split('.')) { bytes.Add((byte)label.Length); bytes.AddRange(System.Text.Encoding.ASCII.GetBytes(label)); }
+            bytes.AddRange([0, 0, 16, 0, 1]);
+            foreach (var strings in records)
+            {
+                var data = strings.SelectMany(t => new[] { (byte)System.Text.Encoding.UTF8.GetByteCount(t) }.Concat(System.Text.Encoding.UTF8.GetBytes(t))).ToArray();
+                bytes.AddRange([0xC0, 0x0C, 0, 16, 0, 1, 0, 0, 0, 60, (byte)(data.Length >> 8), (byte)data.Length]);
+                bytes.AddRange(data);
+            }
+            return [.. bytes];
+        }
+        Assert.Equal(["hello", "dbdatakit-domain-verification=abc"], DnsTxtResolver.ParseTxt(Answer(7, 0, ["hello"], ["dbdatakit-domain-verification=", "abc"]), 7));   // a record's strings are joined
+        Assert.Empty(DnsTxtResolver.ParseTxt(Answer(7, 3), 7));                                                   // NXDOMAIN
+        Assert.Throws<InvalidOperationException>(() => DnsTxtResolver.ParseTxt(Answer(7, 2), 7));                // SERVFAIL
+        Assert.Throws<InvalidOperationException>(() => DnsTxtResolver.ParseTxt(Answer(8, 0, ["x"]), 7));         // not for this question
+        Assert.Throws<InvalidOperationException>(() => DnsTxtResolver.ParseTxt(Answer(7, 0, ["hello"])[..^3], 7)); // cut short
     }
 
     [Fact]

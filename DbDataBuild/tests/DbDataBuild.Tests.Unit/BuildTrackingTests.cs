@@ -1,4 +1,7 @@
+using DbDataBuild.Cli;
 using DbDataBuild.Cli.Server;
+using DbDataBuild.Execution;
+using DbDataKit.Tracking.Build;
 using DbDataBuild.State;
 using DbDataKit.State;
 using DbDataKit.State.Tracking;
@@ -221,8 +224,6 @@ public sealed class BuildTrackingTests : IDisposable
     [Theory]
     [InlineData("tracking:\n  mod: both\n", "tracking.mod is not a tracking setting", "did you mean 'mode'")]
     [InlineData("tracking:\n  mode: sometimes\n", "'sometimes' is not one of target, state, both", "tracking")]
-    [InlineData("tracking:\n  mode: state\n", "keeps the records on the target first", "tracking")]
-    [InlineData("tracking:\n  mode: both\n  primary: state\n", "keeps the records on the target first", "tracking")]
     [InlineData("tracking:\n  mode: target\n  primary: target\n", "takes no primary", "tracking")]
     public void A_setting_that_is_not_valid_stops_the_start_naming_the_file(string yaml, string says, string also)
     {
@@ -247,5 +248,208 @@ public sealed class BuildTrackingTests : IDisposable
         Assert.Contains("(layout 10)", upgrade);
         Assert.Contains("recorded_utc", upgrade);
         Assert.Contains("started_utc", upgrade);      // a row of layout 9 gets the start of its run
+    }
+
+    // ---------- state first (plan 28c E16, mode state with a state primary) ----------
+
+    [Fact]
+    public void A_state_primary_is_a_setting_the_server_reads_and_writes_back_keeping_the_rest_of_the_file()
+    {
+        Assert.Equal(TrackingSide.State, BuildTrackingSettings.Read(ServerDirectory("tracking:\n  mode: state\n")).PrimarySide);
+        Assert.Equal(TrackingSide.State, BuildTrackingSettings.Read(ServerDirectory("tracking:\n  mode: both\n  primary: state\n")).PrimarySide);
+
+        var none = ServerDirectory("instance_id: x\n");
+        Assert.False(BuildTrackingSettings.IsExplicit(none));
+        Assert.Null(BuildTrackingSettings.PrimaryOverride(none));       // no section: the projects' keys decide
+
+        var dir = ServerDirectory("# the server\ninstance_id: x\ntracking:\n  mode: both\n  primary: target\n");
+        Assert.Equal("target", BuildTrackingSettings.PrimaryOverride(dir));
+        BuildTrackingSettings.Write(dir, TrackingSettings.Both(TrackingSide.State));
+        Assert.Equal("state", BuildTrackingSettings.PrimaryOverride(dir));
+        var text = File.ReadAllText(Path.Combine(dir, "server.yaml"));
+        Assert.Contains("# the server", text);
+        Assert.Contains("instance_id: x", text);
+        BuildTrackingSettings.Write(dir, TrackingSettings.Both(TrackingSide.Target));
+        Assert.Equal(TrackingSettings.Default, BuildTrackingSettings.Read(dir));
+
+        // a server with no section gets one when it is switched
+        var fresh = ServerDirectory("instance_id: y\n");
+        BuildTrackingSettings.Write(fresh, TrackingSettings.Both(TrackingSide.State));
+        Assert.Equal("state", BuildTrackingSettings.PrimaryOverride(fresh));
+        Assert.Throws<ArgumentException>(() => BuildTrackingSettings.Write(fresh, TrackingSettings.TargetOnly));
+    }
+
+    [Theory]
+    [InlineData("tracking: {connection: sqlserver}\n", false)]
+    [InlineData("tracking: {connection: sqlserver, mode: target}\n", false)]
+    [InlineData("tracking: {connection: sqlserver, mode: both}\n", false)]
+    [InlineData("tracking: {connection: sqlserver, mode: both, primary: target}\n", false)]
+    [InlineData("tracking: {connection: sqlserver, mode: both, primary: state}\n", true)]
+    [InlineData("tracking: {connection: sqlserver, mode: state}\n", true)]
+    [InlineData("tracking: {connection: sqlserver, mode: state, primary: state}\n", true)]
+    public void The_project_says_its_tracking_is_state_first_with_mode_and_primary(string tracking, bool stateFirst)
+    {
+        var diagnostics = new List<DbDataBuild.Core.Diagnostic>();
+        var config = DbDataBuild.Models.ProjectConfigLoader.LoadFromProject(Project("defaults: {connections: [sqlserver]}\n" + tracking), diagnostics);
+        Assert.DoesNotContain(diagnostics, d => d.Severity == DbDataBuild.Core.Severity.Error);
+        Assert.Equal(stateFirst, config.Tracking.StatePrimary);
+    }
+
+    [Theory]
+    [InlineData("tracking: {connection: sqlserver, mode: sometimes}\n", "tracking.mode")]
+    [InlineData("tracking: {connection: sqlserver, primary: both}\n", "tracking.primary")]
+    [InlineData("tracking: {connection: sqlserver, mode: target, primary: state}\n", "takes no `primary`")]
+    [InlineData("tracking: {connection: sqlserver, mode: state, primary: target}\n", "its primary is `state`")]
+    public void A_mode_or_primary_that_does_not_fit_is_a_diagnostic_naming_the_key(string tracking, string names)
+    {
+        var diagnostics = new List<DbDataBuild.Core.Diagnostic>();
+        DbDataBuild.Models.ProjectConfigLoader.LoadFromProject(Project("defaults: {connections: [sqlserver]}\n" + tracking), diagnostics);
+        Assert.Contains(diagnostics, d => d.Found.Contains(names, StringComparison.Ordinal));
+    }
+
+    private static LoginSettings TrackingLogin() => LoginSettings.FromEnvironment("sqlserver", DbDataBuild.Execution.Login.Read, _ => "Server=sql01;Database=wh;User Id=a;Password=b;TrustServerCertificate=true").Settings!;
+
+    private DbDataBuild.Models.ProjectConfig ConfigOf(string tracking)
+    {
+        var diagnostics = new List<DbDataBuild.Core.Diagnostic>();
+        return DbDataBuild.Models.ProjectConfigLoader.LoadFromProject(Project("defaults: {connections: [sqlserver]}\n" + tracking), diagnostics);
+    }
+
+    [Fact]
+    public void A_state_first_project_with_no_state_to_write_to_is_refused_saying_what_to_set_and_a_target_first_one_is_not_touched()
+    {
+        var scope = new TrackingScope("sqlserver", "dbdatabuild", "sales");
+        var targetFirst = ConfigOf("tracking: {connection: sqlserver}\n");
+        Assert.Same(scope, TrackingJournals.For(targetFirst, scope, TrackingLogin(), _ => null));
+
+        var stateFirst = ConfigOf("tracking: {connection: sqlserver, mode: state}\n");
+        var ex = Assert.Throws<InvalidOperationException>(() => TrackingJournals.For(stateFirst, scope, TrackingLogin(), _ => null));
+        Assert.Contains("state-first", ex.Message);
+        Assert.Contains(TrackingJournals.ServerDirectoryVariable, ex.Message);
+
+        // a host that has a state gives it to the flow, and the scope gets a journal for this tracking store's identity
+        var sink = new StateBuildTrackingSink(new BuildTrackingStore(Open()));
+        using (TrackingJournalSource.Use(sink))
+        {
+            var journaled = TrackingJournals.For(stateFirst, scope, TrackingLogin(), _ => null);
+            Assert.NotNull(journaled.Journal);
+            Assert.StartsWith(BuildTrackingIdentity.Prefix, journaled.Journal!.Identity, StringComparison.Ordinal);
+            Assert.EndsWith("@sales", journaled.Journal.Identity, StringComparison.Ordinal);
+        }
+
+        Assert.Null(TrackingJournalSource.Sink);
+    }
+
+    [Fact]
+    public void The_servers_primary_wins_over_the_projects_keys_for_the_commands_it_starts()
+    {
+        var targetFirst = ConfigOf("tracking: {connection: sqlserver}\n");
+        var stateFirst = ConfigOf("tracking: {connection: sqlserver, mode: state}\n");
+        string? Env(string v) => v == TrackingJournals.PrimaryVariable ? "state" : null;
+        string? EnvTarget(string v) => v == TrackingJournals.PrimaryVariable ? "target" : null;
+        Assert.True(TrackingJournals.IsStateFirst(targetFirst, Env));
+        Assert.False(TrackingJournals.IsStateFirst(stateFirst, EnvTarget));
+        Assert.True(TrackingJournals.IsStateFirst(stateFirst, _ => null));
+        Assert.False(TrackingJournals.IsStateFirst(targetFirst, _ => null));
+    }
+
+    [Fact]
+    public async Task A_state_first_project_has_no_follower_a_server_copies_only_for_the_comparison_of_a_switch()
+    {
+        var root = Project("defaults: {connections: [sqlserver]}\ntracking: {connection: sqlserver, mode: state}\n");
+        string? Env(string v) => v == "DBDATAKIT_BUILD_SQLSERVER_READ" ? "Server=sql01;Database=wh;User Id=a;Password=b" : null;
+        Assert.True(BuildTrackedConnections.StateFirst(root, Env));
+        Assert.Empty(BuildTrackedConnections.Of(root, "sqlserver", Env));
+        Assert.Single(BuildTrackedConnections.Of(root, "sqlserver", Env, includeStateFirst: true));
+
+        // the runner's step says why it copies nothing
+        var lines = await DbDataBuild.Cli.Runner.RunnerTrackingCopy.CopyAsync(null!, root, null, Env, TimeSpan.FromSeconds(5), default);
+        Assert.Contains("state-first", Assert.Single(lines));
+    }
+
+    // ---------- the journal ----------
+
+    private static readonly string H = new('a', 64);
+    private const string Sales = "buildtracking:mssql://sql01/wh.dbdatabuild.tracking@sales";
+
+    private static Dictionary<string, object?> Ddl(Guid id) => new()
+    {
+        ["ddl_id"] = id, ["object_name"] = "marts.v1", ["statement_hash"] = H, ["statement_text"] = "CREATE VIEW", ["hash_before"] = null, ["invoker"] = "me", ["plan_id"] = "p1",
+        ["git_commit"] = null, ["executed_utc"] = new DateTime(2026, 11, 12, 10, 0, 0, DateTimeKind.Unspecified).AddTicks(1234560), ["status"] = "started",
+    };
+
+    [Fact]
+    public async Task The_journal_writes_the_rows_the_follower_would_copy_and_an_update_changes_only_its_columns()
+    {
+        var store = new BuildTrackingStore(Open());
+        var journal = new BuildTrackingJournal(Sales, new StateBuildTrackingSink(store));
+        var id = Guid.NewGuid();
+
+        await journal.InsertAsync("ddl_log", Ddl(id), default);
+        var started = Assert.Single(store.Rows(Sales, "ddl_log"));
+        Assert.Equal(id.ToString("D"), started.Key);
+        Assert.Equal(new DateTime(2026, 11, 12, 10, 0, 0).AddTicks(1234560).Ticks, started.Order);
+        Assert.Contains("\"status\":\"started\"", started.Document);
+        Assert.Contains("\"executed_utc\":\"2026-11-12T10:00:00.1234560Z\"", started.Document);
+        Assert.Equal(id.ToString("D"), Assert.Single(store.Unsettled(Sales, "ddl_log", 10)).Key);        // marked unsettled while the step has not ended
+
+        await journal.UpdateAsync("ddl_log", new Dictionary<string, object?> { ["ddl_id"] = id }, new Dictionary<string, object?> { ["status"] = "ok", ["hash_after"] = H }, default);
+        var done = Assert.Single(store.Rows(Sales, "ddl_log"));
+        Assert.Equal(started.Order, done.Order);
+        Assert.Contains("\"status\":\"ok\"", done.Document);
+        Assert.Contains($"\"hash_after\":\"{H}\"", done.Document);
+        Assert.Contains("\"statement_text\":\"CREATE VIEW\"", done.Document);       // the columns it did not change are as they were
+        Assert.Empty(store.Unsettled(Sales, "ddl_log", 10));
+
+        // a journal that did not write the row (the step was started by another process) finds it in the state and finishes it
+        var other = new BuildTrackingJournal(Sales, new StateBuildTrackingSink(store));
+        var second = Guid.NewGuid();
+        await journal.InsertAsync("ddl_log", Ddl(second), default);
+        await other.UpdateAsync("ddl_log", new Dictionary<string, object?> { ["ddl_id"] = second }, new Dictionary<string, object?> { ["status"] = "failed" }, default);
+        Assert.Contains("\"status\":\"failed\"", store.Rows(Sales, "ddl_log").Single(r => r.Key == second.ToString("D")).Document);
+
+        // a row the state never held is a message, not a silent gap
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => other.UpdateAsync("ddl_log", new Dictionary<string, object?> { ["ddl_id"] = Guid.NewGuid() }, new Dictionary<string, object?> { ["status"] = "ok" }, default));
+        Assert.Contains("state holds no row", ex.Message);
+    }
+
+    [Fact]
+    public async Task The_journal_keys_and_orders_every_stream_the_way_the_target_source_does()
+    {
+        var store = new BuildTrackingStore(Open());
+        var journal = new BuildTrackingJournal(Sales, new StateBuildTrackingSink(store));
+        var at = new DateTime(2026, 11, 12, 10, 0, 0, DateTimeKind.Unspecified);
+
+        await journal.InsertAsync("migration_log", new Dictionary<string, object?> { ["plan_id"] = "p1", ["plan_hash"] = H, ["plan_text"] = "t", ["applied_by"] = "me", ["applied_utc"] = at, ["status"] = "started" }, default);
+        foreach (var position in new[] { 10, 2, 1 })
+            await journal.InsertAsync("refresh_plan_member", new Dictionary<string, object?> { ["plan_id"] = "p1", ["position"] = position, ["membership"] = "member", ["model"] = "m", ["load_name"] = "l", ["load_plan_hash"] = H, ["selected"] = "selected" }, default);
+        var run = Guid.NewGuid();
+        await journal.InsertAsync("run_log", new Dictionary<string, object?> { ["run_id"] = run, ["step_id"] = "r1", ["model"] = "m", ["operation"] = "load", ["status"] = "started", ["started_utc"] = at }, default);
+        await journal.UpdateAsync("run_log", new Dictionary<string, object?> { ["run_id"] = run, ["step_id"] = "r1" }, new Dictionary<string, object?> { ["status"] = "ok", ["rows_affected"] = 5L, ["ended_utc"] = at.AddSeconds(3), ["duration_ms"] = 3000L }, default);
+
+        Assert.Equal([$"p1|{at.Ticks:D19}"], store.Rows(Sales, "migration_log").Select(r => r.Key));
+        // plan members are ordered by the plan's first migration_log time, and their keys sort by position
+        Assert.Equal(["p1|0000000001", "p1|0000000002", "p1|0000000010"], store.Rows(Sales, "refresh_plan_member").Select(r => r.Key));
+        Assert.All(store.Rows(Sales, "refresh_plan_member"), r => Assert.Equal(at.Ticks, r.Order));
+        var runRow = Assert.Single(store.Rows(Sales, "run_log"));
+        Assert.Equal($"{run:D}|r1", runRow.Key);
+        Assert.Contains("\"rows_affected\":5", runRow.Document);
+        Assert.Contains("\"ended_utc\":\"2026-11-12T10:00:03.0000000Z\"", runRow.Document);
+    }
+
+    [Fact]
+    public async Task A_new_metadata_document_rebuilds_the_snapshots_in_the_state_and_the_layout_record_is_left_to_init()
+    {
+        var store = new BuildTrackingStore(Open());
+        var journal = new BuildTrackingJournal(Sales, new StateBuildTrackingSink(store), (kind, json) => kind == "model" ? [new InfoRow("model", "", "", "string", "title")] : null);
+        await journal.InsertAsync("metadata_document", new Dictionary<string, object?> { ["subject_kind"] = "model", ["subject"] = "marts.v1", ["document"] = "{}", ["document_hash"] = H, ["recorded_utc"] = new DateTime(2026, 11, 12, 10, 0, 0), ["tool_version"] = "1" }, default);
+        Assert.Single(store.Rows(Sales, "metadata_document"));
+        Assert.Single(store.Rows(Sales, "object_info"));
+
+        // tracking_version is written by the init script, and a snapshot table is not a row a writer hands over: neither is journaled
+        await journal.InsertAsync("tracking_version", new Dictionary<string, object?> { ["version"] = 10, ["tool_version"] = "x", ["applied_utc"] = DateTime.UtcNow }, default);
+        Assert.Equal(0, store.Count(Sales, "tracking_version"));
+        await journal.InsertAsync("object_info", new Dictionary<string, object?>(), default);
+        Assert.Equal(1, store.Count(Sales, "object_info"));
     }
 }

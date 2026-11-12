@@ -86,7 +86,7 @@ internal static class BuildManagementApi
             });
 
         // the copy of the projects' tracking (plan 28c E16, E18): the mode, the checkpoints and the divergences, and the administrator's resolve
-        if (serverDirectory is not null) BuildTrackingApi.Map(app, new Lazy<StateDatabase>(() => BuildSchedulerSchema.Open(serverDirectory)), serverDirectory, audit);
+        if (serverDirectory is not null) BuildTrackingApi.Map(app, new Lazy<StateDatabase>(() => BuildSchedulerSchema.Open(serverDirectory)), serverDirectory, audit, projects);
 
         // the results of the models' checks (plan 23a FQ17), in the form every server sends a console: Build evaluates after a refresh, so it cannot be asked to evaluate on request
         if (serverDirectory is not null)

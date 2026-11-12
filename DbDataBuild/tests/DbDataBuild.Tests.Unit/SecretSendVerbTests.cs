@@ -28,6 +28,15 @@ public sealed class SecretSendVerbTests : IDisposable
         }
 
         public Task<IReadOnlyList<string>> NamesAsync(string prefix, CancellationToken ct) => Task.FromResult<IReadOnlyList<string>>(Lists ? [.. Held.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal))] : []);
+
+        /// <summary>What the runner's check says; null: it connects. The calls are kept, so a test sees what was asked.</summary>
+        public string? CheckFails { get; set; }
+        public List<(string Package, string Channel, string Slot, string Role)> Checks { get; } = [];
+        public Task<RunnerPublishClient.BindingCheck> CheckAsync(string package, string channel, string slot, string role, CancellationToken ct)
+        {
+            Checks.Add((package, channel, slot, role));
+            return Task.FromResult(CheckFails is null ? new RunnerPublishClient.BindingCheck(true, "connect", $"The slot '{slot}' opened a connection.", true) : new RunnerPublishClient.BindingCheck(false, "connect", CheckFails, false));
+        }
     }
 
     private async Task<DbDataKit.Secrets.Store.EncryptedFileSecretStore> StoreAsync()
@@ -113,4 +122,53 @@ public sealed class SecretSendVerbTests : IDisposable
     }
 
     public void Dispose() { try { Directory.Delete(root, true); } catch (IOException) { } }
+
+    // ---------- the runner's check run (plan 28c E19) ----------
+
+    [Fact]
+    public async Task A_check_asks_the_runner_to_connect_with_the_login_it_holds_and_only_then_is_the_local_copy_deleted()
+    {
+        var store = await StoreAsync();
+        var runner = new FakeRunner();
+        var moved = await Run(store, runner, null, "send", "--to", "runner", "warehouse", "--server", "r", "--check", "sales-build", "--channel", "prod", "--delete-local");
+        Assert.True(moved.Exit == 0, moved.Err);
+        // the slot is the connection's name unless --slot says otherwise, and the role is the one that was sent
+        Assert.Equal(("sales-build", "prod", "warehouse", "write"), Assert.Single(runner.Checks));
+        Assert.Contains("the runner's check passed (connected)", moved.Out);
+        Assert.False(await store.ExistsAsync(ServerSecrets.NameOf("warehouse", LoginRole.Write)));
+        Assert.Equal(true, moved.Data["local_deleted"]);
+        Assert.DoesNotContain("WRITE-pw", moved.Out + moved.Err);
+
+        var other = await Run(await StoreAsync(), new FakeRunner(), null, "send", "--to", "runner", "warehouse", "--server", "r", "--check", "sales-build", "--channel", "prod", "--slot", "source");
+        Assert.True(other.Exit == 0, other.Err);
+    }
+
+    [Fact]
+    public async Task A_login_that_does_not_connect_is_a_failed_send_that_names_the_step_and_keeps_the_local_copy()
+    {
+        var store = await StoreAsync();
+        var runner = new FakeRunner { CheckFails = "The slot 'warehouse' is bound to 'wh', whose login does not connect (error 18456)." };
+        var audit = new FileAuditLog(Path.Combine(root, "management-audit.log"));
+        var result = await Run(store, runner, audit, "send", "--to", "runner", "warehouse", "--server", "r", "--check", "sales-build", "--channel", "prod", "--delete-local");
+        Assert.NotEqual(0, result.Exit);
+        Assert.Contains("failed at the connect step", result.Err);
+        Assert.Contains("error 18456", result.Err);
+        Assert.Contains("the local copy was kept", result.Err);
+        Assert.True(await store.ExistsAsync(ServerSecrets.NameOf("warehouse", LoginRole.Write)));       // never deleted on a login that does not connect
+        Assert.DoesNotContain("WRITE-pw", result.Out + result.Err);
+        Assert.Contains("check failed at connect", Assert.Single(audit.Read()).Outcome);
+    }
+
+    [Theory]
+    [InlineData("--check", "sales-build")]                       // no channel
+    [InlineData("--channel", "prod")]                            // a channel without a package
+    [InlineData("--slot", "source")]                             // a slot without a package
+    public async Task A_check_names_its_package_and_channel_or_the_verb_says_how(string flag, string value)
+    {
+        var runner = new FakeRunner();
+        var result = await Run(await StoreAsync(), runner, null, "send", "--to", "runner", "warehouse", "--server", "r", flag, value);
+        Assert.Equal(DbDataKit.Cli.CliExit.Usage, result.Exit);
+        Assert.Empty(runner.Held);                                // nothing was sent
+        Assert.Empty(runner.Checks);
+    }
 }

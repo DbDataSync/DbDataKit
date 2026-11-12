@@ -9,9 +9,9 @@ namespace DbDataGateway.Server.Serving;
 /// <summary>
 /// Whether a name may be bound to an instance (plan 26 AP08): a name is verified before it is accepted, so an address that would never reach this host, or whose certificate is not for the name, is refused when the administrator adds it
 /// and not found by the first person who opens it. A subdomain is <c>&lt;instance&gt;.&lt;apps.domain&gt;</c> and nothing else (the host's own certificate is the wildcard for it). A custom domain is not under the apps domain, resolves to an
-/// address of this machine or one listed in <c>apps.addresses</c> (a balancer's, a public one), and has a certificate that holds the name, has a private key and has not expired. Every refusal says what to change.
+/// address of this machine or one listed in <c>apps.addresses</c> (a balancer's, a public one) or else proves it is the administrator's with the DNS challenge (<see cref="AppDomainChallenge"/>), and has a certificate that holds the name, has a private key and has not expired. Every refusal says what to change.
 /// </summary>
-public sealed class AppAddressVerifier(Func<GatewayOptions> options, Func<string, string?> secret, Func<string, CancellationToken, Task<IReadOnlyList<IPAddress>>>? resolve = null, Func<IReadOnlyList<IPAddress>>? local = null, TimeProvider? clock = null)
+public sealed class AppAddressVerifier(Func<GatewayOptions> options, Func<string, string?> secret, Func<string, CancellationToken, Task<IReadOnlyList<IPAddress>>>? resolve = null, Func<IReadOnlyList<IPAddress>>? local = null, TimeProvider? clock = null, Func<string, CancellationToken, Task<IReadOnlyList<string>>>? resolveTxt = null)
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
@@ -31,10 +31,50 @@ public sealed class AppAddressVerifier(Func<GatewayOptions> options, Func<string
                 continue;
             }
             if (under) return $"{host} is under this host's apps domain ({domain}): bind it as a subdomain, which is served with the host's own certificate.";
-            if (await ProblemOfResolutionAsync(host, current, ct) is { } resolution) return resolution;
+            if (!await ChallengeHeldAsync(instance.Name, host, ct) && await ProblemOfResolutionAsync(host, current, ct) is { } resolution) return resolution + " " + ChallengeHint(instance.Name, host);
             if (CertificateProblem(host, address) is { } certificate) return certificate;
         }
         return null;
+    }
+
+    /// <summary>The TXT record that proves <paramref name="host"/> is the administrator's for <paramref name="instance"/>: where to create it and what it holds (the editor shows it before the name is saved).</summary>
+    public AppDomainRecord Challenge(string instance, string host)
+    {
+        var normal = AppAddresses.NormalizeHost(host);
+        return new(AppDomainChallenge.RecordName(normal), "TXT", AppDomainChallenge.Value(options().InstanceId, instance, normal));
+    }
+
+    private string ChallengeHint(string instance, string host)
+    {
+        var record = Challenge(instance, host);
+        return $"Or prove the name is yours: create the TXT record {record.Name} with the value {record.Value}, then Verify.";
+    }
+
+    private async Task<bool> ChallengeHeldAsync(string instance, string host, CancellationToken ct)
+    {
+        try
+        {
+            var found = resolveTxt is null ? await DnsTxtResolver.ResolveAsync(AppDomainChallenge.RecordName(host), ct) : await resolveTxt(AppDomainChallenge.RecordName(host), ct);
+            return AppDomainChallenge.Holds(found, Challenge(instance, host).Value);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested) { return false; }   // no record, no resolver, no answer: the name has to resolve to this host instead
+    }
+
+    /// <summary>
+    /// What the Verify button of the instance editor asks: whether a custom domain is accepted, by which proof, and the record to create when it is not. A subdomain of the apps domain needs no proof. The certificate is not looked at here (it is checked when the address is saved).
+    /// </summary>
+    public async Task<AppDomainCheck> CheckAsync(string instance, string host, CancellationToken ct)
+    {
+        var normal = AppAddresses.NormalizeHost(host);
+        var record = Challenge(instance, normal);
+        var current = options().Apps;
+        var domain = string.IsNullOrWhiteSpace(current.Domain) ? null : AppAddresses.NormalizeHost(current.Domain);
+        if (domain is not null && normal.EndsWith("." + domain, StringComparison.Ordinal))
+            return new(normal, record, false, null, $"{normal} is under this host's apps domain ({domain}): bind it as a subdomain, which needs no proof.");
+        if (await ChallengeHeldAsync(instance, normal, ct)) return new(normal, record, true, "challenge", null);
+        var problem = await ProblemOfResolutionAsync(normal, current, ct);
+        return problem is null ? new(normal, record, true, "address", null)
+            : new(normal, record, false, null, $"The TXT record {record.Name} does not hold {record.Value}, and {char.ToLowerInvariant(problem[0])}{problem[1..]}");
     }
 
     private async Task<string?> ProblemOfResolutionAsync(string host, AppsOptions current, CancellationToken ct)
@@ -81,3 +121,9 @@ public sealed class AppAddressVerifier(Func<GatewayOptions> options, Func<string
         catch (NetworkInformationException) { return []; }
     }
 }
+
+/// <summary>The DNS record that proves a custom domain: its <see cref="Name"/>, <see cref="Type"/> (TXT) and <see cref="Value"/>.</summary>
+public sealed record AppDomainRecord(string Name, string Type, string Value);
+
+/// <summary>The answer to a Verify: whether the name is accepted, <see cref="Via"/> `challenge` (the TXT record holds the value) or `address` (it resolves to this host), or <see cref="Reason"/> it is not; <see cref="Record"/> is the record to create.</summary>
+public sealed record AppDomainCheck(string Host, AppDomainRecord Record, bool Verified, string? Via, string? Reason);

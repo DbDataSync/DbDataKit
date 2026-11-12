@@ -77,7 +77,7 @@ public sealed class RunMonitorService(
 
             foreach (var run in active)
             {
-                _watching.Add(run.RunId);
+                if (_watching.Add(run.RunId)) DbDataKit.Telemetry.HostTelemetry.RunStarted(DbDataSyncHost.ProductName, run.RunKind.ToString());   // plan 22a GP28: counted once, when first seen
                 await StreamLogsAsync(run.RunId, stoppingToken);
             }
 
@@ -100,6 +100,9 @@ public sealed class RunMonitorService(
 
                 await StreamLogsAsync(runId, stoppingToken); // catch any trailing log lines first
                 var run = taskRunStore.GetRun(runId);
+                if (run is not null)
+                    DbDataKit.Telemetry.HostTelemetry.RunEnded(DbDataSyncHost.ProductName, run.RunKind.ToString(), run.Status.ToString().ToLowerInvariant(),
+                        run.StartedAtUtc is { } began && run.EndedAtUtc is { } ended ? ended - began : null);   // counts and durations by outcome, never the error text (plan 22a GP28)
                 await hub.Clients.Group(runId.ToString()).SendAsync(
                     "runCompleted",
                     new { runId, status = run?.Status.ToString(), run?.RowsRead, run?.RowsWritten, run?.ErrorSummary },

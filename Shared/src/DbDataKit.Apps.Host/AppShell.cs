@@ -51,6 +51,7 @@ public static class AppShell
               var theme = frame.getAttribute("data-theme");
               if (theme) frame.contentWindow.postMessage({ dbdata: "app/1", type: "theme", tokens: JSON.parse(theme) }, "*");
               if (frame === main) { route = fromAddress(); if (route) tell(route); }
+              else { var start = frame.getAttribute("data-route"); if (valid(start)) frame.contentWindow.postMessage({ dbdata: "app/1", type: "navigate", path: start }, "*"); }
             });
           });
           window.addEventListener("popstate", function () { var p = fromAddress(); if (p && p !== route) { route = p; tell(p); } });

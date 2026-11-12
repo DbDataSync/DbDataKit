@@ -263,6 +263,14 @@ internal static class ApplyCommand
             return CliApp.ExitFindings;
         }
 
+        // a project whose tracking is state-first writes every record to the state before the target (plan 28c E16); a run that has no state is refused here, before a statement runs
+        ITrackingJournal? journal = null;
+        if (!dryRun && tracking.Target is { } journalTarget && trackRead != null)
+        {
+            try { journal = TrackingJournals.For(config, new TrackingScope(journalTarget.Engine, journalTarget.SchemaName, plan.Connection), trackRead, env).Journal; }
+            catch (InvalidOperationException ex) { error.WriteLine(ex.Message); output.WriteLine("Nothing was executed."); return CliApp.ExitFindings; }
+        }
+
         var runId = Guid.NewGuid();
         var hooks = CommandContext.Hooks;       // captured here: the apply runs on another thread
         ApplyResult result;
@@ -274,7 +282,7 @@ internal static class ApplyCommand
             using var log = new FileStatementLog(InitCommand.StatementLogPath(root, env), dryRun ? "apply-dry-run" : "apply", runId);
             logPath = Path.GetRelativePath(root, log.Path);
             output.WriteLine($"Statement log: {logPath}");
-            result = Task.Run(() => ApplyEngine.RunAsync(plan, planText, read!, write, tracking.Target is { } tt ? new ApplyTracking(trackRead!, trackWrite, tt.SchemaName) : null, options, log, runId, line => { output.WriteLine(line); hooks?.Progress?.Invoke(line); })).GetAwaiter().GetResult();
+            result = Task.Run(() => ApplyEngine.RunAsync(plan, planText, read!, write, tracking.Target is { } tt ? new ApplyTracking(trackRead!, trackWrite, tt.SchemaName, journal) : null, options, log, runId, line => { output.WriteLine(line); hooks?.Progress?.Invoke(line); })).GetAwaiter().GetResult();
         }
         finally { if (onInterrupt != null) Console.CancelKeyPress -= onInterrupt; }
 
@@ -286,10 +294,10 @@ internal static class ApplyCommand
                 if (step.Type != StepType.Track) output.WriteLine(step.Text.TrimEnd());
                 foreach (var p in step.Parameters) output.WriteLine($"-- @{p.Name} ({p.Type}) = {p.Value ?? "NULL"}");
             }
-        if (!mode.Refresh && result.Success && !dryRun && tracking.Target is { } definitionTarget) RecordDefinitions(plan, root, new TrackingScope(definitionTarget.Engine, definitionTarget.SchemaName, plan.Connection), trackRead!, trackWrite!, env, commit, output);
+        if (!mode.Refresh && result.Success && !dryRun && tracking.Target is { } definitionTarget) RecordDefinitions(plan, root, new TrackingScope(definitionTarget.Engine, definitionTarget.SchemaName, plan.Connection) { Journal = journal }, trackRead!, trackWrite!, env, commit, output);
         if (!mode.Refresh && result.Success && !dryRun && config.StoreMetadataOnApply)
         {
-            if (tracking.Target is { } storeTarget) StoreMetadata(plan, root, new TrackingScope(storeTarget.Engine, storeTarget.SchemaName, plan.Connection), trackRead!, trackWrite!, commit, output, error);
+            if (tracking.Target is { } storeTarget) StoreMetadata(plan, root, new TrackingScope(storeTarget.Engine, storeTarget.SchemaName, plan.Connection) { Journal = journal }, trackRead!, trackWrite!, commit, output, error);
             else output.WriteLine("note: metadata was not stored: nothing is tracked for this connection.");
         }
         output.Payload("outcomes", result.Outcomes.Select(o => new { step = o.StepId, description = o.Description, status = o.Status, detail = o.Detail }).ToList());

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dbdatakit.dev/schemas/work-item-1.json",
+  "title": "work-item/1",
+  "description": "Work items to make in a backlog, or a backlog exported (plan 27a BK01). An item's id is a name local to the file, so another item can name an epic made in the same file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "project", "items"],
+  "properties": {
+    "schema": { "const": "work-item/1" },
+    "project": { "type": "string", "pattern": "^[A-Z][A-Z0-9]{1,9}$" },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type", "title"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "type": { "enum": ["epic", "story", "task", "bug"] },
+          "title": { "type": "string", "minLength": 1, "maxLength": 250 },
+          "description": { "type": "string" },
+          "priority": { "enum": ["lowest", "low", "medium", "high", "highest"] },
+          "estimate": { "type": "number", "minimum": 0, "maximum": 1000, "multipleOf": 0.5 },
+          "assignee": { "type": "string", "minLength": 1 },
+          "epic": { "type": "string", "minLength": 1 },
+          "labels": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,29}$" }
+          }
+        }
+      }
+    }
+  }
+}

@@ -15,6 +15,7 @@
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="Npgsql" />
     <ProjectReference Include="..\..\src\DbDataKit.Server\DbDataKit.Server.csproj" />
+    <ProjectReference Include="..\..\..\DbDataStore\src\DbDataStore.Server\DbDataStore.Server.csproj" />   <!-- a real Store server in this process: the trace across the relay (plan 22a GP29) -->
     <ProjectReference Include="..\..\..\DbDataGateway\src\DbDataGateway.Core\DbDataGateway.Core.csproj" />   <!-- the Flight client (a library; the Gateway itself is still the program) -->
     <DbDataKitReference Include="Secrets" />
   </ItemGroup>

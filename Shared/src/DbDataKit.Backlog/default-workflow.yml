@@ -1,0 +1,27 @@
+schema: backlog-workflow/1
+
+# The workflow every backlog starts with (plan 27a BK01). A state belongs to a category (todo, doing, done): the board and the sprint's summary count by category,
+# and entering a state of the done category sets the item's closed time, leaving it clears that and the resolution.
+# `requires` names the fields an item must have to enter the state. A transition says who may make it: member (anyone who works on the backlog) or lead.
+states:
+  - { id: backlog,     title: Backlog,     category: todo }
+  - { id: ready,       title: Ready,       category: todo }
+  - { id: in-progress, title: In progress, category: doing, requires: [assignee] }
+  - { id: review,      title: In review,   category: doing, requires: [assignee] }
+  - { id: done,        title: Done,        category: done,  requires: [resolution] }
+  - { id: cancelled,   title: Cancelled,   category: done,  requires: [resolution] }
+
+initial: backlog
+
+transitions:
+  - { from: backlog,     to: ready,       role: member }
+  - { from: ready,       to: backlog,     role: member }
+  - { from: ready,       to: in-progress, role: member }
+  - { from: in-progress, to: ready,       role: member }
+  - { from: in-progress, to: review,      role: member }
+  - { from: review,      to: in-progress, role: member }
+  - { from: in-progress, to: done,        role: member }
+  - { from: review,      to: done,        role: member }
+  - { from: "*",         to: cancelled,   role: member }
+  - { from: done,        to: in-progress, role: lead }
+  - { from: cancelled,   to: backlog,     role: lead }

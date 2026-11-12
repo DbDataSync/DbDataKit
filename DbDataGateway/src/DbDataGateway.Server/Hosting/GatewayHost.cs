@@ -136,6 +136,7 @@ public static class GatewayHost
         {
             host.Product = "dbdatagateway";
             host.Version = Version;
+            host.Telemetry = options.Telemetry.ToSettings("server.yaml");   // off unless telemetry.enabled (plan 22a GP28)
             host.DrainTimeout = TimeSpan.FromSeconds(Math.Max(0, options.Hosting.DrainSeconds));
             host.Limits.MaxConcurrentRequests = Math.Max(1, options.Hosting.MaxConcurrentRequests);
             host.Limits.RequestTimeout = TimeSpan.FromDays(7);
@@ -208,7 +209,18 @@ public static class GatewayHost
                 gate: GatewayVersionGate.Create(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
         });
         services.AddHostedService<DbDataGateway.Server.State.DefinitionFollowerService>();
-        services.AddSingleton<IServingServices>(sp => sp.GetRequiredService<GatewayServing>().WithSemantic(sp.GetRequiredService<SemanticModels>()));
+        // the result cache (plan 24a UC12 to UC14): in memory in this instance; off for every definition that does not say so; with a group's state the instances share their clears through per-dataset epochs (no row data in the state)
+        services.AddSingleton(sp => new DbDataGateway.Server.State.ServingCacheEpochStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>(), sp.GetRequiredService<TimeProvider>()));
+        services.AddSingleton(sp =>
+        {
+            var current = sp.GetRequiredService<IOptionsMonitor<GatewayOptions>>();
+            var state = sp.GetRequiredService<DbDataKit.State.StateDatabase>();
+            return new GatewayCache(sp.GetRequiredService<DataSourceCatalog>(), () => current.CurrentValue, () => sp.GetRequiredService<SemanticModels>(),
+                DbDataGateway.Server.State.GatewayState.IsGroup(state) ? sp.GetRequiredService<DbDataGateway.Server.State.ServingCacheEpochStore>() : null, sp.GetRequiredService<TimeProvider>());
+        });
+        services.AddHostedService(sp => new ServingCacheSyncService(sp.GetRequiredService<GatewayCache>()));
+        services.AddSingleton<IServingServices>(sp => sp.GetRequiredService<GatewayServing>().WithSemantic(sp.GetRequiredService<SemanticModels>())
+            .WithCache(sp.GetRequiredService<GatewayCache>().Store, sp.GetRequiredService<GatewayCache>().Policy));
         services.AddSingleton(sp =>
         {
             var current = sp.GetRequiredService<IOptionsMonitor<GatewayOptions>>();

@@ -23,6 +23,7 @@ import { ReleasesPage } from './pages/ReleasesPage'
 import { ViewsPage } from './pages/ViewsPage'
 import { AgentsPage } from './pages/AgentsPage'
 import { KnowledgePage } from './pages/KnowledgePage'
+import { BacklogPage } from './pages/BacklogPage'
 import { DeliveryPage } from './pages/DeliveryPage'
 import { BindingsPage } from './pages/BindingsPage'
 
@@ -62,6 +63,7 @@ export default function App() {
       <Route path="/views/reports/:name" element={<ViewsPage area="reports" />} />
       <Route path="/agents" element={<AgentsPage />} />
       <Route path="/knowledge" element={<KnowledgePage />} />
+      <Route path="/backlog" element={<BacklogPage />} />
       <Route path="/delivery" element={<DeliveryPage />} />
       <Route path="/bindings" element={<BindingsPage />} />
       <Route path="/monitoring" element={<MonitoringPage />} />

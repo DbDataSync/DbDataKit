@@ -20,7 +20,11 @@ public partial class ApplyConformanceTests
     private sealed class Run(Engine engine, string dir, string name)
     {
         public string Dir => dir;
+        /// <summary>What a Build server would hand its children as DBDATAKIT_BUILD_TRACKING_PRIMARY (plan 28c E16): `state` makes every command of the flow write the state first, whatever the project file says.</summary>
+        public static readonly AsyncLocal<string?> PrimaryOverride = new();
+
         public Func<string, string?> Env => v =>
+            v == "DBDATAKIT_BUILD_TRACKING_PRIMARY" ? PrimaryOverride.Value :
             v == LoginSettings.VariableName(name, DbDataBuild.Execution.Login.Read) || v == LoginSettings.VariableName(name, DbDataBuild.Execution.Login.Write) ? engine.ConnectionString : null;
 
         public (int Exit, string Out, string Err) Cli(params string[] args)

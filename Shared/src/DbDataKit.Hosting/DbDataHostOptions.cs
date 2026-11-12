@@ -1,3 +1,5 @@
+using DbDataKit.Telemetry;
+
 namespace DbDataKit.Hosting;
 
 public sealed class DbDataHostOptions
@@ -26,6 +28,12 @@ public sealed class DbDataHostOptions
     public RequestLimitOptions Limits { get; } = new();
 
     public ForwardedHeadersPolicy ForwardedHeaders { get; } = new();
+
+    /// <summary>
+    /// The <c>telemetry:</c> section of the host's settings file (<see cref="TelemetrySettings.Load"/>; plan 22a GP28). Off by default: nothing is created. On, <see cref="DbDataHostExtensions.UseDbDataHost"/> turns the SDK on and
+    /// <see cref="DbDataHostExtensions.UseDbDataPipeline"/> adds the request span and counters.
+    /// </summary>
+    public TelemetrySettings Telemetry { get; set; } = TelemetrySettings.Off;
 
     /// <summary>Force a mode (tests); null = detect.</summary>
     public HostMode? ModeOverride { get; set; }

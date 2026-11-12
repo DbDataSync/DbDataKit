@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Backlog</RootNamespace>
+    <PackageId>DbDataKit.Backlog</PackageId>
+    <Description>The library of DbDataBacklog (plan 27a BK01): the workflow of work items (states, transitions, who may make them, what they require) as the strict backlog-workflow/1 format with its default, the work-item/1 file for importing and exporting items, and the service that keeps the rules over the backlog state module (items, epics, sprints, boards, comments, links, attachments in the payload store, history).</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <EmbeddedResource Include="schemas\*.schema.json" LogicalName="DbDataKit.Backlog.schemas.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="default-workflow.yml" LogicalName="DbDataKit.Backlog.default-workflow.yml" />
+    <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
+    <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+  </ItemGroup>
+</Project>

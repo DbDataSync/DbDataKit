@@ -11,7 +11,7 @@ import { signInNewAdmin } from './people'
 // routes by `Host` from then on (the same listener, no restart), a name that is not the instance's subdomain is refused in the Gateway's words, and removing the address stops the routing. The apps domain is `localhost`
 // (`sales.localhost`; the requests go to 127.0.0.1 with that Host header, so no DNS is needed). A custom domain's certificate and the redirect URIs are `AppAddressesTests` and `AppAddressingTests`.
 // Needs the built Gateway and the console like `gateway-apps-editors.spec.ts`, on ports 8671 (management), 8672 (identity home) and 8673 (apps). It invites a console administrator, so it sorts after `first-run` and
-// `identity-home` (`views-` does). Written for plan 26 AP08/AP27; not run where it was written (no browser, no Gateway build there).
+// `identity-home` (`views-` does). Written for plan 26 AP08/AP27; run in plan 26 AP27 (green). Its step 3 is the DNS challenge of a custom domain (the record Verify shows).
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
 const gatewayDll = path.join(repoRoot, 'DbDataGateway/src/DbDataGateway.Server/bin/Debug/net10.0/dbdatagateway.dll')
@@ -123,4 +123,18 @@ test('a subdomain is added in the instance editor and routes by name, a name tha
   await screen.getByTestId('instance-editor-save').click()
   await expect(screen.getByTestId('apps-notice')).toContainText('sales is saved')
   await expect.poll(async () => (await asked('sales.localhost')).body, { timeout: 20_000 }).toContain(fallbackWords)
+
+  // 3. a custom domain is proved with a DNS record (AP08): Verify shows the TXT record to create, and a name that is nobody's here (`.invalid` never resolves) is not accepted
+  await screen.getByTestId('instance-edit-sales').click()
+  await screen.getByTestId('instance-editor-address-add').click()
+  await screen.getByTestId('instance-editor-address-kind-0').selectOption('custom')
+  await screen.getByTestId('instance-editor-address-host-0').fill('reports.invalid')
+  await screen.getByTestId('instance-editor-address-verify-0').click()
+  await expect(screen.getByTestId('instance-editor-address-verify-result-0')).toHaveAttribute('data-verified', 'false', { timeout: 30_000 })
+  await expect(screen.getByTestId('instance-editor-address-unverified-0')).toContainText('does not resolve')
+  await expect(screen.getByTestId('instance-editor-address-challenge-name-0')).toHaveText('_dbdatakit-challenge.reports.invalid')
+  await expect(screen.getByTestId('instance-editor-address-challenge-value-0')).toHaveText(/^dbdatakit-domain-verification=[0-9a-f]{32}$/)
+  // an edited name is a new question: the answer about the old one goes away
+  await screen.getByTestId('instance-editor-address-host-0').fill('reports2.invalid')
+  await expect(screen.getByTestId('instance-editor-address-verify-result-0')).toHaveCount(0)
 })

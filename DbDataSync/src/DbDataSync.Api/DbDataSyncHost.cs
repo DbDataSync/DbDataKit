@@ -40,6 +40,9 @@ namespace DbDataSync.Api;
 /// </summary>
 public static class DbDataSyncHost
 {
+    /// <summary>The product name in telemetry (<c>service.name</c> and the <c>dbdatakit.product</c> label).</summary>
+    public const string ProductName = "dbdatasync";
+
     public static WebApplication Build(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
@@ -51,6 +54,12 @@ public static class DbDataSyncHost
         InsertConfigFile(builder);
         RefuseRemovedSettings(builder);
         builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
+
+        // OpenTelemetry (plan 22a GP28): the telemetry: section of server.yaml, off unless it says enabled; off registers nothing and adds no middleware
+        var telemetry = DbDataKit.Telemetry.TelemetrySettings.Load(DbDataSyncConfigFile.PathIn(builder.Configuration["DbDataSync:App:RepoRoot"] ?? ApiOptions.DefaultRepoRoot));
+        var telemetryVersion = (System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(DbDataSyncHost).Assembly)?.InformationalVersion ?? "0.0.0").Split('+')[0];
+        DbDataKit.Telemetry.SuiteTelemetry.Add(builder.Services, telemetry, ProductName, telemetryVersion);
+        builder.Services.AddSingleton(telemetry);
 
         // Applied only when this process really is a service, so `dbdatasync server run` in a terminal is
         // unaffected — UseWindowsService changes lifetime and logging, and doing that to an
@@ -395,6 +404,9 @@ public static class DbDataSyncHost
         {
             app.UseHttpsRedirection();
         }
+
+        // The request span and counters, and a caller's W3C trace continued (plan 22a GP28, GP29); only when telemetry is on
+        if (app.Services.GetRequiredService<DbDataKit.Telemetry.TelemetrySettings>().Enabled) DbDataKit.Telemetry.RequestTelemetry.UseRequestTelemetry(app, ProductName);
 
         // The management API version on every answer, so a console can tell what it is talking to (plan 13, T09).
         app.UseManagementApiVersion();

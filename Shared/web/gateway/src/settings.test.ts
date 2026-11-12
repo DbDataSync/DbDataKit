@@ -82,7 +82,7 @@ describe('the form', () => {
 
   it('shows the values the draft sets, with the defaults when the check has not answered', () => {
     const { semantic: defaults, ...rest } = shown(undefined)
-    expect(rest).toEqual({ modules: [], cacheSeconds: 30, exportMode: '', exportPath: '', logSql: true })
+    expect(rest).toEqual({ modules: [], cacheSeconds: 30, exportMode: '', exportPath: '', logSql: true, telemetryEnabled: false, telemetryEndpoint: '', telemetryProtocol: 'grpc' })
     expect(defaults['semantic.level']).toBe(5)
     expect(shown({ modules: ['flightsql'], 'views.cacheSeconds': 5, 'views.export.mode': 'system', 'views.export.path': '/opt/chrome', logSql: false })).toMatchObject({ modules: ['flightsql'], cacheSeconds: 5, exportMode: 'system', exportPath: '/opt/chrome', logSql: false })
   })

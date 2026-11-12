@@ -47,6 +47,7 @@ public static class ConsoleHost
         {
             host.Product = ConsoleSettings.Product;
             host.ServiceName = ConsoleService.RegistrationName;
+            host.Telemetry = DbDataKit.Telemetry.TelemetrySettings.Load(settings.SettingsPath);   // the telemetry: section; off unless it says enabled (plan 22a GP28)
             host.Version = Version;
         });
         if (settings.AnnounceListen is { } announce && (announce.Scheme != Uri.UriSchemeHttp || announce.Port == settings.Listen.Port))
@@ -127,6 +128,7 @@ public static class ConsoleHost
         // an outside agent (`ui mcp --report-to`) signs in as the person with a token made on the Agents page, as Basic credentials, and reaches the outside endpoints only
         builder.Services.AddSingleton<IPasswordCredentials>(sp => new AgentTokenCredentials(sp.GetRequiredService<ConsoleAgents>().Store, sp.GetRequiredService<IUserAccounts>()));
         builder.Services.AddSingleton<ConsoleQuality>();
+        builder.Services.AddSingleton(sp => new ConsoleBacklog(sp.GetRequiredService<StateDatabase>()));   // the backlog (plan 27a BK01, BK03, BK04): DbDataKit.Backlog over the backlog module
         // delivery: the channels of settings.yaml, the outbox, the subscriptions and the sender that works through the outbox (plan 22a GP07 to GP09, GP17, GP18)
         builder.Services.AddSingleton(sp => new ConsoleDelivery(settings, sp.GetRequiredService<StateDatabase>(), sp.GetRequiredService<ConsoleConnections>(), sp.GetRequiredService<ConsoleBindings>(), sp.GetRequiredService<IUserAccounts>(), sp.GetService<DbDataKit.Delivery.ISubscriptionRenderer>(), null, sp.GetService<DbDataKit.Monitoring.INotificationFeed>()));
         builder.Services.AddHostedService<ConsoleDeliverySender>();

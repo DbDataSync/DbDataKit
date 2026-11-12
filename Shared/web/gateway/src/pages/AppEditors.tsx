@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { availableMembers, bindingRows, egressChoices, emptyAddress, instanceFormProblem, isRename, KNOWN_SETTINGS, moveEntry, navFormProblem, packageApproveBlock, publishBlock, sizeLabel, type InstanceForm, type NavForm, type Prepared } from '../appEditors'
 import { NEEDS_PUBLISHER, shortHash } from '../apps'
-import type { AppCheck, AppsCaller, AppSummary } from '../types'
+import type { AppCheck, AppDomainCheck, AppsCaller, AppSummary } from '../types'
 
 // The editors of the Apps screen (plan 33): the instance form (UE01), the publish panel (UE02) and the navigation set editor (UE03). Each is a view over its props, as the lists in AppsPage are, so it is tested without its calls.
 // The roles are the Gateway's: a button that is off says why, and the Gateway refuses the call again if the screen is wrong.
@@ -28,6 +28,8 @@ export interface InstanceEditorProps {
   existing: string[]
   caller: AppsCaller
   busy: boolean
+  /** Asks the Gateway whether a custom domain is proved (its DNS challenge record, or the name already resolving here) and for the record to create; absent where the screen cannot ask. */
+  verifyAddress?: (host: string) => Promise<AppDomainCheck>
   onChange: (form: InstanceForm) => void
   onSave: () => void
   onCancel: () => void
@@ -40,6 +42,40 @@ export function instanceSaveBlock(p: Pick<InstanceEditorProps, 'form' | 'isNew' 
   if (problem) return problem
   if (p.models === null) return "Reading what this version of the app uses; saving waits so that no binding is dropped by mistake."
   return null
+}
+
+/**
+ * The Verify button of a custom domain and what it said (AP08): accepted, and by which proof, or why not, with the TXT record to create (name and value, to copy). What it said belongs to the name asked: an edited name is a new question.
+ * It has its own state, so the form above stays a view over its props.
+ */
+export function AddressVerify({ index, host, canPublish, verify }: { index: number; host: string; canPublish: boolean; verify: (host: string) => Promise<AppDomainCheck> }) {
+  const [result, setResult] = useState<{ host: string; check: AppDomainCheck | string } | null>(null)
+  const [asking, setAsking] = useState(false)
+  const ask = () => {
+    const named = host.trim()
+    setAsking(true)
+    verify(named).then((check) => setResult({ host, check }), (e) => setResult({ host, check: e instanceof Error ? e.message : String(e) })).finally(() => setAsking(false))
+  }
+  const shown = result && result.host === host ? result.check : null
+  return (
+    <>
+      <button type="button" className="btn sm" disabled={!canPublish || host.trim() === '' || asking} onClick={ask} data-testid={`instance-editor-address-verify-${index}`}>Verify</button>
+      {shown !== null && <DomainCheckView index={index} check={shown} />}
+    </>
+  )
+}
+
+/** What Verify answered, as the screen draws it. */
+export function DomainCheckView({ index, check }: { index: number; check: AppDomainCheck | string }) {
+  if (typeof check === 'string') return <div className="hint" role="alert" style={{ flexBasis: '100%' }} data-testid={`instance-editor-address-verify-result-${index}`} data-verified="error">{check}</div>
+  return (
+    <div className="hint" style={{ flexBasis: '100%', overflowWrap: 'anywhere' }} data-testid={`instance-editor-address-verify-result-${index}`} data-verified={String(check.verified)}>
+      {check.verified
+        ? <span data-testid={`instance-editor-address-verified-${index}`}>{check.via === 'challenge' ? 'Verified: the TXT record holds the value.' : 'Verified: the name resolves to this host.'}</span>
+        : <span data-testid={`instance-editor-address-unverified-${index}`}>{check.reason}</span>}
+      <div>To prove the name is yours, create the DNS record <b>TXT</b> <code className="mono" data-testid={`instance-editor-address-challenge-name-${index}`}>{check.record.name}</code> with the value <code className="mono" data-testid={`instance-editor-address-challenge-value-${index}`}>{check.record.value}</code>, then Verify.</div>
+    </div>
+  )
 }
 
 /** Make an instance or change one: the app and version it runs, its title, its settings (the host reads two, an app may read its own) and, for each Store model the app uses, the model instance it is bound to. */
@@ -94,7 +130,7 @@ export function InstanceEditorView(p: InstanceEditorProps) {
         <button type="button" className="btn sm" disabled={!p.caller.can_publish} onClick={() => set({ settings: [...form.settings, { key: '', value: '' }] })} data-testid="instance-editor-setting-add">Add a setting</button>
 
         <h3 className="hint" style={{ margin: '16px 0 4px' }}>Addresses</h3>
-        <p className="hint" style={{ margin: '0 0 6px' }}>Besides /apps/{form.name || '<name>'}/ the instance can be served at a name of its own: a subdomain of the host's apps domain ({form.name || '<name>'}.&lt;apps domain&gt;), or a custom domain with its certificate (a secret that holds the PFX). The Gateway checks that the name reaches it and that the certificate is for it before it accepts the address.</p>
+        <p className="hint" style={{ margin: '0 0 6px' }}>Besides /apps/{form.name || '<name>'}/ the instance can be served at a name of its own: a subdomain of the host's apps domain ({form.name || '<name>'}.&lt;apps domain&gt;), or a custom domain with its certificate (a secret that holds the PFX). The Gateway checks that the name reaches it, or that you control it (a DNS TXT record that Verify shows), and that the certificate is for it before it accepts the address.</p>
         {form.addresses.length === 0 && <div className="hint" data-testid="instance-editor-addresses-none">No address: the instance is served at its path only.</div>}
         {form.addresses.map((a, i) => (
           <div key={i} className="row" style={{ gap: 6, marginBottom: 4, flexWrap: 'wrap', alignItems: 'center' }} data-testid={`instance-editor-address-${i}`}>
@@ -118,6 +154,7 @@ export function InstanceEditorView(p: InstanceEditorProps) {
                 onChange={(e) => set({ addresses: form.addresses.map((x, j) => ({ ...x, primary: j === i ? e.target.checked : false })) })} data-testid={`instance-editor-address-primary-${i}`} />
               <span className="hint">Primary</span>
             </label>
+            {a.kind === 'custom' && p.verifyAddress && <AddressVerify index={i} host={a.host} canPublish={p.caller.can_publish} verify={p.verifyAddress} />}
             <button type="button" className="btn sm" disabled={!p.caller.can_publish} onClick={() => set({ addresses: form.addresses.filter((_, j) => j !== i) })} data-testid={`instance-editor-address-remove-${i}`}>Remove</button>
           </div>
         ))}

@@ -103,7 +103,13 @@ export interface AppInstanceRow {
 export interface AppAddressRow {
   host: string; kind: 'subdomain' | 'custom'; path: string; primary: boolean
   certificate: string | null; certificate_password: string | null; url?: string | null; redirect_uri?: string | null
+  /** A custom domain's DNS challenge: the TXT record that proves the name is the administrator's (plan 26 AP08). */
+  challenge?: AppDomainRecord | null
 }
+/** A DNS record to create. */
+export interface AppDomainRecord { name: string; type: string; value: string }
+/** What `POST /api/v1/app-instances/{name}/verify-address` answers: accepted by `challenge` (the TXT record holds the value) or `address` (the name resolves to this host), or `reason` why not; `record` is the one to create. */
+export interface AppDomainCheck { host: string; verified: boolean; via: 'challenge' | 'address' | null; reason: string | null; record: AppDomainRecord }
 export interface AppInstances { instances: AppInstanceRow[]; apps_address: string | null; caller: AppsCaller }
 export interface NavigationSetRow { name: string; title: string; entries: { instance: string; label: string | null; icon: string | null }[] }
 export interface AppApprovalRow {
@@ -164,7 +170,7 @@ export interface SecretWritten { name: string; reference: string; replaced: bool
 
 /** server.yaml as the Gateway shows it (plan 33, UE17): secrets masked, the version of the real file, the keys a running Gateway reads at start only. */
 export interface ServerSettings { text: string; version: string | null; masked: boolean; protected: string[]; restart_keys: string[] }
-export interface SettingsFields { modules?: string[]; 'views.cacheSeconds'?: number; 'views.export.mode'?: string | null; 'views.export.path'?: string | null; logSql?: boolean; 'semantic.level'?: number; 'semantic.combine.memoryMb'?: number; 'semantic.combine.timeoutSeconds'?: number; 'semantic.combine.maxInputRows'?: number; 'rest.port'?: number; 'rest.defaultLimit'?: number; 'rest.maxRows'?: number }
+export interface SettingsFields { modules?: string[]; 'views.cacheSeconds'?: number; 'views.export.mode'?: string | null; 'views.export.path'?: string | null; logSql?: boolean; 'telemetry.enabled'?: boolean; 'telemetry.endpoint'?: string | null; 'telemetry.protocol'?: string; 'semantic.level'?: number; 'semantic.combine.memoryMb'?: number; 'semantic.combine.timeoutSeconds'?: number; 'semantic.combine.maxInputRows'?: number; 'rest.port'?: number; 'rest.defaultLimit'?: number; 'rest.maxRows'?: number }
 export interface SettingsCheck { valid: boolean; diagnostics: Diagnostic[]; fields: SettingsFields; changed: string[]; restart_keys: string[]; problems: string[] }
 export interface SettingsEdit { set?: Record<string, string | number | boolean>; remove?: string[]; list?: Record<string, string[]> }
 export interface SettingsWritten { version: string; changed: string[]; restart_keys: string[]; restart_needed: boolean; commit: string | null }

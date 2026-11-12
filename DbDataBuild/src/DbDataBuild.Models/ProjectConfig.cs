@@ -91,9 +91,15 @@ public sealed record ConnectionConfig(string Name, string Engine, int? Version =
 /// <see cref="Disabled"/> is the explicit choice `tracking: none`: not tracked, and no warning. <see cref="RunnerCopy"/> is `tracking: { runner_copy: false }` (plan 28c E16, owner 2026-11-11): the runner keeps no copy of this
 /// project's tracking tables, so the step after a refresh and the `catch-up` task do nothing; it does not touch the tables on the target or the Build server's own copy. On by default.
 /// </summary>
-public sealed record TrackingConfig(string? Connection, string SchemaName, bool Disabled = false, bool RunnerCopy = true)
+public sealed record TrackingConfig(string? Connection, string SchemaName, bool Disabled = false, bool RunnerCopy = true, string? Mode = null, string? Primary = null)
 {
     public static TrackingConfig Default { get; } = new(null, ProductInfo.TrackingSchemaName);
+
+    /// <summary>
+    /// True when the project says the state is the primary of its tracking (plan 28c E16): `tracking: { mode: state }`, or `mode: both` with `primary: state`. Build then writes every record to the state first and to the target second (the target
+    /// keeps the tables: it is the second copy, and its own reads need them). Without either key the target is the primary, as it always was.
+    /// </summary>
+    public bool StatePrimary => Mode == "state" || (Mode is null or "both") && Primary == "state";
 }
 
 /// <summary>A connection's own `tracking:`: `none` (an explicit opt-out), or another tracking connection and, optionally, schema name.</summary>

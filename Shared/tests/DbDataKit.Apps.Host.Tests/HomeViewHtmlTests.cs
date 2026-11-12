@@ -26,9 +26,14 @@ public sealed class HomeViewHtmlTests : IDisposable
 
     private const string Portal = "schemaVersion: 1\nname: acme-portal\nversion: 1.0.0\nkind: portal\nportal:\n  mounts: [{app: sales, path: /sales/}, {app: hr, path: /hr/}, {app: secret, path: /secret/}]\n  home: [views/home.yaml]\n";
 
-    private ResolvedInstance Publish(string home, string manifest = Portal)
+    /// <summary>The same portal with roles of its own, which a block's `roles` names.</summary>
+    private const string Portal2 = "schemaVersion: 1\nname: acme-portal\nversion: 1.0.0\nkind: portal\nroles: [staff, lead]\nportal:\n  mounts: [{app: sales, path: /sales/}, {app: hr, path: /hr/}, {app: secret, path: /secret/}]\n  home: [views/home.yaml]\n";
+
+    private ResolvedInstance Publish(string home, string manifest = Portal, Dictionary<string, byte[]>? more = null)
     {
-        store.PublishApp(new AppPackage(manifest, new Dictionary<string, byte[]> { ["views/home.yaml"] = Encoding.UTF8.GetBytes(home) }), "ada");
+        var files = new Dictionary<string, byte[]> { ["views/home.yaml"] = Encoding.UTF8.GetBytes(home) };
+        foreach (var (path, bytes) in more ?? []) files[path] = bytes;
+        store.PublishApp(new AppPackage(manifest, files), "ada");
         store.Save(new AppInstance("acme", "acme-portal"), "ada");
         return store.Resolve("acme")!;
     }
@@ -81,6 +86,68 @@ public sealed class HomeViewHtmlTests : IDisposable
         var html = HomeViewHtml.Render(store, portal, Person("sales", "hr"))!;
         Assert.True(html.IndexOf(">HR</a>", StringComparison.Ordinal) < html.IndexOf(">SALES</a>", StringComparison.Ordinal));
         Assert.DoesNotContain("SECRET", html);
+    }
+
+    private static AppSession PersonWith(IReadOnlyDictionary<string, string[]> roles) => new("s", new HomeIdentity("u1", "Ada", null, [], roles.ToDictionary(r => AppInstanceAudience.Of(r.Key), r => (IReadOnlyList<string>)r.Value)), DateTimeOffset.MaxValue);
+
+    [Fact]
+    public void A_dashboard_block_is_the_mounted_app_as_a_frame_for_a_person_with_a_role_on_it_and_nothing_for_one_without()
+    {
+        var portal = Publish("schemaVersion: 1\nblocks:\n  - text: Hello\n  - dashboard: {app: sales, view: views/board.yaml, height: 400}\n  - dashboard: {app: hr}\n");
+        var html = HomeViewHtml.Render(store, portal, Person("sales"))!;
+        Assert.Contains("class=\"slot home-dashboard\" data-instance=\"sales\" data-route=\"/views/board.yaml\"", html);
+        Assert.Contains("height:400px", html);
+        Assert.Contains("sandbox=\"allow-scripts allow-forms allow-popups\"", html);
+        Assert.Contains("src=\"/apps/sales/_app/\"", html);
+        Assert.DoesNotContain("data-instance=\"hr\"", html);
+        var both = HomeViewHtml.Render(store, portal, Person("sales", "hr"))!;
+        Assert.Contains("data-instance=\"hr\"", both);
+        var none = HomeViewHtml.Render(store, portal, Person())!;
+        Assert.Contains("Hello", none);
+        Assert.DoesNotContain("<iframe", none);
+    }
+
+    [Fact]
+    public void A_block_with_roles_is_shown_to_a_person_who_holds_one_on_the_portal_or_for_a_dashboard_on_its_app()
+    {
+        const string manifest = Portal2;
+        var portal = Publish("schemaVersion: 1\nblocks:\n  - text: Everyone\n  - text: Staff only\n    roles: [staff]\n  - dashboard: {app: sales}\n    roles: [lead]\n  - table: {columns: [A], rows: [[x]]}\n    roles: [staff]\n", manifest);
+        var anyone = HomeViewHtml.Render(store, portal, Person("sales"))!;
+        Assert.Contains("Everyone", anyone);
+        Assert.DoesNotContain("Staff only", anyone);
+        Assert.DoesNotContain("<table", anyone);
+        Assert.DoesNotContain("home-dashboard", anyone);
+
+        var staff = HomeViewHtml.Render(store, portal, PersonWith(new Dictionary<string, string[]> { ["acme"] = ["staff"], ["sales"] = ["viewer"] }))!;
+        Assert.Contains("Staff only", staff);
+        Assert.Contains("<th", staff);
+        Assert.DoesNotContain("home-dashboard", staff);   // the dashboard wants `lead`, which she holds nowhere
+
+        var lead = HomeViewHtml.Render(store, portal, PersonWith(new Dictionary<string, string[]> { ["sales"] = ["lead"] }))!;
+        Assert.Contains("home-dashboard", lead);           // a role on the dashboard's own app counts for the dashboard
+        Assert.DoesNotContain("Staff only", lead);
+    }
+
+    [Fact]
+    public void An_image_is_a_file_of_the_portal_and_a_table_is_encoded_text()
+    {
+        var portal = Publish("schemaVersion: 1\nblocks:\n  - image: {file: assets/banner.png, alt: 'A <b>banner</b>', width: 300}\n  - table:\n      columns: ['<i>Team</i>']\n      rows: [['<script>x</script>']]\n", Portal2, new Dictionary<string, byte[]> { ["assets/banner.png"] = [1, 2, 3] });
+        var html = HomeViewHtml.Render(store, portal, Person("sales"))!;
+        Assert.Contains("src=\"/apps/acme/_app/assets/banner.png\"", html);
+        Assert.Contains("alt=\"A &lt;b&gt;banner&lt;/b&gt;\"", html);
+        Assert.Contains("width:300px", html);
+        Assert.Contains("<th style=\"text-align:left;border-bottom:1px solid #8886;padding:4px 12px 4px 0\">&lt;i&gt;Team&lt;/i&gt;</th>", html);
+        Assert.Contains("&lt;script&gt;x&lt;/script&gt;", html);
+        Assert.DoesNotContain("<script", html);
+    }
+
+    [Fact]
+    public void A_portal_whose_image_is_missing_or_whose_role_is_unknown_is_refused_at_publication()
+    {
+        var missing = Assert.Throws<AppInstanceException>(() => Publish("schemaVersion: 1\nblocks:\n  - image: {file: assets/gone.png, alt: x}\n", Portal2));
+        Assert.Contains("assets/gone.png", missing.Message);
+        var unknown = Assert.Throws<AppInstanceException>(() => Publish("schemaVersion: 1\nblocks:\n  - text: a\n    roles: [ghost]\n", Portal2));
+        Assert.Contains("ghost", unknown.Message);
     }
 
     [Fact]

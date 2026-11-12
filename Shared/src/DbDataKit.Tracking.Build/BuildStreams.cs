@@ -97,6 +97,37 @@ public static class BuildStreams
         return Encoding.UTF8.GetString(buffer.ToArray());
     }
 
+    /// <summary>A document from the columns by name (a column not given is null): the row an insert writes, as the follower would copy it.</summary>
+    public static string Document(BuildStream stream, IReadOnlyDictionary<string, object?> columns) =>
+        Document(stream, [.. stream.DocumentColumns.Select(c => columns.GetValueOrDefault(c))]);
+
+    /// <summary>The document with the columns in <paramref name="changes"/> replaced, every other column as it was (the row after an update): property order and the other values are copied unchanged.</summary>
+    public static string Merge(BuildStream stream, string document, IReadOnlyDictionary<string, object?> changes)
+    {
+        var table = TrackingSchema.Table(stream.Table);
+        using var parsed = JsonDocument.Parse(document);
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            foreach (var name in stream.DocumentColumns)
+            {
+                writer.WritePropertyName(name);
+                if (changes.TryGetValue(name, out var value)) Write(writer, table.Columns.First(c => c.Name == name).Type, value);
+                else if (parsed.RootElement.TryGetProperty(name, out var old)) old.WriteTo(writer);
+                else writer.WriteNullValue();
+            }
+
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.ToArray());
+    }
+
+    /// <summary>The row key of a row given by column names: the key columns of the stream, each as <see cref="KeyPart"/>, joined with <c>|</c>.</summary>
+    public static string KeyOf(BuildStream stream, IReadOnlyDictionary<string, object?> columns) =>
+        string.Join('|', stream.KeyColumns.Select(k => KeyPart(stream, k, columns.GetValueOrDefault(k))));
+
     /// <summary>A document of a snapshot row (<c>object_info</c>, <c>metadata_dependency</c>): the columns are given by name, in the table's order.</summary>
     public static string SnapshotDocument(string table, IReadOnlyDictionary<string, object?> values)
     {

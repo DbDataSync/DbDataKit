@@ -51,6 +51,9 @@ public sealed class NoServingCache : IServingCachePolicy
 /// <summary>What the cache counts, for the console (24a UC16).</summary>
 public sealed record ServingCacheStats(long Hits, long Misses, int Entries, long Bytes, long Evictions, long Cleared);
 
+/// <summary>What the cache counts for one dataset (as <see cref="ServingCachePlan.Datasets"/> names it), for the console (24a UC16): the entries that read it, their bytes, and the hits and misses of requests that read it.</summary>
+public sealed record ServingCacheDatasetStats(string Dataset, int Entries, long Bytes, long Hits, long Misses);
+
 /// <summary>A stored answer: the Arrow IPC stream of its batches and where it came from.</summary>
 public sealed record ServingCachedAnswer(byte[] Ipc, ServingProvenance Provenance);
 
@@ -76,6 +79,12 @@ public interface IServingCache
     int Clear();
 
     ServingCacheStats Stats { get; }
+
+    /// <summary>As <see cref="TryGet(string, out ServingCachedAnswer)"/>, naming the datasets the request reads so a miss is counted for them too.</summary>
+    bool TryGet(string key, IReadOnlyList<string>? datasets, out ServingCachedAnswer answer) => TryGet(key, out answer);
+
+    /// <summary>Entries, bytes, hits and misses by dataset; empty for a cache that does not count them.</summary>
+    IReadOnlyList<ServingCacheDatasetStats> DatasetStats => [];
 }
 
 /// <summary>Sizes of the in-memory cache (24a UC12: in memory per instance, with a size bound).</summary>
@@ -96,6 +105,9 @@ public sealed class MemoryServingCache(MemoryServingCacheOptions? options = null
     }
 
     private readonly MemoryServingCacheOptions _options = options ?? new();
+
+    /// <summary>The bounds this cache runs on.</summary>
+    public MemoryServingCacheOptions Options => _options;
     private readonly TimeProvider _time = time ?? TimeProvider.System;
     private readonly object _gate = new();
     private readonly Dictionary<string, LinkedListNode<Entry>> _byKey = new(StringComparer.Ordinal);
@@ -103,10 +115,16 @@ public sealed class MemoryServingCache(MemoryServingCacheOptions? options = null
     private long _bytes;
     private long _epoch;
     private long _hits, _misses, _evictions, _cleared;
+    private readonly Dictionary<string, (long Hits, long Misses)> _byDataset = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The name an entry that cannot say what it reads is counted under.</summary>
+    public const string Unscoped = "(unscoped)";
 
     public long Epoch => Interlocked.Read(ref _epoch);
 
-    public bool TryGet(string key, out ServingCachedAnswer answer)
+    public bool TryGet(string key, out ServingCachedAnswer answer) => TryGet(key, null, out answer);
+
+    public bool TryGet(string key, IReadOnlyList<string>? datasets, out ServingCachedAnswer answer)
     {
         lock (_gate)
         {
@@ -117,6 +135,7 @@ public sealed class MemoryServingCache(MemoryServingCacheOptions? options = null
                     _recent.Remove(node);
                     _recent.AddFirst(node);
                     _hits++;
+                    Count(node.Value.Datasets ?? datasets, hit: true);
                     answer = node.Value.Answer;
                     return true;
                 }
@@ -125,6 +144,7 @@ public sealed class MemoryServingCache(MemoryServingCacheOptions? options = null
             }
 
             _misses++;
+            Count(datasets, hit: false);
             answer = null!;
             return false;
         }
@@ -181,6 +201,39 @@ public sealed class MemoryServingCache(MemoryServingCacheOptions? options = null
         get
         {
             lock (_gate) return new ServingCacheStats(_hits, _misses, _byKey.Count, _bytes, _evictions, _cleared);
+        }
+    }
+
+    private void Count(IReadOnlyList<string>? datasets, bool hit)
+    {
+        foreach (var dataset in datasets is { Count: > 0 } ? datasets : [Unscoped])
+        {
+            _byDataset.TryGetValue(dataset, out var counts);
+            _byDataset[dataset] = hit ? (counts.Hits + 1, counts.Misses) : (counts.Hits, counts.Misses + 1);
+        }
+    }
+
+    public IReadOnlyList<ServingCacheDatasetStats> DatasetStats
+    {
+        get
+        {
+            lock (_gate)
+            {
+                var entries = new Dictionary<string, (int Entries, long Bytes)>(StringComparer.OrdinalIgnoreCase);
+                foreach (var entry in _recent)
+                    foreach (var dataset in entry.Datasets ?? [Unscoped])
+                    {
+                        entries.TryGetValue(dataset, out var known);
+                        entries[dataset] = (known.Entries + 1, known.Bytes + entry.Size);
+                    }
+
+                return [.. entries.Keys.Union(_byDataset.Keys, StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).Select(name =>
+                {
+                    entries.TryGetValue(name, out var e);
+                    _byDataset.TryGetValue(name, out var c);
+                    return new ServingCacheDatasetStats(name, e.Entries, e.Bytes, c.Hits, c.Misses);
+                })];
+            }
         }
     }
 
@@ -270,7 +323,7 @@ public sealed class CachingServingQueries(IServingQueries inner, IServingCache c
     {
         if (policy.PlanFor(context, request) is not { } plan) return await inner.RunAsync(context, request, cancellationToken).ConfigureAwait(false);
         var key = ServingCacheKey.Build(context, request, plan);
-        if (cache.TryGet(key, out var hit)) return new HitAnswer(hit);
+        if (cache.TryGet(key, plan.Datasets, out var hit)) return new HitAnswer(hit);
         var epoch = cache.Epoch;
         var answer = await inner.RunAsync(context, request, cancellationToken).ConfigureAwait(false);
         return new TeeAnswer(answer, cache, key, plan, epoch);

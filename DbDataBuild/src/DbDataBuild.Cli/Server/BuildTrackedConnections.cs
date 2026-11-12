@@ -15,7 +15,16 @@ internal static class BuildTrackedConnections
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
 
-    public static IEnumerable<(string Connection, TrackingScope Scope, LoginSettings Read)> Of(string root, string? only, Func<string, string?> env)
+    /// <summary>True when the project's tracking is state-first (plan 28c E16): its runs write the records to the state before the target, so no follower copies them.</summary>
+    public static bool StateFirst(string root, Func<string, string?> env)
+    {
+        if (!Directory.Exists(root)) return false;
+        try { return ProjectConfigLoader.LoadFromProject(root, new List<DbDataBuild.Core.Diagnostic>()) is { } config && TrackingJournals.IsStateFirst(config, env); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+    }
+
+    /// <param name="includeStateFirst">A project whose tracking is state-first (plan 28c E16) writes its records to the state itself, so no follower copies it; the check before a switch of the primary compares the two sides anyway.</param>
+    public static IEnumerable<(string Connection, TrackingScope Scope, LoginSettings Read)> Of(string root, string? only, Func<string, string?> env, bool includeStateFirst = false)
     {
         if (!Directory.Exists(root)) yield break;
         var diagnostics = new List<DbDataBuild.Core.Diagnostic>();
@@ -23,6 +32,7 @@ internal static class BuildTrackedConnections
         try { config = ProjectConfigLoader.LoadFromProject(root, diagnostics); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { yield break; }
         if (config is null) yield break;
+        if (!includeStateFirst && TrackingJournals.IsStateFirst(config, env)) yield break;
         foreach (var connection in config.Connections.Values.OrderBy(c => c.Name, StringComparer.Ordinal))
         {
             if (only is not null && connection.Name != only) continue;

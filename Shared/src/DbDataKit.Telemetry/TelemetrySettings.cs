@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
+using DbDataKit.Config.Yaml;
 
 namespace DbDataKit.Telemetry;
 
@@ -21,6 +23,31 @@ public sealed record TelemetrySettings(bool Enabled = false, Uri? Endpoint = nul
     public static TelemetrySettings Off { get; } = new();
 
     private static readonly string[] Keys = ["enabled", "endpoint", "protocol", "sampling_ratio", "instance_id"];
+
+    public const string Section = "telemetry";
+
+    /// <summary>The <c>telemetry:</c> section of a settings file (<c>server.yaml</c>); <see cref="Off"/> when the file or the section is absent. A file that is not YAML, a section that is not a set of keys and an unknown key fail naming the file.</summary>
+    public static TelemetrySettings Load(string path)
+    {
+        if (!File.Exists(path)) return Off;
+        var diagnostics = new List<ConfigDiagnostic>();
+        var root = StrictYamlReader.Read(File.ReadAllText(path), path, diagnostics) as YamlMapping;
+        if (diagnostics.FirstOrDefault(d => d.Severity == ConfigSeverity.Error) is { } error)
+            throw new TelemetrySettingsException($"{path}: the file is not valid YAML ({error.Message}, line {error.Line}).");
+        if (root?.Get(Section) is not { } node || node is YamlScalar { Value.Length: 0, Quoted: false }) return Off;
+        if (node is not YamlMapping map) throw new TelemetrySettingsException($"{path}: `{Section}` must be a set of keys ({string.Join(", ", Keys)}).");
+        var json = new JsonObject();
+        foreach (var entry in map.Entries)
+        {
+            if (entry.Value is not YamlScalar scalar) throw new TelemetrySettingsException($"{path}: telemetry.{entry.Key.Value} must be a single value.");
+            json[entry.Key.Value] = scalar.Quoted ? scalar.Value
+                : bool.TryParse(scalar.Value, out var b) ? b
+                : double.TryParse(scalar.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d
+                : scalar.Value;
+        }
+
+        return Read(json, path);
+    }
 
     /// <summary>Reads the section; <paramref name="source"/> is the file it came from, named in every refusal. A null section is <see cref="Off"/>.</summary>
     public static TelemetrySettings Read(JsonObject? section, string source)

@@ -1,9 +1,10 @@
 import { put, request, type TrustApi, type TrustState } from '@dbdatakit/shell'
 import type { RenderedViewDocument } from '@dbdatakit/visuals'
 import type { InstanceRequest, NavigationRequest, PublishBody } from './appEditors'
+import type { CacheOverview } from './cacheTypes'
 import type { ReplayResult, RunDetail, RunResult, RunRow, SavedQueryRow, SavedQueryVersionRow } from './runTypes'
 import type {
-  AdoptAnswer, PruneAnswer, SemanticCatalogView, EntityModelDetail, EntityModelRow, SemanticModelDetail, SemanticModelRow, AppApprovals, AppCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SecretWritten, SecretsList, ServerSettings, SettingsCheck, SettingsEdit, SettingsWritten, SessionRow, TestResult, WriteDataSourceResult,
+  AdoptAnswer, PruneAnswer, SemanticCatalogView, EntityModelDetail, EntityModelRow, SemanticModelDetail, SemanticModelRow, AppApprovals, AppCheck, AppDomainCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SecretWritten, SecretsList, ServerSettings, SettingsCheck, SettingsEdit, SettingsWritten, SessionRow, TestResult, WriteDataSourceResult,
 } from './types'
 
 const v1 = '/api/v1'
@@ -118,6 +119,8 @@ export const gatewayApi = {
     rollback: (app: string, to?: number) => request<{ name: string; version: number }>(`${v1}/apps/${enc(app)}/rollback`, { method: 'POST', body: JSON.stringify(to === undefined ? {} : { to }) }),
     /** Makes or changes an instance. The Gateway replaces the whole instance, so a call that changes one thing (the pin) sends the rest back unchanged (`pinRequest`). */
     saveInstance: (name: string, body: InstanceRequest) => put<{ name: string; app: string; version: number }>(`${v1}/app-instances/${enc(name)}`, body),
+    /** Verify of a custom domain (AP08): whether its DNS challenge record exists or the name resolves here, and the record to create. Changes nothing. */
+    verifyAddress: (name: string, host: string) => request<AppDomainCheck>(`${v1}/app-instances/${enc(name)}/verify-address`, { method: 'POST', body: JSON.stringify({ host }) }),
     removeInstance: (name: string) => request<{ name: string; removed: boolean }>(`${v1}/app-instances/${enc(name)}`, { method: 'DELETE' }),
     removeApp: (name: string) => request<{ name: string; removed: boolean }>(`${v1}/apps/${enc(name)}`, { method: 'DELETE' }),
     /** Approves one published version, for the outside origins chosen (`connect=https://api.x.com,img=...`: only origins the manifest asks for; none by default). */
@@ -147,6 +150,11 @@ export const gatewayApi = {
     check: (text: string) => request<SettingsCheck>(`${v1}/config/server.yaml/check`, { method: 'POST', body: JSON.stringify({ text }) }),
     edit: (text: string, change: SettingsEdit) => request<{ text: string }>(`${v1}/config/server.yaml/edit`, { method: 'POST', body: JSON.stringify({ text, ...change }) }).then((r) => r.text),
     write: (text: string, expectedVersion: string | null, note: string) => put<SettingsWritten>(`${v1}/config/server.yaml`, { text, expected_version: expectedVersion, note: note || undefined }),
+  },
+  /** The result cache of this instance (plan 24a UC16): read for a viewer; a clear (one dataset, or all) is an administrator's. */
+  cache: {
+    read: () => request<CacheOverview>(`${v1}/cache`),
+    clear: (body: { dataset: string } | { all: true }) => request<{ cleared: number }>(`${v1}/cache/invalidate`, { method: 'POST', body: JSON.stringify(body) }),
   },
   history: {
     list: () => request<{ commits: CommitRow[] }>(`${v1}/config/history`).then((r) => r.commits),

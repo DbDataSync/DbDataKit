@@ -93,7 +93,7 @@ public static class TrackingStore
         string C(string n) => Quote(scope.Engine, n);
         var text = $"INSERT INTO {C(scope.SchemaName)}.{C("schema_version")} ({C("connection")}, {C("object_name")}, {C("shape_hash")}, {C("physical_hash")}, {C("first_seen_utc")}, {C("source")}, {C("plan_id")}, {C("git_commit")}) " +
                    "VALUES (@connection, @object_name, @shape_hash, @physical_hash, @first_seen_utc, @source, @plan_id, @git_commit)";
-        return gate.ExecuteAsync(GateStatement.Tracking(stepId, text,
+        return new JournaledGate(gate, scope, "schema_version").ExecuteAsync(GateStatement.Tracking(stepId, text,
         [
             new("connection", DbType.String, scope.Connection), new("object_name", DbType.String, objectName), new("shape_hash", DbType.AnsiStringFixedLength, shapeHash), new("physical_hash", DbType.AnsiStringFixedLength, physicalHash),
             new("first_seen_utc", DbType.DateTime2, TrackingClock.NextUtc()), new("source", DbType.AnsiString, source), new("plan_id", DbType.AnsiString, planId), new("git_commit", DbType.AnsiString, gitCommit),
@@ -128,7 +128,7 @@ public static partial class AuditLog
         string c(string n) => C(scope.Engine, n);
         var text = $"INSERT INTO {T(scope, "migration_log")} ({c("connection")}, {c("plan_id")}, {c("plan_hash")}, {c("plan_text")}, {c("git_commit")}, {c("applied_by")}, {c("applied_utc")}, {c("hash_before")}, {c("hash_after")}, {c("status")}, {c("lane")}, {c("project_hash")}, {c("refresh_plan")}, {c("selection")}) " +
                    "VALUES (@connection, @plan_id, @plan_hash, @plan_text, @git_commit, @applied_by, @applied_utc, @hash_before, @hash_after, @status, @lane, @project_hash, @refresh_plan, @selection)";
-        return gate.ExecuteAsync(GateStatement.Tracking(stepId, text,
+        return new JournaledGate(gate, scope, "migration_log").ExecuteAsync(GateStatement.Tracking(stepId, text,
         [
             Connection(scope), A("plan_id", planId), Fixed("plan_hash", planHash), S("plan_text", planText), A("git_commit", gitCommit), S("applied_by", appliedBy),
             new("applied_utc", DbType.DateTime2, TrackingClock.NextUtc()), Fixed("hash_before", hashBefore), Fixed("hash_after", hashAfter), A("status", status), A("lane", lane), Fixed("project_hash", projectHash), A("refresh_plan", refreshPlan), S("selection", selection),
@@ -140,7 +140,7 @@ public static partial class AuditLog
     {
         string c(string n) => C(scope.Engine, n);
         var text = $"INSERT INTO {T(scope, "plan_store")} ({c("connection")}, {c("plan_id")}, {c("plan_hash")}, {c("plan_text")}, {c("stored_by")}, {c("stored_utc")}) VALUES (@connection, @plan_id, @plan_hash, @plan_text, @stored_by, @stored_utc)";
-        return gate.ExecuteAsync(GateStatement.Tracking(stepId, text,
+        return new JournaledGate(gate, scope, "plan_store").ExecuteAsync(GateStatement.Tracking(stepId, text,
         [
             Connection(scope), A("plan_id", planId), Fixed("plan_hash", planHash), S("plan_text", planText), S("stored_by", storedBy), new("stored_utc", DbType.DateTime2, TrackingClock.NextUtc()),
         ]), ct);
@@ -195,7 +195,7 @@ public static partial class AuditLog
         string c(string n) => C(scope.Engine, n);
         var text = $"INSERT INTO {T(scope, "ddl_log")} ({c("connection")}, {c("ddl_id")}, {c("object_name")}, {c("statement_hash")}, {c("statement_text")}, {c("hash_before")}, {c("hash_after")}, {c("invoker")}, {c("plan_id")}, {c("git_commit")}, {c("executed_utc")}, {c("status")}) " +
                    "VALUES (@connection, @ddl_id, @object_name, @statement_hash, @statement_text, @hash_before, NULL, @invoker, @plan_id, @git_commit, @executed_utc, 'started')";
-        return gate.ExecuteAsync(GateStatement.Tracking(stepId, text,
+        return new JournaledGate(gate, scope, "ddl_log", literals: new Dictionary<string, object?> { ["status"] = "started" }).ExecuteAsync(GateStatement.Tracking(stepId, text,
         [
             Connection(scope), new("ddl_id", DbType.Guid, ddlId), S("object_name", objectName), Fixed("statement_hash", statementHash), S("statement_text", statementText), Fixed("hash_before", hashBefore),
             S("invoker", invoker), A("plan_id", planId), A("git_commit", gitCommit), new("executed_utc", DbType.DateTime2, TrackingClock.NextUtc()),
@@ -206,7 +206,7 @@ public static partial class AuditLog
     {
         string c(string n) => C(scope.Engine, n);
         var text = $"UPDATE {T(scope, "ddl_log")} SET {c("status")} = @status, {c("hash_after")} = @hash_after WHERE {c("ddl_id")} = @ddl_id";
-        return gate.ExecuteAsync(GateStatement.Tracking(stepId, text, [A("status", status), Fixed("hash_after", hashAfter), new("ddl_id", DbType.Guid, ddlId)]), ct);
+        return new JournaledGate(gate, scope, "ddl_log", ["ddl_id"]).ExecuteAsync(GateStatement.Tracking(stepId, text, [A("status", status), Fixed("hash_after", hashAfter), new("ddl_id", DbType.Guid, ddlId)]), ct);
     }
 
     public static Task BeginRunAsync(MutationGate gate, TrackingScope scope, string stepId, Guid runId, string model, string operation, string planId, string? gitCommit,
@@ -217,7 +217,7 @@ public static partial class AuditLog
                    $"{c("definition_hash")}, {c("shape_hash_start")}, {c("shape_hash_end")}, {c("load_name")}, {c("load_file_hash")}, {c("resolver_file_hash")}, {c("parameters")}, {c("watermark_used")}, {c("started_utc")}, {c("ended_utc")}, " +
                    $"{c("membership")}, {c("load_plan_hash")}, {c("inputs")}, {c("attempt")}, {c("duration_ms")}) " +
                    "VALUES (@connection, @run_id, @step_id, @model, @operation, NULL, 'started', @plan_id, @git_commit, @definition_hash, @shape_start, NULL, @load_name, @load_file_hash, @resolver_file_hash, @parameters, @watermark_used, @started_utc, NULL, @membership, @load_plan_hash, @inputs, @attempt, NULL)";
-        return gate.ExecuteAsync(GateStatement.Tracking(stepId, text,
+        return new JournaledGate(gate, scope, "run_log", renames: new Dictionary<string, string> { ["shape_start"] = "shape_hash_start" }, literals: new Dictionary<string, object?> { ["status"] = "started" }).ExecuteAsync(GateStatement.Tracking(stepId, text,
         [
             Connection(scope), new("run_id", DbType.Guid, runId), A("step_id", stepId), S("model", model), A("operation", operation), A("plan_id", planId), A("git_commit", gitCommit), Fixed("definition_hash", definitionHash),
             Fixed("shape_start", shapeStart), A("load_name", loadName), Fixed("load_file_hash", loadFileHash), Fixed("resolver_file_hash", resolverFileHash), S("parameters", parameters),
@@ -230,7 +230,7 @@ public static partial class AuditLog
     {
         string c(string n) => C(scope.Engine, n);
         var text = $"UPDATE {T(scope, "run_log")} SET {c("status")} = @status, {c("rows_affected")} = @rows, {c("shape_hash_end")} = @shape_end, {c("ended_utc")} = @ended_utc, {c("duration_ms")} = @duration_ms WHERE {c("run_id")} = @run_id AND {c("step_id")} = @step_id";
-        return gate.ExecuteAsync(GateStatement.Tracking(stepId, text,
+        return new JournaledGate(gate, scope, "run_log", ["run_id", "step_id"], new Dictionary<string, string> { ["rows"] = "rows_affected", ["shape_end"] = "shape_hash_end" }).ExecuteAsync(GateStatement.Tracking(stepId, text,
             [A("status", status), new("rows", DbType.Int64, rows), Fixed("shape_end", shapeEnd), new("ended_utc", DbType.DateTime2, TrackingClock.NextUtc()), new("duration_ms", DbType.Int64, durationMs), new("run_id", DbType.Guid, runId), A("step_id", stepId)]), ct);
     }
 
@@ -246,7 +246,7 @@ public static partial class AuditLog
                    $"{c("membership")}, {c("load_plan_hash")}, {c("inputs")}, {c("attempt")}, {c("duration_ms")}) " +
                    "VALUES (@connection, @run_id, @step_id, @model, @operation, NULL, @status, @plan_id, @git_commit, @definition_hash, NULL, NULL, @load_name, NULL, NULL, NULL, NULL, @started_utc, @ended_utc, @membership, @load_plan_hash, @inputs, NULL, NULL)";
         var now = TrackingClock.NextUtc();
-        return gate.ExecuteAsync(GateStatement.Tracking(stepId, text,
+        return new JournaledGate(gate, scope, "run_log").ExecuteAsync(GateStatement.Tracking(stepId, text,
         [
             Connection(scope), new("run_id", DbType.Guid, runId), A("step_id", stepId), S("model", model), A("operation", loadName), A("status", status), A("plan_id", planId), A("git_commit", gitCommit), Fixed("definition_hash", definitionHash),
             A("load_name", loadName), new("started_utc", DbType.DateTime2, now), new("ended_utc", DbType.DateTime2, now), A("membership", refresh.Membership), Fixed("load_plan_hash", refresh.LoadPlanHash), S("inputs", refresh.InputsJson),
@@ -258,7 +258,7 @@ public static partial class AuditLog
     {
         string c(string n) => C(scope.Engine, n);
         var text = $"INSERT INTO {T(scope, "refresh_plan_member")} ({c("connection")}, {c("plan_id")}, {c("position")}, {c("membership")}, {c("model")}, {c("load_name")}, {c("load_plan_hash")}, {c("selected")}) VALUES (@connection, @plan_id, @position, @membership, @model, @load_name, @load_plan_hash, @selected)";
-        return gate.ExecuteAsync(GateStatement.Tracking(stepId, text,
+        return new JournaledGate(gate, scope, "refresh_plan_member").ExecuteAsync(GateStatement.Tracking(stepId, text,
             [Connection(scope), A("plan_id", planId), new("position", DbType.Int32, position), A("membership", membership), S("model", model), A("load_name", loadName), Fixed("load_plan_hash", loadPlanHash), A("selected", selected ? "selected" : "not selected")]), ct);
     }
 
@@ -267,7 +267,7 @@ public static partial class AuditLog
         string c(string n) => C(scope.Engine, n);
         var text = $"INSERT INTO {T(scope, "operation_interval")} ({c("connection")}, {c("interval_id")}, {c("model")}, {c("run_id")}, {c("range_start")}, {c("range_end")}, {c("shape_hash")}, {c("operation")}, {c("recorded_utc")}) " +
                    "VALUES (@connection, @interval_id, @model, @run_id, @range_start, @range_end, @shape_hash, @operation, @recorded_utc)";
-        return gate.ExecuteAsync(GateStatement.Tracking(stepId, text,
+        return new JournaledGate(gate, scope, "operation_interval").ExecuteAsync(GateStatement.Tracking(stepId, text,
             [Connection(scope), new("interval_id", DbType.Guid, Guid.NewGuid()), S("model", model), new("run_id", DbType.Guid, runId), A("range_start", rangeStart), A("range_end", rangeEnd), Fixed("shape_hash", shapeHash), A("operation", operation), new("recorded_utc", DbType.DateTime2, TrackingClock.NextUtc())]), ct);
     }
 
@@ -278,7 +278,7 @@ public static partial class AuditLog
         var now = TrackingClock.NextUtc();
         var text = $"INSERT INTO {T(scope, "block_log")} ({c("connection")}, {c("block_id")}, {c("model")}, {c("code")}, {c("detail")}, {c("created_utc")}, {c("ack_by")}, {c("ack_reason")}, {c("ack_utc")}) " +
                    "VALUES (@connection, @block_id, @model, @code, @detail, @created_utc, @ack_by, @ack_reason, @ack_utc)";
-        return gate.ExecuteAsync(GateStatement.Tracking(stepId, text,
+        return new JournaledGate(gate, scope, "block_log").ExecuteAsync(GateStatement.Tracking(stepId, text,
         [
             Connection(scope), new("block_id", DbType.Guid, Guid.NewGuid()), S("model", model), A("code", code), S("detail", detail), new("created_utc", DbType.DateTime2, now), S("ack_by", by), S("ack_reason", reason),
             new("ack_utc", DbType.DateTime2, now),

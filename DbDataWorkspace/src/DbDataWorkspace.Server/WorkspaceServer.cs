@@ -47,6 +47,7 @@ public static class WorkspaceServer
         {
             host.Product = WorkspaceSettings.Product;
             host.ServiceName = WorkspaceService.RegistrationName;
+            host.Telemetry = DbDataKit.Telemetry.TelemetrySettings.Load(settings.ServerYaml);   // the telemetry: section; off unless it says enabled (plan 22a GP28)
             host.Version = Version;
         });
         var address = settings.Listen.HostNameType == UriHostNameType.Dns && settings.Listen.Host != "localhost"

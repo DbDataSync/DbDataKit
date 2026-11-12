@@ -15,6 +15,7 @@ const rail: RailItem[] = [
   { to: '/models', title: 'Models', testId: 'rail-models', icon: icon(<><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" /><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5" /></>) },
   { to: '/saved-queries', title: 'Saved queries', testId: 'rail-saved-queries', icon: icon(<><path d="M6 3h9l3 3v15H6z" /><path d="M9 12h6M9 16h6M9 8h3" /></>) },
   { to: '/trust', title: 'Publishers', testId: 'rail-trust', icon: icon(<><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z" /><path d="M9 12l2 2 4-4" /></>) },
+  { to: '/cache', title: 'Result cache', testId: 'rail-cache', icon: icon(<><ellipse cx="12" cy="6" rx="7" ry="2.5" /><path d="M5 6v5c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6" /><path d="M12 14v6M9 17l3 3 3-3" /></>) },
   { to: '/tls', title: 'Certificate', testId: 'rail-tls', icon: icon(<><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 018 0v3" /></>) },
   { to: '/activity', title: 'Activity', testId: 'rail-activity', icon: icon(<><path d="M4 19V9M10 19V5M16 19v-7M22 19H2" /></>) },
   { to: '/settings', title: 'Server settings', testId: 'rail-settings', icon: icon(<><path d="M4 7h10M18 7h2M4 17h2M10 17h10" /><circle cx="16" cy="7" r="2" /><circle cx="8" cy="17" r="2" /></>) },

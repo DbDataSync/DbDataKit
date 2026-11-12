@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DbDataKit.Runner;
 using DbDataKit.Runner.Kit;
+using DbDataKit.Tracking.Build;
 
 namespace DbDataBuild.Cli.Runner;
 
@@ -74,6 +75,8 @@ public sealed class RefreshJob : RunnerJob<RefreshInput, NoProgress, NoSlots>
     {
         var args = new[] { "connection", "refresh", Input.Connection, Input.Plan, "--project", project, "--format", "json" };
         Status($"refresh {Input.Connection} {Input.Plan}");
+        // a project whose tracking is state-first writes each record to the runner's state, through the protocol, before it writes the target (plan 28c E16)
+        using var journalState = TrackingJournalSource.Use(new RemoteBuildTrackingSink(Tracking));
         var (exit, document) = await Task.Run(() => Invoke(args, Env), ct).ConfigureAwait(false);
         using var _ = document;
 

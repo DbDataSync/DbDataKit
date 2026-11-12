@@ -25,12 +25,32 @@ public static partial class HomeViewHtml
         foreach (var path in spec.Home)
         {
             if (!portal.Package.Files.TryGetValue(path, out var bytes)) continue;
-            if (HomeViewLoader.Load(Encoding.UTF8.GetString(bytes), path, mounted) is not { Ok: true, View: { } view }) continue;
+            if (HomeViewLoader.Load(Encoding.UTF8.GetString(bytes), path, mounted, portal.Package.Files.ContainsKey) is not { Ok: true, View: { } view }) continue;
             foreach (var block in view.Blocks)
             {
-                drew = true;
+                if (!MayBeSeen(block, portal, session)) continue;
                 switch (block)
                 {
+                    case HomeDashboard dashboard:
+                        // the viewer's own access decides: a person with no role on the app has no dashboard, as they have no tile
+                        if (session.RolesOn(dashboard.App).Count == 0 || instances.Resolve(dashboard.App) is not { } member) continue;
+                        html.Append(DashboardFrame(dashboard, member, spec));
+                        break;
+                    case HomeImage image:
+                        html.Append($"<p><img alt=\"{WebUtility.HtmlEncode(image.Alt)}\" src=\"{WebUtility.HtmlEncode(AppSite.BasePath + Uri.EscapeDataString(portal.Instance.Name) + "/" + AppSite.BundleFolder + string.Join('/', image.File.Split('/').Select(Uri.EscapeDataString)))}\" style=\"max-width:100%;height:auto{(image.Width is { } w ? $";width:{w}px" : "")}\"></p>");
+                        break;
+                    case HomeTable table:
+                        html.Append("<table class=\"home-table\" style=\"border-collapse:collapse;margin:8px 0\"><thead><tr>");
+                        foreach (var column in table.Columns) html.Append("<th style=\"text-align:left;border-bottom:1px solid #8886;padding:4px 12px 4px 0\">").Append(WebUtility.HtmlEncode(column)).Append("</th>");
+                        html.Append("</tr></thead><tbody>");
+                        foreach (var row in table.Rows)
+                        {
+                            html.Append("<tr>");
+                            foreach (var cell in row) html.Append("<td style=\"padding:4px 12px 4px 0\">").Append(WebUtility.HtmlEncode(cell)).Append("</td>");
+                            html.Append("</tr>");
+                        }
+                        html.Append("</tbody></table>");
+                        break;
                     case HomeText text: html.Append(Markdown(text.Markdown)); break;
                     case HomeLinks links:
                         html.Append("<ul class=\"links\">");
@@ -45,10 +65,24 @@ public static partial class HomeViewHtml
                         html.Append(AppShell.TilesHtml(shown));
                         break;
                 }
+                drew = true;
             }
         }
         html.Append("</main>");
         return drew ? html.ToString() : null;
+    }
+
+    /// <summary>A block with <c>roles</c> is seen by a person who holds one of them on the portal, or, for a dashboard, on its app; a block without them by everyone the home is open to.</summary>
+    private static bool MayBeSeen(HomeBlock block, ResolvedInstance portal, AppSession session) =>
+        block.Roles is not { Count: > 0 } roles
+        || roles.Any(role => session.RolesOn(portal.Instance.Name).Contains(role) || (block is HomeDashboard d && session.RolesOn(d.App).Contains(role)));
+
+    /// <summary>A dashboard block: the mounted app as a sandboxed frame of its own (the same sandbox and broker as a slot, its token for its own instance only, the portal's theme), opened at the named view.</summary>
+    private static string DashboardFrame(HomeDashboard block, ResolvedInstance member, PortalSpec spec)
+    {
+        var title = member.Instance.Title ?? member.Manifest.Title ?? member.Instance.Name;
+        var route = block.View is null ? "" : $" data-route=\"{WebUtility.HtmlEncode("/" + block.View)}\"";
+        return $"<iframe class=\"slot home-dashboard\" data-instance=\"{WebUtility.HtmlEncode(block.App)}\"{route} data-theme=\"{WebUtility.HtmlEncode(PortalChrome.ThemeJson(spec.Theme))}\" title=\"{WebUtility.HtmlEncode(title)}\" sandbox=\"allow-scripts allow-forms allow-popups\" style=\"height:{block.Height}px;width:100%;flex:none;border:1px solid #8884;border-radius:8px;margin:8px 0\" src=\"{WebUtility.HtmlEncode(AppSite.BasePath + Uri.EscapeDataString(block.App) + "/" + AppSite.BundleFolder)}\"></iframe>";
     }
 
     [GeneratedRegex(@"`(?<code>[^`]+)`|\*\*(?<bold>[^*]+)\*\*|\*(?<italic>[^*\s][^*]*)\*|\[(?<text>[^\]]*)\]\((?<href>[^)]*)\)", RegexOptions.CultureInvariant)]

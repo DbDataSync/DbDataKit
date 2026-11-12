@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { commonText, connectionOf, copyRows, keepStale, lagText, switchPrimary, type CopyRow, type Loaded, type TrackingDocument, type TrackingDivergence } from './tracking'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { commonText, connectionOf, copyRows, keepStale, lagText, switchPrimary, switchPrimaryOf, switchRefusal, type CopyRow, type Loaded, type TrackingDocument, type TrackingDivergence } from './tracking'
 import type { InstanceSummary } from './api'
 
 const server = (id: string, name: string, product: string): InstanceSummary => ({ id, name, url: 'https://x', product, version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null })
@@ -63,11 +63,55 @@ describe('switching the primary', () => {
     expect(switchPrimary({ ...base, open: [divergence()] }, nothing).message).toMatch(/open divergence \(run_log\)/)
   })
 
-  it('is refused with one side only, and in this release even when both are up, saying why', () => {
+  it('is refused with one side only', () => {
     expect(switchPrimary({ ...base, mode: 'target', primary: null }, nothing).message).toMatch(/one side only/)
-    const answer = switchPrimary(base, nothing)
-    expect(answer.done).toBe(false)
-    expect(answer.message).toMatch(/target first in this release/)
+  })
+
+  it('passes the checks made here when both sides are up and agree, and then asks the server', () => {
+    expect(switchRefusal(base, nothing)).toBeNull()
+  })
+
+  it('is sent to the package for a runner, whose primary is the project\'s', () => {
+    const [row] = copyRows(server('r1', 'Runner', 'dbdatarunner'), doc())
+    expect(switchRefusal(row, nothing)).toMatch(/package it runs/)
+  })
+
+  describe('asked of a Build server', () => {
+    afterEach(() => vi.unstubAllGlobals())
+    const answer = (status: number, body: unknown) => vi.fn(async () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
+
+    it('goes to the state when the server says it switched', async () => {
+      const fetcher = answer(200, { switched: true, mode: 'both', primary: 'state' })
+      vi.stubGlobal('fetch', fetcher)
+      const result = await switchPrimaryOf(build, base, nothing)
+      expect(result.done).toBe(true)
+      expect(result.message).toMatch(/state first and to the target second/)
+      const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit]
+      expect(url).toContain('/relay/b1/api/v1/tracking/primary')
+      expect(JSON.parse(String(init.body))).toEqual({ primary: 'state' })
+    })
+
+    it('goes back to the target from a state primary', async () => {
+      const fetcher = answer(200, { switched: true })
+      vi.stubGlobal('fetch', fetcher)
+      const result = await switchPrimaryOf(build, { ...base, primary: 'state' }, nothing)
+      expect(result.done).toBe(true)
+      expect(JSON.parse(String((fetcher.mock.calls[0] as unknown as [string, RequestInit])[1].body))).toEqual({ primary: 'target' })
+    })
+
+    it('says what the server refused with, and changes nothing', async () => {
+      vi.stubGlobal('fetch', answer(409, { switched: false, error: 'Not switched: the two sides could not be made level (the target does not answer).' }))
+      const result = await switchPrimaryOf(build, base, nothing)
+      expect(result).toEqual({ done: false, message: 'Not switched: the two sides could not be made level (the target does not answer).' })
+    })
+
+    it('does not ask the server while a check made here refuses', async () => {
+      const fetcher = answer(200, {})
+      vi.stubGlobal('fetch', fetcher)
+      const result = await switchPrimaryOf(build, { ...base, open: [divergence()] }, nothing)
+      expect(result.done).toBe(false)
+      expect(fetcher).not.toHaveBeenCalled()
+    })
   })
 })
 

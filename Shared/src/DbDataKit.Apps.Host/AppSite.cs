@@ -41,7 +41,9 @@ public sealed class AppSite(AppInstanceStore instances, Func<string, AppEgress>?
         var instance = instances.Resolve(instanceName, channel);
         if (instance is null) return Text(404, "No such app.");
         var entry = instance.Manifest.Entry;
-        if (entry is null) return instance.Manifest.Views.Count == 0 ? Text(404, "This app has no page.") : ViewsGet(instance, instanceName, subpath, hostOrigin);
+        // a portal is declared data and has no page of its own here, but its files (logo, favicon, the images of its home view) are served from its bundle (AP30)
+        var portalFile = entry is null && instance.Manifest.Kind == AppKind.Portal && Path.HasExtension(WebUtility.UrlDecode(subpath).Trim('/'));
+        if (entry is null && !portalFile) return instance.Manifest.Views.Count == 0 ? Text(404, "This app has no page.") : ViewsGet(instance, instanceName, subpath, hostOrigin);
 
         var path = WebUtility.UrlDecode(subpath).Trim('/');
         if (path.Length > 0 && !AppPackage.IsPlain(path)) return Text(400, "That is not a path inside the app.");
@@ -49,7 +51,7 @@ public sealed class AppSite(AppInstanceStore instances, Func<string, AppEgress>?
         var files = instance.Package.Files;
         var isFile = path.Length > 0 && Path.HasExtension(path);
         if (isFile && !files.ContainsKey(path)) return Text(404, "No such file.");
-        var name = isFile ? path : entry;
+        var name = isFile ? path : entry ?? "";
         if (!files.TryGetValue(name, out var bytes)) return Text(404, $"The package does not contain its entry '{entry}'.");
 
         var contentType = Types.GetValueOrDefault(Path.GetExtension(name), "application/octet-stream");

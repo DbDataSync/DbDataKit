@@ -71,6 +71,14 @@ internal static class GatewayConnectionFile
         if (composed is null) return;
         add($"{prefix}:ConnectionString", composed, At("connection_string") ?? At("connection_string_secret") ?? At("address") ?? At("auth") ?? At("engine"));
         if (At("timeouts", "command_s") is YamlScalar timeout) add($"{prefix}:CommandTimeoutSeconds", timeout.Value, timeout);
+        // the result cache (connection/2, plan 24a UC03, UC13): off unless the section says `enabled: true`, never part of a connection/1 file (the loader refused it above)
+        if (definition.Cache is { } cache)
+        {
+            var at = At("cache");
+            add($"{prefix}:Cache:Enabled", cache.Enabled ? "true" : "false", at);
+            add($"{prefix}:Cache:Ttl", cache.Ttl, At("cache", "ttl") ?? at);
+            add($"{prefix}:Cache:Scope", cache.Scope, At("cache", "scope") ?? at);
+        }
         // who may use the data source: the definition's `grants` (connection/2, plan 22a GP03), or in a file made by hand `extensions.gateway.groups` / `everyone`; never both, so the grants a definition names are the ones in force
         if (definition.Grants is { } grants)
         {

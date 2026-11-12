@@ -61,6 +61,7 @@ internal static class BuildServer
         {
             host.Product = "dbdatabuild";
             host.ServiceName = BuildService.RegistrationName;
+            host.Telemetry = DbDataKit.Telemetry.TelemetrySettings.Load(settings.ServerYaml);   // the telemetry: section; off unless it says enabled (plan 22a GP28)
             host.Version = DbDataBuild.Core.ProductInfo.Version;
             host.Limits.RequestTimeout = TimeSpan.FromHours(1);    // a command may run for half an hour (ChildProcessCommandRunner)
         });

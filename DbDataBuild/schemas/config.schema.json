@@ -161,6 +161,14 @@
               "type": "string",
               "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
             },
+            "mode": {
+              "description": "Where this project's tracking records are kept (plan 28c E16). `state` writes every record to the state database first and to the tracking tables on the target second (the target stays the second copy, because Build's own reads need the tables): the run needs a state (a runner task has the runner's; a command takes one from DBDATAKIT_STATE_BUILD_ENGINE and DBDATAKIT_STATE_BUILD_CONNECTION) and stops saying so when it has none. `both` is the default: the target first, the Build server's or the runner's follower copies to the state. `target` keeps the records on the target only.",
+              "enum": ["target", "state", "both"]
+            },
+            "primary": {
+              "description": "With `mode: both`, the side the records are written to first: `target` (the default) or `state` (the same as `mode: state`). `mode: target` takes no primary; `mode: state` takes only `state`.",
+              "enum": ["target", "state"]
+            },
             "runner_copy": {
               "description": "Whether a runner keeps a copy of this project's tracking tables (the follower step after a refresh task and the `catch-up` task). `false` turns the runner's copy off: both do nothing and say so in the run log. It does not touch the tables on the target or the Build server's own copy. Default: true.",
               "type": "boolean"

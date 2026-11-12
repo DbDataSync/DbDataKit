@@ -41,7 +41,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | [28c](28c-engines-on-runner.md) E18 | Switch-primary as an action, not a refusal | PARTLY |
 | [28a](28a-runner-slices.md) R25 | Operator screens for in-doubt steps, dead letters and the table of units | PARTLY: checkpoints built |
 | [27a](27a-knowledge-slices.md) AG15, AG18, AG21, AG29, KN28, IX23 | The chat over a real model, providers and usage, fallback lists, the knowledge screens' remainder, the outside-connection form per kind (begun, its row does not say so) | PARTLY |
-| [27a](27a-knowledge-slices.md) AX14, KN25 to KN27, KN29, KN33, BK03, BK04 | Approvals and grants of actions, the knowledge components and app, chunking defaults, the backlog and board, sprints | not built |
+| [27a](27a-knowledge-slices.md) AX14, KN25 to KN27, KN29, KN33, BK03, BK04 | Approvals and grants of actions, the knowledge components and app, chunking defaults, the backlog's app and its browser proof (the console hosts the screens, partly built) | not built |
 | [Identity README](../../Shared/src/DbDataKit.Identity/README.md) "Not yet run on a real host"; [ui-coverage](../ui-coverage.md) "Open gaps" | V1: Windows sign-in on a domain-joined host and Entra sign-in on a tenant (all of it runs with fakes in CI); UI06: the secrets overview of Sync, Build, Store and Workspace; the editor-screen run-time evidence (stories not run, Windows runs, the Store's engine paths) | V1 needs a domain-joined host and an Entra tenant; UI06 OWNER |
 
 ## Gateway (serving layer, semantic layer, views, apps host)
@@ -53,8 +53,8 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | [14a](14a-semantic-slices.md) SL02 to SL04, SL06 to SL11, SL19, SL28, SL29 | The three products read the engine registry; the mapped-columns check and pruning at publish; describe with types; metadata documents; the `semantic:` form; promote a saved query; a row cap in the DAX text; the SSAS executor | |
 | [14a](14a-semantic-slices.md) SL25 to SL27 | Ad hoc registrations and review, the combine in a child process | OWNER ("not yet") |
 | [20](20-serving-layer.md) O05, O08b, O10c, O11, O13 to O14b | HA in CI; entities over Flight SQL; Store publishing from its API; app code in child processes; the outage tests (the instance row); the rename's vocabulary in Build and Store | O10c PARTLY |
-| [26](26-app-publishing.md) AP08, AP17, AP19, AP27, AP30, Z12b | A Playwright story and DNS-challenge verification; the per-app origin and a Windows run; the swap of the apps host onto the home's app tokens; the apps host's stories run; portal home blocks; Store instance remainders | PARTLY |
-| [24a](24a-upgrade-and-cache-slices.md) UC12 to UC15 | The result cache: service and key, expiry on `data.changed`, time-to-live and shared store, the safety conformance suite | UC15 needs the rules (OWNER, QG2) |
+| [26](26-app-publishing.md) AP08, AP17, AP19, AP30, Z12b | The home's side of address bindings and certificate renewal; a Windows run of embedded report servers; a portal home block of a published `dashboard/1`; Store instance remainders | PARTLY |
+| [24a](24a-upgrade-and-cache-slices.md) UC13 (producers), UC15 | The producers of `data.changed` (a Build load, a Sync run, a DbDataStore write, a Runner task send the message to the paired Gateway; the Gateway side, the time-to-live and the shared epochs are built); the safety conformance suite | UC15 needs the rules (OWNER, QG2) |
 | [32](32-dashboards-and-reports.md) DBR13, DBR14, DBR16 to DBR20, DBR23, DBR29, RC01 to RC05 | The rest of apps and portals, the export component's release step and image build, scheduled delivery's channels in the Gateway (the host wiring is built and idle until a Gateway has delivery channels), the embed widget's report-server run, report catalogs (built as libraries, the module's routes and the Catalog tab: what is left is a host that wires the connections, the runner task and the relay of `/api/v1/catalog...`, the app manifest's `catalogs`, the knowledge module's call, recording the SSRS answers, the Windows sign-in) | PARTLY each |
 | [32](32-dashboards-and-reports.md) DBR31 to DBR34, DBR36, DBR42, DBR50 to DBR55 | Custom views in the shell (frames, dialogs, panels, scheduled custom views), the nested axis in print, filtered and repeated measures, attributes in the matrix, field groups, actions with a confirmation popup and batches of changes | not built (9h is design only) |
 | [22a](22a-gap-slices.md) GP01, GP02, GP11 to GP15 | Access rules end to end | OWNER (QG2) |
@@ -110,14 +110,14 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | [21](21-channels-and-previews.md) CH02 to CH06 | The Store's part of releases and inherited reads | |
 | [26](26-app-publishing.md) Z12b, Z13b | Shared entities in `column` mode, instance-scoped tokens and roles, retype and mode moves, the consumer refusal | |
 | [18](18-lineage.md) G12 | The Store's documents, extractions and promotions (the Store has none yet); the apps host's own graph | |
-| [27a](27a-knowledge-slices.md) EA03, EA04, BK01, BK02 | Orphaned attributes, both kinds in search, the backlog module | not built |
+| [27a](27a-knowledge-slices.md) EA03, EA04, BK02 | Orphaned attributes, both kinds in search, the backlog's serving module (the state module and library, BK01, are built) | not built |
 | [20](20-serving-layer.md) O08b | Entities as Flight SQL sources | |
 
 ## Shared and cross-cutting
 
 | Plan and row | What remains | Flag |
 | --- | --- | --- |
-| [22a](22a-gap-slices.md) GP28, GP29 | OpenTelemetry: the hosts' spans and counters, traces across servers (the library `DbDataKit.Telemetry` is built, GP27) | |
+| [22a](22a-gap-slices.md) GP29 | OpenTelemetry: what is left is the trace id in the serving contract and the hop through a module (the hosts' spans and counters, GP28, and the trace across the console's relay are built; `docs/observability.md`) | |
 | [22a](22a-gap-slices.md) GP23 | Descriptions and owners in lineage nodes: the emitters, once the definitions carry the text (the contract `LineageDescriptions` is built) | PARTLY |
 | [24a](24a-upgrade-and-cache-slices.md) UC07 (program legs) | The compatibility job runs the previous release's programs against the current build (the contract check of generations and formats is built) | the first stable release that carries the generation |
 | [27a](27a-knowledge-slices.md) AX01 to AX12, BK05 to BK11 | Actions (one script format, callable and served, principals, grants, audit) and the backlog's links, notifications, automatic items, assistant and agent hand-off | not built |

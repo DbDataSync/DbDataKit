@@ -11,7 +11,7 @@ using DbDataBuild.Targets.Ddl;
 namespace DbDataBuild.Apply;
 
 /// <summary>Where the records of an apply are kept: the logins of the tracking connection (which may be the connection being applied to, or another) and the schema name of its tracking tables there.</summary>
-public sealed record ApplyTracking(LoginSettings Read, LoginSettings? Write, string SchemaName);
+public sealed record ApplyTracking(LoginSettings Read, LoginSettings? Write, string SchemaName, ITrackingJournal? Journal = null);
 
 /// <param name="OpenOrigin">Opens the read session of the connection a `transfer` step reads from (by name). A plan with a transfer step cannot be applied for real without it.</param>
 /// <param name="AllowDestructive">Object names (`marts.fct`) whose destructive steps are allowed. Never "all".</param>
@@ -87,7 +87,7 @@ public static class ApplyEngine
         var sameConnection = tracking != null && string.Equals(tracking.Read.Connection, read.Connection, StringComparison.Ordinal);
         await using var ownTrackingReader = tracking != null && !sameConnection ? await ReadSession.OpenAsync(tracking.Read, ct) : null;
         var trackReader = tracking == null ? null : sameConnection ? reader : ownTrackingReader;
-        TrackingScope? scope = tracking == null ? null : new TrackingScope(tracking.Read.Engine, tracking.SchemaName, read.Connection);
+        TrackingScope? scope = tracking == null ? null : new TrackingScope(tracking.Read.Engine, tracking.SchemaName, read.Connection) { Journal = tracking.Journal };
         if (tracking != null && scope != null)
         {
             var status = await TrackingStore.StatusAsync(trackReader!, scope.Engine, scope.SchemaName, ct);

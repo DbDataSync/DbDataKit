@@ -40,6 +40,16 @@ public static class ReplicationSetPackage
     public const string RepoDir = "repo";
 
     /// <summary>Where the configuration repository keeps the files a message names (the layout of <c>ConfigPaths</c>, which is internal to the core).</summary>
+    /// <summary>The .NET the package is built for: what this assembly targets (<c>net10.0</c> is "10.0"), not the runtime the Sync program happens to run on (it rolls forward to a newer major where one is installed).</summary>
+    private static string TargetDotnet()
+    {
+        var framework = typeof(ReplicationSetPackage).Assembly.GetCustomAttributes(typeof(System.Runtime.Versioning.TargetFrameworkAttribute), false)
+            .OfType<System.Runtime.Versioning.TargetFrameworkAttribute>().FirstOrDefault()?.FrameworkName;
+        var marker = "Version=v";
+        var at = framework?.IndexOf(marker, StringComparison.Ordinal) ?? -1;
+        return at >= 0 && Version.TryParse(framework![(at + marker.Length)..], out var v) ? $"{v.Major}.{v.Minor}" : $"{Environment.Version.Major}.{Environment.Version.Minor}";
+    }
+
     private static class Paths
     {
         public static string ReplicationsDir(string configRoot) => Path.Combine(configRoot, "replications");
@@ -186,7 +196,7 @@ public static class ReplicationSetPackage
 
         var manifest = new PackageManifest(package, $"The Sync replication set {package}: {tasks.Count} replication(s)",
             new PackageLaunch(LaunchKind.Executable, Runtime: new RuntimeReference(RuntimeName, runtimeRange)),
-            new BuiltAgainst($"{Environment.Version.Major}.{Environment.Version.Minor}", null, RunnerProtocol.V1), tasks);
+            new BuiltAgainst(TargetDotnet(), null, RunnerProtocol.V1), tasks);
         var text = PackageManifestWriter.Write(manifest);
 
         // what the runner reads: the manifest must come back from the reader as the same manifest, and pass the validator (a changed format fails here, naming the file, and not on the runner)

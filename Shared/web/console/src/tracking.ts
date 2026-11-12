@@ -120,15 +120,41 @@ export function keepStale(previous: CopyRow[], loaded: Loaded): Loaded {
 }
 
 /**
- * Whether the primary of a copy may be switched, and if not why, in a sentence. Switching is refused while a side is down (the server that holds the copy does not answer, so what the other side holds cannot be compared) and while a
- * divergence is open (the sides have to agree first). Nothing is changed by this call: in this release both servers keep Build's records on the target first (a state primary is refused at start with a message, until Build can write to the state
- * first), so a switch that passes these checks says that too instead of pretending.
+ * Whether the primary of a copy may be switched from here, and if not why, in a sentence. Switching is refused while a side is down (the server that holds the copy does not answer, so what the other side holds cannot be compared), while a
+ * divergence is open (the sides have to agree first), with one side only, for Sync (its primary is a setting of the replication) and for a runner (its primary is the project's, in the published package). Nothing is changed by this call; null means the
+ * checks that can be made here pass and the server is asked (it compares the two sides itself and refuses in a sentence too).
  */
-export function switchPrimary(row: CopyRow, problems: Loaded['problems']): { done: false; message: string } {
-  if (row.stale || problems.some((p) => p.server === row.serverName)) return { done: false, message: `Not switched: ${row.serverName} does not answer, so the two sides cannot be compared. Try again when it is back.` }
-  if (row.open.length > 0) return { done: false, message: `Not switched: ${row.connection} has an open divergence (${row.open.map((d) => d.stream).join(', ')}). Resolve it first, so both sides hold the same rows.` }
-  if (row.mode !== 'both') return { done: false, message: `Not switched: the mode is ${row.mode}, so there is one side only; switching needs both.` }
+export function switchRefusal(row: CopyRow, problems: Loaded['problems']): string | null {
+  if (row.stale || problems.some((p) => p.server === row.serverName)) return `Not switched: ${row.serverName} does not answer, so the two sides cannot be compared. Try again when it is back.`
+  if (row.open.length > 0) return `Not switched: ${row.connection} has an open divergence (${row.open.map((d) => d.stream).join(', ')}). Resolve it first, so both sides hold the same rows.`
+  if (row.mode !== 'both') return `Not switched: the mode is ${row.mode}, so there is one side only; switching needs both.`
   // Sync's primary is a setting of the replication (which side a pass resumes from), not a state of the copy: it is changed where the replication is edited
-  if (row.product === 'dbdatasync') return { done: false, message: `Not switched here: ${row.connection}'s primary is the \`tracking.primary\` of the replication on ${row.serverName}, which decides where a pass resumes. Change it on the replication's Overview tab, Tracking card.` }
-  return { done: false, message: `Not switched: ${row.serverName} keeps Build's records on the target first in this release. A state primary needs Build to write its records to the state, which it does not do yet.` }
+  if (row.product === 'dbdatasync') return `Not switched here: ${row.connection}'s primary is the \`tracking.primary\` of the replication on ${row.serverName}, which decides where a pass resumes. Change it on the replication's Overview tab, Tracking card.`
+  // a runner takes the primary from the project in the package it runs (`tracking.mode` and `primary` of dbdatabuild.yml), so a switch there is a new version of the package
+  if (row.product === 'dbdatarunner') return `Not switched here: the primary of ${row.connection} on ${row.serverName} is the project's \`tracking.primary\` in the package it runs. Publish a version of the project with the key changed.`
+  return null
+}
+
+/** What a switch came to: whether it went through, and the sentence to show either way. */
+export interface SwitchResult { done: boolean; message: string }
+
+/** The refusal as the page shows it, for a switch that is refused before the server is asked (the same sentence as \`switchRefusal\`; `done` is always false). */
+export function switchPrimary(row: CopyRow, problems: Loaded['problems']): { done: false; message: string } {
+  return { done: false, message: switchRefusal(row, problems) ?? `Ask ${row.serverName} to make the ${row.primary === 'state' ? 'target' : 'state'} the primary.` }
+}
+
+/**
+ * Switches the primary of a Build server's copy (an administrator's call, audited by the server): after the checks that can be made here, the server brings its copy level with the target and refuses in a sentence while a side is down or the two
+ * sides differ. From the target to the state, Build writes its records to the state first and to the target second from its next run; back, the target first again.
+ */
+export async function switchPrimaryOf(server: InstanceSummary, row: CopyRow, problems: Loaded['problems']): Promise<SwitchResult> {
+  const refusal = switchRefusal(row, problems)
+  if (refusal) return { done: false, message: refusal }
+  const to = row.primary === 'state' ? 'target' : 'state'
+  try {
+    await request<{ switched: boolean }>(`/relay/${server.id}/api/v1/tracking/primary`, { method: 'POST', body: JSON.stringify({ primary: to }) })
+    return { done: true, message: `Switched: ${server.name} now writes Build's records to the ${to} first${to === 'state' ? ' and to the target second, from the next run it starts' : ', as it did before'}.` }
+  } catch (error) {
+    return { done: false, message: error instanceof Error ? error.message : `Not switched: ${server.name} did not answer.` }
+  }
 }

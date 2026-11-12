@@ -182,6 +182,26 @@
       "files": [ { "path": "Shared/src/DbDataKit.Agents/Evaluation/EvaluationCase.cs", "sha256": null } ]
     },
     {
+      "id": "backlog-workflow",
+      "title": "Workflow of a backlog (backlog-workflow/1: states, transitions and who may make them)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 27a BK01: states with a category (todo, doing, done) and the fields they require, the initial state, and the transitions with the role that may make each; the library's embedded default is the only workflow in use in version 1 (no installation reads a file of its own); a newer number is refused naming the file",
+      "version_source": { "file": "Shared/src/DbDataKit.Backlog/Workflow.cs", "pattern": "public const int Version = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.Backlog/Workflow.cs", "sha256": null } ]
+    },
+    {
+      "id": "work-item",
+      "title": "Work items to make in a backlog, or a backlog exported (work-item/1)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 27a BK01: project and items (id local to the file, type, title, description, priority, estimate, assignee, epic, labels); how items are imported (by a person, BK08's tasks, BK09's proposals) and exported; a newer number is refused naming the file",
+      "version_source": { "file": "Shared/src/DbDataKit.Backlog/WorkItemFile.cs", "pattern": "public const int Version = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.Backlog/WorkItemFile.cs", "sha256": null } ]
+    },
+    {
       "id": "knowledge-project",
       "title": "Published knowledge project (the definition kind knowledge-project, manifest knowledge-project.yml, knowledge-project: N)",
       "current": 1,
