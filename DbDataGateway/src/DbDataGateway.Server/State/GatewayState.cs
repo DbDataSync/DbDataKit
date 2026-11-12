@@ -26,6 +26,7 @@ public static class GatewayState
     [
         IdentityModule.Module, NotificationsModule.Module, AuditModule.Module,
         DefinitionsModule.Module, AppStorageModule.Module, DbDataKit.Web.Trust.TrustModule.Module, ServingModule.Module, UserViewsModule.Module, SemanticRunsModule.Module, TableReadsModule.Module, PayloadStore.Module, AgentsModule.Module,
+        DeliveryModule.Module, RunsModule.Module,   // scheduled delivery (plan 32 DBR18): the subscriptions the Gateway draws, the outbox it hands them to and the runs of its task
     ];
 
     public static StateScope ScopeOf(string? group = null) => new(Group: string.IsNullOrWhiteSpace(group) ? DefaultGroup : group, Service: ServiceId);

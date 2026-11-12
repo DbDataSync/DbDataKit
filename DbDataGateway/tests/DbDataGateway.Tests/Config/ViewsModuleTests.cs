@@ -71,6 +71,8 @@ public sealed partial class ViewsModuleTests : IAsyncLifetime
         TestFolder.Delete(dataDirectory);
     }
 
+    private Action<IServiceCollection>? overrides;
+
     private async Task StartAsync(bool views = true, params string[] more)
     {
         // Free ports are looked up and released before the server binds them, so another process can take one in between ("address already in use"): the whole start is tried again on new ports, up to five times.
@@ -83,7 +85,7 @@ public sealed partial class ViewsModuleTests : IAsyncLifetime
                 "--Gateway:Management:Enabled=true", "--Gateway:Management:Address=127.0.0.1", $"--Gateway:Management:Port={managementPort}", "--Gateway:DefinitionPollSeconds=1"];
             if (views) args.AddRange(["--Gateway:Modules:1=views", "--Gateway:Views:Address=127.0.0.1", $"--Gateway:Views:Port={viewsPort}"]);
             args.AddRange(more);
-            app = GatewayHost.Build([.. args]);
+            app = GatewayHost.Build([.. args], overrideServices: overrides);
             try
             {
                 await app.StartAsync();

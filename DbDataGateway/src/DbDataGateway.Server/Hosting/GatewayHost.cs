@@ -257,6 +257,8 @@ public static class GatewayHost
             services.AddSingleton<GatewayViewsModule>();
             services.AddHostedService(sp => sp.GetRequiredService<GatewayViewsModule>());
             services.AddSingleton<IReadinessProbe, ViewsReadinessProbe>();
+            services.AddSingleton<GatewaySubscriptions>();   // the views-export task in process (plan 32 DBR18): idle unless this instance can export
+            services.AddHostedService(sp => sp.GetRequiredService<GatewaySubscriptions>());
         }
 
         // The shared providers: one registry, one composer, one failure model per engine. With Gateway:LogDriverErrors the providers keep the

@@ -52,6 +52,8 @@
     <DbDataKitReference Include="Apps.Build" />   <!-- the app template and the build both `apps new` and the Workspace server use; plan 22a GP35 -->
     <DbDataKitReference Include="Apps.Bundling" />   <!-- apps build: the bundler behind a command line; plan 26, AP23 -->
     <DbDataKitReference Include="Views.Hosting" />   <!-- the views module: published dashboards and reports as the caller; plan 32, DBR11b -->
+    <DbDataKitReference Include="Delivery" />   <!-- the outbox, channels and subscriptions; scheduled delivery rendered here: plan 32, DBR18 -->
+    <DbDataKitReference Include="Delivery.Runner" />   <!-- the views-export task the Gateway runs in process: plan 32, DBR18 -->
     <DbDataKitReference Include="Apps.Host" />   <!-- the apps module: published apps by subpath; plan 26, AP05 -->
     <DbDataKitReference Include="Identity" />   <!-- the identity home as a module; plan 20, O06 -->
     <DbDataKitReference Include="Config.Git" />   <!-- the configuration folder is a git repository; every change is a commit by the person who made it -->
