@@ -27,7 +27,7 @@ public sealed record QualityTaskSettings(TimeSpan? Every = null, IReadOnlyList<s
 /// This task needs the module <c>runs</c> as well (the run record) and the host's <see cref="IQualitySource"/>.
 /// </para>
 /// </summary>
-public sealed class QualitySystemTasks(IQualitySource source, StateDatabase state, QualityStore store, EvaluationLimits? limits = null, string service = "runner")
+public sealed class QualitySystemTasks(IQualitySource source, StateDatabase state, QualityStore store, EvaluationLimits? limits = null, string service = "runner", IQualityAlerts? alerts = null)
 {
     public const string Package = "quality-system";
     public const string Task = "quality";
@@ -65,7 +65,7 @@ public sealed class QualitySystemTasks(IQualitySource source, StateDatabase stat
         {
             ct.ThrowIfCancellationRequested();
             var dataset = request.Inputs.TryGetValue(DatasetInput, out var named) && !string.IsNullOrWhiteSpace(named) ? named : null;
-            var report = await new QualityRunService(source, store, limits).RunAsync(dataset, runId.ToString("D"), ct).ConfigureAwait(false);
+            var report = await new QualityRunService(source, store, limits, alerts: alerts).RunAsync(dataset, runId.ToString("D"), ct).ConfigureAwait(false);
             var firstFailed = report.Checks.FirstOrDefault(c => c.Evaluation.Status != EvaluationStatus.Pass);
             end = report.AllPassed
                 ? new TaskEnd(TaskEndState.Succeeded, Processed: report.Evaluated)

@@ -18,7 +18,8 @@ export const SETUP_ITEMS: SetupItemDef[] = [
   { id: 'servers', title: 'Pair your first server', why: 'The console manages servers (Build, Sync, the Gateway, the Store, a runner). A server on this machine can be confirmed from its announcement; one on another machine is paired with its address and code.', to: '/instances', unavailable: null },
   { id: 'connections', title: 'Add your first connection', why: 'A connection says where the data is: a Sync source or target, or a data source the Gateway serves.', to: '/connections', unavailable: null },
   { id: 'git-remotes', title: 'Connect a git remote for the configuration', why: 'Definitions are kept in a git repository so every change has an author and a history.', to: '/instances', unavailable: 'Not built yet (plan 22a GP19).' },
-  { id: 'delivery-channels', title: 'Set up where alerts are sent', why: 'A failed check or run can be sent to an address or a channel.', to: '/monitoring', unavailable: 'Not built yet (plan 22a GP18).' },
+  { id: 'delivery-channels', title: 'Set up where alerts are sent', why: 'A delivery channel (mail, Slack, Teams or a signed webhook) is a connection the console sends through; alerts, reports and subscriptions use it.', to: '/delivery', unavailable: null },
+  { id: 'quality-alerts', title: 'Send failed checks to a channel', why: 'Name a delivery channel and the people who get a message when a data quality check fails and when it passes again (the section quality: alerts: of settings.yaml).', to: '/quality', unavailable: null },
   { id: 'build-project', title: 'Make a first Build project from a template', why: 'A template gives a project with models, a connection and a plan to run.', to: '/instances', unavailable: null },
 ]
 
@@ -28,6 +29,10 @@ export interface SetupFacts {
   signIn: boolean
   servers: boolean
   connections: boolean
+  /** At least one delivery channel is configured (the Delivery page's overview lists one). */
+  deliveryChannels: boolean
+  /** The alerts of failed checks name a channel the install has. */
+  qualityAlerts: boolean
   /** Build servers that answered, and how many projects they host: null when no Build server answered. */
   buildProjects: number | null
 }
@@ -44,7 +49,7 @@ export interface SetupRow extends SetupItemDef {
  */
 export function checklist(facts: SetupFacts, skipped: ReadonlySet<string>): SetupRow[] {
   const done: Record<string, boolean> = {
-    'sign-in': facts.signIn, servers: facts.servers, connections: facts.connections, 'build-project': (facts.buildProjects ?? 0) > 0,
+    'sign-in': facts.signIn, servers: facts.servers, connections: facts.connections, 'delivery-channels': facts.deliveryChannels, 'quality-alerts': facts.qualityAlerts, 'build-project': (facts.buildProjects ?? 0) > 0,
   }
   return SETUP_ITEMS.map((item) => ({
     ...item,
@@ -71,10 +76,16 @@ export async function loadFacts(servers: InstanceSummary[], users: UserSummary[]
   const answered = projects.filter((p): p is number => p !== null)
   let connections = false
   try { connections = (await loadConnections(servers)).rows.length > 0 } catch { connections = false }
+  let deliveryChannels = false
+  try { deliveryChannels = (await request<{ channels: unknown[] }>('/api/delivery')).channels.length > 0 } catch { deliveryChannels = false }
+  let qualityAlerts = false
+  try { const a = await request<{ configured: boolean; channelKnown: boolean }>('/api/quality/alerts'); qualityAlerts = a.configured && a.channelKnown } catch { qualityAlerts = false }
   return {
     signIn: users.some((u) => u.enabled && u.credentials.length > 0),
     servers: servers.length > 0,
     connections,
+    deliveryChannels,
+    qualityAlerts,
     buildProjects: answered.length === 0 ? null : answered.reduce((a, b) => a + b, 0),
   }
 }

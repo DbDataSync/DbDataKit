@@ -44,7 +44,7 @@ public sealed class AgentStoreTests : IDisposable
     {
         var rule = Assert.Single(AgentsModule.Module.Retention);
         Assert.Equal(("turn_text", "created_at", 30d), (rule.Table, rule.TimeColumn, rule.DefaultDays));
-        Assert.Equal(["agent_token", "approval", "audit_event", "conversation", "memory", "turn_record", "turn_text"], StateTableDefinitions.Read(AgentsModule.Module).Select(t => t.Name).Order());
+        Assert.Equal(["agent_token", "approval", "audit_event", "conversation", "evaluation_case", "evaluation_minimum", "evaluation_run", "memory", "turn_record", "turn_text"], StateTableDefinitions.Read(AgentsModule.Module).Select(t => t.Name).Order());
         Assert.All(StateTableDefinitions.Read(AgentsModule.Module), t => Assert.NotEmpty(t.PrimaryKey));
         Assert.Equal(StateScopeKind.Install, AgentsModule.Module.Scope);
         Assert.Equal(StateScopeKind.Group, AgentsModule.GroupModule.Scope);
@@ -55,8 +55,8 @@ public sealed class AgentStoreTests : IDisposable
     {
         var (_, database, _) = Open(engine);
         Assert.Equal("agents", database.Layout!.Namespace(AgentsModule.Name).Module.Name);
-        Assert.Equal(3, Assert.Single(database.RegisteredModules(), m => m.Module == "agents").Version);
-        foreach (var table in new[] { "conversation", "turn_text", "turn_record", "audit_event", "approval", "agent_token", "memory" }) Assert.Equal(0, Count(database, table));
+        Assert.Equal(4, Assert.Single(database.RegisteredModules(), m => m.Module == "agents").Version);
+        foreach (var table in new[] { "conversation", "turn_text", "turn_record", "audit_event", "approval", "agent_token", "memory", "evaluation_run", "evaluation_case", "evaluation_minimum" }) Assert.Equal(0, Count(database, table));
     }
 
     [Theory, MemberData(nameof(Engines))]
@@ -209,8 +209,8 @@ public sealed class AgentStoreTests : IDisposable
         var ex = Assert.Throws<InvalidOperationException>(() => location.Open([AgentsModule.Module]));
 
         Assert.Contains("'agents", ex.Message);
+        Assert.Contains("version 5", ex.Message);
         Assert.Contains("version 4", ex.Message);
-        Assert.Contains("version 3", ex.Message);
         Assert.Contains("newer-agents 3.0", ex.Message);
     }
 

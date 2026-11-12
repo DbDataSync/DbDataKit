@@ -1,5 +1,5 @@
 import { request, type SchemaAssociation, type SchemaNode } from '@dbdatakit/shell'
-import type { PublishViewAnswer, PublishViewBody, PublishModelAnswer, SemanticModelEntry, RefreshPlanEntry, RefreshResult, TestsResult, CommandOffer, DefineResult, DefinitionAnswer, ImportResult, ProjectConnections, ProjectTemplateInfo, TemplateCatalog, AdoptAnswer, PairedProxy, PairedRunner, PublishAnswer, RunnerPublishData, GitChange, GitCommit, RenderedFiles, BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
+import type { QueryCheckAnswer, TryQueryAnswer, TryQueryBody, PublishViewAnswer, PublishViewBody, PublishModelAnswer, SemanticModelEntry, RefreshPlanEntry, RefreshResult, TestsResult, CommandOffer, DefineResult, DefinitionAnswer, ImportResult, ProjectConnections, ProjectTemplateInfo, TemplateCatalog, AdoptAnswer, PairedProxy, PairedRunner, PublishAnswer, RunnerPublishData, GitChange, GitCommit, RenderedFiles, BuildProject, FileContent, ProjectFile, Workspace, CommandAnswer, CompareResult, CompileSummary, ConnectionStatus, DeployResult, PlanDetail, PlanEntry, ProjectGraph, SampleResult } from './types'
 
 const project = (id: string) => `/api/v1/projects/${encodeURIComponent(id)}`
 
@@ -151,6 +151,11 @@ export const buildApi = {
   merge: (id: string, workspace: string) => request<{ merged: boolean; sha: string }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/merge`, { method: 'POST' }),
   /** The catalog of a semantic model of the draft, as the compiler reads it: what the dashboard editor's field wells offer (plan 32 DBR29). */
   modelCatalog: (id: string, workspace: string, model: string) => request<{ model: string; catalog: unknown }>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/models/${encodeURIComponent(model)}/catalog`),
+  /** The translation check of one saved query of a model of the draft, as the editor holds it (plan 14a SL20): nothing is run or written. */
+  checkQuery: (id: string, workspace: string, model: string, entry: Record<string, unknown>) =>
+    request<QueryCheckAnswer>(`${project(id)}/workspaces/${encodeURIComponent(workspace)}/models/${encodeURIComponent(model)}/queries/check`, { method: 'POST', body: JSON.stringify(entry) }),
+  /** A try-run of a query on the Gateway the model is published to, as the person who asks (plan 14a SL20): the Gateway's own answer, or its refusal in its words (an error with its status and the engine's code). */
+  tryQuery: (proxy: string, body: TryQueryBody) => request<TryQueryAnswer>(`/api/v1/proxies/${encodeURIComponent(proxy)}/try-query`, { method: 'POST', body: JSON.stringify(body) }),
   /** The files of the project as merged (no workspace): what a publish reads. */
   projectFiles: (id: string) => run<{ files: ProjectFile[] }>(id, 'project_file_list'),
   /** Publishes a dashboard or report of the project as merged to a paired Gateway's registry (plan 32 DBR29). The server needs the approver role; the Gateway's refusal comes back in its own words. */

@@ -45,7 +45,7 @@ public sealed class BuildServerNewProjectTests : IAsyncLifetime
         app = BuildServer.Build(settings, BuildServer.Certificate(ServerDir), new ChildProcessCommandRunner(logins: token => ServerSecrets.LoginsAsync(store, token)), projects, new TuiCommand.CliHost(_ => null).Commands, _ => { });
         await app.StartAsync();
         var url = new Uri(app.Urls.First());
-        var code = new PairingFiles(settings.ServerYaml).Codes().Create(ServerRoles.Close(ServerRole.Approver | ServerRole.Author));
+        var code = new PairingFiles(settings.ServerYaml).Codes().Create(ServerRoles.Close(ServerRole.Approver | ServerRole.Author | ServerRole.Admin));
         paired = await PairingClient.PairAsync(url, code.Code, console, ClientKind.Console, "test console");
         http = new HttpClient(PairingClient.Pinned(paired.CertificateFingerprint)) { BaseAddress = url };
     }
@@ -122,6 +122,23 @@ public sealed class BuildServerNewProjectTests : IAsyncLifetime
         Assert.Equal(("order_id_present", "fail", true), ((string)check["check_id"]!, (string)check["status"]!, (bool)check["blocking"]!));
         Assert.Equal("order_id=3", (string)history["results"]![0]!["sample_keys"]![0]!);
         Assert.Equal(HttpStatusCode.BadRequest, (await AsVic(HttpMethod.Get, "/api/v1/quality/history?dataset=x")).StatusCode);
+    }
+
+    [Fact]
+    public async Task An_administrator_releases_a_block_the_check_still_fails_and_an_author_cannot_and_it_is_audited()
+    {
+        const string dataset = "postgres://pg01/dwh.marts.orders";
+        var store = new DbDataKit.State.QualityStore(BuildSchedulerSchema.Open(ServerDir));
+        store.Record(new DbDataKit.State.CheckResultRecord("order_id_present", dataset, DbDataKit.State.CheckOutcome.Fail, DateTimeOffset.Parse("2026-11-08T12:00:00Z"), 1, 0, ["order_id=3"], "track-1", "block", "alert"));
+        var release = $$$"""{"dataset":"{{{dataset}}}","check":"order_id_present"}""";
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await AsAda(HttpMethod.Post, "/api/v1/quality/release", release)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Send("root", ServerRole.Admin, HttpMethod.Post, "/api/v1/quality/release", release)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Send("root", ServerRole.Admin, HttpMethod.Post, "/api/v1/quality/release", release)).StatusCode);
+
+        var check = (await Json(await AsVic(HttpMethod.Get, "/api/v1/quality")))["datasets"]![0]!["checks"]![0]!;
+        Assert.Equal(("fail", false, "root"), ((string)check["status"]!, (bool)check["blocking"]!, (string)check["released_by"]!));
+        Assert.Empty(store.Blocks());
     }
 
     [Fact]

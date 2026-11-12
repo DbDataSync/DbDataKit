@@ -321,13 +321,21 @@ public sealed class ConfigRepository
 
     // ---- Replication tasks ----
 
+    /// <summary>The driver of the replication's own target connection, or null when the file names none at its level or the connection is not (yet) there: what the tracking check needs.</summary>
+    private string? TargetEngineOf(ReplicationTaskConfig task)
+    {
+        if (task.Endpoints.Target?.ConnectionName is not { Length: > 0 } connection) return null;
+        try { return LoadConnection(connection).DriverType; }
+        catch (FileNotFoundException) { return null; }
+    }
+
     public ReplicationTaskConfig SaveReplicationTask(ReplicationTaskConfig task, GitAuthor author)
     {
         ConfigValidation.ValidateName(task.Name, nameof(task.Name));
         ConfigValidation.ValidateScheduling(task.Scheduling, task.Name);
         ConfigValidation.ValidateChangeProcessing(task.ChangeProcessing, task.Name);
         ValidateHooks(task.Hooks);
-        TrackingResolution.Validate(task.Tracking, task.Name);
+        TrackingResolution.Validate(task.Tracking, task.Name, TargetEngineOf(task));
 
         var path = ConfigPaths.TaskFile(_configRoot, task.Name);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);

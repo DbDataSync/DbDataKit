@@ -180,7 +180,8 @@ public sealed class ConsoleKnowledge(ConsoleSettings settings)
 
     // ---- KN28 and KN37: the overview and the worklists ----
 
-    public JsonObject Overview()
+    /// <param name="needsLook">The ids of verified queries the index marks as needing another look (KN22), with why: they are in their owners' worklists.</param>
+    public JsonObject Overview(IReadOnlyDictionary<string, string>? needsLook = null)
     {
         var catalog = Catalog;
         var projects = new JsonArray();
@@ -208,7 +209,7 @@ public sealed class ConsoleKnowledge(ConsoleSettings settings)
             ["hasSubjectCatalog"] = HasCatalog,
             ["subjects"] = JsonSerializer.SerializeToNode(Subjects(), Web),
             ["index"] = new JsonObject { ["built"] = false, ["message"] = "No index is built yet: the Search and index tab builds one over these files. What is shown here is what the files say and what they would be split into." },
-            ["worklists"] = JsonSerializer.SerializeToNode(Worklists.Build(allItems, catalog), Web),
+            ["worklists"] = JsonSerializer.SerializeToNode(Worklists.Build(allItems, catalog, needsLook: needsLook?.Keys.ToHashSet(StringComparer.Ordinal), needsLookWhy: needsLook), Web),
         };
     }
 

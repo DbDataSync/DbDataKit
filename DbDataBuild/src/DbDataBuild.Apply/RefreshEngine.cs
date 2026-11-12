@@ -25,6 +25,7 @@ public static class LoadStatus
     public const string SkippedStopped = "skipped: stopped";
     public const string SkippedCheckFailed = "skipped: check failed";
     public const string SkippedNoValue = "skipped: no value";
+    public const string SkippedBlocked = "skipped: blocked by check";
     public const string NotRun = "not run";
 
     /// <summary>`done`, `failed`, `skipped` or `not run`.</summary>
@@ -60,6 +61,9 @@ public sealed record RefreshExecution(IReadOnlyList<RefreshUnit> Units, PrepareL
 {
     /// <summary>Called on the coordinator with a load's model once its result has been taken into account (a failure under `stop` has halted the run by then). A test seam: a load that must not end before the run knows another one's result waits for this, not for a pause.</summary>
     public Action<string>? Settled { get; init; }
+
+    /// <summary>Plan 23a FQ14: the reason a model must not run because a dataset it reads is blocked by a check (naming the dataset and the check), or null. The blocked dataset's own load is not asked about: a block stops dependents, not its writers (D7).</summary>
+    public Func<string, string?>? BlockedBy { get; init; }
 }
 
 /// <summary>A load of a refresh and how it ended. <see cref="Note"/> is set on a load that ran although something upstream of it was skipped because it was busy.</summary>
@@ -171,6 +175,7 @@ internal static class RefreshEngine
                 results[i] = await NoRunAsync(unit, LoadStatus.SkippedStopped, "the operator stopped the refresh");
                 return null;
             }
+            if (exec.BlockedBy?.Invoke(unit.Model) is { } blocked) { results[i] = await NoRunAsync(unit, LoadStatus.SkippedBlocked, blocked); return null; }
             if (Reads(failedModels, unit.Model)) { results[i] = await NoRunAsync(unit, LoadStatus.SkippedUpstreamFailed, "a load it reads failed"); return null; }
 
             progress($"load {unit.Position}/{units.Count}: {unit.Display}");

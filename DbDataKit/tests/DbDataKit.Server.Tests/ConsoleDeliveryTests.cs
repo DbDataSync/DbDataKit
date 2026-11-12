@@ -102,8 +102,8 @@ public sealed class ConsoleDeliveryTests : IAsyncLifetime
         http.Dispose();
         await app.StopAsync();
         await app.DisposeAsync();
-        listener.Stop();
-        listener.Close();
+        // HttpListener on Linux can throw "Address already in use" while it removes its prefix on close (another test host took the port back); the listener is gone either way
+        try { listener.Close(); } catch (HttpListenerException) { }
         Environment.SetEnvironmentVariable($"DDK_TEST_HOOK_TOKEN_{tag}", null);
         Environment.SetEnvironmentVariable($"DDK_TEST_HOOK_SECRET_{tag}", null);
         try { Directory.Delete(directory, true); } catch (IOException) { }

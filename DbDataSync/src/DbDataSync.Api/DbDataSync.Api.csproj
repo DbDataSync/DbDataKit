@@ -62,6 +62,7 @@
     <ProjectReference Condition="'$(SkipJdbc)' != 'true'" Include="..\DbDataSync.Drivers.Jdbc\DbDataSync.Drivers.Jdbc.csproj" />
     <ProjectReference Include="..\DbDataSync.Libraries\DbDataSync.Libraries.csproj" />
     <ProjectReference Include="..\DbDataSync.State\DbDataSync.State.csproj" />
+    <ProjectReference Include="..\DbDataSync.Tracking\DbDataSync.Tracking.csproj" />   <!-- the follower of the units a target holds, and the divergence record (plan 28c E17) -->
     <ProjectReference Include="..\DbDataSync.Planning\DbDataSync.Planning.csproj" />   <!-- the planner SchedulerService calls (plan 28c E11); its namespace is a global using below, so the API's own code keeps naming the types it always did -->
     <Using Include="DbDataSync.Planning" />
     <!-- the shared state types come with the project reference; StateDatabase is Sync's own (plan 13, U04) -->

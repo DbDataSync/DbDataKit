@@ -12,7 +12,8 @@ public sealed record AuthoredProblem(string Code, string File, int Line, int Col
 }
 
 /// <summary>A column of a physical table the host knows: its name, its catalog data type (<c>String</c>, <c>Integer</c>, <c>Decimal</c>, <c>Float</c>, <c>Boolean</c>, <c>Date</c>, <c>Time</c>, <c>DateTime</c>, <c>DateTimeTz</c>, <c>Opaque</c>).</summary>
-public sealed record PhysicalColumn(string Name, string DataType);
+/// <summary>A column of a physical table: its name, its catalog type and, for a decimal the source declares with a scale (<c>DECIMAL(18, 2)</c>), that scale (plan 14a SL09, D33). A column that declares none has no scale and the engine's default applies.</summary>
+public sealed record PhysicalColumn(string Name, string DataType, int? Scale = null);
 
 /// <summary>What a host knows about the table a model is on one source: its physical name (as a query writes it), its columns and its key (the model's grain).</summary>
 public sealed record PhysicalTable(string Name, IReadOnlyList<PhysicalColumn> Columns, IReadOnlyList<string> PrimaryKey);
@@ -263,6 +264,7 @@ public sealed class AuthoredCatalog
                     ["datatype"] = c.DataType,
                     ["expression"] = new JsonObject { ["dialects"] = new JsonArray(new JsonObject { ["dialect"] = "ANSI_SQL", ["expression"] = c.Name }) },
                 };
+                if (c.Scale is { } scale) column["scale"] = scale;
                 if (timeColumns.Contains((t.Model, t.Source, c.Name))) column["is_time"] = true;
                 return (JsonNode)column;
             }).ToArray()),

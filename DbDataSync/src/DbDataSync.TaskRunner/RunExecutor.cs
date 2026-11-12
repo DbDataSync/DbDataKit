@@ -925,6 +925,20 @@ public sealed class RunExecutor(
             // exactly the way item.SegmentJson already is — see WithGuard.
             passWriterOptions = WithGuard(passWriterOptions, item.DeleteGuardJson);
 
+            // Plan 28c E17: a replication that keeps its state on the target writes each unit's state row in the unit's own transaction (the writer calls the hook
+            // before its commit) and resumes from the target's position when the target is the primary. Only a Primary pass has a position to keep.
+            UnitStateTracking? unitTracking = null;
+            if (item.RunKind == RunKind.Primary)
+            {
+                unitTracking = UnitStateTracking.For(task, targetDriver, writer, (level, text) => Log(item.RunId, level, text));
+                if (unitTracking is not null)
+                {
+                    var started = await unitTracking.StartAsync(targetConnection, task.Name, mapping.Name, watermarkKey, previousWatermark, cancellationToken);
+                    if (started.Message is not null) Log(item.RunId, LogSeverity.Warning, started.Message);
+                    previousWatermark = started.Resume;
+                }
+            }
+
             var segments = await ResolveSegmentsAsync(
                 reader, sourceConnection, targetConnection, source, item, task, mapping, sourceScriptDialect,
                 cancellationToken);
@@ -1114,9 +1128,28 @@ public sealed class RunExecutor(
                     await RunGeneratedAsync(HookPoints.BeforeLoad, staged.StagingLocation, staged.RowCount, null);
 
                     var writerClock = trace ? Stopwatch.StartNew() : null;
-                    var written = await writer.ApplyAsync(
-                        targetConnection, target, staged, mapping.ColumnMappings, mapping.Name, mapping.TargetColumns,
-                        writerOptions, cancellationToken);
+                    // The unit's state row goes in with the data: the scope hands the writer the row to write before it commits (E17). A unit that read no new position has none.
+                    UnitStateScope.Scope? unitScope = null;
+                    UnitDraft? unitDraft = null;
+                    if (unitTracking is not null && read.WatermarkAfterRead is not null)
+                    {
+                        unitDraft = UnitStateTracking.Draft(item.RunId, task.Name, mapping.Name, watermarkKey, previousWatermark, read, staged.RowCount);
+                        unitScope = UnitStateScope.Begin(unitTracking.State.CommitOf(unitDraft));
+                    }
+
+                    WriteResult written;
+                    try
+                    {
+                        written = await writer.ApplyAsync(
+                            targetConnection, target, staged, mapping.ColumnMappings, mapping.Name, mapping.TargetColumns,
+                            writerOptions, cancellationToken);
+                        if (unitScope is not null)
+                            await unitTracking!.FinishAsync(targetConnection, unitScope, unitDraft!, writerKind, cancellationToken);
+                    }
+                    finally
+                    {
+                        unitScope?.Dispose();
+                    }
                     if (writerClock is not null)
                         writerMs += writerClock.ElapsedMilliseconds;
 
@@ -1160,6 +1193,11 @@ public sealed class RunExecutor(
                 // nothing. Null for every reader that has no such mapping. See phase 87.
                 newWatermarkTime = read.WatermarkTimeAfterRead;
             }
+
+            // Retention of the state table on the target (plan 28c E17): what is older than the setting and not among the mapping's newest units goes, in a transaction of its own.
+            // A failure here is said and does not fail a pass whose data is already committed.
+            if (unitTracking is not null)
+                await unitTracking.PruneAsync(targetConnection, task, mapping.Name, TimeProvider.System.GetUtcNow(), (level, text) => Log(item.RunId, level, text), cancellationToken);
 
             // Segmented passes only ever happen with a reload reader, which has no watermark of its
             // own and echoes back whatever it was given — so taking the last segment's value is the

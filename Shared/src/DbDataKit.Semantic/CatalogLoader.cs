@@ -568,6 +568,9 @@ public static partial class CatalogLoader
                 Roles = m["roles"]?.AsObject().ToDictionary(kv => kv.Key, kv => kv.Value!.GetValue<string>()) ?? [],
                 Filters = m["filters"]?.AsArray().Select(f => Filter.Parse(f!)).ToList() ?? [],
             };
+            // a sum, minimum or maximum of a decimal column the source declares with a scale keeps that scale (an average does not: its scale is the engine's); a count is an integer (plan 14a SL09)
+            if (def.Type == "number" && def.Agg is "sum" or "min" or "max" && ColumnDef(m["of"]!["table"]!.GetValue<string>(), m["of"]!["column"]!.GetValue<string>())?["scale"] is JsonValue scaleNode && int.TryParse(scaleNode.ToJsonString(), NumberStyles.None, CultureInfo.InvariantCulture, out var declaredScale))
+                def.Scale = declaredScale;
             if (m["semantics"] is JsonObject sem)
                 foreach (var (k, v) in sem) def.Semantics[k] = Plain(v)!;
             // Rollup rules name dimensions, and first and last only make sense along time.

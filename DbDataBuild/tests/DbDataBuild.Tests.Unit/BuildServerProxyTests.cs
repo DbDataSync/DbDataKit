@@ -96,12 +96,13 @@ public sealed partial class BuildServerProxyTests : IAsyncLifetime
         app.UseManagementApiVersion();
         app.MapPairing(new PairingService(instanceId, PairingProof.CertificateFingerprint(certificate), files.Clients(), files.Codes()));
         app.UseManagementAuthentication(new ConsoleTokenValidator(instanceId, files.Clients(), new MemoryReplayCache()), _ => { });
-        app.MapMethods("/api/v1/{**rest}", ["GET", "PUT", "DELETE"], async (HttpContext context) =>
+        app.MapMethods("/api/v1/{**rest}", ["GET", "PUT", "DELETE", "POST"], async (HttpContext context) =>
         {
             using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
             var body = await reader.ReadToEndAsync();
             seen.Add((context.Request.Method, context.Request.Path.Value!, body, context.ManagementToken()));
             var path = context.Request.Path.Value!;
+            if (path == "/api/v1/my/runs") return Results.Json(runAnswerIs.Body, statusCode: runAnswerIs.Status);
             if (path == "/api/v1/secrets") return Results.Json(new { secrets = storedSecrets.Order(StringComparer.Ordinal).ToArray() });
             if (path.StartsWith("/api/v1/secrets/", StringComparison.Ordinal))
             {
@@ -110,6 +111,7 @@ public sealed partial class BuildServerProxyTests : IAsyncLifetime
                 return Results.Json(new { reference = "secret:dbdatakit:gateway:managed-x:" + name });
             }
             if (path.StartsWith("/api/v1/dashboards/", StringComparison.Ordinal) || path.StartsWith("/api/v1/reports/", StringComparison.Ordinal)) return ViewsAnswer(body);       // plan 32 DBR29 (BuildServerProxyViewsTests)
+            if (path.EndsWith("/rollback", StringComparison.Ordinal)) return Results.Json(rollbackAnswerIs.Body, statusCode: rollbackAnswerIs.Status);
             if (path.StartsWith("/api/v1/semantic-models/", StringComparison.Ordinal))
                 return context.Request.Method == "GET" ? Results.Json(new { error = "none" }, statusCode: 404)
                     : modelAnswer == HttpStatusCode.OK ? Results.Json(new { version = 1, created = true }) : Results.Json(new { error = "The catalog does not load, so nothing was published." }, statusCode: (int)modelAnswer);

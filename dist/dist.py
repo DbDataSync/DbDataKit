@@ -233,7 +233,7 @@ def suite_notes(members):
             f"{n}. Pair {_alias(meta)}: run '{_alias(meta)} server pair --max-role {_PAIR_ROLES.get(meta['product'], _PAIR_ROLES_DEFAULT)}' (it prints a single-use code), then "
             f"'{console} instance add {target} --code <code> --name {meta['product']}'{note}."
         )
-    lines.append("The first administrator is invited with the link in %ProgramData%\\DbDataKit\\server\\FIRST-RUN.txt.")
+    lines.append("The first administrator opens the setup link the console wrote to %ProgramData%\\DbDataKit\\server\\FIRST-RUN.txt; 'dbdatakit setup link' on the machine prints a new one.")
     return "\n".join(lines)
 
 

@@ -8,6 +8,19 @@ namespace DbDataKit.State;
 /// <summary>An item as the index keeps it (plan 27a KN07): who it is for as JSON, what it is about as subject keys, and where and at which version it came from.</summary>
 public sealed record StoredItem(string Id, string File, string Title, string Role, string? Owner, string Audience, bool AboutImplied, string Hash, string Source, string Version, IReadOnlyList<string> Subjects, DateTimeOffset IndexedAt);
 
+/// <summary>What the index keeps of a verified query (KN21): the pinned request as JSON, its semantic SQL, the model, who verified it and when, and whether it still holds (<see cref="VerifiedStatus"/>).</summary>
+public sealed record StoredVerified(string Model, string? Request, string? SavedQuery, string? SavedVersion, string? SemanticSql, string VerifiedBy, string VerifiedAt, string ModelVersion, string Status = VerifiedStatus.Verified, string? StatusNote = null);
+
+/// <summary>The two states of a verified query in the index (KN22).</summary>
+public static class VerifiedStatus
+{
+    /// <summary>Given as verified.</summary>
+    public const string Verified = "verified";
+
+    /// <summary>A new version of its model no longer answers it as it did: still found, no longer given as verified, its owner told.</summary>
+    public const string NeedsReverification = "needs-reverification";
+}
+
 /// <summary>A piece of an item: its place (<see cref="Seq"/>), the headings above it joined with <c>" > "</c>, its text and where it starts.</summary>
 public sealed record StoredChunk(int Seq, string HeadingPath, string Text, int Tokens, string Hash, int StartLine);
 
@@ -123,7 +136,7 @@ public sealed class KnowledgeStore(StateDatabase database)
     /// Puts an item and its chunks in a channel's index, replacing what was there for it, in one transaction: a search never sees an item half written. Returns false, writing nothing, when the item is already there with the same hash
     /// and <paramref name="force"/> is not set (an item that did not change is not indexed again; the source and version it came from are brought up to date).
     /// </summary>
-    public bool Put(string channel, StoredItem item, IReadOnlyList<StoredChunk> chunks, bool force = false)
+    public bool Put(string channel, StoredItem item, IReadOnlyList<StoredChunk> chunks, bool force = false, StoredVerified? verified = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(channel);
         ArgumentException.ThrowIfNullOrWhiteSpace(item.Id);
@@ -150,6 +163,15 @@ public sealed class KnowledgeStore(StateDatabase database)
                 insert.Bind(database, "channel", channel).Bind(database, "id", item.Id).Bind(database, "file", item.File).Bind(database, "title", item.Title).Bind(database, "role", item.Role)
                     .Bind(database, "owner", item.Owner, System.Data.DbType.String).Bind(database, "audience", item.Audience).Bind(database, "implied", item.AboutImplied ? 1 : 0).Bind(database, "hash", item.Hash)
                     .Bind(database, "source", item.Source).Bind(database, "version", item.Version).Bind(database, "at", item.IndexedAt);
+                insert.ExecuteNonQuery();
+            }
+            if (verified is not null)
+            {
+                using var insert = database.Command(Module, connection, transaction,
+                    "INSERT INTO {table:verified_query} (channel, item_id, model, request, saved_query, saved_version, semantic_sql, verified_by, verified_on, model_version, status, status_note) VALUES ($channel, $id, $model, $request, $saved, $savedVersion, $sql, $by, $at, $version, $status, $note);");
+                insert.Bind(database, "channel", channel).Bind(database, "id", item.Id).Bind(database, "model", verified.Model).Bind(database, "request", verified.Request, System.Data.DbType.String)
+                    .Bind(database, "saved", verified.SavedQuery, System.Data.DbType.String).Bind(database, "savedVersion", verified.SavedVersion, System.Data.DbType.String).Bind(database, "sql", verified.SemanticSql, System.Data.DbType.String)
+                    .Bind(database, "by", verified.VerifiedBy).Bind(database, "at", verified.VerifiedAt).Bind(database, "version", verified.ModelVersion).Bind(database, "status", verified.Status).Bind(database, "note", verified.StatusNote, System.Data.DbType.String);
                 insert.ExecuteNonQuery();
             }
             foreach (var subject in item.Subjects.Distinct(StringComparer.Ordinal))
@@ -201,7 +223,7 @@ public sealed class KnowledgeStore(StateDatabase database)
             fts.Bind(database, "match", $"item_key : \"{Key(channel, itemId)}\"");
             fts.ExecuteNonQuery();
         }
-        foreach (var table in new[] { "chunk", "item_subject" })
+        foreach (var table in new[] { "chunk", "item_subject", "verified_query" })
         {
             using var delete = database.Command(Module, connection, transaction, $"DELETE FROM {{table:{table}}} WHERE channel = $channel AND item_id = $id;");
             delete.Bind(database, "channel", channel).Bind(database, "id", itemId);
@@ -299,6 +321,46 @@ public sealed class KnowledgeStore(StateDatabase database)
             var items = new List<StoredItem>();
             while (reader.Read()) items.Add(ReadItem(reader, subjects.GetValueOrDefault(reader.GetString(0)) ?? []));
             return (IReadOnlyList<StoredItem>)items;
+        });
+
+    private const string VerifiedColumns = "model, request, saved_query, saved_version, semantic_sql, verified_by, verified_on, model_version, status, status_note";
+
+    private static StoredVerified ReadVerified(DbDataReader r, int at = 0) => new(r.GetString(at), r.IsDBNull(at + 1) ? null : r.GetString(at + 1), r.IsDBNull(at + 2) ? null : r.GetString(at + 2), r.IsDBNull(at + 3) ? null : r.GetString(at + 3),
+        r.IsDBNull(at + 4) ? null : r.GetString(at + 4), r.GetString(at + 5), r.GetString(at + 6), r.GetString(at + 7), r.GetString(at + 8), r.IsDBNull(at + 9) ? null : r.GetString(at + 9));
+
+    /// <summary>What the index keeps of a verified query, or null when the item is not one (KN21).</summary>
+    public StoredVerified? Verified(string channel, string itemId) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var command = database.Command(Module, connection, $"SELECT {VerifiedColumns} FROM {{table:verified_query}} WHERE channel = $channel AND item_id = $id;");
+            command.Bind(database, "channel", channel).Bind(database, "id", itemId);
+            using var reader = command.ExecuteReader();
+            return reader.Read() ? ReadVerified(reader) : null;
+        });
+
+    /// <summary>The verified queries of a channel, with the id of their item, those of one model when <paramref name="model"/> is given.</summary>
+    public IReadOnlyList<(string ItemId, StoredVerified Verified)> VerifiedQueries(string channel, string? model = null) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var command = database.Command(Module, connection, $"SELECT item_id, {VerifiedColumns} FROM {{table:verified_query}} WHERE channel = $channel{(model is null ? "" : " AND model = $model")} ORDER BY item_id;");
+            command.Bind(database, "channel", channel);
+            if (model is not null) command.Bind(database, "model", model);
+            using var reader = command.ExecuteReader();
+            var list = new List<(string, StoredVerified)>();
+            while (reader.Read()) list.Add((reader.GetString(0), ReadVerified(reader, 1)));
+            return (IReadOnlyList<(string, StoredVerified)>)list;
+        });
+
+    /// <summary>Marks a verified query as holding or as needing another look (KN22), with the reason; false when the item is not a verified query.</summary>
+    public bool SetVerifiedStatus(string channel, string itemId, string status, string? note) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var command = database.Command(Module, connection, "UPDATE {table:verified_query} SET status = $status, status_note = $note WHERE channel = $channel AND item_id = $id;");
+            command.Bind(database, "status", status).Bind(database, "note", note, System.Data.DbType.String).Bind(database, "channel", channel).Bind(database, "id", itemId);
+            return command.ExecuteNonQuery() > 0;
         });
 
     /// <summary>The ids of the items of a channel that are about a subject (its key, as the lineage spells it).</summary>

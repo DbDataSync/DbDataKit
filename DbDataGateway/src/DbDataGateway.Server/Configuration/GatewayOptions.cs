@@ -73,6 +73,8 @@ public sealed class GatewayOptions
     public ViewsModuleOptions Views { get; set; } = new();
 
     public McpModuleOptions Mcp { get; set; } = new();
+    /// <summary>The <c>feeds</c> module (plan 14a SL31, <c>rest:</c> in <c>server.yaml</c>): saved queries and semantic requests as JSON, CSV or Arrow IPC over HTTP on a listener of its own. Off unless <c>Modules</c> lists <c>feeds</c>.</summary>
+    public RestModuleOptions Rest { get; set; } = new();
 
     public ListenOptions Listen { get; set; } = new();
     public TlsOptions Tls { get; set; } = new();
@@ -321,6 +323,14 @@ public sealed class StoreModuleOptions
 
     [ConfigKey(Min = 1, Max = 65535)]
     public int Port { get; set; } = 8819;
+
+    /// <summary>Days without a write after which a preview's or channel's draft is removed with its writes (plan 21 CH07; <c>store.idleDays</c>). The store module and the apps host's previews write into the same drafts.</summary>
+    [ConfigKey(Min = 1, Max = 3650)]
+    public int IdleDays { get; set; } = 30;
+
+    /// <summary>Days before that removal on which a notice goes into the notification feed (<c>store.noticeDays</c>); it is never longer than the idle time less a day.</summary>
+    [ConfigKey(Min = 0, Max = 365)]
+    public int NoticeDays { get; set; } = 7;
 }
 
 /// <summary>The <c>mcp</c> module (plan 20 O12): where it listens, and how long a step an agent asked for waits for a person.</summary>
@@ -331,11 +341,33 @@ public sealed class McpModuleOptions
     public string Address { get; set; } = "0.0.0.0";
 
     [ConfigKey(Min = 1, Max = 65535)]
-    public int Port { get; set; } = 8821;
+    public int Port { get; set; } = 8822;
 
     /// <summary>How long, in minutes, a step with an effect waits for a person before it is expired (never run).</summary>
     [ConfigKey(Min = 1, Max = 10080)]
     public int ApprovalMinutes { get; set; } = 60;
+}
+
+/// <summary>
+/// The <c>feeds</c> module (plan 14a SL31, route R2 of <c>docs/bi-tools-on-semantic-models.md</c>): where it listens and how many rows a call may ask for. A report server (SSRS, Power BI) or a script reads a saved query or a semantic request as
+/// the person whose token it sends, with the access rules and limits of every other protocol. The module is on when <c>Modules</c> lists <c>feeds</c>; nothing listens otherwise.
+/// </summary>
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class RestModuleOptions
+{
+    /// <summary>Where it listens: every address by default, since report servers, scripts and people call it.</summary>
+    public string Address { get; set; } = "0.0.0.0";
+
+    [ConfigKey(Min = 1, Max = 65535)]
+    public int Port { get; set; } = 8821;
+
+    /// <summary>How many rows a call gets when it does not say <c>limit</c>.</summary>
+    [ConfigKey(Min = 1, Max = 10_000)]
+    public int DefaultLimit { get; set; } = 1000;
+
+    /// <summary>The most rows a call may ask for with <c>limit</c> (paging is <c>limit</c> only); a larger one is refused in words.</summary>
+    [ConfigKey(Min = 1, Max = 10_000)]
+    public int MaxRows { get; set; } = 10_000;
 }
 
 /// <summary>The <c>views</c> module (plan 32, DBR11b): where it listens. Published dashboards and reports are read and rendered here, as the identity home's people, through the models published to the group.</summary>

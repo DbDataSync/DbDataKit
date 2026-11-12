@@ -19,7 +19,7 @@ public sealed class DefinitionPublisherTests : IDisposable
         .Register(new DefinitionKind("integration", ["runner"], PublishMode.Stage)
         {
             // a manifest line "slot <name>" declares a slot
-            SlotsOf = manifest => [.. manifest.Split('\n').Where(l => l.StartsWith("slot ", StringComparison.Ordinal)).Select(l => new DefinitionSlot(l[5..].Trim()))],
+            SlotsOf = manifest => [.. manifest.Split('\n').Where(l => l.StartsWith("slot ", StringComparison.Ordinal)).Select(l => l[5..].Trim().Split(' ')).Select(w => new DefinitionSlot(w[0], Access: w.Length > 1 && DefinitionSlot.TryParseAccess(w[1], out var access) ? access : SlotAccess.Write))],
         })
         .Register(new DefinitionKind("agent", ["runner"], PublishMode.Stage, RequiresApproval: true));
 
@@ -206,6 +206,47 @@ public sealed class DefinitionPublisherTests : IDisposable
         publisher.Bind("prod", "integration", "etl", "target", "conn:b", "ada");
         publisher.Publish(new PublishRequest("integration", "etl", "slot source\nslot target", "ada"));
         Assert.Equal(1, publisher.Activate("integration", "etl", "ada").Version);
+    }
+
+    [Theory]
+    [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
+    public void A_channel_without_a_binding_reads_production_for_a_read_slot_and_refuses_a_write_slot_naming_slot_and_channel(string engine)
+    {
+        var (publisher, _, _) = Open(engine);
+        const string Manifest = "slot source read\nslot target write\nslot legacy";
+        publisher.Bind("prod", "integration", "etl", "source", "conn:prod-dw", "ada");
+        publisher.Bind("prod", "integration", "etl", "target", "conn:prod-out", "ada");
+        publisher.Bind("prod", "integration", "etl", "legacy", "conn:prod-x", "ada");
+
+        // test has bound nothing: the read slot resolves to production's binding and says so, the others are missing
+        var resolved = publisher.ResolveSlots("integration", "etl", "test", Manifest);
+        Assert.Equal(new ResolvedSlot("source", SlotAccess.Read, "conn:prod-dw", SlotSource.Inherited, "prod"), resolved.Single(r => r.Slot == "source"));
+        Assert.Equal(SlotSource.Missing, resolved.Single(r => r.Slot == "target").Source);
+        Assert.Equal(SlotSource.Missing, resolved.Single(r => r.Slot == "legacy").Source);   // a slot that says nothing is a write slot: nothing changes for it
+
+        var refused = Assert.Throws<PublishRefusedException>(() => publisher.Publish(new PublishRequest("integration", "etl", Manifest, "ada", "test")));
+        Assert.Equal(PublishRefusal.UnboundSlot, refused.Reason);
+        Assert.Contains("'target', 'legacy'", refused.Message);
+        Assert.DoesNotContain("'source'", refused.Message);
+        Assert.Contains("'test'", refused.Message);
+        Assert.Contains("No write binding in this channel", refused.Message);
+
+        // the write slots get their own (an override that points somewhere other than production); the read slot is still production's
+        publisher.Bind("test", "integration", "etl", "target", "conn:test-out", "ada");
+        publisher.Bind("test", "integration", "etl", "legacy", "conn:test-x", "ada");
+        Assert.True(publisher.Publish(new PublishRequest("integration", "etl", Manifest, "ada", "test")).Changed);
+        Assert.Equal(1, publisher.Activate("integration", "etl", "ada", "test").Version);
+        resolved = publisher.ResolveSlots("integration", "etl", "test", Manifest);
+        Assert.Equal([SlotSource.Inherited, SlotSource.Own, SlotSource.Own], [resolved[0].Source, resolved[1].Source, resolved[2].Source]);
+        Assert.Equal("conn:test-out", resolved[1].BoundTo);
+
+        // an override of the read slot wins over production's
+        publisher.Bind("test", "integration", "etl", "source", "conn:test-dw", "ada");
+        Assert.Equal(new ResolvedSlot("source", SlotAccess.Read, "conn:test-dw", SlotSource.Own, "test"), publisher.ResolveSlots("integration", "etl", "test", Manifest)[0]);
+        // production inherits nothing: its read slot without a binding is missing
+        Assert.Equal(SlotSource.Missing, publisher.ResolveSlots("integration", "other", "prod", "slot source read")[0].Source);
+        Assert.False(DefinitionSlot.TryParseAccess("rw", out _));
+        Assert.True(DefinitionSlot.TryParseAccess(null, out var none) && none == SlotAccess.Write);
     }
 
     [Theory]
