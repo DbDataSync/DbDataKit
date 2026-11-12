@@ -146,7 +146,7 @@ public static class GatewayManagementHost
                     var text = File.Exists(file) ? File.ReadAllText(file) : app.Services.GetRequiredService<Serving.PublishedDataSources>().Text(dataSource);
                     return text is null ? null : DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, dataSource + ".yaml").Definition?.ManagedBy;
                 }, audit, adoptions: adoptions),
-            apps: new GatewayApps(new DbDataKit.State.DefinitionStore(state), () => HomeApprovers.Open(state, app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue), audit,
+            apps: new GatewayApps(DbDataGateway.Server.Serving.ServingKinds.StoreOf(state), () => HomeApprovers.Open(state, app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue), audit,
                 appsAddress: () => { var current = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue; return GatewayModules.Has(current, GatewayModules.Apps) ? GatewayAppsModule.PublicUrlOf(current) : null; },
                 instanceSaved: name => AppClient(app, state, name, remove: false), instanceRemoved: name => AppClient(app, state, name, remove: true),
                 addressVerifier: new Serving.AppAddressVerifier(() => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue,
@@ -199,7 +199,7 @@ public static class GatewayManagementHost
             if (!GatewayModules.Has(current, GatewayModules.Apps)) return;
             var clients = new DbDataKit.Identity.OidcClients(state);
             if (remove) Serving.AppInstanceClients.Remove(clients, instance);
-            else if (new DbDataKit.Apps.AppInstanceStore(new DbDataKit.State.DefinitionStore(state)) is var store && store.Get(instance) is { } saved)
+            else if (new DbDataKit.Apps.AppInstanceStore(DbDataGateway.Server.Serving.ServingKinds.StoreOf(state)) is var store && store.Get(instance) is { } saved)
                 Serving.AppInstanceClients.SyncRedirects(clients, saved, GatewayAppsModule.PublicUrlOf(current), current.Apps.Home.ClientId, store.List());
             else Serving.AppInstanceClients.Ensure(clients, instance, Serving.AppInstanceClients.CallbackOf(GatewayAppsModule.PublicUrlOf(current)));
         }

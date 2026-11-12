@@ -180,7 +180,7 @@ public static class AppsCommand
                 context.Data["version"] = (int?)answer["version"];
                 return CliExit.Ok;
             }
-            var saved = new AppInstanceStore(new DefinitionStore(IdentityCommand.Open(parsed))).Save(new AppInstance(name, app, pin, parsed.Get("title"), settings, bindings), Environment.UserName);
+            var saved = new AppInstanceStore(DbDataGateway.Server.Serving.ServingKinds.StoreOf(IdentityCommand.Open(parsed))).Save(new AppInstance(name, app, pin, parsed.Get("title"), settings, bindings), Environment.UserName);
             await context.Out.WriteLineAsync($"Saved instance {name} of {app} (version {saved.Version}). It is served at /apps/{name}/.");
             context.Data["name"] = name;
             context.Data["app"] = app;
@@ -197,7 +197,7 @@ public static class AppsCommand
     private static async Task<int> InstanceListAsync(string[] args, CliContext context)
     {
         var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" });
-        var all = new AppInstanceStore(new DefinitionStore(IdentityCommand.Open(parsed))).List();
+        var all = new AppInstanceStore(DbDataGateway.Server.Serving.ServingKinds.StoreOf(IdentityCommand.Open(parsed))).List();
         foreach (var i in all) await context.Out.WriteLineAsync($"{i.Name}  {i.App}  {(i.Pin is { } p ? "pinned to " + p : "current")}{(i.Title is null ? "" : "  " + i.Title)}");
         if (all.Count == 0) await context.Out.WriteLineAsync("No instance is published. Publish an app with: apps publish --dir <folder>, then apps instance-save --name <instance> --app <app>");
         context.Data["instances"] = all.Select(i => new Dictionary<string, object?> { ["name"] = i.Name, ["app"] = i.App, ["pin"] = i.Pin, ["title"] = i.Title }).ToList();
@@ -219,7 +219,7 @@ public static class AppsCommand
         }).ToList();
         try
         {
-            var saved = new AppInstanceStore(new DefinitionStore(IdentityCommand.Open(parsed))).SaveNavigation(new NavigationSet(name, title, entries), Environment.UserName);
+            var saved = new AppInstanceStore(DbDataGateway.Server.Serving.ServingKinds.StoreOf(IdentityCommand.Open(parsed))).SaveNavigation(new NavigationSet(name, title, entries), Environment.UserName);
             await context.Out.WriteLineAsync($"Saved navigation set {name} (version {saved.Version}) with {entries.Count} instance(s).");
             context.Data["name"] = name;
             context.Data["version"] = saved.Version;
@@ -235,7 +235,7 @@ public static class AppsCommand
     private static async Task<int> NavListAsync(string[] args, CliContext context)
     {
         var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo" });
-        var sets = new AppInstanceStore(new DefinitionStore(IdentityCommand.Open(parsed))).NavigationSets();
+        var sets = new AppInstanceStore(DbDataGateway.Server.Serving.ServingKinds.StoreOf(IdentityCommand.Open(parsed))).NavigationSets();
         foreach (var set in sets) await context.Out.WriteLineAsync($"{set.Name}  {set.Title}  {string.Join(", ", set.Entries.Select(e => e.Instance))}");
         if (sets.Count == 0) await context.Out.WriteLineAsync("No navigation set is published. Make one with: apps nav-save --name <set> --title <text> --item <instance>,<instance>");
         context.Data["sets"] = sets.Select(s => new Dictionary<string, object?> { ["name"] = s.Name, ["title"] = s.Title, ["instances"] = s.Entries.Select(e => e.Instance).ToList() }).ToList();
@@ -274,7 +274,7 @@ public static class AppsCommand
                 return CliExit.Failure;
             }
         }
-        var store = new AppInstanceStore(new DefinitionStore(IdentityCommand.Open(parsed)));
+        var store = new AppInstanceStore(DbDataGateway.Server.Serving.ServingKinds.StoreOf(IdentityCommand.Open(parsed)));
         var current = store.Apps().Where(a => parsed.Get("app") is not { Length: > 0 } only || a.Name == only).ToList();
         var rows = new List<Dictionary<string, object?>>();
         foreach (var app in current)
@@ -315,7 +315,7 @@ public static class AppsCommand
                 context.Data["version"] = (int?)answer["version"];
                 return CliExit.Ok;
             }
-            var moved = new AppInstanceStore(new DefinitionStore(IdentityCommand.Open(parsed))).MoveApp(app, Environment.UserName, to);
+            var moved = new AppInstanceStore(DbDataGateway.Server.Serving.ServingKinds.StoreOf(IdentityCommand.Open(parsed))).MoveApp(app, Environment.UserName, to);
             await context.Out.WriteLineAsync($"{app} now serves version {moved.Version}. Instances pinned to a version are unchanged; a trusted app runs only while an approval stands for these exact files.");
             context.Data["app"] = app;
             context.Data["version"] = moved.Version;
@@ -338,7 +338,7 @@ public static class AppsCommand
         }
         try
         {
-            var removed = retire(new AppInstanceStore(new DefinitionStore(IdentityCommand.Open(parsed))), name, Environment.UserName);
+            var removed = retire(new AppInstanceStore(DbDataGateway.Server.Serving.ServingKinds.StoreOf(IdentityCommand.Open(parsed))), name, Environment.UserName);
             await context.Out.WriteLineAsync(removed ? $"The {noun} {name} is no longer served." : $"The {noun} {name} was not being served.");
             return removed ? CliExit.Ok : CliExit.Failure;
         }

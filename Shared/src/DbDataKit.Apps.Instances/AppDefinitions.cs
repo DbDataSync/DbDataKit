@@ -4,7 +4,7 @@ using DbDataKit.State;
 namespace DbDataKit.Apps;
 
 /// <summary>
-/// The kinds of the apps back end in plan 30's registry (PB01): <c>app</c> (the package: the manifest and its files), <c>app-instance</c> and <c>app-nav</c> (a set of instances a menu lists). Each is accepted by <c>serving</c> targets
+/// The kinds of the apps back end in plan 30's registry (PB01): <c>app-approval</c> (the record of an approval), <c>app</c> (the package: the manifest and its files), <c>app-instance</c> and <c>app-nav</c> (a set of instances a menu lists). Each is accepted by <c>serving</c> targets
 /// and serves at once; the validator is what <see cref="AppInstanceStore"/> checks before it publishes, so a version that reaches the registry by another way (the shared HTTP API, plan 30 PB02) is checked the same. An instance
 /// depends on its app (<c>app:name</c>) and a navigation set on the instances it lists (<c>app-instance:name</c>).
 /// </summary>
@@ -16,6 +16,8 @@ public static class AppDefinitions
         kinds.Register(new DefinitionKind(AppInstanceStore.AppKind, ["serving"], PublishMode.Serve) { Validator = ValidateApp });
         kinds.Register(new DefinitionKind(AppInstanceStore.InstanceKind, ["serving"], PublishMode.Serve) { Formats = DefinitionFormats.Of(AppAddresses.InstanceFormat), Validator = ValidateInstance });
         kinds.Register(new DefinitionKind(AppInstanceStore.NavigationKind, ["serving"], PublishMode.Serve) { Validator = ValidateNavigation });
+        // an approval of a trusted version (AP15): a record the approver's act writes, never published by a client; registered so the store that keeps it can be the one that publishes the others
+        kinds.Register(new DefinitionKind(AppApprovalStore.Kind, ["serving"], PublishMode.Serve) { Validator = c => Parse(c.Manifest) is null ? "The approval is not a JSON object." : null });
         return kinds;
     }
 

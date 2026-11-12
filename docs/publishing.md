@@ -30,12 +30,14 @@ Back-end products (Build, the apps back end, DbDataStore, DbDataIntegration) **p
 | --- | --- | --- | --- |
 | `integration` (runner package, `package/1`) | runner | `stage`, activated when every runner is ready | `DbDataKit.Runner/Hosting/RunnerPackages.cs` |
 | `dashboard`, `report` | serving | `serve` | `DbDataKit.Views/Publishing/ViewDefinitions.cs` |
+| `semantic-model`, `data-source`, `entity-model` | serving | `serve` | `DbDataGateway.Server/Serving/ServingKinds.cs` |
+| `app`, `app-instance`, `app-nav`, `app-approval` | serving | `serve` | `DbDataKit.Apps.Instances/AppDefinitions.cs` |
 
-`semantic-model`, `data-source`, entity models, `app`, `app-instance` and `navigation` are also definitions in the same store (`PublishedSemanticModels`, `PublishedDataSources`, `PublishedEntityModels`, `AppInstanceStore`), but they are published through their own endpoints and stores, not yet through the registry and the shared HTTP API. That is the open work of plan 30.
+The Gateway's stores (`PublishedSemanticModels`, `PublishedDataSources`, `PublishedEntityModels`, `AppInstanceStore`) publish through `DefinitionStore.WithRegistry(ServingKinds.All, "serving")`: the kind's validator, its format and the dependencies being active in the channel are checked on every publish. No serving kind declares a slot yet. The shared HTTP API for these kinds (publish, activate, bindings) and the removal of their own endpoints is the open work of plan 30; what is shared already is `GET /api/v1/definitions/{kind}/{name}` and the prune call below.
 
 ## Rules that hold for every kind
 
 - **A channel is part of a version's key** (preview, test, prod). Promotion publishes the same version to the next channel; bindings, not the definition, differ between channels.
 - **The publisher is a paired Publisher** with an owner scope (plan 13 W12): it sees and changes only what it published.
-- **Versions are kept** until an administrator prunes them (owner, 2026-11-04), through an API and a screen that show the active, staged and previous versions, each instance's status and what pruning would remove; an artifact goes when no kept version names it. Built for the runner's versions (`PackagesPage.tsx`); for models it is plan 14a SL07.
+- **Versions are kept** until an administrator prunes them (owner, 2026-11-04), through an API and a screen that show the active, staged and previous versions, each instance's status and what pruning would remove; an artifact goes when no kept version names it. `DefinitionPublisher.Prune` removes the versions an administrator names (or all but the newest N), never one a channel has active, staged or as its previous, nor one another version pins in `depends_on`; a file goes when no kept version names it. It is `POST /api/v1/definitions/integration/{name}/prune` on the runner and `POST /api/v1/definitions/{kind}/{name}/prune` on the Gateway's management listener (administrator; body `keep` or `versions`, and `dry_run`, which is true unless the call says false). The runner's `PackagesPage.tsx` and the Gateway's models screen show the dry run before the button that removes works. Dashboards and reports (UE04) and plan 14a SL07 do not use it yet.
 - **Clean break, not silent:** a version in a format the program does not read is refused naming the kind, the name and both numbers.
