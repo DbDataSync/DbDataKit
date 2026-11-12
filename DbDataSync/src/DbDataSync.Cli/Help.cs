@@ -74,6 +74,11 @@ public static class Help
                   The lineage of the replications' tables and columns, built offline from the
                   configuration: the graph, what a change touches, where a value comes from.
 
+              dbdatasync gateway add|list|remove [--repo <path>]
+                  The serving groups (Gateways) this server tells when a run has written a
+                  dataset, so their result cache is cleared. A pairing is made with a code
+                  from `dbdatagateway server pair`; a failed message never fails a run.
+
               dbdatasync cert use-pem --cert <path> --key <path> | use-pfx --pfx <path>
                   Points Kestrel at a certificate file — unencrypted PEM key or
                   unprotected PFX. Any platform.
