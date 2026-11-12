@@ -102,16 +102,28 @@ public sealed class WorkspaceBuildPublishTests
         Assert.Equal("warehouse", (string)gateway.SemanticModels["sales"].Sources["default"]!);
         Assert.Contains("name: sales", gateway.SemanticModels["sales"].Catalog);
         Assert.All(gateway.Calls, c => { Assert.Contains("with publisher", c); });
-        Assert.DoesNotContain("secret", gateway.Published.Single().ToJsonString(), StringComparison.OrdinalIgnoreCase);   // no login, no reference to one
+        // through the shared publish API (plan 33 SW01): the build's data source document goes first, as this client's own and with no login, and the model over it needs no slot
+        Assert.Equal(["data-source", "semantic-model"], gateway.Published.Select(p => (string)p["manifest"]!).Select(m => m.StartsWith("{", StringComparison.Ordinal) ? "semantic-model" : "data-source").ToArray());
+        Assert.All(gateway.Published, p => Assert.DoesNotContain("secret", p.ToJsonString(), StringComparison.OrdinalIgnoreCase));   // no login, no reference to one
+        Assert.Contains("managed_by: workspace-", gateway.DataSourceDocs["warehouse"].Text);
+        Assert.DoesNotContain("slots", (string)gateway.Published.Last()["manifest"]!, StringComparison.Ordinal);
+        Assert.DoesNotContain(gateway.Calls, c => c.Contains("/api/v1/semantic-models/", StringComparison.Ordinal));
 
         var again = (await Publish(server, workspace, await BuildAsync(server, workspace), new JsonObject { ["target"] = "edge" })).Body!["published"]!["models"]![0]!;
         Assert.Equal((1, true), ((int)again["version"]!, (bool)again["unchanged"]!));
 
-        // a Gateway without the data source says so in its words, and nothing is claimed
+        // the login an administrator put on the Gateway stays when the document is sent again: the document names none and the version replaces the file
+        var withLogin = gateway.DataSourceDocs["warehouse"];
+        gateway.DataSourceDocs["warehouse"] = (withLogin.Version, withLogin.Text + "connection_string_secret: 'secret:dbdatakit:gateway:warehouse-read'\n");
+        Assert.Equal(HttpStatusCode.OK, (await Publish(server, workspace, await BuildAsync(server, workspace), new JsonObject { ["target"] = "edge" })).Response.StatusCode);
+        Assert.Contains("connection_string_secret: 'secret:dbdatakit:gateway:warehouse-read'", gateway.DataSourceDocs["warehouse"].Text);
+        Assert.Contains("managed_by: workspace-", gateway.DataSourceDocs["warehouse"].Text);
+
+        // a data source the Gateway lacks is made from the build's document, without a login (an administrator sets that on the Gateway)
         gateway.DataSources.Remove("warehouse");
-        var refused = await Publish(server, workspace, await BuildAsync(server, workspace), new JsonObject { ["target"] = "edge" });
-        Assert.Equal(HttpStatusCode.Conflict, refused.Response.StatusCode);
-        Assert.Contains("'warehouse', which is not a data source of this server", (string)refused.Body!["error"]!);
+        gateway.DataSourceDocs.Clear();
+        Assert.Equal(HttpStatusCode.OK, (await Publish(server, workspace, await BuildAsync(server, workspace), new JsonObject { ["target"] = "edge" })).Response.StatusCode);
+        Assert.DoesNotContain("connection_string_secret", gateway.DataSourceDocs["warehouse"].Text);
     }
 
     [Fact]

@@ -23,7 +23,8 @@ public sealed class PublishedEntityModels(DefinitionStore store, Action<string>?
     private readonly ConcurrentDictionary<string, (int Version, string Reason)> _failed = new(StringComparer.Ordinal);
 
     /// <summary>A version's content in the store.</summary>
-    public sealed record Content(string Model, string DataSource, string? ManagedBy);
+    /// <param name="Slots">The data sources the version names as slots (plan 33 SW01): each is bound in the channel by the group (an administrator for a data source made by hand) before the version can serve, which takes the place of the per-publish <c>adopt</c>. Absent when the model names none, so a version published without slots reads as before.</param>
+    public sealed record Content(string Model, string DataSource, string? ManagedBy, [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Slots = null);
 
     public string Kind => DefinitionKind;
 

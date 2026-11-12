@@ -24,11 +24,12 @@ public delegate void DefinitionsAuditor(string verb, DefinitionsCaller caller, s
 /// The shared publish API (plan 30 PB02), generalised from the runner's: one set of calls for every kind a host's registry lists, relative to the host's <c>/api/v1</c>.
 /// <code>
 /// HEAD artifacts/{sha256}  |  PUT artifacts/{sha256}                           (the stream calls <see cref="HasArtifact"/> and <see cref="StoreArtifactAsync"/>)
-/// GET  definitions/{kind}                                                       what each channel serves of each definition of the kind        (viewer)
+/// GET  definitions/{kind}                                                       what each channel serves of each definition of the kind        (viewer; a publisher alone sees the names it owns)
 /// GET  definitions/{kind}/{name}                                                versions, what each channel serves, bindings                    (viewer)
 /// PUT  definitions/{kind}/{name}      {manifest, artifacts[], depends_on[], channel, mode, expected_version, note, format}   (publisher: own definitions; admin)
 /// GET  definitions/{kind}/{name}/versions/{n}                                   one version whole: manifest, files, depends_on, signature       (viewer; what a promotion to another group reads, PB06)
 /// POST definitions/{kind}/{name}/activate|switch|rollback|retire|prune          {channel, expected_version, version | keep | versions, dry_run}  (admin)
+/// POST definitions/{kind}/{name}/adopt   {client, adopt}                       (admin; a kind whose hook does it: the Gateway's data-source)
 /// PUT  bindings/{channel}/{kind}/{name}  {slots: {slot: boundTo}, expected_revision}  |  DELETE bindings/{channel}/{kind}/{name}/{slot}   (publisher: own; admin)
 /// </code>
 /// The caller's roles and the owner rules (a publisher changes only the definitions it created) are the API's; what a kind checks is the registry's. A host that serves a kind from what the group serves (the Gateway) is told of each change
@@ -192,9 +193,15 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
         if (CheckKind(kind) is { } bad) return bad;
         if (CanRead(kind, caller) is { } denied) return denied;
         if (HookOf(kind)?.List() is { } listed) return new(200, listed);
+        // a caller that only publishes sees the names it owns and no others (plan 33 SW01): it must not learn what other publishers hold; an administrator and a viewer see every name
+        var ownOnly = !caller.Admin && !caller.Viewer;
         var rows = new JsonArray();
         foreach (var name in publisher.Names(kind))
-            rows.Add(new JsonObject { ["name"] = name, ["owner"] = Owner(kind, name), ["channels"] = Heads(kind, name) });
+        {
+            var owner = Owner(kind, name);
+            if (ownOnly && (caller.ClientId is null || owner != caller.ClientId)) continue;
+            rows.Add(new JsonObject { ["name"] = name, ["owner"] = owner, ["channels"] = Heads(kind, name) });
+        }
         return new(200, new JsonObject { ["kind"] = kind, ["definitions"] = rows });
     }
 
@@ -295,7 +302,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
             }
 
         var hook = HookOf(kind);
-        var hookContext = new PublishHookContext(kind, name, channel, manifest, files, caller) { Body = json };
+        var hookContext = new PublishHookContext(kind, name, channel, manifest, files, caller) { Body = json, BoundTo = slot => publisher.ResolveSlots(kind, name, channel, manifest).FirstOrDefault(r => r.Slot == slot && r.Source != SlotSource.Missing)?.BoundTo };
         if (hook is not null)
             try
             {
@@ -338,7 +345,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
     private async Task<DefinitionsResult> Act(string kind, string name, string act, string? body, DefinitionsCaller caller, CancellationToken ct)
     {
         if (CheckKind(kind) is { } badKind) return badKind;
-        if (act is not ("activate" or "switch" or "rollback" or "retire" or "prune")) return Error(404, $"There is no call '{act}'; the life cycle is activate, switch, rollback, retire and prune.");
+        if (act is not ("activate" or "switch" or "rollback" or "retire" or "prune" or "adopt")) return Error(404, $"There is no call '{act}'; the life cycle is activate, switch, rollback, retire and prune, and a kind that can be handed to a publisher has adopt.");
         var json = Json(body, out var badJson);
         if (json is null) return badJson!;
         var channel = Text(json, "channel") ?? DefinitionStore.Production;
@@ -364,6 +371,9 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
         object detail;
         switch (act)
         {
+            case "adopt":
+                // what a kind hands over is the kind's own (the Gateway's data sources): a kind whose hook does not do it has no such call
+                return Error(404, $"The kind '{kind}' has no adopt call: a definition is handed to a publisher only where its kind says how (the Gateway's data-source).");
             case "activate":
                 var activated = publisher.Activate(kind, name, by, channel, expected);
                 detail = new { version = activated.Version };

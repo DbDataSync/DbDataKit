@@ -108,6 +108,18 @@ public sealed partial class GatewayDataSources
         response["diagnostics"] = pending.Diagnostics.DeepClone();
     }
 
+    /// <summary>
+    /// <c>POST definitions/data-source/{name}/adopt</c> on the shared API (plan 33 SW01): the route's <c>POST /api/v1/data-sources/{name}/adopt</c> as it is, in its words: an administrator's call (a person, never a server client whatever its ceiling) that hands a data source
+    /// made by hand, or by another client, to a paired server client by writing <c>managed_by</c> into its file; the body is <c>{"client": "&lt;id&gt;", "adopt": true}</c> (the second only for a data source that carries a serving policy).
+    /// </summary>
+    internal async Task<DefinitionsResult?> AdoptSharedAsync(LifecycleHookContext context, CancellationToken ct)
+    {
+        if (Of(context.Caller) is not { } caller) return null;
+        if (!NamePattern().IsMatch(context.Name)) throw new DefinitionsRefusalException(400, "A data source name is a letter followed by letters, digits, '.', '_' or '-' (up to 64).");
+        var answered = await AdoptAsync(context.Name, context.Body.ToJsonString(), caller, ct).ConfigureAwait(false);
+        return new DefinitionsResult(answered.Status, answered.Body as JsonObject ?? new JsonObject { ["error"] = "This call is refused." });
+    }
+
     /// <summary>The read rules of the route: a publishing client reaches only the data sources it made (a hand-made one is refused, which is how a publisher learns it must adopt).</summary>
     internal void CheckSharedRead(string name, DefinitionsCaller caller)
     {
@@ -132,4 +144,6 @@ public sealed class DataSourceKindHook(GatewayDataSources dataSources, Signature
     public string? OwnerOf(string name) => dataSources.OwnerOfShared(name);
 
     public void BeforeRead(string name, DefinitionsCaller caller) => dataSources.CheckSharedRead(name, caller);
+
+    public Task<DefinitionsResult?> ActAsync(LifecycleHookContext context, CancellationToken ct) => context.Act == "adopt" ? dataSources.AdoptSharedAsync(context, ct) : Task.FromResult<DefinitionsResult?>(null);
 }
