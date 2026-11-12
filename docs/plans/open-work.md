@@ -17,7 +17,6 @@ Flags: **OWNER** waits for a decision only the owner can take (the decision is n
 | [UI06 of the editor-screen gaps](../ui-coverage.md) | Which store Sync's and Build's secrets overview compares their references with (Store and Workspace: whether their stores are listed at all) | the secrets overview for Sync, Build, Store and Workspace |
 | [27](27-knowledge-agents-integrations-work.md) row 61, [27a](27a-knowledge-slices.md) XL01 to XL03 | The Excel add-in: still a proposal | the add-in |
 | [14a](14a-semantic-slices.md) SL25 to SL27 | Ad hoc registrations and the combine in a child process wait until an app or an agent needs them (decided, "not yet"); a request from the owner starts them | nothing else |
-| [27a](27a-knowledge-slices.md) IX17 and IX23, [docs/channel-bindings.md](../channel-bindings.md) | **OWNER:** where the record of a production binding in a non-production channel lives. You asked for one place; built is one mechanism (the same code) in two tables, each server keeping the choices of the bindings it holds (the console's `bindings.posture_choice`, the Runner's `runner.posture_choice`), because the Runner must enforce the rule without reading the console's database. The document says why and what one table would cost | whether the posture record stays per server |
 
 Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without a version bump ([26](26-app-publishing.md), 2026-11-11); the other defaults taken by delegation on 2026-11-09 are in each plan's decisions.
 
@@ -37,6 +36,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | [27a](27a-knowledge-slices.md) AG15, AG18, AG21, AG29, KN28, IX23 | The chat over a real model, providers and usage, fallback lists, the knowledge screens' remainder, the outside-connection form per kind (begun, its row does not say so) | PARTLY |
 | [27a](27a-knowledge-slices.md) AX14, KN25 to KN27, KN29, KN33, BK03, BK04 | Approvals and grants of actions, the knowledge components and app, chunking defaults, the backlog's app and its browser proof (the console hosts the screens, partly built) | not built |
 | [Identity README](../../Shared/src/DbDataKit.Identity/README.md) "Not yet run on a real host"; [ui-coverage](../ui-coverage.md) "Open gaps" | V1: Windows sign-in on a domain-joined host and Entra sign-in on a tenant (all of it runs with fakes in CI); UI06: the secrets overview of Sync, Build, Store and Workspace; the editor-screen run-time evidence (stories not run, Windows runs, the Store's engine paths) | V1 needs a domain-joined host and an Entra tenant; UI06 OWNER |
+| [27a](27a-knowledge-slices.md) IX25 | Compare, adopt and publish of bindings and published connections between the console, the Runner and a Gateway, and the combined list of posture choices (decided 2026-11-12; goes through plan 30's PB02) | waits for plan 30 PB02 |
 
 ## Gateway (serving layer, semantic layer, views, apps host)
 
