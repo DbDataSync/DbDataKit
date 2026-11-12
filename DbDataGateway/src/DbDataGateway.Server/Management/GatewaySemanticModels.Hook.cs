@@ -71,6 +71,7 @@ public sealed partial class GatewaySemanticModels
         Record(caller, "semantic-model publish", name, created ? "created" : result.Changed ? "changed" : "unchanged");
         response["created"] = created;
         response["unchanged"] = !result.Changed;
+        if (WarningsOf(context.Manifest) is { } warnings) response["warnings"] = warnings;
         if (!_asked.TryGetValue(context, out var adoption) || adoption.Adopted.Count == 0) return;
         foreach (var dataSource in adoption.Adopted)
         {
@@ -78,6 +79,12 @@ public sealed partial class GatewaySemanticModels
             Record(caller, "data-source adopt", dataSource, $"adopted by {Client(caller)} ({Who(caller)}) for the model {name}");
         }
         response["adopted"] = new JsonArray([.. adoption.Adopted.Select(a => (JsonNode?)a)]);
+    }
+
+    private static JsonArray? WarningsOf(string manifest)
+    {
+        try { return PublishedSemanticModels.ContentOf(manifest) is { Catalog.Length: > 0 } content ? AccessPublishNotes.Warnings(CatalogLoader.LoadText(content.Catalog).Access, readOnDataSource: true) : null; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
     }
 
     /// <summary>The read rules of the route: a publishing client reads only its own models.</summary>

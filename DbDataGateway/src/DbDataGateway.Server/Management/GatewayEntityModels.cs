@@ -149,7 +149,7 @@ public sealed partial class GatewayEntityModels(PublishedEntityModels models, Fu
                 adoptions?.Record(dataSource, client!, Who(caller), name, "entity-model", at);
                 Record(caller, "data-source adopt", dataSource, $"adopted by {client} ({Who(caller)}) for the model {name}");
             }
-            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["version"] = version.Version, ["created"] = created, ["unchanged"] = unchanged, ["adopted"] = adopting ? dataSource : null });
+            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["version"] = version.Version, ["created"] = created, ["unchanged"] = unchanged, ["adopted"] = adopting ? dataSource : null, ["warnings"] = AccessPublishNotes.Warnings(loaded.Model.Access, readOnDataSource: false) });
         }
         finally { _publishing.Release(); }
     }
