@@ -8,7 +8,7 @@ namespace DbDataBuild.Tests.Unit;
 
 /// <summary>
 /// The <c>semantic</c> noun in Build (plan 14a SL22): the shared verbs and documents over a Gateway the server is paired with. The connection is the only part that is Build's, so a stand-in session
-/// answers here; one real server answers in the Gateway's own <c>SemanticFlightTests</c>, which run the same session class's protocol.
+/// answers here; the session class itself runs against a real Gateway in the Gateway's <c>SemanticFlightTests</c> (<c>TheSharedFlightSessionBuildUsesDescribesQueriesAndExplains...</c>).
 /// </summary>
 [Collection("BuildSemantic")]
 public class BuildSemanticNounTests : IDisposable
