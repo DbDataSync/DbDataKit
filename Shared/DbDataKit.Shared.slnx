@@ -92,6 +92,7 @@
     <Project Path="src/DbDataKit.Scheduling/DbDataKit.Scheduling.csproj" />
     <Project Path="src/DbDataKit.Delivery/DbDataKit.Delivery.csproj" />
     <Project Path="src/DbDataKit.Delivery.Runner/DbDataKit.Delivery.Runner.csproj" />
+    <Project Path="src/DbDataKit.Telemetry/DbDataKit.Telemetry.csproj" />
     <Project Path="src/DbDataKit.Scripting/DbDataKit.Scripting.csproj" />
     <Project Path="src/DbDataKit.State/DbDataKit.State.csproj" />
     <Project Path="src/DbDataKit.State.Engines/DbDataKit.State.Engines.csproj" />
@@ -207,6 +208,7 @@
     <Project Path="tests/DbDataKit.Runner.Execution.Tests/DbDataKit.Runner.Execution.Tests.csproj" />
     <Project Path="tests/DbDataKit.Scheduling.Tests/DbDataKit.Scheduling.Tests.csproj" />
     <Project Path="tests/DbDataKit.Delivery.Tests/DbDataKit.Delivery.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Telemetry.Tests/DbDataKit.Telemetry.Tests.csproj" />
     <Project Path="tests/DbDataKit.Scripting.Tests/DbDataKit.Scripting.Tests.csproj" />
     <Project Path="tests/DbDataKit.Secrets.Abstractions.Tests/DbDataKit.Secrets.Abstractions.Tests.csproj" />
     <Project Path="tests/DbDataKit.Secrets.Cli.Tests/DbDataKit.Secrets.Cli.Tests.csproj" />
