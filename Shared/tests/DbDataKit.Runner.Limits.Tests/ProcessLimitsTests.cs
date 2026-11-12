@@ -39,6 +39,37 @@ public sealed class ProcessLimitsTests
     }
 
     [Fact]
+    public void The_watchdog_sums_the_process_tree_so_an_allocation_in_a_grandchild_is_killed()
+    {
+        if (!OperatingSystem.IsLinux()) Assert.Skip("The tree is summed from /proc on Linux; Windows holds the tree in a job object.");
+        using var child = Start("grandchild", "600");
+        var limit = 250 * MiB;
+        using var handle = ProcessLimits.Apply(child, new LimitSpec(MemoryBytes: limit), new LimitOptions { DisableCgroup = true, DisableJobObject = true, SampleInterval = TimeSpan.FromMilliseconds(100) });
+        var line = child.StandardOutput.ReadLine();
+        Assert.StartsWith("grandchild ", line);
+        var grandchildId = int.Parse(line!["grandchild ".Length..]);
+
+        Assert.True(Exited(child, TimeSpan.FromSeconds(60)), "the tree was not killed");
+        Assert.True(handle.Exceeded);
+        Assert.True(handle.ExceededInfo!.ObservedValue > limit, $"observed {handle.ExceededInfo.ObservedValue}");
+        // the process itself (a runtime that starts another process and waits) never holds 250 MiB: only the sum over its tree can have passed the limit, which a sampler of the process alone never saw
+        Assert.True(Gone(grandchildId, TimeSpan.FromSeconds(10)), "the grandchild outlived its parent's kill");
+    }
+
+    private static bool Gone(int pid, TimeSpan within)
+    {
+        var until = DateTime.UtcNow + within;
+        while (DateTime.UtcNow < until)
+        {
+            try { using var p = Process.GetProcessById(pid); if (p.HasExited) return true; }
+            catch (ArgumentException) { return true; }
+            Thread.Sleep(50);
+        }
+
+        return false;
+    }
+
+    [Fact]
     public void The_watchdog_leaves_a_child_under_its_limit_alone()
     {
         using var child = Start("alloc", "16");
