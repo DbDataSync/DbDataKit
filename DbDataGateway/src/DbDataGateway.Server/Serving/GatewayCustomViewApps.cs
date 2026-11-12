@@ -13,7 +13,7 @@ namespace DbDataGateway.Server.Serving;
 /// none is refused, whatever the page's data would say. (The per-instance role grant the apps host's token exchange checks is the home's; this is the same rule with the roles the principal already has, and a stricter check is the apps host's to add.)
 /// </para>
 /// </summary>
-public sealed class GatewayCustomViewApps(Func<AppInstanceStore> instances) : ICustomViewApps
+public sealed class GatewayCustomViewApps(Func<AppInstanceStore> instances, Func<Uri?>? appsAddress = null) : ICustomViewApps
 {
     private static readonly Dictionary<string, string> Types = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -47,6 +47,18 @@ public sealed class GatewayCustomViewApps(Func<AppInstanceStore> instances) : IC
         var view = resolved.Manifest.CustomViews.FirstOrDefault(v => v.Name == name && v.Kind == CustomViewKind.Page);
         return view is null || FilesOf(resolved) is not { } files ? null : new CustomPageApp(instance, view, files);
     }
+
+    public IEnumerable<CustomPageApp> Pages()
+    {
+        var store = instances();
+        foreach (var instance in store.List())
+            if (store.Resolve(instance.Name) is { } resolved && FilesOf(resolved) is { } files)
+                foreach (var view in resolved.Manifest.CustomViews.Where(v => v.Kind == CustomViewKind.Page))
+                    yield return new CustomPageApp(instance.Name, view, files);
+    }
+
+    public string? PageAddress(string instance, string name) =>
+        appsAddress?.Invoke() is { } root ? new Uri(root, CustomPages.Address(instance, name).TrimStart('/')).AbsoluteUri : null;
 
     public bool MayOpen(ViewsPrincipal who, string instance) => who.Caller.Roles.Count > 0 && instances().Get(instance) is not null;
 

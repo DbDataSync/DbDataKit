@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using DbDataKit.Apps;
 using DbDataKit.State;
 
 namespace DbDataKit.Views.Hosting;
@@ -20,19 +21,42 @@ public sealed class ViewsCatalog(ViewsPublications published, ViewsOptions optio
 
     private const string DashboardsFolder = "/Dashboards";
     private const string ReportsFolder = "/Reports";
+    private const string PagesFolder = "/Pages";
 
     public string Provider => Name;
 
     /// <summary>The viewer a principal of the module is for the catalog (the person, and the app's narrowing).</summary>
     public static ReportCatalogViewer Viewer(ViewsPrincipal who) => new(who.Caller, who.App?.Instance, who.App?.Models);
 
-    private static string FolderPath(string kind) => kind == ViewDefinitions.Report ? ReportsFolder : DashboardsFolder;
+    private static string FolderPath(string kind) => kind == ViewDefinitions.Report ? ReportsFolder : kind == ViewsApi.PageKind ? PagesFolder : DashboardsFolder;
 
-    private static string ItemType(string kind) => kind == ViewDefinitions.Report ? ReportItemTypes.Report : ReportItemTypes.Dashboard;
+    private static string ItemType(string kind) => kind == ViewDefinitions.Report ? ReportItemTypes.Report : kind == ViewsApi.PageKind ? ReportItemTypes.Page : ReportItemTypes.Dashboard;
 
     private static ReportCatalogItem FolderItem(string kind) =>
-        new($"folder/{(kind == ViewDefinitions.Report ? "reports" : "dashboards")}", FolderPath(kind), kind == ViewDefinitions.Report ? "Reports" : "Dashboards", ReportItemTypes.Folder, Name,
-            Description: kind == ViewDefinitions.Report ? "The reports published to this instance." : "The dashboards published to this instance.");
+        kind == ViewsApi.PageKind
+            ? new("folder/pages", PagesFolder, "Pages", ReportItemTypes.Folder, Name, Description: "The custom pages of the apps this instance serves: code in an app's own document, opened at the apps host.")
+            : new($"folder/{(kind == ViewDefinitions.Report ? "reports" : "dashboards")}", FolderPath(kind), kind == ViewDefinitions.Report ? "Reports" : "Dashboards", ReportItemTypes.Folder, Name,
+                Description: kind == ViewDefinitions.Report ? "The reports published to this instance." : "The dashboards published to this instance.");
+
+    // ---- custom pages (plan 32 DBR33): an app's `kind: page` views, listed by their manifest entries ----
+
+    private static string PageId(CustomPageApp p) => $"page/{p.Instance}.{p.View.Name}";
+
+    private static ReportCatalogItem PageItem(CustomPageApp p) =>
+        new(PageId(p), $"{PagesFolder}/{p.Instance}.{p.View.Name}", p.View.Title ?? p.View.Name, ReportItemTypes.Page, Name, Description: $"A page of the app '{p.Files.App}' at the instance '{p.Instance}'.");
+
+    /// <summary>The pages this viewer may see: those of instances they may open (an app's token only its own instance). Nothing when the host serves no apps.</summary>
+    private IReadOnlyList<CustomPageApp> VisiblePages(ReportCatalogViewer viewer)
+    {
+        if (options.CustomApps is not { } apps) return [];
+        var who = new ViewsPrincipal(viewer.Caller);
+        return [.. apps.Pages().Where(p => (viewer.App is null || string.Equals(viewer.App, p.Instance, StringComparison.Ordinal)) && apps.MayOpen(who, p.Instance))];
+    }
+
+    private CustomPageApp? PageOf(ReportCatalogViewer viewer, string id) => id.StartsWith("page/", StringComparison.Ordinal) ? VisiblePages(viewer).FirstOrDefault(p => PageId(p) == id) : null;
+
+    private static string PageFormatsReason(ViewsOptions o) =>
+        o.Exporter is null ? "export unavailable: it is off on this host (the views.export setting is not set)" : o.Exporter.Availability.Available ? "" : o.Exporter.Availability.Reason ?? "";
 
     private static ReportCatalogItem ItemOf(PublishedView view) =>
         new($"{view.Kind}/{view.Name}", $"{FolderPath(view.Kind)}/{view.Name}", view.Document.Title, ItemType(view.Kind), Name, Modified: view.PublishedAt, Version: view.Version.ToString(CultureInfo.InvariantCulture));
@@ -43,13 +67,14 @@ public sealed class ViewsCatalog(ViewsPublications published, ViewsOptions optio
     private IEnumerable<PublishedView> Visible(ReportCatalogViewer viewer, string kind) => published.For(kind).All.Where(v => Allowed(viewer, v));
 
     /// <summary>The kind a folder path stands for (<c>/Dashboards</c>, <c>/Reports</c>, case ignored, a trailing slash allowed), or null for the root; a folder that is not there is a <c>not_found</c>.</summary>
-    private static string? KindOfFolder(string? folder)
+    private string? KindOfFolder(string? folder)
     {
         var path = (folder ?? "").Trim().TrimEnd('/');
         if (path.Length == 0) return null;
         if (string.Equals(path, DashboardsFolder, StringComparison.OrdinalIgnoreCase)) return ViewDefinitions.Dashboard;
         if (string.Equals(path, ReportsFolder, StringComparison.OrdinalIgnoreCase)) return ViewDefinitions.Report;
-        throw new ReportCatalogException("not_found", $"There is no folder '{folder}' in the catalog 'views': its folders are '{DashboardsFolder}' and '{ReportsFolder}'.");
+        if (string.Equals(path, PagesFolder, StringComparison.OrdinalIgnoreCase)) return ViewsApi.PageKind;
+        throw new ReportCatalogException("not_found", $"There is no folder '{folder}' in the catalog 'views': its folders are '{DashboardsFolder}'{(options.CustomApps is null ? " and " : ", ")}'{ReportsFolder}'{(options.CustomApps is null ? "" : $" and '{PagesFolder}'")}.");
     }
 
     // ---- browse ----
@@ -63,13 +88,13 @@ public sealed class ViewsCatalog(ViewsPublications published, ViewsOptions optio
         {
             // the root: the two folders
             if (query.Wants(ReportItemTypes.Folder)) items.AddRange(ViewDefinitions.Kinds.Select(FolderItem));
+            if (query.Wants(ReportItemTypes.Folder) && VisiblePages(viewer).Count > 0) items.Add(FolderItem(ViewsApi.PageKind));
         }
         else
         {
-            foreach (var each in kind is null ? ViewDefinitions.Kinds : new[] { kind })
-                foreach (var view in Visible(viewer, each))
+            foreach (var each in kind is null ? [.. ViewDefinitions.Kinds, ViewsApi.PageKind] : new[] { kind })
+                foreach (var item in each == ViewsApi.PageKind ? VisiblePages(viewer).Select(PageItem) : Visible(viewer, each).Select(ItemOf))
                 {
-                    var item = ItemOf(view);
                     if (!query.Wants(item.Type)) continue;
                     if (searching && !Matches(item, query.Search!.Trim())) continue;
                     items.Add(item);
@@ -92,7 +117,7 @@ public sealed class ViewsCatalog(ViewsPublications published, ViewsOptions optio
         var head = id[..slash];
         var rest = id[(slash + 1)..];
         if (head == "folder")
-            return rest switch { "dashboards" => (ViewDefinitions.Dashboard, null), "reports" => (ViewDefinitions.Report, null), _ => null };
+            return rest switch { "dashboards" => (ViewDefinitions.Dashboard, null), "reports" => (ViewDefinitions.Report, null), "pages" => (ViewsApi.PageKind, null), _ => null };
         if (!ViewDefinitions.Kinds.Contains(head, StringComparer.Ordinal)) return null;
         return published.For(head).Find(rest) is { } view && Allowed(viewer, view) ? (head, view) : null;
     }
@@ -104,10 +129,12 @@ public sealed class ViewsCatalog(ViewsPublications published, ViewsOptions optio
     }
 
     public Task<ReportCatalogItem?> FindAsync(ReportCatalogViewer viewer, string id, CancellationToken cancellationToken = default) =>
-        Task.FromResult<ReportCatalogItem?>(Resolve(viewer, id) is { } found ? found.View is { } view ? ItemOf(view) : FolderItem(found.Kind) : null);
+        Task.FromResult<ReportCatalogItem?>(PageOf(viewer, id) is { } page ? PageItem(page) : Resolve(viewer, id) is { } found ? found.View is { } view ? ItemOf(view) : FolderItem(found.Kind) : null);
 
     public Task<IReadOnlyList<ReportCatalogParameter>> ParametersAsync(ReportCatalogViewer viewer, string id, CancellationToken cancellationToken = default)
     {
+        if (PageOf(viewer, id) is { } page)
+            return Task.FromResult<IReadOnlyList<ReportCatalogParameter>>([.. page.View.Params.Select(p => new ReportCatalogParameter(p.Name, p.Type, null, p.Many, p.Required, null))]);
         var view = Document(viewer, id, "parameters");
         IReadOnlyList<ReportCatalogParameter> list = [.. view.Document.Parameters.Select(p =>
             new ReportCatalogParameter(p.Name, p.Type, p.Label, p.Many, p.Required, p.HasDefault ? AsText(p.Default) : null, ValuesFrom: p.For))];
@@ -118,6 +145,7 @@ public sealed class ViewsCatalog(ViewsPublications published, ViewsOptions optio
 
     public Task<ReportCatalogOpening> OpenAsync(ReportCatalogViewer viewer, string id, IReadOnlyDictionary<string, string?>? parameters = null, string? layout = null, CancellationToken cancellationToken = default)
     {
+        if (PageOf(viewer, id) is { } page) return Task.FromResult(OpenPage(viewer, page, id, parameters, layout));
         var view = Document(viewer, id, "document");
         var layouts = view.Document.Layouts.Select(l => l.Name).ToList();
         if (layout is not null && !layouts.Contains(layout, StringComparer.Ordinal))
@@ -134,8 +162,32 @@ public sealed class ViewsCatalog(ViewsPublications published, ViewsOptions optio
         return Task.FromResult(opening);
     }
 
+    /// <summary>A page opens as a <b>link</b>: its address on the apps host with the parameters in the query string (a page has no layouts; the apps host asks the person to sign in as it does for the app).</summary>
+    private ReportCatalogOpening OpenPage(ReportCatalogViewer viewer, CustomPageApp page, string id, IReadOnlyDictionary<string, string?>? parameters, string? layout)
+    {
+        if (layout is not null) throw new ReportCatalogException("invalid", $"The page '{page.View.Name}' has no layouts: it is code in the app's own document.");
+        var known = page.View.Params.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+        var unknown = (parameters?.Keys ?? []).Where(k => !known.Contains(k)).Order(StringComparer.Ordinal).ToList();
+        if (unknown.Count > 0)
+            throw new ReportCatalogException("invalid", $"The page '{page.View.Name}' has no parameter {string.Join(", ", unknown.Select(u => $"'{u}'"))}: its parameters are {(known.Count == 0 ? "none" : string.Join(", ", known.Select(k => $"'{k}'")))}.");
+        var address = options.CustomApps?.PageAddress(page.Instance, page.View.Name)
+            ?? throw new ReportCatalogException("unsupported", $"This host does not know where its apps are served, so the page '{page.View.Name}' cannot be opened from here: open it at the apps host, /apps/{page.Instance}/_views/{page.View.Name}.");
+        var query = string.Join('&', (parameters ?? new Dictionary<string, string?>()).Where(p => p.Value is not null).OrderBy(p => p.Key, StringComparer.Ordinal)
+            .SelectMany(p => p.Value!.Split(',').Select(v => $"{Uri.EscapeDataString(p.Key)}={Uri.EscapeDataString(v)}")));
+        Record(viewer, ViewsAuditVerbs.Open, ViewsApi.PageKind, $"{page.Instance}.{page.View.Name}", null, AuditEvent.Ok, new JsonObject
+        {
+            ["catalog"] = true, ["parameters"] = new JsonArray((parameters?.Keys ?? []).Order(StringComparer.Ordinal).Select(k => (JsonNode?)JsonValue.Create(k)).ToArray()),
+        });
+        return new ReportCatalogOpening($"{Name}:{id}", ReportOpenModes.Link, page.View.Title ?? page.View.Name, ViewsApi.PageKind, $"{page.Instance}.{page.View.Name}", Url: query.Length == 0 ? address : address + "?" + query, Parameters: parameters);
+    }
+
     public Task<IReadOnlyList<ReportCatalogExport>> ExportsAsync(ReportCatalogViewer viewer, string id, CancellationToken cancellationToken = default)
     {
+        if (PageOf(viewer, id) is { } page)
+        {
+            var why = PageFormatsReason(options);
+            return Task.FromResult<IReadOnlyList<ReportCatalogExport>>([.. (page.View.Formats.Count == 0 ? ViewsApi.PageFormats : page.View.Formats).Select(f => new ReportCatalogExport(f, why.Length == 0, why.Length == 0 ? null : why))]);
+        }
         Document(viewer, id, "exports");
         var exporter = options.Exporter;
         var browser = exporter?.Availability;
@@ -146,7 +198,7 @@ public sealed class ViewsCatalog(ViewsPublications published, ViewsOptions optio
 
     public Task<ReportCatalogPermissions> PermissionsAsync(ReportCatalogViewer viewer, string id, CancellationToken cancellationToken = default)
     {
-        if (Resolve(viewer, id) is null) throw new ReportCatalogException("not_found", $"The catalog 'views' has no item '{id}'.");   // a folder has them too: the snapshot reader (RC02) asks for every entry
+        if (PageOf(viewer, id) is null && Resolve(viewer, id) is null) throw new ReportCatalogException("not_found", $"The catalog 'views' has no item '{id}'.");   // a folder has them too: the snapshot reader (RC02) asks for every entry
         return Task.FromResult(new ReportCatalogPermissions(false, [], "Who may see it is decided when it is rendered: the viewer's roles and attributes decide the rows of every widget, and an app's manifest narrows the models it may use."));
     }
 

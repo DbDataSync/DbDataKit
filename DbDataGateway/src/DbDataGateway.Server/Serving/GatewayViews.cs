@@ -104,7 +104,8 @@ public sealed class GatewayViews
             MaxExportRows = options.CurrentValue.Views.MaxExportRows,
             Exporter = exporter,
             PageAssets = options.CurrentValue.Views.Export.PageAssets,
-            CustomApps = new GatewayCustomViewApps(() => new DbDataKit.Apps.AppInstanceStore(store)),
+            CustomApps = new GatewayCustomViewApps(() => new DbDataKit.Apps.AppInstanceStore(store),
+                () => options.CurrentValue.Modules.Contains(GatewayModules.Apps) ? DbDataGateway.Server.Hosting.GatewayAppsModule.PublicUrlOf(options.CurrentValue) : null),
             Resolver = new ResolverOptions { FrameOrigins = new LiveOrigins(() => options.CurrentValue.Views.FrameOrigins) },
         }, Publications, new Callers(this), new StateViewsAudit(new AuditLog(state, DbDataGateway.Server.State.GatewayState.ServiceId)), loggers);
     }

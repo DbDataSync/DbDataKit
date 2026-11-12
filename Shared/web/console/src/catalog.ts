@@ -11,7 +11,7 @@ export interface CatalogItem {
   id: string
   path: string
   name: string
-  type: 'folder' | 'dashboard' | 'report' | 'external-report' | string
+  type: 'folder' | 'dashboard' | 'report' | 'page' | 'external-report' | string
   description?: string | null
   owner?: string | null
   modified?: string | null
