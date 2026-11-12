@@ -131,9 +131,40 @@ public sealed class OutsideConnectionsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_file_server_connection_is_listed_with_its_address_keeps_its_private_key_as_a_secret_and_a_server_that_is_not_there_is_not_reached()
+    {
+        var listening = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listening.Start();
+        var port = ((System.Net.IPEndPoint)listening.LocalEndpoint).Port;
+        listening.Stop();   // a port nothing listens on
+        var yaml = $"schema: connection/2\nkind: sftp\nname: drop\nfile_server:\n  host: 127.0.0.1\n  port: {port}\n  root: /upload\n  host_keys: [\"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"]\nsign_in:\n  method: ssh_key\n  user: robot\n  private_key_secret: secret:dbdatakit:server:connection:drop:private_key\n";
+        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, "/api/outside-connections/drop", admin, new YamlBody(yaml))).Status);
+
+        var (_, listed) = await Call(HttpMethod.Get, "/api/outside-connections", viewer);
+        var row = listed!["connections"]![0]!;
+        Assert.Equal(($"sftp://127.0.0.1:{port}/upload", "ssh_key", "sftp"), ((string)row["endpoint"]!, (string)row["signIn"]!, (string)row["kind"]!));
+        Assert.False((bool)row["secrets"]![0]!["available"]!);
+        Assert.Equal("private_key", (string)row["secrets"]![0]!["field"]!);
+
+        // the key is typed once and kept in the store; it is in no answer, no file and no row of the record
+        var (stored, _) = await Call(HttpMethod.Put, "/api/outside-connections/drop/secrets/private_key", admin, new SecretBody("-----BEGIN OPENSSH PRIVATE KEY-----\n" + Canary + "\n-----END OPENSSH PRIVATE KEY-----"));
+        Assert.Equal(HttpStatusCode.OK, stored);
+
+        // Test: the key is not a key, so the sign-in is not even tried; either way the words say what to do and the answer holds no secret
+        var (_, test) = await Call(HttpMethod.Post, "/api/outside-connections/drop/test", admin);
+        Assert.False((bool)test!["ok"]!);
+        Assert.False(string.IsNullOrWhiteSpace((string)test["message"]!));
+        Assert.DoesNotContain(Canary, string.Join('\n', bodies));
+        var (_, audit) = await Call(HttpMethod.Get, "/api/agents/audit?limit=1000", admin);
+        Assert.DoesNotContain(Canary, audit!.ToJsonString());
+        foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).Where(f => !f.EndsWith("secrets.yaml", StringComparison.Ordinal) && !f.Contains("keys") && !f.EndsWith(".db", StringComparison.Ordinal) && !f.Contains(".db-")))
+            Assert.DoesNotContain(Canary, await File.ReadAllTextAsync(file));
+    }
+
+    [Fact]
     public async Task A_template_per_kind_is_a_file_that_reads_and_a_viewer_is_not_given_one()
     {
-        foreach (var kind in new[] { "http", "model-provider" })
+        foreach (var kind in new[] { "http", "model-provider", "sftp", "scp", "ftps" })
         {
             var (status, template) = await Call(HttpMethod.Get, $"/api/outside-connections/template?kind={kind}&name=starter", admin);
             Assert.Equal(HttpStatusCode.OK, status);

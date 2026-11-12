@@ -2,15 +2,18 @@ import { request } from '@dbdatakit/shell'
 import type { Diagnostic } from './agents'
 
 /** The kinds of connection the console keeps itself (plan 27a IX01): an API, a model provider, and (the delivery channels, plan 22a GP18) a mail server. A database connection is kept by the Sync or Gateway server that uses it. A webhook is an `http` connection with a `webhook:` section. */
-export const OUTSIDE_KINDS = ['http', 'model-provider', 'smtp'] as const
+export const OUTSIDE_KINDS = ['http', 'model-provider', 'smtp', 'sftp', 'scp', 'ftps'] as const
 export type OutsideKind = (typeof OUTSIDE_KINDS)[number]
 
-export const KIND_LABEL: Record<string, string> = { database: 'database', http: 'API (http)', 'model-provider': 'model provider', smtp: 'mail server (smtp)' }
+export const KIND_LABEL: Record<string, string> = { database: 'database', http: 'API (http)', 'model-provider': 'model provider', smtp: 'mail server (smtp)', sftp: 'file server (SFTP)', scp: 'file server (SCP)', ftps: 'file server (FTPS)' }
 
 /** What each kind is, in a sentence the new-connection form shows. */
 export const KIND_MEANING: Record<OutsideKind, string> = {
   http: 'An HTTP API: an address and how to sign in to it (an API key, basic, OAuth 2 client credentials or a client certificate).',
   'model-provider': 'A model an agent can use: its provider, the models it allows with their prices, and the key as a secret reference.',
+  sftp: 'A file server reached over SSH: list, read and write files. The server is pinned by its host key (a changed key is refused by name); sign in with a private key kept as a secret, or a password.',
+  scp: 'A file server reached over SSH with SCP: read and write one file at a time (SCP cannot list; use SFTP for that). Pinned by host key like SFTP.',
+  ftps: 'A file server reached over FTP with TLS. Pin its certificate by SHA-256 (or give its authority); a certificate that is neither is refused by name.',
   smtp: 'A mail server that delivery channels send mail through: its host, how the connection is protected (STARTTLS or TLS), the sender address and the login as a secret reference.',
 }
 
@@ -21,6 +24,9 @@ export const NEW_CHOICES: NewChoice[] = [
   { id: 'http', label: KIND_LABEL.http, kind: 'http', meaning: KIND_MEANING.http },
   { id: 'model-provider', label: KIND_LABEL['model-provider'], kind: 'model-provider', meaning: KIND_MEANING['model-provider'] },
   { id: 'smtp', label: KIND_LABEL.smtp, kind: 'smtp', meaning: KIND_MEANING.smtp },
+  { id: 'sftp', label: KIND_LABEL.sftp, kind: 'sftp', meaning: KIND_MEANING.sftp },
+  { id: 'scp', label: KIND_LABEL.scp, kind: 'scp', meaning: KIND_MEANING.scp },
+  { id: 'ftps', label: KIND_LABEL.ftps, kind: 'ftps', meaning: KIND_MEANING.ftps },
   { id: 'slack', label: 'webhook: Slack', kind: 'http', flavor: 'slack', meaning: 'A Slack incoming webhook (Block Kit). Its address carries a token: paste it once and only the template stays in the file.' },
   { id: 'teams', label: 'webhook: Teams', kind: 'http', flavor: 'teams', meaning: 'A Teams Workflows webhook (Adaptive Card). The flow and the signature in its address are secret parts: paste the address once.' },
   { id: 'oauth', label: 'API: OAuth 2 consent', kind: 'http', flavor: 'oauth', meaning: 'An API that a person signs in to once (OAuth 2 authorization code): press Authorize, give consent at the provider, and the refresh token is kept as a secret; the connection then refreshes its own access tokens.' },
@@ -28,11 +34,11 @@ export const NEW_CHOICES: NewChoice[] = [
 ]
 
 export const SIGN_IN_LABEL: Record<string, string> = {
-  none: 'no sign-in', api_key: 'API key', basic: 'user and password', oauth2_client_credentials: 'OAuth 2 client credentials', oauth2_authorization_code: 'OAuth 2 consent (authorization code)', client_certificate: 'client certificate', signed_webhook: 'signed webhook (HMAC)',
+  none: 'no sign-in', api_key: 'API key', basic: 'user and password', oauth2_client_credentials: 'OAuth 2 client credentials', oauth2_authorization_code: 'OAuth 2 consent (authorization code)', client_certificate: 'client certificate', ssh_key: 'SSH private key', signed_webhook: 'signed webhook (HMAC)',
 }
 
 /** What a typed secret is called on the screen, by the field it is kept under; the name of a placeholder of the address is its own label. */
-export const SECRET_LABEL: Record<string, string> = { key: 'API key', password: 'Password', client_secret: 'Client secret', certificate: 'Certificate (PKCS#12, Base64)', certificate_password: 'Certificate password', refresh_token: 'Refresh token (kept by Authorize; type one only if the provider gave it to you)' }
+export const SECRET_LABEL: Record<string, string> = { key: 'API key', password: 'Password', client_secret: 'Client secret', certificate: 'Certificate (PKCS#12, Base64)', certificate_password: 'Certificate password', private_key: 'SSH private key (OpenSSH or PEM text)', passphrase: 'Private key passphrase', refresh_token: 'Refresh token (kept by Authorize; type one only if the provider gave it to you)' }
 
 export const secretLabel = (field: string, path = ''): string => SECRET_LABEL[field] ?? (path.startsWith('endpoint_secrets.') ? `Secret part {${field}} of the address` : path === 'endpoint' ? 'The whole address (a secret)' : field)
 
@@ -64,6 +70,9 @@ export function consentReturn(search: string): ConsentReturn | null {
   const state = q.get('consent')
   return state === 'ok' || state === 'failed' ? { ok: state === 'ok', connection: q.get('connection') ?? '', message: q.get('message') ?? '' } : null
 }
+
+/** The kinds the Test button can try: an API, a mail server, a file server. */
+export const canTest = (kind: string | null): boolean => kind === 'http' || kind === 'smtp' || kind === 'sftp' || kind === 'scp' || kind === 'ftps'
 
 /** Whether a connection signs in with a person's consent (so the screen shows Authorize and Disconnect). */
 export const needsConsent = (c: Pick<OutsideConnection, 'signIn'>): boolean => c.signIn === 'oauth2_authorization_code'

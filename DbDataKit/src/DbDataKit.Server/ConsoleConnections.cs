@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using DbDataKit.Config.Yaml;
 using DbDataKit.Connections;
+using DbDataKit.Connections.Files;
 using DbDataKit.Connections.Http;
 using DbDataKit.Knowledge;
 using DbDataKit.Secrets;
@@ -31,7 +32,7 @@ public sealed record ConsentOutcome(bool Ok, string? Connection, string Message)
 public sealed partial class ConsoleConnections
 {
     /// <summary>The fields a typed secret can be kept under, with what each is called on the screen.</summary>
-    public static readonly string[] SecretFields = ["key", "password", "client_secret", "certificate", "certificate_password"];
+    public static readonly string[] SecretFields = ["key", "password", "client_secret", "certificate", "certificate_password", "private_key", "passphrase"];
 
     /// <summary>Whether <paramref name="field"/> can be kept as a typed secret: one of <see cref="SecretFields"/>, or the name of a placeholder of an endpoint template (<c>token</c>, <c>sig</c>, ...).</summary>
     public static bool IsSecretField(string field) => SecretFields.Contains(field, StringComparer.Ordinal) || PlaceholderName().IsMatch(field);
@@ -41,7 +42,8 @@ public sealed partial class ConsoleConnections
 
     /// <summary>Where a connection reaches, as the screens show it: the endpoint's template (or "address hidden"), never the composed address; a mail server as <c>host:port (tls)</c>.</summary>
     public static string? TargetOf(ConnectionDefinition d) =>
-        d.Smtp is { } smtp ? $"{smtp.Host}:{smtp.Port ?? (smtp.Tls switch { "implicit" => 465, "none" => 25, _ => 587 })} ({smtp.Tls})"
+        d.FileServer is { } fs ? $"{d.KindName}://{fs.Host}:{fs.Port ?? (d.KindName == ConnectionKinds.Ftps ? (fs.FtpsMode == "implicit" ? 990 : 21) : 22)}{(fs.Root == "/" ? "" : fs.Root)}"
+        : d.Smtp is { } smtp ? $"{smtp.Host}:{smtp.Port ?? (smtp.Tls switch { "implicit" => 465, "none" => 25, _ => 587 })} ({smtp.Tls})"
         : d.Endpoint is { } endpoint ? EndpointTemplate.Display(endpoint)
         : d.ModelProvider is { } m ? ModelProviderSpec.DefaultEndpoint(m.Provider) : null;
 
@@ -134,7 +136,7 @@ public sealed partial class ConsoleConnections
         if (result.Definition is { } d)
         {
             if (!d.IsOutside)
-                diagnostics.Add(DefaultDiagnosticCatalog.Instance.Create(ConnectionDefinitionLoader.BadKind, $"connections/{name}.yml", 1, 1, "The console keeps connections of outside systems here (kind `http`, `model-provider` or `smtp`); a database connection is kept by the server that uses it.", "Add `kind: http`, or keep the database connection on its Sync or Gateway server."));
+                diagnostics.Add(DefaultDiagnosticCatalog.Instance.Create(ConnectionDefinitionLoader.BadKind, $"connections/{name}.yml", 1, 1, "The console keeps connections of outside systems here (kind `http`, `model-provider`, `smtp`, `sftp`, `scp` or `ftps`); a database connection is kept by the server that uses it.", "Add `kind: http`, or keep the database connection on its Sync or Gateway server."));
             else if (d.Name != name)
                 diagnostics.Add(DefaultDiagnosticCatalog.Instance.Create(ConnectionDefinitionLoader.BadOutside, $"connections/{name}.yml", 1, 1, $"The file is named {name}.yml but the connection is `{d.Name}`.", "A connection's file is named after it."));
         }
@@ -154,6 +156,8 @@ public sealed partial class ConsoleConnections
         if (s.CertificateSecret is not null) yield return ("certificate", "sign_in.certificate_secret", s.CertificateSecret);
         if (s.CertificatePasswordSecret is not null) yield return ("certificate_password", "sign_in.certificate_password_secret", s.CertificatePasswordSecret);
         if (s.RefreshTokenSecret is not null) yield return ("refresh_token", "sign_in.refresh_token_secret", s.RefreshTokenSecret);
+        if (s.PrivateKeySecret is not null) yield return ("private_key", "sign_in.private_key_secret", s.PrivateKeySecret);
+        if (s.PassphraseSecret is not null) yield return ("passphrase", "sign_in.passphrase_secret", s.PassphraseSecret);
     }
 
     /// <summary>Whether a reference can be read now, without keeping what it reads; a problem in words when it cannot.</summary>
@@ -223,6 +227,12 @@ public sealed partial class ConsoleConnections
         if (d.KindName == ConnectionKinds.ModelProvider) return new HttpTestResult(false, null, "not checked", $"`{name}` is a model provider: test one of its models on the Models screen of the Agents page.", null, false, null, 0);
         if (d.KindName == ConnectionKinds.Smtp || d.Webhook is not null)
             return new HttpTestResult(false, null, "not checked", $"`{name}` is {(d.Webhook is not null ? "a webhook" : "a mail server")} that delivery channels send through: bind it to a channel on the Delivery page (Channels) and press Test there, which sends a message clearly marked as a test through it.", null, false, null, 0);
+        if (ConnectionKinds.IsFileServer(d.KindName))
+        {
+            var files = await FileStoreTester.TestAsync(d, _secrets, cancellation).ConfigureAwait(false);
+            return new HttpTestResult(files.Ok, files.Reached, files.SignIn, files.Message, files.Kind, files.Temporary, null, files.Milliseconds);
+        }
+
         var result = await HttpConnectionTester.TestAsync(d, _secrets, _http, cancellation).ConfigureAwait(false);
         if (d.SignIn?.Method == "oauth2_authorization_code") SetHealth(name, result.Ok, result.Message);
         return result;
@@ -402,6 +412,9 @@ public sealed partial class ConsoleConnections
     /// <summary>A file to start from, per kind: references only, a value is typed on the screen and kept in the store. <paramref name="flavor"/> picks a webhook (<c>slack</c>, <c>teams</c>, <c>signed</c>) for kind <c>http</c>.</summary>
     public static string Template(string kind, string name, string? flavor = null) => kind switch
     {
+        ConnectionKinds.Sftp => $"schema: connection/2\nkind: sftp\nname: {name}\nfile_server:\n  host: files.example.com\n  root: /upload\n  # pin the server: press Test once with `tls.verify: false`, confirm the fingerprint it shows with the server's administrator, write it here and remove `tls`\n  host_keys: []\ntls:\n  verify: false\nsign_in:\n  method: ssh_key\n  user: robot\n  private_key_secret: {ReferenceFor(name, "private_key")}\n  # passphrase_secret: {ReferenceFor(name, "passphrase")}\n",
+        ConnectionKinds.Scp => $"schema: connection/2\nkind: scp\nname: {name}\nfile_server:\n  host: files.example.com\n  root: /home/robot\n  host_keys: []\ntls:\n  verify: false\nsign_in:\n  method: basic\n  user: robot\n  password_secret: {ReferenceFor(name, "password")}\n",
+        ConnectionKinds.Ftps => $"schema: connection/2\nkind: ftps\nname: {name}\nfile_server:\n  host: files.example.com\n  ftps_mode: explicit\n  # certificate_sha256: [\"<64 hex digits: press Test, confirm with the server's administrator>\"]\nsign_in:\n  method: basic\n  user: robot\n  password_secret: {ReferenceFor(name, "password")}\n",
         ConnectionKinds.Smtp => $"schema: connection/2\nkind: smtp\nname: {name}\nsmtp:\n  host: smtp.example.com\n  tls: starttls\n  sender: \"DbData <noreply@example.com>\"\nsign_in:\n  method: basic\n  user: robot\n  password_secret: {ReferenceFor(name, "password")}\n",
         ConnectionKinds.Http when flavor == "slack" => $"schema: connection/2\nkind: http\nname: {name}\nendpoint: https://hooks.slack.com/services/{{token}}\nendpoint_secrets:\n  token: {ReferenceFor(name, "token")}\nwebhook:\n  format: slack\n",
         ConnectionKinds.Http when flavor == "teams" => $"schema: connection/2\nkind: http\nname: {name}\nendpoint: https://prod-00.westus.logic.azure.com:443/workflows/{{flow}}/triggers/manual/paths/invoke?api-version=2016-06-01&sig={{sig}}\nendpoint_secrets:\n  flow: {ReferenceFor(name, "flow")}\n  sig: {ReferenceFor(name, "sig")}\nwebhook:\n  format: teams\n",
@@ -409,6 +422,6 @@ public sealed partial class ConsoleConnections
         ConnectionKinds.Http when flavor == "oauth" => $"schema: connection/2\nkind: http\nname: {name}\nendpoint: https://api.example.com/v1\nsign_in:\n  method: oauth2_authorization_code\n  authorize_url: https://login.example.com/oauth2/authorize\n  token_url: https://login.example.com/oauth2/token\n  # revoke_url: https://login.example.com/oauth2/revoke\n  client_id: my-client-id\n  client_secret_secret: {ReferenceFor(name, "client_secret")}\n  scope: offline_access\n  refresh_token_secret: {ReferenceFor(name, "refresh_token")}\n",
         ConnectionKinds.Http => $"schema: connection/2\nkind: http\nname: {name}\nendpoint: https://api.example.com/v1\nsign_in:\n  method: api_key\n  name: X-Api-Key\n  key_secret: {ReferenceFor(name, "key")}\n",
         ConnectionKinds.ModelProvider => $"schema: connection/2\nkind: model-provider\nname: {name}\nsign_in:\n  method: api_key\n  key_secret: {ReferenceFor(name, "key")}\nmodel_provider:\n  provider: anthropic\n  models:\n    - {{ id: claude-sonnet-4-5, window: 200000, max_output: 8192, price: {{ input: 3, output: 15 }} }}\n",
-        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "The console keeps connections of kind http, model-provider and smtp."),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "The console keeps connections of kind http, model-provider, smtp, sftp, scp and ftps."),
     };
 }

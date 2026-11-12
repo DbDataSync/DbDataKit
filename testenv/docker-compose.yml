@@ -323,3 +323,68 @@ services:
       PRINT_QUERIES: "0"
     ports:
       - "31338:31337"
+
+  # The file servers the connection kinds of plan 27a IX04 are tested against. Not started by a bare `up`: `testenv.sh up sftp ftps`.
+  # sftp: user foo (the password of every engine, or the key `testenv.sh up sftp` makes in the cache folder), the folder `upload`; its host key is
+  # made by the server when it starts, which is what the tests pin after reading it.
+  sftp:
+    profiles: [sftp]
+    image: ${DBDATAKIT_TEST_SFTP_IMAGE:-atmoz/sftp:alpine}
+    container_name: dbkit-test-sftp
+    command: ["foo:${DBDATAKIT_TEST_PASSWORD:-DbKit_Test_Pw1}:1001:100:upload"]
+    volumes:
+      - ${DBDATAKIT_TEST_SFTP_KEYS:-./sftp-keys}/client_ed25519.pub:/home/foo/.ssh/keys/client_ed25519.pub:ro
+    ports:
+      - "13022:22"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 22"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
+
+  # ssh: an OpenSSH server that allows commands and scp (the sftp server above is chrooted to SFTP only, and SCP needs `scp -t` and `mv` on the server):
+  # user foo with the password of every engine, home /config.
+  ssh:
+    profiles: [ssh]
+    image: ${DBDATAKIT_TEST_SSH_IMAGE:-linuxserver/openssh-server:latest}
+    container_name: dbkit-test-ssh
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      USER_NAME: foo
+      USER_PASSWORD: *password
+      PASSWORD_ACCESS: "true"
+    ports:
+      - "13023:2222"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 2222"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
+  # ftps: explicit FTPS (AUTH TLS, TLS required) with a certificate the server makes for localhost when it starts (`testenv.sh env` reads its SHA-256 out);
+  # passive data connections on the same ports inside and out, because the server tells the client which one to use.
+  ftps:
+    profiles: [ftps]
+    image: ${DBDATAKIT_TEST_FTPS_IMAGE:-stilliard/pure-ftpd:latest}
+    container_name: dbkit-test-ftps
+    environment:
+      PUBLICHOST: "127.0.0.1"
+      FTP_USER_NAME: foo
+      FTP_USER_PASS: *password
+      FTP_USER_HOME: /home/foo
+      ADDED_FLAGS: "--tls=2"
+      TLS_CN: localhost
+      TLS_ORG: dbdatakit-test
+      TLS_C: NL
+    ports:
+      - "13021:21"
+      - "30000-30009:30000-30009"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/21'"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 5s

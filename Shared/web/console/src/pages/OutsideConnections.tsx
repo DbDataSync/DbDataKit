@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CodeEditor, ErrorBanner, Field, useIsAdmin } from '@dbdatakit/shell'
 import type { Diagnostic } from '../agents'
 import {
-  KIND_LABEL, NEW_CHOICES, consentReturn, isConnectionName, needsConsent, keptHere, outsideApi, outsideDetail, refusedDiagnostics, secretLabel, secretProblems, splitSummary, testSummary, webhookChoices, webhookYaml, yamlWebhookFormat,
+  KIND_LABEL, NEW_CHOICES, canTest, consentReturn, isConnectionName, needsConsent, keptHere, outsideApi, outsideDetail, refusedDiagnostics, secretLabel, secretProblems, splitSummary, testSummary, webhookChoices, webhookYaml, yamlWebhookFormat,
   type OutsideConnection, type WebhookChoices, type WebhookSplit,
 } from '../outsideConnections'
 
@@ -103,7 +103,7 @@ export function OutsideConnections() {
             <div className="row" style={{ gap: 8, marginTop: 8 }}>
               <button type="button" className="btn" onClick={() => check.mutate()} data-testid="outside-check">Check</button>
               <button type="button" className="btn btn-primary" onClick={() => save.mutate()} disabled={save.isPending} data-testid="outside-save">Save</button>
-              {connection && (connection.kind === 'http' || connection.kind === 'smtp') && <button type="button" className="btn" onClick={() => test.mutate()} disabled={test.isPending} data-testid="outside-test">Test</button>}
+              {connection && canTest(connection.kind) && <button type="button" className="btn" onClick={() => test.mutate()} disabled={test.isPending} data-testid="outside-test">Test</button>}
               {connection && needsConsent(connection) && <button type="button" className="btn" onClick={() => authorize.mutate()} disabled={authorize.isPending} data-testid="outside-authorize">Authorize</button>}
               {connection && needsConsent(connection) && <button type="button" className="btn" onClick={() => disconnect.mutate()} disabled={disconnect.isPending} data-testid="outside-disconnect">Disconnect</button>}
               {connection && <button type="button" className="btn" onClick={() => remove.mutate()} data-testid="outside-remove">Remove</button>}

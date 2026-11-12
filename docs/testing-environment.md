@@ -110,6 +110,10 @@ product's map in `testenv/env/` adds the few names a suite reads that this set d
 Left out on purpose: `DBDATASYNC_MSSQL_SA_PASSWORD` and `DBDATASYNC_POSTGRES_PASSWORD` (variables of a `docker-compose.yml` that is gone; the Sync dev
 harness no longer refuses them: the password is `DBDATAKIT_TEST_PASSWORD`). GitHub secrets and repository variables keep their names.
 
+## The file servers (plan 27a IX04)
+
+`testenv/testenv.sh up sftp ssh ftps` starts three small servers for `DbDataKit.Connections.Files.Tests` (not part of a bare `up`): `sftp` (`atmoz/sftp`, SFTP only, port 13022, folder `/upload`, a key pair made in the cache folder), `ssh` (`linuxserver/openssh-server`, commands and `scp` allowed, port 13023, folder `/config`) and `ftps` (`stilliard/pure-ftpd`, explicit TLS required, port 13021 and passive ports 30000 to 30009, a certificate it makes for `localhost`). Variables: `DBDATAKIT_TEST_SFTP_HOST/_PORT/_USER/_PASSWORD/_ROOT/_KEY_FILE`, `DBDATAKIT_TEST_SSH_HOST/_PORT/_USER/_PASSWORD/_ROOT`, `DBDATAKIT_TEST_FTPS_HOST/_PORT/_USER/_PASSWORD/_CERT_SHA256`. The tests skip (saying what to start) without them; `DBDATAKIT_TEST_REQUIRE_FILE_SERVERS=true` makes a missing variable a failure. In a cloud session pull each image through the mirror and tag it (`docker pull mirror.gcr.io/atmoz/sftp:alpine && docker tag mirror.gcr.io/atmoz/sftp:alpine atmoz/sftp:alpine`, the same for `linuxserver/openssh-server:latest` and `stilliard/pure-ftpd:latest`), then `DBDATAKIT_TEST_PULL=false testenv/testenv.sh up sftp ssh ftps`.
+
 ## Building without JDBC (`SkipJdbc`)
 
 `DBDATAKIT_TEST_SKIP_JDBC=true` (or `-p:SkipJdbc=true`) leaves JDBC and IKVM out of the Sync build: `DbDataSync.Api` and `DbDataSync.TaskRunner` do not

@@ -110,7 +110,7 @@ public sealed class GrantsSpec
 [ConfigSchema(Naming = KeyNaming.SnakeCase, Description = "How a connection of an outside kind signs in (connection/2).")]
 public sealed class SignInSpec
 {
-    [ConfigKey(Pattern = "none|api_key|basic|oauth2_client_credentials|oauth2_authorization_code|client_certificate|signed_webhook")]
+    [ConfigKey(Pattern = "none|api_key|basic|oauth2_client_credentials|oauth2_authorization_code|client_certificate|signed_webhook|ssh_key")]
     public string Method { get; set; } = "none";
 
     /// <summary>api_key: where the key goes, <c>header</c> or <c>query</c>.</summary>
@@ -150,6 +150,40 @@ public sealed class SignInSpec
     /// <summary>... or a secret reference that holds it as Base64.</summary>
     public string? CertificateSecret { get; set; }
     public string? CertificatePasswordSecret { get; set; }
+
+    /// <summary>ssh_key (plan 27a IX04): the reference of the secret that holds the private key (OpenSSH or PEM text, RSA, ECDSA or Ed25519) ...</summary>
+    public string? PrivateKeySecret { get; set; }
+
+    /// <summary>... and, when the key is encrypted, the reference of its passphrase.</summary>
+    public string? PassphraseSecret { get; set; }
+}
+
+/// <summary>
+/// The <c>file_server:</c> section of a connection of kind <c>sftp</c>, <c>scp</c> or <c>ftps</c> (plan 27a IX04; <c>connection/2</c>, additive): the server, the folder every path is relative to, and what the server is <b>pinned</b> to. An SSH server is known by the fingerprint of its host key
+/// (<see cref="HostKeys"/>, <c>SHA256:...</c> as <c>ssh-keygen -lf</c> prints it); a changed key is refused naming it. An FTPS server is trusted by the machine's roots, by <c>tls.ca_file</c> or by <see cref="CertificateSha256"/>, the SHA-256 of its certificate.
+/// </summary>
+[ConfigSchema(Naming = KeyNaming.SnakeCase, Description = "A file server (connection/2, kinds sftp, scp, ftps).")]
+public sealed class FileServerSpec
+{
+    [ConfigKey(Required = true)]
+    public string Host { get; set; } = "";
+
+    /// <summary>Default: 22 for sftp and scp, 21 for explicit FTPS and 990 for implicit.</summary>
+    [ConfigKey(Min = 1, Max = 65535)]
+    public int? Port { get; set; }
+
+    /// <summary>The folder every path of a call is under (<c>/</c> by default, or <c>/upload</c>). A path that leaves it is refused.</summary>
+    public string Root { get; set; } = "/";
+
+    /// <summary>sftp, scp: the pinned host keys as <c>SHA256:&lt;base64&gt;</c>. Required unless <c>tls.verify: false</c> says on purpose that any key is taken.</summary>
+    public List<string> HostKeys { get; set; } = [];
+
+    /// <summary>ftps: the SHA-256 of the server's certificate (64 hex digits) the connection is pinned to, besides or instead of a chain the machine trusts.</summary>
+    public List<string> CertificateSha256 { get; set; } = [];
+
+    /// <summary>ftps: <c>explicit</c> (AUTH TLS on the usual port, the default) or <c>implicit</c> (TLS from the first byte, usually port 990).</summary>
+    [ConfigKey(Pattern = "explicit|implicit")]
+    public string FtpsMode { get; set; } = "explicit";
 }
 
 /// <summary>
@@ -272,7 +306,17 @@ public static class ConnectionKinds
     /// <summary>A mail server a delivery channel sends through (plan 22a GP08, folded into connections by GP18).</summary>
     public const string Smtp = "smtp";
 
-    public static readonly string[] All = [Database, Http, ModelProvider, Smtp];
+    /// <summary>A server that keeps files and is reached over SSH (plan 27a IX04): SFTP lists, reads and writes; SCP reads and writes (it cannot list).</summary>
+    public const string Sftp = "sftp";
+    public const string Scp = "scp";
+
+    /// <summary>A file server reached over FTP with TLS (plan 27a IX04).</summary>
+    public const string Ftps = "ftps";
+
+    public static readonly string[] All = [Database, Http, ModelProvider, Smtp, Sftp, Scp, Ftps];
+
+    /// <summary>The kinds that are a file store (<see cref="ConnectionKindGroup.FileStore"/>): they have a <c>file_server</c> section and no <c>endpoint</c>.</summary>
+    public static bool IsFileServer(string? kind) => kind is Sftp or Scp or Ftps;
 
     public static bool IsKnown(string? kind) => kind is not null && All.Contains(kind, StringComparer.Ordinal);
 }
@@ -330,6 +374,9 @@ public sealed class ConnectionDefinition
 
     /// <summary>The mail server (kind <c>smtp</c>).</summary>
     public SmtpSpec? Smtp { get; set; }
+
+    /// <summary>The file server (kinds <c>sftp</c>, <c>scp</c>, <c>ftps</c>; plan 27a IX04).</summary>
+    public FileServerSpec? FileServer { get; set; }
 
     /// <summary>How an outside kind signs in; null: it does not.</summary>
     public SignInSpec? SignIn { get; set; }
