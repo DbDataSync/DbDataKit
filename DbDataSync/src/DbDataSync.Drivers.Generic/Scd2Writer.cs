@@ -56,6 +56,8 @@ public sealed class Scd2Writer(SqlDialect dialect, ITableCatalog catalog) : ICha
 
     public string Kind => GenericDriverKinds.Scd2;
 
+    public bool SupportsUnitState => true;
+
     public bool SupportsReconciliation => false;
 
     public IReadOnlyList<ParameterDescriptor> Parameters { get; } =
@@ -151,6 +153,7 @@ public sealed class Scd2Writer(SqlDialect dialect, ITableCatalog catalog) : ICha
                 opened = await open.ExecuteNonQueryAsync(cancellationToken);
             }
 
+            await UnitStateScope.BeforeCommitAsync(targetConnection, transaction, cancellationToken);   // plan 28c E17: the unit's state row, same transaction
             await transaction.CommitAsync(cancellationToken);
 
             // Versions opened. A closed version is not a row written — it is a row amended — and

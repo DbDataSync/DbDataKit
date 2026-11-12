@@ -28,7 +28,11 @@ export function TrackingStatusView({ status }: { status: ReplicationTrackingStat
       {status.targetDriver && (
         <div className="hint" data-testid="tracking-target">
           Target: {status.targetDriver}
-          {status.targetCanHoldState ? ' can hold a state table once its writer keeps one.' : ' cannot hold a state table, so its state stays on the runner.'}
+          {status.targetWritersBuilt
+            ? ` keeps a state table (dbdatasync.unit) written in each unit's transaction when the mode is target or both.`
+            : status.targetCanHoldState
+              ? ' can hold a state table, but its writer is not built yet, so its state stays on the runner.'
+              : ' cannot hold a state table, so its state stays on the runner.'}
         </div>
       )}
     </div>
@@ -37,7 +41,7 @@ export function TrackingStatusView({ status }: { status: ReplicationTrackingStat
 
 /**
  * Where this replication keeps its tracking state (plan 28c E17): the mode in the file's `tracking:` section (absent is the default), the mode that applies and the reason when they differ.
- * Only `state` can be chosen while no writer keeps the state on the target; `target` and `both` are listed, disabled, so a person sees what is coming and why it is not offered.
+ * `target` and `both` are offered when a writer keeps the state on this replication's target (SQL Server, PostgreSQL); elsewhere they are listed, disabled.
  */
 export function TrackingCard({ replicationName, draft, onChange }: {
   replicationName: string
