@@ -47,7 +47,7 @@ All screens are shown by the console (`Shared/web/console`) at `/servers/<server
 | | Secrets (the passwords a data source's file refers to; the console's own, by name and reference, never a value) | Yes (a name and a value, written once) | Replace the value | Yes (asks first) | The data source editor lists the references to write | `SecretsPage.tsx`, `DataSourcesPage.tsx` |
 | | Certificate | – | – | – | Renew | `TlsPage.tsx` |
 | | Sessions, queries, lockouts | – | – | – | End a session, cancel a query, lift a lockout | `ActivityPage.tsx` |
-| | Server settings (`server.yaml`: modules, views cache, PDF export, SQL logging, and the text) | – (the file exists; a save changes it) | Yes (form and text, checked by the Gateway as it changes; a restart is said where needed) | – | See the change a save made (its commit) | `SettingsPage.tsx` |
+| | Server settings (`server.yaml`: modules (the `feeds` REST listener among them), views cache, PDF export, the semantic engine's limits, the REST listener's port and row limits (SL31), SQL logging, and the text) | – (the file exists; a save changes it) | Yes (form and text, checked by the Gateway as it changes; a restart is said where needed) | – | See the change a save made (its commit) | `SettingsPage.tsx` |
 | | Configuration history | – | – | – | View and diff commits | `ConfigPage.tsx` |
 | | Overview | – | – | – | Read-only | `OverviewPage.tsx` |
 | | Serving modules (`flightsql`, `identity`; `apps` and `rest` planned) | – | – | – | **No UI**: the `Modules` setting in `server.yaml` (O01) | |

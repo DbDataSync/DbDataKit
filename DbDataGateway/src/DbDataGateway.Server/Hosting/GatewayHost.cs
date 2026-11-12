@@ -225,6 +225,14 @@ public static class GatewayHost
         if (GatewayModules.Has(options, GatewayModules.Identity)) services.AddHostedService<GatewayIdentityModule>();
         if (GatewayModules.Has(options, GatewayModules.Apps)) services.AddHostedService<GatewayAppsModule>();
         if (GatewayModules.Has(options, GatewayModules.Store)) services.AddHostedService<GatewayStoreModule>();
+        // saved queries and requests over REST (plan 14a SL31): a listener of its own, only when asked for
+        if (GatewayModules.Has(options, GatewayModules.Feeds))
+        {
+            services.AddSingleton(sp => new GatewayFeeds(sp.GetRequiredService<IOptionsMonitor<GatewayOptions>>(), sp.GetRequiredService<DbDataKit.Serving.IServingServices>(), sp.GetRequiredService<SemanticModels>(), sp.GetRequiredService<HomeCallers>(),
+                new DbDataGateway.Server.State.StateAuditLog(sp.GetRequiredService<DbDataKit.State.StateDatabase>()), sp.GetRequiredService<TimeProvider>()));
+            services.AddSingleton<GatewayFeedsModule>();
+            services.AddHostedService(sp => sp.GetRequiredService<GatewayFeedsModule>());
+        }
         if (GatewayModules.Has(options, GatewayModules.Views))
         {
             services.AddSingleton<GatewayViewsModule>();

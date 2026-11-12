@@ -28,6 +28,7 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
         ValidateApps(o, cx);
         ValidateStore(o, cx);
         ValidateViews(o, cx);
+        ValidateRest(o, cx);
         ValidateCompression(o.Compression, "Compression", cx);
         ValidateDataSources(o, cx);
         ValidateJwt(o, cx);
@@ -124,6 +125,22 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
             cx.Error("Store.Port", "The store module has its own port; it is the identity home's here.", $"Choose another port than {o.Identity.Port}.");
         if (GatewayModules.Has(o, GatewayModules.Apps) && o.Store.Port == o.Apps.Port)
             cx.Error("Store.Port", "The store module has its own port; it is the apps host's here.", $"Choose another port than {o.Apps.Port}.");
+    }
+
+    private static void ValidateRest(GatewayOptions o, IConfigValidationContext cx)
+    {
+        if (!GatewayModules.Has(o, GatewayModules.Feeds)) return;
+        if (!IPAddress.TryParse(o.Rest.Address, out _))
+            cx.Error("Rest.Address", $"`Address` is `{o.Rest.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
+        void Clash(bool serves, int port, string what) { if (serves && o.Rest.Port == port && port != 0) cx.Error("Rest.Port", $"The feeds module has its own port; it is {what} here.", $"Choose another port than {port}."); }
+        Clash(GatewayModules.Has(o, GatewayModules.FlightSql), o.Listen.Port, "the Flight port");
+        Clash(o.Management.Enabled, o.Management.Port, "the management API's");
+        Clash(GatewayModules.Has(o, GatewayModules.Identity), o.Identity.Port, "the identity home's");
+        Clash(GatewayModules.Has(o, GatewayModules.Apps), o.Apps.Port, "the apps host's");
+        Clash(GatewayModules.Has(o, GatewayModules.Store), o.Store.Port, "the store module's");
+        Clash(GatewayModules.Has(o, GatewayModules.Views), o.Views.Port, "the views module's");
+        if (o.Rest.DefaultLimit > o.Rest.MaxRows)
+            cx.Error("Rest.DefaultLimit", $"`DefaultLimit` is {o.Rest.DefaultLimit}, more than `MaxRows` ({o.Rest.MaxRows}).", "Set a default at or below the most a call may ask for.");
     }
 
     private static void ValidateViews(GatewayOptions o, IConfigValidationContext cx)
