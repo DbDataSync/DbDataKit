@@ -75,6 +75,7 @@ public static class KnowledgeItemLoader
         ["semantic-model"] = ["measure", "dimension"],
         ["store-model"] = ["field"],
         ["connection"] = [],
+        ["report-catalog"] = ["item"],
         ["app"] = [],
         ["integration"] = [],
         ["tag"] = [],
