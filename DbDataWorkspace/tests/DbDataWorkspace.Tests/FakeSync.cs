@@ -27,8 +27,20 @@ internal static class FakeSync
             #!/bin/bash
             out=""; root=""; pkg="orders-set"
             echo "$@" >> "$(dirname "$0")/arguments.txt"
+            verb="$1 $2"; word="$3"
             while [ $# -gt 0 ]; do case "$1" in --out) out="$2"; shift;; --repo) root="$2"; shift;; --package) pkg="$2"; shift;; esac; shift; done
             if [ -n "$DBDATAKIT_TEST_MARKER" ]; then echo "$root/config/replications/orders/task.yaml: the environment of the server reached the program" >&2; exit 1; fi
+            if [ "$verb" = "script list" ]; then
+              names=""; sep=""
+              for f in "$root"/config/scripts/*.yaml; do [ -e "$f" ] || continue; n=$(basename "$f" .yaml); names="$names$sep{\"name\":\"$n\",\"kind\":\"sqlColumnExpression\",\"language\":\"CSharp\",\"error\":null}"; sep=","; done
+              echo "{\"scripts\":[$names]}"; exit 0
+            fi
+            if [ "$verb" = "script test" ]; then
+              code="$root/config/scripts/$word.csx"
+              if [ ! -e "$code" ]; then echo "{\"name\":\"$word\",\"kind\":\"\",\"ok\":false,\"source\":\"\",\"cases\":[],\"log\":[],\"error\":\"Script '$word' does not exist in $root/config/scripts.\"}"; exit 1; fi
+              if grep -q 'not C#' "$code"; then echo "{\"name\":\"$word\",\"kind\":\"sqlColumnExpression\",\"ok\":false,\"source\":\"generated sample\",\"cases\":[],\"log\":[],\"error\":\"Script '$word' did not compile: (1,1) not C#\"}"; exit 1; fi
+              echo "{\"name\":\"$word\",\"kind\":\"sqlColumnExpression\",\"ok\":true,\"source\":\"generated sample, ANSI quoting\",\"cases\":[{\"input\":\"Name -> Name (nvarchar(50))\",\"output\":\"UPPER(\\\"Name\\\")\",\"note\":null}],\"log\":[],\"error\":null}"; exit 0
+            fi
             bad=$(grep -rl 'sourceColumns: \[\]' "$root/config/replications" 2>/dev/null | head -1)
             if [ -n "$bad" ]; then echo "$bad: The metadata for the table mapping 'orders' (source) has not been cached; refresh the mapping's columns first." >&2; echo "Nothing was sent." >&2; exit 1; fi
             files=$(find "$root/config" -type f | wc -l)

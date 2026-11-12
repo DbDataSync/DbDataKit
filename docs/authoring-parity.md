@@ -14,8 +14,8 @@ Summary (counts of the features below):
 | --- | --- | --- | --- | --- | --- |
 | Build | 16 | 3 | 0 | 6 | 25 |
 | Store | 7 | 0 | 0 | 3 | 10 |
-| Sync | 12 | 3 | 3 | 3 | 21 |
-| All | 35 | 6 | 3 | 12 | 56 |
+| Sync | 13 | 3 | 2 | 3 | 21 |
+| All | 36 | 6 | 2 | 12 | 56 |
 
 ### Build
 
@@ -80,7 +80,7 @@ Summary (counts of the features below):
 | Segmenting strategies and the default segmenting of a reload | `replication-detail/SegmentingStrategiesCard.tsx`, `DefaultSegmentingCard.tsx`, `BulkLoadForm.tsx` | `workspace/src/syncSchemas.ts` (`segmentingStrategies` of the task, `defaultSegmenting` of a mapping; the bulk load itself is a run) | built | SC22i |
 | Provisioning: both sides' plan, preview, apply (DDL runs now) | `replication-detail/ProvisioningCard.tsx`, `ReplicationProvisioningPanel.tsx` | none | missing | SC22j |
 | Quality checks of a replication (`checks:` seven kinds, severity, on_error) | `replication-detail/ReplicationChecksPanel.tsx`, `checkForms.ts`, `ChecksCard.tsx` | `workspace/src/syncSchemas.ts`, `qualitySchema.ts` (the task's `checks:` as a form from the shared `check/1` schema) | built | SC22k |
-| Scripts: the registry, write, compile, test against sample input, bind | `sync/src/pages/ScriptsPage.tsx`, `ScriptEditPage.tsx`, `script-edit/ScriptTestPanel.tsx` | none: the template has no scripts folder | missing | SC22k |
+| Scripts: the registry, write, compile, test against sample input, bind | `sync/src/pages/ScriptsPage.tsx`, `ScriptEditPage.tsx`, `script-edit/ScriptTestPanel.tsx` | `workspace/src/pages/SyncScriptsPanel.tsx`, `syncScripts.ts` (the template has `config/scripts/`; **New script** by slot; **Test** runs `dbdatasync script test --json` on a copy; binding is the task and mapping forms' `scripts`) | built | SC22k |
 | Library management (drivers and the platform a package is made for) | `sync/src/pages/ScriptsPage.tsx`, the console's connection library | none: `SyncPlatform` has no setting (SC22c open) | missing | SC22k |
 | Publish to a Runner (package check, channel, stage or serve, slots, bindings) | `sync/src/pages/RunnerPage.tsx`, `RunnerLinkCard.tsx`, `replication-detail/ReplicationRunnerPanel.tsx` | `workspace/src/pages/PublishForm.tsx` | built | SC22c |
 | Who runs the replication (`old`, `observe`, `runner`) and the handover | `replication-detail/ReplicationRunnerPanel.tsx` | none: no Sync scheduler stands behind a Workspace publish (SC22c) | not planned | SC22c |
@@ -102,4 +102,4 @@ Removing the standalone screens with these still `not planned` loses the feature
 
 Every `missing` and `partly` has a row in plan 33: SC20h (Build load graph), SC20k (cache-backed preview and import), SC20l (offline compile, lowered SQL and sample), SC20m (forms for model, connection and semantic files), SC20n (dashboards and reports of a project), SC20o (the decision on database-facing Build screens), SC21e (restore an earlier text), SC22f (error counts), SC22g (mapping columns from the cache), SC22h (connection test), SC22i (transform, segmenting and pipeline forms, the run login), SC22j (provisioning plan), SC22k (checks, scripts, library), SC22l (the decision on Sync's run and monitoring screens). The cache itself is SC20i (format, readers, checks) and SC20j (the paired Gateway's call that writes it: built; a Sync server's own call is not).
 
-**Audited 2026-11-12 (authoring pass 3).** Why the open rows are still open, each with its smallest design in its plan row: SC20h (column lineage needs `project show graph` run on the draft), SC20k (writing models from the cache needs a `--from-cache` mode of `project import`), SC22h (no Sync pairing: the Workspace pairs with Gateways and Runners; the Runner's slot binding test is the nearest paired call), SC22j (the planners read a live catalog: a `provisioning plan --from-cache` verb is the design), SC22k (`script test` exists as a verb; the route, the screen and the template folder are not built). SC20n's wells now offer the draft's own semantic model.
+**Audited 2026-11-12 (authoring pass 3).** Why the open rows are still open, each with its smallest design in its plan row: SC20h (column lineage needs `project show graph` run on the draft), SC20k (writing models from the cache needs a `--from-cache` mode of `project import`), SC22h (no Sync pairing: the Workspace pairs with Gateways and Runners; the Runner's slot binding test is the nearest paired call), SC22j (the planners read a live catalog: a `provisioning plan --from-cache` verb is the design), SC22k (built 2026-11-12: `script list|test --json`, the route, the template folder and the Scripts tab; the library and platform setting stays open with SC22c). SC20n's wells now offer the draft's own semantic model.

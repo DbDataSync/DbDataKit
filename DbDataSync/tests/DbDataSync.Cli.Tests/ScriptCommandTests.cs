@@ -82,4 +82,74 @@ public sealed class ScriptCommandTests : IDisposable
         Assert.Equal(1, exit);
         Assert.Contains("'nope' does not exist", error);
     }
+
+    [Fact]
+    public async Task List_Json_IsOneDocumentWithEachScriptsNameKindAndLanguage()
+    {
+        Write("upper", "sqlColumnExpression", Upper);
+
+        var (exit, output, _) = await RunAsync("list", "--repo", _root, "--json");
+
+        Assert.Equal(0, exit);
+        using var document = System.Text.Json.JsonDocument.Parse(output);
+        var script = Assert.Single(document.RootElement.GetProperty("scripts").EnumerateArray());
+        Assert.Equal("upper", script.GetProperty("name").GetString());
+        Assert.Equal("sqlColumnExpression", script.GetProperty("kind").GetString());
+        Assert.Equal("CSharp", script.GetProperty("language").GetString());
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, script.GetProperty("error").ValueKind);
+    }
+
+    [Fact]
+    public async Task Test_Json_CarriesTheCasesTheSourceAndNoError()
+    {
+        Write("upper", "sqlColumnExpression", Upper);
+
+        var (exit, output, error) = await RunAsync("test", "upper", "--repo", _root, "--json");
+
+        Assert.True(exit == 0, error);
+        using var document = System.Text.Json.JsonDocument.Parse(output);
+        var root = document.RootElement;
+        Assert.True(root.GetProperty("ok").GetBoolean());
+        Assert.Contains("generated sample", root.GetProperty("source").GetString());
+        Assert.Contains(root.GetProperty("cases").EnumerateArray(), c => c.GetProperty("output").GetString() is { } o && o.Contains("UPPER("));
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, root.GetProperty("error").ValueKind);
+    }
+
+    [Fact]
+    public async Task Test_Json_AScriptThatDoesNotCompile_IsStillADocumentWithOkFalseAndTheCompilerMessage()
+    {
+        Write("broken", "sqlColumnExpression", "this is not C#;\nnew X()");
+
+        var (exit, output, _) = await RunAsync("test", "broken", "--repo", _root, "--json");
+
+        Assert.Equal(1, exit);
+        using var document = System.Text.Json.JsonDocument.Parse(output);
+        Assert.False(document.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Contains("did not compile", document.RootElement.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task Test_Json_AScriptThatDoesNotExist_IsADocumentToo()
+    {
+        var (exit, output, _) = await RunAsync("test", "nope", "--repo", _root, "--json");
+
+        Assert.Equal(1, exit);
+        using var document = System.Text.Json.JsonDocument.Parse(output);
+        Assert.Contains("'nope' does not exist", document.RootElement.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task TheRouterCarriesTheSameFindingsAsStructuredDataInFormatJson()
+    {
+        Write("upper", "sqlColumnExpression", Upper);
+        var output = new StringWriter();
+
+        var exit = await SyncCli.Router("1").RunAsync(["script", "test", "upper", "--repo", _root, "--format", "json"], new DbDataKit.Cli.CliContext(output, new StringWriter(), TextReader.Null));
+
+        Assert.Equal(0, exit);
+        using var document = System.Text.Json.JsonDocument.Parse(output.ToString());
+        var data = document.RootElement.GetProperty("data");
+        Assert.True(data.GetProperty("ok").GetBoolean());
+        Assert.NotEmpty(data.GetProperty("cases").EnumerateArray());
+    }
 }

@@ -293,7 +293,7 @@ public sealed class ConsoleWorkspaceTests : IAsyncLifetime
         Assert.Null(ServerProducts.RoleNeeded("dbdatarunner", "GET", "api/v1/projects"));      // another product's table is its own
         Assert.True(ServerProducts.Relayable("dbdatabuild", "DELETE", "api/v1/projects/x"));   // a product with no table is not limited
         // every route of the table is a call a screen makes: the list is the whole of what passes
-        Assert.Equal(37, ServerProducts.WorkspaceRoutes.Count);
+        Assert.Equal(39, ServerProducts.WorkspaceRoutes.Count);
         Assert.All(ServerProducts.WorkspaceRoutes, r => Assert.True(ServerProducts.Relayable("dbdataworkspace", r.Method, r.Route.Replace("{p}", "orders").Replace("{id}", "ada-draft").Replace("{b}", Build).Replace("{sha}", "abc1234").Replace("{name}", "edge").Replace("{path}", "views/orders.yaml"))));
     }
 }

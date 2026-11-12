@@ -255,6 +255,42 @@ public static class WorkspaceManagement
             catch (ProjectKindUnavailableException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
         });
 
+        // a Sync draft's scripts and the test of one (plan 33 SC22k): the product's own program on a copy, offline, the draft untouched. Testing a script RUNS the draft's C# in the child process (a cleared environment, a time limit, no secret store), which is more than a
+        // compile reads, so it needs the Author role; listing only reads the manifests.
+        IResult? SyncToolsOf(string project, string id, HttpContext context, ServerRole needed, out ISyncDraftTools tools, out string root)
+        {
+            (tools, root) = (null!, null!);
+            if (InProject(project, context, needed, out var hosted) is { } refused) return refused;
+            if (workspaces.Find(hosted.Id, id) is not { } workspace) return Results.NotFound();
+            var kindName = store.FindProject(hosted.Id)!.Kind;
+            if (projects.Kinds.Find(kindName) is not ISyncDraftTools found) return Results.Json(new { error = $"A project of the kind '{kindName}' has no Sync scripts to run." }, statusCode: StatusCodes.Status409Conflict);
+            (tools, root) = (found, workspaces.RootOf(workspace));
+            return null;
+        }
+
+        static JsonObject ToolJson(DraftToolResult result) => new() { ["ok"] = result.Ok, ["diagnostics"] = DiagnosticsJson(result.Diagnostics), ["data"] = result.Data };
+
+        app.MapGet("/api/v1/projects/{project}/workspaces/{id}/scripts", async (string project, string id, HttpContext context) =>
+        {
+            if (SyncToolsOf(project, id, context, ServerRole.Viewer, out var tools, out var root) is { } refused) return refused;
+            try { return Results.Json(ToolJson(await tools.ScriptsAsync(root, context.RequestAborted))); }
+            catch (ProjectKindUnavailableException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
+        });
+
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/script-test", async (string project, string id, HttpContext context) =>
+        {
+            if (SyncToolsOf(project, id, context, ServerRole.Author, out var tools, out var root) is { } refused) return refused;
+            var body = await Body(context);
+            const string Shape = "The body is a JSON object with the \"name\" of a script of the project and an optional \"rows\" (1 to 50, default 5).";
+            string? name;
+            int rows;
+            try { (name, rows) = (body?["name"]?.GetValue<string>(), body?["rows"]?.GetValue<int>() ?? 5); }
+            catch (Exception ex) when (ex is InvalidOperationException or FormatException) { return Results.Json(new { error = Shape }, statusCode: StatusCodes.Status400BadRequest); }
+            if (!SyncProjectKind.IsName(name) || rows is < 1 or > 50) return Results.Json(new { error = Shape }, statusCode: StatusCodes.Status400BadRequest);
+            try { return Results.Json(ToolJson(await tools.ScriptTestAsync(root, name!, rows, context.RequestAborted))); }
+            catch (ProjectKindUnavailableException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
+        });
+
         app.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds", (string project, string id, HttpContext context) =>
         {
             if (InProject(project, context, ServerRole.Author, out var hosted) is { } refused) return refused;

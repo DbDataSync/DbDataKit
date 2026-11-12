@@ -140,7 +140,7 @@
     },
     {
       "name": "script_list",
-      "description": "The scripts and the slot each fills. [Offline only] Usage: script list [--repo <path>]",
+      "description": "The scripts and the slot each fills (--json: one JSON document, for the Workspace). [Offline only] Usage: script list [--repo <path>] [--json]",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,

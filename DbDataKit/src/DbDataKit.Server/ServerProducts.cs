@@ -152,6 +152,9 @@ public static class ServerProducts
         ("POST", "api/v1/projects/{p}/workspaces/{id}/compile", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/lowered", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/sample", ServerRole.Viewer),
+        // plan 33 SC22k: a Sync draft's scripts (read) and the test of one (it runs the draft's C# in a child process, so the author's)
+        ("GET", "api/v1/projects/{p}/workspaces/{id}/scripts", ServerRole.Viewer),
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/script-test", ServerRole.Author),
         ("GET", "api/v1/app-build", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/builds", ServerRole.Author),
         ("GET", "api/v1/projects/{p}/workspaces/{id}/builds", ServerRole.Viewer),

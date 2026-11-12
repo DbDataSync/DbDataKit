@@ -52,9 +52,18 @@ public sealed partial class SyncProjectKind(SyncTool tool) : IProjectKind
             "columnMappings: []", "relationships: []", "scripts: {}", "hooks: {}", "provisioning: {}", "verification: []", "defaultSegmenting: []", "primaryKey: []",
             "sourceColumns:", "- name: id", "  nativeType: bigint", "  isPrimaryKey: true", "  keyOrdinal: 1", "targetColumns:", "- name: id", "  nativeType: bigint", "  isPrimaryKey: true", "  keyOrdinal: 1", "relationshipColumns: {}", "");
         var readme = $"# {title ?? id}\n\nA replication set of Sync. `config/replications/<name>/task.yaml` is a replication, `table-mappings/` its mappings (with the cache of the columns they read and write), `config/connections/` the connections by reference:\n"
-            + "a connection holds the name of its secret (`password_secret: secret:dbdatakit:sync:connection:<name>`), never a password. Edit in a workspace, check, merge, publish to a Runner; the connections are bound there.\n";
+            + "a connection holds the name of its secret (`password_secret: secret:dbdatakit:sync:connection:<name>`), never a password. Edit in a workspace, check, merge, publish to a Runner; the connections are bound there.\n"
+            + "`config/scripts/` holds the C# scripts a mapping can name (`<name>.yaml` the manifest, `<name>.csx` the code); the Scripts tab compiles and tests one against generated input, offline.\n";
+        var scriptManifest = string.Join("\n", "schemaVersion: 1", "name: upper-name", "kind: sqlColumnExpression", "language: CSharp",
+            "description: Upper-cases the Name column. A starting point; a mapping uses it once its column names it.", "parameters: []", "enabled: true", "");
+        var scriptCode = string.Join("\n", "using DbDataSync.Scripting.Abstractions;", "",
+            "public sealed class UpperName : ISqlColumnExpression", "{", "    // Return null to leave the column exactly as it would have been.",
+            "    public string? RenderSql(SqlColumnExpressionContext context) => context.SourceColumn == \"Name\" ? $\"UPPER({context.ColumnReference})\" : null;", "}", "",
+            "// The script ends with an expression, with no semicolon after it: the implementation the slot asks for.", "new UpperName()", "");
         return
         [
+            File("config/scripts/upper-name.yaml", scriptManifest),
+            File("config/scripts/upper-name.csx", scriptCode),
             File("config/connections/source-db.yaml", Connection("source-db", "sqlserver", "source.example.com", "App")),
             File("config/connections/target-db.yaml", Connection("target-db", "postgres", "target.example.com", "dw")),
             File("config/replications/orders/task.yaml", task),

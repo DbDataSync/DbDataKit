@@ -45,16 +45,16 @@ public sealed partial class BuildProjectKind
         path is { Length: > 0 and <= 400 } && path.StartsWith("models/", StringComparison.Ordinal) && !path.Contains("..", StringComparison.Ordinal) && !path.Contains('\\') && !path.Contains('\0')
         && (path.EndsWith(".sql", StringComparison.Ordinal) || path.EndsWith(".yml", StringComparison.Ordinal));
 
-    private static void CopyDraft(string from, string to)
+    internal static void CopyDraft(string from, string to, IReadOnlyList<string>? alsoSkipped = null)
     {
         Directory.CreateDirectory(to);
         foreach (var file in Directory.EnumerateFiles(from))
-            if (new FileInfo(file).LinkTarget is null) File.Copy(file, Path.Combine(to, Path.GetFileName(file)));
+            if (Path.GetFileName(file) != ".git" && new FileInfo(file).LinkTarget is null) File.Copy(file, Path.Combine(to, Path.GetFileName(file)));
         foreach (var folder in Directory.EnumerateDirectories(from))
         {
             var name = Path.GetFileName(folder);
-            if (SkippedFolders.Contains(name, StringComparer.Ordinal) || new DirectoryInfo(folder).LinkTarget is not null) continue;
-            CopyDraft(folder, Path.Combine(to, name));
+            if (SkippedFolders.Contains(name, StringComparer.Ordinal) || alsoSkipped?.Contains(name, StringComparer.Ordinal) == true || new DirectoryInfo(folder).LinkTarget is not null) continue;
+            CopyDraft(folder, Path.Combine(to, name), alsoSkipped);
         }
     }
 

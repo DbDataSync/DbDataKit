@@ -79,6 +79,14 @@ export interface LoweredResult { ok: boolean; diagnostics: CheckDiagnostic[]; fi
 /** One table of a run on generated rows: columns, the rows kept (`row_count` is complete), or the error that stopped it. */
 export interface SampleTable { name: string; kind: string; origin: string | null; columns: { name: string; type: string }[]; row_count: number; rows: (string | null)[][]; error: string | null; warnings: string[] }
 export interface SampleResult { ok: boolean; diagnostics: CheckDiagnostic[]; data: { tables: SampleTable[] } | null }
+/** One case of a script's test: what went in, what came out, and why when that is not obvious. */
+export interface ScriptCase { input: string; output: string | null; note: string | null }
+/** What `dbdatasync script test --json` printed, as the tool wrote it: `ok` is false when the script did not compile or threw, and `error` has the words. */
+export interface ScriptTest { name: string; kind: string; ok: boolean; source: string; cases: ScriptCase[]; log: string[]; error: string | null }
+/** One script of `config/scripts/`; `error` is why its manifest cannot be read. */
+export interface ScriptEntry { name: string; kind: string; language: string; error: string | null }
+/** The answer of a Sync draft's tool route: `ok` is false when the program did not answer (the findings say why), `data` is its document. */
+export interface ToolAnswer<T> { ok: boolean; diagnostics: CheckDiagnostic[]; data: T | null }
 export interface SampleOptions { models?: string[]; rows?: number; seed?: number; limit?: number }
 
 const enc = encodeURIComponent
@@ -100,6 +108,10 @@ export const workspaceApi = {
   lowered: (project: string, id: string, path: string) => request<LoweredResult>(`${ws(project, id)}/lowered`, json({ path })),
   /** Models run on generated rows, offline: the same seed gives the same rows. */
   sample: (project: string, id: string, options: SampleOptions = {}) => request<SampleResult>(`${ws(project, id)}/sample`, json(options)),
+  /** The scripts of a Sync draft with the slot each fills (`dbdatasync script list`, on a copy). */
+  scripts: (project: string, id: string) => request<ToolAnswer<{ scripts: ScriptEntry[] }>>(`${ws(project, id)}/scripts`),
+  /** Compiles one script of a Sync draft and runs it against generated input, offline, on a copy (plan 33 SC22k). */
+  scriptTest: (project: string, id: string, name: string, rows = 5) => request<ToolAnswer<ScriptTest>>(`${ws(project, id)}/script-test`, json({ name, rows })),
   /** The commits in which one file changed (newest first), and its text as one of them committed it (plan 33 SC21e). */
   fileHistory: (project: string, id: string, path: string) => request<{ path: string; commits: Commit[] }>(`${ws(project, id)}/file-history/${filePath(path)}`).then((r) => r.commits),
   fileAt: (project: string, id: string, sha: string, path: string) => request<{ path: string; sha: string; content: string }>(`${ws(project, id)}/file-at/${enc(sha)}/${filePath(path)}`).then((r) => r.content),
