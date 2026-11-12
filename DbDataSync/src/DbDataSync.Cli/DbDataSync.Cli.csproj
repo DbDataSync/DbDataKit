@@ -80,6 +80,7 @@
 
   <ItemGroup>
     <!-- The shared `cert` command's verb table (docs/plans/12-shared-tls-rollout.md, slice 7). -->
+    <DbDataKitReference Include="Catalog.Cache" />   <!-- the catalog cache of a project draft: provisioning plan reads it offline; plan 33, SC22j -->
     <DbDataKitReference Include="Cli" />   <!-- the shared noun-verb grammar and the JSON document; plan 13, C07 -->
     <DbDataKitReference Include="State.Cli" />   <!-- state show, test, grants, init, export, import: the shared verbs over Sync's modules; plan 28c, E14 -->
     <DbDataKitReference Include="Lineage.Cli" />   <!-- the lineage noun over the replications of the repository; plan 18, G07b -->

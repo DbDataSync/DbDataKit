@@ -60,8 +60,12 @@ public static class SyncCli
         ]),
         new Noun("script", "The .csx scripts of the configuration",
         [
-            Forward("list", "The scripts and the slot each fills", EffectClass.OfflineOnly, "[--repo <path>]", a => ScriptCommand.RunAsync(["list", .. a])),
-            Forward("test", "Run a script against generated sample input and show what it did", EffectClass.RepoFilesOnly, "<name> [--rows <n>] [--repo <path>]", a => ScriptCommand.RunAsync(["test", .. a])),
+            new Verb("list", "The scripts and the slot each fills (--json: one JSON document, for the Workspace)", EffectClass.OfflineOnly, "[--repo <path>] [--json]", (args, context) => RunScript("list", args, context), ScriptCommand.ListSchema),
+            new Verb("test", "Run a script against generated sample input and show what it did (--json: one JSON document, for the Workspace)", EffectClass.RepoFilesOnly, "<name> [--rows <n>] [--repo <path>] [--json]", (args, context) => RunScript("test", args, context), ScriptCommand.TestSchema),
+        ]),
+        new Noun("provisioning", "What a replication needs of its two databases",
+        [
+            new Verb("plan", "Plan the create or alter of the target tables of a replication offline, from the catalog cache of the repository (--from-cache; --json: one JSON document, for the Workspace). Applying is the server's", EffectClass.OfflineOnly, "<replication> --from-cache [--repo <path>] [--json]", async (args, context) => { using var _ = ContextScope.Enter(context); return await ProvisioningCommand.RunAsync(["plan", .. args], context.Data); }, ProvisioningCommand.PlanSchema),
         ]),
         new Noun("secret", "The encrypted secret store",
         [
@@ -139,6 +143,12 @@ public static class SyncCli
             using var _ = ContextScope.Enter(context);
             return await run(args);
         }, DataSchemas.None);
+
+    private static async Task<int> RunScript(string verb, string[] args, CliContext context)
+    {
+        using var _ = ContextScope.Enter(context);
+        return await ScriptCommand.RunAsync([verb, .. args], context.Data);
+    }
 
     private static Verb Cert(string name, string summary, EffectClass effect, string usage) =>
         Forward(name, summary, effect, usage, a => Task.FromResult(CertCommand.Run([name, .. a])));

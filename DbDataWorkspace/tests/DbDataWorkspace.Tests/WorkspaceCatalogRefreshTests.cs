@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json.Nodes;
 using DbDataKit.Authoring.Server;
+using DbDataKit.Catalog;
 using DbDataKit.Web.Trust;
 
 namespace DbDataWorkspace.Tests;

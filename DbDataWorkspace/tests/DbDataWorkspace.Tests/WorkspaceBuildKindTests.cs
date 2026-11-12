@@ -12,7 +12,7 @@ namespace DbDataWorkspace.Tests;
 [Collection(ServerCollection.Name)]
 public sealed class WorkspaceBuildKindTests
 {
-    private static string? Locate()
+    internal static string? Locate()
     {
         if (Environment.GetEnvironmentVariable("DBDATAKIT_TEST_DBDATABUILD") is { Length: > 0 } given) return File.Exists(given) ? given : null;
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
@@ -23,7 +23,7 @@ public sealed class WorkspaceBuildKindTests
         return null;
     }
 
-    private static string Need()
+    internal static string Need()
     {
         var found = Locate();
         Assert.False(found is null && string.Equals(Environment.GetEnvironmentVariable("DBDATAKIT_TEST_REQUIRE_BUILD"), "true", StringComparison.OrdinalIgnoreCase), "dbdatabuild is required but was not found.");

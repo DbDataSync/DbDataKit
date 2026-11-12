@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DbDataKit.Authoring.Server;
+using DbDataKit.Catalog;
 
 namespace DbDataWorkspace.Tests;
 
@@ -74,9 +75,9 @@ public sealed class CatalogCacheTests
         var folder = Directory.CreateTempSubdirectory("cc-").FullName;
         try
         {
-            Assert.Empty(CatalogCache.Check(folder));
+            Assert.Empty(CatalogCacheCheck.Check(folder));
             File.Copy(Path.Combine(Fixtures, "row.yaml"), Path.Combine(folder, CatalogCache.FileName));
-            var found = Assert.Single(CatalogCache.Check(folder));
+            var found = Assert.Single(CatalogCacheCheck.Check(folder));
             Assert.Equal(("error", CatalogCache.FileName, CatalogCache.UnknownKey), (found.Severity, found.File, found.Code));
         }
         finally { Directory.Delete(folder, true); }
