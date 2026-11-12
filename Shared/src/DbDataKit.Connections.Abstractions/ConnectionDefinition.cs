@@ -179,6 +179,25 @@ public sealed class ObjectStoreSpec
 }
 
 /// <summary>
+/// The <c>report_catalog:</c> section of a connection of kind <c>report-catalog</c> (plan 32 RC01; <c>connection/2</c>, additive): which report server the connection's <c>endpoint</c> (the web portal, <c>https://reports.example.com/Reports</c>) is, and where its URL access is
+/// when that is not the portal's address with <c>Reports</c> replaced by <c>ReportServer</c>.
+/// </summary>
+[ConfigSchema(Naming = KeyNaming.SnakeCase, Description = "An external report server (connection/2, kind report-catalog).")]
+public sealed class ReportCatalogSpec
+{
+    /// <summary><c>ssrs</c> (SQL Server Reporting Services) or <c>pbirs</c> (Power BI Report Server, which also holds Power BI reports).</summary>
+    [ConfigKey(Required = true, Pattern = "ssrs|pbirs")]
+    public string Provider { get; set; } = "ssrs";
+
+    /// <summary>The name that prefixes the keys of the catalog's items (<c>ssrs:/Sales/Monthly</c>); the provider's name when left out. Letters, digits, dashes and underscores.</summary>
+    [ConfigKey(Pattern = "[A-Za-z][A-Za-z0-9_-]{0,31}")]
+    public string? Name { get; set; }
+
+    /// <summary>The report server's URL-access address (<c>https://reports.example.com/ReportServer</c>) when it is not the portal's address with the last segment <c>Reports</c> replaced by <c>ReportServer</c>.</summary>
+    public string? ReportServerAddress { get; set; }
+}
+
+/// <summary>
 /// The <c>file_server:</c> section of a connection of kind <c>sftp</c>, <c>scp</c>, <c>ftps</c> or <c>smb</c> (plan 27a IX04; <c>connection/2</c>, additive): the server, the folder every path is relative to, and what the server is <b>pinned</b> to. An SSH server is known by the fingerprint of its host key
 /// (<see cref="HostKeys"/>, <c>SHA256:...</c> as <c>ssh-keygen -lf</c> prints it); a changed key is refused naming it. An FTPS server is trusted by the machine's roots, by <c>tls.ca_file</c> or by <see cref="CertificateSha256"/>, the SHA-256 of its certificate.
 /// </summary>
@@ -345,7 +364,10 @@ public static class ConnectionKinds
     /// <summary>Azure Blob Storage; plan 27a IX06, decision SD13.</summary>
     public const string AzureBlob = "azure-blob";
 
-    public static readonly string[] All = [Database, Http, ModelProvider, Smtp, Sftp, Scp, Ftps, Smb, S3, AzureBlob];
+    /// <summary>An external report server (SSRS, Power BI Report Server) whose reports the report catalog lists (plan 32 RC01): an <c>endpoint</c> (the portal), a <c>report_catalog</c> section and a sign-in.</summary>
+    public const string ReportCatalog = "report-catalog";
+
+    public static readonly string[] All = [Database, Http, ModelProvider, Smtp, Sftp, Scp, Ftps, Smb, S3, AzureBlob, ReportCatalog];
 
     /// <summary>The kinds that are a file store (<see cref="ConnectionKindGroup.FileStore"/>): they have a <c>file_server</c> section and no <c>endpoint</c>.</summary>
     public static bool IsFileServer(string? kind) => kind is Sftp or Scp or Ftps or Smb;
@@ -418,6 +440,9 @@ public sealed class ConnectionDefinition
 
     /// <summary>The bucket or container (kinds <c>s3</c> and <c>azure-blob</c>; plan 27a IX06).</summary>
     public ObjectStoreSpec? ObjectStore { get; set; }
+
+    /// <summary>The report server (kind <c>report-catalog</c>; plan 32 RC01).</summary>
+    public ReportCatalogSpec? ReportCatalog { get; set; }
 
     /// <summary>How an outside kind signs in; null: it does not.</summary>
     public SignInSpec? SignIn { get; set; }

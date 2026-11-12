@@ -57,5 +57,8 @@ public sealed class ViewsOptions
     /// <summary>The store of people's own dashboards and reports (plan 32 DBR12, the state module <c>user_views</c>); null leaves the <c>/api/v1/my/...</c> routes answering 404 and says why. The host opens the module and passes the store.</summary>
     public UserViewStore? UserViews { get; init; }
 
+    /// <summary>The merged report catalog (plan 32 RC03): our own dashboards and reports (<see cref="ViewsCatalog"/>) beside the external report servers' (the host adds a provider per <c>report-catalog</c> connection). Null leaves <c>/api/v1/catalog</c> answering 404 and saying why.</summary>
+    public ReportCatalogs? Catalogs { get; init; }
+
     public TimeProvider Time { get; init; } = TimeProvider.System;
 }

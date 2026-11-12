@@ -80,7 +80,7 @@ public sealed record ReportCatalogPermissions(bool Known, IReadOnlyList<string> 
 public sealed record ReportCatalogOpening(string Key, string Mode, string Title, string? Kind = null, string? Name = null, string? Version = null, IReadOnlyList<string>? Layouts = null, string? Layout = null,
     string? Url = null, IReadOnlyDictionary<string, string?>? Parameters = null);
 
-/// <summary>Why a catalog could not do what was asked: <c>not_found</c>, <c>denied</c> (the viewer may not), <c>invalid</c> (the request, in words), <c>unavailable</c> (the provider cannot be reached or is draining).</summary>
+/// <summary>Why a catalog could not do what was asked: <c>not_found</c>, <c>denied</c> (the viewer may not), <c>invalid</c> (the request, in words), <c>unsupported</c> (the provider does not do that: create by kind), <c>unavailable</c> (the provider cannot be reached or is draining).</summary>
 public sealed class ReportCatalogException(string code, string message, Exception? inner = null) : Exception(message, inner)
 {
     public string Code { get; } = code;
@@ -110,4 +110,23 @@ public interface IReportCatalogProvider
     Task<IReadOnlyList<ReportCatalogExport>> ExportsAsync(ReportCatalogViewer viewer, string id, CancellationToken cancellationToken = default);
 
     Task<ReportCatalogPermissions> PermissionsAsync(ReportCatalogViewer viewer, string id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// <b>Create by kind</b> (plan 32 DBR19; an optional capability): the kinds of item a provider can make for a viewer (<c>dashboard</c>, <c>report</c> for a provider of documents). None by default, which is what a provider of an external report server says: its reports are
+    /// made in its own tools.
+    /// </summary>
+    IReadOnlyList<string> CreatableKinds => [];
+
+    /// <summary>Makes an empty item of <paramref name="kind"/> (one of <see cref="CreatableKinds"/>) named <paramref name="name"/> for the viewer, in <paramref name="folder"/> when the provider has folders to say; a provider without the capability says <c>unsupported</c>.</summary>
+    Task<ReportCatalogItem> CreateAsync(ReportCatalogViewer viewer, string kind, string name, string? folder = null, CancellationToken cancellationToken = default) =>
+        throw new ReportCatalogException("unsupported", $"The catalog '{Provider}' does not make items: its reports are made in its own tools.");
+}
+
+/// <summary>
+/// How a host asks an external catalog for an export (plan 32 RC05): <see cref="Parameter"/> among the parameters of an open names the format (one of the item's <see cref="ReportCatalogExport"/>), and the opening is then a <c>link</c> to the file the report server renders, never a frame.
+/// The name has a colon, which no report parameter has.
+/// </summary>
+public static class ReportCatalogExportFormat
+{
+    public const string Parameter = "rs:Format";
 }

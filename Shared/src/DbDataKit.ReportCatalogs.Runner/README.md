@@ -1,0 +1,7 @@
+# DbDataKit.ReportCatalogs.Runner
+
+The runner's half of the external report catalogs (plan 32 RC02): the system package **`report-catalogs`** and its task **`read`**. The library `DbDataKit.ReportCatalogs` has the provider, the snapshot and the job; this one runs them on a schedule.
+
+- **What it does.** Every fifteen minutes (`CatalogReadSettings.Every`) the task reads each external catalog the host gives it (`CatalogSource`: a name, the provider signed in as the catalog's service account, the sink of the channel) and publishes a `report-catalog/1` snapshot through plan 30's registry (`DefinitionStoreSnapshotSink`, kind `report-catalog`, one definition per catalog, one version per change) when what it read differs from the last version. The input `catalog` reads that one now.
+- **How a run ends.** `succeeded` when every catalog read (published or unchanged); `completed with failures` when some did not, the failed item naming the catalog and the provider's words (the address and the service account); `failed` when none did. A failing read never replaces the served snapshot.
+- **Hosting.** A host that holds the install's state composes the sources from its `report-catalog` connections bound in the channel (`ReportCatalogConnections.Create` makes the provider of one), publishes `CatalogReadTasks.Manifest()` on its system channel and puts `CatalogReadTaskRunner` around its executor, as for `views-export`. Nothing wires it into a host yet.

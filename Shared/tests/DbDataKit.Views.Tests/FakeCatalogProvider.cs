@@ -12,6 +12,15 @@ public sealed class FakeCatalogProvider(string name, params ReportCatalogItem[] 
 
     public Func<string, ReportCatalogOpening>? Opens { get; set; }
 
+    /// <summary>The kinds this fake makes (create by kind); none by default, as an external report server's provider.</summary>
+    public IReadOnlyList<string> CreatableKinds { get; set; } = [];
+
+    public Task<ReportCatalogItem> CreateAsync(ReportCatalogViewer viewer, string kind, string name, string? folder = null, CancellationToken cancellationToken = default)
+    {
+        Check();
+        return Task.FromResult(new ReportCatalogItem($"{kind}/{name}", $"{folder ?? ""}/{name}", name, kind, name));
+    }
+
     public List<string> Folders { get; } = [];
 
     private void Check() { if (Fails is not null) throw Fails; }

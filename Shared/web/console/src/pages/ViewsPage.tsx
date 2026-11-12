@@ -5,6 +5,7 @@ import { RenderedViews, validateViewDocument, type ThemeChoice } from '@dbdataki
 import { ConsoleShell } from '../ConsoleShell'
 import { readKiosk } from '../viewsUrl'
 import { DashboardsPanel } from './DashboardsPanel'
+import { CatalogPanel } from './CatalogPanel'
 
 type Opened =
   | { kind: 'none' }
@@ -82,19 +83,21 @@ const TABS: SubTab[] = [
   { label: 'Rendered views', path: null, testId: 'views-tab-rendered' },
   { label: 'Dashboards', path: 'dashboards', testId: 'views-tab-dashboards' },
   { label: 'Reports', path: 'reports', testId: 'views-tab-reports' },
+  { label: 'Catalog', path: 'catalog', testId: 'views-tab-catalog' },
 ]
 
 const NOTES = {
   rendered: 'Open a rendered view document and see it as a table or a chart.',
   dashboards: 'Open a dashboard and see it fit the window. Shown from recorded results until a serving module answers.',
   reports: 'Open a report and scroll its pages, with the page-break guides. Shown from recorded results until a serving module answers.',
+  catalog: 'Browse the dashboards, reports and the report servers\' reports you may see, in one list; open one with its parameters, or take an export.',
 }
 
 /**
  * The Views area of the console (plan 19 Y03, plan 32 DBR23): three tabs, the rendered-view opener that was here first, **Dashboards** and **Reports** over the fixture source. The same shared visuals draw all of it;
  * nothing here draws or checks anything of its own.
  */
-export function ViewsPage({ area = 'rendered' }: { area?: 'rendered' | 'dashboards' | 'reports' }) {
+export function ViewsPage({ area = 'rendered' }: { area?: 'rendered' | 'dashboards' | 'reports' | 'catalog' }) {
   const { name } = useParams()
   const [search] = useSearchParams()
   // `?mode=kiosk` on an opened dashboard: the board alone, with none of the console's chrome (plan 32 DBR08)
@@ -107,7 +110,7 @@ export function ViewsPage({ area = 'rendered' }: { area?: 'rendered' | 'dashboar
           <span className="page-note">{NOTES[area]}</span>
         </div>
         <SubTabs base="/views" tabs={TABS} testId="views-tabs" />
-        {area === 'rendered' ? <RenderedPanel /> : <DashboardsPanel kind={area === 'dashboards' ? 'dashboard' : 'report'} />}
+        {area === 'rendered' ? <RenderedPanel /> : area === 'catalog' ? <CatalogPanel /> : <DashboardsPanel kind={area === 'dashboards' ? 'dashboard' : 'report'} />}
       </div>
     </ConsoleShell>
   )

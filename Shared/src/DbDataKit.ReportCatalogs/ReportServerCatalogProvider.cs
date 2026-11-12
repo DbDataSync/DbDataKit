@@ -133,22 +133,31 @@ public sealed class ReportServerCatalogProvider(HttpClient http, ReportServerOpt
         if (item.IsFolder) throw new ReportCatalogException("invalid", $"'{item.Path}' is a folder: browse it.");
         var known = (await ParametersAsync(viewer, id, cancellationToken).ConfigureAwait(false)).Select(p => p.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var filled = new Dictionary<string, string?>(StringComparer.Ordinal);
+        string? format = null;
         foreach (var (name, value) in parameters ?? new Dictionary<string, string?>())
         {
+            if (name == ReportCatalogExportFormat.Parameter)
+            {
+                format = SsrsFormats.FirstOrDefault(f => string.Equals(f, value, StringComparison.OrdinalIgnoreCase));
+                if (format is null || serverType is not ("Report" or "LinkedReport"))
+                    throw new ReportCatalogException("invalid", $"The item '{item.Path}' is not offered in the format '{value}'.");
+                continue;
+            }
             if (!known.Contains(name)) throw new ReportCatalogException("invalid", $"The report '{item.Path}' has no parameter '{name}'.");
             filled[name] = value;
         }
-        return new ReportCatalogOpening($"{Provider}:{item.Id}", ReportOpenModes.Frame, item.Name, Url: UrlFor(item, serverType, filled), Parameters: filled);
+        // an export is the file the server renders, which a person follows (a frame would show a download as nothing)
+        return new ReportCatalogOpening($"{Provider}:{item.Id}", format is null ? ReportOpenModes.Frame : ReportOpenModes.Link, item.Name, Url: UrlFor(item, serverType, filled, format), Parameters: filled);
     }
 
     /// <summary>The report server's URL-access address of an item: the path, the render command, the toolbar hidden (the one parameters pane of the suite takes its place) and each parameter by its name (a value that is null is sent as the server's null).</summary>
-    internal string UrlFor(ReportCatalogItem item, string serverType, IReadOnlyDictionary<string, string?> parameters)
+    internal string UrlFor(ReportCatalogItem item, string serverType, IReadOnlyDictionary<string, string?> parameters, string? format = null)
     {
         var sb = new StringBuilder();
         var server = options.UrlAccess.AbsoluteUri.TrimEnd('/');
         if (serverType == "PowerBIReport")
             return options.PortalAddress.AbsoluteUri.TrimEnd('/') + "/powerbi" + EscapePath(item.Path);
-        sb.Append(server).Append('?').Append(EscapePath(item.Path)).Append("&rs:Command=Render&rc:Toolbar=false");
+        sb.Append(server).Append('?').Append(EscapePath(item.Path)).Append("&rs:Command=Render").Append(format is null ? "&rc:Toolbar=false" : "&rs:Format=" + Uri.EscapeDataString(format));
         foreach (var (name, value) in parameters)
             sb.Append('&').Append(Uri.EscapeDataString(name)).Append('=').Append(value is null ? "" : Uri.EscapeDataString(value)).Append(value is null ? $"&{Uri.EscapeDataString(name)}:isnull=true" : "");
         return sb.ToString();
