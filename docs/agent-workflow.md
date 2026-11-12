@@ -67,7 +67,7 @@ while it waits for CI to be idle:
   descriptor and holds the lock for about ten minutes after the build, and the queue starves. Also `dotnet build -p:UseSharedCompilation=false` and `MSBUILDDISABLENODEREUSE=1`.
 - **Delete `bin`, `obj`, `node_modules`, `.duckdb` and `DbDataBuild/native` right after each step** (`find <dir> -type d \( -name bin -o -name obj -o -name node_modules \) -prune -exec rm -rf {} +`).
   Several products built at once filled the disk twice. Stop building when `df -h /` shows under 3 GB free.
-- **Sync builds only with `DBDATAKIT_TEST_SKIP_JDBC=true`** (`docs/testing-environment.md`, "Building without JDBC"): the IKVM packages are about 4 GB.
+- **`scripts/build-slot.sh` sets `DBDATAKIT_TEST_SKIP_JDBC=true` unless it is already set** (set it to `false` to build the JDBC projects). **Sync builds only with `DBDATAKIT_TEST_SKIP_JDBC=true`** (`docs/testing-environment.md`, "Building without JDBC"): the IKVM packages are about 4 GB.
 - **Docker images** for the test engines are about 3 GB; prune them when no container runs (`docker image prune -a -f`), pull them again through the mirror when needed (`CLAUDE.md`).
 - **Remove finished worktrees** and leave no untracked build output in them.
 - The test host of an xunit v3 project may not start (`MSB1001`, handshake failures): run the built test executable (`-class`, `-method`).
