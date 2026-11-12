@@ -197,4 +197,42 @@ public sealed partial class ManagementTests
         Assert.True(signed.Status == HttpStatusCode.OK, signed.Body.ToJsonString());
         Assert.Equal("verified", (string)signed.Body["signature"]!);
     }
+
+    private static string EntityManifest(string? managedBy, string dataSource) => JsonSerializer(new { model = TerritoriesModel, dataSource, managedBy });
+
+    [Fact]
+    public async Task An_entity_model_is_published_through_the_shared_api_on_a_data_source_the_client_made_or_adopts_and_is_served_at_once()
+    {
+        await StartAsync();
+        var admin = await PairAsync();
+        var first = await PairPublisherAsync(build1);
+        var second = await PairPublisherAsync(build2);
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/by-hand", ServerRole.Admin, Put(Plain("by-hand"), null))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await DefineAsync(build2, second, "data-source", "theirs", DefinitionBody(Plain("theirs") + "managed_by: build-2\n"))).Status);
+        Assert.Equal(HttpStatusCode.OK, (await DefineAsync(build1, first, "data-source", "mine", DefinitionBody(Plain("mine") + "managed_by: build-1\n"))).Status);
+
+        var wrongOwner = await DefineAsync(build1, first, "entity-model", "territories", DefinitionBody(EntityManifest("build-2", "mine")));
+        Assert.Equal(HttpStatusCode.Forbidden, wrongOwner.Status);
+        var nowhere = await DefineAsync(build1, first, "entity-model", "territories", DefinitionBody(EntityManifest("build-1", "nowhere")));
+        Assert.Equal(HttpStatusCode.BadRequest, nowhere.Status);
+        Assert.Contains("'nowhere' is not a data source of this server", (string)nowhere.Body["error"]!);
+        var theirs = await DefineAsync(build1, first, "entity-model", "territories", DefinitionBody(EntityManifest("build-1", "theirs")));
+        Assert.Equal(HttpStatusCode.BadRequest, theirs.Status);
+        Assert.Contains("ask an administrator to hand it over", (string)theirs.Body["error"]!);
+        var hand = await DefineAsync(build1, first, "entity-model", "territories", DefinitionBody(EntityManifest("build-1", "by-hand")));
+        Assert.Equal(HttpStatusCode.BadRequest, hand.Status);
+        Assert.Equal("by-hand", (string)hand.Body["adopt"]!["data_source"]!);
+
+        var ok = await DefineAsync(build1, first, "entity-model", "territories", DefinitionBody(EntityManifest("build-1", "mine"), dependsOn: ["data-source:mine"]));
+        Assert.True(ok.Status == HttpStatusCode.OK, ok.Body.ToJsonString());
+        Assert.True((bool)ok.Body["created"]!);
+        Assert.NotNull(app.Services.GetRequiredService<DbDataGateway.Server.Serving.PublishedEntityModels>().Find("territories"));   // served here at once
+
+        var adopted = await DefineAsync(build1, first, "entity-model", "territories", DefinitionBody(EntityManifest("build-1", "by-hand"), expected: 1, adopt: "by-hand"));
+        Assert.True(adopted.Status == HttpStatusCode.OK, adopted.Body.ToJsonString());
+        Assert.Equal("by-hand", (string)adopted.Body["adopted"]!);
+        Assert.Contains(ConfigTestSupport.AuditEntries(dataDirectory), a => (string)a["command"]! == "data-source adopt" && (string)a["target"]! == "by-hand" && ((string)a["outcome"]!).Contains("for the model territories", StringComparison.Ordinal));
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await CallAsAsync(build2, second, HttpMethod.Get, "/api/v1/definitions/entity-model/territories", ServerRole.Publisher)).StatusCode);
+    }
 }

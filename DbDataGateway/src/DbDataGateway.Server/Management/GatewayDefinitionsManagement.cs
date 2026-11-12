@@ -20,10 +20,10 @@ public sealed class GatewayDefinitionsManagement
     private readonly DefinitionsApi _api;
 
     /// <summary>The hooks of the kinds whose publish does more than the registry's checks (plan 30 PB02): the Gateway's semantic models and data sources, with what the per-kind routes check and do.</summary>
-    public static IReadOnlyList<IDefinitionKindHook> HooksOf(StateDatabase state, GatewaySemanticModels semanticModels, PublishedSemanticModels models, GatewayDataSources dataSources)
+    public static IReadOnlyList<IDefinitionKindHook> HooksOf(StateDatabase state, GatewaySemanticModels semanticModels, PublishedSemanticModels models, GatewayDataSources dataSources, GatewayEntityModels? entityModels = null)
     {
         var policy = new SignaturePolicy(new GroupSettings(state));
-        return [new SemanticModelKindHook(semanticModels, models, policy), new DataSourceKindHook(dataSources, policy)];
+        return [new SemanticModelKindHook(semanticModels, models, policy), new DataSourceKindHook(dataSources, policy), .. entityModels is null ? (IEnumerable<IDefinitionKindHook>)[] : [new EntityModelKindHook(entityModels, policy)]];
     }
 
     public GatewayDefinitionsManagement(StateDatabase state, IAuditLog? audit = null, TimeProvider? clock = null, IEnumerable<IDefinitionKindHook>? hooks = null)
