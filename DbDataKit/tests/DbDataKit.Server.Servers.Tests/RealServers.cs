@@ -14,6 +14,40 @@ internal sealed class RealProcess : IAsyncDisposable
 
     private RealProcess(Process process) => this.process = process;
 
+    public int Id => process.Id;
+
+    /// <summary>The processes this program started (its task processes), found by walking the parent ids of <c>/proc</c> (Linux); each is a process of this test's own tree, never another one on the machine.</summary>
+    public IReadOnlyList<(int Pid, string Command)> Descendants()
+    {
+        var parents = new Dictionary<int, int>();
+        var commands = new Dictionary<int, string>();
+        foreach (var directory in Directory.EnumerateDirectories("/proc"))
+        {
+            if (!int.TryParse(Path.GetFileName(directory), out var pid)) continue;
+            try
+            {
+                var stat = File.ReadAllText(Path.Combine(directory, "stat"));
+                parents[pid] = int.Parse(stat[(stat.LastIndexOf(')') + 2)..].Split(' ')[1]);
+                commands[pid] = File.ReadAllText(Path.Combine(directory, "cmdline")).Replace('\0', ' ');
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException) { /* gone while looked at */ }
+        }
+
+        var found = new List<(int, string)>();
+        var queue = new Queue<int>([process.Id]);
+        while (queue.Count > 0)
+        {
+            var parent = queue.Dequeue();
+            foreach (var (pid, _) in parents.Where(p => p.Value == parent).ToList())
+            {
+                found.Add((pid, commands.GetValueOrDefault(pid, "")));
+                queue.Enqueue(pid);
+            }
+        }
+
+        return found;
+    }
+
     public string Output { get { lock (output) return output.ToString(); } }
 
     public static RealProcess Start(string dll, IEnumerable<string> arguments, string? input = null, IReadOnlyDictionary<string, string>? environment = null)

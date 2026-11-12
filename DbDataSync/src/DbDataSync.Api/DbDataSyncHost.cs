@@ -292,6 +292,7 @@ public static class DbDataSyncHost
         // what the runner holds of the replications it owns (plan 28c E13): their runs and logs, and the inputs of their lag, kept fresh by the refresher so that describing lag never asks a runner
         builder.Services.AddSingleton<DbDataSync.Api.Runner.RunnerRunSource>();
         builder.Services.AddSingleton<DbDataSync.Api.Runner.RunnerVerificationResults>();
+        builder.Services.AddSingleton<DbDataSync.Api.Runner.RunnerBulkLoads>();
         builder.Services.AddSingleton<DbDataSync.Api.Runner.RunnerLagInputs>();
         builder.Services.AddSingleton<DbDataSync.Api.Runner.RunnerRunStreamer>();
         builder.Services.AddHostedService<DbDataSync.Api.Runner.RunnerLagRefresher>();

@@ -6,7 +6,7 @@ const screenshotsDir = screenshotDir('replication-runner-owner')
 
 // Plan 28c E12: the Runner tab of a replication, against the real Sync server through the console (no stub). A replication that needs no engine (disabled, nothing reads its source) is made through the API; the tab shows that
 // this server runs it, the moves are off until the runner is set, the runner is saved from the form and is still there after a reload (the server keeps it in `runner-owners.json`), and a cutover to a runner this machine is not paired
-// with is refused by the real server in its own words, with the owner as it was. A move that succeeds needs a runner: that is the runner conformance suite's (plan 28c E12c), not a browser's.
+// with is refused by the real server in its own words, with the owner as it was. A move that succeeds needs a runner with the real engine: that is `replication-runner-move.spec.ts` (and the runner conformance suite, plan 28c E12c).
 const REPLICATION = 'runner-owner-demo'
 
 async function openRunner(page: Page) {

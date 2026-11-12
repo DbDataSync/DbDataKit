@@ -160,6 +160,10 @@ public sealed class TableMappingsController(
             });
         }
 
+        // a replication the runner owns keeps its read intent, hold and position on the runner, which its drain reads: a change written here would be kept in a state nothing reads (plan 28c E22 precondition)
+        if (runnerAccess.File.OwnerOf(replicationName) == DbDataKit.State.TaskOwners.Runner)
+            return Conflict(new { error = $"'{replicationName}' is scheduled by the runner, which keeps the read intent, hold and position of its mappings: change them on the runner's Checkpoints screen (task '{DbDataSync.Api.Runner.RunnerAccess.TaskOf(replicationName)}'). Nothing was changed." });
+
         string sourceTable;
         try
         {
