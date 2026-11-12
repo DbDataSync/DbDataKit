@@ -22,6 +22,7 @@ public sealed class RunsController(
     ConfigRepository configRepository,
     RunWatermarkTimeService watermarkTimes,
     DbDataSync.Api.Runner.RunnerRunSource runnerRuns,
+    DbDataSync.Api.Runner.RunnerBulkLoads runnerBulkLoads,
     LogWriter logWriter) : ControllerBase
 {
     [HttpPost("replications/{name}/runs")]
@@ -87,8 +88,23 @@ public sealed class RunsController(
     /// </summary>
     [Authorize(Policies.Viewer)]
     [HttpGet("replications/{name}/bulk-loads")]
-    public ActionResult<IReadOnlyList<BulkLoadBatchProgress>> BulkLoads(string name, [FromQuery] int limit = 5) =>
-        Ok(bulkLoadBatchStore.GetRecentBulkLoads(name, Math.Clamp(limit, 1, 20)));
+    public async Task<ActionResult<IReadOnlyList<BulkLoadBatchProgress>>> BulkLoads(string name, CancellationToken cancellationToken, [FromQuery] int limit = 5)
+    {
+        var size = Math.Clamp(limit, 1, 20);
+        var own = bulkLoadBatchStore.GetRecentBulkLoads(name, size);
+        if (!runnerRuns.RunnerOwns(name)) return Ok(own);
+
+        // a replication the runner owns has its batches there (plan 28c E22 precondition): merged with what this server holds from before it was moved
+        try
+        {
+            var onRunner = await runnerBulkLoads.ListAsync(name, null, cancellationToken);
+            return Ok(own.Concat(onRunner).OrderByDescending(b => b.CreatedAtUtc).ThenByDescending(b => b.BatchId, StringComparer.Ordinal).Take(size).ToList());
+        }
+        catch (DbDataSync.Api.Runner.RunnerUnavailableException ex)
+        {
+            return StatusCode(503, new { error = ex.Message });
+        }
+    }
 
     /// <summary>
     /// The wider bulk-load history <c>GetRecentBulkLoads</c>' own doc comment named as a future
@@ -105,16 +121,37 @@ public sealed class RunsController(
     /// </summary>
     [Authorize(Policies.Viewer)]
     [HttpGet("replications/{name}/bulk-loads/history")]
-    public ActionResult<BulkLoadHistoryResponse> BulkLoadHistory(
-        string name, [FromQuery] string? mappingName = null, [FromQuery] string? cursor = null, [FromQuery] int limit = 20)
+    public async Task<ActionResult<BulkLoadHistoryResponse>> BulkLoadHistory(
+        string name, CancellationToken cancellationToken, [FromQuery] string? mappingName = null, [FromQuery] string? cursor = null, [FromQuery] int limit = 20)
     {
         var decodedCursor = BulkLoadHistoryCursorCodec.Decode(cursor, name, mappingName);
-        var page = bulkLoadBatchStore.GetHistory(name, mappingName, decodedCursor, Math.Clamp(limit, 1, 20));
-        var nextCursor = page.NextCursor is { } next
-            ? BulkLoadHistoryCursorCodec.Encode(next, name, mappingName)
-            : null;
+        var size = Math.Clamp(limit, 1, 20);
+        var page = bulkLoadBatchStore.GetHistory(name, mappingName, decodedCursor, size);
+        if (!runnerRuns.RunnerOwns(name))
+        {
+            var next = page.NextCursor is { } own
+                ? BulkLoadHistoryCursorCodec.Encode(own, name, mappingName)
+                : null;
+            return Ok(new BulkLoadHistoryResponse(page.Batches, next));
+        }
 
-        return Ok(new BulkLoadHistoryResponse(page.Batches, nextCursor));
+        // merged with the runner's batches older than the cursor (the same keyset: created at, then batch id, newest first)
+        try
+        {
+            var onRunner = (await runnerBulkLoads.ListAsync(name, mappingName, cancellationToken))
+                .Where(b => decodedCursor is not { } c || b.CreatedAtUtc < c.CreatedAtUtc || (b.CreatedAtUtc == c.CreatedAtUtc && string.CompareOrdinal(b.BatchId, c.BatchId) < 0));
+            var merged = page.Batches.Concat(onRunner).OrderByDescending(b => b.CreatedAtUtc).ThenByDescending(b => b.BatchId, StringComparer.Ordinal).ToList();
+            var shown = merged.Take(size).ToList();
+            var more = merged.Count > size || page.NextCursor is not null;
+            var nextCursor = more && shown.Count > 0
+                ? BulkLoadHistoryCursorCodec.Encode(new BulkLoadHistoryCursor(shown[^1].CreatedAtUtc, shown[^1].BatchId), name, mappingName)
+                : null;
+            return Ok(new BulkLoadHistoryResponse(shown, nextCursor));
+        }
+        catch (DbDataSync.Api.Runner.RunnerUnavailableException ex)
+        {
+            return StatusCode(503, new { error = ex.Message });
+        }
     }
 
     /// <summary>
