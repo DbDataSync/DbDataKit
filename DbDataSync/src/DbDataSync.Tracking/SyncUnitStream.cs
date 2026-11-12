@@ -14,29 +14,22 @@ namespace DbDataSync.Tracking;
 /// </summary>
 public static class SyncUnitStream
 {
-    public const string Name = "unit";
+    public const string Name = SyncUnitCopy.Name;
 
-    public static TrackingStream Stream { get; } = new(
-        Name,
-        ["unit_seq", "unit_id", "replication", "mapping", "watermark_key", "watermark_before", "watermark_after", "watermark_time", "rows_staged", "run_id", "committed_at"],
-        orderingKey: "unit_seq", rowKey: "unit_id");
+    /// <summary>The stream's definition is shared with the runner (<see cref="SyncUnitCopy"/>), which writes the copy of a runner-owned replication.</summary>
+    public static TrackingStream Stream => SyncUnitCopy.Stream;
 
     /// <summary>The progress store's key: where the follower's checkpoints are (the same store the runner's positions use, a key of its own).</summary>
     public static DbDataKit.State.ProgressKey ProgressKey { get; } = new(SyncState.ServiceId, SyncState.DefaultGroup, "tracking");
 
     /// <summary>The identity a replication's units are copied under: which target (engine, server, database), which replication and which connection of Sync, so that a development copy of a target is never the same set of rows.</summary>
     public static string Identity(UnitStateEngine engine, string server, string database, string connection, string replication) =>
-        $"syncunit:{(engine == UnitStateEngine.SqlServer ? "sqlserver" : "postgres")}://{server}/{database}/{replication}@{connection}";
+        $"syncunit:{TargetUnitState.EngineWord(engine)}://{server}/{database}/{replication}@{connection}";
 
     /// <summary>The replication an identity of this stream is for (the part between the last <c>/</c> and the <c>@</c>).</summary>
-    public static string ReplicationOf(string identity)
-    {
-        var at = identity.LastIndexOf('@');
-        var head = at < 0 ? identity : identity[..at];
-        return head[(head.LastIndexOf('/') + 1)..];
-    }
+    public static string ReplicationOf(string identity) => SyncUnitCopy.ReplicationOf(identity);
 
-    public static string ConnectionOf(string identity) => identity[(identity.LastIndexOf('@') + 1)..];
+    public static string ConnectionOf(string identity) => SyncUnitCopy.ConnectionOf(identity);
 
     public static string Document(TargetUnitRecord unit) => new JsonObject
     {
@@ -56,17 +49,5 @@ public static class SyncUnitStream
     public static TrackingRow ToRow(TargetUnitRecord unit) => new(unit.UnitId.ToString("D"), unit.Sequence, Document(unit));
 
     /// <summary>When the unit was committed on the target, read back from a row's document (null when the document does not say).</summary>
-    public static DateTimeOffset? CommittedAt(string document)
-    {
-        try
-        {
-            using var parsed = JsonDocument.Parse(document);
-            return parsed.RootElement.TryGetProperty("committed_at", out var value) && value.ValueKind == JsonValueKind.String
-                && DateTimeOffset.TryParse(value.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var at) ? at : null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
+    public static DateTimeOffset? CommittedAt(string document) => SyncUnitCopy.CommittedAt(document);
 }

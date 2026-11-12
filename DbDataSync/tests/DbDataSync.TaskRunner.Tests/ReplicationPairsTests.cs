@@ -3,6 +3,8 @@ using System.Globalization;
 using DbDataKit.Config.Git;
 using DbDataKit.Runner;
 using DbDataKit.Runner.Execution;
+using DbDataKit.State.Tracking;
+using DbDataKit.Tracking.Build;
 using DbDataSync.Core.Config;
 using DbDataSync.Core.Secrets;
 using DbDataSync.Core.Sql;
@@ -77,6 +79,7 @@ public sealed class ReplicationPairsTests : IAsyncLifetime
     private LogWriter _logs = null!;
     private string _watermarkKey = "";
     private RunnerRig? _rig;
+    private Guid _lastRunId;
     private string? _package;
     private int _version;
 
@@ -282,7 +285,9 @@ public sealed class ReplicationPairsTests : IAsyncLifetime
 
     private async Task OnTheRunnerAsync(RunnerRig rig)
     {
-        var result = await rig.Executor.RunAsync(await rig.DrainRequestAsync(_package!, Replication, runId: Guid.CreateVersion7(), runAll: true));
+        var result = await rig.Executor.RunAsync(await rig.DrainRequestAsync(_package!, Replication, runId: Guid.CreateVersion7(), runAll: true,
+            connectionHandles: new Dictionary<string, string> { ["src_conn"] = "src-conn", ["tgt_conn"] = "tgt-conn" }));
+        _lastRunId = result.RunId;
         if (result.End.State != TaskEndState.Succeeded || result.ExitCode != 0)
             throw new Xunit.Sdk.XunitException($"the drain on the runner ended {result.End.State} (exit {result.ExitCode}); log:\n{rig.LogText(result.RunId)}");
     }
@@ -429,5 +434,98 @@ public sealed class ReplicationPairsTests : IAsyncLifetime
         Assert.Equal("counts", header.CheckName);
         Assert.Equal(4, groups);        // the three keys both sides have, and 99
         Assert.Equal(1, differing);     // 99 is only at the target
+    }
+
+    /// <summary>The target is a shared engine and the replication's name is the same in every run: the units an earlier run left are another run's state, which this one must not meet.</summary>
+    private async Task ClearOldUnitsAsync()
+    {
+        await using var connection = _target.Open();
+        var state = new TargetUnitState(TargetUnitState.EngineOf(_target.DriverType)!.Value);
+        if (!await state.ExistsAsync(connection, CancellationToken.None)) return;
+        await ChangeApplyTargets.ExecuteAsync(connection, $"DELETE FROM {state.Qualified} WHERE replication_name = '{Replication}'");
+    }
+
+    private string UnitTable => new TargetUnitState(TargetUnitState.EngineOf(_target.DriverType)!.Value).Qualified;
+
+    private async Task<string> DumpUnitsAsync()
+    {
+        await using var connection = _target.Open();
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT unit_seq, mapping, watermark_key, watermark_before, watermark_after, rows_staged, committed_at FROM {UnitTable} WHERE replication_name = '{Replication}' ORDER BY unit_seq";
+        var lines = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync()) lines.Add(string.Join(" | ", Enumerable.Range(0, reader.FieldCount).Select(i => reader.IsDBNull(i) ? "null" : Convert.ToString(reader.GetValue(i), CultureInfo.InvariantCulture))));
+        return string.Join("\n", lines);
+    }
+
+    private async Task<long> TargetUnitCountAsync()
+    {
+        await using var connection = _target.Open();
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT COUNT(*) FROM {UnitTable} WHERE replication_name = '{Replication}'";
+        return Convert.ToInt64(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Plan 28c E17, the runner side: a replication whose runs the runner owns and whose file asks for <c>tracking: both</c> with the target primary has the units its passes recorded in <c>dbdatasync.unit</c> copied into the runner's
+    /// state by the drain itself (the protocol writes rows and checkpoint in one transaction there); a target restored to an earlier point is a divergence recorded in the runner's state, nothing more is copied while it is open,
+    /// and the runner's resolve (the shared one the runner's API calls) archives the copy's later rows so the next drain copies the target's units again.
+    /// </summary>
+    [Theory]
+    [InlineData("sqlserver", "postgres")]
+    [InlineData("postgres", "sqlserver")]
+    [InlineData("sqlserver", "mysql")]
+    [InlineData("postgres", "mariadb")]
+    [InlineData("sqlserver", "oracle")]
+    public async Task A_runner_owned_replication_keeping_its_state_on_the_target_is_followed_into_the_runners_state_and_a_restored_target_is_a_divergence_there(string source, string target)
+    {
+        await SetUpAsync(source, target);
+        await ClearOldUnitsAsync();
+        var task = _config.LoadReplicationTask(Replication);
+        task.Tracking = new TrackingConfig { Mode = "both", Primary = "target" };
+        _config.SaveReplicationTask(task, Author);
+        await InsertAsync(1, "one", 1m);
+        await InsertAsync(2, "two", 2m);
+        await DrainAsync(RunMode.Runner);
+        // the first drain is the initial load and may end before the pass that follows it has recorded a unit: drain again until the target holds one
+        for (var again = 0; again < 3 && await TargetUnitCountAsync() == 0; again++) await DrainAsync(RunMode.Runner);
+        var store = new StateTrackingStore(_rig!.Database);
+        var identities = store.Identities().Where(SyncUnitCopy.IsIdentity).ToList();
+        Assert.True(identities.Count == 1, _rig.LogText(_lastRunId));
+        var identity = identities[0];
+        Assert.EndsWith("@tgt-conn", identity);
+        Assert.Equal(Replication, SyncUnitCopy.ReplicationOf(identity));
+        var units = await TargetUnitCountAsync();
+        Assert.True(units > 0);
+        Assert.True((int)units == store.Count(identity, SyncUnitCopy.Name), $"target {units} units, copy {store.Count(identity, SyncUnitCopy.Name)}: " + _rig.LogText(_lastRunId));
+
+        // what the pass recorded since: copied by the next drain, and only that
+        await InsertAsync(3, "three", 3m);
+        await DrainAsync(RunMode.Runner);
+        var afterSecond = await TargetUnitCountAsync();
+        Assert.True(afterSecond > units);
+        Assert.True((int)afterSecond == store.Count(identity, SyncUnitCopy.Name), $"target {afterSecond} units, copy {store.Count(identity, SyncUnitCopy.Name)}:\n" + await DumpUnitsAsync() + "\n" + string.Join("\n", _rig.LogText(_lastRunId).Split('\n').Where(l => l.Contains("unit") || l.Contains("Warning"))));
+        Assert.Equal(await SourceRowsAsync(), await TargetRowsAsync());
+
+        // the target is restored to a backup taken before its newest unit: the copy holds a unit the table does not
+        await using (var connection = _target.Open())
+            await ChangeApplyTargets.ExecuteAsync(connection, $"DELETE FROM {UnitTable} WHERE unit_seq = (SELECT newest FROM (SELECT MAX(unit_seq) AS newest FROM {UnitTable} WHERE replication_name = '{Replication}') latest)");
+        await InsertAsync(4, "four", 4m);
+        await DrainAsync(RunMode.Runner);
+        var open = Assert.Single(new StateTrackingDivergences(_rig.Database).List(identity), d => d.IsOpen);
+        Assert.Equal(SyncUnitCopy.Name, open.Stream);
+        Assert.True(SyncUnitCopy.IsUnitDivergence(_rig.Database, open.Id));
+        Assert.True(open.Reason.Contains("holds rows of 'unit'"), open.Reason);
+        var (_, documented) = SyncUnitCopy.Document(_rig.Database, BuildTrackingState.ProgressKey, _ => ("both", "target"));
+        Assert.Single(documented, d => (long)d!["id"]! == open.Id);
+
+        // the runner's resolve: archive the copy's rows after the common point; the next drain copies the target's units again from there
+        var resolved = await SyncUnitCopy.ResolveAsync(_rig.Database, BuildTrackingState.ProgressKey, null, open.Id, DbDataKit.State.Tracking.TrackingResolution.Archive, "ada", CancellationToken.None);
+        Assert.Equal(SyncUnitResolveOutcome.Resolved, resolved.Outcome);
+        await InsertAsync(5, "five", 5m);
+        await DrainAsync(RunMode.Runner);
+        Assert.Empty(new StateTrackingDivergences(_rig.Database).List(identity).Where(d => d.IsOpen));
+        Assert.Equal((int)await TargetUnitCountAsync(), store.Count(identity, SyncUnitCopy.Name));
+        Assert.Equal(await SourceRowsAsync(), await TargetRowsAsync());
     }
 }

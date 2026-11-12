@@ -422,8 +422,15 @@ as a divergence (they stay until an administrator resolves them, and while one i
 Resolving is the same action as Build's (`POST /api/v1/tracking/divergences/{id}/resolve`, administrator, audited in the management audit log): **archive** keeps the copy's rows after the point where the sides last agree
 apart (out of the live stream), **reset** deletes them; the checkpoint goes back to that point and the next follow copies the target's units from there. The resolve changes the *copy*; what heals a position difference is
 the pass itself, which already resumes from the primary. The replication's Tracking card shows the open divergence with its reason and both buttons (disabled for anyone but an administrator), and the console's
-**Tracking** page lists every replication's copy beside Build's and the runners', with its own mode and primary (the primary of a replication is the `tracking.primary` of its file, edited on the card). The follower
-follows the replication's own target; a mapping that names another target keeps its units there and they are not copied.
+**Tracking** page lists every replication's copy beside Build's and the runners', with its own mode and primary (the primary of a replication is the `tracking.primary` of its file, edited on the card). Every target
+that holds the replication's units is followed: the replication's own and the one each mapping names.
+
+**A replication the runner owns** is followed by its own drain, not by the Sync server (whose state does not hold that replication's positions): after its passes (at most every 30 seconds) and once more when it ends, the
+drain copies the units into the **runner's** state through the runner protocol (rows and checkpoint in one transaction there, under the same `syncunit:...` identity, which must end with a connection the run holds a handle
+for) and compares the target's newest unit of each mapping with the position its own checkpoint holds, with the same two-minute grace. A divergence is recorded in the runner's state; the runner's own
+`GET /api/v1/tracking` lists it beside Build's copies (mode `both`, the target the primary: the setting itself travels in the published definition) and `POST /api/v1/tracking/divergences/{id}/resolve` (administrator,
+audited as `runner.tracking.resolve`) archives or resets it, the console's Tracking page reaching both through the runner relay. The follower never fails the run: a target that is down, a refused grant or a copy that
+failed are lines in the run's log.
 
 **Retention of `dbdatasync.unit`.** After each pass the mapping's old units are removed in a transaction of their own: a unit goes only when it is older than 7 days **and** not among the newest 1000 units of its
 mapping, and the newest unit of every source is never removed (it is where the next pass resumes). The numbers are the optional `tracking.retention` of the file (`units`, `days`; refused with `mode: state`, which

@@ -17,7 +17,7 @@ public sealed record SyncCopyStatus(string Identity, DateTimeOffset At, int Copi
 /// in <c>dbdatasync.unit</c> since the follower's checkpoint (<see cref="SyncUnitFollower"/>) and checks that the position the state holds for each mapping is one the target recorded, which persists a
 /// divergence for a target restored from a backup or a state that was reset. It runs in the API process because that process is the state store's one writer (phase 39). A target that is down is the
 /// <c>Error</c> of the status, never an exception, and never slows a run: the passes do not wait for the follower.
-/// <para>Limit (documented): the replication's own target connection is followed; a mapping that names another target keeps its units there and is not copied.</para>
+/// <para>Every target that holds the replication's units is followed (<see cref="SyncUnitTargets"/>: the replication's own and the one each mapping names).</para>
 /// </summary>
 public sealed class SyncTrackingService(ConfigRepository config, IConnectionFactory connections, StateDatabase state, ChangeWatermarkStore watermarks, ILogger<SyncTrackingService> logger, TimeProvider? time = null) : BackgroundService
 {
@@ -53,20 +53,28 @@ public sealed class SyncTrackingService(ConfigRepository config, IConnectionFact
         }
     }
 
-    /// <summary>Follows one replication now (the console's "catch up" button too). Null when its setting keeps nothing on the target, or its target is not one a writer exists for.</summary>
+    /// <summary>Follows one replication now (the console's "catch up" button too), at every target that holds its units. Null when its setting keeps nothing on a target, or no target is one a writer exists for.</summary>
     public async Task<SyncCopyStatus?> FollowAsync(string replication, CancellationToken cancellationToken)
     {
         ReplicationTaskConfig task;
         try { task = config.LoadReplicationTask(replication); }
         catch (Exception ex) when (ex is FileNotFoundException or ConfigFileException or ConfigValidationException) { return null; }
-        if (task.Endpoints.Target?.ConnectionName is not { Length: > 0 } connectionName) return null;
-        string driver;
-        try { driver = config.LoadConnection(connectionName).DriverType; }
-        catch (FileNotFoundException) { return null; }
-        var resolved = DbDataSync.Core.Config.TrackingResolution.Resolve(task.Tracking, driver);
-        if (resolved.EffectiveMode == "state") { _last.TryRemove(replication, out _); return null; }
+        var targets = SyncUnitTargets.Of(config, task);
+        if (targets.Count == 0) { _last.TryRemove(replication, out _); return null; }
 
-        var engine = driver.Equals(DriverIds.MsSql, StringComparison.OrdinalIgnoreCase) ? UnitStateEngine.SqlServer : UnitStateEngine.Postgres;
+        var all = new List<SyncCopyStatus>();
+        foreach (var target in targets) all.Add(await FollowOneAsync(replication, target, cancellationToken).ConfigureAwait(false));
+        var status = all.Count == 1 ? all[0]
+            : new SyncCopyStatus(all[0].Identity, all.Max(s => s.At), all.Sum(s => s.Copied), all.All(s => s.CaughtUp), all.Select(s => s.Error).FirstOrDefault(e => e is not null),
+                all.Select(s => s.OpenDivergenceId).FirstOrDefault(d => d is not null), all.Select(s => s.PositionProblem).FirstOrDefault(p => p is not null));
+        _last[replication] = status;
+        return status;
+    }
+
+    private async Task<SyncCopyStatus> FollowOneAsync(string replication, SyncUnitTarget target, CancellationToken cancellationToken)
+    {
+        var connectionName = target.Connection;
+        var engine = target.Engine;
         var units = new TargetUnitState(engine);
         Task<System.Data.Common.DbConnection> Open(CancellationToken ct) => OpenAsync(connectionName, ct);
 
@@ -80,9 +88,7 @@ public sealed class SyncTrackingService(ConfigRepository config, IConnectionFact
         {
             // the target is down: the identity is not known, so the last status keeps what it had and says the target did not answer
             var previous = _last.TryGetValue(replication, out var s) ? s : null;
-            var down = new SyncCopyStatus(previous?.Identity ?? "", _time.GetUtcNow(), 0, false, $"The target '{connectionName}' did not answer: {ex.Message}", previous?.OpenDivergenceId, previous?.PositionProblem);
-            _last[replication] = down;
-            return down;
+            return new SyncCopyStatus(previous?.Identity ?? "", _time.GetUtcNow(), 0, false, $"The target '{connectionName}' did not answer: {ex.Message}", previous?.OpenDivergenceId, previous?.PositionProblem);
         }
 
         var follower = new SyncUnitFollower(state, units, Open, identity, replication, time: _time);
@@ -99,9 +105,7 @@ public sealed class SyncTrackingService(ConfigRepository config, IConnectionFact
         }
 
         var open = follower.Follower.Divergence;
-        var status = new SyncCopyStatus(identity, _time.GetUtcNow(), run.Copied, run.CaughtUp, run.Error, open?.Id, problem);
-        _last[replication] = status;
-        return status;
+        return new SyncCopyStatus(identity, _time.GetUtcNow(), run.Copied, run.CaughtUp, run.Error, open?.Id, problem);
     }
 
     private async Task<System.Data.Common.DbConnection> OpenAsync(string connectionName, CancellationToken cancellationToken) =>
