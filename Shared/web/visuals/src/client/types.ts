@@ -129,6 +129,9 @@ export interface DocumentVersions {
 /** What a switch, a rollback or a retire did: the version now served (null when retired). */
 export interface LifecycleResult { version: number | null; moved: string[] }
 
+/** What a prune answered (plan 30 PB05): the versions removed (or, in a dry run, that would be), the candidates kept with the reason, and the files that go with them. */
+export interface PruneResult { dryRun: boolean; remove: number[]; retained: { version: number; reason: string }[]; files: string[] }
+
 export interface ViewsClient {
   list(kind?: ViewKind): Promise<DocumentSummary[]>
   /** Reads a document. A name that does not exist rejects with `ViewsClientError` `not_found`. A document with errors is still returned, with its diagnostics and no `document`. */
@@ -147,6 +150,8 @@ export interface ViewsClient {
   switchTo?(kind: ViewKind, name: string, version: number, expectedVersion?: number | null): Promise<LifecycleResult>
   /** Returns to the version before the one served. */
   rollback?(kind: ViewKind, name: string, expectedVersion?: number | null): Promise<LifecycleResult>
+  /** Removes stored versions an administrator names; `dryRun` says what would go and removes nothing. Never the served, staged or previous version, nor one another version pins. Optional like the other lifecycle calls. */
+  prune?(kind: ViewKind, name: string, request: { versions: number[]; dryRun: boolean }): Promise<PruneResult>
   /** Stops serving the document (its versions stay and a publish brings it back). */
   retire?(kind: ViewKind, name: string, expectedVersion?: number | null): Promise<void>
   /** True when `resolve` honours `order` (the module does; the fixtures hold recorded results and do not): a table the server cut is then sorted by a new run, not over the rows loaded. */

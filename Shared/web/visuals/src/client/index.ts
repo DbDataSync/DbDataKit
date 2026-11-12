@@ -1,6 +1,6 @@
 export { ViewsClientError } from './types'
 export type {
-  ClientDiagnostic, DocumentPreviewRequest, ExportFormat, ExportOptions, ExportedFile, ServerSort, DocumentSummary, DocumentVersion, DocumentVersions, LifecycleResult, OpenedDocument, PreviewRequest, ResolveOptions, SaveResult, ValidationResult, ViewsClient, ViewsClientErrorCode,
+  ClientDiagnostic, DocumentPreviewRequest, ExportFormat, ExportOptions, ExportedFile, ServerSort, DocumentSummary, DocumentVersion, DocumentVersions, LifecycleResult, PruneResult, OpenedDocument, PreviewRequest, ResolveOptions, SaveResult, ValidationResult, ViewsClient, ViewsClientErrorCode,
 } from './types'
 export { FIXTURE_AS_OF, NO_RECORDED_IMAGE, NO_RECORDED_RESULT, fixtureClient, placedWidgets } from './fixtureClient'
 export type { DocumentMap, FixtureBundle, FixtureClientOptions } from './fixtureClient'

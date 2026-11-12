@@ -44,3 +44,13 @@ export function lifecycleMessage(kind: ViewKind, name: string, action: 'switch' 
   const extra = others.length > 0 ? ` The model versions it was published against moved with it: ${others.join(', ')}.` : ''
   return `${action === 'rollback' ? 'Rolled back: version' : 'Version'} ${version} of ${name} is served now.${extra}`
 }
+
+/**
+ * The versions a prune dialog preselects (plan 30 PB05, default taken): all but the served one, the one before it and the three newest. The Gateway also keeps what a channel serves and what another version pins; this
+ * saves the person from ticking those.
+ */
+export function pruneCandidates(versions: DocumentVersions, keepNewest = 3): number[] {
+  const numbers = versions.versions.map((v) => v.version).sort((a, b) => a - b)
+  const newest = new Set([...numbers].reverse().slice(0, keepNewest))
+  return numbers.filter((v) => v !== versions.active && v !== versions.previous && !newest.has(v))
+}

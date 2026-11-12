@@ -48,7 +48,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 
 | Plan and row | What remains | Flag |
 | --- | --- | --- |
-| [30](30-publishing.md) PB01 to PB06 | The shared HTTP API (the prune and read calls are on the Gateway) and the removal of the per-kind routes (when Sync is operational on the runner), signatures and a trust store, apps by file from a disk cache, the prune screen of dashboards and reports (UE04), promotion between groups | PB01 and PB05 mostly built |
+| [30](30-publishing.md) PB01 to PB06 | The shared HTTP API (the prune and read calls are on the Gateway) and the removal of the per-kind routes (when Sync is operational on the runner), signatures and a trust store, apps by file from a disk cache, the entity models' and apps' prune screens, promotion between groups | PB01 and PB05 mostly built |
 | [21](21-channels-and-previews.md) CH02 to CH06 | Releases with one approval, inherited reads, Build's channel targets, Sync trial runs, the contract-step refusal; CH07's sweep on the Gateway and apps host, the console showing the Store's feed, removal on merge | CH01, CH07 library built |
 | [14a](14a-semantic-slices.md) SL02 to SL04, SL06 to SL11, SL19, SL20, SL22, SL28, SL29 | The three products read the engine registry; the mapped-columns check and pruning at publish; describe with types; decimals; metadata documents; the `semantic:` form; promote a saved query; the `queries:` editor; Build's `semantic` noun; a row cap in the DAX text; the SSAS executor | |
 | [14a](14a-semantic-slices.md) SL25 to SL27, SL30, SL31 | Ad hoc registrations and review, the combine in a child process, publish from Build's command line, the REST listener | OWNER ("not yet"); SL30 LOW |

@@ -2,7 +2,7 @@ import type { ViewKind } from '../views/document'
 import type { RenderedWidgets } from '../views/rendered'
 import { validateText } from './text'
 import { ViewsClientError } from './types'
-import type { ClientDiagnostic, DocumentSummary, DocumentVersions, ExportFormat, ExportOptions, ExportedFile, LifecycleResult, OpenedDocument, ViewsClient, ViewsClientErrorCode } from './types'
+import type { ClientDiagnostic, DocumentSummary, DocumentVersions, ExportFormat, ExportOptions, ExportedFile, LifecycleResult, OpenedDocument, PruneResult, ViewsClient, ViewsClientErrorCode } from './types'
 import { diagnosticsFromRefusal } from './refusal'
 
 /**
@@ -171,6 +171,11 @@ export function moduleClient(options: ModuleClientOptions): ViewsClient {
     async rollback(kind, name, expectedVersion): Promise<LifecycleResult> {
       const body = await call<{ version: number; moved?: string[] }>('POST', `/api/v1/${collection(kind)}/${segment(name)}/rollback`, expectedVersion ? { expected_version: expectedVersion } : {})
       return { version: body.version, moved: body.moved ?? [] }
+    },
+
+    async prune(kind, name, request): Promise<PruneResult> {
+      const body = await call<{ dry_run: boolean; remove: number[]; retained: { version: number; reason: string }[]; files: string[] }>('POST', `/api/v1/definitions/${kind}/${segment(name)}/prune`, { versions: request.versions, dry_run: request.dryRun })
+      return { dryRun: body.dry_run, remove: body.remove, retained: body.retained, files: body.files }
     },
 
     async retire(kind, name, expectedVersion) {
