@@ -27,8 +27,8 @@ namespace DbDataGateway.Server.Management;
 /// </list>
 /// A data source whose connection string cannot be read (a secret that is not there, an address that holds no server or database) is named by itself, so two of them never become one node and nothing joins wrongly; it is said in <paramref name="notes"/>.
 /// </summary>
-/// <summary>A dashboard, a report or an app instance as the lineage's consumer (plan 18, G12): what it reads, as the registry writes a dependency (<c>semantic-model:sales</c>, <c>entity-model:territories</c>).</summary>
-public sealed record GatewayConsumer(string Kind, string Name, IReadOnlyList<string> Reads);
+/// <summary>A dashboard, a report or an app instance as the lineage's consumer (plan 18, G12): what it reads, as the registry writes a dependency (<c>semantic-model:sales</c>, <c>entity-model:territories</c>), and the channel it is published in (plan 21 CH06: one node per channel, with the property <c>channel</c>; production's node keeps its address and the others are <c>name~channel</c>).</summary>
+public sealed record GatewayConsumer(string Kind, string Name, IReadOnlyList<string> Reads, string Channel = "prod");
 
 public static class GatewayLineageGraph
 {
@@ -126,7 +126,7 @@ public static class GatewayLineageGraph
         // dashboards, reports and app instances read what they depend on: an edge from the model or the tables to the consumer
         foreach (var consumer in consumers ?? [])
         {
-            var id = LineageIdentity.SuiteObject(instanceId, consumer.Kind, consumer.Name);
+            var id = LineageIdentity.SuiteObject(instanceId, consumer.Kind, consumer.Channel == "prod" ? consumer.Name : consumer.Name + "~" + consumer.Channel);
             var sources = new List<string>();
             foreach (var reference in consumer.Reads)
             {
@@ -135,7 +135,7 @@ public static class GatewayLineageGraph
                 else if (kind == "entity-model" && entityTables.TryGetValue(name, out var tables)) sources.AddRange(tables);
             }
             if (sources.Count == 0) continue;           // what it reads is not in this graph: nothing to draw, and no consumer node without a flow into it
-            nodes[id] = new LineageNode(id, NodeKind.Consumer, consumer.Name, UnknownUpstream: false, new Dictionary<string, string> { ["consumer"] = consumer.Kind });
+            nodes[id] = new LineageNode(id, NodeKind.Consumer, consumer.Name, UnknownUpstream: false, new Dictionary<string, string> { ["consumer"] = consumer.Kind, [ContractGuard.ChannelProperty] = consumer.Channel });
             foreach (var source in sources.Distinct()) edges.Add(new LineageEdge(source, id, EdgeKind.Reads, Granularity.Table, Confidence.Declared));
         }
         return new LineageGraph(nodes.Values, edges);
@@ -257,7 +257,8 @@ public sealed class GatewayLineage(Func<GatewayOptions> options, Func<IEnumerabl
     public ManagementResult Handle(string method, ManagementCaller caller)
     {
         if (method != "GET") return ManagementResult.Problem(405, "The lineage is read, not written.");
-        if (!caller.Holds(ServerRole.Viewer)) return ManagementResult.Problem(403, "This call needs the viewer role.");
+        // a paired server that publishes here (the Publisher role) reads it too: Build's plan and the Store's contract step ask it before a column goes (plan 21 CH06); reader names stay the administrator's
+        if (!caller.Holds(ServerRole.Viewer) && !caller.Holds(ServerRole.Publisher)) return ManagementResult.Problem(403, "This call needs the viewer or publisher role.");
         try
         {
             var graph = Build(caller.Holds(ServerRole.Admin), out var notes);

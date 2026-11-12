@@ -40,4 +40,44 @@ public static class ContractGuard
     public static string? Refusal(string change, IReadOnlyList<ContractConsumer> consumers) =>
         consumers.Count == 0 ? null
             : $"Cannot {change}: the lineage graph shows {string.Join("; ", consumers.Select(c => $"the {c.Kind} '{c.Name}' published in channel '{c.Channel}' ({c.Via})"))}. Publish {(consumers.Count == 1 ? "it" : "them")} without it first, then contract (expand, then contract).";
+
+    /// <summary>
+    /// The whole check a caller makes before it runs a contract step (plan 21 CH06): for each change, the consumers each reachable graph shows; the refusals that name them; and the allowances that were used. <paramref name="graphs"/> is one graph per paired
+    /// server (a Gateway's, by its pairing name), kept apart so one that cannot be joined with the rest does not hide the others; <paramref name="unreachable"/> names a paired server whose graph could not be read (its consumers are not known, so the step is refused
+    /// until a person says it may go on, as <c>gateway:&lt;name&gt;</c>, written after <paramref name="allowWith"/>). <paramref name="allowed"/> are the allowances the person gave: <c>&lt;consumer&gt;</c> (in every channel), <c>&lt;consumer&gt;@&lt;channel&gt;</c> or <c>gateway:&lt;name&gt;</c>.
+    /// </summary>
+    public static ContractVerdict Check(IReadOnlyList<ContractedColumn> changes, IReadOnlyList<(string Server, LineageGraph Graph)> graphs, IReadOnlyList<(string Server, string Why)> unreachable, IReadOnlyCollection<string> allowed, string allowWith = "--allow-consumer")
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        var refusals = new List<string>();
+        var used = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var change in changes)
+        {
+            var consumers = graphs.SelectMany(g => Consumers(g.Graph, [change.ColumnId], change.DatasetId)).DistinctBy(c => (c.Name, c.Channel)).OrderBy(c => c.Name, StringComparer.Ordinal).ThenBy(c => c.Channel, StringComparer.Ordinal).ToList();
+            var open = new List<ContractConsumer>();
+            foreach (var consumer in consumers)
+            {
+                var token = allowed.FirstOrDefault(a => a == consumer.Name || a == consumer.Name + "@" + consumer.Channel);
+                if (token is null) open.Add(consumer); else used.Add(token);
+            }
+            if (Refusal(change.Description, open) is { } refusal) refusals.Add($"{refusal} To go on without that, allow {(open.Count == 1 ? "it" : "each")} by name and channel, which is recorded: {string.Join(" ", open.Select(c => $"{allowWith} {c.Name}@{c.Channel}"))}.");
+        }
+        if (changes.Count > 0)
+            foreach (var (server, why) in unreachable)
+            {
+                var token = "gateway:" + server;
+                if (allowed.Contains(token)) used.Add(token);
+                else refusals.Add($"Cannot check who reads what this change removes: the paired server '{server}' did not give its lineage ({why}), so its published consumers are not known. Try again when it answers, or allow the change without the check with {allowWith} {token}.");
+            }
+        return new ContractVerdict(refusals, [.. used]);
+    }
+}
+
+/// <summary>One column a contract step removes or retypes: what to say (<c>drop the column 'price' of 'sales.orders'</c>), the column's node and its table's node in the graph (<see cref="LineageIdentity"/>).</summary>
+public sealed record ContractedColumn(string Description, string ColumnId, string? DatasetId);
+
+/// <summary>What <see cref="ContractGuard.Check"/> found: the refusals (none means the step may run) and the allowances the person gave that it used, which the caller records.</summary>
+public sealed record ContractVerdict(IReadOnlyList<string> Refusals, IReadOnlyList<string> AllowancesUsed)
+{
+    public bool Allowed => Refusals.Count == 0;
 }

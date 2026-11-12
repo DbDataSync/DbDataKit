@@ -265,3 +265,26 @@ public static class StructurePlanner
         static string Size(ColumnShape s) => s.Length != null ? $"({(s.Length == -1 ? "max" : s.Length.ToString())})" : s.Precision != null ? $"({s.Precision}, {s.Scale})" : "";
     }
 }
+
+/// <summary>
+/// The steps of a structure plan that take a column away from whatever reads it (plan 21 CH06): <c>drop column x</c> (reason <c>col.removed</c>), <c>rename column x to y</c> (declared or answered; x is gone) and <c>alter column x</c> that changes the type to
+/// one the data may not survive (<c>col.type.other</c>; a widening and a change of nullability or collation keep every reader working). A caller that must ask lineage before such a step runs (Build's apply) reads the column from here, in the words
+/// <see cref="StructurePlanner"/> writes the step in, so the two stay together and <c>StructurePlannerTests</c> says so.
+/// </summary>
+public static class ContractSteps
+{
+    /// <summary>The column the step removes or retypes and what is done to it (<c>drop</c>, <c>rename</c>, <c>retype</c>); null for a step that takes nothing away.</summary>
+    public static (string Verb, string Column)? Of(string description, IReadOnlyList<string> reasons)
+    {
+        if (reasons.Contains("col.removed") && description.StartsWith("drop column ", StringComparison.Ordinal)) return ("drop", description["drop column ".Length..]);
+        // a rename is a rename whichever way it was decided (a declared one or an answer): the reasons differ, the words do not
+        if (description.StartsWith("rename column ", StringComparison.Ordinal))
+        {
+            var rest = description["rename column ".Length..];
+            var to = rest.IndexOf(" to ", StringComparison.Ordinal);
+            if (to > 0) return ("rename", rest[..to]);
+        }
+        if (reasons.Contains("col.type.other") && description.StartsWith("alter column ", StringComparison.Ordinal)) return ("retype", description["alter column ".Length..]);
+        return null;
+    }
+}

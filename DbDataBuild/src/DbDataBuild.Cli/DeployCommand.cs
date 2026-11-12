@@ -12,7 +12,7 @@ internal static class DeployCommand
 {
     public static int Run(CommandSpec spec, string root, string? target, string[] models, FileInfo? answers, bool acceptInferred, DirectoryInfo? outDir, string[] ops, string[] backfill, string[] parameters,
         bool writePlan, FileInfo? applyPlan, string? ack, string? reason, bool allowRisky, string[] allowDestructive, bool allowDirty, bool dryRun, bool yes, string[] inputArgs,
-        TextWriter output, TextWriter error, TextReader input, bool interactive, Func<string, string?> env)
+        TextWriter output, TextWriter error, TextReader input, bool interactive, Func<string, string?> env, string[]? allowConsumers = null)
     {
         if (ack != null)
         {
@@ -38,7 +38,7 @@ internal static class DeployCommand
         if (applyPlan != null)
         {
             if (writePlan) { error.WriteLine("--apply-plan applies a plan that was written; --write-plan writes one. Give one of them."); return CliApp.ExitUsage; }
-            return ApplyCommand.Run(spec, applyPlan.FullName, root, dryRun, allowRisky, allowDestructive, allowDirty, output, error, env, target, pins: pins, approveMoved: approve);
+            return ApplyCommand.Run(spec, applyPlan.FullName, root, dryRun, allowRisky, allowDestructive, allowDirty, output, error, env, target, pins: pins, approveMoved: approve, allowConsumers: allowConsumers);
         }
 
         string? written = null;
@@ -62,6 +62,6 @@ internal static class DeployCommand
                 return CliApp.ExitOk;
             }
         }
-        return ApplyCommand.Run(spec, written, root, dryRun, allowRisky, allowDestructive, allowDirty, output, error, env, target, afterPlan: true, approveMoved: approve);
+        return ApplyCommand.Run(spec, written, root, dryRun, allowRisky, allowDestructive, allowDirty, output, error, env, target, afterPlan: true, approveMoved: approve, allowConsumers: allowConsumers);
     }
 }

@@ -59,4 +59,45 @@ public class ContractGuardTests
         var republished = new LineageGraph(graph.Nodes.Where(n => n.Id != "suite://g/semantic_member/sales: revenue"), graph.Edges.Where(e => e.To != prod.Id && e.To != test.Id && e.To != report.Id && e.To != "suite://g/semantic_member/sales: revenue" && e.From != "suite://g/semantic_member/sales: revenue"));
         Assert.Empty(ContractGuard.Consumers(republished, [Price], Table));
     }
+
+    [Fact]
+    public void Check_refuses_naming_package_and_channel_and_the_escape_that_allows_each()
+    {
+        var graph = Graph(out _, out _, out _);
+        var drop = new ContractedColumn("drop the column 'price' of 'sales.orders'", Price, Table);
+        var verdict = ContractGuard.Check([drop], [("gw", graph)], [], []);
+        Assert.False(verdict.Allowed);
+        var refusal = Assert.Single(verdict.Refusals);
+        Assert.Contains("the dashboard 'sales' published in channel 'test'", refusal);
+        Assert.Contains("--allow-consumer sales@test", refusal);
+        Assert.Empty(verdict.AllowancesUsed);
+    }
+
+    [Fact]
+    public void An_allowance_by_name_and_channel_lets_only_that_consumer_through_and_is_reported()
+    {
+        var graph = Graph(out _, out _, out _);
+        var drop = new ContractedColumn("drop the column 'price' of 'sales.orders'", Price, Table);
+        var partial = ContractGuard.Check([drop], [("gw", graph)], [], ["sales@test", "sales@prod"]);
+        var refusal = Assert.Single(partial.Refusals);
+        Assert.DoesNotContain("dashboard 'sales' published", refusal);
+        Assert.Contains("table-only", refusal);
+        var all = ContractGuard.Check([drop], [("gw", graph)], [], ["sales", "sales: revenue", "table-only"]);
+        Assert.True(all.Allowed);
+        Assert.Equal(["sales", "sales: revenue", "table-only"], all.AllowancesUsed);
+    }
+
+    [Fact]
+    public void A_paired_server_that_did_not_answer_refuses_the_step_until_it_is_allowed_by_name()
+    {
+        var drop = new ContractedColumn("drop the column 'price' of 'sales.orders'", Price, Table);
+        var refused = ContractGuard.Check([drop], [], [("gw", "it could not be reached")], [], "allow_consumer=");
+        Assert.Contains("'gw' did not give its lineage", Assert.Single(refused.Refusals));
+        Assert.Contains("allow_consumer= gateway:gw", refused.Refusals[0]);
+        var allowed = ContractGuard.Check([drop], [], [("gw", "it could not be reached")], ["gateway:gw"]);
+        Assert.True(allowed.Allowed);
+        Assert.Equal(["gateway:gw"], allowed.AllowancesUsed);
+        // no change, nothing to ask: an unreachable server is no reason to refuse
+        Assert.True(ContractGuard.Check([], [], [("gw", "x")], []).Allowed);
+    }
 }

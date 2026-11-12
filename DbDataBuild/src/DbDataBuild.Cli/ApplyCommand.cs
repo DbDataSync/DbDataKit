@@ -4,6 +4,7 @@ using DbDataBuild.Core;
 using DbDataBuild.Execution;
 using DbDataBuild.Models;
 using DbDataBuild.Planning;
+using DbDataBuild.Cli.Server;
 
 namespace DbDataBuild.Cli;
 
@@ -89,7 +90,7 @@ internal static class ApplyCommand
     }
 
     public static int Run(CommandSpec spec, string planPath, string root, bool dryRun, bool allowRisky, string[] allowDestructive, bool allowDirty,
-        TextWriter output, TextWriter error, Func<string, string?> env, string? connectionArg = null, bool afterPlan = false, IReadOnlyList<InputPin>? pins = null, Func<IReadOnlyList<MovedInput>, bool>? approveMoved = null)
+        TextWriter output, TextWriter error, Func<string, string?> env, string? connectionArg = null, bool afterPlan = false, IReadOnlyList<InputPin>? pins = null, Func<IReadOnlyList<MovedInput>, bool>? approveMoved = null, string[]? allowConsumers = null)
     {
         string planText, label;
         var fromDatabase = !File.Exists(planPath) && StoredPlanId.IsMatch(Path.GetFileName(planPath));
@@ -111,7 +112,7 @@ internal static class ApplyCommand
             foreach (var d in diags) error.Diag(d);
             return CliApp.ExitFindings;
         }
-        var exit = RunPlan(spec, plan, planText, label, root, dryRun, allowRisky, allowDestructive, allowDirty, new ApplyMode(Header: !afterPlan, Summary: !afterPlan, InputPins: pins, ApproveMoved: approveMoved), output, error, env);
+        var exit = RunPlan(spec, plan, planText, label, root, dryRun, allowRisky, allowDestructive, allowDirty, new ApplyMode(Header: !afterPlan, Summary: !afterPlan, InputPins: pins, ApproveMoved: approveMoved, AllowConsumers: allowConsumers), output, error, env);
         // a plan kept only for the moment (`plans.deploy.keep: ephemeral` puts it under .dbdatabuild/plans/) goes when it has been applied
         if (exit == CliApp.ExitOk && !dryRun && !fromDatabase && Path.GetFullPath(planPath).StartsWith(Path.GetFullPath(Path.Combine(root, PlanCommand.EphemeralPlansDir)) + Path.DirectorySeparatorChar, StringComparison.Ordinal))
         {
@@ -133,7 +134,7 @@ internal static class ApplyCommand
     /// <param name="Run">For a refresh: the plan it ran, the selection and the plan's members, which the event records.</param>
     /// <param name="Execution">For a refresh: its loads with the rules of each and how to make each ready (see <see cref="RefreshExecution"/>).</param>
     /// <param name="OnlyFailed">Whether the loads were chosen by `--only-failed` (the hints that follow say so).</param>
-    internal sealed record ApplyMode(bool Refresh = false, string? PlanHash = null, bool RecordShapes = true, bool Header = true, bool Summary = true, RefreshRunInfo? Run = null, RefreshExecution? Execution = null, bool OnlyFailed = false, IReadOnlyList<InputPin>? InputPins = null, Func<IReadOnlyList<MovedInput>, bool>? ApproveMoved = null, IReadOnlyList<string>? Origins = null, int Parallel = 1, SessionLimits? Limits = null, IReadOnlyList<string>? Warnings = null, Func<RefreshSummary, ModelQualityOutcome?>? AfterRefresh = null);
+    internal sealed record ApplyMode(bool Refresh = false, string? PlanHash = null, bool RecordShapes = true, bool Header = true, bool Summary = true, RefreshRunInfo? Run = null, RefreshExecution? Execution = null, bool OnlyFailed = false, IReadOnlyList<InputPin>? InputPins = null, Func<IReadOnlyList<MovedInput>, bool>? ApproveMoved = null, IReadOnlyList<string>? Origins = null, int Parallel = 1, SessionLimits? Limits = null, IReadOnlyList<string>? Warnings = null, Func<RefreshSummary, ModelQualityOutcome?>? AfterRefresh = null, IReadOnlyList<string>? AllowConsumers = null);
 
     /// <summary>` hourly` when the refresh ran a plan, so the next commands name it; nothing for a load named directly.</summary>
     private static string PlanArgument(ApplyMode mode) => mode.Run?.PlanName is { } name ? " " + name : "";
@@ -261,6 +262,25 @@ internal static class ApplyCommand
             foreach (var d in offline) error.Diag(d);
             output.WriteLine("Nothing was executed.");
             return CliApp.ExitFindings;
+        }
+
+        // plan 21 CH06: a column a published consumer reads is not dropped or retyped. The paired Gateways' lineage is asked (a dry run too, so it says what the apply would refuse); an allowance given by name is recorded
+        if (!mode.Refresh)
+        {
+            var guard = BuildContractGuard.CheckAsync(plan, config, env, mode.AllowConsumers ?? []).GetAwaiter().GetResult();
+            if (guard.Note is { } guardNote) error.WriteLine("note: " + guardNote);
+            if (guard.Refusals.Count > 0)
+            {
+                foreach (var d in guard.Refusals) error.Diag(d);
+                output.WriteLine("Nothing was executed.");
+                return CliApp.ExitFindings;
+            }
+            if (guard.AllowancesUsed.Count > 0)
+            {
+                output.Payload("consumers_allowed", guard.AllowancesUsed);
+                output.WriteLine($"Allowed to lose a column they read: {string.Join(", ", guard.AllowancesUsed)}.");
+                if (!dryRun) BuildContractGuard.Record(env(TrackingJournals.ServerDirectoryVariable), Actor.Of(env, write?.User ?? Environment.UserName), plan.Id, guard.AllowancesUsed);
+            }
         }
 
         // a project whose tracking is state-first writes every record to the state before the target (plan 28c E16); a run that has no state is refused here, before a statement runs

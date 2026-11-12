@@ -92,6 +92,8 @@ internal sealed class WebActions(string projectRoot, ICommandHost host, Semaphor
         if (dryRun) argv.Add("--dry-run");
         if (allowRisky) argv.Add("--allow-risky");
         foreach (var o in destructive.Distinct(StringComparer.Ordinal)) { argv.Add("--allow-destructive"); argv.Add(o); }
+        // a consumer the person allows to lose a column by name (plan 21 CH06); a name the plan has no use for is harmless and the command checks it
+        foreach (var o in ((body?["allow_consumer"] as JsonArray)?.Select(x => x is JsonValue v && v.TryGetValue<string>(out var c) ? c : "").Where(c => c.Length > 0) ?? []).Distinct(StringComparer.Ordinal)) { argv.Add("--allow-consumer"); argv.Add(o); }
 
         _ = Task.Run(() =>
         {

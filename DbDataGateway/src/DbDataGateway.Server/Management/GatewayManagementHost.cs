@@ -159,8 +159,10 @@ public static class GatewayManagementHost
                 {
                     // the dashboards and reports published to the group read what they depend on; an app instance reads the Store models it is bound to
                     var definitions = new DbDataKit.State.DefinitionStore(state);
-                    return [.. new[] { "dashboard", "report" }.SelectMany(kind => definitions.CurrentOfKind(kind).Select(v => new GatewayConsumer(kind, v.Name, v.DependsOn))),
-                        .. new DbDataKit.Apps.AppInstanceStore(definitions).List().Select(i => new GatewayConsumer("app", i.Name, [.. i.Bindings.Keys.Select(model => "entity-model:" + model)]))];
+                    // every channel, not production's alone: the contract guard asks who reads a column in any of them (plan 21 CH06)
+                    var instances = new DbDataKit.Apps.AppInstanceStore(definitions);
+                    return [.. new[] { "dashboard", "report" }.SelectMany(kind => definitions.ChannelsOfKind(kind).SelectMany(channel => definitions.CurrentOfKind(kind, channel).Select(v => new GatewayConsumer(kind, v.Name, v.DependsOn, channel)))),
+                        .. definitions.ChannelsOfKind(DbDataKit.Apps.AppInstanceStore.InstanceKind).SelectMany(channel => instances.List(channel).Select(i => new GatewayConsumer("app", i.Name, [.. i.Bindings.Keys.Select(model => "entity-model:" + model)], channel)))];
                 },
                 (name, text) => app.Services.GetRequiredService<Secrets.SecretsRuntime>().ResolveConnectionString($"Gateway:DataSources:{name}:ConnectionString", text, app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue.DataSources[name].Provider),
                 app.Services.GetRequiredService<DbDataGateway.Server.State.TableReadRecorder>(), app.Services.GetRequiredService<DbDataGateway.Server.State.TableReadStore>(), instanceId),

@@ -594,6 +594,7 @@ Usage: `dbdatabuild connection deploy [connection] [models]... [options]`
 |---|---|
 | `--accept-inferred` | Accept inferred proposals marked high certainty |
 | `--ack` `<text>` | Record a decision instead of deploying, as kind:name: drift:<object> (it changed outside the tool), definition:<model> (an incremental model's query changed), history:<model.column> (a recorded backfill that never happened). Needs --reason |
+| `--allow-consumer` `<text ...>` | A published consumer (name, or name@channel) that reads a column the plan drops or retypes, allowed to lose it anyway; recorded. `gateway:<pairing>` allows a paired Gateway whose lineage could not be read |
 | `--allow-destructive` `<text ...>` | Object (marts.fct) whose destructive steps are allowed; repeat for several objects |
 | `--allow-dirty` | Apply from a working tree with uncommitted changes (recorded) |
 | `--allow-risky` | Allow the plan's risky steps |

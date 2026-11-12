@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
 using DbDataKit.Hosting.Certificates;
+using DbDataKit.Lineage;
 using DbDataKit.Serving.Notify;
 using DbDataKit.Web.Trust;
 using DbDataStore.Server;
@@ -41,6 +42,8 @@ public abstract class StoreDataChangedEngineTests(string engine) : IAsyncLifetim
     private readonly string? server = Environment.GetEnvironmentVariable(engine == "sqlserver" ? "DBDATAKIT_TEST_SQLSERVER" : "DBDATAKIT_TEST_POSTGRES");
     private WebApplication? store;
     private WebApplication? gateway;
+    private string lineage = """{"nodes":[],"edges":[]}""";
+    private int lineageStatus = 200;
     private StoreSettings settings = null!;
 
     private string StoreDir => Path.Combine(root, "store");
@@ -122,6 +125,14 @@ public abstract class StoreDataChangedEngineTests(string engine) : IAsyncLifetim
             lock (seen) seen.Add((text, context.ManagementToken()));
             return Results.Json(new { served = true });
         });
+        // the Gateway's lineage, which the contract step asks (plan 21 CH06); a Publisher may read it
+        app.MapGet("/api/v1/lineage", (HttpContext context) =>
+        {
+            var token = context.ManagementToken();
+            return !ServerRoles.Allows(token.Roles, ServerRole.Viewer) && !token.Roles.HasFlag(ServerRole.Publisher)
+                ? Results.Json(new { error = "This call needs the viewer or publisher role." }, statusCode: 403)
+                : lineageStatus != 200 ? Results.Json(new { error = "down" }, statusCode: lineageStatus) : Results.Content(lineage, "application/json");
+        });
         return app;
     }
 
@@ -163,6 +174,83 @@ public abstract class StoreDataChangedEngineTests(string engine) : IAsyncLifetim
         Assert.EndsWith("territories.territory", dataset);
         Assert.Equal(("store server", ServerRole.Publisher), (call.Token.SubjectName, call.Token.Roles));
         Assert.NotEqual("ada", call.Token.SubjectId);      // the Store server's own client id, not the person who wrote
+    }
+
+    private const string Wider = """
+        schemaVersion: 1
+        name: territories
+        storage: {connection: mdm}
+        entities:
+          territory:
+            key: [code]
+            attributes:
+              code: {type: VARCHAR(10), required: true}
+        """;
+
+    /// <summary>
+    /// Plan 21 CH06 on a real engine: the contract step that drops a column a published dashboard reads, in any channel the paired Gateway's lineage shows, is refused naming the dashboard and the channel, with nothing changed; naming each consumer
+    /// allows it (and the audit says who); once the Gateway's graph no longer shows a reader the step applies; a Gateway that cannot be asked refuses it too, until it is named.
+    /// </summary>
+    [Fact]
+    public async Task The_contract_step_is_refused_while_a_published_consumer_in_any_channel_reads_the_column_and_applies_once_none_does()
+    {
+        Assert.SkipWhen(server is null, $"set DBDATAKIT_TEST_{(SqlServer ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
+        Assert.Equal(HttpStatusCode.Created, (await Send(HttpMethod.Put, "/api/v1/models/territories", Model, ServerRole.Author)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await Send(HttpMethod.Post, "/api/v1/models/territories/storage/create", null, ServerRole.Admin)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Put, "/api/v1/models/territories", Wider, ServerRole.Author)).StatusCode);        // the model no longer has `quota`
+
+        // the table and column as the Gateway's graph names them: the Store's own identity of the copy
+        var (address, problem) = await new StoreConnections(StoreDir).AddressOnlyAsync("mdm", CancellationToken.None);
+        Assert.NotNull(address);
+        Assert.Null(problem);
+        var dataset = LineageIdentity.Dataset(address, "territories", "territory");
+        var column = LineageIdentity.Column(address, dataset, "quota");
+        var consumer = new LineageNode("suite://gw/dashboard/quota-board~test", NodeKind.Consumer, "quota-board", false, new Dictionary<string, string> { ["consumer"] = "dashboard", ["channel"] = "test" });
+        var graph = new LineageGraph([new(dataset.ToString(), NodeKind.Dataset, "territories.territory"), new(column, NodeKind.Column, "quota"), new("suite://gw/semantic-model/quota", NodeKind.Serving, "quota"), consumer],
+            [new(column, "suite://gw/semantic-model/quota", EdgeKind.Binds, Granularity.Column, Confidence.Derived), new("suite://gw/semantic-model/quota", consumer.Id, EdgeKind.Reads, Granularity.Table, Confidence.Declared)]);
+        lineage = LineageJson.Write(graph).ToJsonString();
+
+        const string contract = "/api/v1/models/territories/migrate/contract";
+        var plan = JsonNode.Parse(await (await Send(HttpMethod.Post, contract, null, ServerRole.Admin)).Content.ReadAsStringAsync())!;
+        Assert.Equal(["drop column territory.quota"], plan["steps"]!.AsArray().Select(s => (string)s!["description"]!));      // a dry run asks nothing and says what would happen
+        var hash = (string)plan["hash"]!;
+
+        var refused = await Send(HttpMethod.Post, contract + "?approve=" + hash, null, ServerRole.Admin);
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        var message = (string)JsonNode.Parse(await refused.Content.ReadAsStringAsync())!["error"]!;
+        Assert.Contains("the dashboard 'quota-board' published in channel 'test'", message);
+        Assert.Contains("drop the column 'quota' of 'territories.territory'", message);
+        Assert.Contains("allow_consumer= quota-board@test", message);
+        Assert.False((bool)JsonNode.Parse(await (await Send(HttpMethod.Post, contract, null, ServerRole.Admin)).Content.ReadAsStringAsync())!["nothing"]!);          // nothing was dropped
+
+        // a paired Gateway that cannot be asked is not "no consumers": the step is refused until it is named
+        lineageStatus = 503;
+        var down = await Send(HttpMethod.Post, contract + "?approve=" + hash + "&allow_consumer=quota-board@test", null, ServerRole.Admin);
+        Assert.Equal(HttpStatusCode.Conflict, down.StatusCode);
+        Assert.Contains("'edge' did not give its lineage", (string)JsonNode.Parse(await down.Content.ReadAsStringAsync())!["error"]!);
+        lineageStatus = 200;
+
+        // the consumer is allowed by name and channel: the step runs, and the audit says who allowed what
+        var applied = await Send(HttpMethod.Post, contract + "?approve=" + hash + "&allow_consumer=quota-board@test", null, ServerRole.Admin);
+        Assert.Equal(HttpStatusCode.OK, applied.StatusCode);
+        Assert.True((bool)JsonNode.Parse(await applied.Content.ReadAsStringAsync())!["applied"]!);
+        var entry = Assert.Single(new FileAuditLog(Path.Combine(StoreDir, "management-audit.log")).Read(), e => e.Command == "model.contract.allow-consumer");
+        Assert.Equal("ada", entry.UserId);
+        Assert.Contains("quota-board@test", entry.Target);
+    }
+
+    [Fact]
+    public async Task When_no_published_consumer_reads_the_column_any_more_the_contract_step_applies_without_an_allowance()
+    {
+        Assert.SkipWhen(server is null, $"set DBDATAKIT_TEST_{(SqlServer ? "SQLSERVER" : "POSTGRES")} to run on {engine}");
+        await Send(HttpMethod.Put, "/api/v1/models/territories", Model, ServerRole.Author);
+        await Send(HttpMethod.Post, "/api/v1/models/territories/storage/create", null, ServerRole.Admin);
+        await Send(HttpMethod.Put, "/api/v1/models/territories", Wider, ServerRole.Author);
+        const string contract = "/api/v1/models/territories/migrate/contract";
+        var hash = (string)JsonNode.Parse(await (await Send(HttpMethod.Post, contract, null, ServerRole.Admin)).Content.ReadAsStringAsync())!["hash"]!;
+        var applied = await Send(HttpMethod.Post, contract + "?approve=" + hash, null, ServerRole.Admin);       // the republished graph is empty
+        Assert.Equal(HttpStatusCode.OK, applied.StatusCode);
+        Assert.True((bool)JsonNode.Parse(await applied.Content.ReadAsStringAsync())!["applied"]!);
     }
 }
 
