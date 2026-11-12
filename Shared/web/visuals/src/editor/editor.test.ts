@@ -10,6 +10,7 @@ import { canRedo, canUndo, draftFromOpened, edit, editAll, editText, errorsOf, f
 import { diagnosticsFor, formTarget, markersOf } from './diagnostics'
 import { clientStore, localFileStore, reloadDraft, saveDraft } from './store'
 import { newDocumentText } from './newDocument'
+import { emptyDocumentText } from './emptyDocument.testing'
 import { storedDocuments } from './storedDocuments'
 import { testSelector } from './geometry'
 import { badNumbers, fieldsFromWhen, whenFromFields } from './selector'
@@ -213,7 +214,7 @@ describe('the edit commands', () => {
     d = must(edit(d, { type: 'deleteLayout', name: 'main' }))
     expect(d.value!.layouts.filter((l) => l.default).map((l) => l.name)).toEqual(['desk'])
     expect(d.validation.ok).toBe(true)
-    const only = newDraft('dashboard', 'x', newDocumentText('dashboard', 'X'))
+    const only = newDraft('dashboard', 'x', emptyDocumentText('dashboard', 'X'))
     expect((edit(only, { type: 'deleteLayout', name: 'desk' }).error as EditError).code).toBe('last_layout')
     const added = must(edit(d, { type: 'addLayout', layout: { name: 'tv', type: 'canvas', canvas: { width: 1920, height: 1080 }, tiles: [] } }))
     expect(added.value!.layouts.at(-1)!.name).toBe('tv')
@@ -249,24 +250,30 @@ describe('the edit commands', () => {
 })
 
 describe('new documents', () => {
-  it('a new dashboard starts with an empty desk reflow layout, dirty, with no version; it lacks a widget and a tile', () => {
+  it('a new dashboard starts with a desk reflow layout and a text widget on it: valid, dirty, with no version', () => {
     const d = newDraft('dashboard', 'sales', newDocumentText('dashboard', 'Sales'))
-    expect(errorsOf(d).map((e) => e.path)).toEqual(['widgets', 'layouts[0].tiles'])
+    expect(errorsOf(d)).toEqual([])
     expect(d.baseVersion).toBeUndefined()
     expect(isDirty(d)).toBe(true)
-    expect(d.value!.layouts).toEqual([{ name: 'desk', type: 'reflow', default: true, grid: { columns: 12 }, tiles: [] }])
+    expect(Object.keys(d.value!.widgets)).toEqual(['note'])
+    expect(d.value!.layouts).toEqual([{ name: 'desk', type: 'reflow', default: true, grid: { columns: 12 }, tiles: [{ widget: 'note', x: 0, y: 0, w: 12, h: 1 }] }])
   })
-  it('a new report starts with a flow layout and a section, and lacks a widget and a block', () => {
+  it('a new report starts with a flow layout, a section and a text block: valid', () => {
     const d = newDraft('report', 'monthly', newDocumentText('report', 'Monthly'))
-    expect(errorsOf(d).map((e) => e.path)).toEqual(['widgets', 'layouts[0].sections[0].blocks'])
+    expect(errorsOf(d)).toEqual([])
     expect(d.value!.layouts[0]!.type).toBe('flow')
+    expect(Object.keys(d.value!.widgets)).toEqual(['note'])
+  })
+  it('the empty starting point of the tests lacks a widget and a place for it', () => {
+    expect(errorsOf(newDraft('dashboard', 'sales', emptyDocumentText('dashboard', 'Sales'))).map((e) => e.path)).toEqual(['widgets', 'layouts[0].tiles'])
+    expect(errorsOf(newDraft('report', 'monthly', emptyDocumentText('report', 'Monthly'))).map((e) => e.path)).toEqual(['widgets', 'layouts[0].sections[0].blocks'])
   })
 })
 
 describe('saving', () => {
   it('saves a new document without a version, then a change with the version it was opened at', async () => {
     const store = localFileStore()
-    let d = newDraft('dashboard', 'sales', newDocumentText('dashboard', 'Sales'))
+    let d = newDraft('dashboard', 'sales', emptyDocumentText('dashboard', 'Sales'))
     expect((await saveDraft(store, d)).status).toBe('invalid')
     d = must(editAll(d, [{ type: 'addWidget', id: 'hello', widget: { type: 'text', text: 'hi' } }, { type: 'placeTile', layout: 'desk', tile: { widget: 'hello', x: 0, y: 0, w: 12, h: 1 } }]))
     const first = await saveDraft(store, d)
@@ -370,7 +377,7 @@ describe('stored documents (the console keeps saves across a reload)', () => {
 
 describe('style of edited text', () => {
   it('an empty widgets map and tile list written on one line become blocks when they grow, and keep short leaves on one line', async () => {
-    const d = newDraft('dashboard', 'x', newDocumentText('dashboard', 'X'))
+    const d = newDraft('dashboard', 'x', emptyDocumentText('dashboard', 'X'))
     expect(d.text).toContain('widgets: {}')
     const grown = must(editAll(d, [
       { type: 'addWidget', id: 'metric', widget: { type: 'metric', label: 'M', encodings: { value: 'a.b' }, query: { model: 'm' } } },

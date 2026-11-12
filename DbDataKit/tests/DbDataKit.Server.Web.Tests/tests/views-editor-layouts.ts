@@ -45,6 +45,8 @@ export async function editorLayoutsStory(page: Page) {
   await page.getByTestId('rail-views').click()
   await page.getByTestId('views-tab-dashboards').click()
   await page.getByTestId('views-new').click()
+  // a new document starts with one text widget (`note`) so that it is valid as it stands; the story builds on an empty one
+  await page.getByTestId('ed-widget-remove-note').click()
   await input(page, 'ed-file-name').fill('layout-board')
   await input(page, 'ed-title').fill('Layout board')
   for (const type of ['metric', 'chart']) await page.getByTestId(`ed-add-${type}`).click()

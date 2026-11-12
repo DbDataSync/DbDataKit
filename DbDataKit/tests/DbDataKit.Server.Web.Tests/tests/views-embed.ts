@@ -12,6 +12,8 @@ export async function embedStory(page: Page) {
   await page.getByTestId('rail-views').click()
   await page.getByTestId('views-tab-dashboards').click()
   await by(page, 'views-new').click()
+  // a new document starts with one text widget (`note`) so that it is valid as it stands; the story builds on an empty one
+  await page.getByTestId('ed-widget-remove-note').click()
   await by(page, 'ed-file-name').fill('embed-board')
   await by(page, 'ed-title').fill('Embed board')
   await by(page, 'ed-add-embed').click()
