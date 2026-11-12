@@ -29,14 +29,14 @@ internal static class BuildManagementApi
 {
     /// <summary>The commands a read-only server offers: those that change nothing, not even the project's own files.</summary>
     public static ToolSurface ReadOnlySurface(string projectRoot, IEnumerable<CommandInfo> all) =>
-        new(projectRoot, all.Where(c => c.Impact == Impact.None), withholdWriteFlags: true);
+        new(projectRoot, all.Where(c => c.Impact == Impact.None && !SemanticCommand.IsSemantic(c.Name)), withholdWriteFlags: true);
 
     /// <summary>
     /// The commands a server offers by default: all of them but the ones that start a user interface on the server's own terminal or browser. Whether a call may run is the role its effect class needs, checked on every call; the
     /// options that show values and the paths outside the project stay refused. A server started with <c>--read-only</c> offers <see cref="ReadOnlySurface"/> instead.
     /// </summary>
     public static ToolSurface FullSurface(string projectRoot, IEnumerable<CommandInfo> all) =>
-        new(projectRoot, all.Where(c => c.Name is not ("ui terminal" or "ui mcp")), alsoWithheld: ["connection refresh --check-results"]);
+        new(projectRoot, all.Where(c => c.Name is not ("ui terminal" or "ui mcp") && !SemanticCommand.IsSemantic(c.Name)), alsoWithheld: ["connection refresh --check-results"]);
 
     /// <summary>The person a call is for, as the tracking tables record them: "Ada via Main console".</summary>
     internal static string ActorOf(ValidatedToken token) => $"{token.SubjectName ?? token.SubjectId} via {token.Client.Name}";
@@ -495,6 +495,25 @@ internal static class BuildManagementApi
             return Results.Json(new { model = file.Name, catalog = JsonNode.Parse(ProjectViews.CatalogOf(file).ToJsonString()) });
         });
 
+        // plan 14a SL20: the translation check of one saved query of the draft's model, as the editor holds it (nothing is run, nothing is written)
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/models/{model}/queries/check", async (string project, string id, string model, HttpContext context) =>
+        {
+            if (projects.Find(project) is not { } hosted) return Results.NotFound();
+            var token = context.ManagementToken();
+            var decision = ManagementAuthorization.Authorize(token, ServerRole.Viewer, hosted.Id);
+            if (!decision.Allowed) return Refused(decision);
+            if (workspaces.Find(hosted.Id, id) is not { } workspace) return Results.NotFound();
+            if (workspace.Owner != token.SubjectId) return Results.Json(new { error = "A workspace is its owner's." }, statusCode: StatusCodes.Status403Forbidden);
+            JsonObject? entry;
+            try { entry = await JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body, cancellationToken: context.RequestAborted); }
+            catch (JsonException) { entry = null; }
+            if (entry is null) return Results.Json(new { error = "The body is one entry of queries: a JSON object with sql or request, and optionally description and parameters." }, statusCode: StatusCodes.Status400BadRequest);
+            var loaded = ProjectContext.Load(workspaces.RootOf(workspace));
+            if (loaded.Semantic.Models.FirstOrDefault(m => m.Name == model) is not { } file) return Results.Json(new { error = $"The project has no semantic model '{model}'." }, statusCode: StatusCodes.Status404NotFound);
+            if (file.Compilation is null) return Results.Json(new { error = $"The semantic model '{model}' ({file.File}) does not compile; fix it first (project compile shows why)." }, statusCode: StatusCodes.Status409Conflict);
+            return Results.Json(BuildSemanticQueries.Check(file.Name, DbDataKit.Semantic.CatalogLoader.LoadText(file.Compilation.Json.ToJsonString()), entry));
+        });
+
     }
 
     /// <summary>
@@ -547,6 +566,20 @@ internal static class BuildManagementApi
 
             var config = ProjectContext.Load(projects.RootOf(hosted)).Config;
             var result = await publisher.PublishAsync(proxy, config, connection, string.IsNullOrWhiteSpace(dataSource) ? connection : dataSource, token, context.RequestAborted, adopt);
+            return Results.Json(result.Body, statusCode: result.Status);
+        });
+
+        // plan 14a SL20: a try-run of a query on the Gateway the model is published to (SL14's path: POST /api/v1/my/runs, as the person who asked, on the version published there, which is not the draft)
+        app.MapPost("/api/v1/proxies/{proxy}/try-query", async (string proxy, HttpContext context) =>
+        {
+            var token = context.ManagementToken();
+            if (!ManagementAuthorization.Authorize(token, ServerRole.Viewer).Allowed) return Results.Json(new { error = "This needs the viewer role." }, statusCode: StatusCodes.Status403Forbidden);
+            JsonObject? body;
+            try { body = await JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body, cancellationToken: context.RequestAborted); }
+            catch (JsonException) { body = null; }
+            if (body is null || string.IsNullOrWhiteSpace(body["model"]?.GetValue<string>()) || (body["sql"] is null) == (body["request"] is null))
+                return Results.Json(new { error = "The body is a JSON object with the \"model\" and one of \"sql\" or \"request\", and optionally \"parameters\", \"explain\" and \"limit\"." }, statusCode: StatusCodes.Status400BadRequest);
+            var result = await publisher.RunAsync(proxy, body, token, context.RequestAborted);
             return Results.Json(result.Body, statusCode: result.Status);
         });
 

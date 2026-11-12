@@ -17,7 +17,9 @@ IServingServices services = hostServices.WithSemantic(models);
 - **Saved queries** (J26, J27): a catalog's `queries` and the caller's own or shared ones (`IUserSavedQueries`, the Gateway keeps them in its state database) are called as `SELECT * FROM name(args)`, run as the caller.
 - **SSAS** sources run in the executor `DbDataKit.Semantic.Ssas` on Windows (the Gateway hosts it); other systems answer `dax_execution_unavailable`.
 
-Not here: ad hoc tables (registrations, bindings, value maps) and the request kinds that need them, decimals in the answer (a number is an Arrow double), and a child process for the combine (limits in process first: J11).
+**Decimals (plan 14a SL09, D33).** A measure that sums, or takes the minimum or maximum of, a decimal column the catalog gives a `scale` (the optional `scale` of a physical column, 0 to 38; Build writes it from the model's `DECIMAL(p, s)`) is an Arrow `decimal128(38, scale)` in the answer, a JSON number with its own digits over REST, and carries `x_scale` in the engine's descriptor; `integer` measures stay `int64`, every other `number` (an average, a ratio, a measure over a column with no declared scale) stays a `double`, dates stay text. **A visible schema change:** a client that read such a measure as a double now sees `decimal128` (the descriptor's logical type is still `number`); a catalog without `scale` answers as before. The digits are those of the engine's own arithmetic (a .NET `decimal`, 28 to 29 significant digits): a 38-digit value is not claimed to round-trip.
+
+Not here: ad hoc tables (registrations, bindings, value maps) and the request kinds that need them, and a child process for the combine (limits in process first: J11).
 
 ## Explain
 

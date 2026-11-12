@@ -58,8 +58,19 @@ public sealed partial class ProjectPhysicalLayer : IPhysicalLayer
     public PhysicalTable? Table(string model, string source)
     {
         if (!models.TryGetValue(model, out var found) || ConnectionOf(source) is not { } connection || !found.Connections.Contains(connection, StringComparer.Ordinal)) return null;
-        return new PhysicalTable(found.Name, found.Columns.Select(c => new PhysicalColumn(c.Name, CatalogType(c.Type))).ToList(), found.Grain);
+        return new PhysicalTable(found.Name, found.Columns.Select(c => new PhysicalColumn(c.Name, CatalogType(c.Type), ScaleOf(c.Type))).ToList(), found.Grain);
     }
+
+    /// <summary>The scale a model's decimal column type declares (<c>DECIMAL(18, 2)</c> is 2, <c>NUMERIC(10)</c> is 0); null for a type that is not a decimal or declares no precision, so the engine's default applies (plan 14a SL09).</summary>
+    public static int? ScaleOf(string type)
+    {
+        var match = DecimalType().Match(type.Trim());
+        if (!match.Success) return null;
+        return match.Groups[2].Success ? int.Parse(match.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture) : 0;
+    }
+
+    [GeneratedRegex(@"^(?:DECIMAL|NUMERIC|DEC)\s*\(\s*(\d+)\s*(?:,\s*(\d+)\s*)?\)$", RegexOptions.IgnoreCase)]
+    private static partial Regex DecimalType();
 
     /// <summary>A model's column type as the catalog format names it (`VARCHAR(20)` is `String`, `DECIMAL(18, 2)` is `Decimal`); a type with no equivalent is `Opaque`.</summary>
     public static string CatalogType(string type)

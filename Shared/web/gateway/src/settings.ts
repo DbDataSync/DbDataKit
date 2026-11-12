@@ -1,13 +1,13 @@
 import type { Diagnostic, SettingsCheck, SettingsEdit, SettingsFields } from './types'
 
 /** The modules of the serving layer a Gateway instance can serve (`GatewayModules.Known`). */
-export const MODULES = ['flightsql', 'identity', 'apps', 'store', 'views'] as const
+export const MODULES = ['flightsql', 'identity', 'apps', 'store', 'views', 'feeds'] as const
 
 /** The fields of the form, by the setting path the Gateway edits and reports them under. */
 export type FieldKey = 'modules' | 'views.cacheSeconds' | 'views.export.mode' | 'views.export.path' | 'logSql' | SemanticFieldKey
 
 /** The numbers of the `semantic:` section the form edits (plan 14a SL11); the hand-set models and the Analysis Services connections are edited in the text. */
-export type SemanticFieldKey = 'semantic.level' | 'semantic.combine.memoryMb' | 'semantic.combine.timeoutSeconds' | 'semantic.combine.maxInputRows'
+export type SemanticFieldKey = 'semantic.level' | 'semantic.combine.memoryMb' | 'semantic.combine.timeoutSeconds' | 'semantic.combine.maxInputRows' | 'rest.port' | 'rest.defaultLimit' | 'rest.maxRows'
 
 export interface SemanticNumber { key: SemanticFieldKey; label: string; hint: string; min: number; max: number; fallback: number }
 
@@ -16,6 +16,10 @@ export const SEMANTIC_NUMBERS: SemanticNumber[] = [
   { key: 'semantic.combine.memoryMb', label: 'Combine memory (MB)', hint: 'What one combine, the step that joins the results of several scans, may use.', min: 16, max: 1048576, fallback: 1024 },
   { key: 'semantic.combine.timeoutSeconds', label: 'Combine time (seconds)', hint: 'How long one combine may run.', min: 1, max: 86400, fallback: 60 },
   { key: 'semantic.combine.maxInputRows', label: 'Combine input rows', hint: 'Rows, over all the scans a combine loads, above which it is refused.', min: 1, max: 2000000000, fallback: 5000000 },
+  // the `rest:` section (plan 14a SL31): the listener of the feeds module, which is on when `modules` lists feeds
+  { key: 'rest.port', label: 'REST feeds port', hint: 'Where the feeds module listens (saved queries and requests as JSON, CSV or Arrow) when `feeds` is among the modules. 8821 is the default.', min: 1, max: 65535, fallback: 8821 },
+  { key: 'rest.defaultLimit', label: 'REST feeds default rows', hint: 'The rows a feed gives when the call does not say `limit`.', min: 1, max: 10000, fallback: 1000 },
+  { key: 'rest.maxRows', label: 'REST feeds most rows', hint: 'The most a call may ask for with `limit` (paging is `limit` only).', min: 1, max: 10000, fallback: 10000 },
 ]
 
 /** The whole number a semantic field holds, or null when what was typed is not a whole number in the field's range (the Gateway checks again). */

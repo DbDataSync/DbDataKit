@@ -288,6 +288,58 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
         }
     }
 
+    /// <summary>
+    /// A statement of a model run on a paired Gateway (plan 14a SL20): <c>POST /api/v1/my/runs</c> with the body as given, over the pinned channel, carrying the Publisher role and the person who asked, so the Gateway runs it as that person
+    /// through its semantic module (access, limits and the run record apply). The answer is the Gateway's own (rows or its refusal with the engine's code), under the status it gave.
+    /// </summary>
+    public async Task<PublishResult> RunAsync(string proxyName, JsonObject body, ValidatedToken person, CancellationToken ct)
+    {
+        if (proxies.Find(proxyName) is not { } proxy) return Fail(404, $"This server is not paired with a proxy called '{proxyName}'.");
+        var self = await identity.GetOrCreateAsync(ct);
+        using var http = new HttpClient(PairingClient.Pinned(proxy.Fingerprint)) { BaseAddress = new Uri(proxy.Url), Timeout = TimeSpan.FromSeconds(60) };
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/my/runs");
+            request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, self.Issuer().Issue(new ConsoleTokenRequest(proxy.InstanceId, person.SubjectId, person.SubjectName, ServerRole.Publisher)));
+            request.Content = JsonContent.Create(body, options: Json);
+            using var answered = await http.SendAsync(request, ct);
+            var text = await answered.Content.ReadAsStringAsync(ct);
+            JsonObject? document = null;
+            try { document = JsonNode.Parse(text) as JsonObject; } catch (JsonException) { }
+            if (document is null) return Fail((int)answered.StatusCode, $"The proxy answered {(int)answered.StatusCode} {answered.ReasonPhrase} with a body that is not JSON.");
+            return new PublishResult((int)answered.StatusCode, document);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IncompatibleServerException)
+        {
+            return Fail(502, $"The proxy '{proxyName}' did not answer ({ex.GetType().Name}).");
+        }
+    }
+
+    /// <summary>
+    /// Serves an earlier version of a published model again (plan 14a SL30): <c>POST /api/v1/semantic-models/{model}/rollback</c> with <c>{"to_version"}</c> or an empty body for the version before the current one, as the person with the Publisher
+    /// role. The Gateway keeps every version, so this is a switch; its refusals (no earlier version, a version that no longer loads, an owner rule) come back in its words under the status it gave.
+    /// </summary>
+    public async Task<PublishResult> RollbackAsync(string proxyName, string model, int? toVersion, ValidatedToken person, CancellationToken ct)
+    {
+        if (proxies.Find(proxyName) is not { } proxy) return Fail(404, $"This server is not paired with a proxy called '{proxyName}'.");
+        var self = await identity.GetOrCreateAsync(ct);
+        using var http = new HttpClient(PairingClient.Pinned(proxy.Fingerprint)) { BaseAddress = new Uri(proxy.Url), Timeout = TimeSpan.FromSeconds(60) };
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/semantic-models/{Uri.EscapeDataString(model)}/rollback");
+            request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, self.Issuer().Issue(new ConsoleTokenRequest(proxy.InstanceId, person.SubjectId, person.SubjectName, ServerRole.Publisher)));
+            if (toVersion is not null) request.Content = JsonContent.Create(new { to_version = toVersion }, options: Json);
+            using var answered = await http.SendAsync(request, ct);
+            if (!answered.IsSuccessStatusCode) return await Refused(answered, "the rollback");
+            var answer = JsonNode.Parse(await answered.Content.ReadAsStringAsync(ct))!;
+            return new PublishResult(200, new JsonObject { ["proxy"] = proxyName, ["model"] = model, ["version"] = (int?)answer["version"], ["from_version"] = (int?)answer["from_version"] });
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IncompatibleServerException)
+        {
+            return Fail(502, $"The proxy '{proxyName}' did not answer ({ex.GetType().Name}).");
+        }
+    }
+
     private static PublishResult Fail(int status, string message) => new(status, new JsonObject { ["error"] = message });
 
     /// <summary>

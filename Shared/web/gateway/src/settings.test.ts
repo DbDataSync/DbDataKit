@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Diagnostic, SettingsCheck } from './types'
-import { SEMANTIC_NUMBERS, cacheSeconds, editFor, fieldOf, groupDiagnostics, placeOf, restartText, saveState, semanticNumber, shown, toggleModule } from './settings'
+import { MODULES, SEMANTIC_NUMBERS, cacheSeconds, editFor, fieldOf, groupDiagnostics, placeOf, restartText, saveState, semanticNumber, shown, toggleModule } from './settings'
 
 const diag = (key: string | null, severity = 'error', line = 3): Diagnostic => ({ code: 'DBP-1', severity, key, file: '/x/config/server.yaml', line, column: 1, message: 'wrong', fix: null })
 const check = (over: Partial<SettingsCheck> = {}): SettingsCheck => ({ valid: true, diagnostics: [], fields: {}, changed: ['logSql'], restart_keys: [], problems: [], ...over })
@@ -89,6 +89,17 @@ describe('the form', () => {
 })
 
 describe('the semantic section', () => {
+  it('offers the feeds module and the numbers of its rest section, found by their diagnostics', () => {
+    expect(MODULES).toContain('feeds')
+    expect(fieldOf(diag('Rest.Port'))).toBe('rest.port')
+    expect(fieldOf(diag('Rest.DefaultLimit'))).toBe('rest.defaultLimit')
+    const port = SEMANTIC_NUMBERS.find((f) => f.key === 'rest.port')!
+    expect(semanticNumber(port, '8821')).toBe(8821)
+    expect(semanticNumber(port, '70000')).toBeNull()
+    expect(editFor('rest.maxRows', 500)).toEqual({ set: { 'rest.maxRows': 500 } })
+    expect(toggleModule(['flightsql'], 'feeds', true)).toEqual(['flightsql', 'feeds'])
+  })
+
   const level = SEMANTIC_NUMBERS[0]
   const memory = SEMANTIC_NUMBERS[1]
   it('finds the field a diagnostic of the section belongs to', () => {
@@ -105,7 +116,7 @@ describe('the semantic section', () => {
   })
   it('edits the number by its path and shows the draft values with the Gateway defaults beneath', () => {
     expect(editFor('semantic.combine.timeoutSeconds', 30)).toEqual({ set: { 'semantic.combine.timeoutSeconds': 30 } })
-    expect(shown(undefined).semantic).toEqual({ 'semantic.level': 5, 'semantic.combine.memoryMb': 1024, 'semantic.combine.timeoutSeconds': 60, 'semantic.combine.maxInputRows': 5000000 })
+    expect(shown(undefined).semantic).toEqual({ 'semantic.level': 5, 'semantic.combine.memoryMb': 1024, 'semantic.combine.timeoutSeconds': 60, 'semantic.combine.maxInputRows': 5000000, 'rest.port': 8821, 'rest.defaultLimit': 1000, 'rest.maxRows': 10000 })
     expect(shown({ 'semantic.level': 2 }).semantic['semantic.level']).toBe(2)
   })
 })
