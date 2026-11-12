@@ -17,7 +17,7 @@ lists rules its tests enforce.
 | `testenv/` | SQL Server and PostgreSQL containers shared by the suites | test engines |
 | `scripts/` | repository-wide checks (Python, standard library only) | rules about the repository as a whole |
 | `docs/` | cross-product documentation: `architecture.md` (the suite's shape and decisions), `releases.md`, `suite-*.md` | |
-| `docs/plans/` | the open plans; `README.md` is the index (a finished plan's row points at the document that replaced it); `13c-follow-ups.md` holds what is left of the early suite work | |
+| `docs/plans/` | the open plans; `README.md` is the index (a finished plan's row points at the document that replaced it); `open-work.md` lists what is left, by service | |
 
 A product references a shared library as `<DbDataKitReference Include="Hosting.Cli" />` (its `Directory.Build.targets` turns it into a
 project reference in this repository, a package reference otherwise). Do not copy shared code into a product.

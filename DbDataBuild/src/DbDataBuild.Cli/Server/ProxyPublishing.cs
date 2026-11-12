@@ -57,13 +57,13 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
 
     /// <summary>
     /// The engines the Proxy serves (its providers: SQL Server, ODBC, DuckDB and PostgreSQL) and what a Build connection's driver is called there: the same word. The read login of such a connection is a connection string (for flightsql the login value, <c>grpc+tls://host:port;token=...</c>), which the Proxy takes whole as
-    /// <c>connection_string_secret</c> whatever the engine; <c>access: readonly</c> is what is written, because only the read login goes. A driver the Proxy has no provider for (fabric: plan 13a, P12) is not published.
+    /// <c>connection_string_secret</c> whatever the engine; <c>access: readonly</c> is what is written, because only the read login goes. A driver the Proxy has no provider for (fabric: `docs/engine-support.md`, Microsoft Fabric warehouse) is not published.
     /// </summary>
     private static readonly string[] ProxyEngines = ["sqlserver", "odbc", "duckdb", "postgres", "flightsql"];
 
-    private static string ProxyEngineList => string.Join(", ", ProxyEngines[..^1]) + " and " + ProxyEngines[^1];
+    internal static string ProxyEngineList => string.Join(", ", ProxyEngines[..^1]) + " and " + ProxyEngines[^1];
 
-    private static string? ProxyEngineOf(ConnectionConfig connection) => ProxyEngines.Contains(connection.Kind.Driver) ? connection.Kind.Driver : null;
+    internal static string? ProxyEngineOf(ConnectionConfig connection) => ProxyEngines.Contains(connection.Kind.Driver) ? connection.Kind.Driver : null;
 
     /// <summary>
     /// Pairs this server with the Proxy at <paramref name="url"/> as a server client, with the code its administrator made (or a console asked it for, T11), and remembers it as <paramref name="name"/>. The key this server signs with is its own, kept in its secret store.
@@ -193,9 +193,9 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
     /// The data source file a publish sends: always the current format (<c>connection/2</c>, plan 33 6d rule 5; a Gateway is upgraded before the tools that publish to it). With the connection's <c>grants</c> (plan 22a GP03) it carries
     /// them: the Gateway serves exactly these grants, and the next publish replaces them (a connection whose grants were removed publishes a file with none).
     /// </summary>
-    internal static string DataSourceText(string dataSource, string engine, string reference, GrantsSpec? grants, DbDataKit.Config.Yaml.YamlMapping? policy = null)
+    internal static string DataSourceText(string dataSource, string engine, string? reference, GrantsSpec? grants, DbDataKit.Config.Yaml.YamlMapping? policy = null)
     {
-        var text = $"schema: {DbDataKit.Connections.ConnectionDefinition.CurrentSchemaId}\nname: {dataSource}\nengine: {engine}\naccess: readonly\nconnection_string_secret: '{reference}'\n";
+        var text = $"schema: {DbDataKit.Connections.ConnectionDefinition.CurrentSchemaId}\nname: {dataSource}\nengine: {engine}\naccess: readonly\n" + (reference is null ? "" : $"connection_string_secret: '{reference}'\n");
         // the serving policy of the definition (plan 13c D19): the Gateway replaces its own with exactly this, and a definition without any publishes none
         var policyText = policy is { Entries.Count: > 0 } ? ServingPolicy.Emit(policy) : "";
         if (grants is null) return text + policyText;

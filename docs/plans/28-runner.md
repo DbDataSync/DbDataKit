@@ -11,6 +11,7 @@ The runner is the scheduled and batch counterpart of the serving layer ([plan 20
 3. **Agents on a runner** (owner, 2026-11-06): an unattended agent step runs in the task's own process with the agent runtime as a library; the agent definition is published with the package as a dependency, and its model connection is a slot of the package. **Evaluation runs** (plan 27 section 3.4) are tasks on the console's embedded runner. The embedded runner's `evaluation` kind is a placeholder until plan 27 builds them.
 4. **Sync and Build move onto the runner as published runtimes** (owner, 2026-11-04): one runner hosts their engines as one more kind of package, their schedulers become the runner's, their state moves into modules of the unified state **and** stays on the target (`both`, the target as primary for each), and their write logins move to the runner while the back ends keep read access for interactive work. The design is plan 28c.
 5. **Alerts by email, Teams, Slack and webhook** use the delivery service (plan 22 section 5, not built).
+6. **A `.csx` integration is built into an assembly package before it reaches the runner, with no .NET SDK** (owner's direction, 2026-11-11; built: `dbdatarunner package build`, `DbDataKit.Runner.Packaging`, [`docs/integrations.md`](../integrations.md) section 7). The runner still never compiles. A compiled project needs the SDK. Notebooks stay parked (open question 1).
 
 ## Open questions
 

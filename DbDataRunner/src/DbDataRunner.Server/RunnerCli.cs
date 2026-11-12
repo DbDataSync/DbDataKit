@@ -326,6 +326,10 @@ public static class RunnerCli
         new Verb("install", "Put a package into this runner's own state, served at once: reads a package/1 manifest and a directory of files, stores them, makes them the channel's active version and replaces the channel's task schedule", EffectClass.TargetDataWrites,
             $"<manifest.yaml> <directory> [--channel <name>] {Where}", (args, context) => PackageInstallAsync(args, context, environment),
             DataSchemas.Object([("package", DataSchemas.String), ("channel", DataSchemas.String), ("version", DataSchemas.Integer), ("changed", DataSchemas.Boolean), ("files", DataSchemas.Integer), ("tasks", DataSchemas.StringList)], "package", "channel", "version", "changed")),
+        new Verb("build", IntegrationVerbs.BuildSummary, EffectClass.RepoFilesOnly,
+            $"<project directory> --out <directory> {IntegrationVerbs.Options}", (args, context) => IntegrationVerbs.BuildAsync(args, context, environment), IntegrationVerbs.BuildSchema),
+        new Verb("test", IntegrationVerbs.TestSummary, EffectClass.RepoFilesOnly,
+            $"<project directory> {IntegrationVerbs.Options}", (args, context) => IntegrationVerbs.TestAsync(args, context, environment), IntegrationVerbs.TestSchema),
     ]);
 
     private static async Task<int> PackageInstallAsync(string[] args, CliContext context, Func<string, string?>? environment)

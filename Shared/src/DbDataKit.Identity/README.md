@@ -31,6 +31,13 @@ Entra's group overage (more than 200 groups: the token has no `groups` claim) is
 - An Entra sign-in links to an existing account on the token's UPN (preferred, it is usually the canonical address) or `email`, because the Entra source is built with `trustEmail: true`; every other OpenID source links only on a verified address (U16's rule). A tenant that lets people set their own mail attribute must not be trusted that way.
 - The admin API is the management API of whatever hosts the home (the console's screens through its relay; `dbdatakit identity run`'s commands stay).
 - Signing keys: a home that runs on its own keeps the framework key ring in its `dataprotection/` directory, so a backup or a move takes the state **and** that directory (a copy without it fails to start with a cryptographic error). The serving layer's home protects the keys with `KeySigningKeyProtector` and a key in its secret store (`dbdatakit:gateway:identity:signing-keys`), because the instances of a group share one state. `ISigningKeyProtector` is where a key from outside would go.
+## Not yet run on a real host
+
+Everything above runs in CI with stand-ins (`UpstreamSignInTests` with a fake that signs RS256 tokens, `HomeIdentityTests` with a fake Windows logon). Two checks need an environment no CI job has (GitHub's Windows runners are not domain-joined), and are open until someone runs them and writes the date and the result here:
+
+- **A domain-joined Windows host:** a real negotiated identity carries the `ClaimTypes.Upn` claim that `WindowsSignIn.ResolveOnWindows` reads and signs in to the account that holds that UPN; its group SIDs reach `ExternalSignIns`; the Gateway's `WindowsAccountValidator` resolves a Windows logon to the home account.
+- **An Entra tenant:** an id token with a `groups` claim (the app registration's `groupMembershipClaims` limiting it) signs in through `UpstreamSignIn` and maps to roles.
+
 ## Decisions that bind sign-in (owner, 2026-10-25 and 2026-11-02; folded from the old plan 16)
 
 - **One identity home per install**, a shared component (this package) hosted by the serving layer by default and runnable on its own (`dbdatakit identity run`). Other consoles hold no users: they are OpenID Connect clients of the home, keep only their own settings and a **ceiling** per server from their pairing, and a person is the same user everywhere, so audit names agree. Roles are assigned once, at the home.

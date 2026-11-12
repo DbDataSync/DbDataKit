@@ -47,6 +47,15 @@ public partial class ApplyConformanceTests
         return int.Parse(rows.Single());
     }
 
+    /// <summary>How long the three pausing hooks of one run took in all, by the tool's own clock (the record's start and end of each).</summary>
+    private static async Task<TimeSpan> PauseTotalAsync(Run run, string name, string planId)
+    {
+        var rl = $"{run.Q("dbdatabuild")}.{run.Q("run_log")}";
+        var diff = name == "postgres" ? "CAST(EXTRACT(EPOCH FROM (ended_utc - started_utc)) * 1000 AS BIGINT)" : "DATEDIFF(MILLISECOND, started_utc, ended_utc)";
+        var rows = await run.Engine.RowsAsync($"SELECT CAST(SUM({diff}) AS VARCHAR(20)) FROM {rl} WHERE plan_id = '{planId}' AND operation = 'pre_load' AND model IN ('marts.p1', 'marts.p2', 'marts.p3')");
+        return TimeSpan.FromMilliseconds(long.Parse(rows.Single()));
+    }
+
     private static string Shape(JsonNode data) =>
         string.Join("|", data["results"]!.AsArray().Select(r => $"{(string)r!["model"]!}.{(string)r["member"]!}={(string)r["status"]!}")) + "/" + (string)data["outcome"]!;
 
@@ -54,7 +63,6 @@ public partial class ApplyConformanceTests
     public async Task A_plan_run_with_parallel_3_ends_with_the_same_data_and_states_as_one_at_a_time_and_the_independent_loads_overlap(string name)
     {
         // Fails on SQL Server only, every run: the one-at-a-time baseline takes 7.4 s, not the 9 s of three 3 s pauses (plan 13c, T16).
-        Skip.If(name == "sqlserver", "skipped for SQL Server until docs/plans/13c-follow-ups.md T16 is settled");
         var run = await ParallelSetUp(name);
         await using var engine = run.Engine;
         try
@@ -71,7 +79,11 @@ public partial class ApplyConformanceTests
             Assert.Equal(1, (int)oneDoc["parallel"]!);
             Assert.Equal(1, (int)oneDoc["parallel_effective"]!);
             Assert.Equal("completed", (string)oneDoc["outcome"]!);
-            Assert.True(oneTime >= TimeSpan.FromSeconds(9), $"three pauses of 3 s one after another took {oneTime}");
+            // The engine's WAITFOR DELAY can return early (SQL Server 2025 on Linux measured 1.6 s for a 3 s delay in a micro-VM, and about 2.4 s on a CI runner; the run_log's own clock says the same), so the baseline is what the three hooks
+            // really took, from the record, not 9 s: one at a time means the load took at least the sum of its pauses, and the overlap check below says they did not overlap.
+            var pauses = await PauseTotalAsync(run, name, (string)oneDoc["plan_id"]!);
+            Assert.True(pauses >= TimeSpan.FromSeconds(1), $"the three pre_load hooks ran for {pauses} in all: a pause of 3 s that returns at once is not a pause");
+            Assert.True(oneTime >= pauses, $"three pauses of {pauses} in all one after another took {oneTime}");
             var dataOne = await SnapshotAsync(run);
             Assert.Equal("p1=1,2,3,4;p2=1,2,3,4;p3=1,2,3,4;z1=4;z2=4;d1=4;d2=1", dataOne);
             Assert.Equal(0, await OverlappingPausesAsync(run, (string)oneDoc["plan_id"]!));
@@ -86,7 +98,7 @@ public partial class ApplyConformanceTests
             Assert.Equal(3, (int)threeDoc["parallel_effective"]!);
             Assert.Equal(Shape(oneDoc), Shape(threeDoc));
             Assert.Equal(dataOne, await SnapshotAsync(run));
-            Assert.True(threeTime < oneTime - TimeSpan.FromSeconds(3), $"parallel 3 took {threeTime}, one at a time {oneTime}");
+            Assert.True(threeTime < oneTime - pauses / 3, $"parallel 3 took {threeTime}, one at a time {oneTime} (pauses {pauses} in all)");
             Assert.Equal(3, await OverlappingPausesAsync(run, (string)threeDoc["plan_id"]!));                         // all three pairs
             Assert.Contains("a dry run goes one load at a time", run.Cli("connection", "refresh", name, "par", "--dry-run").Out);
 
@@ -156,7 +168,8 @@ public partial class ApplyConformanceTests
             var cappedPlanId = System.Text.RegularExpressions.Regex.Match(capped.Out, @"Refresh (ref-\S+) \(plan par\)").Groups[1].Value;
             Assert.NotEmpty(cappedPlanId);
             Assert.Equal(0, await OverlappingPausesAsync(run, cappedPlanId));
-            Assert.True(cappedTime >= TimeSpan.FromSeconds(9), $"max_parallel 1 let them overlap: {cappedTime}");
+            var cappedPauses = await PauseTotalAsync(run, name, cappedPlanId);                                       // what the pauses really took (see above), not 9 s
+            Assert.True(cappedTime >= cappedPauses, $"max_parallel 1 let them overlap: {cappedTime}, pauses {cappedPauses} in all");
         }
         finally { if (Directory.Exists(run.Dir)) Directory.Delete(run.Dir, true); }
     }

@@ -89,6 +89,10 @@ Verbs:
       Show, or with on or off set, whether this runner refuses a version that is not signed (plan 30 section 6.2; the signature check itself is not built yet, so 'on' refuses every publish) [Target writes (data only)]
   package install <manifest.yaml> <directory> [--channel <name>] [--repo <server directory>]
       Put a package into this runner's own state, served at once: reads a package/1 manifest and a directory of files, stores them, makes them the channel's active version and replaces the channel's task schedule [Target writes (data only)]
+  package build <project directory> --out <directory> [--source <folder or v3 index address>]... [--cache <directory>] [--offline] [--locked] [--no-lock-write]
+      Build an integration project into a package (package.yaml and files/) without the .NET SDK: the C# files of src/ are compiled with Roslyn, the packages of their #r "nuget:" lines are restored and pinned in package.lock; a compiled .NET project needs the SDK [Repo files only (no target connection)]
+  package test <project directory> [--source <folder or v3 index address>]... [--cache <directory>] [--offline] [--locked] [--no-lock-write]
+      Build an integration project and run the scripts of its tests/ folder against the built package with the kit's RunSimulator (a script passes when it finishes and fails when it throws); no SDK, nothing is published [Repo files only (no target connection)]
 
 $ dbdatarunner state help
 dbdatarunner state: The state database: where it is, whether it works, and the rights it needs
