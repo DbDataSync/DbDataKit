@@ -47,6 +47,10 @@ public static class ReleasesModule
                 PRIMARY KEY (release_id, position)
             );
             """,
+            """
+            -- Migration 2 (plan 21 CH02): the server an item's version is read from; null is the target itself (a move between channels of one group).
+            ALTER TABLE {table:release_item} {{addcolumn}} source {{key}} NULL;
+            """,
         ]);
 }
 
@@ -65,8 +69,8 @@ public static class ReleaseStates
     public const string Failed = "failed";
 }
 
-/// <summary>One per-product promotion of a release: <paramref name="Kind"/> <paramref name="Name"/> at <paramref name="Version"/> from one channel to the next on <paramref name="Product"/>'s <paramref name="Target"/>.</summary>
-public sealed record ReleaseItem(int Position, string Product, string Target, string Kind, string Name, int Version, string FromChannel, string ToChannel, string State = ReleaseStates.Pending, string? Error = null, DateTimeOffset? FinishedAt = null)
+/// <summary>One per-product promotion of a release (<c>Source</c> is the server the version is read from, null when it is the target itself): <paramref name="Kind"/> <paramref name="Name"/> at <paramref name="Version"/> from one channel to the next on <paramref name="Product"/>'s <paramref name="Target"/>.</summary>
+public sealed record ReleaseItem(int Position, string Product, string Target, string Kind, string Name, int Version, string FromChannel, string ToChannel, string State = ReleaseStates.Pending, string? Error = null, DateTimeOffset? FinishedAt = null, string? Source = null)
 {
     /// <summary>How a message names the item: its place in the release and what it moves where.</summary>
     public string Describe() => $"item {Position} ({Product} {Target}: {Kind} '{Name}' version {Version}, {FromChannel} to {ToChannel})";
@@ -118,9 +122,9 @@ public sealed class ReleaseStore(StateDatabase database)
             {
                 var item = items[i];
                 using var row = database.Command(Module, connection, transaction,
-                    "INSERT INTO {table:release_item} (release_id, position, product, target, kind, item_name, item_version, from_channel, to_channel, state) VALUES ($id, $position, $product, $target, $kind, $name, $version, $from, $to, $state);");
+                    "INSERT INTO {table:release_item} (release_id, position, product, target, kind, item_name, item_version, from_channel, to_channel, state, source) VALUES ($id, $position, $product, $target, $kind, $name, $version, $from, $to, $state, $source);");
                 row.Bind(database, "id", id).Bind(database, "position", i + 1).Bind(database, "product", item.Product).Bind(database, "target", item.Target).Bind(database, "kind", item.Kind)
-                    .Bind(database, "name", item.Name).Bind(database, "version", item.Version).Bind(database, "from", item.FromChannel).Bind(database, "to", item.ToChannel).Bind(database, "state", ReleaseStates.Pending).ExecuteNonQuery();
+                    .Bind(database, "name", item.Name).Bind(database, "version", item.Version).Bind(database, "from", item.FromChannel).Bind(database, "to", item.ToChannel).Bind(database, "state", ReleaseStates.Pending).Bind(database, "source", item.Source, System.Data.DbType.String).ExecuteNonQuery();
             }
             transaction.Commit();
         });
@@ -155,12 +159,12 @@ public sealed class ReleaseStore(StateDatabase database)
                 head = (reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.Time(3), reader.IsDBNull(4) ? null : reader.GetString(4), reader.NullableTime(5), reader.NullableInt32(6), reader.IsDBNull(7) ? null : reader.GetString(7), reader.Time(8));
         if (head is not { } h) return null;
         var items = new List<ReleaseItem>();
-        using (var rows = database.Command(Module, connection, "SELECT position, product, target, kind, item_name, item_version, from_channel, to_channel, state, error, finished_at FROM {table:release_item} WHERE release_id = $id ORDER BY position;"))
+        using (var rows = database.Command(Module, connection, "SELECT position, product, target, kind, item_name, item_version, from_channel, to_channel, state, error, finished_at, source FROM {table:release_item} WHERE release_id = $id ORDER BY position;"))
         {
             rows.Bind(database, "id", id);
             using var reader = rows.ExecuteReader();
             while (reader.Read())
-                items.Add(new ReleaseItem(reader.Int32(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.Int32(5), reader.GetString(6), reader.GetString(7), reader.GetString(8), reader.IsDBNull(9) ? null : reader.GetString(9), reader.NullableTime(10)));
+                items.Add(new ReleaseItem(reader.Int32(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.Int32(5), reader.GetString(6), reader.GetString(7), reader.GetString(8), reader.IsDBNull(9) ? null : reader.GetString(9), reader.NullableTime(10), reader.IsDBNull(11) ? null : reader.GetString(11)));
         }
         return new ReleaseRecord(id, h.Item1, h.Item2, h.Item3, h.Item4, h.Item5, h.Item6, h.Item7, h.Item8, h.Item9, items);
     }

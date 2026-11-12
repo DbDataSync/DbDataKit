@@ -31,6 +31,16 @@ public sealed class ReleaseTests : IDisposable
         }
     }
 
+    [Theory]
+    [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
+    public void An_items_source_server_is_kept_and_an_item_without_one_reads_as_none(string engine)
+    {
+        var store = Open(engine);
+        var release = store.Create("with-source", "ada", [Item("runner", "integration", "etl") with { Source = "test-runner" }, Item("runner", "integration", "etl2")]);
+        Assert.Equal(["test-runner", null], release.Items.Select(i => i.Source));
+        Assert.Equal(["test-runner", null], store.Get(release.Id)!.Items.Select(i => i.Source));
+    }
+
     [Fact]
     public void The_module_follows_the_conventions() => Assert.Empty(StateConventions.Violations(ReleasesModule.Module));
 

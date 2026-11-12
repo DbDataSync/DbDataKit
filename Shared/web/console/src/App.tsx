@@ -19,6 +19,7 @@ import { LineagePage } from './pages/LineagePage'
 import { QualityPage } from './pages/QualityPage'
 import { SetupPage } from './pages/SetupPage'
 import { DeploymentsPage } from './pages/DeploymentsPage'
+import { ReleasesPage } from './pages/ReleasesPage'
 import { ViewsPage } from './pages/ViewsPage'
 import { AgentsPage } from './pages/AgentsPage'
 import { KnowledgePage } from './pages/KnowledgePage'
@@ -52,6 +53,7 @@ export default function App() {
       <Route path="/quality" element={<QualityPage />} />
       <Route path="/setup" element={<SetupPage />} />
       <Route path="/deployments" element={<DeploymentsPage />} />
+      <Route path="/releases" element={<ReleasesPage />} />
       <Route path="/views" element={<ViewsPage />} />
       <Route path="/views/dashboards" element={<ViewsPage area="dashboards" />} />
       <Route path="/views/dashboards/:name" element={<ViewsPage area="dashboards" />} />
