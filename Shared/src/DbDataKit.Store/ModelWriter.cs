@@ -91,7 +91,7 @@ public sealed partial class ModelWriter
 
     /// <summary>The row with this key, or null.</summary>
     public Task<StoredRow?> GetAsync(string entityName, IReadOnlyDictionary<string, object?> key, CancellationToken cancellationToken = default) =>
-        ViewAsync(async tx => (await ReadRowsAsync(tx, RequireEntity(entityName), TypedKeyOrThrow(entityName, key), false, null, false, cancellationToken).ConfigureAwait(false)).FirstOrDefault(), cancellationToken);
+        ViewAsync(async tx => (await ReadRowsAsync(tx, RequireEntity(entityName), TypedKeyOrThrow(entityName, key), false, null, false, cancellationToken, filtered: true).ConfigureAwait(false)).FirstOrDefault(), cancellationToken);
 
     /// <summary>One page of an entity's rows (the open versions, for an entity with history), in key order. <paramref name="limit"/> is at most 1000.</summary>
     public async Task<IReadOnlyList<StoredRow>> ListAsync(string entityName, int limit = 100, int offset = 0, CancellationToken cancellationToken = default)
@@ -105,7 +105,9 @@ public sealed partial class ModelWriter
         var paging = _engine == "sqlserver" ? $"OFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY" : $"LIMIT {limit} OFFSET {offset}";
         return await ViewAsync<IReadOnlyList<StoredRow>>(async tx =>
         {
-            await using var command = Command(tx, $"SELECT {string.Join(", ", columns.Select(Col))} FROM {Table(entity.Name)} WHERE {OpenOnly(entity)} ORDER BY {order} {paging}", []);
+            var parameters = new List<object?>();
+            var filter = ReadFilter(entity, parameters);
+            await using var command = Command(tx, $"SELECT {string.Join(", ", columns.Select(Col))} FROM {Table(entity.Name)} WHERE {OpenOnly(entity)}{filter} ORDER BY {order} {paging}", parameters);
             return await ReadAllAsync(command, entity, cancellationToken).ConfigureAwait(false);
         }, cancellationToken).ConfigureAwait(false);
     }
@@ -115,7 +117,7 @@ public sealed partial class ModelWriter
     {
         var entity = RequireEntity(entityName);
         if (!Dated(entity)) throw new StoreNotSupportedException($"`{entityName}` keeps no history, so there is nothing to read as of a date.");
-        return await ViewAsync(async tx => (await ReadRowsAsync(tx, entity, TypedKeyOrThrow(entityName, key), false, asOf, false, cancellationToken).ConfigureAwait(false)).FirstOrDefault(), cancellationToken).ConfigureAwait(false);
+        return await ViewAsync(async tx => (await ReadRowsAsync(tx, entity, TypedKeyOrThrow(entityName, key), false, asOf, false, cancellationToken, filtered: true).ConfigureAwait(false)).FirstOrDefault(), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Every version of a row, oldest first (an entity with effective-dated history).</summary>
@@ -123,7 +125,7 @@ public sealed partial class ModelWriter
     {
         var entity = RequireEntity(entityName);
         if (!Dated(entity)) throw new StoreNotSupportedException($"`{entityName}` keeps no history.");
-        return await ViewAsync<IReadOnlyList<StoredRow>>(async tx => await ReadRowsAsync(tx, entity, TypedKeyOrThrow(entityName, key), false, null, true, cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
+        return await ViewAsync<IReadOnlyList<StoredRow>>(async tx => await ReadRowsAsync(tx, entity, TypedKeyOrThrow(entityName, key), false, null, true, cancellationToken, filtered: true).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
     }
 
     private Dictionary<string, object?> TypedKeyOrThrow(string entityName, IReadOnlyDictionary<string, object?> key)
@@ -483,10 +485,11 @@ public sealed partial class ModelWriter
         (await ReadRowsAsync(tx, entity, typedKey, forUpdate, null, false, ct).ConfigureAwait(false)).FirstOrDefault();
 
     /// <summary>The row, the version that held at a moment, or (with <paramref name="all"/>) every version, oldest first.</summary>
-    private async Task<List<StoredRow>> ReadRowsAsync(DbTransaction? tx, ModelEntity entity, IReadOnlyDictionary<string, object?> typedKey, bool forUpdate, DateTimeOffset? asOf, bool all, CancellationToken ct)
+    private async Task<List<StoredRow>> ReadRowsAsync(DbTransaction? tx, ModelEntity entity, IReadOnlyDictionary<string, object?> typedKey, bool forUpdate, DateTimeOffset? asOf, bool all, CancellationToken ct, bool filtered = false)
     {
         var parameters = new List<object?>();
         var where = Where(entity, typedKey, parameters);
+        if (filtered) where += ReadFilter(entity, parameters);
         if (Dated(entity) && !all)
             where += asOf is { } moment
                 ? $" AND {Col(ModelStorage.ValidFromColumn)} <= @p{Add(parameters, moment.ToUniversalTime())} AND ({Col(ModelStorage.ValidToColumn)} IS NULL OR {Col(ModelStorage.ValidToColumn)} > @p{parameters.Count - 1})"
