@@ -192,6 +192,16 @@
       "files": [ { "path": "Shared/src/DbDataKit.Knowledge.Cli/BuildMetadataDefinitions.cs", "sha256": null } ]
     },
     {
+      "id": "embedding-model",
+      "title": "Published embedding model files (the definition kind embedding-model, manifest embedding-model.yml, embedding-model: N)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 27a KN06: the files of a built-in model, exactly the catalog's, each with the catalog's hash",
+      "version_source": { "file": "Shared/src/DbDataKit.Knowledge.Onnx/ModelFiles.cs", "pattern": "public const int Version = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.Knowledge.Onnx/ModelFiles.cs", "sha256": null } ]
+    },
+    {
       "id": "bindings",
       "title": "Bindings of slots to connections per release channel (bindings.yml, bindings: N)",
       "current": 1,
