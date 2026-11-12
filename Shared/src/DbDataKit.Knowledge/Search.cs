@@ -143,6 +143,25 @@ public static class KnowledgeAccess
         }
         return false;
     }
+
+    /// <summary>Whether an item names a subject the asynchronous access answers (and that exists): the synchronous check cannot decide such an item, the asynchronous one does.</summary>
+    public static bool NeedsAsync(KnowledgeItem item, IAsyncKnowledgeAccess access, ISubjectCatalog catalog) =>
+        item.About.Any(s => s.Type is not ("product" or "install") && access.Handles(s) && SubjectResolver.Status(catalog, s) == SubjectStatus.Exists);
+
+    /// <summary>
+    /// The same rule as <see cref="Visible"/> where a subject <paramref name="extra"/> handles is answered by it (asked per person, so it waits); every other subject is the synchronous caller's. An item about subjects of both kinds is visible when any one is readable.
+    /// </summary>
+    public static async ValueTask<bool> VisibleAsync(KnowledgeItem item, IKnowledgeCaller caller, IAsyncKnowledgeAccess extra, ISubjectCatalog catalog, CancellationToken cancellationToken = default)
+    {
+        if (item.About.Count == 0) return item.For.Includes(caller.Audience, null, null);
+        foreach (var subject in item.About)
+        {
+            if (SubjectResolver.Status(catalog, subject) != SubjectStatus.Exists) continue;
+            if (subject.Type is "product" or "install") return true;
+            if (extra.Handles(subject) ? await extra.MayReadAsync(subject, cancellationToken).ConfigureAwait(false) : caller.MayRead(subject)) return true;
+        }
+        return false;
+    }
 }
 
 /// <summary>What a search gives back for one item: its best chunks (at most three), joined where they are next to each other, with where they came from.</summary>
@@ -163,6 +182,28 @@ public static class KnowledgeSearch
         bool Allowed(IndexedChunk c) => visible.TryGetValue(c.Item.Id, out var yes) ? yes : visible[c.Item.Id] = KnowledgeAccess.Visible(c.Item, caller, catalog);
         var matches = index.Nearest(query, items * MaximumChunksPerItem * 4, Allowed);
         return Assemble(matches, items);
+    }
+
+    /// <summary>
+    /// The search with an asynchronous access beside the caller (our own dashboards and reports: the views catalog is asked per person). The normal check runs first and, in the index, lets an item through that names a subject <paramref name="access"/> handles; the
+    /// asynchronous check then decides those items, once each, and the best chunks of the ones it allows are assembled. <see cref="IKnowledgeCaller"/> is unchanged. The index is asked for more chunks, since the asynchronous check removes some afterwards.
+    /// </summary>
+    public static async Task<IReadOnlyList<SearchHit>> SearchAsync(IKnowledgeIndex index, IEmbeddingGenerator<string, Embedding<float>> embeddings, string question, IKnowledgeCaller caller, IAsyncKnowledgeAccess access, ISubjectCatalog catalog, int items = 5, CancellationToken cancellation = default)
+    {
+        var query = (await embeddings.GenerateAsync([question], cancellationToken: cancellation).ConfigureAwait(false))[0].Vector.ToArray();
+        var pass = new Dictionary<string, bool>(StringComparer.Ordinal);
+        bool Allowed(IndexedChunk c) => pass.TryGetValue(c.Item.Id, out var yes) ? yes : pass[c.Item.Id] = KnowledgeAccess.NeedsAsync(c.Item, access, catalog) || KnowledgeAccess.Visible(c.Item, caller, catalog);
+        var matches = index.Nearest(query, items * MaximumChunksPerItem * 16, Allowed);
+        var decided = new Dictionary<string, bool>(StringComparer.Ordinal);
+        var kept = new List<ChunkMatch>();
+        foreach (var match in matches)
+        {
+            var item = match.Indexed.Item;
+            if (!decided.TryGetValue(item.Id, out var ok))
+                decided[item.Id] = ok = !KnowledgeAccess.NeedsAsync(item, access, catalog) || await KnowledgeAccess.VisibleAsync(item, caller, access, catalog, cancellation).ConfigureAwait(false);
+            if (ok) kept.Add(match);
+        }
+        return Assemble(kept, items);
     }
 
     /// <summary>Matches grouped per item (at most three chunks each, best first, adjacent ones joined into one excerpt), the items best first: what a search gives back whatever found the chunks (their meaning or their words).</summary>

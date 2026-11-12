@@ -146,7 +146,7 @@ public sealed class ViewsCatalog(ViewsPublications published, ViewsOptions optio
 
     public Task<ReportCatalogPermissions> PermissionsAsync(ReportCatalogViewer viewer, string id, CancellationToken cancellationToken = default)
     {
-        Document(viewer, id, "permissions");
+        if (Resolve(viewer, id) is null) throw new ReportCatalogException("not_found", $"The catalog 'views' has no item '{id}'.");   // a folder has them too: the snapshot reader (RC02) asks for every entry
         return Task.FromResult(new ReportCatalogPermissions(false, [], "Who may see it is decided when it is rendered: the viewer's roles and attributes decide the rows of every widget, and an app's manifest narrows the models it may use."));
     }
 

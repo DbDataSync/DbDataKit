@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using DbDataKit.Knowledge;
+using DbDataKit.Views;
 
 namespace DbDataKit.ReportCatalogs;
 
@@ -14,6 +15,13 @@ public static class ReportCatalogKnowledge
     /// <summary>The items of a snapshot, through the renderer: the snapshot's own JSON is what the renderer reads.</summary>
     public static IReadOnlyList<KnowledgeItem> Render(ReportCatalogSnapshot snapshot, string version, string channel) =>
         GeneratedCatalogKnowledge.Render(JsonNode.Parse(snapshot.ToJson())!, GeneratedCatalogKnowledge.SourceOf(snapshot.Provider, version, channel));
+
+    /// <summary>
+    /// The generated items of a provider that answers per person (our own dashboards and reports): read as the service viewer (what a scheduled read does, so everything published is described once, whoever asks), then rendered as a snapshot is. Who sees an item is
+    /// decided at search time by <see cref="ReportCatalogKnowledgeAccess"/>.
+    /// </summary>
+    public static async Task<IReadOnlyList<KnowledgeItem>> RenderProviderAsync(IReportCatalogProvider provider, string version, string channel, CancellationToken cancellationToken = default) =>
+        Render(await ReportCatalogReader.ReadAsync(provider, cancellationToken).ConfigureAwait(false), version, channel);
 
     /// <summary>Whether a person with these names may read the subject: a subject of another type is not this catalog's to answer (false: the caller decides it elsewhere); an item the filter does not list for them, or one the snapshot does not hold, is not readable.</summary>
     public static bool MayRead(KnowledgeSubject subject, ReportCatalogSnapshot? snapshot, ReportCatalogPrincipals person)
