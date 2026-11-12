@@ -373,7 +373,12 @@ jobs:
             case "$product" in
               dbdatagateway)
                 ls "$dir"/*-linux-x64.zip > /dev/null || { echo "::error::$product has no *-linux-x64.zip"; exit 1; }
-                grep -q -- '-linux-x64.zip' "$sums" || { echo "::error::$product's SHA256SUMS does not list *-linux-x64.zip"; exit 1; } ;;
+                grep -q -- '-linux-x64.zip' "$sums" || { echo "::error::$product's SHA256SUMS does not list *-linux-x64.zip"; exit 1; }
+                # the export component, one per platform (plan 32 DBR16): an optional asset the product downloads
+                for rid in win-x64 linux-x64; do
+                  ls "$dir"/dbdatagateway-export-v*-"$rid".zip > /dev/null || { echo "::error::$product has no export component for $rid"; exit 1; }
+                  grep -q -- "-export-v.*-$rid.zip" "$sums" || { echo "::error::$product's SHA256SUMS does not list the export component for $rid"; exit 1; }
+                done ;;
             esac
             echo "== $product"; ls -l "$dir"
           done

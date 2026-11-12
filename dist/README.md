@@ -64,7 +64,7 @@ To pass options through a pipe:
 
 ## The export component
 
-A host that exports PDFs (the Gateway, which hosts the views module and the subscription task) needs the pinned Chromium, the bundled fonts and the print page. They are not in any product zip (the browser alone is about 420 MB installed): `dist/export_component.py stage` builds the folder from a checkout and `verify` checks it against `chromium.pin`, `fonts.pin` and its own manifest (`dist/tests/test_export_component.py`); `dist/export/Dockerfile` is the same folder as an image layer over the Gateway's image. See `docs/views.md`, "The export component". Not yet in a release workflow.
+A host that exports PDFs (the Gateway, which hosts the views module and the subscription task) needs the pinned Chromium, the bundled fonts and the print page. They are not in any product zip (the browser alone is about 420 MB installed): `dist/export_component.py stage` builds the folder from a checkout and `verify` checks it against `chromium.pin`, `fonts.pin` and its own manifest (`dist/tests/test_export_component.py`); `dist/export/Dockerfile` is the same folder as an image layer over the Gateway's image. The Gateway's release attaches it as `dbdatagateway-export-v<version>-<rid>.zip` for each platform (job `package-export` of `dbdatagateway-release.yml`; listed in the release's `SHA256SUMS`), a release asset of its own that no product zip or MSI contains; the product installs it on request (see below). See `docs/views.md`, "The export component".
 
 ## What the installers do
 
