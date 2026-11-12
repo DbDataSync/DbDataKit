@@ -307,6 +307,29 @@ describe('DashboardView with a custom widget', () => {
     } finally { fake.vi.useRealTimers() }
   })
 
+  it('in print a frame that starts but never says it is ready fails its widget after the wait, and one that does is ready', async () => {
+    const fake = await import('vitest')
+    fake.vi.useFakeTimers()
+    try {
+      await show({ medium: 'print', customViews: { ...frames, readyTimeoutMs: 5000 } })
+      const { say } = frameWindow()
+      await say({ type: 'views:hello' })
+      await act(async () => { fake.vi.advanceTimersByTime(6000) })
+      expect(host.querySelector('[data-testid="vz-widget-grid"] [data-testid="vz-widget-error"]')?.textContent).toContain('did not say it was ready')
+    } finally { fake.vi.useRealTimers() }
+  })
+
+  it('the host sees each frame\'s state and size (the print page\'s ready signal and its taller-than-a-page check)', async () => {
+    const seen: string[] = []
+    await show({ medium: 'print', customViews: { ...frames, onFrameState: (w, s) => seen.push(`${w}:${s.kind}`), onFrameSize: (w, h) => seen.push(`${w}@${h}`) } })
+    const { posted, say } = frameWindow()
+    await say({ type: 'views:hello' })
+    expect((posted[0] as Extract<FromHost, { type: 'views:init' }>).props.mode).toBe('print')
+    await say({ type: 'views:size', height: 420 })
+    await say({ type: 'views:ready' })
+    expect(seen).toEqual(['grid@420', 'grid:ready'])
+  })
+
   it('a resize reaches the frame as new props', async () => {
     await show()
     const { posted, say } = frameWindow()

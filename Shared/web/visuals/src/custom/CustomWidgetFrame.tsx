@@ -15,6 +15,13 @@ export interface CustomViewsHost {
   frameSrc(component: string): string | null
   /** The address of a link's target inside the app (a page or a view the app serves), or null for one with no address of its own. */
   route?(link: LinkInfo): string | null
+  /** Each frame's state as it changes (the print page waits for every frame to be ready, or fails on the first error). */
+  onFrameState?(widget: string, state: FrameState): void
+  /** The height of each frame's content, as the frame reports it (the print page checks it against a page). */
+  onFrameSize?(widget: string, height: number): void
+  /** How long a frame may take to say hello before its widget fails (milliseconds; 15 s), and, off the screen, to say it is ready (30 s). */
+  startTimeoutMs?: number
+  readyTimeoutMs?: number
 }
 
 export interface CustomViewsContextValue {
@@ -32,12 +39,6 @@ export interface CustomViewsContextValue {
   notice(message: string): void
   /** A dialog or panel the code opened has closed (a new object each time). */
   closed: { widget: string; link: string; saved: boolean } | null
-  /** Each frame's state, for the print page's ready signal. */
-  onState?(widget: string, state: FrameState): void
-  /** The height each frame says its content has (print checks it against a page). */
-  onSize?(widget: string, height: number): void
-  /** How long a frame may take to start before the widget fails (milliseconds; 15 s). */
-  startTimeoutMs?: number
 }
 
 export const CustomViewsContext = createContext<CustomViewsContextValue | null>(null)
@@ -105,8 +106,8 @@ function Frame({ ctx, src, id, widget, result, box }: CustomWidgetFrameProps & {
         const doc = live.current.links?.[link]
         if (doc) live.current.open(id, describeLink(link, doc), row)
       },
-      onState: (s) => { setState(s); live.current.onState?.(id, s) },
-      onSize: (h) => live.current.onSize?.(id, h),
+      onState: (s) => { setState(s); live.current.host.onFrameState?.(id, s) },
+      onSize: (h) => live.current.host.onFrameSize?.(id, h),
       onNotice: (m) => live.current.notice(m),
     })
     host.current = controller
@@ -117,10 +118,15 @@ function Frame({ ctx, src, id, widget, result, box }: CustomWidgetFrameProps & {
       if (message) controller.receive(message)
     }
     window.addEventListener('message', listen)
-    const timer = window.setTimeout(() => {
-      if (!controller.started) { const s: FrameState = { kind: 'error', message: `The view \`${widget.component}\` did not start: the app's page loaded nothing that registers it (it must call startViewFrame of @dbdatakit/views-sdk).` }; setState(s); live.current.onState?.(id, s) }
-    }, live.current.startTimeoutMs ?? 15000)
-    return () => { window.removeEventListener('message', listen); window.clearTimeout(timer); host.current = null }
+    const fail = (message: string) => { const s: FrameState = { kind: 'error', message }; setState(s); live.current.host.onFrameState?.(id, s) }
+    // a frame that says nothing fails its widget; off the screen (print, a picture) it must also say it is ready, which is what the exporter waits for
+    const startTimer = window.setTimeout(() => {
+      if (!controller.started) fail(`The view \`${widget.component}\` did not start: the app's page loaded nothing that registers it (it must call startViewFrame of @dbdatakit/views-sdk).`)
+    }, live.current.host.startTimeoutMs ?? 15000)
+    const readyTimer = live.current.medium === 'screen' ? 0 : window.setTimeout(() => {
+      if (controller.state.kind === 'loading') fail(`The view \`${widget.component}\` did not say it was ready: its code must call \`ready()\` of useReady when it is drawn.`)
+    }, live.current.host.readyTimeoutMs ?? 30000)
+    return () => { window.removeEventListener('message', listen); window.clearTimeout(startTimer); window.clearTimeout(readyTimer); host.current = null }
     // a frame is made once per widget and component; the props reach it through `latestProps`
   }, [id, widget.component, src, linkNames.join('\n')])
 

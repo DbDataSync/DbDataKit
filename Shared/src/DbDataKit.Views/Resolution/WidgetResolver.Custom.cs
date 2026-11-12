@@ -4,6 +4,12 @@ using DbDataKit.Serving;
 
 namespace DbDataKit.Views;
 
+/// <summary>A custom view's rows could not be resolved: the serving core's own code and words (or the resolver's), naming the query.</summary>
+public sealed class CustomViewException(string code, string message) : Exception(message)
+{
+    public string Code { get; } = code;
+}
+
 public sealed partial class WidgetResolver
 {
     /// <summary>The entry of a custom widget that its manifest entry or its parameters do not allow: a component of another app, or one the host serves no manifest for.</summary>
@@ -28,9 +34,25 @@ public sealed partial class WidgetResolver
         if (widget.Raw["params"] is JsonObject map)
             foreach (var (name, node) in map)
                 given[name] = node is JsonValue v && v.TryGetValue<string>(out var text) && text.StartsWith("$params.", StringComparison.Ordinal) ? values.Get(text[8..])?.DeepClone() : node?.DeepClone();
+        var entry = await RunCustomViewAsync(context, view, component, given, $"widgets.{widget.Id}.params", cancellationToken).ConfigureAwait(false);
+        return entry;
+    }
+
+    /// <summary>
+    /// The rows of a custom view's declared queries as the viewer, for a **page** (the export of a custom page, plan 32 DBR32/DBR33): the same run a widget gets, from the values the address gave. A query that fails throws <see cref="CustomViewException"/> with the
+    /// core's code and words, naming the query; a required parameter with no value is <c>DBD-VIEW-050</c>. The result is <c>{type: custom, component, params, data}</c>.
+    /// </summary>
+    public async Task<JsonObject> ResolveCustomViewAsync(ServingContext context, CustomView view, string component, IReadOnlyDictionary<string, JsonNode?> parameters, CancellationToken cancellationToken = default)
+    {
+        try { return await RunCustomViewAsync(context, view, component, parameters.ToDictionary(p => p.Key, p => p.Value?.DeepClone()), "params", cancellationToken).ConfigureAwait(false); }
+        catch (WidgetProblem p) { throw new CustomViewException(p.Code, p.Message); }
+    }
+
+    private async Task<JsonObject> RunCustomViewAsync(ServingContext context, CustomView view, string component, Dictionary<string, JsonNode?> given, string path, CancellationToken cancellationToken)
+    {
         foreach (var p in view.Params)
             if (p.Required && !HasValue(given.GetValueOrDefault(p.Name)))
-                throw new WidgetProblem(ResolveCodes.RequiredParameter, $"The parameter `{p.Name}` is required by `{component}` and has no value.", $"widgets.{widget.Id}.params.{p.Name}");
+                throw new WidgetProblem(ResolveCodes.RequiredParameter, $"The parameter `{p.Name}` is required by `{component}` and has no value.", $"{path}.{p.Name}");
 
         var data = new JsonObject();
         var limits = new ServingLimits(MaxRows: options.MaxRows, Timeout: options.WidgetTimeout);

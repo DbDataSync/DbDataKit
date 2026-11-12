@@ -51,6 +51,9 @@ public sealed class ViewsOptions
     /// <summary>The folder with <c>print.js</c> and <c>print.css</c>, the visuals' print page (built from <c>web/visuals</c>); the module serves it to the page and to the browser's own print route. Null: the print page is not there and export is unavailable, saying so.</summary>
     public string? PageAssets { get; init; }
 
+    /// <summary>The apps this host serves, for custom views (plan 32 DBR31, DBR32): the manifest entry of a custom widget's component for the resolver and the app's built files for the export. Null: a custom widget is an error entry that says this host serves no app.</summary>
+    public ICustomViewApps? CustomApps { get; init; }
+
     /// <summary>The most rows a CSV or xlsx export holds in all (the rows of every sheet): a larger one is refused, in words, with 413. Not a browser's limit, so it does not come from <c>views.export</c>'s exporter settings.</summary>
     public long MaxExportRows { get; init; } = 100_000;
 

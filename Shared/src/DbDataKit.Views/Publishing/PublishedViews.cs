@@ -71,7 +71,7 @@ public sealed class PublishedView
         return new ResolverOptions
         {
             MaxWidgets = basis.MaxWidgets, MaxRows = basis.MaxRows, MaxParallelism = basis.MaxParallelism, WidgetTimeout = basis.WidgetTimeout, Time = basis.Time,
-            MaxImageBytes = basis.MaxImageBytes, ModelSourcePrefix = basis.ModelSourcePrefix, OnUnexpected = basis.OnUnexpected,
+            MaxImageBytes = basis.MaxImageBytes, ModelSourcePrefix = basis.ModelSourcePrefix, OnUnexpected = basis.OnUnexpected, CustomViews = basis.CustomViews,
             Cache = basis.Cache, CacheScope = CacheScope,
             SavedQueryModel = SavedQueryModel, ImageBytes = ImageBytes,
         };

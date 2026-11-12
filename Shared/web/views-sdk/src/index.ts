@@ -127,6 +127,8 @@ export function useReady(): { ready: () => Promise<void>; fail: (message: string
     ready: async () => {
       try { await document.fonts?.ready } catch { /* a document without fonts is ready */ }
       ;(window as unknown as { __reportReady?: boolean }).__reportReady = true
+      // the final height goes before the ready: the host checks a widget against a page with it
+      port.send({ type: 'views:size', height: contentHeight() })
       port.send({ type: 'views:ready' })
     },
     fail: (message: string) => {
@@ -243,33 +245,52 @@ function Mounted({ component }: { component: ViewComponent }) {
   return createElement(component, host().props)
 }
 
+/** The view a host embedded in the page itself (a `page` exported as the top-level document): `<script type="application/json" id="dbdatakit-view-init">{"name": "RegionalDetail", "props": {...}}</script>`. Null when there is none. */
+export function embeddedInit(doc: Document = document): { name: string; props: ViewProps } | null {
+  const text = doc.getElementById('dbdatakit-view-init')?.textContent
+  if (!text) return null
+  try {
+    const value = JSON.parse(text) as { name?: unknown; props?: unknown }
+    if (typeof value.name !== 'string' || typeof value.props !== 'object' || value.props === null) return null
+    return { name: value.name, props: value.props as ViewProps }
+  } catch { return null }
+}
+
+/** A port for a page that has no host window above it (the top-level document an export prints): nothing to send to and nothing to hear; the view's `ready()` still sets the flags the exporter reads. */
+export const standalonePort: HostPort = { send: () => {}, subscribe: () => () => {} }
+
 /**
  * The frame's runtime. An app's entry calls it after its `defineWidget` / `definePage` calls: **in a view frame** (the address's fragment names a view, `frameRequest`) it waits for the host's `views:init`, mounts the
  * registered component with the props it gave (the host sends `views:props` on every change, and the component sees them through `ViewHost`), reports the content's height as `views:size` (the host sizes a page and
  * checks a widget against a printed page with it), and turns a render error into `views:error`; it returns true and the app must not mount its own screen. **In any other document** it does nothing and returns false.
+ * **A page printed as the top-level document** has no host window: the host embeds the view's name and props in the page (`embeddedInit`), and the runtime mounts it at once with them and a port that talks to nobody.
  * The component calls `useReady().ready()` when it is drawn: the exporter waits for it.
  */
 export function startViewFrame(options: { root?: HTMLElement; port?: HostPort; request?: ReturnType<typeof frameRequest> } = {}): boolean {
-  const request = options.request === undefined ? frameRequest() : options.request
+  const embedded = options.request === undefined ? embeddedInit() : null
+  const request = options.request === undefined ? (embedded ? { view: embedded.name, mode: embedded.props.mode } : frameRequest()) : options.request
   if (!request) return false
-  const port = options.port ?? windowPort()
+  const port = options.port ?? (embedded ? standalonePort : windowPort())
   const root = options.root ?? (document.getElementById('dbdatakit-view') ?? document.body.appendChild(Object.assign(document.createElement('div'), { id: 'dbdatakit-view' })))
   let mounted: ReturnType<typeof createRoot> | null = null
-  const off = port.subscribe((m) => {
-    if (m.type !== 'views:init' || mounted) return
+  const mount = (name: string, props: ViewProps) => {
+    if (mounted) return
     mounted = createRoot(root)
-    mounted.render(createElement(FrameBoundary, { port, children: createElement(FrameRoot, { port, name: m.name, initial: { ...m.props, mode: request.mode } }) }))
+    mounted.render(createElement(FrameBoundary, { port, children: createElement(FrameRoot, { port, name, initial: { ...props, mode: request.mode } }) }))
     watchHeight(port)
-  })
-  void off
-  port.send({ type: 'views:hello' })
+  }
+  port.subscribe((m) => { if (m.type === 'views:init') mount(m.name, m.props) })
+  if (embedded) mount(embedded.name, embedded.props)
+  else port.send({ type: 'views:hello' })
   return true
 }
+
+const contentHeight = () => Math.ceil(Math.max(document.documentElement?.scrollHeight ?? 0, document.body?.scrollHeight ?? 0))
 
 function watchHeight(port: HostPort) {
   let last = -1
   const report = () => {
-    const height = Math.ceil(Math.max(document.documentElement?.scrollHeight ?? 0, document.body?.scrollHeight ?? 0))
+    const height = contentHeight()
     if (height !== last) { last = height; port.send({ type: 'views:size', height }) }
   }
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(report).observe(document.documentElement)

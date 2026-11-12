@@ -111,7 +111,7 @@ const WIDGET_TITLE = 28
 const LINE = 20
 
 /** The default heights, in millimetres, of widgets that have a box of their own when the block says none. */
-export const DEFAULT_HEIGHT_MM: Record<string, number> = { chart: 70, metric: 28, image: 60 }
+export const DEFAULT_HEIGHT_MM: Record<string, number> = { chart: 70, metric: 28, image: 60, custom: 70 }
 
 function textLines(text: string, widthPx: number): number {
   const perLine = Math.max(10, Math.floor(widthPx / 7.5))

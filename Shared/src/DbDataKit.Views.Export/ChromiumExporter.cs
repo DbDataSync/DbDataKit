@@ -11,7 +11,7 @@ namespace DbDataKit.Views.Export;
 
 /// <summary>
 /// <see cref="IReportExporter"/> over PuppeteerSharp and one Chromium (plan 32 section 4.5): the browser is launched from a path (<b>never downloaded</b>: no <c>BrowserFetcher</c> call exists here), with a throwaway profile, per export.
-/// The page is served from memory under <c>http://print.localhost/</c> by request interception, so <b>no request leaves the process</b>: anything the page asks for that is not one of its own files is aborted and reported as a warning.
+/// The page is served from memory under <c>http://print.localhost/</c> by request interception, so <b>no request leaves the process</b> (its files carry <c>Access-Control-Allow-Origin: *</c>, because a custom view's frame is sandboxed with an opaque origin and loads its module script with CORS): anything the page asks for that is not one of its own files is aborted and reported as a warning.
 /// The page says it is drawn with <c>window.__reportReady</c>; then <c>Page.printToPDF</c> cuts it into the layout's paper, margins, header and footer, with the outline and a tagged PDF. A deadline covers the whole export and stops the browser.
 /// </summary>
 public sealed class ChromiumExporter(ExportSettings settings, ILogger? logger = null) : IReportExporter
@@ -209,7 +209,7 @@ public sealed class ChromiumExporter(ExportSettings settings, ILogger? logger = 
                     var key = Uri.UnescapeDataString(new Uri(url).AbsolutePath.TrimStart('/'));
                     if (assets.TryGetValue(key, out var asset))
                     {
-                        await e.Request.RespondAsync(new ResponseData { Status = HttpStatusCode.OK, ContentType = asset.ContentType, BodyData = asset.Content, Headers = new Dictionary<string, object> { ["Cache-Control"] = "no-store" } }).ConfigureAwait(false);
+                        await e.Request.RespondAsync(new ResponseData { Status = HttpStatusCode.OK, ContentType = asset.ContentType, BodyData = asset.Content, Headers = new Dictionary<string, object> { ["Cache-Control"] = "no-store", ["Access-Control-Allow-Origin"] = "*" } }).ConfigureAwait(false);
                         return;
                     }
                     await e.Request.RespondAsync(new ResponseData { Status = HttpStatusCode.NotFound, ContentType = "text/plain", Body = "not found" }).ConfigureAwait(false);
