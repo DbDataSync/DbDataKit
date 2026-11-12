@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using DbDataKit.Connections.Bindings;
 using DbDataKit.Secrets;
 
 namespace DbDataKit.Delivery;
@@ -59,36 +60,40 @@ public sealed record DeliveryPolicy(int MaxAttempts, IReadOnlyList<TimeSpan> Bac
 }
 
 /// <summary>
-/// One delivery channel name of the install and the connection it is bound to in each release channel (plan 22a GP18 fold, plan 21): <c>alerts: { prod: slack-ops, test: slack-sandbox }</c>. The binding is explicit: <b>a release channel with no entry has no channel</b>
-/// (it never uses another release channel's connection, so a test cannot reach production's Slack because production is bound); <c>*</c> binds every release channel that has no entry of its own, and is written on purpose.
+/// One delivery channel name of the install and the connection it is bound to in each release channel (plan 22a GP18 fold, plan 27a IX23): <c>alerts: { prod: slack-ops, test: slack-sandbox }</c> in <c>bindings.yml</c>. It is a <see cref="SlotBinding"/> of kind
+/// <see cref="SlotKind.Delivery"/> with the channel's limit: <b>the one rule of the suite's bindings</b> decides what a release channel uses (its own entry, else the <c>*</c> written on purpose, else nothing; never another release channel's).
 /// </summary>
 public sealed record ChannelBinding(string Name, IReadOnlyDictionary<string, string> Connections, int? LimitPerMinute = null)
 {
     /// <summary>Every release channel that has no entry of its own.</summary>
-    public const string AnyReleaseChannel = "*";
+    public const string AnyReleaseChannel = BindingSet.AnyReleaseChannel;
+
+    /// <summary>The channel's binding as the shared library reads it.</summary>
+    public SlotBinding Slot => new(SlotKind.Delivery, Name, Connections.ToDictionary(c => c.Key, c => (IReadOnlyList<BindingEntry>)[new BindingEntry(c.Value)], StringComparer.Ordinal));
+
+    public static ChannelBinding From(SlotBinding slot, int? limitPerMinute = null) =>
+        new(slot.Name, slot.PerChannel.Where(c => c.Value.Count > 0).ToDictionary(c => c.Key, c => c.Value[0].Connection, StringComparer.Ordinal), limitPerMinute);
+
+    /// <summary>What the release channel resolves to (<see cref="SlotBinding.Resolve"/>): the connection, or the reason there is none.</summary>
+    public BindingResolution Resolve(string? releaseChannel) => Slot.Resolve(releaseChannel);
 
     /// <summary>The connection bound for a release channel: its own entry, else the <c>*</c> entry; null when neither says one.</summary>
-    public string? For(string releaseChannel) => Connections.TryGetValue(releaseChannel, out var own) ? own : Connections.GetValueOrDefault(AnyReleaseChannel);
+    public string? For(string releaseChannel) => Resolve(releaseChannel).Primary?.Connection;
 
     /// <summary>Whether the entry for this release channel is its own (true) or the <c>*</c> one (false).</summary>
     public bool IsOwn(string releaseChannel) => Connections.ContainsKey(releaseChannel);
 }
 
 /// <summary>
-/// The install's <c>delivery:</c> settings section (plan 22a GP07, reduced by the GP18 fold): the retry policy, and which connection each delivery channel name uses in each release channel. Channels are <b>connections</b> now (<c>kind: smtp</c>, or <c>kind: http</c> with a
-/// <c>webhook:</c> section; <see cref="DeliveryConnectionRules"/>), so the section holds no address, host or secret. Read strictly: an unknown key fails naming the source and the key, and a channel written in the old form (<c>kind: email</c>, <c>host</c>, <c>url</c> ...) is refused with the new form.
+/// The install's <c>delivery:</c> settings section (plan 22a GP07) with the delivery bindings of <c>bindings.yml</c> (plan 27a IX23): the retry policy and the limits live in the section, and <b>which connection each delivery channel name uses in each release channel is
+/// a binding</b> (<c>bindings.yml</c>, section <c>delivery:</c>, read by <see cref="BindingsLoader"/>), so the section holds no channel, address, host or secret. Read strictly: an unknown key fails naming the source and the key, and <c>channels</c> in the section (the earlier
+/// place of the mapping) is refused with the new place.
 /// <code>
 /// delivery:
 ///   retry:
 ///     max_attempts: 6                     # tries per message
 ///     backoff_seconds: [30, 120, 600, 3600, 21600]
 ///   lease_seconds: 120
-///   channels:
-///     mail: smtp-main                     # a name alone binds the production release channel (prod)
-///     alerts:                             # a release channel to a connection, each explicit
-///       prod: slack-ops
-///       test: slack-sandbox
-///       dev: slack-sandbox
 ///   limits:                               # optional, messages per minute per delivery channel (the connection's own limit_per_minute applies otherwise)
 ///     alerts: 30
 /// </code>
@@ -97,13 +102,16 @@ public sealed record DeliverySettings(DeliveryPolicy Policy, IReadOnlyList<Chann
 {
     public static DeliverySettings Empty { get; } = new(DeliveryPolicy.Default, []);
 
-    private static readonly string[] SectionKeys = ["retry", "lease_seconds", "channels", "limits"];
+    private static readonly string[] SectionKeys = ["retry", "lease_seconds", "limits"];
     private static readonly string[] RetryKeys = ["max_attempts", "backoff_seconds"];
 
-    /// <summary>Reads the section; <paramref name="source"/> is the file it came from, named in every refusal. A null section is no channels.</summary>
-    public static DeliverySettings Read(JsonObject? section, string source)
+    /// <summary>Reads the section; <paramref name="source"/> is the file it came from, named in every refusal; <paramref name="bindings"/> are the install's bindings (the delivery channels come from them). A null section is the default policy.</summary>
+    public static DeliverySettings Read(JsonObject? section, string source, BindingSet? bindings = null)
     {
-        if (section is null) return Empty;
+        var bound = (bindings ?? BindingSet.Empty).OfKind(SlotKind.Delivery).Select(s => ChannelBinding.From(s)).ToList();
+        if (section is null) return new DeliverySettings(DeliveryPolicy.Default, bound);
+        if (section.ContainsKey("channels"))
+            throw new DeliverySettingsException($"{source}: delivery.channels is not kept here any more: which connection a delivery channel uses is a binding. Move it to {BindingsLoader.FileName} (section `delivery:`): `delivery: {{ mail: <connection>, alerts: {{ prod: <connection>, test: <connection> }} }}`.");
         foreach (var (key, _) in section)
             if (!SectionKeys.Contains(key)) throw new DeliverySettingsException($"{source}: delivery has no key `{key}`. Keys: {string.Join(", ", SectionKeys)}.");
         var policy = DeliveryPolicy.Default;
@@ -124,64 +132,19 @@ public sealed record DeliverySettings(DeliveryPolicy Policy, IReadOnlyList<Chann
 
         if (Whole(section, "lease_seconds", source, "delivery.", 5, 3600) is { } lease) policy = policy with { Lease = TimeSpan.FromSeconds(lease) };
 
-        var bindings = new List<ChannelBinding>();
-        if (section["channels"] is { } channelsNode)
-        {
-            if (channelsNode is not JsonObject map) throw new DeliverySettingsException($"{source}: delivery.channels must be a mapping of channel names to connections.");
-            foreach (var (name, node) in map)
-            {
-                if (!NameOk(name)) throw new DeliverySettingsException($"{source}: delivery.channels.{name}: a channel's name is letters, digits, dashes and underscores, from 1 to 64.");
-                if (bindings.Any(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase))) throw new DeliverySettingsException($"{source}: delivery.channels.{name} is named twice (names are compared ignoring case).");
-                bindings.Add(ReadBinding(name, node, source));
-            }
-        }
-
         if (section["limits"] is { } limitsNode)
         {
             if (limitsNode is not JsonObject limits) throw new DeliverySettingsException($"{source}: delivery.limits must be a mapping of channel names to messages per minute.");
             foreach (var (name, _) in limits)
             {
-                var at = bindings.FindIndex(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
-                if (at < 0) throw new DeliverySettingsException($"{source}: delivery.limits.{name} names a channel that is not in delivery.channels ({(bindings.Count == 0 ? "there are none" : string.Join(", ", bindings.Select(c => c.Name)))}).");
-                bindings[at] = bindings[at] with { LimitPerMinute = Whole(limits, name, source, "delivery.limits.", 1, 100000) };
+                var at = bound.FindIndex(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
+                if (at < 0) throw new DeliverySettingsException($"{source}: delivery.limits.{name} names a channel that is not bound in {BindingsLoader.FileName} ({(bound.Count == 0 ? "there are none" : string.Join(", ", bound.Select(c => c.Name)))}).");
+                bound[at] = bound[at] with { LimitPerMinute = Whole(limits, name, source, "delivery.limits.", 1, 100000) };
             }
         }
 
-        return new DeliverySettings(policy, bindings);
+        return new DeliverySettings(policy, bound);
     }
-
-    private static bool NameOk(string name) => name.Length is >= 1 and <= 64 && name.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
-
-    /// <summary>A connection's name, as the console keeps it: a letter, then letters, digits, <c>- _ .</c>, up to 64.</summary>
-    public static bool ConnectionNameOk(string name) => name.Length is >= 1 and <= 64 && char.IsAsciiLetter(name[0]) && name.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.');
-
-    private static readonly string[] OldKeys = ["kind", "host", "port", "tls", "from", "username", "password", "helo", "timeout_seconds", "trusted_certificate", "url", "secret", "allow_private", "limit_per_minute"];
-
-    private static ChannelBinding ReadBinding(string name, JsonNode? node, string source)
-    {
-        var where = $"delivery.channels.{name}";
-        var form = $"Channels are connections now: keep the mail server or the webhook as a connection (connections/<name>.yml: `kind: smtp`, or `kind: http` with a `webhook:` section) and write `{name}: <connection>` or `{name}: {{ prod: <connection>, test: <connection> }}`.";
-        if (node is JsonValue v && v.TryGetValue<string>(out var single))
-        {
-            if (!ConnectionNameOk(single)) throw new DeliverySettingsException($"{source}: {where} is `{single}`, which is not a connection's name (a letter, then letters, digits, - _ .). {form}");
-            return new ChannelBinding(name, new Dictionary<string, string>(StringComparer.Ordinal) { [ReleaseProd] = single });
-        }
-
-        if (node is not JsonObject map || map.Count == 0) throw new DeliverySettingsException($"{source}: {where} is a connection's name, or a mapping of release channels to connection names. {form}");
-        var connections = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (release, value) in map)
-        {
-            if (OldKeys.Contains(release)) throw new DeliverySettingsException($"{source}: {where} has the key `{release}` of the earlier form of a channel. {form}");
-            if (release != ChannelBinding.AnyReleaseChannel && !NameOk(release)) throw new DeliverySettingsException($"{source}: {where}.{release}: a release channel's name is letters, digits, dashes and underscores (or `*` for every release channel).");
-            if (value is not JsonValue cv || !cv.TryGetValue<string>(out var connection) || !ConnectionNameOk(connection))
-                throw new DeliverySettingsException($"{source}: {where}.{release} is a connection's name (a letter, then letters, digits, - _ .). {form}");
-            connections[release] = connection;
-        }
-
-        return new ChannelBinding(name, connections);
-    }
-
-    private const string ReleaseProd = "prod";
 
     private static int? Whole(JsonObject o, string key, string source, string prefix, int min, int max)
     {

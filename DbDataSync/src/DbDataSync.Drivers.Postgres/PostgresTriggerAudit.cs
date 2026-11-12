@@ -35,18 +35,32 @@ public static class PostgresTriggerAudit
             """;
     }
 
-    public static string CreateFunctionAndTrigger(string schema, string table, IReadOnlyList<string> keyColumns)
+    /// <summary>
+    /// The version marker the function body carries. <see cref="PostgresTriggerInstall"/> looks for it in
+    /// <c>pg_proc.prosrc</c>, which holds the body exactly as written; a function without it is the text
+    /// that recorded only the new key of an update.
+    /// </summary>
+    public const string VersionMarker = "-- ds-audit-v2";
+
+    /// <summary>
+    /// The capture function and the trigger that calls it. Replacing an installed trigger of the old text
+    /// needs only <see cref="CreateFunction"/>: the trigger names the function, not its body.
+    /// </summary>
+    public static string CreateFunctionAndTrigger(string schema, string table, IReadOnlyList<string> keyColumns) =>
+        CreateFunction(schema, table, keyColumns) + "\n\n" + CreateTrigger(schema, table);
+
+    public static string CreateFunction(string schema, string table, IReadOnlyList<string> keyColumns)
     {
         var dialect = PostgresDialect.Instance;
-        var baseTable = dialect.QualifyTable(schema, table);
         var shadow = dialect.QualifyTable(schema, TriggerAuditStatement.ShadowTableName(table));
         var function = dialect.QualifyTable(schema, FunctionName(table));
-        var trigger = dialect.QuoteIdentifier(TriggerName(table));
 
         var op = dialect.QuoteIdentifier(TriggerAuditStatement.OperationColumn);
         var keyList = string.Join(", ", keyColumns.Select(dialect.QuoteIdentifier));
         var newKeys = string.Join(", ", keyColumns.Select(k => $"NEW.{dialect.QuoteIdentifier(k)}"));
         var oldKeys = string.Join(", ", keyColumns.Select(k => $"OLD.{dialect.QuoteIdentifier(k)}"));
+        var keyChanged = string.Join(" OR ", keyColumns.Select(
+            k => $"OLD.{dialect.QuoteIdentifier(k)} IS DISTINCT FROM NEW.{dialect.QuoteIdentifier(k)}"));
 
         // RETURN NULL is correct for an AFTER trigger and is what keeps this from altering the row the
         // application wrote — a BEFORE trigger returning the wrong thing silently changes data, which
@@ -54,9 +68,13 @@ public static class PostgresTriggerAudit
         return $"""
             CREATE OR REPLACE FUNCTION {function}() RETURNS trigger AS $$
             BEGIN
+                {VersionMarker}: an UPDATE that changes the key is a delete of the old key and the new row
                 IF (TG_OP = 'DELETE') THEN
                     INSERT INTO {shadow} ({op}, {keyList}) VALUES ('D', {oldKeys});
                 ELSIF (TG_OP = 'UPDATE') THEN
+                    IF ({keyChanged}) THEN
+                        INSERT INTO {shadow} ({op}, {keyList}) VALUES ('D', {oldKeys});
+                    END IF;
                     INSERT INTO {shadow} ({op}, {keyList}) VALUES ('U', {newKeys});
                 ELSE
                     INSERT INTO {shadow} ({op}, {keyList}) VALUES ('I', {newKeys});
@@ -64,7 +82,17 @@ public static class PostgresTriggerAudit
                 RETURN NULL;
             END;
             $$ LANGUAGE plpgsql;
+            """;
+    }
 
+    public static string CreateTrigger(string schema, string table)
+    {
+        var dialect = PostgresDialect.Instance;
+        var baseTable = dialect.QualifyTable(schema, table);
+        var function = dialect.QualifyTable(schema, FunctionName(table));
+        var trigger = dialect.QuoteIdentifier(TriggerName(table));
+
+        return $"""
             CREATE TRIGGER {trigger}
             AFTER INSERT OR UPDATE OR DELETE ON {baseTable}
             FOR EACH ROW EXECUTE FUNCTION {function}();

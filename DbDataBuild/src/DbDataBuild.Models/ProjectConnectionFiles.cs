@@ -54,7 +54,7 @@ public static class ProjectConnectionFiles
     public static YamlEntry? ReadOne(string text, string relative, string expectedName, List<Diagnostic> diags, IDictionary<YamlNode, string> files, IDictionary<string, TlsSpec>? tls = null, IDictionary<string, GrantsSpec>? grants = null, IDictionary<string, DbDataKit.Config.Yaml.YamlMapping>? policy = null)
     {
         var before = diags.Count;
-        var result = ConnectionDefinitionLoader.Load(text, relative, addressRequired: false);
+        var result = ConnectionDefinitionLoader.LoadDatabaseConnection(text, relative, addressRequired: false);
         foreach (var d in result.Diagnostics.Where(d => d.Severity == DbDataKit.Config.Yaml.ConfigSeverity.Error))
             Report(diags, relative, d.Line, d.Column, d.Message, d.Fix);
         if (result.Definition is null || diags.Count > before) return null;

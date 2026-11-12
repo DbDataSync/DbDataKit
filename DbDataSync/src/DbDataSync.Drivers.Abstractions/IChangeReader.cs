@@ -46,6 +46,15 @@ public interface IChangeReader
     bool DetectsDeletes => false;
 
     /// <summary>
+    /// Whether a primary key update at the source (<c>UPDATE t SET id = 2 WHERE id = 1</c>) reaches the writer as a delete of
+    /// the old key plus the row of the new one (plan 28c CW02). True by default: a reader that reads the whole scope, or a
+    /// log or audit of every write, says it. False for a reader that scans the rows that exist and reads those past a
+    /// position (<c>Watermark</c>) or whose query is the operator's (<c>ScriptedQuery</c>): the row with the old key is not
+    /// there to be read, so the old key stays in the target until a reload or the delete-reconcile sweep removes it.
+    /// </summary>
+    bool DetectsKeyChanges => true;
+
+    /// <summary>
     /// Whether this reader can state each row's true source order and time — see
     /// <see cref="ChangeOrdering"/>. False by default, the same "overstating is what loses data"
     /// reasoning as <see cref="DetectsDeletes"/>: a reader that has not thought about it says no.

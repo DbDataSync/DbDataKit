@@ -47,6 +47,8 @@ public sealed class ReplicationPlannerTests : IDisposable
         public List<string> Checks { get; } = [];
         public bool RowsReadAsked { get; private set; }
         public Dictionary<string, long> RowsRead { get; } = [];
+        public bool PassesAsked { get; private set; }
+        public Dictionary<string, long> Passes { get; } = [];
 
         public IReadOnlyDictionary<string, DateTimeOffset> GetLastPrimaryEnqueueByMapping(string replication) => Primary;
 
@@ -56,6 +58,12 @@ public sealed class ReplicationPlannerTests : IDisposable
         {
             RowsReadAsked = true;
             return RowsRead;
+        }
+
+        public IReadOnlyDictionary<string, long> GetPassesSincePerMapping(string replication, IReadOnlyDictionary<string, DateTimeOffset> sinceByMapping)
+        {
+            PassesAsked = true;
+            return Passes;
         }
 
         public bool HasPendingReconcile(string replication, string mapping) => ReconcileInFlight.Contains(mapping);
@@ -267,6 +275,39 @@ public sealed class ReplicationPlannerTests : IDisposable
 
         Assert.True(state.RowsReadAsked);
         Assert.Equal(["a"], enqueuer.Asked);
+    }
+
+    /// <summary>CW02b: a sweep every N passes needs no cadence, counts passes (not rows), and a mapping that has not made N yet is left alone.</summary>
+    [Fact]
+    public async Task AfterEveryPasses_QueuesTheSweepOfTheMappingThatMadeNPasses_AndNoCadenceIsNeeded()
+    {
+        var reconcile = new ReconcileConfig { Enabled = true, AfterEveryPasses = 3 };
+        var task = Save("passes", new SchedulingConfig { Mode = ScheduleMode.Continuous, FrequencySeconds = 3600 }, GenericDriverKinds.Watermark, reconcile, "three", "two", "inflight");
+        var state = new FakeState();
+        state.Passes["three"] = 3;
+        state.Passes["two"] = 2;
+        state.Passes["inflight"] = 9;
+        state.ReconcileInFlight.Add("inflight");
+        var enqueuer = new RecordingReconcile();
+
+        Assert.True(await Planner(state, reconcile: enqueuer).TickReconcileAsync("passes", task, Names("three", "two", "inflight"), CancellationToken.None));
+
+        Assert.Equal(["three"], enqueuer.Asked);
+        Assert.True(state.PassesAsked);
+        Assert.False(state.RowsReadAsked);      // a pass count needs no history of rows read
+    }
+
+    [Fact]
+    public async Task WithoutAfterEveryPasses_ThePassesAreNotAsked()
+    {
+        var reconcile = new ReconcileConfig { Enabled = true, Every = new SchedulingConfig { Mode = ScheduleMode.Continuous, FrequencySeconds = 60 } };
+        var task = Save("nopasses", new SchedulingConfig { Mode = ScheduleMode.Continuous, FrequencySeconds = 3600 }, GenericDriverKinds.Watermark, reconcile, "a");
+        var state = new FakeState();
+        state.Reconcile["a"] = DateTimeOffset.UtcNow.AddMinutes(-10);
+
+        await Planner(state, reconcile: new RecordingReconcile()).TickReconcileAsync("nopasses", task, Names("a"), CancellationToken.None);
+
+        Assert.False(state.PassesAsked);
     }
 
     [Fact]

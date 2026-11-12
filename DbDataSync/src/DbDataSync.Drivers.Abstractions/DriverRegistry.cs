@@ -91,7 +91,8 @@ public sealed class DriverRegistry
                         r.Kind, r is ISegmentExpandingReader, r.DetectsDeletes, r.Parameters,
                         r is IReadIntentDeclaring declaring
                             ? declaring.SupportedIntents.OrderBy(i => i).ToList()
-                            : []))
+                            : [],
+                        r.DetectsKeyChanges))
                     .ToList(),
                 driver.StagingProviders.Select(p => new StagingCapability(p.Kind, p.Parameters)).ToList(),
                 driver.Writers.Select(w => new WriterCapability(w.Kind, w.SupportsReconciliation, w.Parameters)).ToList(),

@@ -91,6 +91,13 @@ public sealed class ReadsProgress
 
     [Checkpoint]
     public long? AtSweep { get; set; }
+
+    /// <summary>The successful primary passes of the mapping, and how many of them a sweep accounts for (<c>reconcile.afterEveryPasses</c>, plan 28c CW02b). Absent in progress written before it: read as 0.</summary>
+    [Checkpoint]
+    public long? Passes { get; set; }
+
+    [Checkpoint]
+    public long? PassesAtSweep { get; set; }
 }
 
 /// <summary>The checkpoint <c>watermark</c> per mapping and source table (plan 28c section 5.1); the item key is <see cref="WatermarkCheckpoint.ItemKey"/>: the mapping and the engine's watermark key of its source.</summary>
@@ -422,7 +429,20 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
             return (item.Total ?? 0) - (item.AtSweep ?? 0);
         }
 
-        public void MarkSweep(string mapping) => Locked(() => job.Progress.Reads[mapping].AtSweep = job.Progress.Reads[mapping].Total ?? 0);
+        public void AddPass(string mapping) => Locked(() => job.Progress.Reads[mapping].Passes = (job.Progress.Reads[mapping].Passes ?? 0) + 1);
+
+        public long PassesSinceSweep(string mapping)
+        {
+            var item = job.Progress.Reads[mapping];
+            return (item.Passes ?? 0) - (item.PassesAtSweep ?? 0);
+        }
+
+        public void MarkSweep(string mapping) => Locked(() =>
+        {
+            var item = job.Progress.Reads[mapping];
+            item.AtSweep = item.Total ?? 0;
+            item.PassesAtSweep = item.Passes ?? 0;
+        });
     }
 
     /// <summary>What a pass reports that belongs to the run, not to state: a verification result is a step of the run (its value stored with the run, repeatable: a result reported again is the same result).</summary>

@@ -10,5 +10,7 @@ export function readerNotes(reader: ReaderCapability): string[] {
   // cannot see deletes, and the operator is better placed than this picker to know which kind of table
   // this is. What it must not do is let someone assume deletes are covered when they are not.
   if (!reader.detectsDeletes) notes.push('does not detect deletes')
+  // Absent from an older server means it could say it (the default), so only an explicit false is a note.
+  if (reader.detectsKeyChanges === false) notes.push('cannot see a key change')
   return notes
 }

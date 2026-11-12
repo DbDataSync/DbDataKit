@@ -5,8 +5,10 @@ namespace DbDataSync.Drivers.Generic;
 /// <param name="ShadowTableExists">Whether the shadow table is already there.</param>
 /// <param name="TriggerExists">Whether the trigger that fills it is already there.</param>
 /// <param name="KeyColumns">The source's primary key, which the shadow table is keyed by.</param>
+/// <param name="TriggerOutdated">The trigger is there but is the text that recorded only the new key of an
+/// update (CW02a); the plan then replaces it. False for an engine whose trigger never changed.</param>
 public sealed record TriggerAuditState(
-    bool ShadowTableExists, bool TriggerExists, IReadOnlyList<string> KeyColumns);
+    bool ShadowTableExists, bool TriggerExists, IReadOnlyList<string> KeyColumns, bool TriggerOutdated = false);
 
 /// <summary>
 /// The engine-independent parts of enabling trigger-audit capture: what to check, what to warn about,

@@ -70,4 +70,35 @@ public sealed class MySqlTriggerAuditStatementTests
         Assert.Equal("ds_trg_orders_au", MySqlTriggerAudit.TriggerName("orders", "au"));
         Assert.Equal("ds_trg_orders_ad", MySqlTriggerAudit.TriggerName("orders", "ad"));
     }
+
+    [Fact]
+    public void TheUpdateTrigger_RecordsTheOldKeyAsADelete_WhenTheKeyChanges()
+    {
+        var sql = MySqlTriggerAudit.CreateTriggers("db", "orders", ["region", "id"]);
+
+        Assert.Contains("SELECT 'D', OLD.`region`, OLD.`id` FROM DUAL WHERE NOT (OLD.`region` <=> NEW.`region` AND OLD.`id` <=> NEW.`id`)", sql);
+        Assert.Contains("UNION ALL SELECT 'U', NEW.`region`, NEW.`id`", sql);
+    }
+
+    /// <summary>One statement per trigger, so a ";" followed by a newline still splits the script.</summary>
+    [Fact]
+    public void EveryTrigger_IsOneStatement_WithNoCompoundBody()
+    {
+        var sql = MySqlTriggerAudit.CreateTriggers("db", "orders", ["id"]);
+
+        Assert.DoesNotContain("BEGIN", sql);
+        Assert.Equal(6, sql.Split(";\n", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length);
+    }
+
+    [Fact]
+    public void TheCurrentUpdateTrigger_IsRecognised_AndTheOldTextIsNot()
+    {
+        var sql = MySqlTriggerAudit.CreateTriggers("db", "orders", ["id"]);
+        var current = sql.Split(";\n").Single(s => s.Contains("AFTER UPDATE"));
+        const string old = "INSERT INTO `db`.`DS_Changes_orders` (`DS_Op`, `id`) VALUES ('U', NEW.`id`)";
+
+        Assert.True(MySqlTriggerAudit.IsCurrentUpdateTrigger(current));
+        Assert.False(MySqlTriggerAudit.IsCurrentUpdateTrigger(old));
+        Assert.False(MySqlTriggerAudit.IsCurrentUpdateTrigger(null));
+    }
 }

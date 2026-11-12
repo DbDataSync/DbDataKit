@@ -21,7 +21,7 @@ namespace DbDataSync.Drivers.Postgres.Tests;
 [Trait("Category", "Integration")]
 public sealed class TriggerAuditReaderTests(PostgresTestDatabase db) : IClassFixture<PostgresTestDatabase>, IAsyncLifetime
 {
-    private readonly TriggerAuditReader _reader = new(PostgresDialect.Instance, PostgresCatalog.Instance);
+    private readonly TriggerAuditReader _reader = new(PostgresDialect.Instance, PostgresCatalog.Instance, PostgresTriggerInstall.Instance);
     private NpgsqlConnection _connection = null!;
     private string _tableName = null!;
 
@@ -275,5 +275,180 @@ public sealed class TriggerAuditReaderTests(PostgresTestDatabase db) : IClassFix
         var deleted = Assert.Single(rows, r => r.Operation == ChangeOperation.Delete);
         Assert.Equal("south", deleted["Region"]);
         Assert.Equal(1, deleted["Id"]);
+    }
+
+    // ---- CW02a: a primary key update is a delete of the old key and the new row -------------------
+
+    private string Q => $"public.\"{_tableName}\"";
+
+    private async Task<List<ChangeRow>> ChangesSinceAsync(string start) =>
+        await CollectAsync((await ReadAsync(start)).Rows);
+
+    /// <summary>The case of the row: <c>UPDATE orders SET id = 2 WHERE id = 1</c> used to leave the row
+    /// with id 1 in the target for good.</summary>
+    [Fact]
+    public async Task AKeyUpdate_IsADeleteOfTheOldKeyAndTheNewRow()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (\"Id\", \"Name\") VALUES (1, 'Alice');");
+        var start = (await ReadAsync(null)).NewWatermark;
+
+        await ExecuteAsync($"UPDATE {Q} SET \"Id\" = 2 WHERE \"Id\" = 1;");
+
+        var rows = await ChangesSinceAsync(start);
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(ChangeOperation.Delete, Assert.Single(rows, r => (int)r["Id"]! == 1).Operation);
+        var moved = Assert.Single(rows, r => (int)r["Id"]! == 2);
+        Assert.NotEqual(ChangeOperation.Delete, moved.Operation);
+        Assert.Equal("Alice", moved["Name"]);
+    }
+
+    /// <summary>An update that leaves the key alone is still one row, never a delete beside it.</summary>
+    [Fact]
+    public async Task AnUpdateThatKeepsTheKey_IsStillOneRow()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (\"Id\", \"Name\") VALUES (1, 'Alice');");
+        var start = (await ReadAsync(null)).NewWatermark;
+
+        await ExecuteAsync($"UPDATE {Q} SET \"Name\" = 'Alicia', \"Id\" = 1 WHERE \"Id\" = 1;");
+
+        var row = Assert.Single(await ChangesSinceAsync(start));
+        Assert.Equal(ChangeOperation.Update, row.Operation);
+    }
+
+    /// <summary>Two rows swap keys in one transaction (through a free key, as a primary key requires): both
+    /// keys still exist afterwards, so neither may come out as a delete.</summary>
+    [Fact]
+    public async Task AKeySwapOfTwoRows_InOneTransaction_LeavesBothKeysAsRows()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (\"Id\", \"Name\") VALUES (1, 'one'), (2, 'two');");
+        var start = (await ReadAsync(null)).NewWatermark;
+
+        await ExecuteAsync($"""
+            BEGIN;
+            UPDATE {Q} SET "Id" = 0 WHERE "Id" = 1;
+            UPDATE {Q} SET "Id" = 1 WHERE "Id" = 2;
+            UPDATE {Q} SET "Id" = 2 WHERE "Id" = 0;
+            COMMIT;
+            """);
+
+        var rows = await ChangesSinceAsync(start);
+
+        // key 0 existed for a moment only: its last shadow row is a delete of a key the target never had.
+        Assert.Equal(ChangeOperation.Delete, Assert.Single(rows, r => (int)r["Id"]! == 0).Operation);
+        var one = Assert.Single(rows, r => (int)r["Id"]! == 1);
+        var two = Assert.Single(rows, r => (int)r["Id"]! == 2);
+        Assert.NotEqual(ChangeOperation.Delete, one.Operation);
+        Assert.NotEqual(ChangeOperation.Delete, two.Operation);
+        Assert.Equal("two", one["Name"]);
+        Assert.Equal("one", two["Name"]);
+    }
+
+    /// <summary>The key moves and the new row is updated before the pass: one row of the new key with the
+    /// final values, one delete of the old key.</summary>
+    [Fact]
+    public async Task AKeyUpdateFollowedByAnUpdateOfTheNewRow_CarriesTheFinalValues()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (\"Id\", \"Name\") VALUES (1, 'Alice');");
+        var start = (await ReadAsync(null)).NewWatermark;
+
+        await ExecuteAsync($"UPDATE {Q} SET \"Id\" = 2 WHERE \"Id\" = 1;");
+        await ExecuteAsync($"UPDATE {Q} SET \"Name\" = 'Final' WHERE \"Id\" = 2;");
+
+        var rows = await ChangesSinceAsync(start);
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(ChangeOperation.Delete, Assert.Single(rows, r => (int)r["Id"]! == 1).Operation);
+        Assert.Equal("Final", Assert.Single(rows, r => (int)r["Id"]! == 2)["Name"]);
+    }
+
+    /// <summary>A delete of the key and an insert of it again in one pass collapse to the last operation.</summary>
+    [Fact]
+    public async Task ADeleteAndAnInsertOfTheSameKey_CollapseToTheLastOperation()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (\"Id\", \"Name\") VALUES (1, 'old');");
+        var start = (await ReadAsync(null)).NewWatermark;
+
+        await ExecuteAsync($"DELETE FROM {Q} WHERE \"Id\" = 1;");
+        await ExecuteAsync($"INSERT INTO {Q} (\"Id\", \"Name\") VALUES (1, 'new');");
+
+        var row = Assert.Single(await ChangesSinceAsync(start));
+        Assert.NotEqual(ChangeOperation.Delete, row.Operation);
+        Assert.Equal("new", row["Name"]);
+    }
+
+    /// <summary>The last shadow row of a key can be a delete while the row exists (a swap inside one
+    /// statement writes the old key of one row after the new key of the other). The row is the truth.</summary>
+    [Fact]
+    public async Task ADeleteRecordWhileTheRowExists_IsReadAsTheRow()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (\"Id\", \"Name\") VALUES (5, 'here');");
+        var start = (await ReadAsync(null)).NewWatermark;
+        await ExecuteAsync(
+            $"INSERT INTO public.\"{TriggerAuditStatement.ShadowTableName(_tableName)}\" (\"DS_Op\", \"Id\") VALUES ('D', 5);");
+
+        var row = Assert.Single(await ChangesSinceAsync(start));
+
+        Assert.NotEqual(ChangeOperation.Delete, row.Operation);
+        Assert.Equal("here", row["Name"]);
+    }
+
+    // ---- CW02a: a trigger of the old text is detected, named, and replaced -------------------------
+
+    /// <summary>The function as it was before CW02a: the update branch records the new key only.</summary>
+    private Task InstallOldFunctionAsync() => ExecuteAsync($$"""
+        CREATE OR REPLACE FUNCTION public."ds_capture_{{_tableName}}"() RETURNS trigger AS $$
+        BEGIN
+            IF (TG_OP = 'DELETE') THEN
+                INSERT INTO public."DS_Changes_{{_tableName}}" ("DS_Op", "Id") VALUES ('D', OLD."Id");
+            ELSIF (TG_OP = 'UPDATE') THEN
+                INSERT INTO public."DS_Changes_{{_tableName}}" ("DS_Op", "Id") VALUES ('U', NEW."Id");
+            ELSE
+                INSERT INTO public."DS_Changes_{{_tableName}}" ("DS_Op", "Id") VALUES ('I', NEW."Id");
+            END IF;
+            RETURN NULL;
+        END;
+        $$ LANGUAGE plpgsql;
+        """);
+
+    [Fact]
+    public async Task ATriggerOfTheOldText_IsOutdated_TheCurrentOneIsCurrent_AMissingOneIsAbsent()
+    {
+        Assert.Equal(TriggerAuditInstall.Current,
+            await PostgresTriggerInstall.InspectAsync(_connection, "public", _tableName, CancellationToken.None));
+
+        await InstallOldFunctionAsync();
+        Assert.Equal(TriggerAuditInstall.Outdated,
+            await PostgresTriggerInstall.InspectAsync(_connection, "public", _tableName, CancellationToken.None));
+
+        Assert.Equal(TriggerAuditInstall.Absent,
+            await PostgresTriggerInstall.InspectAsync(_connection, "public", "no_such_table", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task APassOverATriggerOfTheOldText_FailsNamingTheTableAndTheWayOut_UntilItIsReplaced()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (\"Id\", \"Name\") VALUES (1, 'Alice');");
+        var start = (await ReadAsync(null)).NewWatermark;
+        await InstallOldFunctionAsync();
+
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => ReadAsync(start));
+        Assert.Contains(_tableName, failure.Message);
+        Assert.Contains("Enable source change capture", failure.Message);
+
+        // the provisioning plan offers exactly the replacement, then it is satisfied
+        var request = new ProvisioningRequest(
+            ProvisioningActions.EnableSourceChangeCapture,
+            new TableRef { ConnectionName = "c", Database = db.DatabaseName, Schema = "public", Table = _tableName },
+            GenericDriverKinds.TriggerAudit, new Dictionary<string, string>(), []);
+        var plan = await PostgresProvisioner.PlanAsync(_connection, request, CancellationToken.None);
+        var step = Assert.Single(plan.Steps);
+        Assert.StartsWith("Replace the change function", step.Title);
+        await ExecuteAsync(step.CommandText);
+
+        Assert.Equal(ProvisioningState.Satisfied,
+            (await PostgresProvisioner.PlanAsync(_connection, request, CancellationToken.None)).State);
+        await ExecuteAsync($"UPDATE {Q} SET \"Id\" = 2 WHERE \"Id\" = 1;");
+        Assert.Equal(2, (await ChangesSinceAsync(start)).Count);
     }
 }

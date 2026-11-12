@@ -36,12 +36,12 @@ public sealed class WorkspaceKindsTests
         Assert.Equal(WorkspaceModule.ProjectKinds.Count, kinds.Count);
         Assert.False((bool)app["produces"]!);
         // what a kind makes to publish, and where it goes (plan 33 SC20d, SC21b, SC22c)
-        foreach (var (name, product, what) in new[] { ("build", "runner", "package"), ("sync", "runner", "package"), ("store", "gateway", "model") })
+        foreach (var (name, product, what) in new[] { ("build", "runner", "package"), ("build", "gateway", "semantic-model"), ("sync", "runner", "package"), ("store", "gateway", "model"), ("integration", "runner", "package") })
         {
             var kind = kinds.Single(k => (string)k!["name"]! == name)!;
             Assert.True((bool)kind["produces"]!, name);
             Assert.False((bool)kind["buildable"]!, name);
-            Assert.Equal((product, what), ((string)kind["publishes"]![0]!["product"]!, (string)kind["publishes"]![0]!["what"]!));
+            Assert.Contains(kind["publishes"]!.AsArray(), p => (string)p!["product"]! == product && (string)p["what"]! == what);
         }
     }
 

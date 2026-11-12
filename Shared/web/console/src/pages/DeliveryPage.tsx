@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { ConsoleShell } from '../ConsoleShell'
+import { BindingsPanel } from './BindingsPage'
 import {
-  bindingProblem, buildRequest, channelProblem, deliveryApi, describeSchedule, emptyForm, formFromSubscription, isChannelName, isReleaseName, mappingBody, mappingOf, mappingProblem, outboxLine, sameMapping, sendNowBlockedReason, statusWord, subscriptionProblem,
-  subscriptionStatusWord, type ChannelMapping, type DeliveryChannel, type DeliveryConnection, type DeliveryMessage, type DeliveryOverview, type Subscription, type SubscriptionForm,
+  buildRequest, channelProblem, deliveryApi, describeSchedule, emptyForm, formFromSubscription, outboxLine, sendNowBlockedReason, statusWord, subscriptionProblem,
+  subscriptionStatusWord, type DeliveryMessage, type DeliveryOverview, type Subscription, type SubscriptionForm,
 } from '../delivery'
 
 type Tab = 'channels' | 'subscriptions' | 'history'
@@ -47,140 +48,19 @@ export function DeliveryPage() {
 // ---- channels ----
 
 /**
- * The channels (plan 22a GP18, folded into connections): each delivery channel name and, per release channel (prod, test, dev, ...), the connection it uses, with its readiness, a Test send through that connection (a message clearly marked as a test) and, for an administrator,
- * the mapping itself. A release channel with no entry has no channel: it never uses another release channel's connection, so a test cannot notify production's. The address of a connection is never shown, only its template.
+ * The channels (plan 22a GP18, folded into connections, then into bindings by plan 27a IX23): which connection each delivery channel name uses in each release channel is a binding, shown and edited by the one Bindings panel (with the Test send through a
+ * release channel's connection); this tab adds what only delivery knows, the outbox of each channel and the retry policy. A release channel with no entry has no channel, so a test cannot notify production's.
  */
 function ChannelsTab({ overview }: { overview: DeliveryOverview }) {
-  const client = useQueryClient()
-  const isAdmin = useIsAdmin()
-  const server = useMemo(() => mappingOf(overview.channels), [overview.channels])
-  const [draft, setDraft] = useState<ChannelMapping | null>(null)
-  const [recipients, setRecipients] = useState<Record<string, string>>({})
-  const [newChannel, setNewChannel] = useState('')
-  const [newRelease, setNewRelease] = useState<Record<string, string>>({})
-  const [tested, setTested] = useState<{ key: string; message: DeliveryMessage; connection: string } | null>(null)
-  const mapping = draft ?? server
-  const dirty = draft !== null && !sameMapping(draft, server)
-  const limits = useMemo(() => Object.fromEntries(overview.channels.map((c) => [c.name, c.limitPerMinute])), [overview.channels])
-  const change = (next: ChannelMapping) => setDraft(next)
-  const test = useMutation({
-    mutationFn: (v: { channel: string; release: string }) => deliveryApi.test(v.channel, recipients[v.channel] ?? '', v.release),
-    onSuccess: (a, v) => setTested({ key: `${v.channel}/${v.release}`, message: a.message, connection: a.connection }),
-    onSettled: () => void client.invalidateQueries({ queryKey: ['delivery'] }),
-  })
-  const save = useMutation({
-    mutationFn: () => deliveryApi.saveChannels(mappingBody(mapping, limits)),
-    onSuccess: () => { setDraft(null); void client.invalidateQueries({ queryKey: ['delivery'] }) },
-  })
-  const problem = draft ? mappingProblem(draft) : null
-  const connectionOptions = (current: string) => (overview.connections.some((c) => c.name === current) || current === '' ? overview.connections : [...overview.connections, { name: current, kind: '?', target: null }])
   return (
     <div data-testid="delivery-channels">
-      <div className="hint" style={{ marginBottom: 8 }} data-testid="delivery-release-note">
-        A channel name is bound to a connection <strong>per release channel</strong> ({overview.releaseChannels.join(', ')}). A test message goes to the sandbox connection of the test channel and never to production&apos;s; a release channel with no entry has no channel.
-        Connections (mail servers and webhooks) are kept on the <a href="/connections">Connections page</a>; a webhook&apos;s address is shown there as its template.
-      </div>
-      {overview.channels.length === 0 && (
-        <div className="empty" data-testid="delivery-no-channels">
-          No channel is set up. {isAdmin ? 'Name one below and choose its connection' : 'An administrator names a channel and chooses its connection'}
-          {overview.connections.length === 0 ? ' (there is no connection to a mail server or webhook yet: make one on the Connections page, from the smtp or a webhook template)' : ''}.
-        </div>
-      )}
+      <BindingsPanel kinds={['delivery']} showRunner={false} showFile={false} />
       {overview.channels.map((c) => (
-        <ChannelCard key={c.name} channel={c} releases={mapping[c.name] ?? {}} isAdmin={isAdmin} connections={connectionOptions} recipient={recipients[c.name] ?? ''} setRecipient={(v) => setRecipients({ ...recipients, [c.name]: v })}
-          testing={test.isPending ? test.variables : undefined} onTest={(release) => test.mutate({ channel: c.name, release })} result={tested && tested.key.startsWith(`${c.name}/`) ? tested : null}
-          newRelease={newRelease[c.name] ?? ''} setNewRelease={(v) => setNewRelease({ ...newRelease, [c.name]: v })}
-          onChange={(releases) => change({ ...mapping, [c.name]: releases })} onRemove={() => { const { [c.name]: _gone, ...rest } = mapping; change(rest) }} dirty={dirty} />
-      ))}
-      {Object.keys(mapping).filter((n) => !overview.channels.some((c) => c.name === n)).map((n) => (
-        <div key={n} className="card" style={{ marginBottom: 12 }} data-testid="delivery-channel-new" data-channel={n}>
-          <div className="card-body"><strong>{n}</strong> <span className="hint">new, not saved yet: {Object.entries(mapping[n]).map(([r, x]) => `${r} uses ${x}`).join(', ')}</span></div>
+        <div key={c.name} className="hint" data-testid={`delivery-outbox-${c.name}`} data-ready={c.ready}>
+          <strong>{c.name}</strong> ({c.kind}{c.limitPerMinute ? `, at most ${c.limitPerMinute} a minute` : ''}): {c.ready ? 'ready' : channelProblem(c) ?? 'cannot be used'}. Outbox: {outboxLine(c.outbox)}
         </div>
       ))}
-      {isAdmin && (
-        <form className="row" style={{ gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 8 }} onSubmit={(e) => { e.preventDefault(); if (isChannelName(newChannel) && !(newChannel in mapping) && overview.connections[0]) { change({ ...mapping, [newChannel]: { prod: overview.connections[0].name } }); setNewChannel('') } }} data-testid="delivery-channel-add">
-          <input className="input mono" placeholder="a new channel's name, such as alerts" value={newChannel} onChange={(e) => setNewChannel(e.target.value)} data-testid="delivery-channel-add-name" />
-          <button type="submit" className="btn btn-sm" disabled={!isChannelName(newChannel) || newChannel in mapping || overview.connections.length === 0} data-testid="delivery-channel-add-button">Add a channel (production uses the first connection; change it below)</button>
-        </form>
-      )}
-      {isAdmin && (draft !== null || save.isError) && (
-        <div className="row" style={{ gap: 8, marginTop: 12, alignItems: 'center' }} data-testid="delivery-bindings-actions">
-          <button type="button" className="btn btn-sm btn-primary" disabled={!dirty || problem !== null || save.isPending} onClick={() => save.mutate()} data-testid="delivery-bindings-save">{save.isPending ? 'Saving…' : 'Save the channels'}</button>
-          <button type="button" className="btn btn-sm" onClick={() => { setDraft(null); save.reset() }} data-testid="delivery-bindings-discard">Discard changes</button>
-          {problem && <span className="error" data-testid="delivery-bindings-problem">{problem}</span>}
-        </div>
-      )}
-      <ErrorBanner error={test.error ?? save.error} />
       {overview.channels.length > 0 && <div className="hint" style={{ marginTop: 8 }}>Messages are tried up to {overview.policy.maxAttempts} times, waiting {overview.policy.backoffSeconds.join(', ')} seconds between tries; then they are parked as failed (History) until an administrator sends them again.</div>}
-    </div>
-  )
-}
-
-function ChannelCard(props: {
-  channel: DeliveryChannel; releases: Record<string, string>; isAdmin: boolean; connections: (current: string) => DeliveryConnection[]; recipient: string; setRecipient: (v: string) => void
-  testing: { channel: string; release: string } | undefined; onTest: (release: string) => void; result: { key: string; message: DeliveryMessage; connection: string } | null
-  newRelease: string; setNewRelease: (v: string) => void; onChange: (releases: Record<string, string>) => void; onRemove: () => void; dirty: boolean
-}) {
-  const { channel: c, releases, isAdmin, recipient, setRecipient, testing, onTest, result, newRelease, setNewRelease, onChange, onRemove, dirty } = props
-  const problem = channelProblem(c)
-  const byRelease = Object.fromEntries(c.bindings.map((b) => [b.release, b]))
-  const shown = Object.keys(releases)
-  return (
-    <div className="card" style={{ marginBottom: 12 }} data-testid="delivery-channel" data-channel={c.name} data-ready={c.ready}>
-      <div className="card-body">
-        <strong>{c.name}</strong> <span className="hint">{c.kind}{c.limitPerMinute ? `, at most ${c.limitPerMinute} a minute` : ''}</span>{' '}
-        <span data-testid={`delivery-ready-${c.name}`} className={c.ready ? 'hint' : 'error'}>{c.ready ? 'ready' : 'cannot be used'}</span>
-        {problem && <div className="error" data-testid={`delivery-missing-${c.name}`}>{problem}</div>}
-        <table className="table" style={{ margin: '8px 0', width: '100%' }} data-testid={`delivery-bindings-${c.name}`}>
-          <thead><tr><th>Release channel</th><th>Connection</th><th>Reaches</th><th /></tr></thead>
-          <tbody>
-            {shown.map((release) => {
-              const b = byRelease[release]
-              const saved = b !== undefined && b.connection === releases[release]
-              const why = saved ? bindingProblem(b) : null
-              return (
-                <tr key={release} data-testid={`delivery-binding-${c.name}-${release}`} data-release={release} data-connection={releases[release]} data-ready={saved ? b.ready : ''}>
-                  <td className="mono">{release === '*' ? '* (every other)' : release}</td>
-                  <td>
-                    {isAdmin
-                      ? <select className="input" value={releases[release]} onChange={(e) => onChange({ ...releases, [release]: e.target.value })} data-testid={`delivery-binding-select-${c.name}-${release}`}>
-                        {props.connections(releases[release]).map((x) => <option key={x.name} value={x.name}>{x.name} ({x.kind})</option>)}
-                      </select>
-                      : <span className="mono">{releases[release]}</span>}
-                  </td>
-                  <td data-testid={`delivery-binding-target-${c.name}-${release}`}>
-                    {saved ? <><span className="mono">{b.target ?? ''}</span>{' '}<span className={b.ready ? 'hint' : 'error'}>{b.ready ? 'ready' : why}</span></> : <span className="hint">{b ? 'changed, not saved yet' : 'new, not saved yet'}</span>}
-                  </td>
-                  <td className="row" style={{ gap: 6 }}>
-                    {isAdmin && (
-                      <button type="button" className="btn btn-sm" disabled={testing !== undefined || !saved || !b.ready || dirty} title={dirty ? 'Save the channels first' : why ?? 'Sends a message marked as a test through this connection'} onClick={() => onTest(release)}
-                        data-testid={release === 'prod' ? `delivery-test-${c.name}` : `delivery-test-${c.name}-${release}`}>
-                        {testing?.channel === c.name && testing.release === release ? 'Sending…' : 'Test send'}
-                      </button>
-                    )}
-                    {isAdmin && <button type="button" className="btn btn-sm" onClick={() => { const { [release]: _gone, ...rest } = releases; onChange(rest) }} data-testid={`delivery-binding-remove-${c.name}-${release}`}>Remove</button>}
-                  </td>
-                </tr>
-              )
-            })}
-            {shown.length === 0 && <tr><td colSpan={4} className="hint">No release channel is bound: nothing can be sent through this name.</td></tr>}
-          </tbody>
-        </table>
-        {isAdmin && (
-          <form className="row" style={{ gap: 8, alignItems: 'center' }} onSubmit={(e) => { e.preventDefault(); const first = props.connections('')[0]; if (isReleaseName(newRelease) && !(newRelease in releases) && first) { onChange({ ...releases, [newRelease]: first.name }); setNewRelease('') } }}>
-            <input className="input mono" placeholder="bind another release channel: test, dev, ..." value={newRelease} onChange={(e) => setNewRelease(e.target.value)} data-testid={`delivery-binding-new-${c.name}`} />
-            <button type="submit" className="btn btn-sm" disabled={!isReleaseName(newRelease) || newRelease in releases} data-testid={`delivery-binding-add-${c.name}`}>Bind</button>
-            <button type="button" className="btn btn-sm" onClick={onRemove} data-testid={`delivery-channel-remove-${c.name}`}>Remove the channel</button>
-          </form>
-        )}
-        <div className="hint" data-testid={`delivery-outbox-${c.name}`}>Outbox: {outboxLine(c.outbox)}</div>
-        {isAdmin && c.kind === 'email' && <input className="input" style={{ marginTop: 8 }} placeholder="test mail goes to (default: your address)" value={recipient} onChange={(e) => setRecipient(e.target.value)} data-testid={`delivery-test-to-${c.name}`} />}
-        {result && (
-          <div className={result.message.status === 'sent' ? 'hint' : 'error'} role="status" data-testid={`delivery-test-result-${c.name}`} data-status={result.message.status} data-connection={result.connection}>
-            Test through {result.connection} ({result.message.releaseChannel ?? 'prod'}): {statusWord(result.message.status)}{result.message.lastDetail ? `: ${result.message.lastDetail}` : ''}
-          </div>
-        )}
-      </div>
     </div>
   )
 }

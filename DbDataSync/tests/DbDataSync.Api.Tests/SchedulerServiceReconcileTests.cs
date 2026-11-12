@@ -205,6 +205,27 @@ public sealed class SchedulerServiceReconcileTests(TestApiFactory factory) : ICl
         Assert.Equal(1, ReconcileRunCount(replicationName, "orders"));
     }
 
+    /// <summary>Plan 28c CW02b: a sweep every N passes on the real scheduler and stores: no cadence, passes that read nothing count, one sweep at N and the count restarts at it.</summary>
+    [Fact]
+    public async Task AfterEveryPasses_QueuesOneSweepAtTheNthPass_AndCountsAgainFromIt()
+    {
+        var replicationName = await SetUpMappingAsync(new ReconcileConfig { Enabled = true, AfterEveryPasses = 3 });
+
+        RecordPrimaryPass(replicationName, "orders", rowsRead: 0);
+        RecordPrimaryPass(replicationName, "orders", rowsRead: 0);
+        await TickAsync(BuildScheduler());
+        Assert.Equal(0, ReconcileRunCount(replicationName, "orders"));      // two passes: not yet
+
+        RecordPrimaryPass(replicationName, "orders", rowsRead: 0);
+        await TickAsync(BuildScheduler());
+        Assert.Equal(1, ReconcileRunCount(replicationName, "orders"));      // the third
+
+        // the sweep's own enqueue is the new cutoff: nothing more is due until three more passes
+        RecordPrimaryPass(replicationName, "orders", rowsRead: 0);
+        await TickAsync(BuildScheduler());
+        Assert.Equal(1, ReconcileRunCount(replicationName, "orders"));
+    }
+
     [Fact]
     public async Task ASweepAlreadyInFlight_IsNotDuplicated()
     {

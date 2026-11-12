@@ -20,11 +20,11 @@ public sealed class ConnectionFormat2Tests
     public void Format_1_is_read_as_before_and_format_2_is_the_newest()
     {
         Assert.Equal(2, ConnectionDefinition.CurrentVersion);
-        var one = ConnectionDefinitionLoader.Load(File(1));
+        var one = ConnectionDefinitionLoader.LoadDatabaseConnection(File(1));
         Assert.True(one.Ok, string.Join("\n", one.Diagnostics));
         Assert.Equal(1, one.Definition!.SchemaVersion);
         Assert.Null(one.Definition.Cache);
-        var two = ConnectionDefinitionLoader.Load(File(2));
+        var two = ConnectionDefinitionLoader.LoadDatabaseConnection(File(2));
         Assert.True(two.Ok, string.Join("\n", two.Diagnostics));
         Assert.Equal(2, two.Definition!.SchemaVersion);
         Assert.Equal(1, ConnectionDefinitionLoader.FormatOfText(File(1)));
@@ -39,7 +39,7 @@ public sealed class ConnectionFormat2Tests
         Assert.Equal("connection/2", ConnectionDefinition.CurrentSchemaId);
         var current = ConnectionDefinitionLoader.WithCurrentVersion("# kept\n" + File(1));
         Assert.StartsWith("# kept\nschema: connection/2\n", current);
-        var loaded = ConnectionDefinitionLoader.Load(current);
+        var loaded = ConnectionDefinitionLoader.LoadDatabaseConnection(current);
         Assert.True(loaded.Ok, string.Join("\n", loaded.Diagnostics));
         Assert.Equal(2, loaded.Definition!.SchemaVersion);
         Assert.Equal(current, ConnectionDefinitionLoader.WithCurrentVersion(current));
@@ -47,7 +47,7 @@ public sealed class ConnectionFormat2Tests
 
         foreach (var outside in new[] { 0, 3 })
         {
-            var refused = ConnectionDefinitionLoader.Load(File(outside), "warehouse.yaml");
+            var refused = ConnectionDefinitionLoader.LoadDatabaseConnection(File(outside), "warehouse.yaml");
             Assert.False(refused.Ok);
             Assert.Contains(refused.Diagnostics, d => d.Path == "warehouse.yaml");
         }
@@ -56,7 +56,7 @@ public sealed class ConnectionFormat2Tests
     [Fact]
     public void Each_key_of_the_cache_section_loads_and_the_checks_have_their_place()
     {
-        var result = ConnectionDefinitionLoader.Load(File(2, "cache: { enabled: true, ttl: 2h, scope: shared, dataset: dbo.orders }\nchecks:\n  - { id: orders_fresh, kind: freshness, dataset: dbo.orders, max_age: 6h }\n  - { id: fk, kind: referential, dataset: dbo.orders, column: customer_id, references: { dataset: dbo.customers, column: id } }\n  - { id: st, kind: accepted_values, dataset: dbo.orders, column: status, values: [open, shipped] }"));
+        var result = ConnectionDefinitionLoader.LoadDatabaseConnection(File(2, "cache: { enabled: true, ttl: 2h, scope: shared, dataset: dbo.orders }\nchecks:\n  - { id: orders_fresh, kind: freshness, dataset: dbo.orders, max_age: 6h }\n  - { id: fk, kind: referential, dataset: dbo.orders, column: customer_id, references: { dataset: dbo.customers, column: id } }\n  - { id: st, kind: accepted_values, dataset: dbo.orders, column: status, values: [open, shipped] }"));
         Assert.True(result.Ok, string.Join("\n", result.Diagnostics));
         var cache = result.Definition!.Cache!;
         Assert.Equal((true, "2h", "shared", "dbo.orders"), (cache.Enabled, cache.Ttl, cache.Scope, cache.Dataset));
@@ -69,7 +69,7 @@ public sealed class ConnectionFormat2Tests
     [Fact]
     public void A_format_1_file_with_a_section_of_format_2_is_refused_naming_the_file_and_the_line()
     {
-        var result = ConnectionDefinitionLoader.Load(File(1, "cache: { enabled: true }\nchecks: []"), "warehouse.yaml");
+        var result = ConnectionDefinitionLoader.LoadDatabaseConnection(File(1, "cache: { enabled: true }\nchecks: []"), "warehouse.yaml");
         var errors = result.Diagnostics.Where(d => d.Severity == ConfigSeverity.Error).ToList();
         Assert.False(result.Ok);
         Assert.Equal([ConnectionDefinitionLoader.SectionNotInThisFormat, ConnectionDefinitionLoader.SectionNotInThisFormat], errors.Select(e => e.Code));
@@ -85,7 +85,7 @@ public sealed class ConnectionFormat2Tests
     [InlineData("checks:\n  - { id: a, kind: not_null, dataset: t, column: c, severity: high }", 6, "`severity` is `high`")]
     public void Each_bad_check_is_refused_with_file_and_line(string extra, int line, string says)
     {
-        var result = ConnectionDefinitionLoader.Load(File(2, extra), "warehouse.yaml");
+        var result = ConnectionDefinitionLoader.LoadDatabaseConnection(File(2, extra), "warehouse.yaml");
         Assert.False(result.Ok);
         var error = Assert.Single(result.Diagnostics, d => d.Severity == ConfigSeverity.Error);
         Assert.Equal(("warehouse.yaml", line), (error.Path, error.Line));
@@ -98,7 +98,7 @@ public sealed class ConnectionFormat2Tests
     [InlineData("cache: { ttl: soon }", "ttl")]
     public void Each_bad_value_is_refused_with_file_and_line(string extra, string says)
     {
-        var result = ConnectionDefinitionLoader.Load(File(2, extra), "warehouse.yaml");
+        var result = ConnectionDefinitionLoader.LoadDatabaseConnection(File(2, extra), "warehouse.yaml");
         Assert.False(result.Ok);
         var error = result.Diagnostics.First(d => d.Severity == ConfigSeverity.Error);
         Assert.Equal(("warehouse.yaml", 5), (error.Path, error.Line));
@@ -110,21 +110,21 @@ public sealed class ConnectionFormat2Tests
     {
         // no server, no database, no connection string: nothing to key the expiry on a data change by
         var secretOnly = "connection_string_secret: \"env:DW\"";
-        var refused = ConnectionDefinitionLoader.Load(File(2, "cache: { enabled: true }", address: secretOnly), "warehouse.yaml");
+        var refused = ConnectionDefinitionLoader.LoadDatabaseConnection(File(2, "cache: { enabled: true }", address: secretOnly), "warehouse.yaml");
         var error = Assert.Single(refused.Diagnostics, d => d.Severity == ConfigSeverity.Error);
         Assert.Equal(ConnectionDefinitionLoader.CannotBeCached, error.Code);
         Assert.Contains("lineage identity", error.Message);
         Assert.Equal(("warehouse.yaml", 5), (error.Path, error.Line));
 
-        Assert.True(ConnectionDefinitionLoader.Load(File(2, "cache: { enabled: false }", address: secretOnly)).Ok);
-        Assert.True(ConnectionDefinitionLoader.Load(File(2, "cache: { enabled: true }", address: "connection_string: \"Server=db1;Database=dw\"")).Ok);
-        Assert.True(ConnectionDefinitionLoader.Load(File(2, "cache: { enabled: true }", address: "address: { database: dw.duckdb }")).Ok);
+        Assert.True(ConnectionDefinitionLoader.LoadDatabaseConnection(File(2, "cache: { enabled: false }", address: secretOnly)).Ok);
+        Assert.True(ConnectionDefinitionLoader.LoadDatabaseConnection(File(2, "cache: { enabled: true }", address: "connection_string: \"Server=db1;Database=dw\"")).Ok);
+        Assert.True(ConnectionDefinitionLoader.LoadDatabaseConnection(File(2, "cache: { enabled: true }", address: "address: { database: dw.duckdb }")).Ok);
     }
 
     [Fact]
     public void A_file_of_a_newer_format_is_refused_by_its_version()
     {
-        var result = ConnectionDefinitionLoader.Load(File(3), "warehouse.yaml");
+        var result = ConnectionDefinitionLoader.LoadDatabaseConnection(File(3), "warehouse.yaml");
         var error = Assert.Single(result.Diagnostics);
         Assert.Equal(SharedCodes.SchemaVersionNewer, error.Code);
         Assert.Equal(("warehouse.yaml", 1), (error.Path, error.Line));

@@ -16,7 +16,7 @@ namespace DbDataSync.Drivers.Oracle.Tests;
 [Trait("Category", "Integration")]
 public sealed class TriggerAuditReaderTests(OracleTestDatabase db) : IClassFixture<OracleTestDatabase>, IAsyncLifetime
 {
-    private readonly TriggerAuditReader _reader = new(OracleDialect.Instance, OracleCatalog.Instance);
+    private readonly TriggerAuditReader _reader = new(OracleDialect.Instance, OracleCatalog.Instance, OracleTriggerInstall.Instance);
     private readonly List<string> _tablesToDrop = [];
     private OracleConnection _connection = null!;
     private string _tableName = null!;
@@ -259,5 +259,105 @@ public sealed class TriggerAuditReaderTests(OracleTestDatabase db) : IClassFixtu
         var deleted = Assert.Single(rows, r => r.Operation == ChangeOperation.Delete);
         Assert.Equal("south", deleted["Region"]);
         Assert.Equal(1m, Convert.ToDecimal(deleted["Id"]));
+    }
+
+    // ---- CW02a: a primary key update is a delete of the old key and the new row -------------------
+
+    private string Q => $"\"{_tableName}\"";
+
+    private async Task<List<ChangeRow>> ChangesSinceAsync(string start) =>
+        await CollectAsync((await ReadAsync(start)).Rows);
+
+    private static int Id(ChangeRow row) => Convert.ToInt32(row["Id"]);
+
+    [Fact]
+    public async Task AKeyUpdate_IsADeleteOfTheOldKeyAndTheNewRow()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (\"Id\", \"Name\") VALUES (1, 'Alice')");
+        var start = (await ReadAsync(null)).NewWatermark;
+
+        await ExecuteAsync($"UPDATE {Q} SET \"Id\" = 2 WHERE \"Id\" = 1");
+
+        var rows = await ChangesSinceAsync(start);
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(ChangeOperation.Delete, Assert.Single(rows, r => Id(r) == 1).Operation);
+        var moved = Assert.Single(rows, r => Id(r) == 2);
+        Assert.NotEqual(ChangeOperation.Delete, moved.Operation);
+        Assert.Equal("Alice", moved["Name"]);
+    }
+
+    [Fact]
+    public async Task AnUpdateThatKeepsTheKey_IsStillOneRow()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (\"Id\", \"Name\") VALUES (1, 'Alice')");
+        var start = (await ReadAsync(null)).NewWatermark;
+
+        await ExecuteAsync($"UPDATE {Q} SET \"Name\" = 'Alicia' WHERE \"Id\" = 1");
+
+        var row = Assert.Single(await ChangesSinceAsync(start));
+        Assert.Equal(ChangeOperation.Update, row.Operation);
+    }
+
+    [Fact]
+    public async Task AKeyUpdateFollowedByAnUpdateOfTheNewRow_CarriesTheFinalValues()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (\"Id\", \"Name\") VALUES (1, 'Alice')");
+        var start = (await ReadAsync(null)).NewWatermark;
+
+        await ExecuteAsync($"UPDATE {Q} SET \"Id\" = 2 WHERE \"Id\" = 1");
+        await ExecuteAsync($"UPDATE {Q} SET \"Name\" = 'Final' WHERE \"Id\" = 2");
+
+        var rows = await ChangesSinceAsync(start);
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(ChangeOperation.Delete, Assert.Single(rows, r => Id(r) == 1).Operation);
+        Assert.Equal("Final", Assert.Single(rows, r => Id(r) == 2)["Name"]);
+    }
+
+    /// <summary>The trigger as it was before CW02a: the update branch records the new key only.</summary>
+    private Task InstallOldTriggerAsync() => ExecuteAsync($"""
+        CREATE OR REPLACE TRIGGER "{db.SchemaName}"."{OracleTriggerAudit.TriggerName(_tableName)}"
+        AFTER INSERT OR UPDATE OR DELETE ON "{db.SchemaName}"."{_tableName}"
+        FOR EACH ROW
+        BEGIN
+            IF INSERTING THEN
+                INSERT INTO "{db.SchemaName}"."DS_Changes_{_tableName}" ("DS_Op", "Id") VALUES ('I', :NEW."Id");
+            ELSIF UPDATING THEN
+                INSERT INTO "{db.SchemaName}"."DS_Changes_{_tableName}" ("DS_Op", "Id") VALUES ('U', :NEW."Id");
+            ELSE
+                INSERT INTO "{db.SchemaName}"."DS_Changes_{_tableName}" ("DS_Op", "Id") VALUES ('D', :OLD."Id");
+            END IF;
+        END;
+        """);
+
+    [Fact]
+    public async Task ATriggerOfTheOldText_IsOutdated_TheCurrentOneIsCurrent_AMissingOneIsAbsent()
+    {
+        Assert.Equal(TriggerAuditInstall.Current,
+            await OracleTriggerInstall.InspectAsync(_connection, db.SchemaName, _tableName, CancellationToken.None));
+
+        await InstallOldTriggerAsync();
+        Assert.Equal(TriggerAuditInstall.Outdated,
+            await OracleTriggerInstall.InspectAsync(_connection, db.SchemaName, _tableName, CancellationToken.None));
+
+        Assert.Equal(TriggerAuditInstall.Absent,
+            await OracleTriggerInstall.InspectAsync(_connection, db.SchemaName, "NO_SUCH_TABLE", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task APassOverATriggerOfTheOldText_FailsNamingTheTableAndTheWayOut()
+    {
+        await ExecuteAsync($"INSERT INTO {Q} (\"Id\", \"Name\") VALUES (1, 'Alice')");
+        var start = (await ReadAsync(null)).NewWatermark;
+        await InstallOldTriggerAsync();
+
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => ReadAsync(start));
+        Assert.Contains(_tableName, failure.Message);
+        Assert.Contains("Enable source change capture", failure.Message);
+
+        await ExecuteAsync(OracleTriggerAudit.CreateTrigger(db.SchemaName, _tableName, ["Id"]));
+        await ExecuteAsync($"UPDATE {Q} SET \"Id\" = 2 WHERE \"Id\" = 1");
+        Assert.Equal(2, (await ChangesSinceAsync(start)).Count);
     }
 }

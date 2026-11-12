@@ -36,7 +36,7 @@ internal static class GatewayConnectionFile
             return;
         }
 
-        var loaded = ConnectionDefinitionLoader.Load(text, path);
+        var loaded = ConnectionDefinitionLoader.LoadDatabaseConnection(text, path);
         diags.AddRange(loaded.Diagnostics);
         if (!loaded.Ok) return;
         var definition = loaded.Definition!;

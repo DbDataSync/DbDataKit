@@ -16,13 +16,13 @@ namespace DbDataGateway.Server.Management;
 /// name of the call, and its data source is one of this server's (for a publishing client, one it made); <c>GET</c> lists and reads, <c>DELETE</c> stops serving it. Every instance of the group serves what is published
 /// (<see cref="PublishedEntityModels"/>). The structure stays the store's server's to change: it publishes the model its tables have.
 /// </summary>
-public sealed partial class GatewayEntityModels(PublishedEntityModels models, Func<GatewayOptions> options, Func<string, string?> ownerOfDataSource, IAuditLog audit, TimeProvider? clock = null)
+public sealed partial class GatewayEntityModels(PublishedEntityModels models, Func<GatewayOptions> options, Func<string, string?> ownerOfDataSource, IAuditLog audit, TimeProvider? clock = null, DataSourceAdoptions? adoptions = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly SemaphoreSlim _publishing = new(1, 1);
 
-    private sealed record PublishRequest(string? Model, [property: JsonPropertyName("data_source")] string? DataSource, [property: JsonPropertyName("expected_version")] int? ExpectedVersion);
+    private sealed record PublishRequest(string? Model, [property: JsonPropertyName("data_source")] string? DataSource, [property: JsonPropertyName("expected_version")] int? ExpectedVersion, string? Adopt = null);
 
     public async Task<ManagementResult> HandleAsync(string method, string[] rest, string? body, ManagementCaller caller, CancellationToken cancellationToken)
     {
@@ -111,8 +111,24 @@ public sealed partial class GatewayEntityModels(PublishedEntityModels models, Fu
             if (!options().DataSources.ContainsKey(dataSource))
                 return Refused(caller, name, $"'{dataSource}' is not a data source of this server; publish the data source the model's tables are on first.");
             var client = Client(caller);
+            var adopting = false;
             if (client is not null && ownerOfDataSource(dataSource) != client)
-                return Refused(caller, name, $"'{dataSource}' is not a data source this client made; a publishing client's models are on its own data sources.");
+            {
+                // plan 33 SC21f: a data source made by hand (nothing manages it) may carry this client's model when the request says so by name, and the Gateway records who, when and which; one another client made never
+                var owner = ownerOfDataSource(dataSource);
+                var madeBy = string.IsNullOrEmpty(owner) ? "by hand or by an administrator" : "by another server client";
+                if (!string.IsNullOrEmpty(owner))
+                    return Refused(caller, name, $"'{dataSource}' is not a data source this client made: it was made {madeBy}, and a publishing client does not take over another client's data source; ask an administrator to hand it over.");
+                if (!string.Equals(request.Adopt, dataSource, StringComparison.Ordinal))
+                {
+                    var hint = new JsonObject { ["data_source"] = dataSource, ["made_by"] = "hand", ["publish_adopt"] = true, ["field"] = "adopt" };
+                    return Refused(caller, name, $"'{dataSource}' is not a data source this client made: it was made {madeBy}. Publish again with \"adopt\": \"{dataSource}\" to put the model on it; the Gateway records who adopted it and when, in its audit and in the data source's metadata.",
+                        extra: hint);
+                }
+                if (OwnerScope.AuthorizePublishingOver(caller.Token!, new ManagedObject(null)) is { Allowed: false } denied)
+                    return Refused(caller, name, denied.Reason ?? $"This client may not put a model on '{dataSource}'.");
+                adopting = true;
+            }
 
             var was = models.Current(name)?.Version;
             // a publishing client's model is its own; one an administrator changes keeps the owner it had
@@ -127,7 +143,13 @@ public sealed partial class GatewayEntityModels(PublishedEntityModels models, Fu
             }
             var unchanged = was == version.Version;
             Record(caller, "entity-model publish", name, created ? "created" : unchanged ? "unchanged" : "changed");
-            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["version"] = version.Version, ["created"] = created, ["unchanged"] = unchanged });
+            if (adopting)
+            {
+                var at = _clock.GetUtcNow();
+                adoptions?.Record(dataSource, client!, Who(caller), name, "entity-model", at);
+                Record(caller, "data-source adopt", dataSource, $"adopted by {client} ({Who(caller)}) for the model {name}");
+            }
+            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["version"] = version.Version, ["created"] = created, ["unchanged"] = unchanged, ["adopted"] = adopting ? dataSource : null });
         }
         finally { _publishing.Release(); }
     }
@@ -145,11 +167,12 @@ public sealed partial class GatewayEntityModels(PublishedEntityModels models, Fu
 
     private string Who(ManagementCaller caller) { var entry = caller.Audit("", null, "", _clock.GetUtcNow()); return entry.UserName ?? entry.UserId; }
 
-    private ManagementResult Refused(ManagementCaller caller, string name, string error, JsonArray? diagnostics = null)
+    private ManagementResult Refused(ManagementCaller caller, string name, string error, JsonArray? diagnostics = null, JsonObject? extra = null)
     {
         Record(caller, "entity-model publish", name, "invalid");
         var body = new JsonObject { ["error"] = error, ["valid"] = false };
         if (diagnostics is not null) body["diagnostics"] = diagnostics;
+        if (extra is not null) body["adopt"] = extra;
         return new ManagementResult(400, body);
     }
 

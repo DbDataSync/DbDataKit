@@ -57,8 +57,11 @@ public sealed class RunnerBindingTestTests
             Environment.SetEnvironmentVariable(Variable, Password);
             var (status, fine) = await h.CallAsync(HttpMethod.Post, path, ServerRole.Admin, body);
             Assert.Equal(HttpStatusCode.OK, status);
-            Assert.True((bool)fine!["ok"]!);
+            // the login resolves, and the connect step is tried: nothing listens at `fake`, so it says the class of the failure, in fixed words, and no value
+            Assert.False((bool)fine!["ok"]!);
+            Assert.Equal("connect", (string)fine["step"]!);
             Assert.False((bool)fine["connected"]!);
+            Assert.DoesNotContain("fake", (string)fine["message"]!);
             Assert.DoesNotContain(Password, fine.ToJsonString());
             Assert.DoesNotContain(Password, string.Join('\n', h.Log));
             Assert.Equal(3, h.Audit.Read(new AuditQuery(VerbPrefix: RunnerBindingTestApi.Verb)).Count);
@@ -81,5 +84,43 @@ public sealed class RunnerBindingTestTests
         Assert.Equal(HttpStatusCode.BadRequest, (await h.CallAsync(HttpMethod.Post, path, ServerRole.Admin, new { })).Status);
         Assert.Equal(HttpStatusCode.Forbidden, (await h.CallAsync(HttpMethod.Post, path, ServerRole.Operator, new { slot = "source" })).Status);
         Assert.Contains(h.Audit.Read(new AuditQuery(VerbPrefix: RunnerBindingTestApi.Verb)), e => e.Entry.Outcome == AuditEvent.Refused);
+    }
+
+    /// <summary>UI08, the connect step on a real SQL Server (<c>DBDATAKIT_TEST_SQLSERVER</c>): a right login opens a connection, a wrong password is the class "login rejected", and neither answer holds a value.</summary>
+    [Fact]
+    public async Task The_connect_step_opens_the_connection_on_SQL_Server_and_a_wrong_password_is_said_as_a_class_never_the_value()
+    {
+        var engine = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SQLSERVER");
+        if (string.IsNullOrWhiteSpace(engine)) { Assert.Skip("set DBDATAKIT_TEST_SQLSERVER to run on SQL Server"); return; }
+        var b = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(engine);
+        const string wrong = "not-the-password-8841";
+        try
+        {
+            await using var h = new RunnerHarness(StateEngineIds.Sqlite);
+            await Bind(h, "erp");
+            await h.StartAsync();
+            Directory.CreateDirectory(Path.Combine(h.Directory, "connections"));
+            File.WriteAllText(Path.Combine(h.Directory, "connections", "erp.yaml"),
+                $"schema: connection/1\nname: erp\nengine: sqlserver\nconnection_string: 'Server={b.DataSource}'\ntls: {{ encrypt: false, trust_server_certificate: true }}\nauth: {{ mode: sql, user: {b.UserID}, password_secret: 'env:{Variable}' }}\n");
+            const string path = "/api/v1/bindings/dev/integration/sample/test";
+
+            Environment.SetEnvironmentVariable(Variable, b.Password);
+            var (_, opened) = await h.CallAsync(HttpMethod.Post, path, ServerRole.Admin, new { slot = "source" });
+            Assert.True((bool)opened!["ok"]!, opened.ToJsonString());
+            Assert.Equal("connect", (string)opened["step"]!);
+            Assert.True((bool)opened["connected"]!);
+            Assert.DoesNotContain(b.Password, opened.ToJsonString());
+
+            Environment.SetEnvironmentVariable(Variable, wrong);
+            var (_, rejected) = await h.CallAsync(HttpMethod.Post, path, ServerRole.Admin, new { slot = "source" });
+            Assert.False((bool)rejected!["ok"]!);
+            Assert.Equal("connect", (string)rejected["step"]!);
+            Assert.False((bool)rejected["connected"]!);
+            Assert.Contains("login was rejected", (string)rejected["message"]!);
+            Assert.DoesNotContain(wrong, rejected.ToJsonString());
+            Assert.DoesNotContain(wrong, string.Join('\n', h.Log));
+            Assert.DoesNotContain(h.Audit.Read(new AuditQuery(VerbPrefix: RunnerBindingTestApi.Verb)), e => (e.Entry.Detail ?? "").Contains(wrong) || (e.Entry.Detail ?? "").Contains(b.Password));
+        }
+        finally { Environment.SetEnvironmentVariable(Variable, null); }
     }
 }

@@ -71,7 +71,7 @@ public sealed class ConsoleConnectionsTests : IAsyncLifetime
                 var body = (await context.Request.ReadFromJsonAsync<JsonObject>())!;
                 syncWrites.Add(body);
                 var text = (string)body["text"]!;
-                var loaded = ConnectionDefinitionLoader.Load(text, $"{name}.yaml");
+                var loaded = ConnectionDefinitionLoader.LoadDatabaseConnection(text, $"{name}.yaml");
                 // what Sync adds to the shared loader: it does not use these keys
                 var refusals = loaded.Diagnostics.Where(d => d.Severity == DbDataKit.Config.Yaml.ConfigSeverity.Error).Select(d => (code: d.Code, line: d.Line, message: d.Message)).ToList();
                 if (loaded.Definition is { } d0)
@@ -98,7 +98,7 @@ public sealed class ConsoleConnectionsTests : IAsyncLifetime
                 if (!ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin).Allowed) return Results.Json(new { error = "needs admin" }, statusCode: 403);
                 var body = (await context.Request.ReadFromJsonAsync<JsonObject>())!;
                 var text = (string)body["text"]!;
-                var loaded = ConnectionDefinitionLoader.Load(text, $"{name}.yaml");
+                var loaded = ConnectionDefinitionLoader.LoadDatabaseConnection(text, $"{name}.yaml");
                 if (!loaded.Ok)
                     return Results.Json(new { error = "The data source is not valid, so nothing was written.", valid = false, diagnostics = loaded.Diagnostics.Select(d => new { code = d.Code, severity = d.Severity.ToString().ToLowerInvariant(), key = d.KeyPath, file = d.Path, line = d.Line, column = d.Column, message = d.Message, fix = d.Fix }) }, statusCode: 400);
                 if (gatewayFiles.ContainsKey(name)) return Results.Json(new { error = "The data source changed since it was read.", current_version = Version(gatewayFiles[name]) }, statusCode: 409);
@@ -144,7 +144,7 @@ public sealed class ConsoleConnectionsTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.OK, status);
         var written = gatewayFiles["erp-copy"];
-        var copy = ConnectionDefinitionLoader.Load(written, "erp-copy.yaml").Require();
+        var copy = ConnectionDefinitionLoader.LoadDatabaseConnection(written, "erp-copy.yaml").Require();
         Assert.Equal("erp-copy", copy.Name);
         Assert.Equal("sql01", copy.Address!.Host);
         Assert.Equal("svc_erp", copy.Auth!.User);
@@ -168,7 +168,7 @@ public sealed class ConsoleConnectionsTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.OK, status);
         var written = syncFiles["erp-pg"];
-        var copy = ConnectionDefinitionLoader.Load(written, "erp-pg.yaml").Require();
+        var copy = ConnectionDefinitionLoader.LoadDatabaseConnection(written, "erp-pg.yaml").Require();
         Assert.Equal("secret:dbdatakit:sync:connection:erp-pg", copy.Auth!.PasswordSecret);
         Assert.Empty(copy.Extensions.Items);                                 // the Gateway's serving policy stays on the Gateway
         Assert.StartsWith("# the ERP reader", written);                      // the file is edited, not rewritten
@@ -186,7 +186,7 @@ public sealed class ConsoleConnectionsTests : IAsyncLifetime
         var (status, _) = await Copy(new { from = "gateway-1", name = "erp", to = "gateway-1", newName = "erp-2" });
 
         Assert.Equal(HttpStatusCode.OK, status);
-        var copy = ConnectionDefinitionLoader.Load(gatewayFiles["erp-2"], "erp-2.yaml").Require();
+        var copy = ConnectionDefinitionLoader.LoadDatabaseConnection(gatewayFiles["erp-2"], "erp-2.yaml").Require();
         Assert.Equal("env:ERP_DB_PASSWORD", copy.Auth!.PasswordSecret);      // a reference the target holds the same way
         Assert.True(copy.Extensions.Items.ContainsKey("gateway"));
     }

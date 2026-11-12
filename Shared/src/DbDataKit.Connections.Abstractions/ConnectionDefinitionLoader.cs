@@ -43,14 +43,33 @@ public static class ConnectionDefinitionLoader
     /// <summary>JSON Schema for editor aids, generated from the type.</summary>
     public static string JsonSchema() => JsonSchemaGenerator.ToJson(typeof(ConnectionDefinition), "https://dbdata.dev/schema/connection/1.json");
 
-    public static ConnectionLoadResult LoadFile(string path) => Load(File.ReadAllText(path), path);
+    // ---- what a program accepts: a typed group of kinds, never a default (owner decision 2026-11-11) ----
 
-    /// <summary>Loads a file of any kind, outside systems and model providers included (the console, the runner and what uses them); <see cref="LoadFile(string)"/> reads database connections only.</summary>
-    public static ConnectionLoadResult LoadFileOfAnyKind(string path) => Load(File.ReadAllText(path), path, outsideKinds: true);
+    /// <summary>Database connections only (Gateway, Sync, Build, Store, the runner's database slots): a file of another kind is refused naming the connection, its kind and the accepted group.</summary>
+    public static ConnectionLoadResult LoadDatabaseConnection(string yaml, string file = "connection.yml", bool addressRequired = true) => Load(yaml, file, ConnectionKindGroup.Database, addressRequired);
 
+    public static ConnectionLoadResult LoadDatabaseFile(string path) => LoadDatabaseConnection(File.ReadAllText(path), path);
+
+    /// <summary>A connection a delivery channel sends through: <c>kind: smtp</c>, or <c>kind: http</c> with a <c>webhook:</c> section.</summary>
+    public static ConnectionLoadResult LoadDeliveryConnection(string yaml, string file = "connection.yml", bool addressRequired = false) => Load(yaml, file, ConnectionKindGroup.Delivery, addressRequired);
+
+    /// <summary>A chat model provider (<c>kind: model-provider</c>, purpose <c>chat</c>).</summary>
+    public static ConnectionLoadResult LoadModelConnection(string yaml, string file = "connection.yml", bool addressRequired = false) => Load(yaml, file, ConnectionKindGroup.Model, addressRequired);
+
+    /// <summary>An embedding model provider (<c>kind: model-provider</c>, purpose <c>embeddings</c>).</summary>
+    public static ConnectionLoadResult LoadEmbeddingConnection(string yaml, string file = "connection.yml", bool addressRequired = false) => Load(yaml, file, ConnectionKindGroup.Embedding, addressRequired);
+
+    /// <summary>An HTTP API a task or an agent calls as a client (<c>kind: http</c>, a webhook included).</summary>
+    public static ConnectionLoadResult LoadHttpConnection(string yaml, string file = "connection.yml", bool addressRequired = false) => Load(yaml, file, ConnectionKindGroup.Http, addressRequired);
+
+    /// <summary>A file of any kind: only for the program that keeps every connection (the console's Connections page) and for tests of the format.</summary>
+    public static ConnectionLoadResult LoadConnectionOfAnyKind(string yaml, string file = "connection.yml", bool addressRequired = false) => Load(yaml, file, ConnectionKindGroup.Any, addressRequired);
+
+    public static ConnectionLoadResult LoadFileOfAnyKind(string path) => LoadConnectionOfAnyKind(File.ReadAllText(path), path);
+
+    /// <param name="accepts">The groups of kinds this program accepts (there is no default: say which); a file of another group is refused naming the connection, its kind and what is accepted (<see cref="KindNotKept"/>).</param>
     /// <param name="addressRequired">False for a product whose connection files carry no address because the login comes from its environment (DbDataBuild: plan 13, E03); every other rule still applies.</param>
-    /// <param name="outsideKinds">False (the default) for a program that keeps database connections only: a file of kind <c>http</c> or <c>model-provider</c> is refused naming the file. True for one that uses them (the console, the runner).</param>
-    public static ConnectionLoadResult Load(string yaml, string file = "connection.yml", bool addressRequired = true, bool outsideKinds = false)
+    public static ConnectionLoadResult Load(string yaml, string file, ConnectionKindGroup accepts, bool addressRequired = true)
     {
         var diags = new List<ConfigDiagnostic>();
         var root = StrictYamlReader.Read(yaml, file, diags);
@@ -80,7 +99,7 @@ public static class ConnectionDefinitionLoader
         diags.AddRange(bound.Diagnostics);
         if (bound.Value is null || diags.HasErrors()) return new(null, diags);
         bound.Value.SchemaVersion = declared;
-        Validate(bound.Value, file, bound.Sources, diags, addressRequired, outsideKinds);
+        Validate(bound.Value, file, bound.Sources, diags, addressRequired, accepts);
         // format 2's checks are check/1 entries (23a FQ01); format 1 has none, and a file that has them was refused above
         if (declared >= 2 && root is YamlMapping { } whole && whole.Get("checks") is { } checksNode)
             bound.Value.CheckDefinitions = DbDataKit.Quality.CheckSection.Read(checksNode, file, diags);
@@ -112,7 +131,7 @@ public static class ConnectionDefinitionLoader
         return diags;
     }
 
-    private static void Validate(ConnectionDefinition d, string file, IReadOnlyDictionary<string, SourceInfo> src, List<ConfigDiagnostic> diags, bool addressRequired = true, bool outsideKinds = true)
+    private static void Validate(ConnectionDefinition d, string file, IReadOnlyDictionary<string, SourceInfo> src, List<ConfigDiagnostic> diags, bool addressRequired = true, ConnectionKindGroup accepts = ConnectionKindGroup.Any)
     {
         void Err(string code, string path, string message, string? fix = null) => diags.Add(Diag(code, file, src, path, message, fix, ConfigSeverity.Error));
         void Warn(string code, string path, string message, string? fix = null) => diags.Add(Diag(code, file, src, path, message, fix, ConfigSeverity.Warning));
@@ -130,10 +149,15 @@ public static class ConnectionDefinitionLoader
         }
         if (d.IsOutside)
         {
-            if (!outsideKinds)
-                Err(KindNotKept, "kind", $"The connection file '{file}' is of kind `{d.KindName}` (an outside system), and this program keeps database connections only.", "Keep it where the console or the runner keeps outside connections.");
+            if (!ConnectionKindGroups.Accepts(accepts, d))
+                Err(KindNotKept, "kind", ConnectionKindGroups.Refusal(d, file, accepts), "Keep it where a program of that group keeps it (the console's Connections page keeps every kind).");
             else
                 ValidateOutside(d, file, src, diags);
+            return;
+        }
+        if (!accepts.HasFlag(ConnectionKindGroup.Database))
+        {
+            Err(KindNotKept, "kind", ConnectionKindGroups.Refusal(d, file, accepts), "Keep it where a program of that group keeps it (the console's Connections page keeps every kind).");
             return;
         }
         if (d.Engine.Length == 0) Err(SharedCodes.MissingKey, "engine", "Required key `engine` is missing: a database connection says which engine it is.", "Add `engine: postgres` (or sqlserver, mysql, oracle, duckdb, odbc, flightsql).");
@@ -439,4 +463,65 @@ public static class ConnectionDefinitionLoader
         }
         return new(code, severity, file, 0, 0, message, fix) { KeyPath = path };
     }
+}
+
+/// <summary>
+/// The groups of connection kinds a program accepts when it loads a connection (owner decision 2026-11-11): a loader names its group, and a file of another group is refused naming the connection, its kind and the group accepted. A kind belongs to one group;
+/// an <c>http</c> connection with a <c>webhook:</c> section is a <see cref="Delivery"/> connection and is also an <see cref="Http"/> one.
+/// </summary>
+[Flags]
+public enum ConnectionKindGroup
+{
+    None = 0,
+
+    /// <summary>A database (the default <c>kind</c>).</summary>
+    Database = 1,
+
+    /// <summary>Something a delivery channel sends through: <c>smtp</c>, or <c>http</c> with a <c>webhook:</c> section.</summary>
+    Delivery = 2,
+
+    /// <summary>A model provider whose purpose is <c>chat</c>.</summary>
+    Model = 4,
+
+    /// <summary>A model provider whose purpose is <c>embeddings</c>.</summary>
+    Embedding = 8,
+
+    /// <summary>An HTTP API used as a client.</summary>
+    Http = 16,
+
+    /// <summary>Every outside system.</summary>
+    Outside = Delivery | Model | Embedding | Http,
+
+    /// <summary>Every kind: the program that keeps all connections.</summary>
+    Any = Database | Outside,
+}
+
+public static class ConnectionKindGroups
+{
+    /// <summary>The group a definition belongs to (for an <c>http</c> webhook, <see cref="ConnectionKindGroup.Delivery"/>; see <see cref="Accepts"/> for the rule that it is an HTTP client too).</summary>
+    public static ConnectionKindGroup Of(ConnectionDefinition d) => d.KindName switch
+    {
+        ConnectionKinds.Smtp => ConnectionKindGroup.Delivery,
+        ConnectionKinds.Http => d.Webhook is not null ? ConnectionKindGroup.Delivery : ConnectionKindGroup.Http,
+        ConnectionKinds.ModelProvider => d.ModelProvider?.Purpose == "embeddings" ? ConnectionKindGroup.Embedding : ConnectionKindGroup.Model,
+        _ => ConnectionKindGroup.Database,
+    };
+
+    /// <summary>Whether a program that accepts <paramref name="accepts"/> accepts the definition (a webhook is accepted by a delivery group and by an HTTP one).</summary>
+    public static bool Accepts(ConnectionKindGroup accepts, ConnectionDefinition d) =>
+        accepts.HasFlag(Of(d)) || (d.KindName == ConnectionKinds.Http && accepts.HasFlag(ConnectionKindGroup.Http));
+
+    public static string Describe(ConnectionKindGroup group)
+    {
+        var names = new List<string>();
+        if (group.HasFlag(ConnectionKindGroup.Database)) names.Add("database");
+        if (group.HasFlag(ConnectionKindGroup.Delivery)) names.Add("delivery (`kind: smtp`, or `kind: http` with a `webhook:` section)");
+        if (group.HasFlag(ConnectionKindGroup.Model)) names.Add("chat model provider");
+        if (group.HasFlag(ConnectionKindGroup.Embedding)) names.Add("embedding model provider");
+        if (group.HasFlag(ConnectionKindGroup.Http)) names.Add("HTTP API (`kind: http`)");
+        return names.Count == 0 ? "none" : string.Join(" or ", names);
+    }
+
+    public static string Refusal(ConnectionDefinition d, string file, ConnectionKindGroup accepts) =>
+        $"The connection '{d.Name}' (file '{file}') is of kind `{d.KindName}`{(d.KindName == ConnectionKinds.ModelProvider ? $" (purpose {d.ModelProvider?.Purpose ?? "chat"})" : "")}, and this program accepts the {Describe(accepts)} group only.";
 }

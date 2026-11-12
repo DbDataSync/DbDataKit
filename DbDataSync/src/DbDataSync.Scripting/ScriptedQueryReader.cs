@@ -71,6 +71,9 @@ public sealed class ScriptedQueryReader(ScriptHost scriptHost, SqlDialect dialec
     /// </summary>
     public bool DetectsDeletes => false;
 
+    /// <summary>The query is the operator's: it reads rows that exist, so it cannot say that a key moved.</summary>
+    public bool DetectsKeyChanges => false;
+
     public async Task<ReadResult> ReadChangesAsync(
         DbConnection sourceConnection,
         SourceTableRef source,

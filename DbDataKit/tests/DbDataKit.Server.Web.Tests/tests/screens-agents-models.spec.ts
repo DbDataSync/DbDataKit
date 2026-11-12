@@ -10,17 +10,15 @@ const provider = (name: string, kind: string, cloud: boolean, model: string) => 
 
 test('a slot is bound differently in two channels with a fallback reordered, usage is shown against the limits, a person deletes a memory, and a tenant-only policy is reviewed', async ({ page, context, baseURL }) => {
   await signInNewAdmin(page, context, baseURL!, 'Model Tester', `agents-models-${Date.now()}@example.com`)
-  const savedSlots: string[] = []
-  const savedPolicies: string[] = []
+    const savedPolicies: string[] = []
   let memories = [
     { id: 'm1', kind: 'person', agent: 'helper', text: 'Prefers tables.', createdAt: 't', updatedAt: 't' },
     { id: 'm2', kind: 'person', agent: 'helper', text: 'Speaks German.', createdAt: 't', updatedAt: 't' },
   ]
   await page.route('**/api/agents/models', (route) => json(route, {
-    providers: [provider('claude', 'anthropic', true, 'claude-sonnet-4-5'), provider('local', 'ollama', false, 'llama3.1:8b')], slotsYaml: '', slotDiagnostics: [], agentSlots: [], secretPrefix: '',
-    bindings: [{ slot: 'default', channel: '*', choices: [{ provider: 'claude', model: 'claude-sonnet-4-5', usable: true, problem: null }] }],
+    providers: [provider('claude', 'anthropic', true, 'claude-sonnet-4-5'), provider('local', 'ollama', false, 'llama3.1:8b')], agentSlots: [], secretPrefix: '',
   }))
-  await page.route('**/api/agents/models/slots', async (route) => { savedSlots.push((route.request().postDataJSON() as { yaml: string }).yaml); await json(route, { saved: true, diagnostics: [] }) })
+  await page.route('**/api/bindings', (route) => json(route, { file: 'bindings.yml', yaml: '', diagnostics: [], earlier: null, releaseChannels: ['prod'], postureSetting: 'p', postureEffect: 'e', connections: [], slots: [] }))
   await page.route('**/api/agents/usage', (route) => json(route, {
     byPerson: [{ key: 'p', personName: 'Model Tester', turns: 3, inputTokens: 900, outputTokens: 90, cost: 5 }],
     byAgent: [{ key: 'helper', turns: 3, inputTokens: 900, outputTokens: 90, cost: 5 }], install: { key: 'install', turns: 3, inputTokens: 900, outputTokens: 90, cost: 5 },
@@ -42,21 +40,10 @@ test('a slot is bound differently in two channels with a fallback reordered, usa
   await page.route('**/api/agents/definitions', (route) => json(route, []))
   await page.route('**/api/agents/conversations*', (route) => json(route, []))
 
-  // AG18: the production channel binds the cloud model then the local one; the test channel only the local one; the fallback is reordered
+  // AG18 (IX23: the Bindings panel, the same as /bindings): the Models tab shows the panel for the model slots; the story of binding one is x-bindings.spec.ts
   await page.goto('/agents?tab=models')
-  await expect(page.getByTestId('slot-editor')).toBeVisible()
+  await expect(page.getByTestId('bindings-panel')).toBeVisible()
   await expect(page.getByTestId('usage-install')).toContainText('of 20 (25%)')
-  await page.getByTestId('bind-add').selectOption('local/llama3.1:8b')
-  await expect(page.getByTestId('bind-choice')).toHaveCount(2)
-  await page.getByTestId('bind-up-1').click()
-  await expect(page.getByTestId('bind-choice').first()).toContainText('local/llama3.1:8b')
-  await page.getByTestId('bind-channel').fill('test')
-  await expect(page.getByTestId('bind-empty')).toBeVisible()
-  await page.getByTestId('bind-add').selectOption('local/llama3.1:8b')
-  await page.getByTestId('bind-save').click()
-  await expect(page.getByTestId('bind-saved')).toBeVisible()
-  expect(savedSlots[0]).toContain('"*":\n      - { provider: local, model: "llama3.1:8b" }\n      - { provider: claude, model: "claude-sonnet-4-5" }')
-  expect(savedSlots[0]).toContain('test:\n      - { provider: local, model: "llama3.1:8b" }')
 
   // AG19: the person's memories are listed; one is deleted, one is edited
   await page.goto('/agents')

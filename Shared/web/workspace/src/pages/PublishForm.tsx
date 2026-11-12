@@ -1,16 +1,19 @@
 import { useState } from 'react'
-import type { PublishOptions, PublishTarget } from '../api'
-import { parseBindings, productWord, publishButton } from '../model'
+import type { AdoptionRequest, PublishOptions, PublishTarget } from '../api'
+import { adoptionSentence, parseBindings, productWord, publishButton } from '../model'
 
 /**
  * The publish form of a build, by the product of the target it names (plan 33 SC20d, SC21b, SC22c): any target takes a note; a Runner takes the channel the package is staged on (and, if asked, serves it at once, and the slots to bind there,
  * `slot=connection`); a Gateway that takes models takes the data source they are on (blank: the model's own storage connection). A target the project's kind is not published to is not offered (the server says which with `accepts`).
+ * When the Gateway refuses a model for a data source made by hand, `adoption` (read from its refusal) shows a confirmation that names the data source and who made it (plan 33 SC21f); **Confirm and publish** publishes again with `adopt`, which the Gateway records.
  * It sends nothing itself: `onPublish` gets the target, the note and the options, so the screen and its tests say the same.
  */
-export function PublishForm({ canWrite, status, targets, models = false, busy, onPublish, initialTarget = '' }: {
+export function PublishForm({ canWrite, status, targets, models = false, busy, onPublish, initialTarget = '', adoption = null, onCancelAdoption }: {
   canWrite: boolean; status: string; targets: readonly PublishTarget[]; models?: boolean; busy: boolean
   onPublish: (target: string, note: string, options: PublishOptions) => void; initialTarget?: string
+  adoption?: AdoptionRequest | null; onCancelAdoption?: () => void
 }) {
+  const [adopted, setAdopted] = useState<string[]>([])
   const [target, setTarget] = useState(initialTarget)
   const [note, setNote] = useState('')
   const [channel, setChannel] = useState('')
@@ -23,14 +26,21 @@ export function PublishForm({ canWrite, status, targets, models = false, busy, o
   const state = publishButton({ canWrite, status, target, targets, busy, channel })
   const why = bindings.problem ?? state.why
   const enabled = state.enabled && bindings.problem === null
-  const send = () => {
+  const send = (adopt: string[] = adopted) => {
     const options: PublishOptions = {}
     if (known?.product === 'runner') {
       options.channel = channel.trim()
       if (serve) options.serve = true
       if (Object.keys(bindings.bind).length > 0) options.bind = bindings.bind
     } else if (models && dataSource.trim() !== '') options.data_source = dataSource.trim()
+    if (known?.product === 'gateway' && adopt.length > 0) options.adopt = adopt
     onPublish(target.trim(), note.trim(), options)
+  }
+  const confirm = () => {
+    if (!adoption) return
+    const next = [...new Set([...adopted, adoption.data_source])]
+    setAdopted(next)
+    send(next)
   }
   return (
     <form className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }} data-testid="wsp-publish-form" data-product={known?.product ?? ''} onSubmit={(e) => { e.preventDefault(); if (enabled) send() }}>
@@ -49,6 +59,15 @@ export function PublishForm({ canWrite, status, targets, models = false, busy, o
       <input className="input" style={{ minWidth: 200 }} aria-label="Note" placeholder="note for the version (optional)" value={note} onChange={(e) => setNote(e.target.value)} data-testid="wsp-publish-note" />
       <button type="submit" className="btn btn-primary" disabled={!enabled} title={why ?? undefined} data-testid="wsp-publish">Publish</button>
       {why && <span className="hint" data-testid="wsp-publish-why">{why}</span>}
+      {adoption && !busy && (
+        <div className="callout" style={{ flexBasis: '100%' }} role="alertdialog" aria-label={`Adopt the data source ${adoption.data_source}`} data-testid="wsp-publish-adopt" data-data-source={adoption.data_source} data-made-by={adoption.made_by}>
+          <div data-testid="wsp-publish-adopt-text">{adoptionSentence(adoption)}</div>
+          <div className="row" style={{ gap: 8, marginTop: 8 }}>
+            <button type="button" className="btn btn-primary" onClick={confirm} data-testid="wsp-publish-adopt-confirm">Confirm and publish onto {adoption.data_source}</button>
+            <button type="button" className="btn" onClick={() => onCancelAdoption?.()} data-testid="wsp-publish-adopt-cancel">Do not publish</button>
+          </div>
+        </div>
+      )}
     </form>
   )
 }

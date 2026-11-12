@@ -75,6 +75,8 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         server.MapGet("/api/v1/connections", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { connections = Array.Empty<object>() })));
         server.MapGet("/api/v1/settings", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { require_signatures = false })));
         server.MapGet("/api/v1/lineage", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { edges = Array.Empty<object>() })));
+        server.MapGet("/api/v1/tracking", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { holder = "runner", copies = Array.Empty<object>(), divergences = Array.Empty<object>() })));
+        server.MapPost("/api/v1/tracking/divergences/{id}/resolve", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { resolved = true })));
         server.MapGet("/api/v1/secrets/overview", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { secrets = Array.Empty<object>() })));
         server.MapGet("/api/v1/certificate", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { present = true })));
         // a server upgrades itself when the console says so (plan 24a UC09): the status is a viewer's, prepare and apply an administrator's
@@ -224,7 +226,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
     public static readonly (string Method, string Pattern, ServerRole Role, ServerRole Or)[] Expected =
     [
         ("GET", "api/v1/status", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/instances", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/connections", ServerRole.Viewer, ServerRole.None),
-        ("GET", "api/v1/runs", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}/logs", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/settings", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/lineage", ServerRole.Viewer, ServerRole.None),
+        ("GET", "api/v1/runs", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}/logs", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/settings", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/lineage", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/tracking", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/upgrade", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/certificate", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/secrets/overview", ServerRole.Admin, ServerRole.None),
@@ -238,7 +240,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         ("POST", "api/v1/definitions/integration/{name}/rollback", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/definitions/integration/{name}/retire", ServerRole.Admin, ServerRole.None),
         ("PUT", "api/v1/artifacts/{sha}", ServerRole.Admin, ServerRole.Publisher), ("PUT", "api/v1/definitions/integration/{name}", ServerRole.Admin, ServerRole.Publisher),
         ("PUT", "api/v1/bindings/{name}/integration/{name}", ServerRole.Admin, ServerRole.Publisher), ("POST", "api/v1/bindings/{name}/integration/{name}/test", ServerRole.Admin, ServerRole.None), ("PUT", "api/v1/settings/require_signatures", ServerRole.Admin, ServerRole.None),
-        ("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/upgrade", ServerRole.Admin, ServerRole.None),
+        ("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/tracking/divergences/{id}/resolve", ServerRole.Admin, ServerRole.None), ("POST", "api/v1/upgrade", ServerRole.Admin, ServerRole.None),
     ];
 
     public static TheoryData<string> Rows => [.. ServerProducts.RunnerRoutes.Select(r => $"{r.Method} {r.Pattern}")];

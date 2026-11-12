@@ -71,7 +71,7 @@ internal sealed class BoundChannel(IDeliveryChannel inner, string connection) : 
 
 /// <summary>
 /// The delivery channels of an install (plan 22a GP18 fold, plan 21): each delivery channel name is bound, <b>per release channel</b>, to a connection (<see cref="ChannelBinding"/>), and the channel is made from that connection's definition
-/// (<see cref="DeliveryConnectionRules"/>) when a message is sent, so an edited connection is used by the next message. A release channel with no binding has no channel: <see cref="Resolve"/> never answers with another release channel's connection, which is what keeps a test
+/// (<see cref="DeliveryConnectionRules"/>) when a message is sent, so an edited connection is used by the next message. A release channel with no binding has no channel (the one rule of <c>docs/channel-bindings.md</c>, <see cref="DbDataKit.Connections.Bindings.SlotBinding.Resolve"/>): <see cref="Resolve"/> never answers with another release channel's connection, which is what keeps a test
 /// message from reaching production's Slack. A channel made from a connection is kept until the connection changes (its HTTP client is not made again for each message).
 /// </summary>
 public sealed class DeliveryChannels(DeliverySettings settings, IDeliveryConnections connections, ChannelKinds kinds, ISecretResolver resolver, SecretScrubber scrubber, TimeProvider? time = null) : IDeliveryChannels
@@ -94,11 +94,9 @@ public sealed class DeliveryChannels(DeliverySettings settings, IDeliveryConnect
         var release = string.IsNullOrWhiteSpace(releaseChannel) ? DbDataKit.State.DefinitionStore.Production : releaseChannel.Trim();
         if (Binding(name) is not { } binding)
             return new ChannelResolution(null, null, release, $"The delivery channel '{name}' is not configured any more; the message was not sent. Add the channel again and send it again.");
-        if (binding.For(release) is not { } connectionName)
-        {
-            var bound = string.Join(", ", binding.Connections.Keys.Order(StringComparer.Ordinal));
-            return new ChannelResolution(null, null, release, $"The delivery channel '{binding.Name}' is not bound in the release channel '{release}' (it is bound in: {bound}); the message was not sent. A release channel never uses another's connection: bind it there in the delivery: section, or send it from another release channel.");
-        }
+        var bound = binding.Resolve(release);
+        if (bound.Primary?.Connection is not { } connectionName)
+            return new ChannelResolution(null, null, release, $"{bound.Unbound} The message was not sent.");
 
         var lookup = connections.Find(connectionName);
         if (lookup.Definition is not { } definition)
