@@ -89,5 +89,8 @@ public sealed class CachingCatalogReader(ICatalogReader inner, ICatalogCache cac
         }
     }
 
+    /// <summary>Not cached (it is one query per schema, and a caller that wants it wants it fresh).</summary>
+    public Task<SchemaKeys> ReadSchemaKeysAsync(string? catalog, string schema, CancellationToken cancellationToken = default) => inner.ReadSchemaKeysAsync(catalog, schema, cancellationToken);
+
     public Task<QueryShape> DescribeQueryAsync(string sql, CancellationToken cancellationToken = default) => inner.DescribeQueryAsync(sql, cancellationToken);
 }

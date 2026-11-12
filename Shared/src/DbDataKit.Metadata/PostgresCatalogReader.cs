@@ -63,7 +63,7 @@ public class PostgresCatalogReader(DbConnection connection, ISqlDialect? dialect
     protected override (string Sql, object?[] Args)? PrimaryKeyQuery(TableRef t)
     {
         var (where, args) = Of(t);
-        return ("SELECT con.conname::text, a.attname::text, k.ord::int FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace "
+        return ("SELECT con.conname::text, a.attname::text, k.ord::int, c.relname::text FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace "
             + "CROSS JOIN LATERAL unnest(con.conkey) WITH ORDINALITY AS k(attnum, ord) JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.attnum "
             + $"WHERE con.contype = 'p' AND {where} ORDER BY k.ord", args);
     }
@@ -75,7 +75,7 @@ public class PostgresCatalogReader(DbConnection connection, ISqlDialect? dialect
         // {0} in the rule template is a C# format hole, not a parameter marker.
         string update = string.Format(System.Globalization.CultureInfo.InvariantCulture, rule, "con.confupdtype");
         string delete = string.Format(System.Globalization.CultureInfo.InvariantCulture, rule, "con.confdeltype");
-        return ("SELECT con.conname::text, k.ord::int, a.attname::text, current_database()::text, rn.nspname::text, rc.relname::text, ra.attname::text, " + update + ", " + delete + " "
+        return ("SELECT con.conname::text, k.ord::int, a.attname::text, current_database()::text, rn.nspname::text, rc.relname::text, ra.attname::text, " + update + ", " + delete + ", c.relname::text "
             + "FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace "
             + "JOIN pg_class rc ON rc.oid = con.confrelid JOIN pg_namespace rn ON rn.oid = rc.relnamespace "
             + "CROSS JOIN LATERAL unnest(con.conkey, con.confkey) WITH ORDINALITY AS k(attnum, fattnum, ord) "

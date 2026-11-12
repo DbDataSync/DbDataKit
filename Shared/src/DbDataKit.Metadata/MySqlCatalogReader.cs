@@ -44,7 +44,7 @@ public class MySqlCatalogReader(DbConnection connection, ISqlDialect? dialect = 
         // key_column_usage names the referenced table and column itself; the standard join through the unique constraint's name cannot,
         // because every table's primary key is called PRIMARY.
         var (where, args) = Where(t, "", "kcu.table_schema", "kcu.table_name");
-        return ("SELECT kcu.constraint_name, kcu.ordinal_position, kcu.column_name, NULL, kcu.referenced_table_schema, kcu.referenced_table_name, kcu.referenced_column_name, rc.update_rule, rc.delete_rule "
+        return ("SELECT kcu.constraint_name, kcu.ordinal_position, kcu.column_name, NULL, kcu.referenced_table_schema, kcu.referenced_table_name, kcu.referenced_column_name, rc.update_rule, rc.delete_rule, kcu.table_name "
             + "FROM information_schema.key_column_usage kcu JOIN information_schema.referential_constraints rc "
             + "ON rc.constraint_schema = kcu.constraint_schema AND rc.constraint_name = kcu.constraint_name AND rc.table_name = kcu.table_name "
             + $"WHERE kcu.referenced_table_name IS NOT NULL AND {where} ORDER BY kcu.constraint_name, kcu.ordinal_position", args);

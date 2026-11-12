@@ -68,6 +68,18 @@ public sealed record TableShape(
     public IReadOnlyList<string> WarningList => Warnings ?? [];
 }
 
+/// <summary>
+/// The primary keys and foreign keys of the tables of one schema, by table name (ordinal comparison), as <see cref="ICatalogReader.ReadSchemaKeysAsync"/> reads them. A table without a key is absent from <see cref="PrimaryKeys"/>; a table without
+/// foreign keys is absent from <see cref="ForeignKeys"/>. <see cref="PrimaryKeysRead"/> and <see cref="ForeignKeysRead"/> are false when the source could not answer (the same meaning as <see cref="ShapeSupport"/>: unknown, never "none"); only tables
+/// (not views) are covered.
+/// </summary>
+public sealed record SchemaKeys(
+    IReadOnlyDictionary<string, KeyInfo> PrimaryKeys, IReadOnlyDictionary<string, IReadOnlyList<ForeignKeyInfo>> ForeignKeys,
+    bool PrimaryKeysRead = true, bool ForeignKeysRead = true, IReadOnlyList<string>? Warnings = null)
+{
+    public IReadOnlyList<string> WarningList => Warnings ?? [];
+}
+
 /// <summary>How a query's result columns were found.</summary>
 public enum DescribeStrategy
 {
