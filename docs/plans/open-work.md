@@ -14,7 +14,6 @@ Flags: **OWNER** waits for a decision only the owner can take (the decision is n
 
 | Plan | Decision | Blocks |
 | --- | --- | --- |
-| [33](33-fewer-services.md) SC20o | Build's database-facing screens (project tests, status, refresh run, compare, initialise): move to the Runner's task screens and the command line, or Build's server keeps those routes | what SC20g removes |
 | [33](33-fewer-services.md) SC22l | Sync's run actions and monitoring: stay with the Runner and the Sync server, or come into the Workspace | what SC22e removes |
 | [33](33-fewer-services.md) SC20e | A Build publish to a Gateway without a login in the Workspace: an offline `project publish --to gateway --out <folder>` that a Build server sends, or another way | Build publishing from the Workspace |
 | [33](33-fewer-services.md) SC21f | Data source adoption at a Store publish (a publish-time adopt, or plan 30's slot bindings) | Store publishing parity |
