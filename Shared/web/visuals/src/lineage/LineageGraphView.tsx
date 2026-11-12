@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Background, Controls, Handle, MarkerType, Position, ReactFlow, type Edge, type Node, type NodeProps } from '@xyflow/react'
 import { layoutLineage } from './layout'
-import { COLUMN_HEIGHT, HEADER_HEIGHT, projectLineage } from './project'
+import { COLUMN_HEIGHT, HEADER_HEIGHT, kindLabel, projectLineage } from './project'
 import { reach } from './reach'
 import { runLabel, runsOfLinks, runState, type LineageRunDoc } from './runs'
 import type { LineageCard, LineageGraphDoc, PlacedCard } from './types'
@@ -22,7 +22,7 @@ function CardNode({ data }: NodeProps<Node<CardData>>) {
       <Handle id="in" type="target" position={Position.Left} style={{ top: HEADER_HEIGHT / 2 }} />
       <Handle id="out" type="source" position={Position.Right} style={{ top: HEADER_HEIGHT / 2 }} />
       <div className="lineage-card-header" style={{ height: HEADER_HEIGHT }}>
-        <span className="lineage-card-kind">{card.kind}</span>
+        <span className="lineage-card-kind">{kindLabel(card.kind)}</span>
         <span className="lineage-card-title" title={card.id}>{card.title}</span>
         {card.unknownUpstream && <span className="lineage-card-unknown" title="What feeds this is not known">?</span>}
         {card.columnCount > 0 && (

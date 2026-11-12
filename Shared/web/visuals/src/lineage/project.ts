@@ -4,6 +4,11 @@ export const CARD_WIDTH = 240
 export const HEADER_HEIGHT = 48
 export const COLUMN_HEIGHT = 22
 
+/** What a card says its kind is: the wire form of most kinds reads well as it is; an outside system (plan 27a IX12) is written `externalsystem` on the wire. */
+export function kindLabel(kind: string): string {
+  return kind === 'externalsystem' ? 'outside system' : kind
+}
+
 /** The dataset a column node belongs to, from its id (`<dataset>#<column>`); null for a node that is not a column. */
 function datasetOf(node: LineageNodeDoc): string | null {
   if (node.kind !== 'column') return null

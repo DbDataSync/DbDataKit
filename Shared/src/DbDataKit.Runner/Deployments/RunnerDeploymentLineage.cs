@@ -24,7 +24,13 @@ public static class RunnerDeploymentLineage
     /// <param name="group">The runner group's name, the instance id of the identities.</param>
     /// <param name="lease">How long after its last heartbeat an instance is live.</param>
     /// <param name="runsPerPackage">How many of the newest runs of each package are laid in the graph.</param>
-    public static LineageGraph Build(StateDatabase state, string group, TimeSpan lease, int runsPerPackage = RunsPerPackage)
+    public static LineageGraph Build(StateDatabase state, string group, TimeSpan lease, int runsPerPackage = RunsPerPackage) => BuildWithProblems(state, group, lease, runsPerPackage).Graph;
+
+    /// <summary>
+    /// <see cref="Build"/> and what was left out, in words (plan 27a IX12): the outside systems the tasks of the packages reported reading and writing (<see cref="OutsideSystems"/>), as nodes beside the deployment, and a task whose systems
+    /// would make data flow in a circle with another's, which the graph refuses and this names instead of failing the whole graph.
+    /// </summary>
+    public static (LineageGraph Graph, List<string> Problems) BuildWithProblems(StateDatabase state, string group, TimeSpan lease, int runsPerPackage = RunsPerPackage)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(group);
         var publisher = new DefinitionPublisher(state, RunnerPackages.Kinds(), null, "runner");
@@ -34,6 +40,7 @@ public static class RunnerDeploymentLineage
 
         var nodes = new Dictionary<string, LineageNode>(StringComparer.Ordinal);
         var edges = new List<LineageEdge>();
+        var packages = new HashSet<string>(StringComparer.Ordinal);
 
         LineageNode Put(string id, string name, string type, params (string Key, string? Value)[] properties)
         {
@@ -70,6 +77,7 @@ public static class RunnerDeploymentLineage
         foreach (var name in publisher.Names(kind))
         {
             var packageId = DeploymentIds.Package(group, kind, name);
+            packages.Add(name);
             Put(packageId, name, DeploymentTypes.Package, (DeploymentProperties.Kind, kind), (DeploymentProperties.Name, name), (DeploymentProperties.Group, group));
             var events = publisher.EventsOf(kind, name, 200);
 
@@ -122,6 +130,50 @@ public static class RunnerDeploymentLineage
             }
         }
 
-        return new LineageGraph(nodes.Values, edges);
+        var problems = new List<string>();
+        var graph = OutsideSystems(new LineageGraph(nodes.Values, edges), new TaskLineageStore(state).Read(), group, kind, packages, problems);
+        return (graph, problems);
+    }
+
+    /// <summary>The prefix of a lineage line that names an outside system: <c>external://&lt;kind&gt;/&lt;name&gt;</c> (<see cref="LineageIdentity.ExternalSystem"/>).</summary>
+    public const string ExternalPrefix = "external://";
+
+    /// <summary>
+    /// Lays the outside systems the tasks reported beside <paramref name="deployment"/> (plan 27a IX12): for each task of a package that is still deployed, a job node (under its package, an edge <c>deploys</c> with the detail <c>task</c>) and
+    /// an <c>external_system</c> node for every <c>external://kind/name</c> line it read from or wrote to (<see cref="ExternalSystemLineage"/>); a rerun names the same ids and adds nothing. Lines that are not outside systems (a task's own name for a table)
+    /// are not nodes. A task whose systems would close a circle with the others is left out and named in <paramref name="problems"/>.
+    /// </summary>
+    public static LineageGraph OutsideSystems(LineageGraph deployment, IReadOnlyList<TaskLineageRow> rows, string group, string kind, IReadOnlySet<string> packages, List<string> problems)
+    {
+        var graph = deployment;
+        foreach (var task in rows.Where(r => packages.Contains(r.Package)).GroupBy(r => (r.Package, r.Task)).OrderBy(g => g.Key.Package, StringComparer.Ordinal).ThenBy(g => g.Key.Task, StringComparer.Ordinal))
+        {
+            ExternalTouch? Parse(string name)
+            {
+                if (!name.StartsWith(ExternalPrefix, StringComparison.Ordinal)) return null;
+                var rest = name[ExternalPrefix.Length..];
+                var slash = rest.IndexOf('/');
+                return slash > 0 && slash < rest.Length - 1 ? new ExternalTouch(rest[..slash], rest[(slash + 1)..]) : null;
+            }
+
+            var reads = task.Where(r => r.Direction == TaskLineageRow.Reads).Select(r => Parse(r.Name)).OfType<ExternalTouch>().Distinct().ToList();
+            var writes = task.Where(r => r.Direction == TaskLineageRow.Writes).Select(r => Parse(r.Name)).OfType<ExternalTouch>().Distinct().ToList();
+            if (reads.Count == 0 && writes.Count == 0) continue;
+            var label = $"{task.Key.Package}/{task.Key.Task}";
+            try
+            {
+                var systems = ExternalSystemLineage.Design(group, label, reads, writes);
+                var jobId = LineageIdentity.SuiteObject(group, "task", label);
+                var packageId = DeploymentIds.Package(group, kind, task.Key.Package);
+                var attach = new LineageGraph([deployment.Node(packageId)!, systems.Node(jobId)!], [new LineageEdge(packageId, jobId, EdgeKind.Deploys, Granularity.Table, Confidence.Declared, "task")]);
+                graph = LineageGraph.Merge([graph, systems, attach]);
+            }
+            catch (LineageGraphException ex)
+            {
+                problems.Add($"The outside systems of task '{label}' are left out: {ex.Message}");
+            }
+        }
+
+        return graph;
     }
 }
