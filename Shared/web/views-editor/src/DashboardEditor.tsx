@@ -33,6 +33,8 @@ export interface EditorHost {
   deleteQuestion?: (kind: ViewKind, name: string) => string
   /** The model a new widget asks of when the document has none yet. */
   defaultModel?: string
+  /** The components of kind `widget` the app registers (its manifest's `views`, DBR30): what a `custom` widget may name. A source with no app (the console's list, Build's project) gives none, and the palette then has no custom widget. */
+  customWidgets?: readonly string[]
   /** Saving, duplicating and deleting are refused for this person, and why (the server refuses them as well). */
   readOnly?: string
   /** What a host adds under the toolbar (Build's publish bar), given the state of the draft. */
@@ -221,12 +223,12 @@ export function DashboardEditor({ kind, name, host }: { kind: ViewKind; name: st
             </table>
             <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }} data-testid="ed-palette">
               <span className="hint">Add:</span>
-              {PALETTE.filter((type) => !(type === 'embed' && doc.kind === 'report')).map((type) => (
+              {[...PALETTE, ...((host.customWidgets?.length ?? 0) > 0 ? ['custom' as WidgetType] : [])].filter((type) => !(type === 'embed' && doc.kind === 'report')).map((type) => (
                 <button key={type} type="button" className="btn btn-sm" data-testid={`ed-add-${type}`} onClick={() => {
                   let id: string = type, n = 1
                   while (widgets[id]) id = `${type}${++n}`
                   let widget: WidgetDoc
-                  try { widget = newWidget(type, doc, host.defaultModel) } catch (e) { say(e instanceof Error ? e.message : String(e)); return }
+                  try { widget = newWidget(type, doc, host.defaultModel, host.customWidgets) } catch (e) { say(e instanceof Error ? e.message : String(e)); return }
                   apply({ type: 'addWidget', id, widget })
                   setSelected(id)
                 }}>{type}</button>
@@ -235,7 +237,7 @@ export function DashboardEditor({ kind, name, host }: { kind: ViewKind; name: st
           </div>
 
           {selected && widgets[selected] && (
-            <WidgetEditor id={selected} widget={widgets[selected]!} doc={doc} catalog={catalog?.catalog ?? null} catalogNote={catalog?.note ?? null} apply={apply} diagnostics={draft.validation.diagnostics} server={server}
+            <WidgetEditor id={selected} widget={widgets[selected]!} doc={doc} components={host.customWidgets ?? []} catalog={catalog?.catalog ?? null} catalogNote={catalog?.note ?? null} apply={apply} diagnostics={draft.validation.diagnostics} server={server}
               preview={(widget) => client.preview({ widget, widgetId: selected, kind, draft: doc, document: draft.name || undefined }) as Promise<RenderedWidget>} />
           )}
 
