@@ -124,6 +124,7 @@ public static class GatewayManagementHost
         var servingCache = app.Services.GetRequiredService<DbDataGateway.Server.Serving.GatewayCache>();
         var cacheApi = new GatewayCacheManagement(servingCache, () => management.BuildLineage(), instanceId, audit, app.Services.GetService<DbDataGateway.Server.State.ServingCacheEpochStore>());
         servingCache.Resolve = cacheApi.Resolve;
+        var serverSettings = new GatewayServerSettings(configDirectory, management, provider.ReloadNow, audit, git);
         management = new GatewayManagement(configuration, configDirectory, instanceId, GatewayHost.Version, dataSources, identities, activity, certificate, git,
             new GatewaySecrets(app.Services.GetRequiredService<GroupSecretStore>() is { Enabled: true } group ? group : SecretsRuntime.OpenStore(options), audit, references: dataSources.References), files.Codes(),
             new GatewaySemanticModels(app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(),
@@ -154,7 +155,9 @@ public static class GatewayManagementHost
             audit: audit,
             cache: cacheApi,
             definitions: new GatewayDefinitionsManagement(state, audit),
-            serverSettings: new GatewayServerSettings(configDirectory, management, provider.ReloadNow, audit, git),
+            serverSettings: serverSettings,
+            export: new GatewayExportManagement(new Export.ExportInstaller(Export.ExportInstaller.DefaultFetcher(), dataDirectory, GatewayHost.Version),
+                () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue, dataDirectory, serverSettings, audit),
             entityModels: new GatewayEntityModels(app.Services.GetRequiredService<Serving.PublishedEntityModels>(),
                 () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue,
                 dataSource =>

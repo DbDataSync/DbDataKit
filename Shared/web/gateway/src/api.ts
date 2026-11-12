@@ -4,7 +4,7 @@ import type { InstanceRequest, NavigationRequest, PublishBody } from './appEdito
 import type { CacheOverview } from './cacheTypes'
 import type { ReplayResult, RunDetail, RunResult, RunRow, SavedQueryRow, SavedQueryVersionRow } from './runTypes'
 import type {
-  AdoptAnswer, PruneAnswer, SemanticCatalogView, EntityModelDetail, EntityModelRow, SemanticModelDetail, SemanticModelRow, AppApprovals, AppCheck, AppDomainCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SecretWritten, SecretsList, ServerSettings, SettingsCheck, SettingsEdit, SettingsWritten, SessionRow, TestResult, WriteDataSourceResult,
+  AdoptAnswer, ExportComponentState, PruneAnswer, SemanticCatalogView, EntityModelDetail, EntityModelRow, SemanticModelDetail, SemanticModelRow, AppApprovals, AppCheck, AppDomainCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SecretWritten, SecretsList, ServerSettings, SettingsCheck, SettingsEdit, SettingsWritten, SessionRow, TestResult, WriteDataSourceResult,
 } from './types'
 
 const v1 = '/api/v1'
@@ -150,6 +150,11 @@ export const gatewayApi = {
     check: (text: string) => request<SettingsCheck>(`${v1}/config/server.yaml/check`, { method: 'POST', body: JSON.stringify({ text }) }),
     edit: (text: string, change: SettingsEdit) => request<{ text: string }>(`${v1}/config/server.yaml/edit`, { method: 'POST', body: JSON.stringify({ text, ...change }) }).then((r) => r.text),
     write: (text: string, expectedVersion: string | null, note: string) => put<SettingsWritten>(`${v1}/config/server.yaml`, { text, expected_version: expectedVersion, note: note || undefined }),
+  },
+  /** The PDF export component (plan 32 DBR16): its state, and the install from the release (an administrator's call; the Gateway downloads, checks and sets views.export, and the screen reads the progress). */
+  exportComponent: {
+    read: () => request<ExportComponentState>(`${v1}/views/export`),
+    install: (force = false) => request<ExportComponentState>(`${v1}/views/export/install`, { method: 'POST', body: JSON.stringify({ force }) }),
   },
   /** The result cache of this instance (plan 24a UC16): read for a viewer; a clear (one dataset, or all) is an administrator's. */
   cache: {
