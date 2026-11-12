@@ -473,7 +473,7 @@ public sealed class EmbeddedRunnerTests : IDisposable
 
     /// <summary>A path the route's pattern matches, on the embedded runner's own address.</summary>
     private static string EmbeddedPath(ServerProducts.RunnerRoute route, Guid instance) =>
-        "/relay/console-runner/" + route.Pattern.Replace("{name}", "etl").Replace("{sha}", new string('a', 64)).Replace("{id}", instance.ToString());
+        "/relay/console-runner/" + (route.Pattern.StartsWith("api/v1/bindings/{name}/", StringComparison.Ordinal) ? "api/v1/bindings/dev/" + route.Pattern["api/v1/bindings/{name}/".Length..] : route.Pattern).Replace("{name}", "etl").Replace("{sha}", new string('a', 64)).Replace("{id}", instance.ToString());
 
     /// <summary>Every route of the table but the upgrade of a server by itself (plan 24a UC09): the embedded runner is a part of the console and is upgraded with it, so only a standalone runner server mounts <c>api/v1/upgrade</c> (<c>DbDataRunner.Server</c>, through <c>UpgradeSetup</c>). No test yet pins the roles of that route to the table's (the runner test harness does not mount it): a follow-up.</summary>
     public static TheoryData<string> RouteRows => [.. ServerProducts.RunnerRoutes.Where(r => !r.Pattern.StartsWith("api/v1/state", StringComparison.Ordinal) && r.Pattern is not ("api/v1/upgrade" or "api/v1/certificate" or "api/v1/secrets/overview" or "api/v1/bindings/{name}/integration/{name}/test")).Select(r => $"{r.Method} {r.Pattern}")];

@@ -26,7 +26,9 @@ export async function editorAxisStory(page: Page) {
   await expect(by(page, 'ed-well-chart-x-entry-1')).toContainText('products.category')
   await expect(by(page, 'ed-derived-request-chart')).toContainText('"order"')
   await expect(by(page, 'ed-derived-sources-chart')).toContainText('widgets.chart.encodings.x[1]')
-  await expect(by(page, 'ed-preview-chart')).toHaveAttribute('data-result', /chart|loading/)
+  // the console-only story reads the fixture source, which has recorded results only for the widgets of its own documents: a new chart says so in its own words
+  await expect(by(page, 'ed-preview-chart')).toHaveAttribute('data-result', 'error')
+  await expect(by(page, 'ed-preview-chart')).toContainText('no recorded result')
 
   // 2. Reordering swaps the levels, and the request's order follows (the first attribute asked for is the outermost level).
   await by(page, 'ed-well-chart-x-up-1').click()
