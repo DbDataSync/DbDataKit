@@ -120,6 +120,29 @@ public sealed class StateTrackingStore(StateDatabase database) : IStateTrackingS
             return cmd.ExecuteNonQuery();
         });
 
+    /// <summary>Every connection identity that has a live row in the copy.</summary>
+    public IReadOnlyList<string> Identities() =>
+        database.Retry<IReadOnlyList<string>>(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, "SELECT DISTINCT connection_identity FROM {table:tracking_row} WHERE archive_id = $archive ORDER BY connection_identity;");
+            cmd.Bind(database, "archive", Live);
+            var identities = new List<string>();
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read()) identities.Add(reader.GetString(0));
+            return identities;
+        });
+
+    /// <summary>How many live rows the copy holds of this identity and stream.</summary>
+    public int Count(string identity, string stream) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var cmd = database.Command(Module, connection, "SELECT COUNT(*) FROM {table:tracking_row} WHERE connection_identity = $identity AND stream = $stream AND archive_id = $archive;");
+            cmd.Bind(database, "identity", identity).Bind(database, "stream", stream).Bind(database, "archive", Live);
+            return Convert.ToInt32(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+        });
+
     /// <summary>How many rows of this identity and stream were put aside under a marker (a count for the console and for tests).</summary>
     public int ArchivedCount(string identity, TrackingStream stream, string marker) =>
         database.Retry(() =>

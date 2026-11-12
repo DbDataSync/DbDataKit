@@ -82,6 +82,7 @@ public static class StoreServer
         StoreModelHistory.Map(app, settings.Directory);
         StoreEvents.Map(app, settings.Directory);
         StoreData.Map(app, settings.Directory, storeConnections);
+        StoreQuality.Map(app, settings.Directory, storeConnections, state);
         return app;
     }
 

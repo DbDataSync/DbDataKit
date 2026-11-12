@@ -41,12 +41,16 @@ public static class KnowledgeChecks
     /// <param name="ownerExists">Whether a group of the identity home exists; null checks no owner.</param>
     /// <param name="agents">The agents whose budget is checked; none checks none.</param>
     /// <param name="counter">How tokens are counted; the estimate of plan 27 SD15 by default.</param>
-    public static KnowledgeCheckReport Check(KnowledgeProject project, string sourceName, ISubjectCatalog? catalog, Func<string, bool>? ownerExists, IReadOnlyList<AgentBudgetInput> agents, ITokenCounter? counter = null)
+    /// <param name="translate">Translates the semantic SQL of a verified query so it can be compared with its request (<c>DBD-KNW-051</c>, <c>-052</c>); null checks no SQL.</param>
+    public static KnowledgeCheckReport Check(KnowledgeProject project, string sourceName, ISubjectCatalog? catalog, Func<string, bool>? ownerExists, IReadOnlyList<AgentBudgetInput> agents, ITokenCounter? counter = null, SqlToRequest? translate = null)
     {
         counter ??= EstimateCounter.Instance;
         var diagnostics = new List<ConfigDiagnostic>(project.Diagnostics);
         foreach (var item in project.Items)
         {
+            // a verified query: the semantic SQL translates and says what the request says (the request is the truth, KN21)
+            if (item.Verified is { SemanticSql: not null } verified && translate is not null && VerifiedQueries.Resolve(verified, translate) is { Ok: false } refused)
+                diagnostics.Add(new ConfigDiagnostic(refused.Error!.StartsWith("The semantic SQL and", StringComparison.Ordinal) ? VerifiedQueries.SqlDisagrees : VerifiedQueries.SqlTranslates, ConfigSeverity.Error, item.File, 1, 1, refused.Error, "Make the SQL say what the request says, or remove the SQL."));
             if (catalog is not null) diagnostics.AddRange(SubjectResolver.CheckOnSave(item, catalog));
             if (ownerExists is not null && item.Owner is { Length: > 0 } owner && !ownerExists(owner))
                 diagnostics.Add(new ConfigDiagnostic(UnknownOwner, ConfigSeverity.Error, item.File, 1, 1, $"The owner '{owner}' of '{item.Id}' is not a group of the identity home.", "Name a group that exists, or create it."));

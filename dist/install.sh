@@ -26,6 +26,7 @@ DRY_RUN=0
 SYSTEM=0
 NO_LINK=0
 ANNOUNCE_URL=
+BUNDLE_TOKEN_FILE=
 SYSTEMD_DIR=''
 INSTALL_DIR=''
 REPO="$DEFAULT_REPO"
@@ -44,6 +45,8 @@ Usage: install.sh [options]
   --no-link           do not put the program on the PATH
   --announce-url <u>  the console's announce address (http://console:8481). With --system (root) it writes the systemd drop-in that sets DBDATAKIT_ANNOUNCE_URL for the
                       unit named for the product (/etc/systemd/system/<product>.service.d/announce.conf); otherwise it prints the line the service needs
+  --bundle-token-file <f>  with --announce-url, for a console on this machine: the bundle token file (made by `dbdatakit bundle init`); the drop-in also sets
+                      DBDATAKIT_BUNDLE_TOKEN_FILE, and the console pairs with this server by itself when it announces. Give the service's account read access to the file (it is mode 600)
   --systemd-dir <d>   where the drop-in goes instead of /etc/systemd/system (writes it without --system; systemd is not asked to reload)
   --repo <owner/repo> --api-base <url>
 USAGE
@@ -58,6 +61,7 @@ while [ $# -gt 0 ]; do
     --install-dir) [ $# -ge 2 ] || die "--install-dir needs a value"; INSTALL_DIR="$2"; shift 2 ;;
     --no-link) NO_LINK=1; shift ;;
     --announce-url) [ $# -ge 2 ] || die "--announce-url needs a value"; ANNOUNCE_URL="$2"; shift 2 ;;
+    --bundle-token-file) [ $# -ge 2 ] || die "--bundle-token-file needs a value"; BUNDLE_TOKEN_FILE="$2"; shift 2 ;;
     --systemd-dir) [ $# -ge 2 ] || die "--systemd-dir needs a value"; SYSTEMD_DIR="$2"; shift 2 ;;
     --repo) [ $# -ge 2 ] || die "--repo needs a value"; REPO="$2"; shift 2 ;;
     --api-base) [ $# -ge 2 ] || die "--api-base needs a value"; API_BASE="$2"; shift 2 ;;
@@ -70,6 +74,12 @@ if [ -n "$ANNOUNCE_URL" ]; then
   # the address goes into a unit file: an http(s) address with nothing that systemd would read as syntax (white space, quotes, backslash, % and $)
   case "$ANNOUNCE_URL" in http://?*|https://?*) ;; *) die "--announce-url is the console's http or https announce address, such as http://console:8481." ;; esac
   case "$ANNOUNCE_URL" in *[[:space:]\"\'\\%\$]*) die "--announce-url must not contain white space, quotes, backslash, % or \$." ;; esac
+fi
+
+if [ -n "$BUNDLE_TOKEN_FILE" ]; then
+  [ -n "$ANNOUNCE_URL" ] || die "--bundle-token-file goes with --announce-url: the token is what the announcement carries to a console on this machine."
+  case "$BUNDLE_TOKEN_FILE" in /?*) ;; *) die "--bundle-token-file is the absolute path of the token file." ;; esac
+  case "$BUNDLE_TOKEN_FILE" in *[[:space:]\"\'\\%\$]*) die "--bundle-token-file must not contain white space, quotes, backslash, % or \$." ;; esac
 fi
 
 fetch() { # fetch <url> [outfile]
@@ -222,9 +232,11 @@ if [ -n "$ANNOUNCE_URL" ]; then
       echo "# Written by install.sh --announce-url: $DISPLAY_NAME announces itself to the console at this address and waits in 'dbdatakit instance pending' until an administrator confirms it."
       echo "[Service]"
       echo "Environment=\"DBDATAKIT_ANNOUNCE_URL=$ANNOUNCE_URL\""
+      [ -z "$BUNDLE_TOKEN_FILE" ] || echo "Environment=\"DBDATAKIT_BUNDLE_TOKEN_FILE=$BUNDLE_TOKEN_FILE\""
     } > "$DROPIN_DIR/announce.conf"
     chmod 644 "$DROPIN_DIR/announce.conf"
     echo "Wrote $DROPIN_DIR/announce.conf: the $PRODUCT service announces itself to the console at $ANNOUNCE_URL and then waits in 'dbdatakit instance pending'."
+    [ -z "$BUNDLE_TOKEN_FILE" ] || echo "It also holds the bundle token file $BUNDLE_TOKEN_FILE: a console on this machine with a bundle pairs with the service by itself (the service's account must be able to read that file)."
     if [ -z "$SYSTEMD_DIR" ] && [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
       systemctl daemon-reload || echo "Note: systemctl daemon-reload failed; run it before starting the service." >&2
       echo "Restart the service if it is running: systemctl restart $PRODUCT"

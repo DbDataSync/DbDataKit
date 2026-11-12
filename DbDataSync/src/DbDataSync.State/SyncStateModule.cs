@@ -146,5 +146,6 @@ public static class SyncState
         ProgressModule.Module,
         QualityModule.Module,
         DbDataKit.Lineage.LineageModule.Module,
+        DbDataKit.State.Tracking.TrackingModule.Module,   // plan 28c E17: the copy of the units a target holds, and the divergences found
     ];
 }

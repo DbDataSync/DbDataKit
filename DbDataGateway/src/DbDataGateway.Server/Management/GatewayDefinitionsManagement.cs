@@ -50,6 +50,9 @@ public sealed class GatewayDefinitionsManagement
 
     public bool HasArtifact(string sha256) => _api.HasArtifact(sha256);
 
+    /// <summary>A stored file by hash for a promotion to another group (plan 30 PB06), or null.</summary>
+    public Stream? OpenArtifact(string sha256) => _api.OpenArtifact(sha256);
+
     public async Task<ManagementResult> StoreArtifactAsync(string sha256, Stream body, string? mediaType, ManagementCaller caller, CancellationToken ct)
     {
         var answer = await _api.StoreArtifactAsync(sha256, body, mediaType, CallerOf(caller), ct);

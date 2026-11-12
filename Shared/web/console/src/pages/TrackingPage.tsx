@@ -10,7 +10,7 @@ let previous: CopyRow[] = []
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '')
 
 /**
- * The copy of Build's tracking tables (plan 28c E18): for every connection of every Build server and runner that keeps one, the mode and primary of the setting, how old the newest copied row is, and a divergence with the point where the two sides part
+ * The copy of Build's tracking tables and of the units Sync keeps on its targets (plan 28c E18, E17): for every connection of every Build server and runner that keeps one, the mode and primary of the setting, how old the newest copied row is, and a divergence with the point where the two sides part
  * (the last row both hold). An administrator resolves an open divergence: archive keeps the copy's later rows apart, reset deletes them, and the copy then follows the target again from the common point; the server audits it. Switching the primary is asked for here
  * and refused in a sentence while a side is down or a divergence is open (and, in this release, because Build keeps its records on the target first). Read from each server through the relay every thirty seconds; a server that does not answer is named, and its
  * copies stay on the page marked as old.
@@ -54,7 +54,7 @@ export function TrackingPage() {
           <div key={p.server} className="empty" data-testid="tracking-problem">{`${p.server} did not answer: ${p.message}`}</div>
         ))}
         {view.isLoading && <div className="hint" data-testid="tracking-loading">Asking the servers…</div>}
-        {view.isSuccess && rows.length === 0 && <div className="empty" data-testid="tracking-none">No Build server or runner that answered holds a copy of tracking tables yet.</div>}
+        {view.isSuccess && rows.length === 0 && <div className="empty" data-testid="tracking-none">No Build server, runner or Sync server that answered holds a copy of tracking rows yet.</div>}
         {rows.length > 0 && (
           <div className="card flush" data-testid="tracking-rows" role="table" aria-label="Tracking copies">
             <div className="grid-head" role="row" style={{ gridTemplateColumns: '1fr 1fr 1fr 0.8fr 0.8fr 2fr 1.4fr', gap: 14 }}><span>Server</span><span>Connection</span><span>State</span><span>Mode</span><span>Primary</span><span>Copy</span><span /></div>

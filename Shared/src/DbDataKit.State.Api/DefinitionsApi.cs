@@ -27,6 +27,7 @@ public delegate void DefinitionsAuditor(string verb, DefinitionsCaller caller, s
 /// GET  definitions/{kind}                                                       what each channel serves of each definition of the kind        (viewer)
 /// GET  definitions/{kind}/{name}                                                versions, what each channel serves, bindings                    (viewer)
 /// PUT  definitions/{kind}/{name}      {manifest, artifacts[], depends_on[], channel, mode, expected_version, note, format}   (publisher: own definitions; admin)
+/// GET  definitions/{kind}/{name}/versions/{n}                                   one version whole: manifest, files, depends_on, signature       (viewer; what a promotion to another group reads, PB06)
 /// POST definitions/{kind}/{name}/activate|switch|rollback|retire|prune          {channel, expected_version, version | keep | versions, dry_run}  (admin)
 /// PUT  bindings/{channel}/{kind}/{name}  {slots: {slot: boundTo}, expected_revision}  |  DELETE bindings/{channel}/{kind}/{name}/{slot}   (publisher: own; admin)
 /// </code>
@@ -127,6 +128,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
         {
             if (parts is ["definitions", var kind] && method == "GET") return List(kind, caller);
             if (parts is ["definitions", var k, var name] && method == "GET") return Describe(k, name, caller);
+            if (parts is ["definitions", var kv, var nv, "versions", var number] && method == "GET") return VersionOf(kv, nv, number, caller);
             if (parts is ["definitions", var k2, var n2] && method == "PUT") return Publish(k2, n2, body, caller);
             if (parts is ["definitions", var k3, var n3, var act] && method == "POST") return await Act(k3, n3, act, body, caller, ct).ConfigureAwait(false);
             if (parts is ["trust", var tk] && method == "GET") return Trust(tk, caller);
@@ -217,6 +219,31 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
             ["channels"] = Heads(kind, name),
             ["bindings"] = new JsonArray([.. publisher.HeadsOf(kind, name).SelectMany(h => publisher.Bindings(h.Channel, kind, name)).Select(b => (JsonNode)new JsonObject { ["channel"] = b.Channel, ["slot"] = b.Slot, ["bound_to"] = b.BoundTo, ["revision"] = b.Revision })]),
         });
+    }
+
+    /// <summary>
+    /// A stored version whole (PB06): what a promotion to another group reads to publish the same version there. The files are listed by hash; they are read by <see cref="OpenArtifact"/>. The caller must be allowed to read the kind.
+    /// </summary>
+    private DefinitionsResult VersionOf(string kind, string name, string number, DefinitionsCaller caller)
+    {
+        if (CheckKind(kind) is { } bad) return bad;
+        if (CanRead(kind, caller) is { } denied) return denied;
+        if (!int.TryParse(number, NumberStyles.None, CultureInfo.InvariantCulture, out var n) || n < 1) return Error(400, $"'{number}' is not a version number.");
+        var v = store.Versions(kind, name).FirstOrDefault(x => x.Version == n);
+        if (v is null) return Error(404, $"There is no version {n} of {kind} '{name}'.");
+        return new(200, new JsonObject
+        {
+            ["kind"] = kind, ["name"] = name, ["version"] = v.Version, ["hash"] = v.Hash, ["format"] = v.Format, ["manifest"] = v.Content, ["note"] = v.Note, ["signature"] = v.Signature, ["signer"] = v.Signer,
+            ["depends_on"] = new JsonArray([.. v.DependsOn.Select(d => (JsonNode)JsonValue.Create(d)!)]),
+            ["artifacts"] = new JsonArray([.. publisher.Artifacts(kind, name, n).Select(a => (JsonNode)new JsonObject { ["path"] = a.Path, ["sha256"] = a.Sha256, ["size"] = a.Size, ["media_type"] = a.MediaType })]),
+        });
+    }
+
+    /// <summary>The bytes of a stored file by hash (<c>GET artifacts/{sha256}</c>, PB06), or null when the group has none; the host checks that the caller may read and disposes the stream. The hash is checked as the stream is read to its end.</summary>
+    public Stream? OpenArtifact(string sha256)
+    {
+        var sha = sha256.ToLowerInvariant();
+        return Sha256Rule().IsMatch(sha) && Find(sha) is { } id ? payloads.OpenRead(id) : null;
     }
 
     private static JsonObject? Json(string? body, out DefinitionsResult? bad)

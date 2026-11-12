@@ -44,12 +44,22 @@ public sealed class BuildPublishesSemanticModelTests : IAsyncLifetime
         await Execute(server, $"CREATE DATABASE [{database}]");
         var readLogin = new SqlConnectionStringBuilder(server) { InitialCatalog = database }.ConnectionString;
         await Execute(readLogin, "CREATE SCHEMA marts");
-        foreach (var table in MartsTables) await Execute(readLogin, $"CREATE TABLE marts.{table} (id INT NULL)");
+        // every table and column the model names must be readable (a publish reads one empty SELECT per table)
+        var columns = new Dictionary<string, string>
+        {
+            ["dim_customer"] = "customer_id INT NULL",
+            ["dim_product"] = "product_id INT NULL, department NVARCHAR(50) NULL, category_name NVARCHAR(50) NULL, product_name NVARCHAR(100) NULL",
+            ["dim_store"] = "store_id INT NULL, region NVARCHAR(50) NULL, channel_group NVARCHAR(50) NULL, store_name NVARCHAR(100) NULL",
+            ["dim_date"] = "date_key INT NULL, [date] DATE NULL, [year] INT NULL, year_month INT NULL",
+            ["fct_sales_lines"] = "customer_id INT NULL",
+            ["fct_returns"] = "product_id INT NULL, date_key INT NULL, refund_amount DECIMAL(18,2) NULL",
+        };
+        foreach (var table in MartsTables) await Execute(readLogin, $"CREATE TABLE marts.{table} ({columns[table]})");
         await Execute(readLogin, "DROP TABLE marts.dim_customer; CREATE TABLE marts.dim_customer (customer_id INT NOT NULL, region NVARCHAR(50) NULL, country_code NVARCHAR(10) NULL)");
         await Execute(readLogin, "INSERT INTO marts.dim_customer VALUES (1, N'West', N'US'), (2, N'East', N'US'), (3, N'North', N'CA')");
         // the values an attribute takes are those in the fact rows that reach it: two customers have sales, the third does not
-        await Execute(readLogin, "DROP TABLE marts.fct_sales_lines; CREATE TABLE marts.fct_sales_lines (customer_id INT NULL, product_id INT NULL, store_id INT NULL, date_key INT NULL)");
-        await Execute(readLogin, "INSERT INTO marts.fct_sales_lines VALUES (1, 1, 1, 20260101), (1, 1, 1, 20260102), (2, 1, 1, 20260101)");
+        await Execute(readLogin, "DROP TABLE marts.fct_sales_lines; CREATE TABLE marts.fct_sales_lines (customer_id INT NULL, product_id INT NULL, store_id INT NULL, date_key INT NULL, order_id INT NULL, quantity INT NULL, net_amount DECIMAL(18,2) NULL, gross_amount DECIMAL(18,2) NULL, margin_amount DECIMAL(18,2) NULL)");
+        await Execute(readLogin, "INSERT INTO marts.fct_sales_lines (customer_id, product_id, store_id, date_key) VALUES (1, 1, 1, 20260101), (1, 1, 1, 20260102), (2, 1, 1, 20260101)");
 
         var build = Programs.Build;
         var gateway = Programs.Gateway;

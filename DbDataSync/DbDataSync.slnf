@@ -22,6 +22,7 @@
       "DbDataSync/src/DbDataSync.Scripting/DbDataSync.Scripting.csproj",
       "DbDataSync/src/DbDataSync.Planning/DbDataSync.Planning.csproj",
       "DbDataSync/src/DbDataSync.State/DbDataSync.State.csproj",
+      "DbDataSync/src/DbDataSync.Tracking/DbDataSync.Tracking.csproj",
       "DbDataSync/src/DbDataSync.TaskRunner/DbDataSync.TaskRunner.csproj",
       "DbDataSync/src/DbDataSync.Updates/DbDataSync.Updates.csproj",
       "DbDataSync/src/DbDataSync.Verification/DbDataSync.Verification.csproj",

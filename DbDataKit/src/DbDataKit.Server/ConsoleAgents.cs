@@ -83,6 +83,7 @@ public sealed class ConsoleAgents
         _users = users;
         _directory = settings.Directory;
         _store = new AgentStore(database);
+        Evaluations = new EvaluationStore(database);
         _models = models;
         _toolSource = toolSource;
         Knowledge = knowledge;
@@ -90,6 +91,12 @@ public sealed class ConsoleAgents
         _desk = new ApprovalDesk(new StateApprovalLedger(_store), time: _time);
         Memories = new MemoryService(new StateMemoryStore(_store), _time);
     }
+
+    /// <summary>The runs of agents' evaluation sets and the minimum scores before a promotion (plan 27a AG23), kept in the <c>agents</c> module.</summary>
+    public EvaluationStore Evaluations { get; }
+
+    /// <summary>The models the slots are bound to (the agent's own, and the judge's slot for evaluations).</summary>
+    public IAgentModels Models => _models;
 
     /// <summary>What agents remember (plan 27a AG19): the person's own and the work's, kept in the <c>agents</c> module.</summary>
     public MemoryService Memories { get; }
@@ -354,7 +361,7 @@ public sealed class ConsoleAgents
 
     // ---- conversations ----
 
-    public async Task<(ConversationRow? Conversation, string? Problem)> StartAsync(string agentName, string person, string personName, string? title, BuildTarget? build = null, CancellationToken cancellation = default)
+    public async Task<(ConversationRow? Conversation, string? Problem)> StartAsync(string agentName, string person, string personName, string? title, BuildTarget? build = null, CancellationToken cancellation = default, Action<ToolCall, ToolOutcome>? observe = null)
     {
         // an agent that works on a Build project asks the server for what it may use, as the person, before its definition is read (a tool it names is checked against that list)
         IReadOnlyList<BuildCommand> live = [];
@@ -416,7 +423,7 @@ public sealed class ConsoleAgents
             PriceOf = name => model.Prices is { } prices && prices.TryGetValue(name, out var price) ? price : model.Price,
             Model = model.Model,
             Ledger = new StateUsageLedger(_store),
-            AfterCall = tracker.Observe,
+            AfterCall = (call, outcome) => { tracker.Observe(call, outcome); observe?.Invoke(call, outcome); },
             Inputs = _ => new ContextInputs(Knowledge.PolicyItems(), instructions, BoundKnowledgeProvider.Bind(definition, sources, tracker.Current, Knowledge.Catalog), Memories.Inputs(person, workRef, switches, memoryRoom), BoundKnowledgeProvider.AlwaysGiven(definition, sources), skills.Offers),
         });
         _live[id] = new Live(session, agentName);

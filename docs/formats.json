@@ -87,7 +87,7 @@
       "current": 2,
       "previous": 1,
       "status": "open",
-      "note": "gains the checks section (plan 23a FQ04); Sync reads 1 and 2 (a file of 1 loads as it is) and every save writes 2 (plan 33 SC50); open until the first release that holds it (24a D5). E17 adds the optional `tracking:` section (`mode`, `primary`) and no version (a file without it loads as the default; a misspelled key is refused by the strict loader); CW02b adds the optional `reconcile.afterEveryPasses` (a number, absent is off) and no version; CW01 adds no key and no version: `changeProcessing.writer` may be left out (the default for the reader is named when the file is read: ChangeApply behind an incremental reader, DeleteInsert behind a reload reader) and the writer kind `ChangeApply` is a new value of an existing key; an older Sync reads a file that names it and fails the run naming the unknown writer kind, and a file without a writer is not readable by it",
+      "note": "gains the checks section (plan 23a FQ04); Sync reads 1 and 2 (a file of 1 loads as it is) and every save writes 2 (plan 33 SC50); open until the first release that holds it (24a D5). E17 adds the optional `tracking:` section (`mode`, `primary`, and the optional `retention` with `units` and `days`) and no version (a file without it loads as the default; a misspelled key is refused by the strict loader); CW02b adds the optional `reconcile.afterEveryPasses` (a number, absent is off) and no version; CW01 adds no key and no version: `changeProcessing.writer` may be left out (the default for the reader is named when the file is read: ChangeApply behind an incremental reader, DeleteInsert behind a reload reader) and the writer kind `ChangeApply` is a new value of an existing key; an older Sync reads a file that names it and fails the run naming the unknown writer kind, and a file without a writer is not readable by it",
       "version_source": { "file": "DbDataSync/src/DbDataSync.Core/Config/ConfigSchema.cs", "pattern": "public const int TaskCurrent = (\\d+);" },
       "files": [ { "path": "DbDataSync/src/DbDataSync.Core/Config/ReplicationTaskConfig.cs", "sha256": null } ]
     },
@@ -147,7 +147,7 @@
       "current": 1,
       "previous": 1,
       "status": "open",
-      "note": "new with plan 27a KN01: role (reference, instruction, guardrail), about (subjects as the catalog names them), for (audience, agent, channel), owner, kind, chunking; folder defaults, nearest wins; a newer number is refused naming the file; verified queries are a kind of it, read from KN21 on. The subject type `report-catalog` (plan 32 RC04: the catalog's name, narrowed by `item`) is additive: the generated items of an external report server's snapshot are about it",
+      "note": "new with plan 27a KN01: role (reference, instruction, guardrail), about (subjects as the catalog names them), for (audience, agent, channel), owner, kind, chunking; folder defaults, nearest wins; a newer number is refused naming the file; verified queries (kind: verified-query: questions, model, request, semantic-sql, saved-query, verified) are a kind of it since KN21; the number stays 1. The subject type `report-catalog` (plan 32 RC04: the catalog's name, narrowed by `item`) is additive: the generated items of an external report server's snapshot are about it",
       "version_source": { "file": "Shared/src/DbDataKit.Knowledge/KnowledgeItemLoader.cs", "pattern": "public const int Version = (\\d+);" },
       "files": [ { "path": "Shared/src/DbDataKit.Knowledge/KnowledgeItemLoader.cs", "sha256": null } ]
     },
@@ -170,6 +170,16 @@
       "note": "new with plan 27a AG09: prompting minimums per trait and settings per tool, limits per scope, the data rule for cloud providers; policy text is knowledge, not this format",
       "version_source": { "file": "Shared/src/DbDataKit.Agents/AgentPolicy.cs", "pattern": "public const int Version = (\\d+);" },
       "files": [ { "path": "Shared/src/DbDataKit.Agents/AgentPolicy.cs", "sha256": null } ]
+    },
+    {
+      "id": "evaluation",
+      "title": "Case of an agent's evaluation set (agents/<name>/tests/evaluation/*.yml, evaluation: N)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 27a AG23: name, task, fixtures, pass-at and expect, a list of checks (tools-called, tools-not-called, answer-contains, answer-matches, rows-match-verified-query, check, rubric); a newer number is refused naming the file",
+      "version_source": { "file": "Shared/src/DbDataKit.Agents/Evaluation/EvaluationCase.cs", "pattern": "public const int Version = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.Agents/Evaluation/EvaluationCase.cs", "sha256": null } ]
     },
     {
       "id": "knowledge-project",
@@ -260,6 +270,16 @@
       "note": "new with plan 22a GP21: the data keys of the secret store, each sealed with AES-256-GCM under a key derived from a passphrase (PBKDF2-SHA256, 600000 rounds, a random salt, the key id as associated data), the id of the active key and nothing about the machine, written by `secret key-backup` and read by `secret key-restore` (a key that DPAPI bound to another machine or user is re-keyed to this one); a wrong passphrase, a changed file or a key moved to another id is refused before anything is stored; never put in git",
       "version_source": { "file": "Shared/src/DbDataKit.Secrets.Store/SecretKeyBackup.cs", "pattern": "public const int FormatVersion = (\\d+);" },
       "files": [ { "path": "Shared/src/DbDataKit.Secrets.Store/SecretKeyBackup.cs", "sha256": null } ]
+    },
+    {
+      "id": "bundle",
+      "title": "The single-machine bundle (bundle.json beside the console's data, schema: bundle/N)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 23a FQ18 (D8, QF6): which products the console pairs with by itself when they announce from this machine with the bundle token, and where the token file is (relative to the console's directory); no secret in it; written by `dbdatakit bundle init`, read by the console at each announcement (a file that cannot be used is a warning in the log and no automatic pairing); the token file is the account's own (mode 600, refused otherwise)",
+      "version_source": { "file": "DbDataKit/src/DbDataKit.Server/ConsoleBundle.cs", "pattern": "Schema = \"bundle/(\\d+)\";" },
+      "files": [ { "path": "DbDataKit/src/DbDataKit.Server/ConsoleBundle.cs", "sha256": null } ]
     }
   ]
 }

@@ -330,6 +330,9 @@ public static class DbDataSyncHost
         builder.Services.AddHostedService(sp => sp.GetRequiredService<ReplicationChecksService>());
         builder.Services.AddHostedService<RunMonitorService>();
         builder.Services.AddHostedService<RunPruningService>();
+        // The units a target holds for a replication that keeps its state there (plan 28c E17), copied into the state; a divergence found is persisted there.
+        builder.Services.AddSingleton<SyncTrackingService>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<SyncTrackingService>());
 
         // Windows-only, registered only there — the same gating this file already uses a few lines
         // down for HTTP.sys, not a new idiom. Certificate management is Windows-only

@@ -69,7 +69,7 @@ public sealed class KnowledgeItemTests
     [InlineData("knowledge: 1\nrole: reference\nabout:\n  - install: false", 5, "install")]
     [InlineData("knowledge: 1\nrole: reference\nfor:\n  audience: [middle]", 5, "not a value")]
     [InlineData("knowledge: 1\nrole: reference\nchunking: whole", 4, "chunking")]
-    [InlineData("knowledge: 1\nrole: reference\nkind: verified-query", 4, "kind")]
+    [InlineData("knowledge: 1\nrole: reference\nkind: dashboard", 4, "kind")]
     public void A_bad_part_is_refused_with_file_line_and_a_suggestion(string frontMatter, int line, string words)
     {
         var result = Load($"---\n{frontMatter}\n---\n# A title\ntext");

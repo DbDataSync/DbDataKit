@@ -199,6 +199,11 @@ export const api = {
     lag: (name: string) => request<ReplicationLag>(`/api/replications/${encodeURIComponent(name)}/lag`),
     // Where the tracking state lives and why (plan 28c E17).
     tracking: (name: string) => request<ReplicationTrackingStatus>(`/api/replications/${encodeURIComponent(name)}/tracking`),
+    /** Follows the target now: copies the units it recorded since the last time and checks the positions (an administrator's call). */
+    trackingCatchUp: (name: string) => request<ReplicationTrackingStatus>(`/api/replications/${encodeURIComponent(name)}/tracking/catch-up`, { method: 'POST' }),
+    /** Resolves an open divergence of the copy: `archive` keeps the copy's later rows apart, `reset` deletes them (an administrator's call, audited). */
+    resolveDivergence: (id: number, resolution: 'archive' | 'reset') =>
+      request<{ resolved: boolean }>(`/api/v1/tracking/divergences/${id}/resolve`, { method: 'POST', body: JSON.stringify({ resolution }) }),
     bulkLoads: (name: string, limit?: number) =>
       request<BulkLoadBatchProgress[]>(
         `/api/replications/${encodeURIComponent(name)}/bulk-loads${limit ? `?limit=${limit}` : ''}`,

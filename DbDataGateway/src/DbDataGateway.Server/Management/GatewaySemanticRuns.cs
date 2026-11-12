@@ -161,11 +161,11 @@ public sealed class GatewaySemanticRuns(SemanticRunStore store, SemanticModels m
     }
 
     /// <summary>The engine wants every query to state its limit; the explorer's text may leave it out, and then it gets the call's (a text that says LIMIT keeps its own).</summary>
-    private static string WithLimit(string sql, int limit) =>
+    internal static string WithLimit(string sql, int limit) =>
         System.Text.RegularExpressions.Regex.IsMatch(sql, @"\bLIMIT\s+\d+", System.Text.RegularExpressions.RegexOptions.IgnoreCase) ? sql : sql.TrimEnd().TrimEnd(';') + " LIMIT " + limit.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>The values of a JSON object as the statement's bound parameters, by name.</summary>
-    private static IReadOnlyList<ServingParameter>? Bind(JsonObject? values)
+    internal static IReadOnlyList<ServingParameter>? Bind(JsonObject? values)
     {
         if (values is not { Count: > 0 }) return null;
         var inv = System.Globalization.CultureInfo.InvariantCulture;

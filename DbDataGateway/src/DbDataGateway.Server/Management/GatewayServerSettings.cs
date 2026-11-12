@@ -31,7 +31,7 @@ public sealed partial class GatewayServerSettings(string configDirectory, Gatewa
 
     /// <summary>Top-level keys a running Gateway reads when it starts (listeners, certificates, the modules it mounts, the state it opens, the hosts it runs): a change to one takes effect at the next start.</summary>
     public static readonly IReadOnlyList<string> RestartKeys =
-        ["dataDirectory", "modules", "listen", "management", "tls", "identity", "apps", "store", "views", "mcp", "state", "secrets", "compression", "worker", "hosting", "definitionPollSeconds"];
+        ["dataDirectory", "modules", "listen", "management", "tls", "identity", "apps", "store", "views", "mcp", "rest", "state", "secrets", "compression", "worker", "hosting", "definitionPollSeconds"];
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly WriteGuard _guard = new();
@@ -108,6 +108,10 @@ public sealed partial class GatewayServerSettings(string configDirectory, Gatewa
                     ["semantic.combine.memoryMb"] = o.Semantic.Combine.MemoryMb,
                     ["semantic.combine.timeoutSeconds"] = o.Semantic.Combine.TimeoutSeconds,
                     ["semantic.combine.maxInputRows"] = o.Semantic.Combine.MaxInputRows,
+                    // the feeds module's listener and limits (plan 14a SL31)
+                    ["rest.port"] = o.Rest.Port,
+                    ["rest.defaultLimit"] = o.Rest.DefaultLimit,
+                    ["rest.maxRows"] = o.Rest.MaxRows,
                 },
             });
         });

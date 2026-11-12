@@ -27,6 +27,13 @@ public interface IChangeWriter
     /// </summary>
     bool SupportsReconciliation { get; }
 
+    /// <summary>
+    /// Whether this writer commits the unit in one transaction and calls <see cref="UnitStateScope.BeforeCommitAsync"/> before that commit, so the replication's state row
+    /// (plan 28c E17, <c>tracking: target</c>) lands with the data or not at all. False for a writer that commits in pieces or not through a transaction of its own; a replication
+    /// that keeps its state on the target is refused with a writer that does not.
+    /// </summary>
+    bool SupportsUnitState => false;
+
     /// <param name="mappingName">The table mapping this write belongs to — see
     /// <see cref="IChangeReader.ReadChangesAsync"/>'s identical parameter.</param>
     /// <param name="targetColumns">The target's cached shape — see
