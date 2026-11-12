@@ -211,6 +211,22 @@ public static class GatewayLineageGraph
         return new ConnectionDefinition { Name = name, Engine = engine, ConnectionString = connectionString };
     }
 
+    /// <summary>The lineage identity of a physical table of a data source (the one <see cref="Design"/> gives it), or null when the data source is not one of these; a connection string that cannot be resolved names the table by the data source.</summary>
+    internal static string? DatasetIdentity(IReadOnlyDictionary<string, DataSourceOptions> dataSources, Func<string, string, string> resolve, string source, string physical)
+    {
+        if (!dataSources.TryGetValue(source, out var options)) return null;
+        ConnectionDefinition definition;
+        try
+        {
+            definition = DefinitionOf(source, options, resolve(source, options.ConnectionString));
+            var probe = LineageIdentity.Dataset(definition, null, "t");
+            if (probe.Namespace.EndsWith("://", StringComparison.Ordinal) && probe.Name == "t") definition = Placeholder(source, options);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { definition = Placeholder(source, options); }
+        var (schema, table) = Split(physical);
+        return LineageIdentity.Dataset(definition, schema, table).ToString();
+    }
+
     private static ConnectionDefinition Placeholder(string name, DataSourceOptions options) =>
         new() { Name = name, Engine = options.Provider.ToLowerInvariant(), Address = new AddressSpec { Host = "unresolved-" + name } };
 

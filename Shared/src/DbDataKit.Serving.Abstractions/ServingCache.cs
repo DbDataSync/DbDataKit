@@ -14,8 +14,8 @@ public enum ServingCacheScope
     Caller,
 
     /// <summary>
-    /// Callers the access rules treat alike share an entry. The rule language is not decided yet (plan 22a QG2), so the values that apply are all of the caller's directory attributes (<see cref="ServingCaller.Attributes"/>),
-    /// a superset of any rule's: callers with the same attributes share, no one else does. A caller with none shares with every caller who has none.
+    /// Callers the access rules treat alike share an entry: the key holds the fingerprint of the caller's resolved rules (<see cref="ServingCachePlan.RulesFingerprint"/>, plan 22a GP10, QG2): the rules' definition, the refresh generation of each
+    /// rules table and the caller's names that appear in it. A plan with no fingerprint (a definition with no rules) falls back to all of the caller's directory attributes (<see cref="ServingCaller.Attributes"/>), a superset of any rule's.
     /// </summary>
     Rules,
 
@@ -28,7 +28,8 @@ public enum ServingCacheScope
 /// <param name="Scope">Who may share an entry.</param>
 /// <param name="DefinitionVersion">The published version the request is pinned to; part of the key, so a new version is a new key.</param>
 /// <param name="Datasets">The datasets the answer reads, by the identity a <c>data.changed</c> message names; empty when it cannot say (only the time-to-live and a publish clear it).</param>
-public sealed record ServingCachePlan(TimeSpan Ttl, ServingCacheScope Scope, string? DefinitionVersion, IReadOnlyList<string>? Datasets = null);
+/// <param name="RulesFingerprint">The fingerprint of the caller's resolved access rules (plan 22a GP10) when the definition has rules: callers with the same effective rules have the same one, so scope <c>rules</c> shares an entry between them and no one else; null when the definition has none.</param>
+public sealed record ServingCachePlan(TimeSpan Ttl, ServingCacheScope Scope, string? DefinitionVersion, IReadOnlyList<string>? Datasets = null, string? RulesFingerprint = null);
 
 /// <summary>
 /// Which requests are cached. The cache is off unless this says otherwise: a request the policy gives no plan for is never stored and never answered from the cache (plan 24 section 3.1, 24a UC12). The policy is
@@ -283,10 +284,14 @@ public static class ServingCacheKey
         fields.Add(context.Preview is { } preview ? "preview:" + preview : "-");
         fields.Add(plan.DefinitionVersion ?? "-");
         fields.Add(plan.Scope.ToString());
+        // a definition with rules: whoever shares, the fingerprint of the rules is part of the key, so a refreshed rules table or another caller's rules is another key
+        if (plan.RulesFingerprint is { } fingerprint) fields.Add("rules:" + fingerprint);
         switch (plan.Scope)
         {
             case ServingCacheScope.Caller:
                 fields.Add(context.Caller.Id);
+                break;
+            case ServingCacheScope.Rules when plan.RulesFingerprint is not null:
                 break;
             case ServingCacheScope.Rules:
                 foreach (var (name, values) in context.Caller.Attributes.OrderBy(a => a.Key, StringComparer.Ordinal))
