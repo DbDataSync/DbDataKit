@@ -138,6 +138,66 @@ public partial class ApplyConformanceTests
         }
     }
 
+    [SkippableTheory, MemberData(nameof(Engines))]
+    public async Task A_model_downstream_of_a_blocked_dataset_is_not_run_and_says_which_check_and_clearing_the_block_lets_it_run(string name)
+    {
+        var run = await SetUp(name);
+        await using var engine = run.Engine;
+        var results = Path.Combine(Path.GetTempPath(), "ddb-e2e-results-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            foreach (var f in new[] { "v_orders", "fct_orders" }) foreach (var ext in new[] { "yml", "sql" }) File.Delete(Path.Combine(run.Dir, $"models/marts/{f}.{ext}"));
+            // a_orders carries a block check; z_orders reads it; y_other reads only staging
+            run.Write("models/marts/a_orders.yml", "schemaVersion: 2\nname: marts.a_orders\nkind: full\ncolumns:\n" + OrdersColumns + "checks:\n  - {id: amount_present, kind: not_null, column: amount, severity: block}\n");
+            run.Write("models/marts/a_orders.sql", "SELECT order_id, amount FROM staging.orders\n");
+            run.Write("models/marts/z_orders.yml", "name: marts.z_orders\nkind: full\ncolumns:\n" + OrdersColumns);
+            run.Write("models/marts/z_orders.sql", "SELECT order_id, amount FROM marts.a_orders\n");
+            run.Write("models/marts/y_other.yml", "name: marts.y_other\nkind: full\ncolumns:\n" + OrdersColumns);
+            run.Write("models/marts/y_other.sql", "SELECT order_id, amount FROM staging.orders\n");
+            Ok(run.Cli("connection", "init", "--apply"), "init");
+            Ok(run.Cli("project", "compile"), "compile");
+            var plan = run.Cli("connection", "deploy", "--write-plan"); Ok(plan, "plan");
+            Ok(run.Cli("connection", "deploy", "--apply-plan", run.PlanFile(plan.Out)), "deploy");
+            var T = (string t) => $"{run.Q("dbdatabuild")}.{run.Q(t)}";
+            Task<int> Status(string model, string status) => CountAsync(run, T("run_log"), $"{run.Q("model")} = '{model}' AND status = '{status}'");
+
+            // the first refresh loads everything (nothing is blocked yet) and the check sets the block
+            var first = run.Cli("connection", "refresh", name, "--check-results", results, "--format", "json");
+            Ok(first, "first refresh");
+            Assert.Equal(1, (int)JsonNode.Parse(first.Out)!["data"]!["checks"]!["blocking"]!);
+
+            // the second: the blocked dataset's own load goes on (a block stops dependents, D7), the model that reads it does not run and names the check, the unrelated one runs
+            var (aBefore, yBefore, zBefore) = (await Status("marts.a_orders", "ok"), await Status("marts.y_other", "ok"), await Status("marts.z_orders", "ok"));
+            var second = run.Cli("connection", "refresh", name, "--check-results", results);
+            Assert.Equal(1, second.Exit);
+            Assert.Contains("skipped: marts.z_orders", second.Out);
+            Assert.Contains("marts.a_orders is blocked by the check amount_present", second.Out);
+            Assert.Equal(1, await Status("marts.z_orders", "skipped: blocked by check"));
+            Assert.Equal(aBefore + 1, await Status("marts.a_orders", "ok"));
+            Assert.Equal(yBefore + 1, await Status("marts.y_other", "ok"));
+            Assert.Equal(zBefore, await Status("marts.z_orders", "ok"));      // the dependent did not load
+
+            // without a results directory the refresh asks nothing of the checks: it is what it was
+            Ok(run.Cli("connection", "refresh", name), "refresh without checks");
+            Assert.Equal(zBefore + 1, await Status("marts.z_orders", "ok"));
+
+            // fix the data: the check passes on this refresh and clears the block, and the next refresh runs the dependent again
+            await engine.ExecAsync("UPDATE staging.orders SET amount = 30.00 WHERE amount IS NULL");
+            // (the block stands while this refresh starts, so the dependent is held once more; the check passes at its end)
+            Assert.Equal(1, run.Cli("connection", "refresh", name, "--check-results", results).Exit);
+            var third = run.Cli("connection", "refresh", name, "--check-results", results);
+            Ok(third, "refresh with the block cleared");
+            Assert.DoesNotContain("blocked by the check", third.Out);
+            Assert.Equal(2, await Status("marts.z_orders", "skipped: blocked by check"));
+            Assert.Equal(zBefore + 2, await Status("marts.z_orders", "ok"));   // the refresh without checks, and this one
+        }
+        finally
+        {
+            if (Directory.Exists(run.Dir)) Directory.Delete(run.Dir, true);
+            try { if (Directory.Exists(results)) Directory.Delete(results, true); } catch (IOException) { }
+        }
+    }
+
     private static string Identity(Run run, string name, string schema, string table)
     {
         var (login, _) = DbDataBuild.Execution.LoginSettings.FromEnvironment(name, name, DbDataBuild.Execution.Login.Read, run.Env);

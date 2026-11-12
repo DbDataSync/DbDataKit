@@ -89,6 +89,38 @@ internal static class ModelQuality
         }
     }
 
+    /// <summary>
+    /// The datasets of this connection's models that a check blocks now (plan 23a FQ14), read from the results directory's <c>quality</c> state: the model's name and the reason a model that reads it gives. A state that cannot be read blocks nothing
+    /// (a check that cannot be read has not shown the data to be bad, QF10) and the reason is returned in <paramref name="problem"/>.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> Blocks(string root, string connection, string resultsDirectory, Func<string, string?> env, out string? problem)
+    {
+        problem = null;
+        try
+        {
+            var ctx = ProjectContext.Load(root);
+            var address = BuildLineage.IdentityOf(ctx.Config, env)(connection);
+            var identityOf = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var model in ctx.Project.BuiltModels.Where(m => ctx.TargetsOf(m.Definition).Contains(connection, StringComparer.Ordinal)).Select(m => m.Definition))
+            {
+                var (schema, name) = DbDataBuild.Targets.Ddl.DdlGenerator.Split(model.Name);
+                identityOf[LineageIdentity.Dataset(address, schema, name).ToString()] = model.Name;
+            }
+
+            var state = DbDataBuild.Cli.Server.BuildState.Open(Path.GetFullPath(resultsDirectory), environment: env);
+            var blocked = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var block in new QualityStore(state).Blocks())
+                if (identityOf.TryGetValue(block.Dataset, out var model) && !blocked.ContainsKey(model))
+                    blocked[model] = $"{model} is blocked by the check {block.CheckId} since {block.BlockedSince:u}";
+            return blocked;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            problem = $"The checks that block were not read, so nothing was held back: {Failures.Describe(ex)}.";
+            return new Dictionary<string, string>();
+        }
+    }
+
     /// <summary>The lines under the refresh's summary.</summary>
     public static IEnumerable<string> Lines(ModelQualityOutcome o)
     {
