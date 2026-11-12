@@ -80,7 +80,7 @@ The Runner is a separate server and **does not read the console's `connections/`
 
 The posture confirmation (above) is the Runner's own: `PUT /api/v1/bindings/<channel>/integration/<package>` refuses with 409 and `needsConfirmation` until the body's `confirm` names each scope, and the Runner records the choice in its own `posture_choice`. The console's `PUT /api/bindings/runner/<server>/<package>/<slot>` sends the definitions first, binds each channel (`prod` first) and passes the 409 on.
 
-Not built: unbinding (the runner has no way to remove a binding; a channel is bound to another connection), a runner screen of the copies beside the Bindings page, sending a secret **value** from the Bindings page (the command line does it), and a ready `HttpClient` for a task through the Kit.
+A channel can be **emptied** (`DELETE /api/v1/bindings/<channel>/integration/<package>/<slot>`, `runner.package.unbind`, the posture choice it held taken back), refused (409) while the version the channel serves or has staged declares the slot. Not built: a runner screen of the copies beside the Bindings page, sending a secret **value** from the Bindings page (the command line does it), and a ready `HttpClient` for a task through the Kit.
 
 ## What was merged
 

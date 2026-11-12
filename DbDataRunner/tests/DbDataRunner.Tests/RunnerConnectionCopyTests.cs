@@ -101,8 +101,11 @@ public sealed class RunnerConnectionCopyTests
             Assert.Contains(Variable, (string)missing["message"]!);
 
             Environment.SetEnvironmentVariable(Variable, KeyValue);
+            // the login resolves on the runner; the connect step does not try an http connection yet (UI08 tries sqlserver and postgres), and says so rather than claiming it opened
             var (_, fine) = await h.CallAsync(HttpMethod.Post, test, ServerRole.Admin, new { slot = "source" });
-            Assert.True((bool)fine!["ok"]!);
+            Assert.Equal("connect", (string)fine!["step"]!);
+            Assert.False((bool)fine["connected"]!);
+            Assert.Contains("login resolved", (string)fine["message"]!);
             Assert.DoesNotContain(KeyValue, fine.ToJsonString());
 
             // the copy says which package slots use it
@@ -167,6 +170,37 @@ public sealed class RunnerConnectionCopyTests
         var (again, other) = await h.CallAsync(HttpMethod.Put, prod, ServerRole.Admin, new { slots = new { source = "crm-sandbox" } });
         Assert.Equal(HttpStatusCode.Conflict, again);
         Assert.Equal(2, other!["needsConfirmation"]!.AsArray().Count);
+    }
+
+    [Fact]
+    public async Task A_channel_of_a_slot_can_be_emptied_the_choice_it_held_is_taken_back_and_a_slot_the_served_version_declares_is_refused()
+    {
+        await using var h = new RunnerHarness(StateEngineIds.Sqlite);
+        h.Install(SamplePackage.Task("fails"));
+        await h.StartAsync();
+        await h.CallAsync(HttpMethod.Put, "/api/v1/bindings/prod/integration/other", ServerRole.Admin, new { slots = new { source = "crm" } });
+        await h.CallAsync(HttpMethod.Put, "/api/v1/bindings/dev/integration/other", ServerRole.Admin, new { slots = new { source = "crm" }, confirm = new[] { "bindings/runner/other/source/dev" } });
+        Assert.Single(new PostureChoices(h.State).List());
+
+        var (status, gone) = await h.CallAsync(HttpMethod.Delete, "/api/v1/bindings/dev/integration/other/source", ServerRole.Admin);
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.True((bool)gone!["unbound"]!);
+        Assert.Empty(new PostureChoices(h.State).List());
+        Assert.Equal(HttpStatusCode.NotFound, (await h.CallAsync(HttpMethod.Delete, "/api/v1/bindings/dev/integration/other/source", ServerRole.Admin)).Status);
+        Assert.Equal(HttpStatusCode.Forbidden, (await h.CallAsync(HttpMethod.Delete, "/api/v1/bindings/prod/integration/other/source", ServerRole.Operator)).Status);
+        Assert.Contains(h.Audit.Read(new AuditQuery(VerbPrefix: RunnerPublishing.UnbindVerb)), e => e.Entry.Outcome == AuditEvent.Ok);
+
+        // a package whose served version declares the slot cannot be emptied: its tasks could not run
+        var service = new RunnerPublishing(h.State);
+        service.Bind("sample", "dev", new Dictionary<string, string> { ["source"] = "erp" }, null, RunnerActor.Local());
+        var files = service.Publisher.Artifacts(RunnerPublishing.Kind, "sample", 1).Select(a => new PublishFile(a.Path, a.Sha256, a.Size, a.MediaType)).ToList();
+        var manifest = PackageManifestWriter.Write(SamplePackage.Manifest(SamplePackage.Task("ok") with { Connections = [new ConnectionSlot("source", "sqlserver")] }));
+        service.Publish(new PublishInput("sample", manifest, files, "dev", PublishMode.Stage), RunnerActor.Local());
+        await service.ActivateAsync("sample", "dev", 1, RunnerActor.Local(), new ActivateOptions(Anyway: true));
+        var (refused, why) = await h.CallAsync(HttpMethod.Delete, "/api/v1/bindings/dev/integration/sample/source", ServerRole.Admin);
+        Assert.Equal(HttpStatusCode.Conflict, refused);
+        Assert.Contains("is declared by version", (string)why!["error"]!);
+        Assert.Single(service.Publisher.Bindings("dev", RunnerPublishing.Kind, "sample"));
     }
 
     private sealed class RecordingHandler : HttpMessageHandler

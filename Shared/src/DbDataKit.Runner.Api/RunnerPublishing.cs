@@ -448,6 +448,40 @@ public sealed partial class RunnerPublishing
         }
     }
 
+    public const string UnbindVerb = "runner.package.unbind";
+
+    /// <summary>
+    /// Empties a slot's binding in a channel (plan 27a IX23). Refused (409) while the version the channel serves or has staged declares the slot, since its tasks could not run; otherwise removed, audited by names, and the
+    /// posture choice the binding held is taken back. False when the slot was not bound.
+    /// </summary>
+    public bool Unbind(string name, string channel, string slot, RunnerActor actor)
+    {
+        var target = $"{name}/{channel}";
+        try
+        {
+            if (!PackageManifestValidator.NameRule.IsMatch(name)) throw new RunnerPublishException(400, $"'{name}' is not a package name.");
+            if (!PackageManifestValidator.NameRule.IsMatch(channel)) throw new RunnerPublishException(400, $"'{channel}' is not a channel name.");
+            if (!SlotRule().IsMatch(slot)) throw new RunnerPublishException(400, $"'{slot}' is not a slot name.");
+            if (Publisher.HeadsOf(Kind, name).FirstOrDefault(h => h.Channel == channel) is { } head)
+                foreach (var version in new[] { head.Active, head.Staged }.OfType<int>().Distinct())
+                    if (_store.Get(Kind, name, version) is { } stored && PackageManifestReader.Load(stored.Content, $"{name}@{version}") is { Ok: true, Manifest: { } manifest } && manifest.Tasks.Any(t => t.Connections.Any(c => c.Name == slot)))
+                        throw new RunnerPublishException(409, $"The slot '{slot}' is declared by version {version} of '{name}', which channel '{channel}' serves or has staged: bind it to another connection instead of emptying it, or retire that version first.");
+            var removed = Publisher.Unbind(channel, Kind, name, slot, actor.Id);
+            if (removed)
+            {
+                Record(UnbindVerb, actor, "package", target, AuditEvent.Ok, new { kind = Kind, name, channel, slot });
+                ReconcilePosture(name, actor, null);
+            }
+
+            return removed;
+        }
+        catch (RunnerPublishException ex)
+        {
+            Record(UnbindVerb, actor, "package", target, AuditEvent.Refused, new { kind = Kind, name, channel, slot, status = ex.Status, reason = ex.Message });
+            throw;
+        }
+    }
+
     /// <summary>The recorded choices of the posture setting <c>production_binding_on_non_production</c> for the bindings of runner slots (scope <c>bindings/runner/&lt;package&gt;/&lt;slot&gt;/&lt;channel&gt;</c>): the Runner's own <c>posture_choice</c> table, the same code as every other choice.</summary>
     public PostureGuard Posture { get; }
 

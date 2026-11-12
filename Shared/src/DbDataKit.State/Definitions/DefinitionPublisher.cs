@@ -404,6 +404,25 @@ public sealed partial class DefinitionPublisher
         });
     }
 
+    /// <summary>Takes a slot's binding in a channel away (plan 27a IX23: a runner's slot channel can be emptied); false when it was not bound. Moves the change log like a bind.</summary>
+    public bool Unbind(string channel, string kind, string name, string slot, string by)
+    {
+        DefinitionStore.Check(kind, name, channel);
+        var now = _database.Time.GetUtcNow();
+        return _database.Retry(() =>
+        {
+            using var connection = _database.OpenConnection();
+            using var transaction = connection.BeginTransaction();
+            if (ReadBinding(connection, transaction, channel, kind, name, slot) is null) return false;
+            using var delete = _database.Command(Module, connection, transaction, "DELETE FROM {table:definition_binding} WHERE channel = $channel AND kind = $kind AND name = $name AND slot = $slot;");
+            delete.Bind(_database, "channel", channel).Bind(_database, "kind", kind).Bind(_database, "name", name).Bind(_database, "slot", slot).ExecuteNonQuery();
+            var active = ReadHead(connection, transaction, kind, name, channel)?.Active ?? 0;
+            Log(connection, transaction, "unbind", kind, name, channel, active, by, now, slot);
+            transaction.Commit();
+            return true;
+        });
+    }
+
     public IReadOnlyList<DefinitionBinding> Bindings(string channel, string kind, string name) =>
         _database.Retry(() =>
         {

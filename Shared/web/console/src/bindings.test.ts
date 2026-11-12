@@ -119,8 +119,12 @@ describe('IX23: bindings, one shape for every slot', () => {
     })
 
     it('sends one connection per channel to the runner, never `*`, and asks the confirmation the way a delivery channel does', () => {
-      expect(runnerSlotBody({ prod: [{ connection: 'crm', model: '' }], dev: [{ connection: '', model: '' }], test: [] }, ['bindings/runner/orders/api/dev'], 'why'))
+      expect(runnerSlotBody({ prod: [{ connection: 'crm', model: '' }], dev: [{ connection: '', model: '' }], test: [] }, {}, ['bindings/runner/orders/api/dev'], 'why'))
         .toEqual({ channels: { prod: 'crm' }, confirm: ['bindings/runner/orders/api/dev'], note: 'why' })
+      // a channel that was bound and is removed (or emptied) is sent as an empty name: the runner unbinds it
+      const saved = { prod: [{ connection: 'crm', model: '' }], dev: [{ connection: 'crm', model: '' }] }
+      expect(runnerSlotBody({ prod: [{ connection: 'crm', model: '' }] }, saved).channels).toEqual({ prod: 'crm', dev: '' })
+      expect(runnerSlotBody({ prod: [{ connection: 'crm', model: '' }], dev: [{ connection: '', model: '' }] }, saved).channels).toEqual({ prod: 'crm', dev: '' })
       expect(draftProblem('runner', { '*': [{ connection: 'crm', model: '' }] })).toContain('no `*`')
       expect(runnerReleaseOk('*')).toBe(false)
       expect(runnerReleaseOk('dev')).toBe(true)

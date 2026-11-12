@@ -83,6 +83,25 @@ public sealed class ConsoleRunnerBindings(ConsoleConnections connections, Consol
         return new RunnerStep(status, status == 200 ? null : body?["error"]?.GetValue<string>() ?? $"{instance.Name} did not bind the slot.", [], []);
     }
 
+    /// <summary>Empties one slot's binding in one channel of the runner (the runner refuses while the version it serves declares the slot). A slot that was not bound is already empty.</summary>
+    public async Task<RunnerStep> UnbindAsync(string server, string package, string channel, string slot, string personId, string? personName, CancellationToken ct)
+    {
+        if (server == ConsoleRunnerSettings.ServerId)
+        {
+            if (Embedded is not { } runner) return new RunnerStep(503, "The console's embedded runner is not running.", [], []);
+            try
+            {
+                runner.Publishing.Unbind(package, channel, slot, ActorOf(personId, personName, server));
+                return new RunnerStep(200, null, [], []);
+            }
+            catch (RunnerPublishException ex) { return new RunnerStep(ex.Status, ex.Message, [], []); }
+        }
+
+        if (instances.Registry.Find(server) is not { } instance) return new RunnerStep(404, $"No server '{server}' is registered.", [], []);
+        var (status, body) = await relay.CallAsync(instance, HttpMethod.Delete, $"/api/v1/bindings/{Uri.EscapeDataString(channel)}/integration/{Uri.EscapeDataString(package)}/{Uri.EscapeDataString(slot)}", null, ct);
+        return status is 200 or 404 ? new RunnerStep(200, null, [], []) : new RunnerStep(status, body?["error"]?.GetValue<string>() ?? $"{instance.Name} did not unbind the slot.", [], []);
+    }
+
     private static UnconfirmedBinding Needs(RunnerUnconfirmedBinding n) => new(n.Scope, "runner", n.Slot, n.Release, n.Connection, n.Effect);
 
     private static IReadOnlyList<string> DiagnosticsOf(JsonNode? body) => body?["diagnostics"] is JsonArray list ? [.. list.Select(d => d?.GetValue<string>() ?? "")] : [];

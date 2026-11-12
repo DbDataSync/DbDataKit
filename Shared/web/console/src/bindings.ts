@@ -203,10 +203,14 @@ export async function loadRunnerSlots(server = 'console-runner', consoleConnecti
   return out
 }
 
-/** The body of a runner slot's save: per channel one connection (a console connection, whose definition the console sends first, or a name the runner knows). */
-export function runnerSlotBody(draft: SlotDraft, confirm: string[] = [], note?: string): { channels: Record<string, string>; confirm?: string[]; note?: string } {
+/**
+ * The body of a runner slot's save: per channel one connection (a console connection, whose definition the console sends first, or a name the runner knows). A channel that was bound (`saved`) and is now removed or empty is sent as an empty
+ * name, which empties it (the runner refuses while the version it serves declares the slot).
+ */
+export function runnerSlotBody(draft: SlotDraft, saved: SlotDraft = {}, confirm: string[] = [], note?: string): { channels: Record<string, string>; confirm?: string[]; note?: string } {
   const channels: Record<string, string> = {}
   for (const [release, list] of Object.entries(draft)) if (list.length > 0 && list[0].connection !== '') channels[release] = list[0].connection
+  for (const [release, list] of Object.entries(saved)) if (list.length > 0 && !(release in channels)) channels[release] = ''
   return { channels, ...(confirm.length > 0 ? { confirm } : {}), ...(note ? { note } : {}) }
 }
 

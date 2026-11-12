@@ -89,7 +89,7 @@ function SlotCard({ slot, view, isAdmin, onSaved, startEditing = false, onCancel
   const [sent, setSent] = useState<Record<string, string>>({})
   const save = useMutation({
     mutationFn: async (confirmed: string[]): Promise<unknown> => isRunner && slot.runner
-      ? bindingsApi.setRunnerSlot(slot.runner.server, slot.runner.package, slot.name.split('/').slice(1).join('/'), runnerSlotBody(draft ?? {}, confirmed, note || undefined))
+      ? bindingsApi.setRunnerSlot(slot.runner.server, slot.runner.package, slot.name.split('/').slice(1).join('/'), runnerSlotBody(draft ?? {}, saved, confirmed, note || undefined))
       : bindingsApi.setSlot(slot.section, slot.name, slotBody(slot.kind, draft ?? {}, confirmed, note || undefined)),
     onSuccess: () => { setDraft(null); setConfirm(null); setNote(''); onSaved() },
     onError: (e) => { const needs = (e as { body?: { needsConfirmation?: Unconfirmed[] } } | null)?.body?.needsConfirmation; if (needs?.length) setConfirm(needs) },
@@ -192,7 +192,7 @@ function SlotCard({ slot, view, isAdmin, onSaved, startEditing = false, onCancel
                         {test.isPending && test.variables?.release === release ? 'Testing…' : 'Test'}
                       </button>
                     ))}
-                    {editing && !isRunner && <button type="button" className="btn btn-sm" onClick={() => { const { [release]: _gone, ...rest } = draft; setDraft(rest) }} data-testid={`binding-release-remove-${slot.name}-${release}`}>Remove</button>}
+                    {editing && <button type="button" className="btn btn-sm" onClick={() => { const { [release]: _gone, ...rest } = draft; setDraft(rest) }} data-testid={`binding-release-remove-${slot.name}-${release}`}>Remove</button>}
                     {!editing && row && Object.entries(tested).filter(([k]) => k.startsWith(`${release}/`)).map(([k, t]) => <span key={k} className={t.ok ? 'hint' : 'error'} role="status" data-testid={`binding-test-result-${slot.name}-${release}`}>{t.text}</span>)}
                   </td>
                 </tr>
@@ -202,7 +202,7 @@ function SlotCard({ slot, view, isAdmin, onSaved, startEditing = false, onCancel
           </tbody>
         </table>
         {slot.kind === 'delivery' && isAdmin && !editing && <input className="input" style={{ marginBottom: 8 }} placeholder="test mail goes to (default: your address)" value={recipient} onChange={(e) => setRecipient(e.target.value)} data-testid={`binding-test-to-${slot.name}`} />}
-        {slot.kind === 'runner' && <div className="hint" data-testid={`binding-runner-note-${slot.name}`}>The runner keeps these in its own store (package/1 is unchanged): a slot per package and release channel, never inherited, and no unbinding (bind a channel to another connection). For a console connection the console sends the runner its definition with secret references, never a value; the references resolve on the runner.</div>}
+        {slot.kind === 'runner' && <div className="hint" data-testid={`binding-runner-note-${slot.name}`}>The runner keeps these in its own store (package/1 is unchanged): a slot per package and release channel, never inherited, and a channel can be emptied only while the version it serves does not declare the slot. For a console connection the console sends the runner its definition with secret references, never a value; the references resolve on the runner.</div>}
         {editable && !editing && (
           <div className="row" style={{ gap: 8 }}>
             <button type="button" className="btn btn-sm" onClick={() => setDraft(saved)} data-testid={`binding-edit-${slot.name}`}>Change</button>
