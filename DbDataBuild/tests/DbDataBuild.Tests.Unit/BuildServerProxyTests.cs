@@ -30,6 +30,7 @@ public sealed partial class BuildServerProxyTests : IAsyncLifetime
     private int dataSourceStatus = 404;       // what the proxy says to a read of the data source; 200 means one exists (and refers to its login), 403 one made by hand
     private readonly HashSet<string> storedSecrets = [];    // the names the proxy holds for this client; a PUT adds one, a DELETE removes it
     private HttpStatusCode writeAnswer = HttpStatusCode.OK;
+    private bool signaturesRequired;                           // the proxy requires signed versions and trusts no key of this server
     private HttpStatusCode modelAnswer = HttpStatusCode.OK;     // what the proxy says to publishing a model
     private WebApplication proxy = null!;
     private WebApplication build = null!;
@@ -110,6 +111,26 @@ public sealed partial class BuildServerProxyTests : IAsyncLifetime
                 if (context.Request.Method == "DELETE") storedSecrets.Remove(name); else storedSecrets.Add(name);
                 return Results.Json(new { reference = "secret:dbdatakit:gateway:managed-x:" + name });
             }
+            // the shared publish API (plan 30 PB02): the data source and the model a Build server publishes go through PUT /api/v1/definitions/{kind}/{name}; this stand-in has no trust store, so a publish goes unsigned
+            if (path.StartsWith("/api/v1/trust/", StringComparison.Ordinal))
+                return signaturesRequired ? Results.Json(new { kind = "data-source", required = true, test_group = false, keys = Array.Empty<object>() }) : Results.Json(new { error = "There is no trust store here." }, statusCode: 404);
+            if (path.StartsWith("/api/v1/definitions/data-source/", StringComparison.Ordinal))
+            {
+                var rest = path["/api/v1/definitions/data-source/".Length..].Split('/');
+                if (context.Request.Method == "GET")
+                {
+                    if (dataSourceStatus != 200) return Results.Json(new { error = dataSourceStatus == 404 ? "none" : "The object was not made by a publisher, so it is not this client's to change" }, statusCode: dataSourceStatus);
+                    return rest.Length == 1
+                        ? Results.Json(new { kind = "data-source", name = rest[0], latest_version = 1, channels = new[] { new { channel = "prod", active = 1 } } })
+                        : Results.Json(new { version = 1, manifest = $"schema: connection/1\nname: x\nengine: sqlserver\naccess: readonly\nconnection_string_secret: 'secret:dbdatakit:gateway:managed-x:{rest[0]}-read'\n" });
+                }
+                return writeAnswer == HttpStatusCode.OK
+                    ? Results.Json(new { version = dataSourceStatus == 200 ? 2 : 1, created = dataSourceStatus != 200 })
+                    : Results.Json(new { error = "The object was not made by a publisher, so it is not this client's to change" }, statusCode: (int)writeAnswer);
+            }
+            if (path.StartsWith("/api/v1/definitions/semantic-model/", StringComparison.Ordinal))
+                return context.Request.Method == "GET" ? Results.Json(new { error = "none" }, statusCode: 404)
+                    : modelAnswer == HttpStatusCode.OK ? Results.Json(new { version = 1, created = true }) : Results.Json(new { error = "The catalog does not load, so nothing was published." }, statusCode: (int)modelAnswer);
             if (path.StartsWith("/api/v1/dashboards/", StringComparison.Ordinal) || path.StartsWith("/api/v1/reports/", StringComparison.Ordinal)) return ViewsAnswer(body);       // plan 32 DBR29 (BuildServerProxyViewsTests)
             if (path.EndsWith("/rollback", StringComparison.Ordinal)) return Results.Json(rollbackAnswerIs.Body, statusCode: rollbackAnswerIs.Status);
             if (path.StartsWith("/api/v1/semantic-models/", StringComparison.Ordinal))
@@ -209,7 +230,7 @@ public sealed partial class BuildServerProxyTests : IAsyncLifetime
 
         var secret = seen.Single(r => r.Path == "/api/v1/secrets/warehouse-read");
         Assert.Equal(ReadLogin, (string)JsonNode.Parse(secret.Body)!["value"]!);
-        var definition = (string)JsonNode.Parse(seen.Single(r => r.Method == "PUT" && r.Path == "/api/v1/data-sources/warehouse").Body)!["text"]!;
+        var definition = (string)JsonNode.Parse(seen.Single(r => r.Method == "PUT" && r.Path == "/api/v1/definitions/data-source/warehouse").Body)!["manifest"]!;
         Assert.Contains("engine: sqlserver", definition);
         Assert.Contains("access: readonly", definition);
         Assert.Contains("connection_string_secret: 'secret:dbdatakit:gateway:managed-x:warehouse-read'", definition);
@@ -234,7 +255,7 @@ public sealed partial class BuildServerProxyTests : IAsyncLifetime
 
         var again = await Publish("ada", ServerRole.Approver, "edge", new { connection = "sqlserver" });
         Assert.False((bool)JsonNode.Parse(await again.Content.ReadAsStringAsync())!["created"]!);
-        Assert.Equal("v1", (string)JsonNode.Parse(seen.Single(r => r.Method == "PUT" && r.Path == "/api/v1/data-sources/sqlserver").Body)!["expected_version"]!);
+        Assert.Equal(1, (int)JsonNode.Parse(seen.Single(r => r.Method == "PUT" && r.Path == "/api/v1/definitions/data-source/sqlserver").Body)!["expected_version"]!);      // the highest version the proxy holds, as the shared API says it
 
         writeAnswer = HttpStatusCode.Forbidden;
         var refused = await Publish("ada", ServerRole.Approver, "edge", new { connection = "sqlserver" });
@@ -308,8 +329,8 @@ public sealed partial class BuildServerProxyTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         Assert.Equal(["warehouse-read"], storedSecrets);
         var order = seen.Select(r => (r.Method, r.Path)).ToList();
-        Assert.True(order.IndexOf(("GET", "/api/v1/data-sources/warehouse")) < order.IndexOf(("PUT", "/api/v1/secrets/warehouse-read")));       // the read before the login
-        Assert.True(order.IndexOf(("PUT", "/api/v1/secrets/warehouse-read")) < order.IndexOf(("PUT", "/api/v1/data-sources/warehouse")));        // the login before the file that refers to it
+        Assert.True(order.IndexOf(("GET", "/api/v1/definitions/data-source/warehouse")) < order.IndexOf(("PUT", "/api/v1/secrets/warehouse-read")));       // the read before the login
+        Assert.True(order.IndexOf(("PUT", "/api/v1/secrets/warehouse-read")) < order.IndexOf(("PUT", "/api/v1/definitions/data-source/warehouse")));        // the login before the file that refers to it
         Assert.DoesNotContain(seen, r => r.Method == "DELETE");
 
         // again, with the source there: written first, then the login follows
@@ -319,7 +340,7 @@ public sealed partial class BuildServerProxyTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, second.StatusCode);
         Assert.False((bool)JsonNode.Parse(await second.Content.ReadAsStringAsync())!["created"]!);
         var again = seen.Select(r => (r.Method, r.Path)).ToList();
-        Assert.True(again.IndexOf(("PUT", "/api/v1/data-sources/warehouse")) < again.IndexOf(("PUT", "/api/v1/secrets/warehouse-read")));
+        Assert.True(again.IndexOf(("PUT", "/api/v1/definitions/data-source/warehouse")) < again.IndexOf(("PUT", "/api/v1/secrets/warehouse-read")));
         Assert.Equal(ReadLogin, (string)JsonNode.Parse(seen.Single(r => r.Method == "PUT" && r.Path == "/api/v1/secrets/warehouse-read").Body)!["value"]!);
         Assert.Equal(["warehouse-read"], storedSecrets);
     }
@@ -354,7 +375,7 @@ public sealed partial class BuildServerProxyTests : IAsyncLifetime
             var reply = await Publish("ada", ServerRole.Approver, "edge", new { connection = name });
             Assert.True(reply.StatusCode == HttpStatusCode.OK, await reply.Content.ReadAsStringAsync());
             Assert.Equal(logins[name].Login, (string)JsonNode.Parse(seen.Single(r => r.Path == $"/api/v1/secrets/{name}-read").Body)!["value"]!);
-            var definition = (string)JsonNode.Parse(seen.Single(r => r.Method == "PUT" && r.Path == $"/api/v1/data-sources/{name}").Body)!["text"]!;
+            var definition = (string)JsonNode.Parse(seen.Single(r => r.Method == "PUT" && r.Path == $"/api/v1/definitions/data-source/{name}").Body)!["manifest"]!;
             Assert.Contains($"engine: {driver}", definition);
             Assert.Contains("access: readonly", definition);
             Assert.Contains($"connection_string_secret: 'secret:dbdatakit:gateway:managed-x:{name}-read'", definition);
@@ -422,9 +443,13 @@ public sealed partial class BuildServerProxyTests : IAsyncLifetime
 
         // the data source before the model that reads it
         var order = seen.Select(r => r.Path).ToList();
-        Assert.True(order.IndexOf("/api/v1/data-sources/sqlserver") < order.IndexOf("/api/v1/semantic-models/retail_sales") && order.IndexOf("/api/v1/data-sources/sqlserver") >= 0);
+        Assert.True(order.IndexOf("/api/v1/definitions/data-source/sqlserver") < order.IndexOf("/api/v1/definitions/semantic-model/retail_sales") && order.IndexOf("/api/v1/definitions/data-source/sqlserver") >= 0);
 
-        var sent = JsonNode.Parse(seen.Single(r => r.Method == "PUT" && r.Path == "/api/v1/semantic-models/retail_sales").Body)!;
+        var put = JsonNode.Parse(seen.Single(r => r.Method == "PUT" && r.Path == "/api/v1/definitions/semantic-model/retail_sales").Body)!;
+        var sent = JsonNode.Parse((string)put["manifest"]!)!;            // the manifest of the shared API: the catalog, the client that made it and the data source of each source
+        Assert.Equal(["data-source:sqlserver"], put["depends_on"]!.AsArray().Select(d => (string)d!));
+        Assert.Equal(0, (int)put["expected_version"]!);                  // nothing was held: the first version
+        Assert.Equal(seen.First().Token.Client.Id, (string)sent["managedBy"]!);             // the stamp is this server's own client id
         var catalog = DbDataKit.Semantic.CatalogLoader.LoadText((string)sent["catalog"]!);            // what the proxy loads
         Assert.Equal("retail_sales", catalog.Name);
         Assert.Contains(catalog.Doc.Sources.Keys, k => k.Length > 0);
@@ -448,5 +473,21 @@ public sealed partial class BuildServerProxyTests : IAsyncLifetime
         var refused = await PublishModel("ada", ServerRole.Approver, "edge", new { model = "retail_sales" });
         Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
         Assert.Contains("nothing was published", await refused.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task A_proxy_that_requires_signed_versions_and_does_not_trust_this_servers_key_is_told_so_in_a_sentence_that_names_the_fix_and_nothing_is_stored()
+    {
+        await Pair();
+        signaturesRequired = true;
+
+        var reply = await Publish("ada", ServerRole.Approver, "edge", new { connection = "sqlserver", data_source = "warehouse" });
+
+        Assert.Equal(HttpStatusCode.Forbidden, reply.StatusCode);
+        var error = (string)JsonNode.Parse(await reply.Content.ReadAsStringAsync())!["error"]!;
+        Assert.Contains("requires signed versions of data-source", error);
+        Assert.Contains("PUT /api/v1/trust/data-source/keys", error);
+        Assert.DoesNotContain(seen, r => r.Method == "PUT" && r.Path.StartsWith("/api/v1/definitions/", StringComparison.Ordinal));
+        Assert.Empty(storedSecrets);        // the login was stored first and is taken away again, as for any refusal of the write
     }
 }

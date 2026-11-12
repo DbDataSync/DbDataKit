@@ -70,13 +70,13 @@ public sealed partial class BuildServerProxyTests
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
         var offer = JsonNode.Parse(await refused.Content.ReadAsStringAsync())!["adopt"]!;
         Assert.True((bool)offer["publish_adopt"]!);
-        Assert.DoesNotContain(seen, r => r.Method == "PUT" && r.Path == "/api/v1/data-sources/warehouse");
+        Assert.DoesNotContain(seen, r => r.Method == "PUT" && r.Path == "/api/v1/definitions/data-source/warehouse");
 
         // with adopt: the write goes with adopt: true, and the Gateway's answer (changes) is the caller's
         seen.Clear();
         var adopted = await Publish("ada", ServerRole.Approver, "edge", new { connection = "sqlserver", data_source = "warehouse", adopt = true });
         Assert.True(adopted.StatusCode == HttpStatusCode.OK, await adopted.Content.ReadAsStringAsync());
-        var write = JsonNode.Parse(seen.Last(r => r.Method == "PUT" && r.Path == "/api/v1/data-sources/warehouse").Body)!;
+        var write = JsonNode.Parse(seen.Last(r => r.Method == "PUT" && r.Path == "/api/v1/definitions/data-source/warehouse").Body)!;
         Assert.True((bool)write["adopt"]!);
         var answer = JsonNode.Parse(await adopted.Content.ReadAsStringAsync())!;
         Assert.True(answer.AsObject().ContainsKey("adopted"));
