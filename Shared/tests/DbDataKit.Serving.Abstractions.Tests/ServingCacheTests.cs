@@ -35,16 +35,16 @@ public class ServingCacheTests
     public void With_access_rules_the_key_holds_the_fingerprint_of_the_resolved_rules_and_not_the_callers_attributes()
     {
         // plan 22a GP10, GP11: two callers with different attributes but the same effective rules share an entry; the same caller under other rules, or a refreshed rules table, does not
-        var plan = Rules with { RulesFingerprint = "aaaa" };
+        var plan = Rules with { Access = "aaaa" };
         var one = Context(Caller("u1", ("region", ["east"])));
         var two = Context(Caller("u2", ("region", ["west"])));
         Assert.Equal(ServingCacheKey.Build(one, Sql(), plan), ServingCacheKey.Build(two, Sql(), plan));
-        Assert.NotEqual(ServingCacheKey.Build(one, Sql(), plan), ServingCacheKey.Build(one, Sql(), plan with { RulesFingerprint = "bbbb" }));
+        Assert.NotEqual(ServingCacheKey.Build(one, Sql(), plan), ServingCacheKey.Build(one, Sql(), plan with { Access = "bbbb" }));
         Assert.NotEqual(ServingCacheKey.Build(one, Sql(), plan), ServingCacheKey.Build(one, Sql(), Rules));
         // scope caller keeps callers apart whatever the fingerprint, and the fingerprint is in the key as well
         var caller = plan with { Scope = ServingCacheScope.Caller };
         Assert.NotEqual(ServingCacheKey.Build(one, Sql(), caller), ServingCacheKey.Build(two, Sql(), caller));
-        Assert.NotEqual(ServingCacheKey.Build(one, Sql(), caller), ServingCacheKey.Build(one, Sql(), caller with { RulesFingerprint = "bbbb" }));
+        Assert.NotEqual(ServingCacheKey.Build(one, Sql(), caller), ServingCacheKey.Build(one, Sql(), caller with { Access = "bbbb" }));
     }
 
     [Fact]
