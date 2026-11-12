@@ -19,6 +19,9 @@ public sealed record DefinitionsAnswer(int Status, JsonObject Body)
     public string? Error => (string?)Body["error"];
 }
 
+/// <summary>What the group holds of a definition: the highest version number, the version the channel serves and its manifest (null when it serves none).</summary>
+public sealed record ServedDefinition(int Latest, int? Active, string? Manifest);
+
 /// <summary>What a publish asks (<c>PUT /api/v1/definitions/{kind}/{name}</c>): the manifest, the files, the channel and mode, the version the caller saw (<see cref="ExpectedVersion"/>, null to create), what it depends on, and <see cref="Extra"/> fields a kind reads from the body (the Gateway's <c>adopt</c>).</summary>
 public sealed record DefinitionPublishRequest(string Kind, string Name, string Manifest, IReadOnlyList<DefinitionFile>? Files = null, string Channel = DefinitionStore.Production, string? Mode = null, int? ExpectedVersion = null,
     IReadOnlyList<string>? DependsOn = null, int? Format = null, string? Note = null, JsonObject? Extra = null);
@@ -86,8 +89,11 @@ public sealed class DefinitionsClient(IDefinitionsLink link, ConsoleSigningKey? 
     public Task<DefinitionsAnswer> DescribeAsync(string kind, string name, CancellationToken ct = default) =>
         GetAsync($"definitions/{Uri.EscapeDataString(kind)}/{Uri.EscapeDataString(name)}", ct);
 
-    /// <summary>The version the channel serves (null when it serves none or the definition is not there) with its manifest, read as <c>GET definitions/{kind}/{name}</c> and then <c>.../versions/{n}</c>. A refusal to read comes back as the answer in <paramref name="refusal"/>.</summary>
-    public async Task<(int Version, string Manifest)?> ServedAsync(string kind, string name, string channel, Action<DefinitionsAnswer>? refusal = null, CancellationToken ct = default)
+    /// <summary>
+    /// What the group holds of a definition as the caller needs it to publish over it: the highest version number (the <c>expected_version</c> of the next publish), the version the channel serves and its manifest (<c>GET definitions/{kind}/{name}</c>, then
+    /// <c>.../versions/{n}</c>). Null when the group has no such definition. A read the group refuses (a status other than 404) is handed to <paramref name="refusal"/> and answers null.
+    /// </summary>
+    public async Task<ServedDefinition?> ServedAsync(string kind, string name, string channel, Action<DefinitionsAnswer>? refusal = null, CancellationToken ct = default)
     {
         var described = await DescribeAsync(kind, name, ct).ConfigureAwait(false);
         if (!described.Ok)
@@ -95,11 +101,12 @@ public sealed class DefinitionsClient(IDefinitionsLink link, ConsoleSigningKey? 
             if (described.Status != 404) refusal?.Invoke(described);
             return null;
         }
+        var latest = (int?)described.Body["latest_version"] ?? 0;
         var active = described.Body["channels"] is JsonArray heads ? heads.OfType<JsonObject>().FirstOrDefault(h => (string?)h["channel"] == channel)?["active"]?.GetValue<int?>() : null;
-        if (active is not { } version) return null;
+        if (active is not { } version) return new ServedDefinition(latest, null, null);
         var read = await GetAsync($"definitions/{Uri.EscapeDataString(kind)}/{Uri.EscapeDataString(name)}/versions/{version}", ct).ConfigureAwait(false);
         if (!read.Ok) { refusal?.Invoke(read); return null; }
-        return (version, (string?)read.Body["manifest"] ?? "");
+        return new ServedDefinition(latest, version, (string?)read.Body["manifest"]);
     }
 
     /// <summary>Binds slots of a definition in a channel (<c>PUT bindings/{channel}/{kind}/{name}</c>): slot to the name of what it is bound to, never a value.</summary>

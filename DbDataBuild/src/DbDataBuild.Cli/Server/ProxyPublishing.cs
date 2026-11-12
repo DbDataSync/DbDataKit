@@ -6,6 +6,8 @@ using DbDataBuild.Models;
 using DbDataKit.Connections;
 using DbDataKit.Secrets;
 using DbDataKit.Secrets.Store;
+using DbDataKit.State;
+using DbDataKit.State.Api;
 using DbDataKit.Web.Trust;
 
 namespace DbDataBuild.Cli.Server;
@@ -54,6 +56,27 @@ internal sealed record PublishResult(int Status, JsonObject Body);
 internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identity, EncryptedFileSecretStore secrets)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    // the Gateway's kinds on the shared publish API (plan 30 PB02): a model and a data source are published to the channel the Gateway serves
+    private const string DataSourceKind = "data-source";
+    private const string ModelKind = "semantic-model";
+    private const string Channel = DefinitionStore.Production;
+
+    /// <summary>The version a data source file has in the per-kind routes' answers: the SHA-256 of its text.</summary>
+    internal static string VersionOf(string text) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
+
+    /// <summary>The call a definitions client makes: relative to <c>/api/v1/</c> on the paired Proxy, over the pinned channel, with a token naming the person who asked and the role Publisher.</summary>
+    private sealed class ProxyLink(string name, HttpClient http, string instanceId, ConsoleIdentity self, ValidatedToken person) : IDefinitionsLink
+    {
+        public string Name => name;
+
+        public Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, HttpContent? content, CancellationToken ct)
+        {
+            var request = new HttpRequestMessage(method, "/api/v1/" + path) { Content = content };
+            request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, self.Issuer().Issue(new ConsoleTokenRequest(instanceId, person.SubjectId, person.SubjectName, ServerRole.Publisher)));
+            return http.SendAsync(request, ct);
+        }
+    }
 
     /// <summary>
     /// The engines the Proxy serves (its providers: SQL Server, ODBC, DuckDB and PostgreSQL) and what a Build connection's driver is called there: the same word. The read login of such a connection is a connection string (for flightsql the login value, <c>grpc+tls://host:port;token=...</c>), which the Proxy takes whole as
@@ -136,20 +159,14 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
 
         try
         {
-            // 1. the data source, read first: new, or the one this server made before (its version is read), and every refusal (the owner rule on a hand-made one) comes before anything is stored
-            string? version = null, current = null;
-            using (var existing = await Send(HttpMethod.Get, $"/api/v1/data-sources/{Uri.EscapeDataString(dataSource)}"))
-            {
-                if (existing.IsSuccessStatusCode)
-                {
-                    var found = JsonNode.Parse(await existing.Content.ReadAsStringAsync(ct));
-                    version = (string?)found?["version"];
-                    current = (string?)found?["text"];
-                }
-                // a data source made by hand is not the publisher's to read; with `adopt` the publish goes on and replaces it (the Gateway records the file it replaces and answers with what changed)
-                else if (existing.StatusCode == System.Net.HttpStatusCode.Forbidden && adopt) { }
-                else if (existing.StatusCode != System.Net.HttpStatusCode.NotFound) return await Refused(existing, "reading the data source", AdoptHint(self.Id, dataSource));
-            }
+            // 1. the data source, read first through the shared API: new, or the one this server made before (the version the channel serves is read), and every refusal (the owner rule on a hand-made one) comes before anything is stored
+            var client = new DefinitionsClient(new ProxyLink(proxyName, http, proxy.InstanceId, self, person), self.Key);
+            DefinitionsAnswer? unreadable = null;
+            var held = await client.ServedAsync(DataSourceKind, dataSource, Channel, a => unreadable = a, ct);
+            int? latest = held?.Latest;
+            string? current = held?.Manifest;
+            // a data source made by hand is not the publisher's to read; with `adopt` the publish goes on and replaces it (the Gateway records the file it replaces and answers with what changed)
+            if (unreadable is not null && !(unreadable.Status == 403 && adopt)) return Refused(unreadable, "reading the data source", AdoptHint(self.Id, dataSource));
 
             // 2. is the login already there? (PUT overwrites, and on a re-publish it is the live login of a source this server manages)
             bool exists;
@@ -171,17 +188,19 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
                 (storedNew, replaced) = (!exists, exists);
             }
 
-            var text = DataSourceText(dataSource, engine, reference!, config.Grants, config.GatewayPolicy);
-            using var written = await Send(HttpMethod.Put, $"/api/v1/data-sources/{Uri.EscapeDataString(dataSource)}", new { text, expected_version = version, adopt });
-            if (!written.IsSuccessStatusCode) return await Undone(await Refused(written, "writing the data source", AdoptHint(self.Id, dataSource)));
-            var answer = JsonNode.Parse(await written.Content.ReadAsStringAsync(ct))!;
+            // the file says whose it is: the manifest is signed, so the Gateway does not add the line (it checks it)
+            var text = DataSourceText(dataSource, engine, reference!, config.Grants, config.GatewayPolicy, self.Id);
+            var extra = adopt ? new JsonObject { ["adopt"] = true } : null;
+            var written = await client.PublishAsync(new DefinitionPublishRequest(DataSourceKind, dataSource, text, ExpectedVersion: latest ?? 0, Extra: extra), ct);
+            if (!written.Ok) return await Undone(Refused(written, "writing the data source", AdoptHint(self.Id, dataSource)));
+            var answer = written.Body;
 
             if (!loginFirst && await StoreLogin() is (_, { } notStored))
             {
                 notStored.Body["error"] = $"{(string?)notStored.Body["error"]} The data source was written and keeps using the login it already had.";
                 return notStored;
             }
-            return new PublishResult(200, new JsonObject { ["proxy"] = proxyName, ["data_source"] = dataSource, ["created"] = (bool?)answer["created"] ?? version is null, ["version"] = (string?)answer["version"], ["adopted"] = (bool?)answer["adopted"] ?? false, ["changes"] = answer["changes"]?.DeepClone(), ["kept"] = answer["kept"]?.DeepClone() });
+            return new PublishResult(200, new JsonObject { ["proxy"] = proxyName, ["data_source"] = dataSource, ["created"] = (bool?)answer["created"] ?? held is null, ["version"] = VersionOf(text), ["adopted"] = (bool?)answer["adopted"] ?? false, ["changes"] = answer["changes"]?.DeepClone(), ["kept"] = answer["kept"]?.DeepClone() });
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IncompatibleServerException)
         {
@@ -193,17 +212,19 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
     /// The data source file a publish sends: always the current format (<c>connection/2</c>, plan 33 6d rule 5; a Gateway is upgraded before the tools that publish to it). With the connection's <c>grants</c> (plan 22a GP03) it carries
     /// them: the Gateway serves exactly these grants, and the next publish replaces them (a connection whose grants were removed publishes a file with none).
     /// </summary>
-    internal static string DataSourceText(string dataSource, string engine, string? reference, GrantsSpec? grants, DbDataKit.Config.Yaml.YamlMapping? policy = null)
+    internal static string DataSourceText(string dataSource, string engine, string? reference, GrantsSpec? grants, DbDataKit.Config.Yaml.YamlMapping? policy = null, string? managedBy = null)
     {
         var text = $"schema: {DbDataKit.Connections.ConnectionDefinition.CurrentSchemaId}\nname: {dataSource}\nengine: {engine}\naccess: readonly\n" + (reference is null ? "" : $"connection_string_secret: '{reference}'\n");
         // the serving policy of the definition (plan 13c D19): the Gateway replaces its own with exactly this, and a definition without any publishes none
         var policyText = policy is { Entries.Count: > 0 } ? ServingPolicy.Emit(policy) : "";
-        if (grants is null) return text + policyText;
+        // the shared API takes the file as signed, so a publishing client's file says whose it is (the Gateway checks the line; the per-kind route added it)
+        var owner = managedBy is null ? "" : $"managed_by: {managedBy}\n";
+        if (grants is null) return text + policyText + owner;
         text += "grants:\n";
         if (grants.Everyone) text += "  everyone: true\n";
         if (grants.Groups.Count > 0) text += "  groups: [" + string.Join(", ", grants.Groups.Select(g => "'" + g.Replace("'", "''", StringComparison.Ordinal) + "'")) + "]\n";
         if (!grants.Everyone && grants.Groups.Count == 0) text += "  groups: []\n";
-        return text + policyText;
+        return text + policyText + owner;
     }
 
     /// <summary>The reference a data source file's <c>connection_string_secret</c> holds when it names the secret <paramref name="secretName"/> (references end in the secret's name), else null.</summary>
@@ -234,27 +255,21 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
 
         var self = await identity.GetOrCreateAsync(ct);
         using var http = new HttpClient(PairingClient.Pinned(proxy.Fingerprint)) { BaseAddress = new Uri(proxy.Url), Timeout = TimeSpan.FromSeconds(60) };
-        async Task<HttpResponseMessage> Send(HttpMethod method, string path, object? body = null)
-        {
-            using var request = new HttpRequestMessage(method, path);
-            request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, self.Issuer().Issue(new ConsoleTokenRequest(proxy.InstanceId, person.SubjectId, person.SubjectName, ServerRole.Publisher)));
-            if (body is not null) request.Content = JsonContent.Create(body, options: Json);
-            return await http.SendAsync(request, ct);
-        }
         try
         {
-            var path = $"/api/v1/semantic-models/{Uri.EscapeDataString(model.Name)}";
-            int? current = null;
-            using (var existing = await Send(HttpMethod.Get, path))
-            {
-                if (existing.IsSuccessStatusCode) current = (int?)JsonNode.Parse(await existing.Content.ReadAsStringAsync(ct))?["current_version"];
-                else if (existing.StatusCode != System.Net.HttpStatusCode.NotFound) return await Refused(existing, "reading the model");
-            }
+            // through the shared API: what the Gateway holds of the model is read first (the version the publish goes over), the manifest is the catalog with the data source each source reads and the client that made it,
+            // and the data sources just published are what it depends on. The Gateway's hook checks the catalog, the sources and that this client made them, as its per-kind route did.
+            var client = new DefinitionsClient(new ProxyLink(proxyName, http, proxy.InstanceId, self, person), self.Key);
+            DefinitionsAnswer? unreadable = null;
+            var held = await client.ServedAsync(ModelKind, model.Name.ToLowerInvariant(), Channel, a => unreadable = a, ct);
+            if (unreadable is not null) return Refused(unreadable, "reading the model");
             var sources = model.Connections.ToDictionary(c => c.Key, c => c.Value, StringComparer.Ordinal);
-            using var written = await Send(HttpMethod.Put, path, new { catalog = compiled.Json.ToJsonString(), sources, expected_version = current });
-            if (!written.IsSuccessStatusCode) return await Refused(written, "publishing the model");
-            var answer = JsonNode.Parse(await written.Content.ReadAsStringAsync(ct))!;
-            return new PublishResult(200, new JsonObject { ["proxy"] = proxyName, ["model"] = model.Name, ["version"] = (int?)answer["version"], ["created"] = (bool?)answer["created"] ?? current is null, ["data_sources"] = published });
+            var manifest = JsonSerializer.Serialize(new { catalog = compiled.Json.ToJsonString(), managedBy = self.Id, sources, ssas = new Dictionary<string, string>() }, Json);
+            var written = await client.PublishAsync(new DefinitionPublishRequest(ModelKind, model.Name.ToLowerInvariant(), manifest, ExpectedVersion: held?.Latest ?? 0,
+                DependsOn: [.. published.Select(d => "data-source:" + (string?)d)]), ct);
+            if (!written.Ok) return Refused(written, "publishing the model");
+            var answer = written.Body;
+            return new PublishResult(200, new JsonObject { ["proxy"] = proxyName, ["model"] = model.Name, ["version"] = (int?)answer["version"], ["created"] = (bool?)answer["created"] ?? held is null, ["data_sources"] = published });
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IncompatibleServerException)
         {
@@ -353,9 +368,17 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
     {
         var message = "";
         try { message = (string?)JsonNode.Parse(await response.Content.ReadAsStringAsync())?["error"] ?? ""; } catch (JsonException) { }
-        var refused = Fail((int)response.StatusCode, $"The proxy refused {step}: {(message.Length > 0 ? message : response.ReasonPhrase)}");
+        return Refused((int)response.StatusCode, message.Length > 0 ? message : response.ReasonPhrase ?? "", step, adopt);
+    }
+
+    /// <summary>The same for what the shared API answered (a refusal carries <c>error</c>; the Gateway's hooks keep the words of the per-kind routes).</summary>
+    private static PublishResult Refused(DefinitionsAnswer answer, string step, JsonObject? adopt = null) => Refused(answer.Status, answer.Error ?? "", step, adopt);
+
+    private static PublishResult Refused(int status, string message, string step, JsonObject? adopt)
+    {
+        var refused = Fail(status, $"The proxy refused {step}: {message}");
         // a refusal on owner grounds (403) can be settled by a person taking the object over; say how
-        if (adopt is not null && response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        if (adopt is not null && status == 403)
         {
             refused.Body["error"] = $"{(string?)refused.Body["error"]} An administrator of the proxy can hand this data source to this server (adopt it, client {(string?)adopt["client"]}); a server cannot adopt for itself.";
             refused.Body["adopt"] = adopt;
