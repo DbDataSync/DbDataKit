@@ -65,7 +65,7 @@ public static class ConnectionKeywords
         var engine = DbDataKit.Connections.Descriptor.EngineRegistry.Builtin.Find(word);
         if (engine is null) return null;
         var notes = new[] { engine.Role(DbDataKit.Connections.Descriptor.EngineRoles.BuildTarget), engine.Role(DbDataKit.Connections.Descriptor.EngineRoles.BuildOrigin) }.Select(r => r.Note).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
-        return $"`{word}` is {engine.DisplayName}, an engine of the suite that Build does not build on or read yet" + (notes.Count == 0 ? "." : $" ({string.Join("; ", notes)}).");
+        return $"`{word}` is not a keyword of `engine`: it is {engine.DisplayName}, an engine of the suite that Build does not build on or read yet" + (notes.Count == 0 ? "." : $" ({string.Join("; ", notes)}).");
     }
 
     /// <summary>Splits the text of `engine` into words: separated by spaces and/or commas.</summary>
