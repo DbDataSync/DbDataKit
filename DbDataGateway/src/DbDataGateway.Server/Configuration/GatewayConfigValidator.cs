@@ -147,6 +147,8 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
             cx.Error("Mcp.Port", "The mcp module has its own port; it is the store module's here.", $"Choose another port than {o.Store.Port}.");
         if (GatewayModules.Has(o, GatewayModules.Views) && o.Mcp.Port == o.Views.Port)
             cx.Error("Mcp.Port", "The mcp module has its own port; it is the views module's here.", $"Choose another port than {o.Views.Port}.");
+    }
+
     private static void ValidateRest(GatewayOptions o, IConfigValidationContext cx)
     {
         if (!GatewayModules.Has(o, GatewayModules.Feeds)) return;
