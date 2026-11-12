@@ -8,7 +8,7 @@ const key = ['state-connections'] as const
 
 /**
  * The state databases of the console as connections of kind `state` (plan 29b, C06): where a server's state can be moved to. A connection holds the engine, the connection string with its password as a secret reference (the password itself is typed once and kept in the
- * console's secret store), and, for SQLite, a path on the console's machine. The list says which paired servers use each one and the module versions found there; Test runs the checks of `state test` through the shared library and answers with one sentence.
+ * console's secret store), and, for SQLite, a file path (in a move, a path on the server that is moved). The list says which paired servers use each one and the module versions found there; Test runs the checks of `state test` through the shared library and answers with one sentence.
  */
 export function StateConnections() {
   const isAdmin = useIsAdmin()
@@ -103,7 +103,7 @@ function StateConnectionForm({ existing, onDone, onCancel }: { existing: StateCo
           <select className="input" value={engine} onChange={(e) => setEngine(e.target.value)} data-testid="state-connection-engine">
             <option value="postgres">PostgreSQL</option>
             <option value="mssql">SQL Server</option>
-            <option value="sqlite">SQLite (a file on this console&apos;s machine)</option>
+            <option value="sqlite">SQLite (a file; for a move, a path on the server being moved)</option>
           </select>
         </Field>
         {sqlite ? (

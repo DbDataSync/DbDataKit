@@ -1,4 +1,5 @@
 using DbDataKit.Connections;
+using DbDataKit.Connections.Http;
 using DbDataKit.Runner.Kit;
 using DbDataKit.Runner.Protocol.Server;
 using DbDataKit.Runner.Staging;
@@ -17,11 +18,19 @@ namespace DbDataKit.Runner.Connections;
 /// <item><see cref="ResolveAsync"/>, for a task that asks through the protocol: a <see cref="ConnectionGrant"/> for one role. A read request never gets the write login, and a write request on a read-only connection is refused.</item>
 /// </list>
 /// A secret that is not in the store is a <see cref="SlotResolutionException"/> naming the slot, the connection and the reference, never a fallback to another role.
+/// The connections come from the catalog: the runner's own directory of files, then the copies the console handed over (<see cref="StoredConnectionCatalog"/>, plan 27a IX23); the runner never reads the console's folder, and a copy's secrets resolve here like any other.
 /// </summary>
 public sealed class RunnerSlotResolver(DefinitionPublisher publisher, IConnectionCatalog catalog, ISecretResolver secrets, IRedactor? redactor = null, PostureChoices? posture = null) : ISlotResolver
 {
-    /// <summary>The scope of the posture choice <see cref="PostureSetting.ProductionBindingOnNonProduction"/> for a slot of a package in a channel (the same shape as the console's bindings: <c>bindings/&lt;section&gt;/&lt;slot&gt;/&lt;release channel&gt;</c>, the slot written <c>package/slot</c>).</summary>
+    /// <summary>The scope of the posture choice <see cref="PostureSetting.ProductionBindingOnNonProduction"/> for a slot of a package in a channel: the one scope the bind-time confirmation (<c>RunnerPublishing</c>), the Bindings page and <c>package allow-production-binding</c> write, in <c>runner.posture_choice</c> (the same shape as the console's bindings: <c>bindings/&lt;section&gt;/&lt;slot&gt;/&lt;release channel&gt;</c>, the slot written <c>package/slot</c>).</summary>
     public static string ProductionBindingScope(string package, string slot, string channel) => $"bindings/runner/{package}/{slot}/{channel}";
+
+    /// <summary>The definition this runner has under <paramref name="connection"/> (a file or a copy), or null when it has none or it does not load.</summary>
+    public ConnectionDefinition? Known(string connection)
+    {
+        try { return catalog.Find(connection); }
+        catch (InvalidDataException) { return null; }
+    }
 
     public const string SyncSecretPrefix = "dbdatakit:sync:connection:";
 
@@ -43,8 +52,7 @@ public sealed class RunnerSlotResolver(DefinitionPublisher publisher, IConnectio
 
     /// <summary>
     /// Plan 27a IX17, at the moment a run starts (so a binding written by hand is held to it as much as one made through the API): a task in a channel other than production does not get the connection that production's channel binds the same slot to,
-    /// because what it sends or writes would reach production's far side, unless an administrator chose <see cref="PostureSetting.ProductionBindingOnNonProduction"/> for that slot and channel (confirmed, recorded with who and when, audited). A connection that
-    /// is read-only cannot send or write, so sharing it is not the case. A slot with no binding in the channel is refused by <see cref="Handles"/> already: nothing is inherited from production.
+    /// because what it sends or writes would reach production's far side, unless an administrator chose <see cref="PostureSetting.ProductionBindingOnNonProduction"/> for that slot and channel (confirmed, recorded with who and when, audited). This is the backstop of the rule the bind refuses first (409 until confirmed): the same record, the same scope, no second mechanism. A slot with no binding in the channel is refused by <see cref="Handles"/> already: nothing is inherited from production.
     /// </summary>
     private void RefuseProductionBindings(TaskRef task, IReadOnlyList<ConnectionSlot> slots, IReadOnlyDictionary<string, string> bound)
     {
@@ -53,7 +61,6 @@ public sealed class RunnerSlotResolver(DefinitionPublisher publisher, IConnectio
         foreach (var slot in slots)
         {
             if (!production.TryGetValue(slot.Name, out var prod) || !string.Equals(prod, bound[slot.Name], StringComparison.Ordinal)) continue;
-            if (catalog.Find(prod) is { Access: AccessMode.Readonly }) continue;
             if (posture.IsChosen(ProductionBindingScope(task.Package, slot.Name, task.Channel), PostureSetting.ProductionBindingOnNonProduction.Name)) continue;
             throw new SlotResolutionException($"The task {task} would use the connection '{prod}' for the slot '{slot.Name}' in channel '{task.Channel}', and that is the connection production uses for it: what the task sends or writes would reach production's far side. "
                 + $"Bind the slot in '{task.Channel}' to a connection of its own (a sandbox), or have an administrator confirm it (package allow-production-binding {task.Package} {slot.Name} {task.Channel} --confirm); the choice is recorded with who and when.");
@@ -101,6 +108,9 @@ public sealed class RunnerSlotResolver(DefinitionPublisher publisher, IConnectio
     public async Task<ConnectionGrant> ResolveAsync(string slot, string connection, string role, CancellationToken ct)
     {
         var definition = Definition(slot, connection);
+        if (definition.KindName == ConnectionKinds.Http) return await ResolveHttpAsync(slot, connection, role, definition, ct).ConfigureAwait(false);
+        if (definition.KindName != ConnectionKinds.Database)
+            throw new SlotResolutionException($"The connection '{connection}' bound to the slot '{slot}' is of kind '{definition.KindName}', which a runner slot does not take (a database or an http connection).");
         var loginRole = role switch { "read" => LoginRole.Read, "write" => LoginRole.Write, _ => LoginRole.Default };
         if (loginRole == LoginRole.Write && definition.Access == AccessMode.Readonly)
             throw new SlotResolutionException($"A write login was asked for the slot '{slot}', and the connection '{connection}' it is bound to is read-only.");
@@ -135,6 +145,69 @@ public sealed class RunnerSlotResolver(DefinitionPublisher publisher, IConnectio
             ConnectionStringSecret = whole,
             Token = token,
         };
+    }
+
+    /// <summary>
+    /// An http connection (a copy the console sent, plan 27a IX23): the address as the file says it (a template whose secret parts stay out of the grant) and the sign-in method, with every secret of it resolved <b>here</b>, in this runner's store. In the grant,
+    /// <c>AuthMode</c> is the method (<c>api_key</c>, <c>basic</c>, <c>oauth2_client_credentials</c>, <c>client_certificate</c>, <c>none</c>), <c>Token</c> the API key or the client secret, <c>Password</c> the password of <c>basic</c>, <c>User</c> its user or the client id.
+    /// A task that wants a ready client asks <see cref="OpenHttp"/>: <c>HttpConnections.Create</c> over this runner's secrets.
+    /// </summary>
+    private async Task<ConnectionGrant> ResolveHttpAsync(string slot, string connection, string role, ConnectionDefinition definition, CancellationToken ct)
+    {
+        var sign = definition.SignIn;
+        var address = definition.Endpoint is { } endpoint && !EndpointTemplate.IsHidden(endpoint) && Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) ? uri : null;
+        string? key = null, password = null;
+        if (sign is not null)
+        {
+            key = await RevealAsync(slot, connection, sign.KeySecret ?? sign.ClientSecretSecret, ct).ConfigureAwait(false);
+            password = await RevealAsync(slot, connection, sign.PasswordSecret, ct).ConfigureAwait(false);
+            await RevealAsync(slot, connection, sign.CertificateSecret, ct).ConfigureAwait(false);
+            await RevealAsync(slot, connection, sign.CertificatePasswordSecret, ct).ConfigureAwait(false);
+        }
+
+        foreach (var (_, reference) in definition.EndpointSecrets) await RevealAsync(slot, connection, reference, ct).ConfigureAwait(false);
+        return new ConnectionGrant
+        {
+            Slot = slot,
+            Connection = connection,
+            Engine = ConnectionKinds.Http,
+            Role = role,
+            Host = address?.Host,
+            Port = address is null ? null : address.Port,
+            ConnectionString = address?.ToString(),
+            ReadOnly = false,
+            AuthMode = sign?.Method ?? "none",
+            User = sign?.User ?? sign?.ClientId,
+            Password = password,
+            Token = key,
+        };
+    }
+
+    /// <summary>A client of the http connection bound to a slot, made by <c>DbDataKit.Connections.Http</c> from the runner's copy of the definition and signed in as it says, over this runner's secrets. The caller disposes it.</summary>
+    public HttpConnectionClient OpenHttp(string slot, string connection, HttpConnectionOptions? options = null)
+    {
+        var definition = Definition(slot, connection);
+        if (definition.KindName != ConnectionKinds.Http) throw new SlotResolutionException($"The connection '{connection}' bound to the slot '{slot}' is of kind '{definition.KindName}', not http.");
+        try { return HttpConnections.Create(definition, secrets, options); }
+        catch (SecretNotFoundException ex) { throw new SlotResolutionException($"The login of the connection '{connection}' bound to the slot '{slot}' is not in this runner's secret store: {ex.Message}", ex); }
+    }
+
+    /// <summary>The secret references of the connection bound to a slot (a name the runner knows, from a file or a copy) and whether each resolves <b>on this runner</b>; the value is dropped at once. A name this runner does not know has none.</summary>
+    public async Task<IReadOnlyList<SecretCheck>> CheckReferencesAsync(ConnectionDefinition definition, CancellationToken ct)
+    {
+        var list = new List<SecretCheck>();
+        foreach (var (path, reference) in ConnectionSecretReferences.Of(definition))
+        {
+            try
+            {
+                using var value = await secrets.ResolveAsync(SecretRef.Parse(reference), ct).ConfigureAwait(false);
+                list.Add(new SecretCheck(path, reference, true, null));
+            }
+            catch (SecretNotFoundException) { list.Add(new SecretCheck(path, reference, false, $"The secret '{reference}' is not in this runner's secret store, the environment or the credentials directory. Send it with `secret send --to <this runner>`, or set it there.")); }
+            catch (Exception ex) when (ex is ArgumentException or FormatException) { list.Add(new SecretCheck(path, reference, false, $"'{reference}' is not a secret reference this runner can parse.")); }
+        }
+
+        return list;
     }
 
     private ConnectionDefinition Definition(string slot, string connection)
@@ -183,3 +256,6 @@ public sealed class RunnerSlotResolver(DefinitionPublisher publisher, IConnectio
         }
     }
 }
+
+/// <summary>One secret reference of a connection and whether it resolves on this runner; <see cref="Problem"/> says what to do when it does not. Never a value.</summary>
+public sealed record SecretCheck(string Path, string Reference, bool Resolves, string? Problem);

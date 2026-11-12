@@ -55,15 +55,23 @@ public sealed class FakeRunnerRuns : IRunnerSync, IRunnerRuns
 
     public void AddPass(string task, PassRecord pass) => AddStep(task, PassRecordText.StepName, pass.RunId.ToString("N"), PassRecordText.Serialize(pass), pass.StartedAt);
 
-    private void Enter()
+    private readonly List<string?> _asked = [];
+
+    /// <summary>How many calls named a task containing <paramref name="fragment"/>: the background pollers of the host (lag, run monitor) call the runner too, so "this request asked nobody" is counted per replication, not by the total.</summary>
+    public int AskedAbout(string fragment)
     {
-        lock (_gate) Calls++;
+        lock (_gate) return _asked.Count(t => t is not null && t.Contains(fragment, StringComparison.Ordinal));
+    }
+
+    private void Enter(string? task = null)
+    {
+        lock (_gate) { Calls++; _asked.Add(task); }
         if (Down) throw new RunnerClientException("https://runner.test:8495 could not be reached (connection refused).");
     }
 
     public Task<IReadOnlyList<ClientRun>> RunsAsync(string? task, int limit, DateTimeOffset? before, string? outcome, CancellationToken ct)
     {
-        Enter();
+        Enter(task);
         lock (_gate)
             return Task.FromResult<IReadOnlyList<ClientRun>>([.. _runs.Where(r => (task is null || r.Task == task) && (before is null || r.Started < before) && (outcome is null || r.Outcome == outcome)).OrderByDescending(r => r.Started).Take(limit)]);
     }
@@ -83,7 +91,7 @@ public sealed class FakeRunnerRuns : IRunnerSync, IRunnerRuns
 
     public Task<IReadOnlyList<ClientStep>> StepsAsync(string task, string step, int limit, DateTimeOffset? before, string? key, CancellationToken ct)
     {
-        Enter();
+        Enter(task);
         lock (_gate)
             return Task.FromResult<IReadOnlyList<ClientStep>>([.. _steps.Where(s => s.Task == task && s.Step == step && (before is null || s.Entry.Started < before) && (key is null || s.Entry.Key == key)).Select(s => s.Entry).OrderByDescending(s => s.Started).Take(limit)]);
     }
@@ -98,7 +106,7 @@ public sealed class FakeRunnerRuns : IRunnerSync, IRunnerRuns
 
     public async Task<bool> StepPayloadAsync(string task, string step, Guid payload, Stream destination, CancellationToken ct)
     {
-        Enter();
+        Enter(task);
         byte[]? content;
         lock (_gate) content = _payloads.GetValueOrDefault((task, step, payload));
         if (content is null) return false;
@@ -108,7 +116,7 @@ public sealed class FakeRunnerRuns : IRunnerSync, IRunnerRuns
 
     public Task<IReadOnlyList<ClientCheckpointItem>> CheckpointAsync(string task, string name, CancellationToken ct)
     {
-        Enter();
+        Enter(task);
         return Task.FromResult<IReadOnlyList<ClientCheckpointItem>>([.. Checkpoint]);
     }
 

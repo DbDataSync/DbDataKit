@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Connections.Files</RootNamespace>
+    <PackageId>DbDataKit.Connections.Files</PackageId>
+    <Description>Clients of the file stores a connection can name (plan 27a IX04 to IX06): SFTP, SCP and FTPS with host-key and certificate pinning, SMB with Windows sign-in, S3-compatible and Azure Blob object storage, behind one small interface: list, read, write (a partial file is never picked up), delete.</Description>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <PackageReference Include="FluentFTP" />
+    <PackageReference Include="SSH.NET" />
+    <ProjectReference Include="..\DbDataKit.Connections.Abstractions\DbDataKit.Connections.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections.Http\DbDataKit.Connections.Http.csproj" />
+    <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
+    <InternalsVisibleTo Include="DbDataKit.Connections.Files.Tests" />
+  </ItemGroup>
+</Project>

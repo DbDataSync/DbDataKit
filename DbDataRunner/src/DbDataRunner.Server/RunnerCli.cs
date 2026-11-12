@@ -42,7 +42,7 @@ public static class RunnerCli
     public static NounRouter Router(Func<string, string?>? environment = null) => new(Program,
     [
         ServerNoun.Create((args, context) => RunServerAsync(args, context, environment))
-            .With([.. PairingVerbs.Create(args => RunnerState.Pairing(DirectoryOf(args, environment), RunnerSettings.StateFrom(environment), environment))]),
+            .With([.. PairingVerbs.Create(args => RunnerState.Pairing(DirectoryOf(args, environment), RunnerSettings.StateFrom(DirectoryOf(args, environment), environment), environment))]),
         RunsNoun(environment),
         TasksNoun(environment),
         RunnerLabelVerbs.Create(environment),
@@ -60,7 +60,7 @@ public static class RunnerCli
         args =>
         {
             var directory = DirectoryOf(args, environment);
-            return new DbDataKit.State.Cli.StateTarget(RunnerSettings.StateFrom(environment, args.Get("engine")), RunnerState.PathIn(directory), () => RunnerState.Secrets(environment));
+            return DbDataKit.State.Cli.StateTarget.From(RunnerState.Resolve(directory, environment, args.Get("engine"), "--engine"), RunnerState.PathIn(directory), () => RunnerState.Secrets(environment), RunnerState.SettingsFile(directory));
         },
         RunnerState.Modules, RunnerState.ScopeOf(), ["engine", "repo"], "[--engine mssql|postgres] [--repo <server directory>]"));
 
@@ -98,9 +98,10 @@ public static class RunnerCli
         RunnerSettings settings;
         try
         {
-            settings = new RunnerSettings(DirectoryOf(args, environment), listen) { State = RunnerSettings.StateFrom(environment), Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")), MaxArtifactBytes = RunnerSettings.MaxArtifactBytesFrom(environment), ActivationMaxWait = RunnerSettings.ActivationMaxWaitFrom(environment), Group = RunnerSettings.GroupFrom(environment, parsed.Get("group")), TaskEnvironment = RunnerSettings.TaskEnvironmentFrom(environment) };
+            var resolvedState = RunnerState.Resolve(DirectoryOf(args, environment), environment);
+            settings = new RunnerSettings(DirectoryOf(args, environment), listen) { State = resolvedState.Settings, StateSources = resolvedState.Sources, Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")), MaxArtifactBytes = RunnerSettings.MaxArtifactBytesFrom(environment), ActivationMaxWait = RunnerSettings.ActivationMaxWaitFrom(environment), Group = RunnerSettings.GroupFrom(environment, parsed.Get("group")), TaskEnvironment = RunnerSettings.TaskEnvironmentFrom(environment) };
         }
-        catch (ArgumentException ex)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
             await context.Error.WriteLineAsync(ex.Message);
             return CliExit.Usage;
@@ -135,7 +136,7 @@ public static class RunnerCli
     // ---- local verbs, on the same state the server uses
 
     private static StateDatabase OpenState(CliArgs parsed, Func<string, string?>? environment) =>
-        RunnerState.Open(DirectoryOf(parsed, environment), RunnerSettings.StateFrom(environment), environment);
+        RunnerState.Open(DirectoryOf(parsed, environment), RunnerSettings.StateFrom(DirectoryOf(parsed, environment), environment), environment);
 
     private static RunnerControl ControlOf(CliArgs parsed, StateDatabase state, Func<string, string?>? environment) =>
         RunnerControl.ForCommands(state, RunnerSettings.ChannelsFrom(environment), Path.Combine(DirectoryOf(parsed, environment), "cache"));
@@ -462,7 +463,7 @@ public static class RunnerCli
         }
 
         var guard = new PostureGuard(OpenState(parsed, environment), RunnerNames.ServiceId);
-        var scope = RunnerSlotResolver.ProductionBindingScope(package, slot, channel);
+        var scope = RunnerPublishing.PostureScope(package, slot, channel);   // the one record: the bind-time confirmation and the Bindings page write the same scope
         var actor = RunnerActor.Local().Id;
         context.Data["package"] = package;
         context.Data["slot"] = slot;

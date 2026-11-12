@@ -41,7 +41,6 @@ Generated from the engine registry (`Shared/src/DbDataKit.Connections.Descriptor
 
 - Build target: unverified. Built, never run against a real engine
 - Build origin: unverified. The same catalog reads as SQL Server; never run against a real engine
-- Gateway: not supported (open, needs a Fabric test tenant). The endpoint speaks TDS but accepts only Entra ID, and the Gateway cannot make that login. The default when it is built: reference `Microsoft.Data.SqlClient.Extensions.Azure` from `DbDataGateway.Server`, map `engine: fabric` onto the SQL Server provider with the `fabric` dialect, put the Entra credential in the connection string (`Authentication=Active Directory Service Principal;User Id=...;Password=env:...`, or managed identity) with no pass-through, and stop refusing `fabric` in Build's publish (`ProxyPublishing.cs`). Done when a Fabric data source answers a query with the read-only classifier applied and its publish is tested, on a tenant. A token source inside the Gateway (`auth: {mode: token}`, the Gateway renewing the token itself) was the other option; not chosen, because the provider already does this.
 
 ### Microsoft SQL Server
 

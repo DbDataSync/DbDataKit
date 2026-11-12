@@ -5,7 +5,7 @@ import { ConsoleShell } from '../ConsoleShell'
 import { agentsApi, type Diagnostic } from '../agents'
 import { deliveryApi } from '../delivery'
 import {
-  KIND_LABEL, bindingsApi, connectionsFor, draftOf, draftProblem, isReleaseName, isSlotName, loadRunnerSlots, maxChoices, moveChoice, needsConfirmation, needsModel, orderedReleases, rowLine, runnerApi, sameDraft, slotBody, unboundWords,
+  KIND_LABEL, bindingsApi, connectionsFor, copyWords, draftOf, draftProblem, isReleaseName, isSlotName, loadRunnerSlots, maxChoices, moveChoice, needsConfirmation, needsModel, orderedReleases, rowLine, runnerApi, runnerReleaseOk, runnerSlotBody, sameDraft, slotBody, unboundWords,
   type BindingConnection, type BindingEntry, type BindingSlot, type BindingsView, type SlotDraft, type SlotKind, type Unconfirmed,
 } from '../bindings'
 
@@ -32,7 +32,9 @@ export function BindingsPanel({ kinds, showRunner = true, showFile = true }: { k
   const isAdmin = useIsAdmin()
   const view = useQuery({ queryKey: ['bindings'], queryFn: bindingsApi.get })
   const wantRunner = showRunner && (kinds === undefined || kinds.includes('runner'))
-  const runner = useQuery({ queryKey: ['bindings', 'runner'], queryFn: () => loadRunnerSlots(), enabled: wantRunner, retry: false })
+  // the runner's slots show where its copy of each connection stands against the console's file, so they are read once the console's connections (and their versions) are known
+  const versions = (view.data?.connections ?? []).map((c) => `${c.name}:${c.version ?? ''}`).join('|')
+  const runner = useQuery({ queryKey: ['bindings', 'runner', versions], queryFn: () => loadRunnerSlots('console-runner', view.data?.connections ?? []), enabled: wantRunner && view.isSuccess, retry: false })
   const [adding, setAdding] = useState<{ kind: SlotKind; name: string } | null>(null)
   const [newKind, setNewKind] = useState<SlotKind>(kinds?.[0] && kinds[0] !== 'runner' ? kinds[0] : 'model-chat')
   const [newName, setNewName] = useState('')
@@ -79,15 +81,24 @@ function SlotCard({ slot, view, isAdmin, onSaved, startEditing = false, onCancel
   const editing = draft !== null
   const dirty = editing && !sameDraft(draft, saved)
   const problem = editing ? draftProblem(slot.kind, draft) : null
-  const connections = connectionsFor(slot.kind, view?.connections ?? [])
-  const editable = slot.kind !== 'runner' && isAdmin
+  // a runner slot of kind http takes the console's http connections (whose definition the console sends); any other kind of runner slot takes a name the runner knows (a folder of its own, or a reference), typed
+  const connections = slot.kind === 'runner' ? (view?.connections ?? []).filter((c) => slot.runner?.kindOfConnection === 'http' && c.kind === 'http') : connectionsFor(slot.kind, view?.connections ?? [])
+  const isRunner = slot.kind === 'runner' && slot.runner !== undefined
+  const editable = isAdmin
   const asks = editing ? needsConfirmation(slot, draft) : []
+  const [sent, setSent] = useState<Record<string, string>>({})
   const save = useMutation({
-    mutationFn: (confirmed: string[]) => bindingsApi.setSlot(slot.section, slot.name, slotBody(slot.kind, draft ?? {}, confirmed, note || undefined)),
+    mutationFn: async (confirmed: string[]): Promise<unknown> => isRunner && slot.runner
+      ? bindingsApi.setRunnerSlot(slot.runner.server, slot.runner.package, slot.name.split('/').slice(1).join('/'), runnerSlotBody(draft ?? {}, saved, confirmed, note || undefined))
+      : bindingsApi.setSlot(slot.section, slot.name, slotBody(slot.kind, draft ?? {}, confirmed, note || undefined)),
     onSuccess: () => { setDraft(null); setConfirm(null); setNote(''); onSaved() },
     onError: (e) => { const needs = (e as { body?: { needsConfirmation?: Unconfirmed[] } } | null)?.body?.needsConfirmation; if (needs?.length) setConfirm(needs) },
   })
   const remove = useMutation({ mutationFn: () => bindingsApi.removeSlot(slot.section, slot.name), onSuccess: onSaved })
+  const resend = useMutation({
+    mutationFn: (name: string) => bindingsApi.sendConnection(slot.runner?.server ?? 'console-runner', name),
+    onSuccess: (r) => { setSent((s) => ({ ...s, [r.connection]: r.unresolved.length > 0 ? `sent (${r.version}); the runner cannot resolve ${r.unresolved.map((u) => u.reference).join(', ')}` : `sent (${r.version})` })); onSaved() },
+  })
   const test = useMutation({
     mutationFn: async (v: { release: string; entry: BindingEntry }): Promise<[string, Tested]> => {
       const key = `${v.release}/${v.entry.connection}`
@@ -127,7 +138,14 @@ function SlotCard({ slot, view, isAdmin, onSaved, startEditing = false, onCancel
                   <td className="mono">{release === '*' ? '* (every other)' : release}</td>
                   <td>
                     {!editing && row?.entries.map((e, i) => <div key={i}><span className="mono">{e.connection}{e.model ? `/${e.model}` : ''}</span>{e.target ? <span className="hint"> reaches {e.target}</span> : null}</div>)}
-                    {editing && (
+                    {editing && isRunner && (
+                      <div data-testid="binding-choice">
+                        <input className="input mono" list={`binding-connections-${slot.name}`} value={list[0]?.connection ?? ''} placeholder="a console connection, or a name the runner knows" aria-label={`Connection for ${release}`} data-testid={`binding-select-${slot.name}-${release}-0`}
+                          onChange={(e) => change(release, [{ connection: e.target.value, model: '' }])} />
+                        <datalist id={`binding-connections-${slot.name}`}>{connections.map((x) => <option key={x.name} value={x.name} />)}</datalist>
+                      </div>
+                    )}
+                    {editing && !isRunner && (
                       <ol style={{ margin: 0, paddingLeft: 18 }}>
                         {list.map((c, i) => (
                           <li key={i} data-testid="binding-choice">
@@ -155,6 +173,16 @@ function SlotCard({ slot, view, isAdmin, onSaved, startEditing = false, onCancel
                     {!editing && row && row.entries.length > 0 && row.entries.every((e) => e.usable) && <span className="hint">ready</span>}
                     {!editing && row?.entries.filter((e) => !e.usable).map((e, i) => <div key={i} className="error">{e.connection}: {e.problem ?? 'cannot be used'}</div>)}
                     {!editing && row && row.entries.length === 0 && <span className="error">not bound ({unboundWords(slot, release)})</span>}
+                    {!editing && row?.entries.map((e) => e.copy && (
+                      <div key={e.connection} data-testid={`binding-copy-${slot.name}-${release}`} data-copy={e.copy.state} className={e.copy.state === 'current' || e.copy.state === 'not-console' ? 'hint' : 'error'}>
+                        {copyWords(e.copy)}{e.copy.shadowed ? '; a file of the runner\'s own folder answers to this name first' : ''}
+                        {e.copy.unresolved.map((u) => <div key={u.reference} className="error" data-testid={`binding-copy-secret-${slot.name}-${release}`}>The runner cannot resolve <span className="mono">{u.reference}</span> ({u.path}): {u.problem}</div>)}
+                        {sent[e.connection] && <div className="hint" role="status" data-testid={`binding-copy-sent-${slot.name}-${release}`}>{sent[e.connection]}</div>}
+                        {isAdmin && e.copy.state !== 'not-console' && e.copy.state !== 'copy-only' && (
+                          <button type="button" className="btn btn-sm" disabled={resend.isPending} onClick={() => resend.mutate(e.connection)} data-testid={`binding-send-${slot.name}-${release}`}>Send again</button>
+                        )}
+                      </div>
+                    ))}
                     {!editing && row?.needsConfirmation && <div className={row.confirmed ? 'hint' : 'error'} data-testid={`binding-posture-${slot.name}-${release}`}>{row.confirmed ? 'Production\'s connection serves this release channel by a recorded choice.' : 'Production\'s connection serves this release channel and nobody confirmed it.'}</div>}
                     {editing && dirty && <span className="hint">not saved yet</span>}
                   </td>
@@ -174,18 +202,18 @@ function SlotCard({ slot, view, isAdmin, onSaved, startEditing = false, onCancel
           </tbody>
         </table>
         {slot.kind === 'delivery' && isAdmin && !editing && <input className="input" style={{ marginBottom: 8 }} placeholder="test mail goes to (default: your address)" value={recipient} onChange={(e) => setRecipient(e.target.value)} data-testid={`binding-test-to-${slot.name}`} />}
-        {slot.kind === 'runner' && <div className="hint">The runner keeps these (package/1): it binds a slot per package and release channel and never inherits. Change them on the runner&apos;s own screen.</div>}
+        {slot.kind === 'runner' && <div className="hint" data-testid={`binding-runner-note-${slot.name}`}>The runner keeps these in its own store (package/1 is unchanged): a slot per package and release channel, never inherited, and a channel can be emptied only while the version it serves does not declare the slot. For a console connection the console sends the runner its definition with secret references, never a value; the references resolve on the runner.</div>}
         {editable && !editing && (
           <div className="row" style={{ gap: 8 }}>
             <button type="button" className="btn btn-sm" onClick={() => setDraft(saved)} data-testid={`binding-edit-${slot.name}`}>Change</button>
-            <button type="button" className="btn btn-sm" onClick={() => remove.mutate()} data-testid={`binding-remove-${slot.name}`}>Remove the slot</button>
+            {!isRunner && <button type="button" className="btn btn-sm" onClick={() => remove.mutate()} data-testid={`binding-remove-${slot.name}`}>Remove the slot</button>}
           </div>
         )}
         {editing && (
           <div data-testid={`binding-editor-${slot.name}`}>
-            <form className="row" style={{ gap: 8, alignItems: 'center' }} onSubmit={(e) => { e.preventDefault(); if (isReleaseName(newRelease) && !(newRelease in draft)) { setDraft({ ...draft, [newRelease]: connections[0] ? [first()] : [] }); setNewRelease('') } }}>
+            <form className="row" style={{ gap: 8, alignItems: 'center' }} onSubmit={(e) => { e.preventDefault(); if ((isRunner ? runnerReleaseOk(newRelease) : isReleaseName(newRelease)) && !(newRelease in draft)) { setDraft({ ...draft, [newRelease]: isRunner ? [{ connection: '', model: '' }] : connections[0] ? [first()] : [] }); setNewRelease('') } }}>
               <input className="input mono" placeholder="bind a release channel: prod, test, dev, or * for every other" value={newRelease} onChange={(e) => setNewRelease(e.target.value)} data-testid={`binding-new-release-${slot.name}`} />
-              <button type="submit" className="btn btn-sm" disabled={!isReleaseName(newRelease) || newRelease in draft} data-testid={`binding-new-release-add-${slot.name}`}>Bind</button>
+              <button type="submit" className="btn btn-sm" disabled={!(isRunner ? runnerReleaseOk(newRelease) : isReleaseName(newRelease)) || newRelease in draft} data-testid={`binding-new-release-add-${slot.name}`}>Bind</button>
             </form>
             {confirm && (
               <div className="banner error" style={{ margin: '8px 0' }} data-testid={`binding-confirm-${slot.name}`}>
@@ -202,7 +230,7 @@ function SlotCard({ slot, view, isAdmin, onSaved, startEditing = false, onCancel
             {(save.error as { body?: { diagnostics?: Diagnostic[] } } | null)?.body?.diagnostics?.map((d, i) => <div key={i} className="banner error" data-testid="binding-diagnostic">line {d.line}: {d.message}</div>)}
           </div>
         )}
-        <ErrorBanner error={remove.error ?? test.error} />
+        <ErrorBanner error={remove.error ?? test.error ?? resend.error} />
       </div>
     </div>
   )

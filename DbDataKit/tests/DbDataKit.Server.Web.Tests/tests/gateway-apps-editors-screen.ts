@@ -284,7 +284,7 @@ export async function instanceEditorStory(page: Page) {
   await expect(page.getByTestId('apps-notice')).toContainText('sales is saved as instance version 1')
   await expect(editor).toHaveCount(0)
   expect(gateway.lastBody('PUT app-instances/sales')).toEqual({
-    app: 'notes', pin: null, title: 'Sales notes', settings: { 'embed.allowed_origins': 'https://portal.example.com' }, bindings: { territories: 'live' },
+    app: 'notes', pin: null, title: 'Sales notes', settings: { 'embed.allowed_origins': 'https://portal.example.com' }, bindings: { territories: 'live' }, addresses: [],
   })
   await expect(page.getByTestId('instance-row-sales').getByTestId('instance-runs')).toHaveText('follows the app: version 2')
   await expect(page.getByTestId('instance-config-sales')).toHaveText('embed.allowed_origins=https://portal.example.com, territories → live')

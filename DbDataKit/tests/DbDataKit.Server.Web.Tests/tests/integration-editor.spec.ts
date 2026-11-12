@@ -48,9 +48,11 @@ test('an integration project: tasks, code and tests, a new task, a finding with 
   await page.getByTestId('wsp-save').click()
   await expect(page.getByTestId('wsp-dirty')).toHaveCount(0)
   await page.getByTestId('wsp-tab-check').click()
+  await page.getByTestId('wsp-check-run').click()   // the Check tab shows nothing until it is asked
   await expect(page.locator('[data-testid="wsp-check-finding"][data-code="DBD-INT-CS1002"]')).toBeVisible({ timeout: 10_000 })
   await page.getByTestId('wsp-code').locator('.monaco-editor').click()
-  await page.keyboard.press('Control+Z')
+  await page.keyboard.press('Control+A')   // the editor's undo history does not outlive the save, so the file is written again as it was
+  await page.keyboard.insertText('namespace Integration;\n\n[RunnerTask("hello")]\npublic sealed class Hello : RunnerJob<NoInput, NoProgress, NoSlots>\n{\n    protected override Task RunAsync(CancellationToken ct) => Task.CompletedTask;\n}\n')
   await page.getByTestId('wsp-save').click()
   await expect(page.getByTestId('wsp-dirty')).toHaveCount(0)
 

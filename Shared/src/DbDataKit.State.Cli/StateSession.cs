@@ -113,7 +113,7 @@ internal sealed class StateSession
             StateErrorKind.Unreachable => (StateExit.Unreachable, $"Cannot reach {where}: start the database server, or correct the host and port in state.connection."),
             StateErrorKind.LoginRefused => (StateExit.LoginRefused, $"The login{(user is null ? "" : $" '{user}'")} was refused by {where} (a wrong password or an unknown login): correct the password in state.connection (the secret it refers to), or create the login."),
             StateErrorKind.DatabaseMissing => (StateExit.Unreachable, $"The database{(database is null ? "" : $" '{database}'")} does not exist on {where}: create it, or correct the database name in state.connection."),
-            StateErrorKind.PermissionDenied => (StateExit.Registry, $"The login may not read the state registry {Registry}: ask a database administrator to run '{Context.Program} state grants --login <the login>'."),
+            StateErrorKind.PermissionDenied => (StateExit.Registry, $"The login may not read the state registry {Registry}: ask a database administrator to run '{Context.StateCommand("grants")} --login <the login>'."),
             _ => (StateExit.Unreachable, IsSqlite
                 ? $"The state file {File} cannot be opened ({Scrub(FirstLine(exception))}): check that it is a SQLite database this account may read, and that no other program has it locked."
                 : $"The connection failed ({Scrub(FirstLine(exception))}): check state.connection."),

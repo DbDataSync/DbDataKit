@@ -12,6 +12,7 @@ namespace DbDataKit.State;
 /// <item><c>trigger_state</c>: when a trigger last fired and its cursor.</item>
 /// <item><c>task_owner</c>: who schedules a task during a move from a product's own scheduler (plan 28c E09, ED6): <c>old</c> (the product does; the runner leaves the task alone), <c>observe</c> (the product does; the runner only records what it would
 /// have queued) or <c>runner</c>. A task with no row is the runner's, as every task was before the move existed.</item>
+/// <item><c>connection_copy</c>: the definition of a console connection a slot is bound to (plan 27a IX23), with the version the console and the runner both compute; secrets stay references.</item>
 /// <item><c>task_decision</c>: what an <c>observe</c> task would have queued and when, beside what the old owner did (<c>source</c> <c>runner</c> or <c>old</c>, ED7); the product compares them.</item>
 /// </list>
 /// Documents a task or a trigger carries (schedule, triggers, limits) are kept as the text they were written as (<c>{{text}}</c>, not <c>{{json}}</c>): PostgreSQL's jsonb would reformat them.
@@ -133,8 +134,20 @@ public static class RunnerModule
                 PRIMARY KEY (package, channel, task, source, decided_at)
             );
             """,
+            // plan 27a IX23: a connection of the console that a channel's slot is bound to, handed over by the console as its definition with secret references (never a value) and kept here, so the runner does not read the console's folder
+            """
+            CREATE TABLE {table:connection_copy} (
+                name        {{key}} NOT NULL,
+                version     {{key}} NOT NULL,
+                kind        {{key}} NOT NULL,
+                definition  {{text}} NOT NULL,
+                sent_by     {{key}} NOT NULL,
+                sent_at     {{time}} NOT NULL,
+                PRIMARY KEY (name)
+            );
+            """,
         ],
-        // versions 2 to 4 only add nullable columns and new tables, which the code of the version before never reads or writes: an instance of the previous version still works with them
+        // versions 2 to 5 only add nullable columns and new tables, which the code of the version before never reads or writes: an instance of the previous version still works with them
         compatibleWithPrevious: 1,
         retention:
         [

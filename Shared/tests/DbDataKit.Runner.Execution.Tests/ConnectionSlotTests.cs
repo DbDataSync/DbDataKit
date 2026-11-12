@@ -214,14 +214,14 @@ public sealed class ConnectionSlotTests : IDisposable
         Assert.Equal("dst_db", resolver.Handles(dev, slots)["dst"]);
         Assert.Throws<SlotResolutionException>(() => resolver.Handles(new TaskRef(Package, "test", "run"), slots).Count.ToString());   // another channel (unbound) is refused as ever
 
-        // a channel with a connection of its own is not in question, and a read-only connection cannot send or write
+        // a channel with a connection of its own is not in question; a read-only connection is held to the rule as the bind-time check holds it
         rig.Bind("dev", "dst", "a_db");
         posture.Revoke(RunnerSlotResolver.ProductionBindingScope(Package, "dst", "dev"), PostureSetting.ProductionBindingOnNonProduction.Name);
         Assert.Equal("a_db", resolver.Handles(dev, slots)["dst"]);
         ConnectionSlot[] ro = [new("ro", "sqlserver", null)];
         rig.Bind("prod", "ro", "ro_db");
         rig.Bind("dev", "ro", "ro_db");
-        Assert.Equal("ro_db", resolver.Handles(dev, ro)["ro"]);
+        Assert.Throws<SlotResolutionException>(() => resolver.Handles(dev, ro));        // read-only is not exempt: the rule is the one the bind refuses first
     }
 
     // ---- ResolveConnection's facts

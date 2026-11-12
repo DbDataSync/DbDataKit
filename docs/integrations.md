@@ -17,7 +17,10 @@ An **integration** is ordinary code that moves data between the suite and a syst
 | The integration editor in the Workspace's web screens (manifest as form and text, code files, run tests, publish) | **built, minimal** (IX24, `IntegrationPanel.tsx`: manifest as form and YAML, tasks, code and tests listed with their errors, new task, run the tests as a build, publish on the Builds tab; vitest 12 tests; the Playwright story `integration-editor.spec.ts` is written and not run) |
 | Project templates "pull pages from a REST API into a staging table" and "pick up CSV files from a share" | **built** (IX21; the Workspace's New project offers them; section 9) |
 | Kit services for outside systems: file formats (CSV, TSV, JSON, JSON Lines, XML, fixed width, Excel, Parquet, gzip, zip, OpenPGP) and the HTTP client with paging, rate limits and retries | **built** (IX08 to IX10; `DbDataKit.Runner.Kit.Formats`, `DbDataKit.Runner.Kit.Http`) |
-| Kit services for outside systems: SFTP, FTPS, SMB, object storage | **not built** (IX04 to IX06) |
+| SFTP, SCP and FTPS as connections (`DbDataKit.Connections.Files`: list, read, write without a partial file, host-key and certificate pinning) | **built** (IX04) |
+| SMB with Windows sign-in (Kerberos), `smb` connections: the interface and a Windows-only implementation | **built, proven on Linux for everything but the share itself** (IX05) |
+| Object storage: `s3` (Amazon and S3-compatible servers) and `azure-blob`, signed without an SDK | **built** (IX06) |
+| The file connections feed the file trigger (`DbDataKit.Runner.FileConnections`: the source follows the connection the slot is bound to in the channel) | **built as a library, not wired into a runner host** (IX07: the host passes the delegate that answers the binding) |
 | Landing helpers: rows into a staging table through `DbDataKit.Transfer` and into DbDataStore's tables through the Store's write path, idempotent | **built** (IX11; `DbDataKit.Runner.Kit.Landing`; the Store route is in process, not through the Store's HTTP API; files into DbDataStore documents wait for plan 15's documents) |
 | Change detection with no change feed (a row-hash snapshot kept as a checkpoint, compared with the next run) | **built** (IX13; `DbDataKit.Runner.Kit.Changes`) |
 | Refused-record listing and replay (the kit's surface over the dead letters; the runner's API and screens are plan 28a R25) | **built** in the kit (IX14; `RefusedRecords`) |
@@ -26,7 +29,8 @@ An **integration** is ordinary code that moves data between the suite and a syst
 | Recorded HTTP responses and a fake file share for tests | **built** (IX15; `RecordedHttp` and `FakeFileShare` in `DbDataKit.Runner.Kit.Testing`; the recording format `http-recording/1` is in `docs/formats.json`) |
 | Dry run (`--dry-run`, the kit refuses writes) and the sandbox run before promotion | **built** (IX16; section 8) |
 | Outbound steps in a non-production channel use the channel's connection or are refused | **built** for the runner (IX17; section 8); the console's delivery channels are held to it when set on the Bindings page, not yet when a file is edited by hand |
-| OAuth 2 authorization code (IX03), the serving layer's end of webhooks (IX18: the runner's end refuses replays, built), the DbDataStore change trigger (IX19: the engine's half is built, a Store feed client is not) | **not built** / **partly built** |
+| OAuth 2 authorization code (consent once on the console, the refresh token a secret, refresh, revoke, an unhealthy connection when the provider revoked the grant) | **built** (IX03; `OAuthAuthorizationCode`, the Authorize and Disconnect buttons of the Connections screen) |
+| The serving layer's end of webhooks (IX18: the runner's end refuses replays, built; the Gateway's public endpoint is not), the DbDataStore change trigger (IX19: the engine's half is built, a Store feed client is not) | **partly built** |
 | Notebooks | **parked**; no row is built |
 | Agents in integrations and agents that write them | **not built** (AG27; plan 27 section 4.9) |
 | Approval of a trusted integration version by an administrator before it serves | **not built** (plan 27 section 4.7; the Runner stages a version and an administrator activates it, which is the approval point today) |

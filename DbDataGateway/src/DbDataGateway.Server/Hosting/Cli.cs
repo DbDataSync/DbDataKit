@@ -141,7 +141,20 @@ public static class Cli
             }
             catch (GatewayConfigException ex) { throw new InvalidOperationException(ex.Message, ex); }
         },
-        State.GatewayState.Modules, State.GatewayState.ScopeOf(), ["repo"], "[--repo <data directory>]"));
+        State.GatewayState.Modules, State.GatewayState.ScopeOf(), ["repo"], "[--repo <data directory>]")
+    {
+        // the keys of the secret store this command line reads (--repo names the data directory): what a moved signing key or group secret is decrypted with
+        SecretSamplesFor = args =>
+        {
+            var directory = args.Get("repo") is { Length: > 0 } repo ? Path.GetFullPath(repo) : null;
+            return State.GatewayStateSecrets.For(() =>
+            {
+                var options = GatewayConfiguration.LoadOptions(directory);
+                if (directory is not null) options.DataDirectory = directory;
+                return options;
+            });
+        },
+    });
 
     // ---- service ----
 

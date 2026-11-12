@@ -12,9 +12,19 @@ using DbDataKit.Web.Trust;
 namespace DbDataKit.Runner.Api;
 
 /// <summary>A publishing call that is refused or fails, with the HTTP status the API answers it with (400 invalid, 403 policy, 404 unknown, 409 stale, 413 too large).</summary>
-public sealed class RunnerPublishException(int status, string message) : InvalidOperationException(message)
+public class RunnerPublishException(int status, string message) : InvalidOperationException(message)
 {
     public int Status { get; } = status;
+}
+
+/// <summary>A binding that needs the administrator's confirmed choice (plan 27a IX17): a non-production channel of a slot uses the connection production uses. The scope is <c>bindings/runner/&lt;package&gt;/&lt;slot&gt;/&lt;channel&gt;</c>.</summary>
+public sealed record RunnerUnconfirmedBinding(string Scope, string Slot, string Release, string Connection, string Effect);
+
+/// <summary>A bind refused (409) until the choices it makes are confirmed; the answer names each one (<see cref="Needs"/>) and how to confirm it.</summary>
+public sealed class RunnerPostureConfirmationException(IReadOnlyList<RunnerUnconfirmedBinding> needs)
+    : RunnerPublishException(409, "Production's connection would serve a non-production channel: " + string.Join(" ", needs.Select(n => $"the slot '{n.Slot}' in '{n.Release}' would use '{n.Connection}'.")) + " Confirm each choice (the body's confirm list names the scopes) to record it.")
+{
+    public IReadOnlyList<RunnerUnconfirmedBinding> Needs { get; } = needs;
 }
 
 /// <summary>One file of a version as the publisher lists it: path inside the package, SHA-256 in hexadecimal, size and media type.</summary>
@@ -97,6 +107,7 @@ public sealed partial class RunnerPublishing
         _projections = new TaskProjections(state);
         _audit = new AuditLog(state, serviceId);
         _settings = new DbDataKit.Web.Trust.GroupSettings(state);
+        Posture = new PostureGuard(state, serviceId);
     }
 
     public DefinitionPublisher Publisher { get; }
@@ -449,7 +460,7 @@ public sealed partial class RunnerPublishing
     // ---- bindings
 
     /// <summary>Fills slots for a channel (slot name to what it is bound to). The package need not exist yet: a version that declares a slot is refused in a channel where the slot is unbound (plan 30), so the slots of a package's first version are bound before it is published (plan 28c E07). Names, never values, are audited.</summary>
-    public IReadOnlyList<DefinitionBinding> Bind(string name, string channel, IReadOnlyDictionary<string, string> slots, int? expectedRevision, RunnerActor actor)
+    public IReadOnlyList<DefinitionBinding> Bind(string name, string channel, IReadOnlyDictionary<string, string> slots, int? expectedRevision, RunnerActor actor, IReadOnlyCollection<string>? confirm = null, string? note = null)
     {
         var target = $"{name}/{channel}";
         try
@@ -463,11 +474,16 @@ public sealed partial class RunnerPublishing
                 if (string.IsNullOrWhiteSpace(to)) throw new RunnerPublishException(400, $"The slot '{slot}' must be bound to something.");
             }
 
+            // plan 27a IX17: production's connection in a non-production channel is a confirmed, recorded choice, checked before anything is written
+            var needs = UnconfirmedAfter(name, channel, slots).Where(u => !Chosen(u.Scope) && confirm?.Contains(u.Scope, StringComparer.Ordinal) != true).ToList();
+            if (needs.Count > 0) throw new RunnerPostureConfirmationException(needs);
             try
             {
                 foreach (var (slot, to) in slots.OrderBy(s => s.Key, StringComparer.Ordinal)) Publisher.Bind(channel, Kind, name, slot, to, actor.Id, expectedRevision);
             }
             catch (Exception ex) when (Translate(ex) is { } translated) { throw translated; }
+
+            ReconcilePosture(name, actor, note);
 
             Record(BindVerb, actor, "package", target, AuditEvent.Ok, new { kind = Kind, name, channel, slots = slots.Keys.Order(StringComparer.Ordinal).ToArray() });
             return Publisher.Bindings(channel, Kind, name);
@@ -477,6 +493,80 @@ public sealed partial class RunnerPublishing
             Record(BindVerb, actor, "package", target, AuditEvent.Refused, new { kind = Kind, name, channel, status = ex.Status, reason = ex.Message });
             throw;
         }
+    }
+
+    public const string UnbindVerb = "runner.package.unbind";
+
+    /// <summary>
+    /// Empties a slot's binding in a channel (plan 27a IX23). Refused (409) while the version the channel serves or has staged declares the slot, since its tasks could not run; otherwise removed, audited by names, and the
+    /// posture choice the binding held is taken back. False when the slot was not bound.
+    /// </summary>
+    public bool Unbind(string name, string channel, string slot, RunnerActor actor)
+    {
+        var target = $"{name}/{channel}";
+        try
+        {
+            if (!PackageManifestValidator.NameRule.IsMatch(name)) throw new RunnerPublishException(400, $"'{name}' is not a package name.");
+            if (!PackageManifestValidator.NameRule.IsMatch(channel)) throw new RunnerPublishException(400, $"'{channel}' is not a channel name.");
+            if (!SlotRule().IsMatch(slot)) throw new RunnerPublishException(400, $"'{slot}' is not a slot name.");
+            if (Publisher.HeadsOf(Kind, name).FirstOrDefault(h => h.Channel == channel) is { } head)
+                foreach (var version in new[] { head.Active, head.Staged }.OfType<int>().Distinct())
+                    if (_store.Get(Kind, name, version) is { } stored && PackageManifestReader.Load(stored.Content, $"{name}@{version}") is { Ok: true, Manifest: { } manifest } && manifest.Tasks.Any(t => t.Connections.Any(c => c.Name == slot)))
+                        throw new RunnerPublishException(409, $"The slot '{slot}' is declared by version {version} of '{name}', which channel '{channel}' serves or has staged: bind it to another connection instead of emptying it, or retire that version first.");
+            var removed = Publisher.Unbind(channel, Kind, name, slot, actor.Id);
+            if (removed)
+            {
+                Record(UnbindVerb, actor, "package", target, AuditEvent.Ok, new { kind = Kind, name, channel, slot });
+                ReconcilePosture(name, actor, null);
+            }
+
+            return removed;
+        }
+        catch (RunnerPublishException ex)
+        {
+            Record(UnbindVerb, actor, "package", target, AuditEvent.Refused, new { kind = Kind, name, channel, slot, status = ex.Status, reason = ex.Message });
+            throw;
+        }
+    }
+
+    /// <summary>The recorded choices of the posture setting <c>production_binding_on_non_production</c> for the bindings of runner slots (scope <c>bindings/runner/&lt;package&gt;/&lt;slot&gt;/&lt;channel&gt;</c>): the Runner's own <c>posture_choice</c> table, the same code as every other choice.</summary>
+    public PostureGuard Posture { get; }
+
+    /// <summary>The scope of the choice for one slot of a package in a channel.</summary>
+    public static string PostureScope(string package, string slot, string channel) => DbDataKit.Runner.Connections.RunnerSlotResolver.ProductionBindingScope(package, slot, channel);
+
+    private bool Chosen(string scope) => Posture.Choices.List(scope).Any(c => c.Setting == PostureSetting.ProductionBindingOnNonProduction.Name);
+
+    private static IEnumerable<RunnerUnconfirmedBinding> Unconfirmed(IReadOnlyList<DefinitionBinding> bindings)
+    {
+        foreach (var bySlot in bindings.GroupBy(b => b.Slot, StringComparer.Ordinal))
+        {
+            var prod = bySlot.FirstOrDefault(b => b.Channel == DefinitionStore.Production)?.BoundTo;
+            if (prod is null) continue;
+            foreach (var other in bySlot.Where(b => b.Channel != DefinitionStore.Production && b.BoundTo == prod))
+                yield return new RunnerUnconfirmedBinding(PostureScope(other.Name, other.Slot, other.Channel), $"{other.Name}/{other.Slot}", other.Channel, prod,
+                    $"The slot '{other.Name}/{other.Slot}' would use '{prod}', which production uses, in the channel '{other.Channel}': what a task sends or writes there reaches production's far side. {PostureSetting.ProductionBindingOnNonProduction.Effect}");
+        }
+    }
+
+    private IReadOnlyList<RunnerUnconfirmedBinding> UnconfirmedAfter(string name, string channel, IReadOnlyDictionary<string, string> change)
+    {
+        var after = Publisher.BindingsOf(Kind, name).Where(b => !(b.Channel == channel && change.ContainsKey(b.Slot))).ToList();
+        var now = DateTimeOffset.UtcNow;
+        foreach (var (slot, to) in change) after.Add(new DefinitionBinding(channel, Kind, name, slot, to, 0, "", now));
+        return [.. Unconfirmed(after)];
+    }
+
+    /// <summary>Records the choice of every unconfirmed binding the package has now (a bind that made one was refused unless an administrator confirmed it), and takes back the choices of bindings that no longer share production's connection.</summary>
+    private void ReconcilePosture(string name, RunnerActor actor, string? note)
+    {
+        var setting = PostureSetting.ProductionBindingOnNonProduction;
+        var now = Unconfirmed(Publisher.BindingsOf(Kind, name)).ToList();
+        foreach (var u in now.Where(u => !Chosen(u.Scope)))
+            Posture.Choose(setting, u.Scope, actor.Id, note ?? $"{u.Slot} ({u.Release}) uses {u.Connection}", confirmed: true);
+        var prefix = $"bindings/runner/{name}/";
+        foreach (var held in Posture.Choices.List().Where(c => c.Setting == setting.Name && c.Scope.StartsWith(prefix, StringComparison.Ordinal) && now.All(n => n.Scope != c.Scope)))
+            Posture.Revoke(setting, held.Scope, actor.Id, "the binding no longer shares production's connection");
     }
 
     // ---- reading
@@ -552,6 +642,7 @@ public sealed partial class RunnerPublishing
         var versions = _store.Versions(Kind, name);
         if (versions.Count == 0) return null;
         var heads = Publisher.HeadsOf(Kind, name);
+        var shared = Publisher.BindingsOf(Kind, name);
         return new JsonObject
         {
             ["kind"] = Kind,
@@ -565,7 +656,12 @@ public sealed partial class RunnerPublishing
             })]),
             ["channels"] = Channels(name),
             ["staging"] = Staging(name),
-            ["bindings"] = new JsonArray([.. heads.SelectMany(h => Publisher.Bindings(h.Channel, Kind, name)).Select(b => (JsonNode)new JsonObject { ["channel"] = b.Channel, ["slot"] = b.Slot, ["bound_to"] = b.BoundTo, ["revision"] = b.Revision })]),
+            ["bindings"] = new JsonArray([.. heads.SelectMany(h => Publisher.Bindings(h.Channel, Kind, name)).Select(b =>
+            {
+                // plan 27a IX17: a non-production channel that uses the connection production uses, and whether an administrator confirmed it
+                var shares = Unconfirmed(shared).Any(u => u.Scope == PostureScope(name, b.Slot, b.Channel));
+                return (JsonNode)new JsonObject { ["channel"] = b.Channel, ["slot"] = b.Slot, ["bound_to"] = b.BoundTo, ["revision"] = b.Revision, ["shares_production"] = shares, ["confirmed"] = shares && Chosen(PostureScope(name, b.Slot, b.Channel)) };
+            })]),
             ["slots"] = Slots(name, heads),
             ["instances"] = new JsonArray([.. heads.SelectMany(h => Publisher.Status.List(Kind, name, h.Channel)).Select(s => (JsonNode)new JsonObject
             {

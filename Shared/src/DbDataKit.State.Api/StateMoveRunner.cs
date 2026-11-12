@@ -128,18 +128,18 @@ internal sealed class StateMoveRunner(StateManagementOptions options, Action<Sta
         catch (System.Text.Json.JsonException) { return Refuse(400, "The body is not JSON."); }
         if (parsed is not JsonObject request) return Refuse(400, "The body is {\"engine\": \"postgres|mssql\", \"connection\": \"... Password=secret:name\", \"dry_run\": false}.");
         foreach (var (key, value) in request)
-            if (key is not ("engine" or "connection" or "schema" or "prefix" or "dry_run"))
-                return Refuse(400, $"'{key}' is not a setting of the call (engine, connection, schema, prefix, dry_run).");
+            if (key is not ("engine" or "connection" or "schema" or "prefix" or "dry_run" or "sqlite_path"))
+                return Refuse(400, $"'{key}' is not a setting of the call (engine, connection, schema, prefix, sqlite_path, dry_run).");
 
         string? Text(string key) => request[key] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
         var dryRun = request["dry_run"] is JsonValue d && d.TryGetValue<bool>(out var flag) && flag;
 
         StateEndpoint to;
-        try { to = ParseTarget(Text("engine"), Text("connection"), Text("schema"), Text("prefix"), options.Target().Settings); }
+        try { to = ParseTarget(Text("engine"), Text("connection"), Text("schema"), Text("prefix"), Text("sqlite_path"), options.Target().Settings); }
         catch (ArgumentException ex) { return Refuse(400, ex.Message); }
         catch (InvalidOperationException ex) { return Refuse(409, "This server's own state settings cannot be read: " + ex.Message); }
 
-        var masked = ConnectionStringReferences.Mask(to.Settings.ConnectionString);
+        var masked = to.Settings.IsSqlite ? to.SqliteFile ?? "" : ConnectionStringReferences.Mask(to.Settings.ConnectionString);
 
         // ---- the server has to be frozen: maintenance, and idle
         var gate = options.Gate.Status();
@@ -169,7 +169,11 @@ internal sealed class StateMoveRunner(StateManagementOptions options, Action<Sta
         if (dryRun)
         {
             record(caller, AuditCommand, "ok", $"preflight: {to.Engine} {masked}", at);
-            return StateResult.Ok(new JsonObject { ["state"] = "preflight_ok", ["to_engine"] = to.Engine, ["to_connection"] = masked, ["message"] = $"The target ({to.Describe()}) opens, is empty and is not this server's own database; the settings file can take the new section." });
+            // the checks of state test on the target, run with this server's own modules (their tables, their engine features): what the console shows as the target's checks (plan 29b C06)
+            var checks = new JsonArray();
+            var report = StateConnectionCheck.Run(new StateTarget(to.Settings, to.SqliteFile ?? "", () => secrets), options.Program, options.Description, options.Modules, options.Scope, forMove: false);
+            foreach (var step in report.Steps) checks.Add(new JsonObject { ["name"] = step.Name, ["status"] = step.Status, ["message"] = Redact(step.Message, to, secrets) });
+            return StateResult.Ok(new JsonObject { ["state"] = "preflight_ok", ["to_engine"] = to.Engine, ["to_connection"] = masked, ["steps"] = checks, ["message"] = $"The target ({to.Describe()}) opens, is empty and is not this server's own database; the settings file can take the new section." });
         }
 
         // ---- start it
@@ -193,7 +197,7 @@ internal sealed class StateMoveRunner(StateManagementOptions options, Action<Sta
     private async Task RunAsync(Run run, StateMoveService service, StateEndpoint from, StateEndpoint to, string settingsFile, ISecretResolver? secrets, StateCaller caller, Func<MoveOptions, MoveOptions>? tuning)
     {
         var ignored = (options.Instances ?? IInstanceDirectory.Empty).Live().Where(i => i.IsSelf).Select(i => i.Key).ToHashSet(StringComparer.Ordinal);
-        var move = new MoveOptions { Export = SnapshotOptions.Default with { IgnoredInstances = ignored, SqliteLockTimeout = TimeSpan.FromSeconds(10) } };
+        var move = new MoveOptions { SecretSamples = options.SecretSamples ?? [], Export = SnapshotOptions.Default with { IgnoredInstances = ignored, SqliteLockTimeout = TimeSpan.FromSeconds(10) } };
         if (tuning is not null) move = tuning(move);
         var progress = new InlineProgress<MoveProgress>(p => Update(run, p));
         try
@@ -290,13 +294,20 @@ internal sealed class StateMoveRunner(StateManagementOptions options, Action<Sta
     }
 
     /// <summary>The target of the body as an endpoint: SQL Server or PostgreSQL, a connection string whose credentials are secret references (a password written out is refused, it would be in the audit and the log).</summary>
-    private static StateEndpoint ParseTarget(string? engine, string? connection, string? schema, string? prefix, StateSettings basis)
+    private static StateEndpoint ParseTarget(string? engine, string? connection, string? schema, string? prefix, string? sqlitePath, StateSettings basis)
     {
         if (string.IsNullOrWhiteSpace(engine)) throw new ArgumentException("The engine is needed: mssql or postgres.");
         var settings = new StateSettings(engine, connection) { Namespaces = basis.Namespaces, Retention = basis.Retention };
         try { _ = settings.EngineId; }
         catch (InvalidOperationException ex) { throw new ArgumentException(ex.Message); }
-        if (settings.IsSqlite) throw new ArgumentException("A move to SQLite is made on the machine with the command line (state move --to-engine sqlite): a SQLite state is a file on that machine.");
+        if (settings.IsSqlite)
+        {
+            // a SQLite state is a file on this server's machine (plan 29b C06): the path is as this server sees it
+            if (string.IsNullOrWhiteSpace(sqlitePath) || !Path.IsPathRooted(sqlitePath)) throw new ArgumentException("A move to SQLite needs sqlite_path: the full path of the file, on this server's machine.");
+            if (!string.IsNullOrWhiteSpace(connection)) throw new ArgumentException("A SQLite state has no connection string: send sqlite_path.");
+            return new StateEndpoint(settings with { Namespaces = basis.Namespaces, Retention = basis.Retention }, Path.GetFullPath(sqlitePath));
+        }
+
         if (string.IsNullOrWhiteSpace(connection)) throw new ArgumentException($"The connection is needed for {engine}: a connection string whose password is a secret reference (Password=secret:state-db).");
         if (ConnectionStringReferences.CredentialValues(connection).Count > 0)
             throw new ArgumentException("The connection holds a password written out: send a secret reference (Password=secret:state-db) that this server resolves in its own store.");

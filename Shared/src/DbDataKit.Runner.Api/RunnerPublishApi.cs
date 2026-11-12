@@ -128,14 +128,41 @@ public static class RunnerPublishApi
                 return Error(403, $"The integration '{name}' belongs to another publisher.");
             }
 
+            List<string>? confirm = null;
+            if (body.Json["confirm"] is JsonArray confirmed)
+            {
+                if (confirmed.Any(x => x is not JsonValue v || !v.TryGetValue<string>(out _))) return Error(400, "confirm is the list of scopes the answer to a refused bind named.");
+                confirm = [.. confirmed.Select(x => (string)x!)];
+            }
+
             try
             {
-                var bindings = publishing.Bind(name, channel, slots, revision, token.Actor);
+                var bindings = publishing.Bind(name, channel, slots, revision, token.Actor, confirm, Text(body.Json, "note"));
                 return Results.Json(new JsonObject
                 {
                     ["name"] = name, ["channel"] = channel,
                     ["bindings"] = new JsonArray([.. bindings.Select(b => (JsonNode)new JsonObject { ["slot"] = b.Slot, ["bound_to"] = b.BoundTo, ["revision"] = b.Revision })]),
                 });
+            }
+            catch (RunnerPostureConfirmationException ex)
+            {
+                return Results.Json(new JsonObject
+                {
+                    ["error"] = ex.Message, ["setting"] = PostureSetting.ProductionBindingOnNonProduction.Name,
+                    ["needsConfirmation"] = new JsonArray([.. ex.Needs.Select(n => (JsonNode)new JsonObject { ["scope"] = n.Scope, ["slot"] = n.Slot, ["release"] = n.Release, ["connection"] = n.Connection, ["effect"] = n.Effect })]),
+                }, statusCode: StatusCodes.Status409Conflict);
+            }
+            catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
+        });
+
+        app.MapDelete($"{root}/bindings/{{channel}}/integration/{{name}}/{{slot}}", (string channel, string name, string slot, HttpContext context) =>
+        {
+            var token = callerOf(context);
+            var owned = new ManagedObject(publishing.Owner(name));
+            if (Authorize(publishing, token, ObjectAction.Change, owned, RunnerPublishing.UnbindVerb, "package", $"{name}/{channel}") is { } denied) return denied;
+            try
+            {
+                return publishing.Unbind(name, channel, slot, token.Actor) ? Results.Json(new JsonObject { ["name"] = name, ["channel"] = channel, ["slot"] = slot, ["unbound"] = true }) : Error(404, $"The slot '{slot}' of '{name}' is not bound in channel '{channel}'.");
             }
             catch (RunnerPublishException ex) { return Error(ex.Status, ex.Message); }
         });

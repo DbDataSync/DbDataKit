@@ -108,7 +108,17 @@ public sealed class Scratch : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(Root, recursive: true); }
-        catch (IOException) { /* a leftover scratch folder is the operating system's to clean */ }
+        // Windows keeps a loaded assembly's file open (UnauthorizedAccessException) until its collectible load context is collected: the tester unloaded it, so a collection frees the file
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            try { Directory.Delete(Root, recursive: true); return; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                Thread.Sleep(100);
+            }
+        }
+        // a leftover scratch folder is the operating system's to clean
     }
 }
