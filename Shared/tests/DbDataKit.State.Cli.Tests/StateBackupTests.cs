@@ -17,7 +17,7 @@ public sealed class StateBackupTests : IDisposable
 
     public static TheoryData<string> Engines => StateCliHarness.Engines;
 
-    private static readonly IReadOnlyList<StateModule> Modules = [Module("backup-demo")];
+    private static readonly IReadOnlyList<StateModule> Modules = [Module("backup_demo")];
 
     /// <summary>Runs one verb once (the harness's helper runs it twice, once per output format, which a verb that writes cannot do).</summary>
     private static async Task<(int Exit, string Out, string Error)> Once(StateVerbContext context, params string[] args)
@@ -34,7 +34,7 @@ public sealed class StateBackupTests : IDisposable
         for (var i = from; i < to; i++)
         {
             using var connection = database.OpenConnection();
-            using var insert = database.Command("backup-demo", connection, "INSERT INTO {table:item} (id, label) VALUES ($id, $label);");
+            using var insert = database.Command("backup_demo", connection, "INSERT INTO {table:item} (id, label) VALUES ($id, $label);");
             insert.Bind(database, "id", "row-" + i).Bind(database, "label", "label " + i);
             insert.ExecuteNonQuery();
         }
@@ -43,7 +43,7 @@ public sealed class StateBackupTests : IDisposable
     private static long Count(StateDatabase database)
     {
         using var connection = database.OpenConnection();
-        using var count = database.Command("backup-demo", connection, "SELECT COUNT(*) FROM {table:item};");
+        using var count = database.Command("backup_demo", connection, "SELECT COUNT(*) FROM {table:item};");
         return Convert.ToInt64(count.ExecuteScalar());
     }
 
@@ -52,7 +52,7 @@ public sealed class StateBackupTests : IDisposable
     public async Task A_backup_is_taken_while_the_database_is_open_and_restored_into_an_empty_one_with_the_same_rows(string engine)
     {
         var source = _h.Provision(engine);
-        using var live = source.Open(Modules);                        // the service holds it open
+        var live = source.Open(Modules);                        // the service holds it open
         Insert(live, 0, 40);
         var folder = Path.Combine(_dir.FullName, "backups");
 
@@ -70,7 +70,7 @@ public sealed class StateBackupTests : IDisposable
         var restore = await Once(Context(target, Modules), "restore", "--from", folder);        // the folder of backups: the newest is used
         Assert.True(restore.Exit == 0, restore.Out + restore.Error);
         Assert.Contains("Using the newest backup", restore.Out);
-        using var restored = target.Open(Modules);
+        var restored = target.Open(Modules);
         Assert.Equal(40, Count(restored));
         Assert.Equal(50, Count(live));
 
@@ -83,12 +83,12 @@ public sealed class StateBackupTests : IDisposable
     public async Task A_changed_byte_is_found_before_the_target_is_touched_and_a_target_that_holds_data_is_refused(string engine)
     {
         var source = _h.Provision(engine);
-        using (var live = source.Open(Modules)) Insert(live, 0, 10);
+        Insert(source.Open(Modules), 0, 10);
         var folder = Path.Combine(_dir.FullName, "backups");
         Assert.Equal(0, (await Once(Context(source, Modules), "backup", "--to", folder)).Exit);
         var made = Assert.Single(Directory.GetDirectories(folder));
 
-        var file = Directory.GetFiles(made).Where(f => !f.EndsWith("manifest.json", StringComparison.Ordinal)).OrderBy(f => f, StringComparer.Ordinal).First(f => new FileInfo(f).Length > 0);
+        var file = Directory.GetFiles(made, "*", SearchOption.AllDirectories).Where(f => !f.EndsWith("manifest.json", StringComparison.Ordinal)).OrderBy(f => f, StringComparer.Ordinal).First(f => new FileInfo(f).Length > 0);
         var bytes = File.ReadAllBytes(file);
         bytes[bytes.Length / 2] ^= 0x01;
         File.WriteAllBytes(file, bytes);
@@ -99,7 +99,7 @@ public sealed class StateBackupTests : IDisposable
         Assert.Contains("nothing was restored", bad.Error);
         var untouched = Context(target, Modules);
         Assert.Equal(0, (await Once(untouched, "show")).Exit);      // the target has no module registered: it is still empty
-        using (var opened = target.Open([])) Assert.NotNull(opened);
+        Assert.NotNull(target.Open([]));
 
         bytes[bytes.Length / 2] ^= 0x01;
         File.WriteAllBytes(file, bytes);                              // repaired: now it restores
