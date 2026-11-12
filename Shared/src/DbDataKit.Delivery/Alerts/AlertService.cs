@@ -52,6 +52,31 @@ public sealed class RunHistoryAlertSource(RunStore runs, TimeProvider? time = nu
     }
 }
 
+/// <summary>
+/// The approvals that wait too long (plan 22a GP16, kind <see cref="AlertKinds.ApprovalsWaiting"/>): a step of an agent that asked for a person's approval and has had no answer for <paramref name="waitingLongerThan"/> (an hour by default) is a reading,
+/// source <c>approval:&lt;id&gt;</c>. The message names the person, the agent and the tool, never the arguments. An answered or expired approval is no longer waiting, so it is the recovery.
+/// </summary>
+public sealed class ApprovalAlertSource(AgentStore agents, TimeProvider? time = null, TimeSpan? waitingLongerThan = null) : IAlertSource
+{
+    public Task<IReadOnlyList<AlertReading>> ReadAsync(CancellationToken cancellationToken)
+    {
+        var now = (time ?? TimeProvider.System).GetUtcNow();
+        var limit = waitingLongerThan ?? TimeSpan.FromHours(1);
+        var readings = agents.Approvals(pendingOnly: true, limit: 200).Where(a => now - a.RequestedAt >= limit)
+            .Select(a => new AlertReading(AlertKinds.ApprovalsWaiting, "approval:" + a.Id.ToString("N"), $"The step '{a.Tool}' of the agent {a.Agent} has waited {HealthEvaluator.Span(now - a.RequestedAt)} for the approval of {a.Person}.", Severity.Warning))
+            .ToList();
+        return Task.FromResult<IReadOnlyList<AlertReading>>(readings);
+    }
+}
+
+/// <summary>
+/// Lets a host (a quality check, a source with its own rhythm) decide how long one reading stays quiet after it was told (plan 22a GP16): the answer replaces the rule's cool-down for that reading; null keeps the rule's. Optional: the service works without it.
+/// </summary>
+public interface IAlertCooldown
+{
+    TimeSpan? CooldownFor(AlertReading reading, AlertRule rule);
+}
+
 /// <summary>What one pass of the alert service did: messages written, recoveries told, sources kept quiet by the cool-down, alerts shown in the feed only, and what could not be done.</summary>
 public sealed record AlertRunResult(int Sent, int Recovered, int Quiet, int FeedOnly, IReadOnlyList<string> Problems);
 
@@ -60,7 +85,7 @@ public sealed record AlertRunResult(int Sent, int Recovered, int Quiet, int Feed
 /// and is marked ok, and an alert whose rule has <b>no channel</b> is <b>shown in the notification feed only</b>. The state is per source and recipient (<c>alert_state</c>), so a cool-down is each recipient's own. A kind that is off is neither told nor tracked.
 /// The message goes through the delivery service (the outbox, the retries, the release-channel binding) with source <c>alert:&lt;kind&gt;</c>. A source that cannot be read ends the pass without telling anything as recovered.
 /// </summary>
-public sealed class AlertService(AlertStore store, DeliveryService delivery, IReadOnlyList<IAlertSource> sources, INotificationFeed? feed = null, TimeProvider? time = null, ILogger<AlertService>? log = null)
+public sealed class AlertService(AlertStore store, DeliveryService delivery, IReadOnlyList<IAlertSource> sources, INotificationFeed? feed = null, TimeProvider? time = null, ILogger<AlertService>? log = null, IAlertCooldown? cooldown = null)
 {
     /// <summary>The notification kinds an alert and a recovery are raised under.</summary>
     public const string FeedKind = "Alert";
@@ -99,10 +124,12 @@ public sealed class AlertService(AlertStore store, DeliveryService delivery, IRe
             if (!rules.TryGetValue(reading.Kind, out var rule) || !rule.Enabled) continue;
             failingNow.Add(reading.Source);
             var anyTold = false;
+            var quietFor = TimeSpan.FromMinutes(rule.CooldownMinutes);
+            if (cooldown?.CooldownFor(reading, rule) is { } own && own > TimeSpan.Zero) quietFor = own;
             foreach (var recipient in Recipients(rule))
             {
                 states.TryGetValue((reading.Source, recipient), out var state);
-                if (state is { Status: AlertStateRow.Failing } && now - state.LastSentAt < TimeSpan.FromMinutes(rule.CooldownMinutes)) { quiet++; continue; }
+                if (state is { Status: AlertStateRow.Failing } && now - state.LastSentAt < quietFor) { quiet++; continue; }
                 if (rule.Channel is not null)
                 {
                     if (!await TrySend(rule, reading.Kind, recipient, $"Alert: {AlertKinds.Title(reading.Kind)}", reading.Message, problems, cancellationToken).ConfigureAwait(false)) continue;

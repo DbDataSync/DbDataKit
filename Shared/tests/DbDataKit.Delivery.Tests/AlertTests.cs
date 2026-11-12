@@ -177,4 +177,44 @@ public sealed class AlertTests
         Assert.Contains(readings, r => r.Kind == AlertKinds.FailedRun && r.Source == "failed:nightly");
         Assert.All(readings, r => Assert.Contains(r.Kind, AlertKinds.All));
     }
+
+    private sealed class FixedCooldown(TimeSpan span) : IAlertCooldown
+    {
+        public TimeSpan? CooldownFor(AlertReading reading, AlertRule rule) => reading.Source.StartsWith("check:", StringComparison.Ordinal) ? span : null;
+    }
+
+    [Fact]
+    public async Task A_cooldown_hook_replaces_the_rules_for_the_readings_it_names_and_leaves_the_others()
+    {
+        using var h = new DeliveryHarness("sqlite");
+        var channel = new ScriptedChannel("ops", _ => DeliveryResult.Sent());
+        var store = new AlertStore(h.Database);
+        store.SetRule(AlertKinds.LateData, true, "ops", [], 60, null, 0);
+        var source = new ScriptedAlertSource();
+        var service = new AlertService(store, h.Service(new ChannelSet(channel), "sender"), [source], null, h.Clock, null, new FixedCooldown(TimeSpan.FromMinutes(5)));
+        source.Now.Add(new AlertReading(AlertKinds.LateData, "check:orders", "orders failed its check"));
+        source.Now.Add(new AlertReading(AlertKinds.LateData, "overdue:nightly", "nightly is late"));
+        Assert.Equal(2, (await service.RunOnceAsync()).Sent);
+        h.Clock.Advance(TimeSpan.FromMinutes(6));
+        var later = await service.RunOnceAsync();
+        Assert.Equal((1, 1), (later.Sent, later.Quiet));                 // the check's own 5 minutes passed; the rule's hour has not
+    }
+
+    [Fact]
+    public async Task An_approval_that_waits_too_long_is_a_reading_without_its_arguments_and_an_answer_recovers_it()
+    {
+        using var engines = new StateEngines();
+        var clock = new StateTestClock(DeliveryHarness.Start);
+        var agents = new AgentStore(engines.Provision("sqlite").Open([AgentsModule.Module], time: clock));
+        var id = agents.RequestApproval(null, "ana", "reporter", "1", "console", "publish", "Publish the sales model", "{\"secret\": \"S3NT1NEL\"}", "writes");
+        var source = new ApprovalAlertSource(agents, clock, TimeSpan.FromHours(1));
+        Assert.Empty(await source.ReadAsync(default));
+        clock.Advance(TimeSpan.FromHours(2));
+        var reading = Assert.Single(await source.ReadAsync(default));
+        Assert.Equal((AlertKinds.ApprovalsWaiting, "approval:" + id.ToString("N")), (reading.Kind, reading.Source));
+        Assert.Contains("'publish' of the agent reporter has waited 2 h for the approval of ana", reading.Message);
+        Assert.DoesNotContain("S3NT1NEL", reading.Message);
+        agents.ExpireApprovals(TimeSpan.Zero);
+        Assert.Empty(await source.ReadAsync(default));
+    }
 }

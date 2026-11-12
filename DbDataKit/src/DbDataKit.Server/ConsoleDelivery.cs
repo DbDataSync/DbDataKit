@@ -122,7 +122,7 @@ public sealed class ConsoleDelivery
         Runner = new SubscriptionService(Subscriptions, Service, renderer ?? new ConsoleNoRenderer(), new ConsoleSubscriberDirectory(users), Time, null, notifications);
         Users = users;
         Alerts = new AlertStore(state);
-        AlertRunner = new AlertService(Alerts, Service, [new RunHistoryAlertSource(new RunStore(state, "console"), Time)], notifications, Time);
+        AlertRunner = new AlertService(Alerts, Service, [new RunHistoryAlertSource(new RunStore(state, "console"), Time), new ApprovalAlertSource(new AgentStore(state), Time)], notifications, Time);
     }
 
     public ChannelKinds Kinds { get; }
