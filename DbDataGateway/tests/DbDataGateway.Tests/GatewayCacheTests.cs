@@ -344,7 +344,7 @@ public sealed class GatewayCacheTests : IDisposable
         var rule = Assert.Single(ServingCacheEpochModule.Module.Retention);
         Assert.Equal(("cache_epoch", "changed_at"), (rule.Table, rule.TimeColumn));
         Assert.True(rule.DefaultDays * 24 > CacheSectionMaxHours);
-        Assert.Equal((StateScopeKind.Group, "serving_cache_epoch", 1), (ServingCacheEpochModule.Module.Scope, ServingCacheEpochModule.Module.Name, ServingCacheEpochModule.Module.Version));
+        Assert.Equal((StateScopeKind.Group, "serving_cache_epoch", 2), (ServingCacheEpochModule.Module.Scope, ServingCacheEpochModule.Module.Name, ServingCacheEpochModule.Module.Version));
         Assert.Contains(ServingCacheEpochModule.Module, GatewayState.Modules);
         // the layout names a dataset, an epoch and who and why: nothing that could hold a row or a result
         Assert.DoesNotContain(ServingCacheEpochModule.Module.Migrations, m => m.Contains("BLOB", StringComparison.OrdinalIgnoreCase) || m.Contains("payload", StringComparison.OrdinalIgnoreCase) || m.Contains("answer", StringComparison.OrdinalIgnoreCase));
