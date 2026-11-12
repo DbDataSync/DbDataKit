@@ -22,13 +22,14 @@ public sealed record ManagementResult(int Status, JsonNode Body)
 /// <item><c>GET /api/v1/about</c>: which server this is (viewer).</item>
 /// <item><c>GET /api/v1/config</c>: every effective setting with where it came from, secrets masked, and what the validator says about the current configuration (admin).</item>
 /// <item><c>GET /api/v1/clients</c>: the paired server clients, by id and name, for handing a data source over (admin).</item>
+/// <item><c>GET /api/v1/lineage</c>: the Gateway's part of the lineage graph, in the wire form every server's lineage has (viewer; <see cref="GatewayLineage"/>).</item>
 /// <item><c>GET /api/v1/state</c> (viewer), <c>GET</c> and <c>POST /api/v1/state/maintenance</c> (viewer, admin): the state and its pending migrations, and the maintenance mode (<c>DbDataKit.State.Api</c>).</item>
 /// <item><c>GET</c>, <c>PUT</c> <c>/api/v1/config/server.yaml</c> and <c>POST .../check</c>, <c>.../edit</c>: the serving settings with secrets masked, checked as a draft and written as a commit (admin; <see cref="GatewayServerSettings"/>).</item>
 /// <item><c>POST /api/v1/config/validate</c>: body <c>{"files": {"server.yaml": "...", "connections/erp.yaml": "..."}}</c>: whether the configuration would be valid with those files in place of the current ones; nothing is written (admin).</item>
 /// </list>
 /// A secret is never part of an answer: the settings are shown the way <c>config show</c> shows them, and the sentinel test puts a value in every place a secret can be and looks for it in every answer.
 /// </summary>
-public sealed partial class GatewayManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, GatewayDataSources? dataSources = null, GatewayIdentities? identities = null, GatewayActivity? activity = null, GatewayCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, GatewaySecrets? secrets = null, IPairingCodeStore? pairingCodes = null, GatewaySemanticModels? semanticModels = null, Func<IReadOnlyList<PairedClient>>? pairedClients = null, DbDataKit.Identity.IdentityAdminApi? identityAdmin = null, GatewayEntityModels? entityModels = null, DbDataKit.State.Api.StateManagement? stateApi = null, GatewayApps? apps = null, GatewayViewsManagement? views = null, IAuditLog? audit = null, GatewayServerSettings? serverSettings = null, GatewayUserQueries? userQueries = null, GatewaySemanticRuns? semanticRuns = null)
+public sealed partial class GatewayManagement(IConfigurationRoot configuration, string configDirectory, string instanceId, string version, GatewayDataSources? dataSources = null, GatewayIdentities? identities = null, GatewayActivity? activity = null, GatewayCertificate? certificate = null, DbDataKit.Config.Git.GitCommitService? git = null, GatewaySecrets? secrets = null, IPairingCodeStore? pairingCodes = null, GatewaySemanticModels? semanticModels = null, Func<IReadOnlyList<PairedClient>>? pairedClients = null, DbDataKit.Identity.IdentityAdminApi? identityAdmin = null, GatewayEntityModels? entityModels = null, DbDataKit.State.Api.StateManagement? stateApi = null, GatewayApps? apps = null, GatewayViewsManagement? views = null, IAuditLog? audit = null, GatewayServerSettings? serverSettings = null, GatewayUserQueries? userQueries = null, GatewaySemanticRuns? semanticRuns = null, GatewayLineage? lineage = null)
 {
     public const string Prefix = "/api/v1";
 
@@ -45,6 +46,7 @@ public sealed partial class GatewayManagement(IConfigurationRoot configuration, 
             var answer = await stateApi.HandleAsync(method, route, body, caller.ToStateCaller(), cancellationToken);
             return new ManagementResult(answer.Status, answer.Body);
         }
+        if (lineage is not null && GatewayLineage.Handles(route)) return lineage.Handle(method, caller);
         if (semanticRuns is not null && GatewaySemanticRuns.Handles(route))
             return await semanticRuns.HandleAsync(method, route, path.Contains('?') ? path[(path.IndexOf('?') + 1)..] : null, body, caller, cancellationToken);
         if (userQueries is not null && GatewayUserQueries.Handles(route))

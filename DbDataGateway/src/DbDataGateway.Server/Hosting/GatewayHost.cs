@@ -284,6 +284,10 @@ public static class GatewayHost
         builder.Services.AddSingleton<DbDataKit.Monitoring.INotificationFeed>(sp => sp.GetRequiredService<DbDataKit.State.NotificationFeedStore>());
         builder.Services.AddSingleton(sp => new DbDataGateway.Server.State.SavedQueryStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
         builder.Services.AddSingleton(sp => new DbDataGateway.Server.State.SemanticRunStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
+        // what statements read, as a summary per table for the lineage (plan 18 G08): counted in memory, written every few seconds
+        builder.Services.AddSingleton(sp => new DbDataGateway.Server.State.TableReadStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
+        builder.Services.AddSingleton(sp => new DbDataGateway.Server.State.TableReadRecorder(sp.GetRequiredService<DbDataGateway.Server.State.TableReadStore>(), sp.GetRequiredService<TimeProvider>()));
+        builder.Services.AddHostedService<DbDataGateway.Server.State.TableReadFlushService>();
         builder.Services.AddSingleton<GatewayEvents>();
         builder.Services.AddSingleton<DbDataGateway.Server.State.GroupSessionKey>();
         // the secrets a group's clients keep on it (plan 20 O04b); the state is looked up when a client's secret is first asked for, never to open the state itself

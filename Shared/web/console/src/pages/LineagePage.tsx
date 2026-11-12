@@ -5,7 +5,7 @@ import { ErrorBanner } from '@dbdatakit/shell'
 import { LineageGraphView, projectLineage, reach } from '@dbdatakit/visuals'
 import { consoleApi } from '../api'
 import { ConsoleShell } from '../ConsoleShell'
-import { checkLine, checkStatusOf, exactCard, findCards, serverNote, withoutDeployments } from '../lineage'
+import { checkLine, checkStatusOf, exactCard, findCards, serverNote, usageLine, withoutDeployments } from '../lineage'
 import { panelLine, qualityApi } from '../quality'
 
 /**
@@ -40,14 +40,14 @@ export function LineagePage() {
       <div className="pane" data-testid="lineage-page">
         <div className="page-head">
           <h1 className="page-title">Lineage</h1>
-          <span className="page-note">What feeds what across your Build and Sync servers. Choose a table to see where it comes from and where it goes.</span>
+          <span className="page-note">What feeds what across your Build, Sync, Gateway and Runner servers. Choose a table to see where it comes from and where it goes.</span>
         </div>
         <ErrorBanner error={lineage.error} />
         {graph?.error && <div className="empty" data-testid="lineage-join-error">{graph.error}</div>}
         {graph && (
           <div className="card" style={{ marginBottom: 14 }} data-testid="lineage-servers">
             <div className="card-body">
-              {graph.servers.length === 0 && <span data-testid="lineage-no-servers">No paired server keeps a lineage yet (Build and Sync servers do).</span>}
+              {graph.servers.length === 0 && <span data-testid="lineage-no-servers">No paired server keeps a lineage yet (Build, Sync, Gateway and Runner servers do).</span>}
               {graph.servers.map((s) => (
                 <div key={s.server} data-testid="lineage-server" data-server={s.server}>
                   <strong>{s.server}</strong> <span className="hint">{serverNote(s)}</span>
@@ -71,6 +71,9 @@ export function LineagePage() {
                 <strong>{chosen.name}</strong> · {counts.upstream} upstream, {counts.downstream} downstream
                 {chosen.unknown_upstream && ' · what feeds it is not known'} · <span className="mono">{chosen.id}</span>
               </div>
+            )}
+            {chosen && usageLine(chosen) && (
+              <div className="hint" style={{ marginBottom: 8 }} data-testid="lineage-node-usage">{usageLine(chosen)} (counted by the Gateway from statement text, as a summary)</div>
             )}
             {chosen && checkLine(chosen, lineage.data?.blocks) && (
               <div className="hint" style={{ marginBottom: 8 }} data-testid="lineage-node-checks" data-status={checkStatusOf(chosen)}>

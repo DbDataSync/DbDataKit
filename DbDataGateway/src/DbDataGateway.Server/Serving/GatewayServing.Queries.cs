@@ -12,7 +12,7 @@ namespace DbDataGateway.Server.Serving;
 public sealed partial class GatewayServing
 {
     /// <summary>Statements and updates against a data source, run as the caller.</summary>
-    private sealed class QueryService(DataSourceCatalog sources, ILogger log, GatewayEvents? events) : IServingQueries, IServingUpdates
+    private sealed class QueryService(DataSourceCatalog sources, ILogger log, GatewayEvents? events, DbDataGateway.Server.State.TableReadRecorder? tableReads) : IServingQueries, IServingUpdates
     {
         public async Task<IServingAnswer> RunAsync(ServingContext context, ServingRequest request, CancellationToken cancellationToken = default)
         {
@@ -23,6 +23,8 @@ public sealed partial class GatewayServing
 
             var result = await GatewayFailures.TranslateAsync(() => source.Executor
                 .ExecuteQueryAsync(new QueryRequest(sql.Text, source.Options.BatchSize, source.Options.CommandTimeoutSeconds, Bind(sql.Parameters)), cancellationToken)).ConfigureAwait(false);
+            // the lineage's run summary of the tables read (plan 18, G08): counted in memory, never a record per query
+            tableReads?.Record(source.Name, sql.Text, principal.Name);
             return new Answer(result, new ServingProvenance(sql.Text, null, context.Channel, source.Name));
         }
 
