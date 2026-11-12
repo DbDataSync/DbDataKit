@@ -129,7 +129,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
             if (parts is ["definitions", var kind] && method == "GET") return List(kind, caller);
             if (parts is ["definitions", var k, var name] && method == "GET") return Describe(k, name, caller);
             if (parts is ["definitions", var kv, var nv, "versions", var number] && method == "GET") return VersionOf(kv, nv, number, caller);
-            if (parts is ["definitions", var k2, var n2] && method == "PUT") return Publish(k2, n2, body, caller);
+            if (parts is ["definitions", var k2, var n2] && method == "PUT") return await Publish(k2, n2, body, caller, ct).ConfigureAwait(false);
             if (parts is ["definitions", var k3, var n3, var act] && method == "POST") return await Act(k3, n3, act, body, caller, ct).ConfigureAwait(false);
             if (parts is ["trust", var tk] && method == "GET") return Trust(tk, caller);
             if (parts is ["trust", var tk2, "keys"] && method == "PUT") return AddKey(tk2, body, caller);
@@ -173,7 +173,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
 
     private bool SignaturesRequired(string kind) => HookOf(kind)?.SignaturesRequired ?? policy?.Required(kind) ?? false;
 
-    private string? Owner(string kind, string name) => settings.Get(OwnerKey(kind, name));
+    private string? Owner(string kind, string name) => settings.Get(OwnerKey(kind, name)) ?? HookOf(kind)?.OwnerOf(name);
 
     /// <summary>The owner rules: an administrator may do anything; a publisher creates, and changes only what it created.</summary>
     private DefinitionsResult? Authorize(string verb, DefinitionsCaller caller, string kind, string name, string channel)
@@ -205,6 +205,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
     {
         if (CheckKind(kind) is { } bad) return bad;
         if (CanRead(kind, caller) is { } denied) return denied;
+        HookOf(kind)?.BeforeRead(name, caller);
         if (HookOf(kind)?.Describe(name) is { } described) return new(200, described);
         var versions = store.Versions(kind, name);
         if (versions.Count == 0) return Error(404, $"There is no {kind} '{name}'.");
@@ -228,6 +229,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
     {
         if (CheckKind(kind) is { } bad) return bad;
         if (CanRead(kind, caller) is { } denied) return denied;
+        HookOf(kind)?.BeforeRead(name, caller);
         if (!int.TryParse(number, NumberStyles.None, CultureInfo.InvariantCulture, out var n) || n < 1) return Error(400, $"'{number}' is not a version number.");
         var v = store.Versions(kind, name).FirstOrDefault(x => x.Version == n);
         if (v is null) return Error(404, $"There is no version {n} of {kind} '{name}'.");
@@ -266,7 +268,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
         return false;
     }
 
-    private DefinitionsResult Publish(string kind, string name, string? body, DefinitionsCaller caller)
+    private async Task<DefinitionsResult> Publish(string kind, string name, string? body, DefinitionsCaller caller, CancellationToken ct)
     {
         if (CheckKind(kind) is { } badKind) return badKind;
         var json = Json(body, out var badJson);
@@ -293,12 +295,12 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
             }
 
         var hook = HookOf(kind);
-        var hookContext = new PublishHookContext(kind, name, channel, manifest, files, caller);
+        var hookContext = new PublishHookContext(kind, name, channel, manifest, files, caller) { Body = json };
         if (hook is not null)
             try
             {
                 hook.CheckChannel(channel);
-                hook.BeforePublish(hookContext);
+                await hook.BeforePublishAsync(hookContext, ct).ConfigureAwait(false);
             }
             catch (DefinitionsRefusalException ex)
             {

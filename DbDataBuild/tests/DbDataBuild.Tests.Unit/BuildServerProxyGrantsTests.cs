@@ -25,7 +25,7 @@ public sealed partial class BuildServerProxyTests
         seen.Clear();
         var reply = await Publish("ada", ServerRole.Approver, "edge", new { connection = "sqlserver", data_source = "warehouse" });
         Assert.True(reply.StatusCode == HttpStatusCode.OK, await reply.Content.ReadAsStringAsync());
-        var text = (string)JsonNode.Parse(seen.Last(r => r.Method == "PUT" && r.Path == "/api/v1/data-sources/warehouse").Body)!["text"]!;
+        var text = (string)JsonNode.Parse(seen.Last(r => r.Method == "PUT" && r.Path == "/api/v1/definitions/data-source/warehouse").Body)!["manifest"]!;
         return (text, ConnectionDefinitionLoader.LoadDatabaseConnection(text, "warehouse.yaml").Require());
     }
 

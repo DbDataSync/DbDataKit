@@ -50,7 +50,7 @@ public sealed partial class GatewayManagement(IConfigurationRoot configuration, 
             return new ManagementResult(answer.Status, answer.Body);
         }
         if (definitions is not null && GatewayDefinitionsManagement.Handles(route))
-            return definitions.Handle(method, route, body, caller);
+            return await definitions.HandleAsync(method, route, body, caller, cancellationToken);
         if (lineage is not null && GatewayLineage.Handles(route)) return lineage.Handle(method, caller);
         if (cache is not null && GatewayCacheManagement.Handles(route)) return cache.Handle(method, route, body, caller);
         if (semanticRuns is not null && GatewaySemanticRuns.Handles(route))

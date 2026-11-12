@@ -20,7 +20,7 @@ namespace DbDataGateway.Server.Management;
 /// (plan 20 O03): stored and switched to in one step, served here at once and by every other instance of the group when it next looks; a publish that fails at any step leaves the version that was serving. Every version is
 /// kept, so a rollback is a switch of which one is served. A model named in <c>server.yaml</c> is not replaced by a publish.
 /// </summary>
-public sealed class GatewaySemanticModels(
+public sealed partial class GatewaySemanticModels(
     PublishedSemanticModels store, SemanticModels models, Func<GatewayOptions> options, string configDirectory, Func<DataSourceCatalog> catalog, IAuditLog audit, TimeProvider? clock = null, DataSourceAdoptions? adoptions = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -30,7 +30,7 @@ public sealed class GatewaySemanticModels(
     private sealed record PublishRequest(string? Catalog, Dictionary<string, string>? Sources, Dictionary<string, string>? Ssas, [property: JsonPropertyName("expected_version")] int? ExpectedVersion, JsonNode? Adopt = null);
 
     /// <summary>What a publish asked to adopt (plan 33 SC21f: the data sources made by hand it puts the model on, named in <c>adopt</c> as a name or a list of names), what the Gateway let through and, when it refused for want of one, the hint a screen asks the person about.</summary>
-    private sealed class Adoption(JsonNode? asked)
+    internal sealed class Adoption(JsonNode? asked)
     {
         public HashSet<string> Names { get; } = asked switch
         {
@@ -77,11 +77,11 @@ public sealed class GatewaySemanticModels(
 
     private static bool IsAdministrator(ManagementCaller caller) => caller.Holds(ServerRole.Admin);
 
-    private static string? Client(ManagementCaller caller) => IsAdministrator(caller) ? null : OwnerScope.Stamp(caller.Token!);
+    internal static string? Client(ManagementCaller caller) => IsAdministrator(caller) ? null : OwnerScope.Stamp(caller.Token!);
 
     private string? OwnerOf(string name) => store.Current(name) is { } n ? store.Version(name, n)?.ManagedBy : null;
 
-    private ManagementResult? Scope(ManagementCaller caller, ObjectAction action, string name)
+    internal ManagementResult? Scope(ManagementCaller caller, ObjectAction action, string name)
     {
         if (IsAdministrator(caller)) return null;
         var decision = OwnerScope.Authorize(caller.Token!, action, action == ObjectAction.Create ? null : new ManagedObject(OwnerOf(name)));
@@ -186,7 +186,7 @@ public sealed class GatewaySemanticModels(
     }
 
     /// <summary>The first reason the mapping cannot be served, or null.</summary>
-    private async Task<string?> CheckSourcesAsync(Catalog parsed, Dictionary<string, string> sources, Dictionary<string, string> ssas, ManagementCaller caller, Adoption adopt, CancellationToken cancellationToken)
+    internal async Task<string?> CheckSourcesAsync(Catalog parsed, Dictionary<string, string> sources, Dictionary<string, string> ssas, ManagementCaller caller, Adoption adopt, CancellationToken cancellationToken)
     {
         var current = options();
         var owner = Client(caller);
@@ -310,7 +310,7 @@ public sealed class GatewaySemanticModels(
     /// <summary>What the group serves under the name, served on this instance now rather than at the next poll.</summary>
     private void Serve(string name) => store.ServeNow(name);
 
-    private string Who(ManagementCaller caller) { var entry = caller.Audit("", null, "", _clock.GetUtcNow()); return entry.UserName ?? entry.UserId; }
+    internal string Who(ManagementCaller caller) { var entry = caller.Audit("", null, "", _clock.GetUtcNow()); return entry.UserName ?? entry.UserId; }
 
     private ManagementResult Refused(ManagementCaller caller, string name, string error, string? detail = null, JsonObject? extra = null)
     {
@@ -321,5 +321,5 @@ public sealed class GatewaySemanticModels(
         return new ManagementResult(400, body);
     }
 
-    private void Record(ManagementCaller caller, string command, string target, string outcome) => audit.Append(caller.Audit(command, target, outcome, _clock.GetUtcNow()));
+    internal void Record(ManagementCaller caller, string command, string target, string outcome) => audit.Append(caller.Audit(command, target, outcome, _clock.GetUtcNow()));
 }
