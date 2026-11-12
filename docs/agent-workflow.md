@@ -63,7 +63,7 @@ while it waits for CI to be idle:
 
 ## Resources (a 4-core machine with a small disk)
 
-- **One build at a time across all agents:** `flock -o /tmp/build.lock <command>`. The `-o` matters: without it the Roslyn compile server a build starts inherits the lock's file
+- **Builds go through build slots:** `scripts/build-slot.sh <command>` runs the command in one of two slots (`DBDATAKIT_BUILD_SLOTS`, default 2; one slot is the old rule "one build at a time"). Slot 1 is `/tmp/build.lock`, so `flock -o /tmp/build.lock <command>` still works and counts against the same limit. Raise the slots only with disk to spare: each build leaves gigabytes of `bin`, `obj` and `node_modules` until it is cleaned. The rest of this item explains the `-o`: The `-o` matters: without it the Roslyn compile server a build starts inherits the lock's file
   descriptor and holds the lock for about ten minutes after the build, and the queue starves. Also `dotnet build -p:UseSharedCompilation=false` and `MSBUILDDISABLENODEREUSE=1`.
 - **Delete `bin`, `obj`, `node_modules`, `.duckdb` and `DbDataBuild/native` right after each step** (`find <dir> -type d \( -name bin -o -name obj -o -name node_modules \) -prune -exec rm -rf {} +`).
   Several products built at once filled the disk twice. Stop building when `df -h /` shows under 3 GB free.
