@@ -114,7 +114,7 @@ public static class Worklists
     /// <summary>
     /// The worklists per owner: orphaned items (with the subjects that are gone), items over a budget (<paramref name="overBudget"/> says for an item), items marked for another look (<paramref name="needsLook"/>, ids). An item with no owner is listed under <c>(no owner)</c>.
     /// </summary>
-    public static IReadOnlyList<OwnerWorklist> Build(IEnumerable<KnowledgeItem> items, ISubjectCatalog catalog, Func<KnowledgeItem, string?>? overBudget = null, IReadOnlySet<string>? needsLook = null)
+    public static IReadOnlyList<OwnerWorklist> Build(IEnumerable<KnowledgeItem> items, ISubjectCatalog catalog, Func<KnowledgeItem, string?>? overBudget = null, IReadOnlySet<string>? needsLook = null, IReadOnlyDictionary<string, string>? needsLookWhy = null)
     {
         var work = new List<(string Owner, WorkItem Item)>();
         foreach (var item in items)
@@ -126,7 +126,7 @@ public static class Worklists
                 work.Add((owner, new WorkItem("orphaned", item.Id, item.Title, $"Everything it is about is gone ({string.Join(", ", gone.Select(s => s.Key))}); it reaches nobody. Point it at another object, or retire it.", gone.FirstOrDefault()?.Key, gone.FirstOrDefault())));
             }
             if (overBudget?.Invoke(item) is { } over) work.Add((owner, new WorkItem("over-budget", item.Id, item.Title, over, null, null)));
-            if (needsLook is not null && needsLook.Contains(item.Id)) work.Add((owner, new WorkItem("needs-look", item.Id, item.Title, "Something it depends on changed; read it again.", null, null)));
+            if (needsLook is not null && needsLook.Contains(item.Id)) work.Add((owner, new WorkItem("needs-look", item.Id, item.Title, needsLookWhy is not null && needsLookWhy.TryGetValue(item.Id, out var why) ? why : "Something it depends on changed; read it again.", null, null)));
         }
         return [.. work.GroupBy(w => w.Owner, StringComparer.Ordinal).OrderBy(g => g.Key, StringComparer.Ordinal)
             .Select(g => new OwnerWorklist(g.Key, [.. g.Select(w => w.Item).OrderBy(w => w.Kind, StringComparer.Ordinal).ThenBy(w => w.ItemId, StringComparer.Ordinal)]))];

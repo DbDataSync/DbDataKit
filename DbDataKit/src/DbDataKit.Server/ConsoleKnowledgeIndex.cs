@@ -165,6 +165,21 @@ public sealed class ConsoleKnowledgeIndex(ConsoleSettings settings, ConsoleKnowl
         Refresh();
     }
 
+    // ---- verified queries that need another look (KN22) ----
+
+    /// <summary>The verified queries of the files the index marks as needing re-verification, by the id the files give them (the project is not part of it), with why. Empty when the index is not built or cannot be read.</summary>
+    public IReadOnlyDictionary<string, string> NeedsAnotherLook()
+    {
+        if (!Enabled) return new Dictionary<string, string>();
+        try
+        {
+            var (index, _) = Index();
+            return index.Store.VerifiedQueries(Channel).Where(v => v.Verified.Status == VerifiedStatus.NeedsReverification)
+                .ToDictionary(v => v.ItemId[(v.ItemId.IndexOf(':', StringComparison.Ordinal) + 1)..], v => v.Verified.StatusNote ?? "It needs to be verified again.", StringComparer.Ordinal);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.Data.Common.DbException or IOException) { return new Dictionary<string, string>(); }
+    }
+
     // ---- what the screen shows ----
 
     public KnowledgeIndexView View()

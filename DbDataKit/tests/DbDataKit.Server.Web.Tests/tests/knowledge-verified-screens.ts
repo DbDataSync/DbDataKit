@@ -16,7 +16,9 @@ export async function mockVerified(page: Page): Promise<VerifiedMock> {
       { name: 'project', exists: true, items: saved.length, chunks: saved.length, instructions: 0, guardrails: 0, references: saved.length, failed: [], orphans: [], files: saved.map((s) => ({ id: s.id, title: 'A verified query', role: 'reference', owner: null })) },
     ],
     hasSubjectCatalog: true, subjects: [{ type: 'semantic-model', name: 'Sales', narrowingKind: '', narrowingName: '', status: 'exists' }],
-    index: { built: false, message: 'No index is built.' }, worklists: [],
+    index: { built: false, message: 'No index is built.' },
+    // KN22: a verified query the index marked after a model change is in its owner's worklist, with why
+    worklists: [{ owner: 'finance', work: [{ kind: 'needs-look', itemId: 'queries/revenue.md', title: 'Revenue by region', message: 'Re-checked when the model changed: the measure revenue is no longer in Sales.', subject: null }] }],
   })
   await page.route('**/api/agents/definitions', (route) => json(route, []))
   await page.route('**/api/knowledge/overview', (route) => json(route, overview()))
@@ -59,4 +61,10 @@ export async function verifiedStory(page: Page, mock: VerifiedMock) {
   await expect(page.getByTestId('verified-questions')).toContainText('What was revenue by region last quarter?')
   await expect(page.getByTestId('verified-request')).toContainText('"kind": "query"')
   await expect(page.getByTestId('verified-sql')).toContainText('SELECT region, revenue FROM Sales')
+
+  // KN22: what a model change left needing another look is in the owner's worklist, with the reason
+  await page.goto('/knowledge?tab=worklist')
+  const work = page.getByTestId('work-item')
+  await expect(work).toHaveAttribute('data-kind', 'needs-look')
+  await expect(work).toContainText('the measure revenue is no longer in Sales')
 }

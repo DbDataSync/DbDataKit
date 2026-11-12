@@ -37,7 +37,7 @@ public sealed class KnowledgeController(ConsoleKnowledge knowledge, ConsoleAgent
     /// <summary>The overview of the files with the index's state in it (the first line of the screen).</summary>
     private JsonObject Overview()
     {
-        var overview = knowledge.Overview();
+        var overview = knowledge.Overview(index.NeedsAnotherLook());
         var view = index.View();
         overview["index"] = new JsonObject { ["built"] = view.Opened, ["message"] = view.Opened ? $"The index is built: {view.Message}" : overview["index"]!["message"]!.GetValue<string>() };
         return overview;
