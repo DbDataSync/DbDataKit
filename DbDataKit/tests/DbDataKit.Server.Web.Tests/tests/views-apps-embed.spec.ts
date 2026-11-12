@@ -139,8 +139,9 @@ test('an approved report origin is framed, one nobody approved is only a link an
   await page.getByTestId('identity-sign-in-passkey').click()
   await expect(page.getByTestId('identity-signed-in')).toHaveText('Signed in as Ada Lovelace.')
 
-  const response = await page.goto(`${appsUrl}/apps/reports/`)
-  const policy = (await response!.allHeaders())['content-security-policy']
+  await page.goto(`${appsUrl}/apps/reports/`)
+  // the policy is the app document's (`_app/`, the one in the shell's frame), not the shell page's, which frames only itself; the request carries the person's session
+  const policy = (await page.request.get(`${appsUrl}/apps/reports/_app/`)).headers()['content-security-policy']
   // the document's policy lists the approved origins and not the one nobody approved
   expect(policy).toContain(`frame-src ${homeUrl} ${silentUrl}`)
   expect(policy).not.toContain('unapproved.example')

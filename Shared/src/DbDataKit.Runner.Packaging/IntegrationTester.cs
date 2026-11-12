@@ -93,8 +93,25 @@ public static class IntegrationTester
         }
         finally
         {
-            try { if (Directory.Exists(scratch)) Directory.Delete(scratch, recursive: true); }
-            catch (IOException) { /* the cache folder is the tool's; a leftover is not a failure */ }
+            RemoveScratch(scratch);
+        }
+    }
+
+    /// <summary>
+    /// Removes the folder the package was built in. The tests loaded its assembly in collectible contexts that are unloaded by now, but Windows keeps the file open (<see cref="UnauthorizedAccessException"/>, not an
+    /// <see cref="IOException"/>) until they are collected: a collection and another try. A folder that stays is the operating system's temp folder to clean, not a failure of the tests.
+    /// </summary>
+    private static void RemoveScratch(string scratch)
+    {
+        for (var attempt = 0; attempt < 5 && Directory.Exists(scratch); attempt++)
+        {
+            try { Directory.Delete(scratch, recursive: true); return; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                Thread.Sleep(100);
+            }
         }
     }
 
