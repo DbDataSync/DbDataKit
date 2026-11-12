@@ -70,6 +70,28 @@ public sealed record UnitStateTracking(TargetUnitState State, bool TargetPrimary
             $"The target's position ('{latest.WatermarkAfter}', unit {latest.Sequence}) differs from the runner state's ({stateText}); the state is the primary, so the pass continues from the state's position.");
     }
 
+    /// <summary>
+    /// Applies <c>tracking.retention</c> (default the last 1000 units and anything newer than 7 days) to the mapping's units, in a transaction of its own on the target. The newest unit of each
+    /// source stays whatever the setting says. A failure is logged as a warning and does not fail the pass: the data and the position it committed are not affected by a prune.
+    /// </summary>
+    public async Task<int> PruneAsync(DbConnection targetConnection, ReplicationTaskConfig task, string mapping, DateTimeOffset now, Action<LogSeverity, string> log, CancellationToken cancellationToken)
+    {
+        var retention = TrackingResolution.RetentionOf(task.Tracking);
+        try
+        {
+            await using var transaction = await targetConnection.BeginTransactionAsync(cancellationToken);
+            var removed = await State.PruneAsync(targetConnection, transaction, task.Name, mapping, retention.EffectiveUnits(), retention.EffectiveDays(), now, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            if (removed > 0) log(LogSeverity.Info, $"'{mapping}': {removed} old unit(s) removed from {TargetUnitState.Schema}.{TargetUnitState.Table} (kept: the newest {retention.EffectiveUnits()} and anything newer than {retention.EffectiveDays()} day(s)).");
+            return removed;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            log(LogSeverity.Warning, $"'{mapping}': the old units of {TargetUnitState.Schema}.{TargetUnitState.Table} could not be pruned: {exception.Message}");
+            return 0;
+        }
+    }
+
     /// <summary>The unit of one segment, as the hook writes it.</summary>
     public static UnitDraft Draft(Guid runId, string replication, string mapping, string watermarkKey, string? before, ReadResult read, long rowsStaged) =>
         new(Guid.NewGuid(), replication, mapping, watermarkKey, before, read.WatermarkAfterRead!, read.WatermarkTimeAfterRead, rowsStaged, runId);

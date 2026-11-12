@@ -933,6 +933,24 @@ export function useReplicationTracking(replicationName: string | undefined) {
   })
 }
 
+/** Follows the replication's target now (plan 28c E17). */
+export function useTrackingCatchUp(replicationName: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.replications.trackingCatchUp(replicationName),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.replicationTracking(replicationName) }),
+  })
+}
+
+/** Resolves an open divergence of the copy of the target's units: archive or reset (plan 28c E17). */
+export function useResolveTrackingDivergence(replicationName: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, resolution }: { id: number; resolution: 'archive' | 'reset' }) => api.replications.resolveDivergence(id, resolution),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.replicationTracking(replicationName) }),
+  })
+}
+
 /**
  * Recent bulk loads for the Monitoring screen's "Batch reload" card.
  *

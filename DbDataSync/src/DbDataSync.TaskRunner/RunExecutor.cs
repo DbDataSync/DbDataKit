@@ -1194,6 +1194,11 @@ public sealed class RunExecutor(
                 newWatermarkTime = read.WatermarkTimeAfterRead;
             }
 
+            // Retention of the state table on the target (plan 28c E17): what is older than the setting and not among the mapping's newest units goes, in a transaction of its own.
+            // A failure here is said and does not fail a pass whose data is already committed.
+            if (unitTracking is not null)
+                await unitTracking.PruneAsync(targetConnection, task, mapping.Name, TimeProvider.System.GetUtcNow(), (level, text) => Log(item.RunId, level, text), cancellationToken);
+
             // Segmented passes only ever happen with a reload reader, which has no watermark of its
             // own and echoes back whatever it was given — so taking the last segment's value is the
             // same as taking any of them. An ordinary incremental pass has exactly one segment (none).

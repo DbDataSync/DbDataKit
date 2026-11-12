@@ -12,6 +12,29 @@ public sealed class TrackingConfig
 
     /// <summary>The side decisions are made from when <see cref="Mode"/> is <c>both</c>: <c>target</c> or <c>state</c>. Refused for the other modes.</summary>
     public string? Primary { get; set; }
+
+    /// <summary>How much of the state table on the target is kept (plan 28c E17, <c>tracking.retention</c>). Absent: <see cref="TrackingRetention.DefaultUnits"/> units and <see cref="TrackingRetention.DefaultDays"/> days. Refused with the mode that keeps no table on the target.</summary>
+    public TrackingRetention? Retention { get; set; }
+}
+
+/// <summary>
+/// The retention of <c>dbdatasync.unit</c>: a unit is removed only when it is older than <see cref="Days"/> days <b>and</b> not among the newest <see cref="Units"/> of its mapping (the newest unit of each source is
+/// never removed: it is where the next pass resumes). Default taken (plan 28c E17, owner not asked): the last 1000 units and anything newer than 7 days.
+/// </summary>
+public sealed class TrackingRetention
+{
+    public const int DefaultUnits = 1000;
+    public const double DefaultDays = 7;
+
+    /// <summary>How many of a mapping's newest units are always kept. At least 1.</summary>
+    public int? Units { get; set; }
+
+    /// <summary>How many days of units are always kept. Zero or more.</summary>
+    public double? Days { get; set; }
+
+    public int EffectiveUnits() => Units ?? DefaultUnits;
+
+    public double EffectiveDays() => Days ?? DefaultDays;
 }
 
 /// <summary>What a replication's tracking comes to: the mode asked for (or the default), the one that applies and the reason when they differ.</summary>
@@ -36,6 +59,9 @@ public static class TrackingResolution
     /// <summary>Whether any target-state writer exists (the status and the screen read it; which engines is <see cref="TargetWriterEngines"/>).</summary>
     public const bool TargetWritersBuilt = true;
 
+    /// <summary>The retention that applies to a replication's state table: what the file says, or the default.</summary>
+    public static TrackingRetention RetentionOf(TrackingConfig? tracking) => tracking?.Retention ?? new TrackingRetention();
+
     public static readonly string[] Modes = ["target", "state", "both"];
     public static readonly string[] Primaries = ["target", "state"];
 
@@ -49,6 +75,13 @@ public static class TrackingResolution
         if (!Modes.Contains(mode)) throw new ConfigValidationException($"Replication '{replicationName}': tracking mode '{tracking.Mode}' is not one of target, state, both.");
         if (primary is not null && !Primaries.Contains(primary)) throw new ConfigValidationException($"Replication '{replicationName}': tracking primary '{tracking.Primary}' is not one of target, state.");
         if (mode == "both" && primary is null) throw new ConfigValidationException($"Replication '{replicationName}': tracking mode 'both' keeps two copies, so it must say which one is the primary (target or state).");
+        if (tracking.Retention is { } retention)
+        {
+            if (mode == "state") throw new ConfigValidationException($"Replication '{replicationName}': `tracking.retention` prunes the state table on the target, and mode 'state' keeps none; remove it or use mode target or both.");
+            if (retention.Units is < 1) throw new ConfigValidationException($"Replication '{replicationName}': `tracking.retention.units` is {retention.Units}; it keeps at least 1 unit per mapping.");
+            if (retention.Days is < 0) throw new ConfigValidationException($"Replication '{replicationName}': `tracking.retention.days` is {retention.Days}; it cannot be negative.");
+        }
+
         if (mode != "both" && primary is not null) throw new ConfigValidationException($"Replication '{replicationName}': tracking mode '{mode}' keeps one side only, so it takes no primary (it was given '{tracking.Primary}').");
     }
 
