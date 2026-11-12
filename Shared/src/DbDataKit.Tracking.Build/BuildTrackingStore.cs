@@ -54,6 +54,8 @@ public sealed class BuildTrackingStore(StateDatabase database) : IStateTrackingS
             Write(connection, transaction, identity, stream, rows);
             transaction.Commit();
         });
+        // Build's runs are read from the copy into the runs module (plan 29a Q21); a failure here stops the copy before its checkpoint moves, so the next pass writes the same rows again and projects them again
+        if (stream.Name == "run_log") BuildRunsProjection.Project(database, identity, rows);
         return Task.CompletedTask;
     }
 

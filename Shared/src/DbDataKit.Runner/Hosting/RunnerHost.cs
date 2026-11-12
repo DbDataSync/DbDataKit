@@ -34,6 +34,7 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
     private RunnerControl? _control;
     private RunnerScheduler? _scheduler;
     private volatile bool _silent;
+    private volatile bool _draining;
     private IReadOnlyDictionary<string, string> _capabilities = new Dictionary<string, string>();
     private readonly string _workerId = $"{Environment.MachineName}-{Environment.ProcessId}-{Guid.NewGuid():N}";
 
@@ -63,11 +64,31 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
         }
     }
 
+    /// <summary>While true this instance takes no new work (maintenance of the state, plan 29b C05); what is running finishes.</summary>
+    public bool Draining
+    {
+        get => _draining;
+        set
+        {
+            _draining = value;
+            if (_scheduler is not null) _scheduler.Draining = value;
+        }
+    }
+
+    /// <summary>The runs this instance has going now.</summary>
+    public int RunningCount => _scheduler?.RunningCount ?? 0;
+
     /// <summary>The runner group this instance belongs to.</summary>
     public string Group => settings.Group;
 
     /// <summary>How this host turns a connection slot into a login, once it has started (null before): what a run uses, and what the binding test of the API tries (UI08).</summary>
     public DbDataKit.Runner.Protocol.Server.ISlotResolver? Slots { get; private set; }
+
+    /// <summary>The runner's own directory of <c>connection/1</c> files; a file there answers to a name before a copy the console sent.</summary>
+    public string ConnectionsDirectory => settings.ConnectionsDirectory;
+
+    /// <summary>The same resolver as <see cref="Slots"/>, as what it is: the connection copies API asks it which references of a copy resolve here (plan 27a IX23).</summary>
+    public DbDataKit.Runner.Connections.RunnerSlotResolver? Resolver { get; private set; }
 
     /// <summary>The name this runner's scheduler claims work items under; the group view counts an instance's running items by it.</summary>
     public string WorkerId => _workerId;
@@ -103,8 +124,9 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
 
         // connection slots (plan 28c E02): the bindings are the publisher's, the connections a directory of connection/1 files, the secrets the runner's own providers; every secret the resolver reveals is registered with the redactor the run log uses
         var redactor = new Redactor();
-        var slots = new RunnerSlotResolver(publisher, settings.Connections ?? new DirectoryConnectionCatalog(settings.ConnectionsDirectory), settings.Secrets ?? RunnerHostSettings.DefaultSecrets(settings.SecretStore), redactor);
+        var slots = new RunnerSlotResolver(publisher, settings.Connections ?? new LayeredConnectionCatalog(new DirectoryConnectionCatalog(settings.ConnectionsDirectory), new StoredConnectionCatalog(new ConnectionCopies(state))), settings.Secrets ?? RunnerHostSettings.DefaultSecrets(settings.SecretStore), redactor);
         Slots = slots;
+        Resolver = slots;
         var executor = new TaskExecutor(state, _host, new TaskExecutorOptions
         {
             DataDirectory = settings.Directory,
@@ -146,6 +168,7 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
             });
         _scheduler = scheduler;
         scheduler.SuspendHeartbeats = _silent;
+        scheduler.Draining = _draining;
         _control = new RunnerControl(state, scheduler, settings.ServiceId);
         _loop = Task.Run(() => scheduler.RunAsync(_stopping.Token));
         _beat = Task.Run(() => HeartbeatAsync(instances, _stopping.Token));

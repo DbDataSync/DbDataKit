@@ -24,7 +24,7 @@ public static class HttpConnectionTester
         var signIn = method == "none" ? "none" : "not checked";
         HttpConnectionClient connection;
         try { connection = HttpConnections.Create(definition, secrets, options); }
-        catch (SecretNotSetException e) { return Done(false, null, signIn, $"{e.Message} Type it on this screen (it is kept in the console's secret store), or set the secret or variable that names."); }
+        catch (SecretNotSetException e) { return Done(false, null, signIn, Unset(definition, e)); }
         catch (ConnectionFailureException e) when (e.Failure.Code == "client-certificate") { return Done(false, null, signIn, "The client certificate could not be loaded: check the file or the secret that holds it, and its password.", ConnectionFailureKind.Tls); }
 
         using (connection)
@@ -38,12 +38,13 @@ public static class HttpConnectionTester
             }
             catch (SecretNotSetException e)
             {
-                return Done(false, null, signIn, $"{e.Message} Type it on this screen (it is kept in the console's secret store), or set the secret or variable that names.");
+                return Done(false, null, signIn, Unset(definition, e));
             }
             catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 var failure = HttpFailures.Classify(e, ct);
                 // a refused client of OAuth 2 is the sign-in being refused; the endpoint was not tried
+                if (failure.Code == TokenEndpoint.GrantRevoked) return Done(false, null, "rejected", TokenEndpoint.GrantRevokedText, failure.Kind);
                 if (failure.Kind == ConnectionFailureKind.Login) return Done(false, failure.Code?.StartsWith("oauth-", StringComparison.Ordinal) == true ? null : true, "rejected", $"The system did not accept the sign-in ({failure.Code}). Check the client id and its secret, and that this client may ask for a token.", failure.Kind);
                 var words = failure.Kind switch
                 {
@@ -56,6 +57,12 @@ public static class HttpConnectionTester
             }
         }
     }
+
+    /// <summary>What a secret that is not set means: for the refresh token of an authorization code connection nobody has given consent yet, for any other it is typed on the screen.</summary>
+    private static string Unset(ConnectionDefinition d, SecretNotSetException e) =>
+        d.SignIn is { Method: "oauth2_authorization_code" } s && s.RefreshTokenSecret == e.Reference
+            ? "Consent has not been given yet: press Authorize on the Connections screen and sign in at the provider (the refresh token it gives is kept in the console's secret store)."
+            : $"{e.Message} Type it on this screen (it is kept in the console's secret store), or set the secret or variable that names.";
 
     private static HttpTestResult Judge(ConnectionDefinition d, string shown, HttpStatusCode status, string method, Func<bool, bool?, string, string, ConnectionFailureKind?, int?, HttpTestResult> done)
     {

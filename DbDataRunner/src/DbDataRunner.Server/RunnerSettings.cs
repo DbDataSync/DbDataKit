@@ -50,6 +50,9 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
     /// <summary>The state database's engine and connection; SQLite by default.</summary>
     public StateSettings State { get; init; } = new();
 
+    /// <summary>Where each state setting came from, for <c>GET /api/v1/state</c>; null: worked out from the directory when asked.</summary>
+    public StateSources? StateSources { get; init; }
+
     /// <summary>The size cap of one file uploaded through the publish API.</summary>
     public long MaxArtifactBytes { get; init; } = RunnerPublishing.DefaultMaxArtifactBytes;
 
@@ -137,6 +140,10 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
     /// <summary>The state settings the environment names; SQLite in the directory when it names none.</summary>
     public static StateSettings StateFrom(Func<string, string?>? environment, string? engineFlag = null) =>
         SuiteEnvironment.ResolveState(ServiceName, environment, engineFlag) ?? new StateSettings();
+
+    /// <summary>The state settings of the directory's runner (plan 29b C07): <see cref="RunnerState.Resolve"/>, as the server and the local verbs read them.</summary>
+    public static StateSettings StateFrom(string directory, Func<string, string?>? environment, string? engineFlag = null) =>
+        RunnerState.Resolve(directory, environment, engineFlag).Settings;
 
     public static TimeSpan ActivationMaxWaitFrom(Func<string, string?>? environment)
     {

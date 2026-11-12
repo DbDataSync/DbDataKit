@@ -188,7 +188,7 @@ function MoveWizard({ serverId, serverName, product, state }: { serverId: string
           <Field label="Target state connection">
             <select className="input" value={target} disabled={busy} onChange={(e) => { setTarget(e.target.value); setPreflight(null); setPhase('idle') }} data-testid="move-target">
               <option value="">Choose a state connection</option>
-              {(connections.data ?? []).filter((c) => c.engine !== 'sqlite').map((c) => <option key={c.name} value={c.name}>{`${c.name} (${engineName(c.engine)})`}</option>)}
+              {(connections.data ?? []).map((c) => <option key={c.name} value={c.name}>{`${c.name} (${engineName(c.engine)})`}</option>)}
             </select>
           </Field>
           <button type="button" className="btn" disabled={!target || check.isPending || busy} onClick={() => check.mutate()} data-testid="move-check">Check</button>

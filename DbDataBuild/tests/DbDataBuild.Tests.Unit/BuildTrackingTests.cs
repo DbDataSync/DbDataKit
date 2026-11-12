@@ -22,6 +22,43 @@ public sealed class BuildTrackingTests : IDisposable
     private StateDatabase Open(TimeProvider? time = null) => StateDatabase.OpenModules(Path.Combine(_dir, "state.db"), BuildTrackingState.Modules, BuildTrackingState.Scope, time);
 
     [Fact]
+    public async Task Build_runs_are_read_from_the_copy_into_the_runs_module_once_and_finished_when_their_steps_end()
+    {
+        // plan 29a Q21: the runs module reads Build's runs from the copy, so one query lists Build's runs beside the other services'
+        var database = StateDatabase.OpenModules(Path.Combine(_dir, "runs.db"), [.. BuildTrackingState.Modules, RunsModule.Module], BuildTrackingState.Scope);
+        var store = new BuildTrackingStore(database);
+        var stream = BuildStreams.Get("run_log").Stream;
+        const string identity = "buildtracking:mssql://sql01/wh.dbdatabuild.tracking";
+        var run = Guid.NewGuid();
+        string Step(string id, string status, long? rows, string? ended) =>
+            $"{{\"run_id\":\"{run:D}\",\"step_id\":\"{id}\",\"model\":\"m_{id}\",\"status\":\"{status}\",\"rows_affected\":{(rows is null ? "null" : rows)},\"started_utc\":\"2026-11-11T10:00:0{id[^1]}.0000000Z\",\"ended_utc\":{(ended is null ? "null" : $"\"{ended}\"")}}}";
+        string Key(string id) => $"{run:D}|{id}";
+        var runs = new RunStore(database, "build");
+
+        await store.WriteAsync(identity, stream, [new TrackingRow(Key("s1"), 10, Step("s1", "ok", 5, "2026-11-11T10:00:01.0000000Z")), new TrackingRow(Key("s2"), 11, Step("s2", "started", null, null))], default);
+        var running = Assert.Single(runs.Read(new RunQuery(Service: "build")));
+        Assert.Equal(DbDataKit.Monitoring.RunOutcome.Running, running.Run.Outcome);
+        Assert.Equal(identity, running.Run.JobId);
+
+        await store.WriteAsync(identity, stream, [new TrackingRow(Key("s2"), 11, Step("s2", "ok", 7, "2026-11-11T10:00:09.0000000Z"))], default);
+        var done = Assert.Single(runs.Read(new RunQuery(Service: "build")));
+        Assert.Equal(DbDataKit.Monitoring.RunOutcome.Succeeded, done.Run.Outcome);
+        Assert.Equal(12, done.Run.Rows);
+        Assert.Equal(DateTimeOffset.Parse("2026-11-11T10:00:09Z"), done.Run.Finished);
+
+        // writing the same rows again changes nothing: a run ends once
+        await store.WriteAsync(identity, stream, [new TrackingRow(Key("s2"), 11, Step("s2", "failed", 7, "2026-11-11T10:00:12.0000000Z"))], default);
+        Assert.Equal(DbDataKit.Monitoring.RunOutcome.Succeeded, Assert.Single(runs.Read(new RunQuery(Service: "build"))).Run.Outcome);
+
+        // a failed step is a failed run that names the item, never a statement
+        var bad = Guid.NewGuid();
+        await store.WriteAsync(identity, stream, [new TrackingRow($"{bad:D}|s1", 20, Step("s1", "failed", null, "2026-11-11T11:00:01.0000000Z").Replace(run.ToString("D"), bad.ToString("D")))], default);
+        var failed = runs.Get(bad)!;
+        Assert.Equal(DbDataKit.Monitoring.RunOutcome.Failed, failed.Run.Outcome);
+        Assert.Equal("m_s1", failed.Run.FailedItem);
+    }
+
+    [Fact]
     public void The_module_follows_the_conventions_and_builds_on_sqlite()
     {
         Assert.Empty(StateConventions.Violations(BuildTrackingModule.Module));
