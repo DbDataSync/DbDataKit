@@ -11,5 +11,8 @@
     <ProjectReference Include="..\DbDataKit.Runner.Abstractions\DbDataKit.Runner.Abstractions.csproj" />
     <ProjectReference Include="..\DbDataKit.Runner.Kit\DbDataKit.Runner.Kit.csproj" />
     <ProjectReference Include="..\DbDataKit.Runner.Kit.Testing\DbDataKit.Runner.Kit.Testing.csproj" />
+    <ProjectReference Include="..\DbDataKit.Runner.Kit.Http\DbDataKit.Runner.Kit.Http.csproj" />
+    <ProjectReference Include="..\DbDataKit.Runner.Kit.Formats\DbDataKit.Runner.Kit.Formats.csproj" />
+    <ProjectReference Include="..\DbDataKit.Runner.Kit.Landing\DbDataKit.Runner.Kit.Landing.csproj" />
   </ItemGroup>
 </Project>

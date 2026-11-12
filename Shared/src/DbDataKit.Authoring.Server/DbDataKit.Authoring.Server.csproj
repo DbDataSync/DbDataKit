@@ -6,6 +6,9 @@
     <IsPackable>true</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="IntegrationTemplates\**\*" LogicalName="IntegrationTemplates/%(RecursiveDir)%(Filename)%(Extension)" />   <!-- the integration project templates (IX21) -->
+  </ItemGroup>
+  <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\DbDataKit.Authoring\DbDataKit.Authoring.csproj" />
     <ProjectReference Include="..\DbDataKit.Apps.Build\DbDataKit.Apps.Build.csproj" />

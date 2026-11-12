@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { abandonState, buildBusy, buildButton, buildWord, commitState, diagnosticLine, notIsolated, pairProblem, publishButton, referenceProblem, conflictsOf, createState, describeEvent, fileTree, isName, languageOf, mergeState, nameProblem, pathProblem, saveState, statusWord } from './model'
+import type { ProjectKindInfo } from './api'
+import { templateToSend, templatesOf, abandonState, buildBusy, buildButton, buildWord, commitState, diagnosticLine, notIsolated, pairProblem, publishButton, referenceProblem, conflictsOf, createState, describeEvent, fileTree, isName, languageOf, mergeState, nameProblem, pathProblem, saveState, statusWord } from './model'
 
 describe('names', () => {
   it('accepts what the server accepts and nothing else', () => {
@@ -142,5 +143,25 @@ describe('builds, preview and publish', () => {
     expect(pairProblem({ name: 'Edge', url: '' })).toContain('lower-case')
     expect(pairProblem({ name: 'edge', url: 'http://gateway' })).toContain('https://')
     expect(pairProblem({ name: 'edge', url: 'https://gateway:8443' })).toBeNull()
+  })
+})
+
+describe('the templates a new project can start from (plan 27a IX21)', () => {
+  const kinds: ProjectKindInfo[] = [
+    { name: 'app', title: 'App', description: '', buildable: true, publishes: [] },
+    { name: 'integration', title: 'Integration', description: '', buildable: false, produces: true, publishes: [],
+      templates: [{ name: 'rest-api-to-staging', title: 'Pull pages from a REST API into a staging table', description: 'd' }, { name: 'csv-files-from-share', title: 'Pick up CSV files from a share', description: 'd' }] },
+  ]
+  it('lists the templates of the chosen kind and none for a kind without them or an unknown one', () => {
+    expect(templatesOf(kinds, 'integration').map((t) => t.name)).toEqual(['rest-api-to-staging', 'csv-files-from-share'])
+    expect(templatesOf(kinds, 'app')).toEqual([])
+    expect(templatesOf(kinds, 'nope')).toEqual([])
+    expect(templatesOf(undefined, 'integration')).toEqual([])
+  })
+  it('sends a template only when the kind offers it, so changing the kind never sends a stale choice', () => {
+    expect(templateToSend(kinds, 'integration', 'csv-files-from-share')).toBe('csv-files-from-share')
+    expect(templateToSend(kinds, 'integration', '')).toBeUndefined()
+    expect(templateToSend(kinds, 'app', 'csv-files-from-share')).toBeUndefined()
+    expect(templateToSend(kinds, 'integration', 'made-up')).toBeUndefined()
   })
 })

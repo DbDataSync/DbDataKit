@@ -1,0 +1,13 @@
+schema: package/1
+name: {{package}}
+launch: { kind: assembly, assembly: bin/{{package}}.dll }
+built_against: { dotnet: "10.0", kit: "1", protocol: dbdatakit.runner.v1 }
+tasks:
+  - name: pick-up-csv
+    entry: { type: CsvPickup.PickUpCsv }
+    schedule: { every: 15m }
+    triggers:
+      - manual: true
+    connections: [ { name: share, kind: folder }, { name: staging, kind: database } ]
+    limits: { timeout: 30m, attempts: 3 }
+    counters: [files, rows, skipped, rejected]

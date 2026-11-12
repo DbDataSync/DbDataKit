@@ -63,13 +63,13 @@ public static class WorkspaceManagement
             var token = context.ManagementToken();
             if (ManagementAuthorization.Authorize(token, ServerRole.Admin) is { Allowed: false } refused) return Refused(refused);
             var body = await Body(context);
-            string? id, title, kind;
-            try { (id, title, kind) = (body?["id"]?.GetValue<string>(), body?["title"]?.GetValue<string>(), body?["kind"]?.GetValue<string>() ?? "app"); }
-            catch (InvalidOperationException) { id = title = kind = null; }
-            if (id is null || kind is null) return Results.Json(new { error = "The body is a JSON object with the project's \"id\" (and optionally a \"title\" and a \"kind\", app by default)." }, statusCode: StatusCodes.Status400BadRequest);
+            string? id, title, kind, template;
+            try { (id, title, kind, template) = (body?["id"]?.GetValue<string>(), body?["title"]?.GetValue<string>(), body?["kind"]?.GetValue<string>() ?? "app", body?["template"]?.GetValue<string>()); }
+            catch (InvalidOperationException) { id = title = kind = template = null; }
+            if (id is null || kind is null) return Results.Json(new { error = "The body is a JSON object with the project's \"id\" (and optionally a \"title\", a \"kind\", app by default, and a \"template\" of that kind)." }, statusCode: StatusCodes.Status400BadRequest);
             try
             {
-                var made = projects.Create(id, kind, title, new GitAuthor(Actor(token), $"{token.SubjectId}@dbdataworkspace.local"), token.SubjectId);
+                var made = projects.Create(id, kind, title, new GitAuthor(Actor(token), $"{token.SubjectId}@dbdataworkspace.local"), token.SubjectId, template);
                 Audit(token, "project.create", id, "ok");
                 return Results.Json(new { id = made.Id, kind = made.Kind, title = made.Title, workspaces = 0, created = made.CreatedAt }, statusCode: StatusCodes.Status201Created);
             }
@@ -161,6 +161,7 @@ public static class WorkspaceManagement
                     ["description"] = k.Description,
                     ["buildable"] = k.Buildable,
                     ["produces"] = k.Produces,
+                    ["templates"] = new JsonArray([.. k.Templates.Select(t => (JsonNode?)new JsonObject { ["name"] = t.Name, ["title"] = t.Title, ["description"] = t.Description })]),
                     ["publishes"] = new JsonArray([.. k.Publishes.Select(r => (JsonNode?)new JsonObject { ["product"] = r.Product, ["what"] = r.What, ["description"] = r.Description })]),
                 })]),
             });

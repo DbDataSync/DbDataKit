@@ -17,9 +17,9 @@ public static class WorkspaceAdminCommand
 
     public static Noun Project(Func<string, string?>? environment) => new("project", "The projects this server hosts",
     [
-        new Verb("create", "Make a new project: a git repository in the server's directory with a first commit", EffectClass.RepoFilesOnly, $"<id> [--title <text>] [--kind app|build|store] {Where}",
+        new Verb("create", "Make a new project: a git repository in the server's directory with a first commit", EffectClass.RepoFilesOnly, $"<id> [--title <text>] [--kind app|build|store|sync|integration] [--template <name>] {Where}",
             (args, context) => CreateAsync(args, context, environment), DataSchemas.Object([("id", DataSchemas.String), ("kind", DataSchemas.String)], "id", "kind")),
-        new Verb("add", "Host a git repository that is already on this machine, in place (merges land in that folder)", EffectClass.RepoFilesOnly, $"<id> --path <repository folder> [--title <text>] [--kind app|build|store] {Where}",
+        new Verb("add", "Host a git repository that is already on this machine, in place (merges land in that folder)", EffectClass.RepoFilesOnly, $"<id> --path <repository folder> [--title <text>] [--kind app|build|store|sync|integration] [--template <name>] {Where}",
             (args, context) => AddAsync(args, context, environment), DataSchemas.Object([("id", DataSchemas.String), ("kind", DataSchemas.String), ("path", DataSchemas.String)], "id", "kind", "path")),
         new Verb("list", "The projects this server hosts", EffectClass.OfflineOnly, Where,
             (args, context) => ListAsync(args, context, environment), DataSchemas.Object([("projects", DataSchemas.ListOf(ProjectRow))], "projects")),
@@ -94,17 +94,17 @@ public static class WorkspaceAdminCommand
 
     private static async Task<int> CreateAsync(string[] args, CliContext context, Func<string, string?>? environment)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "title", "kind", "repo" });
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "title", "kind", "repo", "template" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1)
         {
-            await context.Error.WriteLineAsync($"Usage: project create <id> [--title <text>] [--kind app|build|store] {Where}");
+            await context.Error.WriteLineAsync($"Usage: project create <id> [--title <text>] [--kind app|build|store|sync|integration] [--template <name>] {Where}");
             return CliExit.Usage;
         }
         var directory = DirectoryOf(parsed, environment);
         try
         {
             var (_, projects) = Open(directory, environment);
-            var made = projects.Create(parsed.Words[0], parsed.Get("kind") ?? "app", parsed.Get("title"), new GitAuthor(Environment.UserName, $"{Environment.UserName}@dbdataworkspace.local"), Operator);
+            var made = projects.Create(parsed.Words[0], parsed.Get("kind") ?? "app", parsed.Get("title"), new GitAuthor(Environment.UserName, $"{Environment.UserName}@dbdataworkspace.local"), Operator, parsed.Get("template"));
             await context.Out.WriteLineAsync($"Made the {made.Kind} project {made.Id} in {projects.RootOf(made)}.");
             context.Data["id"] = made.Id;
             context.Data["kind"] = made.Kind;
@@ -122,7 +122,7 @@ public static class WorkspaceAdminCommand
         var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "path", "title", "kind", "repo" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1 || parsed.Get("path") is not { Length: > 0 } path)
         {
-            await context.Error.WriteLineAsync($"Usage: project add <id> --path <repository folder> [--title <text>] [--kind app|build|store] {Where}");
+            await context.Error.WriteLineAsync($"Usage: project add <id> --path <repository folder> [--title <text>] [--kind app|build|store|sync|integration] [--template <name>] {Where}");
             return CliExit.Usage;
         }
         try
