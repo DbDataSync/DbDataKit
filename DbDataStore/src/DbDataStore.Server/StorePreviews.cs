@@ -1,4 +1,5 @@
 using DbDataKit.Config.Yaml;
+using DbDataKit.DataModel.Storage;
 using DbDataKit.Monitoring;
 using DbDataKit.Store;
 using Microsoft.Extensions.Hosting;
