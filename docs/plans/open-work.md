@@ -60,7 +60,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | [22a](22a-gap-slices.md) GP01, GP02, GP11 to GP15 | Access rules end to end | OWNER (QG2) |
 | [23a](23a-first-run-and-quality-slices.md) FQ03, FQ05, FQ11 to FQ15 | Checks stored with the Store's models and the serving definitions, run, warn and block | FQ03, FQ05 wait for QG2 |
 | [18](18-lineage.md) G08, G11b, G13 to G15 | The Gateway's graph and per-table run summary, `serves` edges, manual entries, OpenLineage export, tracing a value | G13 to G15 later |
-| [27a](27a-knowledge-slices.md) KN06, KN10 to KN13, KN15 to KN17, KN19 to KN23, AG25, AG28 | The built-in embedding model, publishing a knowledge project, the `knowledge` module, values as knowledge, the read commands, suggestions, verified queries at staging, front-end agents and a published agent as an MCP tool | KN12, KN14 PARTLY |
+| [27a](27a-knowledge-slices.md) KN06, KN11 to KN17, KN19 to KN23, AG25, AG28 | The built-in embedding model; the Gateway hosting of the `knowledge` module (the library is built: a version per index, stage, switch, rollback, KN11), its subscription to published semantic models (KN12) and to Build\'s metadata (KN13, plus Build\'s own publish step), values as knowledge, the hosts of the read and index commands (KN16, KN17), suggestions, verified queries at staging, front-end agents and a published agent as an MCP tool | KN10 to KN14, KN16, KN17 PARTLY (libraries, commands and the console\'s Check tab built) |
 
 ## Runner
 

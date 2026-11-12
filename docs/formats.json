@@ -182,6 +182,16 @@
       "files": [ { "path": "Shared/src/DbDataKit.Knowledge.Cli/KnowledgeDefinitions.cs", "sha256": null } ]
     },
     {
+      "id": "build-metadata",
+      "title": "Published Build metadata (the definition kind build-metadata, manifest build-metadata.yml, build-metadata: N; the file metadata.json holds Build's metadata documents of a project on a connection)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 27a KN13: data only, served at once; the knowledge module renders an item per model and per column from it",
+      "version_source": { "file": "Shared/src/DbDataKit.Knowledge.Cli/BuildMetadataDefinitions.cs", "pattern": "public const int Version = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.Knowledge.Cli/BuildMetadataDefinitions.cs", "sha256": null } ]
+    },
+    {
       "id": "bindings",
       "title": "Bindings of slots to connections per release channel (bindings.yml, bindings: N)",
       "current": 1,

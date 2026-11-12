@@ -186,6 +186,25 @@ public sealed class KnowledgeVectorStore(StateDatabase database)
         }
     }
 
+    /// <summary>
+    /// Gives the chunks of <paramref name="to"/> the vectors that chunks of <paramref name="from"/> already have for the same model, where the text is the same (the same item, place and chunk hash): a new version of a knowledge project reuses what it did not change, so
+    /// only changed text is embedded (plan 27a KN11). <paramref name="to"/> must have an index for the model (<see cref="Begin"/>) and its chunks must be written. Returns how many vectors were copied.
+    /// </summary>
+    public int CopyUnchanged(string from, string to, string modelId, int dimension) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            EnsureTable(connection, dimension);
+            var table = VectorTable(dimension);
+            using var command = database.Command(Module, connection,
+                $"INSERT INTO {table} (channel, model_id, item_id, seq, chunk_hash, embedding, embedded_at) " +
+                $"SELECT $to, v.model_id, v.item_id, v.seq, v.chunk_hash, v.embedding, v.embedded_at FROM {table} v " +
+                $"JOIN {{table:{Words}.chunk}} c ON c.channel = $to AND c.item_id = v.item_id AND c.seq = v.seq AND c.hash = v.chunk_hash " +
+                $"WHERE v.channel = $from AND v.model_id = $model AND NOT EXISTS (SELECT 1 FROM {table} t WHERE t.channel = $to AND t.model_id = v.model_id AND t.item_id = v.item_id AND t.seq = v.seq);");
+            command.Bind(database, "to", to).Bind(database, "from", from).Bind(database, "model", modelId);
+            return command.ExecuteNonQuery();
+        });
+
     /// <summary>Removes every vector index of a channel (a rebuild from nothing). Words are untouched.</summary>
     public void Drop(string channel) =>
         database.Retry(() =>
