@@ -76,6 +76,7 @@ public static class StoreServer
         StoreModelHistory.Map(app, settings.Directory);
         StoreEvents.Map(app, settings.Directory);
         StoreData.Map(app, settings.Directory, new StoreConnections(settings.Directory));
+        StoreQuality.Map(app, settings.Directory, new StoreConnections(settings.Directory), state);
         return app;
     }
 

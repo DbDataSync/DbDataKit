@@ -366,6 +366,21 @@ class BashInstallerTests(DistTestCase):
         self.assertEqual(dropin.read_text().count("DBDATAKIT_ANNOUNCE_URL"), 1)
         self.assertIn("https://console.example:8481", dropin.read_text())
 
+    def test_the_bundle_token_file_goes_into_the_drop_in_and_is_refused_without_an_announce_address_or_with_syntax(self):
+        # plan 23a FQ18: the token file's path (never the token) is what a server of the single-machine bundle is given
+        systemd = self.fresh() / "etc-systemd-system"
+        home, r = self.announcing_install("--announce-url", "http://127.0.0.1:8481", "--bundle-token-file", "/var/lib/dbdatakit/server/bundle.token", "--systemd-dir", str(systemd))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        lines = (systemd / "widget.service.d" / "announce.conf").read_text().splitlines()
+        self.assertEqual(lines[1:], ["[Service]", 'Environment="DBDATAKIT_ANNOUNCE_URL=http://127.0.0.1:8481"', 'Environment="DBDATAKIT_BUNDLE_TOKEN_FILE=/var/lib/dbdatakit/server/bundle.token"'])
+        self.assertIn("pairs with the service by itself", r.stdout)
+        for args, words in ((("--bundle-token-file", "/x/bundle.token"), "goes with --announce-url"),
+                            (("--announce-url", "http://c:1", "--bundle-token-file", "relative.token"), "absolute path"),
+                            (("--announce-url", "http://c:1", "--bundle-token-file", "/x/a b"), "must not contain")):
+            home, r = self.announcing_install(*args)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn(words, r.stderr)
+
     def test_without_a_system_install_or_a_directory_nothing_is_written_and_the_line_is_printed(self):
         systemd = self.fresh() / "etc-systemd-system"
         home, r = self.announcing_install("--announce-url", "http://console:8481")

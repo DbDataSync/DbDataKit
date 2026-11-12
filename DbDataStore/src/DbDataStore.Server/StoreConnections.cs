@@ -79,6 +79,26 @@ public sealed class StoreConnections(string directory, ISecretResolver? secrets 
         catch (SecretNotFoundException ex) { return (null, $"{name}.yaml needs a secret the server cannot find: {ex.Message}"); }
     }
 
+    /// <summary>
+    /// A connection for the check evaluator (plan 23a FQ11): opened as a <b>read</b> connection, so the provider applies its read-only recipe (keys and session statements), with the model's read login when its file names one and the write login when it does not (a model's
+    /// connection usually has the one login the writer uses). The evaluator sends one SELECT per check and refuses any other statement; this is the one door the Store gives it.
+    /// </summary>
+    public async Task<DbConnection> OpenReadOnlyAsync(string name, CancellationToken cancellationToken)
+    {
+        var definition = Load(name);
+        if (!providers.TryGet(definition.Engine, out var provider)) throw new StoreConnectionException($"{name}.yaml names the engine '{definition.Engine}', which a model's storage does not support; use sqlserver or postgres.");
+        try
+        {
+            var resolver = new LoginResolver(secretResolver, Application);
+            using var login = await resolver.ResolveAsync(definition, LoginRole.Read, cancellationToken).ConfigureAwait(false)
+                ?? await resolver.ResolveAsync(definition, LoginRole.Write, cancellationToken).ConfigureAwait(false)
+                ?? throw new StoreConnectionException($"{name}.yaml has no login for the server to read with: give it a read_login, a write_login or an auth.");
+            return await provider.OpenAsync(new ConnectionContext { Definition = definition, Login = login, Role = LoginRole.Read }, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ConnectionFailureException ex) { throw new StoreConnectionException($"The server could not connect with {name}.yaml ({ex.Failure.Kind})."); }
+        catch (SecretNotFoundException ex) { throw new StoreConnectionException($"{name}.yaml needs a secret the server cannot find: {ex.Message}"); }
+    }
+
     public async Task<DbConnection> OpenAsync(string name, CancellationToken cancellationToken)
     {
         var definition = Load(name);

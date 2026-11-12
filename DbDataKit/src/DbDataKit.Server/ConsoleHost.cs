@@ -128,6 +128,8 @@ public static class ConsoleHost
         builder.Services.AddSingleton(sp => new ConsoleDelivery(settings, sp.GetRequiredService<StateDatabase>(), sp.GetRequiredService<ConsoleConnections>(), sp.GetRequiredService<ConsoleBindings>(), sp.GetRequiredService<IUserAccounts>(), sp.GetService<DbDataKit.Delivery.ISubscriptionRenderer>(), null, sp.GetService<DbDataKit.Monitoring.INotificationFeed>()));
         builder.Services.AddHostedService<ConsoleDeliverySender>();
         builder.Services.AddHostedService<ConsoleAlertSender>();
+        builder.Services.AddSingleton<ConsoleQualityAlerts>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<ConsoleQualityAlerts>());
         builder.Services.AddSingleton(sp => new SetupItems(sp.GetRequiredService<StateDatabase>()));
         if (settings.Home is { } home)
         {
@@ -172,7 +174,13 @@ public static class ConsoleHost
             catch (Exception ex) when (ex is System.Text.Json.JsonException or Microsoft.AspNetCore.Http.BadHttpRequestException) { announcement = null; }
             var resolves = announcement?.Host is { } host && PendingInstances.HostPattern().IsMatch(host) && await ResolvesAsync(host);
             var refusal = announcement is null ? "the body is not an announcement" : context.RequestServices.GetRequiredService<PendingInstances>().Announce(announcement, context.Connection.RemoteIpAddress, resolves);
-            if (refusal is null) { context.Response.StatusCode = StatusCodes.Status204NoContent; return; }
+            if (refusal is null)
+            {
+                // plan 23a FQ18: a server of the single-machine bundle (the token, from this machine) is paired at once; any other waits for an administrator
+                if (announcement is not null) await AutoPairAsync(context.RequestServices, announcement, context.Connection.RemoteIpAddress, context.RequestAborted);
+                context.Response.StatusCode = StatusCodes.Status204NoContent;
+                return;
+            }
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             await context.Response.WriteAsJsonAsync(new { error = refusal }, context.RequestAborted);
         });
@@ -266,6 +274,35 @@ public static class ConsoleHost
                 role == DbDataKit.Web.Trust.ServerRole.Viewer ? user.IsInRole(nameof(DbDataKit.State.UserRole.Viewer)) || user.IsInRole(nameof(DbDataKit.State.UserRole.Admin))
                 : user.IsInRole(nameof(DbDataKit.State.UserRole.Admin)));
         }).RequireAuthorization(DbDataKit.Web.Auth.Policies.Viewer);
+    }
+
+    /// <summary>
+    /// The single-machine bundle's automatic pairing (plan 23a FQ18, D8, QF6): an announcement that carries the bundle token and comes from this machine is confirmed at once, as an administrator's Confirm would, and the audit records it (the server and its
+    /// address, never the token). Anything else, and any failure of the pairing, leaves the server where it is: waiting in the pending list for a person. Without a <c>bundle.json</c> this does nothing.
+    /// </summary>
+    private static async Task AutoPairAsync(IServiceProvider services, Announcement announcement, IPAddress? from, CancellationToken ct)
+    {
+        var settings = services.GetRequiredService<ConsoleSettings>();
+        var (bundle, problem) = ConsoleBundle.Load(settings.Directory);
+        if (bundle is null)
+        {
+            if (problem is not null) services.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataKit.Bundle").LogWarning("bundle: {Problem}", problem);
+            return;
+        }
+
+        if (!bundle.Accepts(announcement.BundleToken, announcement.Product, from)) return;
+        var audit = services.GetRequiredService<AuditLog>();
+        try
+        {
+            var paired = await services.GetRequiredService<ConsoleInstances>().ConfirmAsync(services.GetRequiredService<PendingInstances>(), announcement.InstanceId, ct);
+            audit.Record(new AuditEvent("system", "console", "pairing.auto", AuditEvent.Ok, ViaKind: "bundle", TargetKind: "server", TargetId: paired.InstanceId,
+                Detail: System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?> { ["product"] = announcement.Product, ["name"] = announcement.Name, ["address"] = paired.Url.ToString() })));
+        }
+        catch (Exception ex) when (ex is PairingFailedException or IncompatibleServerException or HttpRequestException or TaskCanceledException)
+        {
+            audit.Record(new AuditEvent("system", "console", "pairing.auto", AuditEvent.Failed, ViaKind: "bundle", TargetKind: "server", TargetId: announcement.InstanceId,
+                Detail: System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?> { ["product"] = announcement.Product, ["problem"] = ex.GetType().Name })));
+        }
     }
 
     /// <summary>Whether the console can look the name up, which a name on the network the servers share with it can.</summary>

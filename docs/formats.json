@@ -250,6 +250,16 @@
       "note": "new with plan 22a GP21: the data keys of the secret store, each sealed with AES-256-GCM under a key derived from a passphrase (PBKDF2-SHA256, 600000 rounds, a random salt, the key id as associated data), the id of the active key and nothing about the machine, written by `secret key-backup` and read by `secret key-restore` (a key that DPAPI bound to another machine or user is re-keyed to this one); a wrong passphrase, a changed file or a key moved to another id is refused before anything is stored; never put in git",
       "version_source": { "file": "Shared/src/DbDataKit.Secrets.Store/SecretKeyBackup.cs", "pattern": "public const int FormatVersion = (\\d+);" },
       "files": [ { "path": "Shared/src/DbDataKit.Secrets.Store/SecretKeyBackup.cs", "sha256": null } ]
+    },
+    {
+      "id": "bundle",
+      "title": "The single-machine bundle (bundle.json beside the console's data, schema: bundle/N)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 23a FQ18 (D8, QF6): which products the console pairs with by itself when they announce from this machine with the bundle token, and where the token file is (relative to the console's directory); no secret in it; written by `dbdatakit bundle init`, read by the console at each announcement (a file that cannot be used is a warning in the log and no automatic pairing); the token file is the account's own (mode 600, refused otherwise)",
+      "version_source": { "file": "DbDataKit/src/DbDataKit.Server/ConsoleBundle.cs", "pattern": "Schema = \"bundle/(\\d+)\";" },
+      "files": [ { "path": "DbDataKit/src/DbDataKit.Server/ConsoleBundle.cs", "sha256": null } ]
     }
   ]
 }

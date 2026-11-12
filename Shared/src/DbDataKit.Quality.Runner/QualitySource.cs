@@ -19,6 +19,9 @@ namespace DbDataKit.Quality;
 public sealed record QualityDataset(string Identity, IReadOnlyList<CheckDefinition> Checks, ISqlDialect Dialect, Func<CancellationToken, Task<DbConnection>> OpenReadOnly,
     Func<string, IReadOnlyList<string>?> ResolveTable, IReadOnlyList<string>? Aliases = null, IReadOnlyList<string>? KeyColumns = null, DateTimeOffset? LastLoadedAt = null)
 {
+    /// <summary>Who owns the dataset (addresses): they get its alerts besides the install's recipients (plan 23a FQ13).</summary>
+    public IReadOnlyList<string>? Owners { get; init; }
+
     public bool Is(string name) => string.Equals(Identity, name, StringComparison.Ordinal) || (Aliases ?? []).Contains(name, StringComparer.OrdinalIgnoreCase);
 }
 

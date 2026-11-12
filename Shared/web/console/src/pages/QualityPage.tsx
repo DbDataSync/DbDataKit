@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { ConsoleShell } from '../ConsoleShell'
-import { blockLine, datasetState, measureLine, qualityApi, runBlockedReason, sortDatasets, stateWord, type QualityCheck, type QualityDataset, type QualityRunAnswer, type QualityServer } from '../quality'
+import { alertsLine, blockLine, datasetState, measureLine, qualityApi, releaseBlockedReason, runBlockedReason, sortDatasets, stateWord, type QualityCheck, type QualityDataset, type QualityRunAnswer, type QualityServer } from '../quality'
 
 /**
  * The data quality of the suite's datasets (plan 23a FQ17), from the servers that evaluate checks (Sync's replications, Build's models) joined by dataset identity: what is blocked, what is failing, and for each check its latest result,
@@ -15,6 +15,7 @@ export function QualityPage() {
   const isAdmin = useIsAdmin()
   const [params, setParams] = useSearchParams()
   const quality = useQuery({ queryKey: ['quality'], queryFn: qualityApi.overview })
+  const alerts = useQuery({ queryKey: ['quality', 'alerts'], queryFn: qualityApi.alerts })
   const [open, setOpen] = useState<string | null>(null)
   const [running, setRunning] = useState<string | null>(null)
   const [outcome, setOutcome] = useState<{ ok: boolean; text: string } | null>(null)
@@ -22,12 +23,22 @@ export function QualityPage() {
   const datasets = useMemo(() => (data ? sortDatasets(data.datasets) : []), [data])
   const selected = datasets.find((d) => d.dataset === params.get('dataset')) ?? null
 
+  const release = async (serverId: string, dataset: string, check: string) => {
+    setOutcome(null)
+    try {
+      await qualityApi.release(serverId, dataset, check, data?.servers.find((x) => x.server_id === serverId)?.product ?? null)
+      setOutcome({ ok: true, text: `The block of ${check} is released: it still fails, and what depends on the dataset is no longer held for it. It ends when the check passes.` })
+      await client.invalidateQueries({ queryKey: ['quality'] })
+    } catch (e) {
+      setOutcome({ ok: false, text: e instanceof Error ? e.message : String(e) })
+    }
+  }
   const choose = (name: string) => { setParams({ dataset: name }); setOpen(null); setOutcome(null) }
   const run = async (serverId: string, serverName: string, dataset: string) => {
     setRunning(serverId)
     setOutcome(null)
     try {
-      const answer: QualityRunAnswer = await qualityApi.run(serverId, dataset)
+      const answer: QualityRunAnswer = await qualityApi.run(serverId, dataset, data?.servers.find((x) => x.server_id === serverId)?.product ?? null)
       setOutcome({ ok: true, text: `${serverName} evaluated ${answer.evaluated} check${answer.evaluated === 1 ? '' : 's'}: ${answer.passed} passed, ${answer.failed} failed, ${answer.errors} could not run.${answer.notes.length > 0 ? ' ' + answer.notes.join(' ') : ''}` })
       await client.invalidateQueries({ queryKey: ['quality'] })
     } catch (e) {
@@ -44,6 +55,11 @@ export function QualityPage() {
           <span className="page-note">The checks stored with your replications and models: what is blocked, what is failing, and what each check last found.</span>
         </div>
         <ErrorBanner error={quality.error} />
+        {alerts.data && (
+          <div className="card" style={{ marginBottom: 14 }} data-testid="quality-alerts" data-configured={alerts.data.configured && alerts.data.channelKnown && !alerts.data.problem}>
+            <div className="card-body">{alertsLine(alerts.data)}</div>
+          </div>
+        )}
         {quality.isLoading && <div className="hint" data-testid="quality-loading">Asking the servers…</div>}
         {data && (
           <div className="card" style={{ marginBottom: 14 }} data-testid="quality-servers">
@@ -81,7 +97,7 @@ export function QualityPage() {
             </div>
             <div style={{ flex: 1, minWidth: 320 }}>
               {!selected && <div className="hint" data-testid="quality-choose">Choose a dataset to see its checks.</div>}
-              {selected && <DatasetDetail dataset={selected} servers={data?.servers ?? []} open={open} setOpen={setOpen} running={running} isAdmin={isAdmin} onRun={run} outcome={outcome} />}
+              {selected && <DatasetDetail dataset={selected} servers={data?.servers ?? []} open={open} setOpen={setOpen} running={running} isAdmin={isAdmin} onRun={run} onRelease={release} outcome={outcome} />}
             </div>
           </div>
         )}
@@ -98,9 +114,10 @@ function DatasetDetail(props: {
   running: string | null
   isAdmin: boolean
   onRun: (serverId: string, serverName: string, dataset: string) => Promise<void>
+  onRelease: (serverId: string, dataset: string, check: string) => Promise<void>
   outcome: { ok: boolean; text: string } | null
 }) {
-  const { dataset, servers, open, setOpen, running, isAdmin, onRun, outcome } = props
+  const { dataset, servers, open, setOpen, running, isAdmin, onRun, onRelease, outcome } = props
   const evaluating = [...new Map(dataset.checks.map((c) => [c.server_id, c.server])).entries()]
   return (
     <div className="card" data-testid="quality-detail" data-dataset={dataset.dataset}>
@@ -126,7 +143,7 @@ function DatasetDetail(props: {
             {dataset.checks.map((c) => {
               const key = `${c.server_id}/${c.check_id}`
               return (
-                <CheckRows key={key} check={c} dataset={dataset.dataset} expanded={open === key} onToggle={() => setOpen(open === key ? null : key)} />
+                <CheckRows key={key} check={c} dataset={dataset.dataset} expanded={open === key} onToggle={() => setOpen(open === key ? null : key)} releaseWhy={releaseBlockedReason(servers.find((s) => s.server_id === c.server_id), isAdmin)} onRelease={() => void onRelease(c.server_id, dataset.dataset, c.check_id)} />
               )
             })}
           </tbody>
@@ -136,7 +153,7 @@ function DatasetDetail(props: {
   )
 }
 
-function CheckRows({ check, dataset, expanded, onToggle }: { check: QualityCheck; dataset: string; expanded: boolean; onToggle: () => void }) {
+function CheckRows({ check, dataset, expanded, onToggle, releaseWhy, onRelease }: { check: QualityCheck; dataset: string; expanded: boolean; onToggle: () => void; releaseWhy: string | null; onRelease: () => void }) {
   const history = useQuery({ queryKey: ['quality', 'history', check.server_id, dataset, check.check_id], queryFn: () => qualityApi.history(check, dataset), enabled: expanded })
   const block = blockLine(check)
   return (
@@ -153,6 +170,12 @@ function CheckRows({ check, dataset, expanded, onToggle }: { check: QualityCheck
         <tr data-testid={`quality-detail-${check.check_id}`}>
           <td colSpan={6}>
             {block && <div className="hint" data-testid={`quality-block-${check.check_id}`}>{block}</div>}
+            {check.blocking && (
+              <div style={{ margin: '6px 0' }}>
+                <button type="button" className="btn btn-sm" disabled={releaseWhy !== null} title={releaseWhy ?? undefined} onClick={onRelease} data-testid={`quality-release-${check.check_id}`}>Release the block</button>
+                {releaseWhy && <span className="hint" data-testid={`quality-release-why-${check.check_id}`}> {releaseWhy}</span>}
+              </div>
+            )}
             <ErrorBanner error={history.error} />
             {history.isLoading && <div className="hint">Reading the history…</div>}
             {history.data && history.data.results.length === 0 && <div className="hint">No result is kept for this check.</div>}

@@ -13,7 +13,7 @@ public sealed record ServerQualityAnswer(string Server, string InstanceId, strin
 public sealed class ConsoleQuality(ConsoleInstances instances, ConsoleRelay relay)
 {
     /// <summary>The path of a product's check results on its management API, or null for a product that keeps none (yet).</summary>
-    public static string? PathOf(string? product) => product switch { ServerProducts.Build => "/api/v1/quality", ServerProducts.Sync => "/api/quality", _ => null };
+    public static string? PathOf(string? product) => product switch { ServerProducts.Build => "/api/v1/quality", ServerProducts.Sync => "/api/quality", ServerProducts.Store => "/api/v1/quality", _ => null };
 
     /// <summary>The latest result of every check in an overview as the lineage graph reads it (plan 23a FQ16): one <see cref="DbDataKit.Lineage.NodeCheck"/> per check and server.</summary>
     public static IReadOnlyList<DbDataKit.Lineage.NodeCheck> ChecksOf(JsonObject overview)
@@ -24,6 +24,16 @@ public sealed class ConsoleQuality(ConsoleInstances instances, ConsoleRelay rela
                 if (dataset?["dataset"]?.GetValue<string>() is { } identity && check?["check_id"]?.GetValue<string>() is { } id && check["status"]?.GetValue<string>() is { } status)
                     all.Add(new DbDataKit.Lineage.NodeCheck(identity, id, status, check["blocking"]?.GetValue<bool>() ?? false, check["blocked_since"]?.GetValue<DateTimeOffset>()));
         return all;
+    }
+
+    /// <summary>The sample keys of a check's latest failed result as its server keeps them (the history route), for an alert; empty when the server does not answer or has none.</summary>
+    public async Task<IReadOnlyList<string>> SampleKeysAsync(string serverId, string? product, string dataset, string checkId, CancellationToken ct)
+    {
+        if (instances.Registry.Find(serverId) is not { } instance || PathOf(product) is not { } path) return [];
+        var (code, body) = await relay.CallAsync(instance, HttpMethod.Get, $"{path}/history?dataset={Uri.EscapeDataString(dataset)}&check={Uri.EscapeDataString(checkId)}", null, ct);
+        if (code != 200 || body?["results"]?.AsArray() is not { } results) return [];
+        var latest = results.FirstOrDefault(r => r?["status"]?.GetValue<string>() == "fail");
+        return [.. (latest?["sample_keys"]?.AsArray() ?? []).Select(k => k?.GetValue<string>()).Where(k => k is not null).Select(k => k!)];
     }
 
     public async Task<JsonObject> OverviewAsync(CancellationToken ct)
@@ -57,7 +67,7 @@ public sealed class ConsoleQuality(ConsoleInstances instances, ConsoleRelay rela
             {
                 ["server"] = a.Server, ["server_id"] = a.InstanceId, ["product"] = a.Product, ["error"] = a.Error,
                 ["checks"] = a.Overview?["datasets"]?.AsArray().Sum(d => d!["checks"]!.AsArray().Count),
-                ["can_run"] = a.Overview is not null && (bool?)a.Overview["can_run"] == true, ["run_note"] = (string?)a.Overview?["run_note"],
+                ["can_run"] = a.Overview is not null && (bool?)a.Overview["can_run"] == true, ["run_note"] = (string?)a.Overview?["run_note"], ["can_release"] = a.Overview is not null && (bool?)a.Overview["can_release"] == true,
             }).ToArray()),
         };
     }

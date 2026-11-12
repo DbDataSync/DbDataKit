@@ -113,4 +113,23 @@ public sealed class QualityEndpointRolesTests(AuthenticatedApiFactory factory) :
         Assert.Equal(HttpStatusCode.NotFound, (await admin.PostAsJsonAsync("/api/quality/run", new { dataset = "a" })).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await factory.CreateClient().GetAsync("/api/quality")).StatusCode);
     }
+
+    [Fact]
+    public async Task An_administrator_releases_a_block_and_a_viewer_cannot()
+    {
+        var viewer = await factory.SignedInAsAsync(UserRole.Viewer);
+        var admin = await factory.SignedInAsAsync(UserRole.Admin);
+        var dataset = $"sqlserver://sql01/rel{Guid.NewGuid():N}.dbo.orders";
+        var store = new QualityStore(factory.Services.GetRequiredService<DbDataSync.State.StateDatabase>());
+        store.Record(new CheckResultRecord("orders_name_present", dataset, CheckOutcome.Fail, DateTimeOffset.Parse("2026-11-08T12:00:00Z"), 2, 0, ["Id=2"], "run-7", "block", "alert"));
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await viewer.PostAsJsonAsync("/api/quality/release", new { dataset, check = "orders_name_present" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsJsonAsync("/api/quality/release", new { dataset })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync("/api/quality/release", new { dataset, check = "orders_name_present" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsJsonAsync("/api/quality/release", new { dataset, check = "orders_name_present" })).StatusCode);
+        Assert.Empty(store.BlocksOf(dataset));
+        var overview = JsonNode.Parse(await admin.GetStringAsync("/api/quality"))!;
+        Assert.True((bool)overview["can_release"]!);
+        Assert.NotNull(store.Status(dataset, "orders_name_present")!.ReleasedSince);
+    }
 }
