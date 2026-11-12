@@ -36,13 +36,16 @@ public sealed class ConsoleBindings
     private (string Yaml, BindingsResult Result) _read = ("", new BindingsResult(BindingSet.Empty, []));
 
     private readonly AuditLog _audit;
+    private readonly PostureChoices _choices;
 
-    public ConsoleBindings(ConsoleSettings settings, ConsoleConnections connections, AuditLog audit)
+    public ConsoleBindings(ConsoleSettings settings, ConsoleConnections connections, AuditLog audit, StateDatabase state)
     {
         _directory = settings.Directory;
         _connections = connections;
         _audit = audit;
+        _choices = new PostureChoices(state, BindingPostureModule.Name);
         Targets = new ConsoleBindingTargets(connections);
+        MoveEarlierChoices();
     }
 
     public string File => Path.Combine(_directory, BindingsLoader.FileName);
@@ -191,34 +194,47 @@ public sealed class ConsoleBindings
     /// <summary>A recorded production-in-non-production choice: who, when, why.</summary>
     public sealed record Choice(string Scope, string ChosenBy, DateTimeOffset ChosenAt, string? Note);
 
-    private string ChoicesFile => Path.Combine(_directory, "bindings-posture.json");
+    /// <summary>The file the choices were kept in before they moved into the state's <c>bindings.posture_choice</c> (IX23, <c>docs/channel-bindings.md</c>).</summary>
+    public const string EarlierChoicesFileName = "bindings-posture.json";
 
-    private Dictionary<string, Choice> Choices()
+    private string EarlierChoicesFile => Path.Combine(_directory, EarlierChoicesFileName);
+
+    /// <summary>
+    /// Moves the choices of the earlier file into the table, once: each keeps who, when and why, the file is renamed <c>bindings-posture.json.moved</c> (never deleted), and the move is audited (<c>bindings.posture.move</c>). A file that does not read
+    /// is left where it is and named by the audit, never silently dropped.
+    /// </summary>
+    private void MoveEarlierChoices()
     {
-        try { return System.IO.File.Exists(ChoicesFile) ? JsonSerializer.Deserialize<Dictionary<string, Choice>>(System.IO.File.ReadAllText(ChoicesFile)) ?? [] : []; }
-        catch (JsonException) { return []; }
+        if (!System.IO.File.Exists(EarlierChoicesFile)) return;
+        Dictionary<string, Choice>? earlier;
+        try { earlier = JsonSerializer.Deserialize<Dictionary<string, Choice>>(System.IO.File.ReadAllText(EarlierChoicesFile)); }
+        catch (JsonException ex)
+        {
+            _audit.Record(new AuditEvent("system", "console", "bindings.posture.move", AuditEvent.Failed, ViaKind: "console", TargetKind: PostureGuard.SettingKind, TargetId: PostureSetting.ProductionBindingOnNonProduction.Name, Detail: JsonSerializer.Serialize(new { file = EarlierChoicesFile, problem = ex.Message })));
+            return;
+        }
+
+        foreach (var (scope, choice) in earlier ?? [])
+            _choices.Record(scope, PostureSetting.ProductionBindingOnNonProduction.Name, choice.ChosenBy, choice.Note, choice.ChosenAt);
+        System.IO.File.Move(EarlierChoicesFile, EarlierChoicesFile + ".moved", overwrite: true);
+        _audit.Record(new AuditEvent("system", "console", "bindings.posture.move", AuditEvent.Ok, ViaKind: "console", TargetKind: PostureGuard.SettingKind, TargetId: PostureSetting.ProductionBindingOnNonProduction.Name, Detail: JsonSerializer.Serialize(new { from = EarlierChoicesFileName, count = earlier?.Count ?? 0 })));
     }
 
-    private void SaveChoices(Dictionary<string, Choice> choices) => System.IO.File.WriteAllText(ChoicesFile, JsonSerializer.Serialize(choices, new JsonSerializerOptions { WriteIndented = true }));
-
     /// <summary>Whether the production-in-non-production choice of a scope was recorded (confirmed by an administrator).</summary>
-    public bool Confirmed(string scope) => Choices().ContainsKey(scope);
+    public bool Confirmed(string scope) => ChoiceOf(scope) is not null;
 
-    public Choice? ChoiceOf(string scope) => Choices().GetValueOrDefault(scope);
+    public Choice? ChoiceOf(string scope) =>
+        _choices.List(scope).FirstOrDefault(c => c.Setting == PostureSetting.ProductionBindingOnNonProduction.Name) is { } c ? new Choice(c.Scope, c.ChosenBy, c.ChosenAt, c.Note) : null;
 
     private void Choose(string scope, string actor, string? note)
     {
-        var all = Choices();
-        all[scope] = new Choice(scope, actor, DateTimeOffset.UtcNow, note);
-        SaveChoices(all);
+        _choices.Record(scope, PostureSetting.ProductionBindingOnNonProduction.Name, actor, note);
         _audit.Record(new AuditEvent("person", actor, "bindings.posture.choose", ViaKind: "console", TargetKind: PostureGuard.SettingKind, TargetId: PostureSetting.ProductionBindingOnNonProduction.Name, Detail: JsonSerializer.Serialize(new { scope, note })));
     }
 
     private void Revoke(string scope, string actor, string? note)
     {
-        var all = Choices();
-        if (!all.Remove(scope)) return;
-        SaveChoices(all);
+        if (!_choices.Revoke(scope, PostureSetting.ProductionBindingOnNonProduction.Name)) return;
         _audit.Record(new AuditEvent("person", actor, "bindings.posture.revoke", ViaKind: "console", TargetKind: PostureGuard.SettingKind, TargetId: PostureSetting.ProductionBindingOnNonProduction.Name, Detail: JsonSerializer.Serialize(new { scope, note })));
     }
 }

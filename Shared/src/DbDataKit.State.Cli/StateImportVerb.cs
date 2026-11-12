@@ -43,7 +43,7 @@ internal static class StateImportVerb
             var options = ImportOptions.Default with { MigrateAfterImport = migrate, ResetOnFailure = true };
             var result = await opened.Service.ImportAsync(directory, opened.Endpoint, opened.Modules, context.Scope, options, StateSnapshotSupport.Lines(output.Out), output.Cancellation);
             var import = result.Import;
-            var next = $"Start {context.Product} as usual: it opens this database. '{context.Program} state show' lists the modules and their versions, and '{context.Program} state verify --snapshot {directory} --db' compares the database with the snapshot again.";
+            var next = $"Start {context.Product} as usual: it opens this database. '{context.StateCommand("show")}' lists the modules and their versions, and '{context.StateCommand("verify")} --snapshot {directory} --db' compares the database with the snapshot again.";
             var data = output.Data;
             data["directory"] = Path.GetFullPath(directory);
             data["engine"] = opened.Session.Engine;

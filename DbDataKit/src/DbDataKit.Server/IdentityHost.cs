@@ -86,6 +86,28 @@ public static class IdentityHostState
         new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]);
 }
 
+/// <summary>The encrypted columns of the home's state (plan 29b C04): the signing keys, protected with the key ring in <c>dataprotection/</c> of the home's directory.</summary>
+public static class IdentityHostSecrets
+{
+    public const string SigningKeyPurpose = "dbdatakit-identity.signing-key";
+    public const string ApplicationName = "dbdatakit-identity";
+
+    public static IReadOnlyList<DbDataKit.State.Engines.Snapshots.StateSecretSample> Samples(string directory) =>
+    [
+        new DbDataKit.State.Engines.Snapshots.StateSecretSample(IdentityModule.Name, "signing_key", "private_key", value => Opens(directory, value)),
+    ];
+
+    /// <summary>True when the home's key ring decrypts the value. A directory with no key ring decrypts nothing, and none is made for the question.</summary>
+    private static bool Opens(string directory, string stored)
+    {
+        var ring = new DirectoryInfo(Path.Combine(directory, "dataprotection"));
+        if (!ring.Exists) return false;
+        var provider = DataProtectionProvider.Create(ring, builder => builder.SetApplicationName(ApplicationName));
+        _ = provider.CreateProtector(SigningKeyPurpose).Unprotect(Convert.FromBase64String(stored));
+        return true;
+    }
+}
+
 /// <summary>Protects the signing keys at rest with the framework's key ring, which the home keeps in its directory.</summary>
 public sealed class DataProtectionSigningKeyProtector(IDataProtector protector) : ISigningKeyProtector
 {
@@ -129,12 +151,12 @@ public static class IdentityHost
         });
         builder.WebHost.ConfigureKestrel(o => o.Listen(AddressOf(settings.Listen), settings.Listen.Port, listen => listen.UseHttps(certificate)));
 
-        builder.Services.AddDataProtection().SetApplicationName("dbdatakit-identity").PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(settings.Directory, "dataprotection")));
+        builder.Services.AddDataProtection().SetApplicationName(IdentityHostSecrets.ApplicationName).PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(settings.Directory, "dataprotection")));
         builder.Services.AddSingleton(_ => IdentityHostState.Open(settings.Directory, settings.State));
         builder.Services.AddSingleton(SessionSettingsFile.Load(serverYaml));   // the session: section of server.yaml (plan 13a U22)
         builder.AddIdentityHome(new IdentityHomeOptions(settings.Public, settings.Directory,
             sp => sp.GetRequiredService<StateDatabase>(),
-            sp => new DataProtectionSigningKeyProtector(sp.GetRequiredService<IDataProtectionProvider>().CreateProtector("dbdatakit-identity.signing-key")),
+            sp => new DataProtectionSigningKeyProtector(sp.GetRequiredService<IDataProtectionProvider>().CreateProtector(IdentityHostSecrets.SigningKeyPurpose)),
             Auth));
         configure?.Invoke(builder.Services);
 
@@ -188,7 +210,7 @@ public static class IdentityHost
             return new DbDataKit.State.Cli.StateTarget(settings.State ?? resolved.Settings, Path.Combine(settings.Directory, "state.db"), () => IdentityHostState.Secrets(settings.Directory),
                 IdentityHostSettings.SettingsFileIn(settings.Directory), settings.StateSources ?? resolved.Sources);
         },
-        DbDataKit.Identity.IdentityHomeState.Modules, StateScope.Install, gate, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), instanceId, ConsoleHost.Version, Move: true));
+        DbDataKit.Identity.IdentityHomeState.Modules, StateScope.Install, gate, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), instanceId, ConsoleHost.Version, Move: true, SecretSamples: IdentityHostSecrets.Samples(settings.Directory)));
 
     /// <summary>Where the management calls a paired console makes live: the token check covers this prefix only.</summary>
     public const string ManagementPrefix = "/api/v1/";

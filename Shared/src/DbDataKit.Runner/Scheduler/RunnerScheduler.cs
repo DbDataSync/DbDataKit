@@ -99,6 +99,12 @@ public sealed partial class RunnerScheduler
     /// <summary>The number of runs this loop has going.</summary>
     public int RunningCount => _running.Count;
 
+    /// <summary>
+    /// True while the state is in maintenance (plan 29b C05): a tick still renews the leases of the runs going on here and gives up what ran out, but takes nothing new (no schedule is evaluated, no trigger is
+    /// asked, no item is claimed), so <see cref="RunningCount"/> falls to zero and the runner can report idle. Leaving it, the next tick evaluates the schedules again (a time that passed meanwhile is handled as a missed one).
+    /// </summary>
+    public volatile bool Draining;
+
     // ---- loop control
 
     /// <summary>
@@ -169,6 +175,7 @@ public sealed partial class RunnerScheduler
             var expired = _queue.ReleaseExpired(RunningHere());
             var (served, rowProblems) = ReadProjection();
             _rowProblems = rowProblems;
+            if (Draining) return new TickReport([], 0, 0, 0, rowProblems.Count, expired);
 
             var enqueued = new List<TaskRef>();
             var refused = 0;

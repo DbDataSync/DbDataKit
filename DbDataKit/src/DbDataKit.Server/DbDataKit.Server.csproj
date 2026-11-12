@@ -12,6 +12,7 @@
     <DbDataKitReference Include="Cli" />   <!-- the shared noun-verb grammar -->
     <DbDataKitReference Include="Config.Git" />
     <DbDataKitReference Include="Config.Yaml" />
+    <DbDataKitReference Include="Connections.Files" />   <!-- the clients and the Test of a connection of kind sftp, scp or ftps; plan 27a IX04 -->
     <DbDataKitReference Include="Connections.Http" />   <!-- the client and the Test of a connection of kind http; plan 27a IX02 -->
     <DbDataKitReference Include="Connections.Abstractions" />   <!-- the connection/1 file the Connections view copies between servers; plan 13a, E05 -->
     <DbDataKitReference Include="Lineage" />   <!-- the servers' lineage graphs, joined by identity; plan 18, G09 -->

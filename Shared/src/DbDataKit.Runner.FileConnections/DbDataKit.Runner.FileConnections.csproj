@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Runner.FileConnections</RootNamespace>
+    <PackageId>DbDataKit.Runner.FileConnections</PackageId>
+    <Description>File connections as the sources of the runner's file trigger (plan 27a IX07): the file stores of DbDataKit.Connections.Files (SFTP, FTPS, SMB, S3, Azure Blob) behind the trigger's IFileSource, the source chosen by the connection a slot is bound to in the task's release channel.</Description>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Runner\DbDataKit.Runner.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections.Files\DbDataKit.Connections.Files.csproj" />
+    <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
+  </ItemGroup>
+</Project>
