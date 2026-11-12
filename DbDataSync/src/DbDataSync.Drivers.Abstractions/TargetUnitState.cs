@@ -177,6 +177,89 @@ public sealed class TargetUnitState(UnitStateEngine engine)
         return rows;
     }
 
+    /// <summary>The newest unit of a replication (any mapping), or null when it has none: the follower's high-water mark.</summary>
+    public async Task<TargetUnitRecord?> HighAsync(DbConnection connection, string replication, CancellationToken cancellationToken)
+    {
+        using var command = connection.CreateTimedCommand();
+        var top = Engine == UnitStateEngine.SqlServer ? "TOP (1) " : "";
+        var limit = Engine == UnitStateEngine.Postgres ? " LIMIT 1" : "";
+        command.CommandText = $"SELECT {top}{Columns} FROM {Qualified} WHERE replication_name = @replication ORDER BY unit_seq DESC{limit}";
+        Add(command, "replication", replication);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false) ? Read(reader) : null;
+    }
+
+    /// <summary>The newest <paramref name="count"/> units of a replication, oldest first: what the follower compares the target and its copy by.</summary>
+    public async Task<IReadOnlyList<TargetUnitRecord>> TailAsync(DbConnection connection, string replication, int count, CancellationToken cancellationToken)
+    {
+        using var command = connection.CreateTimedCommand();
+        var top = Engine == UnitStateEngine.SqlServer ? $"TOP ({count.ToString(CultureInfo.InvariantCulture)}) " : "";
+        var tail = Engine == UnitStateEngine.Postgres ? $" LIMIT {count.ToString(CultureInfo.InvariantCulture)}" : "";
+        command.CommandText = $"SELECT {top}{Columns} FROM {Qualified} WHERE replication_name = @replication ORDER BY unit_seq DESC{tail}";
+        Add(command, "replication", replication);
+        var rows = new List<TargetUnitRecord>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) rows.Add(Read(reader));
+        rows.Reverse();
+        return rows;
+    }
+
+    /// <summary>The newest unit of the mapping and source that ended at <paramref name="watermarkAfter"/>, or null: how a position the runner's state holds is found on the target (and how far behind the target's newest unit it is).</summary>
+    public async Task<TargetUnitRecord?> FindByPositionAsync(DbConnection connection, string replication, string mapping, string watermarkKey, string watermarkAfter, CancellationToken cancellationToken)
+    {
+        using var command = connection.CreateTimedCommand();
+        var top = Engine == UnitStateEngine.SqlServer ? "TOP (1) " : "";
+        var limit = Engine == UnitStateEngine.Postgres ? " LIMIT 1" : "";
+        command.CommandText = $"SELECT {top}{Columns} FROM {Qualified} WHERE replication_name = @replication AND mapping = @mapping AND watermark_key = @watermark_key AND CAST(watermark_after AS {(Engine == UnitStateEngine.SqlServer ? "nvarchar(450)" : "text")}) = @after ORDER BY unit_seq DESC{limit}";
+        Add(command, "replication", replication);
+        Add(command, "mapping", mapping);
+        Add(command, "watermark_key", watermarkKey);
+        Add(command, "after", watermarkAfter);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false) ? Read(reader) : null;
+    }
+
+    /// <summary>The newest unit of every mapping and source of a replication: what the position check walks.</summary>
+    public async Task<IReadOnlyList<TargetUnitRecord>> LatestPerMappingAsync(DbConnection connection, string replication, CancellationToken cancellationToken)
+    {
+        using var command = connection.CreateTimedCommand();
+        command.CommandText =
+            $"SELECT {Columns} FROM {Qualified} WHERE replication_name = @replication AND unit_seq IN " +
+            $"(SELECT MAX(unit_seq) FROM {Qualified} WHERE replication_name = @replication GROUP BY mapping, watermark_key) ORDER BY unit_seq";
+        Add(command, "replication", replication);
+        var rows = new List<TargetUnitRecord>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) rows.Add(Read(reader));
+        return rows;
+    }
+
+    // ---------- retention ----------
+
+    /// <summary>
+    /// Removes the units of one mapping that are both older than <paramref name="keepDays"/> days and not among its newest <paramref name="keepUnits"/> (plan 28c E17: the default is the last 1000 units and
+    /// anything newer than 7 days, setting <c>tracking.retention</c>), in <paramref name="transaction"/> when one is given. The newest unit of every source of the mapping is never removed, because it is the
+    /// position the next pass resumes from. Returns how many rows went.
+    /// </summary>
+    public async Task<int> PruneAsync(DbConnection connection, DbTransaction? transaction, string replication, string mapping, int keepUnits, double keepDays, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (keepUnits < 1) throw new ArgumentOutOfRangeException(nameof(keepUnits), "Retention keeps at least one unit.");
+        if (keepDays < 0) throw new ArgumentOutOfRangeException(nameof(keepDays), "Retention days cannot be negative.");
+        using var command = connection.CreateTimedCommand();
+        command.Transaction = transaction;
+        var n = keepUnits.ToString(CultureInfo.InvariantCulture);
+        var newest = Engine == UnitStateEngine.SqlServer
+            ? $"SELECT TOP ({n}) unit_seq FROM {Qualified} WHERE replication_name = @replication AND mapping = @mapping ORDER BY unit_seq DESC"
+            : $"SELECT unit_seq FROM {Qualified} WHERE replication_name = @replication AND mapping = @mapping ORDER BY unit_seq DESC LIMIT {n}";
+        command.CommandText =
+            $"DELETE FROM {Qualified} WHERE replication_name = @replication AND mapping = @mapping AND committed_at < @cutoff " +
+            $"AND unit_seq NOT IN ({newest}) " +
+            $"AND unit_seq NOT IN (SELECT MAX(unit_seq) FROM {Qualified} WHERE replication_name = @replication AND mapping = @mapping GROUP BY watermark_key)";
+        Add(command, "replication", replication);
+        Add(command, "mapping", mapping);
+        Add(command, "cutoff", now.ToUniversalTime().AddDays(-keepDays));
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private const string Columns = "unit_seq, unit_id, replication_name, mapping, watermark_key, watermark_before, watermark_after, watermark_time, rows_staged, run_id, committed_at";
 
     private static TargetUnitRecord Read(DbDataReader reader) => new(

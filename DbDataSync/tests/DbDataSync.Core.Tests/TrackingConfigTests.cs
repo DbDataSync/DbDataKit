@@ -133,6 +133,45 @@ public sealed class TrackingConfigTests : IDisposable
     }
 
     [Fact]
+    public void RetentionRoundTripsAndAnAbsentOneIsTheDefaultOf1000UnitsAnd7Days()
+    {
+        _config.SaveReplicationTask(Task(new TrackingConfig { Mode = "both", Primary = "target", Retention = new TrackingRetention { Units = 50, Days = 2.5 } }), Author);
+        var loaded = _config.LoadReplicationTask("r");
+        Assert.Equal(50, loaded.Tracking!.Retention!.Units);
+        Assert.Equal(2.5, loaded.Tracking.Retention.Days);
+        Assert.Contains("retention", File.ReadAllText(TaskFile()!));
+
+        var defaults = TrackingResolution.RetentionOf(new TrackingConfig { Mode = "target" });
+        Assert.Equal(1000, defaults.EffectiveUnits());
+        Assert.Equal(7, defaults.EffectiveDays());
+        Assert.Equal(1000, TrackingResolution.RetentionOf(null).EffectiveUnits());
+        // one key given keeps the default of the other
+        Assert.Equal(7, TrackingResolution.RetentionOf(new TrackingConfig { Mode = "target", Retention = new TrackingRetention { Units = 5 } }).EffectiveDays());
+    }
+
+    [Fact]
+    public void ARetentionWithoutATableOnTheTargetOrWithANonsenseNumberIsRefusedNamingTheKey()
+    {
+        var state = Assert.Throws<ConfigValidationException>(() => TrackingResolution.Validate(new TrackingConfig { Mode = "state", Retention = new TrackingRetention { Units = 5 } }, "r"));
+        Assert.Contains("tracking.retention", state.Message);
+        var units = Assert.Throws<ConfigValidationException>(() => TrackingResolution.Validate(new TrackingConfig { Mode = "target", Retention = new TrackingRetention { Units = 0 } }, "r"));
+        Assert.Contains("tracking.retention.units", units.Message);
+        var days = Assert.Throws<ConfigValidationException>(() => TrackingResolution.Validate(new TrackingConfig { Mode = "both", Primary = "state", Retention = new TrackingRetention { Days = -1 } }, "r"));
+        Assert.Contains("tracking.retention.days", days.Message);
+        TrackingResolution.Validate(new TrackingConfig { Mode = "target", Retention = new TrackingRetention { Units = 1, Days = 0 } }, "r", "MsSql");
+    }
+
+    [Fact]
+    public void AMisspelledRetentionKeyIsRefusedByTheStrictLoader()
+    {
+        _config.SaveReplicationTask(Task(new TrackingConfig { Mode = "target", Retention = new TrackingRetention { Units = 5 } }), Author);
+        var path = TaskFile()!;
+        File.WriteAllText(path, File.ReadAllText(path).Replace("units:", "unitz:", StringComparison.Ordinal));
+        var ex = Assert.ThrowsAny<Exception>(() => _config.LoadReplicationTask("r"));
+        Assert.Contains("unitz", ex.ToString());
+    }
+
+    [Fact]
     public void OnlyTheRelationalEnginesCouldHoldAStateTable()
     {
         Assert.Contains(DriverIds.MsSql, TrackingResolution.TargetsThatCanHoldState);

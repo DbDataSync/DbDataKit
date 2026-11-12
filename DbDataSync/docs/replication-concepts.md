@@ -402,6 +402,26 @@ refused at save for now (plan 28c E17), a Flight SQL or DuckDB target never hold
 
 The Overview tab's **Tracking** card and `GET /api/replications/{name}/tracking` say which mode applies, which was asked for and why they differ.
 
+**The copy in the state, and divergence.** In `target` and `both` the Sync server follows the table: a minute apart (and on **Follow now** of the card, an administrator's call) it copies the units a replication
+recorded since its last checkpoint into the `tracking` module of the state (`tracking_row`, identity `syncunit:<engine>://<server>/<database>/<replication>@<connection>`), with the follower Build's tracking uses, so
+the rows and the checkpoint move in one transaction. A run never waits for it, and a target that is down is the card's "the last follow failed", not an error of any run. Two kinds of difference are **persisted**
+as a divergence (they stay until an administrator resolves them, and while one is open nothing is copied):
+
+* *the table parts from its copy*: the target's newest unit is behind the checkpoint (a restore) or the copy holds units the table does not;
+* *the state's position is not the target's*: for a mapping, the state's position is an older unit of the target (the target is **ahead** of the state), is no unit the target recorded (the sides **part**: a restore, a
+  replaced target), or the state has none (reset or lost). Only a difference the target has held for more than two minutes counts, because the pass that wrote a unit moves the state's position a moment later.
+
+Resolving is the same action as Build's (`POST /api/v1/tracking/divergences/{id}/resolve`, administrator, audited in the management audit log): **archive** keeps the copy's rows after the point where the sides last agree
+apart (out of the live stream), **reset** deletes them; the checkpoint goes back to that point and the next follow copies the target's units from there. The resolve changes the *copy*; what heals a position difference is
+the pass itself, which already resumes from the primary. The replication's Tracking card shows the open divergence with its reason and both buttons (disabled for anyone but an administrator), and the console's
+**Tracking** page lists every replication's copy beside Build's and the runners', with its own mode and primary (the primary of a replication is the `tracking.primary` of its file, edited on the card). The follower
+follows the replication's own target; a mapping that names another target keeps its units there and they are not copied.
+
+**Retention of `dbdatasync.unit`.** After each pass the mapping's old units are removed in a transaction of their own: a unit goes only when it is older than 7 days **and** not among the newest 1000 units of its
+mapping, and the newest unit of every source is never removed (it is where the next pass resumes). The numbers are the optional `tracking.retention` of the file (`units`, `days`; refused with `mode: state`, which
+keeps no table, and for a number below 1 or a negative one, naming the key). A prune that fails is a warning in the run's log and does not fail the pass. The copy in the state keeps its rows past the table's
+pruning (the module's retention has no age: how long the history is kept is the owner's decision).
+
 ## Next: Drivers and libraries
 
 Which readers, writers, and staging providers are actually offered depends on the mapping's driver — see

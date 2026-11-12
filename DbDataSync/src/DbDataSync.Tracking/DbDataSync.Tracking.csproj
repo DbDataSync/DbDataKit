@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataSync.Core\DbDataSync.Core.csproj" />
+    <ProjectReference Include="..\DbDataSync.Drivers.Abstractions\DbDataSync.Drivers.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataSync.State\DbDataSync.State.csproj" />
+    <Using Include="DbDataKit.State" />
+    <Using Include="DbDataSync.State.StateDatabase" Alias="StateDatabase" />   <!-- Sync's own, as in the API (plan 13, U04) -->
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>Sync's half of the tracking copy (plan 28c E17): the stream of dbdatasync.unit on a target, the follower that copies it into the Sync state, the persisted divergence record and its resolve.</Description>
+  </PropertyGroup>
+
+</Project>
