@@ -31,6 +31,8 @@ export async function editorReportStory(page: Page) {
   await page.getByTestId('rail-views').click()
   await page.getByTestId('views-tab-reports').click()
   await page.getByTestId('views-new').click()
+  // a new document starts with one text widget (`note`) so that it is valid as it stands; the story builds on an empty one
+  await page.getByTestId('ed-widget-remove-note').click()
   await page.getByTestId('ed-file-name').fill('quarterly')
   await page.getByTestId('ed-title').fill('Quarterly report')
 
