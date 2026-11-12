@@ -31,12 +31,17 @@ export interface Host {
   route(path: string): void
   /** Called when the shell asks for a view (the address changed). Returns how to stop listening. */
   onNavigate(listener: (path: string) => void): () => void
+  /**
+   * Asks the shell page to open a dialog or a side panel at a route of this instance (plan 32 DBR36): the page owns the surface, because a frame inside this document cannot get a token. `closed` is called once, with whether the form in it
+   * saved (`views:saved`), when the surface is closed; a shell that refuses (one is open already, the route is not valid) closes it at once, unsaved.
+   */
+  openSurface(surface: { as: 'dialog' | 'panel'; label: string; address: string }, closed: (saved: boolean) => void): void
   /** Called with the shell's theme (a portal's look, `{type: 'theme', tokens}`), when it sends one. Returns how to stop listening. */
   onTheme(listener: (theme: ShellTheme) => void): () => void
 }
 
 export function connectHost(win: Window = window): Host {
-  const waiting = new Map<string, (m: { type: string; token?: string; expiresIn?: number; message?: string }) => void>()
+  const waiting = new Map<string, (m: { type: string; token?: string; expiresIn?: number; message?: string; saved?: boolean }) => void>()
   const listeners = new Set<(path: string) => void>()
   const themeListeners = new Set<(theme: ShellTheme) => void>()
   let lastTheme: ShellTheme | null = null   // the shell sends the theme once, when the frame loads: a listener added later still gets it
@@ -48,7 +53,7 @@ export function connectHost(win: Window = window): Host {
       if (theme) { lastTheme = theme; themeListeners.forEach((l) => l(theme)) }
       return
     }
-    if (m.type === 'token.request' || m.type === 'route') return   // our own requests, seen again where the page has no parent
+    if (m.type === 'token.request' || m.type === 'route' || m.type === 'surface.open') return   // our own requests, seen again where the page has no parent
     if (m.type === 'navigate' && typeof m.path === 'string') { listeners.forEach((l) => l(m.path)); return }
     waiting.get(m.id)?.(m)
     waiting.delete(m.id)
@@ -69,6 +74,11 @@ export function connectHost(win: Window = window): Host {
       return got.token
     },
     route: (path) => win.parent.postMessage({ dbdata: 'app/1', type: 'route', path }, '*'),
+    openSurface: (surface, closed) => {
+      const id = String(Math.random())
+      waiting.set(id, (m) => closed(m.type === 'surface.closed' && m.saved === true))
+      win.parent.postMessage({ dbdata: 'app/1', id, type: 'surface.open', as: surface.as, label: surface.label, route: surface.address }, '*')
+    },
     onNavigate: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
     onTheme: (listener) => {
       themeListeners.add(listener)

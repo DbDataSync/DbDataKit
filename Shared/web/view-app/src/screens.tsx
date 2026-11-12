@@ -129,7 +129,7 @@ export type CodePages = Record<string, CodePage>
 export interface ViewAppProps {
   doc: ViewsDoc
   client: StoreClient
-  host: Pick<Host, 'route' | 'onNavigate'> & Partial<Pick<Host, 'onTheme'>>
+  host: Pick<Host, 'route' | 'onNavigate'> & Partial<Pick<Host, 'onTheme' | 'openSurface'>>
   /** Pages of code. An app can be only spec files (none here); one page can be code and the rest stay specs. */
   pages?: CodePages
   /** The views client of the app (`appViewsClient`): what draws the app's dashboards and reports (plan 32 DBR13). Without it such a file says the host cannot draw it. */
@@ -168,24 +168,26 @@ export function ViewApp({ doc, client, host, pages = {}, views, openSurface }: V
       const key = current + route   // a new route starts the screen again (React takes a key as a prop of its own, never in a spread)
       body = spec.kind === 'document'
         ? (views
-          ? <DocumentScreen key={key} file={current} kind={spec.document} views={views} query={query} doc={doc} route={host.route} go={go} openSurface={openSurface} />
+          ? <DocumentScreen key={key} file={current} kind={spec.document} views={views} query={query} doc={doc} route={host.route} go={go} openSurface={openSurface ?? host.openSurface} />
           : <div className="sui-error" role="alert">{`This host cannot draw the ${spec.document} '${current}': it gives the app no views client.`}</div>)
         : spec.kind === 'grid' ? <GridScreen key={key} spec={spec} {...props} /> : spec.kind === 'form' ? <FormScreen key={key} spec={spec} {...props} /> : spec.kind === 'detail' ? <DetailScreen key={key} spec={spec} {...props} /> : <DashboardScreen key={key} spec={spec} {...props} />
     }
   }
   // a portal's home block draws a dashboard or report to the whole frame (`?_as=block`): no menu, no title, the board is the box (plan 32 DBR13)
   const block = spec?.kind === 'document' && query[AS_PARAM] === 'block'
+  // a view the shell opened in a dialog or a side panel has the surface's own title and close: no menu and no title of the app
+  const bare = block || openedByLink(query)
   const titleOf = page?.title ?? spec?.title ?? doc.title
   return (
     <StoreClientProvider client={client}>
       <SchemeContext.Provider value={shellScheme}>
       <div className={block ? 'va-app va-block' : 'va-app'}>
-        {!block && menu.length > 1 && (
+        {!bare && menu.length > 1 && (
           <nav className="va-menu" aria-label="Views">
             {menu.map((m) => <a key={m.key} href={`#/${m.key}`} aria-current={m.key === current ? 'page' : undefined} onClick={(e) => { e.preventDefault(); go(`/${m.key}`) }}>{m.title}</a>)}
           </nav>
         )}
-        {!block && <h2 className="va-title">{titleOf}</h2>}
+        {!bare && <h2 className="va-title">{titleOf}</h2>}
         {body}
         {spec && (spec.kind === 'grid' || spec.kind === 'dashboard') && <Links links={spec.links} row={null} params={resolveParams(spec.params, query).values} go={go} only={spec.kind === 'grid' ? 'page' : 'all'} />}
       </div>
