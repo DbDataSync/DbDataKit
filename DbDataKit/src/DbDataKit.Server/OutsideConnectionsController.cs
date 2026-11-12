@@ -24,15 +24,15 @@ public sealed class OutsideConnectionsController(ConsoleConnections connections,
 
     [HttpGet]
     [Authorize(Policies.Viewer)]
-    public IActionResult List() => Ok(new { kinds = new[] { ConnectionKinds.Http, ConnectionKinds.ModelProvider, ConnectionKinds.Smtp, ConnectionKinds.Sftp, ConnectionKinds.Scp, ConnectionKinds.Ftps }, flavors = new[] { "slack", "teams", "signed", "oauth" }, connections = connections.List() });
+    public IActionResult List() => Ok(new { kinds = new[] { ConnectionKinds.Http, ConnectionKinds.ModelProvider, ConnectionKinds.Smtp, ConnectionKinds.Sftp, ConnectionKinds.Scp, ConnectionKinds.Ftps, ConnectionKinds.Smb }, flavors = new[] { "slack", "teams", "signed", "oauth" }, connections = connections.List() });
 
     [HttpGet("template")]
     [Authorize(Policies.Admin)]
     public IActionResult Template([FromQuery] string kind, [FromQuery] string name, [FromQuery] string? flavor = null) =>
         !ConsoleConnections.IsName(name) ? BadRequest(new { error = "A connection's name starts with a letter and has letters, digits, '-', '_' and '.'." })
         : flavor is not null && (kind != ConnectionKinds.Http || flavor is not ("slack" or "teams" or "signed" or "oauth")) ? BadRequest(new { error = "A flavor is slack, teams, signed or oauth, and goes with kind http." })
-        : kind is ConnectionKinds.Http or ConnectionKinds.ModelProvider or ConnectionKinds.Smtp or ConnectionKinds.Sftp or ConnectionKinds.Scp or ConnectionKinds.Ftps ? Ok(new { yaml = ConsoleConnections.Template(kind, name, flavor) })
-        : BadRequest(new { error = $"The console keeps connections of kind {ConnectionKinds.Http}, {ConnectionKinds.ModelProvider}, {ConnectionKinds.Smtp}, {ConnectionKinds.Sftp}, {ConnectionKinds.Scp} and {ConnectionKinds.Ftps}." });
+        : kind is ConnectionKinds.Http or ConnectionKinds.ModelProvider or ConnectionKinds.Smtp or ConnectionKinds.Sftp or ConnectionKinds.Scp or ConnectionKinds.Ftps or ConnectionKinds.Smb ? Ok(new { yaml = ConsoleConnections.Template(kind, name, flavor) })
+        : BadRequest(new { error = $"The console keeps connections of kind {ConnectionKinds.Http}, {ConnectionKinds.ModelProvider}, {ConnectionKinds.Smtp}, {ConnectionKinds.Sftp}, {ConnectionKinds.Scp}, {ConnectionKinds.Ftps} and {ConnectionKinds.Smb}." });
 
     [HttpPost("{name}/check")]
     [Authorize(Policies.Admin)]

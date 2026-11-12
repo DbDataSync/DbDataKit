@@ -2,10 +2,10 @@ import { request } from '@dbdatakit/shell'
 import type { Diagnostic } from './agents'
 
 /** The kinds of connection the console keeps itself (plan 27a IX01): an API, a model provider, and (the delivery channels, plan 22a GP18) a mail server. A database connection is kept by the Sync or Gateway server that uses it. A webhook is an `http` connection with a `webhook:` section. */
-export const OUTSIDE_KINDS = ['http', 'model-provider', 'smtp', 'sftp', 'scp', 'ftps'] as const
+export const OUTSIDE_KINDS = ['http', 'model-provider', 'smtp', 'sftp', 'scp', 'ftps', 'smb'] as const
 export type OutsideKind = (typeof OUTSIDE_KINDS)[number]
 
-export const KIND_LABEL: Record<string, string> = { database: 'database', http: 'API (http)', 'model-provider': 'model provider', smtp: 'mail server (smtp)', sftp: 'file server (SFTP)', scp: 'file server (SCP)', ftps: 'file server (FTPS)' }
+export const KIND_LABEL: Record<string, string> = { database: 'database', http: 'API (http)', 'model-provider': 'model provider', smtp: 'mail server (smtp)', sftp: 'file server (SFTP)', scp: 'file server (SCP)', ftps: 'file server (FTPS)', smb: 'Windows share (SMB)' }
 
 /** What each kind is, in a sentence the new-connection form shows. */
 export const KIND_MEANING: Record<OutsideKind, string> = {
@@ -14,6 +14,7 @@ export const KIND_MEANING: Record<OutsideKind, string> = {
   sftp: 'A file server reached over SSH: list, read and write files. The server is pinned by its host key (a changed key is refused by name); sign in with a private key kept as a secret, or a password.',
   scp: 'A file server reached over SSH with SCP: read and write one file at a time (SCP cannot list; use SFTP for that). Pinned by host key like SFTP.',
   ftps: 'A file server reached over FTP with TLS. Pin its certificate by SHA-256 (or give its authority); a certificate that is neither is refused by name.',
+  smb: 'A Windows file share (SMB): list, read and write files as the Windows identity of the process that runs the work (Kerberos, no secret). Works on a Windows host only; name the server by its DNS name.',
   smtp: 'A mail server that delivery channels send mail through: its host, how the connection is protected (STARTTLS or TLS), the sender address and the login as a secret reference.',
 }
 
@@ -27,6 +28,7 @@ export const NEW_CHOICES: NewChoice[] = [
   { id: 'sftp', label: KIND_LABEL.sftp, kind: 'sftp', meaning: KIND_MEANING.sftp },
   { id: 'scp', label: KIND_LABEL.scp, kind: 'scp', meaning: KIND_MEANING.scp },
   { id: 'ftps', label: KIND_LABEL.ftps, kind: 'ftps', meaning: KIND_MEANING.ftps },
+  { id: 'smb', label: KIND_LABEL.smb, kind: 'smb', meaning: KIND_MEANING.smb },
   { id: 'slack', label: 'webhook: Slack', kind: 'http', flavor: 'slack', meaning: 'A Slack incoming webhook (Block Kit). Its address carries a token: paste it once and only the template stays in the file.' },
   { id: 'teams', label: 'webhook: Teams', kind: 'http', flavor: 'teams', meaning: 'A Teams Workflows webhook (Adaptive Card). The flow and the signature in its address are secret parts: paste the address once.' },
   { id: 'oauth', label: 'API: OAuth 2 consent', kind: 'http', flavor: 'oauth', meaning: 'An API that a person signs in to once (OAuth 2 authorization code): press Authorize, give consent at the provider, and the refresh token is kept as a secret; the connection then refreshes its own access tokens.' },
@@ -34,7 +36,7 @@ export const NEW_CHOICES: NewChoice[] = [
 ]
 
 export const SIGN_IN_LABEL: Record<string, string> = {
-  none: 'no sign-in', api_key: 'API key', basic: 'user and password', oauth2_client_credentials: 'OAuth 2 client credentials', oauth2_authorization_code: 'OAuth 2 consent (authorization code)', client_certificate: 'client certificate', ssh_key: 'SSH private key', signed_webhook: 'signed webhook (HMAC)',
+  none: 'no sign-in', api_key: 'API key', basic: 'user and password', oauth2_client_credentials: 'OAuth 2 client credentials', oauth2_authorization_code: 'OAuth 2 consent (authorization code)', client_certificate: 'client certificate', ssh_key: 'SSH private key', kerberos: 'Windows sign-in (Kerberos)', signed_webhook: 'signed webhook (HMAC)',
 }
 
 /** What a typed secret is called on the screen, by the field it is kept under; the name of a placeholder of the address is its own label. */
@@ -72,7 +74,7 @@ export function consentReturn(search: string): ConsentReturn | null {
 }
 
 /** The kinds the Test button can try: an API, a mail server, a file server. */
-export const canTest = (kind: string | null): boolean => kind === 'http' || kind === 'smtp' || kind === 'sftp' || kind === 'scp' || kind === 'ftps'
+export const canTest = (kind: string | null): boolean => kind === 'http' || kind === 'smtp' || kind === 'sftp' || kind === 'scp' || kind === 'ftps' || kind === 'smb'
 
 /** Whether a connection signs in with a person's consent (so the screen shows Authorize and Disconnect). */
 export const needsConsent = (c: Pick<OutsideConnection, 'signIn'>): boolean => c.signIn === 'oauth2_authorization_code'

@@ -164,7 +164,7 @@ public sealed class OutsideConnectionsTests : IAsyncLifetime
     [Fact]
     public async Task A_template_per_kind_is_a_file_that_reads_and_a_viewer_is_not_given_one()
     {
-        foreach (var kind in new[] { "http", "model-provider", "sftp", "scp", "ftps" })
+        foreach (var kind in new[] { "http", "model-provider", "sftp", "scp", "ftps", "smb" })
         {
             var (status, template) = await Call(HttpMethod.Get, $"/api/outside-connections/template?kind={kind}&name=starter", admin);
             Assert.Equal(HttpStatusCode.OK, status);

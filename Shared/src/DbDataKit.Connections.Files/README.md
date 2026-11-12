@@ -6,6 +6,7 @@ The clients of the places a connection can keep files (plan 27a IX04 to IX06), b
 | --- | --- | --- | --- | --- |
 | `sftp` | SFTP over SSH | SSH.NET | yes | the host key's fingerprint, `file_server.host_keys` |
 | `scp` | SCP over SSH (the file moved into place with `mv`, a folder made with `mkdir -p`) | SSH.NET | **no** (`Unsupported`: use `sftp` to list) | the host key, as `sftp` |
+| `smb` | a Windows share, signed in to as the Windows identity of the process (Kerberos); Windows only | `System.IO` over `\\host\share` | yes | Windows (the server's name; Kerberos proves it) |
 | `ftps` | FTP with TLS, explicit (AUTH TLS) or implicit | FluentFTP | yes | the certificate's SHA-256, `file_server.certificate_sha256`, or `tls.ca_file`, or the machine's roots |
 
 ## The connection file
@@ -27,6 +28,16 @@ sign_in:
 ```
 
 Every secret is a **reference** (the strict reader refuses a key written as itself); the console keeps a typed key in its secret store under `dbdatakit:server:connection:<name>:private_key`. `connection/2` is open: `kind`, `file_server`, the method `ssh_key` and its two keys are additive.
+
+## SMB with Windows sign-in (plan 27a IX05)
+
+```yaml
+kind: smb
+file_server: { host: fs01.corp.example.com, share: data, root: /incoming/partner }   # \\fs01.corp.example.com\data\incoming\partner
+sign_in: { method: kerberos }                                                         # no secret: the Windows identity of the process
+```
+
+`SmbFileStore` reaches the UNC path with `System.IO`; Windows asks the domain controller for a Kerberos ticket for the server's **name** (an address makes it fall back to NTLM: the file reader says so as a warning) and signs and encrypts as the server's policy says. On a host that is not Windows, `FileStores.OpenAsync` is the classified failure `smb-needs-windows` (kind Unsupported) and **Test** says so in words. `SmbFailures` classifies what Windows reports by its numbers (a failed logon, no logon server, a Kerberos ticket that could not be had: a rejected login; a clock skew; an unreachable server or share: the network; access denied: a permission); `PathFileStore` is the same store over any folder, which is what Linux tests exercise. Only a Windows host in a domain proves the ticket and the share themselves.
 
 ## Pinning: a changed server is refused by name
 

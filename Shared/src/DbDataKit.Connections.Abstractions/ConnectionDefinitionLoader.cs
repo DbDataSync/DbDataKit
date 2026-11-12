@@ -387,6 +387,10 @@ public static class ConnectionDefinitionLoader
                         if (url is not null && !IsSafeAddress(url)) Err("sign_in." + key, $"`{key}` is an http or https address with no user name, password or query in it.");
                     NoOthers(("key_secret", s.KeySecret is not null), ("user", s.User is not null), ("password_secret", s.PasswordSecret is not null), ("certificate_file", s.CertificateFile is not null), ("certificate_secret", s.CertificateSecret is not null));
                     break;
+                case "kerberos":
+                    if (d.KindName != ConnectionKinds.Smb) Err("sign_in.method", "`kerberos` signs in to the kind `smb`.", "Use another method for this kind.");
+                    NoOthers(("key_secret", s.KeySecret is not null), ("user", s.User is not null), ("password_secret", s.PasswordSecret is not null), ("token_url", s.TokenUrl is not null), ("client_secret_secret", s.ClientSecretSecret is not null), ("certificate_file", s.CertificateFile is not null), ("certificate_secret", s.CertificateSecret is not null));
+                    break;
                 case "ssh_key":
                     if (!ConnectionKinds.IsFileServer(d.KindName)) Err("sign_in.method", "`ssh_key` signs in to the kinds `sftp` and `scp`.", "Use another method for this kind.");
                     Needs("user", !string.IsNullOrWhiteSpace(s.User));
@@ -435,7 +439,18 @@ public static class ConnectionDefinitionLoader
                 Err("file_server.host", "`file_server.host` is the server's name or address, nothing else (the port is `file_server.port`).");
             if (!f.Root.StartsWith('/') || f.Root.Split('/').Contains("..") || f.Root.Any(char.IsControl)) Err("file_server.root", "`file_server.root` is an absolute folder such as `/` or `/upload`, with no `..`.");
             var ssh = d.KindName is ConnectionKinds.Sftp or ConnectionKinds.Scp;
-            if (ssh)
+            var smb = d.KindName == ConnectionKinds.Smb;
+            if (f.Share is not null && !smb) Err("file_server.share", "`share` belongs to the kind `smb`.", "Remove it.");
+            if (smb)
+            {
+                if (string.IsNullOrWhiteSpace(f.Share) || f.Share.Any(c => char.IsWhiteSpace(c) || c is '/' or '\\' or ':' or '*' or '?' or '"' or '<' or '>' or '|'))
+                    Err("file_server.share", "An SMB connection names the share on the server (`share: data`): no slashes, no spaces.", "The address is `\\\\host\\share`; `root` is the folder in it.");
+                if (f.Port is not null) Err("file_server.port", "A Windows share is reached on port 445: a UNC address has no port.", "Remove `port`.");
+                if (f.HostKeys.Count > 0 || f.CertificateSha256.Count > 0 || f.FtpsMode != "explicit") Err("file_server", "`host_keys`, `certificate_sha256` and `ftps_mode` do not belong to an SMB connection: the server is known by Windows (its name, and Kerberos proving it).", "Remove them.");
+                if (System.Net.IPAddress.TryParse(f.Host, out _))
+                    diags.Add(Diag(BadOutside, file, src, "file_server.host", "An address makes Windows sign in with NTLM instead of Kerberos (a Kerberos ticket is for a server's name). Use the server's DNS name.", null, ConfigSeverity.Warning));
+            }
+            else if (ssh)
             {
                 for (var i = 0; i < f.HostKeys.Count; i++)
                     if (!System.Text.RegularExpressions.Regex.IsMatch(f.HostKeys[i], "^SHA256:[A-Za-z0-9+/]{43}$"))
@@ -454,8 +469,9 @@ public static class ConnectionDefinitionLoader
             }
 
             var method = d.SignIn?.Method ?? "none";
+            if (smb && method != "kerberos") Err("sign_in.method", $"An `smb` connection signs in with `kerberos`: the Windows identity of the process that runs it (no secret), not `{method}`.", "Write `sign_in: { method: kerberos }`.");
             if (ssh && method is not ("basic" or "ssh_key")) Err("sign_in.method", $"A `{d.KindName}` connection signs in with `ssh_key` (a private key held as a secret) or `basic` (user and `password_secret`), not `{method}`.");
-            if (!ssh && method is not ("basic" or "none")) Err("sign_in.method", $"An `ftps` connection signs in with `basic` (user and `password_secret`), or `none` for an anonymous server, not `{method}`.");
+            if (!ssh && !smb && method is not ("basic" or "none")) Err("sign_in.method", $"An `ftps` connection signs in with `basic` (user and `password_secret`), or `none` for an anonymous server, not `{method}`.");
         }
 
         void CheckSmtp()
@@ -566,7 +582,7 @@ public static class ConnectionKindGroups
     public static ConnectionKindGroup Of(ConnectionDefinition d) => d.KindName switch
     {
         ConnectionKinds.Smtp => ConnectionKindGroup.Delivery,
-        ConnectionKinds.Sftp or ConnectionKinds.Scp or ConnectionKinds.Ftps => ConnectionKindGroup.FileStore,
+        ConnectionKinds.Sftp or ConnectionKinds.Scp or ConnectionKinds.Ftps or ConnectionKinds.Smb => ConnectionKindGroup.FileStore,
         ConnectionKinds.Http => d.Webhook is not null ? ConnectionKindGroup.Delivery : ConnectionKindGroup.Http,
         ConnectionKinds.ModelProvider => d.ModelProvider?.Purpose == "embeddings" ? ConnectionKindGroup.Embedding : ConnectionKindGroup.Model,
         _ => ConnectionKindGroup.Database,
@@ -584,7 +600,7 @@ public static class ConnectionKindGroups
         if (group.HasFlag(ConnectionKindGroup.Model)) names.Add("chat model provider");
         if (group.HasFlag(ConnectionKindGroup.Embedding)) names.Add("embedding model provider");
         if (group.HasFlag(ConnectionKindGroup.Http)) names.Add("HTTP API (`kind: http`)");
-        if (group.HasFlag(ConnectionKindGroup.FileStore)) names.Add("file store (`kind: sftp`, `scp`, `ftps`)");
+        if (group.HasFlag(ConnectionKindGroup.FileStore)) names.Add("file store (`kind: sftp`, `scp`, `ftps`, `smb`)");
         return names.Count == 0 ? "none" : string.Join(" or ", names);
     }
 

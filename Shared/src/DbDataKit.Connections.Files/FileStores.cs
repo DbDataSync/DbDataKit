@@ -3,7 +3,7 @@ using DbDataKit.Secrets;
 
 namespace DbDataKit.Connections.Files;
 
-/// <summary>Opens the client of a connection of a file kind (plan 27a IX04 to IX06). The kinds that are not built yet say <see cref="ConnectionFailureKind.Unsupported"/>.</summary>
+/// <summary>Opens the client of a connection of a file kind (plan 27a IX04 to IX06).</summary>
 public static class FileStores
 {
     public static Task<IFileStore> OpenAsync(ConnectionDefinition definition, ISecretResolver secrets, CancellationToken ct = default)
@@ -14,6 +14,7 @@ public static class FileStores
             ConnectionKinds.Sftp => Open(SftpFileStore.OpenAsync(definition, secrets, ct)),
             ConnectionKinds.Scp => Open(ScpFileStore.OpenAsync(definition, secrets, ct)),
             ConnectionKinds.Ftps => Open(FtpsFileStore.OpenAsync(definition, secrets, ct)),
+            ConnectionKinds.Smb => SmbFileStore.OpenAsync(definition, secrets, ct),
             _ => throw new ArgumentException($"A connection of kind `{definition.KindName}` is not a file store this library opens.", nameof(definition)),
         };
 
@@ -48,7 +49,7 @@ public static class FileStoreTester
         var clock = Stopwatch.StartNew();
         FileTestResult Done(bool ok, bool? reached, string signIn, string message, ConnectionFailureKind? kind = null) => new(ok, reached, signIn, message, kind, kind is { } k && ConnectionFailure.IsTemporaryKind(k), clock.ElapsedMilliseconds);
         var server = definition.FileServer;
-        var where = server is null ? definition.Name : $"{server.Host}:{server.Port ?? DefaultPort(definition)}";
+        var where = server is null ? definition.Name : definition.KindName == ConnectionKinds.Smb ? SmbFileStore.UncPath(definition) : $"{server.Host}:{server.Port ?? DefaultPort(definition)}";
         var pinned = server is not null && (server.HostKeys.Count > 0 || server.CertificateSha256.Count > 0);
         try
         {
@@ -73,7 +74,16 @@ public static class FileStoreTester
         }
     }
 
-    private static string Words(ConnectionFailure failure, string where) => failure.Kind switch
+    private static string Words(ConnectionFailure failure, string where) => failure.Code switch
+    {
+        SmbFileStore.NeedsWindows => "An SMB share is signed in to with the Windows identity of the process (Kerberos): this host is not Windows, so the connection cannot be used here. Run it on a Windows host that is joined to the domain.",
+        "smb-kerberos" => $"{where} refused the Windows sign-in or no Kerberos ticket could be had for it. Check that this machine is in the domain, the clock is right, and the server is named by its DNS name (an address makes Windows use NTLM).",
+        "smb-clock" => $"No Kerberos ticket for {where}: this machine's clock is too far from the domain controller's.",
+        "smb-logon" => $"{where} did not accept the Windows identity of the process. Check that the account may use the share, and that the machine is in the domain.",
+        _ => WordsOfKind(failure, where),
+    };
+
+    private static string WordsOfKind(ConnectionFailure failure, string where) => failure.Kind switch
     {
         ConnectionFailureKind.Login => $"{where} did not accept the sign-in ({failure.Code}). Check the user and the secret (the password, or the private key and its passphrase).",
         ConnectionFailureKind.Network => $"{where} could not be reached: nothing answered there. Check the address and that the server is up.",
@@ -90,5 +100,5 @@ public static class FileStoreTester
         catch (Exception e) when (e is not OperationCanceledException) { return null; }
     }
 
-    private static int DefaultPort(ConnectionDefinition d) => d.KindName == ConnectionKinds.Ftps ? (d.FileServer?.FtpsMode == "implicit" ? 990 : 21) : 22;
+    private static int DefaultPort(ConnectionDefinition d) => d.KindName == ConnectionKinds.Smb ? 445 : d.KindName == ConnectionKinds.Ftps ? (d.FileServer?.FtpsMode == "implicit" ? 990 : 21) : 22;
 }

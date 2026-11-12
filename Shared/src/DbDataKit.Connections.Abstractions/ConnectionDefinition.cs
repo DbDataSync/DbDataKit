@@ -110,7 +110,7 @@ public sealed class GrantsSpec
 [ConfigSchema(Naming = KeyNaming.SnakeCase, Description = "How a connection of an outside kind signs in (connection/2).")]
 public sealed class SignInSpec
 {
-    [ConfigKey(Pattern = "none|api_key|basic|oauth2_client_credentials|oauth2_authorization_code|client_certificate|signed_webhook|ssh_key")]
+    [ConfigKey(Pattern = "none|api_key|basic|oauth2_client_credentials|oauth2_authorization_code|client_certificate|signed_webhook|ssh_key|kerberos")]
     public string Method { get; set; } = "none";
 
     /// <summary>api_key: where the key goes, <c>header</c> or <c>query</c>.</summary>
@@ -159,10 +159,10 @@ public sealed class SignInSpec
 }
 
 /// <summary>
-/// The <c>file_server:</c> section of a connection of kind <c>sftp</c>, <c>scp</c> or <c>ftps</c> (plan 27a IX04; <c>connection/2</c>, additive): the server, the folder every path is relative to, and what the server is <b>pinned</b> to. An SSH server is known by the fingerprint of its host key
+/// The <c>file_server:</c> section of a connection of kind <c>sftp</c>, <c>scp</c>, <c>ftps</c> or <c>smb</c> (plan 27a IX04; <c>connection/2</c>, additive): the server, the folder every path is relative to, and what the server is <b>pinned</b> to. An SSH server is known by the fingerprint of its host key
 /// (<see cref="HostKeys"/>, <c>SHA256:...</c> as <c>ssh-keygen -lf</c> prints it); a changed key is refused naming it. An FTPS server is trusted by the machine's roots, by <c>tls.ca_file</c> or by <see cref="CertificateSha256"/>, the SHA-256 of its certificate.
 /// </summary>
-[ConfigSchema(Naming = KeyNaming.SnakeCase, Description = "A file server (connection/2, kinds sftp, scp, ftps).")]
+[ConfigSchema(Naming = KeyNaming.SnakeCase, Description = "A file server (connection/2, kinds sftp, scp, ftps, smb).")]
 public sealed class FileServerSpec
 {
     [ConfigKey(Required = true)]
@@ -180,6 +180,9 @@ public sealed class FileServerSpec
 
     /// <summary>ftps: the SHA-256 of the server's certificate (64 hex digits) the connection is pinned to, besides or instead of a chain the machine trusts.</summary>
     public List<string> CertificateSha256 { get; set; } = [];
+
+    /// <summary>smb (plan 27a IX05): the share on the server, such as <c>data</c> (the address is <c>\\host\share</c>; <see cref="Root"/> is the folder in it).</summary>
+    public string? Share { get; set; }
 
     /// <summary>ftps: <c>explicit</c> (AUTH TLS on the usual port, the default) or <c>implicit</c> (TLS from the first byte, usually port 990).</summary>
     [ConfigKey(Pattern = "explicit|implicit")]
@@ -313,10 +316,13 @@ public static class ConnectionKinds
     /// <summary>A file server reached over FTP with TLS (plan 27a IX04).</summary>
     public const string Ftps = "ftps";
 
-    public static readonly string[] All = [Database, Http, ModelProvider, Smtp, Sftp, Scp, Ftps];
+    /// <summary>A Windows file share (SMB, plan 27a IX05), signed in to with the Windows identity of the process (Kerberos). It works on a Windows host only.</summary>
+    public const string Smb = "smb";
+
+    public static readonly string[] All = [Database, Http, ModelProvider, Smtp, Sftp, Scp, Ftps, Smb];
 
     /// <summary>The kinds that are a file store (<see cref="ConnectionKindGroup.FileStore"/>): they have a <c>file_server</c> section and no <c>endpoint</c>.</summary>
-    public static bool IsFileServer(string? kind) => kind is Sftp or Scp or Ftps;
+    public static bool IsFileServer(string? kind) => kind is Sftp or Scp or Ftps or Smb;
 
     public static bool IsKnown(string? kind) => kind is not null && All.Contains(kind, StringComparer.Ordinal);
 }
