@@ -38,6 +38,7 @@
     <DbDataKitReference Include="Agents.Providers" />   <!-- the agent runtime the console hosts for back-end agents; plan 27a AG14 -->
     <DbDataKitReference Include="Knowledge" />   <!-- the knowledge items, scope and chunking its screens preview; plan 27a KN28, KN36 to KN38 -->
     <DbDataKitReference Include="Knowledge.Index" />   <!-- the catalog of subjects read from the lineage graph; plan 27a KN02 -->
+    <DbDataKitReference Include="Knowledge.Cli" />   <!-- the knowledge noun, the checks and the knowledge-project kind; plan 27a KN10, KN16, KN17 -->
     <DbDataKitReference Include="Monitoring" />
     <DbDataKitReference Include="Scheduling" />
     <DbDataKitReference Include="Delivery" />   <!-- the outbox, channels and subscriptions behind the Delivery screens; plan 22a GP07 to GP09, GP17, GP18 -->

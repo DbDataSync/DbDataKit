@@ -43,6 +43,40 @@ public sealed class KnowledgeProject
         return new(root, [.. items.OrderBy(i => i.Id, StringComparer.Ordinal)], diags);
     }
 
+    /// <summary>
+    /// The same reading of files that are not in a folder: the files of a published version (plan 27a KN10, KN11), path (forward slashes, relative to the project) to text. A file under a folder that starts with <c>.</c> is not read, as on disk.
+    /// </summary>
+    public static KnowledgeProject LoadFiles(string root, IReadOnlyDictionary<string, string> files, KnowledgeSubject? impliedAbout = null)
+    {
+        var items = new List<KnowledgeItem>();
+        var diags = new List<ConfigDiagnostic>();
+        WalkFiles(files, "", [], impliedAbout, items, diags);
+        return new(root, [.. items.OrderBy(i => i.Id, StringComparer.Ordinal)], diags);
+    }
+
+    private static void WalkFiles(IReadOnlyDictionary<string, string> files, string folder, List<FolderDefaults> above, KnowledgeSubject? implied, List<KnowledgeItem> items, List<ConfigDiagnostic> diags)
+    {
+        var prefix = folder.Length == 0 ? "" : folder + "/";
+        var here = files.Where(f => f.Key.StartsWith(prefix, StringComparison.Ordinal) && !f.Key[prefix.Length..].Contains('/')).OrderBy(f => f.Key, StringComparer.Ordinal).ToList();
+        var chain = above;
+        if (here.FirstOrDefault(f => f.Key == prefix + KnowledgeItemLoader.FolderFileName) is { Key: not null } folderFile)
+        {
+            var result = KnowledgeItemLoader.LoadFolderFile(folderFile.Value, folderFile.Key);
+            diags.AddRange(result.Diagnostics);
+            if (result.Defaults is { } defaults) chain = [defaults, .. above];
+        }
+        foreach (var (path, text) in here.Where(f => f.Key.EndsWith(".md", StringComparison.Ordinal)))
+        {
+            var name = path[prefix.Length..];
+            if (name.StartsWith('_') || string.Equals(name, "README.md", StringComparison.OrdinalIgnoreCase)) continue;
+            var result = KnowledgeItemLoader.Load(text, path, path, chain, implied);
+            diags.AddRange(result.Diagnostics);
+            if (result.Item is not null && !result.Diagnostics.HasErrors()) items.Add(result.Item);
+        }
+        foreach (var sub in files.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal) && k[prefix.Length..].Contains('/')).Select(k => k[prefix.Length..].Split('/')[0]).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
+            if (!sub.StartsWith('.')) WalkFiles(files, prefix + sub, chain, implied, items, diags);
+    }
+
     private static void Walk(string root, string folder, List<FolderDefaults> above, KnowledgeSubject? implied, List<KnowledgeItem> items, List<ConfigDiagnostic> diags)
     {
         var chain = above;

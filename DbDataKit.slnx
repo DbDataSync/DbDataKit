@@ -92,6 +92,7 @@
     <Project Path="Shared/src/DbDataKit.Metadata/DbDataKit.Metadata.csproj" />
     <Project Path="Shared/src/DbDataKit.Knowledge/DbDataKit.Knowledge.csproj" />
     <Project Path="Shared/src/DbDataKit.Knowledge.Index/DbDataKit.Knowledge.Index.csproj" />
+    <Project Path="Shared/src/DbDataKit.Knowledge.Cli/DbDataKit.Knowledge.Cli.csproj" />
     <Project Path="Shared/src/DbDataKit.Agents/DbDataKit.Agents.csproj" />
     <Project Path="Shared/src/DbDataKit.Agents.Providers/DbDataKit.Agents.Providers.csproj" />
     <Project Path="Shared/src/DbDataKit.Lineage/DbDataKit.Lineage.csproj" />
@@ -205,6 +206,7 @@
     <Project Path="Shared/tests/DbDataKit.Semantic.Cli.Tests/DbDataKit.Semantic.Cli.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Metadata.Tests/DbDataKit.Metadata.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Knowledge.Tests/DbDataKit.Knowledge.Tests.csproj" />
+    <Project Path="Shared/tests/DbDataKit.Knowledge.Cli.Tests/DbDataKit.Knowledge.Cli.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Agents.Tests/DbDataKit.Agents.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Agents.Providers.Tests/DbDataKit.Agents.Providers.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Lineage.Tests/DbDataKit.Lineage.Tests.csproj" />

@@ -172,6 +172,16 @@
       "files": [ { "path": "Shared/src/DbDataKit.Agents/AgentPolicy.cs", "sha256": null } ]
     },
     {
+      "id": "knowledge-project",
+      "title": "Published knowledge project (the definition kind knowledge-project, manifest knowledge-project.yml, knowledge-project: N)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "new with plan 27a KN10: one version per publish, each Markdown file and _knowledge.yml an artifact by hash; the items inside are knowledge/1",
+      "version_source": { "file": "Shared/src/DbDataKit.Knowledge.Cli/KnowledgeDefinitions.cs", "pattern": "public const int Version = (\\d+);" },
+      "files": [ { "path": "Shared/src/DbDataKit.Knowledge.Cli/KnowledgeDefinitions.cs", "sha256": null } ]
+    },
+    {
       "id": "bindings",
       "title": "Bindings of slots to connections per release channel (bindings.yml, bindings: N)",
       "current": 1,

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Knowledge.Cli</RootNamespace>
+    <PackageId>DbDataKit.Knowledge.Cli</PackageId>
+    <Description>Knowledge as commands and as a published kind (plan 27a KN10, KN16, KN17): the knowledge-project kind of plan 30's registry, the checks (format, subjects, owners and the budgets of the agents an item reaches) and the noun knowledge (check, context, orphans, undescribed, index, search, show, about, publish).</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Cli\DbDataKit.Cli.csproj" />
+    <ProjectReference Include="..\DbDataKit.Agents\DbDataKit.Agents.csproj" />
+    <ProjectReference Include="..\DbDataKit.Knowledge.Index\DbDataKit.Knowledge.Index.csproj" />
+    <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+  </ItemGroup>
+</Project>
