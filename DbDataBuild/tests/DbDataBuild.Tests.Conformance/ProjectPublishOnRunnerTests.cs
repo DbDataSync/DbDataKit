@@ -24,7 +24,7 @@ public class ProjectPublishOnRunnerTests
     private const string Fct = "name: marts.fct_events\nkind: {incremental_by_time_range: {time_column: event_ts}}\ngrain: [event_id]\ncolumns:\n  - {name: event_id, type: BIGINT, nullable: false}\n  - {name: event_ts, type: TIMESTAMP, nullable: false}\n" +
                                "loads:\n  incremental:\n    default: true\n    strategy: watermark_append\n    watermark: {column: event_ts, resolver: target_max, on_null: initial, initial: \"2000-01-01 00:00:00\"}\nrefresh: { hourly: incremental }\n";
 
-    private static string Project()
+    internal static string Project()
     {
         var dir = Directory.CreateTempSubdirectory("ddb-e07-").FullName;
         void Write(string rel, string text) { var p = Path.Combine(dir, rel); Directory.CreateDirectory(Path.GetDirectoryName(p)!); TestFiles.WriteAllText(p, text); }
@@ -39,7 +39,7 @@ public class ProjectPublishOnRunnerTests
     }
 
     /// <summary>A runner of its own directory serving `dev` and `test`, following staged versions, with a stand-in `dbdatabuild-runtime` active in both.</summary>
-    private sealed class Runner : IAsyncDisposable
+    internal sealed class Runner : IAsyncDisposable
     {
         private readonly string _root = Directory.CreateTempSubdirectory("dbdr-e07-").FullName;
         private readonly List<string> _log = [];
@@ -117,14 +117,14 @@ public class ProjectPublishOnRunnerTests
         }
     }
 
-    private static (int Exit, JsonNode Doc, string Text) Publish(string project, string clientDir, params string[] args)
+    internal static (int Exit, JsonNode Doc, string Text) Publish(string project, string clientDir, params string[] args)
     {
         var o = new StringWriter(); var e = new StringWriter();
         var exit = CliApp.Run(["project", "publish", "--to", "runner", "--project", project, "--package", "sales", "--client-dir", clientDir, "--format", "json", .. args], o, e, environment: _ => null);
         return (exit, JsonNode.Parse(o.ToString())!, o + "\n" + e);
     }
 
-    private static JsonNode Data((int Exit, JsonNode Doc, string Text) result)
+    internal static JsonNode Data((int Exit, JsonNode Doc, string Text) result)
     {
         Assert.True(result.Exit == 0, result.Text);
         return result.Doc["data"]!;

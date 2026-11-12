@@ -458,6 +458,26 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         return (string)JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["name"]!;
     }
 
+    /// <summary>
+    /// What the runner's check of one connection slot says (plan 28c E19): <paramref name="Ok"/>, the <paramref name="Step"/> that failed or, when ok, the last that was tried (<c>binding</c>, <c>connection</c>, <c>login</c>, <c>connect</c>), the
+    /// <paramref name="Message"/> (it names the slot, the connection and the reference, never a value) and whether a connection was really <paramref name="Connected"/>.
+    /// </summary>
+    public sealed record BindingCheck(bool Ok, string Step, string Message, bool Connected);
+
+    /// <summary>
+    /// The runner's own check run of a binding, the way a run would use it (<c>POST /api/v1/bindings/{channel}/integration/{package}/test</c>, administrator, audited by the runner): the slot is bound in the channel, the connection it names is one the
+    /// runner has, every secret its login names resolves for <paramref name="role"/>, and the connection opens. Nothing is run and nothing is changed.
+    /// </summary>
+    public async Task<BindingCheck> TestBindingAsync(string server, string? code, string package, string channel, string slot, string role, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        using var content = new StringContent(new JsonObject { ["slot"] = slot, ["role"] = role }.ToJsonString(), Encoding.UTF8, "application/json");
+        using var response = await link.SendAsync(HttpMethod.Post, $"api/v1/bindings/{Uri.EscapeDataString(channel)}/integration/{Uri.EscapeDataString(package)}/test", content, ct);
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to test the binding of {slot} in {package}/{channel}", ct);
+        var node = JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!;
+        return new BindingCheck((bool)node["ok"]!, (string?)node["step"] ?? "", (string?)node["message"] ?? "", (bool?)node["connected"] ?? false);
+    }
+
     /// <summary>The names (never values) the runner's store holds under <paramref name="prefix"/> (administrator).</summary>
     public async Task<IReadOnlyList<string>> SecretNamesAsync(string server, string? code, string prefix = "", Action<string>? log = null, CancellationToken ct = default)
     {
