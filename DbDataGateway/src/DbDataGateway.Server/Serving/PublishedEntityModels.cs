@@ -52,7 +52,7 @@ public sealed class PublishedEntityModels(DefinitionStore store, Action<string>?
     /// <param name="format">The format of the model file (<c>schemaVersion</c>, 24a UC03: 2 when it has a <c>cache</c> or <c>checks</c> section).</param>
     public DefinitionVersion Publish(string name, string modelText, string dataSource, string? managedBy, string by, int format = 1)
     {
-        var version = store.Publish(DefinitionKind, name, JsonSerializer.Serialize(new Content(modelText, dataSource, managedBy), Json), by, ["data-source:" + dataSource], format: format);
+        var version = store.Publish(DefinitionKind, name, JsonSerializer.Serialize(new Content(modelText, dataSource, managedBy), Json), by, !store.UsesRegistry || store.Current(PublishedDataSources.DefinitionKind, dataSource) is not null ? ["data-source:" + dataSource] : [], format: format);
         ServeNow(name);
         return version;
     }

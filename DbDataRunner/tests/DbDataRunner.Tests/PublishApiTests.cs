@@ -350,6 +350,36 @@ public sealed class PublishApiTests
         Assert.Single(Audited(h, RunnerPublishing.RollbackVerb, AuditEvent.Refused));   // the stale expected version
     }
 
+    [Theory, MemberData(nameof(Engines))]
+    public async Task Prune_is_a_dry_run_unless_told_otherwise_keeps_what_a_channel_serves_and_is_audited_when_it_removes(string engine)
+    {
+        await using var h = new RunnerHarness(engine);
+        await h.StartAsync();
+        using var publisher = await PublisherClient.PairAsync(h, "builder-a");
+        foreach (var version in new[] { "1", "2", "3", "4" })
+        {
+            var package = FakePackage.Make("orders", version, SamplePackage.Task("ok"));
+            await package.UploadAllAsync(publisher);
+            var (status, body) = await publisher.JsonAsync(HttpMethod.Put, "/api/v1/definitions/integration/orders", package.Body("dev", "serve"));
+            Assert.True(status == HttpStatusCode.OK, body?.ToJsonString());
+        }
+
+        // an administrator's call without dry_run says what it would do
+        var (dryStatus, dry) = await h.PostAsync("/api/v1/definitions/integration/orders/prune", ServerRole.Admin, new { keep = 1 });
+        Assert.Equal(HttpStatusCode.OK, dryStatus);
+        Assert.True((bool)dry!["dry_run"]!);
+        Assert.Equal([1, 2], dry["remove"]!.AsArray().Select(n => (int)n!));
+        Assert.Empty(Audited(h, RunnerPublishing.PruneVerb, AuditEvent.Ok));
+        Assert.Equal(HttpStatusCode.BadRequest, (await h.PostAsync("/api/v1/definitions/integration/orders/prune", ServerRole.Admin, new { })).Status);
+
+        var (status2, done) = await h.PostAsync("/api/v1/definitions/integration/orders/prune", ServerRole.Admin, new { keep = 1, dry_run = false });
+        Assert.Equal(HttpStatusCode.OK, status2);
+        Assert.False((bool)done!["dry_run"]!);
+        var (_, detail) = await h.GetAsync("/api/v1/definitions/integration/orders");
+        Assert.Equal([4, 3], detail!["versions"]!.AsArray().Select(v => (int)v!["version"]!));
+        Assert.Single(Audited(h, RunnerPublishing.PruneVerb, AuditEvent.Ok));
+    }
+
     [Fact]
     public async Task Bindings_are_set_per_channel_by_the_publisher_who_owns_the_package_and_read_back()
     {

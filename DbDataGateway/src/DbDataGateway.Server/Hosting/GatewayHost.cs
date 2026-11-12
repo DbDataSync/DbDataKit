@@ -181,7 +181,7 @@ public static class GatewayHost
             return loaded;
         });
         // the definitions published to the group, in its state (plan 20 O03): each instance follows them, so a publish through any of them, or by a publisher since stopped, is served by all
-        services.AddSingleton(sp => new DbDataKit.State.DefinitionStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
+        services.AddSingleton(sp => ServingKinds.StoreOf(sp.GetRequiredService<DbDataKit.State.StateDatabase>()));
         services.AddSingleton(sp => new PublishedSemanticModels(sp.GetRequiredService<DbDataKit.State.DefinitionStore>(), sp.GetRequiredService<SemanticModels>(),
             problem => sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataGateway.Semantic").LogWarning("{Problem}", problem)));
         // the data sources a client publishes to a group (O04b), written where the configuration reads them, which is then read again
@@ -220,11 +220,32 @@ public static class GatewayHost
                 ServerVersion = typeof(GatewayHost).Assembly.GetName().Version?.ToString(3) ?? "1.0.0",
             }, sp.GetRequiredService<TimeProvider>());
         });
-        if (GatewayModules.Has(options, GatewayModules.FlightSql)) services.AddHostedService<FlightSqlModuleService>();
+        if (GatewayModules.Has(options, GatewayModules.FlightSql))
+        {
+            services.AddHostedService<FlightSqlModuleService>();
+            // the Flight module's own state first; when it is serving, the group's state database, which sessions and prepared statements need: without it Flight SQL still reads the hand-made data sources, so the line is degraded
+            services.AddSingleton<IReadinessProbe>(sp => new ServingModuleReadinessProbe(sp.GetRequiredService<FlightSqlModule>(), () =>
+                sp.GetRequiredService<FlightSqlModule>().Health() is { State: not ServingHealthState.Ok } own ? own : ServingModuleHealth.Of(true, false, sp.GetRequiredService<DbDataKit.State.StateDatabase>(), ServingHealthState.Degraded)));
+        }
         // the identity home (plan 20, O06): a listener and a web application of its own, only when asked for
-        if (GatewayModules.Has(options, GatewayModules.Identity)) services.AddHostedService<GatewayIdentityModule>();
-        if (GatewayModules.Has(options, GatewayModules.Apps)) services.AddHostedService<GatewayAppsModule>();
-        if (GatewayModules.Has(options, GatewayModules.Store)) services.AddHostedService<GatewayStoreModule>();
+        if (GatewayModules.Has(options, GatewayModules.Identity))
+        {
+            services.AddSingleton<GatewayIdentityModule>();
+            services.AddHostedService(sp => sp.GetRequiredService<GatewayIdentityModule>());
+            services.AddSingleton<IReadinessProbe>(sp => new ServingModuleReadinessProbe(sp.GetRequiredService<GatewayIdentityModule>()));
+        }
+        if (GatewayModules.Has(options, GatewayModules.Apps))
+        {
+            services.AddSingleton<GatewayAppsModule>();
+            services.AddHostedService(sp => sp.GetRequiredService<GatewayAppsModule>());
+            services.AddSingleton<IReadinessProbe>(sp => new ServingModuleReadinessProbe(sp.GetRequiredService<GatewayAppsModule>()));
+        }
+        if (GatewayModules.Has(options, GatewayModules.Store))
+        {
+            services.AddSingleton<GatewayStoreModule>();
+            services.AddHostedService(sp => sp.GetRequiredService<GatewayStoreModule>());
+            services.AddSingleton<IReadinessProbe>(sp => new ServingModuleReadinessProbe(sp.GetRequiredService<GatewayStoreModule>()));
+        }
         if (GatewayModules.Has(options, GatewayModules.Views))
         {
             services.AddSingleton<GatewayViewsModule>();

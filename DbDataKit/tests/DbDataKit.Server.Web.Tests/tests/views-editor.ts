@@ -33,12 +33,16 @@ export async function editorStory(page: Page, context: BrowserContext) {
   watch(page)
   await page.setViewportSize({ width: 1440, height: 900 })
 
-  // 1. New dashboard: an empty desk layout, and what it lacks.
+  // 1. New dashboard: a desk layout with a text widget, valid; emptied, what an empty one lacks.
   await page.getByTestId('rail-views').click()
   await page.getByTestId('views-tab-dashboards').click()
   await page.getByTestId('views-new').click()
   await expect(page.getByTestId('ed-root')).toBeVisible()
   await expect(page.getByTestId('ed-layout-desk')).toBeVisible()
+  // it starts valid, with one text widget on the desk, and the story builds on an empty document: removing the widget brings back what an empty one lacks
+  await expect(page.getByTestId('ed-validity')).toHaveAttribute('data-errors', '0')
+  await expect(page.getByTestId('ed-widget-note')).toBeVisible()
+  await page.getByTestId('ed-widget-remove-note').click()
   await expect(page.getByTestId('ed-validity')).toHaveAttribute('data-errors', '2')
   await expect(page.getByTestId('ed-problems')).toContainText('defines at least one widget')
   await expect(page.getByTestId('ed-save')).toBeEnabled()

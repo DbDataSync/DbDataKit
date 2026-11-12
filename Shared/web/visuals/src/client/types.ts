@@ -58,9 +58,14 @@ export interface ExportedFile {
   browser: string | null
 }
 
+/** What a download is (`format=` of the export route): the PDF of a layout, the xlsx of its tables, matrices and charts, or one widget's rows (`csv`, `xlsx`) or a chart's picture (`svg`), which name the widget. */
+export type ExportFormat = 'pdf' | 'csv' | 'xlsx' | 'svg'
+
 export interface ExportOptions {
   /** The layout to draw; absent: the one the print medium selects. */
   layout?: string
+  /** The widget a `csv` or `svg` (or a one-sheet `xlsx`) is of. */
+  widget?: string
   parameters?: ParameterValues
   signal?: AbortSignal
 }
@@ -124,6 +129,9 @@ export interface DocumentVersions {
 /** What a switch, a rollback or a retire did: the version now served (null when retired). */
 export interface LifecycleResult { version: number | null; moved: string[] }
 
+/** What a prune answered (plan 30 PB05): the versions removed (or, in a dry run, that would be), the candidates kept with the reason, and the files that go with them. */
+export interface PruneResult { dryRun: boolean; remove: number[]; retained: { version: number; reason: string }[]; files: string[] }
+
 export interface ViewsClient {
   list(kind?: ViewKind): Promise<DocumentSummary[]>
   /** Reads a document. A name that does not exist rejects with `ViewsClientError` `not_found`. A document with errors is still returned, with its diagnostics and no `document`. */
@@ -142,12 +150,16 @@ export interface ViewsClient {
   switchTo?(kind: ViewKind, name: string, version: number, expectedVersion?: number | null): Promise<LifecycleResult>
   /** Returns to the version before the one served. */
   rollback?(kind: ViewKind, name: string, expectedVersion?: number | null): Promise<LifecycleResult>
+  /** Removes stored versions an administrator names; `dryRun` says what would go and removes nothing. Never the served, staged or previous version, nor one another version pins. Optional like the other lifecycle calls. */
+  prune?(kind: ViewKind, name: string, request: { versions: number[]; dryRun: boolean }): Promise<PruneResult>
   /** Stops serving the document (its versions stay and a publish brings it back). */
   retire?(kind: ViewKind, name: string, expectedVersion?: number | null): Promise<void>
   /** True when `resolve` honours `order` (the module does; the fixtures hold recorded results and do not): a table the server cut is then sorted by a new run, not over the rows loaded. */
   sortsOnServer?: boolean
   /** The PDF the exporter draws of the **published** document, as the caller (`GET .../export?format=pdf`; through the console's relay as JSON with the file in base64). Optional: the fixtures have no exporter. A host without a browser refuses with `unavailable` and the module's words, which name the `views.export` setting. */
   exportPdf?(ref: { kind: ViewKind; name: string }, options?: ExportOptions): Promise<ExportedFile>
+  /** A download of the **published** document in any format of the export route (DBR17: `pdf`, `xlsx`, a widget's `csv` or `xlsx`, a chart's `svg`); `exportPdf` is `exportFile` with `format: 'pdf'`. Optional: the fixtures have no server. */
+  exportFile?(ref: { kind: ViewKind; name: string }, format: ExportFormat, options?: ExportOptions): Promise<ExportedFile>
   /** One widget's rendered form, for the editor's live preview. */
   preview(request: PreviewRequest): Promise<RenderedWidget>
   /** An unsaved document as the caller would see it, in one call (plan 32 DBR28). Optional: a source with no server (the fixture source) leaves the editor to ask `preview` for each widget. A document the server would refuse to publish rejects with `invalid`, its diagnostics placed in the text. */

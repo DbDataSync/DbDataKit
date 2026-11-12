@@ -665,8 +665,8 @@ public static class ModelDefinitionLoader
                 var method = KeyMethods.Hash;
                 if (Scalar(def, "method", required: false, at: def) is { } m)
                 {
-                    if (m.Value == KeyMethods.KeyMap) Add(DiagnosticCatalog.InvalidValue, m, "`method: key_map` is not available yet (plan 25, slice K10).", "Leave `method` out: the key is a hash of its business key.");
-                    else if (m.Value != KeyMethods.Hash) Add(DiagnosticCatalog.InvalidValue, m, $"method is `{m.Value}`.", "`hash` (the default).");
+                    if (m.Value is KeyMethods.Hash or KeyMethods.KeyMap) method = m.Value;
+                    else Add(DiagnosticCatalog.InvalidValue, m, $"method is `{m.Value}`.", "`hash` (the default) or `key_map`.");
                 }
                 var unknown = false;
                 if (Scalar(def, "unknown_member", required: false, at: def) is { } u)

@@ -24,6 +24,9 @@ public sealed record ExportResult(byte[] Pdf, int Pages, string BrowserVersion, 
 /// <summary>What an SVG export gives: the chart's <c>&lt;svg&gt;</c> as the page drew it (a standalone document: the namespace is declared), the browser that drew it and what to tell the person.</summary>
 public sealed record SvgResult(string Svg, string BrowserVersion, IReadOnlyList<string> Warnings);
 
+/// <summary>What a picture export gives (plan 32 DBR18): the PNG of the page as drawn, its size in pixels, the browser that drew it and what to tell the person.</summary>
+public sealed record PngResult(byte[] Png, int Width, int Height, string BrowserVersion, IReadOnlyList<string> Warnings);
+
 /// <summary>Whether this host can export, and if not, the reason in words that name the setting.</summary>
 public sealed record ExportAvailability(bool Available, string Reason, string? BrowserVersion = null, string? Mode = null)
 {
@@ -53,4 +56,8 @@ public interface IReportExporter : IAsyncDisposable
 
     /// <summary>Draws the page and takes the SVG of the chart <paramref name="chartId"/> (a widget id) out of it, as it is drawn there: the same chart the screen and the PDF show, at the size the layout gives it. Refused like <see cref="ExportPdfAsync"/>, and with code <c>page</c> when the page has no such chart or could not draw it.</summary>
     Task<SvgResult> ExportSvgAsync(PrintJob job, string chartId, CancellationToken cancellationToken = default);
+
+    /// <summary>Draws the page and takes a picture of it, as wide as the layout's paper (at 96 pixels to the inch) and as tall as its content, up to <paramref name="maxHeight"/> pixels: the preview a subscription's message shows inline, beside the PDF it attaches. A host whose exporter cannot (a test's) refuses with <c>unavailable</c>.</summary>
+    Task<PngResult> ExportPngAsync(PrintJob job, int maxHeight = 4000, CancellationToken cancellationToken = default) =>
+        throw new ExportException("unavailable", "this exporter makes no pictures of a page.");
 }

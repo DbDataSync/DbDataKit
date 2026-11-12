@@ -97,6 +97,48 @@ public static class SurrogateKey
         return Sql(engine, arguments.Select((a, i) => new KeyPart(a, types[i])).ToList());
     }
 
+    /// <summary>
+    /// The marker of a call of a key that is kept in a map (plan 25 K10, <c>method: key_map</c>): `ddb_keymap_` and one letter per part, `_`, and the key's name, `ddb_keymap_ti_customer_key`. Its first argument is the owner's schema
+    /// name as a text literal (the map table is `&lt;owner schema&gt;.&lt;key&gt;_map`, <see cref="KeyMapTable"/>), the others are the parts, so the marker alone says which table to read and nothing else has to be carried to the target.
+    /// The same call lowered a second time for the step that adds new keys to the map is `ddb_keytext_...`: it stands for the normalized business key as text instead of the key read from the map.
+    /// </summary>
+    public static string KeyMapMarkerName(IReadOnlyList<KeyPartType> types, string keyName, bool asText = false) =>
+        (asText ? KeyTextPrefix : KeyMapPrefix) + string.Concat(types.Select(t => t switch { KeyPartType.Text => 't', KeyPartType.Integer => 'i', KeyPartType.Date => 'd', _ => 'm' })) + "_" + keyName;
+
+    public const string KeyMapPrefix = "ddb_keymap_";
+    public const string KeyTextPrefix = "ddb_keytext_";
+
+    /// <summary>The part types, key name and kind (the key read from the map, or its text) of a key-map marker name, or null when the name is not one.</summary>
+    public static (IReadOnlyList<KeyPartType> Types, string KeyName, bool AsText)? ParseKeyMapMarker(string name)
+    {
+        var asText = name.StartsWith(KeyTextPrefix, StringComparison.OrdinalIgnoreCase);
+        if (!asText && !name.StartsWith(KeyMapPrefix, StringComparison.OrdinalIgnoreCase)) return null;
+        var rest = name[(asText ? KeyTextPrefix : KeyMapPrefix).Length..];
+        var underscore = rest.IndexOf('_');
+        if (underscore < 1 || underscore == rest.Length - 1) return null;
+        var types = TypesOfMarker("ddb_key_" + rest[..underscore]);
+        return types == null ? null : (types, rest[(underscore + 1)..], asText);
+    }
+
+    /// <summary>The map table of a key: in the schema of the model that owns the key, named `&lt;key&gt;_map` (one table per key). The schema is empty for an owner with no schema name.</summary>
+    public static (string Schema, string Table) KeyMapTable(string ownerModel, string keyName)
+    {
+        var dot = ownerModel.LastIndexOf('.');
+        return (dot < 0 ? "" : ownerModel[..dot], keyName + "_map");
+    }
+
+    /// <summary>The normalized business key as text, NULL when a part is NULL: what a key map stores and looks up (the first step of <see cref="Sql"/>, before the hash).</summary>
+    public static string TextSql(string engine, IReadOnlyList<KeyPart> parts)
+    {
+        if (parts.Count == 0) throw new ArgumentException("A key has at least one part.", nameof(parts));
+        var e = engine.ToLowerInvariant();
+        if (e is not ("sqlserver" or "postgres")) throw new NotSupportedException($"A key map is kept on sqlserver and postgres, not on '{engine}'.");
+        var texts = parts.Select(p => PartSql(e, p)).ToList();
+        var isNull = string.Join(" OR ", parts.Select(p => $"{p.Expression} IS NULL"));
+        var joined = string.Join(e == "postgres" ? " || chr(31) || " : " + NCHAR(31) + ", texts);
+        return $"CASE WHEN {isNull} THEN NULL ELSE {joined} END";
+    }
+
     /// <summary>The engines <see cref="Sql"/> writes for.</summary>
     public static readonly IReadOnlyList<string> Engines = ["duckdb", "sqlserver", "fabric", "postgres"];
 

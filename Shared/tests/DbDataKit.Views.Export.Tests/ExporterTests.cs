@@ -90,10 +90,40 @@ public sealed class ExporterTests
         Assert.Contains(result.EmbeddedFonts, f => f.Contains("Noto", StringComparison.OrdinalIgnoreCase));
         using var document = PdfDocument.Open(result.Pdf);
         Assert.Equal("Sales by region", document.Information.Title);
+        // the file says how it was made (DBR16): the product, the browser's build and the fonts it embeds, beside the producer the browser wrote
+        Assert.Equal(PdfMetadata.Creator, document.Information.Creator);
+        Assert.Contains($"browser: {result.BrowserVersion}", document.Information.Keywords);
+        Assert.All(result.EmbeddedFonts, f => Assert.Contains(f, document.Information.Keywords));
+        Assert.StartsWith("Skia/PDF", document.Information.Producer);
         Assert.True(document.TryGetBookmarks(out var bookmarks));
         var titles = bookmarks.GetNodes().Select(n => n.Title).ToList();
         Assert.Contains("Sales by region", titles);
         Assert.Contains("Second section", titles);
+    }
+
+    [Fact]
+    public void A_pdf_the_stamp_cannot_read_comes_back_as_it_was()
+    {
+        byte[] notAPdf = Encoding.ASCII.GetBytes("%PDF-1.4\n%%EOF\n");
+        Assert.Same(notAPdf, PdfMetadata.Stamp(notAPdf, "k"));
+        byte[] encrypted = Encoding.ASCII.GetBytes("%PDF-1.4\n1 0 obj\n<</Title (T)>>\nendobj\ntrailer\n<</Size 2 /Root 1 0 R /Info 1 0 R /Encrypt 9 0 R>>\nstartxref\n9\n%%EOF\n");
+        Assert.Same(encrypted, PdfMetadata.Stamp(encrypted, "k"));
+    }
+
+    [Fact]
+    public async Task A_picture_of_the_page_is_a_png_as_wide_as_the_paper_and_as_tall_as_its_content()
+    {
+        var (exporter, settings) = await Started();
+        await using var _ = exporter;
+        if (exporter.Fonts is null) Assert.Skip("The bundled fonts are not installed (scripts/fetch-fonts); this test needs them.");
+        var result = await exporter.ExportPngAsync(Report(settings, exporter.Fonts, rows: 10), 4000, TestContext.Current.CancellationToken);
+        Assert.Equal([0x89, 0x50, 0x4E, 0x47], result.Png.Take(4).Select(b => (int)b));
+        Assert.Equal(794, result.Width);          // A4 at 96 pixels to the inch
+        Assert.InRange(result.Height, 200, 4000);
+        Assert.True(result.Png.Length > 5_000, "a drawn page is more than a blank picture");
+        var capped = await exporter.ExportPngAsync(Report(settings, exporter.Fonts, rows: 120), 600, TestContext.Current.CancellationToken);
+        Assert.Equal(600, capped.Height);
+        Assert.Contains(capped.Warnings, w => w.Contains("first 600 pixels", StringComparison.Ordinal));
     }
 
     [Fact]

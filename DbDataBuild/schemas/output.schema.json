@@ -737,6 +737,44 @@
       "if": {
         "properties": {
           "command": {
+            "const": "dashboard new"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_view_new"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "report new"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_view_new"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "project show semantic"
           }
         },
@@ -5420,6 +5458,24 @@
           "required": [
             "allow_risky",
             "allow_destructive"
+          ]
+        }
+      }
+    },
+    "data_view_new": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "dashboard",
+            "report"
           ]
         }
       }

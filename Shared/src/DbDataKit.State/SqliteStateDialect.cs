@@ -100,6 +100,9 @@ public sealed class SqliteStateDialect : StateDialect
     public override bool ShouldRetry(Exception exception) =>
         exception is SqliteException { SqliteErrorCode: 5 or 6 };
 
+    public override bool IsUniqueViolation(Exception exception) =>
+        exception is SqliteException { SqliteErrorCode: 19, SqliteExtendedErrorCode: 1555 or 2067 };
+
     public override bool MigratesInOneTransaction => true;
 
     public override DbTransaction BeginMigrationTransaction(DbConnection connection) =>

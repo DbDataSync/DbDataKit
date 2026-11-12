@@ -32,6 +32,7 @@ export async function buildViewsStory(page: Page, context: BrowserContext, proje
   await page.getByTestId('build-views-new-dashboard').click()
   await expect(page.getByTestId('ed-root')).toBeVisible()
   await expect(page.getByTestId('ed-file-name')).toBeVisible()
+  await page.getByTestId('ed-widget-remove-note').click()   // a new document starts with one text widget; the story builds on an empty one
 
   // 3. The model is the project's own: its measures and attributes are what the wells offer; a chart and a metric, saved as dashboards/my-sales.yaml.
   await page.getByTestId('ed-file-name').fill('my-sales')

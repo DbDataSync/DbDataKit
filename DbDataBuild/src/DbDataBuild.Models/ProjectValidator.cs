@@ -25,7 +25,7 @@ public sealed record BuiltModel(ModelDefinition Definition, string DefinitionFil
     }
 
     /// <summary>The model's query in DuckDB dialect: its `.sql` file, or the generated one of a copy.</summary>
-    private string Raw(string projectRoot) => GeneratedQuery ?? (Head == null ? File.ReadAllText(Path.Combine(projectRoot, QueryFile)) : QueryHeadParser.Body(File.ReadAllText(Path.Combine(projectRoot, QueryFile))));
+    private string Raw(string projectRoot) => GeneratedQuery ?? KeyInference.Rewrite(Head == null ? File.ReadAllText(Path.Combine(projectRoot, QueryFile)) : QueryHeadParser.Body(File.ReadAllText(Path.Combine(projectRoot, QueryFile))), Definition.Keys);
 
     /// <summary>The query as the tool works on it (lowering, rendering, hashing, lineage): each parameter reference stands as a marker literal of its type, so the text, its hash and the rendered files do not depend on a value.</summary>
     public string ReadQuery(string projectRoot, ProjectConfig config, string? connection = null) =>

@@ -58,6 +58,60 @@ public sealed class SemanticModuleTests : IDisposable
     }
 
     [Fact]
+    public async Task ARequestThatSpansAPublishAnswersFromTheVersionItBeganWithAndNamesIt()
+    {
+        // plan 20 O19: the request is pinned to the model it found when it began; a publish that lands while its scan runs changes the next request only
+        var catalog = Catalog.Load(Path.Combine(AppContext.BaseDirectory, "conformance", "catalog.yaml"));
+        var sources = new Dictionary<string, string> { ["sqlserver_sales"] = "warehouse" };
+        var models = new SemanticModels();
+        models.Set(new SemanticModel(catalog, sources) { Version = 1 });
+        var inScan = new ManualResetEventSlim();
+        var published = new ManualResetEventSlim();
+        var services = new Pausing(new TestServices(_host), inScan, published).WithSemantic(models);
+
+        var running = Task.Run(() => services.Queries.RunAsync(Alice, new ServingRequest.Sql("semantic:sales_catalog", Request)));
+        Assert.True(inScan.Wait(TimeSpan.FromSeconds(30)), "the scan did not start");
+        models.Set(new SemanticModel(catalog, sources) { Version = 2 });
+        published.Set();
+        var spanning = await running;
+        var next = await services.Queries.RunAsync(Alice, new ServingRequest.Sql("semantic:sales_catalog", Request));
+
+        Assert.Equal("1", spanning.Provenance.DefinitionVersion);
+        Assert.Equal("2", next.Provenance.DefinitionVersion);
+        Assert.Equal(["West|500|6", "East|400|4"], await RowsAsync(spanning));
+    }
+
+    /// <summary>The host with its first query held until the test has published.</summary>
+    private sealed class Pausing(IServingServices inner, ManualResetEventSlim inScan, ManualResetEventSlim published) : IServingServices, IServingQueries
+    {
+        private int _first = 1;
+
+        public IServingIdentity Identity => inner.Identity;
+
+        public IServingSessions Sessions => inner.Sessions;
+
+        public IServingQueries Queries => this;
+
+        public IServingCatalog Catalog => inner.Catalog;
+
+        public IServingEntities? Entities => null;
+
+        public IServingUpdates? Updates => null;
+
+        public async Task<IServingAnswer> RunAsync(ServingContext context, ServingRequest request, CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Exchange(ref _first, 0) == 1)
+            {
+                inScan.Set();
+                await Task.Run(() => published.Wait(TimeSpan.FromSeconds(30)), cancellationToken);
+            }
+            return await inner.Queries.RunAsync(context, request, cancellationToken);
+        }
+
+        public Task<ServingStatementInfo> PrepareAsync(ServingContext context, ServingRequest.Sql statement, CancellationToken cancellationToken = default) => inner.Queries.PrepareAsync(context, statement, cancellationToken);
+    }
+
+    [Fact]
     public async Task AnExplainedRequestAnswersTheTextItWouldRunAndRunsNothing()
     {
         var sql = "EXPLAIN SELECT customers.region, MEASURE(orders.net_revenue) FROM sales_catalog GROUP BY ALL LIMIT 10";

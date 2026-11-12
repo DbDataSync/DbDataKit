@@ -385,8 +385,8 @@ function Preview({ id, widget, doc, preview }: { id: string; widget: WidgetDoc; 
  * properties each type has, the request the encodings derive (read-only, with each part's place in the document and the parameter bindings; a switch to a written query with its binding check), what the source's
  * check says of the widget (filters, order and totals are the server's), the preview, and how each layout shows the widget (`widget_options`). Every change is an edit command: one undo step.
  */
-export function WidgetEditor({ id, widget, doc, catalog, catalogNote, apply, diagnostics, server, preview }: {
-  id: string; widget: WidgetDoc; doc: ViewsDoc; catalog: Catalog | null; catalogNote: string | null; apply: Apply
+export function WidgetEditor({ id, widget, doc, components = [], catalog, catalogNote, apply, diagnostics, server, preview }: {
+  id: string; widget: WidgetDoc; doc: ViewsDoc; components?: readonly string[]; catalog: Catalog | null; catalogNote: string | null; apply: Apply
   diagnostics: ClientDiagnostic[]; server: ClientDiagnostic[]; preview: (widget: WidgetDoc) => Promise<RenderedWidget>
 }) {
   const [search, setSearch] = useState('')
@@ -488,7 +488,15 @@ export function WidgetEditor({ id, widget, doc, catalog, catalogNote, apply, dia
           </>
         )}
         {widget.type === 'custom' && (
+          <>
+          <label className="hint">component{' '}
+            <select data-testid={`ed-custom-component-${id}`} value={widget.component} onChange={(e) => set(['component'], e.target.value, 'component')}>
+              {!components.includes(widget.component) && <option value={widget.component}>{widget.component || '(none)'}{components.length > 0 ? ' (not registered)' : ''}</option>}
+              {components.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </label>
           <p className="hint" data-testid={`ed-custom-note-${id}`}>Code of an app ({(widget as { component?: string }).component}): its component, queries and parameters are the app&apos;s, edited in the Workspace&apos;s code editor; here the document gives it parameter values and the links it may open (YAML view).</p>
+          </>
         )}
         {widget.type === 'embed' && (
           <>

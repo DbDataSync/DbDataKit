@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.ReportCatalogs</RootNamespace>
+    <Description>The provider of an external report server for the report catalog interface (plan 32 RC01): SQL Server Reporting Services and Power BI Report Server over their REST API (browse, parameters, open address, export formats, item policies).</Description>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Views\DbDataKit.Views.csproj" />
+    <InternalsVisibleTo Include="DbDataKit.ReportCatalogs.Tests" />
+  </ItemGroup>
+</Project>

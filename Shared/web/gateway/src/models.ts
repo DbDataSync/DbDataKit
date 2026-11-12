@@ -25,3 +25,15 @@ export const removeWarning = (kind: 'semantic' | 'entity', name: string): string
     : `Stops serving ${name} here and on every instance of the group. The Store still holds the model and its data; publish it again to serve it.`
 
 export const ownerLabel = (managedBy: string | null): string => (managedBy ? `published by a paired server (${managedBy})` : 'made by an administrator')
+
+/**
+ * The versions a prune preselects (plan 30 PB05, default taken): all but the served one, the one served before it and the three newest. The Gateway also refuses to remove what a channel serves or what another version pins;
+ * this saves the person from ticking those.
+ */
+export function pruneCandidates(versions: number[], served: number | null, keepNewest = 3): number[] {
+  const sorted = [...versions].sort((a, b) => a - b)
+  const newest = new Set([...sorted].reverse().slice(0, keepNewest))
+  const below = served === null ? [] : sorted.filter((v) => v < served)
+  const previous = below.length > 0 ? below[below.length - 1] : null
+  return sorted.filter((v) => v !== served && v !== previous && !newest.has(v))
+}

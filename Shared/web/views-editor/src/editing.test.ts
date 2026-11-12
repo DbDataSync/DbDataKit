@@ -26,3 +26,13 @@ describe('the format select', () => {
     expect(formatChoice('yyyy')).toBe(CUSTOM_FORMAT)
   })
 })
+
+describe('a new custom widget', () => {
+  it('names the first component the app registers', () => {
+    expect(newWidget('custom', empty, undefined, ['Export', 'Other'])).toEqual({ type: 'custom', component: 'Export' })
+  })
+
+  it('is refused when the source lists no component, never a placeholder name', () => {
+    expect(() => newWidget('custom', empty)).toThrow(/lists none/)
+  })
+})

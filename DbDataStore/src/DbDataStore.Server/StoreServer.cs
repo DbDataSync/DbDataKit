@@ -53,6 +53,11 @@ public static class StoreServer
             : settings.Listen.Host == "localhost" ? IPAddress.Loopback : IPAddress.Parse(settings.Listen.Host);
         builder.WebHost.ConfigureKestrel(o => o.Listen(address, settings.Listen.Port, listen => listen.UseHttps(certificate)));
 
+        // the expiry of idle previews (plan 21 CH07): the settings are read here so a wrong `previews:` section stops the server at start, naming the file
+        var previews = PreviewSettings.Load(settings.ServerYaml);
+        var storeConnections = new StoreConnections(settings.Directory);
+        builder.Services.AddHostedService(_ => new StoreDraftSweeper(settings.Directory, storeConnections, new DbDataKit.State.NotificationFeedStore(state, StoreState.ServiceId), previews, log));
+
         var app = builder.Build();
         app.UseManagementApiVersion();
         app.UseDbDataPipeline();
@@ -75,8 +80,8 @@ public static class StoreServer
         StoreModels.Map(app, settings.Directory);
         StoreModelHistory.Map(app, settings.Directory);
         StoreEvents.Map(app, settings.Directory);
-        StoreData.Map(app, settings.Directory, new StoreConnections(settings.Directory));
-        StoreQuality.Map(app, settings.Directory, new StoreConnections(settings.Directory), state);
+        StoreData.Map(app, settings.Directory, storeConnections);
+        StoreQuality.Map(app, settings.Directory, storeConnections, state);
         return app;
     }
 

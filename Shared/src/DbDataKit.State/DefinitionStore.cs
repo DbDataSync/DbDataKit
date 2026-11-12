@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 namespace DbDataKit.State;
 
 /// <summary>One version of a published definition.</summary>
-public sealed record DefinitionVersion(string Kind, string Name, int Version, string Hash, string Content, IReadOnlyList<string> DependsOn, string PublishedBy, DateTimeOffset PublishedAt, string? Note, int Format = DefinitionFormat.First);
+public sealed record DefinitionVersion(string Kind, string Name, int Version, string Hash, string Content, IReadOnlyList<string> DependsOn, string PublishedBy, DateTimeOffset PublishedAt, string? Note, int Format = DefinitionFormat.First, string? Signature = null, string? Signer = null);
 
 /// <summary>What happened to a definition: <c>publish</c> (a new version, served at once), <c>switch</c> (a channel moved to another version) or <c>rollback</c>.</summary>
 public sealed record DefinitionEvent(long Id, string Action, string Kind, string Name, string Channel, int Version, string ActorId, DateTimeOffset At);
@@ -29,15 +29,30 @@ public sealed partial class DefinitionStore(StateDatabase database) : IDefinitio
 
     private const string Module = DefinitionsModule.Name;
 
-    private const string VersionColumns = "kind, name, version, hash, content, depends_on, published_by, published_at, note, format";
+    private const string VersionColumns = "kind, name, version, hash, content, depends_on, published_by, published_at, note, format, signature, signer";
 
-    /// <summary>The older API's publish is the life cycle's publish with <see cref="PublishMode.Serve"/>, no registry and no dependency or slot checks (see <see cref="DefinitionPublisher"/>).</summary>
+    // the registry a publish goes through (plan 30 PB01); null is the compatibility mode
+    private DefinitionKinds? _kinds;
+    private string? _targetType;
+
+    /// <summary>
+    /// The same store with its <b>publishes</b> going through the registry <paramref name="kinds"/> (plan 30 PB01): the kind must be registered and list <paramref name="targetType"/>, its validator and format are checked, a
+    /// dependency must be active in the channel and a declared slot bound there. Switch, rollback and retire stay as they were (no registry), so a version stored before the registry can still be returned to.
+    /// </summary>
+    public DefinitionStore WithRegistry(DefinitionKinds kinds, string targetType) => new(database) { _kinds = kinds, _targetType = targetType };
+
+    /// <summary>Whether a publish through this store goes through a registry (<see cref="WithRegistry"/>): what a caller that writes <c>depends_on</c> asks, since a dependency must then be a definition the channel serves.</summary>
+    public bool UsesRegistry => _kinds is not null;
+
+    /// <summary>The older API's publish is the life cycle's publish with <see cref="PublishMode.Serve"/>; without <see cref="WithRegistry"/> no registry and no dependency or slot checks (see <see cref="DefinitionPublisher"/>).</summary>
     private DefinitionPublisher Publisher => new(database, kinds: null);
+
+    private DefinitionPublisher PublishingPublisher => new(database, _kinds, null, _targetType);
 
     /// <inheritdoc cref="DefinitionPublisher.Publish"/>
     /// <param name="format">The format of the content (24a UC01); 1 when not given. A publish is refused while a live instance of the group cannot read it.</param>
     public DefinitionVersion Publish(string kind, string name, string content, string by, IReadOnlyList<string>? dependsOn = null, string? note = null, string channel = Production, Func<string, string?>? validate = null, int format = DefinitionFormat.First) =>
-        Publisher.Publish(new PublishRequest(kind, name, content, by, channel, PublishMode.Serve, dependsOn, note, Format: format), validate).Version;
+        PublishingPublisher.Publish(new PublishRequest(kind, name, content, by, channel, PublishMode.Serve, dependsOn, note, Format: format), validate).Version;
 
     public DefinitionVersion Switch(string kind, string name, int version, string by, string channel = Production) =>
         Publisher.Switch(kind, name, version, by, channel);
@@ -69,7 +84,7 @@ public sealed partial class DefinitionStore(StateDatabase database) : IDefinitio
         {
             using var connection = database.OpenConnection();
             using var command = database.Command(Module, connection, """
-                SELECT v.kind, v.name, v.version, v.hash, v.content, v.depends_on, v.published_by, v.published_at, v.note, v.format
+                SELECT v.kind, v.name, v.version, v.hash, v.content, v.depends_on, v.published_by, v.published_at, v.note, v.format, v.signature, v.signer
                 FROM {table:definition_serving} s JOIN {table:definition_version} v ON v.kind = s.kind AND v.name = s.name AND v.version = s.version
                 WHERE s.kind = $kind AND s.channel = $channel ORDER BY v.name;
                 """);
@@ -125,7 +140,7 @@ public sealed partial class DefinitionStore(StateDatabase database) : IDefinitio
     }
 
     private static DefinitionVersion Read(DbDataReader reader) =>
-        new(reader.GetString(0), reader.GetString(1), reader.Int32(2), reader.GetString(3), reader.GetString(4), JsonSerializer.Deserialize<string[]>(reader.GetString(5)) ?? [], reader.GetString(6), reader.Time(7), reader.IsDBNull(8) ? null : reader.GetString(8), reader.Int32(9));
+        new(reader.GetString(0), reader.GetString(1), reader.Int32(2), reader.GetString(3), reader.GetString(4), JsonSerializer.Deserialize<string[]>(reader.GetString(5)) ?? [], reader.GetString(6), reader.Time(7), reader.IsDBNull(8) ? null : reader.GetString(8), reader.Int32(9), reader.IsDBNull(10) ? null : reader.GetString(10), reader.IsDBNull(11) ? null : reader.GetString(11));
 
     internal static void Check(string kind, string name, string channel)
     {

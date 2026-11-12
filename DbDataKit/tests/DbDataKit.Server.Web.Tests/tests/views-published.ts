@@ -47,6 +47,15 @@ export async function mockViews(page: Page, options: { module?: boolean; denied?
       }
       return json(route, { kind: 'rendered_widgets', layout: body.layout ?? 'desk', as_of: '2026-11-08T12:00:00Z', widgets })
     }
+    if (tail === `dashboards/${NAME}/export`) {
+      // the relay carries JSON only: the file travels as base64 beside the module's own headers (`GatewayViewsManagement`)
+      calls.other.push(`EXPORT ${url.search}`)
+      const format = url.searchParams.get('format') ?? 'pdf'
+      const widget = url.searchParams.get('widget')
+      const types: Record<string, string> = { pdf: 'application/pdf', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', csv: 'text/csv', svg: 'image/svg+xml' }
+      const content = format === 'svg' ? '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>' : format === 'csv' ? 'region,net\nEast,1\n' : `${format} bytes`
+      return json(route, { file_name: `${NAME}${widget ? `-${widget}` : ''}.${format}`, content_type: types[format] ?? 'application/octet-stream', size: content.length, content_base64: Buffer.from(content).toString('base64'), headers: { 'X-DbData-Export-Pages': '1' } })
+    }
     return json(route, { code: 'not_found', message: 'There is no such call.' }, 404)
   })
   return calls
@@ -116,4 +125,40 @@ export async function publishedStory(page: Page) {
   await expect(page.getByTestId('vz-tile-note')).toContainText('Showing')
 
   expect(outside).toEqual([])
+}
+
+/**
+ * The downloads of a published dashboard (plan 32 DBR17): the toolbar offers the PDF and the Excel of the layout, and a widget's CSV, Excel or (for a chart) SVG; each asks the export route with the format, the layout and the widget,
+ * takes the file the relay carries as base64 and hands it to the browser as a download with the module's file name. The relay is mocked (`mockViews`); its Gateway side is `ViewsModuleTests`.
+ */
+export async function downloadsStory(page: Page) {
+  const calls = await mockViews(page)
+  await page.goto(`/views/dashboards/${NAME}`)
+  await expect(page.getByTestId('vz-dashboard')).toHaveAttribute('data-layout', 'desk')
+  await expect(page.getByTestId('views-downloads')).toBeVisible()
+
+  const exported = () => calls.other.filter((c) => c.startsWith('EXPORT '))
+  const download = async (testId: string) => {
+    const [file] = await Promise.all([page.waitForEvent('download'), page.getByTestId(testId).click()])
+    return file
+  }
+
+  const xlsx = await download('views-download-xlsx')
+  expect(xlsx.suggestedFilename()).toBe(`${NAME}.xlsx`)
+  expect(exported().at(-1)).toContain('format=xlsx')
+
+  // a chart's picture: choose the widget, then the format it offers
+  await page.getByTestId('views-download-widget').selectOption('by_region')
+  await expect(page.getByTestId('views-download-widget-svg')).toBeVisible()
+  const svg = await download('views-download-widget-svg')
+  expect(svg.suggestedFilename()).toBe(`${NAME}-by_region.svg`)
+  expect(exported().at(-1)).toContain('widget=by_region')
+  expect(exported().at(-1)).toContain('format=svg')
+  const text = (await import('node:fs')).readFileSync((await svg.path())!, 'utf8')
+  expect(text).toContain('<svg')
+
+  // a table has rows but no picture
+  await page.getByTestId('views-download-widget').selectOption('top_products')
+  await expect(page.getByTestId('views-download-widget-csv')).toBeVisible()
+  await expect(page.getByTestId('views-download-widget-svg')).toHaveCount(0)
 }
