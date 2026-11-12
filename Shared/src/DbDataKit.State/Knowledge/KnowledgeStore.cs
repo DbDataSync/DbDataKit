@@ -259,6 +259,26 @@ public sealed class KnowledgeStore(StateDatabase database)
         return result;
     }
 
+    /// <summary>Every channel that has an item and whose name starts with <paramref name="prefix"/> (a knowledge project keeps one channel per version, plan 27a KN11).</summary>
+    public IReadOnlyList<string> Channels(string prefix) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var command = database.Command(Module, connection, "SELECT DISTINCT channel FROM {table:item} ORDER BY channel;");
+            using var reader = command.ExecuteReader();
+            var channels = new List<string>();
+            while (reader.Read()) if (reader.GetString(0).StartsWith(prefix, StringComparison.Ordinal)) channels.Add(reader.GetString(0));
+            return (IReadOnlyList<string>)channels;
+        });
+
+    /// <summary>Takes every item of a channel out of the index; how many there were.</summary>
+    public int RemoveChannel(string channel)
+    {
+        var removed = 0;
+        foreach (var item in Items(channel).Select(i => i.Id).ToList()) if (Remove(channel, item)) removed++;
+        return removed;
+    }
+
     /// <summary>One item of a channel with its subjects, or null.</summary>
     public StoredItem? Item(string channel, string id) =>
         database.Retry(() =>

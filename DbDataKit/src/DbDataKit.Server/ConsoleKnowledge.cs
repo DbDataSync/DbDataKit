@@ -2,16 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using DbDataKit.Agents;
 using DbDataKit.Knowledge;
+using DbDataKit.Knowledge.Cli;
 
 namespace DbDataKit.Server;
 
 /// <summary>A knowledge project the console reads: its name (<c>install</c> or <c>project</c>), its folder and what was read from it.</summary>
 public sealed record KnowledgeFolder(string Name, string Path, KnowledgeProject Project);
-
-/// <summary>The context an agent would be given for what is in play, with each part's tokens and share of the budget (plan 27a KN28, KN17's <c>knowledge context</c>).</summary>
-public sealed record ContextReport(string Agent, IReadOnlyList<ContextPartRecord> Parts, int TotalTokens, int Window, int BudgetTokens, bool OverBudget, string Basis, IReadOnlyList<string> InPlay, IReadOnlyList<ContextPartShare> Shares);
-
-public sealed record ContextPartShare(string Layer, string Id, string Version, int Tokens, double ShareOfBudget);
 
 /// <summary>
 /// The knowledge the console reads (plan 27a KN28, KN36, KN37, KN38): two projects in its directory, <c>install-knowledge/</c> (the template of KN35: the install's guardrails in <c>policy/</c>, owned by the administrators) and <c>knowledge/</c> (items about the install's objects),
@@ -114,6 +110,11 @@ public sealed class ConsoleKnowledge(ConsoleSettings settings)
         "project" => new KnowledgeFolder("project", ProjectFolder, KnowledgeProject.Load(ProjectFolder)),
         _ => null,
     };
+
+    /// <summary>What <c>knowledge check</c> says of each project that exists (plan 27a KN10, KN17): the reader's diagnostics, every subject against the catalog and, for each agent a project reaches, whether it pushes the agent over its budget.</summary>
+    public IReadOnlyList<(string Name, KnowledgeCheckReport Report)> Check(IReadOnlyList<AgentBudgetInput> agents) =>
+        [.. new[] { "install", "project" }.Select(Folder).Where(f => f is not null && Directory.Exists(f.Path))
+            .Select(f => (f!.Name, KnowledgeChecks.Check(f.Project, f.Name, HasCatalog ? Catalog : null, null, agents)))];
 
     /// <summary>The items an agent can draw on, by source name (<c>install</c>, <c>project</c>); a folder that is not there is an empty source.</summary>
     public IReadOnlyList<KnowledgeSource> Sources() =>

@@ -110,6 +110,24 @@ public sealed class KnowledgeController(ConsoleKnowledge knowledge, ConsoleAgent
         return Ok(new { result.Found, result.NowGone, result.Complete, result.Total, problems, overview = knowledge.Overview() });
     }
 
+    /// <summary>
+    /// What a publish would check, shown before it (plan 27a KN10, KN17): per project the strict reader's diagnostics with file and line, every subject against what exists, and for each agent the project reaches what it adds to what the agent is always given against its budget.
+    /// </summary>
+    [HttpGet("check")]
+    [Authorize(Policies.Viewer)]
+    public IActionResult Check() =>
+        Ok(new
+        {
+            projects = knowledge.Check(agents.BudgetInputs()).Select(p => new
+            {
+                name = p.Name,
+                ok = p.Report.Ok,
+                items = p.Report.Project.Items.Count,
+                diagnostics = p.Report.Diagnostics.Select(DiagnosticView.Of),
+                reaches = p.Report.Reaches,
+            }),
+        });
+
     /// <summary>How the item as typed would be split, what changed against the saved version, and which agents it would reach and whether it would push one over its budget (KN36, KN38).</summary>
     [HttpPost("preview/chunks")]
     [Authorize(Policies.Viewer)]

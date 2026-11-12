@@ -8,6 +8,9 @@ dbdatakit server run [--repo <console directory>] [--listen https://localhost:84
 dbdatakit user list [--repo <console directory>]
 dbdatakit user invite [--role admin|viewer] (--email <address> | --user <id>) [--url <address>]
 dbdatakit user set-email --user <id> --email <address>
+dbdatakit knowledge check [<folder>] [--repo <console directory>]   # the strict reader, every subject against what exists and the budget of every agent each item reaches, with file and line (plan 27a KN10, KN17)
+dbdatakit knowledge orphans [--repo <console directory>]   # items whose subjects are all gone
+dbdatakit knowledge context <agent> [--in-play <subject> ...] [--repo <console directory>]   # what the agent would be given, in order, with each part's tokens against its budget
 dbdatakit instance add <https address> --code <code> [--name <label>] [--repo <console directory>]
 dbdatakit instance list [--offline] [--repo <console directory>]
 dbdatakit instance remove <id or name> [--repo <console directory>]

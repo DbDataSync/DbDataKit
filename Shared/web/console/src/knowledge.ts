@@ -91,7 +91,31 @@ export function vectorProgressLine(v: VectorState | null): string {
 /** A hit's place as a line: the heading path, or the title when it has none. */
 export const hitPlace = (h: SearchHit): string => (h.headingPath.length > 0 ? h.headingPath.join(' > ') : h.title)
 
+// ---- KN10, KN17: what a publish would check ----
+
+/** What a project adds to one agent's always-given text, against its budget (the same numbers `knowledge check` prints). */
+export interface CheckReach { agent: string; adds: number; used: number; budget: number; pushesOver: boolean; items: string[] }
+export interface CheckProject { name: 'install' | 'project'; ok: boolean; items: number; diagnostics: Diagnostic[]; reaches: CheckReach[] }
+export interface CheckReport { projects: CheckProject[] }
+
+/** The verdict of a check in a line: refused when there is an error, naming how many, and otherwise how many items passed and how many warnings were said. */
+export function checkLine(p: Pick<CheckProject, 'ok' | 'items' | 'diagnostics'>): string {
+  const errors = p.diagnostics.filter((d) => d.severity === 'error').length
+  const warnings = p.diagnostics.filter((d) => d.severity === 'warning').length
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+  if (!p.ok) return `A publish would be refused: ${plural(errors, 'error')}${warnings > 0 ? ` and ${plural(warnings, 'warning')}` : ''}.`
+  return `${plural(p.items, 'item')} would be published${warnings > 0 ? `, with ${plural(warnings, 'warning')}` : ''}.`
+}
+
+/** What an agent would be given by a project, in a line: the tokens it adds to what it has, against its budget. */
+export const reachLine = (r: CheckReach): string =>
+  `${r.agent}: adds ${r.adds} tokens to ${r.used} of a budget of ${r.budget}${r.pushesOver ? ', which is over' : ''} (${r.items.join(', ')}).`
+
+/** Where a diagnostic is, as `file line n` (a diagnostic with no line is about the whole file or project). */
+export const placeOf = (d: Diagnostic): string => (d.line > 0 ? `${d.file} line ${d.line}` : d.file)
+
 export const knowledgeApi = {
+  check: () => request<CheckReport>('/api/knowledge/check'),
   index: () => request<KnowledgeIndexState>('/api/knowledge/index'),
   build: () => request<{ sync: { added: number; unchanged: number; removed: number }; view: KnowledgeIndexState }>('/api/knowledge/index/build', json('POST')),
   retry: () => request<KnowledgeIndexState>('/api/knowledge/index/retry', json('POST')),

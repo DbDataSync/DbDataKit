@@ -1,0 +1,6 @@
+knowledge_check  reads-definitions
+knowledge_orphans  reads-definitions
+knowledge_context  reads-definitions
+service_status  reads-definitions
+service_doctor  reads-definitions
+service_unit  reads-definitions

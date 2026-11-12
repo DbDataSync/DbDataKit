@@ -127,7 +127,7 @@ public sealed class ConsoleModels : IAgentModels
         IChatClient client = usable.Count == 1
             ? first.Binding.Client
             : new FallbackChatClient([.. usable.Select(u => u.Binding)], new AgentRunContext("console", slot, "1"), null, b => policy.AllowsFallbackTo(b.Cloud), ModelProviderException.WorthRetrying);
-        return new BoundModel(client, $"{first.Provider.Name}/{first.Model.Id}", first.Model.Price, first.Model.WindowTokens);
+        return new BoundModel(client, $"{first.Provider.Name}/{first.Model.Id}", first.Model.Price, first.Model.WindowTokens, usable.ToDictionary(u => u.Binding.Name, u => u.Model.Price, StringComparer.Ordinal));
     }
 
     // ---- the screen ----

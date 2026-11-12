@@ -121,6 +121,9 @@ public sealed record AgentSessionOptions
 
     public ModelPrice? Price { get; init; }
 
+    /// <summary>The price of a model by the name it answers under, for a slot bound to a list (a turn answered by the fallback is costed at its own price); null: every turn is costed at <see cref="Price"/>.</summary>
+    public Func<string, ModelPrice?>? PriceOf { get; init; }
+
     public string? Model { get; init; }
 
     public IUsageLedger? Ledger { get; init; }
@@ -196,7 +199,8 @@ public sealed class AgentSession(AgentRunContext context, AgentDefinition defini
         {
             var usage = tap.Usages[i];
             var given = i < turnContext.Given.Count ? turnContext.Given[i] : null;
-            log?.Turn(Context, i + 1, _options.Model, usage.In, usage.Out, _options.Price?.CostOf(usage.In, usage.Out) ?? 0m, given is null ? null : ContextAssembler.Fingerprint(given), given?.RecordLine);
+            var price = usage.Model is { } answered && _options.PriceOf is { } priceOf ? priceOf(answered) : _options.Price;
+            log?.Turn(Context, i + 1, usage.Model ?? _options.Model, usage.In, usage.Out, price?.CostOf(usage.In, usage.Out) ?? 0m, given is null ? null : ContextAssembler.Fingerprint(given), given?.RecordLine);
         }
         limits.Commit(Context, result.Usage);
 
@@ -220,13 +224,19 @@ public sealed class AgentSession(AgentRunContext context, AgentDefinition defini
     /// <summary>Notes the usage the provider reported for each model turn.</summary>
     private sealed class UsageTap(IChatClient inner) : DelegatingChatClient(inner)
     {
-        public List<(long In, long Out)> Usages { get; } = [];
+        public List<(long In, long Out, string? Model)> Usages { get; } = [];
 
         public override async Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
         {
-            var response = await base.GetResponseAsync(messages, options, cancellationToken).ConfigureAwait(false);
-            Usages.Add((response.Usage?.InputTokenCount ?? 0, response.Usage?.OutputTokenCount ?? 0));
-            return response;
+            var holder = new AnswerHolder();
+            FallbackChatClient.Holder = holder;
+            try
+            {
+                var response = await base.GetResponseAsync(messages, options, cancellationToken).ConfigureAwait(false);
+                Usages.Add((response.Usage?.InputTokenCount ?? 0, response.Usage?.OutputTokenCount ?? 0, holder.Name));
+                return response;
+            }
+            finally { FallbackChatClient.Holder = null; }
         }
     }
 }

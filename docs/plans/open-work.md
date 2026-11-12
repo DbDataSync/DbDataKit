@@ -60,7 +60,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | [22a](22a-gap-slices.md) GP01, GP02, GP11 to GP15 | Access rules end to end | OWNER (QG2) |
 | [23a](23a-first-run-and-quality-slices.md) FQ03, FQ05, FQ11 to FQ15 | Checks stored with the Store's models and the serving definitions, run, warn and block | FQ03, FQ05 wait for QG2 |
 | [18](18-lineage.md) G08, G11b, G13 to G15 | The Gateway's graph and per-table run summary, `serves` edges, manual entries, OpenLineage export, tracing a value | G13 to G15 later |
-| [27a](27a-knowledge-slices.md) KN06, KN10 to KN13, KN15 to KN17, KN19 to KN23, AG25, AG28 | The built-in embedding model, publishing a knowledge project, the `knowledge` module, values as knowledge, the read commands, suggestions, verified queries at staging, front-end agents and a published agent as an MCP tool | KN12, KN14 PARTLY |
+| [27a](27a-knowledge-slices.md) KN06 (binding it, Windows), KN11 to KN17, KN19 to KN23, AG25, AG28 | The built-in embedding model is built (generator, catalog, files): it cannot be bound from the console yet; the Gateway hosting of the `knowledge` module (the library is built: a version per index, stage, switch, rollback, KN11), its subscription to published semantic models (KN12) and to Build\'s metadata (KN13, plus Build\'s own publish step), values as knowledge, the hosts of the read and index commands (KN16, KN17), suggestions, verified queries at staging, front-end agents and a published agent as an MCP tool | KN10 to KN14, KN16, KN17 PARTLY (libraries, commands and the console\'s Check tab built) |
 
 ## Runner
 
@@ -91,7 +91,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | [18](18-lineage.md) G06b | Runs on column edges, a job node per load | |
 | [Build OPEN-ITEMS](../../DbDataBuild/docs/progress/OPEN-ITEMS.md) section S; [12](12-shared-tls-rollout.md) items 10 and 11; [Gateway README](../../DbDataGateway/README.md) Fabric (Not supported yet); [windows-test-install](../windows-test-install.md) | K1: Build's `SourceCatalogReader` (needs a schema-wide keys read in the shared readers first) and the ODBC and DuckDB opens; K2: Sync's `service`, `cert` and `secret` verbs on the shared commands (needs a Windows host); D11: Build's CLI on the shared router; F1: Fabric through the Gateway (needs a tenant) | D11 OWNER (deferred); K2 LOW (plan 12) |
 | [14a](14a-semantic-slices.md) SL03, SL10, SL22 | Build reads the registry; metadata documents with semantic models; the `semantic` noun | |
-| [27a](27a-knowledge-slices.md) AG01 | The suite-wide command-spec test with a golden of offered MCP tools | |
+| [27a](27a-knowledge-slices.md) AG01 | The suite-wide command-spec test with a golden of offered MCP tools: built (`CommandSurface`) and kept for the console; the other products add their own copy | PARTLY |
 
 ## Sync
 

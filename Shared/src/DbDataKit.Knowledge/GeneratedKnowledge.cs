@@ -140,7 +140,7 @@ public static class GeneratedKnowledge
 
     private static string Count(int n, string one, string? many = null) => $"{n} {(n == 1 ? one : many ?? one + "s")}";
 
-    private static string Provenance(GeneratedSource source, string id)
+    internal static string Provenance(GeneratedSource source, string id)
     {
         // the version and channel are not in the text: they change with every publish and would make every item look changed. The index keeps them beside the item (source and version), and a hit cites them.
         var text = new StringBuilder($"---\nGenerated from the published {source.Kind} {source.Name}. This is rendered from the definition and changes with it; edit the definition, not this text.");
