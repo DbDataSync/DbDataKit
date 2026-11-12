@@ -120,6 +120,10 @@ public static class GatewayManagementHost
             new StateAuditSink(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), DbDataGateway.Server.State.GatewayState.ServiceId),
             instanceId, GatewayHost.Version, app.Services.GetRequiredService<DbDataGateway.Server.State.ServingInstanceLease>(), Move: true,
             SecretSamples: DbDataGateway.Server.State.GatewayStateSecrets.For(() => options)));
+        // the result cache's calls (plan 24a UC13, UC16); a change a producer reports is mapped to what this Gateway serves by its lineage graph
+        var servingCache = app.Services.GetRequiredService<DbDataGateway.Server.Serving.GatewayCache>();
+        var cacheApi = new GatewayCacheManagement(servingCache, () => management.BuildLineage(), instanceId, audit, app.Services.GetService<DbDataGateway.Server.State.ServingCacheEpochStore>());
+        servingCache.Resolve = cacheApi.Resolve;
         management = new GatewayManagement(configuration, configDirectory, instanceId, GatewayHost.Version, dataSources, identities, activity, certificate, git,
             new GatewaySecrets(app.Services.GetRequiredService<GroupSecretStore>() is { Enabled: true } group ? group : SecretsRuntime.OpenStore(options), audit, references: dataSources.References), files.Codes(),
             new GatewaySemanticModels(app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(),
@@ -148,6 +152,7 @@ public static class GatewayManagementHost
                 (name, text) => app.Services.GetRequiredService<Secrets.SecretsRuntime>().ResolveConnectionString($"Gateway:DataSources:{name}:ConnectionString", text, app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue.DataSources[name].Provider),
                 app.Services.GetRequiredService<DbDataGateway.Server.State.TableReadRecorder>(), app.Services.GetRequiredService<DbDataGateway.Server.State.TableReadStore>(), instanceId),
             audit: audit,
+            cache: cacheApi,
             definitions: new GatewayDefinitionsManagement(state, audit),
             serverSettings: new GatewayServerSettings(configDirectory, management, provider.ReloadNow, audit, git),
             entityModels: new GatewayEntityModels(app.Services.GetRequiredService<Serving.PublishedEntityModels>(),
