@@ -30,14 +30,14 @@ public sealed class RelayRolesTests
         { "PUT", "/api/v1/artifacts/" + "a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1", ServerRole.Admin },
         { "PUT", "/api/v1/definitions/integration/orders", ServerRole.Admin }, { "PUT", "/api/v1/bindings/dev/integration/orders", ServerRole.Admin }, { "POST", "/api/v1/bindings/dev/integration/orders/test", ServerRole.Admin },
         { "GET", "/api/v1/tracking", ServerRole.Viewer }, { "POST", "/api/v1/tracking/divergences/1/resolve", ServerRole.Admin },
-        { "PUT", "/api/v1/settings/require_signatures", ServerRole.Admin }, { "PUT", $"/api/v1/instances/{Instance}/labels", ServerRole.Admin },
+        { "PUT", "/api/v1/settings/require_signatures", ServerRole.Admin }, { "PUT", "/api/v1/settings/require_sandbox_run", ServerRole.Admin }, { "PUT", $"/api/v1/instances/{Instance}/labels", ServerRole.Admin },
     };
 
     private static object? BodyOf(string method, string path) => method switch
     {
         "PUT" when path.EndsWith("/definitions/integration/orders", StringComparison.Ordinal) => FakePackage.Make("orders", "1", SamplePackage.Task("load")).Body("dev", "stage"),
         "PUT" when path.Contains("/bindings/", StringComparison.Ordinal) => new { slots = new { source = "erp" } },
-        "PUT" when path.EndsWith("/require_signatures", StringComparison.Ordinal) => new { value = false },
+        "PUT" when path.EndsWith("/require_signatures", StringComparison.Ordinal) || path.EndsWith("/require_sandbox_run", StringComparison.Ordinal) => new { value = false },
         "PUT" when path.EndsWith("/labels", StringComparison.Ordinal) => new { labels = new[] { "gpu" } },
         "PUT" when path.EndsWith("/owner", StringComparison.Ordinal) => new { owner = "runner", reason = "relay roles test" },
         "POST" => new { channel = "dev" },

@@ -128,6 +128,31 @@ public sealed class TriggerTests
     }
 
     [Theory, MemberData(nameof(Engines))]
+    public async Task A_dry_run_of_A_is_told_so_and_does_not_start_B_while_a_real_run_does(string engine)
+    {
+        using var h = new TriggerHarness(engine);
+        h.Activate(Manifest(Def("a"), Def("b", TaskTrigger.AfterRun("a"))));
+        var inputsOfA = new List<IReadOnlyDictionary<string, string>>();
+        var runner = new FakeRunner(h.Database) { Behaviour = (r, _) => { if (r.Task.Task == "a") inputsOfA.Add(r.Inputs); return Task.FromResult(new TaskEnd(TaskEndState.Succeeded)); } };
+        var scheduler = h.NewScheduler(runner);
+
+        await h.Tick(scheduler);
+        scheduler.RunNow(A, null, "test", dryRun: true);
+        await h.Tick(scheduler);                       // the dry run of A runs
+        await h.Tick(scheduler);                       // its end is seen and set aside
+        await h.Tick(scheduler);
+        Assert.Equal((1, 0), (h.RunsOf("a"), h.RunsOf("b")));
+        Assert.Equal("true", Assert.Single(inputsOfA)[RunnerProtocol.DryRunInput]);
+
+        scheduler.RunNow(A);
+        await h.Tick(scheduler);
+        await h.Tick(scheduler);
+        await h.Tick(scheduler);
+        Assert.Equal((2, 1), (h.RunsOf("a"), h.RunsOf("b")));
+        Assert.False(inputsOfA[1].ContainsKey(RunnerProtocol.DryRunInput));
+    }
+
+    [Theory, MemberData(nameof(Engines))]
     public async Task With_any_B_runs_after_a_failure_too_and_a_filter_names_the_outcomes_it_wants(string engine)
     {
         using var h = new TriggerHarness(engine);

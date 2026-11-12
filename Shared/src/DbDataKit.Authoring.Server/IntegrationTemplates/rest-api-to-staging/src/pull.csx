@@ -62,8 +62,9 @@ public sealed class PullOrders : RunnerJob<NoInput, OrdersProgress, OrdersSlots>
 {
     protected override async Task RunAsync(CancellationToken ct)
     {
-        using var http = await Outside.OpenApiAsync(Slots.Api, ct);
-        await using var gate = await Outside.OpenStagingAsync(Slots.Staging, "pull-orders", ct);
+        using var http = await Outside.OpenApiAsync(Slots.Api, Run, ct);
+        // a dry run reads the API and writes nothing: its gate lists the statements and runs none, and opens no database
+        await using var gate = Run.DryRun ? Outside.DryRunGate(Run, "pull-orders") : await Outside.OpenStagingAsync(Slots.Staging, "pull-orders", ct);
         var lander = new StagingLander(gate, Outside.Dialect, OrdersTable.Table, OrdersTable.Schema);
         await lander.EnsureTableAsync(ct);
 
@@ -74,7 +75,7 @@ public sealed class PullOrders : RunnerJob<NoInput, OrdersProgress, OrdersSlots>
             var landed = await lander.LandAsync($"orders-{from ?? "first"}", Rows(page.Items), ct);
             Count(PullOrdersCounters.Pages, 1);
             Count(PullOrdersCounters.Items, page.Items.Count);
-            if (!landed.AlreadyLanded) Count(PullOrdersCounters.Landed, landed.Rows);
+            if (!landed.AlreadyLanded && !Run.DryRun) Count(PullOrdersCounters.Landed, landed.Rows);          // a dry run wrote nothing
             from = page.Resume;
             Progress.Cursor = from;
         }
@@ -96,10 +97,10 @@ public static class Outside
     /// <summary>The dialect of the staging database's engine (the statements the lander writes are made for it).</summary>
     public static ISqlDialect Dialect { get; } = DialectCatalog.For(EngineId.Postgres);
 
-    public static async Task<OutsideHttp> OpenApiAsync(Slot<object> slot, CancellationToken ct) => await slot.OpenAsync(ct) switch
+    public static async Task<OutsideHttp> OpenApiAsync(Slot<object> slot, IRun run, CancellationToken ct) => await slot.OpenAsync(ct) switch
     {
         OutsideHttp ready => ready,
-        ConnectionGrant grant => Open(grant),
+        ConnectionGrant grant => Open(grant, run),
         var other => throw new InvalidOperationException($"The slot '{slot.Name}' opened a {other.GetType().Name}; expected a connection."),
     };
 
@@ -107,13 +108,26 @@ public static class Outside
     /// The client for the connection the channel binds. The runner hands over what it has today: the address (a connection string without credentials, or host and port), a token or a user name and a password. The sign-in methods
     /// of a connection of kind http (OAuth 2, client certificate) are not handed over yet; when they are, this is the place that changes.
     /// </summary>
-    public static OutsideHttp Open(ConnectionGrant grant)
+    public static OutsideHttp Open(ConnectionGrant grant, IRun run)
     {
         var address = grant.ConnectionString ?? (grant.Host is null ? throw new InvalidOperationException($"The connection '{grant.Connection}' has no address.") : $"https://{grant.Host}{(grant.Port is { } port ? ":" + port : "")}/");
         var client = new HttpClient { BaseAddress = new Uri(address.EndsWith('/') ? address : address + "/") };
         if (grant.Token is { Length: > 0 } token) client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         else if (grant.User is { Length: > 0 } user) client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{grant.Password}")));
-        return new OutsideHttp(client, new OutsideHttpOptions { Connection = grant.Connection, Limit = (5, TimeSpan.FromSeconds(1)) });
+        return new OutsideHttp(client, new OutsideHttpOptions { Connection = grant.Connection, Limit = (5, TimeSpan.FromSeconds(1)), DryRun = run.DryRun, OnWouldSend = run.WouldDo });
+    }
+
+    /// <summary>
+    /// The write gate of a dry run (<c>tasks run --dry-run</c>): it checks and logs every statement the lander makes and executes none, and needs no database connection at all. What it would have run is listed in the run's log as "Dry run, would".
+    /// </summary>
+    public static WriteGate DryRunGate(IRun run, string command) => new(null, new WriteGateOptions(command, new RunStatementLog(run)) { DryRun = true });
+
+    private sealed class RunStatementLog(IRun run) : IStatementLog
+    {
+        public void Append(StatementLogEntry entry)
+        {
+            if (entry.Phase == "dry-run" && entry.Kind is not "Read" and not "Control") run.WouldDo($"{entry.Kind} {entry.StepId}");
+        }
     }
 
     public static async Task<WriteGate> OpenStagingAsync(Slot<object> slot, string command, CancellationToken ct) => await slot.OpenAsync(ct) switch

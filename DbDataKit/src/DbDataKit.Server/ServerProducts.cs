@@ -79,6 +79,7 @@ public static class ServerProducts
         new("PUT", "api/v1/bindings/{name}/integration/{name}", ServerRole.Admin, ServerRole.Publisher),   // UE08
         new("POST", "api/v1/bindings/{name}/integration/{name}/test", ServerRole.Admin),                    // UI08: try a slot's binding (never a value in the answer)
         new("PUT", "api/v1/settings/require_signatures", ServerRole.Admin),                                // UE08
+        new("PUT", "api/v1/settings/require_sandbox_run", ServerRole.Admin),                               // IX16
         new("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin),                                      // UE11
         new("POST", "api/v1/tracking/divergences/{id}/resolve", ServerRole.Admin),                         // E18: archive or reset the runner's copy from the common point (audited by the runner)
         new("POST", "api/v1/upgrade", ServerRole.Admin),                                                   // UC09: prepare and apply its own upgrade

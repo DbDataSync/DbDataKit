@@ -234,6 +234,14 @@ public sealed class TriggerEngine
                 continue;
             }
 
+            if (IsDryRun(run))
+            {
+                // a dry run changed nothing and does not start what follows a real run (plan 27a IX16)
+                if (!_states.TryAdvance(task.Package, task.Channel, task.Task, id, expected, next, lastFired)) { held = true; break; }
+                cursorText = next;
+                continue;
+            }
+
             var end = EndOf(source, run);
             if (end == RunEnd.Hold) { held = true; break; }     // a retry of it is coming: the trigger waits for the last attempt
             if (end == RunEnd.Superseded || _host.IsPaused(task))
@@ -319,6 +327,10 @@ public sealed class TriggerEngine
     }
 
     /// <summary>How deep in a chain of triggered runs the finished run was: the depth its item carried, 0 when it has none (a schedule's, a manual run's, one whose item retention removed).</summary>
+    /// <summary>The work item of the run was a dry run (its inputs carry the reserved word).</summary>
+    private bool IsDryRun(StoredRun run) =>
+        _queue.FindByRun(run.Id) is { } item && WorkPayload.TryParse(item.PayloadJson, out _) is { } payload && payload.Inputs.ContainsKey(RunnerProtocol.DryRunInput);
+
     private int DepthOf(StoredRun run) =>
         _queue.FindByRun(run.Id) is { } item && WorkPayload.TryParse(item.PayloadJson, out _) is { } payload ? payload.TriggerDepth : 0;
 

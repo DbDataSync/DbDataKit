@@ -9,11 +9,12 @@ dbdatarunner server clients | unpair <client> [--repo <server directory>]
 dbdatarunner package pair <https address> --code <code> [--name <label>] [--client-dir <directory>]   # on a publisher's machine: pair with the runner
 dbdatarunner package publish <manifest.yaml> <directory> --server <name or https address> --channel <name> [--code <code>] [--stage] [--expected-version <n>] [--client-dir <directory>]
 dbdatarunner package require-signatures [on|off] [--repo <server directory>]
+dbdatarunner package require-sandbox-run [on|off] [--repo <server directory>]
 dbdatarunner package install <manifest.yaml> <directory> [--channel dev] [--repo <server directory>]   # the development path, see below
 dbdatarunner package build <project directory> --out <directory> [--source <feed>]... [--cache <directory>] [--offline] [--locked] [--no-lock-write]   # an integration project into package.yaml and files/, csx without the SDK
 dbdatarunner package test <project directory> [--source <feed>]... [--cache <directory>] [--offline] [--locked] [--no-lock-write]   # build, then run tests/*.csx against the package with RunSimulator
 dbdatarunner tasks list [--repo <server directory>]
-dbdatarunner tasks run <package>/<channel>/<task> [name=value ...] [--repo <server directory>]
+dbdatarunner tasks run <package>/<channel>/<task> [name=value ...] [--dry-run] [--repo <server directory>]
 dbdatarunner tasks pause <package>/<channel>/<task> [--repo <server directory>]
 dbdatarunner tasks resume <package>/<channel>/<task> [--repo <server directory>]
 dbdatarunner label add <label> --instance <id|this> [--repo <server directory>] [--group <name>]
@@ -96,9 +97,14 @@ The runner serves the channels `prod` and `dev` by default (`--channels`, or `DB
 | `POST /api/v1/definitions/integration/<name>/activate`, `/switch`, `/rollback`, `/retire` with `channel` and `expected_version` | the life cycle (administrator). A staged version is prepared by every runner and activates by itself when all live ones are ready and its progress migration loses nothing. `activate` with `confirm_losses: true` and the loss list echoed in `losses` activates one that would lose progress; with `anyway: true` (and a `reason`) one whose runners failed or have not reported (audited). An activation waits for the runs in flight (at most `DBDATAKIT_RUNNER_ACTIVATION_MAX_WAIT_SECONDS`, 600 by default; 202 with the busy tasks when that runs out), then migrates the progress, moves the version and rebuilds the schedule in one transaction; `rollback` puts the progress back |
 | `PUT /api/v1/bindings/<channel>/integration/<name>` with `slots` | binds the package's slots for a channel |
 | `GET /api/v1/definitions/integration[/<name>]` | the versions, what each channel serves (active, previous, staged), bindings, the connection `slots` each channel's served and staged manifests declare, what each instance reports, and the latest events (viewer) |
-| `GET /api/v1/settings`, `PUT /api/v1/settings/require_signatures` | the publishing settings (the second is an administrator's) |
+| `GET /api/v1/settings`, `PUT /api/v1/settings/require_signatures`, `PUT /api/v1/settings/require_sandbox_run` | the publishing settings (the others are an administrator's) |
 
 `tasks run|pause|resume` do the same from the command line, on the same state, and are audited the same way; what `tasks run` queues, a running server starts within a few seconds.
+
+**Dry run and sandbox run (plan 27a IX16).**
+
+* `tasks run <task> --dry-run` (or `{"dry_run": true}` on `POST .../run`) queues a **dry run**: the task reads what it reads, and nothing it keeps changes. The reserved input `dbdatakit.dry_run` carries the word to the task; the kit takes it out before the job's input is bound and gives the job `Run.DryRun`. The kit's parts behave: progress is not saved (`SaveProgressAsync` does nothing), the file ledger is not written, an inbox item is not taken, a refused record is listed instead of kept; `OutsideHttpOptions.DryRun` refuses a request that is not a read and lists it, and a `WriteGate` with `DryRun` runs no statement. What it would have done is in the run's log as "Dry run, would: ...", under a first line that says it is a dry run; the audit of `runner.task.run` says `dry_run`. A dry run does not start the tasks that follow it (`after` triggers set its end aside). **A job that writes through code of its own is not guarded**: the guarantee is for the kit's clients and landing helpers.
+* `package require-sandbox-run on` (`PUT settings/require_sandbox_run`, an administrator's, audited as `runner.setting.set`) makes `activate` and `switch` on `prod` refuse a version that has had no **sandbox run**: a run of that version that succeeded in a channel other than `prod`, where the slots are bound to that channel's own connections, and was not a dry run. It is read from the run history; nothing else is kept.
 
 ## What a package can be
 

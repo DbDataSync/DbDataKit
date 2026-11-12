@@ -24,7 +24,7 @@ An **integration** is ordinary code that moves data between the suite and a syst
 | Outbound patterns: a table, view, query or DbDataStore entity sent to an API or a file, resumable, nothing sent when nothing changed, with idempotency keys | **built** (IX22; `DbDataKit.Runner.Kit.Outbound`; no semantic-query source yet) |
 | Lineage nodes for outside systems | **not built** (IX12) |
 | Recorded HTTP responses and a fake file share for tests | **built** (IX15; `RecordedHttp` and `FakeFileShare` in `DbDataKit.Runner.Kit.Testing`; the recording format `http-recording/1` is in `docs/formats.json`) |
-| Dry run (`--dry-run`, the kit refuses writes) and the sandbox run before promotion | **not built** (IX16) |
+| Dry run (`--dry-run`, the kit refuses writes) and the sandbox run before promotion | **built** (IX16; section 8) |
 | Outbound steps in a non-production channel use the channel's connection or are refused | **not built** (IX17) |
 | OAuth 2 authorization code, the serving layer's end of webhooks, the DbDataStore change trigger | **not built** (IX03, IX18, IX19) |
 | Notebooks | **parked**; no row is built |
@@ -161,12 +161,11 @@ It validates the manifest, stages the version, and when every instance is ready 
 
 ## 8. Dry run and sandbox rules
 
-**Not built** (IX16, IX17), and written here as decided so that code written now does not have to change:
+**Built** (IX16; the runner's side is in [`DbDataRunner/README.md`](../DbDataRunner/README.md)):
 
-- A **dry run** (`tasks run --dry-run`) runs the task so that it reads the outside system and the kit refuses writes; it lists what it would have sent. A job that writes through its own HTTP client bypasses the kit's guard: the guarantee holds for the kit's clients and landing helpers only.
-- A **sandbox run** goes against the channel's sandbox connection before a version is promoted; an administrator may require it (a recorded setting).
-- In a **non-production channel** an outbound step uses the connection bound for that channel or is refused naming the slot.
-- Until then the safeguard is the channel binding itself: a slot of a preview channel is bound to a sandbox connection by the person who binds it.
+- A **dry run** (`tasks run <task> --dry-run`) runs the task so that it reads the outside system and the kit refuses writes. The job sees `Run.DryRun`; progress is not saved, the file ledger and the inbox are not changed, `OutsideHttpOptions.DryRun` refuses a request that is not a read, a `WriteGate` with `DryRun` runs no statement, and the run's log lists what it would have done (`Dry run, would: ...`). A job tells its own clients: `new OutsideHttp(client, new OutsideHttpOptions { DryRun = Run.DryRun, OnWouldSend = Run.WouldDo })`, and calls `Run.WouldDo(...)` where it skips a write of its own. **A job that writes through its own HTTP client or code bypasses the kit's guard: the guarantee holds for the kit's clients and landing helpers only.** A dry run starts no task that follows it. Test a job's dry run with `new RunSimulator<Job>(dryRun: true)`.
+- A **sandbox run** is a run that succeeded in a channel other than `prod`, where the slots are bound to that channel's own (sandbox) connections. An administrator may require one before a version is promoted (`package require-sandbox-run on`): `activate` and `switch` on `prod` then refuse a version that has had none (a dry run does not count).
+- In a **non-production channel** an outbound step uses the connection bound for that channel or is refused naming the slot (IX17: **not built** for the runner yet).
 
 ## 9. Templates
 

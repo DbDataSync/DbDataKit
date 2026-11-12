@@ -39,6 +39,15 @@ public sealed record OutsideHttpOptions
 
     /// <summary>How a wait is made; a test records the waits instead of sleeping.</summary>
     public Func<TimeSpan, CancellationToken, Task>? Delay { get; init; }
+
+    /// <summary>
+    /// A dry run (plan 27a IX16, <c>IRun.DryRun</c>): a request that changes something (anything but GET, HEAD and OPTIONS) is not sent. It is listed (<see cref="OutsideHttp.WouldSend"/>, and <see cref="OnWouldSend"/> as it happens) and answered with
+    /// 204 and no body, so a job that reads the answer of a write sees an empty one. Reads go out as they would. The guarantee is for this client: a job that sends through a client of its own is not guarded.
+    /// </summary>
+    public bool DryRun { get; init; }
+
+    /// <summary>Told what a dry run would have sent, one line each (method, address, size of the body, idempotency key): <c>run.WouldDo</c> puts it in the run's log. Never the body or a header.</summary>
+    public Action<string>? OnWouldSend { get; init; }
 }
 
 /// <summary>A response read to its end: the status, the headers, the body as bytes. No secret is in it and none of it is put in a failure message.</summary>
@@ -113,6 +122,32 @@ public sealed class OutsideHttp : IDisposable
 
     public Uri? BaseAddress => _client.BaseAddress;
 
+    private readonly List<string> _wouldSend = [];
+
+    /// <summary>What a dry run would have sent, in order (empty unless <see cref="OutsideHttpOptions.DryRun"/>).</summary>
+    public IReadOnlyList<string> WouldSend
+    {
+        get { lock (_wouldSend) return [.. _wouldSend]; }
+    }
+
+    private static readonly HashSet<string> Reads = new(StringComparer.OrdinalIgnoreCase) { "GET", "HEAD", "OPTIONS" };
+
+    /// <summary>In a dry run, a request that is not a read is listed and not sent: the answer is 204 with no body.</summary>
+    private async Task<ApiResponse?> RefuseWriteAsync(Func<HttpRequestMessage> make, CancellationToken ct)
+    {
+        using var request = make();
+        if (Reads.Contains(request.Method.Method)) return null;
+        var size = request.Content is null ? 0 : (await request.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false)).Length;
+        var key = request.Headers.TryGetValues(_o.IdempotencyHeader, out var keys) ? $", {_o.IdempotencyHeader} {string.Join(",", keys)}" : "";
+        // the address without its query: a query can carry a key, and the line goes to a log
+        var address = request.RequestUri is { IsAbsoluteUri: true } absolute ? absolute : _client.BaseAddress is { } baseAddress && request.RequestUri is { } relative ? new Uri(baseAddress, relative) : request.RequestUri;
+        var shown = address is { IsAbsoluteUri: true } ? address.GetLeftPart(UriPartial.Path) : address?.OriginalString.Split('?')[0];
+        var line = $"{request.Method.Method} {shown} ({size} byte(s){key})";
+        lock (_wouldSend) _wouldSend.Add(line);
+        _o.OnWouldSend?.Invoke(line);
+        return new ApiResponse(HttpStatusCode.NoContent, new Dictionary<string, string[]>(), []);
+    }
+
     /// <summary>GET a path (relative to the connection's address), with a query.</summary>
     public Task<ApiResponse> GetAsync(string path, IEnumerable<KeyValuePair<string, string?>>? query = null, CancellationToken ct = default) =>
         SendAsync(() => new HttpRequestMessage(HttpMethod.Get, Url(path, query)), ct);
@@ -129,6 +164,7 @@ public sealed class OutsideHttp : IDisposable
     /// <summary>Sends a request made by <paramref name="make"/> (called once per try, so the body is new each time) and reads the whole response (up to <see cref="OutsideHttpOptions.MaxBufferedBytes"/>).</summary>
     public async Task<ApiResponse> SendAsync(Func<HttpRequestMessage> make, CancellationToken ct = default)
     {
+        if (_o.DryRun && await RefuseWriteAsync(make, ct).ConfigureAwait(false) is { } refused) return refused;
         using var response = await SendCoreAsync(make, ct).ConfigureAwait(false);
         var length = response.Content.Headers.ContentLength;
         if (length > _o.MaxBufferedBytes) throw new ApiShapeException($"The response is {length} bytes; a response held in memory is at most {_o.MaxBufferedBytes}. Read it as a stream (OpenReadAsync).");

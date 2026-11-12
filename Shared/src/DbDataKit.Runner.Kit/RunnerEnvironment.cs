@@ -31,7 +31,10 @@ public sealed class RunnerEnvironment(StateDatabase database, string package, st
 
     public TimeProvider Time => Database.Time;
 
-    internal RunSettings Settings => new(Hooks, MaxParallelism, Database.NewId);
+    /// <summary>A dry run (plan 27a IX16): the job reads what it reads, the kit's clients and landing helpers refuse writes and list what they would have sent, and nothing the run keeps (progress, the file ledger, the inbox) changes.</summary>
+    public bool DryRun { get; init; }
+
+    internal RunSettings Settings => new(Hooks, MaxParallelism, Database.NewId, DryRun);
 }
 
 /// <summary>Injection points for tests and the simulator (slice R03c). A hook that throws <see cref="SimulatedCrashException"/> ends the run as if the process had died at that point.</summary>

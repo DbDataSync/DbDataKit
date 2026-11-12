@@ -49,7 +49,8 @@ public sealed class PickUpCsv : RunnerJob<NoInput, NoProgress, PickUpSlots>
     protected override async Task RunAsync(CancellationToken ct)
     {
         var share = await Outside.OpenShareAsync(Slots.Share, ct);
-        await using var gate = await Outside.OpenStagingAsync(Slots.Staging, "pick-up-csv", ct);
+        // a dry run reads the files and writes nothing: its gate lists the statements and runs none, and opens no database; the files stay where they are
+        await using var gate = Run.DryRun ? Outside.DryRunGate(Run, "pick-up-csv") : await Outside.OpenStagingAsync(Slots.Staging, "pick-up-csv", ct);
         var bad = new BadRows();                                                       // records that do not fit: their number and reason, never the value
         var lander = new StagingLander(gate, Outside.Dialect, CustomersTable.Table, CustomersTable.Schema, new LandOptions { OnBadRow = BadRowDecision.Collect, Bad = bad });
         await lander.EnsureTableAsync(ct);
@@ -66,12 +67,13 @@ public sealed class PickUpCsv : RunnerJob<NoInput, NoProgress, PickUpSlots>
                 // the key names the file's content, so landing it again (a retry after the move failed) writes nothing twice
                 var rows = DelimitedReader.ReadAsync(stream, DelimitedOptions.Csv, new ReadOptions { OnBadRow = BadRowDecision.Collect, Bad = bad, File = file.Path }, ct);
                 var landed = await lander.LandAsync($"csv-{file.Hash}", rows, ct);
-                Count(PickUpCsvCounters.Rows, landed.Rows);
+                Count(PickUpCsvCounters.Rows, landed.Rows);              // in a dry run: the rows it would have landed
                 Count(PickUpCsvCounters.Rejected, bad.Count - before);
             }
 
             await claim.CompleteAsync(ct: ct);
-            await share.MoveAsync(file.Path, CustomersTable.Done + file.Path[CustomersTable.Drop.Length..], ct);
+            if (Run.DryRun) Run.WouldDo($"move {file.Path} to {CustomersTable.Done}");        // a write to the share, which the kit does not guard: the job says so itself
+            else await share.MoveAsync(file.Path, CustomersTable.Done + file.Path[CustomersTable.Drop.Length..], ct);
             Count(PickUpCsvCounters.Files, 1);
         }
     }
@@ -137,6 +139,19 @@ public static class Outside
         ConnectionGrant grant => new LocalFolderShare(grant.Database ?? grant.ConnectionString ?? throw new InvalidOperationException($"The connection '{grant.Connection}' names no folder.")),
         var other => throw new InvalidOperationException($"The slot '{slot.Name}' opened a {other.GetType().Name}; expected a connection."),
     };
+
+    /// <summary>
+    /// The write gate of a dry run (<c>tasks run --dry-run</c>): it checks and logs every statement the lander makes and executes none, and needs no database connection at all. What it would have run is listed in the run's log as "Dry run, would".
+    /// </summary>
+    public static WriteGate DryRunGate(IRun run, string command) => new(null, new WriteGateOptions(command, new RunStatementLog(run)) { DryRun = true });
+
+    private sealed class RunStatementLog(IRun run) : IStatementLog
+    {
+        public void Append(StatementLogEntry entry)
+        {
+            if (entry.Phase == "dry-run" && entry.Kind is not "Read" and not "Control") run.WouldDo($"{entry.Kind} {entry.StepId}");
+        }
+    }
 
     public static async Task<WriteGate> OpenStagingAsync(Slot<object> slot, string command, CancellationToken ct) => await slot.OpenAsync(ct) switch
     {

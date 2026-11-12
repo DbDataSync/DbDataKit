@@ -5,6 +5,7 @@ Pulls the pages of a REST API into a staging table. A template: the code is your
 * `package.yaml` the task `pull-orders` (hourly, or by hand) and its two connection slots: `api` (kind `http`) and `staging` (a database connection).
 * `src/pull.csx` the job: `OutsideHttp` with cursor paging (retries, a rate limit and the failure classes come with it), `StagingLander` writing each page as one batch under a key (the cursor it was asked with), so a rerun writes nothing twice.
 * `tests/` run with no network and no database: the API's answers are `tests/recordings/orders.json` (`http-recording/1`: write it from the API's documentation, never with a secret in it), the table is a `MemoryWarehouse`. A request with no recorded answer fails the test naming it.
+* `tasks run <package>/<channel>/pull-orders --dry-run` reads the API and writes nothing: the job's gate lists the inserts it would have made in the run's log ("Dry run, would") and opens no database; `tests/dry.csx` proves it.
 
 Secrets are never in a file: bind the `api` slot to a connection on the Runner (the connection names its secret by reference). Bind a sandbox endpoint in a preview channel.
 

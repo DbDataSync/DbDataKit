@@ -88,6 +88,7 @@ public static class JobRunner
 
         await backend.StartAsync(ct).ConfigureAwait(false);
         var context = new RunContext(backend, settings);
+        if (settings.DryRun) backend.Log("Information", "This is a dry run: the job reads what it reads and nothing is written or sent; the lines \"Dry run, would\" list what would have been. Progress is not saved.", RunFacade.DryRunItem);
         var binder = new ProgressBinder(backend, layout);
         context.Progress = binder;
         BindSlots(slots, slotOpener);
@@ -115,7 +116,7 @@ public static class JobRunner
         Summarize(context, end);
         try
         {
-            if (!ran) await backend.FinishAsync(end, CancellationToken.None).ConfigureAwait(false);
+            if (!ran || settings.DryRun) await backend.FinishAsync(end, CancellationToken.None).ConfigureAwait(false);
             else if (!await binder.SaveAsync(end, ct).ConfigureAwait(false))
             {
                 end = TaskEndMapping.Cancelled("A checkpoint of this task moved since the run read it (another run got there first, or it was rewound); the run's progress was not saved.", Processed(context));
