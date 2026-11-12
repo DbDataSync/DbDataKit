@@ -110,7 +110,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | [21](21-channels-and-previews.md) CH02 to CH06 | The Store's part of releases and inherited reads | |
 | [26](26-app-publishing.md) Z12b, Z13b | Shared entities in `column` mode, instance-scoped tokens and roles, retype and mode moves, the consumer refusal | |
 | [18](18-lineage.md) G12 | The Store's documents, extractions and promotions (the Store has none yet); the apps host's own graph | |
-| [27a](27a-knowledge-slices.md) EA03, EA04, BK01, BK02 | Orphaned attributes, both kinds in search, the backlog module | not built |
+| [27a](27a-knowledge-slices.md) EA03, EA04, BK02 | Orphaned attributes, both kinds in search, the backlog's serving module (the state module and library, BK01, are built) | not built |
 | [20](20-serving-layer.md) O08b | Entities as Flight SQL sources | |
 
 ## Shared and cross-cutting

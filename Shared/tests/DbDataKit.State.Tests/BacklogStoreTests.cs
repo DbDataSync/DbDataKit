@@ -1,3 +1,5 @@
+using DbDataKit.State.Snapshots;
+
 namespace DbDataKit.State.Tests;
 
 /// <summary>

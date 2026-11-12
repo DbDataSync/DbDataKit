@@ -64,6 +64,7 @@
     <Project Path="src/DbDataKit.Lineage/DbDataKit.Lineage.csproj" />
     <Project Path="src/DbDataKit.Lineage.Cli/DbDataKit.Lineage.Cli.csproj" />
     <Project Path="src/DbDataKit.Tracking.Build/DbDataKit.Tracking.Build.csproj" />
+    <Project Path="src/DbDataKit.Backlog/DbDataKit.Backlog.csproj" />
     <Project Path="src/DbDataKit.Quality/DbDataKit.Quality.csproj" />
     <Project Path="src/DbDataKit.Quality.Evaluation/DbDataKit.Quality.Evaluation.csproj" />
     <Project Path="src/DbDataKit.Quality.Runner/DbDataKit.Quality.Runner.csproj" />
@@ -182,6 +183,7 @@
     <Project Path="tests/DbDataKit.Agents.Providers.Tests/DbDataKit.Agents.Providers.Tests.csproj" />
     <Project Path="tests/DbDataKit.Lineage.Tests/DbDataKit.Lineage.Tests.csproj" />
     <Project Path="tests/DbDataKit.Lineage.Cli.Tests/DbDataKit.Lineage.Cli.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Backlog.Tests/DbDataKit.Backlog.Tests.csproj" />
     <Project Path="tests/DbDataKit.Quality.Tests/DbDataKit.Quality.Tests.csproj" />
     <Project Path="tests/DbDataKit.Quality.Evaluation.Tests/DbDataKit.Quality.Evaluation.Tests.csproj" />
     <Project Path="tests/DbDataKit.Quality.Runner.Tests/DbDataKit.Quality.Runner.Tests.csproj" />

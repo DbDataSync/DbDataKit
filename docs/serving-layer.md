@@ -43,7 +43,7 @@ A console calls servers and a server never calls a console. The serving layer is
 | `webdav` | DbDataStore documents, with extraction on save | not built |
 | `mcp` | the agents' MCP endpoint, acting as the signed-in user with approvals | not built as a module (the Gateway's `ui mcp` offers the `semantic` noun to agents) |
 | `knowledge` | search, show and about over knowledge items, access-filtered; checks and embeds a knowledge project at staging and switches at activation (plan 27 sections 2.2, 2.6) | not built (plan 27a lane KN); no knowledge library, index or embedding connection exists, only the engine check for vector columns, see [knowledge.md](knowledge.md) |
-| `backlog` | the API of DbDataBacklog: work items, sprints, boards, over its own state module (plan 27 section 5.1) | not built (plan 27a lane BK) |
+| `backlog` | the API of DbDataBacklog: work items, sprints, boards, over its own state module (plan 27 section 5.1) | not built (plan 27a lane BK: BK02); its state module `backlog` and library `DbDataKit.Backlog` are built (BK01) |
 
 Health per module is on the host's `/health` and `/health/ready`: each of `flightsql`, `identity`, `apps`, `store` and `views` is one component named after the module (`ServingModuleReadinessProbe`). A module that is not started is `Unhealthy`, one that drains is `Degraded`, and a group state database that does not answer turns `identity`, `apps` and `store` to `Unhealthy` and `flightsql` to `Degraded` (it still reads the hand-made sources); `views` reports its own causes (a version it cannot load) too.
 

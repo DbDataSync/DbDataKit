@@ -110,12 +110,12 @@ public sealed partial class BacklogService(BacklogStore store, WorkflowDefinitio
         if (person.Role < role) throw Refuse(BacklogProblem.Forbidden, $"{what} needs the role of a {role.ToString().ToLowerInvariant()}; {person.Name} has the role of a {person.Role.ToString().ToLowerInvariant()}.");
     }
 
-    private static string Show(object? value) => value switch
+    private static string? Show(object? value) => value switch
     {
-        null => "",
+        null => null,
         decimal d => d.ToString("0.##", CultureInfo.InvariantCulture),
         Guid g => g.ToString("D", CultureInfo.InvariantCulture),
-        _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? "",
+        _ => Convert.ToString(value, CultureInfo.InvariantCulture),
     };
 
     // ---- reading ----

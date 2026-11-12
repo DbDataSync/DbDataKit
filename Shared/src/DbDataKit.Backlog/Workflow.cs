@@ -155,7 +155,9 @@ public static partial class WorkflowLoader
                 var categoryNode = Scalar(entry, "category", true, entry);
                 if (categoryNode is not null)
                 {
-                    if (!Enum.TryParse(categoryNode.Value, ignoreCase: false, out category) || categoryNode.Value != categoryNode.Value.ToLowerInvariant())
+                    var parsed = Enum.GetValues<StateCategory>().Where(c => c.ToString().ToLowerInvariant() == categoryNode.Value).Select(c => (StateCategory?)c).FirstOrDefault();
+                    if (parsed is { } known) category = known;
+                    else
                         Add(BadState, categoryNode, $"`category` is `{categoryNode.Value}`; a category is todo, doing or done.", "Use `category: todo`, `doing` or `done`.");
                 }
 
@@ -223,12 +225,18 @@ public static partial class WorkflowLoader
 /// <summary>The workflows of the library: the default every backlog starts with.</summary>
 public static class BacklogWorkflows
 {
-    private static readonly Lazy<WorkflowDefinition> DefaultLazy = new(() =>
+    /// <summary>The text of the default workflow file.</summary>
+    public static string DefaultText()
     {
         var assembly = typeof(BacklogWorkflows).Assembly;
         using var stream = assembly.GetManifestResourceStream("DbDataKit.Backlog.default-workflow.yml") ?? throw new InvalidOperationException("The default workflow is not embedded in DbDataKit.Backlog.");
         using var reader = new StreamReader(stream);
-        var result = WorkflowLoader.Load(reader.ReadToEnd(), "default-workflow.yml");
+        return reader.ReadToEnd();
+    }
+
+    private static readonly Lazy<WorkflowDefinition> DefaultLazy = new(() =>
+    {
+        var result = WorkflowLoader.Load(DefaultText(), "default-workflow.yml");
         return result.Workflow ?? throw new InvalidOperationException("The default workflow of DbDataKit.Backlog does not load: " + string.Join("; ", result.Diagnostics.Select(d => d.ToString())));
     });
 
