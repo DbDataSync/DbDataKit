@@ -31,6 +31,15 @@ public static class RunnerState
 
     public static StateScope ScopeOf(string? group = null) => new(Group: string.IsNullOrWhiteSpace(group) ? DefaultGroup : group, Service: ServiceId);
 
+    public static string SettingsFile(string directory) => Path.Combine(directory, "server.yaml");
+
+    /// <summary>
+    /// The state settings and where each came from (plan 29b C07): the flags, then <see cref="RunnerSettings.StateEngineVariable"/> and <see cref="RunnerSettings.StateConnectionVariable"/> (then the install's), then the <c>state:</c> section of
+    /// <c>server.yaml</c> in the directory, then SQLite in <c>state.db</c>. The file is read strictly and never created.
+    /// </summary>
+    public static ResolvedState Resolve(string directory, Func<string, string?>? environment = null, string? engineFlag = null, string engineFlagName = "--state-engine") =>
+        StateSettingsResolver.Resolve(SuiteEnvironment.StateInputs(RunnerSettings.ServiceName, SettingsFile(directory), engineFlag, engineFlagName, null, "--state-connection", environment));
+
     public static string PathIn(string directory) => Path.Combine(directory, FileName);
 
     public static bool IsGroup(StateDatabase state) => DbDataKit.Runner.RunnerNames.IsGroup(state);

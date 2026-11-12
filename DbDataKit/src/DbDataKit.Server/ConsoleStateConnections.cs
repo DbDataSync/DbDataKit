@@ -15,7 +15,7 @@ namespace DbDataKit.Server;
 /// <param name="Name">Lower-case letters, digits and dashes.</param>
 /// <param name="Engine"><c>postgres</c>, <c>mssql</c> or <c>sqlite</c>.</param>
 /// <param name="Connection">The connection string of a server engine, with the password as a secret reference; null for SQLite.</param>
-/// <param name="Path">The SQLite file on the console's machine; null for a server engine.</param>
+/// <param name="Path">The SQLite file (in a move, a path on the server that is moved); null for a server engine.</param>
 /// <param name="Note">What it is for, for the list.</param>
 public sealed record StateConnection(string Name, string Engine, string? Connection, string? Path, string? Note);
 
@@ -58,7 +58,7 @@ public sealed partial class ConsoleStateConnections(string directory, EncryptedF
         var existing = Find(name);
         if (id == StateEngineIds.Sqlite)
         {
-            if (string.IsNullOrWhiteSpace(sqlitePath) || !System.IO.Path.IsPathRooted(sqlitePath)) throw new ArgumentException("A SQLite state is a file on this console's machine: give its full path.");
+            if (string.IsNullOrWhiteSpace(sqlitePath) || !System.IO.Path.IsPathRooted(sqlitePath)) throw new ArgumentException("A SQLite state is a file: give its full path (in a move, the path on the server that is moved).");
             entry = new StateConnection(name, "sqlite", null, System.IO.Path.GetFullPath(sqlitePath), Clean(note));
         }
         else

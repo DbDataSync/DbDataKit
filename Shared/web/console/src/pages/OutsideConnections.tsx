@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CodeEditor, ErrorBanner, Field, useIsAdmin } from '@dbdatakit/shell'
 import type { Diagnostic } from '../agents'
 import {
-  KIND_LABEL, NEW_CHOICES, isConnectionName, keptHere, outsideApi, outsideDetail, refusedDiagnostics, secretLabel, secretProblems, splitSummary, testSummary, webhookChoices, webhookYaml, yamlWebhookFormat,
+  KIND_LABEL, NEW_CHOICES, canTest, consentReturn, isConnectionName, needsConsent, keptHere, outsideApi, outsideDetail, refusedDiagnostics, secretLabel, secretProblems, splitSummary, testSummary, webhookChoices, webhookYaml, yamlWebhookFormat,
   type OutsideConnection, type WebhookChoices, type WebhookSplit,
 } from '../outsideConnections'
 
@@ -34,7 +34,11 @@ export function OutsideConnections() {
   const save = useMutation({ mutationFn: () => outsideApi.save(selected!, yaml), onSuccess: (r) => { setProblems(r.diagnostics); refresh() } })
   const check = useMutation({ mutationFn: () => outsideApi.check(selected!, yaml), onSuccess: (r) => setProblems(r.diagnostics) })
   const remove = useMutation({ mutationFn: () => outsideApi.remove(selected!), onSuccess: () => { setSelected(null); refresh() } })
-  const test = useMutation({ mutationFn: () => outsideApi.test(selected!) })
+  const test = useMutation({ mutationFn: () => outsideApi.test(selected!), onSuccess: () => refresh() })
+  // the provider's consent page is another site: the person is sent there and the console's callback brings them back to this screen with the outcome in the address
+  const returned = consentReturn(window.location.search)
+  const authorize = useMutation({ mutationFn: () => outsideApi.authorize(selected!), onSuccess: (r) => window.location.assign(r.url) })
+  const disconnect = useMutation({ mutationFn: () => outsideApi.revoke(selected!), onSuccess: () => refresh() })
   const keep = useMutation({ mutationFn: (field: string) => outsideApi.setSecret(selected!, field, secrets[field] ?? '').then(() => field), onSuccess: (field) => { setSecrets((s) => ({ ...s, [field]: '' })); refresh() } })
   const start = useMutation({
     mutationFn: () => outsideApi.template(choice.kind, newName, choice.flavor),
@@ -62,6 +66,7 @@ export function OutsideConnections() {
         <span className="page-note">The connections this console keeps: an API, a model provider, a mail server, a webhook. A file names the <em>reference</em> of each secret; the secret is kept in the console&apos;s secret store and is never shown.</span>
       </div>
       <ErrorBanner error={list.error} />
+      {returned && <div className="empty" role="status" data-testid="outside-consent-result" data-ok={returned.ok}><strong>{returned.ok ? 'Consent given' : 'Consent not given'}{returned.connection ? ` for ${returned.connection}` : ''}.</strong> {returned.message}</div>}
       {list.isSuccess && rows.length === 0 && <div className="empty" data-testid="outside-none">No connection to an outside system yet.</div>}
       {rows.length > 0 && (
         <div className="card flush" data-testid="outside-rows">
@@ -98,10 +103,18 @@ export function OutsideConnections() {
             <div className="row" style={{ gap: 8, marginTop: 8 }}>
               <button type="button" className="btn" onClick={() => check.mutate()} data-testid="outside-check">Check</button>
               <button type="button" className="btn btn-primary" onClick={() => save.mutate()} disabled={save.isPending} data-testid="outside-save">Save</button>
-              {connection && (connection.kind === 'http' || connection.kind === 'smtp') && <button type="button" className="btn" onClick={() => test.mutate()} disabled={test.isPending} data-testid="outside-test">Test</button>}
+              {connection && canTest(connection.kind) && <button type="button" className="btn" onClick={() => test.mutate()} disabled={test.isPending} data-testid="outside-test">Test</button>}
+              {connection && needsConsent(connection) && <button type="button" className="btn" onClick={() => authorize.mutate()} disabled={authorize.isPending} data-testid="outside-authorize">Authorize</button>}
+              {connection && needsConsent(connection) && <button type="button" className="btn" onClick={() => disconnect.mutate()} disabled={disconnect.isPending} data-testid="outside-disconnect">Disconnect</button>}
               {connection && <button type="button" className="btn" onClick={() => remove.mutate()} data-testid="outside-remove">Remove</button>}
             </div>
           )}
+          {connection && needsConsent(connection) && (
+            <div className="page-note" role="status" style={{ marginTop: 8 }} data-testid="outside-health" data-ok={connection.health?.ok ?? ''}>
+              {connection.health ? `${connection.health.ok ? 'Healthy' : 'Unhealthy'}: ${connection.health.message}` : 'Not tried yet: press Authorize to give consent, then Test.'}
+            </div>
+          )}
+          {disconnect.data && <div className="empty" role="status" data-testid="outside-disconnect-result" style={{ marginTop: 8 }}>{disconnect.data.message}</div>}
           {test.data && (
             <div className="empty" role="status" data-testid="outside-test-result" data-ok={test.data.ok} data-signin={test.data.signIn} style={{ marginTop: 8 }}>
               <strong>{testSummary(test.data)}</strong> {test.data.message}
@@ -148,7 +161,7 @@ export function OutsideConnections() {
               )}
             </div>
           ))}
-          <ErrorBanner error={check.error ?? remove.error ?? keep.error ?? test.error ?? (marking ? null : splitWebhook.error)} />
+          <ErrorBanner error={check.error ?? remove.error ?? keep.error ?? test.error ?? authorize.error ?? disconnect.error ?? (marking ? null : splitWebhook.error)} />
         </div>
       )}
     </section>

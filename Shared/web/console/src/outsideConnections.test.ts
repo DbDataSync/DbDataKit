@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { NEW_CHOICES, isConnectionName, keptHere, secretLabel, splitSummary, webhookChoices, webhookYaml, yamlWebhookFormat, outsideDetail, refusedDiagnostics, secretProblems, testSummary, type OutsideConnection, type OutsideTest } from './outsideConnections'
+import { NEW_CHOICES, canTest, consentReturn, needsConsent, isConnectionName, keptHere, secretLabel, splitSummary, webhookChoices, webhookYaml, yamlWebhookFormat, outsideDetail, refusedDiagnostics, secretProblems, testSummary, type OutsideConnection, type OutsideTest } from './outsideConnections'
 import { ApiError } from '@dbdatakit/shell'
 
 const crm: OutsideConnection = {
@@ -45,12 +45,32 @@ describe('outside connections (plan 27a IX01)', () => {
   })
 
   it('starts a webhook or a mail server from its own template and labels the secret parts of an address', () => {
-    expect(NEW_CHOICES.map((c) => [c.id, c.kind, c.flavor ?? null])).toEqual([['http', 'http', null], ['model-provider', 'model-provider', null], ['smtp', 'smtp', null], ['slack', 'http', 'slack'], ['teams', 'http', 'teams'], ['signed', 'http', 'signed']])
+    expect(NEW_CHOICES.map((c) => [c.id, c.kind, c.flavor ?? null])).toEqual([['http', 'http', null], ['model-provider', 'model-provider', null], ['smtp', 'smtp', null], ['sftp', 'sftp', null], ['scp', 'scp', null], ['ftps', 'ftps', null], ['smb', 'smb', null], ['s3', 's3', null], ['azure-blob', 'azure-blob', null], ['slack', 'http', 'slack'], ['teams', 'http', 'teams'], ['oauth', 'http', 'oauth'], ['signed', 'http', 'signed']])
     expect(secretLabel('key')).toBe('API key')
     expect(secretLabel('token', 'endpoint_secrets.token')).toBe('Secret part {token} of the address')
     expect(secretLabel('endpoint', 'endpoint')).toBe('The whole address (a secret)')
     expect(keptHere('slack-ops', { field: 'token', path: 'endpoint_secrets.token', reference: 'secret:anything:slack-ops:token', available: true, problem: null, keptHere: true })).toBe(true)
     expect(keptHere('slack-ops', { field: 'token', path: 'endpoint_secrets.token', reference: 'env:SLACK_TOKEN', available: true, problem: null, keptHere: false })).toBe(false)
+  })
+
+  it('knows a connection that signs in with consent, and reads the outcome the callback sends the person back with (plan 27a IX03)', () => {
+    expect(needsConsent({ signIn: 'oauth2_authorization_code' })).toBe(true)
+    expect(needsConsent(crm)).toBe(false)
+    expect(secretLabel('refresh_token')).toContain('Refresh token')
+    expect(consentReturn('?consent=ok&connection=crm&message=Consent%20was%20given.')).toEqual({ ok: true, connection: 'crm', message: 'Consent was given.' })
+    expect(consentReturn('?consent=failed&connection=crm&message=The%20provider%20did%20not%20give%20consent%20(access_denied).')?.ok).toBe(false)
+    expect(consentReturn('')).toBeNull()
+    expect(consentReturn('?consent=maybe')).toBeNull()
+  })
+
+  it('knows the file servers: their labels, the key they sign in with and which kinds Test can try (plan 27a IX04)', () => {
+    expect(['http', 'smtp', 'sftp', 'scp', 'ftps', 'smb', 's3', 'azure-blob'].every(canTest)).toBe(true)
+    expect(outsideDetail({ ...crm, kind: 's3', endpoint: 's3://reports/incoming/ at https://s3.example.com', signIn: 'access_key' })).toBe('s3://reports/incoming/ at https://s3.example.com, access key (AWS Signature V4)')
+    expect(outsideDetail({ ...crm, kind: 'smb', endpoint: 'smb://fs01/data/incoming', signIn: 'kerberos' })).toBe('smb://fs01/data/incoming, Windows sign-in (Kerberos)')
+    expect(canTest('model-provider')).toBe(false)
+    expect(canTest(null)).toBe(false)
+    expect(secretLabel('private_key')).toContain('private key')
+    expect(outsideDetail({ ...crm, kind: 'sftp', endpoint: 'sftp://files.example.com:22/upload', signIn: 'ssh_key' })).toBe('sftp://files.example.com:22/upload, SSH private key')
   })
 
   it('writes the file of a split address with the template and the references, never a part', () => {

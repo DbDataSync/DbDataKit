@@ -41,15 +41,16 @@ def local_branches():
 def push(remote, dry_run=False):
     main_ref = f"{remote}/main"
     pushed = []
-    wanted = ["main"] + [b for b in local_branches() if b.startswith("work/")]
+    # `backup/main` is the coordinator's integration branch (docs/agent-workflow.md): it is its own backup, pushed under its own name.
+    wanted = ["main", "backup/main"] + [b for b in local_branches() if b.startswith("work/")]
     for branch in wanted:
         if not ref_exists(branch):
             continue
         if branch != "main" and ref_exists(main_ref) and is_ancestor(branch, main_ref):
             continue  # already on main: nothing to back up
-        if branch == "main" and ref_exists(main_ref) and is_ancestor("main", main_ref):
+        if branch in ("main", "backup/main") and ref_exists(main_ref) and is_ancestor(branch, main_ref):
             continue
-        target = PREFIX + branch
+        target = branch if branch.startswith(PREFIX) else PREFIX + branch
         if dry_run:
             pushed.append((branch, target, "would push"))
             continue

@@ -118,7 +118,8 @@ public static class GatewayManagementHost
             },
             DbDataGateway.Server.State.GatewayState.Modules, DbDataGateway.Server.State.GatewayState.ScopeOf(), maintenance,
             new StateAuditSink(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), DbDataGateway.Server.State.GatewayState.ServiceId),
-            instanceId, GatewayHost.Version, app.Services.GetRequiredService<DbDataGateway.Server.State.ServingInstanceLease>(), Move: true));
+            instanceId, GatewayHost.Version, app.Services.GetRequiredService<DbDataGateway.Server.State.ServingInstanceLease>(), Move: true,
+            SecretSamples: DbDataGateway.Server.State.GatewayStateSecrets.For(() => options)));
         management = new GatewayManagement(configuration, configDirectory, instanceId, GatewayHost.Version, dataSources, identities, activity, certificate, git,
             new GatewaySecrets(app.Services.GetRequiredService<GroupSecretStore>() is { Enabled: true } group ? group : SecretsRuntime.OpenStore(options), audit, references: dataSources.References), files.Codes(),
             new GatewaySemanticModels(app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(),

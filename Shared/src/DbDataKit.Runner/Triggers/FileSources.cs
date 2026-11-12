@@ -6,8 +6,9 @@ namespace DbDataKit.Runner.Triggers;
 public sealed record FileEntry(string Path, long Size, DateTimeOffset ModifiedAt);
 
 /// <summary>
-/// The folder of a connection, as a file trigger sees it (plan 28a R13). No file or SFTP connection kind exists in <c>DbDataKit.Connections</c> yet, so this is the seam: <see cref="LocalDirectoryFileSource"/> is the only
-/// implementation today, and a kind that arrives implements the same two calls. A source lists and reads; it never writes, moves or deletes (what happens to a file after the run is the task's).
+/// The folder of a connection, as a file trigger sees it (plan 28a R13). <see cref="LocalDirectoryFileSource"/> is a folder of this machine; the file connections (SFTP, FTPS, SMB, S3, Azure Blob of
+/// <c>DbDataKit.Connections.Files</c>) implement the same two calls in <c>DbDataKit.Runner.FileConnections</c> (plan 27a IX07). A source lists and reads; it never writes, moves or deletes (what happens to a file after the run is the task's).
+/// A source that holds a connection is <see cref="IAsyncDisposable"/> and the engine lets it go when a look ends.
 /// </summary>
 public interface IFileSource
 {

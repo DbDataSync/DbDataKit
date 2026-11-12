@@ -58,7 +58,7 @@ public sealed class PostureRefusedException(PostureSetting setting, string packa
 /// (<c>runner.posture.choose</c>, <c>runner.posture.revoke</c>; the target is the setting). The audit entry is written in the same transaction as the choice when the <c>runner</c> and <c>audit</c>
 /// modules are in one store, and immediately after when they are not (a SQLite file of their own).
 /// </summary>
-public sealed class PostureGuard(StateDatabase database, string serviceId)
+public sealed class PostureGuard(StateDatabase database, string serviceId, string module = RunnerModule.Name)
 {
     public const string ChooseVerb = "runner.posture.choose";
     public const string RevokeVerb = "runner.posture.revoke";
@@ -67,7 +67,7 @@ public sealed class PostureGuard(StateDatabase database, string serviceId)
     private readonly AuditLog _audit = new(database, serviceId);
 
     /// <summary>The recorded choices.</summary>
-    public PostureChoices Choices { get; } = new(database);
+    public PostureChoices Choices { get; } = new(database, module);
 
     /// <summary>True when a choice applies to the package (its own or the install-wide one).</summary>
     public bool IsAllowed(PostureSetting setting, string package) => Choices.IsChosen(package, setting.Name);
@@ -114,7 +114,7 @@ public sealed class PostureGuard(StateDatabase database, string serviceId)
     }
 
     private bool SameStore() =>
-        database.Layout is not { } layout || string.Equals(layout.Namespace(RunnerModule.Name).File, layout.Namespace(AuditModule.Name).File, StringComparison.Ordinal);
+        database.Layout is not { } layout || string.Equals(layout.Namespace(module).File, layout.Namespace(AuditModule.Name).File, StringComparison.Ordinal);
 
     /// <summary>Runs the change and audits it when it changed something; returns what the change returned.</summary>
     private bool Write(PostureSetting setting, string package, string actor, string verb, string? note, Func<DbConnection, DbTransaction?, bool> change)
@@ -126,7 +126,7 @@ public sealed class PostureGuard(StateDatabase database, string serviceId)
             return database.Retry(() =>
             {
                 using var connection = database.OpenConnection();
-                using var transaction = database.BeginTransaction(connection, RunnerModule.Name);
+                using var transaction = database.BeginTransaction(connection, module);
                 var changed = change(connection, transaction);
                 if (changed) AuditLog.Record(database, connection, transaction, serviceId, entry);
                 transaction.Commit();

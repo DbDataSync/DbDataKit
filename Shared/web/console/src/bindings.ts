@@ -9,14 +9,23 @@ import type { Diagnostic } from './agents'
 
 export type SlotKind = 'model-chat' | 'model-embeddings' | 'delivery' | 'runner'
 
-export interface BindingEntry { connection: string; model: string | null; usable: boolean; problem: string | null; kind: string | null; target: string | null }
+/**
+ * What the runner holds of a connection a slot is bound to (IX23): the Runner is a separate server and keeps its own copy of the console's connection (a definition with secret references, never a value). `current`: the copy is the console's file as it is now;
+ * `stale`: the console's file changed since it was sent; `missing`: the console has the connection and the runner has no copy; `copy-only`: the runner has a copy of a connection the console no longer has; `not-console`: a name the runner knows itself (its own
+ * connections folder or reference), nothing to send.
+ */
+export type CopyState = 'current' | 'stale' | 'missing' | 'copy-only' | 'not-console'
+export interface RunnerSecretCheck { path: string; reference: string; resolves: boolean; problem: string | null }
+export interface CopyInfo { state: CopyState; version: string | null; consoleVersion: string | null; sentBy: string | null; sentAt: string | null; shadowed: boolean; unresolved: RunnerSecretCheck[]; problem: string | null }
+
+export interface BindingEntry { connection: string; model: string | null; usable: boolean; problem: string | null; kind: string | null; target: string | null; copy?: CopyInfo | null }
 export interface BindingRow { release: string; wildcard: boolean; entries: BindingEntry[]; needsConfirmation: boolean; confirmed: boolean; effect: string | null }
 export interface BindingSlot {
   section: string; kind: SlotKind; name: string; usedBy: string[]; limitPerMinute: number | null; rows: BindingRow[]
   /** Set on a runner's slot: the package it belongs to (the runner binds per package and release channel). */
   runner?: { server: string; package: string; kindOfConnection: string }
 }
-export interface BindingConnection { name: string; kind: string; purpose: string | null; models: string[]; canSend: boolean; target: string | null; cloud: boolean | null }
+export interface BindingConnection { name: string; kind: string; purpose: string | null; models: string[]; canSend: boolean; target: string | null; cloud: boolean | null; version?: string | null }
 export interface BindingsView {
   file: string; yaml: string; diagnostics: Diagnostic[]; earlier: string | null; releaseChannels: string[]; connections: BindingConnection[]; slots: BindingSlot[]; postureSetting: string; postureEffect: string
 }
@@ -29,6 +38,9 @@ export const KIND_LABEL: Record<SlotKind, string> = { 'model-chat': 'Chat model'
 
 /** Whether a slot of this kind names a model as well as a connection. */
 export const needsModel = (kind: SlotKind): boolean => kind === 'model-chat' || kind === 'model-embeddings'
+
+/** A runner binds per package and channel, never `*`, and has no unbind: a channel is bound to another connection, not emptied. */
+export const runnerReleaseOk = (release: string): boolean => release !== '*' && isSlotName(release)
 
 /** How many choices a release channel of this kind may hold: a chat model has a fallback list, the rest one. */
 export const maxChoices = (kind: SlotKind): number => (kind === 'model-chat' ? 8 : 1)
@@ -51,6 +63,7 @@ const canonical = (d: SlotDraft) => Object.keys(d).sort().map((k) => [k, d[k]])
 /** What is wrong with a draft before it is sent (the server checks again and says more: which connection exists and fits). */
 export function draftProblem(kind: SlotKind, draft: SlotDraft): string | null {
   for (const [release, list] of Object.entries(draft)) {
+    if (kind === 'runner' && release === '*') return 'A runner binds a slot per channel and has no `*`: bind each channel that runs the package.'
     if (!isReleaseName(release)) return `\`${release}\` is not a release channel name: letters, digits, dashes and underscores (or \`*\` for every release channel).`
     if (list.length === 0) continue
     if (list.length > maxChoices(kind)) return `${KIND_LABEL[kind]} ${release === '*' ? 'for every release channel' : `in ${release}`} takes ${maxChoices(kind) === 1 ? 'one connection' : `at most ${maxChoices(kind)} choices`}.`
@@ -121,21 +134,51 @@ export const unboundWords = (slot: Pick<BindingSlot, 'name' | 'kind' | 'rows'>, 
 export interface RunnerDefinitions { definitions: { name: string }[] }
 export interface RunnerDetail {
   slots: { channel: string; slot: string; kind: string; tasks: string[]; versions: number[] }[]
-  bindings: { channel: string; slot: string; bound_to: string; revision: number }[]
+  bindings: { channel: string; slot: string; bound_to: string; revision: number; shares_production?: boolean; confirmed?: boolean }[]
+}
+
+/** One copy as the runner lists it (`GET connection-copies`). */
+export interface RunnerCopy { name: string; version: string; kind: string; sent_by: string; sent_at: string; shadowed_by_file: boolean; secrets: RunnerSecretCheck[]; unresolved: number; problem: string | null; used_by: { package: string; channel: string; slot: string }[] }
+
+/**
+ * Where the runner's copy of a connection stands against the console's file (IX23): the version both sides compute from the file's text. A name the console does not keep is the runner's own (a folder of its own, or a reference), and has nothing to send.
+ */
+export function copyInfo(connection: string, consoleConnections: BindingConnection[], copies: RunnerCopy[]): CopyInfo {
+  const mine = consoleConnections.find((c) => c.name === connection)
+  const copy = copies.find((c) => c.name === connection)
+  const base = { version: copy?.version ?? null, consoleVersion: mine?.version ?? null, sentBy: copy?.sent_by ?? null, sentAt: copy?.sent_at ?? null, shadowed: copy?.shadowed_by_file ?? false, unresolved: (copy?.secrets ?? []).filter((s) => !s.resolves), problem: copy?.problem ?? null }
+  if (!mine) return { ...base, state: copy ? 'copy-only' : 'not-console' }
+  if (!copy) return { ...base, state: 'missing' }
+  return { ...base, state: copy.version === mine.version ? 'current' : 'stale' }
+}
+
+/** The words for a copy's state on the slot's row. */
+export function copyWords(c: CopyInfo): string {
+  switch (c.state) {
+    case 'current': return `the runner's copy is the console's (${c.version})`
+    case 'stale': return `the runner's copy (${c.version}) is older than the console's (${c.consoleVersion}): send it again`
+    case 'missing': return 'the runner has no copy of this connection yet: send it'
+    case 'copy-only': return 'the runner has a copy of a connection the console no longer keeps'
+    default: return 'a name the runner knows itself; the console has nothing to send'
+  }
 }
 
 /**
  * A runner package's connection slots as binding slots: the runner binds a slot per package and release channel (its channel) to one connection (a name or a reference), never `*` and never inherited, which is the suite's rule already; this only shows it in the same shape.
  * The slot is named `package/slot`.
  */
-export function runnerSlots(server: string, packageName: string, detail: RunnerDetail): BindingSlot[] {
+export function runnerSlots(server: string, packageName: string, detail: RunnerDetail, consoleConnections: BindingConnection[] = [], copies: RunnerCopy[] = []): BindingSlot[] {
   const bySlot = new Map<string, BindingSlot>()
   for (const s of detail.slots) {
     const key = s.slot
     let slot = bySlot.get(key)
     if (!slot) { slot = { section: 'runner', kind: 'runner', name: `${packageName}/${s.slot}`, usedBy: s.tasks.map((t) => `${packageName}/${t}`), limitPerMinute: null, rows: [], runner: { server, package: packageName, kindOfConnection: s.kind } }; bySlot.set(key, slot) }
     const bound = detail.bindings.find((b) => b.channel === s.channel && b.slot === s.slot)
-    slot.rows.push({ release: s.channel, wildcard: false, entries: bound ? [{ connection: bound.bound_to, model: null, usable: true, problem: null, kind: s.kind, target: null }] : [], needsConfirmation: false, confirmed: false, effect: null })
+    slot.rows.push({
+      release: s.channel, wildcard: false,
+      entries: bound ? [{ connection: bound.bound_to, model: null, usable: true, problem: null, kind: s.kind, target: null, copy: copyInfo(bound.bound_to, consoleConnections, copies) }] : [],
+      needsConfirmation: bound?.shares_production === true, confirmed: bound?.confirmed === true, effect: null,
+    })
   }
   return [...bySlot.values()]
 }
@@ -147,15 +190,31 @@ export const runnerApi = {
   definitions: () => request<RunnerDefinitions>(`${RUNNER}/definitions/integration`),
   detail: (name: string) => request<RunnerDetail>(`${RUNNER}/definitions/integration/${encodeURIComponent(name)}`),
   test: (channel: string, name: string, slot: string) => request<RunnerTestAnswer>(`${RUNNER}/bindings/${encodeURIComponent(channel)}/integration/${encodeURIComponent(name)}/test`, json('POST', { slot, role: 'default' })),
+  copies: () => request<{ copies: RunnerCopy[] }>(`${RUNNER}/connection-copies`),
 }
 
-/** Every package slot of the runner, as binding slots; a runner that does not answer gives none (the screen says it could not be read). */
-export async function loadRunnerSlots(server = 'console-runner'): Promise<BindingSlot[]> {
+/** Every package slot of the runner, as binding slots, with where the runner's copy of each connection stands against the console's; a runner that does not answer gives none (the screen says it could not be read). */
+export async function loadRunnerSlots(server = 'console-runner', consoleConnections: BindingConnection[] = []): Promise<BindingSlot[]> {
   const list = await runnerApi.definitions()
+  // a runner that does not have the copies call yet (an older one) has no copies; the slots still show
+  const copies = await runnerApi.copies().then((c) => c.copies).catch(() => [] as RunnerCopy[])
   const out: BindingSlot[] = []
-  for (const d of list.definitions) out.push(...runnerSlots(server, d.name, await runnerApi.detail(d.name)))
+  for (const d of list.definitions) out.push(...runnerSlots(server, d.name, await runnerApi.detail(d.name), consoleConnections, copies))
   return out
 }
+
+/**
+ * The body of a runner slot's save: per channel one connection (a console connection, whose definition the console sends first, or a name the runner knows). A channel that was bound (`saved`) and is now removed or empty is sent as an empty
+ * name, which empties it (the runner refuses while the version it serves declares the slot).
+ */
+export function runnerSlotBody(draft: SlotDraft, saved: SlotDraft = {}, confirm: string[] = [], note?: string): { channels: Record<string, string>; confirm?: string[]; note?: string } {
+  const channels: Record<string, string> = {}
+  for (const [release, list] of Object.entries(draft)) if (list.length > 0 && list[0].connection !== '') channels[release] = list[0].connection
+  for (const [release, list] of Object.entries(saved)) if (list.length > 0 && !(release in channels)) channels[release] = ''
+  return { channels, ...(confirm.length > 0 ? { confirm } : {}), ...(note ? { note } : {}) }
+}
+
+export interface RunnerSaveAnswer { saved: boolean; sent: { connection: string; version: string; unresolved: RunnerSecretCheck[] }[]; needsConfirmation?: Unconfirmed[] }
 
 // ---- the console's bindings ----
 
@@ -169,4 +228,10 @@ export const bindingsApi = {
   removeSlot: (section: string, name: string) => request<SaveAnswer>(`/api/bindings/slots/${section}/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   check: (yaml: string) => request<{ diagnostics: Diagnostic[]; needsConfirmation: Unconfirmed[] }>('/api/bindings/check', json('POST', { yaml })),
   save: (yaml: string, confirm: string[] = [], note?: string) => request<SaveAnswer>('/api/bindings', json('PUT', { yaml, confirm, note })),
+  /** Changes a runner slot's binding: the console sends the connection's definition (secret references, never a value) and then binds. 409 with `needsConfirmation` until production's connection in a non-production channel is confirmed. */
+  setRunnerSlot: (server: string, packageName: string, slot: string, body: ReturnType<typeof runnerSlotBody>) =>
+    request<RunnerSaveAnswer>(`/api/bindings/runner/${encodeURIComponent(server)}/${encodeURIComponent(packageName)}/${encodeURIComponent(slot)}`, json('PUT', body)),
+  /** Sends a console connection to a runner again, so its copy is the console's file as it is now. */
+  sendConnection: (server: string, name: string) =>
+    request<{ connection: string; version: string; unresolved: RunnerSecretCheck[] }>(`/api/bindings/runner/${encodeURIComponent(server)}/connections/${encodeURIComponent(name)}/send`, json('POST', {})),
 }

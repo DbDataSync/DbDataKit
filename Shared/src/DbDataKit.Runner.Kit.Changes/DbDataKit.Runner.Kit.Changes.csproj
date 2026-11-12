@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Runner.Kit.Changes</RootNamespace>
+    <PackageId>DbDataKit.Runner.Kit.Changes</PackageId>
+    <Description>Change detection for sources with no change feed (plan 27a IX13): a row-hash snapshot kept as a checkpoint of the job's progress, and the comparison of a run's rows with it (added, changed, deleted).</Description>
+    <IsPackable>true</IsPackable>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Runner.Kit.Formats\DbDataKit.Runner.Kit.Formats.csproj" />
+  </ItemGroup>
+</Project>

@@ -28,6 +28,7 @@ public sealed record StateResult(int Status, JsonNode Body)
 /// <param name="Instances">The product's instance table; null: none.</param>
 /// <param name="Clock">For tests.</param>
 /// <param name="Move">True when the product keeps a settings file the state writer can write, so the server can move its own state (<c>POST /api/v1/state/move</c>, plan 29b C06). False for the console, whose own move is the command line (plan 29b QM3).</param>
+/// <param name="SecretSamples">The encrypted columns of the product's state, with the keys of its own secret store (plan 29b C04): the move started from the console decrypts a sample of each in the target before it writes the settings, as <c>state move</c> does. Null: none.</param>
 /// <param name="TuneMove">For tests: changes the options of the move before it runs (a failure injected after the import, a fixed snapshot directory).</param>
 public sealed record StateManagementOptions(
     string Product,
@@ -43,7 +44,8 @@ public sealed record StateManagementOptions(
     IInstanceDirectory? Instances = null,
     TimeProvider? Clock = null,
     bool Move = false,
-    Func<DbDataKit.State.Engines.Snapshots.MoveOptions, DbDataKit.State.Engines.Snapshots.MoveOptions>? TuneMove = null);
+    Func<DbDataKit.State.Engines.Snapshots.MoveOptions, DbDataKit.State.Engines.Snapshots.MoveOptions>? TuneMove = null,
+    IReadOnlyList<DbDataKit.State.Engines.Snapshots.StateSecretSample>? SecretSamples = null);
 
 /// <summary>
 /// The state endpoints of a server's management API (plan 29b, C05), apart from how a call arrives (the same answers whether a console asks over https with its token, a person asks in the console's web app, or the command line asks over the local channel):

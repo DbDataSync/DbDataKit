@@ -7,7 +7,7 @@ namespace DbDataKit.Server;
 
 /// <param name="Engine"><c>postgres</c>, <c>mssql</c> or <c>sqlite</c>.</param>
 /// <param name="Connection">Server, database and login, without the password.</param>
-/// <param name="Path">The file of a SQLite state on the console's machine.</param>
+/// <param name="Path">The file of a SQLite state (in a move, a path on the server that is moved).</param>
 /// <param name="Password">Stored in the console's secret store; empty on an edit keeps the stored one.</param>
 public sealed record SaveStateConnectionRequest(string Engine, string? Connection, string? Path, string? Password, string? Note);
 
@@ -24,7 +24,7 @@ public sealed record StateMoveRequest(string Server, string Connection);
 public sealed class StateConnectionsController(ConsoleStateConnections connections, ConsoleInstances instances, ConsoleRelay relay, ConsoleSettings settings) : ControllerBase
 {
     /// <summary>The products whose state a console can move: the ones whose server mounts the move call.</summary>
-    private static readonly Dictionary<string, string> Programs = new() { ["dbdatagateway"] = "dbdatagateway", ["dbdatastore"] = "dbdatastore", ["dbdatabuild"] = "dbdatabuild" };
+    private static readonly Dictionary<string, string> Programs = new() { ["dbdatagateway"] = "dbdatagateway", ["dbdatastore"] = "dbdatastore", ["dbdatabuild"] = "dbdatabuild", ["dbdatarunner"] = "dbdatarunner" };
 
     private static readonly TimeSpan CheckTimeout = TimeSpan.FromSeconds(15);
 
@@ -112,32 +112,46 @@ public sealed class StateConnectionsController(ConsoleStateConnections connectio
 
         Add("server", true, $"{server!.Name} ({status.Product} {status.Version}) reports its state: engine {state["engine"]?.GetValue<string>() ?? "?"}, connection {state["connection"]?.GetValue<string>() ?? "its own file"}.");
 
-        // the shared library's checks on the target, as this console reaches it
-        var report = await TestAsync(connection!);
-        foreach (var step in report.Steps) Add($"target {step.Name}", step.Status != "failed", step.Message);
-        if (report.Ok) Add("target empty", report.Empty, report.Empty ? "The target holds no module: it can take the state." : $"The target already holds {string.Join(", ", report.Modules.Select(m => m.Module).Distinct())}: a move goes into an empty database. Create a new empty database and point the connection at it.");
-
-        // never the server's own database
-        var own = ConsoleStateConnections.IdentityOf(state["engine"]?.GetValue<string>(), state["connection"]?.GetValue<string>(), state["file"]?.GetValue<string>());
-        var target = ConsoleStateConnections.IdentityOf(connection!.Engine, connection.Connection, connection.Path);
-        Add("not the same database", own != target, own != target ? "The target is not the database the server uses now." : "The target is the database this server already uses: name another.");
-
-        // the server's own view: can it resolve the password, open the target, write its settings file
-        if (connection.Engine == "sqlite") Add("server", false, "A move to SQLite is made on the server's machine with the command line: dbdatakit's connections to a SQLite file are on the console's machine.");
+        // the target's checks are the server's own, made with its own modules (their tables, their engine features) and its own secret store: the dry run of the move answers them (plan 29b C06)
+        var (dryCode, dry) = await relay.CallAsync(server, HttpMethod.Post, "/api/v1/state/move", Payload(connection!, dryRun: true), cancellationToken);
+        if (dryCode == 200)
+        {
+            if (dry?["steps"] is JsonArray steps)
+                foreach (var step in steps.OfType<JsonObject>())
+                    Add($"target {step["name"]?.GetValue<string>()}", step["status"]?.GetValue<string>() != "failed", step["message"]?.GetValue<string>() ?? "");
+            Add("server can open the target", true, dry?["message"]?.GetValue<string>() ?? "The server can open the target.");
+            // the server's own preflight refuses a target that holds a module (409); the console adds what it sees itself when it can reach the target (never a SQLite file, which is on the server's machine)
+            var seen = connection!.Engine == "sqlite" ? null : await TestAsync(connection);
+            if (seen is { Ok: true, Empty: false }) Add("target empty", false, EmptySentence(seen));
+            else Add("target empty", true, "The target holds no module: it can take the state.");
+        }
         else
         {
-            var (dryCode, dry) = await relay.CallAsync(server, HttpMethod.Post, "/api/v1/state/move", Payload(connection, dryRun: true), cancellationToken);
+            // an older server answers without the steps: the checks the console can make itself (never for a SQLite file, which is on the server's machine)
+            if (connection!.Engine != "sqlite" && dryCode != 404)
+            {
+                var report = await TestAsync(connection);
+                foreach (var step in report.Steps) Add($"target {step.Name}", step.Status != "failed", step.Message);
+                if (report.Ok) Add("target empty", report.Empty, report.Empty ? "The target holds no module: it can take the state." : EmptySentence(report));
+            }
+            else if (dryCode == 409 && dry?["reason"]?.GetValue<string>() == "targetnotempty")
+                Add("target empty", false, "The target already holds modules: a move goes into an empty database. Create a new empty database and point the connection at it.");
+
             switch (dryCode)
             {
-                case 200: Add("server can open the target", true, dry?["message"]?.GetValue<string>() ?? "The server can open the target."); break;
-                case 404: Add("server offers the move", false, OldServer(program, connection)); break;
+                case 404: Add("server offers the move", false, OldServer(program, connection!)); break;
                 case 400 when (dry?["reason"]?.GetValue<string>() == "secretmissing"):
-                    Add("server has the secret", false, $"{server.Name} cannot resolve the password of this connection: set it on that server with '{program} secret set {ConsoleStateConnections.SecretNameOf(connection.Name)}' (the console never copies a password to a server), then check again.");
+                    Add("server has the secret", false, $"{server.Name} cannot resolve the password of this connection: set it on that server with '{program} secret set {ConsoleStateConnections.SecretNameOf(connection!.Name)}' (the console never copies a password to a server), then check again.");
                     break;
                 default: Add("server can open the target", false, dry?["error"]?.GetValue<string>() ?? $"{server.Name} refused the check ({dryCode}).");
                     break;
             }
         }
+
+        // never the server's own database
+        var own = ConsoleStateConnections.IdentityOf(state["engine"]?.GetValue<string>(), state["connection"]?.GetValue<string>(), state["file"]?.GetValue<string>());
+        var target = ConsoleStateConnections.IdentityOf(connection!.Engine, connection.Connection, connection.Path);
+        Add("not the same database", own != target, own != target ? "The target is not the database the server uses now." : "The target is the database this server already uses: name another.");
 
         return Ok(new { ok, checks, program, maintenance = state["maintenance"] });
     }
@@ -148,8 +162,7 @@ public sealed class StateConnectionsController(ConsoleStateConnections connectio
     {
         var (server, connection, problem) = Resolve(request);
         if (problem is not null) return problem;
-        if (connection!.Engine == "sqlite") return BadRequest(new { error = "A move to SQLite is made on the server's machine with the command line." });
-        var (code, body) = await relay.CallAsync(server!, HttpMethod.Post, "/api/v1/state/move", Payload(connection, dryRun: false), cancellationToken);
+        var (code, body) = await relay.CallAsync(server!, HttpMethod.Post, "/api/v1/state/move", Payload(connection!, dryRun: false), cancellationToken);
         return StatusCode(code is >= 200 and < 600 ? code : 502, body ?? new JsonObject { ["error"] = "No answer." });
     }
 
@@ -162,7 +175,7 @@ public sealed class StateConnectionsController(ConsoleStateConnections connectio
         return StatusCode(code is >= 200 and < 600 ? code : 502, body ?? new JsonObject { ["error"] = "No answer." });
     }
 
-    private static object Payload(StateConnection connection, bool dryRun) => new { engine = connection.Engine, connection = connection.Connection, dry_run = dryRun };
+    private static object Payload(StateConnection connection, bool dryRun) => new { engine = connection.Engine, connection = connection.Connection, sqlite_path = connection.Path, dry_run = dryRun };
 
     private static string OldServer(string program, StateConnection connection) =>
         $"This server is too old to move its state from the console. On its machine, stop it and run: {program} state move --to-engine {connection.Engine} --to-connection \"{connection.Connection}\" --yes " +
@@ -174,6 +187,9 @@ public sealed class StateConnectionsController(ConsoleStateConnections connectio
         if (connections.Find(request.Connection ?? "") is not { } connection) return (null, null, NotFound(new { error = "No such state connection." }));
         return (server, connection, null);
     }
+
+    private static string EmptySentence(DbDataKit.State.Cli.StateConnectionReport report) =>
+        $"The target already holds {string.Join(", ", report.Modules.Select(m => m.Module).Distinct())}: a move goes into an empty database. Create a new empty database and point the connection at it.";
 
     private async Task<DbDataKit.State.Cli.StateConnectionReport> TestAsync(StateConnection connection)
     {

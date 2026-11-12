@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Npgsql" />
+    <ProjectReference Include="..\..\src\DbDataKit.Runner.Kit.Outbound\DbDataKit.Runner.Kit.Outbound.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Runner.Kit.Testing\DbDataKit.Runner.Kit.Testing.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Metadata\DbDataKit.Metadata.csproj" />
+    <!-- the throwaway database per test that the structure tests use -->
+    <Compile Include="..\DbDataKit.Schema.Tests\Engines.cs" Link="Engines.cs" />
+  </ItemGroup>
+</Project>

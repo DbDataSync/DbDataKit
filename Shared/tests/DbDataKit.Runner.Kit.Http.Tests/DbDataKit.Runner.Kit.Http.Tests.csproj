@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\DbDataKit.Runner.Kit.Http\DbDataKit.Runner.Kit.Http.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Secrets\DbDataKit.Secrets.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Runner.Abstractions\DbDataKit.Runner.Abstractions.csproj" />
+  </ItemGroup>
+</Project>
