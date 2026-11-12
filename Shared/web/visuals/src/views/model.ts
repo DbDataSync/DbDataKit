@@ -37,7 +37,13 @@ export interface ChartDoc extends WidgetCommon {
   on_click?: string
 }
 export interface MatrixDoc extends WidgetCommon { type: 'matrix'; encodings: Record<string, unknown>; query: QueryDoc; on_select?: { set: string; from: string }; drill?: unknown; on_click?: string }
-export interface TableColumnDoc { field: string; label?: string; format?: ViewFormatValue; align?: 'left' | 'right' | 'center'; width?: number }
+export interface TableColumnDoc {
+  field: string; label?: string; format?: ViewFormatValue; align?: 'left' | 'right' | 'center'; width?: number
+  /** The object form of a measure (plan 32 DBR50): a new name for the output and its own filters. */
+  alias?: string; filters?: unknown[]
+  /** How the value reads in the cell (DBR51): text, an icon chosen by the value (`icons`, a closed vocabulary), or a badge; `link` names a link of the document a click on the cell follows. */
+  display?: 'text' | 'icon' | 'badge'; icons?: Record<string, string>; link?: string
+}
 export interface TableDoc extends WidgetCommon { type: 'table'; encodings: { columns: TableColumnDoc[]; sort?: unknown }; query: QueryDoc; drill?: unknown; on_click?: string }
 export interface TextDoc extends WidgetCommon { type: 'text'; text: string }
 export interface ImageDoc extends WidgetCommon { type: 'image'; hash: string; media_type: 'image/png' | 'image/jpeg' | 'image/webp'; alt: string; fit?: 'contain' | 'cover' }

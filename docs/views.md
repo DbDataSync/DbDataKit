@@ -157,6 +157,44 @@ encodings:
   entry of a **written** query (`DBD-VIEW-007`: the query says its own measures).
 * A filter value may be `{param: name}`; a filter on a parameter the viewer left unset drops out of that entry, as it does from the query's filters (the request, and so the cache key, differ only for the entries that use it).
 
+### Attributes in the cell area (DBR51)
+
+A matrix's `values` entry may be an **attribute** where a measure was: it changes with the column headers like a measure does, and shows that attribute's value for each cell.
+
+```yaml
+encodings:
+  rows: [customers.region]
+  columns: [orders.ordered_at_month]
+  values:
+    - {field: orders.net_revenue, label: Revenue}
+    - {attribute: orders.status, display: icon, icons: {Open: circle, Completed: check}, many: mixed, link: set-status, label: Status}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `attribute` | the catalog attribute shown (instead of `field`; an entry is one or the other); `format` reads it as it reads an axis member (a date format on a date attribute) |
+| `display` | `text` (default), `icon` (the icon `icons` names for the value; a value the map does not list shows as text) or `badge` |
+| `icons` | value to icon, from a **closed vocabulary** of 24 names (`circle dot check cross warning info clock flag star pause play stop lock unlock arrow-up arrow-down arrow-right plus minus pin bell eye user tag`); an icon display needs it and it needs the icon display |
+| `many` | what a cell with several values shows: `mixed` (default: the text `Mixed`, a marker, the values in a tooltip), `first` or `last` (in the order of the answer), `count` (the number of distinct values, also the cell's `v`), `list` (comma-joined, five at most, then `…`) |
+| `link` | a named link of the document (`links`, [below](#links-one-vocabulary-for-a-click-plan-32-section-9f-dbr35)) that a click on the cell follows; a cell with no text has none |
+
+**The one-row rule.** An attribute is well defined only where a cell holds one row. `DeriveRequest` asks for the attribute **at the cells' grain** (after the axes) and rolls it up **last** in the request's totals, so the answer holds,
+for each cell, the **rows that name its values** and the **cell's own row with the attribute rolled up**, whose measures are the engine's: a measure shown beside an attribute is **never added across the attribute's values** by the
+view, so a cell with four values still holds one honest number. The shaper reads the values from the detail rows, gives the engine's matrix a synthetic measure in the attribute's place (so the grid, its labels, its totals and its
+column limit are the engine's own), and fills each attribute cell: one value is shown as `display` says, several by `many`, none is empty. **A total row or column, and an Other column, leave an attribute cell empty**: there is no one value.
+An attribute that is already on an axis adds nothing to the request (it is the same in every row of its cell). Every policy can be said, so there is no refusal for a `many` the cell cannot show; the engine's own refusals of the request (a
+cube too wide, an unknown member) land on the entry's `attribute` path.
+
+**Refused** (`DBD-106` at the key unless said): `field` and `attribute` together; `alias` or `filters` on an attribute (they belong to a measure); `display: icon` without `icons`, `icons` without it, an icon outside the vocabulary,
+`many` outside the five; `values_on: rows` with an attribute among the values; a `link` the document does not declare (`DBD-VIEW-036`); an attribute entry in a matrix over a **written** query (`DBD-VIEW-007`: the
+request cannot be asked at the cells' grain); a matrix of attributes only (`DBD-VIEW-041`, a request needs a measure).
+
+**A table column** takes the same `display`, `icons` and `link` (a table row has one value, so no `many`).
+
+**Rendering.** A rendered cell carries `icon`, `badge`, `mixed`, `values` and `link` beside `text` (`rendered-widgets.schema.json`). The client draws an icon as a glyph of the closed set (the bundled icon font of DBR37 is not
+built; the glyphs are text characters every font has, with the cell's text as the accessible name), and a cell that names a link as a button **only when the host follows links**: `DashboardView` takes `onLink({name, widget, row, column?})`;
+without it the cell is plain text, which is what print and export draw: **the value prints, the link is dropped** (`print: hidden | normal | link` of the link says more; the PDF annotation of `print: link` is DBR37's, not built).
+
 ### Sorting by a click (DBR45)
 
 A viewer may sort a table or a matrix by clicking a header, **on screen only** (the host sets `sortable` on `DashboardView`; the print and export routes never do): a click sorts ascending, a second click reverses, a third gives the

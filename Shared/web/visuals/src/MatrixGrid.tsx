@@ -1,4 +1,5 @@
 import type { KeyboardEvent, MouseEvent } from 'react'
+import { CellContent } from './CellContent'
 import type { RenderedMatrix } from './types'
 
 export interface Modifiers { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean; altKey: boolean }
@@ -20,9 +21,11 @@ function headerCells(columns: RenderedMatrix['columns'], level: number) {
  * A matrix view as a grid: row labels down the left, column labels across the top (outermost first), the server's text in every cell. Nothing is computed here: a
  * total row or column is the one the result held (`total` on the row or column), Other is a sum the server made, and a cell reads as the server formatted it.
  */
-export function MatrixGrid({ view, onCell, sort, onSortColumn }: {
+export function MatrixGrid({ view, onCell, sort, onSortColumn, onLink }: {
   view: RenderedMatrix
   onCell?: (row: number, column: number | undefined, modifiers: Modifiers) => void
+  /** A cell that names a link of the document (an attribute's cell, plan 32 DBR51) was clicked: the link's name, the cell's row and column. Without it such a cell is plain text. */
+  onLink?: (link: string, row: number, column: number) => void
   /** The column the viewer sorted by (a click on the innermost header, plan 32 DBR45) and what a click does: both only when the host lets viewers sort. */
   sort?: { column: number; dir: 'asc' | 'desc' } | null
   onSortColumn?: (column: number) => void
@@ -68,7 +71,7 @@ export function MatrixGrid({ view, onCell, sort, onSortColumn }: {
                   className={['vz-num', view.columns[c]?.total ? 'vz-total' : '', view.columns[c]?.other ? 'vz-other' : '', onCell && !row.total && !view.columns[c]?.total ? 'vz-pointable' : ''].filter(Boolean).join(' ')}
                   onClick={onCell && !row.total && !view.columns[c]?.total ? (e: MouseEvent) => onCell(r, c, e) : undefined}
                 >
-                  {cell.text}
+                  <CellContent cell={cell} onLink={onLink && !row.total && !view.columns[c]?.total ? (name) => onLink(name, r, c) : undefined} />
                 </td>
               ))}
             </tr>

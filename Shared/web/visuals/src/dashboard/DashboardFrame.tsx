@@ -30,6 +30,7 @@ export interface DashboardFrameProps {
   canDrill?: boolean
   sortable?: boolean
   onServerSort?: TileContext['onServerSort']
+  onLink?: TileContext['onLink']
 }
 
 /**
@@ -37,13 +38,13 @@ export interface DashboardFrameProps {
  * scroll**; a tile below its minimum puts the whole layout on the **compact stack** (one column, minimum heights, the page scrolls: the only scrolling a reflow dashboard does). A table or matrix that does
  * not fit its tile says "12 of 40 rows" and can be **maximized** to the whole container, where it scrolls. No state and no effects: the box and the results are given, so a test draws any size.
  */
-export function DashboardFrame({ document, layout, box, theme, results, loading, parameters = {}, onParameterChange, maximized = null, onMaximize, placed, onHit, asOf, stale, canDrill, sortable, onServerSort }: DashboardFrameProps) {
+export function DashboardFrame({ document, layout, box, theme, results, loading, parameters = {}, onParameterChange, maximized = null, onMaximize, placed, onHit, asOf, stale, canDrill, sortable, onServerSort, onLink }: DashboardFrameProps) {
   const root = (mode: string, children: ReactNode) => (
     <div className="vz vz-dashboard" data-vz-theme={theme} data-testid="vz-dashboard" data-layout={layout.name} data-layout-type={layout.type} data-mode={mode} style={{ width: box.width, height: box.height }}>
       {children}
     </div>
   )
-  const context = { document, layout, theme, results, loading, parameters, onParameterChange, onMaximize, onHit, asOf, stale, canDrill, sortable, onServerSort }
+  const context = { document, layout, theme, results, loading, parameters, onParameterChange, onMaximize, onHit, asOf, stale, canDrill, sortable, onServerSort, onLink }
   if (layout.type === 'canvas') return <CanvasFrame {...context} layout={layout} box={box} maximized={maximized} />
   if (layout.type !== 'reflow')
     return root('none', <p className="vz-state vz-dashboard-notice" role="note" data-testid="vz-engine-missing">{`The layout \`${layout.name}\` is a ${layout.type} layout, which this view does not draw yet.`}</p>)

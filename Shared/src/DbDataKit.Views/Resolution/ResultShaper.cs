@@ -222,7 +222,7 @@ internal static partial class ResultShaper
             var rolled = table.RolledUp(source);
             var labelled = false;
             var cells = new JsonArray();
-            foreach (var (_, field, preset) in resolved)
+            foreach (var (spec, field, preset) in resolved)
             {
                 var node = source[field.Name];
                 if (total && field.Kind == "attribute" && rolled.Contains(field.Binding ?? field.Name))
@@ -230,7 +230,12 @@ internal static partial class ResultShaper
                     cells.Add(new JsonObject { ["v"] = null, ["text"] = labelled ? "" : TotalLabel });
                     labelled = true;
                 }
-                else cells.Add(Cell(node, field, preset, answer.Locale));
+                else
+                {
+                    var cell = Cell(node, field, preset, answer.Locale);
+                    if (!total) DecorateColumn(cell, spec, node);
+                    cells.Add(cell);
+                }
             }
             var row = new JsonObject();
             if (total) row["total"] = true;
@@ -253,6 +258,8 @@ internal static partial class ResultShaper
     public static JsonObject Matrix(ViewWidget widget, AnswerRows answer)
     {
         var encodings = widget.Raw["encodings"] as JsonObject ?? [];
+        // attributes among the values (DBR51): the engine draws a synthetic measure in their place, the cells are filled from the rows that name their values afterwards
+        (answer, encodings, var cellPlan) = PrepareCellAttributes(widget, answer, encodings);
         var spec = new JsonObject { ["type"] = "matrix", ["id"] = "v" };
         // the engine's view reads field names, a sort per axis and the presets: the widget's `{field, format, sort}` entries and a value's mapping format are split off here, and applied to the labels and cells it gives back
         var axisFormats = new Dictionary<string, List<JsonNode?>> { ["rows"] = [], ["columns"] = [] };
@@ -306,6 +313,7 @@ internal static partial class ResultShaper
         }
         var rendered = Render(widget, answer, spec, "matrix");
         FormatMatrix(rendered, answer, encodings, axisFormats, valueFormats);
+        if (cellPlan is not null) FillCellAttributes(rendered, cellPlan, answer);
         return rendered;
     }
 

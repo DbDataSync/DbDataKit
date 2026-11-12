@@ -1,7 +1,7 @@
 import type { Theme } from '../theme'
 import type { Box, LayoutDoc, ParameterDefinition, ParameterValue, ParameterValues, ViewsDoc } from '../views/model'
 import type { RenderedWidget } from '../views/rendered'
-import { WidgetView } from '../widgets/WidgetView'
+import { WidgetView, type CellLink } from '../widgets/WidgetView'
 import type { Hit, HitHow } from './interaction'
 
 /** What every layout engine's frame needs to draw one widget: shared by `DashboardFrame` and `CanvasFrame`, so a tile is the same in both. */
@@ -25,6 +25,8 @@ export interface TileContext {
   sortable?: boolean
   /** A table the server cut: the host runs it again with `order` (widget, column field, direction; null, null for the document's order). */
   onServerSort?: (widget: string, field: string | null, dir: 'asc' | 'desc' | null) => void
+  /** A cell that names a link of the document was clicked (plan 32 DBR51). */
+  onLink?: (link: CellLink) => void
 }
 
 export function tileView(c: TileContext, id: string, box: Box, isMaximized: boolean) {
@@ -50,6 +52,7 @@ export function tileView(c: TileContext, id: string, box: Box, isMaximized: bool
       canDrill={c.canDrill}
       sortable={c.sortable}
       onServerSort={c.onServerSort}
+      onLink={c.onLink}
     />
   )
 }

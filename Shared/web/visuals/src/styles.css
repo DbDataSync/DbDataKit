@@ -187,3 +187,10 @@ tr.vz-pointable:hover td, th.vz-pointable:hover, td.vz-pointable:hover { backgro
 .vz-print-preview-bar { flex: none; display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid #8884; }
 .vz-print-preview-frame { flex: 1; min-height: 0; width: 100%; border: 0; }
 @media print { .vz-print-preview { display: none !important; } }
+
+/* an attribute in a cell (plan 32 DBR51): an icon chosen by the value, a badge, a mixed marker, a link */
+.vz-icon { display: inline-block; min-width: 1.1em; text-align: center; font-size: 1.05em; line-height: 1; }
+.vz-badge { display: inline-block; padding: 0 0.5em; border-radius: 999px; border: 1px solid var(--vz-rule, currentColor); font-size: 0.85em; line-height: 1.5; }
+.vz-mixed { font-style: italic; opacity: 0.75; border-bottom: 1px dotted currentColor; }
+.vz-cell-link { all: unset; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.vz-cell-link:focus-visible { outline: 2px solid var(--vz-accent); outline-offset: 1px; }

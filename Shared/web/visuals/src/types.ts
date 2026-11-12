@@ -1,10 +1,15 @@
+import type { AttributeCellParts } from './CellContent'
+
+/** A cell of a rendered table or matrix: the server's text, the number it stands for, and (an attribute's cell, plan 32 DBR51) the icon, badge, mixed marker, values and link it carries. */
+export type RenderedMatrixCell = { v?: number | null; text: string } & AttributeCellParts
+
 /** The shapes of a rendered view (`rendered-view.schema.json`), as `ViewRenderer.Render` in DbDataKit.Semantic gives them. */
 export interface RenderedMatrix {
   id: string
   type: 'matrix'
   notice?: string | null
   columns: Array<{ labels: string[]; total?: boolean; other?: boolean }>
-  rows: Array<{ labels: string[]; total?: boolean; cells: Array<{ v?: number | null; text: string }> }>
+  rows: Array<{ labels: string[]; total?: boolean; cells: RenderedMatrixCell[] }>
 }
 
 export type DataValue = string | number | boolean | null

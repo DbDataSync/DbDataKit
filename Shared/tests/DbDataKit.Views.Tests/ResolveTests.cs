@@ -38,11 +38,11 @@ public class ResolveTests
         return loaded.Document!;
     }
 
-    private static ViewDocument Doc(string widgets, string parameters = "[]", string kind = "dashboard")
+    private static ViewDocument Doc(string widgets, string parameters = "[]", string kind = "dashboard", string links = "")
     {
         var ids = Regex.Matches(widgets, @"^  ([a-z][a-z0-9_-]*):", RegexOptions.Multiline).Select(m => m.Groups[1].Value).ToList();
         var tiles = string.Join("\n", ids.Select((id, i) => $"      - {{widget: {id}, x: 0, y: {i * 2}, w: 12, h: 2}}"));
-        var yaml = $"schemaVersion: 1\nkind: {kind}\ntitle: Test\nparameters: {parameters}\nwidgets:\n{widgets}\nlayouts:\n  - name: desk\n    type: reflow\n    default: true\n    grid: {{columns: 12, rows: {ids.Count * 2}}}\n    tiles:\n{tiles}\n";
+        var yaml = $"schemaVersion: 1\nkind: {kind}\ntitle: Test\nparameters: {parameters}\n{(links.Length > 0 ? "links:\n" + links + "\n" : "")}widgets:\n{widgets}\nlayouts:\n  - name: desk\n    type: reflow\n    default: true\n    grid: {{columns: 12, rows: {ids.Count * 2}}}\n    tiles:\n{tiles}\n";
         var loaded = ViewsLoader.Load(yaml, "test.yaml");
         Assert.True(loaded.Ok, Conformance.Describe(loaded.Diagnostics) + "\n" + yaml);
         return loaded.Document!;
@@ -840,6 +840,148 @@ public class ResolveTests
         // DBD-106 at the color: the series are the colors (the resolver refuses it too for a document that skipped the loader)
         var loaded = ViewsLoader.LoadWidgets("{\"ch\":{\"type\":\"chart\",\"mark\":\"bar\",\"encodings\":{\"x\":\"products.category\",\"y\":[\"sales.net_amount\",\"sales.units\"],\"color\":\"customers.region\"},\"query\":{\"model\":\"retail_sales\"}}}", "w.json");
         Assert.Contains(loaded.Diagnostics, d => d.Code == "DBD-106" && d.KeyPath == "widgets.ch.encodings.color");
+    }
+
+
+    // ---- attributes in the cell area (plan 32 DBR51) ----
+
+    private const string Links = "  open-it: {form: orders, edit: {id: $products.category}, as: dialog, print: hidden}";
+
+    private static JsonObject MatrixCell(JsonObject matrix, string row, int cell) =>
+        matrix["rows"]!.AsArray().Single(r => r!["labels"]![0]!.GetValue<string>() == row)!["cells"]![cell]!.AsObject();
+
+    [Fact]
+    public async Task An_attribute_in_the_cells_shows_its_value_where_one_row_exists_and_the_many_policy_where_several_do_and_the_measure_is_not_added_across_it()
+    {
+        var doc = Doc("""
+              one:
+                type: matrix
+                encodings:
+                  rows: [products.product]
+                  columns: [date.year_month]
+                  values:
+                    - {field: sales.net_amount, label: Net}
+                    - {attribute: products.category, label: Category}
+                query: {model: retail_sales}
+              mixed:
+                type: matrix
+                encodings:
+                  rows: [products.category]
+                  columns: [date.year_month]
+                  values:
+                    - {attribute: customers.region, label: Regions}
+                    - {field: sales.net_amount, label: Net}
+                query: {model: retail_sales}
+              first:
+                type: matrix
+                encodings: {rows: [products.category], columns: [date.year_month], values: [{attribute: customers.region, many: first}, {field: sales.units}]}
+                query: {model: retail_sales}
+              last:
+                type: matrix
+                encodings: {rows: [products.category], columns: [date.year_month], values: [{attribute: customers.region, many: last}, {field: sales.units}]}
+                query: {model: retail_sales}
+              count:
+                type: matrix
+                encodings: {rows: [products.category], columns: [date.year_month], values: [{attribute: customers.region, many: count}, {field: sales.units}]}
+                query: {model: retail_sales}
+              list:
+                type: matrix
+                encodings: {rows: [products.category], columns: [date.year_month], values: [{attribute: customers.region, many: list}, {field: sales.units}]}
+                query: {model: retail_sales}
+            """);
+        var r = await Resolver(new RetailServing()).ResolveAsync(Viewer(), doc, "desk");
+
+        // one row in the cell: a product has one category, so every cell shows it, and the measure beside it is the cell's own
+        var one = Ok(r, "one");
+        var jacket = MatrixCell(one, "Trail Jacket", 0);
+        Assert.Equal(NetOf(l => l.Product == "Trail Jacket" && l.YearMonth == 202601), jacket["v"]!.GetValue<double>());
+        var category = MatrixCell(one, "Trail Jacket", 1);
+        Assert.Equal("Apparel", category["text"]!.GetValue<string>());
+        Assert.Null(category["mixed"]);
+        Assert.Equal(["Net", "Category"], one["columns"]!.AsArray().Take(2).Select(c => c!["labels"]!.AsArray().Last()!.GetValue<string>()));
+
+        // several rows in the cell: four regions sell Apparel every month, in the order the answer gave them (the sample's regions: West, Central, East, South)
+        var mixed = Ok(r, "mixed");
+        var cell = MatrixCell(mixed, "Apparel", 0);
+        Assert.True(cell["mixed"]!.GetValue<bool>());
+        Assert.Equal(["West", "Central", "East", "South"], cell["values"]!.AsArray().Select(v => v!.GetValue<string>()));
+        // the measure is the cell's, not the sum of four rows of the answer's detail
+        Assert.Equal(NetOf(l => l.Category == "Apparel" && l.YearMonth == 202601), MatrixCell(mixed, "Apparel", 1)["v"]!.GetValue<double>());
+        Assert.Equal("West", MatrixCell(Ok(r, "first"), "Apparel", 0)["text"]!.GetValue<string>());
+        Assert.Equal("South", MatrixCell(Ok(r, "last"), "Apparel", 0)["text"]!.GetValue<string>());
+        var count = MatrixCell(Ok(r, "count"), "Apparel", 0);
+        Assert.Equal((4, "4"), (count["v"]!.GetValue<int>(), count["text"]!.GetValue<string>()));
+        Assert.Equal("West, Central, East, South", MatrixCell(Ok(r, "list"), "Apparel", 0)["text"]!.GetValue<string>());
+        Assert.Empty(Violations(r.ToJson()));
+    }
+
+    [Fact]
+    public async Task The_totals_of_a_matrix_with_an_attribute_among_its_values_leave_the_attribute_cells_empty_and_keep_the_measures_totals()
+    {
+        var doc = Doc("""
+              mx:
+                type: matrix
+                encodings:
+                  rows: [products.category]
+                  columns: [customers.region]
+                  values:
+                    - {field: sales.net_amount, label: Net}
+                    - {attribute: products.product, many: count, label: Products}
+                  totals: {rows: true, columns: true}
+                query: {model: retail_sales}
+            """);
+        var r = await Resolver(new RetailServing()).ResolveAsync(Viewer(), doc, "desk");
+        var mx = Ok(r, "mx");
+        var total = mx["rows"]!.AsArray().Single(x => x!["total"]?.GetValue<bool>() == true)!["cells"]!.AsArray();
+        int Column(string region, string value) => mx["columns"]!.AsArray().ToList().FindIndex(c => c!["labels"]![0]!.GetValue<string>() == region && c["labels"]!.AsArray().Last()!.GetValue<string>() == value);
+        // the total row: the net of the region, and nothing for the products
+        Assert.Equal(NetOf(l => l.Region == "East"), total[Column("East", "Net")]!["v"]!.GetValue<double>());
+        Assert.Equal("", total[Column("East", "Products")]!["text"]!.GetValue<string>());
+        // a detail cell: Apparel in the East has 9 products, counted; the same in the total column is empty
+        var apparel = mx["rows"]!.AsArray().Single(x => x!["labels"]![0]!.GetValue<string>() == "Apparel")!["cells"]!.AsArray();
+        Assert.Equal(9, apparel[Column("East", "Products")]!["v"]!.GetValue<int>());
+        var totalColumn = mx["columns"]!.AsArray().ToList().FindIndex(c => c!["total"]?.GetValue<bool>() == true);
+        Assert.Equal("", apparel[totalColumn + 1]!["text"]!.GetValue<string>());
+        Assert.Empty(Violations(r.ToJson()));
+    }
+
+    [Fact]
+    public async Task An_attribute_draws_as_an_icon_chosen_by_its_value_a_badge_or_a_link_and_a_table_column_does_the_same()
+    {
+        var doc = Doc("""
+              mx:
+                type: matrix
+                encodings:
+                  rows: [products.product]
+                  columns: [date.year_month]
+                  values:
+                    - {attribute: products.category, display: icon, icons: {Apparel: star, Footwear: flag}, link: open-it}
+                    - {field: sales.units}
+                query: {model: retail_sales, filters: [{attribute: date.year_month, operator: equals, values: [202601]}]}
+              tb:
+                type: table
+                encodings:
+                  columns:
+                    - {field: products.category, display: icon, icons: {Apparel: star}, link: open-it}
+                    - {field: customers.region, display: badge}
+                    - {field: sales.units}
+                query: {model: retail_sales, limit: 5}
+            """, links: Links);
+        var r = await Resolver(new RetailServing()).ResolveAsync(Viewer(), doc, "desk");
+        var jacket = MatrixCell(Ok(r, "mx"), "Trail Jacket", 0);
+        Assert.Equal(("Apparel", "star", "open-it"), (jacket["text"]!.GetValue<string>(), jacket["icon"]!.GetValue<string>(), jacket["link"]!.GetValue<string>()));
+        var boot = MatrixCell(Ok(r, "mx"), "Hiking Boot", 0);
+        Assert.Equal("flag", boot["icon"]!.GetValue<string>());
+        // a value the map does not name shows as text, with no icon
+        Assert.Null(MatrixCell(Ok(r, "mx"), "Daypack 22L", 0)["icon"]);
+
+        var tb = Ok(r, "tb");
+        var first = tb["rows"]![0]!["cells"]!;
+        Assert.Equal("star", first[0]!["icon"]!.GetValue<string>());
+        Assert.Equal("open-it", first[0]!["link"]!.GetValue<string>());
+        Assert.True(first[1]!["badge"]!.GetValue<bool>());
+        Assert.Null(first[2]!["icon"]);
+        Assert.Empty(Violations(r.ToJson()));
     }
 
     // ---- parameters ----
