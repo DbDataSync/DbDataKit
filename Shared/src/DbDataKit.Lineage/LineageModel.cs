@@ -22,6 +22,12 @@ public enum RunOutcome { Succeeded, Failed }
 public sealed record LineageNode(string Id, NodeKind Kind, string Name, bool UnknownUpstream = false, IReadOnlyDictionary<string, string>? Properties = null)
 {
     public IReadOnlyDictionary<string, string> PropertyMap => Properties ?? new Dictionary<string, string>();
+
+    /// <summary>The description its definition gives it (<see cref="LineageDescriptions"/>), or null: never an empty string.</summary>
+    public string? Description => Properties is not null && Properties.TryGetValue(LineageDescriptions.DescriptionKey, out var d) && !string.IsNullOrWhiteSpace(d) ? d : null;
+
+    /// <summary>The owner its definition names, or null.</summary>
+    public string? Owner => Properties is not null && Properties.TryGetValue(LineageDescriptions.OwnerKey, out var o) && !string.IsNullOrWhiteSpace(o) ? o : null;
 }
 
 /// <summary>Data flowing from <paramref name="From"/> to <paramref name="To"/>. <paramref name="Detail"/> is the kind's own word (the transform of a <c>derives</c>: identity, expression, aggregate).</summary>

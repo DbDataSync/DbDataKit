@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bindingLine, bindingProblem, buildRequest, channelProblem, describeSchedule, emptyForm, formFromSubscription, outboxLine, sendNowBlockedReason, statusWord, subscriptionProblem, type ChannelBinding, type Subscription, type SubscriptionForm } from './delivery'
+import { alertFormFrom, alertSummary, buildAlertRule, cooldownWords, bindingLine, bindingProblem, buildRequest, channelProblem, describeSchedule, emptyForm, formFromSubscription, outboxLine, sendNowBlockedReason, statusWord, subscriptionProblem, type ChannelBinding, type Subscription, type SubscriptionForm } from './delivery'
 
 const form = (over: Partial<SubscriptionForm> = {}): SubscriptionForm => ({ ...emptyForm('mail'), name: 'Weekly sales', view: 'sales', ...over })
 
@@ -74,5 +74,28 @@ describe('what a channel\'s bindings say in words (the mapping itself is the Bin
     expect(bindingProblem(binding())).toBeNull()
     expect(bindingProblem(binding({ ready: false, problem: 'There is no connection named \'x\'.' }))).toBe('There is no connection named \'x\'.')
     expect(bindingProblem(binding({ ready: false, missing: ['endpoint_secrets.token: env:T cannot be read'] }))).toBe('endpoint_secrets.token: env:T cannot be read')
+  })
+})
+
+describe('the alert rules', () => {
+  const rule = { kind: 'failed-run', title: 'Failed runs', enabled: true, channel: 'alerts', recipients: ['ops@example.com'], cooldownMinutes: 60, releaseChannel: null, version: 2 }
+
+  it('builds the body the API reads from what was typed, recipients in any separator', () => {
+    const form = { ...alertFormFrom(rule), recipients: 'ops@example.com; ana@example.com\nbo@example.com', cooldownMinutes: '30' }
+    expect(buildAlertRule(form, 2)).toEqual({ body: { enabled: true, channel: 'alerts', recipients: ['ops@example.com', 'ana@example.com', 'bo@example.com'], cooldownMinutes: 30, releaseChannel: null, version: 2 } })
+  })
+
+  it('says what is wrong in words before asking the server', () => {
+    expect(buildAlertRule({ ...alertFormFrom(rule), recipients: 'nobody' }, 2)).toEqual({ error: "'nobody' is not an email address." })
+    expect(buildAlertRule({ ...alertFormFrom(rule), channel: '' }, 2)).toEqual({ error: 'Recipients need a channel; with no channel the alert is shown in the notification feed only.' })
+    expect(buildAlertRule({ ...alertFormFrom(rule), cooldownMinutes: '0' }, 2)).toEqual({ error: 'The cool-down is a whole number of minutes, from 1 to 10080 (7 days).' })
+    expect(buildAlertRule({ ...alertFormFrom(rule), cooldownMinutes: 'soon' }, 2)).toMatchObject({ error: expect.stringContaining('whole number') })
+  })
+
+  it('summarises a rule in a sentence and the cool-down in the unit a person reads', () => {
+    expect(alertSummary({ ...rule, enabled: false })).toBe('Off.')
+    expect(alertSummary(rule)).toBe('On: sent through alerts to ops@example.com; a source that keeps failing is told again after an hour.')
+    expect(alertSummary({ ...rule, channel: null, recipients: [], cooldownMinutes: 1440 })).toBe('On: shown in the notification feed only; a source that keeps failing is told again after a day.')
+    expect([cooldownWords(45), cooldownWords(120), cooldownWords(2880)]).toEqual(['45 minutes', '2 hours', '2 days'])
   })
 })

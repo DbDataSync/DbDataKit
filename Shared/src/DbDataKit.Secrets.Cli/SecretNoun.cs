@@ -16,6 +16,8 @@ public static class SecretNoun
         Forward(cli, console, "check", "Whether each reference resolves (every one in the configuration when none is named)", EffectClass.OfflineOnly, "[<reference> ...]"),
         Forward(cli, console, "rotate-key", "Re-encrypt every secret under a new key", EffectClass.RepoFilesOnly, ""),
         Forward(cli, console, "export", "Write every secret to a file under a passphrase", EffectClass.OfflineOnly, "<file> [--prefix <prefix>] [--passphrase-stdin]"),
+        Forward(cli, console, "key-backup", "Write the data keys to a file under a passphrase (plan 22a GP21)", EffectClass.OfflineOnly, "<file> [--passphrase-stdin]"),
+        Forward(cli, console, "key-restore", "Read a key backup into this machine's key ring", EffectClass.RepoFilesOnly, "<file> [--activate] [--passphrase-stdin]"),
         Forward(cli, console, "import", "Read secrets from an export file", EffectClass.RepoFilesOnly, "<file> [--overwrite] [--passphrase-stdin]"),
         Forward(cli, console, "protect", "An inline, encrypted form of one value for a single field", EffectClass.OfflineOnly, "[--stdin]"),
     ]);

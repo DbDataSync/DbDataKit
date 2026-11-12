@@ -202,3 +202,43 @@ export const deliveryApi = {
   run: (id: string) => request<{ result: { outcome: string; detail: string; messageId: string | null }; subscription: Subscription }>(`/api/delivery/subscriptions/${id}/run`, { method: 'POST' }),
   runs: (id: string) => request<{ runs: SubscriptionRun[] }>(`/api/delivery/subscriptions/${id}/runs`),
 }
+
+// ---- alerts (plan 22a GP16) ----
+
+export interface AlertRule { kind: string; title: string; enabled: boolean; channel: string | null; recipients: string[]; cooldownMinutes: number; releaseChannel: string | null; version: number }
+export interface FailingAlert { source: string; kind: string; recipient: string | null; lastSentAt: string; message: string | null }
+export interface AlertOverview { rules: AlertRule[]; failing: FailingAlert[]; channels: string[]; releaseChannels: string[] }
+
+/** What the alert editor holds: the recipients as the person typed them (commas, semicolons or lines), the cool-down as text. */
+export interface AlertForm { enabled: boolean; channel: string; recipients: string; cooldownMinutes: string; releaseChannel: string }
+
+export const alertFormFrom = (r: AlertRule): AlertForm => ({ enabled: r.enabled, channel: r.channel ?? '', recipients: r.recipients.join(', '), cooldownMinutes: String(r.cooldownMinutes), releaseChannel: r.releaseChannel ?? '' })
+
+/** The body the API reads, or what is wrong in words before the server is asked. */
+export function buildAlertRule(form: AlertForm, version: number): { body: Record<string, unknown> } | { error: string } {
+  const recipients = form.recipients.split(/[,;\n]/).map((x) => x.trim()).filter((x) => x.length > 0)
+  const bad = recipients.find((x) => !/^[^@\s]+@[^@\s]+$/.test(x))
+  if (bad) return { error: `'${bad}' is not an email address.` }
+  if (recipients.length > 0 && form.channel.trim() === '') return { error: 'Recipients need a channel; with no channel the alert is shown in the notification feed only.' }
+  const minutes = Number(form.cooldownMinutes)
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > 7 * 24 * 60) return { error: 'The cool-down is a whole number of minutes, from 1 to 10080 (7 days).' }
+  return { body: { enabled: form.enabled, channel: form.channel.trim() === '' ? null : form.channel.trim(), recipients, cooldownMinutes: minutes, releaseChannel: form.releaseChannel.trim() === '' ? null : form.releaseChannel.trim(), version } }
+}
+
+/** One line for a rule: whether it is on, where it goes and how often one source may alert. */
+export function alertSummary(r: AlertRule): string {
+  if (!r.enabled) return 'Off.'
+  const where = r.channel === null ? 'shown in the notification feed only' : `sent through ${r.channel}${r.recipients.length > 0 ? ` to ${r.recipients.join(', ')}` : ''}${r.releaseChannel ? ` (release channel ${r.releaseChannel})` : ''}`
+  return `On: ${where}; a source that keeps failing is told again after ${cooldownWords(r.cooldownMinutes)}.`
+}
+
+export function cooldownWords(minutes: number): string {
+  if (minutes % 1440 === 0) return minutes === 1440 ? 'a day' : `${minutes / 1440} days`
+  if (minutes % 60 === 0) return minutes === 60 ? 'an hour' : `${minutes / 60} hours`
+  return `${minutes} minutes`
+}
+
+export const alertsApi = {
+  overview: () => request<AlertOverview>('/api/delivery/alerts'),
+  set: (kind: string, body: Record<string, unknown>) => request<{ rule: AlertRule }>(`/api/delivery/alerts/${encodeURIComponent(kind)}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+}

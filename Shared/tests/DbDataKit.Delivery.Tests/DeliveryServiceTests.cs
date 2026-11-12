@@ -25,7 +25,7 @@ public sealed class DeliveryServiceTests
         Assert.Equal(["attempt"], rule.Children!.Select(c => c.Table));
         Assert.Equal("delivery", DeliveryModule.Module.Name);
         Assert.Equal(StateScopeKind.Install, DeliveryModule.Module.Scope);
-        Assert.Equal(["attempt", "message", "subscription", "subscription_run"], StateTableDefinitions.Read(DeliveryModule.Module).Select(t => t.Name).Order());
+        Assert.Equal(["alert_rule", "alert_state", "attempt", "message", "subscription", "subscription_run"], StateTableDefinitions.Read(DeliveryModule.Module).Select(t => t.Name).Order());
     }
 
     [Theory, MemberData(nameof(Engines))]

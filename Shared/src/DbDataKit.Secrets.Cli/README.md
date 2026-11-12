@@ -15,6 +15,8 @@ The shared `secret` commands, framework-free. A product mounts them under its ow
 | `delete <name>` (`rm`) | delete |
 | `check [ref...]` | resolves each reference given, or every one in the configuration; prints `ok` or `not found`, never a value; exits 1 if any does not resolve; DPAPI blobs are elided |
 | `rotate-key` | a new data key, every value encrypted again under it, the old key deleted; an interrupted rotation is finished |
+| `key-backup <file> [--passphrase-stdin]` | the store's data keys, each sealed under a passphrase (AES-256-GCM, PBKDF2-SHA256), to restore the key on a lost or new machine (plan 22a GP21, format `secret-key/1`); never put in git, keep the passphrase apart |
+| `key-restore <file> [--activate] [--passphrase-stdin]` | reads a key backup into this machine's key ring under this machine's own key protection (a key DPAPI bound to another machine is re-keyed); a key the ring has is kept; a wrong passphrase or a changed file is refused before anything is stored |
 | `export <file> [--prefix p] [--passphrase-stdin]` | the secrets, encrypted under a passphrase (asked twice, hidden, or the first line of stdin), to move a server; the store's key is not in the file |
 | `import <file> [--overwrite] [--passphrase-stdin]` | read such a file; names already there are kept unless `--overwrite` |
 | `protect [--stdin]` | the inline, encrypted form of one value for a single field (Windows: `dpapi:`); prints that form, not the value |

@@ -5,12 +5,12 @@ import { ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { ConsoleShell } from '../ConsoleShell'
 import { BindingsPanel } from './BindingsPage'
 import {
-  buildRequest, channelProblem, deliveryApi, describeSchedule, emptyForm, formFromSubscription, outboxLine, sendNowBlockedReason, statusWord, subscriptionProblem,
-  subscriptionStatusWord, type DeliveryMessage, type DeliveryOverview, type Subscription, type SubscriptionForm,
+  alertFormFrom, alertSummary, alertsApi, buildAlertRule, buildRequest, channelProblem, deliveryApi, describeSchedule, emptyForm, formFromSubscription, outboxLine, sendNowBlockedReason, statusWord, subscriptionProblem,
+  subscriptionStatusWord, type AlertForm, type AlertRule, type DeliveryMessage, type DeliveryOverview, type Subscription, type SubscriptionForm,
 } from '../delivery'
 
-type Tab = 'channels' | 'subscriptions' | 'history'
-const TABS: { id: Tab; label: string }[] = [{ id: 'channels', label: 'Channels' }, { id: 'subscriptions', label: 'Subscriptions' }, { id: 'history', label: 'History' }]
+type Tab = 'channels' | 'subscriptions' | 'alerts' | 'history'
+const TABS: { id: Tab; label: string }[] = [{ id: 'channels', label: 'Channels' }, { id: 'subscriptions', label: 'Subscriptions' }, { id: 'alerts', label: 'Alerts' }, { id: 'history', label: 'History' }]
 
 /**
  * Delivery (plan 22a GP18): the channels of the install's `delivery:` section with the connection each uses per release channel, whether each can be used and a test send, a person's subscriptions to a dashboard or report (and, for an administrator, everyone's), and the outbox with what the far side
@@ -39,6 +39,7 @@ export function DeliveryPage() {
         </div>
         {overview.data && tab === 'channels' && <ChannelsTab overview={overview.data} />}
         {overview.data && tab === 'subscriptions' && <SubscriptionsTab overview={overview.data} />}
+        {overview.data && tab === 'alerts' && <AlertsTab />}
         {overview.data && tab === 'history' && <HistoryTab overview={overview.data} />}
       </div>
     </ConsoleShell>
@@ -61,6 +62,88 @@ function ChannelsTab({ overview }: { overview: DeliveryOverview }) {
         </div>
       ))}
       {overview.channels.length > 0 && <div className="hint" style={{ marginTop: 8 }}>Messages are tried up to {overview.policy.maxAttempts} times, waiting {overview.policy.backoffSeconds.join(', ')} seconds between tries; then they are parked as failed (History) until an administrator sends them again.</div>}
+    </div>
+  )
+}
+
+// ---- alerts (plan 22a GP16) ----
+
+/**
+ * The alerts (plan 22a GP16): the fixed set of kinds, each on or off with the channel and recipients it goes to (no channel: the notification feed only) and the cool-down per source, and what is failing now and has been told. An administrator's
+ * screen; the server says what a rule may name.
+ */
+function AlertsTab() {
+  const client = useQueryClient()
+  const isAdmin = useIsAdmin()
+  const overview = useQuery({ queryKey: ['delivery', 'alerts'], queryFn: alertsApi.overview, enabled: isAdmin })
+  const [editing, setEditing] = useState<{ rule: AlertRule; form: AlertForm } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const save = useMutation({
+    mutationFn: async ({ rule, form }: { rule: AlertRule; form: AlertForm }) => {
+      const built = buildAlertRule(form, rule.version)
+      if ('error' in built) throw new Error(built.error)
+      return alertsApi.set(rule.kind, built.body)
+    },
+    onSuccess: async () => { setEditing(null); setError(null); await client.invalidateQueries({ queryKey: ['delivery', 'alerts'] }) },
+    onError: (e) => setError(e instanceof Error ? e.message : String(e)),
+  })
+  if (!isAdmin) return <div className="empty" data-testid="alerts-admin-only">Alerts are set by an administrator.</div>
+  const data = overview.data
+  return (
+    <div data-testid="delivery-alerts">
+      <div className="hint">Alerts are on only where an administrator turns them on. A source that keeps failing is told once, again after the cool-down, and once more when it recovers; with no channel an alert is shown in the notification feed only.</div>
+      <ErrorBanner error={overview.error} />
+      {data && (
+        <table className="table" data-testid="alerts-table">
+          <thead><tr><th>Alert</th><th>Rule</th><th /></tr></thead>
+          <tbody>
+            {data.rules.map((r) => (
+              <tr key={r.kind} data-testid={`alert-${r.kind}`} data-enabled={r.enabled}>
+                <td><strong>{r.title}</strong></td>
+                <td>{alertSummary(r)}</td>
+                <td><button type="button" className="btn btn-sm" onClick={() => { setError(null); setEditing({ rule: r, form: alertFormFrom(r) }) }} data-testid={`alert-edit-${r.kind}`}>Edit</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {editing && data && (
+        <div className="card" data-testid="alert-editor">
+          <h3>{editing.rule.title}</h3>
+          <label><input type="checkbox" checked={editing.form.enabled} onChange={(e) => setEditing({ ...editing, form: { ...editing.form, enabled: e.target.checked } })} data-testid="alert-enabled" /> On</label>
+          <label>Channel
+            <select value={editing.form.channel} onChange={(e) => setEditing({ ...editing, form: { ...editing.form, channel: e.target.value } })} data-testid="alert-channel">
+              <option value="">none: the notification feed only</option>
+              {data.channels.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </label>
+          <label>Recipients (email addresses; a webhook channel needs none)
+            <input value={editing.form.recipients} onChange={(e) => setEditing({ ...editing, form: { ...editing.form, recipients: e.target.value } })} data-testid="alert-recipients" />
+          </label>
+          <label>Cool-down in minutes
+            <input value={editing.form.cooldownMinutes} onChange={(e) => setEditing({ ...editing, form: { ...editing.form, cooldownMinutes: e.target.value } })} data-testid="alert-cooldown" />
+          </label>
+          <label>Release channel (empty: prod)
+            <select value={editing.form.releaseChannel} onChange={(e) => setEditing({ ...editing, form: { ...editing.form, releaseChannel: e.target.value } })} data-testid="alert-release">
+              <option value="">prod</option>
+              {data.releaseChannels.filter((c) => c !== 'prod').map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </label>
+          {error && <div className="error" role="alert" data-testid="alert-error">{error}</div>}
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" className="btn btn-sm btn-primary" disabled={save.isPending} onClick={() => save.mutate(editing)} data-testid="alert-save">Save</button>
+            <button type="button" className="btn btn-sm" onClick={() => setEditing(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {data && (
+        <div style={{ marginTop: 12 }} data-testid="alerts-failing">
+          <h3>Failing now</h3>
+          {data.failing.length === 0
+            ? <div className="empty" data-testid="alerts-none">Nothing that has been told is still failing.</div>
+            : <ul>{data.failing.map((f) => <li key={`${f.source}|${f.recipient ?? ''}`}>{f.message ?? f.source} <span className="muted">(told {new Date(f.lastSentAt).toLocaleString()}{f.recipient ? ` to ${f.recipient}` : ''})</span></li>)}</ul>}
+        </div>
+      )}
     </div>
   )
 }

@@ -66,6 +66,8 @@ public sealed class SecretCli(
         "  check [ref...]                  resolve each reference (those given, or every one in the configuration) and say which do not\n" +
         "  rotate-key                      a new data key; every value is encrypted again under it and the old key is deleted\n" +
         "  export <file> [--prefix p] [--passphrase-stdin]   write the secrets, encrypted under a passphrase, to move a server\n" +
+        "  key-backup <file> [--passphrase-stdin]   write the data keys, encrypted under a passphrase (keep the file out of git and the passphrase apart from it)\n" +
+        "  key-restore <file> [--activate] [--passphrase-stdin]   read a key backup into this machine's key ring (re-keys a key another machine protected)\n" +
         "  import <file> [--overwrite] [--passphrase-stdin]  read an export made by `export`\n" +
         "  protect [--stdin]               an inline, encrypted form of one value for a single field (Windows: dpapi:)\n" +
         "names look like dbdatakit:<service>:<kind>:<name>[:<part>]; refs like secret:<name>, env:X, file:/p. There is no command that prints a value.";
@@ -96,6 +98,8 @@ public sealed class SecretCli(
                 "rotate-key" => await RotateAsync(positional, console, ct).ConfigureAwait(false),
                 "export" => await ExportAsync(positional, flags, console, ct).ConfigureAwait(false),
                 "import" => await ImportAsync(positional, flags, console, ct).ConfigureAwait(false),
+                "key-backup" => KeyBackup(positional, flags, console),
+                "key-restore" => await KeyRestoreAsync(positional, flags, console, ct).ConfigureAwait(false),
                 "protect" => Protect(positional, flags, console),
                 _ => Usage_(console, $"unknown command '{args[0]}'"),
             };
@@ -253,6 +257,28 @@ public sealed class SecretCli(
         if (passphrase is null) return 1;
         var result = await admin.ImportAsync(positional[0], passphrase, flags.ContainsKey("--overwrite"), ct).ConfigureAwait(false);
         console.WriteLine($"imported {result.Imported}, overwritten {result.Overwritten}, kept {result.Skipped} that were already there");
+        return 0;
+    }
+
+    private int KeyBackup(List<string> positional, IDictionary<string, string?> flags, IConsole console)
+    {
+        if (positional.Count != 1) return Usage_(console, "key-backup needs one file to write.");
+        if (admin is null) { console.WriteError("key-backup is not available here."); return 1; }
+        using var passphrase = ReadPassphrase(console, flags, confirm: true);
+        if (passphrase is null) return 1;
+        var count = admin.BackupKeys(positional[0], passphrase);
+        console.WriteLine($"backed up {count} key(s) to {positional[0]}; never put the file in git, and keep the passphrase apart from it");
+        return 0;
+    }
+
+    private async Task<int> KeyRestoreAsync(List<string> positional, IDictionary<string, string?> flags, IConsole console, CancellationToken ct)
+    {
+        if (positional.Count != 1) return Usage_(console, "key-restore needs one key backup file.");
+        if (admin is null) { console.WriteError("key-restore is not available here."); return 1; }
+        using var passphrase = ReadPassphrase(console, flags, confirm: false);
+        if (passphrase is null) return 1;
+        var result = await admin.RestoreKeysAsync(positional[0], passphrase, flags.ContainsKey("--activate"), ct).ConfigureAwait(false);
+        console.WriteLine($"restored {result.Restored.Count} key(s), kept {result.Kept.Count} the ring already had; the active key is {result.ActiveKeyId}");
         return 0;
     }
 

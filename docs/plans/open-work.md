@@ -33,8 +33,8 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | --- | --- | --- |
 | [23a](23a-first-run-and-quality-slices.md) FQ18, FQ20, FQ22 | The single-machine bundle (one installer, the bundle token), scaling out as a step (state move, add an instance, re-pair), each product still installable alone. Plan 33's `dbdatakit-full` Scoop package is the nearest thing | |
 | [24a](24a-upgrade-and-cache-slices.md) UC11, UC16 | Groups upgrade rolling after draining (UC10, one server at a time, is built); the cache settings screen and docs | |
-| [22a](22a-gap-slices.md) GP16, GP17 | Alerts (the fixed set, a cool-down, a system task); subscriptions: the access-loss stop of a person who loses a rule's access | PARTLY: delivery service, subscriptions library, Delivery page built |
-| [22a](22a-gap-slices.md) GP19 to GP22 | A git remote per configuration repository, `state backup` for SQLite, the secrets key backup and restore, the recovery drill page | |
+| [22a](22a-gap-slices.md) GP16, GP17 | Alerts: the sources for approvals waiting, expiring previews and late datasets, a task of the runner (the rules, the cool-down, the screen and the failed-run source are built, 2026-11-12); subscriptions: the access-loss stop of a person who loses a rule's access | PARTLY: delivery service, subscriptions library, Delivery page, alerts built |
+| [22a](22a-gap-slices.md) GP19, GP22 | The `git.remote` setting and its `health` line in each product (the pusher `GitRemotePusher` is built); the recovery page, the `health` lines (no backup in N days) and the CI drill (`state backup`/`restore`, `secret key-backup`/`key-restore` and `docs/backup-and-recovery.md` are built, 2026-11-12) | PARTLY |
 | [20](20-serving-layer.md) O07, O06b, O20 | The identity home forwarded behind the firewall; hardening (Entra group overage, keytab, signing keys); a group as one node in the console | |
 | [29b](29b-state-migration-slices.md) C04 to C07 | Products name their encrypted columns for the decrypt-a-sample check; the state API on the runner and the Sync server; the connection test on the server's modules; Sync and the Windows installers read and write the shared `state` section | PARTLY: the identity home, the audit and the Gateway's maintenance are built |
 | [29a](29a-state-slices.md) Q21 | The `runs` module reads Build's runs from the tracking copy | PARTLY: the divergence screen is built |
@@ -117,8 +117,8 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 
 | Plan and row | What remains | Flag |
 | --- | --- | --- |
-| [22a](22a-gap-slices.md) GP27 to GP29 | OpenTelemetry: the library, the hosts, traces across servers | |
-| [22a](22a-gap-slices.md) GP23 | Descriptions and owners in lineage nodes | |
+| [22a](22a-gap-slices.md) GP28, GP29 | OpenTelemetry: the hosts' spans and counters, traces across servers (the library `DbDataKit.Telemetry` is built, GP27) | |
+| [22a](22a-gap-slices.md) GP23 | Descriptions and owners in lineage nodes: the emitters, once the definitions carry the text (the contract `LineageDescriptions` is built) | PARTLY |
 | [24a](24a-upgrade-and-cache-slices.md) UC06, UC07 | The expand-then-contract check of state migrations; the N and N-1 compatibility CI job | |
 | [27a](27a-knowledge-slices.md) AX01 to AX12, BK05 to BK11 | Actions (one script format, callable and served, principals, grants, audit) and the backlog's links, notifications, automatic items, assistant and agent hand-off | not built |
 | [7](07-data-transfer.md), [12](12-shared-tls-rollout.md) | See "Held and parked" | LOW |
