@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using DbDataKit.Config.Git;
 using DbDataKit.Lineage;
 using DbDataSync.Core.Config;
+using DbDataSync.Api;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -49,5 +50,10 @@ public sealed class LineageEndpointTests(TestApiFactory factory) : IClassFixture
         Assert.StartsWith("postgres://pg01", edge.To);
         Assert.Contains(graph.Edges, e => e.Granularity == Granularity.Column && e.To.EndsWith("#customer_id"));
         Assert.IsType<JsonArray>(document["problems"]);
+        // plan 18 G07b: the wire form carries `runs` (none here: nothing ran) and the graph is kept in Sync's state under its owner, the version being the graph's fingerprint
+        Assert.Empty(LineageJson.ReadRuns(document));
+        var store = factory.Services.GetRequiredService<LineageStore>();
+        Assert.Equal(graph.Fingerprint(), store.Version(Controllers.LineageController.Owner));
+        Assert.Contains(store.Load(Controllers.LineageController.Owner).Edges, e => e.Detail == $"{name}/customers");
     }
 }

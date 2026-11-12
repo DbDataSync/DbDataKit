@@ -26,6 +26,7 @@ module is `sync_state`; the others are the suite's shared ones, the same tables 
 | `audit` | `entry` | Who paused or resumed a replication or held a table mapping, and when |
 | `runner_progress` | `checkpoint_head`, `checkpoint_part`, `checkpoint_history` | The read position of each table mapping, with its `ReadIntent`/`ReadHold` (see [Replication concepts](replication-concepts.md)): a declared checkpoint called `watermark`, kept per mapping and source table, whose every change is in the history |
 | `quality` | `check_result`, `check_status` | The results of the checks stored with the replications (`checks:` in `task.yaml`): one row for each evaluation (status, measured value, a few sample keys, the run that set it off), the latest status of each check and any block it sets. Results older than 90 days go; the latest status stays |
+| `lineage` | `node`, `edge`, `design_version`, `run` | Sync's part of the suite's lineage graph (plan 18, G07b), kept between requests: the nodes and edges the replications' table and column mappings give (replaced when a definition changed), the version of that graph, and the newest finished run of each mapping along its `replicates` edge (when, the outcome, the rows). Runs older than 30 days, the retention of run detail, go; the design stays. Read by `GET /api/lineage` and the console's Lineage page; `dbdatasync lineage graph\|impact\|provenance` builds the graph offline from the configuration |
 
 ## An older state database
 

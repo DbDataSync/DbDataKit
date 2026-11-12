@@ -26,6 +26,33 @@ public static class SyncLineage
         };
     }
 
+    /// <summary>
+    /// The replications and connections of a configuration repository, as the graph is built from them: one that cannot be read is left out and named in <paramref name="problems"/> (by the kind of failure, never its message, which can quote a value), and takes none
+    /// of the others with it. Shared by the endpoint and the command line, so both say the same.
+    /// </summary>
+    public static (IReadOnlyList<SyncReplication> Replications, IReadOnlyDictionary<string, ConnectionConfig> Connections) Load(ConfigRepository configRepository, List<string> problems)
+    {
+        var connections = new Dictionary<string, ConnectionConfig>(StringComparer.Ordinal);
+        try { foreach (var connection in configRepository.LoadAllConnections()) connections[connection.Name] = connection; }
+        catch (Exception ex) when (ex is ConfigFileException or ConfigValidationException) { problems.Add($"The connections cannot be read ({ex.GetType().Name}), so no replication has a source or a target in the graph."); }
+
+        var replications = new List<SyncReplication>();
+        foreach (var name in configRepository.ListReplications())
+        {
+            try
+            {
+                var task = configRepository.LoadReplicationTask(name);
+                var mappings = configRepository.ListTableMappings(name).Select(m => configRepository.LoadTableMapping(name, m)).ToList();
+                replications.Add(new SyncReplication(task, mappings));
+            }
+            catch (Exception ex) when (ex is ConfigFileException or ConfigValidationException or MappingLoadingException)
+            {
+                problems.Add($"Replication '{name}' is left out: its configuration could not be read ({ex.GetType().Name}).");
+            }
+        }
+        return (replications, connections);
+    }
+
     /// <summary>The design lineage of the replications. <paramref name="connections"/> are the configured connections by name; a mapping that names none, or one that is not configured, is left out and said in <paramref name="notes"/>.</summary>
     public static LineageGraph Design(IReadOnlyList<SyncReplication> replications, IReadOnlyDictionary<string, ConnectionConfig> connections, List<string>? notes = null)
     {

@@ -21,7 +21,7 @@ public sealed class SyncCliTests
 
     [Fact]
     public void TheNounsAreTheSuiteGrammar() =>
-        Assert.Equal(["server", "service", "cert", "script", "secret", "library", "driver", "package", "config", "state", "health", "ui"], SyncCli.Router().Nouns.Select(n => n.Name));
+        Assert.Equal(["server", "service", "cert", "script", "secret", "library", "driver", "package", "config", "state", "lineage", "health", "ui"], SyncCli.Router().Nouns.Select(n => n.Name));
 
     /// <summary>Plan 28c, E14: <c>state show</c> lists the modules Sync's state is built from, each with the version this build has, and the version a database is at once it exists.</summary>
     [Fact]

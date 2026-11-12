@@ -157,6 +157,8 @@ public static class DbDataSyncHost
                 sp.GetRequiredService<SecretStore>(), sp.GetRequiredService<LibraryRegistry>());
         });
         builder.Services.AddSingleton(sp => new TaskRunStore(sp.GetRequiredService<StateDatabase>()));
+        // Sync's lineage graph and the runs along its edges, kept between requests (plan 18 G07b)
+        builder.Services.AddSingleton(sp => new DbDataKit.Lineage.LineageStore(sp.GetRequiredService<StateDatabase>(), SyncState.ServiceId));
         builder.Services.AddSingleton(sp => new RunMetricsStore(sp.GetRequiredService<StateDatabase>()));
         builder.Services.AddSingleton(sp => new BulkLoadBatchStore(sp.GetRequiredService<StateDatabase>()));
         builder.Services.AddSingleton(sp => new VerificationResultStore(sp.GetRequiredService<StateDatabase>()));

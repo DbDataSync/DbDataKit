@@ -97,6 +97,7 @@ public static class SyncCli
             Forward("set", "Change one setting of server.yaml", EffectClass.RepoFilesOnly, "<key> <value> [--repo <path>]", a => ConfigCommand.RunAsync(["set", .. a])),
         ]),
         StateNoun(),
+        LineageCommand.Noun(),
         new Noun("health", "Is a running server answering",
         [
             new Verb("check", "Exit 0 when a running DbDataSync answers, 1 when it does not (what the container's health check runs)", EffectClass.OfflineOnly, "[--url <url>] [--repo <path>]",
