@@ -5,7 +5,7 @@ using LibGit2Sharp;
 
 namespace DbDataSync.Core.Tests;
 
-/// <summary>Plan 28c E17: the <c>tracking:</c> section of a replication file, its words, its round trip and what it resolves to while no writer keeps the state on the target.</summary>
+/// <summary>Plan 28c E17: the <c>tracking:</c> section of a replication file, its words, its round trip and what it resolves to per target engine.</summary>
 public sealed class TrackingConfigTests : IDisposable
 {
     private static readonly GitAuthor Author = new("Test", "test@example.com");
@@ -55,15 +55,28 @@ public sealed class TrackingConfigTests : IDisposable
     }
 
     [Theory]
-    [InlineData("both", "target")]
-    [InlineData("both", "state")]
-    [InlineData("target", null)]
-    public void ModesThatKeepTheStateOnTheTargetAreRefusedUntilAWriterDoesItAndTheMessageSaysSo(string mode, string? primary)
+    [InlineData("both", "target", "MySql", "not built yet")]
+    [InlineData("target", null, "Oracle", "not built yet")]
+    [InlineData("both", "state", "DuckDb", "cannot hold a state table")]
+    [InlineData("target", null, "ArrowFlightSql", "cannot hold a state table")]
+    public void ModesThatKeepTheStateOnTheTargetAreRefusedForAnEngineWithoutAWriterAndTheMessageSaysSo(string mode, string? primary, string engine, string why)
     {
-        var ex = Assert.Throws<ConfigValidationException>(() => _config.SaveReplicationTask(Task(new TrackingConfig { Mode = mode, Primary = primary }), Author));
-        Assert.Contains("no writer writes it there yet", ex.Message);
+        var ex = Assert.Throws<ConfigValidationException>(() => TrackingResolution.Validate(new TrackingConfig { Mode = mode, Primary = primary }, "r", engine));
+        Assert.Contains(why, ex.Message);
         Assert.Contains("'r'", ex.Message);
-        Assert.Null(TaskFile());
+    }
+
+    [Theory]
+    [InlineData("both", "target", "MsSql")]
+    [InlineData("both", "state", "Postgres")]
+    [InlineData("target", null, "MsSql")]
+    [InlineData("target", null, null)]
+    [InlineData("state", null, "MySql")]
+    public void TheModesAreAcceptedWhereAWriterExistsOrTheEngineIsNotKnown(string mode, string? primary, string? engine)
+    {
+        TrackingResolution.Validate(new TrackingConfig { Mode = mode, Primary = primary }, "r", engine);
+        _config.SaveReplicationTask(Task(new TrackingConfig { Mode = mode, Primary = primary }), Author);
+        Assert.Equal(mode, _config.LoadReplicationTask("r").Tracking?.Mode);
     }
 
     [Theory]
@@ -89,18 +102,34 @@ public sealed class TrackingConfigTests : IDisposable
     }
 
     [Theory]
-    [InlineData(null, "MsSql", "both", "target", "state", true)]
-    [InlineData("state", "MsSql", "state", null, "state", false)]
-    [InlineData(null, "ArrowFlightSql", "both", "target", "state", true)]
-    public void TheDefaultResolvesToStateWithTheReasonWhileNoTargetWriterIsBuilt(string? mode, string? driver, string requested, string? requestedPrimary, string effective, bool defaulted)
+    [InlineData("MsSql")]
+    [InlineData("Postgres")]
+    [InlineData("MySql")]
+    [InlineData("ArrowFlightSql")]
+    [InlineData(null)]
+    public void NoSectionKeepsTheRunnersStateAndSaysSo(string? driver)
     {
-        var resolved = TrackingResolution.Resolve(mode is null ? null : new TrackingConfig { Mode = mode }, driver);
-        Assert.Equal(requested, resolved.RequestedMode);
-        Assert.Equal(requestedPrimary, resolved.RequestedPrimary);
-        Assert.Equal(effective, resolved.EffectiveMode);
+        var resolved = TrackingResolution.Resolve(null, driver);
+        Assert.Equal("state", resolved.EffectiveMode);
         Assert.Null(resolved.EffectivePrimary);
-        Assert.Equal(defaulted, resolved.Defaulted);
-        if (defaulted) Assert.Contains("plan 28c E17", resolved.Reason);
+        Assert.True(resolved.Defaulted);
+        Assert.Contains("No tracking section", resolved.Reason);
+    }
+
+    [Theory]
+    [InlineData("both", "target", "MsSql", "both", "target")]
+    [InlineData("both", "state", "Postgres", "both", "state")]
+    [InlineData("target", null, "MsSql", "target", null)]
+    [InlineData("both", "target", "MySql", "state", null)]
+    [InlineData("target", null, "ArrowFlightSql", "state", null)]
+    public void AnAskedForModeAppliesWhereAWriterExistsAndFallsBackToStateWithTheReasonElsewhere(string mode, string? primary, string driver, string effective, string? effectivePrimary)
+    {
+        var resolved = TrackingResolution.Resolve(new TrackingConfig { Mode = mode, Primary = primary }, driver);
+        Assert.Equal(mode, resolved.RequestedMode);
+        Assert.Equal(effective, resolved.EffectiveMode);
+        Assert.Equal(effectivePrimary, resolved.EffectivePrimary);
+        Assert.False(resolved.Defaulted);
+        if (effective == "state") Assert.Contains("state is kept in the runner's state only", resolved.Reason);
     }
 
     [Fact]

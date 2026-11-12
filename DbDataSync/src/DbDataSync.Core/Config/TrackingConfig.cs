@@ -21,7 +21,7 @@ public sealed record TrackingResolved(string RequestedMode, string? RequestedPri
 /// Resolves <see cref="TrackingConfig"/> against what the writers can do. The state table on the target needs an <c>IChangeWriter</c> that writes it in the unit's transaction
 /// (E17): they exist for <see cref="TargetWriterEngines"/> (SQL Server and PostgreSQL); MySQL/MariaDB and Oracle are listed in <see cref="TargetsThatCanHoldState"/> and keep their state in the
 /// runner's state until theirs are built. A Flight SQL or DuckDB target never holds the table. A file that asks for <c>target</c> or <c>both</c> on an engine that cannot is refused at save with a
-/// message instead of being accepted and ignored; the default (both, the target primary) takes the runner's state there and says why.
+/// message instead of being accepted and ignored; a file without the section keeps the runner's state and creates nothing on the target.
 /// </summary>
 public static class TrackingResolution
 {
@@ -72,9 +72,11 @@ public static class TrackingResolution
     /// <summary>The answer for the screen and the API: what applies, whether it is the default, and why.</summary>
     public static TrackingResolved Resolve(TrackingConfig? tracking, string? targetEngine)
     {
-        var wanted = tracking?.Mode?.Trim().ToLowerInvariant() ?? "both";
-        var wantedPrimary = tracking is null ? "target" : tracking.Primary?.Trim().ToLowerInvariant();
-        var defaulted = tracking is null;
+        // Owner decision (E17): no `tracking:` section keeps the runner's state exactly as before and creates nothing on the target; the target is used only when the file asks.
+        if (tracking is null) return new("state", null, "state", null, true, "No tracking section: the state is kept in the runner's state, as before. Set `tracking: { mode: target }` or `both` to keep it on the target as well.");
+        var wanted = tracking.Mode?.Trim().ToLowerInvariant() ?? "state";
+        var wantedPrimary = tracking.Primary?.Trim().ToLowerInvariant();
+        const bool defaulted = false;
 
         if (wanted == "state") return new("state", null, "state", null, defaulted, "The state is kept in the runner's state only, as asked.");
         if (targetEngine is null || !TargetWriterEngines.Contains(targetEngine))
@@ -82,7 +84,7 @@ public static class TrackingResolution
             var why = targetEngine is null
                 ? "The target is not known yet, so the state is kept in the runner's state only."
                 : $"The target ({targetEngine}): {EngineSentence(targetEngine)}, so the state is kept in the runner's state only.";
-            return new(wanted, wantedPrimary, "state", null, defaulted, defaulted ? "The default is both with the target primary. " + why : $"Mode '{wanted}' keeps the state on the target. " + why);
+            return new(wanted, wantedPrimary, "state", null, defaulted, $"Mode '{wanted}' keeps the state on the target. " + why);
         }
 
         return new(wanted, wantedPrimary, wanted, wanted == "both" ? wantedPrimary : null, defaulted,

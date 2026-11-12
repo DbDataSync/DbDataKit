@@ -382,13 +382,25 @@ it can be found and paged back through the API.
 ## Where the tracking state lives
 
 A replication's positions and the record of what each unit moved are its **tracking state**. The optional `tracking:` section of `task.yaml` says where it is kept: `mode: state` (the runner's
-state only), `mode: target` (a state table on the target, written in the unit's transaction) or `mode: both` with `primary: target|state`. A file without the section gets the suite's default,
-`both` with the target primary.
+state only), `mode: target` (a state table on the target, written in the unit's transaction) or `mode: both` with `primary: target|state`. **A file without the section keeps the runner's state exactly as
+before and creates nothing on its target**; the target is used only when the file asks for it.
 
-Today no writer keeps a state table on the target, so every replication runs in `state` mode: the default resolves to it, the Overview tab's **Tracking** card and
-`GET /api/replications/{name}/tracking` say which mode applies, which was asked for and why they differ, and a file that asks for `target` or `both` is refused at save naming the replication and the
-reason (a clear refusal instead of a setting that is accepted and ignored). A Flight SQL or DuckDB target can never hold the table and will stay in `state` mode. Plan 28c E17 builds the writers (SQL Server,
-PostgreSQL, MySQL/MariaDB, Oracle); the setting, its words and the status are in place so that a file written now keeps its meaning.
+**On the target** (SQL Server and PostgreSQL): the table `dbdatasync.unit`, created on first use (the target login needs the right to create the schema `dbdatasync` and the table; without it the pass fails
+saying so). Every pass that read a new position appends one row (the unit: replication, mapping, source key, the position before and after, the rows staged, the run) **in the same transaction as
+the unit's data**: the writer calls the state write just before its commit, so after a crash between the write and the commit the target holds the data and its row, or neither. The newest row of a mapping is the
+position the next pass resumes from when the target is the primary (`target`, or `both` with `primary: target`). The writers that carry the row are ChangeApply, DeleteInsert, Scd2 and, on SQL Server, MsSqlMerge (which then
+runs all its chunks in one transaction instead of one per chunk) and MsSqlDeleteInsert; a file that asks for the target with another writer is refused when the pass starts, naming the writer. MySQL/MariaDB and Oracle are
+refused at save for now (plan 28c E17), a Flight SQL or DuckDB target never holds the table. The runner's state keeps its own copy of every position for status and lag in every mode.
+
+**When the two sides differ** the primary decides and the run's log says so as a warning:
+
+* *A target restored from a backup* holds an older position than the runner's state: with the target primary the replication resumes from the target's position (rows between are read again; writers are idempotent).
+* *A target that holds no state for the mapping* (the first pass in this mode): the pass continues from the runner's position and the target records it from there.
+  **Blind spot:** a target restored from a backup older than the table's creation has no table, so this cannot be told apart from the first pass; the runner's position is used and the data between the backup and that
+  position is not read again. Reload the mapping after restoring such a target.
+* *A runner state that was lost or reset* while the target holds positions: the pass resumes from the target's position, except that a reader that captures its own position starts an initial load (its position is captured before the target is opened).
+
+The Overview tab's **Tracking** card and `GET /api/replications/{name}/tracking` say which mode applies, which was asked for and why they differ.
 
 ## Next: Drivers and libraries
 

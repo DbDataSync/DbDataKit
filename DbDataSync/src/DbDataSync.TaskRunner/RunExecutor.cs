@@ -934,9 +934,8 @@ public sealed class RunExecutor(
                 if (unitTracking is not null)
                 {
                     var started = await unitTracking.StartAsync(targetConnection, task.Name, mapping.Name, watermarkKey, previousWatermark, cancellationToken);
-                    unitTracking = started.Tracking;
                     if (started.Message is not null) Log(item.RunId, LogSeverity.Warning, started.Message);
-                    if (unitTracking is not null) previousWatermark = started.Resume;
+                    previousWatermark = started.Resume;
                 }
             }
 

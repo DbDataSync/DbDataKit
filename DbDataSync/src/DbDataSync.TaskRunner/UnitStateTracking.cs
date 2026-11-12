@@ -10,8 +10,7 @@ namespace DbDataSync.TaskRunner;
 /// starts and ends. Split from <see cref="RunExecutor"/> so each rule is testable on its own.
 /// </summary>
 /// <param name="TargetPrimary">The target's position decides where the next pass reads from (mode <c>target</c>, or <c>both</c> with the target primary).</param>
-/// <param name="Explicit">The file asked for it. A default that cannot be honoured falls back to the runner's state with a warning; an explicit ask is a failure.</param>
-public sealed record UnitStateTracking(TargetUnitState State, bool TargetPrimary, bool Explicit)
+public sealed record UnitStateTracking(TargetUnitState State, bool TargetPrimary)
 {
     /// <summary>
     /// What applies to this pass, or null when the state is the runner's only (the mode, an engine without a writer, a writer that cannot carry the state). A file that asked
@@ -22,7 +21,7 @@ public sealed record UnitStateTracking(TargetUnitState State, bool TargetPrimary
         var resolved = TrackingResolution.Resolve(task.Tracking, targetDriver.DriverType);
         if (resolved.EffectiveMode == "state")
         {
-            if (!resolved.Defaulted && resolved.RequestedMode != "state")
+            if (resolved.RequestedMode != "state")
                 throw new InvalidOperationException($"Replication '{task.Name}': {resolved.Reason}");
             return null;
         }
@@ -30,30 +29,21 @@ public sealed record UnitStateTracking(TargetUnitState State, bool TargetPrimary
         if (!writer.SupportsUnitState)
         {
             var message = $"The writer '{writer.Kind}' does not commit the unit's state row with its data, so the state of '{task.Name}' cannot be kept on the target; choose another writer or `tracking: {{ mode: state }}`.";
-            if (!resolved.Defaulted) throw new InvalidOperationException(message);
-            log(LogSeverity.Info, "Tracking state is kept in the runner's state: " + message);
-            return null;
+            throw new InvalidOperationException(message);
         }
 
         var engine = targetDriver.DriverType.Equals(DriverIds.MsSql, StringComparison.OrdinalIgnoreCase) ? UnitStateEngine.SqlServer : UnitStateEngine.Postgres;
-        return new UnitStateTracking(new TargetUnitState(engine), resolved.EffectiveMode == "target" || resolved.EffectivePrimary == "target", !resolved.Defaulted);
+        return new UnitStateTracking(new TargetUnitState(engine), resolved.EffectiveMode == "target" || resolved.EffectivePrimary == "target");
     }
 
     /// <summary>
     /// Creates the table when it is missing and says where the pass resumes: the target's position when the target is the primary, the runner's otherwise. Returns the position
-    /// to read from and what to say when the two sides differ, or <c>null</c> state when the default cannot create the table (the pass then runs on the runner's state alone).
+    /// to read from and what to say when the two sides differ, (the table is created on first use; a login that cannot create it fails the pass naming the right it needs).
     /// </summary>
-    public async Task<(UnitStateTracking? Tracking, string? Resume, string? Message)> StartAsync(
+    public async Task<(UnitStateTracking Tracking, string? Resume, string? Message)> StartAsync(
         DbConnection targetConnection, string replication, string mapping, string watermarkKey, string? statePosition, CancellationToken cancellationToken)
     {
-        try
-        {
-            await State.EnsureAsync(targetConnection, cancellationToken);
-        }
-        catch (InvalidOperationException exception) when (!Explicit)
-        {
-            return (null, statePosition, "Tracking state is kept in the runner's state: " + exception.Message);
-        }
+        await State.EnsureAsync(targetConnection, cancellationToken);
 
         var latest = await State.LatestAsync(targetConnection, replication, mapping, watermarkKey, cancellationToken);
         var (resume, message) = Reconcile(statePosition, latest, TargetPrimary);
@@ -65,17 +55,17 @@ public sealed record UnitStateTracking(TargetUnitState State, bool TargetPrimary
     /// runner's state (the first pass in this mode, or a mapping new to it) and the pass records it. They differ: the primary decides and the pass says so, which is how a
     /// target restored from a backup (behind the runner's state) is found: the replication resumes from what the target really holds, not from a position its data never reached.
     /// </summary>
-    public static (string? Resume, string? Message) Reconcile(string? statePosition, UnitRecord? latest, bool targetPrimary)
+    public static (string? Resume, string? Message) Reconcile(string? statePosition, TargetUnitRecord? latest, bool targetPrimary)
     {
         if (latest is null)
-            return (statePosition, statePosition is null ? null : $"The target holds no state for this mapping; the pass continues from the runner's position ('{statePosition}') and the target records it from here.");
+            return (statePosition, statePosition is null ? null : $"The target holds no state for this mapping; the pass continues from the runner's position ('{statePosition}') and the target records it from here. If this target was restored from a backup older than its state table, the table is gone with it and this cannot be told apart: data between the backup and that position is not re-read (reload the mapping to be sure).");
         if (statePosition is not null && string.Equals(statePosition, latest.WatermarkAfter, StringComparison.Ordinal))
             return (statePosition, null);
 
         var stateText = statePosition is null ? "none" : $"'{statePosition}'";
         if (targetPrimary)
             return (latest.WatermarkAfter,
-                $"The target's position ('{latest.WatermarkAfter}', unit {latest.Sequence}) differs from the runner state's ({stateText}): the target was restored or the state was reset. The replication resumes from the target's position.");
+                $"The target's position ('{latest.WatermarkAfter}', unit {latest.Sequence}) differs from the runner state's ({stateText}): the target was restored or the state was reset. The replication resumes from the target's position." + (statePosition is null ? " The runner state holds no position (it was lost or reset), so a reader that captures its own position starts an initial load instead." : ""));
         return (statePosition,
             $"The target's position ('{latest.WatermarkAfter}', unit {latest.Sequence}) differs from the runner state's ({stateText}); the state is the primary, so the pass continues from the state's position.");
     }

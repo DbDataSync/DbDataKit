@@ -15,7 +15,7 @@ public enum UnitStateEngine
 /// <summary>One unit as the target records it: what one pass moved for one mapping, and the position it ended at.</summary>
 /// <param name="Sequence">The order the target numbered it in (an identity column): the stream's ordering key.</param>
 /// <param name="UnitId">The unit's own identity (the stream's row key).</param>
-public sealed record UnitRecord(
+public sealed record TargetUnitRecord(
     long Sequence, Guid UnitId, string Replication, string Mapping, string WatermarkKey, string? WatermarkBefore, string WatermarkAfter,
     DateTimeOffset? WatermarkTime, long RowsStaged, Guid? RunId, DateTimeOffset CommittedAt);
 
@@ -50,22 +50,22 @@ public sealed class TargetUnitState(UnitStateEngine engine)
             "IF OBJECT_ID(N'dbdatasync.unit', N'U') IS NULL CREATE TABLE dbdatasync.unit (" +
             "unit_seq bigint IDENTITY(1,1) NOT NULL CONSTRAINT pk_dbdatasync_unit PRIMARY KEY, " +
             "unit_id uniqueidentifier NOT NULL CONSTRAINT uq_dbdatasync_unit_id UNIQUE, " +
-            "replication nvarchar(128) NOT NULL, mapping nvarchar(128) NOT NULL, watermark_key nvarchar(450) NOT NULL, " +
+            "replication_name nvarchar(128) NOT NULL, mapping nvarchar(128) NOT NULL, watermark_key nvarchar(450) NOT NULL, " +
             "watermark_before nvarchar(max) NULL, watermark_after nvarchar(max) NOT NULL, watermark_time datetime2(7) NULL, " +
             "rows_staged bigint NOT NULL, run_id uniqueidentifier NULL, " +
             "committed_at datetime2(7) NOT NULL CONSTRAINT df_dbdatasync_unit_at DEFAULT SYSUTCDATETIME())",
             "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_dbdatasync_unit_key' AND object_id = OBJECT_ID(N'dbdatasync.unit')) " +
-            "CREATE INDEX ix_dbdatasync_unit_key ON dbdatasync.unit (replication, mapping, watermark_key, unit_seq)",
+            "CREATE INDEX ix_dbdatasync_unit_key ON dbdatasync.unit (replication_name, mapping, watermark_key, unit_seq)",
         ]
         :
         [
             "CREATE SCHEMA IF NOT EXISTS dbdatasync",
             "CREATE TABLE IF NOT EXISTS dbdatasync.unit (" +
             "unit_seq bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, unit_id uuid NOT NULL UNIQUE, " +
-            "replication text NOT NULL, mapping text NOT NULL, watermark_key text NOT NULL, " +
+            "replication_name text NOT NULL, mapping text NOT NULL, watermark_key text NOT NULL, " +
             "watermark_before text NULL, watermark_after text NOT NULL, watermark_time timestamptz NULL, " +
             "rows_staged bigint NOT NULL, run_id uuid NULL, committed_at timestamptz NOT NULL DEFAULT now())",
-            "CREATE INDEX IF NOT EXISTS ix_dbdatasync_unit_key ON dbdatasync.unit (replication, mapping, watermark_key, unit_seq)",
+            "CREATE INDEX IF NOT EXISTS ix_dbdatasync_unit_key ON dbdatasync.unit (replication_name, mapping, watermark_key, unit_seq)",
         ];
 
     /// <summary>Whether the state table is there.</summary>
@@ -109,7 +109,7 @@ public sealed class TargetUnitState(UnitStateEngine engine)
         using var command = connection.CreateTimedCommand();
         command.Transaction = transaction;
         command.CommandText =
-            $"INSERT INTO {Qualified} (unit_id, replication, mapping, watermark_key, watermark_before, watermark_after, watermark_time, rows_staged, run_id) " +
+            $"INSERT INTO {Qualified} (unit_id, replication_name, mapping, watermark_key, watermark_before, watermark_after, watermark_time, rows_staged, run_id) " +
             "VALUES (@unit_id, @replication, @mapping, @watermark_key, @watermark_before, @watermark_after, @watermark_time, @rows_staged, @run_id)";
         Add(command, "unit_id", unit.UnitId);
         Add(command, "replication", unit.Replication);
@@ -140,12 +140,12 @@ public sealed class TargetUnitState(UnitStateEngine engine)
     // ---------- reading ----------
 
     /// <summary>The newest unit of the mapping and source, or null when the target has none (the target never held this replication's state, or it was restored from before).</summary>
-    public async Task<UnitRecord?> LatestAsync(DbConnection connection, string replication, string mapping, string watermarkKey, CancellationToken cancellationToken)
+    public async Task<TargetUnitRecord?> LatestAsync(DbConnection connection, string replication, string mapping, string watermarkKey, CancellationToken cancellationToken)
     {
         using var command = connection.CreateTimedCommand();
         var top = Engine == UnitStateEngine.SqlServer ? "TOP (1) " : "";
         var limit = Engine == UnitStateEngine.Postgres ? " LIMIT 1" : "";
-        command.CommandText = $"SELECT {top}{Columns} FROM {Qualified} WHERE replication = @replication AND mapping = @mapping AND watermark_key = @watermark_key ORDER BY unit_seq DESC{limit}";
+        command.CommandText = $"SELECT {top}{Columns} FROM {Qualified} WHERE replication_name = @replication AND mapping = @mapping AND watermark_key = @watermark_key ORDER BY unit_seq DESC{limit}";
         Add(command, "replication", replication);
         Add(command, "mapping", mapping);
         Add(command, "watermark_key", watermarkKey);
@@ -157,29 +157,29 @@ public sealed class TargetUnitState(UnitStateEngine engine)
     public async Task<bool> HoldsAnyAsync(DbConnection connection, string replication, CancellationToken cancellationToken)
     {
         using var command = connection.CreateTimedCommand();
-        command.CommandText = $"SELECT CASE WHEN EXISTS (SELECT 1 FROM {Qualified} WHERE replication = @replication) THEN 1 ELSE 0 END";
+        command.CommandText = $"SELECT CASE WHEN EXISTS (SELECT 1 FROM {Qualified} WHERE replication_name = @replication) THEN 1 ELSE 0 END";
         Add(command, "replication", replication);
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture) == 1;
     }
 
     /// <summary>The units of a replication after a sequence number, in order (the stream the follower copies).</summary>
-    public async Task<IReadOnlyList<UnitRecord>> ReadAfterAsync(DbConnection connection, string replication, long afterSequence, int limit, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<TargetUnitRecord>> ReadAfterAsync(DbConnection connection, string replication, long afterSequence, int limit, CancellationToken cancellationToken)
     {
         using var command = connection.CreateTimedCommand();
         var top = Engine == UnitStateEngine.SqlServer ? $"TOP ({limit.ToString(CultureInfo.InvariantCulture)}) " : "";
         var tail = Engine == UnitStateEngine.Postgres ? $" LIMIT {limit.ToString(CultureInfo.InvariantCulture)}" : "";
-        command.CommandText = $"SELECT {top}{Columns} FROM {Qualified} WHERE replication = @replication AND unit_seq > @after ORDER BY unit_seq{tail}";
+        command.CommandText = $"SELECT {top}{Columns} FROM {Qualified} WHERE replication_name = @replication AND unit_seq > @after ORDER BY unit_seq{tail}";
         Add(command, "replication", replication);
         Add(command, "after", afterSequence);
-        var rows = new List<UnitRecord>();
+        var rows = new List<TargetUnitRecord>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) rows.Add(Read(reader));
         return rows;
     }
 
-    private const string Columns = "unit_seq, unit_id, replication, mapping, watermark_key, watermark_before, watermark_after, watermark_time, rows_staged, run_id, committed_at";
+    private const string Columns = "unit_seq, unit_id, replication_name, mapping, watermark_key, watermark_before, watermark_after, watermark_time, rows_staged, run_id, committed_at";
 
-    private static UnitRecord Read(DbDataReader reader) => new(
+    private static TargetUnitRecord Read(DbDataReader reader) => new(
         reader.GetInt64(0), reader.GetGuid(1), reader.GetString(2), reader.GetString(3), reader.GetString(4),
         reader.IsDBNull(5) ? null : reader.GetString(5), reader.GetString(6), reader.IsDBNull(7) ? null : ToUtc(reader.GetValue(7)),
         reader.GetInt64(8), reader.IsDBNull(9) ? null : reader.GetGuid(9), ToUtc(reader.GetValue(10)));
