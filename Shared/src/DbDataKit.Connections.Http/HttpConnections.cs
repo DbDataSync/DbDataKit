@@ -56,8 +56,8 @@ public static class HttpConnections
     public static HttpConnectionClient Create(ConnectionDefinition definition, ISecretResolver secrets, HttpConnectionOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
-        if (definition.KindName != ConnectionKinds.Http || definition.Endpoint is null)
-            throw new ArgumentException("The connection is not of kind http with an endpoint.", nameof(definition));
+        if (definition.KindName is not (ConnectionKinds.Http or ConnectionKinds.ReportCatalog) || definition.Endpoint is null)
+            throw new ArgumentException("The connection is not of kind http (or report-catalog) with an endpoint.", nameof(definition));
         options ??= new();
         var spec = definition.SignIn ?? new SignInSpec();
         var time = options.Time ?? TimeProvider.System;

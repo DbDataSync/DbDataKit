@@ -162,7 +162,7 @@ public static class ConnectionDefinitionLoader
         }
         if (d.Engine.Length == 0) Err(SharedCodes.MissingKey, "engine", "Required key `engine` is missing: a database connection says which engine it is.", "Add `engine: postgres` (or sqlserver, mysql, oracle, duckdb, odbc, flightsql).");
         foreach (var (key, present) in new[] { ("endpoint", d.Endpoint is not null), ("sign_in", d.SignIn is not null), ("test_path", d.TestPath is not null), ("model_provider", d.ModelProvider is not null),
-            ("endpoint_secrets", d.EndpointSecrets.Count > 0), ("webhook", d.Webhook is not null), ("smtp", d.Smtp is not null), ("file_server", d.FileServer is not null), ("object_store", d.ObjectStore is not null) })
+            ("endpoint_secrets", d.EndpointSecrets.Count > 0), ("webhook", d.Webhook is not null), ("smtp", d.Smtp is not null), ("file_server", d.FileServer is not null), ("object_store", d.ObjectStore is not null), ("report_catalog", d.ReportCatalog is not null) })
             if (present) Err(BadOutside, key, $"`{key}` belongs to an outside kind (`http`, `model-provider`, `smtp`), not to a database.", "Remove it, or say `kind: http` (and drop the database keys).");
 
         var logins = new (string Path, LoginSpec? Spec)[] { ("auth", d.Auth), ("read_login", d.ReadLogin), ("write_login", d.WriteLogin) };
@@ -296,12 +296,13 @@ public static class ConnectionDefinitionLoader
         {
             if (d.Smtp is not null) Err("smtp", "`smtp` belongs to the kind `smtp`.", "Remove it, or say `kind: smtp`.");
             if (d.FileServer is not null) Err("file_server", "`file_server` belongs to the kinds `sftp`, `scp`, `ftps` and `smb`.", "Remove it, or say `kind: sftp`.");
+            if (d.ReportCatalog is not null && d.KindName != ConnectionKinds.ReportCatalog) Err("report_catalog", "`report_catalog` belongs to the kind `report-catalog`.", "Remove it, or say `kind: report-catalog`.");
             if (d.ObjectStore is not null && !ConnectionKinds.IsObjectStore(d.KindName)) Err("object_store", "`object_store` belongs to the kinds `s3` and `azure-blob`.", "Remove it, or say `kind: s3`.");
             string? endpoint = d.Endpoint ?? (d.ModelProvider is { Provider: var p } ? ModelProviderSpec.DefaultEndpoint(p) : null);
             if (endpoint is null)
             {
                 if (d.EndpointSecrets.Count > 0) Err("endpoint_secrets", "`endpoint_secrets` binds the placeholders of `endpoint`, and there is none.", "Write the address as a template: `endpoint: https://hooks.example.com/services/{token}`.");
-                Err("endpoint", d.KindName == ConnectionKinds.Http ? "A `http` connection needs an `endpoint`." : ConnectionKinds.IsObjectStore(d.KindName) ? $"A `{d.KindName}` connection needs an `endpoint`: the address of the service (`https://s3.eu-west-1.amazonaws.com`, `https://account.blob.core.windows.net`)." : "A model provider of this kind has no default address: write `endpoint`.", "Write the address, such as `endpoint: https://api.example.com/v1`; a secret part of it is a `{placeholder}` bound in `endpoint_secrets`.");
+                Err("endpoint", d.KindName == ConnectionKinds.Http ? "A `http` connection needs an `endpoint`." : d.KindName == ConnectionKinds.ReportCatalog ? "A `report-catalog` connection needs an `endpoint`: the address of the report server's web portal (`https://reports.example.com/Reports`)." : ConnectionKinds.IsObjectStore(d.KindName) ? $"A `{d.KindName}` connection needs an `endpoint`: the address of the service (`https://s3.eu-west-1.amazonaws.com`, `https://account.blob.core.windows.net`)." : "A model provider of this kind has no default address: write `endpoint`.", "Write the address, such as `endpoint: https://api.example.com/v1`; a secret part of it is a `{placeholder}` bound in `endpoint_secrets`.");
             }
             else if (EndpointTemplate.IsHidden(endpoint))
             {
@@ -330,6 +331,12 @@ public static class ConnectionDefinitionLoader
             CheckModelProvider();
         }
         else if (d.Webhook is not null) Err("webhook", "`webhook` belongs to the kind `http`.", "Remove it.");
+        if (d.KindName == ConnectionKinds.ReportCatalog)
+        {
+            if (d.TestPath is not null) Err("test_path", "`test_path` belongs to the kind `http`; Test of a report catalog reads the catalog's folders.", "Remove it.");
+            if (d.ModelProvider is not null) Err("model_provider", "`model_provider` belongs to the kind `model-provider`.", "Remove it.");
+            CheckReportCatalog();
+        }
         if (ConnectionKinds.IsObjectStore(d.KindName))
         {
             if (d.TestPath is not null) Err("test_path", "`test_path` belongs to the kind `http`; Test of an object store lists the bucket.", "Remove it.");
@@ -455,6 +462,21 @@ public static class ConnectionDefinitionLoader
             var method = d.SignIn?.Method ?? "none";
             if (w.Format == "signed" && method != "signed_webhook") Err("sign_in.method", "A `signed` webhook is signed with the shared secret: `sign_in: { method: signed_webhook, key_secret: ... }`.", "Store the shared secret and write its reference.");
             if (w.Format is "slack" or "teams" && method != "none") Err("sign_in.method", $"A `{w.Format}` webhook takes no sign-in: the token is in its address (a placeholder of `endpoint`).", "Remove `sign_in`.");
+        }
+
+        void CheckReportCatalog()
+        {
+            if (d.ReportCatalog is not { } r) { Err("report_catalog", "A `report-catalog` connection needs a `report_catalog` section: which report server it is.", "Write `report_catalog: { provider: ssrs }`."); return; }
+            if (r.Provider is not ("ssrs" or "pbirs")) Err("report_catalog.provider", $"`provider` is `ssrs` or `pbirs`, not `{r.Provider}`.");
+            if (r.Name is { } n && !System.Text.RegularExpressions.Regex.IsMatch(n, "^[A-Za-z][A-Za-z0-9_-]{0,31}$")) Err("report_catalog.name", "`name` prefixes the keys of the items: a letter, then letters, digits, dashes and underscores (at most 32).");
+            if (r.ReportServerAddress is { } ra && !IsSafeAddress(ra)) Err("report_catalog.report_server_address", "`report_server_address` is an http or https address with no user name, password or query in it.");
+            if (d.Endpoint is { } address && !EndpointTemplate.IsHidden(address) && Uri.TryCreate(address, UriKind.Absolute, out var addressUri) && (addressUri.Query.Length > 1 || addressUri.Fragment.Length > 1))
+                Err("endpoint", "The address of a report server has no query or fragment: a key is `sign_in`.", "Remove everything from the `?`.");
+            var method = d.SignIn?.Method ?? "none";
+            if (method is not ("none" or "basic" or "api_key" or "oauth2_client_credentials" or "client_certificate"))
+                Err("sign_in.method", $"A `report-catalog` connection signs in with `basic` (the service account's user and `password_secret`), `api_key`, `oauth2_client_credentials`, `client_certificate`, or `none`, not `{method}`.");
+            if (d.Endpoint is { } ep && !EndpointTemplate.IsHidden(ep) && Uri.TryCreate(ep, UriKind.Absolute, out var uri) && uri.Scheme == "http" && !IsLoopbackHost(uri.Host) && method != "none")
+                Warn("endpoint", "The address is plain http: the service account's credentials travel in clear text.", null, TlsOptOut);
         }
 
         void CheckObjectStore()
@@ -610,8 +632,11 @@ public enum ConnectionKindGroup
     /// <summary>A place that keeps files (plan 27a IX04 to IX06): <c>sftp</c>, <c>scp</c>, <c>ftps</c>, later SMB and object storage.</summary>
     FileStore = 32,
 
+    /// <summary>An external report server (plan 32 RC01): <c>report-catalog</c>.</summary>
+    ReportCatalog = 64,
+
     /// <summary>Every outside system.</summary>
-    Outside = Delivery | Model | Embedding | Http | FileStore,
+    Outside = Delivery | Model | Embedding | Http | FileStore | ReportCatalog,
 
     /// <summary>Every kind: the program that keeps all connections.</summary>
     Any = Database | Outside,
@@ -624,6 +649,7 @@ public static class ConnectionKindGroups
     {
         ConnectionKinds.Smtp => ConnectionKindGroup.Delivery,
         ConnectionKinds.Sftp or ConnectionKinds.Scp or ConnectionKinds.Ftps or ConnectionKinds.Smb or ConnectionKinds.S3 or ConnectionKinds.AzureBlob => ConnectionKindGroup.FileStore,
+        ConnectionKinds.ReportCatalog => ConnectionKindGroup.ReportCatalog,
         ConnectionKinds.Http => d.Webhook is not null ? ConnectionKindGroup.Delivery : ConnectionKindGroup.Http,
         ConnectionKinds.ModelProvider => d.ModelProvider?.Purpose == "embeddings" ? ConnectionKindGroup.Embedding : ConnectionKindGroup.Model,
         _ => ConnectionKindGroup.Database,
@@ -642,6 +668,7 @@ public static class ConnectionKindGroups
         if (group.HasFlag(ConnectionKindGroup.Embedding)) names.Add("embedding model provider");
         if (group.HasFlag(ConnectionKindGroup.Http)) names.Add("HTTP API (`kind: http`)");
         if (group.HasFlag(ConnectionKindGroup.FileStore)) names.Add("file store (`kind: sftp`, `scp`, `ftps`, `smb`, `s3`, `azure-blob`)");
+        if (group.HasFlag(ConnectionKindGroup.ReportCatalog)) names.Add("report catalog (`kind: report-catalog`)");
         return names.Count == 0 ? "none" : string.Join(" or ", names);
     }
 
