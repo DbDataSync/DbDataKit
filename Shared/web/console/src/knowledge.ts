@@ -42,8 +42,9 @@ export interface ContextReport { agent: string; parts: ContextPart[]; totalToken
 /** A refused write carries the diagnostics that say why (file, line, message): show those, not the status text. */
 async function refused<T>(call: Promise<T>): Promise<T> {
   try { return await call } catch (e) {
-    const body = e instanceof ApiError ? (e.body as { diagnostics?: Diagnostic[] } | undefined) : undefined
-    if (body?.diagnostics?.length) throw new Error(body.diagnostics.map((d) => `${d.file} line ${d.line}: ${d.message}${d.fix ? ` ${d.fix}` : ''}`).join(' '))
+    const body = e instanceof ApiError ? (e.body as { diagnostics?: Diagnostic[]; error?: string } | undefined) : undefined
+    const lines = body?.diagnostics?.map((d) => `${d.file} line ${d.line}: ${d.message}${d.fix ? ` ${d.fix}` : ''}`) ?? []
+    if (lines.length > 0 || body?.error) throw new Error([body?.error, ...lines].filter((x) => x).join(' '))
     throw e
   }
 }
@@ -118,6 +119,35 @@ export const reachLine = (r: CheckReach): string =>
 /** Where a diagnostic is, as `file line n` (a diagnostic with no line is about the whole file or project). */
 export const placeOf = (d: Diagnostic): string => (d.line > 0 ? `${d.file} line ${d.line}` : d.file)
 
+// ---- KN19, KN23: suggestions at the edge ----
+
+/** What the person saw of a verified query's result when it was suggested (KN23): the first rows, the values given and the version of the model. */
+export interface SuggestionPreview { model: string; model_version: string; parameters: Record<string, unknown>; columns: { name: string; type: string }[]; rows: (string | null)[][]; row_count: number; truncated: boolean }
+export interface SuggestionView {
+  id: string; project: string; item: string; kind: 'change' | 'new' | 'verified-query'; title: string; state: 'open' | 'withdrawn' | 'needs-another-look' | 'approved' | 'rejected'; reason: string
+  suggestedBy: string; via: string; owner: string | null; baseVersion: string | null; moved: boolean; createdAt: string; decidedBy: string | null; note: string | null; proposed: string | null; preview: SuggestionPreview | null
+}
+export interface SuggestionList { built: boolean; suggestions: SuggestionView[] }
+
+const stateWords: Record<SuggestionView['state'], string> = { open: 'waiting for the owner', withdrawn: 'withdrawn', 'needs-another-look': 'needs another look', approved: 'approved', rejected: 'rejected' }
+const kindWords: Record<SuggestionView['kind'], string> = { change: 'Change to', new: 'New item', 'verified-query': 'Verified query' }
+
+/** A suggestion in a line: what it is, who made it (and that an agent did), and where it stands; an item that moved on since is said so, not merged. */
+export function suggestionLine(s: Pick<SuggestionView, 'kind' | 'item' | 'suggestedBy' | 'via' | 'state' | 'moved'>): string {
+  const agent = s.via.startsWith('agent:') ? ` through the agent ${s.via.slice('agent:'.length)}` : ''
+  const moved = s.moved && (s.state === 'open' || s.state === 'needs-another-look') ? '; the item has changed since, so read both before deciding' : ''
+  return `${kindWords[s.kind]} ${s.item}, by ${s.suggestedBy}${agent}: ${stateWords[s.state]}${moved}.`
+}
+
+/** A person withdraws their own suggestion while it is undecided. */
+export const canWithdraw = (s: Pick<SuggestionView, 'suggestedBy' | 'state'>, me: string | null): boolean => me !== null && s.suggestedBy === me && (s.state === 'open' || s.state === 'needs-another-look')
+
+/** The result a person saw, in a line: how many rows, the values given and the version of the model. */
+export function previewLine(p: SuggestionPreview): string {
+  const values = Object.entries(p.parameters).map(([k, v]) => `${k} = ${String(v)}`).join(', ')
+  return `${p.row_count} row${p.row_count === 1 ? '' : 's'}${p.truncated ? ' or more' : ''} from ${p.model} at version ${p.model_version}${values ? `, with ${values}` : ''}.`
+}
+
 export const knowledgeApi = {
   check: () => request<CheckReport>('/api/knowledge/check'),
   index: () => request<KnowledgeIndexState>('/api/knowledge/index'),
@@ -136,6 +166,10 @@ export const knowledgeApi = {
   setSubject: (type: string, name: string, status: 'exists' | 'gone') => request<KnowledgeOverview>('/api/knowledge/subjects', json('PUT', { type, name, status })),
   previewChunks: (project: string, id: string, text: string) => request<{ preview: ChunkPreview; reaches: Reach[] }>('/api/knowledge/preview/chunks', json('POST', { project, id, text })),
   previewScope: (inPlay: string[], audience: string, agent: string) => request<{ preview: ScopePreview; scopes: string[] }>('/api/knowledge/preview/scope', json('POST', { inPlay, audience, agent })),
+  suggestions: (state?: string) => request<SuggestionList>(`/api/knowledge/suggestions${state ? `?state=${encodeURIComponent(state)}` : ''}`),
+  suggestion: (id: string) => request<SuggestionView>(`/api/knowledge/suggestions/${encodeURIComponent(id)}`),
+  suggest: (input: { item: string; isNew: boolean; project?: string; text: string; reason: string }) => refused(request<SuggestionView>('/api/knowledge/suggestions', json('POST', input))),
+  withdraw: (id: string) => request<{ withdrawn: string }>(`/api/knowledge/suggestions/${encodeURIComponent(id)}/withdraw`, json('POST')),
   context: (agent: string, inPlay: string[]) => request<ContextReport>('/api/knowledge/context', json('POST', { agent, inPlay })),
 }
 

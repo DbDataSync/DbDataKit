@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using DbDataKit.Agents;
 using DbDataKit.Cli;
 using DbDataKit.Config.Yaml;
+using DbDataKit.State;
 
 namespace DbDataKit.Knowledge.Cli;
 
@@ -48,6 +49,9 @@ public sealed record KnowledgeHost
     public IKnowledgeIndexAdmin? Index { get; init; }
 
     public IKnowledgeReader? Reader { get; init; }
+
+    /// <summary>Suggestions at the edge (KN19, KN23): <c>suggest</c>, <c>suggestions</c> and <c>verify</c>; null: the host keeps none.</summary>
+    public ISuggestionDesk? Suggestions { get; init; }
 
     /// <summary>Translates semantic SQL into a request, so a verified query's SQL is checked against its request (KN21); null: not checked here.</summary>
     public SqlToRequest? TranslateSql { get; init; }
@@ -108,6 +112,16 @@ public static class KnowledgeNoun
     private static readonly string AboutSchema = DataSchemas.Object(
         [("subject", DataSchemas.String), ("items", DataSchemas.ListOf(DataSchemas.Object([("id", DataSchemas.String), ("title", DataSchemas.String), ("role", DataSchemas.String), ("source", DataSchemas.String), ("version", DataSchemas.String)], "id", "title", "role")))], "subject", "items");
 
+    private static readonly string SuggestionSchema = DataSchemas.Object(
+        [("id", DataSchemas.String), ("project", DataSchemas.String), ("item", DataSchemas.String), ("kind", DataSchemas.String), ("title", DataSchemas.String), ("state", DataSchemas.String), ("reason", DataSchemas.String),
+            ("suggested_by", DataSchemas.String), ("via", DataSchemas.String), ("owner", DataSchemas.String), ("base_version", DataSchemas.String), ("moved", DataSchemas.Boolean), ("proposed", DataSchemas.String),
+            ("preview", "{ \"type\": \"object\" }"), ("decided_by", DataSchemas.String), ("note", DataSchemas.String), ("created_at", DataSchemas.String)],
+        "id", "item", "kind", "title", "state", "reason", "suggested_by", "via");
+
+    // suggest and verify give the suggestion made; suggestions gives a list, one suggestion, or the id withdrawn
+    private static readonly string SuggestionsSchema = DataSchemas.Object(
+        [("suggestion", SuggestionSchema), ("suggestions", DataSchemas.ListOf(SuggestionSchema)), ("withdrawn", DataSchemas.String)]);
+
     private static readonly string PublishSchema = DataSchemas.Object([("name", DataSchemas.String), ("channel", DataSchemas.String), ("version", DataSchemas.Integer), ("changed", DataSchemas.Boolean)], "name", "channel", "version", "changed");
 
     public static Noun Create(KnowledgeHost host)
@@ -128,6 +142,15 @@ public static class KnowledgeNoun
             verbs.Add(new Verb("search", "Find knowledge by its words or its meaning, as the caller sees it", EffectClass.OfflineOnly, "<text> [--about <subject>] [--kind reference|instruction|guardrail] [--channel <channel>]", (args, context) => SearchAsync(host, args, context), SearchSchema));
             verbs.Add(new Verb("show", "One item, or one section of it", EffectClass.OfflineOnly, "<id> [--section <heading>] [--version <version>] [--channel <channel>]", (args, context) => ShowAsync(host, args, context), ShowSchema));
             verbs.Add(new Verb("about", "Items about a subject (a model, a measure, a project), as the caller sees them", EffectClass.OfflineOnly, "<subject> [--channel <channel>]", (args, context) => AboutAsync(host, args, context), AboutSchema));
+        }
+        if (host.Suggestions is { } desk)
+        {
+            verbs.Add(new Verb("suggest", "Suggest a change to an item (or --new item); the proposed text is the whole file, given with --text or on the standard input; written even when no workspace server runs, decided by the item's owner", EffectClass.RepoFilesOnly,
+                "(<id> | --new <id> --project <project>) --reason <why> [--text <markdown>]", (args, context) => SuggestAsync(desk, args, context), SuggestionsSchema));
+            verbs.Add(new Verb("suggestions", "Your suggestions, and the ones for items you own: list, show one beside its state, or withdraw your own", EffectClass.RepoFilesOnly,
+                "list [--state open|withdrawn|needs-another-look|approved|rejected] | show <id> | withdraw <id>", (args, context) => SuggestionsAsync(desk, args, context), SuggestionsSchema));
+            verbs.Add(new Verb("verify", "Verify an answer: suggest a verified query from the question, the request that answered it and a preview of its result; from an agent only after a person confirmed the answer", EffectClass.RepoFilesOnly,
+                "--question <question> --model <model> --request <json> [--param <name>=<value> ...]", (args, context) => VerifyAsync(desk, args, context), SuggestionsSchema));
         }
         if (host.Publish is not null)
             verbs.Add(new Verb("publish", "Check a knowledge project folder and publish it as one version to a channel", EffectClass.RepoFilesOnly, "<folder> [--to <channel>] [--name <name>]", (args, context) => PublishAsync(host, args, context), PublishSchema));
@@ -335,6 +358,118 @@ public static class KnowledgeNoun
         foreach (var i in items) await context.Out.WriteLineAsync($"{i.Id}  {i.Title} ({i.Role}, {i.Source} {i.Version})");
         if (items.Count == 0) await context.Out.WriteLineAsync($"Nothing is known about {subject.Key} that you may see.");
         return CliExit.Ok;
+    }
+
+    // ---- suggest, suggestions, verify (KN19, KN23) ----
+
+    private static Dictionary<string, object?> Document(SuggestionRow r, bool moved = false, bool full = false)
+    {
+        var d = new Dictionary<string, object?>
+        {
+            ["id"] = r.Id, ["project"] = r.Project, ["item"] = r.ItemId, ["kind"] = r.Kind, ["title"] = r.Title, ["state"] = r.State, ["reason"] = r.Reason, ["suggested_by"] = r.SuggestedBy, ["via"] = r.Via,
+            ["moved"] = moved, ["created_at"] = r.CreatedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+        };
+        if (r.Owner is not null) d["owner"] = r.Owner;
+        if (r.BaseVersion is not null) d["base_version"] = r.BaseVersion;
+        if (r.DecidedBy is not null) d["decided_by"] = r.DecidedBy;
+        if (r.Note is not null) d["note"] = r.Note;
+        if (full)
+        {
+            d["proposed"] = r.Proposed;
+            if (r.Preview is not null) d["preview"] = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(r.Preview);
+        }
+        return d;
+    }
+
+    private static async Task<int> Refused(CliContext context, SuggestionOutcome outcome)
+    {
+        await context.Error.WriteLineAsync(outcome.Refused ?? "Nothing was suggested.");
+        foreach (var d in outcome.Problems) await context.Error.WriteLineAsync($"  line {d.Line}: {d.Message}{(d.Fix is null ? "" : " " + d.Fix)}");
+        return CliExit.Failure;
+    }
+
+    private static async Task<int> Made(CliContext context, SuggestionRow row)
+    {
+        context.Data["suggestion"] = Document(row, full: true);
+        await context.Out.WriteLineAsync($"Suggestion {row.Id} is open: {row.Kind} of {row.ItemId} in {row.Project}, for {row.Owner ?? "the project's owner"} to decide.");
+        return CliExit.Ok;
+    }
+
+    private static async Task<int> SuggestAsync(ISuggestionDesk desk, string[] args, CliContext context)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "new", "project", "reason", "text" });
+        const string usage = "knowledge suggest (<id> | --new <id> --project <project>) --reason <why> [--text <markdown>]";
+        var isNew = parsed.Get("new") is not null;
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count != (isNew ? 0 : 1)) return await Usage(context, usage);
+        var id = isNew ? parsed.Get("new")! : parsed.Words[0];
+        var text = parsed.Get("text");
+        // a person may pipe the file in; an agent has no standard input and gives the text itself
+        if (text is null && !desk.ForAgent && await context.In.ReadToEndAsync(context.Cancellation) is { Length: > 0 } piped) text = piped;
+        if (text is null) return await Fail(context, "Give the whole proposed file with --text, or on the standard input.");
+        var outcome = desk.Suggest(id, isNew, parsed.Get("project"), text, parsed.Get("reason") ?? "");
+        return outcome.Row is { } row ? await Made(context, row) : await Refused(context, outcome);
+    }
+
+    private static async Task<int> SuggestionsAsync(ISuggestionDesk desk, string[] args, CliContext context)
+    {
+        const string usage = "knowledge suggestions list [--state <state>] | show <id> | withdraw <id>";
+        if (args.Length == 0) return await Usage(context, usage);
+        var parsed = CliArgs.Parse(args[1..], new HashSet<string>(), new HashSet<string> { "state" });
+        switch (args[0])
+        {
+            case "list":
+                if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0) return await Usage(context, usage);
+                if (parsed.Get("state") is { } state && !SuggestionStates.All.Contains(state)) return await Fail(context, $"--state is one of: {string.Join(", ", SuggestionStates.All)}.");
+                var rows = desk.List(parsed.Get("state"));
+                context.Data["suggestions"] = rows.Select(r => (object?)Document(r, desk.Moved(r))).ToList();
+                foreach (var r in rows) await context.Out.WriteLineAsync($"{r.Id}  {r.State,-18} {r.Kind,-14} {r.ItemId}  by {r.SuggestedBy}{(r.FromAgent ? $" ({r.Via})" : "")}");
+                if (rows.Count == 0) await context.Out.WriteLineAsync("No suggestions that you may see.");
+                return CliExit.Ok;
+            case "show":
+                if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1) return await Usage(context, usage);
+                if (desk.Show(parsed.Words[0]) is not { } shown) return await Fail(context, $"There is no suggestion '{parsed.Words[0]}' that you may see.");
+                var moved = desk.Moved(shown);
+                context.Data["suggestion"] = Document(shown, moved, full: true);
+                await context.Out.WriteLineAsync($"{shown.Id}: {shown.Kind} of {shown.ItemId} in {shown.Project}, {shown.State}{(moved ? " (the item has changed since: needs another look)" : "")}");
+                await context.Out.WriteLineAsync($"By {shown.SuggestedBy} ({shown.Via}) on {shown.CreatedAt:u}. Why: {shown.Reason}");
+                await context.Out.WriteLineAsync(shown.Proposed);
+                return CliExit.Ok;
+            case "withdraw":
+                if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1) return await Usage(context, usage);
+                if (!desk.Withdraw(parsed.Words[0])) return await Fail(context, $"'{parsed.Words[0]}' is not a suggestion of yours that is still open.");
+                context.Data["withdrawn"] = parsed.Words[0];
+                await context.Out.WriteLineAsync($"Withdrawn {parsed.Words[0]}.");
+                return CliExit.Ok;
+            default:
+                return await Usage(context, usage);
+        }
+    }
+
+    private static async Task<int> VerifyAsync(ISuggestionDesk desk, string[] args, CliContext context)
+    {
+        // --param may repeat: CliArgs keeps the last value of an option, so the values are taken from the arguments first
+        var values = new JsonObject();
+        var rest = new List<string>();
+        for (var i = 0; i < args.Length; i++)
+        {
+            var given = args[i] == "--param" && i + 1 < args.Length ? args[++i] : args[i].StartsWith("--param=", StringComparison.Ordinal) ? args[i]["--param=".Length..] : null;
+            if (given is null) { rest.Add(args[i]); continue; }
+            var at = given.IndexOf('=', StringComparison.Ordinal);
+            if (at < 1) return await Fail(context, $"--param is name=value; '{given}' is not.");
+            values[given[..at]] = given[(at + 1)..];
+        }
+        var parsed = CliArgs.Parse([.. rest], new HashSet<string>(), new HashSet<string> { "question", "model", "request" });
+        const string usage = "knowledge verify --question <question> --model <model> --request <json> [--param <name>=<value> ...]";
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("question") is not { } question || parsed.Get("model") is not { } model || parsed.Get("request") is not { } request) return await Usage(context, usage);
+        // a person may point at a file (`@request.json`); an agent gives the document itself and never names a file
+        if (request.StartsWith('@'))
+        {
+            if (desk.ForAgent) return await Fail(context, "Give the request document itself with --request; a file cannot be named here.");
+            try { request = await File.ReadAllTextAsync(request[1..], context.Cancellation); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return await Fail(context, $"The request file cannot be read: {ex.Message}"); }
+        }
+        var outcome = await desk.VerifyAsync(question, model, request, values.Count > 0 ? values : null, context.Cancellation);
+        return outcome.Row is { } row ? await Made(context, row) : await Refused(context, outcome);
     }
 
     // ---- publish ----

@@ -5,13 +5,14 @@ import { CodeEditor, ErrorBanner, useAuthStatus, useIsAdmin } from '@dbdatakit/s
 import { ConsoleShell } from '../ConsoleShell'
 import { agentsApi, percent } from '../agents'
 import {
+  canWithdraw, previewLine, suggestionLine, type SuggestionView,
   checkLine, contextLine, hitPlace, placeOf, reachLine, isPolicyItem, knowledgeApi, modesOffered, parseInPlay, policyItemId, policyItemText, refreshLine, searchModeLine, subjectSource, vectorPercent, vectorProgressLine, verifiedLine, verifiedQueryId, verifiedQueryText, verifiedRuns, workActions, workWord,
   type ChunkPreview, type KnowledgeIndexState, type KnowledgeOverview, type Reach, type ScopePreview, type SearchMode, type SearchResult, type WorkItem,
 } from '../knowledge'
 
-type Tab = 'overview' | 'search' | 'worklist' | 'items' | 'check' | 'install'
+type Tab = 'overview' | 'search' | 'worklist' | 'items' | 'suggestions' | 'check' | 'install'
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'overview', label: 'Index and context' }, { id: 'search', label: 'Search and index' }, { id: 'worklist', label: 'Worklists' }, { id: 'items', label: 'Items and preview' }, { id: 'check', label: 'Check' }, { id: 'install', label: 'Install knowledge' },
+  { id: 'overview', label: 'Index and context' }, { id: 'search', label: 'Search and index' }, { id: 'worklist', label: 'Worklists' }, { id: 'items', label: 'Items and preview' }, { id: 'suggestions', label: 'Suggestions' }, { id: 'check', label: 'Check' }, { id: 'install', label: 'Install knowledge' },
 ]
 
 /**
@@ -41,6 +42,7 @@ export function KnowledgePage() {
         {overview.data && tab === 'search' && <SearchTab />}
         {overview.data && tab === 'worklist' && <WorklistTab overview={overview.data} />}
         {overview.data && tab === 'items' && <ItemsTab overview={overview.data} />}
+        {overview.data && tab === 'suggestions' && <SuggestionsTab />}
         {overview.data && tab === 'check' && <CheckTab />}
         {overview.data && tab === 'install' && <InstallTab overview={overview.data} />}
       </div>
@@ -234,12 +236,13 @@ function ItemsTab({ overview }: { overview: KnowledgeOverview }) {
           <div data-testid="item-editor" data-item={open}>
             <h2 className="mono">{open}</h2>
             <ErrorBanner error={item.error ?? save.error} />
-            <CodeEditor value={text} language="plaintext" onChange={(v) => { setText(v); setSaved(false) }} diagnostics={preview?.preview.diagnostics.map((d) => ({ line: d.line, column: d.column, message: d.message, severity: d.severity === 'error' ? 'error' as const : 'warning' as const }))} readOnly={!isAdmin} minLines={12} testId="item-text" />
+            <CodeEditor value={text} language="plaintext" onChange={(v) => { setText(v); setSaved(false) }} diagnostics={preview?.preview.diagnostics.map((d) => ({ line: d.line, column: d.column, message: d.message, severity: d.severity === 'error' ? 'error' as const : 'warning' as const }))} minLines={12} testId="item-text" />
             <div data-testid="item-diagnostics">
               {preview?.preview.diagnostics.map((d, i) => <div key={i} data-testid="item-diagnostic" data-severity={d.severity}><span className="mono">{d.code}</span> line {d.line}: {d.message}{d.fix ? ` ${d.fix}` : ''}</div>)}
             </div>
             {isAdmin && <button type="button" className="btn btn-sm btn-primary" disabled={errors.length > 0 || save.isPending} onClick={() => save.mutate()} data-testid="item-save">Save</button>}
             {saved && <span className="hint" data-testid="item-saved"> Saved.</span>}
+            <SuggestChange item={`${project}:${id}`} text={text} original={item.data?.text ?? ''} />
             {preview?.preview.verified && (
               <div className="card" style={{ marginTop: 12 }}><div className="card-body" data-testid="verified-preview">
                 <strong>A verified query</strong>{' '}
@@ -304,6 +307,74 @@ function NewVerifiedQuery({ onMade }: { onMade: (id: string) => void }) {
       <textarea rows={3} value={request} onChange={(e) => setRequest(e.target.value)} placeholder='the request as JSON: {"kind":"query","query":{"measures":["revenue"],"limit":10}}' aria-label="Request" data-testid="vq-request" style={{ width: '100%', margin: '4px 0' }} />
       <button type="button" className="btn btn-sm" disabled={!question.trim() || !model.trim() || make.isPending} onClick={() => make.mutate()} data-testid="vq-make">Start the item</button>
       <ErrorBanner error={make.error} />
+    </div>
+  )
+}
+
+/** "Suggest this change" (plan 27a KN19): the text as it is typed, with the reason, written as a suggestion for the item's owner; it needs the index, which is what a suggestion is based on. */
+function SuggestChange({ item, text, original }: { item: string; text: string; original: string }) {
+  const client = useQueryClient()
+  const [reason, setReason] = useState('')
+  const [made, setMade] = useState<SuggestionView | null>(null)
+  const suggest = useMutation({
+    mutationFn: () => knowledgeApi.suggest({ item, isNew: false, text, reason }),
+    onSuccess: async (row) => { setMade(row); setReason(''); await client.invalidateQueries({ queryKey: ['knowledge', 'suggestions'] }) },
+  })
+  return (
+    <div style={{ marginTop: 12 }} data-testid="suggest-change">
+      <strong>Suggest this change</strong>
+      <div className="hint">The text above, as it is now, goes to the owner of the item with your reason. Nothing changes until they decide.</div>
+      <input value={reason} onChange={(e) => { setReason(e.target.value); setMade(null) }} placeholder="why" aria-label="Reason" data-testid="suggest-reason" style={{ width: '60%' }} />{' '}
+      <button type="button" className="btn btn-sm" disabled={text === original || !reason.trim() || suggest.isPending} onClick={() => suggest.mutate()} data-testid="suggest-send">Suggest</button>
+      <ErrorBanner error={suggest.error} />
+      {made && <div className="hint" data-testid="suggest-made">Suggested ({made.id.slice(0, 8)}): {suggestionLine(made)}</div>}
+    </div>
+  )
+}
+
+/** My suggestions and the ones for items I own: each with where it stands, the text proposed (and the result a verified query showed), and a way to withdraw my own (plan 27a KN19, KN23). */
+function SuggestionsTab() {
+  const client = useQueryClient()
+  const { data: status } = useAuthStatus()
+  const me = status?.userId ?? null
+  const [open, setOpen] = useState<string | null>(null)
+  const list = useQuery({ queryKey: ['knowledge', 'suggestions'], queryFn: () => knowledgeApi.suggestions() })
+  const shown = useQuery({ queryKey: ['knowledge', 'suggestion', open], queryFn: () => knowledgeApi.suggestion(open!), enabled: open !== null })
+  const withdraw = useMutation({ mutationFn: (id: string) => knowledgeApi.withdraw(id), onSuccess: async () => { await client.invalidateQueries({ queryKey: ['knowledge'] }) } })
+  const rows = list.data?.suggestions ?? []
+  const row = shown.data
+  return (
+    <div data-testid="knowledge-suggestions">
+      <ErrorBanner error={list.error ?? withdraw.error} />
+      {list.data && !list.data.built && <div className="hint" data-testid="suggestions-no-index">The index is not built, so there is nothing a suggestion can be based on. An administrator builds it on the Search and index tab.</div>}
+      {list.data?.built && rows.length === 0 && <div className="empty" data-testid="suggestions-empty">No suggestion of yours, and none for an item you own. Suggest a change from an item's page.</div>}
+      <div className="row" style={{ gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ flex: '0 1 420px' }}>
+          {rows.map((r) => (
+            <div key={r.id} style={{ margin: '6px 0' }} data-testid="suggestion" data-state={r.state} data-moved={r.moved} data-kind={r.kind}>
+              <button type="button" className={`btn btn-sm${open === r.id ? ' btn-primary' : ''}`} onClick={() => setOpen(r.id)} data-testid="suggestion-open">{r.title}</button>
+              <div className="hint">{suggestionLine(r)}</div>
+              {canWithdraw(r, me) && <button type="button" className="btn btn-sm" disabled={withdraw.isPending} onClick={() => withdraw.mutate(r.id)} data-testid="suggestion-withdraw">Withdraw</button>}
+            </div>
+          ))}
+        </div>
+        {row && (
+          <div style={{ flex: '1 1 480px', minWidth: 0 }} data-testid="suggestion-detail" data-id={row.id}>
+            <h2>{row.title}</h2>
+            <div className="hint" data-testid="suggestion-reason">{suggestionLine(row)} Why: {row.reason}</div>
+            {row.moved && <div className="banner" data-testid="suggestion-moved">The item has changed since this was suggested. It is shown here to read beside the item's current text, not merged.</div>}
+            {row.preview && (
+              <div data-testid="suggestion-preview">
+                <strong>What it returned</strong> <span className="hint">{previewLine(row.preview)}</span>
+                <table className="table"><thead><tr>{row.preview.columns.map((c) => <th key={c.name}>{c.name}</th>)}</tr></thead>
+                  <tbody>{row.preview.rows.map((r, i) => <tr key={i}>{r.map((v, j) => <td key={j}>{v ?? 'NULL'}</td>)}</tr>)}</tbody></table>
+              </div>
+            )}
+            <strong>Proposed text</strong>
+            <pre className="mono" data-testid="suggestion-proposed" style={{ whiteSpace: 'pre-wrap' }}>{row.proposed}</pre>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

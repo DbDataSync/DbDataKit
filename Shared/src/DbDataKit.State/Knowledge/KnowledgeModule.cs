@@ -84,6 +84,36 @@ public static class KnowledgeModule
         );
         CREATE INDEX {index:verified_query_by_model} ON {table:verified_query}(channel, model);
         """,
+        """
+        -- Suggestions at the edge (KN19): a proposal to change an item or to add one, written here and nowhere else, so it is kept when the Workspace server is down. project is the knowledge project the item is in; item_id the item
+        -- (the new item's id for a suggestion of a new one); kind is 'change', 'new' or 'verified-query'; proposed is the whole text of the file as proposed; base_version is the hash of the item's text it was based on (null for a new
+        -- one), so a suggestion whose item moved on can be told; reason is why; suggested_by is the person, via 'person' or 'agent:<name>'; owner is the group that owns the item (the one who may decide); state is open, withdrawn,
+        -- needs-another-look, approved or rejected (the last three are the Workspace server's, KN20); preview is the JSON of a verified query's result as the person saw it (KN23).
+        CREATE TABLE {table:suggestion} (
+            id           {{key}} NOT NULL,
+            project      {{key}} NOT NULL,
+            item_id      {{key}} NOT NULL,
+            kind         {{key}} NOT NULL,
+            title        {{text}} NOT NULL,
+            proposed     {{text}} NOT NULL,
+            base_version {{key}} NULL,
+            reason       {{text}} NOT NULL,
+            suggested_by {{key}} NOT NULL,
+            via          {{key}} NOT NULL,
+            owner        {{key}} NULL,
+            state        {{key}} NOT NULL,
+            preview      {{text}} NULL,
+            decided_by   {{key}} NULL,
+            decided_at   {{time}} NULL,
+            note         {{text}} NULL,
+            created_at   {{time}} NOT NULL,
+            updated_at   {{time}} NOT NULL,
+            PRIMARY KEY (id)
+        );
+        CREATE INDEX {index:suggestion_by_person} ON {table:suggestion}(suggested_by, state);
+        CREATE INDEX {index:suggestion_by_owner} ON {table:suggestion}(owner, state);
+        CREATE INDEX {index:suggestion_by_item} ON {table:suggestion}(project, item_id);
+        """,
     ];
 
     private static StateModule Make(StateScopeKind scope) => new(Name, scope, Migrations);
