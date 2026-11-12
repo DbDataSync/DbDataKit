@@ -419,6 +419,16 @@ public static class ConnectionDefinitionLoader
                     Needs("key_secret", s.KeySecret is not null);
                     NoOthers(("user", s.User is not null), ("password_secret", s.PasswordSecret is not null), ("token_url", s.TokenUrl is not null), ("client_secret_secret", s.ClientSecretSecret is not null), ("certificate_file", s.CertificateFile is not null));
                     break;
+                case "windows":
+                    if (d.KindName != ConnectionKinds.ReportCatalog) Err("sign_in.method", "`windows` signs in to the kind `report-catalog`.", "Use another method for this kind.");
+                    Needs("user", !string.IsNullOrWhiteSpace(s.User));
+                    Needs("password_secret", s.PasswordSecret is not null);
+                    NoOthers(("key_secret", s.KeySecret is not null), ("token_url", s.TokenUrl is not null), ("client_secret_secret", s.ClientSecretSecret is not null), ("certificate_file", s.CertificateFile is not null), ("certificate_secret", s.CertificateSecret is not null));
+                    break;
+                case "integrated":
+                    if (d.KindName != ConnectionKinds.ReportCatalog) Err("sign_in.method", "`integrated` signs in to the kind `report-catalog`.", "Use another method for this kind.");
+                    NoOthers(("key_secret", s.KeySecret is not null), ("user", s.User is not null), ("password_secret", s.PasswordSecret is not null), ("token_url", s.TokenUrl is not null), ("client_secret_secret", s.ClientSecretSecret is not null), ("certificate_file", s.CertificateFile is not null), ("certificate_secret", s.CertificateSecret is not null));
+                    break;
                 case "kerberos":
                     if (d.KindName != ConnectionKinds.Smb) Err("sign_in.method", "`kerberos` signs in to the kind `smb`.", "Use another method for this kind.");
                     NoOthers(("key_secret", s.KeySecret is not null), ("user", s.User is not null), ("password_secret", s.PasswordSecret is not null), ("token_url", s.TokenUrl is not null), ("client_secret_secret", s.ClientSecretSecret is not null), ("certificate_file", s.CertificateFile is not null), ("certificate_secret", s.CertificateSecret is not null));
@@ -473,10 +483,10 @@ public static class ConnectionDefinitionLoader
             if (d.Endpoint is { } address && !EndpointTemplate.IsHidden(address) && Uri.TryCreate(address, UriKind.Absolute, out var addressUri) && (addressUri.Query.Length > 1 || addressUri.Fragment.Length > 1))
                 Err("endpoint", "The address of a report server has no query or fragment: a key is `sign_in`.", "Remove everything from the `?`.");
             var method = d.SignIn?.Method ?? "none";
-            if (method is not ("none" or "basic" or "api_key" or "oauth2_client_credentials" or "client_certificate"))
-                Err("sign_in.method", $"A `report-catalog` connection signs in with `basic` (the service account's user and `password_secret`), `api_key`, `oauth2_client_credentials`, `client_certificate`, or `none`, not `{method}`.");
+            if (method is not ("none" or "basic" or "api_key" or "oauth2_client_credentials" or "client_certificate" or "windows" or "integrated"))
+                Err("sign_in.method", $"A `report-catalog` connection signs in with `windows` (NTLM or Negotiate: the service account's `user` and `password_secret`), `integrated` (the identity the host runs as, no key), `basic`, `api_key`, `oauth2_client_credentials`, `client_certificate`, or `none`, not `{method}`.");
             if (d.Endpoint is { } ep && !EndpointTemplate.IsHidden(ep) && Uri.TryCreate(ep, UriKind.Absolute, out var uri) && uri.Scheme == "http" && !IsLoopbackHost(uri.Host) && method != "none")
-                Warn("endpoint", "The address is plain http: the service account's credentials travel in clear text.", null, TlsOptOut);
+                Warn("endpoint", method is "windows" or "integrated" ? "The address is plain http: NTLM and Negotiate protect the password, but the catalog itself travels in clear text." : "The address is plain http: the service account's credentials travel in clear text.", null, TlsOptOut);
         }
 
         void CheckObjectStore()

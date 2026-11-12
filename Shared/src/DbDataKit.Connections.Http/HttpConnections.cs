@@ -62,13 +62,14 @@ public static class HttpConnections
         var spec = definition.SignIn ?? new SignInSpec();
         var time = options.Time ?? TimeProvider.System;
 
+        var (composed, parts) = ComposeEndpoint(definition, secrets);
         X509Certificate2? certificate = null;
         HttpMessageHandler inner;
         if (options.InnerHandler is { } given) inner = given;
         else
         {
             if (spec.Method == "client_certificate") certificate = LoadCertificate(spec, secrets);
-            inner = Sockets(definition, certificate);
+            inner = Sockets(definition, certificate, WindowsCredentials(definition, composed, spec, secrets));
         }
 
         ITokenSource? tokens = spec.Method switch
@@ -78,7 +79,6 @@ public static class HttpConnections
             _ => null,
         };
         var handler = new SignInHandler(spec, secrets, tokens, inner, time);
-        var (composed, parts) = ComposeEndpoint(definition, secrets);
         // an API's address is a base for relative paths (a trailing slash); a webhook's is the whole address, which a slash would change
         var endpoint = composed.EndsWith('/') || composed.Contains('?', StringComparison.Ordinal) || definition.Webhook is not null ? composed : composed + "/";
         var client = new HttpClient(handler) { BaseAddress = new Uri(endpoint), Timeout = TimeSpan.FromSeconds(definition.Timeouts.CommandS) };
@@ -101,10 +101,44 @@ public static class HttpConnections
         return (EndpointTemplate.Compose(endpoint, n => values[n]), [.. values.Values]);
     }
 
-    private static SocketsHttpHandler Sockets(ConnectionDefinition d, X509Certificate2? certificate)
+    /// <summary>
+    /// The Windows sign-in of a connection of kind <c>report-catalog</c> (owner decision 2026-11-12): <c>windows</c> is the user and the password the secret holds (<c>DOMAIN\user</c> or <c>user@domain</c>), <c>integrated</c> is the identity the process runs as (nothing in the file).
+    /// The credential is offered for NTLM and Negotiate <b>only</b>, never for Basic, so a server that asks for Basic is not given the password in clear text. Null for every other sign-in.
+    /// </summary>
+    internal static ICredentials? WindowsCredentials(ConnectionDefinition definition, string composedEndpoint, SignInSpec spec, ISecretResolver secrets)
+    {
+        if (spec.Method is not ("windows" or "integrated")) return null;
+        NetworkCredential credential;
+        if (spec.Method == "integrated") credential = CredentialCache.DefaultNetworkCredentials;
+        else
+        {
+            var password = SecretText.ReadAsync(secrets, spec.PasswordSecret!, default).GetAwaiter().GetResult();
+            var user = spec.User!;
+            var slash = user.IndexOf('\\', StringComparison.Ordinal);
+            credential = slash > 0 ? new NetworkCredential(user[(slash + 1)..], password, user[..slash]) : new NetworkCredential(user, password);
+        }
+
+        var cache = new CredentialCache();
+        // the prefix is the address the credential may be sent to: the host and port of the portal (the report server's address is on the same host in the usual setup, and a different one is added)
+        foreach (var address in WindowsPrefixes(definition, composedEndpoint))
+            foreach (var scheme in new[] { "Negotiate", "NTLM" })
+                cache.Add(address, scheme, credential);
+        return cache;
+    }
+
+    private static IEnumerable<Uri> WindowsPrefixes(ConnectionDefinition d, string composed)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var text in new[] { composed, d.ReportCatalog?.ReportServerAddress })
+            if (text is not null && Uri.TryCreate(text, UriKind.Absolute, out var uri) && seen.Add(uri.GetLeftPart(UriPartial.Authority) + "/"))
+                yield return new Uri(uri.GetLeftPart(UriPartial.Authority) + "/");
+    }
+
+    private static SocketsHttpHandler Sockets(ConnectionDefinition d, X509Certificate2? certificate, ICredentials? credentials = null)
     {
         var handler = new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(d.Timeouts.ConnectS), PooledConnectionLifetime = TimeSpan.FromMinutes(5), AllowAutoRedirect = false };
         if (certificate is not null) handler.SslOptions.ClientCertificates = [certificate];
+        if (credentials is not null) handler.Credentials = credentials;
         if (!d.Tls.EffectiveVerify) handler.SslOptions.RemoteCertificateValidationCallback = (_, _, _, _) => true;
         else if (d.Tls.CaFile is { Length: > 0 } caFile)
         {

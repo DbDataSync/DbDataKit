@@ -64,14 +64,30 @@ public static class HttpConnectionTester
             ? "Consent has not been given yet: press Authorize on the Connections screen and sign in at the provider (the refresh token it gives is kept in the console's secret store)."
             : $"{e.Message} Type it on this screen (it is kept in the console's secret store), or set the secret or variable that names.";
 
+    /// <summary>
+    /// What to check when a Windows sign-in (NTLM or Negotiate) is refused. On Linux and macOS the handshake needs the system's GSSAPI libraries (Debian and Ubuntu: <c>libgssapi-krb5-2</c>, and <c>gss-ntlmssp</c> for NTLM; Red Hat: <c>gssntlmssp</c>, <c>krb5-libs</c>),
+    /// and <c>integrated</c> there is a Kerberos ticket of the service account (<c>kinit</c> or a keytab), not a Windows logon.
+    /// </summary>
+    internal static string WindowsHint(string method, bool windows)
+    {
+        if (!windows)
+            return method == "integrated"
+                ? "On Linux, `integrated` needs a Kerberos ticket for the account the service runs as (kinit or a keytab) and the GSSAPI packages (gss-ntlmssp, libgssapi-krb5); without them the handshake is not available and the server answers 401. Use `windows` with a user and a password instead, or install them."
+                : "On Linux, Negotiate and NTLM need the GSSAPI packages (gss-ntlmssp, libgssapi-krb5) on this machine; without them the handshake is not available and the server answers 401. Install them, and check the user (`DOMAIN\\user`) and the password.";
+        return method == "integrated"
+            ? "Check that the account the service runs as is allowed to read the catalog on the report server, and that the address is the server's name (Kerberos) rather than an IP address."
+            : "Check the user (`DOMAIN\\user`) and the password, and that this account may read the catalog on the report server.";
+    }
+
     private static HttpTestResult Judge(ConnectionDefinition d, string shown, HttpStatusCode status, string method, Func<bool, bool?, string, string, ConnectionFailureKind?, int?, HttpTestResult> done)
     {
         var code = (int)status;
         var at = d.TestPath is { Length: > 0 } p ? $"{shown}/{p.TrimStart('/')}" : shown;
         var accepted = method == "none" ? "none" : "accepted";
         if (code is >= 200 and < 400) return done(true, true, accepted, $"{at} answered {code}" + (method == "none" ? "." : " and accepted the sign-in."), null, code);
+        if (code == 401 && method is "windows" or "integrated") return done(false, true, "rejected", $"{at} answered 401: it did not accept the Windows sign-in. " + WindowsHint(method, OperatingSystem.IsWindows()), ConnectionFailureKind.Login, code);
         if (code == 401) return done(false, true, method == "none" ? "none" : "rejected", method == "none" ? $"{at} answered 401: it wants a sign-in, and this connection has none." : $"{at} answered, but did not accept the sign-in (401). Check the secret, and that it is the one for this system.", ConnectionFailureKind.Login, code);
-        if (code == 403) return done(false, true, accepted, $"{at} answered 403: the sign-in was accepted, but it is not allowed to read this address.", ConnectionFailureKind.Permission, code);
+        if (code == 403) return done(false, true, accepted, $"{at} answered 403: the sign-in was accepted, but it is not allowed to read this address." + (method is "windows" or "integrated" ? " Give the Windows account a role (Browser is enough to read) on the report server's folders in its web portal." : ""), ConnectionFailureKind.Permission, code);
         if (code is 404 or 405 or 410)
             return done(true, true, accepted, $"{at} answered {code}: the system is there and did not refuse the sign-in. Set `test_path` to an address that exists to check the sign-in itself.", null, code);
         var failure = HttpFailures.Classify(status);

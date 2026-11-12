@@ -66,6 +66,8 @@ describe('outside connections (plan 27a IX01)', () => {
   it('knows the file servers: their labels, the key they sign in with and which kinds Test can try (plan 27a IX04)', () => {
     expect(['http', 'smtp', 'sftp', 'scp', 'ftps', 'smb', 's3', 'azure-blob', 'report-catalog'].every(canTest)).toBe(true)
     expect(outsideDetail({ ...crm, kind: 's3', endpoint: 's3://reports/incoming/ at https://s3.example.com', signIn: 'access_key' })).toBe('s3://reports/incoming/ at https://s3.example.com, access key (AWS Signature V4)')
+    expect(outsideDetail({ ...crm, kind: 'report-catalog', endpoint: 'https://reports.example.com/Reports', signIn: 'windows' })).toBe('https://reports.example.com/Reports, Windows sign-in (NTLM or Negotiate, user and password)')
+    expect(outsideDetail({ ...crm, kind: 'report-catalog', endpoint: 'https://reports.example.com/Reports', signIn: 'integrated' })).toBe('https://reports.example.com/Reports, Windows sign-in as the service account (integrated)')
     expect(outsideDetail({ ...crm, kind: 'smb', endpoint: 'smb://fs01/data/incoming', signIn: 'kerberos' })).toBe('smb://fs01/data/incoming, Windows sign-in (Kerberos)')
     expect(canTest('model-provider')).toBe(false)
     expect(canTest(null)).toBe(false)

@@ -105,12 +105,13 @@ public sealed class GrantsSpec
 /// <c>method</c> is <c>none</c>, <c>api_key</c> (<see cref="KeySecret"/> sent in the header or query parameter <see cref="Name"/>, after <see cref="Prefix"/>), <c>basic</c> (<see cref="User"/> and <see cref="PasswordSecret"/>),
 /// <c>oauth2_client_credentials</c> (<see cref="TokenUrl"/>, <see cref="ClientId"/>, <see cref="ClientSecretSecret"/>, <see cref="Scope"/>; the token is cached and refreshed), <c>oauth2_authorization_code</c> (plan 27a IX03: a person gives consent once on the console, the refresh token is kept as the
 /// secret <see cref="RefreshTokenSecret"/> and every access token is got from it), <c>client_certificate</c> (a PKCS#12 file or a secret holding it as Base64)
+/// <c>windows</c> and <c>integrated</c> (kind <c>report-catalog</c> only; NTLM or Negotiate: <c>windows</c> is <see cref="User"/> and <see cref="PasswordSecret"/>, <c>integrated</c> is no key at all, the identity the host process runs as),
 /// or <c>signed_webhook</c> (plan 22a GP18 fold: the request body is signed with HMAC-SHA256 and a timestamp using the shared secret <see cref="KeySecret"/>, sent in the header <see cref="Name"/>, default <c>X-DbData-Signature</c>).
 /// </summary>
 [ConfigSchema(Naming = KeyNaming.SnakeCase, Description = "How a connection of an outside kind signs in (connection/2).")]
 public sealed class SignInSpec
 {
-    [ConfigKey(Pattern = "none|api_key|basic|oauth2_client_credentials|oauth2_authorization_code|client_certificate|signed_webhook|ssh_key|kerberos|access_key|shared_key|sas_token")]
+    [ConfigKey(Pattern = "none|api_key|basic|oauth2_client_credentials|oauth2_authorization_code|client_certificate|signed_webhook|ssh_key|kerberos|windows|integrated|access_key|shared_key|sas_token")]
     public string Method { get; set; } = "none";
 
     /// <summary>api_key: where the key goes, <c>header</c> or <c>query</c>.</summary>
