@@ -49,6 +49,9 @@ public sealed record KnowledgeHost
 
     public IKnowledgeReader? Reader { get; init; }
 
+    /// <summary>Translates semantic SQL into a request, so a verified query's SQL is checked against its request (KN21); null: not checked here.</summary>
+    public SqlToRequest? TranslateSql { get; init; }
+
     /// <summary>The channel the read commands use when none is given.</summary>
     public string DefaultChannel { get; init; } = "prod";
 
@@ -152,7 +155,7 @@ public static class KnowledgeNoun
         var projects = new List<object>();
         foreach (var target in targets)
         {
-            var report = KnowledgeChecks.Check(target.Project, target.SourceName, host.Catalog(), host.OwnerExists, agents);
+            var report = KnowledgeChecks.Check(target.Project, target.SourceName, host.Catalog(), host.OwnerExists, agents, translate: host.TranslateSql);
             all.AddRange(report.Diagnostics);
             reaches.AddRange(report.Reaches);
             projects.Add(new Dictionary<string, object?> { ["source"] = target.SourceName, ["root"] = target.Project.Root, ["items"] = target.Project.Items.Count });

@@ -64,6 +64,26 @@ public static class KnowledgeModule
             PRIMARY KEY (channel, item_id, seq)
         );
         """,
+        """
+        -- Verified queries (KN21): what an item of kind verified-query adds to its row. The pinned request (JSON; the request is the truth), the semantic SQL kept for reading, the model it is asked of, who verified it, when and against which model version.
+        -- status is 'verified' or 'needs-reverification' (KN22: a new version of the model no longer answers it the way it did; the item is still found, no longer given as verified); status_note says why. The questions are the item's chunks.
+        CREATE TABLE {table:verified_query} (
+            channel       {{key}} NOT NULL,
+            item_id       {{key}} NOT NULL,
+            model         {{key}} NOT NULL,
+            request       {{text}} NULL,
+            saved_query   {{key}} NULL,
+            saved_version {{key}} NULL,
+            semantic_sql  {{text}} NULL,
+            verified_by   {{key}} NOT NULL,
+            verified_at   {{key}} NOT NULL,
+            model_version {{key}} NOT NULL,
+            status        {{key}} NOT NULL,
+            status_note   {{text}} NULL,
+            PRIMARY KEY (channel, item_id)
+        );
+        CREATE INDEX {index:verified_query_by_model} ON {table:verified_query}(channel, model);
+        """,
     ];
 
     private static StateModule Make(StateScopeKind scope) => new(Name, scope, Migrations);

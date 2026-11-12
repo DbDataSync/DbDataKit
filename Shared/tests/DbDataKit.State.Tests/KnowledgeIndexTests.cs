@@ -56,7 +56,7 @@ public sealed class KnowledgeIndexTests : IDisposable
     {
         Assert.Empty(StateConventions.Violations(KnowledgeModule.Module));
         Assert.Empty(StateConventions.Violations(KnowledgeModule.GroupModule));
-        Assert.Equal(["chunk", "item", "item_subject"], StateTableDefinitions.Read(KnowledgeModule.Module).Select(t => t.Name).Order());
+        Assert.Equal(["chunk", "item", "item_subject", "verified_query"], StateTableDefinitions.Read(KnowledgeModule.Module).Select(t => t.Name).Order());
         Assert.All(StateTableDefinitions.Read(KnowledgeModule.Module), t => Assert.NotEmpty(t.PrimaryKey));
         Assert.Equal(StateScopeKind.Group, KnowledgeModule.GroupModule.Scope);
         Assert.Empty(KnowledgeModule.Module.RequiresFeatures);   // vectors are another module: words are found on every engine

@@ -98,4 +98,5 @@ public sealed record KnowledgeItem(
     ChunkingSetting Chunking,
     string Body,
     int BodyLine,
-    string Hash);
+    string Hash,
+    VerifiedQuery? Verified = null);

@@ -13,8 +13,24 @@
     "about": { "$ref": "#/$defs/about" },
     "for": { "$ref": "#/$defs/for" },
     "owner": { "type": "string", "minLength": 1, "maxLength": 200, "description": "A group of the identity home; approves changes to the item." },
-    "kind": { "enum": ["item"], "description": "Verified queries are a kind of this format, read from plan 27a KN21 on." },
-    "chunking": { "$ref": "#/$defs/chunking" }
+    "kind": { "enum": ["item", "verified-query"], "description": "An item, or a verified query (KN21): questions, the pinned request that answers them and who verified it." },
+    "chunking": { "$ref": "#/$defs/chunking" },
+    "questions": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "type": "string", "minLength": 1, "maxLength": 500 }, "description": "A verified query: the questions it answers, as people ask them. They are what is embedded and found." },
+    "model": { "type": "string", "minLength": 1, "maxLength": 200, "description": "A verified query: the semantic model it is asked of." },
+    "request": { "oneOf": [ { "type": "object", "required": ["kind", "query"], "properties": { "kind": { "const": "query" }, "query": { "type": "object", "required": ["measures"] } } }, { "type": "string" } ], "description": "A verified query: the pinned semantic request (the document `semantic query --request` takes), as a mapping or JSON text. The request is the truth." },
+    "semantic-sql": { "type": "string", "minLength": 1, "description": "A verified query: the same query as semantic SQL, kept for reading. Translated into the request when there is no request; when both are given they must agree." },
+    "saved-query": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*(@\\S+)?$", "description": "A verified query: a saved query of the model's catalog, with the model version it was verified against after @ when pinned." },
+    "verified": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["by", "at", "model-version"],
+      "properties": {
+        "by": { "type": "string", "minLength": 1 },
+        "at": { "type": "string", "minLength": 1, "description": "A date or a date and time." },
+        "model-version": { "type": ["string", "number"], "description": "The version of the model the query was verified against." }
+      },
+      "description": "A verified query: who verified it, when and against which version of the model."
+    }
   },
   "$defs": {
     "defaults": {
