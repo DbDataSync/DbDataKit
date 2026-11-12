@@ -130,6 +130,4 @@ Do these against a **copy** of your old folder, never the live one. The full lis
 - **Only the global Scoop install and its machine variables have been run on Windows** (owner, 2026-11-06). Everything else here, the console and Sync first runs, both certificate steps, pairing and the MSI route, is untested.
 - **The container images for the console and Gateway were not published** (the registry refused the push). Windows installs do not use
   them.
-- **One Build test is skipped on SQL Server** (T16 of the old plan 13c): a plan run with `--parallel 1` took about 7.4 s
-  where three 3-second pauses should take at least 9 s. It is not known whether Build or the test is wrong.
 - The installers are not signed.

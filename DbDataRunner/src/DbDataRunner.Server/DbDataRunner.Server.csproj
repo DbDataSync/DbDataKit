@@ -36,6 +36,9 @@
     <DbDataKitReference Include="Runner" />   <!-- the engine: artifact cache, executor, scheduler loop -->
     <DbDataKitReference Include="Runner.Limits" />   <!-- what this machine can enforce, reported as capabilities -->
     <DbDataKitReference Include="Runner.Protocol.Server" />   <!-- the socket the task processes talk to -->
+    <DbDataKitReference Include="Connections" />   <!-- UI08: the slot binding test opens the connection with the engine's provider -->
+    <DbDataKitReference Include="Connections.SqlServer" />
+    <DbDataKitReference Include="Connections.Postgres" />
     <DbDataKitReference Include="Web" />   <!-- pairing, key rotation, the version header and the token check -->
     <DbDataKitReference Include="Upgrade" />   <!-- the server upgrades itself when the console says so; plan 24a UC09 -->
   </ItemGroup>
