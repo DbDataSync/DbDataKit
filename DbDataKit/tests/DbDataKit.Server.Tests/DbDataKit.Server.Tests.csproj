@@ -9,5 +9,7 @@
     <Using Include="Xunit" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\..\src\DbDataKit.Server\DbDataKit.Server.csproj" />
+    <!-- the fake OAuth provider of the connection library's tests (plan 27a IX03), shared rather than written twice -->
+    <Compile Include="..\..\..\Shared\tests\DbDataKit.Connections.Http.Tests\FakeOAuthServer.cs" Link="FakeOAuthServer.cs" />
   </ItemGroup>
 </Project>

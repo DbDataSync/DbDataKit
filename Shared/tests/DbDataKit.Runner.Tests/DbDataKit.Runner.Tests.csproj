@@ -4,6 +4,8 @@
     <PackageReference Include="Npgsql" />
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\DbDataKit.Runner\DbDataKit.Runner.csproj" />
+    <!-- file connections as the sources of the file trigger (plan 27a IX07) -->
+    <ProjectReference Include="..\..\src\DbDataKit.Runner.FileConnections\DbDataKit.Runner.FileConnections.csproj" />
     <!-- the quality system task (plan 23a FQ08) and the DuckDB file its checks read -->
     <ProjectReference Include="..\..\src\DbDataKit.Quality.Runner\DbDataKit.Quality.Runner.csproj" />
     <ProjectReference Include="..\..\src\DbDataKit.Connections.DuckDb\DbDataKit.Connections.DuckDb.csproj" />
