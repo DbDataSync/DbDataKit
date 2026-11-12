@@ -67,6 +67,28 @@ Tests of the rows with the back-end not running: `OutageTests` (Build, Sync and 
 - **Load balancing is external.** Instances are interchangeable, and Flight SQL tickets and sessions are valid on any instance of the group. NTLM needs a balancer that keeps a connection on one instance.
 - **Lineage and monitoring**: each instance records its runs into the group's state; the console pulls them per group.
 
+## The result cache
+
+The core keeps a **result cache** in front of the query service (plan 24a UC12 to UC14 and UC16; `ServingCache.cs` in `DbDataKit.Serving.Abstractions`, wired by the Gateway as `GatewayCache`). It is **off for every definition that does not turn it on**: an owner writes a `cache:` section in the definition (a `connection/2` data source or the semantic package; the keys `enabled`, `ttl`, `scope`, `dataset` of [plan 24a UC03](plans/24a-upgrade-and-cache-slices.md)), and publishes it, so the setting is promoted with the definition. Dashboards, reports and apps read through the same query service, so they take the cache setting of what they read; they have no `cache:` key of their own.
+
+What is cached, and what never is:
+
+| | |
+| --- | --- |
+| Cached | a statement over data on a data source whose definition says `enabled: true`; a semantic query (`kind: query`, or semantic SQL beginning with `SELECT` or `WITH`) on a model whose catalog says so |
+| Never cached | a preview, MDX, a description of the catalog, a member listing, `EXPLAIN`, a call of a saved query; a **pass-through** data source (its rows are the caller's own database login's); a data source that **accepts writes** (a write changes it without a message); a model that reads Analysis Services or a data source of those kinds; an answer that is too big for an entry, that fails or passes a limit while it streams, or that was read before a clear |
+| Granted | before a request is answered from the cache the Gateway asks, as for a miss, whether the **caller may use every data source** the request reads; an entry another caller made is never a way round a grant |
+
+The key is one SHA-256 over the query as asked (kind, source, text or document, parameters, the limits asked for), the channel, the preview, the published version of the definition (for a data source: a hash of its file's settings, so a republish or a changed login is a new key) and, by `scope`, who the entry is for: `caller` (the caller's id), `rules` (all of the caller's directory attributes, **the default taken until the access-rule language exists**, plan 22a QG2), or `shared` (no one). A hit says the same version and channel and adds `cache: hit` to the provenance. A cold or lost cache changes no result.
+
+**What clears it.** (1) The time-to-live of the definition (`ttl`, 5 minutes by default, at most 24 hours): the backstop for a source written outside the suite. (2) A **`data.changed` message** (`data.changed/1`, `DataChangedMessage`): `POST /api/v1/cache/changed` on the Gateway's management API, with the role Publisher or Admin, a JSON object naming `dataset` (the lineage identity, `namespace/name`), `product` (`sync`, `build`, `store`, `runner`) and optionally `run` and `at`; any other key is refused by name, so no row data and no text travels in it. The call is a signed management call, so a forged or replayed message is refused by the channel before it is read. The Gateway maps the dataset to what it serves with its lineage graph (`Impact` of the table reaches the data sources that serve it and the models that read them) and clears those entries; **a dataset the graph does not know clears the whole cache** (a cold cache is never wrong, a stale one can be). (3) An administrator's **clear** on the console's cache screen, per dataset or all. (4) A new published version is a new key, so the old entries are never found again and leave when they expire. A write that is in flight while the clear happens keeps its answer out of the cache (the epoch of the cache).
+
+**Groups.** Each instance keeps its cache in memory. With a group's state (SQL Server or PostgreSQL) the instances share their clears through the state module `serving_cache_epoch`: one row per cache dataset holding a number, its epoch, that only grows, and who and why. **No row data and no result is ever stored in the state.** Every instance reads the epochs every two seconds and clears what it has not seen, so a message that reached one instance reaches them all; with the shared record down an instance still clears itself, and the others fall back to the time-to-live (a miss, never an error). A single instance on SQLite does not use the module.
+
+**What the console shows** (the Gateway's *Cache* screen, `GET /api/v1/cache`): per instance the hits, misses, hit rate, entries, bytes and evictions; the same by dataset; the cache setting of every data source and semantic model (off unless the definition says so, and the reason an enabled one does nothing); and what the cache has heard of data changes (how many, the last, from which product, whether the group shares them), so "events not arriving" is visible and a long time-to-live is not a silent staleness.
+
+Known limits: a hit is not recorded as a semantic run (SL23: the run record is written by the module a miss goes through); producers of `data.changed` (a Build load, a Sync run, a DbDataStore write, a Runner task) are not wired to send it yet, so until they are only the time-to-live, a publish and the console's clear empty an entry (plan 24a UC13); the sizes (64 MB, 8 MB an entry) and the two-second poll are not settings yet.
+
 ## Decisions
 
 1. The `apps` and `mcp` modules are part of the serving layer.

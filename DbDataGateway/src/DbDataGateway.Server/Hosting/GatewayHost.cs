@@ -207,7 +207,18 @@ public static class GatewayHost
                 });
         });
         services.AddHostedService<DbDataGateway.Server.State.DefinitionFollowerService>();
-        services.AddSingleton<IServingServices>(sp => sp.GetRequiredService<GatewayServing>().WithSemantic(sp.GetRequiredService<SemanticModels>()));
+        // the result cache (plan 24a UC12 to UC14): in memory in this instance; off for every definition that does not say so; with a group's state the instances share their clears through per-dataset epochs (no row data in the state)
+        services.AddSingleton(sp => new DbDataGateway.Server.State.ServingCacheEpochStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>(), sp.GetRequiredService<TimeProvider>()));
+        services.AddSingleton(sp =>
+        {
+            var current = sp.GetRequiredService<IOptionsMonitor<GatewayOptions>>();
+            var state = sp.GetRequiredService<DbDataKit.State.StateDatabase>();
+            return new GatewayCache(sp.GetRequiredService<DataSourceCatalog>(), () => current.CurrentValue, () => sp.GetRequiredService<SemanticModels>(),
+                DbDataGateway.Server.State.GatewayState.IsGroup(state) ? sp.GetRequiredService<DbDataGateway.Server.State.ServingCacheEpochStore>() : null, sp.GetRequiredService<TimeProvider>());
+        });
+        services.AddHostedService(sp => new ServingCacheSyncService(sp.GetRequiredService<GatewayCache>()));
+        services.AddSingleton<IServingServices>(sp => sp.GetRequiredService<GatewayServing>().WithSemantic(sp.GetRequiredService<SemanticModels>())
+            .WithCache(sp.GetRequiredService<GatewayCache>().Store, sp.GetRequiredService<GatewayCache>().Policy));
         services.AddSingleton(sp =>
         {
             var current = sp.GetRequiredService<IOptionsMonitor<GatewayOptions>>();
