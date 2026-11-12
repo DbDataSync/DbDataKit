@@ -81,6 +81,7 @@
     <Project Path="src/DbDataKit.Runner.Kit.Formats/DbDataKit.Runner.Kit.Formats.csproj" />
     <Project Path="src/DbDataKit.Runner.Kit.Http/DbDataKit.Runner.Kit.Http.csproj" />
     <Project Path="src/DbDataKit.Runner.Kit.Landing/DbDataKit.Runner.Kit.Landing.csproj" />
+    <Project Path="src/DbDataKit.Runner.Kit.Outbound/DbDataKit.Runner.Kit.Outbound.csproj" />
     <Project Path="src/DbDataKit.Runner.Kit.Testing/DbDataKit.Runner.Kit.Testing.csproj" />
     <Project Path="src/DbDataKit.Runner.Packaging/DbDataKit.Runner.Packaging.csproj" />
     <Project Path="src/DbDataKit.Runner.TaskHost/DbDataKit.Runner.TaskHost.csproj" />
@@ -192,6 +193,7 @@
     <Project Path="tests/DbDataKit.Runner.Kit.Formats.Tests/DbDataKit.Runner.Kit.Formats.Tests.csproj" />
     <Project Path="tests/DbDataKit.Runner.Kit.Http.Tests/DbDataKit.Runner.Kit.Http.Tests.csproj" />
     <Project Path="tests/DbDataKit.Runner.Kit.Landing.Tests/DbDataKit.Runner.Kit.Landing.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Runner.Kit.Outbound.Tests/DbDataKit.Runner.Kit.Outbound.Tests.csproj" />
     <Project Path="tests/DbDataKit.Runner.Kit.Testing.Tests/DbDataKit.Runner.Kit.Testing.Tests.csproj" />
     <Project Path="tests/DbDataKit.Runner.Packaging.Tests/DbDataKit.Runner.Packaging.Tests.csproj" />
     <Project Path="tests/DbDataKit.Runner.TestPackage/DbDataKit.Runner.TestPackage.csproj" />

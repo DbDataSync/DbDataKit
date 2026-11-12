@@ -21,6 +21,7 @@ An **integration** is ordinary code that moves data between the suite and a syst
 | Landing helpers: rows into a staging table through `DbDataKit.Transfer` and into DbDataStore's tables through the Store's write path, idempotent | **built** (IX11; `DbDataKit.Runner.Kit.Landing`; the Store route is in process, not through the Store's HTTP API; files into DbDataStore documents wait for plan 15's documents) |
 | Change detection with no change feed (a row-hash snapshot kept as a checkpoint, compared with the next run) | **built** (IX13; `DbDataKit.Runner.Kit.Changes`) |
 | Refused-record listing and replay (the kit's surface over the dead letters; the runner's API and screens are plan 28a R25) | **built** in the kit (IX14; `RefusedRecords`) |
+| Outbound patterns: a table, view, query or DbDataStore entity sent to an API or a file, resumable, nothing sent when nothing changed, with idempotency keys | **built** (IX22; `DbDataKit.Runner.Kit.Outbound`; no semantic-query source yet) |
 | Lineage nodes for outside systems | **not built** (IX12) |
 | Recorded HTTP responses and a fake file share for tests | **built** (IX15; `RecordedHttp` and `FakeFileShare` in `DbDataKit.Runner.Kit.Testing`; the recording format `http-recording/1` is in `docs/formats.json`) |
 | Dry run (`--dry-run`, the kit refuses writes) and the sandbox run before promotion | **not built** (IX16) |
