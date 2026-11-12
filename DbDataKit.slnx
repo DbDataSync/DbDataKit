@@ -104,6 +104,7 @@
     <Project Path="Shared/src/DbDataKit.Runner/DbDataKit.Runner.csproj" />
     <Project Path="Shared/src/DbDataKit.Runner.Api/DbDataKit.Runner.Api.csproj" />
     <Project Path="Shared/src/DbDataKit.Runner.Client/DbDataKit.Runner.Client.csproj" />
+    <Project Path="Shared/src/DbDataKit.Runner.FileConnections/DbDataKit.Runner.FileConnections.csproj" />
     <Project Path="Shared/src/DbDataKit.Runner.Limits/DbDataKit.Runner.Limits.csproj" />
     <Project Path="Shared/src/DbDataKit.Runner.Kit/DbDataKit.Runner.Kit.csproj" />
     <Project Path="Shared/src/DbDataKit.Runner.Protocol/DbDataKit.Runner.Protocol.csproj" />

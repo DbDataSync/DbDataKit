@@ -20,7 +20,7 @@ An **integration** is ordinary code that moves data between the suite and a syst
 | SFTP, SCP and FTPS as connections (`DbDataKit.Connections.Files`: list, read, write without a partial file, host-key and certificate pinning) | **built** (IX04) |
 | SMB with Windows sign-in (Kerberos), `smb` connections: the interface and a Windows-only implementation | **built, proven on Linux for everything but the share itself** (IX05) |
 | Object storage: `s3` (Amazon and S3-compatible servers) and `azure-blob`, signed without an SDK | **built** (IX06) |
-| The file connections feed the file trigger | **not built** (IX07) |
+| The file connections feed the file trigger (`DbDataKit.Runner.FileConnections`: the source follows the connection the slot is bound to in the channel) | **built as a library, not wired into a runner host** (IX07: the host passes the delegate that answers the binding) |
 | Landing helpers: rows into a staging table through `DbDataKit.Transfer` and into DbDataStore's tables through the Store's write path, idempotent | **built** (IX11; `DbDataKit.Runner.Kit.Landing`; the Store route is in process, not through the Store's HTTP API; files into DbDataStore documents wait for plan 15's documents) |
 | Change detection with no change feed (a row-hash snapshot kept as a checkpoint, compared with the next run) | **built** (IX13; `DbDataKit.Runner.Kit.Changes`) |
 | Refused-record listing and replay (the kit's surface over the dead letters; the runner's API and screens are plan 28a R25) | **built** in the kit (IX14; `RefusedRecords`) |

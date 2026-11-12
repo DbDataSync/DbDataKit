@@ -73,6 +73,7 @@
     <Project Path="src/DbDataKit.Runner/DbDataKit.Runner.csproj" />
     <Project Path="src/DbDataKit.Runner.Api/DbDataKit.Runner.Api.csproj" />
     <Project Path="src/DbDataKit.Runner.Client/DbDataKit.Runner.Client.csproj" />
+    <Project Path="src/DbDataKit.Runner.FileConnections/DbDataKit.Runner.FileConnections.csproj" />
     <Project Path="src/DbDataKit.Runner.Limits/DbDataKit.Runner.Limits.csproj" />
     <Project Path="src/DbDataKit.Runner.Kit/DbDataKit.Runner.Kit.csproj" />
     <Project Path="src/DbDataKit.Runner.Kit.Analyzers/DbDataKit.Runner.Kit.Analyzers.csproj" />
