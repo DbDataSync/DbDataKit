@@ -159,6 +159,9 @@ describe('the saved queries screen', () => {
     expect(text).toContain('data-testid="sq-delete"')
     expect(renderToStaticMarkup(<SavedQueryManager {...manager(saved[0]!, { confirmDelete: true })} />)).toContain('sq-delete-confirm')
   })
+  it('offers the model entry of a query to copy, for an own query and a shared one alike (SL19)', () => {
+    for (const row of [saved[0]!, saved[1]!]) expect(renderToStaticMarkup(<SavedQueryManager {...manager(row)} />)).toContain('data-testid="sq-promote"')
+  })
   it('names a sharing it cannot read and leaves a shared query read-only', () => {
     expect(renderToStaticMarkup(<SavedQueryManager {...manager(saved[0]!, { shares: 'everyone' })} />)).toContain('data-testid="sq-share-problem"')
     const theirs = renderToStaticMarkup(<SavedQueryManager {...manager(saved[1]!)} />)

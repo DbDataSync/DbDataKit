@@ -77,3 +77,26 @@ export function merged(lists: SavedQueryRow[][]): SavedQueryRow[] {
   for (const row of lists.flat()) { const k = rowKey(row); if (!seen.has(k)) { seen.add(k); all.push(row) } }
   return ordered(all)
 }
+
+function safeJson(text: string): Record<string, unknown> | null {
+  try { const v: unknown = JSON.parse(text); return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null } catch { return null }
+}
+
+/**
+ * A saved query as the entry of a model's `queries:` (plan 14a SL19): the text a person pastes into the model's semantic file in the Build project (`semantic/<model>.yml`), compiles and publishes, and the query is then the model's own,
+ * run by everyone who may query it. Semantic SQL is a block scalar, a request and the parameter definitions are flow mappings (JSON is YAML), the description is a quoted string; the saved query itself stays until its owner deletes it.
+ * `text` is what is in the box (an edit not saved yet), when given.
+ */
+export function promotedEntry(r: Pick<SavedQueryRow, 'name' | 'description' | 'sql' | 'request' | 'parameters'>, text?: string): string {
+  const lines = ['queries:', `  ${r.name}:`]
+  if (r.description?.trim()) lines.push(`    description: ${JSON.stringify(r.description.trim())}`)
+  const shown = (text ?? queryText(r)).trim()
+  const asRequest = text !== undefined ? (shown.startsWith('{') ? safeJson(shown) : null) : r.sql === null ? r.request : null
+  if (asRequest) lines.push(`    request: ${JSON.stringify(asRequest)}`)
+  else {
+    lines.push('    sql: |-')
+    for (const line of shown.replace(/;\s*$/, '').split('\n')) lines.push(line.trim() === '' ? '' : `      ${line}`)
+  }
+  if (Object.keys(r.parameters ?? {}).length > 0) lines.push(`    parameters: ${JSON.stringify(r.parameters)}`)
+  return lines.join('\n') + '\n'
+}
