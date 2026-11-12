@@ -31,14 +31,14 @@ public sealed class ReplicationTrackingController(ConfigRepository configReposit
         return Ok(new ReplicationTrackingStatus(
             resolved.RequestedMode, resolved.RequestedPrimary, resolved.EffectiveMode, resolved.EffectivePrimary,
             resolved.Defaulted, resolved.Reason, driver, driver is not null && TrackingResolution.TargetsThatCanHoldState.Contains(driver),
-            TrackingResolution.TargetWritersBuilt));
+            driver is not null && TrackingResolution.TargetWriterEngines.Contains(driver)));
     }
 }
 
 /// <summary>The answer of <c>GET api/replications/{name}/tracking</c>.</summary>
 /// <param name="TargetDriver">The driver of the replication's target connection; null when the replication names none at its level.</param>
 /// <param name="TargetCanHoldState">Whether that driver's writers can carry a state table once they are built.</param>
-/// <param name="TargetWritersBuilt">Whether any writer keeps the state on the target yet.</param>
+/// <param name="TargetWritersBuilt">Whether the writers that keep the state on this target engine are built (SQL Server and PostgreSQL).</param>
 public sealed record ReplicationTrackingStatus(
     string RequestedMode, string? RequestedPrimary, string EffectiveMode, string? EffectivePrimary, bool Defaulted, string Reason,
     string? TargetDriver, bool TargetCanHoldState, bool TargetWritersBuilt);
