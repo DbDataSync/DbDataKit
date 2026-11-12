@@ -17,8 +17,7 @@ public static class KeyChecks
         foreach (var model in models.Where(m => m.IsBuilt).OrderBy(m => m.Name, StringComparer.Ordinal))
             foreach (var key in model.Keys.Where(k => k.Method == KeyMethods.Hash))
             {
-                var column = key.History is not null ? key.VersionKey : key.Name;
-                if (column is null || !model.Columns.Any(c => string.Equals(c.Name, column, StringComparison.OrdinalIgnoreCase))) continue;     // the model does not hold the key as a column, so there is nothing here to count
+                if (UniqueColumn(key, model.Columns) is not { } column) continue;     // the model does not hold the key as a column, so there is nothing here to count
                 foreach (var connection in model.Connections.Order(StringComparer.Ordinal))
                 {
                     if (!config.Connections.TryGetValue(connection, out var settings) || !settings.Kind.IsBuildTarget || SharedQuoting.For(settings.Engine) is not { } dialect) continue;
@@ -29,6 +28,16 @@ public static class KeyChecks
             }
         return checks;
     }
+
+    /// <summary>The column whose values must be on one row for a key (the version key of a key with history, else the key itself), null when the model does not hold it as a column.</summary>
+    public static string? UniqueColumn(KeyDefinition key, IReadOnlyList<ColumnDefinition> columns)
+    {
+        var column = key.History is not null ? key.VersionKey : key.Name;
+        return column is not null && columns.Any(c => string.Equals(c.Name, column, StringComparison.OrdinalIgnoreCase)) ? column : null;
+    }
+
+    /// <summary>The id of the framework check (plan 23a) that holds the same test for a model's key column: `key.&lt;column&gt;.unique`.</summary>
+    public static string FrameworkCheckId(string column) => $"key.{column}.unique";
 
     /// <summary>The key values that more than one row has (a NULL key is not a repeat: it is the missing member), with how many rows each has.</summary>
     public static string UniquenessSql(ISqlDialect dialect, string model, string column)
