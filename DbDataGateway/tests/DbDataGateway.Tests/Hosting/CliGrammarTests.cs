@@ -30,6 +30,7 @@ public sealed class CliGrammarTests
               cert        The server's TLS certificate
               secret      The encrypted secret store, secret references and protected values
               identity    The identity home this gateway serves: register consoles and apps, invite people, give them roles
+              access      The access rules' key (the hash mask of a column rule)
               apps        The apps host this gateway serves: its apps, instances and navigation sets
               views       The dashboards and reports this gateway's group serves: publish a document, list what is served
               export      The PDF export component: install it from the release (the pinned Chromium, the bundled fonts, the print page) and show its state

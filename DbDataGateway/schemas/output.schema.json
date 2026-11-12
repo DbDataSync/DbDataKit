@@ -52,6 +52,98 @@
       "if": {
         "properties": {
           "command": {
+            "const": "access mask-key-rotate"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_access_mask_key_rotate"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "access mask-key-rotate"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_access_mask_key_rotate_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "access mask-key-status"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_access_mask_key_status"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "access mask-key-status"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_access_mask_key_status_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "apps approval-list"
           },
           "ok": {
@@ -3914,6 +4006,55 @@
     }
   ],
   "$defs": {
+    "data_access_mask_key_rotate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rotated": {
+          "type": "boolean"
+        },
+        "cleared": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "rotated",
+        "cleared"
+      ]
+    },
+    "data_access_mask_key_rotate_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rotated": {
+          "type": "boolean"
+        },
+        "cleared": {
+          "type": "integer"
+        }
+      }
+    },
+    "data_access_mask_key_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "exists"
+      ]
+    },
+    "data_access_mask_key_status_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        }
+      }
+    },
     "data_apps_approval_list": {
       "type": "object",
       "additionalProperties": false,
