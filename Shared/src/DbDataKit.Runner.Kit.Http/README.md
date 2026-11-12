@@ -4,6 +4,7 @@ The HTTP client of an integration (plan 27a IX10). It sits on the signed-in `Htt
 
 ```csharp
 using var http = OutsideHttp.Open(definition, secrets, new OutsideHttpOptions { Limit = (5, TimeSpan.FromSeconds(1)) });   // the one place the client is made
+// from a connection file: OutsideHttp.OpenYaml(yaml, "connections/crm.yml", secrets) (the typed loader of HTTP connections; a file of another kind is refused)
 
 await foreach (var page in http.PagesAsync("orders", new CursorPaging { ItemsPath = "items" }, resumeFrom: Progress.OrdersCursor))
 {
