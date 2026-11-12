@@ -1,0 +1,26 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "chart",
+      "mark": "bar",
+      "encodings": {
+        "x": {
+          "field": "customers.region",
+          "alias": "area"
+        },
+        "y": "orders.net_revenue"
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "refusal": [
+    {
+      "code": "wrong_member_kind",
+      "path": "widgets.w.encodings.x.alias",
+      "message": "customers.region is an attribute: only a measure takes `alias` and `filters`."
+    }
+  ]
+}

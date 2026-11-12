@@ -45,6 +45,8 @@ export interface WidgetInfo { id: string; type: string; raw: Json }
 /** What reading widgets needs of the rest of the document. */
 export interface Context {
   kind?: 'dashboard' | 'report'; declared: Set<string>; targets?: Record<string, DrillTarget[]>; widgetIds: Set<string> | null
+  /** The `params` of the widget being read, which the markers in the filters of its encoded measures are mapped through. */
+  queryParams?: Json
   /** The links the widgets name (`on_click`), collected for the document to resolve once it has read `links`. */
   clickRefs?: { name: string; path: string }[]
 }
@@ -75,7 +77,18 @@ export function checkWidgets(raw: unknown, context: Context, issues: Issues, bas
   return list
 }
 
-interface Encoded { channel: string; field: string; path: string }
+/** An encoded field; `alias` and `filtered` are those of its object form (DBR50): the output of the field is its alias. */
+interface Encoded { channel: string; field: string; path: string; alias?: string; filtered?: boolean }
+const outputOf = (f: Encoded) => f.alias ?? f.field
+
+/** What the object form of a measure says beyond the field (plan 32 DBR50): the `alias` that names its output, whether it has `filters`; the markers in them are checked as the query's are. */
+function measureOptions(entry: Json, path: string, field: Encoded, context: Context, issues: Issues): Encoded {
+  const alias = typeof entry.alias === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(entry.alias) ? entry.alias : undefined
+  const filtered = Array.isArray(entry.filters) && entry.filters.length > 0
+  if (filtered) markers(entry.filters, join(path, 'filters'), context.queryParams, context, issues)
+  return { ...field, alias, filtered }
+}
+
 
 function checkWidget(id: string, raw: unknown, path: string, context: Context, issues: Issues): WidgetInfo | null {
   if (!isObject(raw)) { issues.add('DBD-106', path, `The widget \`${id}\` must be a mapping.`); return null }
@@ -86,13 +99,18 @@ function checkWidget(id: string, raw: unknown, path: string, context: Context, i
   run(widgetChecks[type]!, raw, { kind: 'widget', type }, path, issues)
   formats(raw, type, path, issues)
   const fields: Encoded[] = []
+  context.queryParams = isObject(raw.query) && isObject(raw.query.params) ? raw.query.params : undefined
   const encodings = isObject(raw.encodings) ? raw.encodings : undefined
   const ep = join(path, 'encodings')
   switch (type) {
     case 'metric':
-      for (const channel of ['value', 'compare'] as const) if (encodings && typeof encodings[channel] === 'string') fields.push({ channel, field: encodings[channel] as string, path: join(ep, channel) })
+      for (const channel of ['value', 'compare'] as const) {
+        const v = encodings?.[channel]
+        if (typeof v === 'string') fields.push({ channel, field: v, path: join(ep, channel) })
+        else if (isObject(v) && typeof v.field === 'string') fields.push(measureOptions(v, join(ep, channel), { channel, field: v.field, path: join(join(ep, channel), 'field') }, context, issues))
+      }
       break
-    case 'chart': chart(raw, path, fields, issues); break
+    case 'chart': chart(raw, path, fields, context, issues); break
     case 'matrix':
       for (const axis of ['rows', 'columns'] as const) {
         const list = encodings?.[axis]
@@ -106,10 +124,10 @@ function checkWidget(id: string, raw: unknown, path: string, context: Context, i
           if (sorted.length > 1) issues.add('DBD-106', join(at(join(ep, axis), sorted[1]!), 'sort'), `Only one level of the ${axis} carries a sort: it is the sort of the axis.`)
         }
       }
-      if (Array.isArray(encodings?.values)) encodings.values.forEach((v, i) => { if (isObject(v) && typeof v.field === 'string') fields.push({ channel: 'values', field: v.field, path: join(at(join(ep, 'values'), i), 'field') }) })
+      if (Array.isArray(encodings?.values)) encodings.values.forEach((v, i) => { if (isObject(v) && typeof v.field === 'string') fields.push(measureOptions(v, at(join(ep, 'values'), i), { channel: 'values', field: v.field, path: join(at(join(ep, 'values'), i), 'field') }, context, issues)) })
       break
     case 'table':
-      if (Array.isArray(encodings?.columns)) encodings.columns.forEach((c, i) => { if (isObject(c) && typeof c.field === 'string') fields.push({ channel: 'columns', field: c.field, path: join(at(join(ep, 'columns'), i), 'field') }) })
+      if (Array.isArray(encodings?.columns)) encodings.columns.forEach((c, i) => { if (isObject(c) && typeof c.field === 'string') fields.push(measureOptions(c, at(join(ep, 'columns'), i), { channel: 'columns', field: c.field, path: join(at(join(ep, 'columns'), i), 'field') }, context, issues)) })
       break
     case 'text': text(raw, path, context, issues); break
     case 'embed': embed(raw, path, context, issues); break
@@ -124,8 +142,12 @@ function checkWidget(id: string, raw: unknown, path: string, context: Context, i
     else {
       const query = checkQuery(raw.query, join(path, 'query'), context, issues)
       if (query.explicit && query.outputs)
-        for (const f of fields.filter((f) => !query.outputs!.has(f.field)))
-          issues.add(VIEW('005'), f.path, `\`${f.field}\` is encoded as ${f.channel} but is not an output of the query (it gives ${[...query.outputs].sort().join(', ')}).`)
+        for (const f of fields.filter((f) => !query.outputs!.has(outputOf(f))))
+          issues.add(VIEW('005'), f.path, `\`${outputOf(f)}\` is encoded as ${f.channel} but is not an output of the query (it gives ${[...query.outputs].sort().join(', ')}).`)
+      // a written query says its own measures: the filters of an encoded measure are how a derived request is told, so there they have no meaning
+      if (query.explicit)
+        for (const f of fields.filter((f) => f.filtered))
+          issues.add(VIEW('007'), f.path, `\`${f.field}\` carries \`filters\`, but the query is written out (\`mode: explicit\`) and says its own measures.`)
     }
     if (raw.on_select !== undefined) onSelect(raw.on_select, join(path, 'on_select'), context, issues)
     if (raw.drill !== undefined) drill(raw.drill, join(path, 'drill'), context, issues)
@@ -167,7 +189,10 @@ function formats(raw: Json, type: string, path: string, issues: Issues): void {
   }
   const ep = join(path, 'encodings')
   const encodings = isObject(raw.encodings) ? raw.encodings : undefined
-  if (type === 'metric') one(raw.format, join(path, 'format'))
+  if (type === 'metric') {
+    one(raw.format, join(path, 'format'))
+    for (const channel of ['value', 'compare'] as const) { const v = encodings?.[channel]; if (isObject(v)) one(v.format, join(join(ep, channel), 'format')) }
+  }
   const columns = encodings?.columns
   if (type === 'table' && Array.isArray(columns))
     columns.forEach((c, i) => { if (isObject(c)) one(c.format, join(at(join(ep, 'columns'), i), 'format')) })
@@ -180,14 +205,14 @@ function formats(raw: Json, type: string, path: string, issues: Issues): void {
   }
   if (type === 'chart' && encodings)
     for (const [channel, value] of Object.entries(encodings)) {
-      const items = channel === 'tooltip' && Array.isArray(value) ? value.map((v, i) => [v, at(join(ep, channel), i)] as const) : ([[value, join(ep, channel)]] as const)
+      const items = (channel === 'tooltip' || channel === 'y') && Array.isArray(value) ? value.map((v, i) => [v, at(join(ep, channel), i)] as const) : ([[value, join(ep, channel)]] as const)
       for (const [item, where] of items) if (isObject(item)) one(item.format, join(where, 'format'))
       if (channel === 'x' && Array.isArray(value)) value.forEach((level, i) => { if (isObject(level)) one(level.format, join(at(join(ep, 'x'), i), 'format')) })
     }
 }
 
 /** A chart's mark and encodings: the Vega-Lite subset, closed. Anything that fetches or computes is refused by name (no computation in the chart spec). */
-function chart(raw: Json, path: string, fields: Encoded[], issues: Issues): void {
+function chart(raw: Json, path: string, fields: Encoded[], context: Context, issues: Issues): void {
   const computing = (p: string, key: string) => issues.add(VIEW('004'), p, `\`${key}\` isn't allowed in a chart: it fetches data or computes a value; computation belongs in the widget's query.`)
   const mark = raw.mark
   const mp = join(path, 'mark')
@@ -213,12 +238,13 @@ function chart(raw: Json, path: string, fields: Encoded[], issues: Issues): void
       continue
     }
     if (channel === 'x' && Array.isArray(value)) { nestedAxis(value, cp, mark, encodings, join(ep, 'column'), fields, issues); continue }
-    const items: [unknown, string][] = channel === 'tooltip' && Array.isArray(value) ? value.map((v, i) => [v, at(cp, i)]) : [[value, cp]]
+    const items: [unknown, string][] = (channel === 'tooltip' || channel === 'y') && Array.isArray(value) ? value.map((v, i) => [v, at(cp, i)]) : [[value, cp]]
+    if (channel === 'y' && Array.isArray(value) && (value.length === 0 || value.length > 8)) issues.add('DBD-106', cp, 'A `y` list names 1 to 8 measures.')
     for (const [item, p] of items) {
       if (typeof item === 'string' && item.length > 0) fields.push({ channel, field: item, path: p })
       else if (isObject(item)) {
         run(channelCheck, item, { kind: 'channel' }, p, issues)
-        if (typeof item.field === 'string' && item.field.length > 0) fields.push({ channel, field: item.field, path: join(p, 'field') })
+        if (typeof item.field === 'string' && item.field.length > 0) fields.push(measureOptions(item, p, { channel, field: item.field, path: join(p, 'field') }, context, issues))
       } else issues.add('DBD-106', p, 'A channel is a field name, or a mapping with `field`, `type`, `sort`, `stack` and `title`.')
     }
   }

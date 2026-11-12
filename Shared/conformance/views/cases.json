@@ -59,6 +59,10 @@
     {
       "file": "good/dashboard-custom.json",
       "kind": "dashboard"
+    },
+    {
+      "file": "good/dashboard-filtered-measures.json",
+      "kind": "dashboard"
     }
   ],
   "bad": [
@@ -1133,6 +1137,69 @@
       "code": "DBD-104",
       "path": "widgets.grid.query",
       "line": 47,
+      "schema": true
+    },
+    {
+      "name": "measure-alias-not-a-name",
+      "file": "bad/measure-alias-not-a-name.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.value.alias",
+      "line": 11,
+      "schema": true
+    },
+    {
+      "name": "measure-filters-not-a-list",
+      "file": "bad/measure-filters-not-a-list.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.value.filters",
+      "line": 12,
+      "schema": true
+    },
+    {
+      "name": "measure-filters-undeclared-parameter",
+      "file": "bad/measure-filters-undeclared-parameter.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-008",
+      "path": "widgets.w.encodings.value.filters[0].values[0].param",
+      "line": 18,
+      "schema": false
+    },
+    {
+      "name": "measure-unknown-key",
+      "file": "bad/measure-unknown-key.json",
+      "as": "dashboard",
+      "code": "DBD-104",
+      "path": "widgets.w.encodings.value.colour",
+      "line": 11,
+      "schema": true
+    },
+    {
+      "name": "measure-filters-in-an-explicit-query",
+      "file": "bad/measure-filters-in-an-explicit-query.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-007",
+      "path": "widgets.w.encodings.value.field",
+      "line": 10,
+      "schema": false
+    },
+    {
+      "name": "measure-alias-is-the-output-of-an-explicit-query",
+      "file": "bad/measure-alias-is-the-output-of-an-explicit-query.json",
+      "as": "dashboard",
+      "code": "DBD-VIEW-005",
+      "path": "widgets.w.encodings.value.field",
+      "line": 10,
+      "schema": false
+    },
+    {
+      "name": "y-list-over-eight",
+      "file": "bad/y-list-over-eight.json",
+      "as": "dashboard",
+      "code": "DBD-106",
+      "path": "widgets.w.encodings.y",
+      "line": 11,
       "schema": true
     }
   ],

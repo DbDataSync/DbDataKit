@@ -30,7 +30,7 @@ export interface WellSpec {
 
 const CHART: WellSpec[] = [
   { id: 'x', label: 'x (levels, outermost first)', kind: 'either', multiple: true, path: ['encodings', 'x'], shape: 'fields', prefer: 'attribute', scalarWhenOne: true, max: 3 },
-  { id: 'y', label: 'y', kind: 'either', multiple: false, path: ['encodings', 'y'], shape: 'field', prefer: 'measure' },
+  { id: 'y', label: 'y (one series each)', kind: 'either', multiple: true, path: ['encodings', 'y'], shape: 'fields', prefer: 'measure', scalarWhenOne: true, max: 8 },
   { id: 'color', label: 'color', kind: 'either', multiple: false, path: ['encodings', 'color'], shape: 'field', prefer: 'attribute' },
   { id: 'column', label: 'column (facet)', kind: 'either', multiple: false, path: ['encodings', 'column'], shape: 'field', prefer: 'attribute' },
   { id: 'row', label: 'row (facet)', kind: 'either', multiple: false, path: ['encodings', 'row'], shape: 'field', prefer: 'attribute' },

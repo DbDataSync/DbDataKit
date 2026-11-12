@@ -1,0 +1,76 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "matrix",
+      "encodings": {
+        "rows": [
+          "customers.region"
+        ],
+        "columns": [
+          "products.category"
+        ],
+        "values": [
+          {
+            "field": "orders.net_revenue"
+          },
+          {
+            "field": "orders.net_revenue",
+            "alias": "open_revenue",
+            "label": "Open",
+            "filters": [
+              {
+                "attribute": "orders.status",
+                "operator": "equals",
+                "values": [
+                  "Open",
+                  "Pending"
+                ]
+              }
+            ]
+          }
+        ],
+        "totals": {
+          "rows": true
+        }
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        "orders.net_revenue",
+        {
+          "measure": "orders.net_revenue",
+          "as": "open_revenue",
+          "filters": [
+            {
+              "attribute": "orders.status",
+              "operator": "equals",
+              "values": [
+                "Open",
+                "Pending"
+              ]
+            }
+          ]
+        }
+      ],
+      "attributes": [
+        "customers.region",
+        "products.category"
+      ],
+      "limit": 10000,
+      "totals": {
+        "subtotal_by": [
+          "products.category",
+          "customers.region"
+        ]
+      }
+    }
+  }
+}

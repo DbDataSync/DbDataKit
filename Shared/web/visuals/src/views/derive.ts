@@ -56,7 +56,8 @@ export function memberProblem(roles: CatalogRoles, field: string, well: Well): {
   if (well === 'attribute' && role === 'measure') return { code: 'wrong_member_kind', message: `${field} is a measure, not a attribute.` }
   return null
 }
-interface Slot { field: string; path: string; well: Well }
+/** An encoded field: its name, its place, the well it goes to and, for the object form (DBR50), the entry (`alias`, `filters`) and its path. */
+interface Slot { field: string; path: string; well: Well; entry?: Json; entryPath?: string }
 
 const isString = (v: unknown): v is string => typeof v === 'string' && v.length > 0
 
@@ -98,20 +99,51 @@ export function deriveRequest(widget: DerivableWidget, roles: CatalogRoles): Der
 
   const encodings = isObject(raw.encodings) ? raw.encodings : {}
   const slots = slotsOf(type, encodings, join(wp, 'encodings'))
-  const measures: string[] = []
+  const measures: { name: string; node: unknown }[] = []
   const attributes: string[] = []
 
-  const place = (field: string, path: string, well: Well) => {
+  const placeEntry = (slot: Slot) => {
+    const { field, path, well, entry, entryPath } = slot
+    // a name that an entry already gives the output (an alias) is that output: a sort or an order may name it
+    if (entry === undefined && measures.some((m) => m.name === field)) return
     const role = roleOf(roles, field)
     const problem = memberProblem(roles, field, well)
     if (problem) issue(problem.code, path, problem.message)
     const toMeasures = well === 'measure' || (well === 'either' && role === 'measure')
-    const list = toMeasures ? measures : attributes
-    if (list.includes(field)) return
-    list.push(field)
-    origins.set(`query.${toMeasures ? 'measures' : 'attributes'}[${list.length - 1}]`, path)
+    const alias = entry && typeof entry.alias === 'string' && entry.alias.length > 0 && entry.alias !== field ? entry.alias : undefined
+    const filters = entry && Array.isArray(entry.filters) && entry.filters.length > 0 ? entry.filters : undefined
+    if (!toMeasures) {
+      if (alias !== undefined || filters !== undefined)
+        issue('wrong_member_kind', filters !== undefined ? `${entryPath}.filters` : `${entryPath}.alias`, `${field} is an attribute: only a measure takes \`alias\` and \`filters\`.`)
+      if (attributes.includes(field)) return
+      attributes.push(field)
+      origins.set(`query.attributes[${attributes.length - 1}]`, path)
+      return
+    }
+    // the object form (DBR50): the engine's own rule, in its words
+    if (filters !== undefined && alias === undefined) issue('alias_required', `${entryPath}.filters`, "A measure with its own filters needs an 'as' alias, so it can't be mistaken for the unfiltered measure.")
+    let node: unknown = field
+    if (alias !== undefined || filters !== undefined) {
+      const o: Json = { measure: field }
+      if (alias !== undefined) o.as = alias
+      if (filters !== undefined) o.filters = structuredClone(filters)
+      node = o
+    }
+    const name = alias ?? field
+    const at = measures.findIndex((m) => m.name === name)
+    if (at >= 0) {
+      if (JSON.stringify(measures[at]!.node) !== JSON.stringify(node)) issue('duplicate_measure', alias !== undefined ? `${entryPath}.alias` : path, `${name} is listed more than once: give one of the entries an \`alias\`.`)
+      return
+    }
+    measures.push({ name, node })
+    origins.set(`query.measures[${measures.length - 1}]`, path)
+    if (entry !== undefined) {
+      if (alias !== undefined) origins.set(`query.measures[${measures.length - 1}].as`, `${entryPath}.alias`)
+      if (filters !== undefined) origins.set(`query.measures[${measures.length - 1}].filters`, `${entryPath}.filters`)
+    }
   }
-  for (const s of slots) place(s.field, s.path, s.well)
+  const place = (field: string, path: string, well: Well) => placeEntry({ field, path, well })
+  for (const s of slots) placeEntry(s)
 
   // ---- order: the query's own, else a table's sort ----
   let order: unknown[] | undefined
@@ -124,14 +156,14 @@ export function deriveRequest(widget: DerivableWidget, roles: CatalogRoles): Der
     const sortField = encodings.sort.by
     const direction = typeof encodings.sort.dir === 'string' ? encodings.sort.dir : 'asc'
     const sortPath = join(join(wp, 'encodings'), 'sort.by')
-    if (!measures.includes(sortField) && !attributes.includes(sortField)) place(sortField, sortPath, 'either')
+    if (!measures.some((m) => m.name === sortField) && !attributes.includes(sortField)) place(sortField, sortPath, 'either')
     order = [[sortField, direction]]
     origins.set('query.order[0]', sortPath)
   }
 
   // ---- totals ----
   let totals: Json | undefined
-  if (type === 'matrix') totals = matrixTotals(encodings, roles, wp, query, issue)
+  if (type === 'matrix') totals = matrixTotals(encodings, (n) => roleOf(roles, n) === 'measure' || measures.some((m) => m.name === n), wp, query, issue)
   else if (isObject(query.totals)) {
     totals = structuredClone(query.totals)
     if (totals.subtotal_by === undefined && attributes.length > 0) totals = { subtotal_by: [...attributes], ...totals }
@@ -142,7 +174,7 @@ export function deriveRequest(widget: DerivableWidget, roles: CatalogRoles): Der
 
   // ---- the request, its keys in the order the .NET twin writes them ----
   const written = typeof query.limit === 'number' && Number.isInteger(query.limit) ? Math.min(query.limit, MAXIMUM_LIMIT) : defaultLimit(type)
-  const q: Json = { measures }
+  const q: Json = { measures: measures.map((m) => m.node) }
   if (attributes.length > 0) q.attributes = attributes
   if (Array.isArray(query.filters) && query.filters.length > 0) {
     q.filters = structuredClone(query.filters)
@@ -164,37 +196,32 @@ export function deriveRequest(widget: DerivableWidget, roles: CatalogRoles): Der
 
 function slotsOf(type: string, encodings: Json, path: string): Slot[] {
   const slots: Slot[] = []
-  const one = (channel: string, well: Well) => { const v = encodings[channel]; if (isString(v)) slots.push({ field: v, path: join(path, channel), well }) }
-  const channel = (node: unknown, p: string) => {
-    if (isString(node)) slots.push({ field: node, path: p, well: 'either' })
-    else if (isObject(node) && isString(node.field)) slots.push({ field: node.field, path: join(p, 'field'), well: 'either' })
+  // a field name, or the object form (DBR50): `{field, alias, label, filters, format}` where a measure goes
+  const entry = (node: unknown, p: string, well: Well) => {
+    if (isString(node)) slots.push({ field: node, path: p, well })
+    else if (isObject(node) && isString(node.field)) slots.push({ field: node.field, path: join(p, 'field'), well, entry: node, entryPath: p })
   }
   switch (type) {
-    case 'metric': one('value', 'measure'); one('compare', 'measure'); break
+    case 'metric': entry(encodings.value, join(path, 'value'), 'measure'); entry(encodings.compare, join(path, 'compare'), 'measure'); break
     case 'chart':
       for (const c of CHART_CHANNELS) {
         const v = encodings[c]
-        if (c === 'tooltip' && Array.isArray(v)) v.forEach((item, i) => channel(item, at(join(path, c), i)))
+        // the tooltip's list and a `y` of several measures (one series each)
+        if ((c === 'tooltip' || c === 'y') && Array.isArray(v)) v.forEach((item, i) => entry(item, at(join(path, c), i), 'either'))
         // a nested axis (DBR42): every level is an attribute, outermost first
-        else if (c === 'x' && Array.isArray(v)) v.forEach((level, i) => {
-          if (isString(level)) slots.push({ field: level, path: at(join(path, c), i), well: 'attribute' })
-          else if (isObject(level) && isString(level.field)) slots.push({ field: level.field, path: join(at(join(path, c), i), 'field'), well: 'attribute' })
-        })
-        else channel(v, join(path, c))
+        else if (c === 'x' && Array.isArray(v)) v.forEach((level, i) => entry(level, at(join(path, c), i), 'attribute'))
+        else entry(v, join(path, c), 'either')
       }
       break
     case 'matrix':
       for (const axis of ['rows', 'columns'] as const) {
         const list = encodings[axis]
-        if (Array.isArray(list)) list.forEach((f, i) => {
-          if (typeof f === 'string') slots.push({ field: f, path: at(join(path, axis), i), well: 'attribute' })
-          else if (isObject(f) && typeof f.field === 'string') slots.push({ field: f.field, path: join(at(join(path, axis), i), 'field'), well: 'attribute' })
-        })
+        if (Array.isArray(list)) list.forEach((f, i) => entry(f, at(join(path, axis), i), 'attribute'))
       }
-      if (Array.isArray(encodings.values)) encodings.values.forEach((v, i) => { if (isObject(v) && typeof v.field === 'string') slots.push({ field: v.field, path: join(at(join(path, 'values'), i), 'field'), well: 'measure' }) })
+      if (Array.isArray(encodings.values)) encodings.values.forEach((v, i) => { if (isObject(v)) entry(v, at(join(path, 'values'), i), 'measure') })
       break
     case 'table':
-      if (Array.isArray(encodings.columns)) encodings.columns.forEach((c, i) => { if (isObject(c) && typeof c.field === 'string') slots.push({ field: c.field, path: join(at(join(path, 'columns'), i), 'field'), well: 'either' }) })
+      if (Array.isArray(encodings.columns)) encodings.columns.forEach((c, i) => { if (isObject(c)) entry(c, at(join(path, 'columns'), i), 'either') })
       break
   }
   return slots
@@ -234,7 +261,7 @@ function nestedOrder(levels: unknown[], xPath: string, origins: Map<string, stri
 
 // ---- a matrix's totals ----
 
-function matrixTotals(encodings: Json, roles: CatalogRoles, wp: string, query: Json, issue: (code: string, path: string, message: string) => void): Json | undefined {
+function matrixTotals(encodings: Json, isMeasure: (name: string) => boolean, wp: string, query: Json, issue: (code: string, path: string, message: string) => void): Json | undefined {
   // an axis entry is a field name or `{field, format, sort}` (DBR41)
   const entryField = (n: unknown): string => (isObject(n) ? String(n.field ?? '') : String(n ?? ''))
   const axis = (name: string): string[] => [...new Set(Array.isArray(encodings[name]) ? (encodings[name] as unknown[]).map(entryField) : [])]
@@ -246,7 +273,7 @@ function matrixTotals(encodings: Json, roles: CatalogRoles, wp: string, query: J
   // sorting an axis by a measure reads each member's value in the axis total (the view's `sort_needs_totals`), so the request asks for that total too
   const sort = isObject(encodings.sort) ? encodings.sort : {}
   const axisSort = (name: string): unknown => sort[name] ?? (Array.isArray(encodings[name]) ? (encodings[name] as unknown[]).map((n) => (isObject(n) ? n.sort : undefined)).find((x) => x !== undefined) : undefined)
-  const byMeasure = (name: string) => { const s = axisSort(name); return isObject(s) && typeof s.by === 'string' && roleOf(roles, s.by) === 'measure' }
+  const byMeasure = (name: string) => { const s = axisSort(name); return isObject(s) && typeof s.by === 'string' && isMeasure(s.by) }
   const needRow = wantRow || (byMeasure('columns') && rows.length > 0)
   const needColumn = wantColumn || (byMeasure('rows') && columns.length > 0)
   if (!needRow && !needColumn) return undefined

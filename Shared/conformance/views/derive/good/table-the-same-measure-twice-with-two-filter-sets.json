@@ -1,0 +1,91 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "table",
+      "encodings": {
+        "columns": [
+          {
+            "field": "customers.region"
+          },
+          {
+            "field": "orders.net_revenue",
+            "alias": "open_revenue",
+            "label": "Open",
+            "filters": [
+              {
+                "attribute": "orders.status",
+                "operator": "equals",
+                "values": [
+                  "Open",
+                  "Pending"
+                ]
+              }
+            ]
+          },
+          {
+            "field": "orders.net_revenue",
+            "alias": "completed_revenue",
+            "label": "Completed",
+            "filters": [
+              {
+                "attribute": "orders.status",
+                "operator": "equals",
+                "values": [
+                  "Completed"
+                ]
+              }
+            ]
+          },
+          {
+            "field": "orders.net_revenue",
+            "label": "All"
+          }
+        ]
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "request": {
+    "spec_version": "0.3",
+    "kind": "query",
+    "query": {
+      "measures": [
+        {
+          "measure": "orders.net_revenue",
+          "as": "open_revenue",
+          "filters": [
+            {
+              "attribute": "orders.status",
+              "operator": "equals",
+              "values": [
+                "Open",
+                "Pending"
+              ]
+            }
+          ]
+        },
+        {
+          "measure": "orders.net_revenue",
+          "as": "completed_revenue",
+          "filters": [
+            {
+              "attribute": "orders.status",
+              "operator": "equals",
+              "values": [
+                "Completed"
+              ]
+            }
+          ]
+        },
+        "orders.net_revenue"
+      ],
+      "attributes": [
+        "customers.region"
+      ],
+      "limit": 100
+    }
+  }
+}

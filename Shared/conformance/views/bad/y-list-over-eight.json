@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "kind": "dashboard",
+  "title": "Filtered measures",
+  "widgets": {
+    "w": {
+      "type": "chart",
+      "mark": "bar",
+      "encodings": {
+        "x": "products.category",
+        "y": [
+          "orders.m0",
+          "orders.m1",
+          "orders.m2",
+          "orders.m3",
+          "orders.m4",
+          "orders.m5",
+          "orders.m6",
+          "orders.m7",
+          "orders.m8"
+        ]
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "layouts": [
+    {
+      "name": "desk",
+      "type": "reflow",
+      "default": true,
+      "grid": {
+        "columns": 12
+      },
+      "tiles": [
+        {
+          "widget": "w",
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 6
+        }
+      ]
+    }
+  ]
+}

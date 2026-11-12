@@ -134,6 +134,29 @@ encodings:
 * **Limits, stated:** an inner level sorted by a measure has **one** order for the whole axis (the first group's), not one per group; a third level is joined into the group label, not drawn as a third header row; the
   PDF is drawn from the same rendered chart by the same client code, so it carries the group headers (not checked here: the exporter's tests need Chromium and fonts).
 
+### Filtered and repeated measures (DBR50)
+
+A measure may be written as an **object** where a name was: `{field, alias, label, filters, format}`. It is how the **same measure is put in a visual several times** with different filters (two series, two matrix
+value columns, two metrics, two table columns): in a metric's `value` and `compare`, a chart channel (`y`, `color`, `tooltip`...; the channel object's `title` names it, as before), a matrix `values` entry and a table column.
+A chart's `y` may be a **list** (one to eight entries, one series each); its entries are drawn as the series of one chart.
+
+```yaml
+encodings:
+  columns:
+    - customers.region
+    - {field: orders.net_revenue, alias: open_revenue, label: Open, filters: [{attribute: orders.status, operator: equals, values: [Open, Pending]}]}
+    - {field: orders.net_revenue, alias: completed_revenue, label: Completed, filters: [{attribute: orders.status, operator: equals, values: [{param: status}]}]}
+    - {field: orders.net_revenue, label: All}
+```
+
+* `DeriveRequest` writes the request's `measures` entry in the engine's own form, `{measure, as, filters}` (the widget's `alias` is the request's `as`); an entry with neither is the plain name. The **output** of an entry is its
+  alias, so a matrix's sort, a table's `sort.by`, `order` and an explicit query's outputs name the **alias** (`DBD-VIEW-005` says `open_revenue` is not an output, not `orders.net_revenue`).
+* The checks are the engine's, in its codes and words, at the document's path: `alias_required` (filters with no alias, at `filters`), `duplicate_measure` (one output name twice with different definitions, at the second entry; the
+  same entry twice is asked once), `wrong_member_kind` (`alias` or `filters` on an attribute), then the catalog check's `filter_member_not_in_source`, `alias_invalid` (an alias that is a catalog member name) and the rest.
+  The loaders refuse an alias that is not a snake_case name (`DBD-106` at `alias`), `filters` that are not a list of mappings (one to fifty), a marker of an undeclared parameter in them (`DBD-VIEW-008`), and `filters` on an
+  entry of a **written** query (`DBD-VIEW-007`: the query says its own measures).
+* A filter value may be `{param: name}`; a filter on a parameter the viewer left unset drops out of that entry, as it does from the query's filters (the request, and so the cache key, differ only for the entries that use it).
+
 ### Sorting by a click (DBR45)
 
 A viewer may sort a table or a matrix by clicking a header, **on screen only** (the host sets `sortable` on `DashboardView`; the print and export routes never do): a click sorts ascending, a second click reverses, a third gives the
@@ -193,6 +216,7 @@ a refusal of the engine lands on the field or the filter the person wrote.
 
 | Code | Meaning |
 | --- | --- |
+| `alias_required` / `duplicate_measure` | a measure with `filters` and no `alias`; one output name twice with different definitions (DBR50, above) |
 | `unknown_member` | an encoded field the catalog has no member of (the engine's code and words: `customers.regon is not a catalog member.`) |
 | `wrong_member_kind` | a dimension in a measure well (`customers.region is a attribute, not a measure.`) or a measure in a matrix axis, in the engine's words |
 | `DBD-VIEW-040` | nothing to derive: a widget with no query (`text`, `image`, `control`) or an explicit query (its encodings do not drive it) |

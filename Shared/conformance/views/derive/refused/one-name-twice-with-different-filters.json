@@ -1,0 +1,49 @@
+{
+  "parameters": [],
+  "widgets": {
+    "w": {
+      "type": "table",
+      "encodings": {
+        "columns": [
+          {
+            "field": "orders.net_revenue",
+            "alias": "revenue_by_status",
+            "filters": [
+              {
+                "attribute": "orders.status",
+                "operator": "equals",
+                "values": [
+                  "Open",
+                  "Pending"
+                ]
+              }
+            ]
+          },
+          {
+            "field": "orders.net_revenue",
+            "alias": "revenue_by_status",
+            "filters": [
+              {
+                "attribute": "orders.status",
+                "operator": "equals",
+                "values": [
+                  "Completed"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "refusal": [
+    {
+      "code": "duplicate_measure",
+      "path": "widgets.w.encodings.columns[1].alias",
+      "message": "revenue_by_status is listed more than once: give one of the entries an `alias`."
+    }
+  ]
+}

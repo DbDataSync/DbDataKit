@@ -6,8 +6,12 @@ namespace DbDataKit.Views;
 /// <summary>A document's parameter, as J25 defines one. <see cref="Default"/> is the default as JSON (a list for <c>many</c>), null when there is none.</summary>
 public sealed record ViewParameter(string Name, string Type, string? For, bool Many, bool Required, bool HasDefault, string? Label, int Line, System.Text.Json.Nodes.JsonNode? Default = null);
 
-/// <summary>A field a widget encodes (<c>x</c> of a chart, a matrix's <c>rows</c>, a metric's <c>value</c>...), by channel, in encoding order, with its path in the document (<c>widgets.by_region.encodings.x</c>) and its position.</summary>
-public sealed record EncodedField(string Channel, string Field, string Path, int Line, int Column);
+/// <summary>A field a widget encodes (<c>x</c> of a chart, a matrix's <c>rows</c>, a metric's <c>value</c>...), by channel, in encoding order, with its path in the document (<c>widgets.by_region.encodings.x</c>) and its position; <c>Alias</c> and <c>Filtered</c> are those of its object form (DBR50).</summary>
+public sealed record EncodedField(string Channel, string Field, string Path, int Line, int Column, string? Alias = null, bool Filtered = false)
+{
+    /// <summary>The name the field has in the query's answer: its <c>alias</c> when it has one (plan 32 DBR50: a measure put in a visual twice, or filtered), else the field.</summary>
+    public string Output => Alias ?? Field;
+}
 
 /// <summary>
 /// A widget's query. <see cref="Form"/> is <c>derived</c> (the request is derived from the encodings), <c>semantic</c> (a request), <c>semantic_sql</c>, <c>saved</c>, <c>store</c> or <c>ref</c> (an already

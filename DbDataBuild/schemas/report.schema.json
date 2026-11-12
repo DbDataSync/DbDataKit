@@ -71,8 +71,13 @@
     }
   },
   "$defs": {
+    "core__alias": {
+      "description": "A new snake_case name for a measure's output (the engine's `as`): the same measure put in a visual twice, or a filtered one, is told apart by it (plan 32 DBR50).",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
     "core__chart_channel": {
-      "description": "The Vega-Lite subset's channel object (its own definitions of field, type, sort, stack and title, referenced and not copied) and `format` (plan 32 DBR41): how the channel's values read on an axis, in a legend and in a tooltip. The subset and the QIS view (0.3) are unchanged: the format belongs to the widget vocabulary and the renderer maps it.",
+      "description": "The Vega-Lite subset's channel object (its own definitions of field, type, sort, stack and title, referenced and not copied), `format` (plan 32 DBR41: how the channel's values read on an axis, in a legend and in a tooltip) and, on a measure, `alias` and `filters` (DBR50). The subset and the QIS view (0.3) are unchanged: the format belongs to the widget vocabulary and the renderer maps it.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -93,6 +98,12 @@
         },
         "format": {
           "$ref": "#/$defs/core__format"
+        },
+        "alias": {
+          "$ref": "#/$defs/core__alias"
+        },
+        "filters": {
+          "$ref": "#/$defs/core__measure_filters"
         }
       }
     },
@@ -112,7 +123,20 @@
           ]
         },
         "y": {
-          "$ref": "#/$defs/core__encoding_channel"
+          "description": "One measure, or a list of them (plan 32 DBR50): each is one series, told apart by its `alias` when one measure is there twice.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/core__encoding_channel"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "$ref": "#/$defs/core__encoding_channel"
+              }
+            }
+          ]
         },
         "color": {
           "$ref": "#/$defs/core__encoding_channel"
@@ -761,8 +785,52 @@
           },
           "label": {
             "$ref": "#/$defs/view__matrix/properties/values/items/properties/label"
+          },
+          "alias": {
+            "$ref": "#/$defs/core__alias"
+          },
+          "filters": {
+            "$ref": "#/$defs/core__measure_filters"
           }
         }
+      }
+    },
+    "core__measure_field": {
+      "description": "A measure's entry in a measure well (a metric's `value` and `compare`): a field name, or the object form (plan 32 section 9h, DBR50) `{field, alias, label, filters, format}`.",
+      "type": [
+        "string",
+        "object"
+      ],
+      "minLength": 1,
+      "required": [
+        "field"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "$ref": "#/$defs/core__field"
+        },
+        "alias": {
+          "$ref": "#/$defs/core__alias"
+        },
+        "label": {
+          "type": "string"
+        },
+        "filters": {
+          "$ref": "#/$defs/core__measure_filters"
+        },
+        "format": {
+          "$ref": "#/$defs/core__format"
+        }
+      }
+    },
+    "core__measure_filters": {
+      "description": "A filtered measure's own filters (the semantic request's filter grammar, `docs/semantic/query.md`, checked by the engine at publish): they intersect with the query's and never replace them. A filter value may be {param: name}. Needs an `alias` (the engine's `alias_required`, said by the derivation).",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": {
+        "type": "object"
       }
     },
     "core__medium": {
@@ -1217,6 +1285,12 @@
           "type": "integer",
           "minimum": 20,
           "maximum": 2000
+        },
+        "alias": {
+          "$ref": "#/$defs/core__alias"
+        },
+        "filters": {
+          "$ref": "#/$defs/core__measure_filters"
         }
       }
     },
@@ -1609,10 +1683,10 @@
           "additionalProperties": false,
           "properties": {
             "value": {
-              "$ref": "#/$defs/core__field"
+              "$ref": "#/$defs/core__measure_field"
             },
             "compare": {
-              "$ref": "#/$defs/core__field"
+              "$ref": "#/$defs/core__measure_field"
             }
           }
         },

@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "kind": "dashboard",
+  "title": "Filtered measures",
+  "parameters": [
+    {
+      "name": "status",
+      "type": "string",
+      "many": true
+    }
+  ],
+  "widgets": {
+    "w": {
+      "type": "table",
+      "title": "Revenue by status",
+      "encodings": {
+        "columns": [
+          {
+            "field": "customers.region"
+          },
+          {
+            "field": "orders.net_revenue",
+            "alias": "open_revenue",
+            "label": "Open",
+            "format": "compact",
+            "filters": [
+              {
+                "attribute": "orders.status",
+                "operator": "equals",
+                "values": [
+                  {
+                    "param": "status"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "field": "orders.net_revenue",
+            "alias": "completed_revenue",
+            "label": "Completed",
+            "filters": [
+              {
+                "attribute": "orders.status",
+                "operator": "equals",
+                "values": [
+                  "Completed"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "query": {
+        "model": "sales_catalog"
+      }
+    }
+  },
+  "layouts": [
+    {
+      "name": "desk",
+      "type": "reflow",
+      "default": true,
+      "grid": {
+        "columns": 12
+      },
+      "tiles": [
+        {
+          "widget": "w",
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 6
+        }
+      ]
+    }
+  ]
+}

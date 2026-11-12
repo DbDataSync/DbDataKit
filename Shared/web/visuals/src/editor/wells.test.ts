@@ -44,8 +44,9 @@ describe('the wells of each widget type', () => {
       const sortField = (widget as any).encodings?.sort?.by
       const xs = (widget as any).encodings?.x
       const levelSort = Array.isArray(xs) ? xs.map((l: any) => l?.sort?.by) : []
-      const q = c.request.query as { measures: string[]; attributes?: string[] }
-      for (const f of [...q.measures, ...(q.attributes ?? [])]) if (f !== sortField && !(levelSort ?? []).includes(f) && !((widget as any).query?.order ?? []).some((o: unknown[]) => o[0] === f)) expect(inWells.has(f), f).toBe(true)
+      const q = c.request.query as { measures: (string | { measure: string })[]; attributes?: string[] }
+      // a filtered or aliased measure (DBR50) is asked for as `{measure, as, filters}`: its field is in the well
+      for (const f of [...q.measures.map((m) => (typeof m === 'string' ? m : m.measure)), ...(q.attributes ?? [])]) if (f !== sortField && !(levelSort ?? []).includes(f) && !((widget as any).query?.order ?? []).some((o: unknown[]) => o[0] === f)) expect(inWells.has(f), f).toBe(true)
     })
 })
 
