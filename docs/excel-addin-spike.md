@@ -120,3 +120,14 @@ Then XL02 builds: the static site under the console, the generated manifest (XML
 - Custom functions: [overview](https://learn.microsoft.com/en-us/office/dev/add-ins/excel/custom-functions-overview) (2026-09-30), [JavaScript-only runtime](https://learn.microsoft.com/en-us/office/dev/add-ins/excel/custom-functions-runtime) (2025-10-22), [shared runtime](https://learn.microsoft.com/en-us/office/dev/add-ins/develop/configure-your-add-in-to-use-a-shared-runtime) (2026-07-30), [web requests and streaming](https://learn.microsoft.com/en-us/office/dev/add-ins/excel/custom-functions-web-reqs) (2026-03-03), [batching](https://learn.microsoft.com/en-us/office/dev/add-ins/excel/custom-functions-batching) (2025-10-22), [volatile](https://learn.microsoft.com/en-us/office/dev/add-ins/excel/custom-functions-volatile) (2026-07-28), [authentication](https://learn.microsoft.com/en-us/office/dev/add-ins/excel/custom-functions-authentication) (2026-07-10), [JSON metadata](https://learn.microsoft.com/en-us/office/dev/add-ins/excel/custom-functions-json) (2026-07-24), [requirement sets](https://learn.microsoft.com/en-us/office/dev/add-ins/excel/custom-functions-requirement-sets) (2025-10-17).
 - Excel API: [tables](https://learn.microsoft.com/en-us/office/dev/add-ins/excel/excel-add-ins-tables) (2026-06-03), [workbooks and settings](https://learn.microsoft.com/en-us/office/dev/add-ins/excel/excel-add-ins-workbooks) (2026-06-03), [performance and payload limits](https://learn.microsoft.com/en-us/office/dev/add-ins/excel/performance) (2026-06-02). Custom XML parts: a documentation search result only, not the page.
 - [Unified manifest now generally available](https://devblogs.microsoft.com/microsoft365dev/unified-manifest-for-office-add-ins-now-ga/) (Microsoft 365 Developer Blog, 2026-07-16). Tools: `office-addin-dev-certs` 3.0.1 and `office-addin-manifest` 3.0.1 on npm.
+
+## Owner decisions (2026-11-12)
+
+- **Manifest:** the XML manifest first; the unified JSON manifest later, if at all.
+- **Hosting:** a static site of the Gateway or the identity home, not the console (end users are kept out of the console). Served from the home's own origin, the add-in needs no CORS on the home's token and userinfo routes; served from the Gateway, the home must answer CORS for that origin. XL02's first slice picks one.
+- **Tokens:** no refresh token in `OfficeRuntime.storage`; tokens stay in memory and the person signs in again after 12 hours.
+- **Sign-in:** no passkeys in the add-in; Windows and Entra sign-in automatically where Office's dialog allows it.
+- **Platforms:** Windows first; Excel on the web second (not a priority); Mac last.
+- **Offline installs:** nice to have, not required, and not worth much effort (self-hosting `office.js` is the open question).
+- **Still open:** a Windows machine with Excel, a Mac and an Excel-on-the-web account for the one-day check.
+
