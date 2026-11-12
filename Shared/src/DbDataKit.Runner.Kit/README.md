@@ -79,7 +79,7 @@ The runner hands the job its task's progress at start; a member read is memory. 
 
 * **Files.** `Files.Claim(connection, path, size, modified, hash)` returns a handle, or `null` when a file with that content hash was already processed (the ledger): a file that arrives twice runs once.
 * **Inbox.** `TakeAsync` returns the next received item (a webhook body the serving layer verified and stored as a payload) exactly once across runners, or null; `CompleteAsync` finishes it, `RejectAsync(reason)` makes a dead letter, and an item neither completed nor rejected when the run ends is released and taken again.
-* **Dead letters.** `RejectAsync(record, reason)` stores the record as a payload and a dead letter, replayable later as an inbox item of the same task.
+* **Dead letters.** `RejectAsync(record, reason)` stores the record as a payload and a dead letter. **`RefusedRecords`** (plan 27a IX14) is the surface over them, over a state database and a task (`new RefusedRecords(database, new ProgressKey(package, channel, task))`, `RunSimulator.Refused()` in a test): `List()` the open ones with their reason, source and attempts, `ReadBody(id)` / `Read<T>(id)`, `Discard(id)`, and `ReplayAsync(send)` / `ReplayAsync<T>(send)`, which sends **exactly the open records, once each, oldest first**: one that goes through is marked replayed and never offered again, one that fails stays open with its attempts counted and the failure's public text, and by default (`ReplayFailure.Stop`) the replay ends at the first failure, so the next one starts there (`Continue` goes on to the next). The record's id is the idempotency key to send it under (a crash between the send and the mark would replay it). The runner's API, its command and the console screens that call this (list, replay, discard) are plan 28a R25's.
 * **Connections.** `Slots.Warehouse.OpenAsync(ct)` returns the handle the slot's type names, bound to what the channel binds that slot to. The job never sees a secret and never opens the runner's state.
 
 ## How a job ends
@@ -92,7 +92,7 @@ The kit's logic (recovery, units, typed progress, counts) sits above an internal
 
 ## Not built
 
-An operator's screens and API for what the kit leaves for a person: marking an `Ask` step `happened` or `did not happen`, listing, replaying and discarding dead letters, and the table of units of a run. The stores support all of it (`StepStore.Resolve`, the dead letter states); the runner's API and the console do not call them yet (plan 28a, R25).
+An operator's screens and API for what the kit leaves for a person: marking an `Ask` step `happened` or `did not happen`, listing, replaying and discarding dead letters (the kit's own surface for that, `RefusedRecords`, exists; what is missing is the runner's route and the screens), and the table of units of a run. The stores support all of it (`StepStore.Resolve`, the dead letter states); the runner's API and the console do not call them yet (plan 28a, R25).
 
 ## For integrations with outside systems: the companion libraries (plan 27a, lane IX)
 
@@ -102,3 +102,4 @@ The kit stays small. What an integration needs to talk to a system that is not a
 | --- | --- | --- |
 | `DbDataKit.Runner.Kit.Formats` | rows from and to CSV and TSV, fixed width, JSON, JSON Lines, XML, Excel and Parquet; gzip, zip and OpenPGP; a bad row reported with its position and a decision (refuse, skip, collect) | IX08, IX09 |
 | `DbDataKit.Runner.Kit.Http` | an HTTP client on a connection's sign-in: paging (offset, cursor, link header), a per-connection rate limit, `Retry-After`, retries of temporary failures, the connection's failure classification | IX10 |
+| `DbDataKit.Runner.Kit.Landing` | rows into a staging table (write gate, one transaction per batch, an idempotency key) and records into a DbDataStore entity through the Store's write path, both landing again changing nothing | IX11 |
