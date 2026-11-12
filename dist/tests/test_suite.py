@@ -219,7 +219,9 @@ class SuiteManifestTests(unittest.TestCase):
         update = undo[undo.index("} else {", real):].split("SetEnvironmentVariable")[0]
         for word in ("Unregister", "unpair", "instance"):
             self.assertNotIn(word, update)
-        self.assertNotIn("Remove-Item", undo)           # data under %ProgramData% stays
+        for line in undo.splitlines():                   # data under %ProgramData% stays: only the copy of the program files is removed
+            if "Remove-Item" in line:
+                self.assertTrue("$binThis" in line or "$binRoot" in line, line)
 
     def test_an_update_is_told_from_an_uninstall_by_scoops_command_and_else_by_a_newer_version_folder(self):
         undo = "\n".join(self.manifest()["pre_uninstall"])
@@ -266,9 +268,14 @@ class SuiteManifestTests(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertIn(f"removing={expected}", r.stdout, (command, others, this))
 
-    def test_the_services_run_from_scoops_current_folder(self):
+    def test_the_services_run_from_a_copy_under_programdata_never_from_scoops_folder(self):
+        # Scoop refuses an update while a process runs from its app folder
         post = "\n".join(self.manifest()["post_install"])
-        self.assertIn("Join-Path $appDir 'current'", post)
+        self.assertIn("'DbDataKit\\bin'", post)
+        self.assertIn("$base = $binThis", post)
+        self.assertNotIn("Join-Path $appDir 'current'", post)
+        self.assertIn("Copy-Item", post)
+        self.assertIn("re-pointing", post)
 
     def test_the_scripts_are_balanced_powershell(self):
         m = self.manifest()
