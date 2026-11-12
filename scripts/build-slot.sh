@@ -32,6 +32,23 @@ else
   slots="${DBDATAKIT_BUILD_SLOTS:-2}"; base=/tmp/build.lock
 fi
 
+# Cores per build: the cores divided between the slots of the pool (override with DBDATAKIT_BUILD_CPUS). Without a cap every `dotnet build`
+# starts one MSBuild node per core, so two builds at once oversubscribe the machine and each one gets slower, not faster.
+cores="$(nproc 2>/dev/null || echo 2)"
+cpus="${DBDATAKIT_BUILD_CPUS:-$(( cores / slots ))}"
+[ "$cpus" -lt 1 ] && cpus=1
+if [ "$pool" = "node" ]; then
+  export VITEST_MAX_WORKERS="${VITEST_MAX_WORKERS:-$cpus}"   # vitest uses one worker per core otherwise
+elif [ "$(basename -- "${1:-}")" = "dotnet" ]; then
+  case "${2:-}" in
+    build|test|publish|restore|pack|msbuild)
+      case " $* " in
+        *" -m "*|*" -m:"*|*" -maxcpucount"*|*" --maxcpucount"*) ;;           # the caller chose
+        *) set -- "$1" "$2" "-m:$cpus" "${@:3}" ;;
+      esac ;;
+  esac
+fi
+
 min_free="${DBDATAKIT_BUILD_MIN_FREE_GB:-3}"
 free_gb=$(df -P --block-size=1G / 2>/dev/null | awk 'NR==2 {print $4}')
 if [ -n "$free_gb" ] && [ "$free_gb" -lt "$min_free" ]; then
