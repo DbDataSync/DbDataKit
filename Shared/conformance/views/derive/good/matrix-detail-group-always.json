@@ -52,11 +52,19 @@
       ],
       "order": [
         [
+          "customers.region",
+          "asc"
+        ],
+        [
           "customers.customer",
           "asc"
         ],
         [
           "products.category",
+          "asc"
+        ],
+        [
+          "orders.status",
           "asc"
         ]
       ],

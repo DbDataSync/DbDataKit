@@ -984,6 +984,96 @@ public class ResolveTests
         Assert.Empty(Violations(r.ToJson()));
     }
 
+
+    // ---- field groups (plan 32 DBR52) ----
+
+    private static ViewDocument GroupDoc(string widgets, string groups)
+    {
+        var ids = Regex.Matches(widgets, @"^  ([a-z][a-z0-9_-]*):", RegexOptions.Multiline).Select(m => m.Groups[1].Value).ToList();
+        var tiles = string.Join("\n", ids.Select((id, i) => $"      - {{widget: {id}, x: 0, y: {i * 2}, w: 12, h: 2}}"));
+        var yaml = $"schemaVersion: 1\nkind: dashboard\ntitle: Test\ngroups:\n{groups}\nwidgets:\n{widgets}\nlayouts:\n  - name: desk\n    type: reflow\n    default: true\n    grid: {{columns: 12, rows: {ids.Count * 2}}}\n    tiles:\n{tiles}\n";
+        var loaded = ViewsLoader.Load(yaml, "groups.yaml");
+        Assert.True(loaded.Ok, Conformance.Describe(loaded.Diagnostics) + "\n" + yaml);
+        return loaded.Document!;
+    }
+
+    [Fact]
+    public async Task A_group_in_a_chart_is_one_field_with_one_member_per_combination_labelled_by_its_template_and_ordered_by_its_levels()
+    {
+        var doc = GroupDoc("""
+              line:
+                type: chart
+                mark: line
+                encodings: {x: {group: where, title: Where}, y: sales.net_amount}
+                query: {model: retail_sales}
+              bar:
+                type: chart
+                mark: bar
+                encodings: {x: customers.region, y: sales.net_amount, color: {group: what}}
+                query: {model: retail_sales}
+            """, """
+              where: {fields: [customers.region, products.category], template: "{2} in {1}"}
+              what: {fields: [products.category, products.product]}
+            """);
+        var r = await Resolver(new RetailServing()).ResolveAsync(Viewer(), doc, "desk");
+        var line = Ok(r, "line")["vega_lite"]!;
+        Assert.Equal("ordinal", line["encoding"]!["x"]!["type"]!.GetValue<string>());
+        Assert.Equal("Where", line["encoding"]!["x"]!["title"]!.GetValue<string>());
+        Assert.Equal("__group_where", line["encoding"]!["x"]!["field"]!.GetValue<string>());
+        var members = line["encoding"]!["x"]!["sort"]!.AsArray().Select(m => m!.GetValue<string>()).ToList();
+        Assert.Equal(16, members.Count);                                           // four regions, four categories
+        Assert.Equal("Accessories in Central", members[0]);                        // by the levels in turn: the first region, then its categories
+        Assert.Equal("Outdoor in Central", members[3]);
+        Assert.Equal(members, members.Distinct());
+        var values = line["data"]!["values"]!.AsArray();
+        Assert.Equal(NetOf(l => l.Region == "East" && l.Category == "Footwear"), values.Single(v => v!["__group_where"]!.GetValue<string>() == "Footwear in East")!["sales_net_amount"]!.GetValue<double>());
+
+        var bar = Ok(r, "bar")["vega_lite"]!;
+        Assert.Equal("Accessories Beanie", bar["encoding"]!["color"]!["sort"]![0]!.GetValue<string>());      // the default template joins the levels with a space
+        Assert.Empty(Violations(r.ToJson()));
+    }
+
+    [Fact]
+    public async Task A_group_on_a_matrix_axis_is_one_attribute_and_its_total_rolls_every_level_up_together_and_details_are_extra_header_columns()
+    {
+        var doc = GroupDoc("""
+              mx:
+                type: matrix
+                encodings:
+                  rows: [customers.region]
+                  columns: [{group: what}]
+                  values: [{field: sales.net_amount}]
+                  totals: {rows: true}
+                query: {model: retail_sales}
+              details:
+                type: matrix
+                encodings:
+                  rows: [products.category, {group: detail, show: always}]
+                  columns: [date.year_month]
+                  values: [{field: sales.units}]
+                  totals: {rows: true}
+                query: {model: retail_sales}
+            """, """
+              what: {fields: [products.category, products.product]}
+              detail: {fields: [products.product, customers.region]}
+            """);
+        var r = await Resolver(new RetailServing()).ResolveAsync(Viewer(), doc, "desk");
+        var mx = Ok(r, "mx");
+        Assert.Equal(24, mx["columns"]!.AsArray().Count);                          // one column per product, one header level: the group's label
+        Assert.Equal("Accessories Beanie", mx["columns"]![0]!["labels"]![0]!.GetValue<string>());
+        var total = mx["rows"]!.AsArray().Single(x => x!["total"]?.GetValue<bool>() == true)!["cells"]!.AsArray();
+        Assert.Equal(NetOf(l => l.Product == "Beanie"), total[0]!["v"]!.GetValue<double>());
+        Assert.Equal(4 + 1, mx["rows"]!.AsArray().Count);
+
+        var d = Ok(r, "details");
+        var rows = d["rows"]!.AsArray();
+        Assert.Equal(24 * 4 + 1, rows.Count);                                      // a row per (category, product, region) and the total row; no subtotal of the details alone
+        Assert.Equal(["Accessories", "Beanie", "Central"], rows[0]!["labels"]!.AsArray().Select(l => l!.GetValue<string>()));
+        Assert.True(rows[^1]!["total"]!.GetValue<bool>());
+        Assert.Equal(RetailServing.Lines.Where(l => l.YearMonth == 202601).Sum(l => l.Units), rows[^1]!["cells"]![0]!["v"]!.GetValue<long>());
+        Assert.Empty(Violations(r.ToJson()));
+    }
+
     // ---- parameters ----
 
     [Fact]

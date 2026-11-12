@@ -203,8 +203,9 @@ public static class DeriveRequest
         // a group on a chart's `x` (DBR52): its levels in turn, so a line over year and month is in calendar order whatever order the rows arrive in
         else if (widget.Type == "chart" && encodings["x"] is JsonObject { } xGroup && xGroup["group"] is not null)
             order = GroupOrder(slots.Where(sl => sl.Group is not null && sl.Path == $"{wp}.encodings.x.group"), xGroup["sort"]?.GetValue<string>() == "descending", origins);
-        else if (widget.Type == "matrix" && slots.Any(sl => sl.Group is not null && sl.Path.Contains(".rows[", StringComparison.Ordinal) | sl.Path.Contains(".columns[", StringComparison.Ordinal)))
-            order = GroupOrder(slots.Where(sl => sl.Group is not null && !sl.Path.EndsWith(".show", StringComparison.Ordinal)), false, origins);
+        // a matrix with a group (DBR52): the rows' attributes then the columns', each ascending, the group's levels in place, so a combined member and a details column read in order
+        else if (widget.Type == "matrix" && slots.Any(sl => sl.Group is not null && (sl.Path.Contains(".rows[", StringComparison.Ordinal) || sl.Path.Contains(".columns[", StringComparison.Ordinal))))
+            order = GroupOrder(slots.Where(sl => sl.Path.Contains(".rows[", StringComparison.Ordinal) || sl.Path.Contains(".columns[", StringComparison.Ordinal)), false, origins);
         else if (widget.Type == "table" && encodings["sort"] is JsonObject { } sort && sort["by"] is JsonValue by && by.TryGetValue<string>(out var sortField))
         {
             var direction = sort["dir"] is JsonValue d && d.TryGetValue<string>(out var dir) ? dir : "asc";

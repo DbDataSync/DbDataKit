@@ -258,6 +258,8 @@ internal static partial class ResultShaper
     public static JsonObject Matrix(ViewWidget widget, AnswerRows answer)
     {
         var encodings = widget.Raw["encodings"] as JsonObject ?? [];
+        // field groups on the axes (DBR52): a combined group is one attribute of the answer, details are extra levels of the rows
+        (answer, encodings) = PrepareMatrixGroups(widget, answer, encodings);
         // attributes among the values (DBR51): the engine draws a synthetic measure in their place, the cells are filled from the rows that name their values afterwards
         (answer, encodings, var cellPlan) = PrepareCellAttributes(widget, answer, encodings);
         var spec = new JsonObject { ["type"] = "matrix", ["id"] = "v" };
@@ -376,6 +378,8 @@ internal static partial class ResultShaper
                     ["Move the field into `column` or `row`, or keep one measure on `y`."]);
             (answer, encodings) = FoldSeries(widget, answer, encodings, series);
         }
+        // a field group in a channel (DBR52) is one field of the answer: its members' labels, in the order of the levels
+        (answer, encodings) = PrepareChartGroups(widget, answer, encodings);
         // a nested `x` (DBR42): the innermost level is the engine's `x`, the outermost its `column`; the levels are drawn after the engine has resolved them
         var nested = ReadNestedLevels(encodings);
         foreach (var (channel, value) in encodings)

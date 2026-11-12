@@ -165,7 +165,8 @@ export function deriveRequest(widget: DerivableWidget, roles: CatalogRoles): Der
     // a group on a chart's `x` (DBR52): its levels in turn, so a line over year and month is in calendar order whatever order the rows arrive in
     order = groupOrder(slots.filter((sl) => sl.group !== undefined && sl.path === `${join(join(wp, 'encodings'), 'x')}.group`), encodings.x.sort === 'descending', origins)
   } else if (type === 'matrix' && slots.some((sl) => sl.group !== undefined && (sl.path.includes('.rows[') || sl.path.includes('.columns[')))) {
-    order = groupOrder(slots.filter((sl) => sl.group !== undefined), false, origins)
+    // a matrix with a group (DBR52): the rows' attributes then the columns', each ascending, the group's levels in place
+    order = groupOrder(slots.filter((sl) => sl.path.includes('.rows[') || sl.path.includes('.columns[')), false, origins)
   } else if (type === 'table' && isObject(encodings.sort) && isString(encodings.sort.by)) {
     const sortField = encodings.sort.by
     const direction = typeof encodings.sort.dir === 'string' ? encodings.sort.dir : 'asc'

@@ -55,6 +55,10 @@
       ],
       "order": [
         [
+          "customers.region",
+          "asc"
+        ],
+        [
           "orders.ordered_at_year",
           "asc"
         ],
