@@ -9,7 +9,8 @@ product's own `register` command after the files are copied (INSTALLSERVICE=0 sk
 one implementation. An upgrade (same UpgradeCode, higher version) installs the new files first and removes the old product after InstallFinalize:
 the other order lets Windows Installer skip files it still sees from the old version and then delete them. The registered service is kept,
 stopped for the file copy and started again. A product with `msi.addToPath` gets its folder on the machine PATH. Settings and data live outside the package and are
-never touched. Double-click installs with the standard Windows Installer prompts; `msiexec /i x.msi /qn` is silent.
+never touched. A product with `exportComponent` takes `ADDPDFEXPORT=1` (and `EXPORTSOURCE=<folder or https address>`): the product installs its PDF export component after the files are copied
+(`export install`, plan 32 DBR16). Double-click installs with the standard Windows Installer prompts; `msiexec /i x.msi /qn` is silent.
 
 wixl is the msitools project's builder (LGPL, `apt install wixl`). It reads the WiX schema but is independent of the WiX toolset.
 """
@@ -197,6 +198,18 @@ def wxs(meta, version, payload):
             '(REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE) OR WIX_UPGRADE_DETECTED')
         sequence.append(f'<Custom Action="{stop_id}" Sequence="1900">{stop_condition}</Custom>')
         sequence.append('<Custom Action="UnregisterService" Sequence="1901">REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>')
+    if meta.get("exportComponent"):
+        # msiexec /i <file>.msi ADDPDFEXPORT=1 [EXPORTSOURCE=D:\release-files]: the product installs its own PDF export component (plan 32 DBR16, owner decision 2026-11-12): it downloads the
+        # release's asset for this platform (or reads EXPORTSOURCE, a folder or an https address, for a machine with no internet), checks it against SHA256SUMS and its pins and sets
+        # views.export. Before the service starts (a fresh install registers it stopped; an upgrade starts it after this), so the one start reads it. A refusal does not undo the product's install
+        # (Return="ignore"; the message is in the installer log): `<program> export status` and the console's Server settings say what is missing.
+        command = f"export install --version {version}"
+        actions += [
+            f'<CustomAction Id="InstallPdfExport" FileKey="{exe_file_id}" ExeCommand={quoteattr(command)} Execute="deferred" Impersonate="no" Return="ignore"/>',
+            f'<CustomAction Id="InstallPdfExportFrom" FileKey="{exe_file_id}" ExeCommand={quoteattr(command + " --source " + chr(34) + "[EXPORTSOURCE]" + chr(34))} Execute="deferred" Impersonate="no" Return="ignore"/>',
+        ]
+        at = next((i for i, (action_id, _c) in enumerate(after_files) if action_id == "StartService"), len(after_files))
+        after_files[at:at] = [("InstallPdfExport", "ADDPDFEXPORT AND NOT EXPORTSOURCE"), ("InstallPdfExportFrom", "ADDPDFEXPORT AND EXPORTSOURCE")]
     if meta.get("requiresDotnet"):
         # Before anything changes: a clear sentence in the error (Windows Installer shows the failed command), not a service that will not start later.
         major = str(meta["requiresDotnet"]).split(".")[0]

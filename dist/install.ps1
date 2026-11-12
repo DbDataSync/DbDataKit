@@ -34,6 +34,10 @@ param(
   # The console's announce address (http://console:8481): the server announces itself there and waits in `dbdatakit instance pending` to be confirmed. Sets DBDATAKIT_ANNOUNCE_URL
   # for the machine (-Machine, elevated) or for the user; only for a product that announces.
   [string]$AnnounceUrl,
+  # Also install the PDF export component (the pinned Chromium, fonts and print page, about 420 MB, a release asset of its own), for a product that has one: runs `<program> export install`
+  # for this release after the install. -ExportSource is where the release's files are (a folder, for an offline copy, or an https address) instead of the release on GitHub.
+  [switch]$WithPdfExport,
+  [string]$ExportSource,
   [string]$Repo,
   [string]$ApiBase = 'https://api.github.com'
 )
@@ -50,6 +54,7 @@ $Bound = @{
 if (-not $Bound.Product) { throw 'This copy of install.ps1 is not bound to a product. Use the one attached to a release.' }
 $product = $Bound.Product
 if ($AnnounceUrl -and $AnnounceUrl -notmatch '^https?://\S+$') { throw "-AnnounceUrl must be an http or https address, such as http://console:8481 (got '$AnnounceUrl')." }
+if ($ExportSource -and -not $WithPdfExport) { throw '-ExportSource goes with -WithPdfExport.' }
 $display = $Bound.DisplayName
 if (-not $Repo) { $Repo = $Bound.Repo }
 $onWindows = ($PSVersionTable.PSVersion.Major -lt 6) -or $IsWindows
@@ -176,6 +181,18 @@ try {
       Write-Host "Set DBDATAKIT_ANNOUNCE_URL for the $($scope.ToLower()): the server announces itself to $AnnounceUrl and waits in 'dbdatakit instance pending' (confirm it with 'dbdatakit instance confirm')."
     }
   }
+  # The component is put in place before the service starts again, so the one restart picks up views.export.
+  $exportFailed = $false
+  if ($WithPdfExport) {
+    if (-not $Bound.ExportComponent) { Write-Warning "$display has no PDF export component; -WithPdfExport is ignored." }
+    else {
+      Write-Host 'Adding PDF export (the pinned Chromium, fonts and print page, about 420 MB) ...'
+      $exportArgs = @('export', 'install', '--version', $releaseVersion)
+      if ($ExportSource) { $exportArgs += @('--source', $ExportSource) }
+      & $exe @exportArgs
+      if ($LASTEXITCODE) { $exportFailed = $true; Write-Warning "$display is installed, but its PDF export was not (see the message above). Run '$($Bound.Exe) $($exportArgs -join ' ')' again when it can be reached, or use the console's Server settings." }
+    }
+  }
   if ($wasRunning) { Write-Host 'Starting service...'; Start-Service $Bound.ServiceName }
 
   # --- PATH (a per-user install only: a machine-wide one is left to the administrator) ---
@@ -203,3 +220,4 @@ if ($onWindows -and $Bound.RequiresVcRuntime -and -not (Test-Path (Join-Path $en
   Write-Warning "$display needs the Microsoft Visual C++ 2015-2022 Redistributable (x64), which was not found. Install it from https://aka.ms/vs/17/release/vc_redist.x64.exe"
 }
 if ($Bound.Notes) { Write-Host $Bound.Notes }
+if ($exportFailed) { throw "$display is installed, but its PDF export was not." }
