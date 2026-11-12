@@ -17,6 +17,7 @@ namespace DbDataGateway.Server.Management;
 public sealed partial class GatewayEntityModels
 {
     private readonly ConditionalWeakTable<PublishHookContext, string> _adopting = new();
+    private readonly ConditionalWeakTable<PublishHookContext, string> _slotUsed = new();
 
     private static ManagementCaller? Of(DefinitionsCaller caller) => caller.Context as ManagementCaller;
 
@@ -55,7 +56,15 @@ public sealed partial class GatewayEntityModels
         var dataSource = content.DataSource;
         if (!options().DataSources.ContainsKey(dataSource))
             throw Invalid(caller, name, $"'{dataSource}' is not a data source of this server; publish the data source the model's tables are on first.");
+        ServingSlots.CheckDeclared(content.Slots, [dataSource]);
         if (client is null || ownerOfDataSource(dataSource) == client) return;
+
+        // plan 33 SW01: a data source made by hand that the model names as a slot is the group's to allow, by binding the slot (an administrator's act, recorded); the registry refuses the version naming the slot while it is unbound
+        if (string.IsNullOrEmpty(ownerOfDataSource(dataSource)) && ServingSlots.Declared(content.Slots, dataSource))
+        {
+            if (ServingSlots.Bound(content.Slots, context, dataSource)) _slotUsed.AddOrUpdate(context, dataSource);
+            return;
+        }
 
         // plan 33 SC21f: a data source made by hand may carry this client's model when the request says so by name, and the Gateway records who, when and which; one another client made never
         var owner = ownerOfDataSource(dataSource);
@@ -81,11 +90,20 @@ public sealed partial class GatewayEntityModels
         Record(caller, "entity-model publish", name, created ? "created" : result.Changed ? "changed" : "unchanged");
         response["created"] = created;
         response["unchanged"] = !result.Changed;
+        if (_slotUsed.TryGetValue(context, out var used))
+        {
+            adoptions?.Record(used, Client(caller)!, Who(caller), name, "entity-model (slot)", _clock.GetUtcNow());
+            Record(caller, "data-source use", used, ServingSlots.UseNote(Client(caller)!, Who(caller), name));
+            response["slots_used"] = new JsonArray((JsonNode?)used);
+        }
         if (!_adopting.TryGetValue(context, out var dataSource)) return;
         adoptions?.Record(dataSource, Client(caller)!, Who(caller), name, "entity-model", _clock.GetUtcNow());
         Record(caller, "data-source adopt", dataSource, $"adopted by {Client(caller)} ({Who(caller)}) for the model {name}");
         response["adopted"] = dataSource;
     }
+
+    /// <summary>The checks around binding the slot of a model (plan 33 SW01): the data source of the same name, one of this Gateway's, made by the binding client or bound by an administrator.</summary>
+    internal void CheckSharedBind(BindingHookContext context) => ServingSlots.CheckBind(context, options, ownerOfDataSource);
 
     internal void CheckSharedRead(string name, DefinitionsCaller caller)
     {
@@ -104,6 +122,8 @@ public sealed class EntityModelKindHook(GatewayEntityModels entityModels, Signat
     public void BeforePublish(PublishHookContext context) => entityModels.CheckSharedPublish(context);
 
     public void AfterPublish(PublishHookContext context, PublishResult result, JsonObject response) => entityModels.AfterSharedPublish(context, result, response);
+
+    public void BeforeBind(BindingHookContext context) => entityModels.CheckSharedBind(context);
 
     public string? OwnerOf(string name) => entityModels.OwnerOfShared(name);
 
