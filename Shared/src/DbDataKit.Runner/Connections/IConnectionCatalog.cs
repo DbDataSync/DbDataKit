@@ -31,7 +31,7 @@ public sealed class DirectoryConnectionCatalog(string directory) : IConnectionCa
         {
             var path = Path.Combine(Directory, name + extension);
             if (!File.Exists(path)) continue;
-            var load = ConnectionDefinitionLoader.LoadFile(path);
+            var load = ConnectionDefinitionLoader.LoadDatabaseFile(path);
             if (!load.Ok)
                 throw new InvalidDataException($"The connection file '{path}' does not load: {string.Join(" ", load.Diagnostics.Where(d => d.Severity == DbDataKit.Config.Yaml.ConfigSeverity.Error).Select(d => d.ToString()))}");
             if (!string.Equals(load.Definition!.Name, name, StringComparison.Ordinal))

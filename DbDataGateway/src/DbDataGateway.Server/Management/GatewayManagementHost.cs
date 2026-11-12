@@ -95,7 +95,9 @@ public static class GatewayManagementHost
         var management = new GatewayManagement(configuration, configDirectory, instanceId, GatewayHost.Version);
         // one for every kind of change, in the state every instance of a group shares (plan 20 O02); the file it used to be is read in once
         var audit = new DbDataGateway.Server.State.StateAuditLog(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>());
-        dataSources = new GatewayDataSources(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit, git, findClient: clients.Find, published: app.Services.GetRequiredService<Serving.PublishedDataSources>());
+        var adoptions = new DataSourceAdoptions(configDirectory);
+        dataSources = new GatewayDataSources(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit, git, findClient: clients.Find, published: app.Services.GetRequiredService<Serving.PublishedDataSources>(), adoptions: adoptions,
+            servingCatalog: () => app.Services.GetRequiredService<DbDataKit.Serving.IServingServices>().Catalog);
         var identities = new GatewayIdentities(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue, audit, git);
         var activity = new GatewayActivity(app.Services.GetRequiredService<SessionStore>(), app.Services.GetRequiredService<ActiveQueries>(), app.Services.GetRequiredService<QueryLimits>(),
             app.Services.GetRequiredService<LoginThrottle>(), () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue, audit,
@@ -120,7 +122,7 @@ public static class GatewayManagementHost
         management = new GatewayManagement(configuration, configDirectory, instanceId, GatewayHost.Version, dataSources, identities, activity, certificate, git,
             new GatewaySecrets(app.Services.GetRequiredService<GroupSecretStore>() is { Enabled: true } group ? group : SecretsRuntime.OpenStore(options), audit, references: dataSources.References), files.Codes(),
             new GatewaySemanticModels(app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(),
-                () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue, configDirectory, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit),
+                () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue, configDirectory, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit, adoptions: adoptions),
             pairedClients: clients.All,
             identityAdmin: options.Identity.Enabled
                 ? new DbDataKit.Identity.IdentityAdminApi(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>(), GatewayIdentityModule.PublicUrlOf(options).AbsoluteUri, new DbDataKit.Identity.AccessTokenPolicy(options.Identity.AccessTokenMaxDays))
@@ -141,8 +143,8 @@ public static class GatewayManagementHost
                     // who made a data source: its file in this instance's configuration, else the group's published one (O04b)
                     var file = Path.Combine(configDirectory, "connections", dataSource + ".yaml");
                     var text = File.Exists(file) ? File.ReadAllText(file) : app.Services.GetRequiredService<Serving.PublishedDataSources>().Text(dataSource);
-                    return text is null ? null : DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, dataSource + ".yaml").Definition?.ManagedBy;
-                }, audit),
+                    return text is null ? null : DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, dataSource + ".yaml").Definition?.ManagedBy;
+                }, audit, adoptions: adoptions),
             apps: new GatewayApps(new DbDataKit.State.DefinitionStore(state), () => HomeApprovers.Open(state, app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue), audit,
                 appsAddress: () => { var current = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue; return GatewayModules.Has(current, GatewayModules.Apps) ? GatewayAppsModule.PublicUrlOf(current) : null; },
                 instanceSaved: name => AppClient(app, state, name, remove: false), instanceRemoved: name => AppClient(app, state, name, remove: true),

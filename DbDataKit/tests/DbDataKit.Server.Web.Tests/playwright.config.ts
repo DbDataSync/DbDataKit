@@ -20,7 +20,7 @@ if (!isWorker) {
   const fileRef = (name: string) => `file:${path.join(scratchDirectory, name).replace(/\\/g, '/')}`
   fs.mkdirSync(path.join(scratchDirectory, 'connections'), { recursive: true })
   fs.writeFileSync(path.join(scratchDirectory, 'connections', 'e2e-hook-conn.yml'), `schema: connection/2\nkind: http\nname: e2e-hook-conn\nendpoint: ${fileRef('delivery-hook-url.txt')}\nwebhook:\n  format: signed\n  allow_private: [127.0.0.1]\nsign_in:\n  method: signed_webhook\n  key_secret: ${fileRef('delivery-hook-secret.txt')}\n`)
-  fs.writeFileSync(path.join(scratchDirectory, 'settings.yaml'), 'delivery:\n  channels:\n    e2e-hook: e2e-hook-conn\n')
+  fs.writeFileSync(path.join(scratchDirectory, 'bindings.yml'), 'bindings: 1\ndelivery:\n  e2e-hook: e2e-hook-conn\n')   // the channel is a binding (plan 27a IX23)
 }
 
 // A Build server for the console to pair with: a real one, in a directory of its own, with a pairing code made before it starts and written where the test can read it.

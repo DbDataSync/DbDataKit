@@ -25,6 +25,18 @@ public sealed record WorkspaceSettings(string Directory, Uri Listen)
     /// <summary>The platform the runners run on (<c>linux-x64</c> or <c>win-x64</c>) when it is not the one of this machine: a Sync project's package is made with the driver libraries restored for it (<c>dbdatasync package publish --platform</c>); null: the machine's own.</summary>
     public string? SyncPlatform { get; init; }
 
+    /// <summary>The path of <c>dbdatarunner</c> when it is not beside the server or on PATH: an integration project (csx) is checked, tested and built with its <c>package build</c> and <c>package test</c>, which need only the .NET runtime.</summary>
+    public string? RunnerExecutable { get; init; }
+
+    /// <summary>The path of <c>dotnet</c> when it is not on PATH: only a compiled integration project is built with it, and only where the SDK is installed.</summary>
+    public string? DotnetExecutable { get; init; }
+
+    /// <summary>Where a csx integration finds NuGet packages: v3 index addresses or folders in the global-packages layout (an offline feed); null: nuget.org.</summary>
+    public IReadOnlyList<string>? IntegrationSources { get; init; }
+
+    /// <summary>Where the packages of csx integrations are kept; null: <c>integration-cache</c> in the server's directory.</summary>
+    public string? IntegrationCache { get; init; }
+
     public const string Product = "dbdataworkspace";
     public const string DefaultListen = "https://127.0.0.1:8471";
 

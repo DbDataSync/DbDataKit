@@ -113,7 +113,7 @@ public class ProjectPublishTests
         var published = File.ReadAllText(Path.Combine(output, "files", "connections", "sqlserver.yaml"));
         Assert.Equal("# the warehouse\nschema: connection/2\nname: sqlserver\nengine: sqlserver\n", published);
         Assert.Equal(AsWritten, File.ReadAllText(file));
-        Assert.Equal(2, DbDataKit.Connections.ConnectionDefinitionLoader.Load(published, "sqlserver.yaml", addressRequired: false).Require().SchemaVersion);
+        Assert.Equal(2, DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(published, "sqlserver.yaml", addressRequired: false).Require().SchemaVersion);
     }
 
     [Fact]

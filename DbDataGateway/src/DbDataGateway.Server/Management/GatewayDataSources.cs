@@ -24,7 +24,7 @@ namespace DbDataGateway.Server.Management;
 /// </summary>
 public sealed partial class GatewayDataSources(
     string configDirectory, GatewayManagement validation, Action reload, Func<DataSourceCatalog> catalog, IAuditLog audit, GitCommitService? git, TimeProvider? clock = null, Func<string, PairedClient?>? findClient = null,
-    DbDataGateway.Server.Serving.PublishedDataSources? published = null)
+    DbDataGateway.Server.Serving.PublishedDataSources? published = null, DataSourceAdoptions? adoptions = null, Func<DbDataKit.Serving.IServingCatalog>? servingCatalog = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly WriteGuard _guard = new();
@@ -55,6 +55,10 @@ public sealed partial class GatewayDataSources(
         // taking over a hand-made data source is a person's act with the admin role (OwnerScope.AuthorizeAdopt), whatever a server client's ceiling says: decided before the owner rules, which a client would fail with another sentence
         if (rest.Length == 2 && rest[1] == "adopt")
             return method == "POST" ? await AdoptAsync(name, body, caller, cancellationToken) : ManagementResult.Problem(405, "A data source is adopted with POST.");
+
+        // plan 33 SC20j: the shape of the data source's catalog (tables, columns, keys: never a row, a login or an address) for a Workspace's catalog cache; decided before the owner rules, which it applies in its own words
+        if (rest.Length == 2 && rest[1] == "schema")
+            return method == "POST" ? await SchemaAsync(name, body, caller, cancellationToken) : ManagementResult.Problem(405, "A data source's schema is read with POST (the body may carry \"adopt\").");
 
         // a publishing client reaches only the data sources it made (the owner rules, plan 13 W12); an administrator reaches all. The one exception (plan 13c D19) is a write that says `adopt: true` over a data source made by hand
         var action = method switch { "GET" or "POST" => ObjectAction.Change, "DELETE" => ObjectAction.Delete, _ => TextOf(name) is not null ? ObjectAction.Change : ObjectAction.Create };
@@ -87,7 +91,7 @@ public sealed partial class GatewayDataSources(
         foreach (var (name, text) in published?.All() ?? []) if (!texts.Any(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase))) texts.Add((name, text));
         foreach (var (name, text) in texts)
         {
-            if (DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, name + ".yaml").Definition is not { } d) continue;
+            if (DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, name + ".yaml").Definition is not { } d) continue;
             var found = new List<string?> { d.ConnectionStringSecret };
             foreach (var login in new[] { d.Auth, d.ReadLogin, d.WriteLogin }) if (login is not null) found.AddRange([login.PasswordSecret, login.ConnectionStringSecret, login.TokenSecret]);
             var references = found.Where(f => !string.IsNullOrWhiteSpace(f)).Select(f => SecretRef.TryParse(f, out var r) ? r : null).Where(r => r is not null).Select(r => r!).ToList();
@@ -103,7 +107,7 @@ public sealed partial class GatewayDataSources(
             foreach (var file in Directory.EnumerateFiles(Folder, "*.yaml").OrderBy(f => f, StringComparer.Ordinal))
             {
                 var text = File.ReadAllText(file);
-                var loaded = DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, file);
+                var loaded = DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, file);
                 if (owner is not null && loaded.Definition?.ManagedBy != owner) continue;
                 items.Add(new JsonObject
                 {
@@ -117,7 +121,7 @@ public sealed partial class GatewayDataSources(
         foreach (var (name, text) in published?.All() ?? [])
         {
             if (own.Contains(name)) continue;
-            var loaded = DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, name + ".yaml");
+            var loaded = DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, name + ".yaml");
             if (owner is not null && loaded.Definition?.ManagedBy != owner) continue;
             items.Add(new JsonObject
             {
@@ -128,6 +132,63 @@ public sealed partial class GatewayDataSources(
         return new JsonObject { ["data_sources"] = items };
     }
 
+    private sealed record SchemaRequest(string? Adopt = null);
+
+    /// <summary>
+    /// <c>POST /api/v1/data-sources/{name}/schema</c> (plan 33 SC20j, D20): what the data source's catalog holds (<see cref="DataSourceSchema"/>), read with the Gateway's own login so that the caller needs none. An administrator reads any; a publishing client
+    /// the ones it made, and a data source made by hand only when the body says <c>{"adopt": "&lt;name&gt;"}</c> (the same explicit, recorded consent as a model on it, SC21f: who, when and which go into the audit and the data source's metadata); one another client made, never.
+    /// </summary>
+    private async Task<ManagementResult> SchemaAsync(string name, string? body, ManagementCaller caller, CancellationToken cancellationToken)
+    {
+        if (servingCatalog is null) return ManagementResult.Problem(404, "This Gateway cannot read a data source's catalog here.");
+        SchemaRequest? request = null;
+        try { if (!string.IsNullOrWhiteSpace(body)) request = JsonSerializer.Deserialize<SchemaRequest>(body, Json); }
+        catch (JsonException) { return ManagementResult.Problem(400, "The body is empty or {\"adopt\": \"<data source>\"}."); }
+        if (TextOf(name) is not { } text) return ManagementResult.Problem(404, $"There is no data source '{name}'.");
+        var definition = DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, name + ".yaml").Definition;
+        var adopting = false;
+        if (!IsAdministrator(caller))
+        {
+            var client = OwnerScope.Stamp(caller.Token!);
+            var owner = definition?.ManagedBy;
+            if (owner != client)
+            {
+                if (!string.IsNullOrEmpty(owner))
+                {
+                    Record(caller, "data-source schema", name, "refused");
+                    return ManagementResult.Problem(403, $"The data source '{name}' was made by another server client; a publishing client reads the catalog of its own data sources. Ask an administrator to hand it over.");
+                }
+                if (!string.Equals(request?.Adopt, name, StringComparison.Ordinal))
+                {
+                    Record(caller, "data-source schema", name, "refused");
+                    return new ManagementResult(409, new JsonObject
+                    {
+                        ["error"] = $"The data source '{name}' was made by hand or by an administrator, not by this client. Ask again with \"adopt\": \"{name}\" to read its catalog (its tables and columns, never rows); the Gateway records who adopted it and when, in its audit and in the data source's metadata.",
+                        ["adopt"] = new JsonObject { ["data_source"] = name, ["made_by"] = "hand", ["publish_adopt"] = true, ["field"] = "adopt" },
+                    });
+                }
+                if (OwnerScope.AuthorizePublishingOver(caller.Token!, new ManagedObject(null)) is { Allowed: false } denied)
+                    return ManagementResult.Problem(403, denied.Reason ?? "This client may not read that data source.");
+                adopting = true;
+            }
+        }
+        JsonObject answer;
+        try { answer = await DataSourceSchema.ReadAsync(servingCatalog(), name, definition?.Engine ?? "", _clock.GetUtcNow(), cancellationToken); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Record(caller, "data-source schema", name, "failed");
+            // the type of the failure, never the driver's text: it can carry the address or the login
+            return ManagementResult.Problem(502, $"The catalog of the data source '{name}' could not be read ({ex.GetType().Name}). Test the data source first.");
+        }
+        if (adopting)
+        {
+            adoptions?.Record(name, OwnerScope.Stamp(caller.Token!), Who(caller), "", "schema-read", _clock.GetUtcNow());
+            Record(caller, "data-source adopt", name, $"adopted by {OwnerScope.Stamp(caller.Token!)} ({Who(caller)}) to read its catalog");
+        }
+        else Record(caller, "data-source schema", name, "read");
+        return ManagementResult.Ok(answer);
+    }
+
     private ManagementResult Read(string name)
     {
         if (TextOf(name) is not { } text) return ManagementResult.Problem(404, $"There is no data source '{name}'.");
@@ -135,8 +196,10 @@ public sealed partial class GatewayDataSources(
         return ManagementResult.Ok(new JsonObject
         {
             ["name"] = name, ["text"] = text, ["version"] = VersionOf(text), ["group"] = group,
-            ["grants"] = GrantsView(DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, name + ".yaml").Definition, group),
-            ["policy"] = PolicyView(DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, name + ".yaml").Definition, text, group),
+            ["grants"] = GrantsView(DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, name + ".yaml").Definition, group),
+            ["policy"] = PolicyView(DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, name + ".yaml").Definition, text, group),
+            // plan 33 SC21f: the publishing clients that put a model on this data source with `adopt` (who, when, for which model)
+            ["adoptions"] = adoptions?.Read(name) ?? [],
         });
     }
 
@@ -191,7 +254,7 @@ public sealed partial class GatewayDataSources(
 
     /// <summary>Whether the data source exists and nothing manages it: made by hand, or by an administrator (no <c>managed_by</c>).</summary>
     private bool IsHandMade(string name) =>
-        TextOf(name) is { } text && string.IsNullOrEmpty(DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, name + ".yaml").Definition?.ManagedBy);
+        TextOf(name) is { } text && string.IsNullOrEmpty(DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, name + ".yaml").Definition?.ManagedBy);
 
     private ManagementResult? AdoptScope(ManagementCaller caller, string name)
     {
@@ -219,7 +282,7 @@ public sealed partial class GatewayDataSources(
         if (publishing)
         {
             // what a publishing client may send: the serving policy of the definition (plan 13c D19), but not allow_writes or allowed_directories, and the file says whose it is (stamped here when it does not)
-            var sent = DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, $"{name}.yaml").Definition;
+            var sent = DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, $"{name}.yaml").Definition;
             var client = OwnerScope.Stamp(caller.Token!);
             if (DbDataKit.Connections.ServingPolicy.BlockOf(text) is { } block && DbDataKit.Connections.ServingPolicy.Check(block) is { Count: > 0 } problems)
             {
@@ -336,7 +399,7 @@ public sealed partial class GatewayDataSources(
         var file = FileOf(name);
         if (!File.Exists(file)) return ManagementResult.Problem(404, $"There is no data source '{name}'.");
         var text = File.ReadAllText(file);
-        var current = DbDataKit.Connections.ConnectionDefinitionLoader.Load(text, file).Definition;
+        var current = DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, file).Definition;
         var policyFields = DbDataKit.Connections.ServingPolicy.BlockOf(text)?.Entries.Select(e => e.Key.Value).ToList() ?? [];
         if (policyFields.Count > 0 && request.Adopt != true)
         {
@@ -452,7 +515,7 @@ public sealed partial class GatewayDataSources(
         if (IsAdministrator(caller)) return null;
         var text = TextOf(name);
         if (action != ObjectAction.Create && text is null) return ManagementResult.Problem(404, $"There is no data source '{name}'.");
-        ManagedObject? target = action == ObjectAction.Create ? null : new ManagedObject(DbDataKit.Connections.ConnectionDefinitionLoader.Load(text!, name + ".yaml").Definition?.ManagedBy);
+        ManagedObject? target = action == ObjectAction.Create ? null : new ManagedObject(DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text!, name + ".yaml").Definition?.ManagedBy);
         var decision = OwnerScope.Authorize(caller.Token!, action, target);
         return decision.Allowed ? null : ManagementResult.Problem(403, decision.Reason ?? "This client may not do this to that data source.");
     }

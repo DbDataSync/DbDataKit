@@ -42,7 +42,7 @@ public static partial class ConnectionCopy
         if (ExtensionKey(targetProduct) is not { } targetKey) return Refused($"Connections cannot be copied to a {targetProduct} server.");
         if (!IsValidName(newName)) return Refused($"'{newName}' is not a connection name: a letter, then letters, digits, '-', '_' or '.', at most 64 characters.");
 
-        var loaded = ConnectionDefinitionLoader.Load(sourceText, "source", addressRequired: false);
+        var loaded = ConnectionDefinitionLoader.LoadDatabaseConnection(sourceText, "source", addressRequired: false);
         if (!loaded.Ok)
             return Refused("The connection cannot be read, so it is not copied: " + string.Join(" ", loaded.Diagnostics.Where(d => d.Severity == ConfigSeverity.Error).Select(d => $"line {d.Line}: {d.Message}")));
         var source = loaded.Definition!;
@@ -112,7 +112,7 @@ public static partial class ConnectionCopy
 
         if (problem is not null) return Refused("The file could not be changed for the target: " + problem);
 
-        var check = ConnectionDefinitionLoader.Load(text, "copy", addressRequired: false);
+        var check = ConnectionDefinitionLoader.LoadDatabaseConnection(text, "copy", addressRequired: false);
         if (!check.Ok)
             return Refused("The copy would not be a valid connection file: " + string.Join(" ", check.Diagnostics.Where(d => d.Severity == ConfigSeverity.Error).Select(d => $"line {d.Line}: {d.Message}")));
 

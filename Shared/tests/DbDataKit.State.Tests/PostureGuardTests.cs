@@ -19,7 +19,7 @@ public sealed class PostureGuardTests : IDisposable
     [Fact]
     public void Every_setting_has_a_name_a_default_and_a_one_sentence_effect()
     {
-        Assert.Equal(6, PostureSetting.All.Count);
+        Assert.Equal(7, PostureSetting.All.Count);
         Assert.Equal(PostureSetting.All.Count, PostureSetting.All.Select(s => s.Name).Distinct().Count());
         foreach (var setting in PostureSetting.All)
         {

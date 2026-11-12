@@ -23,12 +23,12 @@ public sealed class KeyRing : IKeySource
 
     /// <param name="directory">The key directory (for example <c>&lt;data&gt;/secrets/keys</c>).</param>
     /// <param name="protector">How a key is kept at rest.</param>
-    /// <param name="windowsIdentities">Who may reach the files on Windows (default: the current user, SYSTEM and Administrators); ignored elsewhere.</param>
+    /// <param name="windowsIdentities">Who may reach the files on Windows (default: the current user, SYSTEM, Administrators and the accounts of the services that run on the data directory); ignored elsewhere.</param>
     public KeyRing(string directory, IKeyProtector? protector = null, IEnumerable<string>? windowsIdentities = null)
     {
         _directory = Path.GetFullPath(directory);
         _protector = protector ?? new RestrictedFileKeyProtector();
-        _identities = (windowsIdentities ?? ["CurrentUser", "SYSTEM", "Administrators"]).ToArray();
+        _identities = (windowsIdentities ?? AclHelper.DefaultIdentities(Path.GetFullPath(Path.Combine(directory, "..", "..")))).ToArray();
     }
 
     public string DirectoryPath => _directory;

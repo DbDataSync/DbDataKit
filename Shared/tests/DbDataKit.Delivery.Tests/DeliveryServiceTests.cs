@@ -260,10 +260,10 @@ public sealed class DeliveryServiceTests
     [Fact]
     public void The_section_is_read_strictly_and_an_unknown_key_fails_naming_the_file()
     {
-        var read = DeliverySettings.Read(JsonNode.Parse("""
+        var read = TestConnections.Section("""
             {"retry": {"max_attempts": 4, "backoff_seconds": [10, 60]}, "lease_seconds": 90,
              "channels": {"mail": "smtp-main", "alerts": {"prod": "slack-ops", "test": "slack-sandbox", "*": "slack-sandbox"}}, "limits": {"alerts": 20}}
-            """)!.AsObject(), "settings.yaml");
+            """);
         Assert.Equal(4, read.Policy.MaxAttempts);
         Assert.Equal([TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(60)], read.Policy.Backoff);
         Assert.Equal(TimeSpan.FromSeconds(90), read.Policy.Lease);
@@ -274,29 +274,36 @@ public sealed class DeliveryServiceTests
         Assert.True(alerts.IsOwn("test"));
         Assert.False(alerts.IsOwn("anything-else"));
 
-        static string Refused(string json) => Assert.Throws<DeliverySettingsException>(() => DeliverySettings.Read(JsonNode.Parse(json)!.AsObject(), "settings.yaml")).Message;
+        static string Refused(string json) => Assert.Throws<DeliverySettingsException>(() => TestConnections.Section(json)).Message;
         Assert.StartsWith("settings.yaml: delivery has no key `queue`", Refused("""{"queue": {}}"""));
         Assert.StartsWith("settings.yaml: delivery.retry has no key `attempts`", Refused("""{"retry": {"attempts": 3}}"""));
-        Assert.Contains("delivery.channels.mail is `not a name`", Refused("""{"channels": {"mail": "not a name"}}"""));
-        Assert.Contains("delivery.channels.mail.test is a connection's name", Refused("""{"channels": {"mail": {"test": 5}}}"""));
-        Assert.Contains("named twice", Refused("""{"channels": {"mail": "a", "MAIL": "b"}}"""));
-        Assert.Contains("delivery.limits.nope names a channel that is not in delivery.channels", Refused("""{"channels": {"mail": "a"}, "limits": {"nope": 5}}"""));
+        Assert.Contains("delivery.limits.nope names a channel that is not bound in bindings.yml", Refused("""{"channels": {"mail": "a"}, "limits": {"nope": 5}}"""));
         Assert.Contains("delivery.limits.mail is a whole number", Refused("""{"channels": {"mail": "a"}, "limits": {"mail": 0}}"""));
         Assert.Contains("delivery.retry.max_attempts is a whole number", Refused("""{"retry": {"max_attempts": 0}}"""));
     }
 
-    [Theory]
-    [InlineData("""{"channels": {"mail": {"kind": "email", "host": "smtp.example.com", "from": "a@b.example"}}}""", "`kind`")]
-    [InlineData("""{"channels": {"mail": {"host": "smtp.example.com"}}}""", "`host`")]
-    [InlineData("""{"channels": {"hook": {"url": "secret:x/url"}}}""", "`url`")]
-    [InlineData("""{"channels": {"hook": {"limit_per_minute": 5}}}""", "`limit_per_minute`")]
-    public void A_channel_in_the_old_form_is_refused_naming_the_file_and_the_new_form(string section, string key)
+    [Fact]
+    public void Channels_in_the_section_are_refused_naming_the_file_and_the_place_they_moved_to()
     {
-        var message = Assert.Throws<DeliverySettingsException>(() => DeliverySettings.Read(JsonNode.Parse(section)!.AsObject(), "/etc/console/settings.yaml")).Message;
-        Assert.StartsWith("/etc/console/settings.yaml: delivery.channels.", message, StringComparison.Ordinal);
-        Assert.Contains(key, message, StringComparison.Ordinal);
-        Assert.Contains("Channels are connections now", message, StringComparison.Ordinal);
+        var message = Assert.Throws<DeliverySettingsException>(() => DeliverySettings.Read(JsonNode.Parse("""{"channels": {"mail": "smtp-main"}}""")!.AsObject(), "/etc/console/settings.yaml")).Message;
+        Assert.StartsWith("/etc/console/settings.yaml: delivery.channels is not kept here any more", message, StringComparison.Ordinal);
+        Assert.Contains("bindings.yml", message, StringComparison.Ordinal);
         Assert.Contains("{ prod: <connection>, test: <connection> }", message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{"mail": {"kind": "email", "host": "smtp.example.com", "from": "a@b.example"}}""", "`kind`")]
+    [InlineData("""{"mail": {"host": "smtp.example.com"}}""", "`host`")]
+    [InlineData("""{"hook": {"url": "secret:x/url"}}""", "`url`")]
+    [InlineData("""{"hook": {"limit_per_minute": 5}}""", "`limit_per_minute`")]
+    public void A_channel_in_the_old_form_is_refused_naming_the_file_and_the_new_form(string channels, string key)
+    {
+        var read = DbDataKit.Connections.Bindings.BindingsLoader.Load("bindings: 1\ndelivery: " + channels, "/etc/console/bindings.yml");
+        Assert.False(read.Ok);
+        var d = Assert.Single(read.Diagnostics, x => x.Code == DbDataKit.Connections.Bindings.BindingsLoader.EarlierForm && x.Message.Contains(key, StringComparison.Ordinal));
+        Assert.Equal("/etc/console/bindings.yml", d.Path);
+        Assert.Contains("Channels are connections now", d.Message, StringComparison.Ordinal);
+        Assert.Contains("{ prod: <connection>, test: <connection> }", d.Fix, StringComparison.Ordinal);
     }
 
     [Fact]

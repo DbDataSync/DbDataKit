@@ -110,6 +110,7 @@
     <Project Path="Shared/src/DbDataKit.Runner.TaskHost/DbDataKit.Runner.TaskHost.csproj" />
     <Project Path="Shared/src/DbDataKit.Runner.Kit.Analyzers/DbDataKit.Runner.Kit.Analyzers.csproj" />
     <Project Path="Shared/src/DbDataKit.Runner.Kit.Testing/DbDataKit.Runner.Kit.Testing.csproj" />
+    <Project Path="Shared/src/DbDataKit.Runner.Packaging/DbDataKit.Runner.Packaging.csproj" />
     <Project Path="Shared/src/DbDataKit.Scheduling/DbDataKit.Scheduling.csproj" />
     <Project Path="Shared/src/DbDataKit.Delivery/DbDataKit.Delivery.csproj" />
     <Project Path="Shared/src/DbDataKit.Delivery.Runner/DbDataKit.Delivery.Runner.csproj" />
@@ -215,6 +216,7 @@
     <Project Path="Shared/tests/DbDataKit.Runner.Limits.Tests/DbDataKit.Runner.Limits.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Runner.Kit.Tests/DbDataKit.Runner.Kit.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Runner.Kit.Testing.Tests/DbDataKit.Runner.Kit.Testing.Tests.csproj" />
+    <Project Path="Shared/tests/DbDataKit.Runner.Packaging.Tests/DbDataKit.Runner.Packaging.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Runner.TestPackage/DbDataKit.Runner.TestPackage.csproj" />
     <Project Path="Shared/tests/DbDataKit.Runner.Execution.Tests/DbDataKit.Runner.Execution.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Scheduling.Tests/DbDataKit.Scheduling.Tests.csproj" />

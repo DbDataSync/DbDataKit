@@ -11,7 +11,7 @@ namespace DbDataKit.Server;
 public sealed record TestSendBody(string? Recipient = null, string? Channel = null);
 
 /// <summary>
-/// Delivery in the console (plan 22a GP18, folded into connections): the channels of the install's <c>delivery:</c> section with, per release channel, the connection each uses and whether it can be used, and a test send through a chosen release channel's connection; the outbox with its tries and what failed; and subscriptions (a person's own, or everyone's for an administrator).
+/// Delivery in the console (plan 22a GP18, folded into connections; the mapping is a binding, plan 27a IX23: <c>/api/bindings</c>): the channels with, per release channel, the connection each uses and whether it can be used, and a test send through a chosen release channel's connection; the outbox with its tries and what failed; and subscriptions (a person's own, or everyone's for an administrator).
 /// <b>Nobody reads a message's words but who it is for or an administrator</b>; the outbox rows a person sees are their own.
 /// </summary>
 [ApiController]
@@ -59,17 +59,6 @@ public sealed class DeliveryController(ConsoleDelivery delivery) : ControllerBas
             channels,
             outbox = delivery.Outbox.Counts(),
         });
-    }
-
-    /// <summary>Saves which connection each delivery channel name uses in each release channel (and the limits), as the strict reader of the settings reads them; a name alone is the production release channel's.</summary>
-    [HttpPut("channels")]
-    [Authorize(Policies.Admin)]
-    public async Task<IActionResult> SaveChannels([FromBody] JsonObject body, CancellationToken ct)
-    {
-        if (body["channels"] is not JsonObject channels) return Refuse(400, "invalid", "Send `channels`: a mapping of channel names to a connection name, or to release channels and their connections.");
-        var (saved, error) = delivery.SaveChannels(channels, body["limits"] as JsonObject);
-        if (!saved) return Refuse(422, "invalid", error ?? "The channels could not be saved.");
-        return Ok(new { saved = true, releaseChannels = delivery.ReleaseChannels, channels = await delivery.ChannelViewsAsync(ct) });
     }
 
     /// <summary>

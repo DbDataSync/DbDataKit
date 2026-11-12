@@ -53,6 +53,7 @@ public static class ServerProducts
         new("GET", "api/v1/runs/{id}/logs", ServerRole.Viewer),                                             // UI08: its output, a page at a time
         new("GET", "api/v1/settings", ServerRole.Viewer),
         new("GET", "api/v1/lineage", ServerRole.Viewer),
+        new("GET", "api/v1/tracking", ServerRole.Viewer),                                                   // E18: the runner's copy of Build's tracking, its divergences and their common points
         new("GET", "api/v1/upgrade", ServerRole.Viewer),                                                    // UC09: the status of its own upgrade
         new("GET", "api/v1/certificate", ServerRole.Viewer),                                                // UI10: days left and subject of the certificate it presents, for Monitoring
         new("GET", "api/v1/secrets/overview", ServerRole.Admin),                                            // UI06: names, dates and references of the secrets and what names them, never a value
@@ -79,6 +80,7 @@ public static class ServerProducts
         new("POST", "api/v1/bindings/{name}/integration/{name}/test", ServerRole.Admin),                    // UI08: try a slot's binding (never a value in the answer)
         new("PUT", "api/v1/settings/require_signatures", ServerRole.Admin),                                // UE08
         new("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin),                                      // UE11
+        new("POST", "api/v1/tracking/divergences/{id}/resolve", ServerRole.Admin),                         // E18: archive or reset the runner's copy from the common point (audited by the runner)
         new("POST", "api/v1/upgrade", ServerRole.Admin),                                                   // UC09: prepare and apply its own upgrade
     ];
 

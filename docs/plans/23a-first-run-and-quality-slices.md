@@ -1,6 +1,6 @@
 # Plan 23a: first-run setup and data quality (direction and slices)
 
-Status: **proposed** (2026-11-07). This file is plans 23 and 23a in one: the **direction** the owner decided on 2026-10-27 (one question at a time; formerly plan 23) comes first, then the **slices** (what exists in the code, the order, decisions, questions, milestones, the slice rows). Both plan numbers, 23 and 23a, stay in the index and in the source comments.
+Status: **in progress** (proposed 2026-11-07; re-audited 2026-11-11: 13 of the 23 slices are built, among them FQ16, FQ19, FQ21 and FQ23 on 2026-11-11; **open:** FQ03 and FQ05 (checks stored in the Store's model and the serving definitions, they wait for GP01 and GP02), FQ11 to FQ15 (Store and serving checks, warn and block), FQ18 the single-machine bundle (plan 33's `dbdatakit-full` package is the nearest thing and does not replace it), FQ20 and FQ22). This file is plans 23 and 23a in one: the **direction** the owner decided on 2026-10-27 (one question at a time; formerly plan 23) comes first, then the **slices** (what exists in the code, the order, decisions, questions, milestones, the slice rows). Both plan numbers, 23 and 23a, stay in the index and in the source comments.
 
 A slice is one branch, one pull request, "done" is the test in the last column but one, and the status goes in the slice's row in the same change (the shape of [28a](28a-runner-slices.md) and [29a](29a-state-slices.md)).
 

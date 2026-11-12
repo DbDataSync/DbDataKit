@@ -25,9 +25,10 @@ public sealed partial class BuildProjectKind(BuildTool tool) : IProjectKind, IDr
     public bool Buildable => false;
     public string? GitIgnore => null;       // the template carries its own .gitignore
 
-    // a route is listed only when it can be used: the package of refresh plans goes to a Runner (SC20d); semantic models and data sources to a Gateway are not published from here (a data source carries a login, and the Workspace holds none)
+    // the package of refresh plans goes to a Runner (SC20d); the compiled semantic models go to a Gateway (SC20e) over data sources the Gateway already has: a data source carries a login, the Workspace holds none, so no data source is made from here
     public IReadOnlyList<ProjectPublishRoute> Publishes { get; } =
-        [new("runner", "package", "The project's refresh plans (the committed rendered/ files) as a definition package: one task per plan with its schedule and connection slots, staged on a channel of a Runner.")];
+        [new("runner", "package", "The project's refresh plans (the committed rendered/ files) as a definition package: one task per plan with its schedule and connection slots, staged on a channel of a Runner."),
+         new("gateway", "semantic-model", "The project's compiled semantic models (semantic/), published to a Gateway over the data sources it already has under the connections' names. No login is sent: the Workspace holds none.")];
 
     public bool Produces => true;
 
@@ -36,6 +37,50 @@ public sealed partial class BuildProjectKind(BuildTool tool) : IProjectKind, IDr
     /// changed after the plan hashed it) answers with the program's own words, which name the file.
     /// </summary>
     public async Task<ProjectArtifact> ProduceAsync(string root, string projectId, string outputFolder, CancellationToken cancellationToken)
+    {
+        // each thing the project has is made, and each that is made must succeed: the package of the committed plans (rendered/) for a Runner, the models (semantic/) for a Gateway (SC20e); a project with neither gets the package's own words
+        var hasModels = Directory.Exists(Path.Combine(root, "semantic")) && Directory.EnumerateFiles(Path.Combine(root, "semantic"), "*.yml", SearchOption.AllDirectories).Any();
+        var hasPlans = Directory.Exists(Path.Combine(root, "rendered"));
+        ProjectArtifact? package = null, models = null;
+        if (hasPlans || !hasModels) package = await ProducePackageAsync(root, projectId, outputFolder, cancellationToken);
+        if (hasModels && package is not { Succeeded: false }) models = await ProduceModelsAsync(root, Path.Combine(outputFolder, "gateway"), cancellationToken);
+        if (package is { Succeeded: false }) return package;
+        if (models is { Succeeded: false }) return models;
+        var info = new Dictionary<string, string>();
+        foreach (var part in new[] { package, models })
+            if (part?.Info is not null) foreach (var (k, v) in part.Info) info[k] = v;
+        return new(true, string.Join(" ", new[] { package?.Message, models?.Message }.Where(m => m is not null)), [], info);
+    }
+
+    /// <summary>The models a Gateway publish sends (<c>dbdatabuild project publish --to gateway --out</c>, SC20e): no database login is read, nothing is sent.</summary>
+    private async Task<ProjectArtifact> ProduceModelsAsync(string root, string folder, CancellationToken cancellationToken)
+    {
+        (int Exit, string Output, string Error) result;
+        try { result = await tool.RunAsync(["project", "publish", "--to", "gateway", "--out", folder, "--project", root], root, cancellationToken); }
+        catch (ProjectKindUnavailableException ex) { return new(false, ex.Message, [new("error", "DBD-WS-BUILD-MISSING", ex.Message)]); }
+        if (result.Exit != 0)
+        {
+            var said = (result.Error.Trim().Length > 0 ? result.Error : result.Output).Trim();
+            var message = said.Length > 0 ? said : $"dbdatabuild stopped with exit code {result.Exit}.";
+            return new(false, message, [new("error", "DBD-WS-BUILD-PUBLISH", message)]);
+        }
+        if (!File.Exists(Path.Combine(folder, "gateway.json")))
+            return new(false, "The program said it wrote the models but gateway.json is not there.", [new("error", "DBD-WS-PACKAGE", "The program said it wrote the models but gateway.json is not there.")]);
+        var models = new List<string>();
+        var dataSources = new List<string>();
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "gateway.json")));
+            if (document.RootElement.TryGetProperty("models", out var m) && m.ValueKind == JsonValueKind.Array)
+                models.AddRange(m.EnumerateArray().Select(x => x.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "").Where(x => x.Length > 0));
+            if (document.RootElement.TryGetProperty("data_sources", out var d) && d.ValueKind == JsonValueKind.Array)
+                dataSources.AddRange(d.EnumerateArray().Select(x => x.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "").Where(x => x.Length > 0));
+        }
+        catch (JsonException) { return new(false, "gateway.json of the models is not a document.", [new("error", "DBD-WS-PACKAGE", "gateway.json of the models is not a document.")]); }
+        return new(true, $"The models: {string.Join(", ", models)}.", [], new Dictionary<string, string> { ["models"] = string.Join(", ", models), ["data_sources"] = string.Join(", ", dataSources) });
+    }
+
+    private async Task<ProjectArtifact> ProducePackageAsync(string root, string projectId, string outputFolder, CancellationToken cancellationToken)
     {
         var package = PackageArtifacts.NameOf(projectId);
         (int Exit, string Output, string Error) result;
