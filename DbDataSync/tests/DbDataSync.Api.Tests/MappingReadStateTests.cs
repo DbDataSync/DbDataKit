@@ -337,4 +337,18 @@ public sealed class MappingReadStateTests(TestApiFactory factory) : IClassFixtur
         Assert.Contains("Checkpoints", await rewind.Content.ReadAsStringAsync(), StringComparison.Ordinal);
         Assert.Equal("300", store.GetWatermark(replication, mapping, key));
     }
+
+    [Fact]
+    public async Task Setting_the_read_state_of_a_replication_the_runner_owns_answers_409_naming_the_runners_checkpoints_and_changes_nothing()
+    {
+        var (replication, mapping, store, key) = await WithThreePositionsAsync();
+        factory.Services.GetRequiredService<DbDataSync.Api.Runner.RunnerAccess>().File.SetOwner(replication, DbDataKit.State.TaskOwners.Runner);
+        var before = store.GetReadState(replication, mapping, key);
+
+        var response = await SetReadStateAsync(replication, mapping, ReadIntent.InitialLoad, ReadHold.Paused);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("Checkpoints", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Equal(before, store.GetReadState(replication, mapping, key));
+    }
 }
