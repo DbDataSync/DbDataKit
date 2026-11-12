@@ -95,7 +95,7 @@ Removing the standalone screens with these still `not planned` loses the feature
 
 - **Runs and the database-facing Build views** (SC20o: tests, status, refresh run, compare, initialise). Decided 2026-11-12: the Runner does the work and the console shows it in one screen with the authoring screens; the Build server keeps none of these routes.
 - **The Store's storage and rows** (`StorageTab.tsx`, `EntityPage.tsx`): acts on a database and data, not authoring. SC21d's hand-over removes only the authoring screens and keeps these.
-- **Sync's run, monitoring and verification screens** (SC22l): the Sync server's runtime screens stay; SC22e removes the authoring routes only.
+- **Sync's run, monitoring and verification screens** (SC22l): decided 2026-11-12: the Runner does the work and the console shows it in one screen; the Sync server keeps its run routes until Sync runs fully on the Runner (plan 28c).
 - **Publish of Build's models to a Gateway** (SC20e, owner decision 2026-11-11): Build has the offline verb `project publish --to gateway --out <dir>` (models and data-source documents, no login); the Workspace publishes its models with the publisher key over data sources the Gateway already has. Making or changing a data source (the login) stays with Build's server or a Gateway administrator. Built against a fake Gateway and a stand-in `dbdatabuild`; not run against a real Gateway.
 
 ## Gaps and their rows
