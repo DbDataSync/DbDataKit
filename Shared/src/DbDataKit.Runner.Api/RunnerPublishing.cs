@@ -61,6 +61,7 @@ public sealed partial class RunnerPublishing
     public const string SwitchVerb = "runner.package.switch";
     public const string RollbackVerb = "runner.package.rollback";
     public const string RetireVerb = "runner.package.retire";
+    public const string PruneVerb = "runner.package.prune";
     public const string BindVerb = "runner.package.bind";
     public const string SettingVerb = "runner.setting.set";
 
@@ -348,6 +349,23 @@ public sealed partial class RunnerPublishing
             Record(verb, actor, "package", target, AuditEvent.Refused, new { kind = Kind, name, channel, status = ex.Status, reason = ex.Message });
             throw;
         }
+    }
+
+    /// <summary>
+    /// Removes versions of the package an administrator no longer wants, or says what it would remove (<paramref name="dryRun"/>; plan 30 PB05): <paramref name="keep"/> the newest N, or the named <paramref name="versions"/>. Never the version a channel
+    /// serves, has staged or served before, nor one another version pins; a file goes when no kept version names it. Only a real prune is audited.
+    /// </summary>
+    public PrunePlan Prune(string name, int? keep, IReadOnlyList<int>? versions, bool dryRun, RunnerActor actor)
+    {
+        if (!PackageManifestValidator.NameRule.IsMatch(name)) throw new RunnerPublishException(400, $"'{name}' is not a package name.");
+        try
+        {
+            var plan = Publisher.Prune(Kind, name, actor.Id, keep, versions, dryRun);
+            if (!dryRun) Record(PruneVerb, actor, "package", name, AuditEvent.Ok, new { kind = Kind, name, removed = plan.Remove, files = plan.Artifacts.Count });
+            return plan;
+        }
+        catch (ArgumentException ex) { throw new RunnerPublishException(400, ex.Message); }
+        catch (DefinitionNotFoundException ex) { throw new RunnerPublishException(404, ex.Message); }
     }
 
     /// <summary>Stops serving the package in the channel and drops its schedule there; the versions stay. False when the channel had nothing.</summary>

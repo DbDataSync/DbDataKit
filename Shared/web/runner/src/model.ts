@@ -81,3 +81,14 @@ export function connectionsOfTask(connections: RunnerConnection[], task: { packa
   const wanted = `${task.package}/${task.task}`
   return connections.flatMap((c) => c.used_by.filter((u) => u.process === 'task' && u.name === wanted && u.channel === task.channel).map((u) => ({ name: c.name, kind: c.kind, role: u.role })))
 }
+
+/**
+ * The versions a prune dialog preselects (plan 30 PB05, default taken): every version except the one any channel serves, has staged or served before, and the three newest. The server refuses the ones that are kept anyway; this only
+ * saves the person from ticking them.
+ */
+export function pruneCandidates(versions: number[], heads: ChannelHead[], keepNewest = 3): number[] {
+  const held = new Set<number>()
+  for (const h of heads) for (const v of [h.active, h.previous, h.staged]) if (v !== null && v !== undefined) held.add(v)
+  const newest = new Set([...versions].sort((a, b) => b - a).slice(0, keepNewest))
+  return versions.filter((v) => !held.has(v) && !newest.has(v)).sort((a, b) => a - b)
+}

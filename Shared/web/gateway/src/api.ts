@@ -3,7 +3,7 @@ import type { RenderedViewDocument } from '@dbdatakit/visuals'
 import type { InstanceRequest, NavigationRequest, PublishBody } from './appEditors'
 import type { ReplayResult, RunDetail, RunResult, RunRow, SavedQueryRow, SavedQueryVersionRow } from './runTypes'
 import type {
-  AdoptAnswer, SemanticCatalogView, EntityModelDetail, EntityModelRow, SemanticModelDetail, SemanticModelRow, AppApprovals, AppCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SecretWritten, SecretsList, ServerSettings, SettingsCheck, SettingsEdit, SettingsWritten, SessionRow, TestResult, WriteDataSourceResult,
+  AdoptAnswer, PruneAnswer, SemanticCatalogView, EntityModelDetail, EntityModelRow, SemanticModelDetail, SemanticModelRow, AppApprovals, AppCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SecretWritten, SecretsList, ServerSettings, SettingsCheck, SettingsEdit, SettingsWritten, SessionRow, TestResult, WriteDataSourceResult,
 } from './types'
 
 const v1 = '/api/v1'
@@ -20,6 +20,10 @@ export const gatewayApi = {
     test: (name: string) => request<TestResult>(`${v1}/data-sources/${enc(name)}/test`, { method: 'POST' }),
     /** A person with the admin role hands a data source to a paired server client, which then manages it (T12). */
     adopt: (name: string, client: string) => request<AdoptAnswer>(`${v1}/data-sources/${enc(name)}/adopt`, { method: 'POST', body: JSON.stringify({ client }) }),
+  },
+  /** Prune the versions of a definition of any serving kind (plan 30 PB05); `dry_run` true says what would go and removes nothing. An administrator's call. */
+  definitions: {
+    prune: (kind: string, name: string, body: { versions: number[]; dry_run: boolean }) => request<PruneAnswer>(`${v1}/definitions/${enc(kind)}/${enc(name)}/prune`, { method: 'POST', body: JSON.stringify(body) }),
   },
   /** The paired server clients a data source can be handed to. */
   clients: () => request<{ clients: ServerClient[] }>(`${v1}/clients`).then((r) => r.clients),

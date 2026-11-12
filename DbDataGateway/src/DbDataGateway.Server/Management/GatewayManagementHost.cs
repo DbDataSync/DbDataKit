@@ -136,6 +136,7 @@ public static class GatewayManagementHost
                 app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), app.Services.GetRequiredService<Serving.GatewayServing>(), app.Services.GetRequiredService<DbDataKit.Serving.IServingServices>(),
                 GatewayModules.Has(options, GatewayModules.Views) ? app.Services.GetRequiredService<Serving.GatewayViews>() : null, audit),
             audit: audit,
+            definitions: new GatewayDefinitionsManagement(state, audit),
             serverSettings: new GatewayServerSettings(configDirectory, management, provider.ReloadNow, audit, git),
             entityModels: new GatewayEntityModels(app.Services.GetRequiredService<Serving.PublishedEntityModels>(),
                 () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue,

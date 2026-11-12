@@ -229,4 +229,9 @@ export const runnerApi = {
   switchTo: (name: string, body: ActivateRequest & { version: number }) => post<ActivationAnswer>(`/api/v1/definitions/integration/${enc(name)}/switch`, body),
   rollback: (name: string, body: ActivateRequest) => post<ActivationAnswer>(`/api/v1/definitions/integration/${enc(name)}/rollback`, body),
   retire: (name: string, body: ActivateRequest) => post<{ retired: boolean }>(`/api/v1/definitions/integration/${enc(name)}/retire`, body),
+  /** Prune (plan 30 PB05): with `dry_run` true (the default of the call) it only says what would go. */
+  prune: (name: string, body: { versions: number[]; dry_run: boolean }) => post<PruneAnswer>(`/api/v1/definitions/integration/${enc(name)}/prune`, body),
 }
+
+/** What a prune answers: the versions it removed (or would), the candidates it kept and why, and the files that go with them. */
+export interface PruneAnswer { name: string; dry_run: boolean; remove: number[]; retained: { version: number; reason: string }[]; files: string[] }
