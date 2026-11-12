@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Runner.Kit.Formats</RootNamespace>
+    <PackageId>DbDataKit.Runner.Kit.Formats</PackageId>
+    <Description>The kit's readers and writers for files (plan 27a IX08 and IX09): CSV and TSV, fixed width, JSON, JSON Lines and XML as streams of rows with a bad row reported with its position and a decision (refuse, skip, collect); Excel and Parquet; gzip, zip and OpenPGP.</Description>
+    <IsPackable>true</IsPackable>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <InternalsVisibleTo Include="DbDataKit.Runner.Kit.Landing" />
+    <PackageReference Include="ClosedXML" />
+    <PackageReference Include="Parquet.Net" />
+    <PackageReference Include="BouncyCastle.Cryptography" />
+  </ItemGroup>
+</Project>

@@ -23,7 +23,7 @@ public sealed record BindingRowView(string Release, bool Wildcard, IReadOnlyList
 
 public sealed record BindingSlotView(string Section, string Kind, string Name, IReadOnlyList<string> UsedBy, int? LimitPerMinute, IReadOnlyList<BindingRowView> Rows);
 
-public sealed record BindingConnectionView(string Name, string Kind, string? Purpose, IReadOnlyList<string> Models, bool CanSend, string? Target, bool? Cloud);
+public sealed record BindingConnectionView(string Name, string Kind, string? Purpose, IReadOnlyList<string> Models, bool CanSend, string? Target, bool? Cloud, string? Version = null);
 
 public sealed record BindingsView(string File, string Yaml, IReadOnlyList<DiagnosticView> Diagnostics, string? Earlier, IReadOnlyList<string> ReleaseChannels, IReadOnlyList<BindingConnectionView> Connections,
     IReadOnlyList<BindingSlotView> Slots, string PostureSetting, string PostureEffect);
@@ -35,7 +35,7 @@ public sealed record BindingsView(string File, string Yaml, IReadOnlyList<Diagno
 /// </summary>
 [ApiController]
 [Route("api/bindings")]
-public sealed class BindingsController(ConsoleBindings bindings, ConsoleModels models, ConsoleDelivery delivery, ConsoleConnections connections, ConsoleAgents agents) : ControllerBase
+public sealed class BindingsController(ConsoleBindings bindings, ConsoleModels models, ConsoleDelivery delivery, ConsoleConnections connections, ConsoleAgents agents, ConsoleRunnerBindings runners) : ControllerBase
 {
     private string PersonId => User.FindFirst(ConsoleHost.Auth.UserIdClaim)?.Value ?? User.Identity?.Name ?? "unknown";
 
@@ -75,7 +75,7 @@ public sealed class BindingsController(ConsoleBindings bindings, ConsoleModels m
 
         var releases = set.Slots.SelectMany(s => s.PerChannel.Keys).Where(k => k != BindingSet.AnyReleaseChannel).Prepend(BindingSet.Production).Distinct(StringComparer.Ordinal).ToList();
         var targets = bindings.Targets.All.OrderBy(t => t.Name, StringComparer.Ordinal).Select(t => new BindingConnectionView(t.Name, t.Kind, t.Purpose, t.Models ?? [], t.CanSend,
-            connections.Find(t.Name) is { } d ? ConsoleConnections.TargetOf(d) : null, connections.Find(t.Name) is { ModelProvider: not null } md ? ModelProviderConnection.From(md).Cloud : null)).ToList();
+            connections.Find(t.Name) is { } d ? ConsoleConnections.TargetOf(d) : null, connections.Find(t.Name) is { ModelProvider: not null } md ? ModelProviderConnection.From(md).Cloud : null, runners.VersionOf(t.Name))).ToList();
         return new BindingsView(BindingsLoader.FileName, yaml, bindings.Diagnostics(), bindings.Earlier, releases, targets, slots, PostureSetting.ProductionBindingOnNonProduction.Name, PostureSetting.ProductionBindingOnNonProduction.Effect);
     }
 

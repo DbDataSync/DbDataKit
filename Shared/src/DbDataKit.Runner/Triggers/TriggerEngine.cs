@@ -394,7 +394,7 @@ public sealed class TriggerEngine
         if (source is null)
         {
             pass.Status(task, "file", id, describe, state?.LastFiredAt, $"this runner has no folder for the connection slot '{connection}'");
-            pass.Problem(task, $"The file trigger watches the connection slot '{connection}', and this runner has no folder for it (file connections are not built; the runner is told a local folder per slot).");
+            pass.Problem(task, $"The file trigger watches the connection slot '{connection}', and this runner has no folder for it (the runner is told a local folder per slot, or the slot is bound to a file connection: plan 27a IX07).");
             return;
         }
 
@@ -413,48 +413,56 @@ public sealed class TriggerEngine
         _states.Set(task.Package, task.Channel, task.Task, id, lastFired, pass.Now.UtcTicks.ToString(CultureInfo.InvariantCulture));    // the look is counted when it starts, so a slow folder is not looked at every tick
         var progress = new ProgressStore(_database, new ProgressKey(task.Package, task.Channel, task.Task));
         var queued = 0;
-        await foreach (var file in source.ListAsync(directory, pattern, ct).ConfigureAwait(false))
+        try
         {
-            if (queued >= _options.FileBatch) break;
-            var age = pass.Now - file.ModifiedAt;
-            if (age >= TimeSpan.Zero && age < _options.FileSettle) continue;      // maybe still being written
-
-            var key = $"{task}|{connection}|{file.Path}|{file.Size}|{file.ModifiedAt.UtcTicks}";
-            if (_seenFiles.ContainsKey(key)) continue;
-            var hash = await HashAsync(source, file.Path, ct).ConfigureAwait(false);
-            if (progress.FindFile(connection, hash) is not null)
+            await foreach (var file in source.ListAsync(directory, pattern, ct).ConfigureAwait(false))
             {
+                if (queued >= _options.FileBatch) break;
+                var age = pass.Now - file.ModifiedAt;
+                if (age >= TimeSpan.Zero && age < _options.FileSettle) continue;      // maybe still being written
+
+                var key = $"{task}|{connection}|{file.Path}|{file.Size}|{file.ModifiedAt.UtcTicks}";
+                if (_seenFiles.ContainsKey(key)) continue;
+                var hash = await HashAsync(source, file.Path, ct).ConfigureAwait(false);
+                if (progress.FindFile(connection, hash) is not null)
+                {
+                    Remember(key);
+                    continue;       // the task has seen this content: a file that arrives twice runs once
+                }
+
+                var start = new TriggerStart(FileTrigger, "file:" + hash, 0, $"file {file.Path}",
+                    AlsoWrite: (conn, transaction, _) =>
+                    {
+                        if (!progress.NoteFile(conn, transaction, connection, file.Path, file.Size, file.ModifiedAt, hash)) throw new TriggerClaimLostException();
+                    });
+                try
+                {
+                    var result = _host.Enqueue(task, start);
+                    if (result.Outcome == TriggerEnqueueOutcome.Unavailable)
+                    {
+                        pass.Problem(task, result.Problem ?? "The task cannot be started.");
+                        break;
+                    }
+
+                    if (result.Outcome == TriggerEnqueueOutcome.Queued)
+                    {
+                        queued++;
+                        lastFired = pass.Now;
+                        pass.Queued.Add(task);
+                    }
+                }
+                catch (TriggerClaimLostException)
+                {
+                    // another runner noted the file first and queued the run
+                }
+
                 Remember(key);
-                continue;       // the task has seen this content: a file that arrives twice runs once
             }
-
-            var start = new TriggerStart(FileTrigger, "file:" + hash, 0, $"file {file.Path}",
-                AlsoWrite: (conn, transaction, _) =>
-                {
-                    if (!progress.NoteFile(conn, transaction, connection, file.Path, file.Size, file.ModifiedAt, hash)) throw new TriggerClaimLostException();
-                });
-            try
-            {
-                var result = _host.Enqueue(task, start);
-                if (result.Outcome == TriggerEnqueueOutcome.Unavailable)
-                {
-                    pass.Problem(task, result.Problem ?? "The task cannot be started.");
-                    break;
-                }
-
-                if (result.Outcome == TriggerEnqueueOutcome.Queued)
-                {
-                    queued++;
-                    lastFired = pass.Now;
-                    pass.Queued.Add(task);
-                }
-            }
-            catch (TriggerClaimLostException)
-            {
-                // another runner noted the file first and queued the run
-            }
-
-            Remember(key);
+        }
+        finally
+        {
+            // a source that holds a connection (an SFTP session) is let go when the look ends, whatever ended it
+            if (source is IAsyncDisposable disposable) await disposable.DisposeAsync().ConfigureAwait(false);
         }
 
         if (queued > 0) _states.Set(task.Package, task.Channel, task.Task, id, lastFired, pass.Now.UtcTicks.ToString(CultureInfo.InvariantCulture));

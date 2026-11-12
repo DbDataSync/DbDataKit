@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Runner.Kit.Http</RootNamespace>
+    <PackageId>DbDataKit.Runner.Kit.Http</PackageId>
+    <Description>The kit's HTTP client for outside systems (plan 27a IX10): a connection's sign-in, paging helpers (offset, cursor, link header), a per-connection rate limit, a wait as Retry-After says, retries of temporary failures with back-off, and the connection's failure classification so the runner's retry reads it.</Description>
+    <IsPackable>true</IsPackable>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Connections.Http\DbDataKit.Connections.Http.csproj" />
+  </ItemGroup>
+</Project>

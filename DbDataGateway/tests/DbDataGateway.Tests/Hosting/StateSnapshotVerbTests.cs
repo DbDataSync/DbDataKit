@@ -111,4 +111,53 @@ public sealed class StateSnapshotVerbTests : IDisposable
         Assert.Equal(engine == "mssql" ? StateEngineIds.MsSql : StateEngineIds.Postgres, read.Settings.EngineId);
         Assert.Equal(StateSourceKind.File, read.Sources.Engine.Kind);
     }
+
+    /// <summary>A gateway whose state holds a signing key made with one key and whose secret store holds the secret of <paramref name="storeKey"/> (null: none).</summary>
+    private void SeedSigningKey(string directory, byte[] madeWith, byte[]? storeKey)
+    {
+        var state = OpenState(directory, null);
+        new DbDataKit.Identity.SigningKeys(state, new DbDataKit.Identity.KeySigningKeyProtector(madeWith)).Current();
+        state.OpenConnection().Dispose();
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        Directory.CreateDirectory(GatewayConfigFile.DirectoryIn(directory));
+        if (storeKey is null) return;
+        var options = GatewayConfiguration.LoadOptions(directory);
+        options.DataDirectory = directory;
+        using var value = DbDataKit.Secrets.SecretValue.From(Convert.ToBase64String(storeKey));
+        DbDataGateway.Server.Secrets.SecretsRuntime.OpenStore(options).SetAsync(DbDataKit.Secrets.SecretName.Parse(GatewayIdentityModule.SigningKeySecret), value).GetAwaiter().GetResult();
+    }
+
+    [Theory]
+    [MemberData(nameof(StateVerbDatabases.Engines), MemberType = typeof(StateVerbDatabases))]
+    public async Task State_move_stops_before_the_settings_change_when_the_secret_store_cannot_decrypt_a_signing_key(string engine)
+    {
+        var target = engine == "sqlite" ? null : databases.Provision(engine);
+        Environment.SetEnvironmentVariable(StateVerbDatabases.PasswordVariable, databases.Password);
+        SeedSigningKey(Dir("source"), System.Security.Cryptography.RandomNumberGenerator.GetBytes(32), System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+
+        var moved = await Run(MoveArguments(engine, target));
+
+        Assert.Equal(StateExit.MoveFailed, moved.Exit);
+        Assert.Contains("signing_key", moved.Error);
+        Assert.DoesNotContain("state:", File.Exists(GatewayConfigFile.PathIn(Dir("source"))) ? File.ReadAllText(GatewayConfigFile.PathIn(Dir("source"))) : "");
+    }
+
+    [Theory]
+    [MemberData(nameof(StateVerbDatabases.Engines), MemberType = typeof(StateVerbDatabases))]
+    public async Task State_move_goes_through_when_the_secret_store_holds_the_key_that_protected_the_signing_key(string engine)
+    {
+        var target = engine == "sqlite" ? null : databases.Provision(engine);
+        Environment.SetEnvironmentVariable(StateVerbDatabases.PasswordVariable, databases.Password);
+        var key = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
+        SeedSigningKey(Dir("source"), key, key);
+
+        var moved = await Run(MoveArguments(engine, target));
+
+        Assert.True(moved.Exit == 0, moved.Out + moved.Error);
+        Assert.Contains("Decrypting a sample", moved.Out);
+    }
+
+    private string[] MoveArguments(string engine, string? target) =>
+        engine == "sqlite" ? ["state", "move", "--to-engine", "sqlite", "--to-sqlite", Path.Combine(Dir("moved"), "state.db"), "--yes", "--repo", Dir("source")]
+        : ["state", "move", "--to-engine", engine, "--to-connection", target!, "--yes", "--repo", Dir("source")];
 }
