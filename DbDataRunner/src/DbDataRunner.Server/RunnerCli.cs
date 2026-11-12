@@ -1,3 +1,4 @@
+using DbDataKit.Runner.Connections;
 using DbDataKit.Runner.Api;
 using DbDataKit.Runner.Client;
 using System.Globalization;
@@ -327,6 +328,9 @@ public static class RunnerCli
         new Verb("require-sandbox-run", "Show, or with on or off set, whether a version reaches production only after a sandbox run: a run that succeeded in a channel other than prod, where its connections are bound to that channel's own (plan 27a IX16; a dry run does not count)", EffectClass.TargetDataWrites,
             $"[on|off] {Where}", (args, context) => PackageRequireSandboxRunAsync(args, context, environment),
             DataSchemas.Object([("require_sandbox_run", DataSchemas.Boolean)], "require_sandbox_run")),
+        new Verb("allow-production-binding", "Choose, as an explicit and recorded act, that a channel other than prod uses the connection prod uses for a slot of the package (plan 27a IX17): what the task sends or writes there reaches production's far side. Without --confirm nothing changes; --revoke takes the choice back", EffectClass.TargetDataWrites,
+            $"<package> <slot> <channel> [--confirm] [--revoke] [--note <text>] {Where}", (args, context) => PackageAllowProductionBindingAsync(args, context, environment),
+            DataSchemas.Object([("package", DataSchemas.String), ("slot", DataSchemas.String), ("channel", DataSchemas.String), ("allowed", DataSchemas.Boolean)], "package", "slot", "channel", "allowed")),
         new Verb("install", "Put a package into this runner's own state, served at once: reads a package/1 manifest and a directory of files, stores them, makes them the channel's active version and replaces the channel's task schedule", EffectClass.TargetDataWrites,
             $"<manifest.yaml> <directory> [--channel <name>] {Where}", (args, context) => PackageInstallAsync(args, context, environment),
             DataSchemas.Object([("package", DataSchemas.String), ("channel", DataSchemas.String), ("version", DataSchemas.Integer), ("changed", DataSchemas.Boolean), ("files", DataSchemas.Integer), ("tasks", DataSchemas.StringList)], "package", "channel", "version", "changed")),
@@ -439,6 +443,49 @@ public static class RunnerCli
             await context.Error.WriteLineAsync(ex.Message);
             return CliExit.Failure;
         }
+    }
+
+    private static async Task<int> PackageAllowProductionBindingAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        var parsed = CliArgs.Parse(args, new HashSet<string> { "confirm", "revoke" }, new HashSet<string> { "repo", "note" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 3)
+        {
+            await context.Error.WriteLineAsync($"Usage: package allow-production-binding <package> <slot> <channel> [--confirm] [--revoke] [--note <text>] {Where}");
+            return CliExit.Usage;
+        }
+
+        var (package, slot, channel) = (parsed.Words[0], parsed.Words[1], parsed.Words[2]);
+        if (channel == "prod")
+        {
+            await context.Error.WriteLineAsync("prod is the channel that uses production's connection; the choice is for another channel.");
+            return CliExit.Usage;
+        }
+
+        var guard = new PostureGuard(OpenState(parsed, environment), RunnerNames.ServiceId);
+        var scope = RunnerSlotResolver.ProductionBindingScope(package, slot, channel);
+        var actor = RunnerActor.Local().Id;
+        context.Data["package"] = package;
+        context.Data["slot"] = slot;
+        context.Data["channel"] = channel;
+        if (parsed.Has("revoke"))
+        {
+            var revoked = guard.Revoke(PostureSetting.ProductionBindingOnNonProduction, scope, actor, parsed.Get("note"));
+            context.Data["allowed"] = false;
+            await context.Out.WriteLineAsync(revoked ? $"Taken back: {channel} no longer may use production's connection for {slot} of {package}." : $"There was no choice for {slot} of {package} in {channel}.");
+            return CliExit.Ok;
+        }
+
+        if (!parsed.Has("confirm"))
+        {
+            context.Data["allowed"] = false;
+            await context.Error.WriteLineAsync($"{PostureSetting.ProductionBindingOnNonProduction.Effect} Nothing was changed. To accept this for {slot} of {package} in {channel}, run again with --confirm.");
+            return CliExit.Failure;
+        }
+
+        guard.Choose(PostureSetting.ProductionBindingOnNonProduction, scope, actor, parsed.Get("note"), confirmed: true);
+        context.Data["allowed"] = true;
+        await context.Out.WriteLineAsync($"Recorded: {channel} may use production's connection for {slot} of {package} (by {actor}, audited).");
+        return CliExit.Ok;
     }
 
     private static async Task<int> PackageRequireSandboxRunAsync(string[] args, CliContext context, Func<string, string?>? environment)

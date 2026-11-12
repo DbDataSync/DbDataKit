@@ -18,8 +18,11 @@ namespace DbDataKit.Runner.Connections;
 /// </list>
 /// A secret that is not in the store is a <see cref="SlotResolutionException"/> naming the slot, the connection and the reference, never a fallback to another role.
 /// </summary>
-public sealed class RunnerSlotResolver(DefinitionPublisher publisher, IConnectionCatalog catalog, ISecretResolver secrets, IRedactor? redactor = null) : ISlotResolver
+public sealed class RunnerSlotResolver(DefinitionPublisher publisher, IConnectionCatalog catalog, ISecretResolver secrets, IRedactor? redactor = null, PostureChoices? posture = null) : ISlotResolver
 {
+    /// <summary>The scope of the posture choice <see cref="PostureSetting.ProductionBindingOnNonProduction"/> for a slot of a package in a channel (the same shape as the console's bindings: <c>bindings/&lt;section&gt;/&lt;slot&gt;/&lt;release channel&gt;</c>, the slot written <c>package/slot</c>).</summary>
+    public static string ProductionBindingScope(string package, string slot, string channel) => $"bindings/runner/{package}/{slot}/{channel}";
+
     public const string SyncSecretPrefix = "dbdatakit:sync:connection:";
 
     /// <summary>The part of Sync's secret name for the run login of a connection that has a second one (<c>dbdatakit:sync:connection:&lt;name&gt;:run</c>, plan 28c E20).</summary>
@@ -33,8 +36,28 @@ public sealed class RunnerSlotResolver(DefinitionPublisher publisher, IConnectio
         var unbound = slots.Where(s => !bound.ContainsKey(s.Name)).Select(s => $"'{s.Name}'").ToList();
         if (unbound.Count > 0)
             throw new SlotResolutionException($"The task {task} needs the connection {(unbound.Count == 1 ? "slot" : "slots")} {string.Join(", ", unbound)} bound in channel '{task.Channel}', and {(unbound.Count == 1 ? "it has" : "they have")} no binding there.");
+        RefuseProductionBindings(task, slots, bound);
         foreach (var slot in slots) handles[slot.Name] = bound[slot.Name];
         return handles;
+    }
+
+    /// <summary>
+    /// Plan 27a IX17, at the moment a run starts (so a binding written by hand is held to it as much as one made through the API): a task in a channel other than production does not get the connection that production's channel binds the same slot to,
+    /// because what it sends or writes would reach production's far side, unless an administrator chose <see cref="PostureSetting.ProductionBindingOnNonProduction"/> for that slot and channel (confirmed, recorded with who and when, audited). A connection that
+    /// is read-only cannot send or write, so sharing it is not the case. A slot with no binding in the channel is refused by <see cref="Handles"/> already: nothing is inherited from production.
+    /// </summary>
+    private void RefuseProductionBindings(TaskRef task, IReadOnlyList<ConnectionSlot> slots, IReadOnlyDictionary<string, string> bound)
+    {
+        if (posture is null || task.Channel == DefinitionStore.Production) return;
+        var production = publisher.Bindings(DefinitionStore.Production, PackageActivator.Kind, task.Package).ToDictionary(b => b.Slot, b => b.BoundTo, StringComparer.Ordinal);
+        foreach (var slot in slots)
+        {
+            if (!production.TryGetValue(slot.Name, out var prod) || !string.Equals(prod, bound[slot.Name], StringComparison.Ordinal)) continue;
+            if (catalog.Find(prod) is { Access: AccessMode.Readonly }) continue;
+            if (posture.IsChosen(ProductionBindingScope(task.Package, slot.Name, task.Channel), PostureSetting.ProductionBindingOnNonProduction.Name)) continue;
+            throw new SlotResolutionException($"The task {task} would use the connection '{prod}' for the slot '{slot.Name}' in channel '{task.Channel}', and that is the connection production uses for it: what the task sends or writes would reach production's far side. "
+                + $"Bind the slot in '{task.Channel}' to a connection of its own (a sandbox), or have an administrator confirm it (package allow-production-binding {task.Package} {slot.Name} {task.Channel} --confirm); the choice is recorded with who and when.");
+        }
     }
 
     public async Task<IReadOnlyDictionary<string, string>> EnvironmentAsync(IReadOnlyDictionary<string, string> handles, IReadOnlyList<ConnectionSlot> slots, CancellationToken ct)

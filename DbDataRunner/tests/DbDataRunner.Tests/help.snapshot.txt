@@ -89,6 +89,8 @@ Verbs:
       Show, or with on or off set, whether this runner refuses a version that is not signed (plan 30 section 6.2; the signature check itself is not built yet, so 'on' refuses every publish) [Target writes (data only)]
   package require-sandbox-run [on|off] [--repo <server directory>]
       Show, or with on or off set, whether a version reaches production only after a sandbox run: a run that succeeded in a channel other than prod, where its connections are bound to that channel's own (plan 27a IX16; a dry run does not count) [Target writes (data only)]
+  package allow-production-binding <package> <slot> <channel> [--confirm] [--revoke] [--note <text>] [--repo <server directory>]
+      Choose, as an explicit and recorded act, that a channel other than prod uses the connection prod uses for a slot of the package (plan 27a IX17): what the task sends or writes there reaches production's far side. Without --confirm nothing changes; --revoke takes the choice back [Target writes (data only)]
   package install <manifest.yaml> <directory> [--channel <name>] [--repo <server directory>]
       Put a package into this runner's own state, served at once: reads a package/1 manifest and a directory of files, stores them, makes them the channel's active version and replaces the channel's task schedule [Target writes (data only)]
   package build <project directory> --out <directory> [--source <folder or v3 index address>]... [--cache <directory>] [--offline] [--locked] [--no-lock-write]

@@ -10,6 +10,7 @@ dbdatarunner package pair <https address> --code <code> [--name <label>] [--clie
 dbdatarunner package publish <manifest.yaml> <directory> --server <name or https address> --channel <name> [--code <code>] [--stage] [--expected-version <n>] [--client-dir <directory>]
 dbdatarunner package require-signatures [on|off] [--repo <server directory>]
 dbdatarunner package require-sandbox-run [on|off] [--repo <server directory>]
+dbdatarunner package allow-production-binding <package> <slot> <channel> [--confirm] [--revoke] [--note <text>] [--repo <server directory>]
 dbdatarunner package install <manifest.yaml> <directory> [--channel dev] [--repo <server directory>]   # the development path, see below
 dbdatarunner package build <project directory> --out <directory> [--source <feed>]... [--cache <directory>] [--offline] [--locked] [--no-lock-write]   # an integration project into package.yaml and files/, csx without the SDK
 dbdatarunner package test <project directory> [--source <feed>]... [--cache <directory>] [--offline] [--locked] [--no-lock-write]   # build, then run tests/*.csx against the package with RunSimulator
@@ -101,10 +102,11 @@ The runner serves the channels `prod` and `dev` by default (`--channels`, or `DB
 
 `tasks run|pause|resume` do the same from the command line, on the same state, and are audited the same way; what `tasks run` queues, a running server starts within a few seconds.
 
-**Dry run and sandbox run (plan 27a IX16).**
+**Dry run, sandbox run, and production's connection in another channel (plan 27a IX16, IX17).**
 
 * `tasks run <task> --dry-run` (or `{"dry_run": true}` on `POST .../run`) queues a **dry run**: the task reads what it reads, and nothing it keeps changes. The reserved input `dbdatakit.dry_run` carries the word to the task; the kit takes it out before the job's input is bound and gives the job `Run.DryRun`. The kit's parts behave: progress is not saved (`SaveProgressAsync` does nothing), the file ledger is not written, an inbox item is not taken, a refused record is listed instead of kept; `OutsideHttpOptions.DryRun` refuses a request that is not a read and lists it, and a `WriteGate` with `DryRun` runs no statement. What it would have done is in the run's log as "Dry run, would: ...", under a first line that says it is a dry run; the audit of `runner.task.run` says `dry_run`. A dry run does not start the tasks that follow it (`after` triggers set its end aside). **A job that writes through code of its own is not guarded**: the guarantee is for the kit's clients and landing helpers.
 * `package require-sandbox-run on` (`PUT settings/require_sandbox_run`, an administrator's, audited as `runner.setting.set`) makes `activate` and `switch` on `prod` refuse a version that has had no **sandbox run**: a run of that version that succeeded in a channel other than `prod`, where the slots are bound to that channel's own connections, and was not a dry run. It is read from the run history; nothing else is kept.
+* A task in a channel other than `prod` is refused the connection `prod` binds the same slot to (at the start of the run, so a hand-made binding is held to it too): the slot's connection would send or write on production's far side. A read-only connection is exempt. An administrator's recorded choice allows it (`package allow-production-binding <package> <slot> <channel> --confirm`: the posture setting `production_binding_on_non_production`, scope `bindings/runner/<package>/<slot>/<channel>`, who and when in the audit; `--revoke` takes it back). A slot with no binding in the channel is refused as before: nothing is inherited from `prod`.
 
 ## What a package can be
 
