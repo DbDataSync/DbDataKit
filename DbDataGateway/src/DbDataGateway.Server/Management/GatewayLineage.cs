@@ -4,8 +4,10 @@ using System.Text.RegularExpressions;
 using DbDataKit.Connections;
 using DbDataKit.Lineage;
 using DbDataKit.Serving.Semantic;
+using DbDataKit.Store;
 using DbDataKit.Web.Trust;
 using DbDataGateway.Server.Configuration;
+using DbDataGateway.Server.Serving;
 using DbDataGateway.Server.State;
 
 namespace DbDataGateway.Server.Management;
@@ -25,6 +27,9 @@ namespace DbDataGateway.Server.Management;
 /// </list>
 /// A data source whose connection string cannot be read (a secret that is not there, an address that holds no server or database) is named by itself, so two of them never become one node and nothing joins wrongly; it is said in <paramref name="notes"/>.
 /// </summary>
+/// <summary>A dashboard, a report or an app instance as the lineage's consumer (plan 18, G12): what it reads, as the registry writes a dependency (<c>semantic-model:sales</c>, <c>entity-model:territories</c>).</summary>
+public sealed record GatewayConsumer(string Kind, string Name, IReadOnlyList<string> Reads);
+
 public static class GatewayLineageGraph
 {
     private static readonly Regex Plain = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -35,7 +40,7 @@ public static class GatewayLineageGraph
     /// <param name="reads">What statements have read (<see cref="TableReadStore.Summaries"/>).</param>
     /// <param name="readers">Whether the names of the readers are told (an administrator's call).</param>
     public static LineageGraph Design(string instanceId, IReadOnlyDictionary<string, DataSourceOptions> dataSources, IEnumerable<SemanticModel> models, Func<string, string, string> resolve,
-        IReadOnlyList<TableReadSummary> reads, bool readers, List<string>? notes = null)
+        IReadOnlyList<TableReadSummary> reads, bool readers, List<string>? notes = null, IEnumerable<ServedEntityModel>? entityModels = null, IEnumerable<GatewayConsumer>? consumers = null)
     {
         var nodes = new Dictionary<string, LineageNode>(StringComparer.Ordinal);
         var edges = new List<LineageEdge>();
@@ -106,6 +111,32 @@ public static class GatewayLineageGraph
             nodes[served] = new LineageNode(served, NodeKind.Serving, model.Name, UnknownUpstream: false,
                 new Dictionary<string, string> { ["serving"] = "semantic-model", ["catalog"] = model.Name, ["version"] = model.Version?.ToString(CultureInfo.InvariantCulture) ?? "configured" });
             Bind(model, served);
+        }
+        // the entity models the Gateway serves (a Store's): their tables under the identity the Store gives them, so the two servers' graphs meet
+        var entityTables = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var served in entityModels ?? [])
+        {
+            if (!dataSources.ContainsKey(served.DataSource) || Definition(served.DataSource) is not { } definition) { notes?.Add($"The entity model `{served.Model.Name}` is on the data source `{served.DataSource}`, which is not served here, so it has no tables in the graph."); continue; }
+            var graph = EntityModelLineage.Design(served.Model, definition, instanceId, served.DataSource);
+            foreach (var node in graph.Nodes) nodes[node.Id] = nodes.TryGetValue(node.Id, out var known) ? node with { Properties = known.PropertyMap.Concat(node.PropertyMap).GroupBy(p => p.Key).ToDictionary(g => g.Key, g => g.Last().Value) } : node;
+            edges.AddRange(graph.Edges);
+            entityTables[served.Model.Name] = [.. graph.Nodes.Where(n => n.Kind == NodeKind.Dataset).Select(n => n.Id)];
+        }
+
+        // dashboards, reports and app instances read what they depend on: an edge from the model or the tables to the consumer
+        foreach (var consumer in consumers ?? [])
+        {
+            var id = LineageIdentity.SuiteObject(instanceId, consumer.Kind, consumer.Name);
+            var sources = new List<string>();
+            foreach (var reference in consumer.Reads)
+            {
+                var (kind, name) = reference.Split(':', 2) is [var k, var n] ? (k, n) : ("", reference);
+                if (kind == "semantic-model" && nodes.ContainsKey(LineageIdentity.SuiteObject(instanceId, "semantic-model", name))) sources.Add(LineageIdentity.SuiteObject(instanceId, "semantic-model", name));
+                else if (kind == "entity-model" && entityTables.TryGetValue(name, out var tables)) sources.AddRange(tables);
+            }
+            if (sources.Count == 0) continue;           // what it reads is not in this graph: nothing to draw, and no consumer node without a flow into it
+            nodes[id] = new LineageNode(id, NodeKind.Consumer, consumer.Name, UnknownUpstream: false, new Dictionary<string, string> { ["consumer"] = consumer.Kind });
+            foreach (var source in sources.Distinct()) edges.Add(new LineageEdge(source, id, EdgeKind.Reads, Granularity.Table, Confidence.Declared));
         }
         return new LineageGraph(nodes.Values, edges);
 
@@ -217,7 +248,7 @@ public static class GatewayLineageGraph
 /// <c>GET /api/v1/lineage</c> (plan 18, G08; viewer role): the Gateway's graph in the wire form every server's lineage has (<see cref="LineageJson"/>), so the console joins it with the others. The graph is built on request from the
 /// data sources and models in force and the counted reads (<see cref="TableReadStore"/>), which are written first so a read a moment ago is in the answer. An administrator also gets the names of the readers.
 /// </summary>
-public sealed class GatewayLineage(Func<GatewayOptions> options, Func<IEnumerable<SemanticModel>> models, Func<string, string, string> resolve, TableReadRecorder recorder, TableReadStore reads, string instanceId)
+public sealed class GatewayLineage(Func<GatewayOptions> options, Func<IEnumerable<SemanticModel>> models, Func<IEnumerable<ServedEntityModel>> entityModels, Func<IEnumerable<GatewayConsumer>> consumers, Func<string, string, string> resolve, TableReadRecorder recorder, TableReadStore reads, string instanceId)
 {
     public const string Route = GatewayManagement.Prefix + "/lineage";
 
@@ -243,6 +274,6 @@ public sealed class GatewayLineage(Func<GatewayOptions> options, Func<IEnumerabl
     {
         recorder.Flush();
         notes = [];
-        return GatewayLineageGraph.Design(instanceId, options().DataSources, models(), resolve, reads.Summaries(), readers, notes);
+        return GatewayLineageGraph.Design(instanceId, options().DataSources, models(), resolve, reads.Summaries(), readers, notes, entityModels(), consumers());
     }
 }

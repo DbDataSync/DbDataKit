@@ -71,6 +71,7 @@ public static class StoreServer
         app.UseScopedTokens();
         app.UsePublishedModels(settings.Directory);
         Map(app, instanceId);
+        StoreLineage.Map(app, settings.Directory, instanceId, new StoreConnections(settings.Directory));
         StoreModels.Map(app, settings.Directory);
         StoreModelHistory.Map(app, settings.Directory);
         StoreEvents.Map(app, settings.Directory);

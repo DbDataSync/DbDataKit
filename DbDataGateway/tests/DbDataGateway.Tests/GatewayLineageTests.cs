@@ -6,6 +6,7 @@ using DbDataKit.State;
 using DbDataGateway.Server.Configuration;
 using DbDataGateway.Server.Data;
 using DbDataGateway.Server.Management;
+using DbDataGateway.Server.Serving;
 using DbDataGateway.Server.State;
 using DbDataGateway.Tests.Config;
 
@@ -177,5 +178,44 @@ public sealed class GatewayLineageTests : IDisposable
         // the model's Analysis Services source is not a data source of the Gateway and is no gap to report
         Assert.DoesNotContain(notes, n => n.Contains("ssas_finance", StringComparison.Ordinal));
         _ = LineageJson.Read(LineageJson.Write(graph));
+    }
+
+    private const string Territories = """
+        schemaVersion: 1
+        name: territories
+        storage: {connection: sqlserver_sales}
+        entities:
+          territory:
+            key: [code]
+            attributes:
+              code: {type: VARCHAR(10), required: true}
+        """;
+
+    /// <summary>Plan 18 G12: a served entity model has its tables under the Store's identity; a dashboard reads the model it depends on and an app instance the Store model it is bound to; a consumer whose source is not in the graph has no node.</summary>
+    [Fact]
+    public void Entity_model_tables_dashboards_and_apps_are_in_the_graph_as_tables_and_consumers_that_read_what_they_depend_on()
+    {
+        var loaded = DbDataKit.DataModel.DataModelLoader.Load(Territories, "territories.yaml");
+        Assert.True(loaded.Ok);
+        var entity = new ServedEntityModel(loaded.Model!, "sqlserver_sales", 2, null);
+        var consumers = new[]
+        {
+            new GatewayConsumer("dashboard", "sales_overview", ["semantic-model:sales_catalog"]),
+            new GatewayConsumer("app", "territory-notes", ["entity-model:territories"]),
+            new GatewayConsumer("report", "orphan_report", ["semantic-model:nowhere"]),
+        };
+
+        var graph = GatewayLineageGraph.Design("gw1", Sources(), [Model()], Resolve, [], readers: false, entityModels: [entity], consumers: consumers);
+
+        var table = "sqlserver://warehouse01/Sales.territories.territory";
+        Assert.Equal(NodeKind.Dataset, graph.Node(table)!.Kind);
+        Assert.Contains(graph.Edges, e => e is { Kind: EdgeKind.Reads } && e.From == table && e.To == "suite://gw1/app/territory-notes");
+        var dashboard = graph.Node("suite://gw1/dashboard/sales_overview")!;
+        Assert.Equal(NodeKind.Consumer, dashboard.Kind);
+        Assert.Equal("suite://gw1/semantic-model/sales_catalog", Assert.Single(graph.Upstream(dashboard.Id)).From);
+        Assert.Null(graph.Node("suite://gw1/report/orphan_report"));
+        // the impact of a source column reaches the dashboard through the model
+        var column = graph.Edges.First(e => e.Kind == EdgeKind.Binds).From;
+        Assert.Contains(graph.Impact(column, 6).Reached, r => r.Node.Id == dashboard.Id);
     }
 }
