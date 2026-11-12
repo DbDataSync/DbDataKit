@@ -35,10 +35,11 @@ public static class RunnerServer
         return InstanceId(RunnerState.Open(directory, settings, environment));
     }
 
-    private static DbDataKit.Runner.Connections.IConnectionCatalog CatalogOf(RunnerSettings settings)
+    /// <summary>The connections the binding test and the slots both see: the runner's own folder, then the copies the console handed over (plan 27a IX23).</summary>
+    private static DbDataKit.Runner.Connections.IConnectionCatalog CatalogOf(RunnerSettings settings, StateDatabase state)
     {
         var host = settings.ToHostSettings();
-        return host.Connections ?? new DbDataKit.Runner.Connections.DirectoryConnectionCatalog(host.ConnectionsDirectory);
+        return host.Connections ?? new DbDataKit.Runner.Connections.LayeredConnectionCatalog(new DbDataKit.Runner.Connections.DirectoryConnectionCatalog(host.ConnectionsDirectory), new DbDataKit.Runner.Connections.StoredConnectionCatalog(new ConnectionCopies(state)));
     }
 
     public static WebApplication Build(RunnerSettings settings, X509Certificate2 certificate, Action<string> log, Func<string, string?>? environment = null) =>
@@ -95,7 +96,8 @@ public static class RunnerServer
         RunnerSecretsApi.Map(app, state, () => secretStore.Open(), "/api/v1", RunnerCallers.TokenResolver,
             connections: () => RunnerConnections.Inventory(state, app.Services.GetRequiredService<RunnerEngine>().Group, RunnerSettings.Product),
             listHeld: async (opened, ct) => opened is DbDataKit.Secrets.Store.ISecretAdmin admin ? [.. (await admin.ListInfoAsync("", ct)).Select(i => new DbDataKit.Secrets.SecretHeld(i.Name, i.Updated == default ? null : i.Updated))] : await RunnerSecretsApi.NamesOnly(opened, ct));   // UI06: the overview
-        RunnerBindingTestApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>().Slots, "/api/v1", RunnerCallers.TokenResolver, RunnerConnectTest.Create(CatalogOf(settings)));   // UI08: try a slot's binding, up to the connection
+        RunnerBindingTestApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>().Slots, "/api/v1", RunnerCallers.TokenResolver, RunnerConnectTest.Create(CatalogOf(settings, state)));   // UI08: try a slot's binding, up to the connection
+        RunnerConnectionCopyApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);   // plan 27a IX23: the connections the console handed over (definition and secret references, never a value)
         RunnerGroupApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);
         RunnerLineageApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);
         RunnerTrackingApi.Map(app, state, "/api/v1", RunnerCallers.TokenResolver);   // plan 28c E18: the runner's own copy of Build's tracking, and the resolve of its divergences

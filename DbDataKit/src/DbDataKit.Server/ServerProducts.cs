@@ -48,6 +48,8 @@ public static class ServerProducts
         new("GET", "api/v1/status", ServerRole.Viewer),
         new("GET", "api/v1/instances", ServerRole.Viewer),
         new("GET", "api/v1/connections", ServerRole.Viewer),
+        new("GET", "api/v1/connection-copies", ServerRole.Viewer),                                          // IX23: the connections the console handed over, their version and whether their secret references resolve there
+        new("PUT", "api/v1/connection-copies/{name}", ServerRole.Admin),                                   // IX23: send a connection's definition (secret references, never a value)
         new("GET", "api/v1/runs", ServerRole.Viewer),
         new("GET", "api/v1/runs/{id}", ServerRole.Viewer),                                                  // UI08: one run
         new("GET", "api/v1/runs/{id}/logs", ServerRole.Viewer),                                             // UI08: its output, a page at a time
@@ -77,6 +79,7 @@ public static class ServerProducts
         new("PUT", "api/v1/artifacts/{sha}", ServerRole.Admin, ServerRole.Publisher),                      // UE10
         new("PUT", "api/v1/definitions/integration/{name}", ServerRole.Admin, ServerRole.Publisher),       // UE10
         new("PUT", "api/v1/bindings/{name}/integration/{name}", ServerRole.Admin, ServerRole.Publisher),   // UE08
+        new("DELETE", "api/v1/bindings/{name}/integration/{name}/{name}", ServerRole.Admin, ServerRole.Publisher),   // IX23: empty a slot's channel
         new("POST", "api/v1/bindings/{name}/integration/{name}/test", ServerRole.Admin),                    // UI08: try a slot's binding (never a value in the answer)
         new("PUT", "api/v1/settings/require_signatures", ServerRole.Admin),                                // UE08
         new("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin),                                      // UE11
