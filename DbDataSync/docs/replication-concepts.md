@@ -379,6 +379,14 @@ target's *current* rows rather than its full history. It's operator-triggered on
 a schedule today — and its result is written as a parquet file rather than as rows anywhere, indexed so
 it can be found and paged back through the API.
 
+## Telling a serving group that a table changed
+
+A Gateway can keep the answers of queries in a result cache. It empties the entries that read a table when it is told the table changed, and otherwise when their time-to-live ends. Sync tells it. When a run of a replication ends having written rows (a change-processing run, a bulk load or a reconcile of deletes; a run that wrote nothing, a verification and a cancelled run do not count, and a run that failed after rows went in does, because the old rows are stale either way), the server sends one `data.changed` message for each target table of the mapping to every serving group it is paired with. The message names the table the way the lineage graph does (`engine://server/database.schema.table`, the same node `GET /api/lineage` sends) and carries the run's id and time. It never carries rows or statement text.
+
+The server signs the message as itself, with the key of its own pairing, and the role Publisher; nobody's sign-in is involved. A group whose graph does not know the table ignores the message. A failed delivery is tried once more after 30 seconds and then given up on, with a line in the log and a counter, and never changes the run. A server with no pairing sends nothing.
+
+Pair a server with a group from the console (**Servers**, **Link**), or on the server: `dbdatasync gateway add <name> --url https://gateway:port --code <code>` with a code made on the Gateway by `dbdatagateway server pair --max-role publisher`. `dbdatasync gateway list` and `gateway remove` show and forget the pairings (`gateways.json` in the repository root). A replication owned by a Runner is not told from here: the Runner reports what its tasks wrote.
+
 ## Where the tracking state lives
 
 A replication's positions and the record of what each unit moved are its **tracking state**. The optional `tracking:` section of `task.yaml` says where it is kept: `mode: state` (the runner's

@@ -18,6 +18,7 @@
     <DbDataKitReference Include="Security.Acl" />
     <DbDataKitReference Include="DataModel" />   <!-- model/1: the models the server holds -->
     <DbDataKitReference Include="Lineage" />   <!-- the models in the suite's lineage graph; plan 18, G12 -->
+    <DbDataKitReference Include="Serving.Notify" />   <!-- data.changed to the serving groups this server is paired with, after an applied write; plan 24a UC13 -->
     <DbDataKitReference Include="Store" />   <!-- validated, audited row writes -->
     <DbDataKitReference Include="Quality.Runner" />   <!-- the entities' checks, evaluated and recorded; plan 23a FQ11 -->
     <DbDataKitReference Include="Connections" />   <!-- the connection a model's tables live on -->

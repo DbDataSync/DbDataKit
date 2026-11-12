@@ -90,7 +90,7 @@ internal interface IObservedDecisions
 /// </para>
 /// </summary>
 internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunner runner, StateDatabase database, TimeProvider clock, Action<string> log, TimeSpan? lease = null, Func<bool>? paused = null, BuildTrackingHost? tracking = null,
-    Func<BuildScheduleSettings>? schedule = null, IObservedDecisions? observed = null)
+    Func<BuildScheduleSettings>? schedule = null, IObservedDecisions? observed = null, BuildDataChanges? dataChanges = null)
 {
     /// <summary>How long a claimed run stays claimed without a heartbeat; a run beats three times in it, so only a worker that died loses its run.</summary>
     public static readonly TimeSpan DefaultLease = TimeSpan.FromMinutes(10);
@@ -195,6 +195,8 @@ internal sealed class BuildScheduler(ProjectsFile projects, IProjectCommandRunne
         {
             var result = await runner.RunAsync(["connection", "refresh", parts[0], parts[1], "--project", projects.RootOf(project)], projects.RootOf(project), cancellationToken);
             exit = result.Exit;
+            // plan 24a UC13: the models the run loaded are datasets that changed; the serving groups are told in the background, and the run's outcome never depends on it
+            if (dataChanges is not null) await dataChanges.RefreshCompletedAsync(projects.RootOf(project), item.RunId.ToString(), result.Out, CancellationToken.None);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

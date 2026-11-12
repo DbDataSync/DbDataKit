@@ -152,6 +152,8 @@ internal static class ServerCli
             return logins;
         }
         var runner = new ChildProcessCommandRunner(logins: ChildEnvironment);
+        // plan 24a UC13: what a refresh loaded is told to the serving groups this server is paired with, as itself; with no pairing nothing is sent
+        var dataChanges = BuildDataChanges.Create(settings.Directory, new ConsoleKeyStore(secrets, secrets), line => context.Error.WriteLine(line));
         using var sessions = new WarmSessionRunner(logins: token => ServerSecrets.LoginsAsync(secrets, token));
         // running plans on their schedules is opt-in: a server that was only meant to answer reads never writes a target by itself
         // maintenance mode (plan 29b, C05): the scheduler stops claiming while the gate is on, and the gate is idle when the plans it started have ended
@@ -180,11 +182,11 @@ internal static class ServerCli
             var reporter = new RunnerDecisionReporter(() => BuildScheduleSettings.Read(ownerFile).Runner is { } link
                 ? new ClientRunnerSchedule(new DbDataKit.Runner.Client.RunnerPublishClient(new DbDataKit.Runner.Client.RunnerClientStore(link.ClientDirectory ?? DbDataKit.Runner.Client.RunnerClientStore.DefaultDirectory(environment)), environment), link) : null, line => context.Error.WriteLine(line));
             scheduler = new BuildScheduler(projects, runner, schedulerState, TimeProvider.System, line => context.Error.WriteLine(line), paused: () => gate.Enabled, tracking: trackingHost,
-                schedule: () => BuildScheduleSettings.Read(ownerFile), observed: reporter);
+                schedule: () => BuildScheduleSettings.Read(ownerFile), observed: reporter, dataChanges: dataChanges);
         }
         var publisher = new ProxyPublisher(new ProxiesFile(settings.Directory), new ConsoleKeyStore(secrets, secrets), secrets);
         var app = BuildServer.Build(settings, BuildServer.Certificate(settings.Directory), runner, projects, host.Commands, line => context.Error.WriteLine(line), parsed.Has("read-only") ? BuildManagementApi.ReadOnlySurface : null, scheduler, sessions, publisher, gate,
-            state is null ? null : new DbDataKit.State.Cli.StateTarget(state, BuildState.SqlitePath(settings.Directory), () => BuildState.Secrets(settings.Directory, environment), BuildState.SettingsFile(settings.Directory), sources));
+            state is null ? null : new DbDataKit.State.Cli.StateTarget(state, BuildState.SqlitePath(settings.Directory), () => BuildState.Secrets(settings.Directory, environment), BuildState.SettingsFile(settings.Directory), sources), dataChanges: dataChanges);
         await context.Out.WriteLineAsync($"Serving {projects.All().Count} project(s) on {listen} (instance {BuildServer.InstanceId(settings.ServerYaml)}){(scheduler is null ? "" : ", running scheduled refresh plans")}. Pair a client with: dbdatabuild server pair");
         // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
         await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(app, context.Cancellation);

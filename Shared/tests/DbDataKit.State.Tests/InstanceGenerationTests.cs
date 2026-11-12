@@ -56,11 +56,12 @@ public sealed class InstanceGenerationTests : IDisposable
     [Fact]
     public void The_migrations_are_appended_and_a_binary_of_the_version_before_still_works_with_them()
     {
-        Assert.Equal(5, RunnerModule.Module.Version);
+        Assert.Equal(6, RunnerModule.Module.Version);
         Assert.Equal(1, RunnerModule.Module.CompatibleWithPrevious);
         Assert.Contains("generation", RunnerModule.Module.Migrations[3], StringComparison.Ordinal);
         Assert.Contains("task_owner", RunnerModule.Module.Migrations[3], StringComparison.Ordinal);   // plan 28c E09: part of the newest migration, no release holds the module yet
         Assert.Contains("connection_copy", RunnerModule.Module.Migrations[4], StringComparison.Ordinal);   // plan 27a IX23: the connections the console hands the runner, an additive table
+        Assert.Contains("task_lineage", RunnerModule.Module.Migrations[5], StringComparison.Ordinal);   // plan 27a IX12: what a task reported it read and wrote, an additive table
     }
 
     [Theory]

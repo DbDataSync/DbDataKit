@@ -13,6 +13,7 @@ namespace DbDataKit.State;
 /// <item><c>task_owner</c>: who schedules a task during a move from a product's own scheduler (plan 28c E09, ED6): <c>old</c> (the product does; the runner leaves the task alone), <c>observe</c> (the product does; the runner only records what it would
 /// have queued) or <c>runner</c>. A task with no row is the runner's, as every task was before the move existed.</item>
 /// <item><c>connection_copy</c>: the definition of a console connection a slot is bound to (plan 27a IX23), with the version the console and the runner both compute; secrets stay references.</item>
+/// <item><c>task_lineage</c>: what a task reported it read and wrote (plan 27a IX12), one row per task, direction and name, for the runner's lineage route.</item>
 /// <item><c>task_decision</c>: what an <c>observe</c> task would have queued and when, beside what the old owner did (<c>source</c> <c>runner</c> or <c>old</c>, ED7); the product compares them.</item>
 /// </list>
 /// Documents a task or a trigger carries (schedule, triggers, limits) are kept as the text they were written as (<c>{{text}}</c>, not <c>{{json}}</c>): PostgreSQL's jsonb would reformat them.
@@ -146,8 +147,25 @@ public static class RunnerModule
                 PRIMARY KEY (name)
             );
             """,
+            // plan 27a IX12: what a task reported it read and wrote (the Kit's run.Lineage(reads, writes)), kept so the runner's lineage route can show the outside systems a task touches. One row per package, channel, task, direction (reads or
+            // writes) and name, with the run that said it last and how often: a rerun updates the row and adds none. name is a lineage identity for a dataset or external://<kind>/<name> for an outside system; name_hash (SHA-256, lower-case hex) is what the key
+            // uses, so a long name cannot overflow it.
+            """
+            CREATE TABLE {table:task_lineage} (
+                package       {{key}} NOT NULL,
+                channel       {{key}} NOT NULL,
+                task          {{key}} NOT NULL,
+                direction     {{key}} NOT NULL,
+                name_hash     {{key}} NOT NULL,
+                name          {{text}} NOT NULL,
+                last_run      {{uuid}} NULL,
+                last_seen_at  {{time}} NOT NULL,
+                seen          {{int}} NOT NULL,
+                PRIMARY KEY (package, channel, task, direction, name_hash)
+            );
+            """,
         ],
-        // versions 2 to 5 only add nullable columns and new tables, which the code of the version before never reads or writes: an instance of the previous version still works with them
+        // every version after the first only adds nullable columns and new tables, which the code of the version before never reads or writes: an instance of the previous version still works with them
         compatibleWithPrevious: 1,
         retention:
         [

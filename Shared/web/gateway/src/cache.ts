@@ -46,7 +46,10 @@ export function ago(then: Date, now: Date): string {
 
 /** What the cache has heard of data changes, so a stale entry is not a silent surprise. `now` is a parameter so a test can fix the clock. */
 export function eventsText(events: CacheEvents, now: Date = new Date()): string {
+  const ignored = events.ignored ?? 0
+  const apart = ignored > 0 ? ` ${ignored} more ${ignored === 1 ? 'was' : 'were'} about datasets this Gateway does not serve and cleared nothing.` : ''
+  if (events.received === 0 && ignored > 0) return `No data change for what this Gateway serves has been reported.${apart} Entries leave when their time-to-live ends, when a definition is published, or when an administrator clears them.`
   if (events.received === 0) return 'No data change has been reported to this instance. Entries leave when their time-to-live ends, when a definition is published, or when an administrator clears them.'
   const last = events.last_at ? ago(new Date(events.last_at), now) : 'at an unknown time'
-  return `${events.received} data ${events.received === 1 ? 'change' : 'changes'} reported, the last ${last} by ${events.last_product ?? 'a producer'} for ${events.last_dataset ?? 'a dataset'}; ${events.cleared} ${events.cleared === 1 ? 'entry' : 'entries'} cleared in all.`
+  return `${events.received} data ${events.received === 1 ? 'change' : 'changes'} reported, the last ${last} by ${events.last_product ?? 'a producer'} for ${events.last_dataset ?? 'a dataset'}; ${events.cleared} ${events.cleared === 1 ? 'entry' : 'entries'} cleared in all.${apart}`
 }

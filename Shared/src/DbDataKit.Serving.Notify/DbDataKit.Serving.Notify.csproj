@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Serving.Notify</RootNamespace>
+    <PackageId>DbDataKit.Serving.Notify</PackageId>
+    <Description>The producer side of the serving group's result cache (plan 24a UC13): a product server that finished writing a dataset tells the serving groups it is paired with, with a signed data.changed/1 message that names the dataset and carries no row data. Pairing, the service identity, retry and counters.</Description>
+    <IsPackable>true</IsPackable>
+    <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\DbDataKit.Serving.Abstractions\DbDataKit.Serving.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Web\DbDataKit.Web.csproj" />
+  </ItemGroup>
+</Project>

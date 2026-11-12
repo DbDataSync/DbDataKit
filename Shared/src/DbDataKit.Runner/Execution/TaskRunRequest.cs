@@ -96,6 +96,12 @@ public sealed record TaskRunResult(
     bool ScratchOverLimit,
     IReadOnlyList<StepRecord> InDoubtSteps)
 {
+    /// <summary>
+    /// What the task reported it read and wrote with the Kit's <c>run.Lineage(reads, writes)</c> during this run, in the order it said it (plan 27a IX12); null when no process ran or the task reported none. The executor has already kept it
+    /// (<see cref="DbDataKit.State.TaskLineageStore"/>); a host that tells another server what the task changed reads it here.
+    /// </summary>
+    public IReadOnlyList<DbDataKit.Runner.Protocol.Server.LineageEntry>? Lineage { get; init; }
+
     /// <summary>What the queue item becomes (R02's mapping).</summary>
     public Scheduling.WorkItemStatus WorkItemStatus => End.ToWorkItemStatus();
 

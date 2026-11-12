@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { layoutLineage } from './layout'
-import { projectLineage } from './project'
+import { kindLabel, projectLineage } from './project'
 import { reach } from './reach'
 import type { LineageGraphDoc } from './types'
 
@@ -116,5 +116,31 @@ describe('reach', () => {
     expect(reach(projection, sibling).upstream).toEqual(new Set([crm]))
     expect(reach(projection, warehouse).downstream.has(sibling)).toBe(false)
     expect(reach(projection, warehouse).upstream.has(sibling)).toBe(false)
+  })
+})
+
+describe('an outside system a task touched (plan 27a IX12)', () => {
+  const api = 'external://http-api/crm'
+  const task = 'suite://main/task/orders/pull'
+  const outside: LineageGraphDoc = {
+    nodes: [
+      { id: api, kind: 'externalsystem', name: 'crm', unknown_upstream: true, properties: { system: 'http-api' } },
+      { id: task, kind: 'job', name: 'orders/pull', unknown_upstream: false },
+      { id: warehouse, kind: 'dataset', name: 'public.customers', unknown_upstream: true },
+    ],
+    edges: [
+      { from: api, to: task, kind: 'reads', granularity: 'table', confidence: 'observed' },
+      { from: task, to: warehouse, kind: 'serves', granularity: 'table', confidence: 'observed', detail: 'wrote to' },
+    ],
+  }
+
+  it('is a card of its own kind, said as an outside system, upstream of what the task wrote', () => {
+    const projection = projectLineage(outside)
+    const card = projection.cards.find((c) => c.id === api)!
+    expect(card.kind).toBe('externalsystem')
+    expect(kindLabel(card.kind)).toBe('outside system')
+    expect(kindLabel('dataset')).toBe('dataset')
+    expect(card.unknownUpstream).toBe(true)
+    expect(reach(projection, api).downstream.has(warehouse)).toBe(true)
   })
 })

@@ -77,6 +77,9 @@ public sealed class SecretStore
 
     public bool CanStore => _writable is not null;
 
+    /// <summary>The store this one writes to, when it has one (the shared encrypted store, or an in-memory one in a test): where the server keeps its own signing key as a client of the serving groups it is paired with (plan 24a UC13).</summary>
+    public ISecretStore? Writable => _writable;
+
     public IReadOnlyList<string> ProviderNames => _providerNames;
 
     /// <summary>The environment variable that answers <paramref name="name"/> when the store has nothing.</summary>

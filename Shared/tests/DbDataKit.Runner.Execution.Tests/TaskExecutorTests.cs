@@ -44,6 +44,29 @@ public sealed class TaskExecutorTests
     }
 
     [Theory, MemberData(nameof(Engines))]
+    public async Task What_a_task_reported_it_read_and_wrote_is_in_the_result_and_kept_once_per_name_across_reruns(string engine)
+    {
+        using var h = new ExecutorHarness(engine);
+
+        var first = await h.Executor.RunAsync(await h.SampleRequest("reports"));
+        var second = await h.Executor.RunAsync(await h.SampleRequest("reports"));
+
+        Assert.Equal(TaskEndState.Succeeded, first.End.State);
+        var line = Assert.Single(first.Lineage!);
+        Assert.Equal(["external://http-api/crm", "crm.orders"], line.Reads);
+        Assert.Contains("sqlserver://wh/Sales.dbo.orders", line.Writes);
+        var kept = new TaskLineageStore(h.Database).Read().Where(r => r.Task == "reports").ToList();
+        Assert.Equal(5, kept.Count);                                             // two reads and three writes, once each
+        Assert.All(kept, r => Assert.Equal(2, r.Seen));                          // the rerun added no row, it counted
+        Assert.All(kept, r => Assert.Equal(second.RunId, r.LastRun));
+        Assert.Contains(kept, r => r is { Direction: "writes", Name: "external://sftp/exports" });
+        // a task that reported nothing leaves nothing and has no lineage in its result
+        var quiet = await h.Executor.RunAsync(await h.SampleRequest("ok"));
+        Assert.Null(quiet.Lineage);
+        Assert.DoesNotContain(new TaskLineageStore(h.Database).Read(), r => r.Task == "ok");
+    }
+
+    [Theory, MemberData(nameof(Engines))]
     public async Task A_task_that_fails_ends_failed_with_a_classified_failure_and_the_exit_code_zero(string engine)
     {
         using var h = new ExecutorHarness(engine);

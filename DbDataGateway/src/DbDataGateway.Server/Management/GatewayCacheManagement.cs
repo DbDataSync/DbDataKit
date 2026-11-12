@@ -73,13 +73,14 @@ public sealed class GatewayCacheManagement(GatewayCache cache, Func<LineageGraph
     {
         if (!DataChangedMessage.TryRead(body, _time.GetUtcNow(), out var notice, out var problem)) return ManagementResult.Problem(400, problem);
         var outcome = cache.Invalidator.Apply(notice);
-        audit?.Append(caller.Audit("cache changed", notice.Dataset, outcome.Everything ? $"everything cleared ({outcome.Removed} entries)" : $"{outcome.Removed} entries cleared", _time.GetUtcNow()));
+        audit?.Append(caller.Audit("cache changed", notice.Dataset, outcome.Ignored ? "not served here, nothing cleared" : outcome.Everything ? $"everything cleared ({outcome.Removed} entries)" : $"{outcome.Removed} entries cleared", _time.GetUtcNow()));
         return ManagementResult.Ok(new JsonObject
         {
             ["message"] = DataChangedMessage.Format,
             ["dataset"] = notice.Dataset,
             ["cleared"] = outcome.Removed,
             ["everything"] = outcome.Everything,
+            ["served"] = !outcome.Ignored,
             ["datasets"] = outcome.Datasets is null ? null : new JsonArray([.. outcome.Datasets.Select(d => (JsonNode)JsonValue.Create(d)!)]),
         });
     }
@@ -137,7 +138,7 @@ public sealed class GatewayCacheManagement(GatewayCache cache, Func<LineageGraph
             })]),
             ["events"] = new JsonObject
             {
-                ["received"] = activity.Received, ["cleared"] = activity.Cleared, ["last_at"] = Time(activity.LastAt), ["last_product"] = activity.LastProduct, ["last_dataset"] = activity.LastDataset,
+                ["received"] = activity.Received, ["ignored"] = activity.Ignored, ["cleared"] = activity.Cleared, ["last_at"] = Time(activity.LastAt), ["last_product"] = activity.LastProduct, ["last_dataset"] = activity.LastDataset,
                 ["manual"] = activity.Manual, ["last_manual_at"] = Time(activity.LastManualAt), ["shared"] = cache.Invalidator.Shared, ["recent"] = recent,
             },
         };

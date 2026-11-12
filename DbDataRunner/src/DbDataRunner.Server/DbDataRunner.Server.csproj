@@ -24,6 +24,7 @@
     <DbDataKitReference Include="Monitoring" />
     <DbDataKitReference Include="Lineage.Cli" />   <!-- the lineage noun: deployment lineage (E24) -->
     <DbDataKitReference Include="Lineage" />
+    <DbDataKitReference Include="Serving.Notify" />   <!-- data.changed to the serving groups this server is paired with, after a task wrote datasets; plan 24a UC13 -->
     <DbDataKitReference Include="Scheduling" />
     <DbDataKitReference Include="State" />
     <DbDataKitReference Include="Secrets.Abstractions" />
