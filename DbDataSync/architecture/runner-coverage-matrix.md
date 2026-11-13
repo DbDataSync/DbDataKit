@@ -24,7 +24,7 @@ SQL Server Change Tracking into each target (`ChangeApplyReplicationTests`, the 
 | Source | Target | Supervisor | Runner |
 | --- | --- | --- | --- |
 | sqlserver CT | postgres, mysql, mariadb, oracle, sqlserver | proven | proven |
-| sqlserver CT | sqlserver (MERGE writer, an existing configuration) | proven | not run |
+| sqlserver CT | sqlserver (MERGE writer, an existing configuration) | proven | proven by the move story (`SyncOnRunnerTests`, replication `inc`: Change Tracking, `MsSqlMerge`, positions handed over and back), not by `ChangeApplyReplicationTests` |
 
 ## Every engine as a source and as a target on the runner
 
@@ -44,12 +44,18 @@ SQL Server Change Tracking into each target (`ChangeApplyReplicationTests`, the 
 | A failed write leaves the position | proven | proven | `RunExecutorIntegrationTests.AFailedWrite_...` |
 | A table replicated by two mappings keeps a position for each | proven | proven | `ReplicationPairsTests.TwoMappingsOfOneSourceTable_...` |
 | Verification result file | beside Sync's state | a payload of the run, scratch deleted | `ReplicationPairsTests.AVerification_...` |
+| The Sync API lists and pages a verification result | from the files beside its state | from the run's payload on the runner (`RunnerVerificationResults`), nothing beside either state | `RunnerOwnedVerificationTests` (fake runner), `SyncOnRunnerVerificationTests` (real Sync server, runner, engine and SQL Server) |
+| A bulk load of 20 segments whose drain process is killed after the twelfth | not applicable (the worker is restarted by the supervisor) | the next drain finishes it, every row once, batch of 20 completed | `SyncOnRunnerLoadsTests.A_bulk_load_of_twenty_segments...` (a real process kill), `DrainOnTheRunnerTests.ABulkLoadOfTwentySegments_...` (stopped at the executor) |
+| A move refused while a mapping is loading | the same refusal | refused with the mapping's name, owner and runner as they were | `SyncOnRunnerLoadsTests.A_replication_whose_mapping_is_still_loading...` (a failed initial load, no worker), `ReplicationOwnershipTests` |
+| The Monitoring card's bulk loads and their history | `BulkLoadBatchStore` | the batches of the drain's checkpoint `batch` (`RunnerBulkLoads`), merged with the old ones | `RunnerOwnedBulkLoadsTests`, `SyncOnRunnerLoadsTests` (the batch of 20 completed) |
+| A move and its way back, in a browser | not applicable | written, not run: `replication-runner-move.spec.ts` | none yet |
 
 ## Not proven
 
-- PostgreSQL logical slot (`PgLogicalSlot`): no wal2json in the test engines used for this work.
+- PostgreSQL logical slot (`PgLogicalSlot`): the test engines used for this work had no wal2json; the profile `postgres-logical` (15433) of `testenv` has it and no pair has been run on it yet.
 - SQL Server CDC, `TriggerAudit` (MySQL, MariaDB, Oracle, SQL Server) and Oracle Flashback as the reader on the runner: the readers have their own driver tests; no replication ends to end through the runner with them.
 - A Watermark reader cannot see deletes, so no pair here deletes a row; Change Tracking deletes are proven in `ChangeApplyReplicationTests`.
-- The API reading a verification result from a runner-owned replication (list and page of the payload): the engine side is done, the API still reads files beside its own state.
+- A verification result the old path recorded before a move is not listed for a runner-owned replication (it stays in this server's state until the owner moves back).
+- What the runner does not do yet, and what stops the old paths from being retired: the list "Preconditions, audited 2026-11-12" in the row E22 of `docs/plans/28c-engines-on-runner.md`.
 - Reverse-ring pairs on the supervisor; same-engine pairs (postgres to postgres, and so on).
 - Other tests of `RunExecutorIntegrationTests` (provisioning, reconcile, timing, trace) stay supervisor-only: they assert on Sync's own stores.

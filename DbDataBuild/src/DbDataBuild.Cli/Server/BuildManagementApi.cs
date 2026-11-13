@@ -168,6 +168,9 @@ internal static class BuildManagementApi
             ? (runnerControl ?? (l => DbDataBuild.Cli.Runner.ClientRunnerTaskControl.For(l, Environment.GetEnvironmentVariable)))(link)
             : null;
 
+        // plan 28c E21: the person-driven writes (apply a plan, acknowledge a block, seed) are manual-only tasks of the runner this server is paired with, started for the person who asked
+        BuildRunnerOperationsApi.Map(app, projects, specs, OwnersNow, ControlOf, audit);
+
         // the scheduled plans of a project, whether or not this server runs them (the scheduler is opt-in): their schedule, the next time each is due and how the last run went.
         // A plan the runner owns carries owner "runner" and the runner's own row (pause, next due, last run): what this server's scheduler recorded is not what runs it.
         app.MapGet("/api/v1/projects/{project}/schedule", async (string project, HttpContext context) =>

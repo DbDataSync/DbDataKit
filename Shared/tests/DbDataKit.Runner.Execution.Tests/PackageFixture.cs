@@ -64,7 +64,7 @@ internal static class PackageFixture
         var directory = Directory.CreateTempSubdirectory("dbdatakit-exec-scripts-").FullName;
         File.WriteAllText(Path.Combine(directory, "exit0.sh"), "echo 'a script that speaks no protocol'\nexit 0\n");
         File.WriteAllText(Path.Combine(directory, "exit3.sh"), "echo 'failing quietly' >&2\nexit 3\n");
-        File.WriteAllText(Path.Combine(directory, "args.sh"), "echo \"args: $1 $2\"\necho \"task: $DBDATAKIT_TASK_NAME\"\nexit 0\n");
+        File.WriteAllText(Path.Combine(directory, "args.sh"), "echo \"args: $1 $2\"\necho \"task: $DBDATAKIT_TASK_NAME\"\necho \"by: $DBDATAKIT_RUN_REQUESTED_BY\"\nexit 0\n");
         File.WriteAllText(Path.Combine(directory, "runtime.sh"), "echo \"cwd: $(pwd -P)\"\necho \"package: $DBDATAKIT_PACKAGE_DIR\"\necho \"runtime: $DBDATAKIT_RUNTIME_DIR\"\necho \"extract: $DOTNET_BUNDLE_EXTRACT_BASE_DIR\"\necho \"args: $1 $2\"\nexit 0\n");
         // the names of the DBDATAKIT_ variables the task was given (never the values), and a task that holds still so a test can look at its process
         File.WriteAllText(Path.Combine(directory, "slots.sh"), "env | cut -d= -f1 | grep -E '^DBDATAKIT_(SECRET|BUILD)_' | sort | sed 's/^/var: /'\nexit 0\n");

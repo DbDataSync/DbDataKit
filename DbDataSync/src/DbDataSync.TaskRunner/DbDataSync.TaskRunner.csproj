@@ -29,6 +29,7 @@
     <ProjectReference Condition="'$(SkipJdbc)' != 'true'" Include="..\DbDataSync.Drivers.Jdbc\DbDataSync.Drivers.Jdbc.csproj" />
     <ProjectReference Include="..\DbDataSync.Libraries\DbDataSync.Libraries.csproj" />
     <ProjectReference Include="..\DbDataSync.State\DbDataSync.State.csproj" />
+    <ProjectReference Include="..\DbDataSync.Tracking\DbDataSync.Tracking.csproj" />   <!-- the follower of a runner-owned replication's units; plan 28c, E17 -->
     <ProjectReference Include="..\DbDataSync.Planning\DbDataSync.Planning.csproj" />   <!-- the planner a drain runs at the start of each cycle; plan 28c, E11 -->
     <!-- the shared state types come with the project reference; StateDatabase is Sync's own (plan 13, U04) -->
     <Using Include="DbDataKit.State" />

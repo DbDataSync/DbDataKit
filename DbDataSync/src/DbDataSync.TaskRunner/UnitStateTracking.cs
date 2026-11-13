@@ -32,7 +32,8 @@ public sealed record UnitStateTracking(TargetUnitState State, bool TargetPrimary
             throw new InvalidOperationException(message);
         }
 
-        var engine = targetDriver.DriverType.Equals(DriverIds.MsSql, StringComparison.OrdinalIgnoreCase) ? UnitStateEngine.SqlServer : UnitStateEngine.Postgres;
+        var engine = TargetUnitState.EngineOf(targetDriver.DriverType)
+            ?? throw new InvalidOperationException($"Replication '{task.Name}': the target driver '{targetDriver.DriverType}' has no state table writer.");
         return new UnitStateTracking(new TargetUnitState(engine), resolved.EffectiveMode == "target" || resolved.EffectivePrimary == "target");
     }
 

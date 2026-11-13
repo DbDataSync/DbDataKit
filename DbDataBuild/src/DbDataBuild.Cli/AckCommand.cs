@@ -53,7 +53,7 @@ internal static class AckCommand
                     return entries.Any(e => $"{e.Model}.{e.Column}" == name && e.Acknowledgement != null) ? CliApp.ExitOk : CliApp.ExitFindings;
                 }
                 var historyRun = Guid.NewGuid();
-                using var historyLog = new FileStatementLog(Path.Combine(root, InitCommand.StatementLogDir), spec.Name, historyRun);
+                using var historyLog = new FileStatementLog(InitCommand.StatementLogPath(root, env), spec.Name, historyRun);
                 await using var historyGate = await MutationGate.OpenAsync(write, spec.Name, StatementKind.Tracking, historyLog, historyRun);
                 foreach (var e in open)
                 {
@@ -99,7 +99,7 @@ internal static class AckCommand
             }
 
             var runId = Guid.NewGuid();
-            using var log = new FileStatementLog(Path.Combine(root, InitCommand.StatementLogDir), spec.Name, runId);
+            using var log = new FileStatementLog(InitCommand.StatementLogPath(root, env), spec.Name, runId);
             await using var gate = await MutationGate.OpenAsync(write, spec.Name, StatementKind.Tracking, log, runId);
             await AuditLog.AcknowledgeAsync(gate, scope, "ack", name, code, detail, Actor.Of(env, write.User ?? Environment.UserName), reason!);
             output.Payload("acknowledged", new[] { new { kind, subject = name, key = $"{code}|{name}|{detail}", by = Actor.Of(env, write.User ?? Environment.UserName), reason } });

@@ -49,6 +49,8 @@ if (!isWorker) {
 export const syncRunner = {
   directory: path.join(os.tmpdir(), 'ddk-e2e-syncrunner'),
   clientDirectory: path.join(os.tmpdir(), 'ddk-e2e-syncrunner-client'),
+  moveClientDirectory: path.join(os.tmpdir(), 'ddk-e2e-syncrunner-move'),   // the pairing of the story that moves a replication (`replication-runner-move.spec.ts`)
+  engineOutput: path.join(repoRoot, 'src/DbDataSync.TaskRunner/bin/Debug/net10.0'),
   runtime: path.join(os.tmpdir(), 'ddk-e2e-syncrunner-runtime'),
   port: 8641,
   url: 'https://localhost:8641',
@@ -64,7 +66,7 @@ function runnerCommand(args: string[]): string {
   }
 }
 if (!isWorker) {
-  for (const directory of [syncRunner.directory, syncRunner.clientDirectory, syncRunner.runtime]) {
+  for (const directory of [syncRunner.directory, syncRunner.clientDirectory, syncRunner.moveClientDirectory, syncRunner.runtime]) {
     fs.rmSync(directory, { recursive: true, force: true })
     fs.mkdirSync(directory, { recursive: true })
   }
@@ -72,17 +74,24 @@ if (!isWorker) {
   const line = execFileSync('dotnet', ['exec', syncDll, 'version'], { encoding: 'utf8' }).trim().split('.').slice(0, 2).join('.')
   const rid = process.platform === 'win32' ? 'win-x64' : 'linux-x64'
   fs.mkdirSync(path.join(syncRunner.runtime, 'files', 'bin'), { recursive: true })
-  fs.writeFileSync(path.join(syncRunner.runtime, 'files', 'bin', 'DbDataSync.TaskRunner.dll'), 'stand-in for the engine')
+  // the engine itself (the TaskRunner's build output, as the runtime package is made from it) when it is built: the story that moves a replication (`replication-runner-move.spec.ts`) runs real drains on it; the publish stories
+  // only stage and serve, so a run with no build of the engine keeps the placeholder
+  if (fs.existsSync(path.join(syncRunner.engineOutput, 'DbDataSync.TaskRunner.dll'))) fs.cpSync(syncRunner.engineOutput, path.join(syncRunner.runtime, 'files', 'bin'), { recursive: true })
+  else fs.writeFileSync(path.join(syncRunner.runtime, 'files', 'bin', 'DbDataSync.TaskRunner.dll'), 'stand-in for the engine')
   fs.writeFileSync(path.join(syncRunner.runtime, 'package.yaml'), execFileSync('bash', [path.join(repoRoot, 'scripts/runtime-manifest.sh'), rid, `${line}.1`], { encoding: 'utf8' }))
   runnerCommand(['package', 'install', path.join(syncRunner.runtime, 'package.yaml'), path.join(syncRunner.runtime, 'files'), '--channel', 'prod', '--repo', syncRunner.directory])
   const made = runnerCommand(['server', 'pair', '--minutes', '120', '--repo', syncRunner.directory, '--max-role', 'viewer,operator,publisher,admin'])
   fs.writeFileSync(path.join(consoleScratch, 'sync-runner-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
+  // a second code, for the story that moves a replication (a code pairs one machine's client directory once)
+  const moveCode = runnerCommand(['server', 'pair', '--minutes', '120', '--repo', syncRunner.directory, '--max-role', 'viewer,operator,publisher,admin'])
+  fs.writeFileSync(path.join(consoleScratch, 'sync-runner-move-pairing-code.txt'), /Pairing code: (\S+)/.exec(moveCode)![1])
 }
 
 // The environment variables the spawned worker's secret store falls back to (this sandbox has no OS keychain): the connection passwords the specs save, for the spawned worker to resolve.
 const secretEnv = {
   DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_PLAYWRIGHT_SRC: SA_PASSWORD,
   DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_PLAYWRIGHT_TGT: SA_PASSWORD,
+  DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_MOVE_DB: SA_PASSWORD,   // `replication-runner-move.spec.ts`: the login of its connection, for this server's worker and for the runner's drain (the runner's environment below)
 }
 
 export default defineConfig({
@@ -146,6 +155,7 @@ export default defineConfig({
       timeout: 90_000,
       stdout: 'pipe',
       stderr: 'pipe',
+      env: { ...secretEnv },
     },
   ],
 })

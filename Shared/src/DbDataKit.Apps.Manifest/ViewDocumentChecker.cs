@@ -5,8 +5,8 @@ namespace DbDataKit.Apps;
 /// <summary>A parameter or field a link or drill may give a view of the app (plan 32 DBR13): a name, the core's type name (<c>string</c>, <c>integer</c>, <c>number</c>, <c>boolean</c>, <c>date</c>, or <c>any</c> where the type is the model's to say), whether it is a list, and whether it must be given.</summary>
 public sealed record ViewDocumentTarget(string Name, string Type, bool Many, bool Required, bool HasDefault);
 
-/// <summary>What a dashboard or a report file says about itself: its kind (<c>dashboard</c> or <c>report</c>) and its parameters, which links to it may give.</summary>
-public sealed record ViewDocumentInfo(string Kind, IReadOnlyList<ViewDocumentTarget> Parameters);
+/// <summary>What a dashboard or a report file says about itself: its kind (<c>dashboard</c> or <c>report</c>), its parameters (which links to it may give) and its title (the apps host's menu shows it).</summary>
+public sealed record ViewDocumentInfo(string Kind, IReadOnlyList<ViewDocumentTarget> Parameters, string? Title = null);
 
 /// <summary>What a document is checked against: the app's manifest and the targets a link or drill may lead to, keyed <c>dashboard:name</c>, <c>report:name</c>, <c>view:name</c>, <c>page:name</c> or <c>form:name</c> (a name is the file's name without folder and extension).</summary>
 public sealed record ViewDocumentContext(AppManifest Manifest, IReadOnlyDictionary<string, IReadOnlyList<ViewDocumentTarget>> Targets);

@@ -20,7 +20,7 @@ public sealed class AppViewDocuments : IViewDocumentChecker
         var load = Load(text, file);
         if (load.Document is not { } d) return null;
         return new ViewDocumentInfo(d.Kind == ViewKind.Dashboard ? "dashboard" : "report",
-            [.. d.Parameters.Select(p => new ViewDocumentTarget(p.Name, p.Type, p.Many, p.Required, p.HasDefault))]);
+            [.. d.Parameters.Select(p => new ViewDocumentTarget(p.Name, p.Type, p.Many, p.Required, p.HasDefault))], d.Title);
     }
 
     public IReadOnlyList<ConfigDiagnostic> Check(string text, string file, ViewDocumentContext context)
@@ -64,22 +64,34 @@ public sealed class AppViewDocuments : IViewDocumentChecker
 
     private static void CheckQuery(AppManifest manifest, ViewWidget widget, WidgetQuery query, Action<string, int, int, string, string?> problem)
     {
+        if (QueryRefusal(manifest, widget, query) is { } refusal) problem(AppManifestLoader.ViewDocumentModel, widget.Line, widget.Column, refusal.Message, refusal.Fix);
+    }
+
+    private static (string Message, string Fix)? QueryRefusal(AppManifest manifest, ViewWidget widget, WidgetQuery query)
+    {
         switch (query.Form)
         {
             case "derived" or "semantic" or "semantic_sql" when query.Model is { } model && !manifest.SemanticModels.Contains(model):
-                problem(AppManifestLoader.ViewDocumentModel, widget.Line, widget.Column, $"The widget `{widget.Id}` queries the semantic model `{model}`, which the manifest does not list under `semantic`.",
+                return ($"The widget `{widget.Id}` queries the semantic model `{model}`, which the manifest does not list under `semantic`.",
                     manifest.SemanticModels.Count == 0 ? "List the model under `semantic` in the manifest." : $"The manifest's semantic models: {string.Join(", ", manifest.SemanticModels)}.");
-                break;
             case "store":
                 var store = query.Raw["store"] as System.Text.Json.Nodes.JsonObject;
                 var storeModel = store?["model"]?.GetValue<string>();
                 var entity = store?["entity"]?.GetValue<string>();
                 var use = manifest.Models.FirstOrDefault(m => m.Model == storeModel);
                 if (use is null || entity is null || !use.Entities.TryGetValue(entity, out var allowed) || !allowed.HasFlag(DataOperations.Read))
-                    problem(AppManifestLoader.ViewDocumentModel, widget.Line, widget.Column, $"The widget `{widget.Id}` reads `{storeModel}.{entity}`, which the manifest does not list with `read` under `models`.", "Add the model and `read` for the entity to the manifest.");
+                    return ($"The widget `{widget.Id}` reads `{storeModel}.{entity}`, which the manifest does not list with `read` under `models`.", "Add the model and `read` for the entity to the manifest.");
                 break;
         }
+        return null;
     }
+
+    /// <summary>
+    /// What the manifest forbids a document to read, as words (the second lock of the host that renders it, plan 32 DBR13): the publish check says the same at <c>app validate</c>, and a host that renders what was published before the check, or
+    /// by another route, still refuses a widget whose query names a semantic model the manifest does not list or a Store entity it does not list with <c>read</c>.
+    /// </summary>
+    public static IReadOnlyList<string> AccessProblems(AppManifest manifest, ViewDocument document) =>
+        [.. document.Widgets.Where(w => w.Query is not null).Select(w => QueryRefusal(manifest, w, w.Query!)).Where(r => r is not null).Select(r => r!.Value.Message)];
 
     private static void CheckCustom(AppManifest manifest, ViewDocument document, ViewWidget widget, Action<string, int, int, string, string?> problem)
     {

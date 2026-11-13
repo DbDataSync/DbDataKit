@@ -81,7 +81,9 @@ public static partial class HomeViewHtml
     private static string DashboardFrame(HomeDashboard block, ResolvedInstance member, PortalSpec spec)
     {
         var title = member.Instance.Title ?? member.Manifest.Title ?? member.Instance.Name;
-        var route = block.View is null ? "" : $" data-route=\"{WebUtility.HtmlEncode("/" + block.View)}\"";
+        // a dashboard or a report file of the app is drawn to the frame's whole box (no menu, no title: `_as=block`), in the layout its selectors pick for that box; the other views are drawn as they are
+        var isDocument = block.View is not null && member.Package.Files.TryGetValue(block.View, out var bytes) && ViewSpecLoader.IsDocument(Encoding.UTF8.GetString(bytes));
+        var route = block.View is null ? "" : $" data-route=\"{WebUtility.HtmlEncode("/" + block.View + (isDocument ? "?_as=block" : ""))}\"";
         return $"<iframe class=\"slot home-dashboard\" data-instance=\"{WebUtility.HtmlEncode(block.App)}\"{route} data-theme=\"{WebUtility.HtmlEncode(PortalChrome.ThemeJson(spec.Theme))}\" title=\"{WebUtility.HtmlEncode(title)}\" sandbox=\"allow-scripts allow-forms allow-popups\" style=\"height:{block.Height}px;width:100%;flex:none;border:1px solid #8884;border-radius:8px;margin:8px 0\" src=\"{WebUtility.HtmlEncode(AppSite.BasePath + Uri.EscapeDataString(block.App) + "/" + AppSite.BundleFolder)}\"></iframe>";
     }
 

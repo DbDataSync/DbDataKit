@@ -500,6 +500,7 @@ Usage: `dbdatabuild project publish [options]`
 | `--client-dir` `<text>` | Where this machine's pairings with runners are kept (default: DBDATAKIT_RUNNER_CLIENT_DIR, else a folder under the user's local application data) |
 | `--code` `<text>` | The single-use pairing code (from `dbdatarunner server pair --max-role publisher`), when this machine is not paired with the runner yet |
 | `--expected-version` `<number>` | The highest version the package has, as you saw it (0 for a first publish); a newer one is refused |
+| `--operations` | Publish the project's person-driven writes instead of its refresh plans (plan 28c E21): the manual-only tasks `apply_plan`, `ack` and `seed`, with the project's sources and a slot for every connection, as the package `<project>-ops` (or --package). The Build server starts them for the person who asked; the write login is the runner's binding, not the server's |
 | `--out` `<text>` | Write the package (package.yaml and files/; for --to gateway gateway.json, models/ and data-sources/) to this directory and send nothing |
 | `--package` `<text>` | The package's name on the runner (default: the project folder's name) |
 | `--project` `<path>` | Project root |

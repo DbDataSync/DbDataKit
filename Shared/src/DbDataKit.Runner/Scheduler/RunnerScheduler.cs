@@ -654,6 +654,7 @@ public sealed partial class RunnerScheduler
                     RunId = item.RunId,
                     Chain = payload.Chain,
                     Attempt = payload.Attempt,
+                    RequestedBy = payload.RequestedBy,
                     Inputs = WithDefaults(task.Inputs, payload.Inputs),
                     ConnectionHandles = handles,
                     Slots = task.Connections,

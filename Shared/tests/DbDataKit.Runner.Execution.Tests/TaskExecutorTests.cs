@@ -454,6 +454,24 @@ public sealed class TaskExecutorTests
     }
 
     [Fact]
+    public async Task A_run_asked_for_by_hand_gives_the_task_who_asked_in_its_environment_and_a_run_nobody_asked_for_gives_it_nothing()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the sample executables are shell scripts");
+        using var h = new ExecutorHarness(Engine.Sqlite);
+        var request = await h.ScriptRequest("args.sh", "second");
+        request = request with { Launch = request.Launch with { Args = ["{package}/args.sh", "first"] }, Entry = new TaskEntry(Args: ["second"]) };
+
+        // plan 28c E21: the executor writes the name from the run's own record; the task reads it to write a record under that person's name
+        var asked = request with { RequestedBy = "Ada via Main console (sent by Build server)" };
+        await h.Executor.RunAsync(asked);
+        Assert.Contains(h.Log(asked.RunId!.Value), l => l.Message == "by: Ada via Main console (sent by Build server)");
+
+        var scheduled = request with { RunId = h.Database.NewId() };
+        await h.Executor.RunAsync(scheduled);
+        Assert.Contains(h.Log(scheduled.RunId!.Value), l => l.Message == "by: ");
+    }
+
+    [Fact]
     public async Task A_definition_run_by_a_runtime_starts_the_runtimes_command_in_the_definitions_directory_with_both_directories_in_the_environment()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "the sample executables are shell scripts");

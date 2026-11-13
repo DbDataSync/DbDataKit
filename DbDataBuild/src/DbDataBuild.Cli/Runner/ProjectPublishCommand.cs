@@ -5,7 +5,7 @@ namespace DbDataBuild.Cli.Runner;
 
 /// <summary>What `project publish` was asked.</summary>
 internal sealed record PublishOptions(string To, string? Server, string? Code, string? Channel, string? Package, bool Serve, int? ExpectedVersion, IReadOnlyList<string> Bind,
-    string? PromoteFrom, string? RuntimeRange, string? ClientDir, string? Out, bool RunnerSchedules = false);
+    string? PromoteFrom, string? RuntimeRange, string? ClientDir, string? Out, bool RunnerSchedules = false, bool Operations = false);
 
 /// <summary>
 /// `dbdatabuild project publish --to gateway --out` (plan 33 SC20e) writes the models and data sources a Gateway publish would send, with no login (<see cref="ProjectPublishGateway"/>).
@@ -24,7 +24,8 @@ internal static class ProjectPublishCommand
             return ProjectPublishGateway.Run(spec, root, o.Out, output, error);
         }
         if (o.To != "runner") { error.WriteLine($"--to is `runner` or `gateway`, not `{o.To}`."); return CliApp.ExitUsage; }
-        var package = o.Package ?? RunnerProject.DefaultPackageName(root);
+        if (o.Operations && (o.RunnerSchedules || o.PromoteFrom is not null)) { error.WriteLine("--operations publishes the manual-only operations package; --runner-schedules and --promote-from belong to the refresh package."); return CliApp.ExitUsage; }
+        var package = o.Package ?? (o.Operations ? BuildOperations.PackageOf(Path.GetFileName(Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))) : RunnerProject.DefaultPackageName(root));
         var bindings = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var text in o.Bind)
         {
@@ -56,7 +57,8 @@ internal static class ProjectPublishCommand
             }
 
             var diagnostics = new List<Diagnostic>();
-            var built = RunnerProject.Build(root, package, o.RuntimeRange ?? RunnerProject.RuntimeRange(ProductInfo.Version), diagnostics);
+            var range = o.RuntimeRange ?? RunnerProject.RuntimeRange(ProductInfo.Version);
+            var built = o.Operations ? OperationsPackage.Build(root, package, range, diagnostics) : RunnerProject.Build(root, package, range, diagnostics);
             if (built is null)
             {
                 foreach (var d in diagnostics) error.Diag(d);
@@ -65,7 +67,10 @@ internal static class ProjectPublishCommand
                 return CliApp.ExitFindings;
             }
 
-            var tasks = built.Plans.Select(p => new { name = p.Task, connection = p.Connection, plan = p.Plan, schedule = p.Cron, time_zone = p.TimeZone, slots = p.Slots, timeout_seconds = p.Timeout is { } t ? (long?)t.TotalSeconds : null }).ToList();
+            // the operations package has no plan: its tasks are the manual-only writes, each with every connection of the project as a slot
+            var tasks = o.Operations
+                ? built.Manifest.Tasks.Select(t => new { name = t.Name, connection = (string?)null, plan = (string?)null, schedule = (string?)null, time_zone = (string?)null, slots = t.Connections.Select(c => c.Name).ToList(), timeout_seconds = t.Limits.Timeout is { } limit ? (long?)limit.TotalSeconds : null }).ToList()
+                : built.Plans.Select(p => new { name = p.Task, connection = (string?)p.Connection, plan = (string?)p.Plan, schedule = p.Cron, time_zone = p.TimeZone, slots = p.Slots.ToList(), timeout_seconds = p.Timeout is { } t ? (long?)t.TotalSeconds : null }).ToList();
             output.Payload("package", package);
             output.Payload("files", built.Files.Count);
             output.Payload("tasks", tasks);
@@ -73,7 +78,7 @@ internal static class ProjectPublishCommand
             {
                 RunnerProject.Write(built, Path.GetFullPath(o.Out));
                 output.Payload("written_to", Path.GetFullPath(o.Out));
-                output.WriteLine($"Wrote the package {package} ({built.Plans.Count} task(s), {built.Files.Count} file(s)) to {Path.GetFullPath(o.Out)}; nothing was sent.");
+                output.WriteLine($"Wrote the package {package} ({(o.Operations ? built.Manifest.Tasks.Count : built.Plans.Count)} task(s), {built.Files.Count} file(s)) to {Path.GetFullPath(o.Out)}; nothing was sent.");
                 return CliApp.ExitOk;
             }
 

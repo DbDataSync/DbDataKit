@@ -1,4 +1,5 @@
 import { createSemanticClient, type SemanticClient } from '@dbdatakit/semantic-client'
+import { moduleClient, type ViewsClient } from '@dbdatakit/visuals'
 import { createStoreClient, type Fetcher, type StoreClient } from '@dbdatakit/store-ui'
 import { parseShellTheme, type ShellTheme, type StoredRow } from '@dbdatakit/store-ui'
 
@@ -30,12 +31,17 @@ export interface Host {
   route(path: string): void
   /** Called when the shell asks for a view (the address changed). Returns how to stop listening. */
   onNavigate(listener: (path: string) => void): () => void
+  /**
+   * Asks the shell page to open a dialog or a side panel at a route of this instance (plan 32 DBR36): the page owns the surface, because a frame inside this document cannot get a token. `closed` is called once, with whether the form in it
+   * saved (`views:saved`), when the surface is closed; a shell that refuses (one is open already, the route is not valid) closes it at once, unsaved.
+   */
+  openSurface(surface: { as: 'dialog' | 'panel'; label: string; address: string }, closed: (saved: boolean) => void): void
   /** Called with the shell's theme (a portal's look, `{type: 'theme', tokens}`), when it sends one. Returns how to stop listening. */
   onTheme(listener: (theme: ShellTheme) => void): () => void
 }
 
 export function connectHost(win: Window = window): Host {
-  const waiting = new Map<string, (m: { type: string; token?: string; expiresIn?: number; message?: string }) => void>()
+  const waiting = new Map<string, (m: { type: string; token?: string; expiresIn?: number; message?: string; saved?: boolean }) => void>()
   const listeners = new Set<(path: string) => void>()
   const themeListeners = new Set<(theme: ShellTheme) => void>()
   let lastTheme: ShellTheme | null = null   // the shell sends the theme once, when the frame loads: a listener added later still gets it
@@ -47,7 +53,7 @@ export function connectHost(win: Window = window): Host {
       if (theme) { lastTheme = theme; themeListeners.forEach((l) => l(theme)) }
       return
     }
-    if (m.type === 'token.request' || m.type === 'route') return   // our own requests, seen again where the page has no parent
+    if (m.type === 'token.request' || m.type === 'route' || m.type === 'surface.open') return   // our own requests, seen again where the page has no parent
     if (m.type === 'navigate' && typeof m.path === 'string') { listeners.forEach((l) => l(m.path)); return }
     waiting.get(m.id)?.(m)
     waiting.delete(m.id)
@@ -68,6 +74,11 @@ export function connectHost(win: Window = window): Host {
       return got.token
     },
     route: (path) => win.parent.postMessage({ dbdata: 'app/1', type: 'route', path }, '*'),
+    openSurface: (surface, closed) => {
+      const id = String(Math.random())
+      waiting.set(id, (m) => closed(m.type === 'surface.closed' && m.saved === true))
+      win.parent.postMessage({ dbdata: 'app/1', id, type: 'surface.open', as: surface.as, label: surface.label, route: surface.address }, '*')
+    },
     onNavigate: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
     onTheme: (listener) => {
       themeListeners.add(listener)
@@ -94,4 +105,17 @@ export function appStoreClient(host: Pick<Host, 'instance' | 'token'>, fetchImpl
 /** The semantic client of an app, on the same route and token. The apps host serves the semantic route (plan 22a GP35c) for the models the manifest lists under `semantic:`, as the signed-in person; a model it does not list is refused (`denied`). */
 export function appSemanticClient(host: Pick<Host, 'instance' | 'token'>, fetchImpl?: typeof fetch): SemanticClient {
   return createSemanticClient(appFetcher(host, fetchImpl))
+}
+
+/**
+ * The views client of an app (plan 32 DBR13): the shared `moduleClient` over the app's data route, with the shell's token. The route reads a dashboard or a report of the app by its file (`api/v1/dashboards/<file>`, the file the manifest
+ * lists under `views`) and renders its widgets as the signed-in person (`.../render`), so `DashboardView` draws an app's document as it draws a published one. Exports, versions and the editor's calls are not on the app's route and answer `unavailable`.
+ */
+export function appViewsClient(host: Pick<Host, 'instance' | 'token'>, fetchImpl?: typeof fetch): ViewsClient {
+  return moduleClient({
+    baseUrl: `/apps/${encodeURIComponent(host.instance)}/_data`,
+    ...(fetchImpl ? { fetch: fetchImpl } : {}),
+    trusted: true,   // the host loaded and checked the document; this page may not compile a schema (its policy has no `unsafe-eval`)
+    headers: async () => ({ Authorization: `Bearer ${await host.token()}` }),
+  })
 }

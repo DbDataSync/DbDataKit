@@ -1,6 +1,6 @@
 import type { ValidateFunction } from 'ajv'
 import {
-  CHART_CHANNELS, COMPUTING, Issues, MARKS, NAME, VIEW, ajv, at, defs, isObject, isSafeTextLink, join, part, run,
+  CHART_CHANNELS, COMPUTING, Issues, MARKS, NAME, VIEW, ajv, lazy, at, defs, isObject, isSafeTextLink, join, part, run,
 } from './common'
 import type { Json, ViewsIssue } from './common'
 import { checkFormat } from './format'
@@ -34,8 +34,8 @@ const widgetChecks: Record<string, ValidateFunction> = {
 const queryChecks: Record<string, ValidateFunction> = {
   derived: part(defs.query_derived!), semantic: part(defs.query_explicit_semantic!), saved: part(defs.query_explicit_saved!), store: part(defs.query_explicit_store!), ref: part(defs.query_explicit_ref!),
 }
-const channelCheck = ajv.getSchema(`${(coreSchema as { $id: string }).$id}#/$defs/chart_channel`)!
-const levelsCheck = ajv.getSchema(`${(coreSchema as { $id: string }).$id}#/$defs/x_levels`)!
+const channelCheck = lazy(() => ajv.getSchema(`${(coreSchema as { $id: string }).$id}#/$defs/chart_channel`)!)
+const levelsCheck = lazy(() => ajv.getSchema(`${(coreSchema as { $id: string }).$id}#/$defs/x_levels`)!)
 
 export const RAW_HTML = /<[A-Za-z/!?]/
 export const MARKDOWN_IMAGE = /!\[[^\]]*\]\([^)]*\)/

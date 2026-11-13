@@ -25,6 +25,9 @@ public static class RunnerProtocolNames
     /// <summary>The environment variable that holds the task's scratch directory (also its working directory and its temp directory): the one place it may write, removed after the run.</summary>
     public const string ScratchVariable = "DBDATAKIT_SCRATCH_DIR";
 
+    /// <summary>The environment variable that holds who the run is for, when a person asked for it by hand (plan 28c E21): the name the runner recorded ("Ada via Main console (sent by Build server)"). Set by the executor from the run's own record, never from a task input or the package, and absent for a scheduled run. Not a secret.</summary>
+    public const string RequestedByVariable = "DBDATAKIT_RUN_REQUESTED_BY";
+
     /// <summary>The environment variable that holds the root of the package's materialized version: read-only to the task.</summary>
     public const string PackageDirectoryVariable = "DBDATAKIT_PACKAGE_DIR";
 

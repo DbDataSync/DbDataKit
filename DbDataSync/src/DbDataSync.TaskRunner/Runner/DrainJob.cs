@@ -216,6 +216,9 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
             plannerState, Run.Log);
         var planner = new ReplicationPlanner(config, plannerState, gate, engine.Drivers, new EngineReconcileEnqueuer(config, plannerState, segments), Run.Log);
 
+        // a replication that asks for its state on the target (tracking: target|both) has its units copied into the runner's state after its passes (plan 28c E17)
+        var tracking = new DrainTracking(Input.Replication, config, (name, token) => executor.OpenPlanningConnectionAsync(name, token), Tracking, (mapping, key) => state.GetWatermark(Input.Replication, mapping, key), Run.Log);
+
         await DrainRequests.ApplyAsync(Input.Requests, Input.Replication, queue, checkpoints, checkpoints, Run.Log, ct).ConfigureAwait(false);
 
         var drain = new DrainLoop(Input.Replication, config, planner, plannerState, state, queue, Input.RunAll, Math.Max(1, Input.DegreeOfParallelism), Run.Log, Status, outputs: outputs,
@@ -223,13 +226,18 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
         try
         {
             await drain.RunAsync(
-                (items, parallelism, token) => ForEachAsync(DrainUnits.Mapping, items, parallelism, (pass, _) => RunPassAsync(executor, state, drain, pass), token),
+                (items, parallelism, token) => ForEachAsync(DrainUnits.Mapping, items, parallelism, async (pass, _) =>
+                {
+                    await RunPassAsync(executor, state, drain, pass).ConfigureAwait(false);
+                    await tracking.MaybeFollowAsync(force: false, token).ConfigureAwait(false);
+                }, token),
                 ct).ConfigureAwait(false);
         }
         finally
         {
             // what the drain claimed and did not finish goes back to the queue now, whether it was cancelled, failed or ended: the run's end gives back the rest, and a unit of the next drain finds the item as Pending
             await drain.ReleaseUnfinishedAsync().ConfigureAwait(false);
+            await tracking.MaybeFollowAsync(force: true, CancellationToken.None).ConfigureAwait(false);
         }
     }
 

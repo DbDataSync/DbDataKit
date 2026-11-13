@@ -388,10 +388,18 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         await RunNowAsync(server, code, package, channel, task, inputs: null, log, ct);
 
     /// <summary>Queues a run of the task now with <paramref name="inputs"/> (names and text values, as the manifest declares them; the body is <c>{"inputs": {...}}</c>).</summary>
-    public async Task<string?> RunNowAsync(string server, string? code, string package, string channel, string task, IReadOnlyDictionary<string, string>? inputs, Action<string>? log = null, CancellationToken ct = default)
+    public async Task<string?> RunNowAsync(string server, string? code, string package, string channel, string task, IReadOnlyDictionary<string, string>? inputs, Action<string>? log = null, CancellationToken ct = default) =>
+        await RunNowAsync(server, code, package, channel, task, inputs, onBehalfOf: null, log, ct);
+
+    /// <summary>
+    /// Queues a run of the task now for a person the caller signed in (<paramref name="onBehalfOf"/>, such as "Ada via Main console"): the run's record names the person with this client beside them, and a task that writes under a
+    /// person's name (Build's apply, acknowledge and seed) writes theirs (plan 28c E21).
+    /// </summary>
+    public async Task<string?> RunNowAsync(string server, string? code, string package, string channel, string task, IReadOnlyDictionary<string, string>? inputs, string? onBehalfOf, Action<string>? log = null, CancellationToken ct = default)
     {
         using var link = await OpenAsync(server, code, log, ct);
         var body = new JsonObject();
+        if (!string.IsNullOrWhiteSpace(onBehalfOf)) body["on_behalf_of"] = onBehalfOf;
         if (inputs is { Count: > 0 })
         {
             var map = new JsonObject();

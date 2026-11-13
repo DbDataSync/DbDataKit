@@ -73,11 +73,27 @@ public sealed class RunnerControl
     public DbDataKit.Runner.Triggers.TriggerEngine Triggers => _scheduler.Triggers;
 
     /// <summary>Queues a run of the task apart from its schedule (also when it is paused). With <paramref name="dryRun"/> it is a dry run: the job reads and nothing it keeps changes, the kit refuses writes and lists what it would have sent (plan 27a IX16), and the run does not start the tasks that follow it. Throws <see cref="UnknownTaskException"/> for a task this runner does not serve.</summary>
-    public RunNowResult RunNow(TaskRef task, IReadOnlyDictionary<string, string>? inputs, RunnerActor actor, bool dryRun = false)
+    public RunNowResult RunNow(TaskRef task, IReadOnlyDictionary<string, string>? inputs, RunnerActor actor, bool dryRun = false, string? onBehalfOf = null)
     {
-        var runId = Translate(() => _scheduler.RunNow(task, inputs, actor.Display, dryRun));
-        Record(RunVerb, task, actor, new { run_id = runId, queued = runId is not null, dry_run = dryRun, inputs = inputs?.Keys.Order(StringComparer.Ordinal).ToArray() ?? [] });
+        var requestedBy = RequestedBy(actor, onBehalfOf);
+        var runId = Translate(() => _scheduler.RunNow(task, inputs, requestedBy, dryRun));
+        Record(RunVerb, task, actor, new { run_id = runId, queued = runId is not null, dry_run = dryRun, inputs = inputs?.Keys.Order(StringComparer.Ordinal).ToArray() ?? [], on_behalf_of = onBehalfOf });
         return new RunNowResult(runId is not null, runId);
+    }
+
+    /// <summary>The longest name of a person a caller may start a run for.</summary>
+    public const int MaxOnBehalfOf = 200;
+
+    /// <summary>
+    /// Who a manual run is for, as the run records it and as a task that writes under a person's name reads it: the caller's own name, or, when a paired server starts the run for a person it signed in
+    /// (plan 28c E21, <paramref name="onBehalfOf"/> such as "Ada via Main console"), that person with the caller after them ("Ada via Main console (sent by Build server)"), so the record names both and a caller cannot pass for a person without
+    /// being named beside them. Control characters and anything past <see cref="MaxOnBehalfOf"/> characters are dropped.
+    /// </summary>
+    public static string RequestedBy(RunnerActor actor, string? onBehalfOf)
+    {
+        var person = new string((onBehalfOf ?? "").Where(c => !char.IsControl(c)).ToArray()).Trim();
+        if (person.Length > MaxOnBehalfOf) person = person[..MaxOnBehalfOf];
+        return person.Length == 0 ? actor.Display : $"{person} (sent by {actor.Display})";
     }
 
     public void Pause(TaskRef task, RunnerActor actor)

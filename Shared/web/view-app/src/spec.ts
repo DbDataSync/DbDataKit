@@ -26,7 +26,9 @@ export interface WidgetSpec {
 /** The widgets that read rows of an entity: every kind but an `embed`. */
 export const readsRows = (w: WidgetSpec): boolean => w.kind !== 'embed'
 export interface DashboardSpec extends Base { kind: 'dashboard'; widgets: WidgetSpec[] }
-export type ViewSpec = GridSpec | FormSpec | DetailSpec | DashboardSpec
+/** A dashboard or report file of the app (`dashboard/1`, `report/1`, plan 32 DBR13): the host lists it (`document` is its kind, `title` its own) and the screen reads its text through the views client, so the shared visuals draw it as the signed-in person. */
+export interface DocumentSpec extends Base { kind: 'document'; document: 'dashboard' | 'report' }
+export type ViewSpec = GridSpec | FormSpec | DetailSpec | DashboardSpec | DocumentSpec
 
 export interface ViewsDoc {
   format: string

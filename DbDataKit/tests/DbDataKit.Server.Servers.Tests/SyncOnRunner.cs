@@ -74,9 +74,18 @@ internal sealed class SyncOnRunner : IAsyncDisposable
             ? "set DBDATAKIT_TEST_SQLSERVER and DBDATAKIT_TEST_POSTGRES (testenv/testenv.sh up mssql postgres; eval \"$(testenv/testenv.sh env dbdatakit)\") to run a replication on a real runner"
             : null;
 
-    public static async Task<SyncOnRunner> StartAsync()
+    /// <summary>The replications of the loads story (<c>SyncOnRunnerLoadsTests</c>) beside the three of the move: <c>bulk</c> (SQL Server to SQL Server, Change Tracking and merge, for a reload in segments), <c>ver</c> (the same pair, periodic, its mapping has a verification check) and
+    /// <c>loadfail</c> (the same pair whose target table refuses every row, so an initial load fails and the mapping stays loading).</summary>
+    public bool Extras { get; init; }
+
+    private string[] Tables => Extras ? ["cont", "per", "inc", "bulk", "ver", "loadfail"] : ["cont", "per", "inc"];
+
+    /// <summary>The replications whose target is the SQL Server database <see cref="DwDatabase"/> (the others write to PostgreSQL).</summary>
+    private static bool IsDw(string table) => table is "inc" or "bulk" or "ver" or "loadfail";
+
+    public static async Task<SyncOnRunner> StartAsync(bool extras = false)
     {
-        var harness = new SyncOnRunner { SqlServer = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SQLSERVER")!, Postgres = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES")! };
+        var harness = new SyncOnRunner { Extras = extras, SqlServer = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SQLSERVER")!, Postgres = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES")! };
         try { await harness.InitializeAsync(); }
         catch { await harness.DisposeAsync(); throw; }
         return harness;
@@ -121,7 +130,8 @@ internal sealed class SyncOnRunner : IAsyncDisposable
         foreach (var table in tables)
         {
             await Exec(source, $"CREATE TABLE dbo.[{table}_src] (id INT NOT NULL PRIMARY KEY, name NVARCHAR(50) NOT NULL); ALTER TABLE dbo.[{table}_src] ENABLE CHANGE_TRACKING;");
-            if (table == "inc") await Exec(dw, "CREATE TABLE dbo.inc_tgt (id INT NOT NULL PRIMARY KEY, name NVARCHAR(50) NOT NULL)");
+            if (table == "loadfail") await Exec(dw, "CREATE TABLE dbo.loadfail_tgt (id INT NOT NULL PRIMARY KEY, name NVARCHAR(50) NOT NULL, must_have INT NOT NULL)");   // a column the mapping does not fill: every insert fails
+            else if (IsDw(table)) await Exec(dw, $"CREATE TABLE dbo.{table}_tgt (id INT NOT NULL PRIMARY KEY, name NVARCHAR(50) NOT NULL)");
             else await Exec(target, $"CREATE TABLE public.{table}_tgt (id integer PRIMARY KEY, name text NOT NULL)");
         }
     }
@@ -146,6 +156,14 @@ internal sealed class SyncOnRunner : IAsyncDisposable
             """);
     }
 
+    /// <summary>Runs a statement against the SQL Server database the <c>dw</c> connection points at (the target of <c>inc</c>, <c>bulk</c>, <c>ver</c> and <c>loadfail</c>).</summary>
+    public async Task ExecuteDwAsync(string sql)
+    {
+        await using var dw = new SqlConnection(DwConnectionString);
+        await dw.OpenAsync();
+        await Exec(dw, sql);
+    }
+
     public async Task<long> SourceCountAsync(string table)
     {
         await using var source = new SqlConnection(SourceConnectionString);
@@ -158,12 +176,12 @@ internal sealed class SyncOnRunner : IAsyncDisposable
     /// <summary>What the target table of <paramref name="table"/> holds: the number of rows and of distinct ids (a row twice would show as a difference; the key forbids it, so a duplicate fails the writer instead).</summary>
     public async Task<(long Rows, long Distinct)> TargetAsync(string table)
     {
-        if (table == "inc")
+        if (IsDw(table))
         {
             await using var dw = new SqlConnection(DwConnectionString);
             await dw.OpenAsync();
             await using var query = dw.CreateCommand();
-            query.CommandText = "SELECT COUNT_BIG(*), COUNT_BIG(DISTINCT id) FROM dbo.inc_tgt";
+            query.CommandText = $"SELECT COUNT_BIG(*), COUNT_BIG(DISTINCT id) FROM dbo.{table}_tgt";
             await using var rows = await query.ExecuteReaderAsync();
             await rows.ReadAsync();
             return (rows.GetInt64(0), rows.GetInt64(1));
@@ -192,7 +210,8 @@ internal sealed class SyncOnRunner : IAsyncDisposable
         var (sync, runner) = (Programs.Sync, Programs.Runner);
         Directory.CreateDirectory(SyncDirectory);
         Directory.CreateDirectory(RunnerDirectory);
-        await CreateDatabasesAsync("cont", "per", "inc");
+        await CreateDatabasesAsync(Tables);
+        if (Extras) await InsertAsync("loadfail", 1, 100);   // rows are there before the replication is, so its very first (initial) load has rows to write into a target that refuses them
         Step("databases");
 
         // the runtime package, installed and active before the runner starts (the development path, in the runner's own directory)
@@ -242,6 +261,12 @@ internal sealed class SyncOnRunner : IAsyncDisposable
         await CreateReplicationAsync("cont", new { mode = "Continuous", frequencySeconds = 2, idleTimeoutSeconds = 5 }, "tgt");
         await CreateReplicationAsync("per", new { mode = "Periodic", cronExpression = "0 3 * * *" }, "tgt");   // never due while the test runs: it runs when it is asked to
         await CreateReplicationAsync("inc", new { mode = "Continuous", frequencySeconds = 2, idleTimeoutSeconds = 5 }, "dw");
+        if (Extras)
+        {
+            await CreateReplicationAsync("bulk", new { mode = "Continuous", frequencySeconds = 2, idleTimeoutSeconds = 5 }, "dw");
+            await CreateReplicationAsync("ver", new { mode = "Periodic", cronExpression = "0 3 * * *" }, "dw", verify: true);
+            await CreateReplicationAsync("loadfail", new { mode = "Continuous", frequencySeconds = 2, idleTimeoutSeconds = 5 }, "dw");
+        }
 
         Step("connections and replications made");
 
@@ -314,7 +339,7 @@ internal sealed class SyncOnRunner : IAsyncDisposable
         Assert.True(made.Status == HttpStatusCode.OK, $"dw: {made.Status} {made.Body}");
     }
 
-    private async Task CreateReplicationAsync(string name, object scheduling, string target)
+    private async Task CreateReplicationAsync(string name, object scheduling, string target, bool verify = false)
     {
         // PostgreSQL has no upsert writer, so a replication to it reloads the table each pass (BatchReload, DeleteInsert); SQL Server to SQL Server reads Change Tracking and merges
         var processing = target == "tgt"
@@ -335,6 +360,7 @@ internal sealed class SyncOnRunner : IAsyncDisposable
             sources = new[] { new { schema = "dbo", table = name + "_src" } },
             targets = new[] { new { schema = target == "tgt" ? "public" : "dbo", table = name + "_tgt" } },
             columnMappings = new[] { new { sourceColumn = "id", targetColumn = "id" }, new { sourceColumn = "name", targetColumn = "name" } },
+            verification = verify ? (object[])[new { name = "counts", kind = "RowCount", groupBy = new[] { "id" } }] : [],
         });
         Assert.True(mapping.Status == HttpStatusCode.OK, $"{name} mapping: {mapping.Status} {mapping.Body}");
         var cached = await Sync(HttpMethod.Post, $"/api/replications/{name}/table-mappings/main/refresh-metadata");
