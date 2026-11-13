@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using DbDataKit.Config.Git;
 using DbDataKit.Runner.Client;
 using DbDataSync.Api.Controllers;
+using DbDataSync.Api.Runner;
 using DbDataSync.Core.Config;
 using DbDataSync.State;
 using Microsoft.Extensions.DependencyInjection;
@@ -140,6 +141,42 @@ public sealed class RunnerOwnedReadStateTests(RunnerOwnedApiFactory factory) : I
 
         Assert.Equal(HttpStatusCode.Conflict, busy.StatusCode);
         Assert.Equal("Paused", Item(key).Parts["hold"]);
+    }
+
+    [Fact]
+    public async Task The_status_of_a_replication_the_runner_owns_carries_the_runners_row_in_a_field_of_its_own_and_running_stays_this_servers_worker()
+    {
+        var (replication, _, _) = SetUp();
+        var due = new DateTimeOffset(2026, 11, 13, 6, 0, 0, TimeSpan.Zero);
+        factory.Runner.TaskStatus = new ClientTaskStatus(RunnerAccess.TaskOf(replication), "runner", due, new ClientLastRun("1", "succeeded", due.AddHours(-1), due.AddHours(-1).AddMinutes(2), 1, 40), 1, 2, true, "ada");
+        var url = $"/api/replications/{replication}/status";
+
+        var up = (await _client.GetFromJsonAsync<JsonElement>(url, JsonOptions));
+        factory.Runner.Down = true;
+        var down = (await _client.GetFromJsonAsync<JsonElement>(url, JsonOptions));
+        factory.Runner.Down = false;
+        factory.Runner.TaskStatus = null;
+
+        Assert.False(up.GetProperty("running").GetBoolean());
+        var runner = up.GetProperty("runner");
+        Assert.True(runner.GetProperty("reachable").GetBoolean());
+        Assert.True(runner.GetProperty("running").GetBoolean());
+        Assert.Equal((1, 2, true, "ada"), (runner.GetProperty("runningCount").GetInt32(), runner.GetProperty("queued").GetInt32(), runner.GetProperty("paused").GetBoolean(), runner.GetProperty("pausedBy").GetString()));
+        Assert.Equal("succeeded", runner.GetProperty("lastRun").GetProperty("outcome").GetString());
+        Assert.False(down.GetProperty("running").GetBoolean());
+        Assert.False(down.GetProperty("runner").GetProperty("reachable").GetBoolean());
+        Assert.Contains("down", down.GetProperty("runner").GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task The_status_of_a_replication_this_server_runs_has_no_runner_field()
+    {
+        var (replication, _, _) = SetUp();
+        factory.Services.GetRequiredService<DbDataSync.Api.Runner.RunnerOwnerFile>().SetOwner(replication, DbDataKit.State.TaskOwners.Old);
+
+        var status = await _client.GetFromJsonAsync<JsonElement>($"/api/replications/{replication}/status", JsonOptions);
+
+        Assert.False(status.TryGetProperty("runner", out var runner) && runner.ValueKind != JsonValueKind.Null);
     }
 
     [Fact]

@@ -53,6 +53,20 @@ public sealed class RunnerDispatch(RunnerAccess runner)
         catch (RunnerClientException ex) { throw new RunnerUnavailableException(ex.Message, ex); }
     }
 
+    /// <summary>The runner's row of the replication's drain for the status card; never throws: a runner that cannot be asked is <see cref="RunnerTaskState.Unreachable"/>.</summary>
+    public async Task<RunnerTaskState> StateOfAsync(string replication, CancellationToken ct)
+    {
+        if (runner.Open() is not { } sync) return RunnerTaskState.Unreachable($"No runner is linked ({runner.File.Path}).");
+        try
+        {
+            return await sync.StatusAsync(RunnerAccess.TaskOf(replication), ct).ConfigureAwait(false) is { } status ? RunnerTaskState.From(status) : RunnerTaskState.NoTask;
+        }
+        catch (RunnerClientException ex)
+        {
+            return RunnerTaskState.Unreachable(ex.Message);
+        }
+    }
+
     /// <summary>Pause or resume on the runner: what stops, or lets go of, the next start of the drain (a drain that is up sees it and plans nothing new).</summary>
     public async Task SetPausedAsync(string replication, bool paused, CancellationToken ct)
     {

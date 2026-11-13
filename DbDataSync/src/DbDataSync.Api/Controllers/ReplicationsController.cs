@@ -79,7 +79,7 @@ public sealed class ReplicationsController(
     /// </summary>
     [Authorize(Policies.Viewer)]
     [HttpGet("{name}/status")]
-    public ActionResult<ReplicationStatus> Status(string name)
+    public async Task<ActionResult<ReplicationStatus>> Status(string name, CancellationToken cancellationToken)
     {
         if (!configRepository.ListReplications().Contains(name, StringComparer.Ordinal))
             return NotFound();
@@ -99,12 +99,15 @@ public sealed class ReplicationsController(
             // error — the next poll will 404 on the listing check above.
         }
 
+        // a replication the runner owns has its drain there: its own field, so `Running` keeps meaning this server's worker (plan 28c E12g)
+        var runner = runnerDispatch.RunnerOwns(name) ? await runnerDispatch.StateOfAsync(name, cancellationToken) : null;
         return Ok(supervisor.DescribeStatus(name) with
         {
             Enabled = enabled,
             Paused = paused,
             PauseNote = pauseNote,
             ShouldRun = TaskScheduling.ShouldRun(enabled, paused),
+            Runner = runner,
         });
     }
 
@@ -138,7 +141,7 @@ public sealed class ReplicationsController(
         }
 
         taskRunStore.SetPaused(name, request.Paused, request.Note, currentUser.Author.Name);
-        return Status(name);
+        return await Status(name, cancellationToken);
     }
 
     /// <summary>

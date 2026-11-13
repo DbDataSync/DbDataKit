@@ -143,7 +143,14 @@ public sealed class FakeRunnerRuns : IRunnerSync, IRunnerRuns
 
     public Task ResumeAsync(string task, CancellationToken ct) => throw new NotSupportedException();
 
-    public Task<ClientTaskStatus?> StatusAsync(string task, CancellationToken ct) => throw new NotSupportedException();
+    /// <summary>What the runner answers for the task's row (null: it has none).</summary>
+    public ClientTaskStatus? TaskStatus { get; set; }
+
+    public Task<ClientTaskStatus?> StatusAsync(string task, CancellationToken ct)
+    {
+        if (Down) throw new RunnerClientException("The runner is down.");
+        return Task.FromResult(TaskStatus);
+    }
 
     /// <summary>How many of the next changes of a checkpoint item find a drain has moved it first (the version moves, the change is refused).</summary>
     public int MovedUnderneath { get; set; }

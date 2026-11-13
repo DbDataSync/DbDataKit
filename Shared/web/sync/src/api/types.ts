@@ -823,6 +823,21 @@ export interface ReplicationStatus {
   paused: boolean
   /** Why it is held, when whoever held it said. Null when not paused, and when they cleared it. */
   pauseNote: string | null
+  /** What the runner says of the drain, for a replication the runner owns (plan 28c E12g); absent otherwise. `running` above stays this server's own worker. */
+  runner?: RunnerTaskState | null
+}
+
+/** The runner's row of a replication's drain. `reachable` false: the runner could not be asked (`error` says why), which is not "nothing is running there". */
+export interface RunnerTaskState {
+  reachable: boolean
+  running: boolean
+  runningCount: number
+  queued: number
+  paused: boolean
+  pausedBy: string | null
+  nextDueUtc: string | null
+  lastRun: { id: string; outcome: string; started: string; finished: string | null; attempt: number; rows: number | null } | null
+  error: string | null
 }
 
 export interface ScriptDiagnostic {
