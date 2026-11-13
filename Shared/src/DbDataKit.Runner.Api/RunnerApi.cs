@@ -16,6 +16,7 @@ namespace DbDataKit.Runner.Api;
 /// tasks, and each of those is written to the audit (<see cref="RunnerControl"/>), refused attempts included.
 /// <list type="bullet">
 /// <item><c>GET /api/v1/status</c>: the engine of the state, the channels served, what this machine reports (<c>LimitCapabilities</c>), this instance's id and every task's status: next due, last run, what is running or waiting, whether it is paused.</item>
+/// <item><c>POST /api/v1/runs/{id}/cancel</c> (operator, plan 28c E12g): stops one run, audited as <c>runner.run.cancel</c>; it is not retried.</item>
 /// <item><c>GET /api/v1/runs[?package=&amp;channel=&amp;task=&amp;outcome=&amp;limit=&amp;before=]</c>: the run history, newest first; <c>task</c> needs the package and the channel.</item>
 /// <item><c>GET /api/v1/runs/{id}</c> and <c>.../runs/{id}/logs[?after=&amp;limit=]</c>: one run and its log in order, a page at a time by line id (plan 28c E13); <c>.../tasks/{package}/{channel}/{task}/steps/{name}[?limit=&amp;before=&amp;key=]</c>: the completed steps of that name across the task's runs, newest first. A viewer reads all three.</item>
 /// <item><c>.../tasks/{package}/{channel}/{task}/steps/{name}/payloads/{id}</c>: the file a completed step of that name kept as its streamed result (plan 28c E06e); 404 when it is not one of that task's or the retention removed it. A viewer reads it.</item>
@@ -307,6 +308,22 @@ public static class RunnerApi
                 return result.Queued
                     ? Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["run_id"] = result.RunId!.Value.ToString() }, statusCode: StatusCodes.Status202Accepted)
                     : Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["queued"] = false, ["error"] = $"{reference} is queued or running already." }, statusCode: StatusCodes.Status409Conflict);
+            });
+        });
+
+        // stops one run by its id (plan 28c E12g): a run not started is cancelled, one that runs is asked to stop (its loop cancels the task, a stopped run is not retried). Operator; audited as runner.run.cancel with the task.
+        app.MapPost($"{root}/runs/{{id:guid}}/cancel", (Guid id, HttpContext context) =>
+        {
+            if (Deny(context, ServerRole.Operator) is { } denied) return denied;
+            return Control(engine(), control =>
+            {
+                var (outcome, task) = control.CancelRun(id, ActorOf(context));
+                return outcome switch
+                {
+                    RunCancelOutcome.Unknown => Results.NotFound(new { error = $"There is no run {id} on the queue (it may have ended long ago, or a retry gave it a new id)." }),
+                    RunCancelOutcome.AlreadyEnded => Results.Json(new JsonObject { ["run_id"] = id.ToString(), ["task"] = task?.ToString(), ["cancelled"] = false, ["error"] = $"The run {id} ended already." }, statusCode: StatusCodes.Status409Conflict),
+                    _ => Results.Json(new JsonObject { ["run_id"] = id.ToString(), ["task"] = task?.ToString(), ["cancelled"] = true, ["state"] = outcome == RunCancelOutcome.Cancelled ? "cancelled" : "stopping" }, statusCode: StatusCodes.Status202Accepted),
+                };
             });
         });
 

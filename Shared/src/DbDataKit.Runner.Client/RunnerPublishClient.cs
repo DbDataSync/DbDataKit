@@ -413,6 +413,19 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         return (string?)JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["run_id"];
     }
 
+    /// <summary>
+    /// Stops one run of the runner by its id: <c>POST api/v1/runs/{id}/cancel</c> (an operator of the pairing; audited as <c>runner.run.cancel</c>). True when the run was cancelled or its loop was asked to stop; false when the runner has
+    /// no such run (404) or it ended already (409).
+    /// </summary>
+    public async Task<bool> CancelRunAsync(string server, string? code, Guid runId, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        using var response = await link.SendAsync(HttpMethod.Post, $"api/v1/runs/{runId}/cancel", null, ct);
+        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Conflict) return false;
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to cancel the run {runId}", ct);
+        return true;
+    }
+
     /// <summary>Puts an item in the task's own queue (<c>POST .../work</c>, the operator role): the way to hand work to a run that is up already. The id of the item's run.</summary>
     public async Task<string> EnqueueWorkAsync(string server, string? code, string package, string channel, string task, string kind, string subject, string part, string? payload, Action<string>? log = null, CancellationToken ct = default)
     {

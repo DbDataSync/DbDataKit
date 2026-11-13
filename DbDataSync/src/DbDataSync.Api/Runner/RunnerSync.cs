@@ -18,6 +18,9 @@ public interface IRunnerSync
 
     Task PauseAsync(string task, CancellationToken ct);
 
+    /// <summary>Stops one run of the runner by its id (plan 28c E12g): true when it was cancelled or its drain was asked to stop, false when the runner has no such run or it ended.</summary>
+    Task<bool> CancelRunAsync(Guid runId, CancellationToken ct);
+
     Task ResumeAsync(string task, CancellationToken ct);
 
     Task<ClientTaskStatus?> StatusAsync(string task, CancellationToken ct);
@@ -49,6 +52,8 @@ public sealed class ClientRunnerSync(RunnerPublishClient client, RunnerLink link
     public Task<string?> RunNowAsync(string task, IReadOnlyDictionary<string, string>? inputs, CancellationToken ct) => client.RunNowAsync(link.Server, null, link.Package, link.Channel, task, inputs, null, ct);
 
     public Task PauseAsync(string task, CancellationToken ct) => client.PauseAsync(link.Server, null, link.Package, link.Channel, task, null, ct);
+
+    public Task<bool> CancelRunAsync(Guid runId, CancellationToken ct) => client.CancelRunAsync(link.Server, null, runId, null, ct);
 
     public Task ResumeAsync(string task, CancellationToken ct) => client.ResumeAsync(link.Server, null, link.Package, link.Channel, task, null, ct);
 

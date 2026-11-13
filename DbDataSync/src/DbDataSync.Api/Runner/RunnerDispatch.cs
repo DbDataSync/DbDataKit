@@ -42,6 +42,17 @@ public sealed class RunnerDispatch(RunnerAccess runner)
         }
     }
 
+    /// <summary>
+    /// Stops a run of the runner (plan 28c E12g): the Sync API's cancel asks its own supervisor first and, for a run that is not its own, the linked runner. False when no runner is linked or the runner has no such run (or it ended); a runner
+    /// that cannot be reached is thrown as <see cref="RunnerUnavailableException"/>, never answered as "no such run".
+    /// </summary>
+    public async Task<bool> CancelRunAsync(Guid runId, CancellationToken ct)
+    {
+        if (runner.Open() is not { } sync) return false;
+        try { return await sync.CancelRunAsync(runId, ct).ConfigureAwait(false); }
+        catch (RunnerClientException ex) { throw new RunnerUnavailableException(ex.Message, ex); }
+    }
+
     /// <summary>Pause or resume on the runner: what stops, or lets go of, the next start of the drain (a drain that is up sees it and plans nothing new).</summary>
     public async Task SetPausedAsync(string replication, bool paused, CancellationToken ct)
     {

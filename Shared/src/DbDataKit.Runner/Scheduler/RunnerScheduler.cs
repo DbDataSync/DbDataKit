@@ -839,6 +839,20 @@ public sealed partial class RunnerScheduler
         return TryEnqueue(served, WorkPayload.ManualTrigger, inputs, requestedBy);
     }
 
+    /// <summary>
+    /// Stops one run by its id (the id <see cref="RunNow"/> returned, or a run record's): an item nobody holds yet is cancelled, an item a loop holds (this one or another instance's: the request is stored with the item) is asked to stop and its
+    /// loop cancels the task at its next heartbeat; a stopped run is never retried (<see cref="RetryPlanner"/>) and a continuous task is queued again by its schedule as usual. The task is null for a run that is not on the queue (unknown, or an earlier
+    /// attempt of a retried item, whose id the retry replaced).
+    /// </summary>
+    public (RunCancelOutcome Outcome, TaskRef? Task) CancelRun(Guid runId)
+    {
+        if (_queue.FindByRun(runId) is not { } item) return (RunCancelOutcome.Unknown, null);
+        TaskRef.TryParse(WorkPayload.TryParse(item.PayloadJson, out _)?.Task, out var task);
+        if (item.Status is WorkItemStatus.Done or WorkItemStatus.Failed or WorkItemStatus.Cancelled) return (RunCancelOutcome.AlreadyEnded, task);
+        if (item.Status == WorkItemStatus.Pending && _queue.TryCancelPending(runId)) return (RunCancelOutcome.Cancelled, task);
+        return _queue.RequestCancel(runId) ? (RunCancelOutcome.Requested, task) : (RunCancelOutcome.AlreadyEnded, task);
+    }
+
     /// <summary>Stops the task from being queued at its scheduled times until it is resumed. A run already going is not touched.</summary>
     public void Pause(TaskRef task, string by)
     {

@@ -128,6 +128,19 @@ public sealed class FakeRunnerRuns : IRunnerSync, IRunnerRuns
 
     public Task PauseAsync(string task, CancellationToken ct) => throw new NotSupportedException();
 
+    /// <summary>The runs the Sync API asked to cancel; a run the fake knows is cancelled (true), any other is not on the runner (false).</summary>
+    public List<Guid> CancelRequests { get; } = [];
+
+    public Task<bool> CancelRunAsync(Guid runId, CancellationToken ct)
+    {
+        if (Down) throw new RunnerClientException("The runner is down.");
+        lock (_gate)
+        {
+            CancelRequests.Add(runId);
+            return Task.FromResult(_runs.Any(r => r.Id == runId && r.Finished is null));
+        }
+    }
+
     public Task ResumeAsync(string task, CancellationToken ct) => throw new NotSupportedException();
 
     public Task<ClientTaskStatus?> StatusAsync(string task, CancellationToken ct) => throw new NotSupportedException();
