@@ -823,6 +823,21 @@ export interface ReplicationStatus {
   paused: boolean
   /** Why it is held, when whoever held it said. Null when not paused, and when they cleared it. */
   pauseNote: string | null
+  /** What the runner says of the drain, for a replication the runner owns (plan 28c E12g); absent otherwise. `running` above stays this server's own worker. */
+  runner?: RunnerTaskState | null
+}
+
+/** The runner's row of a replication's drain. `reachable` false: the runner could not be asked (`error` says why), which is not "nothing is running there". */
+export interface RunnerTaskState {
+  reachable: boolean
+  running: boolean
+  runningCount: number
+  queued: number
+  paused: boolean
+  pausedBy: string | null
+  nextDueUtc: string | null
+  lastRun: { id: string; outcome: string; started: string; finished: string | null; attempt: number; rows: number | null } | null
+  error: string | null
 }
 
 export interface ScriptDiagnostic {
@@ -1679,6 +1694,20 @@ export interface RunnerEventView {
 }
 
 /** The package as the linked runner holds it, narrowed to the link's channel. `linked` is false while no runner is set, `published` while the runner has no such package. */
+/** Where the repository stands against the last publish to the linked package and channel (plan 28c E12g). A publish is explicit: until the next one a runner runs the published version. */
+export interface PublishState {
+  /** A publish of this package and channel was made from this repository; false shows nothing. */
+  everPublished: boolean
+  unpublished: boolean
+  /** The connections, libraries, drivers or files, which every replication uses, changed. */
+  sharedChanged: boolean
+  /** The replications whose own files changed, were added or were removed since. */
+  replications: string[]
+  publishedAtUtc: string | null
+  version: number | null
+  mode: string | null
+}
+
 export interface RunnerPackageView {
   linked: boolean
   server: string | null

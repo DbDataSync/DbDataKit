@@ -339,7 +339,7 @@ public sealed class MappingReadStateTests(TestApiFactory factory) : IClassFixtur
     }
 
     [Fact]
-    public async Task Setting_the_read_state_of_a_replication_the_runner_owns_answers_409_naming_the_runners_checkpoints_and_changes_nothing()
+    public async Task Setting_the_read_state_of_a_replication_the_runner_owns_goes_to_the_runner_and_with_none_to_ask_is_a_503_that_changes_nothing()
     {
         var (replication, mapping, store, key) = await WithThreePositionsAsync();
         factory.Services.GetRequiredService<DbDataSync.Api.Runner.RunnerAccess>().File.SetOwner(replication, DbDataKit.State.TaskOwners.Runner);
@@ -347,8 +347,8 @@ public sealed class MappingReadStateTests(TestApiFactory factory) : IClassFixtur
 
         var response = await SetReadStateAsync(replication, mapping, ReadIntent.InitialLoad, ReadHold.Paused);
 
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Contains("Checkpoints", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        // the runner's own behaviour is RunnerOwnedReadStateTests'; this factory has no runner to ask (plan 28c E12g)
+        Assert.True(response.StatusCode is HttpStatusCode.ServiceUnavailable, await response.Content.ReadAsStringAsync());
         Assert.Equal(before, store.GetReadState(replication, mapping, key));
     }
 }

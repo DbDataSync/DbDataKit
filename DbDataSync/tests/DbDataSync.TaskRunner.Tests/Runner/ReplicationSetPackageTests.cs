@@ -83,6 +83,9 @@ public sealed class ReplicationSetPackageTests : IDisposable
         Assert.All(orders.Connections, c => Assert.Equal(SlotEnvironmentFormats.SyncSecret, c.Env));
         Assert.Equal("orders", orders.Inputs.Single(i => i.Name == "replication").Default);
         Assert.Equal(ReplicationSetPackage.RepoDir, orders.Inputs.Single(i => i.Name == "repo_dir").Default);
+        // plan 28c E12g: a killed drain is run again by the retry chain, so a periodic bulk load does not wait for its next cron time; it survives the manifest's text
+        Assert.All(built.Manifest.Tasks, t => Assert.Equal((ReplicationSetPackage.DrainAttempts, ReplicationSetPackage.DrainBackoff, ReplicationSetPackage.DrainMaxBackoff), (t.Limits.Attempts, t.Limits.Backoff, t.Limits.MaxBackoff)));
+        Assert.Contains("attempts: 3", built.ManifestText);
         Assert.Null(orders.Limits.Concurrency);   // plan 28c E12e: a package-wide limit would serialize the replications of the set, and a continuous drain would starve the others
         Assert.Equal((ReplicationSetPackage.RuntimeName, "2026.11.x"), (built.Manifest.Launch.Runtime!.Name, built.Manifest.Launch.Runtime.Range));
 

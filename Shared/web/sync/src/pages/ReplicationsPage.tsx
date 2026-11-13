@@ -8,8 +8,10 @@ import {
   useReplicationLag,
   useReplications,
   useTableMappings,
+  useUnpublishedChanges,
   useUpsertReplication,
 } from '../api/hooks'
+import { UnpublishedTag } from '../components/UnpublishedChanges'
 import { formatLag } from './replication-detail/lag'
 import type { ReplicationTaskConfig, ScheduleMode } from '../api/types'
 
@@ -47,6 +49,7 @@ function LagSummary({ name }: { name: string }) {
 
 function ReplicationRow({ name, onOpen }: { name: string; onOpen: () => void }) {
   const { data } = useReplication(name)
+  const { data: publishState } = useUnpublishedChanges()
   const { data: mappings } = useTableMappings(name)
 
   return (
@@ -59,6 +62,7 @@ function ReplicationRow({ name, onOpen }: { name: string; onOpen: () => void }) 
         <span className={`dot ${data?.enabled ? 'dot-ok' : 'dot-idle'}`} />
         {data ? (data.enabled ? 'enabled' : 'disabled') : '…'}
         {mappings && <span className="faint" style={{ marginLeft: 6 }}>· {mappings.length} mapping{mappings.length === 1 ? '' : 's'}</span>}
+        <UnpublishedTag state={publishState} replication={name} />
       </span>
     </button>
   )

@@ -17,7 +17,7 @@ public sealed record BindRunnerSlotsRequest(IReadOnlyDictionary<string, string> 
 /// </summary>
 [ApiController]
 [Route("api/runner")]
-public sealed class RunnerPublishController(ReplicationSetPublishing publishing, CurrentUser currentUser) : ControllerBase
+public sealed class RunnerPublishController(ReplicationSetPublishing publishing, CurrentUser currentUser, RunnerAccess runnerAccess, DbDataSync.Api.Configuration.ApiOptions options) : ControllerBase
 {
     private string Actor => currentUser.Name ?? currentUser.Author.Name;
 
@@ -30,6 +30,17 @@ public sealed class RunnerPublishController(ReplicationSetPublishing publishing,
         try { return Ok(await publishing.StatusAsync(cancellationToken)); }
         catch (Exception ex) when (ex is RunnerClientException or HttpRequestException) { return StatusCode(StatusCodes.Status502BadGateway, new { error = ex.Message }); }
     }
+
+    /// <summary>
+    /// Whether the repository changed since the last publish to the linked package and channel, and which replications (plan 28c E12g, E22 precondition P9). A publish is explicit: an edited replication runs the version the runner has until somebody
+    /// publishes, so the screens say so. <c>everPublished</c> false (nothing published from this repository, or to another package or channel) shows nothing. Read from the marker <c>package publish</c> writes, against the working tree.
+    /// </summary>
+    [Authorize(Policies.Viewer)]
+    [HttpGet("package/unpublished")]
+    public ActionResult<DbDataSync.Libraries.PublishState> Unpublished() =>
+        runnerAccess.Link is { } link
+            ? Ok(DbDataSync.Libraries.PublishedDefinition.StateOf(options.RepoRoot, link.Package, link.Channel))
+            : Ok(new DbDataSync.Libraries.PublishState(false, false, false, [], null, null, null));
 
     [Authorize(Policies.Viewer)]
     [HttpPost("package/check")]

@@ -284,6 +284,7 @@ public static class DbDataSyncHost
         builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.RunnerOwnerFile(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(sp.GetRequiredService<ApiOptions>().StateDbPath))!, "runner-owners.json")));
         builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.RunnerAccess(sp.GetRequiredService<DbDataSync.Api.Runner.RunnerOwnerFile>(), link => DbDataSync.Api.Runner.ClientRunnerSync.For(link, Environment.GetEnvironmentVariable)));
         builder.Services.AddSingleton<DbDataSync.Api.Runner.RunnerDispatch>();
+        builder.Services.AddSingleton<DbDataSync.Api.Runner.RunnerReadState>();
         // the publish action of plan 28c E08: the verb `package publish` as a child process with the stored link, the runner's package read and bound through the paired client, every call audited beside the state
         builder.Services.AddSingleton<DbDataSync.Api.Runner.IPackageLauncher>(sp => new DbDataSync.Api.Runner.CliPackageLauncher(sp.GetRequiredService<ApiOptions>()));
         builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.ReplicationSetPublishing(sp.GetRequiredService<DbDataSync.Api.Runner.RunnerAccess>(), sp.GetRequiredService<DbDataSync.Api.Runner.IPackageLauncher>(),

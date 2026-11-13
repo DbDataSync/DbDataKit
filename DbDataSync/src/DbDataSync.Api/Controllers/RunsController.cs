@@ -358,6 +358,20 @@ public sealed class RunsController(
     }
 
     [HttpPost("runs/{runId:guid}/cancel")]
-    public IActionResult Cancel(Guid runId) =>
-        supervisor.CancelRun(runId) ? Ok() : NotFound(new { error = "No cancellable run with that id on this API instance." });
+    public async Task<IActionResult> Cancel(Guid runId, CancellationToken cancellationToken)
+    {
+        if (supervisor.CancelRun(runId)) return Ok();
+
+        // not a run of this server's own worker: a run of a replication the runner owns is stopped on the runner (plan 28c E12g), which answers for the ids of its own history
+        try
+        {
+            if (await runnerDispatch.CancelRunAsync(runId, cancellationToken)) return Ok();
+        }
+        catch (DbDataSync.Api.Runner.RunnerUnavailableException ex)
+        {
+            return StatusCode(503, new { error = ex.Message });
+        }
+
+        return NotFound(new { error = "No cancellable run with that id on this API instance or on its runner." });
+    }
 }

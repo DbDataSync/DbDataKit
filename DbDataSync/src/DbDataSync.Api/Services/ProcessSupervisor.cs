@@ -355,6 +355,9 @@ public class ProcessSupervisor(
 /// </param>
 /// <param name="PauseNote">Why it is held, if whoever held it said. Null when not paused, and also
 /// when they cleared it — the popup allows both.</param>
+/// <param name="Runner">What the runner says of the replication's drain, for a replication the runner owns (plan 28c E12g,
+/// E22 precondition P6); null otherwise. A field of its own and not a change of <c>Running</c>, which stays this server's
+/// own worker (false for a replication the runner owns: Sync starts no worker for it).</param>
 public sealed record ReplicationStatus(
     bool Running,
     int? Pid = null,
@@ -364,7 +367,8 @@ public sealed record ReplicationStatus(
     bool ShouldRun = true,
     bool Enabled = true,
     bool Paused = false,
-    string? PauseNote = null)
+    string? PauseNote = null,
+    DbDataSync.Api.Runner.RunnerTaskState? Runner = null)
 {
     /// <summary>A replication with no worker. The common state, and not a problem — a worker drains
     /// its queue and exits, so an idle replication has no process by design.</summary>
