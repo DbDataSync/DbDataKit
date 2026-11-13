@@ -173,4 +173,37 @@ public sealed class EntityReadAccessTests
         var refused = As(engines, model, "u1", "east");
         await Assert.ThrowsAsync<StoreReadRefusedException>(() => refused.ListAsync("territory"));
     }
+
+    [Theory, MemberData(nameof(Engines.Both), MemberType = typeof(Engines))]
+    public async Task The_rows_of_a_rules_table_that_name_the_caller_and_the_values_no_rule_row_covers_are_read_for_the_explanation(string engine)
+    {
+        var (engines, model) = await OpenAsync(engine);
+        await using var _ = engines;
+        var writer = new ModelWriter(model, engines.Connection, engine);
+        var region = model.Access!.RowRulesOf("territory")!.Groups[0].Rules[0];
+        // the rows that name east, as the table spells them (a duplicate row is two rows), nothing for a name it does not hold
+        var rows = await writer.RulesRowsAsync(region, ["east"], 10);
+        Assert.Equal(["East", "East"], rows.Select(r => r.Values["region_code"]));
+        Assert.All(rows, r => Assert.Equal("east", r.Subject));
+        Assert.Single(await writer.RulesRowsAsync(region, ["nullers"], 10), r => r.Values["region_code"] is null);   // a NULL is a null value, not a text
+        Assert.Empty(await writer.RulesRowsAsync(region, ["nobody"], 10));
+        Assert.Single(await writer.RulesRowsAsync(region, ["east"], 1));   // limited
+
+        // territory regions: East (3 rows), West, North, NULL; the table covers East, West and NULL: North is uncovered, with one row
+        var uncovered = await writer.UncoveredAsync("territory", region, 10);
+        Assert.Equal(1, uncovered.Count);
+        Assert.Equal("North", uncovered.Values[0].Values["region"]);
+        Assert.Equal(1, uncovered.Values[0].Rows);
+        // without the NULL row of the table the NULL region is uncovered too, counted and listed as a null value
+        await engines.ExecuteAsync("DELETE FROM rules.region_access WHERE region_code IS NULL");
+        var again = await writer.UncoveredAsync("territory", region, 10);
+        Assert.Equal(2, again.Count);
+        Assert.Contains(again.Values, v => v.Values["region"] is null);
+        // a pair of columns is matched together: quota has (East, gold) (East, silver) (NULL, silver) (NULL, gold) (West, silver); the table has (East, gold), (NULL, silver)
+        var pair = model.Access!.RowRulesOf("quota")!.Groups[0].Rules[0];
+        var pairs = await writer.UncoveredAsync("quota", pair, 2);
+        Assert.Equal(3, pairs.Count);
+        Assert.True(pairs.Truncated);
+        Assert.Equal(2, pairs.Values.Count);
+    }
 }

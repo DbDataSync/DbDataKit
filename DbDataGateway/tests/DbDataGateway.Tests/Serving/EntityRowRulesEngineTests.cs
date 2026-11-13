@@ -113,6 +113,7 @@ public sealed class EntityRowRulesEngineTests : IDisposable
         public required GatewayAccess Access { get; init; }
         public required List<string> Alerts { get; init; }
         public required Dictionary<string, string[]> Groups { get; init; }
+        public GatewayAccessInspector Inspector { get; init; } = null!;
 
         public void Execute(string sql)
         {
@@ -190,6 +191,7 @@ public sealed class EntityRowRulesEngineTests : IDisposable
         {
             Engine = engine, Connection = connection, Options = options, Time = clock, Alerts = fixture.Alerts, Groups = fixture.Groups,
             Access = rulesChanged, Api = new GroupStoreApi(() => options, secrets, models, null!, access),
+            Inspector = new GatewayAccessInspector(rulesChanged, () => new DbDataKit.Serving.Semantic.SemanticModels(), models, _state, secrets, () => options),
         };
     }
 
@@ -332,5 +334,35 @@ public sealed class EntityRowRulesEngineTests : IDisposable
         // a person the home has no groups for reads nothing
         var stranger = await host.SendAsync(call with { SubjectId = "u9", SubjectName = "u9" }, CancellationToken.None);
         Assert.Empty(System.Text.Json.Nodes.JsonNode.Parse(stranger.Body)!["rows"]!.AsArray());
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public void The_explanation_and_the_coverage_of_an_entity_model_use_the_stores_database_and_carry_the_warning_that_rules_limit_reads_only(string engine)
+    {
+        var f = Make(engine);
+        // a group's rows: east reads East without the closed E3 (two include rows for East, one exclude row)
+        var included = f.Inspector.Explain("east", "group", "sales", "territory", new Dictionary<string, string?> { ["region"] = "East", ["code"] = "E1" });
+        var dataset = included["datasets"]![0]!;
+        Assert.True((bool)dataset["verdict"]!["included"]!);
+        Assert.Equal("by_region/region", (string?)dataset["verdict"]!["decided_by"]![0]);
+        var closed = f.Inspector.Explain("east", "group", "sales", "territory", new Dictionary<string, string?> { ["region"] = "East", ["code"] = "E3" })["datasets"]![0]!["verdict"]!;
+        Assert.False((bool)closed["included"]!);
+        Assert.Equal("by_region/not_closed", (string?)closed["decided_by"]![0]);
+        Assert.Contains(included["warnings"]!.AsArray(), w => (string?)w == AccessPublishNotes.EntityWritesWarning);   // QR6: the owner requires it to be visible
+        // a group the tables do not name
+        var nobody = f.Inspector.Explain("nobody", "group", "sales", "territory", null)["datasets"]![0]!;
+        Assert.Contains("No row of 'rules.region_access' names them", (string?)nobody["summary"]);
+        // the rules and the warning in the list; an entity model with row rules limits reads only
+        var rules = f.Inspector.Rules(full: true)["definitions"]![0]!;
+        Assert.Equal("entity-model/sales", (string?)rules["reference"]);
+        Assert.True((bool)rules["limits_reads_only"]!);
+        Assert.Contains(rules["warnings"]!.AsArray(), w => (string?)w == AccessPublishNotes.EntityWritesWarning);
+        Assert.Equal(2, rules["tables"]!.AsArray().Count);
+        // coverage: territory regions are East, West, North and NULL; the table covers East, West and NULL
+        var coverage = f.Inspector.Coverage("sales", "territory")["rules"]!.AsArray().Single(r => (string?)r!["rule"] == "region")!;
+        Assert.Equal(1, (int)coverage["uncovered"]!);
+        Assert.Equal("North", (string?)coverage["values"]![0]!["values"]!["region"]);
+        f.Execute("DELETE FROM rules.region_access WHERE region_code IS NULL");
+        Assert.Equal(2, (int)f.Inspector.Coverage("sales", "territory")["rules"]!.AsArray().Single(r => (string?)r!["rule"] == "region")!["uncovered"]!);
     }
 }
