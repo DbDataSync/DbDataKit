@@ -1694,6 +1694,20 @@ export interface RunnerEventView {
 }
 
 /** The package as the linked runner holds it, narrowed to the link's channel. `linked` is false while no runner is set, `published` while the runner has no such package. */
+/** Where the repository stands against the last publish to the linked package and channel (plan 28c E12g). A publish is explicit: until the next one a runner runs the published version. */
+export interface PublishState {
+  /** A publish of this package and channel was made from this repository; false shows nothing. */
+  everPublished: boolean
+  unpublished: boolean
+  /** The connections, libraries, drivers or files, which every replication uses, changed. */
+  sharedChanged: boolean
+  /** The replications whose own files changed, were added or were removed since. */
+  replications: string[]
+  publishedAtUtc: string | null
+  version: number | null
+  mode: string | null
+}
+
 export interface RunnerPackageView {
   linked: boolean
   server: string | null

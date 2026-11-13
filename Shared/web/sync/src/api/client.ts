@@ -1,7 +1,7 @@
 import { adminApi } from '@dbdatakit/admin'
 import { ApiError, put, request, shellApi } from '@dbdatakit/shell'
 import type {
-  OwnerView, OwnershipChange, ReplicationOwner, RunnerLink, RunnerPackageView, ReplicationSetPublication, PublishRunnerRequest,
+  OwnerView, OwnershipChange, ReplicationOwner, RunnerLink, RunnerPackageView, PublishState, ReplicationSetPublication, PublishRunnerRequest,
   ReplicationChecks, ReplicationTrackingStatus,
   CheckForm,
   ApplyResult,
@@ -276,6 +276,8 @@ export const api = {
     save: (link: RunnerLink) => put<RunnerLink>('/api/runner', link),
     /** The package as the linked runner holds it: the version served, the staged one, the slots and their bindings (plan 28c E08). */
     package: () => request<RunnerPackageView>('/api/runner/package'),
+    /** Whether the repository changed since the last publish, and which replications (plan 28c E12g). */
+    unpublished: () => request<PublishState>('/api/runner/package/unpublished'),
     /** What a publish would hold, or why it is refused (409, in the verb's words); restores nothing and sends nothing. */
     check: () => request<ReplicationSetPublication>('/api/runner/package/check', { method: 'POST' }),
     /** Publishes the replications to the runner: staged (the runners activate it when every one has it ready) or served at once. A refusal is 409 in the words of the verb or the runner. */

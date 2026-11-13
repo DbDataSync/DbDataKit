@@ -45,6 +45,8 @@ public static class PackageCommand
         var version = typeof(PackageCommand).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
             .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "0";
         var problems = new List<string>();
+        // what the working tree holds now: taken before the package is built, so an edit made while it is sent counts as unpublished (plan 28c E12g)
+        var digest = check || output is not null ? null : DbDataSync.Libraries.DefinitionDigest.Of(repoRoot);
         var built = ReplicationSetPackage.Build(repoRoot, package, CliOptions.Read(rest, "--runtime-range") ?? ReplicationSetPackage.RuntimeRange(version), problems);
         if (built is null)
         {
@@ -117,6 +119,8 @@ public static class PackageCommand
                 int? expected = int.TryParse(CliOptions.Read(rest, "--expected-version"), out var e) ? e : null;
                 var serve = CliOptions.Has(rest, "--serve");
                 var result = await client.PublishAsync(server!, code, Path.Combine(directory, "package.yaml"), Path.Combine(directory, "files"), channel!, stage: !serve, expected, log);
+                try { DbDataSync.Libraries.PublishedDefinition.Record(repoRoot, new DbDataSync.Libraries.PublishedMarker(package, channel!, server!, result.Version, result.Mode, DateTimeOffset.UtcNow, digest!)); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Console.Error.WriteLine($"Published, but the record of what was published could not be written ({ex.Message}); the screens will show unpublished changes until the next publish."); }
                 if (json) Console.WriteLine(Result(package, channel, result.Mode, built, result, bindings.Keys));
                 else Console.WriteLine($"{(result.Mode == "stage" ? "Staged" : "Published")} {package} on {result.Channel}: version {result.Version}{(result.Changed ? "" : " (the same content as before, nothing changed)")}, {result.Uploaded} file(s) uploaded, {result.Skipped} already there."
                     + (result.Mode == "stage" ? " Runners prepare it and activate it once every runner of the group has it ready." : "")

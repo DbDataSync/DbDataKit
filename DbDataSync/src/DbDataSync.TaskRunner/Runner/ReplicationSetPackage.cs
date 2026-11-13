@@ -50,7 +50,7 @@ public static class ReplicationSetPackage
     public static readonly TimeSpan DrainMaxBackoff = TimeSpan.FromMinutes(5);
 
     /// <summary>Where in the package the definition is: the <c>repo_dir</c> input of the drain.</summary>
-    public const string RepoDir = "repo";
+    public const string RepoDir = DefinitionFiles.RepoDir;
 
     /// <summary>Where the configuration repository keeps the files a message names (the layout of <c>ConfigPaths</c>, which is internal to the core).</summary>
     /// <summary>The .NET the package is built for: what this assembly targets (<c>net10.0</c> is "10.0"), not the runtime the Sync program happens to run on (it rolls forward to a newer major where one is installed).</summary>
@@ -69,8 +69,6 @@ public static class ReplicationSetPackage
         public static string TaskFile(string configRoot, string name) => Path.Combine(ReplicationsDir(configRoot), name, "task.yaml");
         public static string TableMappingFile(string configRoot, string name, string mapping) => Path.Combine(ReplicationsDir(configRoot), name, "table-mappings", mapping + ".yaml");
     }
-
-    private static readonly string[] SkippedDirectories = [".git", "secrets", "state", "script-cache", "node_modules"];
 
     /// <summary>The range of runtimes a set published by this tool accepts: the release's own line, <c>2026.11.x</c>; <c>*</c> when the version is not numbers.</summary>
     public static string RuntimeRange(string version)
@@ -231,29 +229,8 @@ public static class ReplicationSetPackage
         _ => Schedule.Interval(scheduling.Frequency),
     };
 
-    /// <summary>
-    /// The definition's files under <c>repo/</c>: everything of <c>config/</c>, <c>libraries/</c> (their scripts and pins; the stores come with <see cref="AddLibrariesAsync"/>), <c>drivers/</c> and <c>files/</c> except what is
-    /// local to a machine (<c>secrets/</c>, <c>.git</c>, the state, the script cache) and a library's or driver's own <c>lib/</c>, which is rebuilt for the platform.
-    /// </summary>
-    private static List<SetPackageFile> Files(string repoRoot)
-    {
-        var files = new SortedDictionary<string, string>(StringComparer.Ordinal);
-        foreach (var top in new[] { "config", "libraries", "drivers", "files" })
-        {
-            var root = Path.Combine(repoRoot, top);
-            if (!Directory.Exists(root)) continue;
-            foreach (var path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
-            {
-                var relative = Path.GetRelativePath(repoRoot, path).Replace('\\', '/');
-                var parts = relative.Split('/');
-                if (parts.Take(parts.Length - 1).Any(p => SkippedDirectories.Contains(p, StringComparer.OrdinalIgnoreCase))) continue;
-                if (top is "libraries" or "drivers" && parts.Length > 3 && parts[2] == LibraryPaths.LibDirName) continue;
-                files[RepoDir + "/" + relative] = path;
-            }
-        }
-
-        return [.. files.Select(f => new SetPackageFile(f.Key, f.Value))];
-    }
+    /// <summary>The definition's files under <c>repo/</c> (the list <see cref="DefinitionFiles"/> keeps, which the check for unpublished changes reads too).</summary>
+    private static List<SetPackageFile> Files(string repoRoot) => [.. DefinitionFiles.Enumerate(repoRoot).Select(f => new SetPackageFile(f.Path, f.Source))];
 
     /// <summary>
     /// Adds the <c>driver-libraries</c> part for <paramref name="platform"/> (<see cref="DriverLibrariesPart"/>, built into <paramref name="partDirectory"/>, which has to be empty) to the package's files, under <c>repo/</c>, and returns the set with them.

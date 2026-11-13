@@ -68,6 +68,7 @@ const keys = {
   replicationOwner: (name: string) => ['replications', name, 'owner'] as const,
   runnerLink: () => ['runner', 'link'] as const,
   runnerPackage: () => ['runner', 'package'] as const,
+  runnerUnpublished: () => ['runner', 'unpublished'] as const,
   replicationCommitDiff: (name: string, sha: string) =>
     ['replications', name, 'history', sha, 'diff'] as const,
   replicationRestorePreview: (name: string, sha: string) =>
@@ -456,6 +457,16 @@ export function useRunnerPackage() {
   })
 }
 
+/** Whether the repository changed since the last publish (plan 28c E12g): a saved change reaches the runner only by a publish, so the screens show this. Read again every ten seconds and after a publish. */
+export function useUnpublishedChanges() {
+  return useQuery({
+    queryKey: keys.runnerUnpublished(),
+    queryFn: () => api.runner.unpublished(),
+    retry: false,
+    refetchInterval: 10_000,
+  })
+}
+
 /** What a publish would hold, or why it is refused (a mutation: it runs the verb, which reads the whole definition). */
 export function useCheckRunnerPackage() {
   return useMutation({ mutationFn: () => api.runner.check() })
@@ -468,6 +479,7 @@ export function usePublishRunnerPackage() {
     mutationFn: (body: PublishRunnerRequest) => api.runner.publish(body),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: keys.runnerPackage() })
+      queryClient.invalidateQueries({ queryKey: keys.runnerUnpublished() })
       queryClient.invalidateQueries({ queryKey: ['replications'] })
     },
   })
