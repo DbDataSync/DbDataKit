@@ -16,6 +16,7 @@ namespace DbDataKit.Runner.Api;
 /// tasks, and each of those is written to the audit (<see cref="RunnerControl"/>), refused attempts included.
 /// <list type="bullet">
 /// <item><c>GET /api/v1/status</c>: the engine of the state, the channels served, what this machine reports (<c>LimitCapabilities</c>), this instance's id and every task's status: next due, last run, what is running or waiting, whether it is paused.</item>
+/// <item><c>POST /api/v1/runs/{id}/cancel</c> (operator, plan 28c E12g): stops one run, audited as <c>runner.run.cancel</c>; it is not retried.</item>
 /// <item><c>GET /api/v1/runs[?package=&amp;channel=&amp;task=&amp;outcome=&amp;limit=&amp;before=]</c>: the run history, newest first; <c>task</c> needs the package and the channel.</item>
 /// <item><c>GET /api/v1/runs/{id}</c> and <c>.../runs/{id}/logs[?after=&amp;limit=]</c>: one run and its log in order, a page at a time by line id (plan 28c E13); <c>.../tasks/{package}/{channel}/{task}/steps/{name}[?limit=&amp;before=&amp;key=]</c>: the completed steps of that name across the task's runs, newest first. A viewer reads all three.</item>
 /// <item><c>.../tasks/{package}/{channel}/{task}/steps/{name}/payloads/{id}</c>: the file a completed step of that name kept as its streamed result (plan 28c E06e); 404 when it is not one of that task's or the retention removed it. A viewer reads it.</item>
@@ -125,6 +126,65 @@ public static class RunnerApi
                 {
                     if (!control.RewindCheckpoint(reference!, name, key, historyId, ActorOf(context)))
                         return Results.Json(new { error = $"The checkpoint '{name}' of {reference} moved while it was being rewound, or that change is not one of its own. Read its history again." }, statusCode: StatusCodes.Status409Conflict);
+                }
+                catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
+                var now = new ProgressStore(state, new ProgressKey(package, channel, task)).GetCheckpoint(name, key);
+                return Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["name"] = name, ["key"] = key, ["version"] = now?.Version });
+            });
+        });
+
+        // a hand change of some parts of one checkpoint item (plan 28c E12g): the product's recovery actions (a mapping's read intent, hold and captured position). Operator, audited with before and after. 409 when a run moved the item meanwhile.
+        app.MapPost($"{root}/tasks/{{package}}/{{channel}}/{{task}}/checkpoints/{{name}}/set", async (string package, string channel, string task, string name, HttpContext context) =>
+        {
+            if (!ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
+            if (Deny(context, ServerRole.Operator, RunnerControl.SetCheckpointVerb, engine(), reference!) is { } denied) return denied;
+            if (!PackageManifestValidator.NameRule.IsMatch(name)) return Results.BadRequest(new { error = $"'{name}' is not a checkpoint name." });
+            using var reader = new StreamReader(context.Request.Body);
+            var text = await reader.ReadToEndAsync(context.RequestAborted);
+            if (text.Length > 1_000_000) return Results.BadRequest(new { error = "The body is larger than 1 MB." });
+            JsonObject? body;
+            try { body = JsonNode.Parse(text) as JsonObject; }
+            catch (System.Text.Json.JsonException) { return Results.BadRequest(new { error = "The body is not JSON." }); }
+            const string shape = "The body is {\"key\": \"\", \"version\": <the version read, 0 for none>, \"set\": {\"part\": {\"type\": \"text\", \"value\": \"...\"}}, \"remove\": [\"part\"]}.";
+            if (body?["version"] is not JsonValue versionValue || !versionValue.TryGetValue<long>(out var version) || version < 0) return Results.BadRequest(new { error = shape });
+            var key = body["key"] is JsonValue keyValue && keyValue.TryGetValue<string>(out var keyText) ? keyText : "";
+            var set = new Dictionary<string, ProgressValue>(StringComparer.Ordinal);
+            if (body["set"] is { } setNode)
+            {
+                if (setNode is not JsonObject setObject) return Results.BadRequest(new { error = shape });
+                foreach (var (part, node) in setObject)
+                {
+                    if (!PackageManifestValidator.NameRule.IsMatch(part)) return Results.BadRequest(new { error = $"'{part}' is not a part name." });
+                    if (node is not JsonObject spec || spec["type"] is not JsonValue typeValue || !typeValue.TryGetValue<string>(out var typeText) || spec["value"] is not JsonValue valueNode || !valueNode.TryGetValue<string>(out var valueText))
+                        return Results.BadRequest(new { error = $"The part '{part}' is {{\"type\": \"text|time|int|bool\", \"value\": \"...\"}}." });
+                    switch (typeText)
+                    {
+                        case "text": set[part] = ProgressValue.OfText(valueText); break;
+                        case "time" when DateTimeOffset.TryParse(valueText, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at): set[part] = ProgressValue.OfTime(at); break;
+                        case "int" when long.TryParse(valueText, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var number): set[part] = ProgressValue.OfInt(number); break;
+                        case "bool" when bool.TryParse(valueText, out var flag): set[part] = ProgressValue.OfBool(flag); break;
+                        default: return Results.BadRequest(new { error = $"The part '{part}' is not a text, a time, a whole number or a bool as its type says." });
+                    }
+                }
+            }
+
+            var remove = new List<string>();
+            if (body["remove"] is { } removeNode)
+            {
+                if (removeNode is not JsonArray removeArray) return Results.BadRequest(new { error = shape });
+                foreach (var node in removeArray)
+                {
+                    if (node is JsonValue v && v.TryGetValue<string>(out var partName) && PackageManifestValidator.NameRule.IsMatch(partName)) remove.Add(partName);
+                    else return Results.BadRequest(new { error = "remove is a list of part names." });
+                }
+            }
+
+            return Control(engine(), control =>
+            {
+                try
+                {
+                    if (!control.SetCheckpointParts(reference!, name, key, version, set, remove, ActorOf(context)))
+                        return Results.Json(new { error = $"The checkpoint '{name}' of {reference} moved while it was being changed (a run advanced it). Read it again." }, statusCode: StatusCodes.Status409Conflict);
                 }
                 catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
                 var now = new ProgressStore(state, new ProgressKey(package, channel, task)).GetCheckpoint(name, key);
@@ -307,6 +367,22 @@ public static class RunnerApi
                 return result.Queued
                     ? Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["run_id"] = result.RunId!.Value.ToString() }, statusCode: StatusCodes.Status202Accepted)
                     : Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["queued"] = false, ["error"] = $"{reference} is queued or running already." }, statusCode: StatusCodes.Status409Conflict);
+            });
+        });
+
+        // stops one run by its id (plan 28c E12g): a run not started is cancelled, one that runs is asked to stop (its loop cancels the task, a stopped run is not retried). Operator; audited as runner.run.cancel with the task.
+        app.MapPost($"{root}/runs/{{id:guid}}/cancel", (Guid id, HttpContext context) =>
+        {
+            if (Deny(context, ServerRole.Operator) is { } denied) return denied;
+            return Control(engine(), control =>
+            {
+                var (outcome, task) = control.CancelRun(id, ActorOf(context));
+                return outcome switch
+                {
+                    RunCancelOutcome.Unknown => Results.NotFound(new { error = $"There is no run {id} on the queue (it may have ended long ago, or a retry gave it a new id)." }),
+                    RunCancelOutcome.AlreadyEnded => Results.Json(new JsonObject { ["run_id"] = id.ToString(), ["task"] = task?.ToString(), ["cancelled"] = false, ["error"] = $"The run {id} ended already." }, statusCode: StatusCodes.Status409Conflict),
+                    _ => Results.Json(new JsonObject { ["run_id"] = id.ToString(), ["task"] = task?.ToString(), ["cancelled"] = true, ["state"] = outcome == RunCancelOutcome.Cancelled ? "cancelled" : "stopping" }, statusCode: StatusCodes.Status202Accepted),
+                };
             });
         });
 

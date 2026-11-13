@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { AppShell } from '../components/AppShell'
-import { useBindRunnerSlots, useCheckRunnerPackage, usePublishRunnerPackage, useRunnerLink, useRunnerPackage } from '../api/hooks'
+import { useBindRunnerSlots, useCheckRunnerPackage, usePublishRunnerPackage, useRunnerLink, useRunnerPackage, useUnpublishedChanges } from '../api/hooks'
 import type { ReplicationSetPublication, RunnerPackageView } from '../api/types'
 import { RunnerLinkCard } from './RunnerLinkCard'
 import { bindingsToSend, packageState, scheduleText, slotChoices, type SlotChoice } from './runnerPublish'
@@ -106,6 +106,7 @@ export function RunnerPage() {
   const isAdmin = useIsAdmin()
   const link = useRunnerLink()
   const pkg = useRunnerPackage()
+  const unpublished = useUnpublishedChanges()
   const check = useCheckRunnerPackage()
   const publish = usePublishRunnerPackage()
   const bind = useBindRunnerSlots()
@@ -143,6 +144,14 @@ export function RunnerPage() {
           <h1 className="page-title">Runner</h1>
           <span className="page-note">the replication set on the paired runner</span>
         </div>
+        {unpublished.data?.everPublished && unpublished.data.unpublished && (
+          <div className="banner warn" role="status" data-testid="runner-unpublished-changes">
+            <strong>Unpublished changes.</strong>{' '}
+            {unpublished.data.replications.length > 0 && <>Changed since version {unpublished.data.version ?? '?'} was published: {unpublished.data.replications.join(', ')}. </>}
+            {unpublished.data.sharedChanged && <>Connections, libraries, drivers or files, which every replication uses, changed. </>}
+            A runner runs the published version until the replication set is published again.
+          </div>
+        )}
 
         <RunnerPackageCard view={pkg.data} />
         {pkg.error && <ErrorBanner error={pkg.error} />}

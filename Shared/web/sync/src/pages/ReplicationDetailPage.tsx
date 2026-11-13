@@ -6,6 +6,7 @@ import { tabClass } from '@dbdatakit/shell'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { MetricsCard } from './replication-detail/MetricsCard'
 import { StatusCard } from './replication-detail/StatusCard'
+import { UnpublishedChanges } from '../components/UnpublishedChanges'
 import {
   useDeleteReplication, useReplication, useReplicationStatus, useSetReplicationEnabled,
   useSetReplicationPaused, useUpsertReplication,
@@ -228,6 +229,7 @@ export function ReplicationDetailPage() {
 
         <div className="detail-rail">
           <ErrorBanner error={error ?? upsert.error ?? setEnabled.error} />
+          <UnpublishedChanges replication={name} />
           <StatusCard replicationName={name} enabled={enabled} />
           <MetricsCard replicationName={name} enabled={enabled} />
         </div>

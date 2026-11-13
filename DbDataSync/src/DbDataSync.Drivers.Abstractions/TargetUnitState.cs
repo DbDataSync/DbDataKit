@@ -35,7 +35,7 @@ public sealed record UnitDraft(
 /// <list type="bullet">
 /// <item>SQL Server and PostgreSQL: schema <c>dbdatasync</c>, table <c>unit</c>, native uuid and timestamp columns.</item>
 /// <item>MySQL and MariaDB: database (schema) <c>dbdatasync</c>, table <c>unit</c>; the ids are <c>CHAR(36)</c> text, the times <c>DATETIME(6)</c> in UTC, the text columns compare by binary collation (as the other engines do).</item>
-/// <item>Oracle: a schema is a user, which a replication's login rarely may create, so the table is <c>DBDATASYNC_UNIT</c> in the login's own schema; the ids are <c>VARCHAR2(36)</c> text, the times <c>TIMESTAMP(6)</c> in UTC, positions at most <see cref="MaxPositionLength"/> characters.</item>
+/// <item>Oracle: a schema is a user, which a replication's login rarely may create, so the table is <c>DBDATAKIT_SYNC_UNIT</c> in the login's own schema; the ids are <c>VARCHAR2(36)</c> text, the times <c>TIMESTAMP(6)</c> in UTC, positions at most <see cref="MaxPositionLength"/> characters.</item>
 /// </list>
 /// </summary>
 public sealed class TargetUnitState(UnitStateEngine engine)
@@ -74,7 +74,7 @@ public sealed class TargetUnitState(UnitStateEngine engine)
     private bool TextIds => Oracle || MySql;
 
     /// <summary>The table's name as a statement writes it: Oracle keeps it in the login's own schema.</summary>
-    public string Qualified => Oracle ? "DBDATASYNC_UNIT" : $"{Schema}.{Table}";
+    public string Qualified => Oracle ? "DBDATAKIT_SYNC_UNIT" : $"{Schema}.{Table}";
 
     private string P(string name) => (Oracle ? ":" : "@") + name;
 
@@ -119,13 +119,13 @@ public sealed class TargetUnitState(UnitStateEngine engine)
         ],
         _ =>
         [
-            "CREATE TABLE DBDATASYNC_UNIT (" +
+            "CREATE TABLE DBDATAKIT_SYNC_UNIT (" +
             "unit_seq NUMBER(19) GENERATED ALWAYS AS IDENTITY PRIMARY KEY, unit_id VARCHAR2(36) NOT NULL, " +
             "replication_name VARCHAR2(128) NOT NULL, mapping VARCHAR2(128) NOT NULL, watermark_key VARCHAR2(450) NOT NULL, " +
             "watermark_before VARCHAR2(4000) NULL, watermark_after VARCHAR2(4000) NOT NULL, watermark_time TIMESTAMP(6) NULL, " +
             "rows_staged NUMBER(19) NOT NULL, run_id VARCHAR2(36) NULL, committed_at TIMESTAMP(6) NOT NULL, " +
             "CONSTRAINT uq_dbdatasync_unit_id UNIQUE (unit_id))",
-            "CREATE INDEX ix_dbdatasync_unit_key ON DBDATASYNC_UNIT (replication_name, mapping, watermark_key, unit_seq)",
+            "CREATE INDEX ix_dbdatasync_unit_key ON DBDATAKIT_SYNC_UNIT (replication_name, mapping, watermark_key, unit_seq)",
         ],
     };
 
@@ -134,7 +134,7 @@ public sealed class TargetUnitState(UnitStateEngine engine)
         UnitStateEngine.SqlServer => "SELECT CASE WHEN OBJECT_ID(N'dbdatasync.unit', N'U') IS NULL THEN 0 ELSE 1 END",
         UnitStateEngine.Postgres => "SELECT CASE WHEN to_regclass('dbdatasync.unit') IS NULL THEN 0 ELSE 1 END",
         UnitStateEngine.MySql => "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'dbdatasync' AND table_name = 'unit'",
-        _ => "SELECT COUNT(*) FROM user_tables WHERE table_name = 'DBDATASYNC_UNIT'",
+        _ => "SELECT COUNT(*) FROM user_tables WHERE table_name = 'DBDATAKIT_SYNC_UNIT'",
     };
 
     /// <summary>Whether the state table is there.</summary>

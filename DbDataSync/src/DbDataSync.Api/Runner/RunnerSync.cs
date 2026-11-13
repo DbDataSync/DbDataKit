@@ -18,12 +18,18 @@ public interface IRunnerSync
 
     Task PauseAsync(string task, CancellationToken ct);
 
+    /// <summary>Stops one run of the runner by its id (plan 28c E12g): true when it was cancelled or its drain was asked to stop, false when the runner has no such run or it ended.</summary>
+    Task<bool> CancelRunAsync(Guid runId, CancellationToken ct);
+
     Task ResumeAsync(string task, CancellationToken ct);
 
     Task<ClientTaskStatus?> StatusAsync(string task, CancellationToken ct);
 
     /// <summary>The items of the task's checkpoint <paramref name="name"/> as the runner holds them (the drain's positions are the checkpoint <c>watermark</c>, one item per source table).</summary>
     Task<IReadOnlyList<ClientCheckpointItem>> CheckpointAsync(string task, string name, CancellationToken ct);
+
+    /// <summary>Changes parts of one item of the task's checkpoint if it is still at <paramref name="version"/> (plan 28c E12g); the new version, or null when a run moved it first.</summary>
+    Task<long?> SetCheckpointAsync(string task, string name, string key, long version, IReadOnlyDictionary<string, ClientPartValue> set, IReadOnlyCollection<string> remove, CancellationToken ct);
 
     /// <summary>Puts an item in the task's own queue, which a drain that is up takes in its next sweep (the runner starts one drain of a task at a time).</summary>
     Task EnqueueWorkAsync(string task, string kind, string subject, string part, string? payload, CancellationToken ct);
@@ -50,11 +56,16 @@ public sealed class ClientRunnerSync(RunnerPublishClient client, RunnerLink link
 
     public Task PauseAsync(string task, CancellationToken ct) => client.PauseAsync(link.Server, null, link.Package, link.Channel, task, null, ct);
 
+    public Task<bool> CancelRunAsync(Guid runId, CancellationToken ct) => client.CancelRunAsync(link.Server, null, runId, null, ct);
+
     public Task ResumeAsync(string task, CancellationToken ct) => client.ResumeAsync(link.Server, null, link.Package, link.Channel, task, null, ct);
 
     public Task<ClientTaskStatus?> StatusAsync(string task, CancellationToken ct) => client.TaskStatusAsync(link.Server, null, link.Package, link.Channel, task, null, ct);
 
     public Task<IReadOnlyList<ClientCheckpointItem>> CheckpointAsync(string task, string name, CancellationToken ct) => client.CheckpointAsync(link.Server, null, link.Package, link.Channel, task, name, null, ct);
+
+    public Task<long?> SetCheckpointAsync(string task, string name, string key, long version, IReadOnlyDictionary<string, ClientPartValue> set, IReadOnlyCollection<string> remove, CancellationToken ct) =>
+        client.SetCheckpointAsync(link.Server, null, link.Package, link.Channel, task, name, key, version, set, remove, null, ct);
 
     public async Task EnqueueWorkAsync(string task, string kind, string subject, string part, string? payload, CancellationToken ct) =>
         await client.EnqueueWorkAsync(link.Server, null, link.Package, link.Channel, task, kind, subject, part, payload, null, ct);

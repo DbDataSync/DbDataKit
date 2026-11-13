@@ -60,6 +60,26 @@ public sealed class RunnerOwnedRunsTests(RunnerOwnedApiFactory factory) : IClass
     }
 
     [Fact]
+    public async Task Cancel_of_a_run_the_supervisor_does_not_know_is_forwarded_to_the_runner_which_answers_for_its_own_runs()
+    {
+        var name = NewName();
+        factory.RunnerOwns(name);
+        var going = factory.Runner.AddRun(DbDataSync.Api.Runner.RunnerAccess.TaskOf(name), "running", DateTimeOffset.UtcNow.AddMinutes(-1));
+
+        var cancelled = await _client.PostAsync($"/api/runs/{going.Id}/cancel", null);
+        var unknown = await _client.PostAsync($"/api/runs/{Guid.NewGuid()}/cancel", null);
+        factory.Runner.Down = true;
+        var down = await _client.PostAsync($"/api/runs/{going.Id}/cancel", null);
+        factory.Runner.Down = false;
+
+        Assert.Equal(HttpStatusCode.OK, cancelled.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, down.StatusCode);
+        Assert.Equal(2, factory.Runner.CancelRequests.Count);   // the unreachable runner was asked and did not answer
+        Assert.Equal(going.Id, factory.Runner.CancelRequests[0]);
+    }
+
+    [Fact]
     public async Task The_history_merges_the_runners_passes_and_drains_with_this_servers_own_with_counters_timings_and_failures()
     {
         var name = NewName();

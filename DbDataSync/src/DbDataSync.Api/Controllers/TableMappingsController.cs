@@ -20,7 +20,7 @@ public sealed class TableMappingsController(
     ParameterCheck parameterCheck, ReaderLagService lag,
     MappingMetadataService mappingMetadata, MappingColumnReader columnReader,
     ChangeWatermarkStore watermarks, RunLockStore runLocks, DriverRegistry driverRegistry,
-    TaskRunStore taskRunStore, DbDataSync.Api.Runner.RunnerAccess runnerAccess) : ControllerBase
+    TaskRunStore taskRunStore, DbDataSync.Api.Runner.RunnerAccess runnerAccess, DbDataSync.Api.Runner.RunnerReadState runnerReadState) : ControllerBase
 {
     [Authorize(Policies.Viewer)]
     [HttpGet]
@@ -78,7 +78,7 @@ public sealed class TableMappingsController(
     /// </summary>
     [Authorize(Policies.Viewer)]
     [HttpGet("{mappingName}/read-state")]
-    public ActionResult<MappingReadStateDto> GetReadState(string replicationName, string mappingName)
+    public async Task<ActionResult<MappingReadStateDto>> GetReadState(string replicationName, string mappingName, CancellationToken cancellationToken)
     {
         ReplicationTaskConfig task;
         TableMappingConfig mapping;
@@ -100,6 +100,13 @@ public sealed class TableMappingsController(
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = DriverFailures.Describe(ex) });
+        }
+
+        // a replication the runner owns keeps its read state in the runner's checkpoint, which its drain reads (plan 28c E12g)
+        if (runnerAccess.File.OwnerOf(replicationName) == DbDataKit.State.TaskOwners.Runner)
+        {
+            try { return Ok((await runnerReadState.ReadAsync(replicationName, mappingName, sourceTable, ReadIntentResolution.Default(task, mapping), cancellationToken)).ToDto()); }
+            catch (DbDataSync.Api.Runner.RunnerUnavailableException ex) { return StatusCode(503, new { error = ex.Message }); }
         }
 
         var stored = watermarks.GetReadState(replicationName, mappingName, sourceTable);
@@ -135,8 +142,8 @@ public sealed class TableMappingsController(
     /// </para>
     /// </summary>
     [HttpPost("{mappingName}/read-state")]
-    public ActionResult<MappingReadStateDto> SetReadState(
-        string replicationName, string mappingName, [FromBody] SetMappingReadStateRequest request)
+    public async Task<ActionResult<MappingReadStateDto>> SetReadState(
+        string replicationName, string mappingName, [FromBody] SetMappingReadStateRequest request, CancellationToken cancellationToken)
     {
         ReplicationTaskConfig task;
         TableMappingConfig mapping;
@@ -160,10 +167,6 @@ public sealed class TableMappingsController(
             });
         }
 
-        // a replication the runner owns keeps its read intent, hold and position on the runner, which its drain reads: a change written here would be kept in a state nothing reads (plan 28c E22 precondition)
-        if (runnerAccess.File.OwnerOf(replicationName) == DbDataKit.State.TaskOwners.Runner)
-            return Conflict(new { error = $"'{replicationName}' is scheduled by the runner, which keeps the read intent, hold and position of its mappings: change them on the runner's Checkpoints screen (task '{DbDataSync.Api.Runner.RunnerAccess.TaskOf(replicationName)}'). Nothing was changed." });
-
         string sourceTable;
         try
         {
@@ -172,6 +175,30 @@ public sealed class TableMappingsController(
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = DriverFailures.Describe(ex) });
+        }
+
+        // a replication the runner owns keeps its read intent, hold and captured position in the runner's checkpoint, which its drain reads: the change is made there (audited under this server's pairing), and the pause history is kept here as it is for the replication's own pause (plan 28c E12g)
+        if (runnerAccess.File.OwnerOf(replicationName) == DbDataKit.State.TaskOwners.Runner)
+        {
+            try
+            {
+                var (outcome, previous, after) = await runnerReadState.SetAsync(replicationName, mappingName, sourceTable, ReadIntentResolution.Default(task, mapping), request.Intent, request.Hold, request.UseCapturedPosition, cancellationToken);
+                switch (outcome)
+                {
+                    case DbDataSync.Api.Runner.RunnerReadStateOutcome.NoCapturedPosition:
+                        return BadRequest(new { error = $"Table mapping '{mappingName}' has no captured position to continue from — it is not waiting on an initial load. Choose a read intent instead." });
+                    case DbDataSync.Api.Runner.RunnerReadStateOutcome.Moved:
+                        return Conflict(new { error = $"The runner's drain kept moving the position of '{mappingName}' while it was being changed; nothing was changed. Try again." });
+                }
+
+                if (!request.UseCapturedPosition && request.Hold != previous && (request.Hold == ReadHold.Paused || previous == ReadHold.Paused))
+                    taskRunStore.SetMappingHold(replicationName, mappingName, request.Hold == ReadHold.Paused, request.Note, currentUser.Author.Name);
+                return Ok(after.ToDto());
+            }
+            catch (DbDataSync.Api.Runner.RunnerUnavailableException ex)
+            {
+                return StatusCode(503, new { error = ex.Message });
+            }
         }
 
         if (request.UseCapturedPosition)

@@ -1,6 +1,7 @@
 import { useReplicationStatus } from '../../api/hooks'
 import { DisabledIcon, PauseIcon, PulseIcon } from '../../components/icons'
 import type { ReplicationStatus } from '../../api/types'
+import { RunnerStatusRow } from './RunnerStatusRow'
 
 /**
  * What this replication's worker process is doing, right now.
@@ -46,12 +47,18 @@ export function StatusCard({ replicationName, enabled }: { replicationName: stri
             <Figure label="CPU time" value={formatMs(status.cpuMilliseconds)} />
             <Figure label="Started" value={status.startedAtUtc ? formatAgo(status.startedAtUtc) : '—'} />
           </div>
+        ) : status?.runner ? (
+          <span className="hint" data-testid="replication-no-local-worker">
+            This server runs no worker for this replication: the runner owns it.
+          </span>
         ) : (
           <span className="hint">
             No worker process. A worker stays up between passes and leaves once it has gone its idle
             timeout without finding a changed row — so this is a quiet replication, not a broken one.
           </span>
         )}
+
+        <RunnerStatusRow runner={status?.runner} />
       </div>
     </div>
   )
