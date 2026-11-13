@@ -186,7 +186,7 @@ public sealed class GatewayAccessInspector(GatewayAccess semantic, Func<Semantic
         if (target.Served is not null && target.Section.Row.Count > 0) warnings.Add(AccessPublishNotes.EntityWritesWarning);
         if (target.Model is not null) warnings.AddRange(CatalogColumnView.MasksThatHide(target.Model.Catalog, target.Section).Select(m => AccessPublishNotes.MaskHidesWarning(m.Dataset, m.Column, m.Reason)));
         return Run(target, async (reader, resolver, scope) =>
-            new AccessExplainer(resolver, reader).Explain(caller, scope, dataset, row, warnings, subject, subjectKind).ToJson()).Result;
+            new AccessExplainer(resolver, reader).Explain(caller, scope, dataset, row, warnings, subjectKind == SubjectKind.Person && !string.IsNullOrEmpty(caller.Name) ? caller.Name : subject, subjectKind).ToJson()).Result;
     }
 
     /// <summary>The values of the filtered datasets that no rule row covers, per rule.</summary>
