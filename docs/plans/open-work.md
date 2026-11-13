@@ -70,7 +70,6 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | --- | --- | --- |
 | [33](33-fewer-services.md) SC20g, SC21d, SC22e | The hand-over of the Build, Store and Sync authoring routes | ON HOLD |
 | [33](33-fewer-services.md) SW01 (the apps command's move with plan 30 PB04, the secret push as a binding, retiring SC20e's verb and SC21f's confirmation), SW02 (the screen for slot bindings), SC20e, SC20f, SC20j, SC20k, SC20n, SC20o, SC21f, SC22d, SC22h, SC22j, SC22k, SC22l | Build publishing to a Gateway, a browser story of the screens, the catalog cache's producer, the Views tab opened in a browser, the database-facing screens, adoption, Sync screens' stories, test a connection, the source side of the provisioning plan (the live server's) and the platform setting; built 2026-11-12 and not opened in a browser: column lineage (SC20h), model files from cached tables (SC20k), the provisioning plan from the cache (SC22j), scripts (SC22k) | SC20e, SC20o, SC21f, SC22l OWNER; SC22h skipped (no Sync pairing target); the rest PARTLY or not built |
-| [33](33-fewer-services.md) SC14 | The Windows install job of the suite release has never run | needs a Windows machine |
 | [22a](22a-gap-slices.md) GP36 | Agents through MCP, every step approved | PARTLY |
 | [27a](27a-knowledge-slices.md) AG16, AX13, KN20, KN29, KN30, IX20, IX24, BK06 | The W rows: the agent, action, knowledge, search and integration editors in the Workspace, links to workspaces and pull requests | follow GP35 |
 
