@@ -150,4 +150,62 @@ public sealed class ExportInstallerTests : IDisposable
         Assert.False((bool)before["installed"]!);
         Assert.Contains("not installed", (string)before["summary"]!);
     }
+
+    [Fact]
+    public async Task A_component_of_the_browser_and_fonts_this_program_was_tested_with_says_verified()
+    {
+        using var release = new FakeExportRelease(testedPins: true);
+        var result = await Installer().InstallAsync(new ExportInstallRequest(null, release.Folder, null, release.Rid, false));
+        Assert.True(result.Pins.Verified);
+        Assert.StartsWith("verified: the browser and fonts this program was tested with", result.Pins.Note);
+        Assert.Equal(ExportPins.Chromium, result.Chromium);
+        var status = ExportComponentStatus.Describe(StatusOptions(result.Directory), data);
+        Assert.True((bool)status["pins_verified"]!);
+        Assert.StartsWith("verified:", (string)status["pins_note"]!);
+    }
+
+    [Fact]
+    public async Task A_component_with_another_chromium_is_installed_anyway_with_a_warning_in_words_and_status_says_so()
+    {
+        using var release = new FakeExportRelease();   // Chromium 1.2.3.4, other fonts
+        var result = await Installer().InstallAsync(new ExportInstallRequest(null, release.Folder, null, release.Rid, false));
+        Assert.False(result.AlreadyInstalled);
+        Assert.Empty(ExportComponent.Verify(result.Directory, release.Rid));   // installed, whole
+        Assert.False(result.Pins.Verified);
+        Assert.Contains($"this component carries Chromium {FakeExportRelease.Chromium} (this program was tested with {ExportPins.Chromium})", result.Pins.Note);
+        Assert.EndsWith(": installed as the release pins it.", result.Pins.Note);
+        Assert.StartsWith("Warning: ", result.Pins.Sentence);
+        var status = ExportComponentStatus.Describe(StatusOptions(result.Directory), data);
+        Assert.True((bool)status["whole"]!);
+        Assert.False((bool)status["pins_verified"]!);
+        Assert.Contains($"this component carries Chromium {FakeExportRelease.Chromium}", (string)status["pins_note"]!);
+        // a second run still reports it
+        Assert.False((await Installer().InstallAsync(new ExportInstallRequest(null, release.Folder, null, release.Rid, false))).Pins.Verified);
+    }
+
+    [Fact]
+    public async Task The_pins_decide_nothing_a_tampered_archive_is_still_refused_when_the_pins_match()
+    {
+        using var release = new FakeExportRelease(testedPins: true, changeArchiveAfterChecksums: true);
+        var ex = await Assert.ThrowsAsync<ExportInstallException>(() => Installer().InstallAsync(new ExportInstallRequest(null, release.Folder, null, release.Rid, false)));
+        Assert.Contains("Nothing was installed", ex.Message);
+    }
+
+    [Fact]
+    public void The_embedded_pins_are_the_repository_files_so_they_cannot_drift()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "chromium.pin"))) root = root.Parent;
+        Assert.NotNull(root);
+        foreach (var name in new[] { "chromium.pin", "fonts.pin" })
+            Assert.Equal(File.ReadAllText(Path.Combine(root.FullName, name)).Replace("\r\n", "\n").Split('\n').Select(l => l).ToArray(), ExportPins.Text(name).Split('\n'));
+        Assert.Matches(@"^\d+(\.\d+){3}$", ExportPins.Chromium);
+        Assert.Equal(3, ExportPins.Families.Count);
+    }
+
+    private static DbDataGateway.Server.Configuration.ViewsExportOptions StatusOptions(string folder)
+    {
+        var settings = ExportComponent.SettingsFor(folder);
+        return new DbDataGateway.Server.Configuration.ViewsExportOptions { Mode = "pinned", Pin = settings["views.export.pin"], PageAssets = settings["views.export.pageAssets"] };
+    }
 }

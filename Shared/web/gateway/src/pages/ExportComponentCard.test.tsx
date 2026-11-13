@@ -5,7 +5,7 @@ import type { ExportComponentState } from '../types'
 import { ExportComponentView, type ExportComponentViewProps } from './ExportComponentCard'
 
 const state = (over: Partial<ExportComponentState> = {}, install: Partial<ExportComponentState['install']> = {}): ExportComponentState => ({
-  platform: 'linux-x64', supported: true, installed: false, whole: false, directory: '/var/lib/dbdatakit/gateway/export-component', release: null, chromium: null, fonts: null, mode: null, configured: false, problems: [],
+  platform: 'linux-x64', supported: true, installed: false, whole: false, directory: '/var/lib/dbdatakit/gateway/export-component', release: null, chromium: null, fonts: null, mode: null, configured: false, pins_verified: null, pins_note: null, problems: [],
   summary: 'PDF export is not installed.', install: { state: 'idle', step: '', bytes: 0, total: 0, message: null, restart_needed: false, ...install }, ...over,
 })
 
@@ -83,5 +83,16 @@ describe('the PDF export component card on the server settings screen', () => {
 
   it('shows a read that failed', () => {
     expect(html({ state: undefined, loadError: 'The management API said no' })).toContain('The management API said no')
+  })
+
+  it('says a component of the browser this program was tested with is verified, and one of another Chromium is installed with a warning, never a refusal', () => {
+    const verified = state({ installed: true, whole: true, configured: true, release: '1', chromium: '156.0.8078.47', pins_verified: true, pins_note: 'verified: the browser and fonts this program was tested with (Chromium 156.0.8078.47, fonts 5.3.0).' })
+    expect(find(tree({ state: verified }), 'export-pins-verified')).toBeDefined()
+    expect(find(tree({ state: verified }), 'export-pins-warning')).toBeUndefined()
+    const other = state({ installed: true, whole: true, configured: true, release: '2', chromium: '157.0.1.1', pins_verified: false, pins_note: 'this component carries Chromium 157.0.1.1 (this program was tested with 156.0.8078.47): installed as the release pins it.' })
+    const shown = html({ state: other })
+    expect(shown).toContain('Warning: this component carries Chromium 157.0.1.1 (this program was tested with 156.0.8078.47): installed as the release pins it.')
+    expect(find(tree({ state: other }), 'export-component')!.props['data-state']).toBe('ready')   // a warning, not a broken state
+    expect(find(tree({ state: other }), 'export-install')).toBeUndefined()
   })
 })

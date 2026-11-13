@@ -10,7 +10,7 @@ namespace DbDataGateway.Server.Management;
 /// <summary>
 /// The export component on the management API (plan 32 DBR16): the console's "PDF export is not installed: Install" card calls the same <see cref="ExportInstaller"/> the command <c>dbdatagateway export install</c> runs.
 /// <code>
-/// GET  /api/v1/views/export          {platform, supported, installed, whole, directory, release, chromium, fonts, mode, configured, problems, summary, install: {state, step, bytes, total, message, restart_needed}}  (admin)
+/// GET  /api/v1/views/export          {platform, supported, installed, whole, directory, release, chromium, fonts, mode, configured, pins_verified, pins_note, problems, summary, install: {state, step, bytes, total, message, restart_needed}}  (admin)
 /// POST /api/v1/views/export/install  {version?, force?}  starts the install in the background and answers 202 with the same body (admin); a second call while one runs answers the running one
 /// </code>
 /// The release address is the host's (<c>DBDATAKIT_EXPORT_RELEASE_BASE</c>, the upgrade mirror, else the product's GitHub release), never a caller's: a screen cannot point a host at another source. A finished install sets
@@ -66,8 +66,8 @@ public sealed class GatewayExportManagement(ExportInstaller installer, Func<Gate
                 return;
             }
             var restart = written.Body["restart_needed"]?.GetValue<bool>() ?? true;
-            Record(caller, "export.install", (result.AlreadyInstalled ? "already installed " : "installed ") + result.Version);
-            Finish("done", result.AlreadyInstalled ? $"Release {result.Version} was already installed; views.export points at it." : $"Release {result.Version} is installed (Chromium {result.Chromium}). Restart the gateway to use it.", restart);
+            Record(caller, "export.install", (result.AlreadyInstalled ? "already installed " : "installed ") + result.Version + (result.Pins.Verified ? " (" + result.Pins.Note.TrimEnd('.') + ")" : ": " + result.Pins.Note));
+            Finish("done", (result.AlreadyInstalled ? $"Release {result.Version} was already installed; views.export points at it." : $"Release {result.Version} is installed (Chromium {result.Chromium}). Restart the gateway to use it.") + " " + result.Pins.Sentence, restart);
         }
         catch (ExportInstallException ex)
         {

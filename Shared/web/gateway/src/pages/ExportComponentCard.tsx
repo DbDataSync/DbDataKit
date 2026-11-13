@@ -32,6 +32,8 @@ export function ExportComponentView(p: ExportComponentViewProps) {
           <>
             <p data-testid="export-summary">{s.summary}</p>
             {!s.supported && <p className="hint" data-testid="export-unsupported">This platform has no pinned browser. Set views.export to an installed browser (mode: installed browser) above.</p>}
+            {s.pins_verified === false && s.pins_note && <p className="hint" role="status" data-testid="export-pins-warning">Warning: {s.pins_note}</p>}
+            {s.pins_verified === true && s.pins_note && !running && <p className="hint" data-testid="export-pins-verified">{s.pins_note[0].toUpperCase() + s.pins_note.slice(1)}</p>}
             {s.problems.length > 0 && (
               <ul data-testid="export-problems">{s.problems.map((m, i) => <li key={i} className="mono">{m}</li>)}</ul>
             )}
