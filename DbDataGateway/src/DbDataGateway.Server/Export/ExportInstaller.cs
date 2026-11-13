@@ -14,8 +14,8 @@ namespace DbDataGateway.Server.Export;
 /// <param name="Force">Install again although the same version is installed and whole.</param>
 public sealed record ExportInstallRequest(string? Version, string? Source, string? Directory, string? Rid, bool Force);
 
-/// <summary>What an install did: where the component is, which Chromium and fonts it holds, and whether it was already there.</summary>
-public sealed record ExportInstallResult(string Directory, string Version, string Rid, string Chromium, string Fonts, bool AlreadyInstalled, long DownloadedBytes);
+/// <summary>What an install did: where the component is, which Chromium and fonts it holds, whether it was already there, and whether it carries the browser and fonts this program was tested with (<paramref name="Pins"/>: a verification line or a warning, never a refusal).</summary>
+public sealed record ExportInstallResult(string Directory, string Version, string Rid, string Chromium, string Fonts, bool AlreadyInstalled, long DownloadedBytes, ExportPinCheck Pins);
 
 /// <summary>An install that did not happen, in words: nothing was installed or changed unless the message says so.</summary>
 public sealed class ExportInstallException(string message, Exception? inner = null) : Exception(message, inner);
@@ -69,7 +69,7 @@ public sealed class ExportInstaller(IContentFetcher fetcher, string dataDirector
 
         // already here and whole: nothing to download
         if (!request.Force && ExportComponent.ReadManifest(target) is { } installed && installed.Rid == rid && ExportComponent.Verify(target, rid).Count == 0 && ReadVersion(target) == version)
-            return new ExportInstallResult(target, version, rid, installed.Chromium, installed.Fonts, true, 0);
+            return new ExportInstallResult(target, version, rid, installed.Chromium, installed.Fonts, true, 0, ExportPins.Compare(target, installed));
 
         var (sumsUri, zipUri) = Locate(request.Source, version, zip);
         Report("reading the checksums");
@@ -112,7 +112,7 @@ public sealed class ExportInstaller(IContentFetcher fetcher, string dataDirector
             Report("installing");
             Place(staged, target, work);
             var manifest = ExportComponent.ReadManifest(target)!;
-            return new ExportInstallResult(target, version, rid, manifest.Chromium, manifest.Fonts, false, downloaded);
+            return new ExportInstallResult(target, version, rid, manifest.Chromium, manifest.Fonts, false, downloaded, ExportPins.Compare(target, manifest));
         }
         finally
         {

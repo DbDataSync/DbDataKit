@@ -7,6 +7,82 @@ namespace DbDataKit.Views.Export;
 /// <summary>What <c>export-component.json</c> says about a staged component (plan 32 DBR16, <c>dist/export_component.py stage</c>).</summary>
 public sealed record ExportComponentManifest(string Rid, string Chromium, string Fonts, IReadOnlyDictionary<string, string> Print);
 
+/// <summary>Whether a component carries the browser and fonts this program release was tested with: <see cref="Verified"/> with the line to say, or the difference in words (a warning, never a refusal).</summary>
+public sealed record ExportPinCheck(bool Verified, string Note)
+{
+    /// <summary>The note as a sentence of its own; a difference is prefixed "Warning:" (a warning level, not an error).</summary>
+    public string Sentence => Verified ? char.ToUpperInvariant(Note[0]) + Note[1..] : "Warning: " + Note;
+}
+
+/// <summary>
+/// The repository's pins as this program embeds them (<c>chromium.pin</c> and <c>fonts.pin</c> at the repository root, the one source): the Chromium and the font set this release was tested with. They only produce a
+/// verification line or a warning; they decide nothing (owner decision 2026-11-12: a release may install and pin another browser, and what browser security patch is allowed is not this program's call).
+/// </summary>
+public static class ExportPins
+{
+    private static readonly Lazy<Dictionary<string, List<string>>> chromiumPin = new(() => Load("chromium.pin"));
+    private static readonly Lazy<Dictionary<string, List<string>>> fontsPin = new(() => Load("fonts.pin"));
+
+    /// <summary>The Chromium this program was tested with.</summary>
+    public static string Chromium => chromiumPin.Value["VERSION"][0];
+
+    /// <summary>The font package version this program was tested with.</summary>
+    public static string Fonts => fontsPin.Value["VERSION"][0];
+
+    /// <summary>The font families of the tested set, sorted.</summary>
+    public static IReadOnlyList<string> Families => Split(fontsPin.Value["FAMILIES"][0]);
+
+    /// <summary>The embedded pin text, for a test that compares it with the repository's file.</summary>
+    public static string Text(string name) => string.Join("\n", ReadResource(name));
+
+    private static IReadOnlyList<string> Split(string families) => [.. families.Split(' ', StringSplitOptions.RemoveEmptyEntries).Order(StringComparer.Ordinal)];
+
+    private static string[] ReadResource(string name)
+    {
+        using var stream = typeof(ExportPins).Assembly.GetManifestResourceStream("DbDataKit.Views.Export." + name) ?? throw new InvalidOperationException($"The embedded {name} is missing from DbDataKit.Views.Export.");
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd().Replace("\r\n", "\n").Split('\n');
+    }
+
+    private static Dictionary<string, List<string>> Load(string name)
+    {
+        var values = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var raw in ReadResource(name))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith('#') || !line.Contains('=')) continue;
+            var parts = line.Split('=', 2);
+            if (!values.TryGetValue(parts[0], out var list)) values[parts[0]] = list = [];
+            list.Add(parts[1]);
+        }
+        return values;
+    }
+
+    /// <summary>Compares what a component (or a browser a host runs) carries with the embedded pins; <paramref name="fonts"/> and <paramref name="families"/> are null when not known (then only the browser is compared).</summary>
+    public static ExportPinCheck Compare(string chromium, string? fonts, IEnumerable<string>? families)
+    {
+        var differences = new List<string>();
+        if (!string.Equals(chromium.Contains('/') ? chromium[(chromium.LastIndexOf('/') + 1)..] : chromium, Chromium, StringComparison.Ordinal))
+            differences.Add($"Chromium {chromium} (this program was tested with {Chromium})");
+        if (fonts is not null && !string.Equals(fonts, Fonts, StringComparison.Ordinal))
+            differences.Add($"fonts {fonts} (this program was tested with {Fonts})");
+        if (families is not null && !Split(string.Join(' ', families)).SequenceEqual(Families))
+            differences.Add($"the font families {string.Join(' ', Split(string.Join(' ', families)))} (this program was tested with {string.Join(' ', Families)})");
+        return differences.Count == 0
+            ? new ExportPinCheck(true, $"verified: the browser and fonts this program was tested with (Chromium {Chromium}, fonts {Fonts}).")
+            : new ExportPinCheck(false, "this component carries " + string.Join(" and ", differences) + ": installed as the release pins it.");
+    }
+
+    /// <summary>Compares an installed component folder with the embedded pins (its manifest's versions and the font families of its <c>fonts.pin</c>).</summary>
+    public static ExportPinCheck Compare(string folder, ExportComponentManifest manifest)
+    {
+        IEnumerable<string>? families = null;
+        try { if (ExportComponent.ReadPin(Path.Combine(folder, "fonts.pin")).TryGetValue("FAMILIES", out var f)) families = f[0].Split(' ', StringSplitOptions.RemoveEmptyEntries); }
+        catch (IOException) { /* Verify names an unreadable pin */ }
+        return Compare(manifest.Chromium, manifest.Fonts, families);
+    }
+}
+
 /// <summary>
 /// The export component as installed (plan 32 DBR16): one folder holding <c>chromium.pin</c>, <c>.chromium/&lt;rid&gt;</c> (the pinned browser), <c>fonts.pin</c>, <c>.fonts</c> (each family with its OFL.txt) and
 /// <c>print/</c> (the print page), with <c>export-component.json</c> naming what was staged. The release builds it (<c>dist/export_component.py</c>, a build-time tool); a host installs it from the release's zip
@@ -104,7 +180,7 @@ public static class ExportComponent
     }
 
     /// <summary>KEY=value lines (comments and blanks skipped); a repeated key (<c>FILE=</c>) keeps every value.</summary>
-    private static Dictionary<string, List<string>> ReadPin(string file)
+    internal static Dictionary<string, List<string>> ReadPin(string file)
     {
         var values = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         foreach (var raw in File.ReadLines(file))

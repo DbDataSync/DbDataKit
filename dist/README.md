@@ -66,6 +66,30 @@ To pass options through a pipe:
 
 A host that exports PDFs (the Gateway, which hosts the views module and the subscription task) needs the pinned Chromium, the bundled fonts and the print page. They are not in any product zip (the browser alone is about 420 MB installed): `dist/export_component.py stage` builds the folder from a checkout and `verify` checks it against `chromium.pin`, `fonts.pin` and its own manifest (`dist/tests/test_export_component.py`); `dist/export/Dockerfile` is the same folder as an image layer over the Gateway's image. The Gateway's release attaches it as `dbdatagateway-export-v<version>-<rid>.zip` for each platform (job `package-export` of `dbdatagateway-release.yml`; listed in the release's `SHA256SUMS`), a release asset of its own that no product zip or MSI contains; the product installs it on request: `dbdatagateway export install` downloads the zip of its platform from the release (or `--source`, a folder or an https address, or `DBDATAKIT_EXPORT_RELEASE_BASE`, for a machine with no internet), checks it against `SHA256SUMS` and the pins inside it, installs it in its data directory and sets `views.export`; the console's Server settings screen has the same as a button. **A feature never depends on a person running a Python script**: `export_component.py` is a build-time tool that the release workflow runs. The installers have an option that calls that command for the release they installed, so the choice is made once, at install time: `install.sh --with-pdf-export [--export-source <folder or https address>]`, `install.ps1 -WithPdfExport [-ExportSource <...>]` and `msiexec /i dbdatagateway-v<version>-win-x64.msi ADDPDFEXPORT=1 [EXPORTSOURCE=<...>]` (a product opts in with `exportComponent: true` in its `dist.json`; the MSI action runs before the service starts and a failed download does not undo the install, the installer log has the message, and `dbdatagateway export status` says what is missing). With Scoop, run the command after the install (the manifest's notes say so). See `docs/views.md`, "The export component".
 
+### The embedded pins: a verification line or a warning, never a gate
+
+The program embeds the repository's `chromium.pin` and `fonts.pin` (one source: the files at the repository root, compiled in by `DbDataKit.Views.Export`; a test keeps the embedded text equal to the files): the browser and fonts **this program release was tested with**. They decide nothing. The integrity checks stay as they are: the zip's SHA-256 against the release's `SHA256SUMS`, and the extracted files against the pins and manifest **inside** the zip. A release may carry another Chromium than the one this program was tested with, and a newer browser build is installed and pinned like any other: what browser security patch is allowed is the release's call, not this program's. `export install` and `export status` (and the console's card, the audit entry `export.install` and `/health`'s export line) say one of two things:
+
+- `verified: the browser and fonts this program was tested with (Chromium <X>, fonts <Y>).` when the component's browser version and font set equal the embedded pins;
+- `Warning: this component carries Chromium <X> (this program was tested with <Y>): installed as the release pins it.` (and the same for the fonts) when they differ. The component is installed all the same, at warning level, not as an error (`pins_verified` and `pins_note` in the JSON of both commands).
+
+`views.export` is set to pin what the **component carries** (`mode: pinned`, the component's own `chromium.pin`), so a later install of another version replaces it, and a pinned host refuses to start with any Chromium other than the installed pin, as before.
+
+### A host with no internet (the manual route)
+
+No new command: `export install` reads the release's files from a folder. On a machine with internet, download two files from the release `dbdatagateway/v<version>` (GitHub: `https://github.com/<owner>/<repo>/releases/tag/dbdatagateway/v<version>`) and copy them to the host:
+
+- `dbdatagateway-export-v<version>-<rid>.zip` (`<rid>` is `linux-x64` or `win-x64`, the host's platform), and
+- `SHA256SUMS` of the same release (it lists the zip; the install refuses a zip whose SHA-256 is not listed there).
+
+Put them in one folder, **flat** (`D:\release-files\SHA256SUMS` and the zip beside it), or in the layout a mirror uses, `<folder>/dbdatagateway/v<version>/` holding the same two files. Then on the host:
+
+```
+dbdatagateway export install --source D:\release-files
+```
+
+or set `DBDATAKIT_EXPORT_RELEASE_BASE=D:\release-files` (a `file://` address works too; an https address that serves the two files, an internal mirror, is read the same way; plain http is refused). `--version <release>` names the release when it is not this program's own version, `--rid` the platform. The command checks the zip against `SHA256SUMS` and the pins inside it, installs it in the data directory's `export-component` folder and sets `views.export`; restart the gateway afterwards. `dbdatagateway export status` says whether it is installed, whole and in use, and which of the two lines above applies.
+
 ## What the installers do
 
 Both find the newest **stable** release whose tag starts with `<product>/v` (GitHub's own "latest" is one marker for the whole repository

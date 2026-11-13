@@ -25,6 +25,7 @@ public static class ExportComponentStatus
         else if (problems.Count > 0) summary = $"The installed component is not whole: {problems[0]}";
         else if (!configured) summary = $"The component (release {ExportInstaller.ReadVersion(folder) ?? "unknown"}, Chromium {manifest.Chromium}) is installed in {folder}; views.export does not point at it.";
         else summary = $"PDF export is installed: release {ExportInstaller.ReadVersion(folder) ?? "unknown"}, Chromium {manifest.Chromium}.";
+        var pins = manifest is null || problems.Count > 0 ? null : ExportPins.Compare(folder, manifest);
         return new JsonObject
         {
             ["platform"] = rid,
@@ -37,6 +38,8 @@ public static class ExportComponentStatus
             ["fonts"] = manifest?.Fonts,
             ["mode"] = string.IsNullOrEmpty(export.Mode) ? null : export.Mode,
             ["configured"] = configured,
+            ["pins_verified"] = pins?.Verified,
+            ["pins_note"] = pins?.Note,
             ["problems"] = new JsonArray([.. problems.Select(p => (JsonNode)p)]),
             ["summary"] = summary,
         };

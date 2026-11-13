@@ -43,6 +43,9 @@ public sealed class ExportCommandTests : IDisposable
         Assert.Equal(FakeExportRelease.Chromium, (string)result["chromium"]!);
         Assert.False((bool)result["already_installed"]!);
         Assert.True((bool)result["restart_needed"]!);
+        // another Chromium than the one this program was tested with: installed all the same, a warning in words, exit 0
+        Assert.False((bool)result["pins_verified"]!);
+        Assert.Contains("this component carries Chromium " + FakeExportRelease.Chromium, (string)result["pins_note"]!);
         Assert.Contains("views.export.mode", result["settings_changed"]!.ToJsonString());
         var yaml = File.ReadAllText(GatewayConfigFile.PathIn(data));
         Assert.Contains("# kept", yaml);
@@ -59,12 +62,28 @@ public sealed class ExportCommandTests : IDisposable
         Assert.True((bool)after.Json!["data"]!["installed"]!);
         Assert.True((bool)after.Json["data"]!["whole"]!);
         Assert.True((bool)after.Json["data"]!["configured"]!);
+        Assert.False((bool)after.Json["data"]!["pins_verified"]!);
+        Assert.Contains("this component carries Chromium " + FakeExportRelease.Chromium, (string)after.Json["data"]!["pins_note"]!);
 
         // a second run finds it there and changes nothing
         var again = await Run("export", "install", "--source", release.Folder, "--version", FakeExportRelease.Version, "--repo", data);
         Assert.Equal(0, again.Exit);
         Assert.True((bool)again.Json!["data"]!["already_installed"]!);
         Assert.Empty(again.Json["data"]!["settings_changed"]!.AsArray());
+    }
+
+    [Fact]
+    public async Task A_component_of_the_tested_browser_says_verified_in_the_install_and_in_status()
+    {
+        using var release = new FakeExportRelease(testedPins: true);
+        Directory.CreateDirectory(GatewayConfigFile.DirectoryIn(data));
+        File.WriteAllText(GatewayConfigFile.PathIn(data), "schemaVersion: 2\n");
+        var install = await Run("export", "install", "--source", release.Folder, "--version", FakeExportRelease.Version, "--repo", data);
+        Assert.Equal(0, install.Exit);
+        Assert.True((bool)install.Json!["data"]!["pins_verified"]!);
+        var status = await Run("export", "status", "--repo", data);
+        Assert.True((bool)status.Json!["data"]!["pins_verified"]!);
+        Assert.StartsWith("verified: the browser and fonts this program was tested with", (string)status.Json["data"]!["pins_note"]!);
     }
 
     [Fact]

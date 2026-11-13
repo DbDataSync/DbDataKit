@@ -4865,6 +4865,12 @@
         "downloaded_bytes": {
           "type": "integer"
         },
+        "pins_verified": {
+          "type": "boolean"
+        },
+        "pins_note": {
+          "type": "string"
+        },
         "settings_changed": {
           "type": "array",
           "items": {
@@ -4912,6 +4918,12 @@
         "downloaded_bytes": {
           "type": "integer"
         },
+        "pins_verified": {
+          "type": "boolean"
+        },
+        "pins_note": {
+          "type": "string"
+        },
         "settings_changed": {
           "type": "array",
           "items": {
@@ -4949,6 +4961,12 @@
           "type": "string"
         },
         "mode": {
+          "type": "string"
+        },
+        "pins_verified": {
+          "type": "boolean"
+        },
+        "pins_note": {
           "type": "string"
         },
         "summary": {
@@ -4996,6 +5014,12 @@
           "type": "string"
         },
         "mode": {
+          "type": "string"
+        },
+        "pins_verified": {
+          "type": "boolean"
+        },
+        "pins_note": {
           "type": "string"
         },
         "summary": {

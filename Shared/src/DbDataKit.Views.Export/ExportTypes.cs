@@ -27,8 +27,8 @@ public sealed record SvgResult(string Svg, string BrowserVersion, IReadOnlyList<
 /// <summary>What a picture export gives (plan 32 DBR18): the PNG of the page as drawn, its size in pixels, the browser that drew it and what to tell the person.</summary>
 public sealed record PngResult(byte[] Png, int Width, int Height, string BrowserVersion, IReadOnlyList<string> Warnings);
 
-/// <summary>Whether this host can export, and if not, the reason in words that name the setting.</summary>
-public sealed record ExportAvailability(bool Available, string Reason, string? BrowserVersion = null, string? Mode = null)
+/// <summary>Whether this host can export, and if not, the reason in words that name the setting. <paramref name="Note"/> is a warning on an available host (a browser or font set other than the one this program was tested with), never a refusal.</summary>
+public sealed record ExportAvailability(bool Available, string Reason, string? BrowserVersion = null, string? Mode = null, string? Note = null)
 {
     public static ExportAvailability Off(string reason) => new(false, "export unavailable: " + reason);
 }

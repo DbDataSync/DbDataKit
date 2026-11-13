@@ -79,7 +79,11 @@ public sealed class ChromiumExporter(ExportSettings settings, ILogger? logger = 
                 if (!await FontPresentAsync(launched.Browser, family, ct).ConfigureAwait(false))
                     return ExportAvailability.Off($"fonts: the promised font '{family}' is not installed on this host (views.export.fonts.required); install the package that provides it (for example fonts-noto-cjk on Debian and Ubuntu), or remove it from the list.");
 
-            return new ExportAvailability(true, "ok", version, settings.Mode == BrowserMode.Pinned ? "pinned" : "system");
+            // the browser and fonts against the ones this program was tested with: a warning, never a refusal (a host may pin another release's component)
+            string? note = null;
+            if (settings.Mode == BrowserMode.Pinned && ExportPins.Compare(version, FontsVersion(), null) is { Verified: false } check)
+                note = check.Note.Replace("this component carries", "this host runs").Replace(": installed as the release pins it.", ": used as pinned.");
+            return new ExportAvailability(true, "ok", version, settings.Mode == BrowserMode.Pinned ? "pinned" : "system", note);
         }
         catch (ExportException e) { return ExportAvailability.Off(e.Message); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -88,6 +92,13 @@ public sealed class ChromiumExporter(ExportSettings settings, ILogger? logger = 
             logger?.LogWarning(e, "The export browser could not be started.");
             return ExportAvailability.Off($"the browser at {executable} did not start ({e.GetType().Name}: {e.Message}).");
         }
+    }
+
+    /// <summary>The version the fonts pin in use names, or null when none is in use or it cannot be read.</summary>
+    private string? FontsVersion()
+    {
+        try { return FindFonts()?.Pin is { } pin && ExportComponent.ReadPin(pin).TryGetValue("VERSION", out var v) ? v[0] : null; }
+        catch (IOException) { return null; }
     }
 
     /// <summary>The bundled fonts next to a <c>fonts.pin</c> the program ships with, when the settings name none.</summary>
