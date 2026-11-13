@@ -26,6 +26,22 @@ using Npgsql;
 
 namespace DbDataGateway.Tests.Serving;
 
+/// <summary>An exporter that returns the print page's HTML as the "PDF" (the rows of the page are the subscriber's).</summary>
+internal sealed class PageAsPdfExporter : DbDataKit.Views.Export.IReportExporter
+{
+    public DbDataKit.Views.Export.ExportAvailability Availability { get; } = new(true, "fake", "fake", "system");
+
+    public DbDataKit.Views.Export.BundledFonts? Fonts => null;
+
+    public Task<DbDataKit.Views.Export.ExportAvailability> CheckAsync(CancellationToken cancellationToken = default) => Task.FromResult(Availability);
+
+    public Task<DbDataKit.Views.Export.ExportResult> ExportPdfAsync(DbDataKit.Views.Export.PrintJob job, CancellationToken cancellationToken = default) => Task.FromResult(new DbDataKit.Views.Export.ExportResult(Encoding.UTF8.GetBytes(job.Html), 1, "fake", [], []));
+
+    public Task<DbDataKit.Views.Export.SvgResult> ExportSvgAsync(DbDataKit.Views.Export.PrintJob job, string chartId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
 /// <summary>A person of the rig: a user of the identity home in some groups, with a personal access token (the user name is the address).</summary>
 internal sealed record RigPerson(string Name, string UserId, string Address, string Token, string[] Groups);
 
@@ -268,7 +284,13 @@ internal sealed class ModuleAccessRig : IAsyncDisposable
                 [$"Gateway:DataSources:{Source}:ConnectionString"] = _connection,
             };
             HomeSeed.Open(settings, [Source], group: DataGroup);
-            _app = GatewayHost.Build([], b => b.Configuration.AddInMemoryCollection(settings));
+            // the export of a subscription is drawn by a fake that hands back the print page, so the rows composed for the subscriber can be read without a browser
+            var assets = Path.Combine(_dir, "print");
+            Directory.CreateDirectory(assets);
+            File.WriteAllText(Path.Combine(assets, "print.css"), "body { }");
+            File.WriteAllText(Path.Combine(assets, "print.js"), "window.__reportReady = true;");
+            settings["Gateway:Views:Export:PageAssets"] = assets;
+            _app = GatewayHost.Build([], b => b.Configuration.AddInMemoryCollection(settings), services => services.AddSingleton<DbDataKit.Views.Export.IReportExporter>(new PageAsPdfExporter()));
             try
             {
                 await _app.StartAsync();

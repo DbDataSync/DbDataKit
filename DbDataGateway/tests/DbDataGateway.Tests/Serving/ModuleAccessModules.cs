@@ -185,6 +185,36 @@ internal sealed class ViewsModule(ModuleAccessRig rig) : RigModule(rig, "views (
     }
 }
 
+/// <summary>
+/// The views module's subscriptions (the scheduled export): a subscription of the person is due, the Gateway draws the dashboard as its subscriber and hands the print page to delivery; the rows of the page's widgets are the answer. A widget that is an error is a refusal.
+/// </summary>
+internal sealed class SubscriptionModule(ModuleAccessRig rig) : RigModule(rig, "views (subscription export)")
+{
+    public override bool Asks(ConformanceQuestion question) => question.Id is "by-region" or "by-customer" or "members";
+
+    public override async Task<ModuleAnswer> AskAsync(string person, ConformanceQuestion question, CancellationToken cancellationToken = default)
+    {
+        var p = Person(person);
+        var state = Rig.Get<DbDataKit.State.StateDatabase>();
+        var subscriptions = Rig.Get<DbDataGateway.Server.Hosting.GatewaySubscriptions>();
+        var id = subscriptions.Subscriptions.Create(new DbDataKit.State.SubscriptionFields($"conformance {Guid.NewGuid():N}", "dashboard", "orders", null, null, "pdf", null, "mail", null, "0 7 * * *", "UTC", false, "email"), p.UserId, p.Name, p.UserId, DateTimeOffset.UtcNow.AddMinutes(-1));
+        await subscriptions.RunPassAsync(cancellationToken);
+        var message = new DbDataKit.State.DeliveryStore(state).List(source: $"subscription:{id:D}").SingleOrDefault(m => m.Attachments.Count > 0);
+        if (message is null) return ModuleAnswer.Refusal("the subscription sent nothing: " + subscriptions.Subscriptions.Find(id)?.LastDetail);
+        using var read = new DbDataKit.State.PayloadStore(state).OpenRead(message.Attachments[0].Payload);
+        using var bytes = new MemoryStream();
+        read.CopyTo(bytes);
+        var page = Encoding.UTF8.GetString(bytes.ToArray());
+        var match = System.Text.RegularExpressions.Regex.Match(page, "id=\"dbdatakit-print\"[^>]*>(?<json>.*?)</script>", System.Text.RegularExpressions.RegexOptions.Singleline);
+        var widgets = JsonNode.Parse(System.Net.WebUtility.HtmlDecode(match.Groups["json"].Value))!["rendered"]!["widgets"]!.AsObject();
+        var widget = widgets[question.Id switch { "by-region" => "by_region", "by-customer" => "by_customer", _ => "regions" }]!;
+        if ((string?)widget["type"] == "error") return ModuleAnswer.Refusal((string?)widget["message"] ?? "error");
+        return question.Id == "members"
+            ? ModuleAnswer.Of(widget["values"]!.AsArray().Select(v => ModuleAnswer.Row(ModuleAccessRig.JsonCell(v!["value"]))))
+            : ModuleAnswer.Of(widget["rows"]!.AsArray().Select(r => ModuleAnswer.Row(r!["cells"]!.AsArray().Select(c => ModuleAccessRig.JsonCell(c!["v"])).ToArray())));
+    }
+}
+
 /// <summary>The negative module of GP14: it has its own connection to the data source and reads the tables itself, so no rule of the core applies to it.</summary>
 internal sealed class DirectSourceModule(ModuleAccessRig rig) : RigModule(rig, "direct-source")
 {

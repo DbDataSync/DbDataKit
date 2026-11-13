@@ -23,7 +23,7 @@ public sealed class ModuleAccessConformanceTests
 
     private static IReadOnlyList<IConformanceModule> Modules(ModuleAccessRig rig) =>
     [
-        new FlightModule(rig, sql: false), new FlightModule(rig, sql: true), new FeedsModule(rig, "request"), new FeedsModule(rig, "sql"), new FeedsModule(rig, "saved"), new AppsSemanticModule(rig), new McpSemanticModule(rig), new ViewsModule(rig),
+        new FlightModule(rig, sql: false), new FlightModule(rig, sql: true), new FeedsModule(rig, "request"), new FeedsModule(rig, "sql"), new FeedsModule(rig, "saved"), new AppsSemanticModule(rig), new McpSemanticModule(rig), new ViewsModule(rig), new SubscriptionModule(rig),
     ];
 
     [Theory, MemberData(nameof(Setups))]
@@ -62,6 +62,10 @@ public sealed class ModuleAccessConformanceTests
         Assert.True(report.Passed, report.Describe());
         Assert.Contains("flightsql (semantic request)/members", report.Asked);
         Assert.Contains("feeds (saved)/by-region", report.Asked);
+        Assert.Contains("views (dashboard render)/members", report.Asked);
+        Assert.Contains("views (subscription export)/by-customer", report.Asked);
+        Assert.Contains("mcp (query_semantic)/total", report.Asked);
+        Assert.Contains("apps host (semantic call)/by-customer", report.Asked);
     }
 
     [Theory, MemberData(nameof(Engines))]
