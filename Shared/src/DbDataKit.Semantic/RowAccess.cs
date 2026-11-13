@@ -38,6 +38,15 @@ public sealed class RowAccessPlan
 
     private static string KeyOf(string source, string table) => BaseSource(source) + "\n" + Normalize(table);
 
+    /// <summary>The name of a column of a catalog table as the source writes it (a plain identifier), or null when the catalog gives it as an expression a rule cannot be written over. The explanation and the coverage report use it too, so they read the columns the rules filter on.</summary>
+    public static string? PhysicalColumn(JsonObject table, string column)
+    {
+        var found = table["columns"]?.AsArray().OfType<JsonObject>().FirstOrDefault(c => c["name"]?.GetValue<string>() == column);
+        var expression = found?["expression"]?["dialects"]?.AsArray().OfType<JsonObject>().FirstOrDefault(d => d["dialect"]?.GetValue<string>() == "ANSI_SQL")?["expression"]?.GetValue<string>();
+        var name = expression ?? column;
+        return Plain.IsMatch(name) ? name : null;
+    }
+
     /// <summary>The entry of a physical table of a source (a source id of the engine, a table as the catalog writes it), or null when the caller's rules do not filter it.</summary>
     public TableRowAccess? For(string source, string table) => _tables.GetValueOrDefault(KeyOf(source, table));
 
@@ -59,13 +68,7 @@ public sealed class RowAccessPlan
         var tables = (catalog.Source["tables"] as JsonArray)?.OfType<JsonObject>().ToList() ?? [];
         JsonObject? Table(string name) => tables.FirstOrDefault(t => t["name"]?.GetValue<string>() == name);
 
-        string? Physical(JsonObject table, string column)
-        {
-            var found = table["columns"]?.AsArray().OfType<JsonObject>().FirstOrDefault(c => c["name"]?.GetValue<string>() == column);
-            var expression = found?["expression"]?["dialects"]?.AsArray().OfType<JsonObject>().FirstOrDefault(d => d["dialect"]?.GetValue<string>() == "ANSI_SQL")?["expression"]?.GetValue<string>();
-            var name = expression ?? column;
-            return Plain.IsMatch(name) ? name : null;
-        }
+        static string? Physical(JsonObject table, string column) => PhysicalColumn(table, column);
 
         foreach (var dataset in decision.Datasets)
         {

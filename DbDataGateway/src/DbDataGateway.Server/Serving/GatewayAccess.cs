@@ -29,6 +29,11 @@ public sealed class GatewayAccess(DataSourceCatalog sources, Func<GatewayOptions
     /// <summary>The resolver (one per instance: it keeps the names of each rules table per generation).</summary>
     public AccessResolver Resolver { get; } = new(ledger, new Alerts(audit, log, time), time);
 
+    /// <summary>The data sources of this instance (the explanation and the coverage report read a rules table on the one the model's tables are on).</summary>
+    internal DataSourceCatalog Sources => _sources;
+
+    internal GatewayOptions Options => _options();
+
     /// <summary>The caller as the rules see them: the id and the name, and the groups of the identity home.</summary>
     public static AccessCaller CallerOf(ServingCaller caller) => new(caller.Id, caller.Name, caller.Roles);
 
@@ -36,8 +41,14 @@ public sealed class GatewayAccess(DataSourceCatalog sources, Func<GatewayOptions
     public static bool HasRowRules(SemanticModel model) => model.Catalog.Access is { Row.Count: > 0 };
 
     /// <summary>What applies to the caller on the model: the rules, the state of each rules table, the fingerprint.</summary>
-    public AccessDecision DecisionFor(ServingCaller caller, SemanticModel model) =>
-        model.Catalog.Access is { IsEmpty: false } section ? Resolver.Resolve(CallerOf(caller), new AccessScope(GatewayCachePolicy.ModelPrefix + model.Name, section, table => TableKey(model, table), new Subjects(this, model))) : AccessDecision.None;
+    public AccessDecision DecisionFor(ServingCaller caller, SemanticModel model) => DecisionFor(CallerOf(caller), model);
+
+    /// <summary>The same for a caller made of names (<c>access explain</c> asks for a person or a group that is not the one making the call): the one resolver, the one scope.</summary>
+    public AccessDecision DecisionFor(AccessCaller caller, SemanticModel model) =>
+        model.Catalog.Access is { IsEmpty: false } section ? Resolver.Resolve(caller, ScopeFor(model, section)) : AccessDecision.None;
+
+    /// <summary>What the resolver is asked about for a model: its section, the identity of each rules table and the reader of a rules table's names.</summary>
+    internal AccessScope ScopeFor(SemanticModel model, AccessSection section) => new(GatewayCachePolicy.ModelPrefix + model.Name, section, table => TableKey(model, table), new Subjects(this, model));
 
     /// <summary>
     /// The plan of the caller's row rules on the catalog of <paramref name="model"/>, which may be the caller's column view of a registered model (plan 22a GP13): the decision (the ledger keys, the rules tables read, the fingerprint the cache keys on) is made for the registered
@@ -54,7 +65,7 @@ public sealed class GatewayAccess(DataSourceCatalog sources, Func<GatewayOptions
         return serving + "/" + RowAccessPlan.Normalize(physical);
     }
 
-    private static System.Text.Json.Nodes.JsonObject? TableOf(SemanticModel model, string name) =>
+    internal static System.Text.Json.Nodes.JsonObject? TableOf(SemanticModel model, string name) =>
         (model.Catalog.Source["tables"] as System.Text.Json.Nodes.JsonArray)?.OfType<System.Text.Json.Nodes.JsonObject>().FirstOrDefault(t => t["name"]?.GetValue<string>() == name);
 
     /// <summary>

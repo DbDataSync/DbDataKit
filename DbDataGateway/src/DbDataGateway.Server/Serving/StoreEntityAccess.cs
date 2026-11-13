@@ -27,6 +27,10 @@ public sealed class StoreEntityAccess(IRulesTableLedger ledger, Func<string, IRe
     /// <summary>The identity of a rules table in the state: the data source and the table as the model names it, the same key the semantic path gives a table of the same name on the same data source.</summary>
     public static string TableKey(string dataSource, string table) => dataSource + "/" + DbDataKit.Semantic.RowAccessPlan.Normalize(table);
 
+    /// <summary>What the resolver is asked about for an entity model: its section, the identity of each rules table on its data source and the reader of a rules table's names.</summary>
+    public static AccessScope ScopeFor(ServedEntityModel served, AccessSection section, IRulesSubjects subjects) =>
+        new("entity-model/" + served.Model.Name, section, table => TableKey(served.DataSource, table), subjects);
+
     /// <summary>Whether reads of this entity are limited by row rules.</summary>
     public static bool Limits(ServedEntityModel served, string entity) => served.Model.Access?.RowRulesOf(entity) is not null;
 
@@ -39,7 +43,7 @@ public sealed class StoreEntityAccess(IRulesTableLedger ledger, Func<string, IRe
         if (served.Model.Access is not { IsEmpty: false } section) return _ => null;
         var groups = caller.Groups ?? groupsOf(caller.UserId);
         var decision = Resolver.Resolve(new AccessCaller(caller.UserId, caller.Name ?? caller.UserId, groups),
-            new AccessScope("entity-model/" + served.Model.Name, section, table => TableKey(served.DataSource, table), new Subjects(writer)));
+            ScopeFor(served, section, new Subjects(writer)));
         var found = new Dictionary<string, EntityReadAccess>(StringComparer.Ordinal);
         foreach (var dataset in decision.Datasets) found[dataset.Dataset] = new EntityReadAccess(RowPredicate.Of(dataset), dataset.Refusal);
         return entity => found.GetValueOrDefault(entity);

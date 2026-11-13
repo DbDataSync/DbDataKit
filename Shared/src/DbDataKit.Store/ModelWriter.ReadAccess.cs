@@ -83,4 +83,53 @@ public sealed partial class ModelWriter
             if (!reader.IsDBNull(0)) names.Add(Convert.ToString(reader.GetValue(0), System.Globalization.CultureInfo.InvariantCulture) ?? "");
         return names;
     }
+
+    /// <summary>
+    /// The rows of the rules table of <paramref name="rule"/> that name one of <paramref name="names"/> (as the table spells them), at most <paramref name="limit"/>, for <c>access explain</c> (plan 22a GP15): the subject and the mapped columns, as text.
+    /// </summary>
+    public async Task<IReadOnlyList<RulesTableRow>> RulesRowsAsync(RowRule rule, IReadOnlyCollection<string> names, int limit, CancellationToken cancellationToken = default)
+    {
+        if (names.Count == 0) return [];
+        var parameters = new List<object?>();
+        var list = string.Join(", ", names.Select(n => "@p" + Add(parameters, n)));
+        var columns = rule.Columns.Select(c => c.RulesColumn).Distinct(StringComparer.Ordinal).ToList();
+        await using var command = Command(null, $"SELECT r.{Col(rule.Subject)}, {string.Join(", ", columns.Select(c => "r." + Col(c)))} FROM {QualifiedTable(rule.Table)} r WHERE r.{Col(rule.Subject)} IN ({list})", parameters);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var rows = new List<RulesTableRow>();
+        while (rows.Count < limit && await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            rows.Add(new RulesTableRow(Text(reader.GetValue(0)) ?? "", columns.Select((c, i) => (c, Text(reader.GetValue(i + 1)))).ToDictionary(x => x.c, x => x.Item2)));
+        return rows;
+    }
+
+    /// <summary>
+    /// The combinations of the rule's mapped columns in the entity (its open versions) that no row of the rules table has, NULL counted, for <c>access coverage</c> (plan 22a GP15): one statement, with the same NULL-safe comparison the read filter uses.
+    /// All combinations are counted, the first <paramref name="limit"/> (the most rows first) are listed.
+    /// </summary>
+    public async Task<UncoveredValues> UncoveredAsync(string entityName, RowRule rule, int limit, CancellationToken cancellationToken = default)
+    {
+        var entity = RequireEntity(entityName);
+        var mine = rule.Columns.Select(c => c.DatasetColumn).ToList();
+        var match = string.Join(" AND ", rule.Columns.Select(c => $"(d.{Col(c.DatasetColumn)} = r.{Col(c.RulesColumn)} OR (d.{Col(c.DatasetColumn)} IS NULL AND r.{Col(c.RulesColumn)} IS NULL))"));
+        var sql = $"SELECT {string.Join(", ", mine.Select(c => "d." + Col(c)))}, COUNT(*) FROM {Table(entity.Name)} d WHERE {OpenOnly(entity, "d")} AND NOT EXISTS (SELECT 1 FROM {QualifiedTable(rule.Table)} r WHERE {match}) "
+            + $"GROUP BY {string.Join(", ", mine.Select(c => "d." + Col(c)))} ORDER BY COUNT(*) DESC";
+        await using var command = Command(null, sql, []);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var values = new List<UncoveredValue>();
+        var count = 0;
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            count++;
+            if (values.Count < limit) values.Add(new UncoveredValue(mine.Select((c, i) => (c, Text(reader.GetValue(i)))).ToDictionary(x => x.c, x => x.Item2), Convert.ToInt64(reader.GetValue(mine.Count), System.Globalization.CultureInfo.InvariantCulture)));
+        }
+
+        return new UncoveredValues(count, values, count > values.Count);
+    }
+
+    private static string? Text(object? value) => value is null or DBNull ? null : value switch
+    {
+        DateTime moment => moment.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture),
+        DateTimeOffset moment => moment.ToString("yyyy-MM-dd HH:mm:ss zzz", System.Globalization.CultureInfo.InvariantCulture),
+        bool flag => flag ? "true" : "false",
+        _ => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture),
+    };
 }

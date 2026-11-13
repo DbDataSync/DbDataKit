@@ -28,7 +28,7 @@ public static class Cli
     }
 
     /// <summary>What <c>ui mcp</c> never offers: secrets (they read standard input, which is the protocol's channel), queries (they return rows; an agent works without data) and adopting (a person's act).</summary>
-    private static readonly string[] NotForAgents = ["secret", "query", "server pair", "server unpair", "datasource adopt", "export install", "identity", "apps"];   // identity: client secrets and invitations establish trust, as pairing does
+    private static readonly string[] NotForAgents = ["secret", "query", "server pair", "server unpair", "datasource adopt", "export install", "identity", "apps", "access explain", "access coverage"];   // access explain and coverage: who may see what is not for an agent to enumerate; identity: client secrets and invitations establish trust, as pairing does
 
     public static NounRouter Router(Func<string, string?>? environment = null)
     {

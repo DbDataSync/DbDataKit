@@ -52,6 +52,98 @@
       "if": {
         "properties": {
           "command": {
+            "const": "access coverage"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_access_coverage"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "access coverage"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_access_coverage_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "access explain"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_access_explain"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "access explain"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_access_explain_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "access mask-key-rotate"
           },
           "ok": {
@@ -4006,6 +4098,855 @@
     }
   ],
   "$defs": {
+    "data_access_coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "definition": {
+          "type": "string"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "dataset": {
+                "type": "string"
+              },
+              "group": {
+                "type": "string"
+              },
+              "rule": {
+                "type": "string"
+              },
+              "effect": {
+                "type": "string"
+              },
+              "table": {
+                "type": "string"
+              },
+              "columns": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "dataset_column": {
+                      "type": "string"
+                    },
+                    "rules_column": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "dataset_column",
+                    "rules_column"
+                  ]
+                }
+              },
+              "uncovered": {
+                "type": "integer"
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "values": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "rows": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "values",
+                    "rows"
+                  ]
+                }
+              },
+              "truncated": {
+                "type": "boolean"
+              },
+              "problem": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "dataset",
+              "group",
+              "rule",
+              "effect",
+              "table",
+              "columns",
+              "uncovered",
+              "values",
+              "truncated"
+            ]
+          }
+        }
+      },
+      "required": [
+        "definition",
+        "rules"
+      ]
+    },
+    "data_access_coverage_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "definition": {
+          "type": "string"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "dataset": {
+                "type": "string"
+              },
+              "group": {
+                "type": "string"
+              },
+              "rule": {
+                "type": "string"
+              },
+              "effect": {
+                "type": "string"
+              },
+              "table": {
+                "type": "string"
+              },
+              "columns": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "dataset_column": {
+                      "type": "string"
+                    },
+                    "rules_column": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "dataset_column",
+                    "rules_column"
+                  ]
+                }
+              },
+              "uncovered": {
+                "type": "integer"
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "values": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "rows": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "values",
+                    "rows"
+                  ]
+                }
+              },
+              "truncated": {
+                "type": "boolean"
+              },
+              "problem": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "dataset",
+              "group",
+              "rule",
+              "effect",
+              "table",
+              "columns",
+              "uncovered",
+              "values",
+              "truncated"
+            ]
+          }
+        }
+      }
+    },
+    "data_access_explain": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "definition": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "subject_kind": {
+          "type": "string"
+        },
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "datasets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "dataset": {
+                "type": "string"
+              },
+              "match": {
+                "type": "string"
+              },
+              "refusal": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "summary": {
+                "type": "string"
+              },
+              "groups": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "match": {
+                      "type": "string"
+                    },
+                    "included": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "rules": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "effect": {
+                            "type": "string"
+                          },
+                          "table": {
+                            "type": "string"
+                          },
+                          "subject": {
+                            "type": "string"
+                          },
+                          "subject_kind": {
+                            "type": "string"
+                          },
+                          "columns": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "dataset_column": {
+                                  "type": "string"
+                                },
+                                "rules_column": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "dataset_column",
+                                "rules_column"
+                              ]
+                            }
+                          },
+                          "names": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "rows": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "subject": {
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "type": "object",
+                                  "additionalProperties": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                }
+                              },
+                              "required": [
+                                "subject",
+                                "values"
+                              ]
+                            }
+                          },
+                          "rows_truncated": {
+                            "type": "boolean"
+                          },
+                          "holds": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "read_problem": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "effect",
+                          "table",
+                          "subject",
+                          "subject_kind",
+                          "columns",
+                          "names",
+                          "rows",
+                          "rows_truncated"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "match",
+                    "rules"
+                  ]
+                }
+              },
+              "verdict": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "included": {
+                    "type": "boolean"
+                  },
+                  "decided_by": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "row": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "missing_columns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "dataset",
+              "match",
+              "summary",
+              "groups",
+              "missing_columns"
+            ]
+          }
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "dataset": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "treatment": {
+                "type": "string"
+              },
+              "rules": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "subject": {
+                      "type": "string"
+                    },
+                    "subject_kind": {
+                      "type": "string"
+                    },
+                    "treatment": {
+                      "type": "string"
+                    },
+                    "mask": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "subject",
+                    "subject_kind",
+                    "treatment"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "dataset",
+              "column",
+              "treatment",
+              "rules"
+            ]
+          }
+        },
+        "tables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "table": {
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "age_seconds": {
+                "type": "integer"
+              },
+              "max_age_seconds": {
+                "type": "integer"
+              },
+              "counted_from": {
+                "type": "string"
+              },
+              "last_changed": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "table",
+              "key",
+              "state",
+              "age_seconds",
+              "max_age_seconds",
+              "counted_from"
+            ]
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "definition",
+        "subject",
+        "subject_kind",
+        "names",
+        "fingerprint",
+        "datasets",
+        "columns",
+        "tables",
+        "warnings"
+      ]
+    },
+    "data_access_explain_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "definition": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "subject_kind": {
+          "type": "string"
+        },
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "datasets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "dataset": {
+                "type": "string"
+              },
+              "match": {
+                "type": "string"
+              },
+              "refusal": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "summary": {
+                "type": "string"
+              },
+              "groups": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "match": {
+                      "type": "string"
+                    },
+                    "included": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "rules": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "effect": {
+                            "type": "string"
+                          },
+                          "table": {
+                            "type": "string"
+                          },
+                          "subject": {
+                            "type": "string"
+                          },
+                          "subject_kind": {
+                            "type": "string"
+                          },
+                          "columns": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "dataset_column": {
+                                  "type": "string"
+                                },
+                                "rules_column": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "dataset_column",
+                                "rules_column"
+                              ]
+                            }
+                          },
+                          "names": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "rows": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "subject": {
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "type": "object",
+                                  "additionalProperties": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                }
+                              },
+                              "required": [
+                                "subject",
+                                "values"
+                              ]
+                            }
+                          },
+                          "rows_truncated": {
+                            "type": "boolean"
+                          },
+                          "holds": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "read_problem": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "effect",
+                          "table",
+                          "subject",
+                          "subject_kind",
+                          "columns",
+                          "names",
+                          "rows",
+                          "rows_truncated"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "match",
+                    "rules"
+                  ]
+                }
+              },
+              "verdict": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "included": {
+                    "type": "boolean"
+                  },
+                  "decided_by": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "row": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "missing_columns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "dataset",
+              "match",
+              "summary",
+              "groups",
+              "missing_columns"
+            ]
+          }
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "dataset": {
+                "type": "string"
+              },
+              "column": {
+                "type": "string"
+              },
+              "treatment": {
+                "type": "string"
+              },
+              "rules": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "subject": {
+                      "type": "string"
+                    },
+                    "subject_kind": {
+                      "type": "string"
+                    },
+                    "treatment": {
+                      "type": "string"
+                    },
+                    "mask": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "subject",
+                    "subject_kind",
+                    "treatment"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "dataset",
+              "column",
+              "treatment",
+              "rules"
+            ]
+          }
+        },
+        "tables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "table": {
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "age_seconds": {
+                "type": "integer"
+              },
+              "max_age_seconds": {
+                "type": "integer"
+              },
+              "counted_from": {
+                "type": "string"
+              },
+              "last_changed": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "table",
+              "key",
+              "state",
+              "age_seconds",
+              "max_age_seconds",
+              "counted_from"
+            ]
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "data_access_mask_key_rotate": {
       "type": "object",
       "additionalProperties": false,

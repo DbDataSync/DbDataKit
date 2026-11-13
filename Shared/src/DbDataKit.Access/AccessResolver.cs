@@ -63,7 +63,8 @@ public sealed class NoAccessAlerts : IAccessAlerts
 /// <param name="State">Fresh, stale or expired by its age.</param>
 /// <param name="MaxAge">The longest age it may have (the smallest of the rules that name it).</param>
 /// <param name="Since">The instant its age counts from.</param>
-public sealed record RulesTableStatus(string Table, string Key, RulesTableState State, TimeSpan Age, TimeSpan MaxAge, DateTimeOffset Since);
+/// <param name="ChangedAt">When the producer last reported it refreshed (<c>data.changed</c>); null when it never did, and its age counts from when it was first served.</param>
+public sealed record RulesTableStatus(string Table, string Key, RulesTableState State, TimeSpan Age, TimeSpan MaxAge, DateTimeOffset Since, DateTimeOffset? ChangedAt = null);
 
 /// <summary>A rule with the caller's names that appear in its rules table, spelled as the table spells them; empty when the table has no row for the caller, so the rule cannot hold for any row.</summary>
 public sealed record RuleResolution(RowRule Rule, IReadOnlyList<string> Names);
@@ -127,7 +128,7 @@ public sealed class AccessResolver(IRulesTableLedger ledger, IAccessAlerts? aler
             var age = now - record.Since;
             if (age < TimeSpan.Zero) age = TimeSpan.Zero;
             var state = age > maxAge ? RulesTableState.Expired : age > maxAge / 2 ? RulesTableState.Stale : RulesTableState.Fresh;
-            var status = new RulesTableStatus(table, key, state, age, maxAge, record.Since);
+            var status = new RulesTableStatus(table, key, state, age, maxAge, record.Since, record.ChangedAt);
             statuses.Add(status);
             Alert(status);
         }

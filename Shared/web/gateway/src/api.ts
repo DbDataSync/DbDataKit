@@ -1,6 +1,7 @@
 import { put, request, type TrustApi, type TrustState } from '@dbdatakit/shell'
 import type { RenderedViewDocument } from '@dbdatakit/visuals'
 import type { InstanceRequest, NavigationRequest, PublishBody } from './appEditors'
+import type { AccessCoverage, AccessExplanation, AccessRulesAnswer } from './accessTypes'
 import type { CacheOverview } from './cacheTypes'
 import type { ReplayResult, RunDetail, RunResult, RunRow, SavedQueryRow, SavedQueryVersionRow } from './runTypes'
 import type {
@@ -9,6 +10,8 @@ import type {
 
 const v1 = '/api/v1'
 const enc = encodeURIComponent
+/** A query string; a name with several values is given once for each. */
+const queryText = (query: Record<string, string | string[]>) => Object.entries(query).flatMap(([k, v]) => (Array.isArray(v) ? v : [v]).map((x) => `${enc(k)}=${enc(x)}`)).join('&')
 
 /** The calls of the Gateway's management API, through the console's relay. A write names the version it read; the server refuses one that is stale with the current version. */
 export const gatewayApi = {
@@ -160,6 +163,16 @@ export const gatewayApi = {
   cache: {
     read: () => request<CacheOverview>(`${v1}/cache`),
     clear: (body: { dataset: string } | { all: true }) => request<{ cleared: number }>(`${v1}/cache/invalidate`, { method: 'POST', body: JSON.stringify(body) }),
+  },
+  /**
+   * The access rules (plan 22a GP15): the rules of each model with the state of its rules tables; why a person or group can or cannot read (an administrator asks about anyone, anyone else only about themselves); the values no rule row covers
+   * (an administrator's); and the key of the hash mask (status and rotate, an administrator's).
+   */
+  access: {
+    rules: () => request<AccessRulesAnswer>(`${v1}/access/rules`),
+    explain: (query: Record<string, string | string[]>) => request<AccessExplanation>(`${v1}/access/explain?${queryText(query)}`),
+    coverage: (model: string, dataset?: string) => request<AccessCoverage>(`${v1}/access/coverage?${queryText({ model, ...(dataset ? { dataset } : {}) })}`),
+    rotateMaskKey: () => request<{ rotated: boolean; cleared: number }>(`${v1}/access/mask-key/rotate`, { method: 'POST' }),
   },
   history: {
     list: () => request<{ commits: CommitRow[] }>(`${v1}/config/history`).then((r) => r.commits),
