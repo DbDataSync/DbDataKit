@@ -48,6 +48,7 @@ public sealed class RunnerControl
     public const string CancelVerb = "runner.run.cancel";
     public const string OwnerVerb = "runner.task.owner";
     public const string RewindVerb = "runner.checkpoint.rewind";
+    public const string SetCheckpointVerb = "runner.checkpoint.set";
     public const string ResolveStepVerb = "runner.step.resolve";
     public const string ReplayVerb = "runner.deadletter.replay";
     public const string DiscardVerb = "runner.deadletter.discard";
@@ -147,6 +148,31 @@ public sealed class RunnerControl
         Record(RewindVerb, task, actor, new { checkpoint = name, key = itemKey, history_id = historyId, from_version = before?.Version, to_version = after?.Version, from = Parts(before), to = Parts(after) },
             rewound ? AuditEvent.Ok : AuditEvent.Failed);
         return rewound;
+    }
+
+    /// <summary>
+    /// Changes some parts of one item of a task's checkpoint by hand (plan 28c E12g: a product's recovery actions, such as setting a mapping's read intent and hold, continuing from a captured position, or leaving a loading hold): the parts
+    /// in <paramref name="set"/> are written, those named in <paramref name="remove"/> are dropped and the rest stay, as one new version under the actor's name, only if the item is still at <paramref name="expectedVersion"/> (0: it does not
+    /// exist yet). False, and a failure on record, when a run moved it meanwhile: the caller reads it again. Audited as <c>runner.checkpoint.set</c> with what each part was and became. Throws <see cref="InvalidOperationException"/> when nothing would be left.
+    /// </summary>
+    public bool SetCheckpointParts(TaskRef task, string name, string itemKey, long expectedVersion, IReadOnlyDictionary<string, ProgressValue> set, IReadOnlyCollection<string> remove, RunnerActor actor)
+    {
+        var store = new ProgressStore(State, new ProgressKey(task.Package, task.Channel, task.Task));
+        var before = store.GetCheckpoint(name, itemKey);
+        static object? Parts(IReadOnlyDictionary<string, ProgressValue>? parts) => parts?.ToDictionary(p => p.Key, p => p.Value.Canonical());
+        if ((before?.Version ?? 0) != expectedVersion)
+        {
+            Record(SetCheckpointVerb, task, actor, new { checkpoint = name, key = itemKey, expected_version = expectedVersion, found_version = before?.Version ?? 0 }, AuditEvent.Failed);
+            return false;
+        }
+
+        var parts = new Dictionary<string, ProgressValue>(before?.Parts ?? new Dictionary<string, ProgressValue>(), StringComparer.Ordinal);
+        foreach (var part in remove) parts.Remove(part);
+        foreach (var (part, value) in set) parts[part] = value;
+        if (parts.Count == 0) throw new InvalidOperationException($"The checkpoint '{name}' would be left with no part.");
+        var moved = store.Advance(name, parts, expectedVersion, itemKey: itemKey, actor: actor.Display);
+        Record(SetCheckpointVerb, task, actor, new { checkpoint = name, key = itemKey, from_version = before?.Version ?? 0, from = Parts(before?.Parts), to = Parts(parts), removed = remove.Order(StringComparer.Ordinal).ToArray() }, moved ? AuditEvent.Ok : AuditEvent.Failed);
+        return moved;
     }
 
     /// <summary>

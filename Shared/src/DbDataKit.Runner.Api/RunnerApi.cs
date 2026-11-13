@@ -133,6 +133,65 @@ public static class RunnerApi
             });
         });
 
+        // a hand change of some parts of one checkpoint item (plan 28c E12g): the product's recovery actions (a mapping's read intent, hold and captured position). Operator, audited with before and after. 409 when a run moved the item meanwhile.
+        app.MapPost($"{root}/tasks/{{package}}/{{channel}}/{{task}}/checkpoints/{{name}}/set", async (string package, string channel, string task, string name, HttpContext context) =>
+        {
+            if (!ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
+            if (Deny(context, ServerRole.Operator, RunnerControl.SetCheckpointVerb, engine(), reference!) is { } denied) return denied;
+            if (!PackageManifestValidator.NameRule.IsMatch(name)) return Results.BadRequest(new { error = $"'{name}' is not a checkpoint name." });
+            using var reader = new StreamReader(context.Request.Body);
+            var text = await reader.ReadToEndAsync(context.RequestAborted);
+            if (text.Length > 1_000_000) return Results.BadRequest(new { error = "The body is larger than 1 MB." });
+            JsonObject? body;
+            try { body = JsonNode.Parse(text) as JsonObject; }
+            catch (System.Text.Json.JsonException) { return Results.BadRequest(new { error = "The body is not JSON." }); }
+            const string shape = "The body is {\"key\": \"\", \"version\": <the version read, 0 for none>, \"set\": {\"part\": {\"type\": \"text\", \"value\": \"...\"}}, \"remove\": [\"part\"]}.";
+            if (body?["version"] is not JsonValue versionValue || !versionValue.TryGetValue<long>(out var version) || version < 0) return Results.BadRequest(new { error = shape });
+            var key = body["key"] is JsonValue keyValue && keyValue.TryGetValue<string>(out var keyText) ? keyText : "";
+            var set = new Dictionary<string, ProgressValue>(StringComparer.Ordinal);
+            if (body["set"] is { } setNode)
+            {
+                if (setNode is not JsonObject setObject) return Results.BadRequest(new { error = shape });
+                foreach (var (part, node) in setObject)
+                {
+                    if (!PackageManifestValidator.NameRule.IsMatch(part)) return Results.BadRequest(new { error = $"'{part}' is not a part name." });
+                    if (node is not JsonObject spec || spec["type"] is not JsonValue typeValue || !typeValue.TryGetValue<string>(out var typeText) || spec["value"] is not JsonValue valueNode || !valueNode.TryGetValue<string>(out var valueText))
+                        return Results.BadRequest(new { error = $"The part '{part}' is {{\"type\": \"text|time|int|bool\", \"value\": \"...\"}}." });
+                    switch (typeText)
+                    {
+                        case "text": set[part] = ProgressValue.OfText(valueText); break;
+                        case "time" when DateTimeOffset.TryParse(valueText, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at): set[part] = ProgressValue.OfTime(at); break;
+                        case "int" when long.TryParse(valueText, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var number): set[part] = ProgressValue.OfInt(number); break;
+                        case "bool" when bool.TryParse(valueText, out var flag): set[part] = ProgressValue.OfBool(flag); break;
+                        default: return Results.BadRequest(new { error = $"The part '{part}' is not a text, a time, a whole number or a bool as its type says." });
+                    }
+                }
+            }
+
+            var remove = new List<string>();
+            if (body["remove"] is { } removeNode)
+            {
+                if (removeNode is not JsonArray removeArray) return Results.BadRequest(new { error = shape });
+                foreach (var node in removeArray)
+                {
+                    if (node is JsonValue v && v.TryGetValue<string>(out var partName) && PackageManifestValidator.NameRule.IsMatch(partName)) remove.Add(partName);
+                    else return Results.BadRequest(new { error = "remove is a list of part names." });
+                }
+            }
+
+            return Control(engine(), control =>
+            {
+                try
+                {
+                    if (!control.SetCheckpointParts(reference!, name, key, version, set, remove, ActorOf(context)))
+                        return Results.Json(new { error = $"The checkpoint '{name}' of {reference} moved while it was being changed (a run advanced it). Read it again." }, statusCode: StatusCodes.Status409Conflict);
+                }
+                catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
+                var now = new ProgressStore(state, new ProgressKey(package, channel, task)).GetCheckpoint(name, key);
+                return Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["name"] = name, ["key"] = key, ["version"] = now?.Version });
+            });
+        });
+
         // an item for the task's own queue, the one a run of the task claims from (plan 28c E12c): how a product hands work to a run that is up already, since a task runs one at a time and a second start is refused. Operator.
         app.MapPost($"{root}/tasks/{{package}}/{{channel}}/{{task}}/work", async (string package, string channel, string task, HttpContext context) =>
         {

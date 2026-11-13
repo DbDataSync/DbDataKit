@@ -78,6 +78,9 @@ public sealed record ClientTaskSchedule(string Task, string Owner, string? Owner
 public sealed record ClientSeed(DateTimeOffset HandledUpTo, string? PausedBy, DateTimeOffset? PausedAt);
 
 /// <summary>One item of a task's checkpoint as the runner has it (plan 28c E12c): its key, its version and its parts as text (times as ISO 8601 in UTC).</summary>
+/// <summary>A part value to write into a checkpoint item by hand: <see cref="Type"/> is <c>text</c>, <c>time</c> (ISO 8601), <c>int</c> or <c>bool</c>.</summary>
+public sealed record ClientPartValue(string Type, string Value);
+
 public sealed record ClientCheckpointItem(string Key, long Version, IReadOnlyDictionary<string, string> Parts);
 
 /// <summary>How a task's last run on the runner ended, as the runner's status gives it (plan 28c E10).</summary>
@@ -424,6 +427,22 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Conflict) return false;
         if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to cancel the run {runId}", ct);
         return true;
+    }
+
+    /// <summary>
+    /// Changes parts of one item of a task's checkpoint by hand (<c>POST .../checkpoints/{name}/set</c>, operator; audited with before and after): the parts in <paramref name="set"/> are written and those in <paramref name="remove"/> dropped, only if the
+    /// item is still at <paramref name="version"/> (the version a read gave; 0 for an item that does not exist yet). The new version, or null when a run moved the item meanwhile (409): read it again.
+    /// </summary>
+    public async Task<long?> SetCheckpointAsync(string server, string? code, string package, string channel, string task, string name, string key, long version, IReadOnlyDictionary<string, ClientPartValue> set, IReadOnlyCollection<string> remove, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        var parts = new JsonObject();
+        foreach (var (part, value) in set) parts[part] = new JsonObject { ["type"] = value.Type, ["value"] = value.Value };
+        var body = new JsonObject { ["key"] = key, ["version"] = version, ["set"] = parts, ["remove"] = new JsonArray(remove.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()) };
+        using var response = await link.SendAsync(HttpMethod.Post, TaskPath(package, channel, task) + $"/checkpoints/{name}/set", new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"), ct);
+        if (response.StatusCode == HttpStatusCode.Conflict) return null;
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to change the checkpoint {name} of {package}/{channel}/{task}", ct);
+        return (long?)JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["version"];
     }
 
     /// <summary>Puts an item in the task's own queue (<c>POST .../work</c>, the operator role): the way to hand work to a run that is up already. The id of the item's run.</summary>

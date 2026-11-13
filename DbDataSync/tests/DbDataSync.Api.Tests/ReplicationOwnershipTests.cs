@@ -133,6 +133,8 @@ public sealed class ReplicationOwnershipTests : IDisposable
 
         public Task PauseAsync(string task, CancellationToken ct) { Calls.Add("pause"); RunnerPaused = true; return Task.CompletedTask; }
 
+        public Task<long?> SetCheckpointAsync(string task, string name, string key, long version, IReadOnlyDictionary<string, ClientPartValue> set, IReadOnlyCollection<string> remove, CancellationToken ct) => throw new NotSupportedException();
+
         public Task<bool> CancelRunAsync(Guid runId, CancellationToken ct) { Calls.Add("cancel:" + runId); return Task.FromResult(true); }
 
         public Task ResumeAsync(string task, CancellationToken ct) { Calls.Add("resume"); RunnerPaused = false; return Task.CompletedTask; }

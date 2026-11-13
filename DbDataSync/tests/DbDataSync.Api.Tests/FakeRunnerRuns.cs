@@ -145,5 +145,37 @@ public sealed class FakeRunnerRuns : IRunnerSync, IRunnerRuns
 
     public Task<ClientTaskStatus?> StatusAsync(string task, CancellationToken ct) => throw new NotSupportedException();
 
+    /// <summary>How many of the next changes of a checkpoint item find a drain has moved it first (the version moves, the change is refused).</summary>
+    public int MovedUnderneath { get; set; }
+
+    /// <summary>The hand changes made to checkpoint items (the key and what was written and removed).</summary>
+    public List<(string Key, IReadOnlyDictionary<string, ClientPartValue> Set, IReadOnlyCollection<string> Remove)> CheckpointSets { get; } = [];
+
+    public Task<long?> SetCheckpointAsync(string task, string name, string key, long version, IReadOnlyDictionary<string, ClientPartValue> set, IReadOnlyCollection<string> remove, CancellationToken ct)
+    {
+        if (Down) throw new RunnerClientException("The runner is down.");
+        lock (_gate)
+        {
+            var at = Checkpoint.FindIndex(i => i.Key == key);
+            var current = at < 0 ? null : Checkpoint[at];
+            if (MovedUnderneath > 0)
+            {
+                MovedUnderneath--;
+                var bumped = new ClientCheckpointItem(key, (current?.Version ?? 0) + 1, current?.Parts ?? new Dictionary<string, string>());
+                if (at < 0) Checkpoint.Add(bumped); else Checkpoint[at] = bumped;
+                return Task.FromResult<long?>(null);
+            }
+
+            if ((current?.Version ?? 0) != version) return Task.FromResult<long?>(null);
+            var parts = new Dictionary<string, string>(current?.Parts ?? new Dictionary<string, string>(), StringComparer.Ordinal);
+            foreach (var part in remove) parts.Remove(part);
+            foreach (var (part, value) in set) parts[part] = value.Value;
+            var next = new ClientCheckpointItem(key, version + 1, parts);
+            if (at < 0) Checkpoint.Add(next); else Checkpoint[at] = next;
+            CheckpointSets.Add((key, set, remove));
+            return Task.FromResult<long?>(next.Version);
+        }
+    }
+
     public Task EnqueueWorkAsync(string task, string kind, string subject, string part, string? payload, CancellationToken ct) => throw new NotSupportedException();
 }
