@@ -236,8 +236,11 @@ public static class GatewayHost
                 DbDataGateway.Server.State.GatewayState.IsGroup(state) ? sp.GetRequiredService<DbDataGateway.Server.State.ServingCacheEpochStore>() : null, sp.GetRequiredService<TimeProvider>(), access: sp.GetRequiredService<GatewayAccess>());
         });
         services.AddHostedService(sp => new ServingCacheSyncService(sp.GetRequiredService<GatewayCache>()));
+        // the physical tables the served models put access rules on (plan 22a GP12): one index for the pass-through refusal and the catalog listing, rebuilt when the set of served definitions changes
+        services.AddSingleton(sp => new RuledTables(() => sp.GetRequiredService<SemanticModels>(), () => sp.GetRequiredService<PublishedEntityModels>().All));
         services.AddSingleton<IServingServices>(sp => sp.GetRequiredService<GatewayServing>().WithSemantic(sp.GetRequiredService<SemanticModels>())
-            .WithCache(sp.GetRequiredService<GatewayCache>().Store, sp.GetRequiredService<GatewayCache>().Policy));
+            .WithCache(sp.GetRequiredService<GatewayCache>().Store, sp.GetRequiredService<GatewayCache>().Policy)
+            .WithPassThroughGuard(sp.GetRequiredService<RuledTables>(), sp.GetRequiredService<DataSourceCatalog>(), sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataGateway.Access"), sp.GetService<GatewayEvents>()));
         services.AddSingleton(sp =>
         {
             var current = sp.GetRequiredService<IOptionsMonitor<GatewayOptions>>();

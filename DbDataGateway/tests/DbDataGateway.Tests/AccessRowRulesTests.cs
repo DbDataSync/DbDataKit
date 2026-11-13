@@ -205,7 +205,7 @@ public sealed class AccessRowRulesTests : IDisposable
         var cache = new GatewayCache(sources, () => options, () => models, null, clock, access: access);
         var serving = new GatewayServing(sources, new ChainedCredentialValidator([]), null!, null!, monitor, NullLogger<GatewayServing>.Instance, clock);
         cache.Resolve = new GatewayCacheManagement(cache, () => null, "gw", access: access).Resolve;
-        var fixture = new Fixture { Engine = engine, Connection = connection, Options = options, Time = clock, Access = access, Cache = cache, Models = models, Alerts = alerts, Services = serving.WithSemantic(models).WithCache(cache.Store, cache.Policy) };
+        var fixture = new Fixture { Engine = engine, Connection = connection, Options = options, Time = clock, Access = access, Cache = cache, Models = models, Alerts = alerts, Services = serving.WithSemantic(models).WithCache(cache.Store, cache.Policy).WithPassThroughGuard(new RuledTables(() => models, () => []), sources) };
         foreach (var statement in Seed) fixture.Execute(statement);
         return fixture;
     }
@@ -318,6 +318,52 @@ public sealed class AccessRowRulesTests : IDisposable
         }
 
         Assert.Equal(["East|200|2"], await Rows(f.Services, east, Query()));
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public async Task A_statement_that_names_a_table_with_rules_is_refused_in_every_spelling_and_the_same_data_through_the_model_works(string engine)
+    {
+        var f = Make(engine);
+        var east = Person("u1", "east");
+        var quoted = engine == "mssql" ? "SELECT * FROM [dbo].[DIM_CUSTOMER]" : "SELECT * FROM \"public\".\"dim_customer\"";
+        foreach (var text in new[] { "SELECT * FROM dim_customer", "select * from DIM_Customer c", quoted, "SELECT f.order_id FROM fact_sales f", "SELECT 1 FROM (SELECT * FROM fact_sales /* c */) x", "SELECT * FROM dbo/**/./**/fact_sales".Replace("dbo", engine == "mssql" ? "dbo" : "public") })
+        {
+            var refused = await Assert.ThrowsAsync<ServingDeniedException>(() => Rows(f.Services, east, new ServingRequest.Sql("warehouse", text)));
+            Assert.Contains("access rules", refused.Message);
+            Assert.Contains("semantic:orders_model", refused.Message);
+            Assert.Contains("row rules", refused.Message);
+        }
+
+        // rule names: the table of the other dataset names its own rules
+        var named = await Assert.ThrowsAsync<ServingDeniedException>(() => Rows(f.Services, east, new ServingRequest.Sql("warehouse", "SELECT * FROM fact_sales")));
+        Assert.Contains("'statuses'", named.Message);
+        Assert.Contains("'no_blocked'", named.Message);
+        // prepared statements are checked as well
+        await Assert.ThrowsAsync<ServingDeniedException>(() => f.Services.Queries.PrepareAsync(east, new ServingRequest.Sql("warehouse", "SELECT * FROM dim_customer")));
+        // the rules tables and a table nobody put rules on are untouched (the data source's own grants decide), and so is a statement that names none
+        Assert.Equal(["East", "East"], await Rows(f.Services, east, new ServingRequest.Sql("warehouse", "SELECT region_code FROM region_access WHERE who = 'east' AND region_code IS NOT NULL")));
+        Assert.Equal(["1"], await Rows(f.Services, east, new ServingRequest.Sql("warehouse", "SELECT 1")));
+        // the same data through the model: the rules apply
+        Assert.Equal(["East|200|2"], await Rows(f.Services, east, Query()));
+        Assert.Equal(["East|200|2"], await Rows(f.Services, east, new ServingRequest.Sql("semantic:orders_model", """{"spec_version":"0.3","kind":"query","query":{"measures":["orders.net_revenue","orders.order_count"],"attributes":["customers.region"],"limit":100}}""")));
+        // the listing: the raw data source does not list a ruled table (nor its columns), an unruled one is listed; the model lists its own datasets
+        async Task<List<string>> Listed(string source, bool columns = false)
+        {
+            var names = new List<string>();
+            await foreach (var o in f.Services.Catalog.DescribeAsync(east, [], withColumns: columns, source: source)) names.Add($"{o.Kind}:{o.Name}");
+            return names;
+        }
+
+        var raw = await Listed("warehouse", columns: true);
+        Assert.DoesNotContain(raw, n => n.EndsWith(":dim_customer", StringComparison.OrdinalIgnoreCase) || n.EndsWith(":fact_sales", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(raw, n => n.StartsWith("Table:", StringComparison.Ordinal) && n.EndsWith(":region_access", StringComparison.OrdinalIgnoreCase));
+        var model = await Listed("semantic:orders_model");
+        Assert.Contains("Measure:orders.net_revenue", model);
+        Assert.Contains("Dimension:customers", model);
+        // the model taken out of service frees the tables, and the listing
+        f.Models.Remove("orders_model");
+        Assert.Contains(await Listed("warehouse"), n => n.EndsWith(":dim_customer", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(5, (await Rows(f.Services, east, new ServingRequest.Sql("warehouse", "SELECT * FROM dim_customer"))).Count);
     }
 
     [Theory, MemberData(nameof(Engines))]
