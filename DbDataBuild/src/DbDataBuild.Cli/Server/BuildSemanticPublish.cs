@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using DbDataBuild.Models;
 using DbDataKit.Cli;
 using DbDataKit.Secrets.Store;
@@ -21,7 +22,7 @@ internal static class BuildSemanticPublish
     private static readonly string PublishSchema = DataSchemas.Object(
     [
         ("gateway", DataSchemas.String), ("model", DataSchemas.String), ("version", DataSchemas.Integer), ("created", DataSchemas.Boolean),
-        ("data_sources", DataSchemas.ListOf(DataSchemas.String)),
+        ("data_sources", DataSchemas.ListOf(DataSchemas.String)), ("warnings", DataSchemas.StringList),
     ], "gateway", "model", "created", "data_sources");
 
     private static readonly string RollbackSchema = DataSchemas.Object(
@@ -110,6 +111,10 @@ internal static class BuildSemanticPublish
             if ((int?)result.Body["version"] is { } version) context.Data["version"] = version;
             context.Data["created"] = (bool?)result.Body["created"] == true;
             context.Data["data_sources"] = sources;
+            // what the Gateway says about the access rules of the model it published (plan 22a GP02/GP12/GP13): every line is printed, none is an error
+            var warnings = result.Body["warnings"] is JsonArray listed ? listed.Select(w => (string?)w ?? "").Where(w => w.Length > 0).ToList() : [];
+            foreach (var warning in warnings) await context.Out.WriteLineAsync($"warning: {warning}");
+            if (warnings.Count > 0) context.Data["warnings"] = warnings;
             return CliExit.Ok;
         }
         catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException)

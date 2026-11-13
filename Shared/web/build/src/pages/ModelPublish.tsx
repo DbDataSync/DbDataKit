@@ -4,6 +4,7 @@ import { ErrorBanner } from '@dbdatakit/shell'
 import { buildApi } from '../api'
 import type { PairedProxy, PublishModelAnswer, SemanticModelEntry } from '../types'
 import { publishFailure } from './PublishTab'
+import { PublishWarnings } from './PublishWarnings'
 
 /** Why the button is off, in words, or null. */
 export function publishModelBlock(proxy: string, model: string, busy: boolean): string | null {
@@ -77,6 +78,7 @@ export function ModelPublishView(p: ModelPublishViewProps) {
           <div className="card-body">
             <span className="mono">{p.done.model}</span> is {p.done.created ? 'now served' : 'updated'} on <strong>{p.done.proxy}</strong>{p.done.version !== null ? <>, version <span data-testid="build-publish-model-version">{p.done.version}</span></> : null}{p.done.created ? ' (new)' : ''}.
             {p.done.data_sources.length > 0 && <div className="hint">Data sources published with it: <span className="mono">{p.done.data_sources.filter((d) => d).join(', ')}</span>.</div>}
+            <PublishWarnings warnings={p.done.warnings} />
           </div>
         </div>
       )}

@@ -206,6 +206,8 @@ export interface PublishAnswer {
   adopted?: boolean
   /** What the definition added, changed or dropped against the file it replaced, by field (the Gateway's answer). */
   changes?: PolicyChange[]
+  /** What the Gateway said about the data source it published, one plain sentence each. */
+  warnings?: string[] | null
 }
 
 /** One field the Gateway reports as changed by a publish: a dotted name of the data source file; the connection's own values are named, not repeated. */
@@ -433,6 +435,8 @@ export interface PublishModelAnswer {
   version: number | null
   created: boolean
   data_sources: (string | null)[]
+  /** What the Gateway said about the access rules of the model it published (plan 22a), one plain sentence each; absent or empty when it said nothing. */
+  warnings?: string[] | null
 }
 
 /** What a dashboard or report is published as (plan 32 DBR29): its kind and name in the project's `dashboards/` or `reports/`, the registry version last seen when the person wants a conflict refused, and a note. */

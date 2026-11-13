@@ -48,6 +48,16 @@ describe('publishing a semantic model', () => {
     expect(html({ proxies: undefined, models: undefined, loading: true })).toContain('Loading')
     expect(html({ proxies: undefined, listError: new ApiError(500, 'The server could not list its gateways.', null) })).toContain('The server could not list its gateways.')
   })
+  it('shows each warning of the Gateway in plain words under the result (plan 22a: row rules limit reads only)', () => {
+    const warnings = ['Row rules limit reads only, not writes: a person may still change a row they cannot read.', "The mask on 'email' of 'customers' hides the column instead: no plain SQL expression to wrap."]
+    const done = html({ done: { proxy: 'gateway-one', model: 'sales', version: 2, created: false, data_sources: ['warehouse'], warnings } })
+    expect(done.match(/data-testid="publish-warning"/g)).toHaveLength(2)
+    expect(done).toContain('Row rules limit reads only, not writes')
+    expect(done).toContain('hides the column instead')
+    expect(done).toContain('2 warnings')
+    expect(html({ done: { proxy: 'gateway-one', model: 'sales', version: 2, created: false, data_sources: [], warnings: ['One thing.'] } })).toContain('a warning')
+    for (const none of [undefined, null, [], ['']]) expect(html({ done: { proxy: 'gateway-one', model: 'sales', version: 2, created: false, data_sources: [], warnings: none } })).not.toContain('publish-warning')
+  })
   it('shows what the Gateway answered, and its refusal in its words', () => {
     const done = html({ done: { proxy: 'gateway-one', model: 'sales', version: 2, created: false, data_sources: ['warehouse', 'finance'] } })
     expect(done).toContain('is updated on')

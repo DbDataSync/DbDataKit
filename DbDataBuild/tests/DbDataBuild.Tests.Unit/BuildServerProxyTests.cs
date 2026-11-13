@@ -32,6 +32,7 @@ public sealed partial class BuildServerProxyTests : IAsyncLifetime
     private HttpStatusCode writeAnswer = HttpStatusCode.OK;
     private bool signaturesRequired;                           // the proxy requires signed versions and trusts no key of this server
     private HttpStatusCode modelAnswer = HttpStatusCode.OK;     // what the proxy says to publishing a model
+    private string[]? modelWarnings;                            // the `warnings` the proxy's answer to publishing a model carries (plan 22a), none when null
     private WebApplication proxy = null!;
     private WebApplication build = null!;
     private HttpClient http = null!;
@@ -130,7 +131,7 @@ public sealed partial class BuildServerProxyTests : IAsyncLifetime
             }
             if (path.StartsWith("/api/v1/definitions/semantic-model/", StringComparison.Ordinal))
                 return context.Request.Method == "GET" ? Results.Json(new { error = "none" }, statusCode: 404)
-                    : modelAnswer == HttpStatusCode.OK ? Results.Json(new { version = 1, created = true }) : Results.Json(new { error = "The catalog does not load, so nothing was published." }, statusCode: (int)modelAnswer);
+                    : modelAnswer == HttpStatusCode.OK ? Results.Json(new { version = 1, created = true, warnings = modelWarnings }) : Results.Json(new { error = "The catalog does not load, so nothing was published." }, statusCode: (int)modelAnswer);
             if (path.StartsWith("/api/v1/dashboards/", StringComparison.Ordinal) || path.StartsWith("/api/v1/reports/", StringComparison.Ordinal)) return ViewsAnswer(body);       // plan 32 DBR29 (BuildServerProxyViewsTests)
             if (path.EndsWith("/rollback", StringComparison.Ordinal)) return Results.Json(rollbackAnswerIs.Body, statusCode: rollbackAnswerIs.Status);
             if (path.StartsWith("/api/v1/semantic-models/", StringComparison.Ordinal))
@@ -427,6 +428,22 @@ public sealed partial class BuildServerProxyTests : IAsyncLifetime
         using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/projects/{projectId}/proxies/{proxyName}/publish-model") { Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(body), Encoding.UTF8, "application/json") };
         request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, console.Issuer().Issue(new ConsoleTokenRequest(paired.InstanceId, who, who, role)));
         return await http.SendAsync(request);
+    }
+
+    [Fact]
+    public async Task The_warnings_of_the_gateways_answer_reach_the_publish_answer_and_none_is_added_when_it_says_nothing()
+    {
+        await Pair();
+        modelWarnings = ["Row rules limit reads only, not writes.", "Model 'sales' puts access rules on 'dbo.orders' of data source 'wh'; this model reads the same table and does not apply them."];
+
+        var reply = await PublishModel("ada", ServerRole.Approver, "edge", new { model = "retail_sales" });
+
+        Assert.Equal(HttpStatusCode.OK, reply.StatusCode);
+        Assert.Equal(modelWarnings, JsonNode.Parse(await reply.Content.ReadAsStringAsync())!["warnings"]!.AsArray().Select(w => (string)w!));
+
+        modelWarnings = null;
+        var quiet = JsonNode.Parse(await (await PublishModel("ada", ServerRole.Approver, "edge", new { model = "retail_sales" })).Content.ReadAsStringAsync())!;
+        Assert.Null(quiet["warnings"]);
     }
 
     [Fact]

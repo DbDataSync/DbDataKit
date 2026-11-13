@@ -200,7 +200,7 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
                 notStored.Body["error"] = $"{(string?)notStored.Body["error"]} The data source was written and keeps using the login it already had.";
                 return notStored;
             }
-            return new PublishResult(200, new JsonObject { ["proxy"] = proxyName, ["data_source"] = dataSource, ["created"] = (bool?)answer["created"] ?? held is null, ["version"] = VersionOf(text), ["adopted"] = (bool?)answer["adopted"] ?? false, ["changes"] = answer["changes"]?.DeepClone(), ["kept"] = answer["kept"]?.DeepClone() });
+            return new PublishResult(200, new JsonObject { ["proxy"] = proxyName, ["data_source"] = dataSource, ["created"] = (bool?)answer["created"] ?? held is null, ["version"] = VersionOf(text), ["adopted"] = (bool?)answer["adopted"] ?? false, ["changes"] = answer["changes"]?.DeepClone(), ["kept"] = answer["kept"]?.DeepClone(), ["warnings"] = answer["warnings"]?.DeepClone() });
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IncompatibleServerException)
         {
@@ -269,7 +269,7 @@ internal sealed class ProxyPublisher(ProxiesFile proxies, ConsoleKeyStore identi
                 DependsOn: [.. published.Select(d => "data-source:" + (string?)d)]), ct);
             if (!written.Ok) return Refused(written, "publishing the model");
             var answer = written.Body;
-            return new PublishResult(200, new JsonObject { ["proxy"] = proxyName, ["model"] = model.Name, ["version"] = (int?)answer["version"], ["created"] = (bool?)answer["created"] ?? held is null, ["data_sources"] = published });
+            return new PublishResult(200, new JsonObject { ["proxy"] = proxyName, ["model"] = model.Name, ["version"] = (int?)answer["version"], ["created"] = (bool?)answer["created"] ?? held is null, ["data_sources"] = published, ["warnings"] = answer["warnings"]?.DeepClone() });
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IncompatibleServerException)
         {

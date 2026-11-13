@@ -28,6 +28,12 @@ const handMade = refusal(403, 'The proxy refused reading the data source: the ob
 })
 
 describe('publishing a connection to a proxy', () => {
+  it('shows the warnings of the Gateway under the result', () => {
+    const text = html({ done: { proxy: 'edge', data_source: 'erp', created: true, version: 'v1', warnings: ['The rules table could not be checked.'] } })
+    expect(text).toContain('data-testid="publish-warning"')
+    expect(text).toContain('The rules table could not be checked.')
+    expect(html({ done: { proxy: 'edge', data_source: 'erp', created: true, version: 'v1' } })).not.toContain('publish-warning')
+  })
   it('says what it does: the read login only, the approver role, SQL Server', () => {
     const text = html()
     expect(text).toContain('read</strong> login')

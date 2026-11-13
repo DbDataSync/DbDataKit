@@ -36,6 +36,25 @@ public sealed partial class BuildServerProxyTests
     }
 
     [Fact]
+    public async Task Publish_by_command_prints_each_warning_of_the_gateway_as_a_line_and_adds_them_to_the_data()
+    {
+        await Pair();
+        modelWarnings = ["Row rules limit reads only, not writes.", "The mask on 'email' of 'customers' hides the column instead: no plain SQL expression."];
+
+        var text = await Semantic("publish", "retail", "retail_sales", "--gateway", "edge");
+        Assert.True(text.Exit == 0, text.Err + text.Out);
+        Assert.Contains("warning: Row rules limit reads only, not writes.", text.Out);
+        Assert.Contains("warning: The mask on 'email' of 'customers' hides the column instead", text.Out);
+
+        var json = await Semantic("publish", "retail", "retail_sales", "--gateway", "edge", "--format", "json");
+        Assert.Equal(modelWarnings, JsonNode.Parse(json.Out)!["data"]!["warnings"]!.AsArray().Select(w => (string)w!));
+
+        modelWarnings = null;
+        var quiet = await Semantic("publish", "retail", "retail_sales", "--gateway", "edge", "--format", "json");
+        Assert.DoesNotContain("warning", quiet.Out);
+    }
+
+    [Fact]
     public async Task Publish_names_what_is_wrong_before_or_in_the_gateways_words_and_takes_no_token_flag()
     {
         await Pair();

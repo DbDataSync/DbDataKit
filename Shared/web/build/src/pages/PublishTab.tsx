@@ -5,6 +5,7 @@ import { ApiError, ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { buildApi } from '../api'
 import { RunnerPublish } from './RunnerPublish'
 import { ModelPublish } from './ModelPublish'
+import { PublishWarnings } from './PublishWarnings'
 import type { AdoptAnswer, AdoptHint, PairedProxy, PublishAnswer } from '../types'
 
 /** What the person reads when a publish failed: the server's own words (they name the rule or the proxy that refused), or a plain sentence for what it did not say. */
@@ -128,6 +129,7 @@ export function PublishView(p: PublishViewProps) {
                 ))}
               </div>
             )}
+            <PublishWarnings warnings={p.done.warnings} />
           </div>
         </div>
       )}
