@@ -9,11 +9,16 @@ ARG BASE_IMAGE=dbdatagateway
 FROM ${BASE_IMAGE}
 USER root
 ARG HOST_FONT_PACKAGES=""
-# The libraries Chromium links against (the names are virtual on the newer Debian that renamed some with a t64 suffix: apt picks the provider).
+# The libraries Chromium links against. The newer Debian and Ubuntu renamed some with a t64 suffix and left the old name virtual; a virtual name with
+# more than one provider (libasound2 on Ubuntu 24.04: libasound2t64 and liboss4-salsa-asound2) is refused by apt, so a package whose t64 name exists is
+# installed by that name.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-       ca-certificates fontconfig libasound2 libatk-bridge2.0-0 libatk1.0-0 libcairo2 libcups2 libdbus-1-3 libdrm2 libexpat1 libgbm1 libglib2.0-0 libnspr4 libnss3 \
-       libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2 $HOST_FONT_PACKAGES \
+    && pkgs="" \
+    && for p in ca-certificates fontconfig libasound2 libatk-bridge2.0-0 libatk1.0-0 libcairo2 libcups2 libdbus-1-3 libdrm2 libexpat1 libgbm1 libglib2.0-0 libnspr4 libnss3 \
+         libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2; do \
+         if apt-cache show "${p}t64" > /dev/null 2>&1; then pkgs="$pkgs ${p}t64"; else pkgs="$pkgs $p"; fi; \
+       done \
+    && apt-get install -y --no-install-recommends $pkgs $HOST_FONT_PACKAGES \
     && rm -rf /var/lib/apt/lists/*
 COPY .export-component /opt/dbdatakit/export
 # A browser that cannot start (a library missing) fails the build, not the first export.
