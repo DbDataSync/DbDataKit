@@ -23,10 +23,10 @@ public static class ExportCommand
         new Verb("install", "Download the export component of this release (or --version) for this platform, check it against the release's SHA256SUMS and its own pins, install it and set views.export to use it", EffectClass.RepoFilesOnly,
             $"[--version <release>] [--source <folder or https address of the release's files>] [--dir <install folder, default <data directory>/export-component>] [--rid linux-x64|win-x64] [--force] {Where}", InstallAsync,
             DataSchemas.Object([("directory", DataSchemas.String), ("release", DataSchemas.String), ("rid", DataSchemas.String), ("chromium", DataSchemas.String), ("fonts", DataSchemas.String), ("already_installed", DataSchemas.Boolean),
-                ("downloaded_bytes", DataSchemas.Integer), ("settings_changed", DataSchemas.StringList), ("restart_needed", DataSchemas.Boolean)], "directory", "release", "rid", "chromium", "fonts", "already_installed", "downloaded_bytes", "settings_changed", "restart_needed")),
+                ("downloaded_bytes", DataSchemas.Integer), ("pins_verified", DataSchemas.Boolean), ("pins_note", DataSchemas.String), ("settings_changed", DataSchemas.StringList), ("restart_needed", DataSchemas.Boolean)], "directory", "release", "rid", "chromium", "fonts", "already_installed", "downloaded_bytes", "settings_changed", "restart_needed")),
         new Verb("status", "Is the export component installed here, whole, and does views.export point at it", EffectClass.OfflineOnly, Where, StatusAsync,
             DataSchemas.Object([("installed", DataSchemas.Boolean), ("whole", DataSchemas.Boolean), ("configured", DataSchemas.Boolean), ("directory", DataSchemas.String), ("release", DataSchemas.String), ("chromium", DataSchemas.String), ("platform", DataSchemas.String),
-                ("mode", DataSchemas.String), ("summary", DataSchemas.String), ("problems", DataSchemas.StringList)], "installed", "whole", "configured", "directory", "summary", "problems")),
+                ("mode", DataSchemas.String), ("pins_verified", DataSchemas.Boolean), ("pins_note", DataSchemas.String), ("summary", DataSchemas.String), ("problems", DataSchemas.StringList)], "installed", "whole", "configured", "directory", "summary", "problems")),
     ]);
 
     private static async Task<int> InstallAsync(string[] args, CliContext context)
@@ -60,6 +60,7 @@ public static class ExportCommand
         await context.Out.WriteLineAsync(result.AlreadyInstalled
             ? $"The export component of release {result.Version} is already installed in {result.Directory} and whole."
             : $"Installed the export component of release {result.Version} (Chromium {result.Chromium}) in {result.Directory} ({result.DownloadedBytes / (1024 * 1024)} MB downloaded).");
+        await context.Out.WriteLineAsync(result.Pins.Sentence);
         await context.Out.WriteLineAsync(changed.Count == 0 ? "views.export already points at it." : $"Set in server.yaml: {string.Join(", ", changed)}.");
         await context.Out.WriteLineAsync("Restart the gateway to use it (the views module reads views.export when it starts). Behind a container's sandbox limits, also set views.export.noSandbox: true.");
         context.Data["directory"] = result.Directory;
@@ -69,6 +70,8 @@ public static class ExportCommand
         context.Data["fonts"] = result.Fonts;
         context.Data["already_installed"] = result.AlreadyInstalled;
         context.Data["downloaded_bytes"] = result.DownloadedBytes;
+        context.Data["pins_verified"] = result.Pins.Verified;
+        context.Data["pins_note"] = result.Pins.Note;
         context.Data["settings_changed"] = changed.ToList();
         context.Data["restart_needed"] = true;
         return CliExit.Ok;
@@ -106,6 +109,7 @@ public static class ExportCommand
         catch (GatewayConfigException ex) { await context.Error.WriteLineAsync(ex.Message); return CliExit.Failure; }
         var status = ExportComponentStatus.Describe(options.Views.Export, dataDirectory);
         await context.Out.WriteLineAsync((string?)status["summary"] ?? "");
+        if ((string?)status["pins_note"] is { } pinsNote) await context.Out.WriteLineAsync(((bool?)status["pins_verified"] ?? false) ? char.ToUpperInvariant(pinsNote[0]) + pinsNote[1..] : "Warning: " + pinsNote);
         foreach (var problem in (JsonArray)status["problems"]!) await context.Out.WriteLineAsync("  " + (string?)problem);
         context.Data["installed"] = (bool?)status["installed"] ?? false;
         context.Data["whole"] = (bool?)status["whole"] ?? false;
@@ -115,6 +119,8 @@ public static class ExportCommand
         if ((string?)status["chromium"] is { } chromium) context.Data["chromium"] = chromium;
         if ((string?)status["platform"] is { } platform) context.Data["platform"] = platform;
         if ((string?)status["mode"] is { } mode) context.Data["mode"] = mode;
+        if ((bool?)status["pins_verified"] is { } verified) context.Data["pins_verified"] = verified;
+        if ((string?)status["pins_note"] is { } note) context.Data["pins_note"] = note;
         context.Data["summary"] = (string?)status["summary"] ?? "";
         context.Data["problems"] = ((JsonArray)status["problems"]!).Select(p => (string?)p ?? "").ToList();
         return (bool?)status["installed"] == true && (bool?)status["whole"] != true ? CliExit.Failure : CliExit.Ok;

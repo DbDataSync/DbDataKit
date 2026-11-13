@@ -42,7 +42,7 @@ public sealed class CatalogColumnView
     /// hidden level, a segment or a saved query that names one); the table keeps the column for the joins and the row rules that use it, but nothing reaches it. <b>Null</b> and <b>mask</b> (<c>fixed</c>): a derived column of the table
     /// evaluates to NULL or to the constant in the database itself, written so that it still names the column (<c>COALESCE(NULLIF(c, c), '********')</c>): a constant in a GROUP BY is refused by SQL Server, and a group-by on this
     /// expression gives the one group it should. The attribute is bound to the derived column. <b>Mask</b> (<c>hash</c>): the engine reads the real value and the answer replaces it (<see cref="Hashed"/>); the key never enters a statement.
-    /// A column of a source on Analysis Services cannot carry the expression, and a mask of a column declared as something other than text cannot be a text constant: both are hidden instead (default taken).
+    /// A column of a source on Analysis Services cannot carry the expression, and a column with no plain SQL expression has none to wrap: both are hidden instead (default taken; the publish names them, see <see cref="MasksThatHide"/>). A mask of a column declared as something other than text is refused when the catalog loads.
     /// </summary>
     public static CatalogColumnView For(Catalog catalog, ColumnTreatments treatments)
     {
@@ -57,10 +57,7 @@ public sealed class CatalogColumnView
         foreach (var (dataset, column, treatment) in treatments.All)
         {
             if (!tables.TryGetValue(dataset, out var table) || (table["columns"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault(c => c["name"]?.GetValue<string>() == column) is not { } def) continue;
-            var kind = (json["sources"] as JsonObject)?[table["x_source"]?.GetValue<string>() ?? ""]?["kind"]?.GetValue<string>();
-            var effective = treatment;
-            if (treatment.Treatment != ColumnTreatment.Hide && (kind == "ssas" || (treatment.Treatment == ColumnTreatment.Mask && treatment.Mask == MaskKind.Fixed && def["datatype"]?.GetValue<string>() is { } type && type != "String")))
-                effective = new ColumnTreatmentOf(ColumnTreatment.Hide);
+            var effective = HideReason(json, table, def, treatment) is null ? treatment : new ColumnTreatmentOf(ColumnTreatment.Hide);
             treatmentOf[(dataset, column)] = effective;
             switch (effective.Treatment)
             {
@@ -68,8 +65,7 @@ public sealed class CatalogColumnView
                 case ColumnTreatment.Mask when effective.Mask == MaskKind.Hash: hashedColumns.Add((dataset, column)); break;
                 default:
                     var name = column + Suffix;
-                    var plain = (def["expression"]?["dialects"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault(d => d["dialect"]?.GetValue<string>() == "ANSI_SQL")?["expression"]?.GetValue<string>();
-                    if (plain is null) { hiddenColumns.Add((dataset, column)); break; }   // no ANSI expression to wrap: hide it
+                    var plain = PlainExpression(def)!;   // HideReason made a column with none a hide
                     ((JsonArray)table["columns"]!).Add(DerivedColumn(def, name, effective));
                     derived[(dataset, column)] = name;
                     if (!computed.TryGetValue(dataset, out var list)) computed[dataset] = list = [];
@@ -155,6 +151,40 @@ public sealed class CatalogColumnView
 
         var view = CatalogLoader.LoadJson(json);
         return new CatalogColumnView(view, treated, hashed, gone);
+    }
+
+    /// <summary>A mask rule that hides the column instead (default taken), with the reason, for the publish answer to name it.</summary>
+    public sealed record MaskThatHides(string Dataset, string Column, string Reason);
+
+    /// <summary>
+    /// The mask rules of a section that <see cref="For"/> turns into a hide, whoever they name: the column's source is Analysis Services, or it has no plain SQL expression to wrap (or, for a catalog that was not checked on load, it is declared as something other than text and the mask is a <c>fixed</c> constant). A rule on a column the catalog does not have is not listed (the section's own check refuses it).
+    /// </summary>
+    public static IReadOnlyList<MaskThatHides> MasksThatHide(Catalog catalog, AccessSection access)
+    {
+        var json = catalog.Source;
+        var tables = (json["tables"] as JsonArray)?.OfType<JsonObject>().Where(t => t["name"] is not null).ToDictionary(t => t["name"]!.GetValue<string>(), StringComparer.Ordinal) ?? [];
+        var found = new List<MaskThatHides>();
+        foreach (var rule in access.Columns.Where(r => r.Treatment == ColumnTreatment.Mask))
+        {
+            if (!tables.TryGetValue(rule.Dataset, out var table) || (table["columns"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault(c => c["name"]?.GetValue<string>() == rule.Column) is not { } def) continue;
+            if (HideReason(json, table, def, new ColumnTreatmentOf(rule.Treatment, rule.Mask ?? MaskKind.Fixed)) is { } reason && !found.Any(f => f.Dataset == rule.Dataset && f.Column == rule.Column && f.Reason == reason))
+                found.Add(new MaskThatHides(rule.Dataset, rule.Column, reason));
+        }
+
+        return found;
+    }
+
+    private static string? PlainExpression(JsonObject column) =>
+        (column["expression"]?["dialects"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault(d => d["dialect"]?.GetValue<string>() == "ANSI_SQL")?["expression"]?.GetValue<string>();
+
+    /// <summary>Why a null or mask cannot be written for the column and the column is hidden instead (null for a column that can carry it, and always for a hide).</summary>
+    private static string? HideReason(JsonObject json, JsonObject table, JsonObject column, ColumnTreatmentOf treatment)
+    {
+        if (treatment.Treatment == ColumnTreatment.Hide) return null;
+        if ((json["sources"] as JsonObject)?[table["x_source"]?.GetValue<string>() ?? ""]?["kind"]?.GetValue<string>() == "ssas") return "its source is Analysis Services";
+        if (treatment.Treatment == ColumnTreatment.Mask && treatment.Mask == MaskKind.Fixed && column["datatype"]?.GetValue<string>() is { } type && type != "String") return $"its type is {type}, not text";
+        if (!(treatment.Treatment == ColumnTreatment.Mask && treatment.Mask == MaskKind.Hash) && PlainExpression(column) is null) return "it has no plain SQL expression to mask";
+        return null;
     }
 
     private static JsonObject? AttributeNode(JsonObject json, string key)

@@ -85,7 +85,8 @@ public sealed class GroupChangeRequests(StateDatabase database)
 }
 
 /// <summary>Who called the store module: the identity home's user, whether as an agent (a service account), and the roles the home gives them on this group.</summary>
-public sealed record StoreCaller(string UserId, string? Name, bool IsAgent, ServerRole Roles, string? Via = null, bool Interactive = false)
+/// <param name="Groups">The names of the home groups the person is in, which the row rules of an entity match (plan 22a GP11); null when the caller was made without them, and the store then asks the home (<see cref="StoreEntityAccess"/>).</param>
+public sealed record StoreCaller(string UserId, string? Name, bool IsAgent, ServerRole Roles, string? Via = null, bool Interactive = false, IReadOnlyList<string>? Groups = null)
 {
     /// <summary>How the audit names the caller: the person, and for a call made through a trusted app, the app, its version and the approval (plan 26 AP15, AP16).</summary>
     public string? AuditName
@@ -162,6 +163,6 @@ public sealed class StoreCallers(StateDatabase state, Func<string> serverId, Ope
     private StoreCaller CallerOf(UserRecord user)
     {
         var roles = new HomeDirectory(state).RolesOn(user.Id, serverId()).Roles;
-        return new StoreCaller(user.Id, user.DisplayName, new AccessTokens(state, _users).ServiceAccountOf(user.Id) is not null, roles);
+        return new StoreCaller(user.Id, user.DisplayName, new AccessTokens(state, _users).ServiceAccountOf(user.Id) is not null, roles, Groups: GroupsOf(user.Id));
     }
 }

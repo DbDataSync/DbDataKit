@@ -72,7 +72,7 @@ public sealed class GatewayStoreModule(IOptionsMonitor<GatewayOptions> options, 
 
     /// <summary>The group's store for this instance: what the module's listener and the apps host's data calls answer with.</summary>
     public static GroupStoreApi ApiOf(IOptionsMonitor<GatewayOptions> options, StateDatabase state, SecretsRuntime secrets, PublishedEntityModels models) =>
-        new(() => options.CurrentValue, secrets, models, new GroupChangeRequests(state));
+        new(() => options.CurrentValue, secrets, models, new GroupChangeRequests(state), StoreEntityAccess.For(state));
 
     /// <summary>The group's server id, which the home's roles name (<c>server:&lt;id&gt;</c>): the instance id every instance of the group shares (O04a).</summary>
     public static string ServerIdOf(GatewayOptions options, StateDatabase state)

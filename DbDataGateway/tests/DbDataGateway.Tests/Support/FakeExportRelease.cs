@@ -17,13 +17,13 @@ public sealed class FakeExportRelease : IDisposable
 
     private readonly string root = Path.Combine(Path.GetTempPath(), "fake-export-" + Guid.NewGuid().ToString("N")[..8]);
 
-    public FakeExportRelease(string? rid = null, string version = Version, bool listInSums = true, Action<string>? tamperWithComponent = null, Action<string>? tamperWithZip = null, bool changeArchiveAfterChecksums = false)
+    public FakeExportRelease(string? rid = null, string version = Version, bool listInSums = true, Action<string>? tamperWithComponent = null, Action<string>? tamperWithZip = null, bool changeArchiveAfterChecksums = false, bool testedPins = false)
     {
         Rid = rid ?? ExportComponent.CurrentRid() ?? "linux-x64";
         Folder = Path.Combine(root, "release");
         Directory.CreateDirectory(Folder);
         var component = Path.Combine(root, "component");
-        Stage(component, Rid);
+        Stage(component, Rid, testedPins);
         tamperWithComponent?.Invoke(component);
         var zip = Path.Combine(Folder, $"dbdatagateway-export-v{version}-{Rid}.zip");
         ZipFile.CreateFromDirectory(component, zip, CompressionLevel.Fastest, false);
@@ -44,15 +44,19 @@ public sealed class FakeExportRelease : IDisposable
 
     public static string Sha(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
 
-    private static void Stage(string folder, string rid)
+    private static void Stage(string folder, string rid, bool testedPins)
     {
+        // the pins this program embeds (a component of the tested browser and fonts) or fixture values that differ from them
+        var chromium = testedPins ? ExportPins.Chromium : Chromium;
+        var fontsVersion = testedPins ? ExportPins.Fonts : "9.9.9";
+        var families = testedPins ? ExportPins.Families.ToArray() : new[] { "noto-sans", "noto-serif" };
         var key = rid.Replace('-', '_');
         var browser = Encoding.UTF8.GetBytes("#!/bin/sh\necho browser\n");
         var bin = rid == "win-x64" ? "chrome-win64/chrome.exe" : "chrome-linux64/chrome";
         Write(folder, $".chromium/{rid}/{bin}", browser);
-        Write(folder, "chromium.pin", Encoding.UTF8.GetBytes($"# fixture\nVERSION={Chromium}\nBASE=https://example.test\nBIN_{key}={bin}\nBIN_SHA256_{key}={Sha(browser)}\n"));
-        var pin = new StringBuilder("# fixture\nVERSION=9.9.9\nFAMILIES=noto-sans noto-serif\n");
-        foreach (var family in new[] { "noto-sans", "noto-serif" })
+        Write(folder, "chromium.pin", Encoding.UTF8.GetBytes($"# fixture\nVERSION={chromium}\nBASE=https://example.test\nBIN_{key}={bin}\nBIN_SHA256_{key}={Sha(browser)}\n"));
+        var pin = new StringBuilder($"# fixture\nVERSION={fontsVersion}\nFAMILIES={string.Join(' ', families)}\n");
+        foreach (var family in families)
         {
             var font = Encoding.UTF8.GetBytes(family + "-regular");
             var licence = Encoding.UTF8.GetBytes("licence of " + family);
@@ -65,7 +69,7 @@ public sealed class FakeExportRelease : IDisposable
         var css = Encoding.UTF8.GetBytes("body{margin:0}");
         Write(folder, "print/print.js", js);
         Write(folder, "print/print.css", css);
-        Write(folder, ExportComponent.ManifestFile, JsonSerializer.SerializeToUtf8Bytes(new { component = "export", rid, chromium = Chromium, fonts = "9.9.9", print = new Dictionary<string, string> { ["print.js"] = Sha(js), ["print.css"] = Sha(css) } }));
+        Write(folder, ExportComponent.ManifestFile, JsonSerializer.SerializeToUtf8Bytes(new { component = "export", rid, chromium, fonts = fontsVersion, print = new Dictionary<string, string> { ["print.js"] = Sha(js), ["print.css"] = Sha(css) } }));
     }
 
     private static void Write(string folder, string relative, byte[] bytes)

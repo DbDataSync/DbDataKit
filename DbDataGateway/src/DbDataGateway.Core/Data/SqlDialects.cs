@@ -49,6 +49,10 @@ public static class ParameterMarkers
 
     public static int Count(string sql, ISqlDialect dialect) => Questions(sql, dialect).Count();
 
+    /// <summary>How many numbered markers (<c>$1</c>, <c>$2</c>) the statement has (PostgreSQL's own style, which the semantic module writes for a PostgreSQL source); they are bound by position, never by name.</summary>
+    public static int CountNumbered(string sql, ISqlDialect dialect) =>
+        SqlLexer.Tokenize(sql, dialect.Syntax).Count(t => t.Parameter == SqlParameterKind.Numbered);
+
     /// <summary>Replaces each <c>?</c> with <c>@p1</c>, <c>@p2</c>, ... in order (SQL Server named parameters).</summary>
     public static string RewriteToNamed(string sql, ISqlDialect dialect)
     {

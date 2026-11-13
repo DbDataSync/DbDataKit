@@ -187,4 +187,30 @@ public sealed class CatalogAccessTests
         var catalog = CatalogLoader.LoadText(With("access:\n  columns:\n    - { subject: s, dataset: dim_customer, column: customer, treatment: null }"), "sales.catalog.yaml");
         Assert.Equal(ColumnTreatment.Null, catalog.Access!.Columns.Single().Treatment);
     }
+
+    [Fact]
+    public void The_masks_that_cannot_be_masks_are_listed_with_the_reason_and_are_the_ones_the_view_hides()
+    {
+        // fact_budget.region is a column of an Analysis Services source; fact_sales.note (bound by nothing) has only a T-SQL expression, so a constant cannot be written around it; dim_customer.customer is text with a plain expression
+        // (a mask of a column that is not text is refused when the catalog loads, DBD-ACC-008, so that case never reaches the view)
+        var text = With("""
+            access:
+              columns:
+                - { subject: interns, dataset: fact_budget, column: region, treatment: mask, mask: hash }
+                - { subject: interns, dataset: fact_budget, column: region, treatment: mask }
+                - { subject: interns, dataset: fact_sales, column: note, treatment: mask }
+                - { subject: analysts, dataset: fact_sales, column: note, treatment: mask, mask: hash }
+                - { subject: interns, dataset: dim_customer, column: customer, treatment: mask }
+                - { subject: interns, dataset: dim_customer, column: region, treatment: "null" }
+            """).Replace("      - {name: net_amount, datatype: Decimal, expression: {dialects: [{dialect: ANSI_SQL, expression: net_amount}]}}\n", "      - {name: net_amount, datatype: Decimal, expression: {dialects: [{dialect: ANSI_SQL, expression: net_amount}]}}\n      - {name: note, datatype: String, expression: {dialects: [{dialect: TSQL, expression: \"[note]\"}]}}\n", StringComparison.Ordinal);
+        var catalog = CatalogLoader.LoadText(text, "sales.catalog.yaml");
+        var hidden = CatalogColumnView.MasksThatHide(catalog, catalog.Access!);
+        Assert.Equal(["fact_budget.region: its source is Analysis Services", "fact_sales.note: it has no plain SQL expression to mask"], hidden.Select(h => $"{h.Dataset}.{h.Column}: {h.Reason}").Order(StringComparer.Ordinal));
+
+        // the view agrees: the text column with a plain expression stays a mask for interns, and the attribute bound to the column of the Analysis Services source is gone for them
+        var view = CatalogColumnView.For(catalog, ColumnTreatments.For(catalog.Access, "u1", "u1", ["interns"]));
+        Assert.Contains("customers.customer", view.Treated.Keys);
+        Assert.DoesNotContain(view.Hidden, h => h == "customers.customer");
+        Assert.Contains("customers.region", view.Hidden);
+    }
 }

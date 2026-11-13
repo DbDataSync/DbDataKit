@@ -91,7 +91,12 @@ public sealed partial class GatewaySemanticModels
 
     private static JsonArray? WarningsOf(string manifest)
     {
-        try { return PublishedSemanticModels.ContentOf(manifest) is { Catalog.Length: > 0 } content ? AccessPublishNotes.Warnings(CatalogLoader.LoadText(content.Catalog).Access, readOnDataSource: true) : null; }
+        try
+        {
+            if (PublishedSemanticModels.ContentOf(manifest) is not { Catalog.Length: > 0 } content) return null;
+            var catalog = CatalogLoader.LoadText(content.Catalog);
+            return AccessPublishNotes.Warnings(catalog.Access, readOnDataSource: true, catalog);
+        }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
     }
 

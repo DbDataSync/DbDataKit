@@ -185,7 +185,7 @@ public sealed partial class GatewaySemanticModels(
                 adoptions?.Record(dataSource, Client(caller)!, Who(caller), name, "semantic-model", _clock.GetUtcNow());
                 Record(caller, "data-source adopt", dataSource, $"adopted by {Client(caller)} ({Who(caller)}) for the model {name}");
             }
-            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["version"] = version.Number, ["created"] = created, ["unchanged"] = unchanged, ["adopted"] = adoption.Adopted.Count == 0 ? null : new JsonArray([.. adoption.Adopted.Select(a => (JsonNode?)a)]), ["warnings"] = AccessPublishNotes.Warnings(parsed.Access, readOnDataSource: true) });
+            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["version"] = version.Number, ["created"] = created, ["unchanged"] = unchanged, ["adopted"] = adoption.Adopted.Count == 0 ? null : new JsonArray([.. adoption.Adopted.Select(a => (JsonNode?)a)]), ["warnings"] = AccessPublishNotes.Warnings(parsed.Access, readOnDataSource: true, parsed) });
         }
         finally { _publishing.Release(); }
     }

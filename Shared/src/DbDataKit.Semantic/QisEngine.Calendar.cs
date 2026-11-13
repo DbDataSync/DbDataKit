@@ -143,14 +143,19 @@ public sealed partial class QisEngine
     private List<Dictionary<string, object?>> PairRows(string source, string a, string b)
     {
         var (ba, bb) = (cat.Binding(a, source)!, cat.Binding(b, source)!);
-        if (ba.Join is not null && ba.Join == bb.Join && CanReadDimension(cat.Doc.Sources[source], ba, bb))
+        if (ba.Join is not null && ba.Join == bb.Join && CanReadDimension(source, ba, bb))
             return ReadDimension(source, SqlEmitter.BuildPairs(cat, source, a, b), () => DaxEmitter.BuildPairs(cat, source, a, b));
         return Scan(source, [a, b], []);
     }
 
     /// <summary>True when a source can be asked for a whole dimension (its own table, not the fact rows): SQL Server, or an Analysis Services model whose columns have DAX.</summary>
-    private static bool CanReadDimension(SourceDef source, params BindingDef[] bindings) =>
-        source.Kind is "sqlserver" or "postgres" || (source.Kind == "ssas" && bindings.All(b => b.Dax is not null));
+    private bool CanReadDimension(string sourceId, params BindingDef[] bindings)
+    {
+        var source = cat.Doc.Sources[sourceId];
+        // a dimension table the access rules filter is never read whole (plan 22a GP11): its members are read through the fact rows, which the rules filter
+        if (cat.RowAccess is { } access && bindings.Any(b => b.Join is not null && source.Joins.TryGetValue(b.Join, out var join) && access.For(sourceId, join.Table) is not null)) return false;
+        return source.Kind is "sqlserver" or "postgres" || (source.Kind == "ssas" && bindings.All(b => b.Dax is not null));
+    }
 
     /// <summary>
     /// Reads a dimension with no parameters: T-SQL on SQL Server, the same text as PostgreSQL's; on Analysis Services the DAX, with the SQL text as the twin the test stand-in runs. The rows are what the

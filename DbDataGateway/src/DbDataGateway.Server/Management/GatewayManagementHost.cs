@@ -135,7 +135,7 @@ public static class GatewayManagementHost
             SecretSamples: DbDataGateway.Server.State.GatewayStateSecrets.For(() => options)));
         // the result cache's calls (plan 24a UC13, UC16); a change a producer reports is mapped to what this Gateway serves by its lineage graph
         var servingCache = app.Services.GetRequiredService<DbDataGateway.Server.Serving.GatewayCache>();
-        var cacheApi = new GatewayCacheManagement(servingCache, () => management.BuildLineage(), instanceId, audit, app.Services.GetService<DbDataGateway.Server.State.ServingCacheEpochStore>());
+        var cacheApi = new GatewayCacheManagement(servingCache, () => management.BuildLineage(), instanceId, audit, app.Services.GetService<DbDataGateway.Server.State.ServingCacheEpochStore>(), access: app.Services.GetRequiredService<Serving.GatewayAccess>());
         servingCache.Resolve = cacheApi.Resolve;
         var serverSettings = new GatewayServerSettings(configDirectory, management, provider.ReloadNow, audit, git);
         management = new GatewayManagement(configuration, configDirectory, instanceId, GatewayHost.Version, dataSources, identities, activity, certificate, git,
@@ -168,6 +168,7 @@ public static class GatewayManagementHost
                 app.Services.GetRequiredService<DbDataGateway.Server.State.TableReadRecorder>(), app.Services.GetRequiredService<DbDataGateway.Server.State.TableReadStore>(), instanceId),
             audit: audit,
             cache: cacheApi,
+            accessKeys: new GatewayAccessManagement(app.Services.GetRequiredService<DbDataGateway.Server.State.GroupMaskKey>(), servingCache, audit),
             definitions: new GatewayDefinitionsManagement(state, audit, hooks: GatewayDefinitionsManagement.HooksOf(state, semanticModels, app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), dataSources, entityModels)),
             serverSettings: serverSettings,
             export: new GatewayExportManagement(new Export.ExportInstaller(Export.ExportInstaller.DefaultFetcher(), dataDirectory, GatewayHost.Version),

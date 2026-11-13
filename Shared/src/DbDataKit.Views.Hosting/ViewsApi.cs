@@ -610,7 +610,7 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
         var a = exporter.Availability;
         var (assets, missing) = PrintPages.LoadAssets(options.PageAssets);
         var reason = a.Available && assets is null ? "export unavailable: " + missing : a.Reason;
-        return new JsonObject { ["available"] = a.Available && assets is not null, ["reason"] = reason, ["browser"] = a.BrowserVersion, ["mode"] = a.Mode };
+        return new JsonObject { ["available"] = a.Available && assets is not null, ["reason"] = reason, ["browser"] = a.BrowserVersion, ["mode"] = a.Mode, ["note"] = a.Note };
     }
 
     // ---- the parts ----

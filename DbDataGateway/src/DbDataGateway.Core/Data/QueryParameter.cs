@@ -189,6 +189,11 @@ internal static class ParameterBinder
         if (parameters is null || parameters.Count == 0) return;
 
         int markers = ParameterMarkers.Count(sql, dialect);
+        // numbered markers ($1) are bound by position: a parameter with a name would be matched by name instead, and the statement would find none
+        int numberedMarkers = markers == 0 ? ParameterMarkers.CountNumbered(sql, dialect) : 0;
+        if (numberedMarkers > 0 && numberedMarkers != parameters.Count)
+            throw new ParameterMismatchException($"The statement has {numberedMarkers} '$n' markers but {parameters.Count} parameters were supplied.");
+        bool numbered = numberedMarkers > 0;
         if (markers > 0)
         {
             if (markers != parameters.Count)
@@ -208,7 +213,8 @@ internal static class ParameterBinder
             if (!(value is DBNull && command.GetType().Name == "NpgsqlCommand")) parameter.DbType = dbType;
             parameter.Value = value;
             // Positional markers need no name for ODBC/DuckDB; the named style always does.
-            if (style == ParameterStyle.NamedAtSign)
+            if (numbered) { /* positional: no name */ }
+            else if (style == ParameterStyle.NamedAtSign)
                 parameter.ParameterName = markers > 0 ? "@p" + (i + 1) : Prefixed(parameters[i].Name, i);
             else if (markers == 0 && parameters[i].Name is { Length: > 0 } name)
                 parameter.ParameterName = name.TrimStart('@', '$', ':');

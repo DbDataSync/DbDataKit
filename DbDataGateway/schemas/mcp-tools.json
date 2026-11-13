@@ -139,6 +139,29 @@
       }
     },
     {
+      "name": "access_mask_key_status",
+      "description": "Has the group made its key for hash masks yet (the value is never shown); the running gateway must have its local channel on. [Offline only] Usage: access mask-key-status [--repo <data directory>]",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words and options after the command, one per element, as in the usage line."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "traits": [
+          "reads-definitions"
+        ]
+      }
+    },
+    {
       "name": "views_list",
       "description": "The dashboards and reports served on the production channel, with their versions. [Offline only] Usage: views list [--kind dashboard|report] [--repo <data directory>]",
       "inputSchema": {

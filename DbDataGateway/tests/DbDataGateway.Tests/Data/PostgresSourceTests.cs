@@ -40,6 +40,24 @@ public sealed class PostgresSourceTests
     }
 
     [Fact]
+    public async Task Numbered_markers_are_counted_and_bound_by_position_not_by_name()
+    {
+        // the semantic module writes $1, $2 for a PostgreSQL source (plan 22a GP11): a parameter with a name is matched by name by Npgsql, and the statement then found none (08P01)
+        var dialect = ProviderDialects.Postgres;
+        Assert.Equal(2, ParameterMarkers.CountNumbered("SELECT 1 WHERE a = $1 AND b IN ($2)", dialect));
+        Assert.Equal(0, ParameterMarkers.CountNumbered("SELECT $$ $1 $$, '$2'", dialect));
+        Assert.Equal(0, ParameterMarkers.Count("SELECT 1 WHERE a = $1", dialect));
+
+        await PostgresEnv.EnsureReachableAsync();
+        var executor = Catalog(Postgres(), new QueryLimits()).Resolve(new GatewayPrincipal("u1", "password", ["a"], "a"), "a").Executor;
+        await using var result = await executor.ExecuteQueryAsync(new QueryRequest("SELECT $1::text AS a, $2::int AS b", Parameters: [new QueryParameter("p1", "string", "x"), new QueryParameter("p2", "int64", "7")]), default);
+        var rows = 0;
+        await foreach (var batch in result.ReadBatchesAsync(default)) rows += batch.Length;
+        Assert.Equal(1, rows);
+        await Assert.ThrowsAsync<ParameterMismatchException>(async () => await (await executor.ExecuteQueryAsync(new QueryRequest("SELECT $1, $2", Parameters: [new QueryParameter(null, "string", "x")]), default)).DisposeAsync());
+    }
+
+    [Fact]
     public void The_read_only_session_is_applied_to_a_source_that_cannot_write()
     {
         var composed = TestSources.Postgres("Host=h;Database=d;Username=u;Password=p", readOnly: true).Compose();

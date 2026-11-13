@@ -6,6 +6,9 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
+    <!-- The repository's browser and font pins: the versions this program release was tested with (a warning and a verification line, never a gate; ExportPins). One source: the files at the root. -->
+    <EmbeddedResource Include="..\..\..\chromium.pin" LogicalName="DbDataKit.Views.Export.chromium.pin" Link="chromium.pin" />
+    <EmbeddedResource Include="..\..\..\fonts.pin" LogicalName="DbDataKit.Views.Export.fonts.pin" Link="fonts.pin" />
     <None Include="README.md" Pack="true" PackagePath="/" />
     <PackageReference Include="PuppeteerSharp" />
     <PackageReference Include="PdfPig" />

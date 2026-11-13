@@ -71,6 +71,8 @@ public sealed partial class ManagementTests
             Assert.True((bool)done["whole"]!);
             Assert.True((bool)done["configured"]!);
             Assert.Equal(FakeExportRelease.Chromium, (string)done["chromium"]!);
+            Assert.False((bool)done["pins_verified"]!);
+            Assert.Contains("Warning: this component carries Chromium " + FakeExportRelease.Chromium, (string)done["install"]!["message"]!);
 
             var onDisk = File.ReadAllText(ServerFile);
             Assert.Contains("mode: pinned", onDisk);
@@ -81,7 +83,7 @@ public sealed partial class ManagementTests
             Assert.Contains($"PDF export component {FakeExportRelease.Version} installed", commit.Message);
             var audit = ConfigTestSupport.AuditEntries(dataDirectory).Select(e => e.ToJsonString()).ToList();
             Assert.Contains(audit, e => e.Contains("export.install", StringComparison.Ordinal) && e.Contains("started", StringComparison.Ordinal));
-            Assert.Contains(audit, e => e.Contains("export.install", StringComparison.Ordinal) && e.Contains("installed " + FakeExportRelease.Version, StringComparison.Ordinal));
+            Assert.Contains(audit, e => e.Contains("export.install", StringComparison.Ordinal) && e.Contains("installed " + FakeExportRelease.Version, StringComparison.Ordinal) && e.Contains("this program was tested with", StringComparison.Ordinal));
         }
         finally { Environment.SetEnvironmentVariable(ExportInstaller.SourceVariable, was); }
     }

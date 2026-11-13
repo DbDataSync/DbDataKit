@@ -15,6 +15,8 @@ COPY Directory.Build.props Directory.Packages.props global.json ./
 COPY Shared Shared
 COPY DbDataGateway DbDataGateway
 COPY duckdb.pin ./
+# the export library embeds the repository's browser and font pins (DbDataKit.Views.Export: a verification line, never a gate), from the root of the repository
+COPY chromium.pin fonts.pin ./
 COPY scripts/fetch-duckdb.sh scripts/fetch-duckdb.sh
 # CI's cache of the archives (.duckdb-archives/, filled by .github/actions/duckdb-cache) is inside the build context; a local build has none and
 # downloads from the pin's address (the pattern matches nothing then, and duckdb.pin alone is copied). An archive missing there is downloaded.

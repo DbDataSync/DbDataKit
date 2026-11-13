@@ -180,6 +180,8 @@ export interface SettingsEdit { set?: Record<string, string | number | boolean>;
 export interface ExportInstallProgress { state: 'idle' | 'running' | 'done' | 'failed'; step: string; bytes: number; total: number; message: string | null; restart_needed: boolean }
 export interface ExportComponentState {
   platform: string | null; supported: boolean; installed: boolean; whole: boolean; directory: string; release: string | null; chromium: string | null; fonts: string | null; mode: string | null; configured: boolean
+  /** Whether the component carries the browser and fonts this program was tested with (null: not installed or not whole); `pins_note` says it in words. A difference is a warning, never a refusal. */
+  pins_verified: boolean | null; pins_note: string | null
   problems: string[]; summary: string; install: ExportInstallProgress
 }
 export interface SettingsWritten { version: string; changed: string[]; restart_keys: string[]; restart_needed: boolean; commit: string | null }

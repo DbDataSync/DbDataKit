@@ -17,6 +17,8 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 
 ### Windows
 | `ManagementTests.An_install_whose_archive_does_not_match_the_checksums_fails_in_words...` fails on Windows only: `Assert.Contains() Failure: Filter not matched` for the `export.install` audit line after the test saw the state `failed` | a background install set its final state before it appended its audit entry, so a caller that polls the state and then reads the audit can find none yet (Windows files are slower) | a background job writes its audit entry **before** the state a poller waits for (`GatewayExportManagement.RunAsync`); a test that reads a record after a state change waits for the record, not only for the state |
+| a Gateway test that builds a `SecretsRuntime` (or any host part with a key ring) fails in CI with `UnauthorizedAccessException: Access to the path '/var/lib/dbdatakit' is denied` (`KeyRing.EnsureDirectory`) while it passes on a machine where it runs as root | `new GatewayOptions()` has no `DataDirectory`, so the key ring opens its default folder under `/var/lib/dbdatakit`, which the CI user cannot create | a test sets `DataDirectory` to its own temp folder before it builds anything that opens a data directory (`EntityRowRulesEngineTests.Make`) |
+| the `compose` job of `DbDataKit CI` fails building the Gateway image with `error CS1566: Error reading resource 'DbDataKit.Views.Export.chromium.pin' -- Could not find file '/src/chromium.pin'` | a library embeds a file from the root of the repository (`chromium.pin`, `fonts.pin`), and a Dockerfile copies only the folders it names | a Dockerfile that builds a product depending on such a library copies the root file too (`COPY chromium.pin fonts.pin ./` in `DbDataGateway/Dockerfile`); a new root file a project reads needs the same line in every Dockerfile that builds it |
 
 | Signature | Cause | Fix |
 | --- | --- | --- |
@@ -191,6 +193,13 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 | a data source a Build server published is refused to every home user: `names no home group and is not open to everyone`; or `BuildPublishesSemanticModelTests` finds the data source closed after a publish | who may read a data source is the **published definition's** `grants` (owner decision of 2026-11-08), not a policy the Gateway's administrator adds to the file: a publish writes the whole file again, so an `extensions.gateway` added on the Gateway never survives, and a publishing client may not send one | put `grants:` (`schema: connection/2`) in the project's `connections/<name>.yaml` and publish again; the test writes `connections/sqlserver.yaml` with `grants: {everyone: true}` into the project, it does not edit the Gateway's file |
 | `DBD-CONN-009` ``grants` is a section of format 2`, or a Build connection file refused with `DDB-620` naming `connections/<name>.yaml` | the file says `schema: connection/1` and has `grants` | write `schema: connection/2` (Build's editor does it when it adds the first group and goes back to `connection/1` when the last is removed) |
 | a Gateway refuses a data source file: ``grants` and `extensions.gateway.groups` both say who may use the data source` | the definition names the people in two places | keep `grants`; a hand-made file uses one place or the other, never both |
+
+### Access rules (plan 22a GP11)
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| a semantic request with a filter or a rule on a **PostgreSQL** data source fails with `The database operation failed. [postgres 08P01]` (SQL Server answers) | the semantic module writes PostgreSQL's own `$1` markers and sends the values with names (`@p1`); Npgsql then binds by name and the statement finds no positional parameter | `ParameterBinder` counts the numbered markers (`ParameterMarkers.CountNumbered`) and binds those parameters by position, with no name |
+| a test of a model with `access` rules fails with `The rules table ... cannot be read (ConnectionFailureException)` on PostgreSQL only | the Gateway reads a rules table with its own login and the test data source's connection string had no `SSL Mode=Disable` (the testenv PostgreSQL has no TLS) | add `;SSL Mode=Disable` to the test's data source, as the other Gateway tests on PostgreSQL do |
 
 ### Dashboards and reports (plan 32 goldens)
 

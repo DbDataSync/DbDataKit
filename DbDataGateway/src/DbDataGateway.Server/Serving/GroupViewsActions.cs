@@ -52,7 +52,7 @@ public sealed class GroupViewsActions(GroupStoreApi store, HomeCallers callers, 
             {
                 // no version in the link: the change is made over the version at this moment (the Store still refuses a change that races it)
                 var query = key.ToDictionary(p => $"key.{p.Key}", p => p.Value?.ToString() ?? "");
-                var read = await store.RowAsync(caller, a.Model!, a.Entity!, query, cancellationToken).ConfigureAwait(false);
+                var read = await store.RowAsync(caller, a.Model!, a.Entity!, query, cancellationToken, forWrite: true).ConfigureAwait(false);
                 if (read.Status != 200) return Map(read);
                 version = read.Body["version"]?.GetValue<long>();
             }
@@ -108,7 +108,7 @@ public sealed class GroupViewsActions(GroupStoreApi store, HomeCallers callers, 
                 var version = a.TypedVersion;
                 if (version is null)
                 {
-                    var read = await store.RowAsync(caller, a.Model!, a.Entity!, key.ToDictionary(p => $"key.{p.Key}", p => p.Value?.ToString() ?? ""), cancellationToken).ConfigureAwait(false);
+                    var read = await store.RowAsync(caller, a.Model!, a.Entity!, key.ToDictionary(p => $"key.{p.Key}", p => p.Value?.ToString() ?? ""), cancellationToken, forWrite: true).ConfigureAwait(false);
                     if (read.Status != 200) { var r = Map(read); return new BatchResult(r.Status, 0, r.Message, Problems: r.Violations?.Select(v => new BatchProblem(null, v.Rule, v.Attribute, v.Message)).ToList()); }
                     version = read.Body["version"]?.GetValue<long>();
                 }

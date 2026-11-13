@@ -14,8 +14,8 @@ public enum ServingCacheScope
     Caller,
 
     /// <summary>
-    /// Callers the access rules treat alike share an entry. The rule language is not decided yet (plan 22a QG2), so the values that apply are all of the caller's directory attributes (<see cref="ServingCaller.Attributes"/>),
-    /// a superset of any rule's: callers with the same attributes share, no one else does. A caller with none shares with every caller who has none.
+    /// Callers the access rules treat alike share an entry: the key holds the fingerprint of the caller's resolved rules (<see cref="ServingCachePlan.Access"/>, plan 22a GP10, QG2): the rules' definition, the refresh generation of each
+    /// rules table and the caller's names that appear in it. A plan with no fingerprint (a definition with no rules for this caller) falls back to all of the caller's directory attributes (<see cref="ServingCaller.Attributes"/>), a superset of any rule's.
     /// </summary>
     Rules,
 
@@ -28,8 +28,9 @@ public enum ServingCacheScope
 /// <param name="Scope">Who may share an entry.</param>
 /// <param name="DefinitionVersion">The published version the request is pinned to; part of the key, so a new version is a new key.</param>
 /// <param name="Datasets">The datasets the answer reads, by the identity a <c>data.changed</c> message names; empty when it cannot say (only the time-to-live and a publish clear it).</param>
-/// <param name="Access">What the caller's access rules do to this answer, as a fingerprint the host computes (plan 22a GP13: the caller's resolved column treatments; the resolver of GP10 folds its row-rule fingerprint in): part of the key in every scope, so
-/// an answer made for a caller who sees a column masked is never served to one who sees it as it is. Null or <c>-</c> when no rule applies.</param>
+/// <param name="Access">What the caller's access rules do to this answer, as one fingerprint the host computes (plan 22a GP10, GP11, GP13, QG2): the resolver's fingerprint of the caller's resolved rules (the definition's access section, the refresh generation of each
+/// rules table, the caller's names in it, the caller's column treatments) when the definition has rules, or the caller's column treatments alone on a host without the resolver. Part of the key in every scope, so an answer made for a caller who sees a column masked or is
+/// narrowed to some rows is never served to one who is not. Null or <c>-</c> when no rule applies.</param>
 public sealed record ServingCachePlan(TimeSpan Ttl, ServingCacheScope Scope, string? DefinitionVersion, IReadOnlyList<string>? Datasets = null, string? Access = null);
 
 /// <summary>
@@ -285,11 +286,14 @@ public static class ServingCacheKey
         fields.Add(context.Preview is { } preview ? "preview:" + preview : "-");
         fields.Add(plan.DefinitionVersion ?? "-");
         fields.Add(plan.Scope.ToString());
+        // a definition with rules: whoever shares, the fingerprint of the rules is part of the key, so a refreshed rules table, another caller\'s rules or another caller\'s column treatments is another key
         fields.Add(plan.Access is { Length: > 0 } access ? "access:" + access : "-");
         switch (plan.Scope)
         {
             case ServingCacheScope.Caller:
                 fields.Add(context.Caller.Id);
+                break;
+            case ServingCacheScope.Rules when plan.Access is { Length: > 0 } and not "-":
                 break;
             case ServingCacheScope.Rules:
                 foreach (var (name, values) in context.Caller.Attributes.OrderBy(a => a.Key, StringComparer.Ordinal))
