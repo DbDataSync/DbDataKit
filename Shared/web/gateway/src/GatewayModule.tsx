@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
+import { AccessPage } from './pages/AccessPage'
 import { ActivityPage } from './pages/ActivityPage'
 import { AppsPage } from './pages/AppsPage'
 import { CachePage } from './pages/CachePage'
@@ -39,6 +40,7 @@ export function GatewayModule() {
       <Route path="/models/:name/explore" element={<ExplorerPage />} />
       <Route path="/saved-queries" element={<SavedQueriesPage />} />
       <Route path="/trust" element={<TrustPage />} />
+      <Route path="/access" element={<AccessPage />} />
       <Route path="/cache" element={<CachePage />} />
       <Route path="/tls" element={<TlsPage />} />
       <Route path="/activity" element={<ActivityPage />} />

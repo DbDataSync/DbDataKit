@@ -67,7 +67,7 @@ public sealed class GatewayAccessInspector(GatewayAccess semantic, Func<Semantic
         return decision.Tables;
     }
 
-    private static string Seconds(TimeSpan span) => ((long)span.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
+    private static long Seconds(TimeSpan span) => (long)span.TotalSeconds;
 
     private static JsonArray Warnings(Target target) => AccessPublishNotes.Warnings(target.Section, readOnDataSource: target.Model is not null, target.Model?.Catalog) ?? [];
 
@@ -119,7 +119,7 @@ public sealed class GatewayAccessInspector(GatewayAccess semantic, Func<Semantic
             {
                 ["id"] = r.Id, ["effect"] = Lower(r.Effect), ["table"] = r.Table, ["subject"] = r.Subject, ["subject_kind"] = Lower(r.SubjectKind),
                 ["columns"] = new JsonArray([.. r.Columns.Select(c => (JsonNode)new JsonObject { ["dataset_column"] = c.DatasetColumn, ["rules_column"] = c.RulesColumn })]),
-                ["max_age_seconds"] = r.MaxAge is { } age ? Seconds(age) : null,
+                ["max_age_seconds"] = r.MaxAge is { } age ? Seconds(age) : (long?)null,
             })]),
         })]),
     };
