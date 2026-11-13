@@ -637,7 +637,7 @@ public sealed partial class ViewsApi(ViewsPublications published, IServingServic
         return new ResolverOptions
         {
             MaxWidgets = b.MaxWidgets, MaxRows = b.MaxRows, MaxParallelism = b.MaxParallelism, WidgetTimeout = b.WidgetTimeout, Time = options.Time, MaxImageBytes = b.MaxImageBytes,
-            ModelSourcePrefix = b.ModelSourcePrefix, FrameOrigins = b.FrameOrigins, Cache = cached ? cache : null, CustomViews = options.CustomApps is { } apps ? apps.Find : b.CustomViews,
+            ModelSourcePrefix = b.ModelSourcePrefix, FrameOrigins = b.FrameOrigins, Cache = cached ? cache : null, CacheBasis = b.CacheBasis, CustomViews = options.CustomApps is { } apps ? apps.Find : b.CustomViews,
             OnUnexpected = (id, e) =>
             {
                 b.OnUnexpected?.Invoke(id, e);

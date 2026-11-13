@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DbDataKit.Access;
 using DbDataKit.Secrets;
 using DbDataKit.Store;
 using DbDataKit.Web.Trust;
@@ -45,6 +46,9 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
         !StoreEntityAccess.Limits(served, entity) || access is not null ? null
             : StoreAnswer.Error(403, $"`{entity}` of the model '{served.Model.Name}' has row rules, and this server cannot apply them to a read of an entity, so the rows are not served (plan 22a GP11).");
 
+    /// <summary>A row as the caller's column rules leave it (plan 22a GP13): the same on every read, so no module that reads an entity shows an attribute the rules hide or mask.</summary>
+    private JsonObject Shaped(JsonObject row, ServedEntityModel served, string entity, ColumnTreatments treatments) => StoreColumnRules.Row(row, entity, treatments, access?.MaskKey);
+
     /// <summary>The key attributes of an entity of a published model, or the problem (an action's single `key` value needs a one-field key).</summary>
     public (IReadOnlyList<string>? Key, StoreAnswer? Problem) KeyOf(string name, string entity)
     {
@@ -84,7 +88,8 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
         if (Needs(caller, ServerRole.Viewer) is { } denied) return denied;
         var (served, missing) = Served(name);
         if (missing is not null) return missing;
-        var schema = ModelSchemaJson.Of(served!.Model);
+        var treatments = access?.TreatmentsFor(served!, caller) ?? ColumnTreatments.None;
+        var schema = StoreColumnRules.Schema(ModelSchemaJson.Of(served!.Model), _ => treatments);
         if (mayRead is not null)
         {
             var kept = ((JsonArray)schema["entities"]!).OfType<JsonObject>().Where(e => mayRead((string)e["name"]!)).Select(e => (JsonNode)JsonNode.Parse(e.ToJsonString())!).ToArray();
@@ -103,6 +108,7 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
         if (missing is not null) return missing;
         if (RowRulesRefusal(served!, entity) is { } ruled) return ruled;
         var key = query.Where(q => q.Key.StartsWith("key.", StringComparison.Ordinal)).ToDictionary(q => q.Key[4..], q => (object?)q.Value);
+        var treatments = forWrite ? ColumnTreatments.None : access?.TreatmentsFor(served!, caller) ?? ColumnTreatments.None;
         return await WithWriter(served!, async writer =>
         {
             if (query.GetValueOrDefault("history") == "true")
@@ -110,7 +116,7 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
                 var versions = await writer.HistoryAsync(entity, key, cancellationToken);
                 // a row the caller may not read has no history for them either: not found, as for a row that was never there
                 if (versions.Count == 0 && StoreEntityAccess.Limits(served!, entity)) return StoreAnswer.Error(404, $"`{entity}` has no such row.");
-                return StoreAnswer.Ok(new JsonObject { ["versions"] = new JsonArray([.. versions.Select(r => (JsonNode)RowJson.Row(r))]) });
+                return StoreAnswer.Ok(new JsonObject { ["versions"] = new JsonArray([.. versions.Select(r => (JsonNode)Shaped(RowJson.Row(r), served!, entity, treatments))]) });
             }
             StoredRow? row;
             if (query.GetValueOrDefault("as_of") is { Length: > 0 } asOf)
@@ -119,7 +125,7 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
                 row = await writer.GetAsOfAsync(entity, key, moment, cancellationToken);
             }
             else row = await writer.GetAsync(entity, key, cancellationToken);
-            return row is null ? StoreAnswer.Error(404, $"`{entity}` has no such row.") : StoreAnswer.Ok(RowJson.Row(row));
+            return row is null ? StoreAnswer.Error(404, $"`{entity}` has no such row.") : StoreAnswer.Ok(Shaped(RowJson.Row(row), served!, entity, treatments));
         }, cancellationToken, draft, readAs: forWrite ? null : caller);
     }
 
@@ -135,7 +141,8 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
         var limited = StoreEntityAccess.Limits(served!, entity);
         return await WithWriter(served!, async writer =>
         {
-            var answer = new JsonObject { ["rows"] = new JsonArray([.. (await writer.ListAsync(entity, limit, offset, cancellationToken)).Select(r => (JsonNode)RowJson.Row(r))]), ["limit"] = limit, ["offset"] = offset };
+            var treatments = access?.TreatmentsFor(served!, caller) ?? ColumnTreatments.None;
+            var answer = new JsonObject { ["rows"] = new JsonArray([.. (await writer.ListAsync(entity, limit, offset, cancellationToken)).Select(r => (JsonNode)Shaped(RowJson.Row(r), served!, entity, treatments))]), ["limit"] = limit, ["offset"] = offset };
             // an entity with row rules also says how many rows the caller may read in all (the count is over the filter, never the table's)
             if (limited) answer["total"] = await writer.CountAsync(entity, cancellationToken);
             return StoreAnswer.Ok(answer);

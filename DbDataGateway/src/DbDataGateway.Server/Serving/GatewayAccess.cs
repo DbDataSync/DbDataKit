@@ -74,6 +74,7 @@ public sealed class GatewayAccess(DataSourceCatalog sources, Func<GatewayOptions
     /// </summary>
     public IReadOnlyList<string> Changed(DataChangedNotice notice)
     {
+        Interlocked.Increment(ref _changes);
         var touched = new List<string>();
         foreach (var model in models().All)
         {
@@ -101,6 +102,11 @@ public sealed class GatewayAccess(DataSourceCatalog sources, Func<GatewayOptions
                     ledger.Changed(StoreEntityAccess.TableKey(served.DataSource, table), notice.At > _time.GetUtcNow() ? _time.GetUtcNow() : notice.At, notice.Product, "data.changed " + notice.Dataset);
         return touched;
     }
+
+    private long _changes;
+
+    /// <summary>How many <c>data.changed</c> messages this resolver was told of: a number a cache of a module's own keys on, so no entry made before a rules table was refreshed is served after it (plan 24a UC15).</summary>
+    public long Changes => Interlocked.Read(ref _changes);
 
     /// <summary>The cache datasets of the models that have a rules table the message names, without moving anything (for the mapping of a message to what it clears).</summary>
     public IReadOnlyList<string> DependentsOf(string dataset)

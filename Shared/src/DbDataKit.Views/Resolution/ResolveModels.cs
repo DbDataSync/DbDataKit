@@ -92,6 +92,12 @@ public sealed class ResolverOptions
     /// <summary>The result cache (opt in: null runs every request). What it holds is the rows of a successful answer, under <see cref="CacheScope"/> and <see cref="WidgetCacheKey"/>, so two viewers whose access differs never share an entry.</summary>
     public WidgetResultCache? Cache { get; init; }
 
+    /// <summary>
+    /// What the host adds to the cache key at the time of each lookup (plan 24a UC15): the state of everything that decides the rows a viewer may get besides the viewer and the request (a refreshed rules table, a published model, a changed data source). A host
+    /// that changes the rules a viewer is held to without this changing lets an entry of the old rules be served until its time-to-live; null adds nothing.
+    /// </summary>
+    public Func<string>? CacheBasis { get; init; }
+
     /// <summary>What the host adds to the cache key: the definition and what it depends on (<see cref="PublishedView.CacheScope"/>), so a new model version never answers from the rows of the old one.</summary>
     public string CacheScope { get; init; } = "";
 }

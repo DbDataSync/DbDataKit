@@ -72,7 +72,7 @@ public sealed class PublishedView
         {
             MaxWidgets = basis.MaxWidgets, MaxRows = basis.MaxRows, MaxParallelism = basis.MaxParallelism, WidgetTimeout = basis.WidgetTimeout, Time = basis.Time,
             MaxImageBytes = basis.MaxImageBytes, ModelSourcePrefix = basis.ModelSourcePrefix, OnUnexpected = basis.OnUnexpected, CustomViews = basis.CustomViews,
-            Cache = basis.Cache, CacheScope = CacheScope,
+            Cache = basis.Cache, CacheScope = CacheScope, CacheBasis = basis.CacheBasis,
             SavedQueryModel = SavedQueryModel, ImageBytes = ImageBytes,
         };
     }
