@@ -2,7 +2,7 @@
   <PropertyGroup>
     <RootNamespace>DbDataKit.Serving.Conformance</RootNamespace>
     <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
-    <Description>Abstract xunit conformance suite for the core services of the serving layer (identity, sessions, catalog, queries, updates): what any host promises a protocol module.</Description>
+    <Description>Conformance suites of the serving layer: the abstract suite for the core services (identity, sessions, catalog, queries, updates: what any host promises a protocol module), the module access suite (the same people and questions to the core and to every module, every answer equal to the core's: plan 22a GP14, 24a UC15) and the reference test that no module reaches a data source around the core.</Description>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="xunit.v3.extensibility.core" />
