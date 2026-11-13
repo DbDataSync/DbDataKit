@@ -36,6 +36,19 @@ public static class ReplicationSetPackage
     /// <summary>The runtime package that runs a Sync definition (plan 28c E06): <c>scripts/publish-runtime.sh</c>'s package name.</summary>
     public const string RuntimeName = "dbdatasync-runtime";
 
+    /// <summary>
+    /// How often a drain is run again when its process is killed or its host goes away (plan 28c E12g, owner decision 2026-11-12): the first run and two more. The retry chain of the runner restarts the same item with the same inputs after
+    /// <see cref="DrainBackoff"/> (doubling up to <see cref="DrainMaxBackoff"/>), so a periodic drain, and the bulk load it carries as its <c>requests</c> input (a request applies once by its id), goes on at once and not at the next cron time.
+    /// Only a temporary failure or a gone process is retried; a drain that ended with failed mappings, or a permanent failure, is not.
+    /// </summary>
+    public const int DrainAttempts = 3;
+
+    /// <summary>The wait before the second run of a drain.</summary>
+    public static readonly TimeSpan DrainBackoff = TimeSpan.FromSeconds(30);
+
+    /// <summary>The ceiling of the wait between runs of a drain.</summary>
+    public static readonly TimeSpan DrainMaxBackoff = TimeSpan.FromMinutes(5);
+
     /// <summary>Where in the package the definition is: the <c>repo_dir</c> input of the drain.</summary>
     public const string RepoDir = "repo";
 
@@ -186,7 +199,7 @@ public static class ReplicationSetPackage
                 "repo_dir" => i with { Default = RepoDir },
                 _ => i,
             }).ToList();
-            tasks.Add(drain with { Name = taskName, Entry = new TaskEntry(), Schedule = schedule, Inputs = inputs, Connections = slots });   // no `concurrency`: it limits the runs of the whole package, which would serialize the replications of the set (and a continuous drain, which stays up, would starve the others); the queue already keeps one task from running twice
+            tasks.Add(drain with { Name = taskName, Entry = new TaskEntry(), Schedule = schedule, Inputs = inputs, Connections = slots, Limits = drain.Limits with { Attempts = DrainAttempts, Backoff = DrainBackoff, MaxBackoff = DrainMaxBackoff } });   // no `concurrency`: it limits the runs of the whole package, which would serialize the replications of the set (and a continuous drain, which stays up, would starve the others); the queue already keeps one task from running twice
             published.Add(new PublishedReplication(task.Name, taskName, task.Scheduling.Mode.ToString(), task.Scheduling.CronExpression, task.Scheduling.FrequencySeconds, [.. slots.Select(s => s.Name)], mappings.Count, new Dictionary<string, string>(slotNames, StringComparer.Ordinal)));
         }
 
