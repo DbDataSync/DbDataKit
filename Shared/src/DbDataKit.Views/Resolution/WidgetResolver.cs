@@ -187,7 +187,7 @@ public sealed partial class WidgetResolver
     private async Task<AnswerRows> RecallAsync(string key, Func<Task<AnswerRows>> run, CancellationToken cancellationToken)
     {
         var cache = options.Cache;
-        var scoped = options.CacheScope + "\n" + key;
+        var scoped = options.CacheScope + "\n" + (options.CacheBasis?.Invoke() ?? "") + "\n" + key;
         if (cache is not null && cache.TryGet(scoped, out var kept)) return kept;
         var rows = await run().WaitAsync(cancellationToken).ConfigureAwait(false);
         cache?.Set(scoped, rows);

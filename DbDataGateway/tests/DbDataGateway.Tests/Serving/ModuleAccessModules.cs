@@ -160,6 +160,31 @@ internal sealed class McpSemanticModule(ModuleAccessRig rig) : RigModule(rig, "m
     }
 }
 
+/// <summary>
+/// The <c>views</c> module's render route over its HTTPS listener: a published dashboard drawn as the person. Its widgets are the questions: a table of revenue by region, a table of orders by customer, and a control whose values are the members of the region attribute.
+/// A widget that is an error is a refusal.
+/// </summary>
+internal sealed class ViewsModule(ModuleAccessRig rig) : RigModule(rig, "views (dashboard render)")
+{
+    public override bool Asks(ConformanceQuestion question) => question.Id is "by-region" or "by-customer" or "members";
+
+    public override async Task<ModuleAnswer> AskAsync(string person, ConformanceQuestion question, CancellationToken cancellationToken = default)
+    {
+        using var http = ModuleAccessRig.Trusting();
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"https://127.0.0.1:{Rig.ViewsPort}/api/v1/dashboards/orders/render") { Content = new StringContent("""{"parameters":{},"layout":"desk"}""", Encoding.UTF8, "application/json") };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Person(person).Token);
+        using var response = await http.SendAsync(request, cancellationToken);
+        var text = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode) return OfHttp(response.StatusCode, text);
+        var widgets = JsonNode.Parse(text)!["widgets"]!.AsObject();
+        var widget = widgets[question.Id switch { "by-region" => "by_region", "by-customer" => "by_customer", _ => "regions" }]!;
+        if ((string?)widget["type"] == "error") return ModuleAnswer.Refusal((string?)widget["message"] ?? "error");
+        return question.Id == "members"
+            ? ModuleAnswer.Of(widget["values"]!.AsArray().Select(v => ModuleAnswer.Row(ModuleAccessRig.JsonCell(v!["value"]))))
+            : ModuleAnswer.Of(widget["rows"]!.AsArray().Select(r => ModuleAnswer.Row(r!["cells"]!.AsArray().Select(c => ModuleAccessRig.JsonCell(c!["v"])).ToArray())));
+    }
+}
+
 /// <summary>The negative module of GP14: it has its own connection to the data source and reads the tables itself, so no rule of the core applies to it.</summary>
 internal sealed class DirectSourceModule(ModuleAccessRig rig) : RigModule(rig, "direct-source")
 {

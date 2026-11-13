@@ -89,9 +89,10 @@ public sealed class GatewayViewsPublishing(DefinitionStore store, StateDatabase 
 /// </summary>
 public sealed class GatewayViews
 {
-    public GatewayViews(DefinitionStore store, GatewayViewsPublishing publishing, IOptionsMonitor<GatewayOptions> options, HomeCallers homeCallers, StateDatabase state, ILoggerFactory loggers, SecretsRuntime secrets, PublishedEntityModels entityModels, IReportExporter? exporter = null)
+    public GatewayViews(DefinitionStore store, GatewayViewsPublishing publishing, IOptionsMonitor<GatewayOptions> options, HomeCallers homeCallers, StateDatabase state, ILoggerFactory loggers, SecretsRuntime secrets, PublishedEntityModels entityModels, IReportExporter? exporter = null, GatewayCache? servingCache = null, DbDataKit.Serving.Semantic.SemanticModels? semantic = null, GatewayAccess? access = null)
     {
         Publishing = publishing;
+        _optionsWatch = options.OnChange(_ => Interlocked.Increment(ref _optionChanges));
         exporter ??= ExporterOf(options.CurrentValue.Views.Export, loggers);
         CanExport = exporter is not null;
         this.homeCallers = homeCallers;
@@ -110,7 +111,13 @@ public sealed class GatewayViews
             Actions = new GroupViewsActions(GatewayStoreModule.ApiOf(options, state, secrets, entityModels), homeCallers),
             CustomApps = new GatewayCustomViewApps(() => new DbDataKit.Apps.AppInstanceStore(store),
                 () => options.CurrentValue.Modules.Contains(GatewayModules.Apps) ? DbDataGateway.Server.Hosting.GatewayAppsModule.PublicUrlOf(options.CurrentValue) : null),
-            Resolver = new ResolverOptions { FrameOrigins = new LiveOrigins(() => options.CurrentValue.Views.FrameOrigins) },
+            // the module's rows are kept for a few seconds (views.cacheSeconds) in a cache of its own, outside the serving cache: a rows entry is only served while nothing that decides what a viewer may read has changed (a rules table refreshed or a
+            // cache cleared by hand, a model published or retired, the data sources and their groups edited), so a change of the rules is never answered from the rows of the old ones (plan 24a UC15)
+            Resolver = new ResolverOptions
+            {
+                FrameOrigins = new LiveOrigins(() => options.CurrentValue.Views.FrameOrigins),
+                CacheBasis = () => string.Join('/', servingCache?.Store.Epoch ?? 0, semantic?.Generation ?? 0, access?.Changes ?? 0, Interlocked.Read(ref _optionChanges)),
+            },
         }, Publications, new Callers(this), new StateViewsAudit(new AuditLog(state, DbDataGateway.Server.State.GatewayState.ServiceId)), loggers);
     }
 
@@ -134,6 +141,8 @@ public sealed class GatewayViews
         }, loggers.CreateLogger("Views.Export"));
 
     private readonly HomeCallers homeCallers;
+    private long _optionChanges;
+    private readonly IDisposable? _optionsWatch;
     private readonly IOptionsMonitor<GatewayOptions> options;
 
     public GatewayViewsPublishing Publishing { get; }

@@ -58,13 +58,28 @@ public sealed class SemanticModels
     {
         var model = new SemanticModel(catalog, sources ?? new Dictionary<string, string>(), ssas);
         if (!_models.TryAdd(model.Name, model)) throw new InvalidOperationException($"Two semantic models are named '{model.Name}'.");
+        Interlocked.Increment(ref _generation);
         return this;
     }
 
     /// <summary>Serves this model from now on in place of the one of the same name, if there is one.</summary>
-    public void Set(SemanticModel model) => _models[model.Name] = model;
+    public void Set(SemanticModel model)
+    {
+        _models[model.Name] = model;
+        Interlocked.Increment(ref _generation);
+    }
 
-    public bool Remove(string name) => _models.TryRemove(name, out _);
+    public bool Remove(string name)
+    {
+        var removed = _models.TryRemove(name, out _);
+        Interlocked.Increment(ref _generation);
+        return removed;
+    }
+
+    private long _generation;
+
+    /// <summary>A number that changes whenever a model is added, replaced or retired, for a cache of a module's own to key on (plan 24a UC15: no answer outlives the definition it was made under).</summary>
+    public long Generation => Interlocked.Read(ref _generation);
 
     /// <summary>The model a source names (<c>semantic:sales</c>, or just <c>sales</c> for a request kind that is always semantic); null when it names none.</summary>
     public SemanticModel? Find(string source) =>

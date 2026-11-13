@@ -23,7 +23,7 @@ public sealed class ModuleAccessConformanceTests
 
     private static IReadOnlyList<IConformanceModule> Modules(ModuleAccessRig rig) =>
     [
-        new FlightModule(rig, sql: false), new FlightModule(rig, sql: true), new FeedsModule(rig, "request"), new FeedsModule(rig, "sql"), new FeedsModule(rig, "saved"), new AppsSemanticModule(rig), new McpSemanticModule(rig),
+        new FlightModule(rig, sql: false), new FlightModule(rig, sql: true), new FeedsModule(rig, "request"), new FeedsModule(rig, "sql"), new FeedsModule(rig, "saved"), new AppsSemanticModule(rig), new McpSemanticModule(rig), new ViewsModule(rig),
     ];
 
     [Theory, MemberData(nameof(Setups))]

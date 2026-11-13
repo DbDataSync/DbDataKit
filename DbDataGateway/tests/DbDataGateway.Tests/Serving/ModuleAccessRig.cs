@@ -176,6 +176,40 @@ internal sealed class ModuleAccessRig : IAsyncDisposable
                     - { id: no_blocked, effect: exclude, table: blocked_status, subject: who, columns: { status: status_code } }
         """;
 
+    /// <summary>A dashboard over the model: a table of revenue by region, a table of orders by customer and a control that lists the regions (a members request).</summary>
+    public const string Dashboard = """
+        schemaVersion: 1
+        kind: dashboard
+        title: Orders
+        parameters:
+          - {name: region, type: string, for: customers.region, many: true, default: []}
+        widgets:
+          regions:
+            type: control
+            parameter: region
+            control: multiselect
+            values: {attribute: customers.region}
+          by_region:
+            type: table
+            encodings:
+              columns: [{field: customers.region}, {field: orders.net_revenue}, {field: orders.order_count}]
+            query: {model: orders_model, limit: 100}
+          by_customer:
+            type: table
+            encodings:
+              columns: [{field: customers.customer}, {field: orders.order_count}]
+            query: {model: orders_model, limit: 100}
+        layouts:
+          - name: desk
+            type: reflow
+            default: true
+            grid: {columns: 12, rows: 6}
+            tiles:
+              - {widget: regions, x: 0, y: 0, w: 12, h: 1}
+              - {widget: by_region, x: 0, y: 1, w: 6, h: 5}
+              - {widget: by_customer, x: 6, y: 1, w: 6, h: 5}
+        """;
+
     /// <summary>The model's text for a cache setting (<c>off</c>, <c>caller</c> or <c>rules</c>) and the column rules (the lines of <c>access.columns</c>).</summary>
     public static string CatalogText(string cache, params string[] columnRules) =>
         Catalog + "\ncache: " + (cache == "off" ? "{enabled: false}" : $"{{enabled: true, ttl: 10m, scope: {cache}}}") + "\naccess:\n" + RowRules + (columnRules.Length == 0 ? "" : "\n  columns:\n" + string.Join("\n", columnRules.Select(r => "    - " + r)));
@@ -255,6 +289,8 @@ internal sealed class ModuleAccessRig : IAsyncDisposable
         }
 
         Publish(CatalogText(cache, ColumnRules));
+        if (Get<GatewayViewsPublishing>().Publish("dashboard", "orders", Dashboard, "test").Status != 200) throw new InvalidOperationException("The dashboard was not published.");
+        Get<DefinitionFollower>().Poll();
     }
 
     /// <summary>Publishes a version of the model and serves it now, as a publisher's call does.</summary>
