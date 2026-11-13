@@ -231,3 +231,34 @@ internal sealed class NaiveCachingModule(IConformanceModule inner) : IConformanc
         return _kept[question.Id] = await inner.AskAsync(person, question, cancellationToken);
     }
 }
+
+/// <summary>Flight SQL pass-through: a statement of the person's own to the data source, not to a model. <c>by-region</c> reads the customer table the model puts rules on; <c>plain</c> reads a table no rule covers.</summary>
+internal sealed class PassThroughModule(ModuleAccessRig rig) : RigModule(rig, "flightsql (statement to the data source)")
+{
+    public override bool Asks(ConformanceQuestion question) => question.Id is "by-region" or "plain";
+
+    public override async Task<ModuleAnswer> AskAsync(string person, ConformanceQuestion question, CancellationToken cancellationToken = default)
+    {
+        var p = Person(person);
+        using var client = new GatewayFlightClient(Rig.FlightAddress, new GrpcChannelOptions { HttpHandler = new SocketsHttpHandler { SslOptions = new SslClientAuthenticationOptions { RemoteCertificateValidationCallback = (_, _, _, _) => true } } });
+        try
+        {
+            await client.AuthenticateAsync(p.Address, p.Token);
+            var result = await client.QueryAsync(question.Id == "plain" ? "SELECT id, note FROM plain_notes" : "SELECT region FROM dim_customer", new QueryOptions { DataSource = ModuleAccessRig.Source }, cancellationToken);
+            var rows = new List<string>();
+            await foreach (var batch in result)
+                for (var r = 0; r < batch.Length; r++)
+                    rows.Add(ModuleAnswer.Row(Enumerable.Range(0, batch.ColumnCount).Select(c => (object?)(batch.Column(c) switch
+                    {
+                        Apache.Arrow.StringArray s => s.IsNull(r) ? null : s.GetString(r),
+                        Apache.Arrow.Int32Array n => n.GetValue(r)!.Value,
+                        var other => other.GetType().Name,
+                    })).ToArray()));
+            return ModuleAnswer.Of(rows);
+        }
+        catch (RpcException rpc) when (rpc.StatusCode is StatusCode.PermissionDenied or StatusCode.InvalidArgument or StatusCode.NotFound)
+        {
+            return ModuleAnswer.Refusal(rpc.Status.Detail);
+        }
+    }
+}

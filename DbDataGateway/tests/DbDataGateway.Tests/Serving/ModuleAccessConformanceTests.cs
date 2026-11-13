@@ -85,4 +85,26 @@ public sealed class ModuleAccessConformanceTests
         Assert.False(report.Passed);
         Assert.Contains(report.Violations, v => v.Person != "ada" && v.Module.StartsWith("naive-cache", StringComparison.Ordinal));
     }
+
+    /// <summary>Whether this branch has plan 22a GP12's index of ruled tables (<c>RuledTables</c>): the pass-through case below holds the Flight SQL module to it once it does.</summary>
+    private static bool HasPassThroughGuard => typeof(DbDataGateway.Server.Hosting.GatewayHost).Assembly.GetType("DbDataGateway.Server.Serving.RuledTables") is not null;
+
+    [Theory, MemberData(nameof(Engines))]
+    public async Task Flight_sql_pass_through_to_a_table_the_models_rules_cover_is_refused_and_a_table_with_no_rule_is_read(string engine)
+    {
+        Assert.SkipUnless(HasPassThroughGuard, "plan 22a GP12 (pass-through SQL refusal) is not in this branch: until it is, a statement to a data source reads a ruled table in full; remove this check when GP12 is merged");
+        await using var rig = await ModuleAccessRig.StartAsync(engine);
+        rig.Execute("CREATE TABLE plain_notes (id INT, note VARCHAR(20))");
+        rig.Execute("INSERT INTO plain_notes VALUES (1, 'free')");
+        var pass = new PassThroughModule(rig);
+
+        foreach (var person in People)
+        {
+            var refused = await pass.AskAsync(person, ModuleAccessRig.Question(ModuleAccessRig.ByRegion));
+            Assert.True(refused.Refused, $"{person} read the ruled table dim_customer through a statement to the data source: {refused}");
+            Assert.Contains("orders_model", refused.Reason);
+        }
+
+        Assert.Equal(["1|free"], (await pass.AskAsync("ada", new ConformanceQuestion("plain", "a table no rule covers"))).Rows);
+    }
 }
