@@ -483,6 +483,15 @@ public sealed class ReplicationPairsTests : IAsyncLifetime
         await ClearOldUnitsAsync();
         var task = _config.LoadReplicationTask(Replication);
         task.Tracking = new TrackingConfig { Mode = "both", Primary = "target" };
+        if (!DbDataSync.Core.Config.TrackingResolution.TargetWriterEngines.Contains(_target.DriverType))
+        {
+            // today: the writers of MySQL, MariaDB and Oracle are written and never run, so the save refuses `tracking: target|both` for them, naming the plan row; the follow below runs for these pairs
+            // again when the refusal is lifted (TrackingResolution.TargetWriterEngines)
+            var refused = Assert.Throws<ConfigValidationException>(() => _config.SaveReplicationTask(task, Author));
+            Assert.Contains("plan 28c E17", refused.Message);
+            Assert.Contains("keeps the state on the target", refused.Message);
+            return;
+        }
         _config.SaveReplicationTask(task, Author);
         await InsertAsync(1, "one", 1m);
         await InsertAsync(2, "two", 2m);

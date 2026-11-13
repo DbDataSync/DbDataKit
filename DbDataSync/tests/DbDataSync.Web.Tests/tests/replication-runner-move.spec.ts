@@ -36,6 +36,13 @@ test.afterEach(async ({ page }) => {
 })
 
 test.afterAll(() => {
+  // the runner this story linked is the Sync server's for the rest of the run (`runner-owners.json` beside its state): the story of `replication-runner-owner.spec.ts`, which sorts after this one, starts from "no runner is set yet"
+  const owners = path.join(syncDirectory, 'runner-owners.json')
+  try {
+    const settings = JSON.parse(fs.readFileSync(owners, 'utf8')) as Record<string, unknown>
+    delete settings.link
+    fs.writeFileSync(owners, JSON.stringify(settings, null, 2))
+  } catch { /* no file: nothing was linked */ }
   fs.rmSync(path.join(syncRunner.directory, 'connections', `${CONNECTION}.yaml`), { force: true })
   try { runSql(`DROP TABLE IF EXISTS dbo.[${SOURCE}]; DROP TABLE IF EXISTS dbo.[${TARGET}];`, DB_NAME) } catch { /* the database may be gone */ }
 })
