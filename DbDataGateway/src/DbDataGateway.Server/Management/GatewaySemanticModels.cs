@@ -21,7 +21,7 @@ namespace DbDataGateway.Server.Management;
 /// kept, so a rollback is a switch of which one is served. A model named in <c>server.yaml</c> is not replaced by a publish.
 /// </summary>
 public sealed partial class GatewaySemanticModels(
-    PublishedSemanticModels store, SemanticModels models, Func<GatewayOptions> options, string configDirectory, Func<DataSourceCatalog> catalog, IAuditLog audit, TimeProvider? clock = null, DataSourceAdoptions? adoptions = null)
+    PublishedSemanticModels store, SemanticModels models, Func<GatewayOptions> options, string configDirectory, Func<DataSourceCatalog> catalog, IAuditLog audit, TimeProvider? clock = null, DataSourceAdoptions? adoptions = null, Func<RuledTables>? ruled = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
@@ -185,7 +185,7 @@ public sealed partial class GatewaySemanticModels(
                 adoptions?.Record(dataSource, Client(caller)!, Who(caller), name, "semantic-model", _clock.GetUtcNow());
                 Record(caller, "data-source adopt", dataSource, $"adopted by {Client(caller)} ({Who(caller)}) for the model {name}");
             }
-            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["version"] = version.Number, ["created"] = created, ["unchanged"] = unchanged, ["adopted"] = adoption.Adopted.Count == 0 ? null : new JsonArray([.. adoption.Adopted.Select(a => (JsonNode?)a)]), ["warnings"] = AccessPublishNotes.Warnings(parsed.Access, readOnDataSource: true, parsed) });
+            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["version"] = version.Number, ["created"] = created, ["unchanged"] = unchanged, ["adopted"] = adoption.Adopted.Count == 0 ? null : new JsonArray([.. adoption.Adopted.Select(a => (JsonNode?)a)]), ["warnings"] = AccessPublishNotes.ForSemantic(parsed, sources, ruled?.Invoke()) });
         }
         finally { _publishing.Release(); }
     }

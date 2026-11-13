@@ -16,7 +16,7 @@ namespace DbDataGateway.Server.Management;
 /// name of the call, and its data source is one of this server's (for a publishing client, one it made); <c>GET</c> lists and reads, <c>DELETE</c> stops serving it. Every instance of the group serves what is published
 /// (<see cref="PublishedEntityModels"/>). The structure stays the store's server's to change: it publishes the model its tables have.
 /// </summary>
-public sealed partial class GatewayEntityModels(PublishedEntityModels models, Func<GatewayOptions> options, Func<string, string?> ownerOfDataSource, IAuditLog audit, TimeProvider? clock = null, DataSourceAdoptions? adoptions = null)
+public sealed partial class GatewayEntityModels(PublishedEntityModels models, Func<GatewayOptions> options, Func<string, string?> ownerOfDataSource, IAuditLog audit, TimeProvider? clock = null, DataSourceAdoptions? adoptions = null, Func<RuledTables>? ruled = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
@@ -149,7 +149,7 @@ public sealed partial class GatewayEntityModels(PublishedEntityModels models, Fu
                 adoptions?.Record(dataSource, client!, Who(caller), name, "entity-model", at);
                 Record(caller, "data-source adopt", dataSource, $"adopted by {client} ({Who(caller)}) for the model {name}");
             }
-            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["version"] = version.Version, ["created"] = created, ["unchanged"] = unchanged, ["adopted"] = adopting ? dataSource : null, ["warnings"] = AccessPublishNotes.Warnings(loaded.Model.Access, readOnDataSource: false) });
+            return ManagementResult.Ok(new JsonObject { ["name"] = name, ["version"] = version.Version, ["created"] = created, ["unchanged"] = unchanged, ["adopted"] = adopting ? dataSource : null, ["warnings"] = AccessPublishNotes.ForEntity(loaded.Model, dataSource, ruled?.Invoke()) });
         }
         finally { _publishing.Release(); }
     }

@@ -27,7 +27,8 @@ public sealed class RuledTables(Func<SemanticModels> models, Func<IReadOnlyColle
     /// <param name="Holder">The model that holds the rules, as a person names it (<c>the semantic model 'semantic:orders_model'</c>).</param>
     /// <param name="Rules">The rules, for the message (<c>row rules 'east_only'; column rules on 'email'</c>).</param>
     /// <param name="Ask">How to get the same data through the model.</param>
-    public sealed record Ruled(string Source, string Table, string Name, string? Schema, string Holder, string Rules, string Ask)
+    /// <param name="ModelName">The name of the model that holds the rules (<c>orders_model</c>), for the publish warning.</param>
+    public sealed record Ruled(string Source, string Table, string Name, string? Schema, string Holder, string Rules, string Ask, string ModelName = "")
     {
         /// <summary>Whether the name at <paramref name="index"/> of a dotted chain could be this table: the same name (any case), and for a Store table the part before it, when there is one, is the model's schema.</summary>
         public bool MatchesAt(IReadOnlyList<string> chain, int index)
@@ -98,10 +99,63 @@ public sealed class RuledTables(Func<SemanticModels> models, Func<IReadOnlyColle
         return index;
     }
 
+    /// <summary>The ruled tables one semantic model has (what the index holds for it).</summary>
+    internal static IReadOnlyList<Ruled> RuledBy(SemanticModel model) => [.. OfSemantic(model)];
+
+    /// <summary>The ruled tables one entity model has on its data source.</summary>
+    internal static IReadOnlyList<Ruled> RuledBy(ServedEntityModel served) => [.. OfEntity(served)];
+
+    /// <summary>Every physical table a semantic model reads: its serving data source and the name chain of the table.</summary>
+    internal static IReadOnlyList<(string Source, IReadOnlyList<string> Chain)> ReadsOf(SemanticModel model)
+    {
+        var reads = new List<(string, IReadOnlyList<string>)>();
+        if (model.Catalog.Source["tables"] is not JsonArray tables) return reads;
+        foreach (var table in tables.OfType<JsonObject>())
+            if (table["source"]?.GetValue<string>() is { Length: > 0 } physical && TableNameScan.Scan(physical).Chains.FirstOrDefault() is { Count: > 0 } chain)
+                reads.Add((model.ServingSource(table["x_source"]?.GetValue<string>() ?? ""), chain));
+        return reads;
+    }
+
+    /// <summary>Every table an entity model reads: its entities, on its data source, in the schema of the model.</summary>
+    internal static IReadOnlyList<(string Source, IReadOnlyList<string> Chain)> ReadsOf(ServedEntityModel served) =>
+        [.. served.Model.Entities.Select(e => (served.DataSource, (IReadOnlyList<string>)[served.Model.Name, e.Name]))];
+
+    /// <summary>
+    /// The warnings of a publish whose model reads tables (owner decision 2026-11-12, plan 22a GP12): for each table it reads that ANOTHER served model puts rules on while this model puts none on it, one sentence naming that model and the table.
+    /// A model that carries rules of its own for the table (any rules, even different ones) says nothing; a model that is no longer served says nothing, as the index is built from the models served now.
+    /// </summary>
+    /// <param name="holder">The holder text of the publishing model (<see cref="Ruled.Holder"/>): its own entries in the index are not another model's.</param>
+    /// <param name="own">The tables the publishing model puts rules on.</param>
+    /// <param name="reads">The tables the publishing model reads.</param>
+    internal JsonArray? UnappliedWarnings(string holder, IReadOnlyList<Ruled> own, IReadOnlyList<(string Source, IReadOnlyList<string> Chain)> reads)
+    {
+        var notes = new List<string>();
+        foreach (var (source, chain) in reads)
+        {
+            var last = chain.Count - 1;
+            if (own.Any(o => string.Equals(o.Source, source, StringComparison.OrdinalIgnoreCase) && o.MatchesAt(chain, last))) continue;
+            foreach (var other in On(source).Where(r => r.Holder != holder && r.MatchesAt(chain, last)))
+            {
+                var note = UnappliedWarning(other.ModelName, other.Table, source);
+                if (!notes.Contains(note)) notes.Add(note);
+            }
+        }
+        return notes.Count == 0 ? null : new JsonArray([.. notes.Select(n => (JsonNode)n)]);
+    }
+
+    /// <summary>The words of the warning: the model that holds the rules, the table, the data source.</summary>
+    public static string UnappliedWarning(string model, string table, string source) => $"Model '{model}' puts access rules on '{table}' of data source '{source}'; this model reads the same table and does not apply them.";
+
+    /// <summary>The holder text of a semantic model, as an entry of the index names it.</summary>
+    internal static string HolderOf(SemanticModel model) => $"the semantic model '{SemanticModels.SourcePrefix + model.Name}'";
+
+    /// <summary>The holder text of an entity model.</summary>
+    internal static string HolderOf(ServedEntityModel served) => $"the entity model '{served.Model.Name}'";
+
     private static IEnumerable<Ruled> OfSemantic(SemanticModel model)
     {
         if (model.Catalog.Access is not { IsEmpty: false } section || model.Catalog.Source["tables"] is not JsonArray tables) yield break;
-        var holder = $"the semantic model '{SemanticModels.SourcePrefix + model.Name}'";
+        var holder = HolderOf(model);
         var ask = $"read it from data source '{SemanticModels.SourcePrefix + model.Name}' (a semantic request or semantic SQL), which applies the rules";
         foreach (var dataset in section.Row.Select(r => r.Dataset).Concat(section.Columns.Select(c => c.Dataset)).Distinct(StringComparer.Ordinal))
         {
@@ -110,19 +164,19 @@ public sealed class RuledTables(Func<SemanticModels> models, Func<IReadOnlyColle
             var chain = TableNameScan.Scan(physical).Chains.FirstOrDefault();
             if (chain is null || chain.Count == 0) continue;
             var serving = model.ServingSource(table["x_source"]?.GetValue<string>() ?? "");
-            yield return new Ruled(serving, string.Join('.', chain), chain[^1], null, holder, RulesOf(section, dataset), ask);
+            yield return new Ruled(serving, string.Join('.', chain), chain[^1], null, holder, RulesOf(section, dataset), ask, model.Name);
         }
     }
 
     private static IEnumerable<Ruled> OfEntity(ServedEntityModel served)
     {
         if (served.Model.Access is not { IsEmpty: false } section) yield break;
-        var holder = $"the entity model '{served.Model.Name}'";
+        var holder = HolderOf(served);
         var ask = $"read the entity through the Store (the model '{served.Model.Name}'), which applies the rules";
         foreach (var dataset in section.Row.Select(r => r.Dataset).Concat(section.Columns.Select(c => c.Dataset)).Distinct(StringComparer.Ordinal))
         {
             if (served.Model.Entity(dataset) is null) continue;
-            yield return new Ruled(served.DataSource, $"{served.Model.Name}.{dataset}", dataset, served.Model.Name, holder, RulesOf(section, dataset), ask);
+            yield return new Ruled(served.DataSource, $"{served.Model.Name}.{dataset}", dataset, served.Model.Name, holder, RulesOf(section, dataset), ask, served.Model.Name);
         }
     }
 

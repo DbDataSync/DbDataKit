@@ -73,7 +73,7 @@ public sealed partial class GatewaySemanticModels
         Record(caller, "semantic-model publish", name, created ? "created" : result.Changed ? "changed" : "unchanged");
         response["created"] = created;
         response["unchanged"] = !result.Changed;
-        if (WarningsOf(context.Manifest) is { } warnings) response["warnings"] = warnings;
+        if (WarningsOf(context.Manifest, ruled?.Invoke()) is { } warnings) response["warnings"] = warnings;
         if (!_asked.TryGetValue(context, out var adoption) || (adoption.Adopted.Count == 0 && adoption.BoundUsed.Count == 0)) return;
         foreach (var dataSource in adoption.BoundUsed)
         {
@@ -89,13 +89,13 @@ public sealed partial class GatewaySemanticModels
         if (adoption.BoundUsed.Count > 0) response["slots_used"] = new JsonArray([.. adoption.BoundUsed.Select(a => (JsonNode?)a)]);
     }
 
-    private static JsonArray? WarningsOf(string manifest)
+    private static JsonArray? WarningsOf(string manifest, RuledTables? ruled)
     {
         try
         {
             if (PublishedSemanticModels.ContentOf(manifest) is not { Catalog.Length: > 0 } content) return null;
             var catalog = CatalogLoader.LoadText(content.Catalog);
-            return AccessPublishNotes.Warnings(catalog.Access, readOnDataSource: true, catalog);
+            return AccessPublishNotes.ForSemantic(catalog, content.Sources ?? [], ruled);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
     }

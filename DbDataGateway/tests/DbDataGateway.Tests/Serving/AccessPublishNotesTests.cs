@@ -69,4 +69,67 @@ public sealed class AccessPublishNotesTests
         Assert.Null(AccessPublishNotes.Warnings(catalog.Access, readOnDataSource: true, catalog));
         Assert.Null(AccessPublishNotes.Warnings(CatalogLoader.LoadText(Catalog, "money.catalog.yaml").Access, readOnDataSource: true));   // the caller that has no catalog to read says nothing about types
     }
+
+    private const string StoreModel = """
+        schemaVersion: 2
+        name: mdm
+        storage: {connection: wh}
+        access:
+          row:
+            - dataset: territory
+              groups:
+                - id: g
+                  rules:
+                    - { id: r1, effect: include, table: rules.region_access, subject: who, columns: { region: region_code } }
+        entities:
+          territory:
+            key: [code]
+            attributes:
+              code: {type: VARCHAR(10)}
+              region: {type: VARCHAR(20)}
+        """;
+
+    private const string ReadsTerritory = """
+        version: "0.3"
+        name: reader
+        timezone: UTC
+        sources:
+          warehouse: {kind: sqlserver, dialects: [TSQL, DUCKDB]}
+        tables:
+          - name: territory
+            x_source: warehouse
+            source: mdm.territory
+            columns:
+              - {name: code, datatype: String, expression: {dialects: [{dialect: ANSI_SQL, expression: code}]}}
+        dimensions:
+          places:
+            attributes:
+              code:
+                type: string
+                bindings:
+                  warehouse: {table: territory, column: code}
+        measures:
+          territory.rows:
+            type: integer
+            source: warehouse
+            agg: count
+            of: {table: territory, column: code}
+            semantics: {grain: [places.code], rollup: {default: none}, spread: blank, status: governed}
+        """;
+
+    [Fact]
+    public void A_semantic_model_reading_a_Store_entity_table_with_rules_is_warned_once_and_not_when_the_model_is_gone_or_the_source_differs()
+    {
+        var store = new ServedEntityModel(DbDataKit.DataModel.DataModelLoader.Load(StoreModel, "mdm.yaml").Model!, "wh", 1, null);
+        var served = new List<ServedEntityModel> { store };
+        var ruled = new RuledTables(() => new DbDataKit.Serving.Semantic.SemanticModels(), () => served);
+        var catalog = CatalogLoader.LoadText(ReadsTerritory, "reader.catalog.yaml");
+
+        var warnings = AccessPublishNotes.ForSemantic(catalog, new Dictionary<string, string> { ["warehouse"] = "wh" }, ruled)!.Select(n => (string?)n).ToList();
+        Assert.Equal(["Model 'mdm' puts access rules on 'mdm.territory' of data source 'wh'; this model reads the same table and does not apply them."], warnings);
+
+        Assert.Null(AccessPublishNotes.ForSemantic(catalog, new Dictionary<string, string> { ["warehouse"] = "other" }, ruled));   // another data source is another table
+        served.Clear();
+        Assert.Null(AccessPublishNotes.ForSemantic(catalog, new Dictionary<string, string> { ["warehouse"] = "wh" }, ruled));       // the model with the rules is gone
+    }
 }

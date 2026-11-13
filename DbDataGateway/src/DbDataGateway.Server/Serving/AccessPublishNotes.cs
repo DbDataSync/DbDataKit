@@ -16,6 +16,32 @@ internal static class AccessPublishNotes
     /// <summary>The words of the warning for a mask that became a hide: the column, the dataset, the reason (plan 22a GP13, owner decision 2026-11-12).</summary>
     public static string MaskHidesWarning(string dataset, string column, string reason) => $"The mask on '{column}' of '{dataset}' hides the column instead: {reason}.";
 
+    /// <summary>All the warnings of a semantic model's publish: the access section's and, with the index of ruled tables, the tables it reads that another served model puts rules on (owner decision 2026-11-12, plan 22a GP12).</summary>
+    public static JsonArray? ForSemantic(Catalog catalog, IReadOnlyDictionary<string, string> sources, RuledTables? ruled)
+    {
+        var notes = Warnings(catalog.Access, readOnDataSource: true, catalog);
+        if (ruled is null) return notes;
+        var model = new DbDataKit.Serving.Semantic.SemanticModel(catalog, sources);
+        return Append(notes, ruled.UnappliedWarnings(RuledTables.HolderOf(model), RuledTables.RuledBy(model), RuledTables.ReadsOf(model)));
+    }
+
+    /// <summary>All the warnings of an entity model's publish, as <see cref="ForSemantic"/> says for a semantic one.</summary>
+    public static JsonArray? ForEntity(DbDataKit.DataModel.DataModel model, string dataSource, RuledTables? ruled)
+    {
+        var notes = Warnings(model.Access, readOnDataSource: false);
+        if (ruled is null) return notes;
+        var served = new ServedEntityModel(model, dataSource, 0, null);
+        return Append(notes, ruled.UnappliedWarnings(RuledTables.HolderOf(served), RuledTables.RuledBy(served), RuledTables.ReadsOf(served)));
+    }
+
+    private static JsonArray? Append(JsonArray? notes, JsonArray? more)
+    {
+        if (more is null) return notes;
+        notes ??= [];
+        foreach (var note in more.ToList()) { more.Remove(note); notes.Add(note); }
+        return notes;
+    }
+
     /// <summary>The warnings of a publish whose definition has this section, or null when there is nothing to say.</summary>
     /// <param name="readOnDataSource">Whether the publish read the table on the data source (a semantic model's does; an entity model's publish reads no table).</param>
     /// <param name="catalog">The semantic model the section belongs to, when the publish reads its catalog's types: every mask rule that cannot be a mask there (a column that is not text, a column of an Analysis Services source) is hidden instead, and the warning says which.</param>
