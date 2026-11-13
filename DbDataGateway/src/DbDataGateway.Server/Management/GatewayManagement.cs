@@ -53,7 +53,7 @@ public sealed partial class GatewayManagement(IConfigurationRoot configuration, 
             return await definitions.HandleAsync(method, route, body, caller, cancellationToken);
         if (lineage is not null && GatewayLineage.Handles(route)) return lineage.Handle(method, caller);
         if (cache is not null && GatewayCacheManagement.Handles(route)) return cache.Handle(method, route, body, caller);
-        if (accessKeys is not null && GatewayAccessManagement.Handles(route)) return accessKeys.Handle(method, route, caller);
+        if (accessKeys is not null && GatewayAccessManagement.Handles(route)) return accessKeys.Handle(method, route, caller, query);
         if (semanticRuns is not null && GatewaySemanticRuns.Handles(route))
             return await semanticRuns.HandleAsync(method, route, path.Contains('?') ? path[(path.IndexOf('?') + 1)..] : null, body, caller, cancellationToken);
         if (userQueries is not null && GatewayUserQueries.Handles(route))

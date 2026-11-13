@@ -35,7 +35,8 @@ public abstract record RowPredicate
         return dataset.Rules.Match == AccessMatch.All ? Conjunction(groups) : Disjunction(groups);
     }
 
-    private static RowPredicate Of(GroupResolution group)
+    /// <summary>The predicate of one group (its includes combined by its <c>match</c>, its excludes subtracted): the explanation asks it for a group's verdict.</summary>
+    public static RowPredicate Of(GroupResolution group)
     {
         RowPredicate Holds(RuleResolution rule) => rule.Names.Count == 0 ? False : new Rule(rule);
         var includes = group.Rules.Where(r => r.Rule.Effect == AccessEffect.Include).Select(Holds).ToList();
@@ -73,6 +74,18 @@ public abstract record RowPredicate
 
         return kept.Count == 0 ? False : kept.Count == 1 ? kept[0] : new Or(kept);
     }
+
+    /// <summary>Whether a row passes, given which rules hold for it (<paramref name="holds"/>): the same tree a host renders as SQL, read in memory by <c>access explain</c>, so the explanation can never disagree with the enforcement about how rules combine.</summary>
+    public bool Evaluate(Func<RuleResolution, bool> holds) => this switch
+    {
+        Always => true,
+        Never => false,
+        Rule rule => holds(rule.Resolution),
+        And and => and.Items.All(i => i.Evaluate(holds)),
+        Or or => or.Items.Any(i => i.Evaluate(holds)),
+        Not not => !not.Item.Evaluate(holds),
+        _ => false,
+    };
 
     /// <summary>The rules the predicate still reads (the ones that can hold for the caller), for the cache and the explanation.</summary>
     public IEnumerable<RuleResolution> Rules() => this switch
