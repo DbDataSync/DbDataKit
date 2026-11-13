@@ -71,8 +71,13 @@ public sealed class GatewayStoreModule(IOptionsMonitor<GatewayOptions> options, 
     }
 
     /// <summary>The group's store for this instance: what the module's listener and the apps host's data calls answer with.</summary>
-    public static GroupStoreApi ApiOf(IOptionsMonitor<GatewayOptions> options, StateDatabase state, SecretsRuntime secrets, PublishedEntityModels models) =>
-        new(() => options.CurrentValue, secrets, models, new GroupChangeRequests(state), StoreEntityAccess.For(state));
+    public static GroupStoreApi ApiOf(IOptionsMonitor<GatewayOptions> options, StateDatabase state, SecretsRuntime secrets, PublishedEntityModels models)
+    {
+        // the row and column rules of the model's access section are applied by this one instance of a state, whoever reads (the store module, the apps host, the views module, an agent's tool); the key of a hash mask is the group's, the same as the semantic path's
+        var access = StoreEntityAccess.For(state);
+        access.MaskKey ??= new State.GroupMaskKey(state, new State.GroupSessionKey(state, options)).Current;
+        return new(() => options.CurrentValue, secrets, models, new GroupChangeRequests(state), access);
+    }
 
     /// <summary>The group's server id, which the home's roles name (<c>server:&lt;id&gt;</c>): the instance id every instance of the group shares (O04a).</summary>
     public static string ServerIdOf(GatewayOptions options, StateDatabase state)

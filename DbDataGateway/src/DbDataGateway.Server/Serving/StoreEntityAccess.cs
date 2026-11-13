@@ -21,6 +21,13 @@ public sealed class StoreEntityAccess(IRulesTableLedger ledger, Func<string, IRe
     public static StoreEntityAccess For(StateDatabase state, TimeProvider? time = null) =>
         PerState.GetValue(state, s => new StoreEntityAccess(RulesTableLedger.For(s, time), userId => [.. new HomeDirectory(s).GroupsOf(userId).Select(g => g.Name)], new Alerts(new StateAuditLog(s), time), time));
 
+    /// <summary>The key of the keyed hash for <c>mask: hash</c> (the group's, <see cref="GroupMaskKey"/>); the host sets it, and a host that does not has hash masks hide the attribute.</summary>
+    public Func<byte[]>? MaskKey { get; set; }
+
+    /// <summary>The column rules of the model's <c>access</c> section for this caller, by their own name, id and groups (the home's groups when the call came without them): none when the model has none or no rule names the caller.</summary>
+    public ColumnTreatments TreatmentsFor(ServedEntityModel served, StoreCaller caller) =>
+        served.Model.Access is { Columns.Count: > 0 } section ? ColumnTreatments.For(section, caller.UserId, caller.Name ?? caller.UserId, caller.Groups ?? groupsOf(caller.UserId)) : ColumnTreatments.None;
+
     /// <summary>The resolver (it keeps the names of each rules table per generation of the table).</summary>
     public AccessResolver Resolver { get; } = new(ledger, alerts, time);
 

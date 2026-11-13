@@ -54,6 +54,8 @@ internal sealed class ModuleAccessRig : IAsyncDisposable
 
     public int ViewsPort { get; private set; }
 
+    public int StorePort { get; private set; }
+
     public string FlightAddress { get; private set; } = "";
 
     public Dictionary<string, RigPerson> People { get; } = new(StringComparer.Ordinal);
@@ -253,10 +255,12 @@ internal sealed class ModuleAccessRig : IAsyncDisposable
             FeedsPort = FreePort();
             McpPort = FreePort();
             ViewsPort = FreePort();
+            StorePort = FreePort();
             var settings = new Dictionary<string, string?>
             {
                 ["Gateway:DataDirectory"] = _dir, ["Gateway:Management:Enabled"] = "false", ["Gateway:Listen:Address"] = "127.0.0.1", ["Gateway:Listen:Port"] = "0", ["Gateway:DefinitionPollSeconds"] = "1",
-                ["Gateway:Modules:0"] = "flightsql", ["Gateway:Modules:1"] = "feeds", ["Gateway:Modules:2"] = "mcp", ["Gateway:Modules:3"] = "views",
+                ["Gateway:Modules:0"] = "flightsql", ["Gateway:Modules:1"] = "feeds", ["Gateway:Modules:2"] = "mcp", ["Gateway:Modules:3"] = "views", ["Gateway:Modules:4"] = "store",
+                ["Gateway:Store:Address"] = "127.0.0.1", ["Gateway:Store:Port"] = StorePort.ToString(),
                 ["Gateway:Rest:Address"] = "127.0.0.1", ["Gateway:Rest:Port"] = FeedsPort.ToString(),
                 ["Gateway:Mcp:Address"] = "127.0.0.1", ["Gateway:Mcp:Port"] = McpPort.ToString(),
                 ["Gateway:Views:Address"] = "127.0.0.1", ["Gateway:Views:Port"] = ViewsPort.ToString(),
@@ -291,6 +295,65 @@ internal sealed class ModuleAccessRig : IAsyncDisposable
         Publish(CatalogText(cache, ColumnRules));
         if (Get<GatewayViewsPublishing>().Publish("dashboard", "orders", Dashboard, "test").Status != 200) throw new InvalidOperationException("The dashboard was not published.");
         Get<DefinitionFollower>().Poll();
+    }
+
+    /// <summary>The master data model of the Store half: territory (a key, a region the column rules treat) with row rules from two rules tables in the schema <c>rules</c>.</summary>
+    public static string EntityModelText(params string[] columnRules)
+    {
+        var text = new StringBuilder();
+        text.Append("schemaVersion: 2\nname: sales\nstorage: {connection: warehouse}\naccess:\n  max_age: 1h\n  row:\n    - dataset: territory\n      groups:\n        - id: by_region\n          rules:\n");
+        text.Append("            - { id: region, effect: include, table: rules.region_access, subject: who, columns: { region: region_code } }\n");
+        text.Append("            - { id: not_closed, effect: exclude, table: rules.closed_codes, subject: who, columns: { code: code } }\n");
+        if (columnRules.Length > 0) text.Append("  columns:\n").AppendJoin("\n", columnRules.Select(r => "    - " + r)).Append('\n');
+        text.Append("entities:\n  territory:\n    key: [code]\n    attributes:\n      code: {type: VARCHAR(10), required: true}\n      region: {type: VARCHAR(20)}\n");
+        return text.ToString();
+    }
+
+    /// <summary>The rows of the entity and the rules tables the Store half reads, made on the rig's database (Store models run on SQL Server and PostgreSQL), and the model published with these column rules.</summary>
+    public Task PublishEntitiesOnlyAsync(params string[] columnRules)
+    {
+        Get<PublishedEntityModels>().Publish("sales", EntityModelText(columnRules), Source, null, "test", format: 2);
+        return Task.CompletedTask;
+    }
+
+    public async Task PublishEntitiesAsync(params string[] columnRules)
+    {
+        var models = Get<PublishedEntityModels>();
+        models.Publish("sales", EntityModelText(columnRules), Source, null, "test", format: 2);
+        var served = models.Find("sales") ?? throw new InvalidOperationException("The entity model was not served.");
+        DbConnection data = Engine == "mssql" ? new SqlConnection(_connection) : new NpgsqlConnection(_connection);
+        await using (data)
+        {
+            await data.OpenAsync();
+            var engine = Engine == "mssql" ? "sqlserver" : "postgres";
+            await DbDataKit.DataModel.Storage.ModelStorage.CreateAsync(data, DbDataKit.DataModel.Storage.ModelStorage.Plan(served.Model, engine));
+            foreach (var statement in new[]
+            {
+                "CREATE SCHEMA rules",
+                "CREATE TABLE rules.region_access (who VARCHAR(40), region_code VARCHAR(20))",
+                "CREATE TABLE rules.closed_codes (who VARCHAR(40), code VARCHAR(10))",
+                "INSERT INTO rules.region_access VALUES ('east', 'East'), ('emea', 'East'), ('emea', 'West'), ('nullers', NULL)",
+                "INSERT INTO rules.closed_codes VALUES ('east', 'E3')",
+            })
+            {
+                using var command = data.CreateCommand();
+                command.CommandText = statement;
+                command.ExecuteNonQuery();
+            }
+
+            var writer = new DbDataKit.Store.ModelWriter(served.Model, data, engine);
+            var ada = new DbDataKit.Store.WriteActor("u-ada", "Ada");
+            foreach (var (code, region) in new[] { ("E1", "East"), ("E2", "East"), ("E3", "East"), ("W1", "West"), ("N1", "North"), ("X1", null) })
+                await writer.InsertAsync("territory", new Dictionary<string, object?> { ["code"] = code, ["region"] = region }, ada);
+        }
+    }
+
+    /// <summary>The producer says a rules table of the entity model was refreshed.</summary>
+    public int RefreshEntityRules(string table)
+    {
+        var notice = new DataChangedNotice(GatewayLineageGraph.DatasetIdentity(Get<IOptionsMonitor<GatewayOptions>>().CurrentValue.DataSources, (name, text) => Get<DbDataGateway.Server.Secrets.SecretsRuntime>().ResolveConnectionString($"Gateway:DataSources:{name}:ConnectionString", text, Engine == "mssql" ? "sqlserver" : "postgres"), Source, table)!, "build", DateTimeOffset.UtcNow);
+        Get<GatewayAccess>().Changed(notice);
+        return Get<GatewayCache>().Invalidator.Apply(notice).Removed;
     }
 
     /// <summary>Publishes a version of the model and serves it now, as a publisher's call does.</summary>
