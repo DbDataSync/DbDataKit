@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner, Field } from '@dbdatakit/shell'
 import { consoleApi } from '../api'
-import { addressOf, canRemove, describeUse, filterInventory, loadInventory, productLabel, removeConnection, type InventoryRow } from '../connectionInventory'
+import { bindingsApi } from '../bindings'
+import { addressOf, canRemove, describeUse, filterInventory, loadInventory, productLabel, removeConnection, runnerCopyState, type InventoryRow } from '../connectionInventory'
 
-const columns = '1.1fr 1.3fr 1.4fr 1.6fr 3fr 0.7fr'
+const columns = '1.1fr 1.3fr 1.4fr 1.6fr 1.1fr 3fr 0.7fr'
 
 /**
  * Where each connection is used (plan 28c E23, ED17): one table over the paired Build and Sync servers and the runners, each connection with its address, the reference of its secret (never a value) and the processes that use it, with the login each
@@ -20,7 +21,11 @@ export function ConnectionInventory() {
     enabled: instances.isSuccess,
     refetchInterval: 30_000,
   })
+  // the console's own connections with their versions, to say whether a runner's copy is the console's file (the Bindings page's comparison)
+  const consoleView = useQuery({ queryKey: ['bindings'], queryFn: bindingsApi.get })
+  const consoleConnections = consoleView.data?.connections ?? []
   const [connection, setConnection] = useState('')
+  const [server, setServer] = useState('')
   const [user, setUser] = useState('')
   const [refused, setRefused] = useState<string | null>(null)
   const remove = useMutation({
@@ -28,7 +33,7 @@ export function ConnectionInventory() {
     onSuccess: () => { setRefused(null); client.invalidateQueries({ queryKey: ['connection-inventory'] }) },
     onError: (error) => setRefused(error instanceof Error ? error.message : 'The server refused.'),
   })
-  const rows = filterInventory(view.data?.rows ?? [], { connection, user })
+  const rows = filterInventory(view.data?.rows ?? [], { connection, user, server })
 
   return (
     <div style={{ marginTop: 24 }} data-testid="connection-inventory">
@@ -42,7 +47,10 @@ export function ConnectionInventory() {
         <Field label="Where is this connection used?">
           <input className="input mono" placeholder="connection name" value={connection} onChange={(e) => setConnection(e.target.value)} data-testid="inventory-filter-connection" />
         </Field>
-        <Field label="What does this task connect to?">
+        <Field label="Exists on">
+          <input className="input mono" placeholder="server or runner" value={server} onChange={(e) => setServer(e.target.value)} data-testid="inventory-filter-server" />
+        </Field>
+        <Field label="Used by: what does this task connect to?">
           <input className="input mono" placeholder="task, plan or replication" value={user} onChange={(e) => setUser(e.target.value)} data-testid="inventory-filter-user" />
         </Field>
       </div>
@@ -50,13 +58,16 @@ export function ConnectionInventory() {
       {view.isSuccess && rows.length === 0 && <div className="empty" data-testid="inventory-none">No connection matches on the servers that answered.</div>}
       {rows.length > 0 && (
         <div className="card flush" data-testid="inventory-rows">
-          <div className="grid-head" style={{ gridTemplateColumns: columns, gap: 14 }}><span>Server</span><span>Connection</span><span>Address</span><span>Secret reference</span><span>Used by</span><span /></div>
+          <div className="grid-head" style={{ gridTemplateColumns: columns, gap: 14 }}><span>Server</span><span>Connection</span><span>Address</span><span>Secret reference</span><span>Runner's copy</span><span>Used by</span><span /></div>
           {rows.map((row) => (
             <div key={row.key} className="grid-row" style={{ gridTemplateColumns: columns, gap: 14 }} data-testid="inventory-row" data-server={row.serverName} data-name={row.name} data-product={row.product}>
               <span>{row.serverName} <span className="page-note">({productLabel[row.product]})</span></span>
               <span className="mono">{row.name}</span>
               <span className="mono" data-testid="inventory-address">{addressOf(row)}</span>
               <span className="mono" data-testid="inventory-secret">{row.secretRef ?? 'none'}</span>
+              <span data-testid="inventory-copy" data-source={row.source ?? ''} data-state={runnerCopyState(row, consoleConnections) ?? ''} title={row.version ?? undefined}>
+                {row.source === null ? '' : `${row.source}${runnerCopyState(row, consoleConnections) ? `: ${runnerCopyState(row, consoleConnections)}` : ''}`}
+              </span>
               <span data-testid="inventory-users">
                 {row.usedBy.length === 0 ? 'Not used' : row.usedBy.map((u) => <div key={`${u.process}${u.name}${u.instance}${u.channel}`} data-testid="inventory-use" data-process={u.process} data-use={u.name}>{describeUse(u)}</div>)}
               </span>

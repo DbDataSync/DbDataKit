@@ -37,6 +37,18 @@ public sealed class ConnectionInventoryTests
     }
 
     [Fact]
+    public void The_runners_source_and_version_are_written_only_when_there_are_some_and_read_back()
+    {
+        var with = ConnectionInventoryJson.Write("dbdatarunner", [new InventoryConnection("erp", "database", "sqlserver", "sql01:1433", "Erp", "env:X", [], Source: "copy", Version: "sha256:aa")]);
+        Assert.Equal("copy", (string?)with["connections"]![0]!["source"]);
+        var back = Assert.Single(ConnectionInventoryJson.Read(JsonNode.Parse(with.ToJsonString())));
+        Assert.Equal(("copy", "sha256:aa"), (back.Source, back.Version));
+        var without = ConnectionInventoryJson.Write("dbdatasync", [new InventoryConnection("erp", "sync", null, null, null, null, [])]);
+        Assert.False(without["connections"]![0]!.AsObject().ContainsKey("source"));
+        Assert.False(without["connections"]![0]!.AsObject().ContainsKey("version"));
+    }
+
+    [Fact]
     public void Removal_is_refused_naming_the_users_but_not_for_the_server_alone()
     {
         Assert.Null(ConnectionUsers.RemovalRefusal("erp", [Server]));

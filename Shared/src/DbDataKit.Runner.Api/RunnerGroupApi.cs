@@ -58,7 +58,7 @@ public static class RunnerGroupApi
         app.MapGet($"{prefix.TrimEnd('/')}/connections", (HttpContext context) =>
             !caller(context).Authorize(ServerRole.Viewer).Allowed
                 ? Results.Json(new { error = "This needs the viewer role." }, statusCode: StatusCodes.Status403Forbidden)
-                : Results.Json(RunnerConnections.Inventory(state, engine().Group, "dbdatarunner")));
+                : Results.Json(RunnerConnections.Inventory(state, engine().Group, "dbdatarunner", engine().ConnectionsDirectory)));
 
     private static IResult Error(int status, string message) => Results.Json(new { error = message }, statusCode: status);
 
