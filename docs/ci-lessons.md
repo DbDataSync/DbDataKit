@@ -17,6 +17,7 @@ The CI runners are small (two cores, Windows and Linux), run many jobs at once, 
 
 ### Windows
 | `ManagementTests.An_install_whose_archive_does_not_match_the_checksums_fails_in_words...` fails on Windows only: `Assert.Contains() Failure: Filter not matched` for the `export.install` audit line after the test saw the state `failed` | a background install set its final state before it appended its audit entry, so a caller that polls the state and then reads the audit can find none yet (Windows files are slower) | a background job writes its audit entry **before** the state a poller waits for (`GatewayExportManagement.RunAsync`); a test that reads a record after a state change waits for the record, not only for the state |
+| a Gateway test that builds a `SecretsRuntime` (or any host part with a key ring) fails in CI with `UnauthorizedAccessException: Access to the path '/var/lib/dbdatakit' is denied` (`KeyRing.EnsureDirectory`) while it passes on a machine where it runs as root | `new GatewayOptions()` has no `DataDirectory`, so the key ring opens its default folder under `/var/lib/dbdatakit`, which the CI user cannot create | a test sets `DataDirectory` to its own temp folder before it builds anything that opens a data directory (`EntityRowRulesEngineTests.Make`) |
 
 | Signature | Cause | Fix |
 | --- | --- | --- |

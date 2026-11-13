@@ -135,7 +135,7 @@ public sealed class EntityRowRulesEngineTests : IDisposable
     {
         _scratch = ScratchStateDatabase.For(engine);
         var connection = _scratch.Connection.Replace("env:" + _scratch.PasswordVariable, _scratch.Environment(_scratch.PasswordVariable));
-        var options = new GatewayOptions();
+        var options = new GatewayOptions { DataDirectory = _dir };   // the key ring of the secrets runtime opens its folder under it: never the default /var/lib/dbdatakit
         options.DataSources["mdm_sql"] = new DataSourceOptions { Provider = engine == "mssql" ? "sqlserver" : "postgres", ConnectionString = engine == "mssql" ? connection : connection + ";SSL Mode=Disable", Everyone = true };
         var clock = new Clock(DateTimeOffset.Parse("2026-11-12T10:00:00Z"));
         var monitor = new Monitor(options);
