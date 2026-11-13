@@ -1,109 +1,108 @@
-# Trying the suite release on a Windows test server
+# Testing the suite on a Windows test server
 
-A step-by-step for installing the console (`dbdatakit`) and DbDataSync from the first suite release, on a Windows machine that is not
-your live Sync server. It is written from the release's files and the code on `main`; **only the global Scoop install and its machine variables have been confirmed on Windows** (by the owner, 2026-11-06).
-Each step marked *untested* is the first time anyone does it, so write down what happens.
+How to install every DbDataKit service on one Windows machine with one command, then check that each one does its main job. Use a test
+machine, not your live Sync server. Each check in step 4 is pass or fail. If one fails, write down what happened: it becomes a new row of open
+work, and the rest of the checks still count.
 
-There are two builds to choose from (Gateway and Build have the same versions; they are not needed for this test):
-
-- **The snapshot `2026.11.6.2114-snapshot.gcf65995`**, cut from `main` at `cf65995`: the first suite release's code plus the Sync fixes
-  merged since (PR #400), and the manifests that set the data folders on a global install. This guide uses it.
-- **The stable release `2026.11.6.837`**, the first suite release. Its manifests do not set the data-folder variables, so with it
-  pass `--repo` to every `dbdatakit` command (see step 2) and read the folders in step 5 as they are.
-
-Every release file is on <https://github.com/DbDataSync/DbDataKit/releases>. The newest snapshot of each product is always at
-`.../releases/download/<product>/dist-snapshot/<product>.json` (and `.msi`), the newest stable one at `.../<product>/dist/`.
+**What CI already proves.** The suite release runs `dist/tests/suite-scoop-e2e.ps1` on a Windows runner (`suite-install-windows` in
+`suite-release.yml`, green since 2026-11-12). It installs `dbdatakit-full` with Scoop, starts all seven services, waits until each answers its health
+check and the console lists it as paired and ready, then repeats the install, updates and uninstalls. Steps 1 to 3 below are that, by hand.
+Step 4 is what CI does not check yet: that each service does its main job.
 
 ## 0. What you need
 
-- Windows with an elevated PowerShell (a global Scoop install and a service both need it).
-- The **.NET 10 runtime** (ASP.NET Core for the console). The zips do not carry it. Sync also needs the .NET 10 **SDK** if you install
-  drivers from the console.
-- [Scoop](https://scoop.sh), or use the MSIs in step 1.
-- A name for the machine that other machines can use (`test-sync.example.com` below). **Use that name, not `localhost`, in every
-  `--url` and `instance add`:** the self-signed certificate Sync makes is issued for the host in its URL.
+- Windows with an elevated PowerShell (a global Scoop install registers services).
+- The **.NET 10 runtime with ASP.NET Core** for every account, in `C:\Program Files\dotnet`. The Microsoft installer for ".NET 10 Hosting Bundle" or
+  "ASP.NET Core Runtime 10" does this. The services do not read a per-user install.
+- [Scoop](https://scoop.sh).
+- A SQL Server the machine can reach (Express or Developer is enough), with a login that can create a database. Step 4 uses it.
+- A browser that can register a passkey (Windows Hello, a security key or a phone).
 
 ## 1. Install
 
-Pick one route per machine and do not mix them (they share a folder).
-
-**Scoop, global** (confirmed on a Windows test server, 2026-11-06):
-
 ```powershell
-scoop install -g https://github.com/DbDataSync/DbDataKit/releases/download/dbdatakit/dist-snapshot/dbdatakit.json
-scoop install -g https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist-snapshot/dbdatasync.json
-dbdatasync version
+scoop install -g https://github.com/DbDataSync/DbDataKit/releases/download/dbdatakit-full/dist-beta/dbdatakit-full.json
 ```
 
-Open a new terminal afterwards so the PATH change is seen; both programs should then be found.
+Use `dist` instead of `dist-beta` for the newest stable release, and `dist-snapshot` for the newest snapshot.
 
-Each manifest is pinned to the build it was published with (a later snapshot replaces the file at that URL) and checks the zip's SHA256;
-I downloaded both zips and the hashes match. A global install puts the programs under
-`C:\ProgramData\scoop\apps\` and shims on the machine PATH. Both manifests have no `persist` entries; settings and data live in
-`%ProgramData%` (step 2 and 3), not in the Scoop folder, so `scoop uninstall` leaves them.
+When it returns:
 
-> **Running either one as a Windows service from a Scoop install is not proven.** Scoop keeps each version in its own folder and a
-> service registered against that folder points at a path that `scoop update` replaces. For this test run both in a console window
-> (steps 2 and 3). If you want services, use the MSI instead.
+- every service is registered, running and paired with the console: `DbDataKit` (the console), `dbdatagateway`, `DbDataRunner`, `DbDataSync`,
+  `DbDataBuild`, `DbDataStore` and `DbDataWorkspace`;
+- the console's address and a **setup link** for the first administrator are printed. The link is also in
+  `C:\ProgramData\DbDataKit\server\FIRST-RUN.txt`.
 
-A global install also sets machine-wide environment variables (confirmed on a Windows test server, 2026-11-06; the manifest does it with a Scoop `post_install` step that
-runs only for `-g`): `DBDATAKIT_DATA` to `C:\ProgramData\DbDataKit`, the one root every DbDataKit service keeps a folder under (`server`, `sync`, and so on). In a **new** elevated terminal check it:
+The services run from a copy of the programs in `C:\ProgramData\DbDataKit\bin\<version>`, and keep their data in a folder each under
+`C:\ProgramData\DbDataKit`. Open a **new** terminal afterwards so the programs and `DBDATAKIT_DATA` are on the path.
 
-```powershell
-[Environment]::GetEnvironmentVariable('DBDATAKIT_DATA', 'Machine')
-```
+**Pass:** the command ends without an error and prints the setup link.
 
-If it is empty, the step did not run: say so, set it by hand, and keep passing `--repo` as step 2 shows. `scoop uninstall -g`
-does **not** remove it: every product's manifest sets the same variable, so one product's uninstall must not take it from another. Remove it by hand when the last product is gone.
+## 2. Sign in
 
-**MSI** (the documented route for a service): `dbdatakit.msi` and `dbdatasync.msi` from the `dbdatakit/dist-snapshot` and
-`dbdatasync/dist-snapshot` releases (the stable ones are under `dist`), then `msiexec /i dbdatakit.msi /qn` and the same for Sync. Each installs to `C:\Program Files\<Name>` and registers its
-service **stopped**: `DbDataKit` and `DbDataSync`. Their data folders are `C:\ProgramData\DbDataKit\server` and `C:\ProgramData\DbDataKit\sync` (the folders of earlier builds, `DbDataKit\console` and `DbDataSync`, are not read or moved). They are unsigned, so Windows will say "Unknown publisher".
+Open the setup link (`https://localhost:8480/invite#<code>`) in a browser on the machine and register a passkey: you are the first administrator. The
+browser warns about the certificate, because the console made a self-signed one. Accept it for `localhost`. The link works once and ends after 24 hours;
+`dbdatakit setup link --url https://localhost:8480` makes a new one.
 
-## 2. The console
+To open the console from another machine, use the machine's name instead of `localhost` both in that command and in the browser.
 
-> **Every `dbdatakit` command that touches the console's data needs the same folder** (`server run`, `user`, `instance`). A command
-> without `--repo` and without `DBDATAKIT_DATA_SERVER` (or `DBDATAKIT_DATA`) uses `%LOCALAPPDATA%\dbdatakit\console` instead, which is not the folder
-> `server run` serves, so a pairing made there never shows in the web app. Either pass `--repo` every time, as below, or set the
-> variable once for the account: `[Environment]::SetEnvironmentVariable('DBDATAKIT_DATA_SERVER', 'C:\ProgramData\DbDataKit\server', 'User')`
-> (a new terminal picks it up).
+**Pass:** you are signed in and the console shows its home page.
+
+## 3. Check the servers
 
 ```powershell
-dbdatakit server run --repo C:\ProgramData\DbDataKit\server
+dbdatakit instance list
+Get-Service DbDataKit, dbdatagateway, DbDataRunner, DbDataSync, DbDataBuild, DbDataStore, DbDataWorkspace
 ```
 
-It listens on `https://localhost:8480`, makes a self-signed certificate in that folder, and with no user yet writes an invitation to
-`FIRST-RUN.txt` there and to the log. Open `https://localhost:8480/invite#<code>` **once** on the machine and register a passkey: that
-person is the first administrator. (`dbdatakit user invite --email <your address> --repo C:\ProgramData\DbDataKit\server` prints a new invitation if the first has expired; it needs `--email` for a new person or `--user <id>` for an existing one, and `user list` shows the ids.) To reach it from
-another machine add `--listen https://test-sync.example.com:8480`.
+In the console, open **Servers**. **Setup** in the rail lists the first steps and ticks each one off by what the console actually has.
 
-## 3. Sync, started for the first time
+**Pass:** all six servers are listed as answering, with the same version, and all seven services are `Running`.
 
-Use a **new, empty** folder, not a copy of your live install. Sync 2026.11 reads `server.yaml` and nothing else; see step 5 for what
-that means for an existing install.
+## 4. One task per service
+
+Make a demo database first (in SSMS or `sqlcmd`):
+
+```sql
+CREATE DATABASE demo;
+GO
+USE demo;
+CREATE TABLE dbo.customers (id int PRIMARY KEY, name nvarchar(100) NOT NULL, country nvarchar(2) NOT NULL);
+CREATE TABLE dbo.orders (id int PRIMARY KEY, customer_id int NOT NULL REFERENCES dbo.customers(id), ordered_on date NOT NULL, amount decimal(10,2) NOT NULL);
+INSERT dbo.customers VALUES (1, N'Ada', N'GB'), (2, N'Grace', N'US'), (3, N'Linus', N'FI'), (4, N'Margaret', N'US');
+INSERT dbo.orders VALUES (1, 1, '2026-01-05', 120.00), (2, 2, '2026-01-06', 75.50), (3, 2, '2026-02-01', 210.00), (4, 3, '2026-02-03', 15.25), (5, 4, '2026-03-10', 99.99);
+CREATE DATABASE demo_target;
+```
+
+Each task below names where its full description lives. The console's **Docs** has the same pages.
+
+| # | Service | Task | Pass when | Details |
+| --- | --- | --- | --- | --- |
+| 4.1 | Sync | Open Sync from **Servers**. Add a connection for `demo` and one for `demo_target`, make a replication from the first to the second, map `dbo.orders` and press **Runs → Run Now** | the run ends succeeded and `demo_target.dbo.orders` has 5 rows | `DbDataSync/docs/getting-started.md` ("Your first replication") |
+| 4.2 | Build | Open Build from **Servers**, **Projects → New project** from a template, add a connection to `demo`, then in a workspace **Import from a connection** for `dbo.orders`, **Write the compiled files**, commit, and deploy the plan | the plan applies and the table or view it names exists in `demo` | `DbDataBuild/docs/interfaces.md` ("Starting a project, a model or an import from the console") |
+| 4.3 | Gateway | Add `demo` as a `sqlserver` data source (the Gateway's **Data sources** screen, or `server.yaml` as the Gateway README describes) open to everyone for this test (`everyone: true`; a source that names no group and is not open is refused), make a service account and token (`dbdatagateway identity service-account-add --name me`, then `identity token-create --account me --name test`), and query it | `dbdatagateway query run --insecure --user <account> --password <token> --datasource demo --sql "SELECT count(*) FROM dbo.orders"` prints 5 | `DbDataGateway/README.md` ("Quick start", "Data sources") |
+| 4.4 | Store | Open the Store from **Servers**, add a connection to `demo`, save a `model/1` with one entity whose `storage` names that connection, **create the tables**, and write a row | the row is in the entity's table and the model's history lists your save | `DbDataStore/README.md` ("The model", "Writing data", "The console's screens") |
+| 4.5 | Workspace | `dbdataworkspace project create hello --kind app`, then open the Workspace from **Servers** and edit, commit and merge a file of a workspace of `hello` | the commit is on the project's main branch | `DbDataWorkspace/README.md` |
+| 4.6 | Runner | Open the Runner from **Servers** and look at its packages, channels and runs | the Runner's pages open and say what it serves (none yet) | `DbDataRunner/README.md` |
+
+What these tasks leave out, on purpose:
+
+- **The Runner runs no task here.** A task comes from a published package, and the release has no sample package to publish yet. Sync and Build
+  already run their work on their own servers.
+- **The Workspace does not build apps here.** Building an app needs bun and a package store (`apps.packageStore`), and the package installs neither.
+  Editing, committing and merging work without them.
+- **Sign-in with Windows accounts or Entra** is not part of this test.
+
+## 5. Update and remove
 
 ```powershell
-dbdatasync server run --repo C:\ProgramData\DbDataKit\sync --url https://test-sync.example.com:5080
+scoop update -g dbdatakit-full      # when a newer release is published: same data and pairings, new programs
+scoop uninstall -g dbdatakit-full   # removes the services, the pairings and the programs; keeps C:\ProgramData\DbDataKit
 ```
 
-Because the URL is `https://` and no certificate is configured, Sync makes a self-signed one in `tls\dbdatasync.pfx` under the
-folder and binds it. (Sync's default address is `https://localhost:5080` and it makes the same kind of certificate there; plain `http://` is served only with an explicit `--url http://...`, and a console cannot pair with that.) Browsing to Sync's
-own address now gives a plain-text message: Sync has no web app, its screens are the console's.
+**Pass:** after an update, step 3 passes again with the new version; after an uninstall, no DbDataKit service is left.
 
-## 4. Pair them
-
-On the Sync machine, in a second window:
-
-```powershell
-dbdatasync server pair
-dbdatakit instance add https://test-sync.example.com:5080 --code <the code it printed> --repo C:\ProgramData\DbDataKit\server
-dbdatakit instance list --repo C:\ProgramData\DbDataKit\server
-```
-
-The code is single-use and lasts a few minutes. The console pins Sync's certificate when it pairs. Then open the console, **Servers**,
-and open Sync from there (`/servers/<id>`). Check that you can sign in, see the replications screens, and save a connection.
-
-## 5. What an existing install will hit
+## 6. Moving an existing Sync install
 
 Do these against a **copy** of your old folder, never the live one. The full list, with the reason for each, is
 [`docs/plans/RELEASE-NOTES-PENDING.md`](plans/RELEASE-NOTES-PENDING.md) (the DbDataSync section); the ones that stop you first:
@@ -125,9 +124,7 @@ Do these against a **copy** of your old folder, never the live one. The full lis
 8. **MySQL, MariaDB and Oracle connections verify TLS by default.** A server with a private certificate needs the connection's
    `SSL Mode` or `Encrypt` property set.
 
-## 6. Known gaps in this release
+## 7. Known gaps
 
-- **Only the global Scoop install and its machine variables have been run on Windows** (owner, 2026-11-06). Everything else here, the console and Sync first runs, both certificate steps, pairing and the MSI route, is untested.
-- **The container images for the console and Gateway were not published** (the registry refused the push). Windows installs do not use
-  them.
-- The installers are not signed.
+- The installers are not signed: Windows shows "Unknown publisher" and SmartScreen may warn.
+- Step 4 is checked by hand; CI checks steps 1 to 3 and step 5.
