@@ -216,12 +216,8 @@ public static class GatewayHost
         // the result cache (plan 24a UC12 to UC14): in memory in this instance; off for every definition that does not say so; with a group's state the instances share their clears through per-dataset epochs (no row data in the state)
         services.AddSingleton(sp => new DbDataGateway.Server.State.ServingCacheEpochStore(sp.GetRequiredService<DbDataKit.State.StateDatabase>(), sp.GetRequiredService<TimeProvider>()));
         // the access rules (plan 22a GP10, GP11): the group's record of when each rules table last changed, and the resolver over it with the Gateway's reader of a rules table's names
-<<<<<<< HEAD
-        services.AddSingleton(sp => new DbDataGateway.Server.State.RulesTableLedger(sp.GetRequiredService<DbDataKit.State.StateDatabase>(), sp.GetRequiredService<TimeProvider>()));
         services.AddSingleton(sp => new DbDataGateway.Server.State.GroupMaskKey(sp.GetRequiredService<DbDataKit.State.StateDatabase>(), sp.GetRequiredService<DbDataGateway.Server.State.GroupSessionKey>(), sp.GetRequiredService<TimeProvider>()));
-=======
         services.AddSingleton(sp => DbDataGateway.Server.State.RulesTableLedger.For(sp.GetRequiredService<DbDataKit.State.StateDatabase>(), sp.GetRequiredService<TimeProvider>()));
->>>>>>> work/b-access5
         services.AddSingleton(sp =>
         {
             var current = sp.GetRequiredService<IOptionsMonitor<GatewayOptions>>();
