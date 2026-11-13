@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { addressOf, canRemove, describeUse, filterInventory, hasInventory, loadInventory, type InventoryRow } from './connectionInventory'
+import { addressOf, canRemove, describeUse, filterInventory, hasInventory, inventoryRows, loadInventory, runnerCopyState, type InventoryRow } from './connectionInventory'
 import type { InstanceSummary } from './api'
 
 const server = (id: string, name: string, product: string, reachable = true): InstanceSummary => ({ id, name, url: 'https://x', product, version: '1', apiVersion: 1, reachable, ready: true, problem: null, pairedAt: null })
@@ -40,7 +40,7 @@ describe('the connection inventory', () => {
   })
 
   const row = (name: string, users: { process: string; name: string }[]): InventoryRow => ({
-    key: name, server: 's1', serverName: 'Sync', product: 'dbdatasync', name, kind: 'sync', engine: 'sqlserver', host: 'sql01:1433', database: 'Erp', secretRef: 'secret:dbdatakit:sync:connection:' + name, roles: [],
+    key: name, server: 's1', serverName: 'Sync', product: 'dbdatasync', name, kind: 'sync', engine: 'sqlserver', host: 'sql01:1433', database: 'Erp', secretRef: 'secret:dbdatakit:sync:connection:' + name, roles: [], source: null, version: null,
     usedBy: users.map((u) => ({ ...u, version: null, group: null, instance: null, channel: null, role: 'run' })),
   })
   const rows = [row('erp', [{ process: 'replication', name: 'orders' }, { process: 'server', name: 'this server' }]), row('wh', [{ process: 'replication', name: 'ledger' }])]
@@ -60,5 +60,36 @@ describe('the connection inventory', () => {
     expect(addressOf({ ...rows[0], host: null })).toBe('sqlserver')
     expect(canRemove(rows[0])).toBe(true)
     expect(canRemove({ ...rows[0], product: 'dbdatabuild' })).toBe(false)
+  })
+
+  // plan 28c E27: a runner's rows say where the definition came from and its version; the table marks it against the console's file
+  const onRunner = (name: string, source: string | null, version: string | null): InventoryRow => ({ ...row(name, []), serverName: 'Runner', server: 'r1', product: 'dbdatarunner', source, version })
+  const consoleHas = (name: string, version: string) => ({ name, kind: 'database', purpose: null, models: [], canSend: true, target: null, cloud: null, version })
+
+  it('reads engine, host, database, source and version from a runner answer', () => {
+    const read = inventoryRows(runner, { connections: [{ name: 'erp', kind: 'database', engine: 'sqlserver', host: 'sql01:1433', database: 'Erp', secret_ref: 'env:X', roles: [], used_by: [], source: 'copy', version: 'sha256:aa' }, { name: 'old', kind: 'k', engine: null, host: null, database: null, secret_ref: null, roles: [], used_by: [] }] })
+    expect(read[0]).toMatchObject({ engine: 'sqlserver', host: 'sql01:1433', database: 'Erp', source: 'copy', version: 'sha256:aa' })
+    expect(read[1]).toMatchObject({ source: null, version: null })
+  })
+
+  it("marks a runner copy current, stale, missing or the runner's own against the console file", () => {
+    const mine = [consoleHas('erp', 'sha256:aa')]
+    expect(runnerCopyState(onRunner('erp', 'copy', 'sha256:aa'), mine)).toBe('current')
+    expect(runnerCopyState(onRunner('erp', 'copy', 'sha256:bb'), mine)).toBe('stale')
+    expect(runnerCopyState(onRunner('erp', 'unknown', null), mine)).toBe('missing')
+    expect(runnerCopyState(onRunner('erp', 'file', 'sha256:aa'), mine)).toBe("runner's own")
+    expect(runnerCopyState(onRunner('own', 'copy', 'sha256:aa'), mine)).toBe("runner's own")
+    expect(runnerCopyState(onRunner('env:X', 'reference', null), mine)).toBe("runner's own")
+    // nothing to compare: a name nobody holds, a product with no copies
+    expect(runnerCopyState(onRunner('ghost', 'unknown', null), mine)).toBeNull()
+    expect(runnerCopyState(row('erp', []), mine)).toBeNull()
+  })
+
+  it('filters by the server a connection exists on, and shows an unused copy', () => {
+    const all = [onRunner('spare', 'copy', 'sha256:aa'), row('erp', [{ process: 'replication', name: 'orders' }])]
+    expect(filterInventory(all, { connection: '', user: '', server: 'runner' }).map((r) => r.name)).toEqual(['spare'])
+    expect(filterInventory(all, { connection: '', user: '', server: 'sync' }).map((r) => r.name)).toEqual(['erp'])
+    expect(filterInventory(all, { connection: '', user: '' })).toHaveLength(2)
+    expect(all[0].usedBy).toEqual([])
   })
 })
