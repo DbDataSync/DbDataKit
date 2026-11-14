@@ -69,6 +69,10 @@ process is used only for:
 - **code a person wrote** (Sync's scripts, an integration's code);
 - **32-bit drivers** (the Gateway's 32-bit ODBC worker).
 
+**New code goes into a shared library first (owner, 2026-11-14).** Code that can reasonably be shared is written as a library under `Shared/src` (`DbDataKit.*`),
+and the products' command-line and service projects **compose** those libraries: a host project wires settings, routes, commands and services together and does not hold the
+logic itself. A product keeps code of its own only when nothing else could use it, and says so. Code that exists today moves when a slice touches it, not for its own sake.
+
 In those cases the process is a host with a typed protocol. The calls that exist today (the Workspace's `BuildTool` and `SyncTool`, the Runner starting the Build and
 Sync runtimes by their command lines) stay until a slice touches them anyway; nothing is converted for its own sake. Whether `dbdatabuild`, `dbdatasync` and
 `dbdatastore` stay as command lines is then only a question of a tool for people.
