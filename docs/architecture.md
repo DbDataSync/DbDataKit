@@ -59,6 +59,24 @@ So very few screens stay server- or service-oriented: the console's **Servers** 
 state, upgrades), not for doing work. A screen that makes a person find "the server", then "the runner", to finish one task is a defect. New screens are planned this way
 from the start, and the existing server-oriented screens move to it as their slices are touched (plan 33 SC20o, SC22l, `docs/authoring-parity.md`).
 
+## Our code calls our code as a library (owner, 2026-11-14)
+
+New code calls another part of the suite **in process, as a library**, never by starting one of our own command-line programs and parsing what it prints. A separate
+process is used only for:
+
+- an **external** program (git, a database's own tool, a browser);
+- the **Runner's task isolation**, for resilience and security (a task runs in its own process; a runtime package is loaded as an assembly where it can be, so the contract is the Runner's task protocol, not a command line);
+- **code a person wrote** (Sync's scripts, an integration's code);
+- **32-bit drivers** (the Gateway's 32-bit ODBC worker).
+
+**New code goes into a shared library first (owner, 2026-11-14).** Code that can reasonably be shared is written as a library under `Shared/src` (`DbDataKit.*`),
+and the products' command-line and service projects **compose** those libraries: a host project wires settings, routes, commands and services together and does not hold the
+logic itself. A product keeps code of its own only when nothing else could use it, and says so. Code that exists today moves when a slice touches it, not for its own sake.
+
+In those cases the process is a host with a typed protocol. The calls that exist today (the Workspace's `BuildTool` and `SyncTool`, the Runner starting the Build and
+Sync runtimes by their command lines) stay until a slice touches them anyway; nothing is converted for its own sake. Whether `dbdatabuild`, `dbdatasync` and
+`dbdatastore` stay as command lines is then only a question of a tool for people.
+
 ## Clean break
 
 The new releases start from nothing. No migration, import, upgrade path or compatibility reader is written for existing configs, scripts, libraries,
@@ -82,8 +100,8 @@ is not ours to break and is outside this rule. (CLAUDE.md states the working rul
 | D8 | Anything Build cannot reproduce exactly on DuckDB 2.0 is refused with a named diagnostic; `%` and `//` by zero follow 2.0 and the targets (they raise). Done. | A refusal is honest; a silent difference is a data bug. |
 | D9 | Our own Roslyn scripting with NuGet libraries, embedded, no SDK at run time (`DbDataKit.Scripting`). | `dotnet script` and its embedded form both need `dotnet restore`, hence the SDK. |
 | D10 | Secret store: encrypted values in a YAML file, key protected by DPAPI on Windows and a permission-restricted file elsewhere; no ClrKernel, nothing imported. | Works for services, CLIs and containers alike; an OS keychain is per user. |
-| D11 | **Open.** Whether suite binaries are self-contained or framework-dependent is not decided. Owner (2026-11-08): "we need to re-evaluate this plan and come up with a decision, particularly after the sync and build tools use the runner". What ships today: the console, Sync and Runner zips are framework-dependent (they need the .NET 10 runtime: `requiresDotnet` in `dist.json`); Build ships self-contained single files. To be decided after Sync and Build run on the runner (plan 28c E06 to E13). | Fewer prerequisites on a server against smaller zips; the answer depends on how the runner hosts the tools. |
-| D12 | The Build server runs commands in child processes (one per command, one long-lived per authoring workspace). | A crash in the native polyglot library must not take the server down. |
+| D11 | **Decided (owner, 2026-11-14): framework-dependent everywhere.** Every program of the suite needs the .NET 10 runtime (ASP.NET Core for the servers) installed on the machine, as the console, Runner, Sync, Store and Workspace already do; Build's single self-contained file and the Gateway's self-contained Windows build become framework-dependent like the rest (plan 33 SC25). **One exception:** the Gateway's 32-bit ODBC worker (`DbDataGateway.Worker`, win-x86) stays self-contained, so a machine with 32-bit drivers needs no second, 32-bit .NET runtime. | One prerequisite for every program, one publish mode in the scripts, smaller zips and runtime packages, and .NET's security fixes arrive through one runtime the machine updates (Microsoft Update on Windows, the package manager on Linux) instead of a rebuild of the suite. |
+| D12 | **Revised (owner, 2026-11-14):** isolating Build's native SQL library (polyglot) in a child process is not required: no crash has been reported and the library is pinned and hash-checked. Existing child-process calls stay until a slice touches them; see "Our code calls our code as a library". | A defensive cost with no reported failure behind it. |
 | D13 | A Build schedule lives in the project (committed with the refresh plan); an operator may pause or run now, not add. | Fits "everything is a file" and review of plans. |
 | D14 | Trust: a client calls a server, never the reverse; several clients per server, each with its own key and ceiling; short-lived signed tokens naming a person; ownership-scoped ceilings (Publisher) for server clients; the local CLI over a named pipe or Unix socket. | A server needs no credentials for any console and stays the security boundary (`DbDataKit.Web`). |
 | D15 | Authoring merges by pushing to the project's git remote and opening a pull request when one is configured, else inside the Build server with the author's identity. | The usual review path where a remote exists. |
