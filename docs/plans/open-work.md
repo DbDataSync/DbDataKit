@@ -24,11 +24,11 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | Plan and row | What remains | Flag |
 | --- | --- | --- |
 | [23a](23a-first-run-and-quality-slices.md) FQ18, FQ20, FQ22 | The single-machine bundle (one installer, the bundle token), scaling out as a step (state move, add an instance, re-pair), each product still installable alone. Plan 33's `dbdatakit-full` Scoop package is the nearest thing | |
-| [24a](24a-upgrade-and-cache-slices.md) UC11, UC16 | Groups upgrade rolling after draining (UC10, one server at a time, is built); the cache settings screen and docs | |
+| [24a](24a-upgrade-and-cache-slices.md) UC11, UC16 | Groups upgrade rolling after draining (waits for the first stable release, owner 2026-11-14) (UC10, one server at a time, is built); the cache settings screen and docs | |
 | [22a](22a-gap-slices.md) GP16, GP17 | Alerts: the sources for approvals waiting, expiring previews and late datasets, a task of the runner (the rules, the cool-down, the screen and the failed-run source are built, 2026-11-12); subscriptions: the access-loss stop of a person who loses a rule's access | PARTLY: delivery service, subscriptions library, Delivery page, alerts built |
 | [22a](22a-gap-slices.md) GP19, GP22 | The `git.remote` setting and its `health` line in each product (the pusher `GitRemotePusher` is built); the recovery page, the `health` lines (no backup in N days) and the CI drill (`state backup`/`restore`, `secret key-backup`/`key-restore` and `docs/backup-and-recovery.md` are built, 2026-11-12) | PARTLY |
 | [20](20-serving-layer.md) O07, O06b, O20 | The identity home forwarded behind the firewall; hardening (Entra group overage, keytab, signing keys); a group as one node in the console | |
-| [29b](29b-state-migration-slices.md) C04 to C07 | Products name their encrypted columns for the decrypt-a-sample check; the state API on the runner and the Sync server; the connection test on the server's modules; Sync and the Windows installers read and write the shared `state` section | PARTLY: the identity home, the audit and the Gateway's maintenance are built |
+| [29b](29b-state-migration-slices.md) C04 to C07 | Products name their encrypted columns for the decrypt-a-sample check; the state API on the runner (the Sync server's half dropped, owner 2026-11-14); the connection test on the server's modules; the Windows installers read and write the shared `state` section (Sync's half dropped) | PARTLY: the identity home, the audit and the Gateway's maintenance are built |
 | [29a](29a-state-slices.md) Q21 | The `runs` module reads Build's runs from the tracking copy | PARTLY: the divergence screen is built |
 | [28c](28c-engines-on-runner.md) E18 | Switch-primary as an action, not a refusal | PARTLY |
 | [28a](28a-runner-slices.md) R25 | Operator screens for in-doubt steps, dead letters and the table of units | PARTLY: checkpoints built |
@@ -42,7 +42,7 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | --- | --- | --- |
 | [30](30-publishing.md) PB01 to PB06 | The shared HTTP API's callers (the apps command; Build's data sources and models and the Workspace's models and data source documents are on it) and the removal of the per-kind routes (when Sync is operational on the runner), the approver's signature, apps by file from a disk cache, the entity models' and apps' prune screens (PB06, promotion between groups, is built: library, runner command and the console's action) | PB01, PB02 (runner, Gateway), PB03 (but the approver's signature) and PB05 mostly built |
 | [21](21-channels-and-previews.md) CH02 to CH06 | A Playwright story of the Releases screen (the console hosts releases for runner packages and Gateway definitions), Build's channel targets, Sync trial runs (the contract guard's callers are built); CH07's removal of a preview on merge or abandon of a branch (the Workspace's call) | CH01, CH07 built but for the merge call |
-| [14a](14a-semantic-slices.md) SL02 to SL04, SL06 to SL11, SL19, SL28, SL29 | The three products read the engine registry; the mapped-columns check and pruning at publish; describe with types; metadata documents; the `semantic:` form; promote a saved query; a row cap in the DAX text; the SSAS executor | |
+| [14a](14a-semantic-slices.md) SL02 (rest), SL06 to SL11, SL19, SL28, SL29 | The Gateway's old engine switches retired (SL03, SL04 and most of SL02 built 2026-11-12); the mapped-columns check and pruning at publish; describe with types; metadata documents; the `semantic:` form; promote a saved query; a row cap in the DAX text; the SSAS executor | |
 | [14a](14a-semantic-slices.md) SL25 to SL27 | Ad hoc registrations and review, the combine in a child process | OWNER ("not yet") |
 | [20](20-serving-layer.md) O05, O08b, O10c, O11, O13 to O14b | HA in CI; entities over Flight SQL; Store publishing from its API; app code in child processes; the outage tests (the instance row); the rename's vocabulary in Build and Store | O10c PARTLY |
 | [26](26-app-publishing.md) AP08, AP17, AP19, AP30, Z12b | The home's side of address bindings and certificate renewal; a Windows run of embedded report servers; a portal home block of a published `dashboard/1`; Store instance remainders | PARTLY |
@@ -58,17 +58,17 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 
 | Plan and row | What remains | Flag |
 | --- | --- | --- |
-| [28a](28a-runner-slices.md) R07, R13, R16, R20, R26, R27, R27c, R27d | Limits per connection, the process tree and the cgroup path in CI; the serving layer's webhook end, the Store change source, a file connection kind; signatures; the embedded runner's account; a per-package account; the manifest generated in a build step, a release cut and installed; a task and a replication under a real Windows service | R13 PARTLY |
+| [28a](28a-runner-slices.md) R07, R13, R16, R20, R26, R27, R27c, R27d | Limits per connection, the process tree and the cgroup path in CI; the serving layer's webhook end, the Store change source, a file connection kind; signatures; a per-package account; the manifest generated in a build step, a release cut and installed; a task and a replication under a real Windows service | R13 PARTLY |
 | [28c](28c-engines-on-runner.md) E06f, E17, E21, E22 | Splitting the Sync integration CI job (recorded only); Sync's state on the target (the `tracking:` setting, its status and the Tracking card are built; the same-transaction writers are built for SQL Server and PostgreSQL; the follower to the state database, the persisted divergence with its resolve, the retention and the console's Sync half are built, in the Sync server only; the runner-side follower for a runner-owned Sync and the MySQL/MariaDB/Oracle writers are not); interactive writes as manual tasks; retiring the old paths (`ProcessSupervisor`, `BuildScheduler`, the loopback state; waits for E17's state modes and E16's `mode: state`) | E17 PARTLY; E21 required (owner 2026-11-14), Build half built |
 | [28c](28c-engines-on-runner.md) E14, E16, CW02 | The rest of Sync on modules; Build tracking's remainder; the primary-key-update remainder | PARTLY |
-| [29a](29a-state-slices.md) Q20, Q22, Q25 | The migration function (a `package/2`); Sync's processes on the runner-owned state; deleting the old state path | Q20 PARTLY |
+| [29a](29a-state-slices.md) Q22, Q25 | Sync's processes on the runner-owned state; deleting the old state path | Q20 PARTLY |
 | [27a](27a-knowledge-slices.md) IX03 to IX06, IX16 to IX24 | OAuth 2 authorization code, SFTP, SMB and object storage, templates, the integration kind in the Workspace | IX20 to IX24 and the W rows follow the Workspace |
 
 ## Workspace
 
 | Plan and row | What remains | Flag |
 | --- | --- | --- |
-| [33](33-fewer-services.md) SC20g, SC21d, SC22e | The hand-over of the Build, Store and Sync authoring routes | ON HOLD |
+| [33](33-fewer-services.md) SC23 (SC20g and SC22e folded in), SC21d | Delete the Build and Sync servers in one step (their web apps, services, installers, old publish routes, Sync's updater and service verbs, the console's embedded runner), after the parity gate, the owner's beta test and go; the Store's hand-over (SC21d) waits for the owner's S9 discussion | ON HOLD for the owner's test and go |
 | [33](33-fewer-services.md) SW01 (the apps command's move with plan 30 PB04, the secret push as a binding, retiring SC20e's verb and SC21f's confirmation), SW02 (the screen for slot bindings), SC20e, SC20f, SC20j, SC20k, SC20n, SC20o, SC21f, SC22d, SC22h, SC22j, SC22k, SC22l | Build publishing to a Gateway, a browser story of the screens, the catalog cache's producer, the Views tab opened in a browser, the database-facing screens, adoption, Sync screens' stories, test a connection, the source side of the provisioning plan (the live server's) and the platform setting; built 2026-11-12 and not opened in a browser: column lineage (SC20h), model files from cached tables (SC20k), the provisioning plan from the cache (SC22j), scripts (SC22k) | SC20e, SC20o, SC21f, SC22l OWNER; SC22h decided 2026-11-14 (the Runner tests a published set's bound login); the rest PARTLY or not built |
 | [22a](22a-gap-slices.md) GP36 | Agents through MCP, every step approved | PARTLY |
 | [27a](27a-knowledge-slices.md) AG16, AX13, KN20, KN29, KN30, IX20, IX24, BK06 | The W rows: the agent, action, knowledge, search and integration editors in the Workspace, links to workspaces and pull requests | follow GP35 |
@@ -79,8 +79,8 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | --- | --- | --- |
 | [25](25-surrogate-keys-and-agent-tests.md) K07, K11 | Consumers of inferred relationships, Store ids as `BINARY(16)` and `uuid` | none blocked; K11's drafts exist |
 | [18](18-lineage.md) G06b | A job node per load (decided against for now); the server path over a real tracking copy untested | |
-| [Build OPEN-ITEMS](../../DbDataBuild/docs/progress/OPEN-ITEMS.md) section S; [12](12-shared-tls-rollout.md) items 10 and 11; [Gateway README](../../DbDataGateway/README.md) Fabric (Not supported yet); [windows-test-install](../windows-test-install.md) | K1 (done 2026-11-12, except the ODBC and DuckDB opens, which stay on purpose: Build OPEN-ITEMS S): the shared readers' schema-wide keys read and Build's `SourceCatalogReader` on it; K2: Sync's `service`, `cert` and `secret` verbs on the shared commands (needs a Windows host); D11: Build's CLI on the shared router; F1: Fabric through the Gateway (needs a tenant) | D11 OWNER (deferred); K2 LOW (plan 12) |
-| [14a](14a-semantic-slices.md) SL03, SL10, SL22 | Build reads the registry; metadata documents with semantic models; the `semantic` noun | |
+| [Build OPEN-ITEMS](../../DbDataBuild/docs/progress/OPEN-ITEMS.md) section S; [12](12-shared-tls-rollout.md) items 10 and 11; [Gateway README](../../DbDataGateway/README.md) Fabric (Not supported yet); [windows-test-install](../windows-test-install.md) | K1 (done 2026-11-12, except the ODBC and DuckDB opens, which stay on purpose: Build OPEN-ITEMS S): the shared readers' schema-wide keys read and Build's `SourceCatalogReader` on it; K2: Sync's `service`, `cert` and `secret` verbs are deleted with the Sync server (plan 33 SC23, owner 2026-11-14), not moved; D11: Build's CLI on the shared router; F1: Fabric through the Gateway (needs a tenant) | D11 OWNER (deferred); K2 closes with SC23 |
+| [14a](14a-semantic-slices.md) SL10, SL22 | Metadata documents with semantic models; the `semantic` noun | |
 | [27a](27a-knowledge-slices.md) AG01 | The suite-wide command-spec test with a golden of offered MCP tools: built (`CommandSurface`) and kept for the console; the other products add their own copy | PARTLY |
 
 ## Sync
@@ -91,7 +91,6 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 | [29a](29a-state-slices.md) Q22, [29b](29b-state-migration-slices.md) C05, C07 | The runner-owned state for processes; the state API; the shared `state` section | |
 | [07](07-data-transfer.md) TR04 | Sync adopts the write gate | LOW |
 | [18](18-lineage.md) G07b | The target table's own upstream when Sync is not its only writer; runs on column edges | |
-| [14a](14a-semantic-slices.md) SL04 | Sync reads the engine registry | |
 
 ## Store
 
@@ -108,8 +107,9 @@ Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without
 
 | Plan and row | What remains | Flag |
 | --- | --- | --- |
+| [18](18-lineage.md) G18 | Lineage without the Build and Sync servers: the Runner's lineage carries the published packages' models, column edges and replications | |
 | [22a](22a-gap-slices.md) GP29 | OpenTelemetry: what is left is the trace id in the serving contract and the hop through a module (the hosts' spans and counters, GP28, and the trace across the console's relay are built; `docs/observability.md`) | |
 | [22a](22a-gap-slices.md) GP23 | Descriptions and owners in lineage nodes: the emitters, once the definitions carry the text (the contract `LineageDescriptions` is built) | PARTLY |
-| [24a](24a-upgrade-and-cache-slices.md) UC07 (program legs) | The compatibility job runs the previous release's programs against the current build (the contract check of generations and formats is built) | the first stable release that carries the generation |
+| [24a](24a-upgrade-and-cache-slices.md) UC07 (program legs) | The compatibility job runs the previous release's programs against the current build (the contract check of generations and formats is built) | waits for the first stable release (owner 2026-11-14) |
 | [27a](27a-knowledge-slices.md) AX01 to AX12, BK05 to BK11 | Actions (one script format, callable and served, principals, grants, audit) and the backlog's links, notifications, automatic items, assistant and agent hand-off | not built |
 | [7](07-data-transfer.md), [12](12-shared-tls-rollout.md) | See "Held and parked" | LOW |

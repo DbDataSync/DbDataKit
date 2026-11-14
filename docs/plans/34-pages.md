@@ -29,6 +29,8 @@ Status: **proposed** (owner's direction 2026-11-12, one conversation; the model 
 
 All baseline work is on `main`, built and green, and the specs here are incorporated: DBR13 (the drawing of `dashboard/1` and `report/1` in the app runtime, the portal home block, the shell dialog and panel) merged and published; the access rules (plan 22a GP01, GP02, GP11 to GP15) built by session B; session B's chromium pin task for exports; the Runner connection store slices of plan 28c are independent and do not wait. Then the owner reviews this plan and names who starts: session B owns plan 32 and the views module and is the natural owner of PG02 to PG09.
 
+**Owner decision (2026-11-14, S11): pages come before the rest of plan 32.** The open rows of plan 32 that build on `dashboard/1`, `report/1` or `view-spec/1` (the portal block for a published `dashboard/1`, plan 26 AP30; `view-spec/1`'s grid work; the custom-page rows PG08 folds in) are not built on the old formats: each is done as part of the PG slice that replaces its format.
+
 ## Slices
 
 | Slice | What | Needs | Size | Done when |

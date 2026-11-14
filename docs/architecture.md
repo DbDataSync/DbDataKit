@@ -44,6 +44,21 @@ because source comments cite them). Where each part is described in detail: the 
   in every product, so a console can show and edit them side by side. Each server still owns its definitions: it must run without the console and without the
   other products.
 
+## Screens follow the work, not the servers (owner, 2026-11-14)
+
+A screen is organised around what a person is doing (author a model, deploy it, look at its runs, approve a change) and the product it belongs to, never around
+which server does the work. **Where an action is started and where it runs are separate questions**, and the screen answers only the first:
+
+- **Started where the person is working.** Creating or migrating a Store model's tables is a **Deploy** on the model's screen; applying a Build plan, provisioning a
+  Sync target, testing a connection, a refresh or a run-now are buttons where the project or model is shown. The person does not go to another server's page to do it.
+- **Run where it belongs.** The work itself runs as a task on the Runner (the login is bound there, the run is recorded there under the person's name), or is answered by
+  the Gateway, the Workspace or the console. That is an implementation detail the screen may mention (a link to the run), not a place the person has to find.
+- **Results come back to the same screen.** A run's status, log and outcome are shown where it was started, with a link to the full run on the Runner's screens and a link back.
+
+So very few screens stay server- or service-oriented: the console's **Servers** pages are for administering the installation (pairing, versions, health, certificates,
+state, upgrades), not for doing work. A screen that makes a person find "the server", then "the runner", to finish one task is a defect. New screens are planned this way
+from the start, and the existing server-oriented screens move to it as their slices are touched (plan 33 SC20o, SC22l, `docs/authoring-parity.md`).
+
 ## Clean break
 
 The new releases start from nothing. No migration, import, upgrade path or compatibility reader is written for existing configs, scripts, libraries,

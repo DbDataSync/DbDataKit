@@ -10,6 +10,9 @@ Status: **in progress** (audited against the code 2026-11-11: since 2026-11-08 D
 
 **Slice ids** `DBR01`... (DBR is free in every plan and branch: grep over plans 13a, 13c, 18 to 31 and the local branches found no `DBR` and no `DB` ids; `DR` is plan 28's decision numbers). Same rules as [22a](22a-gap-slices.md): one slice, one commit in the batch, "done" is the test, the stored formats a slice touches are named in the first line of its commit.
 
+
+**Owner decision (2026-11-14): plan 34 (pages) comes first.** An open row here that builds on `dashboard/1`, `report/1` or `view-spec/1` waits for the PG slice that replaces its format and is done there.
+
 ## 1. What exists (verified on `origin/suite/batch-13` at `5f2fcd70`, 2026-11-08; "branch" = only on a local branch; "not verified" = not checked in code)
 
 | Part | What is there | Where | What is not |
