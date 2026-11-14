@@ -6,15 +6,15 @@ import { screenshotDir } from '../screenshots'
 
 const screenshotsDir = screenshotDir('replication-runner-history')
 
-// Plan 28c E13: the run history of a replication the runner owns, against the real Sync server through the console (no stub). The server keeps who owns a replication in `runner-owners.json` beside its state and reads it at every
-// use, so this story writes the file the way a cutover leaves it (the owner `runner`, and a runner that nobody answers at) and the real server does the rest: its history says it could not ask the runner, in its own words, and
+// Plan 28c E13 and E22: the run history of a replication, against the real Sync server through the console (no stub). The Runner is Sync's only scheduler; the server keeps the runner it is linked to in `runner-link.json` beside its state
+// and reads it at every use, so this story writes a link to a runner that nobody answers at and the real server does the rest: its history says it could not ask the runner, in its own words, and
 // does not look complete; the runs it holds of its own from before the move are still listed. The live lines and the merged history with a runner that answers are proved against the real hub and a real runner's endpoints
 // (`RunnerOwnedRunsTests`, `RunReadApiTests`): a browser needs a paired runner with the package published to show them, which this suite does not start.
 const REPLICATION = 'runner-history-demo'
-const ownersFile = path.join(consoleScratch, 'sync', 'runner-owners.json')
+const linkFile = path.join(consoleScratch, 'sync', 'runner-link.json')
 
 test.afterEach(() => {
-  fs.rmSync(ownersFile, { force: true })
+  fs.rmSync(linkFile, { force: true })
 })
 
 test('a runner that does not answer is said in the history, which still lists this server\'s own runs, and never looks complete', async ({ page }) => {
@@ -28,13 +28,13 @@ test('a runner that does not answer is said in the history, which still lists th
   })
   expect(made.ok(), await made.text()).toBe(true)
 
-  // this server owns it: the history is its own and says nothing of a runner
+  // no runner is linked: the history is this server's own and says nothing of a runner
   await page.goto(`/replications/${REPLICATION}/monitoring/history`)
   await expect(page.getByTestId('run-history-table')).toBeVisible()
   await expect(page.getByTestId('runner-history-unavailable')).toHaveCount(0)
 
-  // the runner owns it, and the runner nobody answers at
-  fs.writeFileSync(ownersFile, JSON.stringify({ link: { server: 'https://localhost:9', channel: 'prod', package: 'sales-set' }, owners: { [REPLICATION]: 'runner' } }, null, 2))
+  // a runner is linked, and nobody answers at it
+  fs.writeFileSync(linkFile, JSON.stringify({ link: { server: 'https://localhost:9', channel: 'prod', package: 'sales-set' } }, null, 2))
   const history = await page.request.get(`/api/replications/${REPLICATION}/runs`)
   expect(history.ok(), await history.text()).toBe(true)
   const body = (await history.json()) as { runs: unknown[]; runnerUnavailable: string | null }

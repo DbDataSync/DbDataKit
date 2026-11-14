@@ -1,20 +1,27 @@
 import { test, expect, type Page } from '../fixtures'
+import fs from 'node:fs'
 import path from 'node:path'
+import { consoleScratch } from '../console-paths'
 import { screenshotDir } from '../screenshots'
 
 const screenshotsDir = screenshotDir('replication-runner-owner')
 
-// Plan 28c E12: the Runner tab of a replication, against the real Sync server through the console (no stub). A replication that needs no engine (disabled, nothing reads its source) is made through the API; the tab shows that
-// this server runs it, the moves are off until the runner is set, the runner is saved from the form and is still there after a reload (the server keeps it in `runner-owners.json`), and a cutover to a runner this machine is not paired
-// with is refused by the real server in its own words, with the owner as it was. A move that succeeds needs a runner with the real engine: that is `replication-runner-move.spec.ts` (and the runner conformance suite, plan 28c E12c).
+// Plan 28c E12 and E22: the Runner tab of a replication, against the real Sync server through the console (no stub). The Runner is Sync's only scheduler (owner decision S2, 2026-11-14), so the tab says the runner runs the
+// replication, with no owner to move. A replication that needs no engine (disabled, nothing reads its source) is made through the API; with no runner linked the tab says so; the runner is saved from the form and is still
+// there after a reload (the server keeps it in `runner-link.json` beside its state); and the runner's row of the replication, asked of a runner this machine is not paired with, is the real server's refusal in its own words.
 const REPLICATION = 'runner-owner-demo'
+const linkFile = path.join(consoleScratch, 'sync', 'runner-link.json')
+
+test.afterEach(() => {
+  fs.rmSync(linkFile, { force: true })
+})
 
 async function openRunner(page: Page) {
   await page.goto(`/replications/${REPLICATION}/runner`)
   await expect(page.getByTestId('replication-runner')).toBeVisible()
 }
 
-test('set the runner, reload and see it, and a cutover to a runner nobody paired is refused in words and changes nothing', async ({ page }) => {
+test('with no runner linked the tab says so, the runner is set and kept across a reload, and an unpaired runner is refused in words', async ({ page }) => {
   const made = await page.request.put(`/api/replications/${REPLICATION}`, {
     data: {
       name: REPLICATION, enabled: false,
@@ -27,34 +34,26 @@ test('set the runner, reload and see it, and a cutover to a runner nobody paired
 
   await openRunner(page)
   await expect(page.getByTestId('tab-runner')).toBeVisible()
-  await expect(page.getByTestId('runner-owner')).toHaveAttribute('data-owner', 'old')
-  await expect(page.getByTestId('runner-owner-text')).toContainText('own worker processes')
-  await expect(page.getByTestId('runner-row-none')).toBeVisible()
-  // no runner is set yet: nothing can be moved, and the buttons say why
-  for (const move of ['runner-observe', 'runner-cutover', 'runner-rollback']) await expect(page.getByTestId(move)).toBeDisabled()
+  await expect(page.getByTestId('runner-owner')).toContainText('runner')
+  await expect(page.getByTestId('runner-row-error')).toContainText('No runner is linked')
   await expect(page.getByTestId('runner-link-save')).toBeDisabled()
-  await page.screenshot({ path: path.join(screenshotsDir, '90-runner-old.png'), fullPage: true })
+  await page.screenshot({ path: path.join(screenshotsDir, '90-runner-none.png'), fullPage: true })
 
   await page.getByTestId('runner-link-server').fill('https://localhost:9')
   await page.getByTestId('runner-link-channel').fill('prod')
   await page.getByTestId('runner-link-package').fill('sales-set')
+  await expect(page.getByTestId('runner-link-save')).toBeEnabled()
+  const saved = page.waitForResponse((r) => r.request().method() === 'PUT' && new URL(r.url()).pathname.endsWith('/api/runner'))
   await page.getByTestId('runner-link-save').click()
-  await expect(page.getByTestId('runner-cutover')).toBeEnabled()
-  await expect(page.getByTestId('runner-observe')).toBeEnabled()
-  await expect(page.getByTestId('runner-rollback')).toBeDisabled()    // this server schedules it already
+  expect((await saved).ok()).toBe(true)
 
-  // the server keeps it: a reload reads it back
+  // the server keeps it: a reload reads it back, and the runner's row is asked of a runner this machine is not paired with
   await page.reload()
   await expect(page.getByTestId('replication-runner')).toBeVisible()
   await expect(page.getByTestId('runner-link-server')).toHaveValue('https://localhost:9')
   await expect(page.getByTestId('runner-link-package')).toHaveValue('sales-set')
-
-  // a cutover to a runner this machine is not paired with: the real server's refusal, shown as it is, and the owner is as it was
-  await page.getByTestId('runner-cutover').click()
-  await expect(page.getByText('not paired with a runner')).toBeVisible()
-  await expect(page.getByTestId('runner-owner')).toHaveAttribute('data-owner', 'old')
-  await expect(page.getByTestId('runner-done')).toHaveCount(0)
-  const owner = await page.request.get(`/api/replications/${REPLICATION}/owner`)
-  expect(((await owner.json()) as { owner: string }).owner).toBe('old')
-  await page.screenshot({ path: path.join(screenshotsDir, '91-runner-refused.png'), fullPage: true })
+  await expect(page.getByTestId('runner-row-error')).toContainText('not paired with a runner')
+  const link = await page.request.get('/api/runner')
+  expect(((await link.json()) as { server: string }).server).toBe('https://localhost:9')
+  await page.screenshot({ path: path.join(screenshotsDir, '91-runner-unpaired.png'), fullPage: true })
 })
