@@ -1,5 +1,3 @@
-using DbDataKit.Connections;
-using DbDataKit.Lineage;
 using DbDataKit.Secrets;
 using DbDataKit.Serving.Notify;
 using DbDataKit.Web.Trust;
@@ -34,22 +32,9 @@ public sealed class SyncDataChanges(ConfigRepository config, GatewayPairingsFile
     internal static bool Changed(TaskRunRecord run) =>
         run.RunKind is RunKind.Primary or RunKind.BulkLoad or RunKind.ReconcileDeletes && run.Status is RunStatus.Succeeded or RunStatus.Failed && run.RowsWritten > 0;
 
-    /// <summary>The datasets (lineage identities of the target tables) of the mapping a run belongs to.</summary>
-    internal IReadOnlyList<string> TargetsOf(string replication, string mapping)
-    {
-        var task = config.LoadReplicationTask(replication);
-        var table = config.LoadTableMapping(replication, mapping);
-        var connections = config.LoadAllConnections().ToDictionary(c => c.Name, StringComparer.Ordinal);
-        var datasets = new List<string>();
-        foreach (var target in table.Targets)
-        {
-            var name = target.ConnectionName ?? task.Endpoints.Target?.ConnectionName;
-            if (name is null || !connections.TryGetValue(name, out var connection)) continue;
-            datasets.Add(LineageIdentity.Dataset(SyncLineage.DefinitionOf(connection, target.Database ?? task.Endpoints.Target?.Database), target.Schema, target.Table).ToString());
-        }
-
-        return datasets;
-    }
+    /// <summary>The datasets (lineage identities of the target tables) of the mapping a run belongs to, as the drain on the Runner reports them (<see cref="SyncLineage.TablesOf"/>).</summary>
+    internal IReadOnlyList<string> TargetsOf(string replication, string mapping) =>
+        SyncLineage.TablesOf(config.LoadReplicationTask(replication), config.LoadTableMapping(replication, mapping), config.LoadAllConnections().ToDictionary(c => c.Name, StringComparer.Ordinal)).Writes;
 
     /// <summary>A run has ended. Never throws and never waits for the network.</summary>
     public void RunCompleted(TaskRunRecord run)

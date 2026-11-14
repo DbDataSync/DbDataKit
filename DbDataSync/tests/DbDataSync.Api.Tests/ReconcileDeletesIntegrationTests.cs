@@ -14,10 +14,9 @@ using DbDataSync.TestSupport;
 namespace DbDataSync.Api.Tests;
 
 /// <summary>
-/// Phase 124's <c>POST .../reconcile-deletes</c> driven end to end through real HTTP, a real spawned
-/// DbDataSync.TaskRunner worker, and a real SQL Server — the same shape
-/// <see cref="BulkLoadIntegrationTests"/> already establishes for the bulk load trigger, since a
-/// reconcile sweep is enqueued and drained through the identical worker/lane machinery.
+/// Phase 124's <c>POST .../reconcile-deletes</c> through real HTTP against a real SQL Server: what the API refuses before it sends a sweep to the runner. The sweeps themselves run in the replication's drain on
+/// the runner (plan 28c E22); what they delete, the guard's refusal and the override are the engine's, tested in <c>RunExecutorIntegrationTests.ReconcileDeletes_*</c> (and <c>Scd2NaturalKeyIntegrationTests</c>
+/// for an SCD2 target), and the request's way into the drain in <c>DrainRequestsTests</c>.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class ReconcileDeletesIntegrationTests : IClassFixture<TestApiFactory>, IAsyncLifetime
@@ -62,13 +61,6 @@ public sealed class ReconcileDeletesIntegrationTests : IClassFixture<TestApiFact
         await CreateConnectionAsync();
         await CreateReplicationAsync();
         await CreateMappingAsync();
-
-        // Seed the target equal to the source through a real Primary pass — the state a reconcile
-        // sweep normally finds itself run against, rather than an empty table.
-        var primary = await ReadRunIdsAsync(await _client.PostAsync($"/api/replications/{_replicationName}/runs", Empty()));
-        AssertAllSucceeded(await Task.WhenAll(primary.Select(PollUntilTerminalAsync)));
-        await _client.WaitForLoadToCompleteAsync(_replicationName, "map");
-        Assert.Equal(3, await CountAsync());
     }
 
     public async Task DisposeAsync()
@@ -78,27 +70,6 @@ public sealed class ReconcileDeletesIntegrationTests : IClassFixture<TestApiFact
         await using var connection = new SqlConnection(ServerConnectionString);
         await connection.OpenAsync();
         await MsSqlScratch.DropDatabaseAsync(connection, _databaseName);
-    }
-
-    [Fact]
-    public async Task ReconcileDeletes_RemovesTheRowDeletedAtTheSource()
-    {
-        await using (var db = await OpenDatabaseAsync())
-            await ExecuteAsync(db, "DELETE FROM dbo.[Src] WHERE Id = 1;");
-
-        var response = await PostReconcileAsync(new FullSegment());
-        var runIds = await ReadRunIdsAsync(response);
-        var run = Assert.Single(await Task.WhenAll(runIds.Select(PollUntilTerminalAsync)));
-
-        Assert.Equal("Succeeded", run.GetProperty("status").GetString());
-        Assert.Equal("ReconcileDeletes", run.GetProperty("runKind").GetString());
-        Assert.Equal(2, await CountAsync());
-
-        // Never touches the incremental watermark or shows up as a Primary in history — a reconcile
-        // sweep is on-demand, non-incremental work, the same posture a BulkLoad already has.
-        var history = await _client.GetFromJsonAsync<JsonElement>(
-            $"/api/replications/{_replicationName}/runs?kind=ReconcileDeletes&limit=50", JsonOptions);
-        Assert.Single(history.GetProperty("runs").EnumerateArray());
     }
 
     [Fact]
@@ -118,39 +89,6 @@ public sealed class ReconcileDeletesIntegrationTests : IClassFixture<TestApiFact
             JsonOptions);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-    }
-
-    /// <summary>The default guard's refusal, reachable through the real endpoint: deleting every row
-    /// (100%, over the default 50% ceiling) fails the run rather than emptying the target.</summary>
-    [Fact]
-    public async Task ReconcileDeletes_ExceedingTheDefaultGuard_FailsAndDeletesNothing()
-    {
-        await using (var db = await OpenDatabaseAsync())
-            await ExecuteAsync(db, "DELETE FROM dbo.[Src];");
-
-        var runIds = await ReadRunIdsAsync(await PostReconcileAsync(new FullSegment()));
-        var run = Assert.Single(await Task.WhenAll(runIds.Select(PollUntilTerminalAsync)));
-
-        Assert.Equal("Failed", run.GetProperty("status").GetString());
-        Assert.Equal(3, await CountAsync());
-    }
-
-    /// <summary>The same request with <c>overrideGuard</c> set lets it through.</summary>
-    [Fact]
-    public async Task ReconcileDeletes_WithOverrideGuard_DeletesEverything()
-    {
-        await using (var db = await OpenDatabaseAsync())
-            await ExecuteAsync(db, "DELETE FROM dbo.[Src];");
-
-        var body = $$"""{ "segments": [{{SegmentSerializer.Serialize(new FullSegment())}}], "overrideGuard": true }""";
-        var response = await _client.PostAsync(
-            $"/api/replications/{_replicationName}/mappings/map/reconcile-deletes",
-            new StringContent(body, Encoding.UTF8, "application/json"));
-        var runIds = await ReadRunIdsAsync(response);
-        var run = Assert.Single(await Task.WhenAll(runIds.Select(PollUntilTerminalAsync)));
-
-        Assert.Equal("Succeeded", run.GetProperty("status").GetString());
-        Assert.Equal(0, await CountAsync());
     }
 
     // ---- helpers -----------------------------------------------------------------------------

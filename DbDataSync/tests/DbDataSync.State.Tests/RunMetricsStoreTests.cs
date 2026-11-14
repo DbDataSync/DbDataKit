@@ -311,4 +311,28 @@ public sealed class RunMetricsStoreTests : IDisposable
         Assert.Contains(plan, line => line.Contains("run_detail_by_task"));
         Assert.DoesNotContain(plan, line => line.StartsWith("SCAN"));
     }
+    /// <summary>Plan 28c E22 P5: the passes the Runner ran count with the rows of the table, by the same window, kind and task rules.</summary>
+    [Fact]
+    public void TheRunnersPasses_CountWithTheTablesRuns_ByTheSameRules()
+    {
+        AddRun(_now.AddHours(-3), TimeSpan.FromSeconds(1), rowsRead: 10, rowsWritten: 8);
+        TaskRunRecord Pass(DateTimeOffset at, RunStatus status, long rows, RunKind kind = RunKind.Primary, string task = Task) =>
+            new(Guid.NewGuid(), task, null, status, kind, "orders", null, at, at, at, at.AddSeconds(3), rows, rows, null);
+        var runner = new[]
+        {
+            Pass(_now.AddHours(-1), RunStatus.Succeeded, 5),
+            Pass(_now.AddMinutes(-30), RunStatus.Failed, 2),
+            Pass(_now.AddHours(-2), RunStatus.Succeeded, 100, kind: RunKind.BulkLoad),   // another kind
+            Pass(_now.AddHours(-2), RunStatus.Succeeded, 100, task: "other"),            // another task
+            Pass(_now.AddDays(-3), RunStatus.Succeeded, 100),                            // outside the window
+        };
+
+        var metrics = _metrics.Get(Task, _now - TimeSpan.FromHours(24), _now, RunKind.Primary, 24, runner);
+
+        Assert.Equal((3, 1, 17L, 15L), (metrics.Runs, metrics.Failures, metrics.RowsRead, metrics.RowsWritten));
+        Assert.Equal(3000, metrics.ProcessingMaxMs);
+        Assert.Equal(_now.AddHours(-1).AddSeconds(3), metrics.LastCompletedPassUtc);
+        Assert.Equal(3, metrics.Buckets.Sum(b => b.Runs));
+        Assert.Equal(15L, metrics.Buckets.Sum(b => b.RowsWritten));
+    }
 }

@@ -3,6 +3,7 @@ using DbDataKit.Runner.Kit;
 using DbDataKit.Runner.Protocol;
 using DbDataKit.Secrets;
 using DbDataSync.Core.Config;
+using DbDataSync.Core.Lineage;
 using DbDataSync.Core.Secrets;
 using DbDataSync.Planning;
 using DbDataSync.Scripting;
@@ -184,6 +185,8 @@ public static class DrainUnits
 public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
 {
     private readonly SemaphoreSlim _save = new(1, 1);
+    private readonly HashSet<string> _reported = new(StringComparer.Ordinal);
+    private ConfigRepository? _config;
 
     protected override async Task RunAsync(CancellationToken ct)
     {
@@ -196,7 +199,7 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
         // The definition is read, never written (ED8): logins come from the environment the runner set (DBDATAKIT_SECRET_..., ED11), so no secret store file or key is created; the configuration is the read-only
         // repository (no git service, no directory created in the view); the engine's own caches go to the scratch directory.
         var secrets = SecretStore.ForProviders();
-        var config = ConfigRepository.ReadOnly(Path.Combine(repoRoot, "config"), secrets);
+        var config = _config = ConfigRepository.ReadOnly(Path.Combine(repoRoot, "config"), secrets);
         var engine = EngineComposition.Compose(config, repoRoot, new ScriptCacheDirectory(Path.Combine(scratch, "script-cache")));
 
         var checkpoints = new Checkpoints(this);
@@ -286,6 +289,7 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
         Count(DrainCounters.Rows, outcome.RowsWritten);
         drain.NotePass(pass.Item, outcome);
         RecordPass(pass, outcome, startedAt);
+        ReportLineage(pass, outcome);
         if (outcome.Status != RunStatus.Succeeded)
         {
             var kind = outcome.Status == RunStatus.Cancelled ? TaskFailureKind.Cancelled
@@ -310,6 +314,30 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
             outcome.RowsRead, outcome.RowsWritten, outcome.Summary, outcome.FailureKind, outcome.Detail, pass.Item.BulkLoadBatchId);
         Step(DrainSteps.Pass, record).Repeatable().RunAsync(_ => Task.FromResult(record), CancellationToken.None).GetAwaiter().GetResult();
     }
+
+    /// <summary>
+    /// A pass that wrote rows reports its mapping's tables as the run's lineage (plan 24a UC13): the Runner keeps them (its lineage route) and, when the run ends, tells the serving groups it is paired with that the targets changed
+    /// (<c>RunnerDataChanges</c>), as the Sync server did for its own runs. The kinds that write, ended in success or in failure after rows went in (stale rows are worse than a cold cache); a mapping once per run. A table that
+    /// cannot be named (its connection is not configured) is left out, and a failure to name them is a line of the log, never a failure of the pass.
+    /// </summary>
+    private void ReportLineage(PlannedPass pass, PassOutcome outcome)
+    {
+        if (!WroteRows(pass.Item.RunKind, outcome) || _config is not { } config || !_reported.Add(pass.Mapping)) return;
+        try
+        {
+            var connections = config.LoadAllConnections().ToDictionary(c => c.Name, StringComparer.Ordinal);
+            var (reads, writes) = SyncLineage.TablesOf(config.LoadReplicationTask(Input.Replication), config.LoadTableMapping(Input.Replication, pass.Mapping), connections);
+            if (writes.Count > 0) Run.Lineage(reads, writes);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Run.Log.LogWarning("The tables of '{Mapping}' could not be reported as the run's lineage ({Type}).", pass.Mapping, ex.GetType().Name);
+        }
+    }
+
+    /// <summary>Whether a pass changed rows at its target: the kinds that write, ended in success or in failure after rows went in.</summary>
+    internal static bool WroteRows(RunKind kind, PassOutcome outcome) =>
+        kind is RunKind.Primary or RunKind.BulkLoad or RunKind.ReconcileDeletes && outcome.Status is RunStatus.Succeeded or RunStatus.Failed && outcome.RowsWritten > 0;
 
     /// <summary>The position of a mapping as the run's checkpoint: read from the progress the run started with, written and saved at once, one save at a time (a save writes everything changed, and two at once would conflict with each other).</summary>
     private sealed class Checkpoints(DrainJob job) : IDrainCheckpoints, IDrainLedger

@@ -120,4 +120,24 @@ public static class SyncLineage
             }
         return new LineageGraph(nodes.Values, edges.Distinct());
     }
+    /// <summary>
+    /// The tables a pass of <paramref name="mapping"/> reads and writes, as the dataset lines of the Runner Kit's <c>run.Lineage</c> (<see cref="RunTables"/>; plan 24a UC13): a drain reports them after a pass that wrote rows, so the
+    /// Runner tells its paired serving groups the targets changed, and the API's <c>data.changed</c> names the same tables. A source that is a hand-written query and an endpoint whose connection is not configured are left out.
+    /// </summary>
+    public static (IReadOnlyList<string> Reads, IReadOnlyList<string> Writes) TablesOf(ReplicationTaskConfig task, TableMappingConfig mapping, IReadOnlyDictionary<string, ConnectionConfig> connections)
+    {
+        ConnectionDefinition? Definition(string? name, string? database) => name is not null && connections.TryGetValue(name, out var c) ? DefinitionOf(c, database) : null;
+        var reads = new List<RunTable>();
+        foreach (var source in mapping.Sources)
+        {
+            if (!string.IsNullOrWhiteSpace(source.Query) || string.IsNullOrWhiteSpace(source.Table)) continue;
+            if (Definition(source.ConnectionName ?? task.Endpoints.Source?.ConnectionName, source.Database ?? task.Endpoints.Source?.Database) is { } definition) reads.Add(new RunTable(definition, source.Schema, source.Table));
+        }
+
+        var writes = new List<RunTable>();
+        foreach (var target in mapping.Targets)
+            if (Definition(target.ConnectionName ?? task.Endpoints.Target?.ConnectionName, target.Database ?? task.Endpoints.Target?.Database) is { } definition) writes.Add(new RunTable(definition, target.Schema, target.Table));
+
+        return (RunTables.Datasets(reads), RunTables.Datasets(writes));
+    }
 }

@@ -16,8 +16,11 @@ namespace DbDataSync.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/lineage")]
-public sealed class LineageController(ConfigRepository configRepository, TaskRunStore taskRunStore, LineageStore lineageStore) : ControllerBase
+public sealed class LineageController(ConfigRepository configRepository, TaskRunStore taskRunStore, LineageStore lineageStore, DbDataSync.Api.Runner.RunnerRunSource runnerRuns) : ControllerBase
 {
+    /// <summary>How many of the runner's newest runs of each replication are read for the runs of its edges.</summary>
+    internal const int RunnerPasses = 200;
+
     /// <summary>The owner of Sync's graph in its own lineage store.</summary>
     public const string Owner = "sync";
 
@@ -34,7 +37,7 @@ public sealed class LineageController(ConfigRepository configRepository, TaskRun
 
     [Authorize(Policies.Viewer)]
     [HttpGet]
-    public ActionResult<JsonObject> Get()
+    public async Task<ActionResult<JsonObject>> Get(CancellationToken cancellationToken)
     {
         var problems = new List<string>();
         var (replications, connections) = SyncLineage.Load(configRepository, problems);
@@ -45,19 +48,24 @@ public sealed class LineageController(ConfigRepository configRepository, TaskRun
         var document = LineageJson.Write(graph);
         document["problems"] = new JsonArray(problems.Select(p => (JsonNode)JsonValue.Create(p)!).ToArray());
 
+        // plan 28c E22 P5: the runner runs every replication, so its newest passes of each are laid along the edges with what this server kept from before
+        var runner = new List<TaskRunRecord>();
+        foreach (var replication in replications)
+            runner.AddRange(await runnerRuns.RecentAsync(replication.Task.Name, RunnerPasses, cancellationToken));
+
         // keep what is known and answer with the runs kept: a failure of the store never takes the graph away (the answer falls back to the runs of the run history)
         IReadOnlyList<EdgeRun> runs;
         try
         {
             var keeper = new LineageKeeper(lineageStore, Owner);
-            keeper.Keep(graph, SyncLineageRuns.Runs(graph, taskRunStore), TimeSpan.FromDays(SyncStateModule.RunDetailDays));
+            keeper.Keep(graph, SyncLineageRuns.Runs(graph, taskRunStore, runner), TimeSpan.FromDays(SyncStateModule.RunDetailDays));
             runs = keeper.Read().Runs;
         }
         catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException or IOException)
         {
             problems.Add($"The lineage could not be kept in the state ({ex.GetType().Name}), so its runs are those of the run history.");
             document["problems"] = new JsonArray(problems.Select(p => (JsonNode)JsonValue.Create(p)!).ToArray());
-            runs = SyncLineageRuns.Runs(graph, taskRunStore);
+            runs = SyncLineageRuns.Runs(graph, taskRunStore, runner);
         }
         document["runs"] = LineageJson.WriteRuns(LineageFreshness.Mark(runs, ExpectedEvery(graph, replications)));
         return Ok(document);

@@ -16,7 +16,7 @@ namespace DbDataSync.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/replications/{replicationName}/metrics")]
-public sealed class MetricsController(RunMetricsStore metrics) : ControllerBase
+public sealed class MetricsController(RunMetricsStore metrics, DbDataSync.Api.Runner.RunnerRunSource runnerRuns) : ControllerBase
 {
     /// <param name="window">
     /// <c>1h</c>, <c>24h</c> or <c>7d</c> — "is it failing now" and "did it fail this week" are
@@ -29,18 +29,24 @@ public sealed class MetricsController(RunMetricsStore metrics) : ControllerBase
     /// </param>
     [Authorize(Policies.Viewer)]
     [HttpGet]
-    public ActionResult<RunMetrics> Get(
+    public async Task<ActionResult<RunMetrics>> Get(
         string replicationName,
         [FromQuery] string window = "24h",
         [FromQuery] RunKind? kind = RunKind.Primary,
-        [FromQuery] int buckets = 24)
+        [FromQuery] int buckets = 24,
+        CancellationToken cancellationToken = default)
     {
         if (!TryParseWindow(window, out var span))
             return BadRequest(new { error = $"Unrecognised window '{window}'. Use 1h, 24h or 7d." });
 
         var now = DateTimeOffset.UtcNow;
-        return Ok(metrics.Get(replicationName, now - span, now, kind, buckets));
+        // plan 28c E22 P5: the runner runs every replication, so the passes it recorded count with what this server kept from before (the newest RunnerMetricsPasses of them; a runner that cannot be asked adds none)
+        var runner = await runnerRuns.RecentAsync(replicationName, RunnerMetricsPasses, cancellationToken);
+        return Ok(metrics.Get(replicationName, now - span, now, kind, buckets, runner));
     }
+
+    /// <summary>How many of the runner's newest passes of a replication the figures read.</summary>
+    internal const int RunnerMetricsPasses = 1000;
 
     /// <summary>
     /// A small closed set rather than a general duration parser: these are the three the card offers,

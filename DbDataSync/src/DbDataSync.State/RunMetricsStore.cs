@@ -52,8 +52,12 @@ public sealed record RunMetrics(
 /// </summary>
 public sealed class RunMetricsStore(StateDatabase database)
 {
+    /// <param name="more">
+    /// Runs this state does not hold, counted as if it did (plan 28c E22 P5): the passes the Runner ran for the replication (its pass records, as the run history reads them). A run of another task, of another kind than
+    /// <paramref name="runKind"/>, or queued outside the window is left out by the same rules as a row of the table.
+    /// </param>
     public RunMetrics Get(
-        string taskName, DateTimeOffset fromUtc, DateTimeOffset toUtc, RunKind? runKind, int buckets) =>
+        string taskName, DateTimeOffset fromUtc, DateTimeOffset toUtc, RunKind? runKind, int buckets, IReadOnlyList<TaskRunRecord>? more = null) =>
         database.Retry(() =>
         {
             using var connection = database.OpenConnection();
@@ -61,15 +65,46 @@ public sealed class RunMetricsStore(StateDatabase database)
             var kindClause = runKind is null ? "" : " AND run_kind = $runKind";
             var totals = ReadTotals(connection, taskName, fromUtc, toUtc, runKind, kindClause);
             var processing = ReadProcessingTimes(connection, taskName, fromUtc, toUtc, runKind, kindClause);
+            var lastCompleted = ReadLastCompletedPass(connection, taskName, runKind, kindClause);
+            var bucketList = ReadBuckets(connection, taskName, fromUtc, toUtc, runKind, kindClause, buckets);
+
+            var extra = (more ?? []).Where(r => r.TaskName == taskName && (runKind is null || r.RunKind == runKind)).ToList();
+            if (extra.Count > 0)
+            {
+                var inWindow = extra.Where(r => r.EnqueuedAtUtc is { } at && at >= fromUtc && at < toUtc).ToList();
+                totals = (totals.Runs + inWindow.Count, totals.Failures + inWindow.Count(r => r.Status == RunStatus.Failed),
+                    totals.RowsRead + inWindow.Sum(r => r.RowsRead), totals.RowsWritten + inWindow.Sum(r => r.RowsWritten));
+                processing.AddRange(inWindow.Where(r => r.StartedAtUtc is not null && r.EndedAtUtc is not null).Select(r => Math.Max(0, (r.EndedAtUtc!.Value - r.StartedAtUtc!.Value).TotalMilliseconds)));
+                processing.Sort();
+                var newest = extra.Where(r => r.Status == RunStatus.Succeeded && r.EndedAtUtc is not null).Select(r => r.EndedAtUtc).Max();
+                if (newest is not null && (lastCompleted is null || newest > lastCompleted)) lastCompleted = newest;
+                bucketList = AddToBuckets(bucketList, fromUtc, toUtc, inWindow);
+            }
 
             return new RunMetrics(
                 taskName, runKind, fromUtc, toUtc,
                 totals.Runs, totals.Failures, totals.RowsRead, totals.RowsWritten,
                 Percentile(processing, 0.50), Percentile(processing, 0.95),
                 processing.Count == 0 ? null : processing[^1],
-                ReadLastCompletedPass(connection, taskName, runKind, kindClause),
-                ReadBuckets(connection, taskName, fromUtc, toUtc, runKind, kindClause, buckets));
+                lastCompleted,
+                bucketList);
         });
+
+    /// <summary>The buckets with <paramref name="runs"/> (all inside the window) added, by the same rule as <see cref="ReadBuckets"/>.</summary>
+    private static IReadOnlyList<RunMetricsBucket> AddToBuckets(IReadOnlyList<RunMetricsBucket> buckets, DateTimeOffset fromUtc, DateTimeOffset toUtc, IReadOnlyList<TaskRunRecord> runs)
+    {
+        if (buckets.Count == 0) return buckets;
+        var width = (toUtc - fromUtc) / buckets.Count;
+        var result = buckets.ToArray();
+        foreach (var run in runs)
+        {
+            var index = width <= TimeSpan.Zero ? 0 : Math.Clamp((int)((run.EnqueuedAtUtc!.Value - fromUtc) / width), 0, buckets.Count - 1);
+            var b = result[index];
+            result[index] = b with { Runs = b.Runs + 1, Failures = b.Failures + (run.Status == RunStatus.Failed ? 1 : 0), RowsWritten = b.RowsWritten + run.RowsWritten };
+        }
+
+        return result;
+    }
 
     private (int Runs, int Failures, long RowsRead, long RowsWritten) ReadTotals(
         DbConnection connection, string taskName, DateTimeOffset fromUtc, DateTimeOffset toUtc,

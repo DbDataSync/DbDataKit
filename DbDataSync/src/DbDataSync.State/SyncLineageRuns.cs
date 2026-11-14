@@ -8,7 +8,8 @@ namespace DbDataSync.State;
 /// </summary>
 public static class SyncLineageRuns
 {
-    public static IReadOnlyList<EdgeRun> Runs(LineageGraph design, TaskRunStore store)
+    /// <param name="more">Runs this state does not hold (plan 28c E22 P5: the Runner's passes of the replications, as the run history reads them), considered with the store's own.</param>
+    public static IReadOnlyList<EdgeRun> Runs(LineageGraph design, TaskRunStore store, IReadOnlyList<TaskRunRecord>? more = null)
     {
         var runs = new List<EdgeRun>();
         foreach (var edge in design.Edges.Where(e => e.Kind == EdgeKind.Replicates && e.Granularity == Granularity.Table && e.Detail is { } d && d.Contains('/')))
@@ -16,6 +17,7 @@ public static class SyncLineageRuns
             var (task, mapping) = (edge.Detail![..edge.Detail.IndexOf('/')], edge.Detail[(edge.Detail.IndexOf('/') + 1)..]);
             var last = new[] { RunKind.Primary, RunKind.BulkLoad }
                 .SelectMany(kind => store.GetMappingRunHistory(task, kind, mapping, 5))
+                .Concat((more ?? []).Where(r => r.TaskName == task && r.MappingName == mapping && r.RunKind is RunKind.Primary or RunKind.BulkLoad))
                 .Where(r => r.Status is RunStatus.Succeeded or RunStatus.Failed && r.EndedAtUtc is not null)
                 .OrderByDescending(r => r.EndedAtUtc)
                 .FirstOrDefault();

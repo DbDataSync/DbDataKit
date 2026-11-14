@@ -403,6 +403,13 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         Assert.False(held.Parts.ContainsKey("pending_position"));
         Assert.Equal("None", held.Parts["hold"].AsText);
 
+        // plan 24a UC13: the load wrote rows, so the run reports the mapping's target as lineage (a dataset identity, what RunnerDataChanges sends as data.changed) and the source it read; the mapping once per run
+        var lineage = Assert.Single(result.Lineage ?? []);
+        var written = Assert.Single(lineage.Writes);
+        Assert.Contains("://", written, StringComparison.Ordinal);
+        Assert.EndsWith("." + _runnerTarget, written, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(lineage.Reads);
+
         // changes after the load are the next drain's, from the promoted position
         await InsertRowsAsync(2, from: 4);
         var again = await rig.Executor.RunAsync(await rig.DrainRequestAsync(source, "runner-sync", runId: Guid.CreateVersion7(), runAll: true));

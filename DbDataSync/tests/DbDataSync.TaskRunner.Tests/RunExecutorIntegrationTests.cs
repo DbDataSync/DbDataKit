@@ -66,6 +66,7 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime, IDisposable
     private SqlConnection _adminConnection = null!;
     private SecretStore _secrets = null!;
     private RunnerRig? _rig;
+    private string? _lastFailure;
     private string? _packageSource;
 
     public async Task InitializeAsync()
@@ -294,7 +295,9 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime, IDisposable
 
         var request = await _rig.DrainRequestAsync(_packageSource!, taskName, runId: Guid.CreateVersion7(), chain: Guid.CreateVersion7().ToString(), runAll: true);
         var result = await _rig.Executor.RunAsync(request);
-        return result.End.State == TaskEndState.Succeeded && result.ExitCode == 0 ? RunStatus.Succeeded : RunStatus.Failed;
+        if (result.End.State == TaskEndState.Succeeded && result.ExitCode == 0) return RunStatus.Succeeded;
+        _lastFailure = $"the drain of {taskName} ended {result.End.State} ({result.ExitCode}):\n{_rig.LogText(result.RunId)}";
+        return RunStatus.Failed;
     }
 
     /// <summary>The position of the mapping <c>main</c> of the default replication as the mode keeps it: Sync's own state, or the runner's checkpoint.</summary>
@@ -1459,4 +1462,40 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime, IDisposable
     }
 
     #endregion
+    /// <summary>
+    /// A source that is a hand-written query is read by the drain on the runner and lands the query's own rows, not the table's (moved here from the Sync API's <c>RawQuerySourceTests</c>, whose pass went through the
+    /// deleted worker: plan 28c E22, P12).
+    /// </summary>
+    [Fact]
+    public async Task AQuerySource_OnTheRunner_LandsTheQuerysOwnRows()
+    {
+        await ExecuteAsync(_adminConnection, $"INSERT INTO dbo.[{_sourceTable}] (Id, Name) VALUES (1, 'Alice'), (2, 'Bob');");
+        _configRepository.SaveReplicationTask(new ReplicationTaskConfig
+        {
+            Name = "query-sync",
+            Scheduling = new SchedulingConfig { Mode = ScheduleMode.Periodic },   // a reload reads rows on every pass, so a continuous drain would never go idle
+            ChangeProcessing = new ChangeProcessingConfig
+            {
+                Reader = new ReaderConfig { Kind = "BatchReload" },
+                Cache = new CacheConfig { Kind = MsSqlDriverKinds.StagingTable },
+                Writer = new WriterConfig { Kind = MsSqlDriverKinds.DeleteInsert },
+            },
+        }, Author);
+        _configRepository.SaveTableMapping("query-sync", new TableMappingConfig
+        {
+            Name = "main",
+            Sources = [new SourceTableSpec { ConnectionName = "src-conn", Database = _databaseName, Query = $"SELECT Id, Name FROM dbo.[{_sourceTable}] WHERE Id = 1", AllowSubquery = true }],
+            Targets = [new TableSpec { ConnectionName = "tgt-conn", Database = _databaseName, Schema = "dbo", Table = _targetTable }],
+            ColumnMappings =
+            [
+                new ColumnMapping { SourceColumn = "Id", TargetColumn = "Id" },
+                new ColumnMapping { SourceColumn = "Name", TargetColumn = "Name" },
+            ],
+            TargetColumns = await CachedColumnsAsync("dbo", _targetTable),
+        }, Author);
+
+        var status = await RunPassAsync(RunMode.Runner, "query-sync");
+        Assert.True(status == RunStatus.Succeeded, _lastFailure);
+        Assert.Equal(new Dictionary<int, string> { [1] = "Alice" }, await GetTargetRowsAsync());
+    }
 }

@@ -135,4 +135,31 @@ public sealed class SyncLineageTests : IDisposable
         var edge = Assert.Single(keeper.Read().Runs);
         Assert.Equal((DbDataKit.Lineage.RunOutcome.Failed, Dataset("dwh", "public", "customers")), (edge.Outcome, edge.To));
     }
+    /// <summary>Plan 28c E22 P5: the Runner's passes (its pass records, as the run history reads them) are laid along the edges with the store's own runs, the newest finished one winning.</summary>
+    [Fact]
+    public void The_runners_passes_are_runs_of_the_edges_with_the_stores_own()
+    {
+        var store = new TaskRunStore(new StateDatabase(Path.Combine(_tempDir, "state.db")));
+        var graph = SyncLineage.Design([new SyncReplication(Task(), [Customers()])], Connections);
+        var ended = DateTimeOffset.UtcNow;
+        var pass = new TaskRunRecord(Guid.NewGuid(), "crm-to-dwh", null, RunStatus.Succeeded, RunKind.Primary, "customers", null, ended.AddSeconds(-5), ended.AddSeconds(-5), ended.AddSeconds(-5), ended, 7, 7, null);
+        var other = pass with { RunId = Guid.NewGuid(), TaskName = "elsewhere", RowsWritten = 99 };
+
+        var edge = Assert.Single(SyncLineageRuns.Runs(graph, store, [pass, other]));
+
+        Assert.Equal((DbDataKit.Lineage.RunOutcome.Succeeded, 7L, Dataset("dwh", "public", "customers")), (edge.Outcome, edge.Rows, edge.To));
+    }
+
+    /// <summary>Plan 24a UC13: the tables a pass reads and writes are the identities the graph names them by (the lines a drain reports as its run's lineage); a query source has no table and is left out.</summary>
+    [Fact]
+    public void The_tables_of_a_pass_are_the_graphs_identities_and_a_query_source_is_left_out()
+    {
+        var (reads, writes) = SyncLineage.TablesOf(Task(), Customers(), Connections);
+        Assert.Equal([Dataset("crm", "dbo", "Customers")], reads);
+        Assert.Equal([Dataset("dwh", "public", "customers")], writes);
+
+        var (none, written) = SyncLineage.TablesOf(Task(), FromQuery(), Connections);
+        Assert.Empty(none);
+        Assert.Equal([Dataset("dwh", "public", "recent_orders")], written);
+    }
 }
