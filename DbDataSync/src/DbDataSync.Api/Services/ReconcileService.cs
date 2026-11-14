@@ -28,10 +28,8 @@ namespace DbDataSync.Api.Services;
 public sealed class ReconcileService(
     ConfigRepository configRepository,
     DriverConnectionFactory connections,
-    WorkQueueStore workQueueStore,
-    ProcessSupervisor supervisor,
     CustomSegmentExpansion customSegments,
-    DbDataSync.Api.Runner.RunnerDispatch runnerDispatch) : IScheduledReconcileEnqueuer
+    DbDataSync.Api.Runner.RunnerDispatch runnerDispatch)
 {
     private readonly SegmentExpander expander = new(customSegments);
 
@@ -82,103 +80,10 @@ public sealed class ReconcileService(
         var guard = request.OverrideGuard ? new NoneDeleteGuard() : PipelineResolution.Reconcile(task, mapping).DeleteGuard;
         var guardJson = DeleteGuardOption.Serialize(guard);
 
-        if (runnerDispatch.RunnerOwns(replicationName))
-            return await runnerDispatch.SendAsync(replicationName,
-                [.. segments.Select(s => new DrainRequest(nameof(RunKind.ReconcileDeletes), mappingName, s.Describe(), SegmentSerializer.Serialize(s), kinds.ReaderKind, kinds.CacheKind, kinds.WriterKind, DeleteGuardJson: guardJson))],
-                runAll: false, cancellationToken);
-
-        var runIds = segments
-            .Select(segment => workQueueStore.Enqueue(
-                replicationName,
-                RunKind.ReconcileDeletes,
-                mappingName,
-                segment.Describe(),
-                SegmentSerializer.Serialize(segment),
-                kinds,
-                bulkLoadBatchId: null,
-                deleteGuardJson: guardJson))
-            .ToList();
-
-        var ensureResult = supervisor.EnsureWorkerRunning(replicationName);
-        return ensureResult.Outcome == TriggerOutcome.FailedToStart ? ensureResult : TriggerResult.Started(runIds);
-    }
-
-    /// <summary>
-    /// Phase 125's scheduled path: <see cref="SchedulerService"/> found this mapping due (by cadence,
-    /// by after-change, or both) and calls this instead of an operator's own request. Segmented exactly
-    /// like an on-demand sweep, except the segments come from the mapping's own
-    /// <see cref="TableMappingConfig.DefaultSegmenting"/> — "segmenting stays on the mapping" is the
-    /// same rule a standalone reload replication's own configured segments already follow — and the
-    /// guard comes from the resolved <see cref="ReconcileConfig.DeleteGuard"/>, never an operator
-    /// override (there is no operator in this path to ask for one).
-    /// </summary>
-    public async Task<TriggerResult> EnqueueScheduledAsync(
-        string replicationName, string mappingName, CancellationToken cancellationToken)
-    {
-        ReplicationTaskConfig task;
-        TableMappingConfig mapping;
-        try
-        {
-            task = configRepository.LoadReplicationTask(replicationName);
-            mapping = configRepository.LoadTableMapping(replicationName, mappingName);
-        }
-        catch (FileNotFoundException)
-        {
-            return TriggerResult.NotFound();
-        }
-
-        if (mapping.Sources.Count != 1 || mapping.Targets.Count != 1)
-            return TriggerResult.Invalid(
-                $"Table mapping '{mappingName}' has {mapping.Sources.Count} source(s) and " +
-                $"{mapping.Targets.Count} target(s); reconcile-deletes supports 1:1 mappings.");
-
-        // Empty means Full — the same convention DefaultSegmenting already has for a standalone
-        // reload's own configured segments.
-        var requested = mapping.DefaultSegmenting.Count == 0
-            ? [new FullSegment()]
-            : mapping.DefaultSegmenting;
-
-        IReadOnlyList<BatchReloadSegment> segments;
-        try
-        {
-            segments = await ExpandAsync(task, mapping, requested, cancellationToken);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or System.Data.Common.DbException)
-        {
-            return TriggerResult.Invalid(DriverFailures.Describe(ex));
-        }
-
-        var guard = PipelineResolution.Reconcile(task, mapping).DeleteGuard;
-        var kinds = new WorkItemKinds(ReaderKind, CacheKind, PipelineResolution.ReconcileWriterKind(task, mapping));
-        var guardJson = DeleteGuardOption.Serialize(guard);
-
-        var runIds = segments
-            .Select(segment => workQueueStore.Enqueue(
-                replicationName,
-                RunKind.ReconcileDeletes,
-                mappingName,
-                segment.Describe(),
-                SegmentSerializer.Serialize(segment),
-                kinds,
-                bulkLoadBatchId: null,
-                deleteGuardJson: guardJson))
-            .ToList();
-
-        var ensureResult = supervisor.EnsureWorkerRunning(replicationName);
-        return ensureResult.Outcome == TriggerOutcome.FailedToStart ? ensureResult : TriggerResult.Started(runIds);
-    }
-
-    /// <summary>The planner's view of <see cref="EnqueueScheduledAsync(string, string, CancellationToken)"/> (plan 28c E11): the same call with the outcome in the planner's own words.</summary>
-    async Task<ScheduledReconcileResult> IScheduledReconcileEnqueuer.EnqueueScheduledAsync(string replication, string mapping, CancellationToken cancellationToken)
-    {
-        var result = await EnqueueScheduledAsync(replication, mapping, cancellationToken);
-        return result.Outcome switch
-        {
-            TriggerOutcome.Started => ScheduledReconcileResult.Queued,
-            TriggerOutcome.ReplicationNotFound => new ScheduledReconcileResult(ScheduledReconcileOutcome.NotFound, result.Reason),
-            TriggerOutcome.Invalid => new ScheduledReconcileResult(ScheduledReconcileOutcome.Invalid, result.Reason),
-            _ => new ScheduledReconcileResult(ScheduledReconcileOutcome.QueuedNotStarted, result.Reason),
-        };
+        // a request of the replication's drain on the runner (plan 28c E12, E22: the Runner is Sync's only scheduler; a scheduled sweep is planned by the drain itself)
+        return await runnerDispatch.SendAsync(replicationName,
+            [.. segments.Select(s => new DrainRequest(nameof(RunKind.ReconcileDeletes), mappingName, s.Describe(), SegmentSerializer.Serialize(s), kinds.ReaderKind, kinds.CacheKind, kinds.WriterKind, DeleteGuardJson: guardJson))],
+            runAll: false, cancellationToken);
     }
 
     /// <summary>The same segment expansion as <see cref="BulkLoadService"/> (<see cref="SegmentExpander"/>), but the reader is always <c>KeyReconcile</c> — there is no per-request reader Kind to resolve.</summary>

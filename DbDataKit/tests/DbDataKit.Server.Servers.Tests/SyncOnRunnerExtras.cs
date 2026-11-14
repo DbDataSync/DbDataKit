@@ -41,8 +41,6 @@ public abstract class SyncOnRunnerExtrasTest(SyncOnRunnerExtrasFixture fixture)
         return body ?? new JsonObject();
     }
 
-    protected Task<JsonNode> Move(string replication, string owner) => Ok(H.Sync(HttpMethod.Put, $"/api/replications/{replication}/owner", new { owner, waitSeconds = 300 }), $"{replication} -> {owner}");
-
     protected Task<JsonNode> RunNow(string replication) => Ok(H.Sync(HttpMethod.Post, $"/api/replications/{replication}/runs"), $"run now {replication}", HttpStatusCode.Accepted);
 
     protected async Task<List<JsonNode>> RunnerRuns(string replication) =>

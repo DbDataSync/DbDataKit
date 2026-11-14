@@ -22,15 +22,18 @@ public sealed class RunnerOwnedApiFactory : TestApiFactory
     protected override void ConfigureTestServices(IServiceCollection services)
     {
         services.RemoveAll<RunnerAccess>();
-        services.AddSingleton(sp => new RunnerAccess(sp.GetRequiredService<RunnerOwnerFile>(), _ => Runner));
+        services.AddSingleton(sp => new RunnerAccess(sp.GetRequiredService<RunnerLinkFile>(), _ => Runner));
     }
 
-    /// <summary>Makes the replication the runner's, as a cutover leaves it (the file is read at every use).</summary>
+    /// <summary>
+    /// Links the runner (the file is read at every use) and makes the replication one of this server's (its folder in the configuration): every replication of this server is the runner's
+    /// since plan 28c E22, and the readers ask the runner for the tasks of the replications they know.
+    /// </summary>
     public void RunnerOwns(string replication)
     {
-        var file = Services.GetRequiredService<RunnerOwnerFile>();
+        var file = Services.GetRequiredService<RunnerLinkFile>();
         file.SetLink(new RunnerLink("runner-1", "prod", "sales-set"));
-        file.SetOwner(replication, TaskOwners.Runner);
+        Directory.CreateDirectory(Path.Combine(RepoRoot, "config", "replications", replication));
     }
 }
 
@@ -156,9 +159,6 @@ public sealed class RunnerOwnedRunsTests(RunnerOwnedApiFactory factory) : IClass
             factory.Runner.Down = false;
         }
 
-        // a replication this server still owns never asks the runner
-        Assert.Null((await HistoryAsync("never-moved")).RunnerUnavailable);
-        Assert.Equal(0, factory.Runner.AskedAbout("never-moved"));
     }
 
     [Fact]

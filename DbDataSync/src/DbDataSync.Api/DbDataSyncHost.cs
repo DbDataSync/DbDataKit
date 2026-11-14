@@ -8,8 +8,6 @@ using DbDataSync.Api.Auth;
 using DbDataSync.Api.Hubs;
 using DbDataSync.Certificates;
 using DbDataSync.Api.Services;
-using DbDataSync.Api.State;
-using DbDataSync.State.Remote;
 using DbDataSync.Core.Config;
 using DbDataSync.Core.Sql;
 using DbDataKit.Config.Git;
@@ -188,11 +186,6 @@ public static class DbDataSyncHost
         builder.Services.AddSingleton(sp => new WorkQueueStore(sp.GetRequiredService<StateDatabase>()));
         builder.Services.AddSingleton(sp => new LogWriter(sp.GetRequiredService<StateDatabase>()));
 
-        // This process owns the state file — LocalRunnerState is how it, and only it, writes to it. The
-        // runners it spawns reach these same operations over loopback (RunnerStateController).
-        builder.Services.AddSingleton<LocalRunnerState>();
-        builder.Services.AddSingleton<RunnerToken>();
-        builder.Services.AddSingleton<JournalRecovery>();
 
         // And it owns config, on the same terms — LocalRunnerConfig is the one path by which a runner's
         // provisioning report becomes a real commit here (phase 94). Attributed to SystemAuthor: there
@@ -201,13 +194,6 @@ public static class DbDataSyncHost
         builder.Services.AddSingleton<IRunnerConfig>(sp =>
             new LocalRunnerConfig(sp.GetRequiredService<ConfigRepository>(), CurrentUser.SystemAuthor));
 
-        // The state endpoint is a server of its own, listening on loopback only, so a remote connection is
-        // refused by the OS and no application code has to be correct for that to hold — including when
-        // someone puts the main API behind a reverse proxy or binds it to 0.0.0.0, which is how this would
-        // realistically go wrong. RunnerStateGuard is the second defence, for when the binding is widened.
-        // Started before the scheduler, because the scheduler spawns the children that need it.
-        builder.Services.AddSingleton<StateHost>();
-        builder.Services.AddHostedService(sp => sp.GetRequiredService<StateHost>());
 
         builder.Services.AddSingleton(sp =>
             ScriptCacheDirectory.BesideStateDatabase(sp.GetRequiredService<ApiOptions>().StateDbPath));
@@ -280,9 +266,9 @@ public static class DbDataSyncHost
         builder.Services.AddSingleton<ParameterCheck>();
         builder.Services.AddSingleton<PreviewService>();
         builder.Services.AddSingleton<ScriptTestService>();
-        // Plan 28c E12: who schedules each replication (the file beside the state), the runner it moves to, and what a request does for a replication the runner owns.
-        builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.RunnerOwnerFile(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(sp.GetRequiredService<ApiOptions>().StateDbPath))!, "runner-owners.json")));
-        builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.RunnerAccess(sp.GetRequiredService<DbDataSync.Api.Runner.RunnerOwnerFile>(), link => DbDataSync.Api.Runner.ClientRunnerSync.For(link, Environment.GetEnvironmentVariable)));
+        // Plan 28c E12, E22: the runner this server's replications run on (the file beside the state; the Runner is Sync's only scheduler), and what a request does on it.
+        builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.RunnerLinkFile(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(sp.GetRequiredService<ApiOptions>().StateDbPath))!, DbDataSync.Api.Runner.RunnerLinkFile.FileName)));
+        builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.RunnerAccess(sp.GetRequiredService<DbDataSync.Api.Runner.RunnerLinkFile>(), link => DbDataSync.Api.Runner.ClientRunnerSync.For(link, Environment.GetEnvironmentVariable)));
         builder.Services.AddSingleton<DbDataSync.Api.Runner.RunnerDispatch>();
         builder.Services.AddSingleton<DbDataSync.Api.Runner.RunnerReadState>();
         // the publish action of plan 28c E08: the verb `package publish` as a child process with the stored link, the runner's package read and bound through the paired client, every call audited beside the state
@@ -297,10 +283,6 @@ public static class DbDataSyncHost
         builder.Services.AddSingleton<DbDataSync.Api.Runner.RunnerLagInputs>();
         builder.Services.AddSingleton<DbDataSync.Api.Runner.RunnerRunStreamer>();
         builder.Services.AddHostedService<DbDataSync.Api.Runner.RunnerLagRefresher>();
-        builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.ReplicationOwnership(
-            sp.GetRequiredService<ConfigRepository>(), sp.GetRequiredService<TaskRunStore>(), sp.GetRequiredService<WorkQueueStore>(), sp.GetRequiredService<ChangeWatermarkStore>(),
-            sp.GetRequiredService<DriverRegistry>(), name => sp.GetRequiredService<ProcessSupervisor>().DescribeStatus(name).Running, sp.GetRequiredService<DbDataSync.Api.Runner.RunnerAccess>(), TimeProvider.System));
-        builder.Services.AddSingleton<ProcessSupervisor>();
 
         // Phase 159/196L: the Updates screen — releases, slots, and the commands to run on the server. The facts
         // describe how this process was installed and started.
@@ -310,19 +292,6 @@ public static class DbDataSyncHost
         builder.Services.AddSingleton<SegmentingStrategyRunner>();
         builder.Services.AddSingleton<CustomSegmentExpansion>();
         builder.Services.AddSingleton<BulkLoadService>();
-        // LocalRunnerState (DbDataSync.State) needs BulkLoadService's segment-expansion/enqueue core for
-        // a runner-triggered initial load (phase 134) but cannot reference DbDataSync.Api directly
-        // without a project-reference cycle — see IInitialLoadEnqueuer's own doc. Same pattern as
-        // IConnectionFactory/DriverConnectionFactory above: registered by interface as well, not instead.
-        builder.Services.AddSingleton<IInitialLoadEnqueuer>(sp => sp.GetRequiredService<BulkLoadService>());
-        // Deferred, not resolved directly by LocalRunnerState's constructor — StateHost (an
-        // IHostedService built eagerly at startup) depends on LocalRunnerState, and eagerly resolving
-        // IInitialLoadEnqueuer here would force BulkLoadService -> ProcessSupervisor -> StateHost to
-        // build too, closing a DI cycle that hangs the host before it logs a single line (this shipped
-        // once without the Lazy wrapper and did exactly that in CI). The Lazy<T> itself is cheap to
-        // construct — it just closes over `sp` — and only resolves the real service, well after
-        // startup, the first time LocalRunnerState.RequestInitialLoad actually runs.
-        builder.Services.AddSingleton(sp => new Lazy<IInitialLoadEnqueuer>(sp.GetRequiredService<IInitialLoadEnqueuer>));
         builder.Services.AddSingleton<ReconcileService>();
         builder.Services.AddSingleton<SegmentingPreviewService>();
         builder.Services.AddSingleton<ResyncService>();
@@ -344,7 +313,6 @@ public static class DbDataSyncHost
         // Dating a run's stored watermarks reads the same polling history through the same
         // resolution, for the same reason — see phase 88.
         builder.Services.AddSingleton<RunWatermarkTimeService>();
-        builder.Services.AddHostedService<SchedulerService>();
         // The checks stored with the replications (plan 23a FQ10): evaluated when a run of the replication ends and on a clock, results in the state database's quality module.
         builder.Services.AddSingleton<ReplicationQuality>();
         builder.Services.AddSingleton<ReplicationChecksService>();

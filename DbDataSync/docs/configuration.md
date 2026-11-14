@@ -261,11 +261,11 @@ setting to grow a third state without another schema change. Releases before pla
 | `App:Server` | `DbDataSync__App__Server` | `kestrel` | `kestrel` or `httpsys`. `httpsys` is Windows-only and exists so the port can be shared with other processes — see "Sharing a port with HTTP.sys," below. Anything else refuses to start. Takes effect on restart |
 | `App:TrustedProxies` | `DbDataSync__App__TrustedProxies` | none | proxies (IP addresses or CIDR ranges such as `10.0.0.0/8`, comma- or semicolon-separated) whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are believed. Set it when a TLS-terminating reverse proxy sits in front of a plain-HTTP bind; see [Plain HTTP](#plain-http-and-reverse-proxies) |
 | `App:AllowInsecureHttp` | `DbDataSync__App__AllowInsecureHttp` | `false` | serve plain HTTP to every client. Credentials and data then cross the network in clear text |
-| `App:TaskRunnerDllPath` | `DbDataSync__App__TaskRunnerDllPath` | none | start replication workers as `dotnet exec` of this `DbDataSync.TaskRunner.dll`, see below |
+| `App:TaskRunnerDllPath` | `DbDataSync__App__TaskRunnerDllPath` | none | read but unused since plan 28c E22: the server starts no replication worker (the Runner runs every replication); it goes with the server (plan 33 SC23) |
 | `App:CliDllPath` | `DbDataSync__App__CliDllPath` | none | start the deep, connection-scoped library-validation check as `dotnet exec` of this `DbDataSync.Cli.dll`, see below |
 
-Normally neither is set. The server starts a replication's worker, and a library validation, as **itself again**: `dbdatasync internal worker ...`
-and `dbdatasync library validate ...`, using the same executable that is running the server (the launcher under an installed service,
+Normally neither is set. The server starts a library validation (and the publish verb) as **itself again**:
+`dbdatasync library validate ...`, using the same executable that is running the server (the launcher under an installed service,
 a published executable, or `dotnet DbDataSync.Cli.dll serve`). Nothing then needs `dotnet` on the path, which is what lets Sync be published
 self-contained. The two settings are for a host that is not `DbDataSync.Cli`, such as the test host, or `DbDataSync.Api.dll` run directly
 in this repository's working tree. When neither is set and the running program is not `DbDataSync.Cli`, the files beside the running
@@ -450,22 +450,13 @@ HTTPS redirection should be enabled — it isn't, unless an `https://` URL is ac
 `ASPNETCORE_ENVIRONMENT` (set to `Development` in `Properties/launchSettings.json` for the dev-loop
 `http`/`https` profiles).
 
-## DbDataSync.TaskRunner process (CLI only)
+## DbDataSync.TaskRunner process (Runner task only)
 
-Spawned per run — by `ProcessSupervisor` inside the API, or directly by `dbdatasync`. Hand-rolled
-argument parser; an unrecognized flag is a hard error, not a silent ignore.
+Started by a Runner as the task of a published replication set (`--runner`, plan 28c E03). Since plan 28c E22 the Runner is Sync's
+only scheduler: the Sync server starts no worker, and the program refuses to start without `--runner` (exit code 2). The flags
+of the old worker (`--repo-root`, `--state-db`, `--state-endpoint` and the rest) are gone with it.
 
-| flag | required | default |
-| --- | --- | --- |
-| `--repo-root <path>` | yes | — |
-| `--state-db <path>` | yes | — |
-| `--replication <name>` | yes | — |
-| `--degree-of-parallelism <n>` | no | `4` |
-| `--bulk-load-parallelism <n>` | no | `4` |
-| `--state-endpoint <url>` | no | falls back to the `DBDATAKIT_SYNC_STATE_ENDPOINT` environment variable |
-| `--state-grace-seconds <n>` | no | `60` |
-
-The worker runs **two independent lanes**, each with its own bounded queue and its own
+Within a drain the engine runs **two independent lanes**, each with its own bounded queue and its own
 pool of consumers:
 
 - `--degree-of-parallelism` sizes the **change-processing lane** — incremental (`Primary`) passes.

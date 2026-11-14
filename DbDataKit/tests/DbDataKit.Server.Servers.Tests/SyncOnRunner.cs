@@ -17,11 +17,11 @@ namespace DbDataKit.Server.Servers.Tests;
 /// <summary>
 /// The end-to-end harness of plan 28c E12e: a replication that really is owned by a runner, SQL Server to PostgreSQL, with every piece the programs they are.
 /// <list type="bullet">
-/// <item>a <b>Sync server</b> (<c>DbDataSync.Cli server run</c>, its own directory; its supervisor starts real workers) and a <b>runner</b> (<c>dbdatarunner server run</c>, its own directory), both processes;</item>
+/// <item>a <b>Sync server</b> (<c>DbDataSync.Cli server run</c>, its own directory; since plan 28c E22 it starts no process of its own) and a <b>runner</b> (<c>dbdatarunner server run</c>, its own directory), both processes;</item>
 /// <item>the engine as the runtime package <c>dbdatasync-runtime</c>, installed and active in the channel (the TaskRunner's build output with the manifest <c>scripts/runtime-manifest.sh</c> prints);</item>
 /// <item>the replication set published with the real <c>dbdatasync package publish --to runner</c>, its slots bound to the connections the runner knows: <c>connection/1</c> files in the runner's <c>connections</c> directory and the
 /// logins as <c>DBDATAKIT_SECRET_*</c> in the runner's environment (plan 28c E02);</item>
-/// <item>the Sync API called as Sync's screens call it: through a <b>console</b> in this process that is paired with both servers (<c>PUT /api/runner</c>, <c>PUT /api/replications/{name}/owner</c>), because the API takes the console's signed token and a
+/// <item>the Sync API called as Sync's screens call it: through a <b>console</b> in this process that is paired with both servers (<c>PUT /api/runner</c>), because the API takes the console's signed token and a
 /// real server is what the move has to be proved against; the runner is read the same way.</item>
 /// </list>
 /// </summary>
@@ -74,14 +74,13 @@ internal sealed class SyncOnRunner : IAsyncDisposable
             ? "set DBDATAKIT_TEST_SQLSERVER and DBDATAKIT_TEST_POSTGRES (testenv/testenv.sh up mssql postgres; eval \"$(testenv/testenv.sh env dbdatakit)\") to run a replication on a real runner"
             : null;
 
-    /// <summary>The replications of the loads story (<c>SyncOnRunnerLoadsTests</c>) beside the three of the move: <c>bulk</c> (SQL Server to SQL Server, Change Tracking and merge, for a reload in segments), <c>ver</c> (the same pair, periodic, its mapping has a verification check) and
-    /// <c>loadfail</c> (the same pair whose target table refuses every row, so an initial load fails and the mapping stays loading).</summary>
+    /// <summary>The replications of the loads story (<c>SyncOnRunnerLoadsTests</c>) beside the three of the move: <c>bulk</c> (SQL Server to SQL Server, Change Tracking and merge, for a reload in segments), <c>ver</c> (the same pair, periodic, its mapping has a verification check).</summary>
     public bool Extras { get; init; }
 
-    private string[] Tables => Extras ? ["cont", "per", "inc", "bulk", "ver", "loadfail"] : ["cont", "per", "inc"];
+    private string[] Tables => Extras ? ["cont", "per", "inc", "bulk", "ver"] : ["cont", "per", "inc"];
 
     /// <summary>The replications whose target is the SQL Server database <see cref="DwDatabase"/> (the others write to PostgreSQL).</summary>
-    private static bool IsDw(string table) => table is "inc" or "bulk" or "ver" or "loadfail";
+    private static bool IsDw(string table) => table is "inc" or "bulk" or "ver";
 
     public static async Task<SyncOnRunner> StartAsync(bool extras = false)
     {
@@ -130,8 +129,7 @@ internal sealed class SyncOnRunner : IAsyncDisposable
         foreach (var table in tables)
         {
             await Exec(source, $"CREATE TABLE dbo.[{table}_src] (id INT NOT NULL PRIMARY KEY, name NVARCHAR(50) NOT NULL); ALTER TABLE dbo.[{table}_src] ENABLE CHANGE_TRACKING;");
-            if (table == "loadfail") await Exec(dw, "CREATE TABLE dbo.loadfail_tgt (id INT NOT NULL PRIMARY KEY, name NVARCHAR(50) NOT NULL, must_have INT NOT NULL)");   // a column the mapping does not fill: every insert fails
-            else if (IsDw(table)) await Exec(dw, $"CREATE TABLE dbo.{table}_tgt (id INT NOT NULL PRIMARY KEY, name NVARCHAR(50) NOT NULL)");
+            if (IsDw(table)) await Exec(dw, $"CREATE TABLE dbo.{table}_tgt (id INT NOT NULL PRIMARY KEY, name NVARCHAR(50) NOT NULL)");
             else await Exec(target, $"CREATE TABLE public.{table}_tgt (id integer PRIMARY KEY, name text NOT NULL)");
         }
     }
@@ -211,7 +209,6 @@ internal sealed class SyncOnRunner : IAsyncDisposable
         Directory.CreateDirectory(SyncDirectory);
         Directory.CreateDirectory(RunnerDirectory);
         await CreateDatabasesAsync(Tables);
-        if (Extras) await InsertAsync("loadfail", 1, 100);   // rows are there before the replication is, so its very first (initial) load has rows to write into a target that refuses them
         Step("databases");
 
         // the runtime package, installed and active before the runner starts (the development path, in the runner's own directory)
@@ -265,7 +262,6 @@ internal sealed class SyncOnRunner : IAsyncDisposable
         {
             await CreateReplicationAsync("bulk", new { mode = "Continuous", frequencySeconds = 2, idleTimeoutSeconds = 5 }, "dw");
             await CreateReplicationAsync("ver", new { mode = "Periodic", cronExpression = "0 3 * * *" }, "dw", verify: true);
-            await CreateReplicationAsync("loadfail", new { mode = "Continuous", frequencySeconds = 2, idleTimeoutSeconds = 5 }, "dw");
         }
 
         Step("connections and replications made");

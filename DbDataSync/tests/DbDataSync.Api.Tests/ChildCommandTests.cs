@@ -47,9 +47,6 @@ public sealed class ChildCommandTests
             CliDllPath = "/x/DbDataSync.Cli.dll",
         };
 
-        var worker = ChildCommand.ForWorker(options);
-        Assert.Equal("dotnet", worker.FileName);
-        Assert.Equal(["exec", "/x/DbDataSync.TaskRunner.dll"], worker.LeadingArguments);
         var cli = ChildCommand.ForCli(options);
         Assert.Equal("dotnet", cli.FileName);
         Assert.Equal(["exec", "/x/DbDataSync.Cli.dll"], cli.LeadingArguments);
@@ -60,10 +57,10 @@ public sealed class ChildCommandTests
     {
         var options = new ApiOptions { RepoRoot = "/tmp/repo", StateDbPath = "/tmp/repo/state.db" };
 
-        var (fileName, leading) = ChildCommand.ForWorker(options);
+        var (fileName, leading) = ChildCommand.ForCli(options);
 
         Assert.Equal("dotnet", fileName);
         Assert.Equal("exec", leading[0]);
-        Assert.EndsWith("DbDataSync.TaskRunner.dll", leading[1]);
+        Assert.EndsWith("DbDataSync.Cli.dll", leading[1]);
     }
 }

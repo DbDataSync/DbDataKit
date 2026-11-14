@@ -45,7 +45,8 @@ public sealed class RunnerLagInputs(RunnerAccess runner, TimeProvider? clock = n
     private readonly ConcurrentDictionary<string, RunnerLagSnapshot> _snapshots = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _problems = new(StringComparer.Ordinal);
 
-    public bool Owns(string replication) => runner.File.OwnerOf(replication) == DbDataKit.State.TaskOwners.Runner;
+    /// <summary>Whether the replication's inputs are the runner's: every replication's, once a runner is linked (plan 28c E22: the Runner is Sync's only scheduler).</summary>
+    public bool Owns(string replication) => runner.Link is not null;
 
     /// <summary>Why the last attempt to read the replication from the runner failed, or null when it did not (or none was made).</summary>
     public string? Problem(string replication) => _problems.GetValueOrDefault(replication);
@@ -102,7 +103,7 @@ public sealed class RunnerLagInputs(RunnerAccess runner, TimeProvider? clock = n
 }
 
 /// <summary>Keeps the lag inputs of the replications the runner owns fresh (plan 28c E13), so that describing lag reads figures and asks nobody.</summary>
-public sealed class RunnerLagRefresher(RunnerLagInputs inputs, RunnerOwnerFile file, Microsoft.Extensions.Logging.ILogger<RunnerLagRefresher> logger) : Microsoft.Extensions.Hosting.BackgroundService
+public sealed class RunnerLagRefresher(RunnerLagInputs inputs, RunnerAccess runner, DbDataSync.Core.Config.ConfigRepository config, Microsoft.Extensions.Logging.ILogger<RunnerLagRefresher> logger) : Microsoft.Extensions.Hosting.BackgroundService
 {
     /// <summary>The cadence of the refresh: the polling gate's own tick is five seconds, so a faster read would only see the same checks.</summary>
     public static readonly TimeSpan Interval = TimeSpan.FromSeconds(5);
@@ -114,8 +115,9 @@ public sealed class RunnerLagRefresher(RunnerLagInputs inputs, RunnerOwnerFile f
         {
             try
             {
-                foreach (var (replication, owner) in file.Read().Owners)
-                    if (owner == DbDataKit.State.TaskOwners.Runner && !await inputs.RefreshAsync(replication, stoppingToken).ConfigureAwait(false))
+                if (runner.Link is null) continue;
+                foreach (var replication in config.ListReplications())
+                    if (!await inputs.RefreshAsync(replication, stoppingToken).ConfigureAwait(false))
                         logger.LogWarning("The runner could not be read for the lag of '{Replication}': {Problem}", replication, inputs.Problem(replication));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

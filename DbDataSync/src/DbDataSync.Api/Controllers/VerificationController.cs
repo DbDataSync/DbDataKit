@@ -1,4 +1,3 @@
-using DbDataSync.Api.Configuration;
 using DbDataSync.Api.Services;
 using DbDataSync.Core.Config;
 using DbDataSync.State;
@@ -10,30 +9,17 @@ using Microsoft.AspNetCore.Mvc;
 namespace DbDataSync.Api.Controllers;
 
 /// <summary>
-/// Running a mapping's checks, and reading what they said — see phase 43.
-/// <para>
-/// A verification run goes through the same queue, lock and history as any other: it is a run, and
-/// giving it a parallel mechanism would mean a second answer to "what is this replication doing".
-/// What is different is what it produces — a file rather than rows at the target — and that file is
-/// written by the TaskRunner straight to disk, never through this process's state channel.
-/// </para>
+/// Running a mapping's checks, and reading what they said — see phase 43. Since plan 28c E22 the Runner is Sync's only scheduler: a verification is a request of the replication's drain, and its
+/// results are steps of the runner's runs (plan 28c E06e), read through the paired runner.
 /// </summary>
 [ApiController]
 [Route("api/replications/{replicationName}")]
 public sealed class VerificationController(
     ConfigRepository configRepository,
-    WorkQueueStore workQueue,
-    ProcessSupervisor supervisor,
     DbDataSync.Api.Runner.RunnerDispatch runnerDispatch,
-    VerificationResultStore results,
-    DbDataSync.Api.Runner.RunnerVerificationResults runnerResults,
-    ApiOptions options) : ControllerBase
+    DbDataSync.Api.Runner.RunnerVerificationResults runnerResults) : ControllerBase
 {
-    /// <summary>
-    /// Queues this mapping's checks as one run. Operator-triggered, like phase 41's script test and
-    /// phase 19's connection test — a check is something somebody asks for, and nothing has yet asked
-    /// for it on a schedule.
-    /// </summary>
+    /// <summary>Queues this mapping's checks as a request of the drain on the runner. Operator-triggered: a check is something somebody asks for.</summary>
     [HttpPost("mappings/{mappingName}/verify")]
     public async Task<IActionResult> Verify(string replicationName, string mappingName, CancellationToken cancellationToken)
     {
@@ -55,15 +41,8 @@ public sealed class VerificationController(
             });
         }
 
-        if (runnerDispatch.RunnerOwns(replicationName))
-        {
-            var sent = await runnerDispatch.SendAsync(replicationName, [new DrainRequest(nameof(RunKind.Verification), mappingName)], runAll: false, cancellationToken);
-            return sent.Outcome == TriggerOutcome.Started ? Accepted(new { runIds = sent.RunIds }) : StatusCode(409, new { error = sent.Reason });
-        }
-
-        var runId = workQueue.Enqueue(replicationName, RunKind.Verification, mappingName);
-        supervisor.EnsureWorkerRunning(replicationName);
-        return Accepted(new { runIds = new[] { runId } });
+        var sent = await runnerDispatch.SendAsync(replicationName, [new DrainRequest(nameof(RunKind.Verification), mappingName)], runAll: false, cancellationToken);
+        return sent.Outcome == TriggerOutcome.Started ? Accepted(new { runIds = sent.RunIds }) : StatusCode(409, new { error = sent.Reason });
     }
 
     [Authorize(Policies.Viewer)]
@@ -71,10 +50,6 @@ public sealed class VerificationController(
     public async Task<ActionResult<IReadOnlyList<VerificationResultRecord>>> List(
         string replicationName, CancellationToken cancellationToken, [FromQuery] string? mappingName = null, [FromQuery] int limit = 50)
     {
-        if (!runnerDispatch.RunnerOwns(replicationName))
-            return Ok(results.List(replicationName, mappingName, limit));
-
-        // owned by the runner: its results are steps of its runs (plan 28c E06e), not rows of this process's state
         try
         {
             return Ok(await runnerResults.ListAsync(replicationName, mappingName, limit, cancellationToken));
@@ -86,18 +61,7 @@ public sealed class VerificationController(
     }
 
     /// <summary>
-    /// One page of a result, read back from the parquet the runner wrote.
-    /// <para>
-    /// A page, not the result. A check over a large table produces a row per group — millions of them
-    /// — and this used to return every one: the API allocated the lot, the response was tens of
-    /// megabytes of JSON, and the browser rendered a DOM node per cell. It locked the tab up for
-    /// minutes and crashed some of them, to show a screenful.
-    /// </para>
-    /// <para>
-    /// The index is checked against the replication in the route before the file is opened: a result
-    /// id is an integer somebody could guess, and a path out of the database is not a path this should
-    /// serve without knowing it belongs where the caller says it does.
-    /// </para>
+    /// One page of a result, read back from the parquet the runner kept as the step's payload. A page, not the result: a check over a large table produces a row per group, millions of them.
     /// </summary>
     [Authorize(Policies.Viewer)]
     [HttpGet("verification-results/{id:long}")]
@@ -109,83 +73,20 @@ public sealed class VerificationController(
         [FromQuery] int limit = 100,
         [FromQuery] bool differingOnly = false)
     {
-        if (runnerDispatch.RunnerOwns(replicationName))
-        {
-            try
-            {
-                var read = await runnerResults.ReadPageAsync(replicationName, id, offset, limit, differingOnly, cancellationToken);
-                if (read.NotFound) return NotFound();
-                return read.Page is { } page ? Ok(page) : NotFound(new { error = read.Error });
-            }
-            catch (DbDataSync.Api.Runner.RunnerUnavailableException ex)
-            {
-                return StatusCode(503, new { error = ex.Message });
-            }
-        }
-
-        if (ResolveFile(replicationName, id) is not { } path)
-            return NotFound();
-
-        if (!System.IO.File.Exists(path))
-        {
-            return NotFound(new
-            {
-                error = "The result file is no longer on disk. Run the check again to produce a new one.",
-            });
-        }
-
-        return Ok(await VerificationResultQuery.ReadPageAsync(path, offset, limit, differingOnly, cancellationToken));
-    }
-
-    /// <summary>
-    /// Throws away one result — its index row and its file.
-    /// <para>
-    /// The index row goes first. A row pointing at a file that is gone is a broken link an operator
-    /// has to work out; a file with no row pointing at it is disk somebody can reclaim, and the next
-    /// run of the same check overwrites it anyway.
-    /// </para>
-    /// </summary>
-    [HttpDelete("verification-results/{id:long}")]
-    public IActionResult Delete(string replicationName, long id)
-    {
-        if (runnerDispatch.RunnerOwns(replicationName))
-            return StatusCode(409, new { error = "The results of a replication the runner owns are kept by the runner's retention with the run that made them; they are not deleted here." });
-
-        if (ResolveFile(replicationName, id) is not { } path)
-            return NotFound();
-
-        results.Delete(id);
-
         try
         {
-            System.IO.File.Delete(path);
+            var read = await runnerResults.ReadPageAsync(replicationName, id, offset, limit, differingOnly, cancellationToken);
+            if (read.NotFound) return NotFound();
+            return read.Page is { } page ? Ok(page) : NotFound(new { error = read.Error });
         }
-        catch (IOException)
+        catch (DbDataSync.Api.Runner.RunnerUnavailableException ex)
         {
-            // The result is forgotten either way. A file still held open by something is a stale file,
-            // not a failed delete, and reporting it as one would leave the operator with a row they
-            // cannot remove.
+            return StatusCode(503, new { error = ex.Message });
         }
-
-        return NoContent();
     }
 
-    /// <summary>
-    /// The result's file, or null when there is no such result for this replication.
-    /// <para>
-    /// Under the verification root and nowhere else. The path came out of this process's own database,
-    /// but a check on the way out costs nothing and is the kind of thing that stops being true after a
-    /// migration nobody thought about.
-    /// </para>
-    /// </summary>
-    private string? ResolveFile(string replicationName, long id)
-    {
-        var record = results.Get(id);
-        if (record is null || record.TaskName != replicationName)
-            return null;
-
-        var root = Path.GetFullPath(VerificationPaths.RootFor(options.StateDbPath));
-        var path = Path.GetFullPath(record.ResultPath);
-        return path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal) ? path : null;
-    }
+    /// <summary>The results are kept by the runner's retention with the run that made them, so nothing is deleted here.</summary>
+    [HttpDelete("verification-results/{id:long}")]
+    public IActionResult Delete(string replicationName, long id) =>
+        StatusCode(409, new { error = "The results of a replication are kept by the runner's retention with the run that made them (plan 28c E22: the Runner runs every replication); they are not deleted here." });
 }

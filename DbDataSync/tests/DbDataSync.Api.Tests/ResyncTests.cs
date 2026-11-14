@@ -86,55 +86,22 @@ public sealed class ResyncTests(TestApiFactory factory) : IClassFixture<TestApiF
         return runId;
     }
 
-    [Fact]
-    public async Task APositionExpiredRun_CanBeResynced()
+    /// <summary>
+    /// A resync is a request of the drain on the runner (plan 28c E12, E22: the Runner is Sync's only scheduler), whatever failed and whether or not the run was a position that expired. With no runner
+    /// linked nothing can run it, and the answer says so (409) instead of setting an intent this server no longer reads.
+    /// </summary>
+    [Theory]
+    [InlineData(RunFailureKinds.PositionExpired)]
+    [InlineData(null)]
+    public async Task A_resync_goes_to_the_runner_and_with_none_linked_is_refused_saying_so(string? failureKind)
     {
         var (replication, mapping) = await SetUpAsync();
-        var runId = RecordFailedRun(replication, mapping, RunFailureKinds.PositionExpired);
+        var runId = RecordFailedRun(replication, mapping, failureKind);
 
         var response = await _client.PostAsync($"/api/runs/{runId}/resync", null);
 
-        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
-    }
-
-    /// <summary>
-    /// Setting the intent and clearing the hold is the pair an operator constructing this by hand would
-    /// get half of — the same reasoning that used to apply to clearing the watermark, restated for what
-    /// this method does now (phase 101's retarget). The next <c>Primary</c> pass resolves
-    /// <see cref="ReadIntent.InitialLoad"/> itself, so there is no watermark to clear any more.
-    /// </summary>
-    [Fact]
-    public async Task Resync_SetsInitialLoadAndClearsTheHold()
-    {
-        var (replication, mapping) = await SetUpAsync();
-        var watermarks = factory.Services.GetRequiredService<ChangeWatermarkStore>();
-        var key = WatermarkKey.Build(
-            new SourceTableRef { ConnectionName = "src", Database = "App", Schema = "dbo", Table = "Orders" },
-            MsSqlDialect.Instance);
-        watermarks.SetReadIntentAndHold(replication, mapping, key, ReadIntent.Changes, ReadHold.PositionExpired);
-
-        var runId = RecordFailedRun(replication, mapping, RunFailureKinds.PositionExpired);
-        (await _client.PostAsync($"/api/runs/{runId}/resync", null)).EnsureSuccessStatusCode();
-
-        var state = watermarks.GetReadState(replication, mapping, key);
-        Assert.Equal(ReadIntent.InitialLoad, state!.Intent);
-        Assert.Equal(ReadHold.None, state.Hold);
-    }
-
-    /// <summary>
-    /// The gate is wider than "recovering from a PositionExpired hold" — an operator can ask for a full
-    /// reload of a mapping at any time, so an ordinary failure (or no failure at all) does not refuse
-    /// this the way it used to.
-    /// </summary>
-    [Fact]
-    public async Task AnOrdinaryFailure_IsStillResyncable()
-    {
-        var (replication, mapping) = await SetUpAsync();
-        var runId = RecordFailedRun(replication, mapping, failureKind: null);
-
-        var response = await _client.PostAsync($"/api/runs/{runId}/resync", null);
-
-        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("No runner is linked", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
 
     [Fact]

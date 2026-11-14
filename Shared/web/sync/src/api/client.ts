@@ -1,7 +1,7 @@
 import { adminApi } from '@dbdatakit/admin'
 import { ApiError, put, request, shellApi } from '@dbdatakit/shell'
 import type {
-  OwnerView, OwnershipChange, ReplicationOwner, RunnerLink, RunnerPackageView, PublishState, ReplicationSetPublication, PublishRunnerRequest,
+  ReplicationRunnerView, RunnerLink, RunnerPackageView, PublishState, ReplicationSetPublication, PublishRunnerRequest,
   ReplicationChecks, ReplicationTrackingStatus,
   CheckForm,
   ApplyResult,
@@ -168,11 +168,8 @@ export const api = {
     /** Replaces them; `version` is the one `checks` gave. A refusal carries the strict reader's diagnostics (400) or the current checks (409). */
     saveChecks: (name: string, checks: CheckForm[], version: string) =>
       put<ReplicationChecks>(`/api/replications/${encodeURIComponent(name)}/checks`, { checks, version }),
-    /** Who schedules the replication (`old`, `observe`, `runner`), the runner's own row of its task, and the link (plan 28c E12). */
-    owner: (name: string) => request<OwnerView>(`/api/replications/${encodeURIComponent(name)}/owner`),
-    /** Moves it: `observe`, `runner` (cutover) or `old` (rollback). A refusal is 409 with what was found, and the owner is as it was. */
-    setOwner: (name: string, owner: ReplicationOwner, waitSeconds?: number) =>
-      put<OwnershipChange>(`/api/replications/${encodeURIComponent(name)}/owner`, { owner, waitSeconds: waitSeconds ?? null }),
+    /** The runner's own row of the replication's task and the link (plan 28c E12; since E22 the Runner runs every replication). */
+    runner: (name: string) => request<ReplicationRunnerView>(`/api/replications/${encodeURIComponent(name)}/runner`),
     history: (name: string) => request<CommitInfo[]>(`/api/replications/${encodeURIComponent(name)}/history`),
     /** The patch one commit made to this replication — phase 35's "View changes". Read-only. */
     commitDiff: (name: string, sha: string) =>

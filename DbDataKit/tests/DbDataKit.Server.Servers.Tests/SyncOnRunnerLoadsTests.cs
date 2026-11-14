@@ -16,7 +16,6 @@ public sealed class SyncOnRunnerLoadsTests(SyncOnRunnerExtrasFixture fixture) : 
         RequireEngines();
         const int segments = 20, perSegment = 25_000;
         await H.InsertAsync("bulk", 1, segments * perSegment);
-        await Move("bulk", "runner");
         await RunNow("bulk");
         await WaitForRows("bulk", segments * perSegment, "loaded by the drain's first pass (a full initial load)");
         await H.ExecuteDwAsync("TRUNCATE TABLE dbo.bulk_tgt");   // the reload starts from an empty target, so the rows that arrive are the segments' rows
@@ -53,26 +52,5 @@ public sealed class SyncOnRunnerLoadsTests(SyncOnRunnerExtrasFixture fixture) : 
         Assert.Equal("Completed", (string?)batch!["state"]);
         Assert.Equal(0, (int)batch["segmentsFailed"]!);
         Assert.Equal(segments * perSegment, (long)batch["rowsCopied"]!);
-    }
-
-    [Fact]
-    public async Task A_replication_whose_mapping_is_still_loading_cannot_be_moved_to_the_runner_and_nothing_changes()
-    {
-        RequireEngines();
-        // the supervisor's worker (its scheduler started it as the replication was made) captured the position, queued the initial load as a batch, and the load failed: every insert into the target is refused
-        await H.WaitAsync(async () => (await Ok(H.Sync(HttpMethod.Get, "/api/replications/loadfail/runs?limit=50&kind=BulkLoad"), "runs of loadfail"))["runs"]!.AsArray().Any(r => (string?)r!["status"] == "Failed"),
-            "the initial load of loadfail to have failed", 180);
-        await Ok(H.Sync(HttpMethod.Put, "/api/replications/loadfail/paused", new { paused = true, note = "held for the proof" }), "pause loadfail");
-        await H.WaitAsync(async () => !await WorkerRunning("loadfail"), "the worker of loadfail to have ended", 120);
-        Assert.Equal((0L, 0L), await H.TargetAsync("loadfail"));
-
-        var (status, body) = await H.Sync(HttpMethod.Put, "/api/replications/loadfail/owner", new { owner = "runner", waitSeconds = 20 });
-
-        Assert.True(status == HttpStatusCode.Conflict, $"{status} {body}\nruns: {(await H.Sync(HttpMethod.Get, "/api/replications/loadfail/runs?limit=50")).Body}");
-        var error = (string?)body?["error"] ?? "";
-        Assert.True(error.Contains("is loading", StringComparison.Ordinal) && error.Contains("'main'", StringComparison.Ordinal), error);   // the mapping's hold, not work left in the queue
-        Assert.Equal("old", (string?)(await Ok(H.Sync(HttpMethod.Get, "/api/replications/loadfail/owner"), "owner of loadfail"))["owner"]);
-        Assert.False(await WorkerRunning("loadfail"));
-        Assert.Empty(await RunnerRuns("loadfail"));   // the runner was not started for it
     }
 }

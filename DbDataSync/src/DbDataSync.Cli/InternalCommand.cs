@@ -4,8 +4,7 @@ namespace DbDataSync.Cli;
 
 /// <summary>
 /// <c>dbdatasync internal ...</c> — commands for the build, not for an operator. Deliberately absent
-/// from <see cref="Help.Print"/> and from every user-facing doc; the Dockerfile and the API (which starts workers with
-/// <c>internal worker</c>, see <c>ChildCommand</c>) are the callers.
+/// from <see cref="Help.Print"/> and from every user-facing doc; the Dockerfile is the caller.
 /// </summary>
 public static class InternalCommand
 {
@@ -13,7 +12,7 @@ public static class InternalCommand
     {
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("Usage: dbdatasync internal build-catalog-cache <out-dir> | worker <worker arguments>");
+            Console.Error.WriteLine("Usage: dbdatasync internal build-catalog-cache <out-dir>");
             return 1;
         }
 
@@ -21,7 +20,7 @@ public static class InternalCommand
         {
             "build-catalog-cache" => await BuildCatalogCacheAsync(args[1..]),
             "apply-update" => await ApplyUpdateAsync(),
-            "worker" => await TaskRunner.WorkerEntry.RunAsync(args[1..]),
+            "worker" => Retired(),
             var other => Unknown(other),
         };
     }
@@ -67,6 +66,13 @@ public static class InternalCommand
     {
         Console.WriteLine("update: this step is retired; apply updates with `sudo dbdatasync update --apply`. Nothing was done.");
         return Task.FromResult(0);
+    }
+
+    /// <summary>The worker the Sync server started for a replication is gone (plan 28c E22: the Runner is Sync's only scheduler); a unit or script that still starts it is told so.</summary>
+    private static int Retired()
+    {
+        Console.Error.WriteLine("`internal worker` is gone: the Runner runs every replication (plan 28c E22). Publish the replication set to a Runner (`dbdatasync package publish --to runner`).");
+        return 2;
     }
 
     private static int Unknown(string sub)

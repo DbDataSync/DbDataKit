@@ -101,16 +101,4 @@ public sealed class RunnerOwnedBulkLoadsTests(RunnerOwnedApiFactory factory) : I
         }
     }
 
-    [Fact]
-    public async Task A_replication_on_the_old_path_lists_its_own_states_batches_and_asks_no_runner()
-    {
-        var name = NewName();
-
-        var list = await _client.GetFromJsonAsync<List<BulkLoadBatchProgress>>($"/api/replications/{name}/bulk-loads", JsonOptions);
-        var history = await _client.GetFromJsonAsync<BulkLoadHistoryResponse>($"/api/replications/{name}/bulk-loads/history", JsonOptions);
-
-        Assert.Empty(list!);
-        Assert.Empty(history!.Batches);
-        Assert.Equal(0, factory.Runner.AskedAbout(name));
-    }
 }

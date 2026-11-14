@@ -11,7 +11,6 @@ namespace DbDataSync.Api.Controllers;
 [ApiController]
 [Route("api")]
 public sealed class RunsController(
-    ProcessSupervisor supervisor,
     DbDataSync.Api.Runner.RunnerDispatch runnerDispatch,
     BulkLoadService bulkLoadService,
     ReconcileService reconcileService,
@@ -28,14 +27,15 @@ public sealed class RunsController(
     [HttpPost("replications/{name}/runs")]
     public async Task<IActionResult> Trigger(string name, CancellationToken cancellationToken)
     {
-        // "Run now" of a replication the runner owns is a run of its drain with run_all (plan 28c E12)
-        var result = runnerDispatch.RunnerOwns(name)
-            ? await runnerDispatch.SendAsync(name, [], runAll: true, cancellationToken)
-            : supervisor.TriggerReplication(name);
+        // "Run now" is a run of the replication's drain on the runner with run_all (plan 28c E12; E22: the Runner is the only scheduler)
+        if (!configRepository.ListReplications().Contains(name, StringComparer.Ordinal))
+            return NotFound(new { error = $"Replication '{name}' not found." });
+        var result = await runnerDispatch.SendAsync(name, [], runAll: true, cancellationToken);
         return result.Outcome switch
         {
             TriggerOutcome.Started => Accepted(new { runIds = result.RunIds }),
             TriggerOutcome.ReplicationNotFound => NotFound(new { error = result.Reason }),
+            TriggerOutcome.FailedToStart => StatusCode(409, new { error = result.Reason }),
             _ => StatusCode(500, new { error = result.Reason }),
         };
     }
@@ -92,9 +92,9 @@ public sealed class RunsController(
     {
         var size = Math.Clamp(limit, 1, 20);
         var own = bulkLoadBatchStore.GetRecentBulkLoads(name, size);
-        if (!runnerRuns.RunnerOwns(name)) return Ok(own);
+        if (!runnerRuns.AnyOwned) return Ok(own);   // no runner linked: nothing runs, so there is nothing more to read
 
-        // a replication the runner owns has its batches there (plan 28c E22 precondition): merged with what this server holds from before it was moved
+        // the batches are the runner's (plan 28c E22): merged with what this server holds from before the Runner ran everything
         try
         {
             var onRunner = await runnerBulkLoads.ListAsync(name, null, cancellationToken);
@@ -127,13 +127,8 @@ public sealed class RunsController(
         var decodedCursor = BulkLoadHistoryCursorCodec.Decode(cursor, name, mappingName);
         var size = Math.Clamp(limit, 1, 20);
         var page = bulkLoadBatchStore.GetHistory(name, mappingName, decodedCursor, size);
-        if (!runnerRuns.RunnerOwns(name))
-        {
-            var next = page.NextCursor is { } own
-                ? BulkLoadHistoryCursorCodec.Encode(own, name, mappingName)
-                : null;
-            return Ok(new BulkLoadHistoryResponse(page.Batches, next));
-        }
+        if (!runnerRuns.AnyOwned)
+            return Ok(new BulkLoadHistoryResponse(page.Batches, page.NextCursor is { } own ? BulkLoadHistoryCursorCodec.Encode(own, name, mappingName) : null));
 
         // merged with the runner's batches older than the cursor (the same keyset: created at, then batch id, newest first)
         try
@@ -225,15 +220,7 @@ public sealed class RunsController(
     {
         var decodedCursor = RunHistoryCursorCodec.Decode(cursor, name, kind, mappingName, status);
         var page = taskRunStore.GetRunHistory(name, kind, mappingName, status, decodedCursor, limit);
-        // a replication the runner owns has the runs it ran there as well (plan 28c E13): its passes and its drains, merged with what this server holds from before it was moved
-        if (!runnerRuns.RunnerOwns(name))
-        {
-            var nextCursor = page.NextCursor is { } next
-                ? RunHistoryCursorCodec.Encode(next, name, kind, mappingName, status)
-                : null;
-            return Ok(new RunHistoryResponse(page, nextCursor));
-        }
-
+        // the runs are the runner's (plan 28c E13, E22): its passes and its drains, merged with what this server holds from before the Runner ran everything
         var size = Math.Clamp(limit, 1, 200);
         // asked a little over a page, and from the cursor's own instant: runs that started at the same instant as the last one shown are not skipped, and the filter below drops the ones already seen
         var asked = size + 1 + TieSlack;
@@ -352,7 +339,7 @@ public sealed class RunsController(
         {
             TriggerOutcome.ReplicationNotFound => NotFound(),
             TriggerOutcome.Invalid => BadRequest(new { error = result.Reason }),
-            TriggerOutcome.FailedToStart => StatusCode(500, new { error = result.Reason }),
+            TriggerOutcome.FailedToStart => StatusCode(409, new { error = result.Reason }),   // no runner linked, or the runner refused (plan 28c E22)
             _ => Accepted(new { runIds = result.RunIds }),
         };
     }
@@ -360,9 +347,7 @@ public sealed class RunsController(
     [HttpPost("runs/{runId:guid}/cancel")]
     public async Task<IActionResult> Cancel(Guid runId, CancellationToken cancellationToken)
     {
-        if (supervisor.CancelRun(runId)) return Ok();
-
-        // not a run of this server's own worker: a run of a replication the runner owns is stopped on the runner (plan 28c E12g), which answers for the ids of its own history
+        // a run is the runner's (plan 28c E12g, E22), which answers for the ids of its own history
         try
         {
             if (await runnerDispatch.CancelRunAsync(runId, cancellationToken)) return Ok();
@@ -372,6 +357,6 @@ public sealed class RunsController(
             return StatusCode(503, new { error = ex.Message });
         }
 
-        return NotFound(new { error = "No cancellable run with that id on this API instance or on its runner." });
+        return NotFound(new { error = "No cancellable run with that id on the runner." });
     }
 }

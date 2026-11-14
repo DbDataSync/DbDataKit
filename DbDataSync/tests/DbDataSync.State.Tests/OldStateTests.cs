@@ -22,12 +22,29 @@ public sealed class OldStateTests : IClassFixture<LibraryInstallFixture>, IDispo
         Directory.Delete(_tempDir, recursive: true);
     }
 
-    /// <summary>A database as the last release before the modules left it: the whole old schema, and a position in it.</summary>
+    /// <summary>
+    /// The one table of the old structure these tests read (its positions), made the way the old structure made every table: a numbered schema script (plan 29a Q22 deleted the old list of
+    /// scripts, <c>Migrations.Templates</c>; a database the old structure made is recognised by its schema version, which this writes too).
+    /// </summary>
+    private static readonly StateSchema OldSchema = new([
+        """
+        CREATE TABLE ChangeWatermarks (
+            TaskName {{key}} NOT NULL,
+            MappingName {{key}} NOT NULL,
+            SourceTable {{key}} NOT NULL,
+            Watermark {{text}} NULL,
+            UpdatedAtUtc {{text}} NOT NULL,
+            PRIMARY KEY (TaskName, MappingName, SourceTable)
+        );
+        """,
+    ]);
+
+    /// <summary>A database as the last release before the modules left it: the old structure, and a position in it.</summary>
     private static void MakeOld(string engine, string connectionString, string? marker = null)
     {
         var old = engine == StateEngineIds.Sqlite
-            ? new DbDataKit.State.StateDatabase(connectionString, new StateSchema(Migrations.Templates))
-            : new DbDataKit.State.StateDatabase(engine, connectionString, new StateSchema(Migrations.Templates));
+            ? new DbDataKit.State.StateDatabase(connectionString, OldSchema)
+            : new DbDataKit.State.StateDatabase(engine, connectionString, OldSchema);
         using var connection = old.OpenConnection();
         using var cmd = old.Command(connection, "INSERT INTO ChangeWatermarks (TaskName, MappingName, SourceTable, Watermark, UpdatedAtUtc) VALUES ('crm-sync', 'orders', 'dbo.Orders', '0000002A:00000140:0003', '2026-11-01T10:00:00Z');");
         cmd.ExecuteNonQuery();
@@ -62,7 +79,7 @@ public sealed class OldStateTests : IClassFixture<LibraryInstallFixture>, IDispo
         MakeOld(StateEngineIds.Sqlite, path);
         Assert.Throws<OldStateException>(() => new StateDatabase(path));
 
-        var old = new DbDataKit.State.StateDatabase(path, new StateSchema(Migrations.Templates));
+        var old = new DbDataKit.State.StateDatabase(path, OldSchema);
         using var connection = old.OpenConnection();
         using var cmd = old.Command(connection, "SELECT Watermark FROM ChangeWatermarks WHERE TaskName = 'crm-sync';");
         Assert.Equal("0000002A:00000140:0003", cmd.ExecuteScalar());

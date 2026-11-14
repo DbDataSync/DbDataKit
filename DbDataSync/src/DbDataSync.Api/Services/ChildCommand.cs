@@ -4,8 +4,8 @@ using DbDataSync.Api.Configuration;
 namespace DbDataSync.Api.Services;
 
 /// <summary>
-/// The program and leading arguments that start a child process of this application: a worker for one replication, or the
-/// connection-scoped library validation. A child gets its own process so a crash or a stuck driver stays out of the API, and it
+/// The program and leading arguments that start a child process of this application: the CLI (the publish verb,
+/// the connection-scoped library validation). Since plan 28c E22 no replication runs in a child of this server: the Runner runs them. A child gets its own process so a crash or a stuck driver stays out of the API, and it
 /// is started as <c>dbdatasync internal worker ...</c> or <c>dbdatasync library validate ...</c>, that is, as this same
 /// executable again, rather than as <c>dotnet exec &lt;file&gt;</c>. That needs no <c>dotnet</c> on the path and so lets Sync be
 /// published self-contained (plan 13, D11 and slice F14).
@@ -20,11 +20,6 @@ namespace DbDataSync.Api.Services;
 internal static class ChildCommand
 {
     private const string CliAssemblyName = "DbDataSync.Cli";
-
-    public static (string FileName, string[] LeadingArguments) ForWorker(ApiOptions options) =>
-        options.TaskRunnerDllPath is { } dll ? Dotnet(dll)
-        : Self() is { } self ? (self.FileName, [.. self.LeadingArguments, "internal", "worker"])
-        : Dotnet(ApiOptions.ResolveDefaultTaskRunnerDllPath());
 
     public static (string FileName, string[] LeadingArguments) ForCli(ApiOptions options) =>
         options.CliDllPath is { } dll ? Dotnet(dll)

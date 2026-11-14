@@ -14,7 +14,6 @@ public sealed class SyncOnRunnerVerificationTests(SyncOnRunnerExtrasFixture fixt
     {
         RequireEngines();
         await H.InsertAsync("ver", 1, 200);
-        await Move("ver", "runner");
         await RunNow("ver");
         await WaitForRows("ver", 200, "loaded by the first drain on the runner");
 

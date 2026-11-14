@@ -30,15 +30,20 @@ public sealed class ResyncService(
     ConfigRepository configRepository,
     DriverRegistry driverRegistry,
     TaskRunStore taskRunStore,
-    ChangeWatermarkStore watermarks,
-    WorkQueueStore workQueueStore,
-    ProcessSupervisor supervisor,
-    DbDataSync.Api.Runner.RunnerDispatch runnerDispatch)
+    DbDataSync.Api.Runner.RunnerDispatch runnerDispatch,
+    DbDataSync.Api.Runner.RunnerRunSource runnerRuns)
 {
     public async Task<TriggerResult> ResyncAsync(Guid runId, CancellationToken cancellationToken)
     {
-        var run = taskRunStore.GetRun(runId);
-        if (run is null)
+        // a run of this server's history from before the Runner ran everything, or a pass (or drain) of the runner's history (plan 28c E22 precondition P2)
+        TaskRunRecord? run;
+        try { run = taskRunStore.GetRun(runId) ?? (runnerRuns.AnyOwned ? await runnerRuns.FindAsync(runId, cancellationToken) : null); }
+        catch (Exception ex) when (ex is DbDataSync.Api.Runner.RunnerUnavailableException or DbDataKit.Runner.Client.RunnerClientException)
+        {
+            return TriggerResult.FailedToStart(ex.Message);
+        }
+
+        if (run is null || string.IsNullOrEmpty(run.MappingName))
             return TriggerResult.NotFound();
 
         ReplicationTaskConfig task;
@@ -73,25 +78,7 @@ public sealed class ResyncService(
 
         var watermarkKey = WatermarkKey.Build(source, sourceDialect);
 
-        // the position of a replication the runner owns is the drain's progress: the resync is a request of its next run (plan 28c E12)
-        if (runnerDispatch.RunnerOwns(run.TaskName))
-            return await runnerDispatch.SendAsync(run.TaskName, [new DrainRequest("Resync", run.MappingName, SourceKey: watermarkKey)], runAll: false, cancellationToken);
-
-        // Both in the one write: an intent set without clearing the hold, or a hold cleared under the
-        // old intent, are each a state an operator constructing this by hand could land in and a single
-        // call cannot.
-        watermarks.SetReadIntentAndHold(run.TaskName, run.MappingName, watermarkKey, ReadIntent.InitialLoad, ReadHold.None);
-
-        // An ordinary Primary pass, not a BulkLoad: InitialLoad is a read intent like any other, and any
-        // Primary pass can resolve to it — that is the entire point of an intent rather than a
-        // special-cased reload path. Enqueued immediately rather than left for the mapping's own
-        // schedule: an operator who just asked for this should not have to wait out its interval to see
-        // it start.
-        var newRunId = workQueueStore.Enqueue(run.TaskName, RunKind.Primary, run.MappingName);
-
-        var ensureResult = supervisor.EnsureWorkerRunning(run.TaskName);
-        return ensureResult.Outcome == TriggerOutcome.FailedToStart
-            ? ensureResult
-            : TriggerResult.Started([newRunId]);
+        // the position is the drain's progress on the runner: the resync is a request of its next run (plan 28c E12, E22)
+        return await runnerDispatch.SendAsync(run.TaskName, [new DrainRequest("Resync", run.MappingName, SourceKey: watermarkKey)], runAll: false, cancellationToken);
     }
 }

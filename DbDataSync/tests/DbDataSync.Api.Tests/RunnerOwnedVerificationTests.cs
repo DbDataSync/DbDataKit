@@ -123,14 +123,4 @@ public sealed class RunnerOwnedVerificationTests(RunnerOwnedApiFactory factory) 
         }
     }
 
-    [Fact]
-    public async Task A_replication_on_the_old_path_lists_its_own_states_results_and_asks_no_runner()
-    {
-        var name = NewName();
-
-        var list = await _client.GetFromJsonAsync<List<VerificationResultRecord>>($"/api/replications/{name}/verification-results", JsonOptions);
-
-        Assert.Empty(list!);
-        Assert.Equal(0, factory.Runner.AskedAbout(name));
-    }
 }

@@ -98,9 +98,8 @@ public sealed class RunnerLagTests(TestApiFactory factory) : IClassFixture<TestA
             runner.AddStep(task, ChangeCheckText.StepName, $"{pair.OnRunner}/{group.chunk[0].CheckedAt.UtcTicks}", JsonSerializer.Serialize(batch, new JsonSerializerOptions(JsonSerializerDefaults.Web)), group.chunk[0].CheckedAt);
         }
 
-        var file = new RunnerOwnerFile(Path.Combine(Path.GetTempPath(), $"runner-owners-{Guid.NewGuid():N}.json"));
+        var file = new RunnerLinkFile(Path.Combine(Directory.CreateTempSubdirectory("runner-link-").FullName, RunnerLinkFile.FileName));
         file.SetLink(new RunnerLink("runner-1", "prod", "sales-set"));
-        file.SetOwner(pair.OnRunner, DbDataKit.State.TaskOwners.Runner);
         var inputs = new RunnerLagInputs(new RunnerAccess(file, _ => runner));
         ReaderLagService Build(RunnerLagInputs? i) => new(
             factory.Services.GetRequiredService<ChangeSourceResolver>(), watermarks, factory.Services.GetRequiredService<ChangeCheckStore>(), NullLogger<ReaderLagService>.Instance, i);

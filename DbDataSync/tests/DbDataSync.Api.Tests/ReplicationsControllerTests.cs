@@ -122,9 +122,8 @@ public sealed class ReplicationsControllerTests(TestApiFactory factory) : IClass
         };
         (await _client.PutAsJsonAsync($"/api/replications/{name}/table-mappings/orders", mapping, JsonOptions))
             .EnsureSuccessStatusCode();
-        (await _client.PostAsJsonAsync($"/api/replications/{name}/table-mappings/orders/read-state",
-            new { intent = "Changes", hold = "Paused", note = "one table" }, JsonOptions))
-            .EnsureSuccessStatusCode();
+        // the mapping's hold is set on the runner (plan 28c E22) and recorded here as the endpoint does after the runner took it
+        factory.Services.GetRequiredService<DbDataSync.State.TaskRunStore>().SetMappingHold(name, "orders", true, "one table", "test");
 
         var history = await _client.GetFromJsonAsync<List<PauseEventDto>>(
             $"/api/replications/{name}/pause-history", JsonOptions);

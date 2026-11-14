@@ -144,7 +144,7 @@ public sealed class RunnerOwnedReadStateTests(RunnerOwnedApiFactory factory) : I
     }
 
     [Fact]
-    public async Task The_status_of_a_replication_the_runner_owns_carries_the_runners_row_in_a_field_of_its_own_and_running_stays_this_servers_worker()
+    public async Task The_status_of_a_replication_carries_the_runners_row_and_running_is_whether_its_drain_is_up_there()
     {
         var (replication, _, _) = SetUp();
         var due = new DateTimeOffset(2026, 11, 13, 6, 0, 0, TimeSpan.Zero);
@@ -157,7 +157,7 @@ public sealed class RunnerOwnedReadStateTests(RunnerOwnedApiFactory factory) : I
         factory.Runner.Down = false;
         factory.Runner.TaskStatus = null;
 
-        Assert.False(up.GetProperty("running").GetBoolean());
+        Assert.True(up.GetProperty("running").GetBoolean());   // plan 28c E22: the drain on the runner is what runs
         var runner = up.GetProperty("runner");
         Assert.True(runner.GetProperty("reachable").GetBoolean());
         Assert.True(runner.GetProperty("running").GetBoolean());
@@ -166,17 +166,6 @@ public sealed class RunnerOwnedReadStateTests(RunnerOwnedApiFactory factory) : I
         Assert.False(down.GetProperty("running").GetBoolean());
         Assert.False(down.GetProperty("runner").GetProperty("reachable").GetBoolean());
         Assert.Contains("down", down.GetProperty("runner").GetProperty("error").GetString());
-    }
-
-    [Fact]
-    public async Task The_status_of_a_replication_this_server_runs_has_no_runner_field()
-    {
-        var (replication, _, _) = SetUp();
-        factory.Services.GetRequiredService<DbDataSync.Api.Runner.RunnerOwnerFile>().SetOwner(replication, DbDataKit.State.TaskOwners.Old);
-
-        var status = await _client.GetFromJsonAsync<JsonElement>($"/api/replications/{replication}/status", JsonOptions);
-
-        Assert.False(status.TryGetProperty("runner", out var runner) && runner.ValueKind != JsonValueKind.Null);
     }
 
     [Fact]

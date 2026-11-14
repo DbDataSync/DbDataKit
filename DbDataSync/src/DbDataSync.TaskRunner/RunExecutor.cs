@@ -13,7 +13,6 @@ using DbDataSync.Libraries;
 using DbDataSync.Scripting;
 using DbDataSync.Scripting.Abstractions;
 using DbDataSync.State;
-using DbDataSync.State.Remote;
 using DbDataSync.Verification;
 using DbDataSync.Core.Sql;
 

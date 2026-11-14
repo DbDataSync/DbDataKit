@@ -13,7 +13,6 @@ namespace DbDataSync.Api.Controllers;
 public sealed class ReplicationsController(
     ConfigRepository configRepository,
     ParameterCheck parameterCheck,
-    ProcessSupervisor supervisor,
     DbDataSync.Api.Runner.RunnerDispatch runnerDispatch,
     TaskRunStore taskRunStore,
     CurrentUser currentUser) : ControllerBase
@@ -84,9 +83,7 @@ public sealed class ReplicationsController(
         if (!configRepository.ListReplications().Contains(name, StringComparer.Ordinal))
             return NotFound();
 
-        // Composed here rather than in the supervisor, which knows about processes and has no business
-        // reading config or state. What the worker is doing and whether it is allowed to do anything
-        // are different questions; they travel together because one card asks both.
+        // What the drain is doing and whether it is allowed to do anything are different questions; they travel together because one card asks both.
         var (paused, pauseNote) = taskRunStore.GetPauseState(name);
         var enabled = true;
         try
@@ -99,9 +96,9 @@ public sealed class ReplicationsController(
             // error — the next poll will 404 on the listing check above.
         }
 
-        // a replication the runner owns has its drain there: its own field, so `Running` keeps meaning this server's worker (plan 28c E12g)
-        var runner = runnerDispatch.RunnerOwns(name) ? await runnerDispatch.StateOfAsync(name, cancellationToken) : null;
-        return Ok(supervisor.DescribeStatus(name) with
+        // the Runner is Sync's only scheduler (plan 28c E22): the drain's row on the runner is the replication's status, and Running is whether a drain is up there
+        var runner = await runnerDispatch.StateOfAsync(name, cancellationToken);
+        return Ok(new ReplicationStatus(runner.Running)
         {
             Enabled = enabled,
             Paused = paused,
@@ -130,14 +127,11 @@ public sealed class ReplicationsController(
         if (!configRepository.ListReplications().Contains(name, StringComparer.Ordinal))
             return NotFound();
 
-        // a replication the runner owns is paused on the runner (plan 28c E12, QE5): that stops the next start of its drain and a drain that is up plans nothing new; the pause is recorded here too, for the history
-        if (runnerDispatch.RunnerOwns(name))
+        // the replication is paused on the runner (plan 28c E12, QE5; E22: the only scheduler): that stops the next start of its drain and a drain that is up plans nothing new; the pause is recorded here too, for the history
+        try { await runnerDispatch.SetPausedAsync(name, request.Paused, cancellationToken); }
+        catch (DbDataKit.Runner.Client.RunnerClientException ex)
         {
-            try { await runnerDispatch.SetPausedAsync(name, request.Paused, cancellationToken); }
-            catch (Exception ex) when (ex is DbDataKit.Runner.Client.RunnerClientException or DbDataSync.Api.Runner.OwnershipException)
-            {
-                return StatusCode(409, new { error = $"The runner did not take the pause: {ex.Message}" });
-            }
+            return StatusCode(409, new { error = $"The runner did not take the pause: {ex.Message}" });
         }
 
         taskRunStore.SetPaused(name, request.Paused, request.Note, currentUser.Author.Name);

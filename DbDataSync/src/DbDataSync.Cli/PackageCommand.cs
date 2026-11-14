@@ -93,26 +93,23 @@ public static class PackageCommand
                     log($"Bound {string.Join(", ", bindings.Keys.Order(StringComparer.Ordinal))} in {channel}.");
                 }
 
-                // plan 28c E09, ED6 (and E12e): a published replication is scheduled by this server until its owner is moved, so the runner is told so before the version can activate; a task the runner already has an owner for keeps it
-                var handedBack = new List<string>();
-                if (!CliOptions.Has(rest, "--runner-schedules"))
+                // plan 28c E22 (S2): the Runner is Sync's only scheduler, so a published replication is the runner's from its first activation. A task the runner still records with another owner
+                // (an earlier publish that left it with the Sync server) is given to the runner: this publish is the one that moves it.
+                foreach (var replication in built.Replications)
                 {
-                    foreach (var replication in built.Replications)
+                    var known = await client.ScheduleOfAsync(server!, code, package, channel!, replication.Task, null);
+                    if (known.OwnerSetBy is null || known.Owner == DbDataKit.State.TaskOwners.Runner) continue;
+                    try
                     {
-                        var known = await client.ScheduleOfAsync(server!, code, package, channel!, replication.Task, null);
-                        if (known.OwnerSetBy is not null) continue;
-                        try { await client.SetOwnerAsync(server!, code, package, channel!, replication.Task, DbDataKit.State.TaskOwners.Old, "published by `package publish`: the runner does not schedule it until its owner is moved to the runner", null); }
-                        catch (RunnerClientException ex)
-                        {
-                            Console.Error.WriteLine($"{ex.Message}\nThe runner is told that the replications stay with this server's scheduler until their owner is moved, which takes the operator role of this pairing. Pair with a code that allows it, or pass --runner-schedules to let the runner schedule the replications from the first activation.");
-                            if (!json) Console.WriteLine("Nothing was sent.");
-                            return 1;
-                        }
-
-                        handedBack.Add(replication.Task);
+                        await client.SetOwnerAsync(server!, code, package, channel!, replication.Task, DbDataKit.State.TaskOwners.Runner, "published by `package publish`: the Runner is Sync's only scheduler (plan 28c E22)", null);
+                        log($"{replication.Task} was left to the Sync server by an earlier publish; the runner schedules it now.");
                     }
-
-                    if (handedBack.Count > 0) (json ? Console.Error : Console.Out).WriteLine($"The runner leaves {string.Join(", ", handedBack)} to this server until the owner is moved (owner old).");
+                    catch (RunnerClientException ex)
+                    {
+                        Console.Error.WriteLine($"{ex.Message}\nThe runner records {replication.Task} as scheduled by the Sync server (owner {known.Owner}), which is gone (plan 28c E22); moving it to the runner takes the operator role of this pairing. Pair with a code that allows it.");
+                        if (!json) Console.WriteLine("Nothing was sent.");
+                        return 1;
+                    }
                 }
 
                 ReplicationSetPackage.Write(built, directory);
@@ -124,7 +121,7 @@ public static class PackageCommand
                 if (json) Console.WriteLine(Result(package, channel, result.Mode, built, result, bindings.Keys));
                 else Console.WriteLine($"{(result.Mode == "stage" ? "Staged" : "Published")} {package} on {result.Channel}: version {result.Version}{(result.Changed ? "" : " (the same content as before, nothing changed)")}, {result.Uploaded} file(s) uploaded, {result.Skipped} already there."
                     + (result.Mode == "stage" ? " Runners prepare it and activate it once every runner of the group has it ready." : "")
-                    + $" A replication runs on the runner when its owner is `runner` (a continuous one as a drain that stays up and plans on the runner; a periodic one as a drain per cron time): observe or cut it over with `PUT /api/replications/<name>/owner` or on its Runner tab, and until then this server's scheduler and workers run it.");
+                    + " The runner runs each replication (a continuous one as a drain that stays up and plans on the runner; a periodic one as a drain per cron time).");
                 return 0;
             }
             catch (RunnerClientException ex)

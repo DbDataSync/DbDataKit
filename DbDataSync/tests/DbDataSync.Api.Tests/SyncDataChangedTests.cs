@@ -80,6 +80,8 @@ public sealed class SyncDataChangedTests(SyncDataChangedFactory factory) : IClas
         var id = queue.Enqueue(replication, kind, "customers");
         runs.BeginRun(id, pid: 1);
         runs.CompleteRun(id, status, rows, rows, errorSummary: status == RunStatus.Failed ? "boom" : null);
+        // the producer is told of the ended run directly: since plan 28c E22 this server runs nothing itself, so no monitor of its own runs calls it (the runner's side is plan 24a UC13's)
+        factory.Services.GetRequiredService<DbDataSync.Api.Management.SyncDataChanges>().RunCompleted(runs.GetRun(id)!);
         return id;
     }
 

@@ -1609,10 +1609,7 @@ export interface ChecksFault {
   keyPath?: string | null
 }
 
-// ---- who schedules a replication and the runner it moves to (plan 28c E12)
-
-/** `old`: this server's scheduler and workers; `observe`: the same, and the runner records what it would have queued; `runner`: the runner's drain. */
-export type ReplicationOwner = 'old' | 'observe' | 'runner'
+// ---- the runner the replications run on (plan 28c E12; E22: the Runner is Sync's only scheduler)
 
 export interface RunnerLink {
   server: string
@@ -1633,23 +1630,12 @@ export interface RunnerTaskRow {
   pausedBy: string | null
 }
 
-export interface OwnerView {
+export interface ReplicationRunnerView {
   replication: string
-  owner: ReplicationOwner
+  task: string
   link: RunnerLink | null
   runner: RunnerTaskRow | null
   runnerError: string | null
-}
-
-export interface OwnershipChange {
-  replication: string
-  from: ReplicationOwner
-  to: ReplicationOwner
-  task: string
-  positionsHandedOver: number
-  handledUpTo: string | null
-  paused: boolean
-  waited: boolean
 }
 
 // ---- publishing the replication set to the runner (plan 28c E08)

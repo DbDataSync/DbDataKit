@@ -34,12 +34,12 @@ public sealed record RunnerRunPage(IReadOnlyList<TaskRunRecord> Runs, string? Un
 /// <c>run_detail</c> holds for the API's own path) and, beside them, the runner's runs that explain themselves no other way: a drain that is still going (its log is what the live view shows) and a drain that ended badly with no
 /// pass to say why (a crash, a time limit, a definition that would not load). A drain whose failure a failed pass record already names is not listed twice. The kinds are the passes' own; the runner's run is a <c>Primary</c> one.
 /// </summary>
-public sealed class RunnerRunSource(RunnerAccess runner) : IRunnerRunHistory
+public sealed class RunnerRunSource(RunnerAccess runner, DbDataSync.Core.Config.ConfigRepository config) : IRunnerRunHistory
 {
     bool IRunnerRunHistory.Owns(string jobId) => RunnerOwns(jobId);
 
-    /// <summary>Whether the replication is the runner's (a file that does not read is refused naming the file, as everywhere the owner is read).</summary>
-    public bool RunnerOwns(string replication) => runner.File.OwnerOf(replication) == DbDataKit.State.TaskOwners.Runner;
+    /// <summary>Every replication is the runner's since plan 28c E22 (the Runner is Sync's only scheduler); what remains to ask is whether a runner is linked.</summary>
+    public bool RunnerOwns(string replication) => true;
 
     private IRunnerRuns Require() => runner.OpenRuns() ?? throw new RunnerUnavailableException(runner.Link is null
         ? $"No runner is linked, so the runs of a replication it owns cannot be read ({runner.File.Path})."
@@ -75,12 +75,12 @@ public sealed class RunnerRunSource(RunnerAccess runner) : IRunnerRunHistory
         }
     }
 
-    /// <summary>The replications the runner owns, by the name of the task each one is on the runner.</summary>
+    /// <summary>The replications of this server (all of them the runner's since plan 28c E22), by the name of the task each one is on the runner.</summary>
     private IReadOnlyDictionary<string, string> OwnedTasks() =>
-        runner.File.Read().Owners.Where(o => o.Value == DbDataKit.State.TaskOwners.Runner).ToDictionary(o => RunnerAccess.TaskOf(o.Key), o => o.Key, StringComparer.Ordinal);
+        config.ListReplications().Distinct(StringComparer.Ordinal).ToDictionary(RunnerAccess.TaskOf, r => r, StringComparer.Ordinal);
 
-    /// <summary>Whether any replication is the runner's (the live view and the other readers have nothing to ask a runner otherwise).</summary>
-    public bool AnyOwned => runner.File.Read().Owners.Any(o => o.Value == DbDataKit.State.TaskOwners.Runner);
+    /// <summary>Whether a runner is linked (the live view and the other readers have nothing to ask otherwise).</summary>
+    public bool AnyOwned => runner.Link is not null;
 
     /// <summary>The newest drains of the runner's replications, going or ended (one call: the runner lists the package's runs newest first), with the replication each one is of.</summary>
     public async Task<IReadOnlyList<(string Replication, ClientRun Run)>> RecentDrainsAsync(CancellationToken ct)
