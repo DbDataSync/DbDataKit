@@ -2,6 +2,9 @@
 
 Status: **in progress, low priority (owner, 2026-11-09; re-audited 2026-11-11).** What is built (the `model/1` format, rules, history, storage on SQL Server and PostgreSQL, the write path, change requests, publishing to the serving layer) is described in [DbDataStore/README.md](../../DbDataStore/README.md). This plan holds only unbuilt work and open questions. The slices of the built lane (Z01 to Z14 but Z07's agent tools: the Store on SQL Server and PostgreSQL, instances, per-instance migration) are done and were plan 19's; what is left is below, with plan 20's `store` and `webdav` modules ([20-serving-layer.md](20-serving-layer.md)) and, for sandboxed writes, [plan 21](21-channels-and-previews.md) (its CH01, the Store's draft layer, is built since 2026-11-11 and described in the Store's README). The agent tools row is the remainder of Z07 (server side built: an agent's write is a change request unless the model says `approval: {agents: direct}`; requests are approved or rejected over `POST .../requests/{id}/approve` and `/reject`, with the audit actor the approver).
 
+
+**Owner decision (2026-11-14): the Store server is deleted (plan 33 SC23, SC24).** Authoring is the Workspace's, rows and change requests are the Gateway's store module, storage runs as a Runner task started from the model's screen. Each open item below is read that way when it is taken up.
+
 ## Not built, from the original goals
 
 | Item | What is left |
