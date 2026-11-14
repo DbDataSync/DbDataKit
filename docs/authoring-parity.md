@@ -91,7 +91,9 @@ Summary (counts of the features below):
 
 ## What the hand-over rows must keep
 
-Removing the standalone screens with these still `not planned` loses the feature, so the owner decides for each group before SC20g, SC21d and SC22e are released:
+Removing the standalone screens with these still `not planned` loses the feature, so the owner decides for each group before SC20g, SC21d and SC22e are released (for Build and Sync this is done, below):
+
+**Owner, 2026-11-14 (Build and Sync):** every `not planned` row of Build and Sync above is confirmed: the work goes to Runner tasks shown in the console, and nothing more is asked before SC20g and SC22e. **One condition: the UI is one place.** A person working on a project in the Workspace never has to leave it, find the project's server, then find the Runner to see or start its runs, tests, status or monitoring: either those screens are part of the Workspace's project page, or the project page links straight to them (the package and channel on the Runner, the target's tracking) and they link back. SC20o and SC22l are built that way, and the hand-over is not done while a feature is reachable only by navigating to another server. **The test release:** the owner's test of a beta counts as the snapshot release this page asks for; the Windows test guide (`docs/windows-test-install.md`) has the Workspace steps for a Build and a Sync project.
 
 - **Runs and the database-facing Build views** (SC20o: tests, status, refresh run, compare, initialise). Decided 2026-11-12: the Runner does the work and the console shows it in one screen with the authoring screens; the Build server keeps none of these routes.
 - **The Store's storage and rows** (`StorageTab.tsx`, `EntityPage.tsx`): acts on a database and data, not authoring. SC21d's hand-over removes only the authoring screens and keeps these.

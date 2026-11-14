@@ -85,6 +85,25 @@ Each task below names where its full description lives. The console's **Docs** h
 | 4.5 | Workspace | `dbdataworkspace project create hello --kind app`, then open the Workspace from **Servers** and edit, commit and merge a file of a workspace of `hello` | the commit is on the project's main branch | `DbDataWorkspace/README.md` |
 | 4.6 | Runner | Open the Runner from **Servers** and look at its packages, channels and runs | the Runner's pages open and say what it serves (none yet) | `DbDataRunner/README.md` |
 
+### 4b. Build and Sync authored in the Workspace
+
+These checks are the test release the hand-over of Build's and Sync's authoring waits for (`docs/authoring-parity.md`). The Workspace runs the
+`dbdatabuild` and `dbdatasync` programs the package installed for its checks and builds.
+
+First pair the Workspace with the Runner as a publisher, once:
+
+```powershell
+dbdatarunner server pair --max-role publisher      # prints a code
+dbdataworkspace publisher pair runner --url https://127.0.0.1:8495 --code <code>
+```
+
+| # | Task | Pass when |
+| --- | --- | --- |
+| 4.7 | In the Workspace, make a new project of kind **build**. In a workspace of it, add a connection to `demo`, import `dbo.orders` from the catalog, edit the model, run **Check** and **Compile**, commit and merge | the check has no errors and the merge is on the main branch |
+| 4.8 | Build the project and publish it to the Runner on the channel `dev` | the Runner lists the package and its refresh task on `dev` |
+| 4.9 | Make a new project of kind **sync**. Edit its replication to copy `dbo.orders` from `demo` to `demo_target`, run **Check**, commit, merge, build and publish it to the Runner | the Runner lists the replication set's drain task |
+| 4.10 | From each project's page, find its runs on the Runner | you get there without going through **Servers**; if you have to, write down where you got lost |
+
 What these tasks leave out, on purpose:
 
 - **The Runner runs no task here.** A task comes from a published package, and the release has no sample package to publish yet. Sync and Build
