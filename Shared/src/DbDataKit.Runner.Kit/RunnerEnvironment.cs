@@ -66,6 +66,9 @@ public sealed class RunnerHooks
     /// <summary>Told of every unit the run finished with (see <see cref="StepReported"/>).</summary>
     public Action<UnitReport>? UnitReported { get; init; }
 
+    /// <summary>Told of every <c>run.Lineage(reads, writes)</c> the job reports, as the backend is given it.</summary>
+    public Action<IReadOnlyList<string>, IReadOnlyList<string>>? LineageReported { get; init; }
+
     /// <summary>Told of every <c>Count</c> the job makes: the counter's name and the amount.</summary>
     public Action<string, long>? Counted { get; init; }
 

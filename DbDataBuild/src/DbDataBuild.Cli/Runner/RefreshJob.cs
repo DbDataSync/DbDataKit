@@ -89,6 +89,7 @@ public sealed class RefreshJob : RunnerJob<RefreshInput, NoProgress, NoSlots>
         long rows = 0;
         foreach (var l in results) if (l.State == "done") rows += l.Rows;
         Count(RefreshCounters.Rows, rows);
+        ReportLineage(project, Env, document);
         await ForEachAsync(RefreshUnits.Load, results, parallelism: 1, (load, _) =>
         {
             if (load.State == "failed") throw new TaskFailureException(TaskFailureKind.Permanent, $"The load `{load.Name}` failed{(string.IsNullOrEmpty(load.Detail) ? "" : ": " + load.Detail)}", load.Name);
@@ -100,6 +101,26 @@ public sealed class RefreshJob : RunnerJob<RefreshInput, NoProgress, NoSlots>
         {
             var first = results.FirstOrDefault(l => l.State == "failed");
             throw new TaskFailureException(TaskFailureKind.Permanent, first is null ? $"The refresh ended {outcome ?? "with exit code " + exit}: {Describe(document)}" : $"The load `{first.Name}` failed and no load of the plan finished", first?.Name);
+        }
+    }
+
+    /// <summary>
+    /// The loads that finished, as the run's lineage (plan 24a UC13): the Runner keeps the tables and its <c>RunnerDataChanges</c> tells the serving groups it is paired with that they changed, as the Build server's
+    /// <c>BuildDataChanges</c> did for its own refreshes, under the same names (<see cref="BuildLineage.LoadedDatasets"/>). A dry run and a refresh that loaded nothing report nothing; a failure to name them is a line of the log,
+    /// never a failure of the run.
+    /// </summary>
+    private void ReportLineage(string project, Func<string, string?> env, JsonDocument document)
+    {
+        try
+        {
+            var loaded = DbDataBuild.Cli.Server.BuildDataChanges.LoadedModels(document.RootElement.GetRawText());
+            if (loaded.Count == 0) return;
+            var datasets = BuildLineage.LoadedDatasets(ProjectContext.Load(project).Config, env, loaded);
+            if (datasets.Count > 0) Run.Lineage([], datasets);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Console.Error.WriteLine($"The tables the refresh loaded could not be reported as the run's lineage ({ex.GetType().Name}).");
         }
     }
 

@@ -53,7 +53,7 @@ internal sealed class RunContext
         Settings = settings;
         Root = new CountScope(null);
         Log = new RunLogger(backend);
-        Run = new RunFacade(backend.Identity, Log, backend, settings.DryRun);
+        Run = new RunFacade(backend.Identity, Log, backend, settings.DryRun, settings.Hooks?.LineageReported);
     }
 
     public IRunBackend Backend { get; }
@@ -193,7 +193,7 @@ internal sealed class RunContext
     public Task AfterUnitBodyAsync(string name, string key, CancellationToken ct) => Settings.Hooks?.AfterUnitBody?.Invoke(name, key, ct) ?? Task.CompletedTask;
 }
 
-internal sealed class RunFacade(RunIdentity identity, ILogger log, IRunBackend backend, bool dryRun = false) : IRun
+internal sealed class RunFacade(RunIdentity identity, ILogger log, IRunBackend backend, bool dryRun = false, Action<IReadOnlyList<string>, IReadOnlyList<string>>? lineageReported = null) : IRun
 {
     public bool DryRun => dryRun;
 
@@ -213,7 +213,12 @@ internal sealed class RunFacade(RunIdentity identity, ILogger log, IRunBackend b
 
     public ILogger Log => log;
 
-    public void Lineage(IEnumerable<string> reads, IEnumerable<string> writes) => backend.Lineage([.. reads ?? []], [.. writes ?? []]);
+    public void Lineage(IEnumerable<string> reads, IEnumerable<string> writes)
+    {
+        IReadOnlyList<string> read = [.. reads ?? []], written = [.. writes ?? []];
+        backend.Lineage(read, written);
+        lineageReported?.Invoke(read, written);
+    }
 }
 
 /// <summary>An <see cref="ILogger"/> whose lines go to the run's log in the state database (the logger of <see cref="IRun.Log"/>).</summary>

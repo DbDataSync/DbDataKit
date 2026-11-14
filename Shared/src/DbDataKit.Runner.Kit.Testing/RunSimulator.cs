@@ -75,6 +75,8 @@ public sealed class RunSimulator<TJob> : IDisposable
         public List<UnitReport> Units { get; } = [];
 
         public Dictionary<string, long> Counters { get; } = new(StringComparer.Ordinal);
+
+        public List<(IReadOnlyList<string> Reads, IReadOnlyList<string> Writes)> Lineage { get; } = [];
     }
 
     private readonly object _gate = new();
@@ -118,10 +120,17 @@ public sealed class RunSimulator<TJob> : IDisposable
                 BeforeProgressSave = BeforeProgressSave,
                 StepReported = report => { lock (_gate) _tally.Steps.Add(report); },
                 UnitReported = report => { lock (_gate) _tally.Units.Add(report); },
+                LineageReported = (reads, writes) => { lock (_gate) _tally.Lineage.Add((reads, writes)); },
                 Counted = (name, n) => { lock (_gate) { _tally.Counters[name] = _tally.Counters.GetValueOrDefault(name) + n; _counted[name] = _counted.GetValueOrDefault(name) + n; } },
             },
         };
         TaskName = JobRunner.TaskNameOf(typeof(TJob));
+    }
+
+    /// <summary>What the latest attempt reported with <c>run.Lineage(reads, writes)</c>, in the order it said it.</summary>
+    public IReadOnlyList<(IReadOnlyList<string> Reads, IReadOnlyList<string> Writes)> Lineage
+    {
+        get { lock (_gate) return [.. _tally.Lineage]; }
     }
 
     /// <summary>The state database the job runs over: the real stores, for a test to look into.</summary>

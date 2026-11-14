@@ -28,6 +28,20 @@ internal static class BuildLineage
         return new ConnectionDefinition { Name = name, Engine = config.EngineOf(name) ?? name, Address = new AddressSpec { Host = "unresolved-" + name } };
     };
 
+    /// <summary>
+    /// The tables a refresh loaded (<c>connection, schema.table</c>), as the dataset lines a run reports with the Runner Kit's <c>run.Lineage</c> and a <c>data.changed</c> message carries (plan 24a UC13; the shared
+    /// <see cref="RunTables"/>): the name the Gateway's graph holds for the table, the connection's address from the login in <paramref name="environment"/>.
+    /// </summary>
+    public static IReadOnlyList<string> LoadedDatasets(ProjectConfig config, Func<string, string?> environment, IEnumerable<(string Connection, string Model)> loaded)
+    {
+        var identityOf = IdentityOf(config, environment);
+        return RunTables.Datasets(loaded.Select(l =>
+        {
+            var (schema, table) = DbDataBuild.Targets.Ddl.DdlGenerator.Split(l.Model);
+            return new RunTable(identityOf(l.Connection), schema, table);
+        }));
+    }
+
     /// <summary>The design lineage of the project: what its definitions say can flow where. Offline; nothing is connected to.</summary>
     public static LineageGraph Design(ProjectContext ctx, Func<string, ConnectionDefinition> connectionOf, string instanceId = "local")
     {

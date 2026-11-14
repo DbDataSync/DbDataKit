@@ -52,15 +52,7 @@ internal sealed class BuildDataChanges(IDataChangeNotifier notifier, string serv
             if (loaded.Count == 0) return;
             var context = ProjectContext.Load(projectRoot);
             var environment = await ServerLineage.EnvironmentAsync(serverDirectory, ct).ConfigureAwait(false);
-            var identityOf = BuildLineage.IdentityOf(context.Config, environment);
-            var changes = new List<DataChange>();
-            foreach (var (connection, model) in loaded.Distinct())
-            {
-                var (schema, table) = DbDataBuild.Targets.Ddl.DdlGenerator.Split(model);
-                changes.Add(new DataChange(LineageIdentity.Dataset(identityOf(connection), schema, table).ToString(), runId));
-            }
-
-            notifier.Publish(changes);
+            notifier.Publish(BuildLineage.LoadedDatasets(context.Config, environment, loaded).Select(d => new DataChange(d, runId)));
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
         {
