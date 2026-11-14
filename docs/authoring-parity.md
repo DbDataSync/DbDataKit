@@ -66,7 +66,7 @@ Summary (counts of the features below):
 
 | Feature | The standalone screen (files under `Shared/web/`) | The Workspace today (files under `Shared/web/`) | State | Owner |
 | --- | --- | --- | --- | --- |
-| Connections: list, test a connection (reachable) | `sync/src/pages/ConnectionsPage.tsx`, `connection-edit/ConnectionTestCard.tsx` | `workspace/src/pages/SyncSetPanel.tsx` lists them; no test | partly | SC22h |
+| Connections: list, test a connection (reachable) | `sync/src/pages/ConnectionsPage.tsx`, `connection-edit/ConnectionTestCard.tsx` | `workspace/src/pages/SyncSetPanel.tsx` lists them; no test yet (decided 2026-11-14: the Runner tests the bound login of a published set, every Sync engine) | partly | SC22h |
 | Connection edit as a form (engine, address, auth by secret reference); no password in git | `sync/src/pages/ConnectionEditPage.tsx` | `workspace/src/pages/SyncSetPanel.tsx`, `StructuredPanel.tsx`, `syncSchemas.ts` (form from `sync-connection`, secret findings) | built | SC22d |
 | The connection's run login (`extensions.sync.run_user`) | `sync/src/pages/connection-edit/RunLoginCard.tsx` | `workspace/src/syncSchemas.ts` (`extensions.sync.run_user` and its secret reference, in the connection form) | built | SC22i |
 | Replications: list with status, lag, enable and pause | `sync/src/pages/ReplicationsPage.tsx` | `workspace/src/pages/SyncSetPanel.tsx` (the list, `enabled` in the form); no run state | partly | SC22l |
