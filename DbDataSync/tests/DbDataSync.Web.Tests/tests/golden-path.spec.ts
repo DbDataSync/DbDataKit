@@ -1755,8 +1755,12 @@ new Shout()
 
     expect(sidebar.x + sidebar.width, 'the sidebar sits left of the pane').toBeLessThanOrEqual(pane.x + 1)
     expect(Math.abs(sidebar.y - body.y), 'the sidebar starts at the top of the content').toBeLessThan(2)
-    expect(Math.abs((sidebar.y + sidebar.height) - (body.y + body.height)),
-      'the sidebar runs to the bottom of the content').toBeLessThan(2)
+    // Polled: the rail's cards (the status, the metrics, the unpublished-changes banner) arrive after the page and can make the content taller for a moment while the layout settles.
+    await expect.poll(async () => {
+      const side = (await page.locator('.sidebar').boundingBox())!
+      const content = (await page.locator('.detail-body').boundingBox())!
+      return Math.abs((side.y + side.height) - (content.y + content.height))
+    }, { message: 'the sidebar runs to the bottom of the content', timeout: 10_000 }).toBeLessThan(2)
 
     // And the rail is still beside both of them rather than under them.
     const rail = (await page.locator('.detail-rail').boundingBox())!
@@ -1764,7 +1768,7 @@ new Shout()
     await shot(page, '43-detail-layout.png')
   })
 
-  test('36 - a big result is paged rather than shipped whole, and can be thrown away', async ({ page }) => {
+  test('36 - a big result is paged rather than shipped whole, and is kept by the runner', async ({ page }) => {
     test.setTimeout(180_000)
 
     // A check grouped by a column with many distinct values is what produced the lock-up: one row per
@@ -1795,6 +1799,8 @@ new Shout()
     }
     expect((await page.request.put(
       `/api/replications/${REPLICATION_NAME}/table-mappings/wide`, { data: mapping })).ok()).toBeTruthy()
+    // the runner runs what the definition holds, the columns' shape included: captured before the set is published (a mapping saved by API carries none)
+    expect((await page.request.post(`/api/replications/${REPLICATION_NAME}/table-mappings/wide/refresh-metadata`)).ok()).toBeTruthy()
 
     await page.goto(`/replications/${REPLICATION_NAME}/mappings/wide/verification`)
     await publish(page)   // the check as saved runs on the runner: published again (P9)
@@ -1841,17 +1847,13 @@ new Shout()
     await page.getByTestId('differing-only-toggle').click()
     await expect(page.getByTestId('verification-result')).toContainText('Nothing differs', { timeout: 20_000 })
 
-    // A result is an artifact on disk, and somebody who ran the wrong check over a large table needs
-    // to be rid of it without going looking for the file.
+    // The result is the runner's, kept with the run that made it for as long as the runner's retention keeps runs (plan 28c E22): the screen offers no Delete and says where it is kept, and the API refuses one in words.
     await page.goto(`/replications/${REPLICATION_NAME}/mappings/wide/verification`)
-    await page.getByTestId(`delete-result-${result!.id}`).click()
-
-    await expect.poll(async () => (await (await page.request.get(
-      `/api/replications/${REPLICATION_NAME}/verification-results?mappingName=wide`)).json()).length,
-      { timeout: 15_000 }).toBe(0)
-
-    expect((await page.request.get(
-      `/api/replications/${REPLICATION_NAME}/verification-results/${result!.id}`)).status()).toBe(404)
+    await expect(page.getByTestId('verification-results-kept')).toBeVisible({ timeout: 20_000 })
+    await expect(page.locator('[data-testid^="delete-result-"]')).toHaveCount(0)
+    const refused = await page.request.delete(`/api/replications/${REPLICATION_NAME}/verification-results/${result!.id}`)
+    expect(refused.status()).toBe(409)
+    expect(await refused.text()).toContain('retention')
 
     expect((await page.request.delete(
       `/api/replications/${REPLICATION_NAME}/table-mappings/wide`)).ok()).toBeTruthy()

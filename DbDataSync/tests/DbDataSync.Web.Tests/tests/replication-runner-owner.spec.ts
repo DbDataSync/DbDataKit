@@ -12,6 +12,11 @@ const screenshotsDir = screenshotDir('replication-runner-owner')
 const REPLICATION = 'runner-owner-demo'
 const linkFile = path.join(consoleScratch, 'sync', 'runner-link.json')
 
+// the story starts with no runner linked, whatever a story before it left (a link is the Sync server's until removed), and leaves none
+test.beforeEach(() => {
+  fs.rmSync(linkFile, { force: true })
+})
+
 test.afterEach(() => {
   fs.rmSync(linkFile, { force: true })
 })

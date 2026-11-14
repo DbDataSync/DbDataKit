@@ -1,7 +1,7 @@
 import { useOutletContext, useParams } from 'react-router-dom'
 import { ErrorBanner, Link } from '@dbdatakit/shell'
 import {
-  useDeleteVerificationResult, useReplication, useRunVerification, useTableMapping,
+  useReplication, useRunVerification, useTableMapping,
   useUpsertTableMapping, useVerificationResults,
 } from '../../api/hooks'
 import { ChecksCard } from './ChecksCard'
@@ -33,7 +33,6 @@ export function VerificationPanel() {
   const { data: task } = useReplication(replicationName)
   const upsert = useUpsertTableMapping(replicationName)
   const run = useRunVerification(replicationName)
-  const remove = useDeleteVerificationResult(replicationName)
   const tabs = useMappingTabs(replicationName, base, mappingName)
 
   // Saved through the mapping, because a check lives on the mapping. The whole config goes back, so
@@ -77,7 +76,7 @@ export function VerificationPanel() {
         testId="mapping-subtabs"
       />
 
-      <ErrorBanner error={error ?? run.error ?? upsert.error ?? remove.error} />
+      <ErrorBanner error={error ?? run.error ?? upsert.error} />
 
       {mapping && (
         <ChecksCard
@@ -99,6 +98,9 @@ export function VerificationPanel() {
         </div>
         {results?.length === 0 && (
           <div className="empty">No results yet — run the checks to produce one.</div>
+        )}
+        {(results?.length ?? 0) > 0 && (
+          <div className="hint" data-testid="verification-results-kept">The runner keeps each result with the run that made it, for as long as its retention keeps runs; there is nothing to delete here.</div>
         )}
         {(results ?? []).map((r) => (
           <div
@@ -122,17 +124,6 @@ export function VerificationPanel() {
               >
                 Open
               </Link>
-              {/* A result is an artifact on disk. Somebody who has read one, or ran the wrong check
-                  over a large table, needs a way to be rid of it that is not "find the file". */}
-              <button
-                type="button"
-                className="btn-link quiet"
-                disabled={remove.isPending}
-                onClick={() => remove.mutate(r.id)}
-                data-testid={`delete-result-${r.id}`}
-              >
-                Delete
-              </button>
             </span>
           </div>
         ))}

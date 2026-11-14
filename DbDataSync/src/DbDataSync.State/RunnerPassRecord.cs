@@ -11,6 +11,7 @@ namespace DbDataSync.State;
 /// <param name="RunId">The pass's own run id (what its log lines name in the engine).</param>
 /// <param name="DrainRunId">The runner's run of the drain that ran the pass: the log lines of the pass are in that run's log, between <see cref="StartedAt"/> and <see cref="EndedAt"/>.</param>
 /// <param name="Status">A <see cref="RunStatus"/> as text: <c>Succeeded</c>, <c>Failed</c> or <c>Cancelled</c>.</param>
+/// <param name="Timing">Where the time of the pass went, for a mapping that times its passes (<c>traceTiming</c>); null otherwise and in a record of a drain from before it was kept.</param>
 public sealed record PassRecord(
     Guid RunId,
     Guid DrainRunId,
@@ -26,7 +27,8 @@ public sealed record PassRecord(
     string? Summary,
     string? FailureKind,
     string? Detail,
-    string? BatchId);
+    string? BatchId,
+    RunTiming? Timing = null);
 
 /// <summary>The pass records as text: written by the drain, read by the API (the same code on both sides).</summary>
 public static class PassRecordText
@@ -61,7 +63,7 @@ public static class PassRecordText
         Enum.TryParse<RunKind>(record.Kind, out var kind) ? kind : RunKind.Primary,
         record.Mapping, record.Segment is { Length: > 0 } s && s != WorkQueueStore.NoSegment ? s : null,
         EnqueuedAtUtc: record.StartedAt, ClaimedAtUtc: record.StartedAt, StartedAtUtc: record.StartedAt, EndedAtUtc: record.EndedAt,
-        record.RowsRead, record.RowsWritten, record.Summary, record.FailureKind, Timing: null, PreviousWatermark: null, NewWatermark: null, ErrorDetail: record.Detail);
+        record.RowsRead, record.RowsWritten, record.Summary, record.FailureKind, Timing: record.Timing, PreviousWatermark: null, NewWatermark: null, ErrorDetail: record.Detail);
 }
 
 /// <summary>One check the polling gate made of a source: what its counter read (<c>sync_state.change_check</c>'s row, plan 28c E11b).</summary>
