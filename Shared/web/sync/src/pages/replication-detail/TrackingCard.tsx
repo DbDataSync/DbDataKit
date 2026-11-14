@@ -29,9 +29,9 @@ export function TrackingStatusView({ status }: { status: ReplicationTrackingStat
         <div className="hint" data-testid="tracking-target">
           Target: {status.targetDriver}
           {status.targetWritersBuilt
-            ? ` keeps a state table (dbdatasync.unit) written in each unit's transaction when the mode is target or both.`
+            ? ` keeps a state table (dbdatasync.position_log) written in each entry's transaction when the mode is target or both.`
             : status.targetCanHoldState
-              ? ' can hold a state table, but its writer is not built yet, so its state stays on the runner.'
+              ? ' keeps its state on the runner only (mode: state): no writer keeps the position log on MySQL, MariaDB or Oracle.'
               : ' cannot hold a state table, so its state stays on the runner.'}
         </div>
       )}
@@ -39,13 +39,13 @@ export function TrackingStatusView({ status }: { status: ReplicationTrackingStat
   )
 }
 
-/** How the retention reads: what is always kept (the newest units of a mapping and what is newer than the days). */
-export function retentionText(units: number, days: number): string {
-  return `The target's table keeps the newest ${units} unit${units === 1 ? '' : 's'} of each mapping and everything newer than ${days} day${days === 1 ? '' : 's'}; the newest unit of each source is never removed.`
+/** How the retention reads: what is always kept (the newest entries of a mapping and what is newer than the days). */
+export function retentionText(entries: number, days: number): string {
+  return `The target's table keeps the newest ${entries} ${entries === 1 ? 'entry' : 'entries'} of each mapping and everything newer than ${days} day${days === 1 ? '' : 's'}; the newest entry of each source is never removed.`
 }
 
 /**
- * The state's copy of the units the target holds (plan 28c E17): how many rows, whether the follower has everything, what went wrong, and an open divergence with the two ways to resolve it.
+ * The state's copy of the entries the target holds (plan 28c E17): how many rows, whether the follower has everything, what went wrong, and an open divergence with the two ways to resolve it.
  * Split from the card so it renders without the query; the buttons are given and shown disabled for anyone but an administrator.
  */
 export function TrackingCopyView({ copy, canResolve, busy, onResolve, onCatchUp }: {
@@ -59,7 +59,7 @@ export function TrackingCopyView({ copy, canResolve, busy, onResolve, onCatchUp 
     <div className="card-body" style={{ gap: 8 }} data-testid="tracking-copy">
       <div className="row" style={{ gap: 8 }}>
         <span className="hint">The state's copy</span>
-        <span data-testid="tracking-copy-rows">{`${copy.rows} unit${copy.rows === 1 ? '' : 's'}`}</span>
+        <span data-testid="tracking-copy-rows">{`${copy.rows} ${copy.rows === 1 ? 'entry' : 'entries'}`}</span>
         <span className="hint" data-testid="tracking-copy-state">
           {copy.error ? 'the last follow failed' : copy.divergenceId !== null ? 'diverged, not copying' : copy.caughtUp ? 'caught up' : 'catching up'}
         </span>
@@ -73,11 +73,11 @@ export function TrackingCopyView({ copy, canResolve, busy, onResolve, onCatchUp 
           <div data-testid="tracking-divergence-reason">{copy.divergenceReason}</div>
           <div className="row" style={{ gap: 8, marginTop: 6 }}>
             <button type="button" className="btn btn-sm" disabled={!canResolve || busy} onClick={() => onResolve(copy.divergenceId!, 'archive')} data-testid="tracking-resolve-archive"
-              title="The copy keeps its later rows apart and copies the target's units again from the point where the sides part.">
+              title="The copy keeps its later rows apart and copies the target's entries again from the point where the sides part.">
               Archive later rows
             </button>
             <button type="button" className="btn btn-sm" disabled={!canResolve || busy} onClick={() => onResolve(copy.divergenceId!, 'reset')} data-testid="tracking-resolve-reset"
-              title="The copy deletes its later rows and copies the target's units again from the point where the sides part.">
+              title="The copy deletes its later rows and copies the target's entries again from the point where the sides part.">
               Reset the copy
             </button>
             {!canResolve && <span className="hint" data-testid="tracking-admin-only">An administrator resolves it.</span>}
@@ -106,11 +106,11 @@ export function TrackingCard({ replicationName, draft, onChange }: {
   const value = draft.tracking?.mode ?? 'default'
   const keepsOnTarget = draft.tracking?.mode === 'target' || draft.tracking?.mode === 'both'
 
-  const setRetention = (key: 'units' | 'days', text: string) => {
+  const setRetention = (key: 'entries' | 'days', text: string) => {
     if (!draft.tracking) return
     const number = text.trim() === '' ? null : Number(text)
     const next = { ...(draft.tracking.retention ?? {}), [key]: number !== null && Number.isFinite(number) ? number : null }
-    const empty = next.units == null && next.days == null
+    const empty = next.entries == null && next.days == null
     onChange({ ...draft, tracking: { ...draft.tracking, retention: empty ? null : next } })
   }
 
@@ -124,7 +124,7 @@ export function TrackingCard({ replicationName, draft, onChange }: {
     <div className="card" data-testid="tracking-card">
       <div className="card-head">
         <span className="card-title">Tracking</span>
-        <span className="card-note">where the positions and the record of each unit are kept</span>
+        <span className="card-note">where the positions and the record of each entry are kept</span>
       </div>
       <div className="card-body" style={{ gap: 12 }}>
         <div className="row" style={{ gap: 12 }}>
@@ -152,15 +152,15 @@ export function TrackingCard({ replicationName, draft, onChange }: {
         </div>
         {keepsOnTarget && (
           <div className="row" style={{ gap: 12 }} data-testid="tracking-retention">
-            <Field label="Keep the newest units per mapping">
-              <input className="input sm" type="number" min={1} placeholder="1000" value={draft.tracking?.retention?.units ?? ''} onChange={(e) => setRetention('units', e.target.value)} data-testid="tracking-retention-units" />
+            <Field label="Keep the newest entries per mapping">
+              <input className="input sm" type="number" min={1} placeholder="1000" value={draft.tracking?.retention?.entries ?? ''} onChange={(e) => setRetention('entries', e.target.value)} data-testid="tracking-retention-entries" />
             </Field>
             <Field label="and everything newer than (days)">
               <input className="input sm" type="number" min={0} step="any" placeholder="7" value={draft.tracking?.retention?.days ?? ''} onChange={(e) => setRetention('days', e.target.value)} data-testid="tracking-retention-days" />
             </Field>
           </div>
         )}
-        {status && keepsOnTarget && <div className="hint" data-testid="tracking-retention-text">{retentionText(status.retentionUnits, status.retentionDays)}</div>}
+        {status && keepsOnTarget && <div className="hint" data-testid="tracking-retention-text">{retentionText(status.retentionEntries, status.retentionDays)}</div>}
         {error && <div className="banner warn" role="alert" data-testid="tracking-error">The tracking status could not be read: {String((error as Error).message ?? error)}</div>}
       </div>
       {status && <TrackingStatusView status={status} />}

@@ -27,7 +27,7 @@ public sealed class MsSqlMergeWriter : IChangeWriter, IStatementPreview
     public bool SupportsReconciliation => false;
 
     /// <summary>Through one transaction for the whole staged set, when the replication keeps its state on the target (plan 28c E17); see <see cref="ApplyAsync"/>.</summary>
-    public bool SupportsUnitState => true;
+    public bool SupportsPositionLog => true;
 
     /// <summary>Only the batch size: everything else this writer does is derived from the target.</summary>
     public IReadOnlyList<ParameterDescriptor> Parameters { get; } = [ApplyBatch.Descriptor];
@@ -48,16 +48,16 @@ public sealed class MsSqlMergeWriter : IChangeWriter, IStatementPreview
         var batchSize = ApplyBatch.Read(options);
 
         long rowsAffected = 0;
-        // A replication that keeps its state on the target writes the unit and its state row in ONE transaction, so the chunks below share it (their locks are held to the
+        // A replication that keeps its state on the target writes the entry and its state row in ONE transaction, so the chunks below share it (their locks are held to the
         // commit: the price of the state being exactly as far along as the data). Without that, the chunks stay autocommit as described next.
-        await using var unit = UnitStateScope.Active ? await targetConnection.BeginTransactionAsync(cancellationToken) : null;
+        await using var entry = PositionLogScope.Active ? await targetConnection.BeginTransactionAsync(cancellationToken) : null;
         // Each chunk is its own statement and therefore its own implicit transaction, which is the
         // whole point: the target's locks are taken and released a chunk at a time instead of being
         // held across the entire staged set. An interrupted apply leaves earlier chunks committed —
         // safe here because a MERGE of the same staged rows is idempotent and the watermark has not
         // advanced, so the next attempt replays the pass and converges. See ApplyBatch.
         await MsSqlIdentityInsert.RunAsync(
-            targetConnection, transaction: unit, shape.QuotedTarget, shape.RequiresIdentityInsert,
+            targetConnection, transaction: entry, shape.QuotedTarget, shape.RequiresIdentityInsert,
             async () =>
             {
                 // The text is the same for every chunk, so it is built once (on the first, as before: a staged set with
@@ -67,7 +67,7 @@ public sealed class MsSqlMergeWriter : IChangeWriter, IStatementPreview
                 {
                     merge ??= BuildMerge(shape, staged.StagingLocation, chunked: batchSize is not null);
                     using var cmd = targetConnection.CreateTimedCommand();
-                    cmd.Transaction = unit;
+                    cmd.Transaction = entry;
                     cmd.CommandText = merge.Text;
                     SegmentScope.AddTo(cmd, MsSqlDialect.Instance, MsSqlValueBinding.Instance, merge.Slots, column: null, after, upTo);
 
@@ -78,10 +78,10 @@ public sealed class MsSqlMergeWriter : IChangeWriter, IStatementPreview
             },
             cancellationToken);
 
-        if (unit is not null)
+        if (entry is not null)
         {
-            await UnitStateScope.BeforeCommitAsync(targetConnection, unit, cancellationToken);
-            await unit.CommitAsync(cancellationToken);
+            await PositionLogScope.BeforeCommitAsync(targetConnection, entry, cancellationToken);
+            await entry.CommitAsync(cancellationToken);
         }
 
         return new WriteResult(rowsAffected);

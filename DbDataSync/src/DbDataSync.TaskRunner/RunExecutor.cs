@@ -29,7 +29,7 @@ namespace DbDataSync.TaskRunner;
 /// continuously, so a fixed-collection fan-out (Parallel.ForEach/Task.WhenAll over an enumerated list)
 /// doesn't fit — new work keeps arriving while the queue is being drained.
 /// <para>
-/// Each table mapping's own unit of work (a Primary pass, or one segment of a BulkLoad) is independent
+/// Each table mapping's own entry of work (a Primary pass, or one segment of a BulkLoad) is independent
 /// — its own RunId, its own (TaskName, RunKind, MappingName) lock, its own TaskRuns row — not one
 /// shared run/lock/row for the whole replication. This is what lets one slow or locked mapping stop
 /// blocking every other mapping.
@@ -152,7 +152,7 @@ public sealed class RunExecutor(
     }
 
     /// <summary>
-    /// Runs one item that something else planned and claimed (plan 28c E03): the runner's drain plans a pass per mapping itself and runs each as a unit of its run, so there is no queue to claim from and no lane to
+    /// Runs one item that something else planned and claimed (plan 28c E03): the runner's drain plans a pass per mapping itself and runs each as an entry of its run, so there is no queue to claim from and no lane to
     /// feed. The outcome is recorded through <see cref="IRunnerState"/> exactly as for a claimed item (the state's <c>CompleteRun</c> says how it ended); only the claiming loop above is not used.
     /// </summary>
     public Task RunPlannedItemAsync(WorkItem item, CancellationToken cancellationToken) =>
@@ -714,7 +714,7 @@ public sealed class RunExecutor(
         var effectiveWriter = item.RunKind == RunKind.BulkLoad
             ? PipelineResolution.BulkLoadWriter(task, mapping) : PipelineResolution.Writer(task, mapping);
 
-        // Then the unit of work's own, which is the most specific. It's how a BulkLoad of an
+        // Then the entry of work's own, which is the most specific. It's how a BulkLoad of an
         // incrementally-synced replication reloads a segment at all: the configured reader reports
         // changes since a watermark, which is not what reloading a segment means.
         var readerKind = item.Kinds.ReaderKind ?? effectiveReader.Kind;
@@ -925,15 +925,15 @@ public sealed class RunExecutor(
             // exactly the way item.SegmentJson already is — see WithGuard.
             passWriterOptions = WithGuard(passWriterOptions, item.DeleteGuardJson);
 
-            // Plan 28c E17: a replication that keeps its state on the target writes each unit's state row in the unit's own transaction (the writer calls the hook
+            // Plan 28c E17: a replication that keeps its state on the target writes each entry's state row in the entry's own transaction (the writer calls the hook
             // before its commit) and resumes from the target's position when the target is the primary. Only a Primary pass has a position to keep.
-            UnitStateTracking? unitTracking = null;
+            PositionLogTracking? positionLogTracking = null;
             if (item.RunKind == RunKind.Primary)
             {
-                unitTracking = UnitStateTracking.For(task, targetDriver, writer, (level, text) => Log(item.RunId, level, text));
-                if (unitTracking is not null)
+                positionLogTracking = PositionLogTracking.For(task, targetDriver, writer, (level, text) => Log(item.RunId, level, text));
+                if (positionLogTracking is not null)
                 {
-                    var started = await unitTracking.StartAsync(targetConnection, task.Name, mapping.Name, watermarkKey, previousWatermark, cancellationToken);
+                    var started = await positionLogTracking.StartAsync(targetConnection, task.Name, mapping.Name, watermarkKey, previousWatermark, cancellationToken);
                     if (started.Message is not null) Log(item.RunId, LogSeverity.Warning, started.Message);
                     previousWatermark = started.Resume;
                 }
@@ -1128,13 +1128,13 @@ public sealed class RunExecutor(
                     await RunGeneratedAsync(HookPoints.BeforeLoad, staged.StagingLocation, staged.RowCount, null);
 
                     var writerClock = trace ? Stopwatch.StartNew() : null;
-                    // The unit's state row goes in with the data: the scope hands the writer the row to write before it commits (E17). A unit that read no new position has none.
-                    UnitStateScope.Scope? unitScope = null;
-                    UnitDraft? unitDraft = null;
-                    if (unitTracking is not null && read.WatermarkAfterRead is not null)
+                    // The entry's state row goes in with the data: the scope hands the writer the row to write before it commits (E17). An entry that read no new position has none.
+                    PositionLogScope.Scope? positionLogScope = null;
+                    PositionLogDraft? positionLogDraft = null;
+                    if (positionLogTracking is not null && read.WatermarkAfterRead is not null)
                     {
-                        unitDraft = UnitStateTracking.Draft(item.RunId, task.Name, mapping.Name, watermarkKey, previousWatermark, read, staged.RowCount);
-                        unitScope = UnitStateScope.Begin(unitTracking.State.CommitOf(unitDraft));
+                        positionLogDraft = PositionLogTracking.Draft(item.RunId, task.Name, mapping.Name, watermarkKey, previousWatermark, read, staged.RowCount);
+                        positionLogScope = PositionLogScope.Begin(positionLogTracking.State.CommitOf(positionLogDraft));
                     }
 
                     WriteResult written;
@@ -1143,12 +1143,12 @@ public sealed class RunExecutor(
                         written = await writer.ApplyAsync(
                             targetConnection, target, staged, mapping.ColumnMappings, mapping.Name, mapping.TargetColumns,
                             writerOptions, cancellationToken);
-                        if (unitScope is not null)
-                            await unitTracking!.FinishAsync(targetConnection, unitScope, unitDraft!, writerKind, cancellationToken);
+                        if (positionLogScope is not null)
+                            await positionLogTracking!.FinishAsync(targetConnection, positionLogScope, positionLogDraft!, writerKind, cancellationToken);
                     }
                     finally
                     {
-                        unitScope?.Dispose();
+                        positionLogScope?.Dispose();
                     }
                     if (writerClock is not null)
                         writerMs += writerClock.ElapsedMilliseconds;
@@ -1194,10 +1194,10 @@ public sealed class RunExecutor(
                 newWatermarkTime = read.WatermarkTimeAfterRead;
             }
 
-            // Retention of the state table on the target (plan 28c E17): what is older than the setting and not among the mapping's newest units goes, in a transaction of its own.
+            // Retention of the state table on the target (plan 28c E17): what is older than the setting and not among the mapping's newest entries goes, in a transaction of its own.
             // A failure here is said and does not fail a pass whose data is already committed.
-            if (unitTracking is not null)
-                await unitTracking.PruneAsync(targetConnection, task, mapping.Name, TimeProvider.System.GetUtcNow(), (level, text) => Log(item.RunId, level, text), cancellationToken);
+            if (positionLogTracking is not null)
+                await positionLogTracking.PruneAsync(targetConnection, task, mapping.Name, TimeProvider.System.GetUtcNow(), (level, text) => Log(item.RunId, level, text), cancellationToken);
 
             // Segmented passes only ever happen with a reload reader, which has no watermark of its
             // own and echoes back whatever it was given — so taking the last segment's value is the
@@ -1239,7 +1239,7 @@ public sealed class RunExecutor(
     }
 
     /// <summary>
-    /// What this unit of work should read, in order. Either exactly one segment carried on the work
+    /// What this entry of work should read, in order. Either exactly one segment carried on the work
     /// item itself (a BulkLoad — the API expanded and enqueued one item per segment), or the static
     /// segment list a standalone reload replication configures on its reader (iterated within this
     /// one pass), or a single null meaning "no segment, read the whole thing" — every ordinary

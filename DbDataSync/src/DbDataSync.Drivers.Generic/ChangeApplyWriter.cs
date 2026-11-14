@@ -40,7 +40,7 @@ public sealed class ChangeApplyWriter(SqlDialect dialect, ITableCatalog catalog,
 {
     public string Kind => GenericDriverKinds.ChangeApply;
 
-    public bool SupportsUnitState => true;
+    public bool SupportsPositionLog => true;
 
     public bool SupportsReconciliation => false;
 
@@ -92,7 +92,7 @@ public sealed class ChangeApplyWriter(SqlDialect dialect, ITableCatalog catalog,
                 () => RunAsync(targetConnection, transaction, statements.Insert, ranges, cancellationToken),
                 cancellationToken);
 
-            await UnitStateScope.BeforeCommitAsync(targetConnection, transaction, cancellationToken);   // plan 28c E17: the unit's state row, same transaction
+            await PositionLogScope.BeforeCommitAsync(targetConnection, transaction, cancellationToken);   // plan 28c E17: the entry's state row, same transaction
             await transaction.CommitAsync(cancellationToken);
             return new WriteResult(affected);
         }

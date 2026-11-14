@@ -8,13 +8,13 @@ using Microsoft.Extensions.Logging;
 
 namespace DbDataSync.TaskRunner.Runner;
 
-/// <summary>What one follow of the units of a runner-owned replication did.</summary>
+/// <summary>What one follow of the entries of a runner-owned replication did.</summary>
 /// <param name="Applies">False when the replication keeps its state in the runner's state only (nothing on the target to copy).</param>
 public sealed record DrainTrackingResult(bool Applies, string? Identity, int Copied, bool CaughtUp, string? Error, bool Diverged, string? PositionProblem, string Said);
 
 /// <summary>
-/// The follower of a runner-owned replication (plan 28c E17, the runner side): the replication's drain copies the units its passes recorded in <c>dbdatasync.unit</c> on the target into the runner's state, through the runner
-/// protocol (<see cref="RemoteSyncUnitFollower"/>), and checks that the positions its own checkpoint holds are ones the target recorded (a target restored from a backup, or a checkpoint that was reset, is a persisted divergence
+/// The follower of a runner-owned replication (plan 28c E17, the runner side): the replication's drain copies the entries its passes recorded in <c>dbdatasync.position_log</c> on the target into the runner's state, through the runner
+/// protocol (<see cref="RemoteSyncPositionLogFollower"/>), and checks that the positions its own checkpoint holds are ones the target recorded (a target restored from a backup, or a checkpoint that was reset, is a persisted divergence
 /// in the runner's state, resolved with the runner's <c>POST /api/v1/tracking/divergences/{id}/resolve</c>). Only a replication whose file asks for <c>tracking: target</c> or <c>both</c> is followed; the drain does the
 /// copy after its passes, at most once in <see cref="MinInterval"/> and once more when it ends, and it never fails the run: a target that is down, a copy the runner refused or a grant the run does not hold are lines in the log.
 /// </summary>
@@ -48,7 +48,7 @@ public sealed class DrainTracking(string replication, ConfigRepository config, F
         }
         catch (Exception ex)
         {
-            log.LogWarning("The units of '{Replication}' could not be copied to the runner's state ({Type}: {Message}).", replication, ex.GetType().Name, ex.Message);
+            log.LogWarning("The entries of '{Replication}' could not be copied to the runner's state ({Type}: {Message}).", replication, ex.GetType().Name, ex.Message);
         }
         finally
         {
@@ -56,11 +56,11 @@ public sealed class DrainTracking(string replication, ConfigRepository config, F
         }
     }
 
-    /// <summary>One follow of every target that holds the replication's units: the catch-up, then the position check when the catch-up went well. Public for the tests.</summary>
+    /// <summary>One follow of every target that holds the replication's entries: the catch-up, then the position check when the catch-up went well. Public for the tests.</summary>
     public async Task<DrainTrackingResult> FollowAsync(CancellationToken cancellationToken)
     {
         var task = config.LoadReplicationTask(replication);
-        var targets = SyncUnitTargets.Of(config, task);
+        var targets = SyncPositionLogTargets.Of(config, task);
         if (targets.Count == 0) return new(false, null, 0, false, null, false, null, "");
         var results = new List<DrainTrackingResult>();
         foreach (var target in targets) results.Add(await FollowOneAsync(target, cancellationToken).ConfigureAwait(false));
@@ -68,25 +68,25 @@ public sealed class DrainTracking(string replication, ConfigRepository config, F
             results.Select(r => r.PositionProblem).FirstOrDefault(p => p is not null), string.Join(" ", results.Select(r => r.Said).Where(t => t.Length > 0)));
     }
 
-    private async Task<DrainTrackingResult> FollowOneAsync(SyncUnitTarget target, CancellationToken cancellationToken)
+    private async Task<DrainTrackingResult> FollowOneAsync(SyncPositionLogTarget target, CancellationToken cancellationToken)
     {
         var connectionName = target.Connection;
         var engine = target.Engine;
-        var units = new TargetUnitState(engine);
+        var entries = new TargetPositionLog(engine);
 
         string identity;
         try
         {
             await using var probe = await open(connectionName, cancellationToken).ConfigureAwait(false);
-            identity = SyncUnitStream.Identity(engine, probe.DataSource, probe.Database, connectionName, replication);
+            identity = SyncPositionLogStream.Identity(engine, probe.DataSource, probe.Database, connectionName, replication);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            var said = $"The target '{connectionName}' did not answer, so the units of '{replication}' were not copied to the runner's state: {ex.Message}";
+            var said = $"The target '{connectionName}' did not answer, so the entries of '{replication}' were not copied to the runner's state: {ex.Message}";
             return new(true, null, 0, false, said, false, null, said);
         }
 
-        var follower = new RemoteSyncUnitFollower(copy, units, ct => open(connectionName, ct), identity, replication, time: _time);
+        var follower = new RemoteSyncPositionLogFollower(copy, entries, ct => open(connectionName, ct), identity, replication, time: _time);
         var run = await follower.CatchUpAsync(Budget, cancellationToken).ConfigureAwait(false);
         string? problem = null;
         if (run.Error is null && !run.Diverged)
@@ -96,12 +96,12 @@ public sealed class DrainTracking(string replication, ConfigRepository config, F
         }
 
         var text = run.Error is not null
-            ? $"The units of '{replication}' could not be copied to the runner's state: {run.Error}"
+            ? $"The entries of '{replication}' could not be copied to the runner's state: {run.Error}"
             : run.Diverged
-                ? $"The copy of the units of '{replication}' in the runner's state is diverged from its target ({run.Divergence?.Reason}); an administrator resolves it (archive or reset)."
+                ? $"The copy of the entries of '{replication}' in the runner's state is diverged from its target ({run.Divergence?.Reason}); an administrator resolves it (archive or reset)."
                 : problem is not null
                     ? $"{problem} It is recorded as a divergence in the runner's state; an administrator resolves it (archive or reset)."
-                    : $"{run.Copied} unit(s) of '{replication}' copied to the runner's state{(run.CaughtUp ? "" : ", not caught up yet")}.";
+                    : $"{run.Copied} entry(s) of '{replication}' copied to the runner's state{(run.CaughtUp ? "" : ", not caught up yet")}.";
         return new(true, identity, run.Copied, run.CaughtUp, run.Error, run.Diverged, problem, text);
     }
 }

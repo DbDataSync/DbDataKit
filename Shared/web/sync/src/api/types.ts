@@ -267,9 +267,9 @@ export interface TrackingConfig {
   retention?: TrackingRetention | null
 }
 
-/** `tracking.retention`: a unit goes only when it is older than `days` and not among the newest `units` of its mapping. */
+/** `tracking.retention`: an entry of the position log goes only when it is older than `days` and not among the newest `entries` of its mapping. */
 export interface TrackingRetention {
-  units?: number | null
+  entries?: number | null
   days?: number | null
 }
 
@@ -299,7 +299,7 @@ export interface ReplicationTrackingStatus {
   targetWritersBuilt: boolean
   /** The state's copy of the target's units; null when the state is the runner's only or nothing was followed yet. */
   copy: TrackingCopyStatus | null
-  retentionUnits: number
+  retentionEntries: number
   retentionDays: number
 }
 

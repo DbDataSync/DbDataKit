@@ -16,7 +16,7 @@ namespace DbDataKit.Runner.Api;
 /// same rules as the Build server's (<see cref="BuildTrackingDocument.ResolveAsync"/>) and writes it to the runner's audit as <c>runner.tracking.resolve</c>, a refusal too. The runner's copy is made from the target the project's connection names, so
 /// its mode is <c>both</c> and the target is the primary; whether a project keeps a copy at all is the project's setting (<c>tracking: {runner_copy: false}</c>).
 /// <para>
-/// The same two routes carry the copies of Sync's units a runner-owned replication's drain made (plan 28c E17, <see cref="SyncUnitCopy"/>): the answer lists them beside Build's (each with its replication, mode
+/// The same two routes carry the copies of Sync's entries a runner-owned replication's drain made (plan 28c E17, <see cref="SyncPositionLogCopy"/>): the answer lists them beside Build's (each with its replication, mode
 /// <c>both</c> and the target as primary: a replication whose state is on the target; the setting itself is in the published definition), and a resolve of such a divergence is the same archive or reset, over the same rows,
 /// audited the same way.
 /// </para>
@@ -35,12 +35,12 @@ public static class RunnerTrackingApi
         {
             if (!callerOf(context).Authorize(ServerRole.Viewer).Allowed) return Results.Json(new { error = "This needs the viewer role." }, statusCode: StatusCodes.Status403Forbidden);
             var document = BuildTrackingDocument.Build(state, "both", "target", "runner");
-            var (units, unitDivergences) = SyncUnitCopy.Document(state, BuildTrackingState.ProgressKey, _ => ("both", "target"));
-            foreach (var copy in units) document["copies"]!.AsArray().Add(copy!.DeepClone());
-            if (unitDivergences.Count > 0)
+            var (entries, positionLogDivergences) = SyncPositionLogCopy.Document(state, BuildTrackingState.ProgressKey, _ => ("both", "target"));
+            foreach (var copy in entries) document["copies"]!.AsArray().Add(copy!.DeepClone());
+            if (positionLogDivergences.Count > 0)
             {
                 // newest first across both kinds, as each document is
-                var all = document["divergences"]!.AsArray().Concat(unitDivergences).Select(d => d!.DeepClone()).OrderByDescending(d => (long)d!["id"]!).ToList();
+                var all = document["divergences"]!.AsArray().Concat(positionLogDivergences).Select(d => d!.DeepClone()).OrderByDescending(d => (long)d!["id"]!).ToList();
                 document["divergences"] = new JsonArray([.. all]);
             }
 
@@ -71,16 +71,16 @@ public static class RunnerTrackingApi
 
             if (!long.TryParse(divergence, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id)) return Error(404, $"There is no divergence {divergence}.");
             var word = resolution == TrackingResolution.Archive ? "archive" : "reset";
-            if (SyncUnitCopy.IsUnitDivergence(state, id))
+            if (SyncPositionLogCopy.IsPositionLogDivergence(state, id))
             {
-                var unit = await SyncUnitCopy.ResolveAsync(state, BuildTrackingState.ProgressKey, null, id, resolution.Value, caller.Actor.Id, context.RequestAborted);
-                Record(audit, caller.Actor, target, unit.Outcome == SyncUnitResolveOutcome.Resolved ? AuditEvent.Ok : AuditEvent.Refused,
-                    new { resolution = word, identity = unit.Divergence?.Identity, stream = unit.Divergence?.Stream, reason = unit.Message });
-                return unit.Outcome switch
+                var entry = await SyncPositionLogCopy.ResolveAsync(state, BuildTrackingState.ProgressKey, null, id, resolution.Value, caller.Actor.Id, context.RequestAborted);
+                Record(audit, caller.Actor, target, entry.Outcome == SyncPositionLogResolveOutcome.Resolved ? AuditEvent.Ok : AuditEvent.Refused,
+                    new { resolution = word, identity = entry.Divergence?.Identity, stream = entry.Divergence?.Stream, reason = entry.Message });
+                return entry.Outcome switch
                 {
-                    SyncUnitResolveOutcome.Resolved => Results.Json(new { resolved = true, divergence = DivergenceOf(state, unit.Divergence!) }),
-                    SyncUnitResolveOutcome.NotFound => Error(404, unit.Message!),
-                    _ => Error(409, unit.Message!),
+                    SyncPositionLogResolveOutcome.Resolved => Results.Json(new { resolved = true, divergence = DivergenceOf(state, entry.Divergence!) }),
+                    SyncPositionLogResolveOutcome.NotFound => Error(404, entry.Message!),
+                    _ => Error(409, entry.Message!),
                 };
             }
 
@@ -98,7 +98,7 @@ public static class RunnerTrackingApi
 
     /// <summary>The answer's divergence of a Sync copy: the same object the document lists for it (with the common point's time).</summary>
     private static JsonNode DivergenceOf(StateDatabase state, TrackingDivergence divergence) =>
-        SyncUnitCopy.Document(state, BuildTrackingState.ProgressKey, _ => ("both", "target")).Divergences.First(d => (long)d!["id"]! == divergence.Id)!.DeepClone();
+        SyncPositionLogCopy.Document(state, BuildTrackingState.ProgressKey, _ => ("both", "target")).Divergences.First(d => (long)d!["id"]! == divergence.Id)!.DeepClone();
 
     private static IResult Error(int status, string message) => Results.Json(new { error = message }, statusCode: status);
 

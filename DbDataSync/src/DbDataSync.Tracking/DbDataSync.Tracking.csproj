@@ -12,7 +12,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Description>Sync's half of the tracking copy (plan 28c E17): the stream of dbdatasync.unit on a target, the follower that copies it into the Sync state, the persisted divergence record and its resolve.</Description>
+    <Description>Sync's half of the tracking copy (plan 28c E17): the stream of dbdatasync.position_log on a target, the follower that copies it into the Sync state, the persisted divergence record and its resolve.</Description>
   </PropertyGroup>
 
 </Project>

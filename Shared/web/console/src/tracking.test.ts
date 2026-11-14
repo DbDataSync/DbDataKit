@@ -117,12 +117,12 @@ describe('switching the primary', () => {
 
 describe('a Sync server (plan 28c E17)', () => {
   const sync = server('s1', 'Sync prod', 'dbdatasync')
-  const unitIdentity = 'syncunit:sqlserver://sql01/wh/orders@sales'
+  const positionLogIdentity = 'syncposition:sqlserver://sql01/wh/orders@sales'
   const syncDoc = (over: Partial<TrackingDocument> = {}): TrackingDocument => ({
     holder: 'sync-server', mode: 'state', primary: null, divergences: [],
     copies: [
-      { identity: unitIdentity, replication: 'orders', mode: 'both', primary: 'target', streams: [{ stream: 'unit', rows: 40, checkpoint: { order: 40, key: 'u-40', time: '2026-11-10T10:00:00.0000000Z' }, diverged: false }] },
-      { identity: 'syncunit:postgres://pg/wh/events@analytics', replication: 'events', mode: 'target', primary: null, streams: [{ stream: 'unit', rows: 3, checkpoint: null, diverged: false }] },
+      { identity: positionLogIdentity, replication: 'orders', mode: 'both', primary: 'target', streams: [{ stream: 'position', rows: 40, checkpoint: { order: 40, key: 'u-40', time: '2026-11-10T10:00:00.0000000Z' }, diverged: false }] },
+      { identity: 'syncposition:postgres://pg/wh/events@analytics', replication: 'events', mode: 'target', primary: null, streams: [{ stream: 'position', rows: 3, checkpoint: null, diverged: false }] },
     ],
     ...over,
   })
@@ -132,15 +132,15 @@ describe('a Sync server (plan 28c E17)', () => {
     expect(rows.map((r) => [r.connection, r.mode, r.primary, r.product, r.rows])).toEqual([['orders', 'both', 'target', 'dbdatasync', 40], ['events', 'target', null, 'dbdatasync', 3]])
   })
 
-  it('names the unit both sides hold even when the copy no longer holds its time', () => {
-    expect(commonText(divergence({ identity: unitIdentity, stream: 'unit', common: { order: 3, key: 'u-3', time: null } }))).toBe('The last row both hold is u-3.')
+  it('names the entry both sides hold even when the copy no longer holds its time', () => {
+    expect(commonText(divergence({ identity: positionLogIdentity, stream: 'position', common: { order: 3, key: 'u-3', time: null } }))).toBe('The last row both hold is u-3.')
   })
 
   it('sends the person to the replication to change the primary, and still refuses first for a down server or an open divergence', () => {
     const [row] = copyRows(sync, syncDoc())
     expect(switchPrimary(row, []).message).toMatch(/Overview tab, Tracking card/)
     expect(switchPrimary({ ...row, stale: true }, []).message).toMatch(/Sync prod does not answer/)
-    expect(switchPrimary({ ...row, open: [divergence({ stream: 'unit' })] }, []).message).toMatch(/open divergence/)
+    expect(switchPrimary({ ...row, open: [divergence({ stream: 'position' })] }, []).message).toMatch(/open divergence/)
   })
 })
 

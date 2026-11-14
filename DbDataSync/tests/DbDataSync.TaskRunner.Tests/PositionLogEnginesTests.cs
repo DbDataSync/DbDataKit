@@ -5,12 +5,12 @@ using Xunit;
 namespace DbDataSync.TaskRunner.Tests;
 
 /// <summary>
-/// Plan 28c E17: <see cref="TargetUnitState"/> on every engine a replication can keep its state on (SQL Server, PostgreSQL, MySQL, MariaDB, Oracle): the table is made once and again safely, a row written in a transaction
-/// is there after the commit and not after a rollback, the newest unit of a mapping and source, the units after a sequence, the tail, the position lookup, the newest unit of every source, the identity of a unit and its
+/// Plan 28c E17: <see cref="TargetPositionLog"/> on every engine a replication can keep its state on (SQL Server, PostgreSQL, MySQL, MariaDB, Oracle): the table is made once and again safely, a row written in a transaction
+/// is there after the commit and not after a rollback, the newest entry of a mapping and source, the entries after a sequence, the tail, the position lookup, the newest entry of every source, the identity of an entry and its
 /// times in UTC come back as written, and the prune keeps what it must. Needs the engines of <c>testenv.sh env dbdatasync</c> (an engine that is not up fails its row, it is not skipped).
 /// </summary>
 [Trait("Category", "Integration")]
-public sealed class UnitStateEnginesTests
+public sealed class PositionLogEnginesTests
 {
     [Theory]
     [InlineData("sqlserver")]
@@ -18,11 +18,11 @@ public sealed class UnitStateEnginesTests
     [InlineData("mysql")]
     [InlineData("mariadb")]
     [InlineData("oracle")]
-    public async Task The_state_table_keeps_units_in_order_atomically_with_its_transaction_and_prunes_what_is_old(string name)
+    public async Task The_state_table_keeps_entries_in_order_atomically_with_its_transaction_and_prunes_what_is_old(string name)
     {
         var target = ChangeApplyTargets.Make(name);
         await target.PrepareAsync();
-        var state = new TargetUnitState(TargetUnitState.EngineOf(target.DriverType)!.Value);
+        var state = new TargetPositionLog(TargetPositionLog.EngineOf(target.DriverType)!.Value);
         await using var connection = target.Open();
 
         await state.EnsureAsync(connection, CancellationToken.None);
@@ -33,29 +33,29 @@ public sealed class UnitStateEnginesTests
         Assert.False(await state.HoldsAnyAsync(connection, replication, CancellationToken.None));
         Assert.Null(await state.HighAsync(connection, replication, CancellationToken.None));
 
-        var drafts = new List<UnitDraft>();
+        var drafts = new List<PositionLogDraft>();
         for (var i = 1; i <= 5; i++)
         {
-            var draft = new UnitDraft(Guid.NewGuid(), replication, "m", "src/k", i == 1 ? null : $"pos-{i - 1}", $"pos-{i}", i == 5 ? null : DateTimeOffset.UtcNow.AddSeconds(-i), i * 10, i % 2 == 0 ? Guid.NewGuid() : null);
+            var draft = new PositionLogDraft(Guid.NewGuid(), replication, "m", "src/k", i == 1 ? null : $"pos-{i - 1}", $"pos-{i}", i == 5 ? null : DateTimeOffset.UtcNow.AddSeconds(-i), i * 10, i % 2 == 0 ? Guid.NewGuid() : null);
             await state.WriteAsync(connection, null, draft, CancellationToken.None);
             drafts.Add(draft);
         }
 
-        var other = new UnitDraft(Guid.NewGuid(), replication, "m2", "src/k2", null, "other-1", null, 1, null);
+        var other = new PositionLogDraft(Guid.NewGuid(), replication, "m2", "src/k2", null, "other-1", null, 1, null);
         await state.WriteAsync(connection, null, other, CancellationToken.None);
         // another source of the same mapping is another key
-        var upper = new UnitDraft(Guid.NewGuid(), replication, "m", "src/other", null, "upper-1", null, 1, null);
+        var upper = new PositionLogDraft(Guid.NewGuid(), replication, "m", "src/other", null, "upper-1", null, 1, null);
         await state.WriteAsync(connection, null, upper, CancellationToken.None);
 
-        // a transaction: its unit is there after the commit and not after a rollback
-        var rolledBack = new UnitDraft(Guid.NewGuid(), replication, "m", "src/k", "pos-5", "pos-rollback", null, 1, null);
+        // a transaction: its entry is there after the commit and not after a rollback
+        var rolledBack = new PositionLogDraft(Guid.NewGuid(), replication, "m", "src/k", "pos-5", "pos-rollback", null, 1, null);
         await using (var transaction = await connection.BeginTransactionAsync())
         {
             await state.WriteAsync(connection, transaction, rolledBack, CancellationToken.None);
             await transaction.RollbackAsync();
         }
 
-        var committed = new UnitDraft(Guid.NewGuid(), replication, "m", "src/k", "pos-5", "pos-6", null, 1, null);
+        var committed = new PositionLogDraft(Guid.NewGuid(), replication, "m", "src/k", "pos-5", "pos-6", null, 1, null);
         await using (var transaction = await connection.BeginTransactionAsync())
         {
             await state.WriteAsync(connection, transaction, committed, CancellationToken.None);
@@ -65,13 +65,13 @@ public sealed class UnitStateEnginesTests
         var latest = await state.LatestAsync(connection, replication, "m", "src/k", CancellationToken.None);
         Assert.Equal("pos-6", latest!.WatermarkAfter);
         Assert.Equal("pos-5", latest.WatermarkBefore);
-        Assert.Equal(committed.UnitId, latest.UnitId);
+        Assert.Equal(committed.EntryId, latest.EntryId);
         Assert.Equal("upper-1", (await state.LatestAsync(connection, replication, "m", "src/other", CancellationToken.None))!.WatermarkAfter);
         Assert.Null(await state.FindByPositionAsync(connection, replication, "m", "src/k", "pos-rollback", CancellationToken.None));
 
-        // what a unit carries comes back as written: the id, the nulls, the time in UTC, the engine's own time of commit in UTC
+        // what an entry carries comes back as written: the id, the nulls, the time in UTC, the engine's own time of commit in UTC
         var first = (await state.ReadAfterAsync(connection, replication, 0, 100, CancellationToken.None))[0];
-        Assert.Equal(drafts[0].UnitId, first.UnitId);
+        Assert.Equal(drafts[0].EntryId, first.EntryId);
         Assert.Null(first.WatermarkBefore);
         Assert.Null(first.RunId);
         Assert.InRange((first.WatermarkTime!.Value - drafts[0].WatermarkTime!.Value).Duration(), TimeSpan.Zero, TimeSpan.FromSeconds(1));
@@ -91,19 +91,19 @@ public sealed class UnitStateEnginesTests
         Assert.True(await state.HoldsAnyAsync(connection, replication, CancellationToken.None));
         Assert.Equal(3, (await state.LatestPerMappingAsync(connection, replication, CancellationToken.None)).Count);   // (m, src/k), (m, src/other), (m2, src/k2)
 
-        // the position lookup finds the unit that ended there
+        // the position lookup finds the entry that ended there
         var found = await state.FindByPositionAsync(connection, replication, "m", "src/k", "pos-3", CancellationToken.None);
-        Assert.Equal(drafts[2].UnitId, found!.UnitId);
+        Assert.Equal(drafts[2].EntryId, found!.EntryId);
 
-        // the prune keeps the newest two units of the mapping and the newest of each source whatever their age, and touches no other mapping
+        // the prune keeps the newest two entries of the mapping and the newest of each source whatever their age, and touches no other mapping
         var removed = await ((Func<Task<int>>)(async () =>
         {
             await using var transaction = await connection.BeginTransactionAsync();
-            var count = await state.PruneAsync(connection, transaction, replication, "m", keepUnits: 2, keepDays: 0, DateTimeOffset.UtcNow.AddMinutes(10), CancellationToken.None);
+            var count = await state.PruneAsync(connection, transaction, replication, "m", keepEntries: 2, keepDays: 0, DateTimeOffset.UtcNow.AddMinutes(10), CancellationToken.None);
             await transaction.CommitAsync();
             return count;
         }))();
-        // "m" held pos-1..pos-5, pos-6 and the other source's unit: the newest two are pos-6 and that one, which are also the newest of their sources; the five oldest of src/k go
+        // "m" held pos-1..pos-5, pos-6 and the other source's entry: the newest two are pos-6 and that one, which are also the newest of their sources; the five oldest of src/k go
         Assert.Equal(5, removed);
         var left = await state.ReadAfterAsync(connection, replication, 0, 100, CancellationToken.None);
         Assert.Equal(3, left.Count);
@@ -111,7 +111,7 @@ public sealed class UnitStateEnginesTests
         Assert.Contains(left, u => u.WatermarkAfter == "pos-6");
 
         // the oversized name is refused in words, not by the engine
-        var tooLong = new UnitDraft(Guid.NewGuid(), new string('x', TargetUnitState.MaxNameLength + 1), "m", "k", null, "p", null, 0, null);
+        var tooLong = new PositionLogDraft(Guid.NewGuid(), new string('x', TargetPositionLog.MaxNameLength + 1), "m", "k", null, "p", null, 0, null);
         await Assert.ThrowsAsync<InvalidOperationException>(() => state.WriteAsync(connection, null, tooLong, CancellationToken.None));
     }
 }

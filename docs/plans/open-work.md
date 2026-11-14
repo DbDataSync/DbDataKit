@@ -15,9 +15,8 @@ Flags: **OWNER** waits for a decision only the owner can take (the decision is n
 | Plan | Decision | Blocks |
 | --- | --- | --- |
 | [14a](14a-semantic-slices.md) SL25 to SL27 | Ad hoc registrations and the combine in a child process wait until an app or an agent needs them (decided, "not yet"); a request from the owner starts them | nothing else |
-| Naming review, owner to review later | The word **unit** is generic and confusing without context. It names Sync's per-pass state record on a target (`dbdatasync.unit`, `DBDATAKIT_SYNC_UNIT`, `UnitStateScope`, `TargetUnitState`, `SyncUnitCopy`, the tracking stream `unit`, `IChangeWriter.SupportsUnitState`) and appears elsewhere; it probably needs a better name. Not reviewed yet; the owner does not want to discuss it now | nothing; the names stay until reviewed |
 
-Taken (not open any more): AP17's per-app origin goes into `view-spec/1` without a version bump ([26](26-app-publishing.md), 2026-11-11); the other defaults taken by delegation on 2026-11-09 are in each plan's decisions.
+Taken (not open any more): the word "unit" of Sync's state on a target is the **position log** (owner, 2026-11-14, S8; built in [28c](28c-engines-on-runner.md) E17); AP17's per-app origin goes into `view-spec/1` without a version bump ([26](26-app-publishing.md), 2026-11-11); the other defaults taken by delegation on 2026-11-09 are in each plan's decisions.
 
 ## Console (DbDataKit server and its web app)
 

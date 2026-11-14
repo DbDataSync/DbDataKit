@@ -22,7 +22,7 @@ public sealed class MsSqlDeleteInsertWriter : IChangeWriter, IStatementPreview
 {
     public string Kind => MsSqlDriverKinds.DeleteInsert;
 
-    public bool SupportsUnitState => true;
+    public bool SupportsPositionLog => true;
 
     public bool SupportsReconciliation => true;
 
@@ -64,7 +64,7 @@ public sealed class MsSqlDeleteInsertWriter : IChangeWriter, IStatementPreview
                 },
                 cancellationToken);
 
-            await UnitStateScope.BeforeCommitAsync(targetConnection, transaction, cancellationToken);   // plan 28c E17: the unit's state row, same transaction
+            await PositionLogScope.BeforeCommitAsync(targetConnection, transaction, cancellationToken);   // plan 28c E17: the entry's state row, same transaction
             await transaction.CommitAsync(cancellationToken);
 
             // RowsWritten counts the insert only. Folding the delete count in would double-count every

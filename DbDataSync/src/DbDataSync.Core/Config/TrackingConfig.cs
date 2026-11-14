@@ -1,38 +1,38 @@
 namespace DbDataSync.Core.Config;
 
 /// <summary>
-/// Where a replication's tracking state (its positions, the record of what each unit moved) lives (plan 28c E17, plan 29 section 4a.2): the optional
+/// Where a replication's tracking state (its positions, the record of what each entry moved) lives (plan 28c E17, plan 29 section 4a.2): the optional
 /// <c>tracking:</c> section of <c>task.yaml</c>, <c>mode: target|state|both</c> and, for <c>both</c>, <c>primary: target|state</c>. Absent means the default
 /// (<see cref="TrackingResolution"/> says what that is and why). An optional key of an open format: a file from before loads, a misspelled key is refused by the strict loader.
 /// </summary>
 public sealed class TrackingConfig
 {
-    /// <summary><c>target</c> (the state table on the target, in the unit's transaction), <c>state</c> (the runner's state only) or <c>both</c>.</summary>
+    /// <summary><c>target</c> (the state table on the target, in the entry's transaction), <c>state</c> (the runner's state only) or <c>both</c>.</summary>
     public string? Mode { get; set; }
 
     /// <summary>The side decisions are made from when <see cref="Mode"/> is <c>both</c>: <c>target</c> or <c>state</c>. Refused for the other modes.</summary>
     public string? Primary { get; set; }
 
-    /// <summary>How much of the state table on the target is kept (plan 28c E17, <c>tracking.retention</c>). Absent: <see cref="TrackingRetention.DefaultUnits"/> units and <see cref="TrackingRetention.DefaultDays"/> days. Refused with the mode that keeps no table on the target.</summary>
+    /// <summary>How much of the state table on the target is kept (plan 28c E17, <c>tracking.retention</c>). Absent: <see cref="TrackingRetention.DefaultEntries"/> entries and <see cref="TrackingRetention.DefaultDays"/> days. Refused with the mode that keeps no table on the target.</summary>
     public TrackingRetention? Retention { get; set; }
 }
 
 /// <summary>
-/// The retention of <c>dbdatasync.unit</c>: a unit is removed only when it is older than <see cref="Days"/> days <b>and</b> not among the newest <see cref="Units"/> of its mapping (the newest unit of each source is
-/// never removed: it is where the next pass resumes). Default taken (plan 28c E17, owner not asked): the last 1000 units and anything newer than 7 days.
+/// The retention of <c>dbdatasync.position_log</c>: an entry is removed only when it is older than <see cref="Days"/> days <b>and</b> not among the newest <see cref="Entries"/> of its mapping (the newest entry of each source is
+/// never removed: it is where the next pass resumes). Default taken (plan 28c E17, owner not asked): the last 1000 entries and anything newer than 7 days.
 /// </summary>
 public sealed class TrackingRetention
 {
-    public const int DefaultUnits = 1000;
+    public const int DefaultEntries = 1000;
     public const double DefaultDays = 7;
 
-    /// <summary>How many of a mapping's newest units are always kept. At least 1.</summary>
-    public int? Units { get; set; }
+    /// <summary>How many of a mapping's newest entries are always kept. At least 1.</summary>
+    public int? Entries { get; set; }
 
-    /// <summary>How many days of units are always kept. Zero or more.</summary>
+    /// <summary>How many days of entries are always kept. Zero or more.</summary>
     public double? Days { get; set; }
 
-    public int EffectiveUnits() => Units ?? DefaultUnits;
+    public int EffectiveEntries() => Entries ?? DefaultEntries;
 
     public double EffectiveDays() => Days ?? DefaultDays;
 }
@@ -41,18 +41,18 @@ public sealed class TrackingRetention
 public sealed record TrackingResolved(string RequestedMode, string? RequestedPrimary, string EffectiveMode, string? EffectivePrimary, bool Defaulted, string Reason);
 
 /// <summary>
-/// Resolves <see cref="TrackingConfig"/> against what the writers can do. The state table on the target needs an <c>IChangeWriter</c> that writes it in the unit's transaction
-/// (E17): they exist for <see cref="TargetWriterEngines"/> (SQL Server and PostgreSQL); MySQL/MariaDB and Oracle are listed in <see cref="TargetsThatCanHoldState"/> and keep their state in the
-/// runner's state until theirs are built. A Flight SQL or DuckDB target never holds the table. A file that asks for <c>target</c> or <c>both</c> on an engine that cannot is refused at save with a
+/// Resolves <see cref="TrackingConfig"/> against what the writers can do. The state table on the target needs an <c>IChangeWriter</c> that writes it in the entry's transaction
+/// (E17): they exist for <see cref="TargetWriterEngines"/> (SQL Server and PostgreSQL); MySQL/MariaDB and Oracle are listed in <see cref="TargetsThatCanHoldState"/> but keep their state in the
+/// runner's state only (<c>mode: state</c>): the owner decided on 2026-11-14 (S3) that their writers are not built. A Flight SQL or DuckDB target never holds the table. A file that asks for <c>target</c> or <c>both</c> on an engine that cannot is refused at save with a
 /// message instead of being accepted and ignored; a file without the section keeps the runner's state and creates nothing on the target.
 /// </summary>
 public static class TrackingResolution
 {
-    /// <summary>The engines whose writers can carry a state table in the unit's transaction once built (E17).</summary>
+    /// <summary>The engines whose writers could carry a state table in the entry's transaction (E17); of these only <see cref="TargetWriterEngines"/> do (S3: MySQL, MariaDB and Oracle stay on <c>mode: state</c>).</summary>
     public static readonly IReadOnlySet<string> TargetsThatCanHoldState = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         { DriverIds.MsSql, DriverIds.Postgres, DriverIds.MySql, DriverIds.Oracle };
 
-    /// <summary>The engines whose state-table writers are built (<c>TargetUnitState</c>): a subset of <see cref="TargetsThatCanHoldState"/>.</summary>
+    /// <summary>The engines whose state-table writers are built (<c>TargetPositionLog</c>): a subset of <see cref="TargetsThatCanHoldState"/>.</summary>
     public static readonly IReadOnlySet<string> TargetWriterEngines = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         { DriverIds.MsSql, DriverIds.Postgres };
 
@@ -78,7 +78,7 @@ public static class TrackingResolution
         if (tracking.Retention is { } retention)
         {
             if (mode == "state") throw new ConfigValidationException($"Replication '{replicationName}': `tracking.retention` prunes the state table on the target, and mode 'state' keeps none; remove it or use mode target or both.");
-            if (retention.Units is < 1) throw new ConfigValidationException($"Replication '{replicationName}': `tracking.retention.units` is {retention.Units}; it keeps at least 1 unit per mapping.");
+            if (retention.Entries is < 1) throw new ConfigValidationException($"Replication '{replicationName}': `tracking.retention.entries` is {retention.Entries}; it keeps at least 1 entry per mapping.");
             if (retention.Days is < 0) throw new ConfigValidationException($"Replication '{replicationName}': `tracking.retention.days` is {retention.Days}; it cannot be negative.");
         }
 
@@ -99,8 +99,8 @@ public static class TrackingResolution
 
     private static string EngineSentence(string engine) =>
         TargetsThatCanHoldState.Contains(engine)
-            ? $"the writer that keeps it on a {engine} target is not built yet (plan 28c E17)"
-            : $"a {engine} target cannot hold a state table in the unit's transaction (a Flight SQL or DuckDB target)";
+            ? $"a {engine} target keeps Sync's state on the Runner only: MySQL, MariaDB and Oracle use `mode: state`, and no writer keeps the position log on them (owner decision of 2026-11-14, plan 28c E17 S3), so a restored target of this engine is not flagged as diverged"
+            : $"a {engine} target cannot hold a state table in the entry's transaction (a Flight SQL or DuckDB target)";
 
     /// <summary>The answer for the screen and the API: what applies, whether it is the default, and why.</summary>
     public static TrackingResolved Resolve(TrackingConfig? tracking, string? targetEngine)
@@ -122,7 +122,7 @@ public static class TrackingResolution
 
         return new(wanted, wantedPrimary, wanted, wanted == "both" ? wantedPrimary : null, defaulted,
             wanted == "both"
-                ? $"The state table is on the target, written in the unit's transaction; the runner's state follows it. The {wantedPrimary} decides where a pass resumes."
-                : "The state table is on the target, written in the unit's transaction.");
+                ? $"The state table is on the target, written in the entry's transaction; the runner's state follows it. The {wantedPrimary} decides where a pass resumes."
+                : "The state table is on the target, written in the entry's transaction.");
     }
 }

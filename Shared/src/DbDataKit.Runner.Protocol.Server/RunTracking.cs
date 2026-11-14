@@ -13,15 +13,15 @@ internal sealed class TrackingNotGrantedException(string message) : Unauthorized
 /// login of a connection it was granted. The rows and the checkpoint move in one transaction here (the task never holds a connection to this state). Every call names an identity, and the identity must end with
 /// <c>@&lt;connection&gt;</c> where the connection is one the run holds a handle for: the name of a slot of the run, or the connection the channel binds that slot to; a run cannot write the copy of a connection it was not given.
 /// <para>
-/// The same calls carry Sync's copy of the units a runner-owned replication recorded on its target (plan 28c E17): the stream <see cref="SyncUnitCopy.Name"/> for an identity that starts with
-/// <see cref="SyncUnitCopy.IdentityPrefix"/>, kept in the shared <c>tracking</c> module (<see cref="StateTrackingStore"/>) under the same follower checkpoints. A Build stream under a Sync identity, or the unit stream under a Build
+/// The same calls carry Sync's copy of the entries a runner-owned replication recorded on its target (plan 28c E17): the stream <see cref="SyncPositionLogCopy.Name"/> for an identity that starts with
+/// <see cref="SyncPositionLogCopy.IdentityPrefix"/>, kept in the shared <c>tracking</c> module (<see cref="StateTrackingStore"/>) under the same follower checkpoints. A Build stream under a Sync identity, or the entry stream under a Build
 /// identity, is refused.
 /// </para>
 /// </summary>
 internal sealed class RunTracking(StateDatabase database, IReadOnlyDictionary<string, string> handles)
 {
     private readonly BuildTrackingStore _store = new(database);
-    private readonly StateTrackingStore _units = new(database);
+    private readonly StateTrackingStore _entries = new(database);
     private readonly ProgressStore _progress = new(database, BuildTrackingState.ProgressKey);
     private readonly StateTrackingDivergences _divergences = new(database);
 
@@ -35,19 +35,19 @@ internal sealed class RunTracking(StateDatabase database, IReadOnlyDictionary<st
             throw new TrackingNotGrantedException($"The identity '{identity}' does not end with '@' and a connection this run holds a handle for ({(Granted.Count == 0 ? "it holds none" : string.Join(", ", Granted.Order(StringComparer.Ordinal)))}).");
     }
 
-    /// <summary>The stream a call names, for the identity it names: one of Build's tables, or Sync's units.</summary>
-    private readonly record struct Bound(string Identity, string Name, TrackingStream Stream, bool Unit);
+    /// <summary>The stream a call names, for the identity it names: one of Build's tables, or Sync's entries.</summary>
+    private readonly record struct Bound(string Identity, string Name, TrackingStream Stream, bool Entry);
 
     private Bound Bind(string identity, string stream)
     {
         Check(identity);
-        if (SyncUnitCopy.IsIdentity(identity))
+        if (SyncPositionLogCopy.IsIdentity(identity))
         {
-            if (stream != SyncUnitCopy.Name) throw new ArgumentException($"'{stream}' is not a stream of Sync's units; the identity '{identity}' has one, '{SyncUnitCopy.Name}'.");
-            return new(identity, stream, SyncUnitCopy.Stream, true);
+            if (stream != SyncPositionLogCopy.Name) throw new ArgumentException($"'{stream}' is not a stream of Sync's entries; the identity '{identity}' has one, '{SyncPositionLogCopy.Name}'.");
+            return new(identity, stream, SyncPositionLogCopy.Stream, true);
         }
 
-        if (stream == SyncUnitCopy.Name) throw new ArgumentException($"The stream '{SyncUnitCopy.Name}' is Sync's units, and the identity '{identity}' is not a copy of them ('{SyncUnitCopy.IdentityPrefix}...').");
+        if (stream == SyncPositionLogCopy.Name) throw new ArgumentException($"The stream '{SyncPositionLogCopy.Name}' is Sync's entries, and the identity '{identity}' is not a copy of them ('{SyncPositionLogCopy.IdentityPrefix}...').");
         var build = BuildStreams.All.FirstOrDefault(s => s.Name == stream) ?? throw new ArgumentException($"'{stream}' is not a stream of Build's tracking tables ({string.Join(", ", BuildStreams.All.Select(s => s.Name))}).");
         return new(identity, stream, build.Stream, false);
     }
@@ -79,14 +79,14 @@ internal sealed class RunTracking(StateDatabase database, IReadOnlyDictionary<st
 
         if (!advance)
         {
-            if (bound.Unit) _units.WriteAsync(id, kind.Stream, rows, CancellationToken.None).GetAwaiter().GetResult();
+            if (bound.Entry) _entries.WriteAsync(id, kind.Stream, rows, CancellationToken.None).GetAwaiter().GetResult();
             else _store.WriteAsync(id, kind.Stream, rows, CancellationToken.None).GetAwaiter().GetResult();
             return true;
         }
 
         var last = rows[^1];
         var parts = new Dictionary<string, ProgressValue> { [TrackingFollower.OrderPartName] = ProgressValue.OfInt(last.Order), [TrackingFollower.KeyPartName] = ProgressValue.OfText(last.Key) };
-        var advanced = _progress.Advance(CheckpointName(kind), parts, expectedVersion, itemKey: id, actor: "tracking-follower", alsoWrite: (connection, transaction) => { if (bound.Unit) _units.Write(connection, transaction, id, kind.Stream, rows); else _store.Write(connection, transaction, id, kind.Stream, rows); });
+        var advanced = _progress.Advance(CheckpointName(kind), parts, expectedVersion, itemKey: id, actor: "tracking-follower", alsoWrite: (connection, transaction) => { if (bound.Entry) _entries.Write(connection, transaction, id, kind.Stream, rows); else _store.Write(connection, transaction, id, kind.Stream, rows); });
         // the run's record in the runs module (plan 29a Q21), after the rows and the checkpoint are in
         if (advanced && kind.Name == "run_log") BuildRunsProjection.Project(database, id, rows);
         return advanced;
@@ -96,23 +96,23 @@ internal sealed class RunTracking(StateDatabase database, IReadOnlyDictionary<st
     {
         var kind = Bind(identity, stream);
         var count1 = Math.Clamp(count, 1, 1000);
-        return kind.Unit
-            ? _units.TailAsync(kind.Identity, kind.Stream, count1, CancellationToken.None).GetAwaiter().GetResult()
+        return kind.Entry
+            ? _entries.TailAsync(kind.Identity, kind.Stream, count1, CancellationToken.None).GetAwaiter().GetResult()
             : _store.TailAsync(kind.Identity, kind.Stream, count1, CancellationToken.None).GetAwaiter().GetResult();
     }
 
     public IReadOnlyList<TrackingRow> Read(string identity, string stream, TrackingPosition? after, int limit)
     {
         var kind = Bind(identity, stream);
-        return kind.Unit
-            ? _units.ReadAfterAsync(kind.Identity, kind.Stream, after, Math.Clamp(limit, 1, 5000), CancellationToken.None).GetAwaiter().GetResult()
+        return kind.Entry
+            ? _entries.ReadAfterAsync(kind.Identity, kind.Stream, after, Math.Clamp(limit, 1, 5000), CancellationToken.None).GetAwaiter().GetResult()
             : _store.ReadAfterAsync(kind.Identity, kind.Stream, after, Math.Clamp(limit, 1, 5000), CancellationToken.None).GetAwaiter().GetResult();
     }
 
     public IReadOnlyList<(string Key, string Hash)> Unsettled(string identity, string stream, int limit)
     {
         var kind = Bind(identity, stream);
-        return kind.Unit ? [] : _store.Unsettled(kind.Identity, kind.Name, Math.Clamp(limit, 1, 1000));
+        return kind.Entry ? [] : _store.Unsettled(kind.Identity, kind.Name, Math.Clamp(limit, 1, 1000));
     }
 
     public TrackingDivergence Mark(string identity, string stream, string reason, TrackingPosition? common, TrackingPosition? primaryHigh, TrackingPosition? copyHigh)
@@ -124,7 +124,7 @@ internal sealed class RunTracking(StateDatabase database, IReadOnlyDictionary<st
     public int ReplaceSnapshot(string identity, string table, IReadOnlyList<TrackingRow> rows)
     {
         Check(identity);
-        if (SyncUnitCopy.IsIdentity(identity)) throw new ArgumentException("Sync's units have no snapshot tables.");
+        if (SyncPositionLogCopy.IsIdentity(identity)) throw new ArgumentException("Sync's entries have no snapshot tables.");
         if (!BuildStreams.Snapshots.Contains(table)) throw new ArgumentException($"'{table}' is not a snapshot of Build's tracking tables ({string.Join(", ", BuildStreams.Snapshots)}).");
         foreach (var row in rows)
         {

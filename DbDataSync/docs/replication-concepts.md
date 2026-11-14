@@ -389,13 +389,15 @@ Pair a server with a group from the console (**Servers**, **Link**), or on the s
 
 ## Where the tracking state lives
 
-A replication's positions and the record of what each unit moved are its **tracking state**. The optional `tracking:` section of `task.yaml` says where it is kept: `mode: state` (the runner's
-state only), `mode: target` (a state table on the target, written in the unit's transaction) or `mode: both` with `primary: target|state`. **A file without the section keeps the runner's state exactly as
+A replication's positions and the record of what each entry moved are its **tracking state**. The optional `tracking:` section of `task.yaml` says where it is kept: `mode: state` (the runner's
+state only), `mode: target` (a state table on the target, written in the entry's transaction) or `mode: both` with `primary: target|state`. **A file without the section keeps the runner's state exactly as
 before and creates nothing on its target**; the target is used only when the file asks for it.
 
-**On the target** (SQL Server and PostgreSQL): the table `dbdatasync.unit`, created on first use (the target login needs the right to create the schema `dbdatasync` and the table; without it the pass fails
-saying so). Every pass that read a new position appends one row (the unit: replication, mapping, source key, the position before and after, the rows staged, the run) **in the same transaction as
-the unit's data**: the writer calls the state write just before its commit, so after a crash between the write and the commit the target holds the data and its row, or neither. The newest row of a mapping is the
+**The position log** (the name since 2026-11-14; it was the "unit" table, `dbdatasync.unit`, `DBDATAKIT_SYNC_UNIT` on Oracle): a target that still holds the table under its old name is refused when a pass would create the new one, with a message naming the old table (drop it, or rename it and its columns `unit_seq`, `unit_id` to `entry_seq`, `entry_id` to keep its history); `tracking.retention.units` is now `entries`, and the copies' identities start `syncposition:` with the stream `position`. **MySQL, MariaDB and Oracle** keep a replication's state on the Runner only (`mode: state`, owner 2026-11-14): no writer keeps the position log on them, `target` and `both` are refused at save naming the engine, and a restored target of those engines is not flagged as diverged.
+
+**On the target** (SQL Server and PostgreSQL): the table `dbdatasync.position_log`, created on first use (the target login needs the right to create the schema `dbdatasync` and the table; without it the pass fails
+saying so). Every pass that read a new position appends one row (the entry: replication, mapping, source key, the position before and after, the rows staged, the run) **in the same transaction as
+the entry's data**: the writer calls the state write just before its commit, so after a crash between the write and the commit the target holds the data and its row, or neither. The newest row of a mapping is the
 position the next pass resumes from when the target is the primary (`target`, or `both` with `primary: target`). The writers that carry the row are ChangeApply, DeleteInsert, Scd2 and, on SQL Server, MsSqlMerge (which then
 runs all its chunks in one transaction instead of one per chunk) and MsSqlDeleteInsert; a file that asks for the target with another writer is refused when the pass starts, naming the writer. MySQL/MariaDB and Oracle are
 refused at save for now (plan 28c E17), a Flight SQL or DuckDB target never holds the table. The runner's state keeps its own copy of every position for status and lag in every mode.
@@ -410,30 +412,30 @@ refused at save for now (plan 28c E17), a Flight SQL or DuckDB target never hold
 
 The Overview tab's **Tracking** card and `GET /api/replications/{name}/tracking` say which mode applies, which was asked for and why they differ.
 
-**The copy in the state, and divergence.** In `target` and `both` the Sync server follows the table: a minute apart (and on **Follow now** of the card, an administrator's call) it copies the units a replication
-recorded since its last checkpoint into the `tracking` module of the state (`tracking_row`, identity `syncunit:<engine>://<server>/<database>/<replication>@<connection>`), with the follower Build's tracking uses, so
+**The copy in the state, and divergence.** In `target` and `both` the Sync server follows the table: a minute apart (and on **Follow now** of the card, an administrator's call) it copies the entries a replication
+recorded since its last checkpoint into the `tracking` module of the state (`tracking_row`, identity `syncposition:<engine>://<server>/<database>/<replication>@<connection>`), with the follower Build's tracking uses, so
 the rows and the checkpoint move in one transaction. A run never waits for it, and a target that is down is the card's "the last follow failed", not an error of any run. Two kinds of difference are **persisted**
 as a divergence (they stay until an administrator resolves them, and while one is open nothing is copied):
 
-* *the table parts from its copy*: the target's newest unit is behind the checkpoint (a restore) or the copy holds units the table does not;
-* *the state's position is not the target's*: for a mapping, the state's position is an older unit of the target (the target is **ahead** of the state), is no unit the target recorded (the sides **part**: a restore, a
-  replaced target), or the state has none (reset or lost). Only a difference the target has held for more than two minutes counts, because the pass that wrote a unit moves the state's position a moment later.
+* *the table parts from its copy*: the target's newest entry is behind the checkpoint (a restore) or the copy holds entries the table does not;
+* *the state's position is not the target's*: for a mapping, the state's position is an older entry of the target (the target is **ahead** of the state), is no entry the target recorded (the sides **part**: a restore, a
+  replaced target), or the state has none (reset or lost). Only a difference the target has held for more than two minutes counts, because the pass that wrote an entry moves the state's position a moment later.
 
 Resolving is the same action as Build's (`POST /api/v1/tracking/divergences/{id}/resolve`, administrator, audited in the management audit log): **archive** keeps the copy's rows after the point where the sides last agree
-apart (out of the live stream), **reset** deletes them; the checkpoint goes back to that point and the next follow copies the target's units from there. The resolve changes the *copy*; what heals a position difference is
+apart (out of the live stream), **reset** deletes them; the checkpoint goes back to that point and the next follow copies the target's entries from there. The resolve changes the *copy*; what heals a position difference is
 the pass itself, which already resumes from the primary. The replication's Tracking card shows the open divergence with its reason and both buttons (disabled for anyone but an administrator), and the console's
 **Tracking** page lists every replication's copy beside Build's and the runners', with its own mode and primary (the primary of a replication is the `tracking.primary` of its file, edited on the card). Every target
-that holds the replication's units is followed: the replication's own and the one each mapping names.
+that holds the replication's entries is followed: the replication's own and the one each mapping names.
 
 **A replication the runner owns** is followed by its own drain, not by the Sync server (whose state does not hold that replication's positions): after its passes (at most every 30 seconds) and once more when it ends, the
-drain copies the units into the **runner's** state through the runner protocol (rows and checkpoint in one transaction there, under the same `syncunit:...` identity, which must end with a connection the run holds a handle
-for) and compares the target's newest unit of each mapping with the position its own checkpoint holds, with the same two-minute grace. A divergence is recorded in the runner's state; the runner's own
+drain copies the entries into the **runner's** state through the runner protocol (rows and checkpoint in one transaction there, under the same `syncposition:...` identity, which must end with a connection the run holds a handle
+for) and compares the target's newest entry of each mapping with the position its own checkpoint holds, with the same two-minute grace. A divergence is recorded in the runner's state; the runner's own
 `GET /api/v1/tracking` lists it beside Build's copies (mode `both`, the target the primary: the setting itself travels in the published definition) and `POST /api/v1/tracking/divergences/{id}/resolve` (administrator,
 audited as `runner.tracking.resolve`) archives or resets it, the console's Tracking page reaching both through the runner relay. The follower never fails the run: a target that is down, a refused grant or a copy that
 failed are lines in the run's log.
 
-**Retention of `dbdatasync.unit`.** After each pass the mapping's old units are removed in a transaction of their own: a unit goes only when it is older than 7 days **and** not among the newest 1000 units of its
-mapping, and the newest unit of every source is never removed (it is where the next pass resumes). The numbers are the optional `tracking.retention` of the file (`units`, `days`; refused with `mode: state`, which
+**Retention of `dbdatasync.position_log`.** After each pass the mapping's old entries are removed in a transaction of their own: an entry goes only when it is older than 7 days **and** not among the newest 1000 entries of its
+mapping, and the newest entry of every source is never removed (it is where the next pass resumes). The numbers are the optional `tracking.retention` of the file (`entries`, `days`; refused with `mode: state`, which
 keeps no table, and for a number below 1 or a negative one, naming the key). A prune that fails is a warning in the run's log and does not fail the pass. The copy in the state keeps its rows past the table's
 pruning (the module's retention has no age: how long the history is kept is the owner's decision).
 

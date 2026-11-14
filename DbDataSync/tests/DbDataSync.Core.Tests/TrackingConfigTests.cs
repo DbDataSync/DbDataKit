@@ -55,8 +55,8 @@ public sealed class TrackingConfigTests : IDisposable
     }
 
     [Theory]
-    [InlineData("both", "target", "MySql", "not built yet")]
-    [InlineData("target", null, "Oracle", "not built yet")]
+    [InlineData("both", "target", "MySql", "use `mode: state`")]
+    [InlineData("target", null, "Oracle", "no writer keeps the position log")]
     [InlineData("both", "state", "DuckDb", "cannot hold a state table")]
     [InlineData("target", null, "ArrowFlightSql", "cannot hold a state table")]
     public void ModesThatKeepTheStateOnTheTargetAreRefusedForAnEngineWithoutAWriterAndTheMessageSaysSo(string mode, string? primary, string engine, string why)
@@ -133,42 +133,48 @@ public sealed class TrackingConfigTests : IDisposable
     }
 
     [Fact]
-    public void RetentionRoundTripsAndAnAbsentOneIsTheDefaultOf1000UnitsAnd7Days()
+    public void RetentionRoundTripsAndAnAbsentOneIsTheDefaultOf1000EntriesAnd7Days()
     {
-        _config.SaveReplicationTask(Task(new TrackingConfig { Mode = "both", Primary = "target", Retention = new TrackingRetention { Units = 50, Days = 2.5 } }), Author);
+        _config.SaveReplicationTask(Task(new TrackingConfig { Mode = "both", Primary = "target", Retention = new TrackingRetention { Entries = 50, Days = 2.5 } }), Author);
         var loaded = _config.LoadReplicationTask("r");
-        Assert.Equal(50, loaded.Tracking!.Retention!.Units);
+        Assert.Equal(50, loaded.Tracking!.Retention!.Entries);
         Assert.Equal(2.5, loaded.Tracking.Retention.Days);
         Assert.Contains("retention", File.ReadAllText(TaskFile()!));
 
         var defaults = TrackingResolution.RetentionOf(new TrackingConfig { Mode = "target" });
-        Assert.Equal(1000, defaults.EffectiveUnits());
+        Assert.Equal(1000, defaults.EffectiveEntries());
         Assert.Equal(7, defaults.EffectiveDays());
-        Assert.Equal(1000, TrackingResolution.RetentionOf(null).EffectiveUnits());
+        Assert.Equal(1000, TrackingResolution.RetentionOf(null).EffectiveEntries());
         // one key given keeps the default of the other
-        Assert.Equal(7, TrackingResolution.RetentionOf(new TrackingConfig { Mode = "target", Retention = new TrackingRetention { Units = 5 } }).EffectiveDays());
+        Assert.Equal(7, TrackingResolution.RetentionOf(new TrackingConfig { Mode = "target", Retention = new TrackingRetention { Entries = 5 } }).EffectiveDays());
     }
 
     [Fact]
     public void ARetentionWithoutATableOnTheTargetOrWithANonsenseNumberIsRefusedNamingTheKey()
     {
-        var state = Assert.Throws<ConfigValidationException>(() => TrackingResolution.Validate(new TrackingConfig { Mode = "state", Retention = new TrackingRetention { Units = 5 } }, "r"));
+        var state = Assert.Throws<ConfigValidationException>(() => TrackingResolution.Validate(new TrackingConfig { Mode = "state", Retention = new TrackingRetention { Entries = 5 } }, "r"));
         Assert.Contains("tracking.retention", state.Message);
-        var units = Assert.Throws<ConfigValidationException>(() => TrackingResolution.Validate(new TrackingConfig { Mode = "target", Retention = new TrackingRetention { Units = 0 } }, "r"));
-        Assert.Contains("tracking.retention.units", units.Message);
+        var entries = Assert.Throws<ConfigValidationException>(() => TrackingResolution.Validate(new TrackingConfig { Mode = "target", Retention = new TrackingRetention { Entries = 0 } }, "r"));
+        Assert.Contains("tracking.retention.entries", entries.Message);
         var days = Assert.Throws<ConfigValidationException>(() => TrackingResolution.Validate(new TrackingConfig { Mode = "both", Primary = "state", Retention = new TrackingRetention { Days = -1 } }, "r"));
         Assert.Contains("tracking.retention.days", days.Message);
-        TrackingResolution.Validate(new TrackingConfig { Mode = "target", Retention = new TrackingRetention { Units = 1, Days = 0 } }, "r", "MsSql");
+        TrackingResolution.Validate(new TrackingConfig { Mode = "target", Retention = new TrackingRetention { Entries = 1, Days = 0 } }, "r", "MsSql");
     }
 
     [Fact]
     public void AMisspelledRetentionKeyIsRefusedByTheStrictLoader()
     {
-        _config.SaveReplicationTask(Task(new TrackingConfig { Mode = "target", Retention = new TrackingRetention { Units = 5 } }), Author);
+        _config.SaveReplicationTask(Task(new TrackingConfig { Mode = "target", Retention = new TrackingRetention { Entries = 5 } }), Author);
         var path = TaskFile()!;
-        File.WriteAllText(path, File.ReadAllText(path).Replace("units:", "unitz:", StringComparison.Ordinal));
+        var saved = File.ReadAllText(path);
+        File.WriteAllText(path, saved.Replace("entries:", "entriez:", StringComparison.Ordinal));
         var ex = Assert.ThrowsAny<Exception>(() => _config.LoadReplicationTask("r"));
-        Assert.Contains("unitz", ex.ToString());
+        Assert.Contains("entriez", ex.ToString());
+
+        // plan 28c E17 (S8): the key was `units` before "unit" became the position log; a file that still says so is refused naming it, not read
+        File.WriteAllText(path, saved.Replace("entries:", "units:", StringComparison.Ordinal));
+        var old = Assert.ThrowsAny<Exception>(() => _config.LoadReplicationTask("r"));
+        Assert.Contains("units", old.ToString());
     }
 
     [Fact]

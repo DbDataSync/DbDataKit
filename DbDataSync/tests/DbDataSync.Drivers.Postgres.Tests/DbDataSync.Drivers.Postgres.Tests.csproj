@@ -31,7 +31,7 @@
          be tested from inside either driver's own project. -->
     <ProjectReference Include="..\..\src\DbDataSync.Drivers.MsSql\DbDataSync.Drivers.MsSql.csproj" />
     <ProjectReference Include="..\..\src\DbDataSync.Drivers.Postgres\DbDataSync.Drivers.Postgres.csproj" />
-    <ProjectReference Include="..\..\src\DbDataSync.Tracking\DbDataSync.Tracking.csproj" />   <!-- the follower of dbdatasync.unit on both engines (plan 28c E17) -->
+    <ProjectReference Include="..\..\src\DbDataSync.Tracking\DbDataSync.Tracking.csproj" />   <!-- the follower of dbdatasync.position_log on both engines (plan 28c E17) -->
     <ProjectReference Include="..\..\src\DbDataSync.State\DbDataSync.State.csproj" />
   </ItemGroup>
 

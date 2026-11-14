@@ -74,31 +74,31 @@ public sealed class RunnerTrackingApiTests
     }
 
     [Fact]
-    public async Task The_copy_of_a_runner_owned_replications_units_is_listed_beside_builds_and_resolved_the_same_way()
+    public async Task The_copy_of_a_runner_owned_replications_entries_is_listed_beside_builds_and_resolved_the_same_way()
     {
         var (h, buildId) = await WithDivergenceAsync();
         await using var _ = h;
-        const string unitIdentity = "syncunit:postgres://pg01/wh/orders-sync@warehouse";
-        var rows = Enumerable.Range(1, 3).Select(n => new TrackingRow($"0000000{n}-0000-0000-0000-000000000000", n, $"{{\"unit_seq\":{n},\"committed_at\":\"2026-11-12T10:00:0{n}.0000000+00:00\"}}")).ToArray();
-        await new StateTrackingStore(h.State).WriteAsync(unitIdentity, SyncUnitCopy.Stream, rows, default);
-        var unit = new StateTrackingDivergences(h.State).Mark(unitIdentity, SyncUnitCopy.Name, "the copy holds rows of 'unit' that the primary does not", new TrackingPosition(1, rows[0].Key), new TrackingPosition(2, "x"), new TrackingPosition(3, rows[2].Key));
+        const string positionLogIdentity = "syncposition:postgres://pg01/wh/orders-sync@warehouse";
+        var rows = Enumerable.Range(1, 3).Select(n => new TrackingRow($"0000000{n}-0000-0000-0000-000000000000", n, $"{{\"entry_seq\":{n},\"committed_at\":\"2026-11-12T10:00:0{n}.0000000+00:00\"}}")).ToArray();
+        await new StateTrackingStore(h.State).WriteAsync(positionLogIdentity, SyncPositionLogCopy.Stream, rows, default);
+        var entry = new StateTrackingDivergences(h.State).Mark(positionLogIdentity, SyncPositionLogCopy.Name, "the copy holds rows of 'position' that the primary does not", new TrackingPosition(1, rows[0].Key), new TrackingPosition(2, "x"), new TrackingPosition(3, rows[2].Key));
 
         var (status, body) = await h.GetAsync("/api/v1/tracking");
         Assert.Equal(HttpStatusCode.OK, status);
         var copies = body!["copies"]!.AsArray();
         Assert.Equal(2, copies.Count);
-        var copy = copies.Single(c => (string?)c!["identity"] == unitIdentity)!;
+        var copy = copies.Single(c => (string?)c!["identity"] == positionLogIdentity)!;
         Assert.Equal("orders-sync", (string?)copy["replication"]);
         Assert.Equal(3, (int)copy["streams"]![0]!["rows"]!);
         Assert.True((bool)copy["streams"]![0]!["diverged"]!);
         Assert.Equal(2, body["divergences"]!.AsArray().Count);
-        Assert.Equal(unit.Id > buildId ? unit.Id : buildId, (long)body["divergences"]![0]!["id"]!);   // newest first across both kinds
-        Assert.Equal("2026-11-12T10:00:01.0000000+00:00", (string?)body["divergences"]!.AsArray().Single(d => (long)d!["id"]! == unit.Id)!["common"]!["time"]);
+        Assert.Equal(entry.Id > buildId ? entry.Id : buildId, (long)body["divergences"]![0]!["id"]!);   // newest first across both kinds
+        Assert.Equal("2026-11-12T10:00:01.0000000+00:00", (string?)body["divergences"]!.AsArray().Single(d => (long)d!["id"]! == entry.Id)!["common"]!["time"]);
 
-        var (resolved, answer) = await h.PostAsync($"/api/v1/tracking/divergences/{unit.Id}/resolve", ServerRole.Admin, new { resolution = "reset" });
+        var (resolved, answer) = await h.PostAsync($"/api/v1/tracking/divergences/{entry.Id}/resolve", ServerRole.Admin, new { resolution = "reset" });
         Assert.Equal(HttpStatusCode.OK, resolved);
-        Assert.Equal(unit.Id, (long)answer!["divergence"]!["id"]!);
-        Assert.Equal(1, new StateTrackingStore(h.State).Count(unitIdentity, SyncUnitCopy.Name));
+        Assert.Equal(entry.Id, (long)answer!["divergence"]!["id"]!);
+        Assert.Equal(1, new StateTrackingStore(h.State).Count(positionLogIdentity, SyncPositionLogCopy.Name));
         Assert.Contains(h.Audit.Read(new AuditQuery(VerbPrefix: "runner.tracking.")), r => r.Entry.Verb == "runner.tracking.resolve" && r.Entry.Outcome == AuditEvent.Ok);
         Assert.True(new StateTrackingDivergences(h.State).List().Single(d => d.Id == buildId).IsOpen);   // Build's own is untouched
     }

@@ -25,11 +25,11 @@ public sealed class TrackingEndpointTests(TestApiFactory factory) : IClassFixtur
 
     private (string Identity, long DivergenceId) Seed()
     {
-        var identity = SyncUnitStream.Identity(DbDataSync.Drivers.Abstractions.UnitStateEngine.SqlServer, "sql01", "wh", "sales", $"orders{Guid.NewGuid():N}"[..14]);
+        var identity = SyncPositionLogStream.Identity(DbDataSync.Drivers.Abstractions.PositionLogEngine.SqlServer, "sql01", "wh", "sales", $"orders{Guid.NewGuid():N}"[..14]);
         var store = new StateTrackingStore(State);
-        var rows = Enumerable.Range(1, 5).Select(i => new TrackingRow($"u-{i}", i, $"{{\"unit_seq\":{i},\"committed_at\":\"2026-11-10T10:0{i}:00.0000000+00:00\"}}")).ToList();
-        store.WriteAsync(identity, SyncUnitStream.Stream, rows, CancellationToken.None).GetAwaiter().GetResult();
-        var divergence = new StateTrackingDivergences(State).Mark(identity, SyncUnitStream.Name, "The state's position is not one the target recorded.", new TrackingPosition(3, "u-3"), new TrackingPosition(3, "u-3"), new TrackingPosition(5, "u-5"));
+        var rows = Enumerable.Range(1, 5).Select(i => new TrackingRow($"u-{i}", i, $"{{\"entry_seq\":{i},\"committed_at\":\"2026-11-10T10:0{i}:00.0000000+00:00\"}}")).ToList();
+        store.WriteAsync(identity, SyncPositionLogStream.Stream, rows, CancellationToken.None).GetAwaiter().GetResult();
+        var divergence = new StateTrackingDivergences(State).Mark(identity, SyncPositionLogStream.Name, "The state's position is not one the target recorded.", new TrackingPosition(3, "u-3"), new TrackingPosition(3, "u-3"), new TrackingPosition(5, "u-5"));
         return (identity, divergence.Id);
     }
 
@@ -64,8 +64,8 @@ public sealed class TrackingEndpointTests(TestApiFactory factory) : IClassFixtur
         Assert.Equal(HttpStatusCode.Conflict, (await _client.PostAsJsonAsync($"/api/v1/tracking/divergences/{id}/resolve", new { resolution = "archive" })).StatusCode);
 
         var store = new StateTrackingStore(State);
-        Assert.Equal(3, store.Count(identity, SyncUnitStream.Name));
-        Assert.Equal(2, store.ArchivedCount(identity, SyncUnitStream.Stream, $"divergence-{id}"));
+        Assert.Equal(3, store.Count(identity, SyncPositionLogStream.Name));
+        Assert.Equal(2, store.ArchivedCount(identity, SyncPositionLogStream.Stream, $"divergence-{id}"));
         var after = JsonNode.Parse(await _client.GetStringAsync("/api/v1/tracking"))!;
         var listed = Assert.Single(after["divergences"]!.AsArray(), d => (long)d!["id"]! == id)!;
         Assert.False((bool)listed["open"]!);
@@ -81,7 +81,7 @@ public sealed class TrackingEndpointTests(TestApiFactory factory) : IClassFixtur
         var response = await _client.PostAsJsonAsync($"/api/v1/tracking/divergences/{foreign.Id}/resolve", new { resolution = "reset" });
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Contains("not a copy of Sync's units", await response.Content.ReadAsStringAsync());
+        Assert.Contains("not a copy of Sync's entries", await response.Content.ReadAsStringAsync());
         Assert.DoesNotContain(JsonNode.Parse(await _client.GetStringAsync("/api/v1/tracking"))!["divergences"]!.AsArray(), d => (long)d!["id"]! == foreign.Id);   // and its document does not list it
     }
 
@@ -105,14 +105,14 @@ public sealed class TrackingEndpointTests(TestApiFactory factory) : IClassFixtur
             Tracking = tracking,
         };
 
-        var refused = await _client.PutAsJsonAsync($"/api/replications/{replication}", Task(new TrackingConfig { Mode = "state", Retention = new TrackingRetention { Units = 5 } }), JsonOptions);
+        var refused = await _client.PutAsJsonAsync($"/api/replications/{replication}", Task(new TrackingConfig { Mode = "state", Retention = new TrackingRetention { Entries = 5 } }), JsonOptions);
         Assert.False(refused.IsSuccessStatusCode);
         Assert.Contains("tracking.retention", await refused.Content.ReadAsStringAsync());
 
-        (await _client.PutAsJsonAsync($"/api/replications/{replication}", Task(new TrackingConfig { Mode = "target", Retention = new TrackingRetention { Units = 50 } }), JsonOptions)).EnsureSuccessStatusCode();
+        (await _client.PutAsJsonAsync($"/api/replications/{replication}", Task(new TrackingConfig { Mode = "target", Retention = new TrackingRetention { Entries = 50 } }), JsonOptions)).EnsureSuccessStatusCode();
         var status = JsonNode.Parse(await _client.GetStringAsync($"/api/replications/{replication}/tracking"))!;
         Assert.Equal("target", (string)status["effectiveMode"]!);
-        Assert.Equal((50, 7.0), ((int)status["retentionUnits"]!, (double)status["retentionDays"]!));
+        Assert.Equal((50, 7.0), ((int)status["retentionEntries"]!, (double)status["retentionDays"]!));
         Assert.Null(status["copy"]);   // nothing followed yet
 
         var follow = await _client.PostAsync($"/api/replications/{replication}/tracking/catch-up", null);

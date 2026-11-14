@@ -14,7 +14,7 @@ namespace DbDataSync.Api.Controllers;
 
 /// <summary>
 /// Where one replication keeps its tracking state and why (plan 28c E17, the Sync half of E18's screen): the mode asked for (or the default), the mode that applies, the primary and the reason
-/// when they differ, and, when the state is on the target, the state's copy of the units (how far the follower is, the open divergence). Read-only here: the setting is the <c>tracking:</c> section
+/// when they differ, and, when the state is on the target, the state's copy of the entries (how far the follower is, the open divergence). Read-only here: the setting is the <c>tracking:</c> section
 /// of the replication's file, edited with the rest of it. Resolving a divergence is <c>POST api/v1/tracking/divergences/{id}/resolve</c>.
 /// </summary>
 [ApiController]
@@ -41,26 +41,26 @@ public sealed class ReplicationTrackingController(ConfigRepository configReposit
             resolved.RequestedMode, resolved.RequestedPrimary, resolved.EffectiveMode, resolved.EffectivePrimary,
             resolved.Defaulted, resolved.Reason, driver, driver is not null && SettingResolution.TargetsThatCanHoldState.Contains(driver),
             driver is not null && SettingResolution.TargetWriterEngines.Contains(driver),
-            resolved.EffectiveMode == "state" ? null : CopyOf(replicationName), retention.EffectiveUnits(), retention.EffectiveDays()));
+            resolved.EffectiveMode == "state" ? null : CopyOf(replicationName), retention.EffectiveEntries(), retention.EffectiveDays()));
     }
 
-    /// <summary>Follows the replication's target now: copies the units recorded since the last time and checks the positions. 409 when the replication keeps its state in the runner's state only.</summary>
+    /// <summary>Follows the replication's target now: copies the entries recorded since the last time and checks the positions. 409 when the replication keeps its state in the runner's state only.</summary>
     [Authorize(Policies.Admin)]
     [HttpPost("catch-up")]
     public async Task<ActionResult<ReplicationTrackingStatus>> CatchUp(string replicationName, CancellationToken cancellationToken)
     {
         if (await tracking.FollowAsync(replicationName, cancellationToken) is null)
-            return Conflict(new { error = $"Replication '{replicationName}' keeps its state in the runner's state only (or its target is not known), so there are no units on a target to copy." });
+            return Conflict(new { error = $"Replication '{replicationName}' keeps its state in the runner's state only (or its target is not known), so there are no entries on a target to copy." });
         return Get(replicationName);
     }
 
     private TrackingCopyStatus? CopyOf(string replication)
     {
         var last = tracking.Last(replication);
-        var divergences = new StateTrackingDivergences(state).List().Where(d => d.Stream == SyncUnitStream.Name && d.Identity.StartsWith("syncunit:", StringComparison.Ordinal) && SyncUnitStream.ReplicationOf(d.Identity) == replication).ToList();
+        var divergences = new StateTrackingDivergences(state).List().Where(d => d.Stream == SyncPositionLogStream.Name && d.Identity.StartsWith("syncposition:", StringComparison.Ordinal) && SyncPositionLogStream.ReplicationOf(d.Identity) == replication).ToList();
         var open = divergences.FirstOrDefault(d => d.IsOpen);
         if (last is null && divergences.Count == 0) return null;
-        var rows = last is null ? 0 : new StateTrackingStore(state).Count(last.Identity, SyncUnitStream.Name);
+        var rows = last is null ? 0 : new StateTrackingStore(state).Count(last.Identity, SyncPositionLogStream.Name);
         return new TrackingCopyStatus(last?.Identity, rows, last?.At, last?.CaughtUp ?? false, last?.Error, open?.Id, open?.Reason, open?.DivergedAt, divergences.Count);
     }
 }
@@ -69,12 +69,12 @@ public sealed class ReplicationTrackingController(ConfigRepository configReposit
 /// <param name="TargetDriver">The driver of the replication's target connection; null when the replication names none at its level.</param>
 /// <param name="TargetCanHoldState">Whether that driver's writers can carry a state table once they are built.</param>
 /// <param name="TargetWritersBuilt">Whether the writers that keep the state on this target engine are built (SQL Server and PostgreSQL).</param>
-/// <param name="Copy">The state's copy of the target's units; null when the state is the runner's only or nothing was followed yet.</param>
-/// <param name="RetentionUnits">How many of a mapping's newest units the target's table always keeps (<c>tracking.retention</c>).</param>
-/// <param name="RetentionDays">How many days of units it always keeps.</param>
+/// <param name="Copy">The state's copy of the target's entries; null when the state is the runner's only or nothing was followed yet.</param>
+/// <param name="RetentionEntries">How many of a mapping's newest entries the target's table always keeps (<c>tracking.retention</c>).</param>
+/// <param name="RetentionDays">How many days of entries it always keeps.</param>
 public sealed record ReplicationTrackingStatus(
     string RequestedMode, string? RequestedPrimary, string EffectiveMode, string? EffectivePrimary, bool Defaulted, string Reason,
-    string? TargetDriver, bool TargetCanHoldState, bool TargetWritersBuilt, TrackingCopyStatus? Copy, int RetentionUnits, double RetentionDays);
+    string? TargetDriver, bool TargetCanHoldState, bool TargetWritersBuilt, TrackingCopyStatus? Copy, int RetentionEntries, double RetentionDays);
 
 /// <summary>What the follower of one replication has done: the rows the state's copy holds, when it last looked, whether it holds everything, what went wrong, and the open divergence.</summary>
 public sealed record TrackingCopyStatus(

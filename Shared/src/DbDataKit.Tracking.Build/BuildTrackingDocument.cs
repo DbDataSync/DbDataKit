@@ -28,8 +28,8 @@ public static class BuildTrackingDocument
     {
         var store = new BuildTrackingStore(database);
         var progress = new ProgressStore(database, BuildTrackingState.ProgressKey);
-        // a divergence of Sync's units (a runner-owned replication's copy) is not Build's: the runner's answer lists it beside Build's (SyncUnitCopy)
-        var divergences = new StateTrackingDivergences(database).List().Where(d => !SyncUnitCopy.IsIdentity(d.Identity)).ToList();
+        // a divergence of Sync's entries (a runner-owned replication's copy) is not Build's: the runner's answer lists it beside Build's (SyncPositionLogCopy)
+        var divergences = new StateTrackingDivergences(database).List().Where(d => !SyncPositionLogCopy.IsIdentity(d.Identity)).ToList();
         var identities = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var d in divergences) identities.Add(d.Identity);
         foreach (var identity in store.Identities()) identities.Add(identity);

@@ -19,17 +19,17 @@ public enum SyncResolveOutcome
 public sealed record SyncResolveResult(SyncResolveOutcome Outcome, TrackingDivergence? Divergence, string? Message);
 
 /// <summary>
-/// The document of <c>GET /api/v1/tracking</c> on a Sync server and the resolve of a divergence over its copy of the units (plan 28c E17, the Sync half of E18): the same shape as Build's and the runner's
+/// The document of <c>GET /api/v1/tracking</c> on a Sync server and the resolve of a divergence over its copy of the entries (plan 28c E17, the Sync half of E18): the same shape as Build's and the runner's
 /// (<c>DbDataKit.Tracking.Build.BuildTrackingDocument</c>), so the console's page reads all three, with the replication and its own mode and primary on each copy (the setting is per replication here).
 /// The host decides who may call and records the audit entry; what is read and what is changed is here. The rules are those of Build's divergence: resolve is <c>archive</c> (the copy keeps its later rows apart)
-/// or <c>reset</c> (it deletes them), the checkpoint goes back to the common point, and the next catch-up copies the target's units again from there.
+/// or <c>reset</c> (it deletes them), the checkpoint goes back to the common point, and the next catch-up copies the target's entries again from there.
 /// </summary>
 public static class SyncTrackingDocument
 {
     /// <param name="settingsOf">The mode and primary of a replication, as words (<c>("both", "target")</c>); null for a replication that is gone.</param>
     public static JsonObject Build(StateDatabase database, Func<string, (string Mode, string? Primary)?> settingsOf)
     {
-        var (copies, divergences) = SyncUnitCopy.Document(database, SyncUnitStream.ProgressKey, settingsOf);
+        var (copies, divergences) = SyncPositionLogCopy.Document(database, SyncPositionLogStream.ProgressKey, settingsOf);
         return new JsonObject
         {
             ["holder"] = "sync-server",
@@ -43,7 +43,7 @@ public static class SyncTrackingDocument
     /// <summary>Resolves the open divergence <paramref name="id"/> of the copy in <paramref name="database"/>.</summary>
     public static async Task<SyncResolveResult> ResolveAsync(StateDatabase database, long id, TrackingResolution resolution, string actor, CancellationToken cancellationToken)
     {
-        var result = await SyncUnitCopy.ResolveAsync(database, SyncUnitStream.ProgressKey, new AuditLog(database, SyncState.ServiceId), id, resolution, actor, cancellationToken).ConfigureAwait(false);
+        var result = await SyncPositionLogCopy.ResolveAsync(database, SyncPositionLogStream.ProgressKey, new AuditLog(database, SyncState.ServiceId), id, resolution, actor, cancellationToken).ConfigureAwait(false);
         return new SyncResolveResult((SyncResolveOutcome)(int)result.Outcome, result.Divergence, result.Message);
     }
 }
