@@ -63,6 +63,7 @@ public sealed class RunnerOwnedVerificationTests(RunnerOwnedApiFactory factory) 
         Assert.Equal(["customers", "orders"], all!.Select(r => r.MappingName));      // newest first
         var one = Assert.Single(orders!);
         Assert.Equal(VerificationResultPayload.RouteIdOf(payload), one.Id);
+        Assert.InRange(one.Id, 1, VerificationResultPayload.JavaScriptSafe);   // a browser reads the number as it is
         Assert.Equal(name, one.TaskName);
 
         var page = await _client.GetFromJsonAsync<VerificationResultPage>($"/api/replications/{name}/verification-results/{one.Id}?limit=4", JsonOptions);

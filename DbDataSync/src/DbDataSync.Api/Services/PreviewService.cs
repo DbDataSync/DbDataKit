@@ -35,8 +35,25 @@ public sealed class PreviewService(
     DriverRegistry driverRegistry,
     ScriptHost scriptHost,
     ChangeWatermarkStore watermarks,
-    ScriptedMetadata scriptedMetadata)
+    ScriptedMetadata scriptedMetadata,
+    DbDataSync.Api.Runner.RunnerAccess? runner = null,
+    DbDataSync.Api.Runner.RunnerReadState? runnerReadState = null)
 {
+    /// <summary>
+    /// The position the next pass reads from: the runner's checkpoint when a runner is linked (plan 28c E22: the Runner is Sync's only scheduler, so the drain keeps the position there), else what this server kept from before.
+    /// A runner that cannot be asked falls back to this server's own, which the preview says as it always did (a full load when there is none).
+    /// </summary>
+    private async Task<string?> PositionAsync(string replication, string mapping, string sourceTable, CancellationToken cancellationToken)
+    {
+        if (runner?.Link is not null && runnerReadState is not null)
+        {
+            try { return (await runnerReadState.ReadAsync(replication, mapping, sourceTable, ReadIntent.Changes, cancellationToken)).Position; }
+            catch (DbDataSync.Api.Runner.RunnerUnavailableException) { /* the runner cannot be asked: what this server kept */ }
+        }
+
+        return watermarks.GetWatermark(replication, mapping, sourceTable);
+    }
+
     public async Task<PreviewReport> BuildAsync(
         string replicationName, string mappingName, CancellationToken cancellationToken)
     {
@@ -97,8 +114,7 @@ public sealed class PreviewService(
                 task, mapping, targetConnectionConfig, source, target, sourceDialect, targetDialect, problems));
 
             var processing = task.ChangeProcessing;
-            var previousWatermark = watermarks.GetWatermark(
-                task.Name, mapping.Name, WatermarkKey.Build(source, sourceDialect));
+            var previousWatermark = await PositionAsync(task.Name, mapping.Name, WatermarkKey.Build(source, sourceDialect), cancellationToken);
 
             // Resolved once, here, rather than inside each component's own DescribeAsync — phase 167V.
             // Goes through ScriptedMetadata, the same path browsing and mapping refresh already use, so

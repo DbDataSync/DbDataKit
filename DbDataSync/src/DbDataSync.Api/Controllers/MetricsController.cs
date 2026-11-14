@@ -46,7 +46,7 @@ public sealed class MetricsController(RunMetricsStore metrics, DbDataSync.Api.Ru
     }
 
     /// <summary>How many of the runner's newest passes of a replication the figures read.</summary>
-    internal const int RunnerMetricsPasses = 1000;
+    internal const int RunnerMetricsPasses = DbDataSync.Api.Runner.RunnerRunSource.MostRunsAsked;
 
     /// <summary>
     /// A small closed set rather than a general duration parser: these are the three the card offers,

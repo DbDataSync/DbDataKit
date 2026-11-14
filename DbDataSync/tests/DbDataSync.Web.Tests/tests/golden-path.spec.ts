@@ -6,6 +6,7 @@ import { DB_NAME, MSSQL_PORT, querySql, runSql, SA_PASSWORD, SOURCE_TABLE, SRC_C
 import { screenshotDir } from '../screenshots'
 import { waitForLoadToComplete } from '../mapping-load-waiter'
 import { saveMapping, saveSettings } from '../save-waiter'
+import { publishToRunner, runNow, runnerIdle, unlinkRunner } from '../golden-runner'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const screenshotsDir = screenshotDir('golden-path')
@@ -49,6 +50,10 @@ async function selectWhenReady(page: Page, testId: string, label: string) {
 }
 
 test.describe.serial('golden path: define, configure, and run a replication end-to-end', () => {
+  // the passes run on the suite's runner (plan 28c E22): see golden-runner.ts
+  const publish = (page: Page) => publishToRunner(page, REPLICATION_NAME, [SRC_CONNECTION_NAME, TGT_CONNECTION_NAME])
+  test.afterAll(() => unlinkRunner())
+
   test('01 - app loads and redirects to the replications list', async ({ page }) => {
     await page.goto('/')
     await expect(page).toHaveURL(/\/replications$/)
@@ -225,31 +230,18 @@ test.describe.serial('golden path: define, configure, and run a replication end-
   })
 
   test('06 - trigger a run and watch it complete live', async ({ page }) => {
-    // Touch both rows before triggering. A replication that has never run is due immediately, so the
-    // scheduler can beat this test to the pass — and then the triggered run correctly reads nothing,
-    // because there is nothing left to read.
-    //
-    // Touching first narrows that window; it does not close it, because the scheduler can still take
-    // a pass between the UPDATE and the click. So a run that reads nothing is treated as "the
-    // scheduler got there first" and the whole gesture is repeated, rather than failing an assertion
-    // about who won a race the test was never about.
-    for (let attempt = 1; ; attempt++) {
-      runSql(`UPDATE dbo.[${SOURCE_TABLE}] SET Name = Name;`, DB_NAME)
+    // The pass is a drain of the suite's runner (plan 28c E22): the set is published first, with a schedule that is never due while the story runs, so nothing races the click.
+    await publish(page)
+    await page.goto(`/replications/${REPLICATION_NAME}`)
+    await page.getByTestId('tab-monitoring').click()
+    await runNow(page, REPLICATION_NAME)
 
-      await page.goto(`/replications/${REPLICATION_NAME}`)
-      await page.getByTestId('tab-monitoring').click()
-      await page.getByTestId('trigger-run-button').click()
+    await expect(page.getByTestId('live-run-panel')).toBeVisible()
+    await expect(page.getByTestId('live-log-viewer')).toContainText('Run started', { timeout: 20_000 })
+    await shot(page, '07-live-run-in-progress.png')
 
-      await expect(page.getByTestId('live-run-panel')).toBeVisible()
-      await expect(page.getByTestId('live-log-viewer')).toContainText('Run started', { timeout: 20_000 })
-      if (attempt === 1) await shot(page, '07-live-run-in-progress.png')
-
-      await expect(page.getByTestId('live-run-panel')).toContainText('succeeded', { timeout: 45_000 })
-      const reported = await page.getByTestId('live-run-panel').textContent()
-      if (reported?.includes('2 row(s) read · 2 row(s) written')) break
-
-      expect(attempt, 'the scheduler took the changes before every triggered run').toBeLessThan(3)
-    }
+    // The rows the drain wrote are not asserted here: the first pass captures the source's position and queues the mapping's load, which this drain or the next takes; test 08 reads the target itself.
+    await expect(page.getByTestId('live-run-panel')).toContainText('succeeded', { timeout: 90_000 })
     await shot(page, '08-live-run-completed.png')
 
     // The live panel auto-clears a few seconds after completion, leaving the persisted history row.
@@ -275,7 +267,7 @@ test.describe.serial('golden path: define, configure, and run a replication end-
     // become visible to this separate connection. A hard read here then fails by a fraction of a
     // second on a run that did everything right.
     const query = `SET NOCOUNT ON; SELECT Id, Name FROM dbo.[${TARGET_TABLE}] ORDER BY Id;`
-    await expect.poll(() => querySql(query, DB_NAME), { timeout: 15_000 }).toContain(NAMES.widget)
+    await expect.poll(() => querySql(query, DB_NAME), { timeout: 60_000 }).toContain(NAMES.widget)
     const output = querySql(query, DB_NAME)
     expect(output).toContain(NAMES.gadget)
     expect(output.trim().split('\n').filter((l) => l.trim())).toHaveLength(2)
@@ -304,6 +296,7 @@ test.describe.serial('golden path: define, configure, and run a replication end-
     await expect(page.getByTestId('bulk-load-mapping-select')).toHaveValue(MAPPING_NAME, { timeout: 20_000 })
     await shot(page, '11-bulk-load-form.png')
 
+    await runnerIdle(page, REPLICATION_NAME)   // a drain that is up would take the load from its queue: the load starts a drain of its own once the task is idle
     await page.getByTestId('bulk-load-submit-button').click()
 
     await expect(page.getByTestId('live-run-panel')).toBeVisible()
@@ -326,12 +319,19 @@ test.describe.serial('golden path: define, configure, and run a replication end-
     // Nothing has changed at the source since test 05, so the next incremental pass must read nothing.
     // Had the bulk load disturbed the watermark, this pass would re-read the whole table instead — the
     // single most important consequence of BulkLoad runs never calling SetWatermark.
+    // The pass is the runner's (plan 28c E22): its own row in the history says what it read and wrote, the drain's live panel only what the drain wrote.
+    await runnerIdle(page, REPLICATION_NAME)
+    const before = new Set(((await (await page.request.get(`/api/replications/${REPLICATION_NAME}/runs?kind=Primary&limit=50`)).json()) as { runs: { runId: string }[] }).runs.map((r) => r.runId))
     await page.goto(`/replications/${REPLICATION_NAME}`)
     await page.getByTestId('tab-monitoring').click()
-    await page.getByTestId('trigger-run-button').click()
+    await runNow(page, REPLICATION_NAME)
 
-    await expect(page.getByTestId('live-run-panel')).toContainText('succeeded', { timeout: 30_000 })
-    await expect(page.getByTestId('live-run-panel')).toContainText('0 row(s) read · 0 row(s) written')
+    await expect(page.getByTestId('live-run-panel')).toContainText('succeeded', { timeout: 60_000 })
+    await expect.poll(async () => {
+      const runs = ((await (await page.request.get(`/api/replications/${REPLICATION_NAME}/runs?kind=Primary&limit=50`)).json()) as { runs: { runId: string; mappingName: string; status: string; rowsRead: number; rowsWritten: number }[] }).runs
+      const pass = runs.find((r) => !before.has(r.runId) && r.mappingName === MAPPING_NAME && r.status === 'Succeeded')
+      return pass ? `${pass.rowsRead} read, ${pass.rowsWritten} written` : 'no pass yet'
+    }, { timeout: 30_000 }).toBe('0 read, 0 written')
   })
 
   test('11 - settings expose live driver capabilities and per-stage options', async ({ page }) => {
@@ -573,7 +573,8 @@ new ReverseName()
     runSql(`UPDATE dbo.[${SOURCE_TABLE}] SET Name = Name;`, DB_NAME)
 
     await page.goto(`/replications/${REPLICATION_NAME}/runs`)
-    await page.getByTestId('trigger-run-button').click()
+    await publish(page)   // the definition as this step left it runs on the runner: published again (P9)
+    await runNow(page, REPLICATION_NAME)
     await expect(page.getByTestId('live-run-panel')).toContainText('succeeded', { timeout: 30_000 })
 
     // 'Widget' reversed is 'tegdiW' — and the source still holds 'Widget', so the only thing that
@@ -661,7 +662,8 @@ new DropGadgets()
     runSql(`UPDATE dbo.[${SOURCE_TABLE}] SET Name = Name;`, DB_NAME)
 
     await page.goto(`/replications/${REPLICATION_NAME}/runs`)
-    await page.getByTestId('trigger-run-button').click()
+    await publish(page)   // the definition as this step left it runs on the runner: published again (P9)
+    await runNow(page, REPLICATION_NAME)
     await expect(page.getByTestId('live-run-panel')).toContainText('succeeded', { timeout: 30_000 })
 
     await shot(page, '21-row-transform-run.png')
@@ -817,7 +819,8 @@ new DropGadgets()
     // Monitoring, not Runs — Run Now is chrome, reachable from any tab (phase 103 moved Runs under
     // Monitoring as a sub-tab, and this proves the button still works from a tab that is not it).
     await page.getByTestId('tab-monitoring').click()
-    await page.getByTestId('trigger-run-button').click()
+    await publishToRunner(page, PROVISIONED_REPLICATION, [SRC_CONNECTION_NAME, TGT_CONNECTION_NAME])   // its pass runs on the runner too (plan 28c E22)
+    await runNow(page, PROVISIONED_REPLICATION)
 
     await expect.poll(async () => {
       const response = await page.request.get(`/api/replications/${PROVISIONED_REPLICATION}/runs?limit=30`)
@@ -1125,6 +1128,8 @@ new Shout()
     }
 
     const runAndWait = async (expectedResults: number) => {
+      await publish(page)   // the check as set runs on the runner: published again (P9)
+      await page.reload()
       await page.getByTestId('run-verification-button').click()
       await expect.poll(async () => {
         const results = await (await page.request.get(
@@ -1206,16 +1211,15 @@ new Shout()
         { timeout: 15_000 })
     }
 
-    // Whichever of the two states it is in, the card names it — a worker stays up between passes now
-    // and leaves after its idle timeout, so both are ordinary and neither should read as a fault.
-    // Asserted as "says which, and explains it" rather than pinned to one, because which one it is
-    // depends on whether this replication happens to be inside its idle window right now.
+    // Whichever of the two states it is in, the card names it, and says the runner runs it (plan 28c E22): a drain that is up,
+    // or none between the runs of its schedule. Asserted as "says which, and explains it" rather than pinned to one.
     await expect(page.getByTestId('replication-status-state')).toContainText(/^(Running|Idle)$/,
       { timeout: 20_000 })
+    await expect(page.getByTestId('replication-status-card')).toContainText('the runner owns it')
     await expect(page.getByTestId('replication-status-card')).toContainText(
       await page.getByTestId('replication-status-state').textContent() === 'Running'
-        ? 'PID'
-        : 'not a broken one')
+        ? 'a drain is running'
+        : 'no drain is up')
 
     // The draft used to live in the Overview panel, which unmounts the moment you click Runs — so a
     // half-finished edit was lost by looking at something else. It is held in the chrome now.
@@ -1688,6 +1692,8 @@ new Shout()
     }))
 
     // And it runs, which is the only proof the editor wrote something the runner understands.
+    await publish(page)   // the check as saved runs on the runner: published again (P9)
+    await page.reload()
     await page.getByTestId('run-verification-button').click()
     await expect(page.getByTestId('verification-result-ui-rows-by-name')).toBeVisible({ timeout: 60_000 })
 
@@ -1791,6 +1797,8 @@ new Shout()
       `/api/replications/${REPLICATION_NAME}/table-mappings/wide`, { data: mapping })).ok()).toBeTruthy()
 
     await page.goto(`/replications/${REPLICATION_NAME}/mappings/wide/verification`)
+    await publish(page)   // the check as saved runs on the runner: published again (P9)
+    await page.reload()
     await page.getByTestId('run-verification-button').click()
 
     let result: { id: number; groupsCompared: number } | undefined
@@ -2109,6 +2117,8 @@ new Shout()
     await expect(page.getByTestId('bulk-load-candidate-1')).toBeVisible()
     await shot(page, '46-strategy-in-bulk-load.png')
 
+    await publish(page)   // the definition as this step left it runs on the runner: published again (P9)
+    await runnerIdle(page, REPLICATION_NAME)   // a drain that is up would take the load from its queue: the load starts a drain of its own once the task is idle
     await page.getByTestId('bulk-load-submit-button').click()
     await expect(page.getByTestId('live-run-panel')).toContainText('succeeded', { timeout: 40_000 })
 
@@ -2149,7 +2159,8 @@ new Shout()
     runSql(`UPDATE dbo.[${SOURCE_TABLE}] SET Name = Name;`, DB_NAME)
 
     await page.goto(`/replications/${REPLICATION_NAME}/runs`)
-    await page.getByTestId('trigger-run-button').click()
+    await publish(page)   // the definition as this step left it runs on the runner: published again (P9)
+    await runNow(page, REPLICATION_NAME)
     await expect(page.getByTestId('live-run-panel')).toContainText('succeeded', { timeout: 40_000 })
 
     // The traced run — found by asking the API which one carries timing, rather than assuming the
