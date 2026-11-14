@@ -1,6 +1,6 @@
 # Plan 34: pages, one document format for dashboards, reports, data screens and content
 
-Status: **proposed** (owner's direction 2026-11-12, one conversation; the model below is the coordinator's reading of it, the open questions are marked). **Nothing here is started, by the owner's order:** the baseline work has to be on `main` first (see "Before this starts") and the owner has to review this plan. Slice ids `PG01`... (`PG` is free in every plan).
+Status: **decided, not started** (owner's direction 2026-11-12 and 2026-11-13; reviewed by the owner 2026-11-14, PG01). The work starts after the server-removal work of plan 33 (SC23's preconditions), taken by the same agent before the other open work. Slice ids `PG01`... (`PG` is free in every plan).
 
 ## What the owner decided (2026-11-12)
 
@@ -21,13 +21,15 @@ Status: **proposed** (owner's direction 2026-11-12, one conversation; the model 
 15. **There is no `home` kind (owner, 2026-11-13): a portal's home is any page mounted at the root of the portal; there is one page type.** Its `text`, `image`, `table` and `links` are the ordinary widgets. The list of the apps the person may open is a `tiles` widget with layout options for how it is rendered; a custom widget may read the same data (the apps this person may open, a host-declared query like any other) when it wants more control. The portal home's own block format (`views/home.yaml`, `HomeBlock`) goes away. Left to the PG07 design, not decided now: visibility of a widget by role (the old home's `roles` on a block) and framing a page of another mounted app (the old home's `dashboard` block); the proposal is `roles` on any widget and a widget that frames another app's page.
 16. **The rename of `dashboard` and `report` is one scripted slice (owner, 2026-11-13);** the owner does not care who does it. Old files get a clean-break message naming the file. It starts only after the owner has reviewed this plan and the baseline is on `main`.
 
-## Open (the owner has not decided)
+## Decided at the owner's review (2026-11-14)
 
-- **The rename (decision 16):** a rename of `dashboard` and `report` as definition kinds touches the registry (plan 30 PB01), routes, catalog, audit verbs, lineage, subscriptions, exports and the app `views` lists; done as one scripted slice.
+17. **The rename** of `dashboard` and `report` as definition kinds (registry, routes, catalog, audit verbs, lineage, subscriptions, exports, app `views` lists) is decision 16: one scripted slice, PG02.
+18. **PG07's two details: neither for now.** No `roles` visibility on widgets (a page shows the same widgets to everyone who may open it) and no widget that frames another mounted app's page (a `links` or `tiles` entry opens it instead).
+19. **Store rows:** plan 33 SC24 reuses the existing `store-ui` controls against the Gateway and builds no new rows screen; the long-term screen for Store rows is a page of kind `screen` with the entity widgets (PG03).
 
-## Before this starts (the owner's condition)
+## Before this starts
 
-All baseline work is on `main`, built and green, and the specs here are incorporated: DBR13 (the drawing of `dashboard/1` and `report/1` in the app runtime, the portal home block, the shell dialog and panel) merged and published; the access rules (plan 22a GP01, GP02, GP11 to GP15) built by session B; session B's chromium pin task for exports; the Runner connection store slices of plan 28c are independent and do not wait. Then the owner reviews this plan and names who starts: session B owns plan 32 and the views module and is the natural owner of PG02 to PG09.
+**Changed by the owner (2026-11-14):** DBR13 is no longer a precondition. Its unbuilt parts (the drawing of the document in the app runtime, the portal home's block, the shell dialog and panel) are built once, on `page/1`, in PG02, PG03 and PG07. The rest of the baseline is on `main`: the access rules (plan 22a GP01, GP02, GP10 to GP15, except GP15's form editor) and the Chromium pin for exports.
 
 **Owner decision (2026-11-14, S11): pages come before the rest of plan 32.** The open rows of plan 32 that build on `dashboard/1`, `report/1` or `view-spec/1` (the portal block for a published `dashboard/1`, plan 26 AP30; `view-spec/1`'s grid work; the custom-page rows PG08 folds in) are not built on the old formats: each is done as part of the PG slice that replaces its format.
 
@@ -35,13 +37,13 @@ All baseline work is on `main`, built and green, and the specs here are incorpor
 
 | Slice | What | Needs | Size | Done when |
 | --- | --- | --- | --- | --- |
-| PG01 | The owner reviews and decides the open questions above; this plan is rewritten as decided and `docs/views.md`, `docs/apps.md` and the formats registry rows follow in the first build slice | baseline | S | the plan has no open question |
+| PG01 | **Done (2026-11-14).** The owner reviews and decides the open questions above; this plan is rewritten as decided and `docs/views.md`, `docs/apps.md` and the formats registry rows follow in the first build slice | baseline | S | the plan has no open question |
 | PG02 | `page/1` replaces `dashboard/1` and `report/1`: one loader, `kind`, per-kind rules, a scripted rename of the registry kinds, routes, catalog types, audit verbs, lineage, subscriptions, exports and app `views` lists; old files refused naming the file | PG01 | L | the conformance goldens pass for every kind; the catalog finds a Report and not a home page; nothing references the old names (a source scan) |
 | PG03 | Entity widgets `grid`, `form`, `detail` with `view-spec/1`'s keys (columns, filters, sort, `pageSize`, fields, `key`, sections, composite keys); `view-spec/1` and `DashboardBoard` removed (DBR13 part 4 folds in) | PG02 | L | the apps' screens run on pages; `app validate` checks them; the territory sample and template are pages |
 | PG04 | Kind rules, templates and the authoring choices (New: Dashboard, Report, Data screen, Content page); validation per kind | PG02 | M | each choice makes a valid document of its kind; a widget a kind refuses is refused in words |
 | PG05 | One Markdown renderer for the `text` widget (the GFM dialect, the safety rules above); the WYSIWYG editor spike and integration | PG02 | M | a table and a task list render; every rule above has a refusing test; the editor writes only the dialect |
 | PG06 | The Store read API takes filter, sort, limit and offset; the grid asks the Store instead of loading 2000 rows | none | M | a grid over 50,000 rows filters and pages through the whole entity; the note about more rows goes away |
-| PG07 | The portal home becomes an ordinary page mounted at the portal's root: the `tiles` widget (apps the person may open, with render options), the data for custom widgets, and the decisions still open (visibility by role, framing another app's page); `HomeBlock` removed | PG02 | M | a portal home is a page; a custom widget reads the same apps list; `views/home.yaml` of the old format is refused naming the file |
+| PG07 | The portal home becomes an ordinary page mounted at the portal's root: the `tiles` widget (apps the person may open, with render options) and the data for custom widgets (decision 18: no role visibility, no app-framing widget); `HomeBlock` removed | PG02 | M | a portal home is a page; a custom widget reads the same apps list; `views/home.yaml` of the old format is refused naming the file |
 | PG08 | Custom pages fold into a page with one custom widget in an unpaged flow layout (decision 11) | PG02 | M | a custom page exports to PDF and PNG as before; `kind: page` is refused in `app.yaml` with a message |
 | PG09 | The catalog's kind facet, in search, browse, lineage, subscriptions and exports | PG02 | S | a search for Reports lists no landing page |
 | PG10 | The spec of data entry in dashboards and reports (inline edits, forms in a tile, validation, versions and conflicts); no build | PG03 | S | a document in `docs/` the owner approves |
