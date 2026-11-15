@@ -23,8 +23,20 @@ public sealed record StoreAnswer(int Status, JsonNode Body)
 /// and the apps host answers an app's data calls with it in the same process (O08c), so both follow the same rules. Every call names who makes it (<see cref="StoreCaller"/>): viewer reads, author writes, a change request
 /// when the model asks for approval of the caller's writes, and its decision as the model says. The data source the model was published with (O04b) is opened for each call.
 /// </summary>
-public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime secrets, PublishedEntityModels models, GroupChangeRequests requests, StoreEntityAccess? access = null)
+public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime secrets, PublishedEntityModels models, GroupChangeRequests requests, StoreEntityAccess? access = null,
+    Action<ServedEntityModel, IReadOnlyList<string>>? written = null)
 {
+    /// <summary>
+    /// Rows of <paramref name="entities"/> of <paramref name="served"/> were written to the data (not to a draft): the Gateway's own result cache hears it (plan 24a UC13, the Store's share: a write through the Gateway clears what reads the
+    /// entity, where the Store's server used to send a <c>data.changed</c> message). Never fails the write it follows.
+    /// </summary>
+    private void Written(ServedEntityModel served, IEnumerable<string> entities)
+    {
+        if (written is null) return;
+        try { written(served, [.. entities.Distinct(StringComparer.Ordinal)]); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { /* the cache's time-to-live still bounds what it serves */ }
+    }
+
     /// <summary>The model's default copy is the one the group serves; models with copies of their own (instances) are not served by the group yet.</summary>
     public const string DefaultCopy = "default";
 
@@ -180,6 +192,7 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
         return await WithWriter(served, async writer =>
         {
             await writer.ApplyAsync(changes!, new WriteActor(caller.UserId, caller.AuditName), cancellationToken);
+            Written(served, changes!.Select(c => c.Entity));
             return StoreAnswer.Ok(new JsonObject { ["applied"] = changes!.Count });
         }, cancellationToken);
     }
@@ -310,6 +323,7 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
         {
             await writer.ApplyAsync(changes!, new WriteActor(caller.UserId, $"{caller.Name ?? caller.UserId}, approving {request.ProposedByName ?? request.ProposedBy}'s change request {request.Id}"), cancellationToken);
             requests.Decide(request, GroupChangeRequest.Approved, caller, note);
+            Written(served, changes!.Select(c => c.Entity));
             return StoreAnswer.Ok(requests.Find(name, id)!.ToJson(withChanges: false));
         }, cancellationToken);
     }

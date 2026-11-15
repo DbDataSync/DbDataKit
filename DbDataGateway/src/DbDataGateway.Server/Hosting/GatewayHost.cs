@@ -282,7 +282,7 @@ public static class GatewayHost
         if (GatewayModules.Has(options, GatewayModules.Mcp))
         {
             services.AddSingleton(sp => new McpServices(sp.GetRequiredService<IOptionsMonitor<GatewayOptions>>(), sp.GetRequiredService<DbDataKit.State.StateDatabase>(), sp.GetRequiredService<SecretsRuntime>(),
-                sp.GetRequiredService<IServingServices>(), sp.GetRequiredService<SemanticModels>(), sp.GetRequiredService<PublishedEntityModels>(), sp.GetRequiredService<GatewayViewsPublishing>(), sp.GetRequiredService<HomeCallers>()));
+                sp.GetRequiredService<IServingServices>(), sp.GetRequiredService<SemanticModels>(), sp.GetRequiredService<PublishedEntityModels>(), sp.GetRequiredService<GatewayViewsPublishing>(), sp.GetRequiredService<HomeCallers>(), sp.GetRequiredService<GatewayCache>()));
             services.AddSingleton<GatewayMcpModule>();
             services.AddHostedService(sp => sp.GetRequiredService<GatewayMcpModule>());
             services.AddSingleton<IReadinessProbe>(sp => new ServingModuleReadinessProbe(sp.GetRequiredService<GatewayMcpModule>()));

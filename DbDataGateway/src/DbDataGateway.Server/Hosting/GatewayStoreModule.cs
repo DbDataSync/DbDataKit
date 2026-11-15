@@ -21,7 +21,7 @@ namespace DbDataGateway.Server.Hosting;
 /// which the apps host answers an app's data calls with too (O08c).
 /// </summary>
 public sealed class GatewayStoreModule(IOptionsMonitor<GatewayOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, PublishedEntityModels models, ILoggerFactory loggers,
-    HomeCallers homeCallers, GroupCertificate? group = null) : IHostedService, IServingModule, IAsyncDisposable
+    HomeCallers homeCallers, GroupCertificate? group = null, GatewayCache? servingCache = null) : IHostedService, IServingModule, IAsyncDisposable
 {
     private WebApplication? _app;
 
@@ -64,19 +64,32 @@ public sealed class GatewayStoreModule(IOptionsMonitor<GatewayOptions> options, 
         });
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy"));
-        Map(app, ApiOf(options, state, secrets, models));
+        Map(app, ApiOf(options, state, secrets, models, servingCache));
         await app.StartAsync(cancellationToken);
         _app = app;
         _draining = false;
     }
 
     /// <summary>The group's store for this instance: what the module's listener and the apps host's data calls answer with.</summary>
-    public static GroupStoreApi ApiOf(IOptionsMonitor<GatewayOptions> options, StateDatabase state, SecretsRuntime secrets, PublishedEntityModels models)
+    /// <remarks>With <paramref name="cache"/>, a write to the data clears what this Gateway's result cache holds of the entity (plan 24a UC13, the Store's share): the entity's table is named as lineage names it (<c>GatewayLineageGraph.DatasetIdentity</c>),
+    /// and the cache clears what reads it; a table the lineage graph does not know clears the whole cache, as any unknown dataset does.</remarks>
+    public static GroupStoreApi ApiOf(IOptionsMonitor<GatewayOptions> options, StateDatabase state, SecretsRuntime secrets, PublishedEntityModels models, GatewayCache? cache = null)
     {
         // the row and column rules of the model's access section are applied by this one instance of a state, whoever reads (the store module, the apps host, the views module, an agent's tool); the key of a hash mask is the group's, the same as the semantic path's
         var access = StoreEntityAccess.For(state);
         access.MaskKey ??= new State.GroupMaskKey(state, new State.GroupSessionKey(state, options)).Current;
-        return new(() => options.CurrentValue, secrets, models, new GroupChangeRequests(state), access);
+        Action<ServedEntityModel, IReadOnlyList<string>>? written = cache is null ? null : (served, entities) =>
+        {
+            var current = options.CurrentValue;
+            foreach (var entity in entities)
+            {
+                var dataset = DbDataGateway.Server.Management.GatewayLineageGraph.DatasetIdentity(current.DataSources,
+                    (name, text) => secrets.ResolveConnectionString($"Gateway:DataSources:{name}:ConnectionString", text, current.DataSources[name].Provider), served.DataSource, $"{served.Model.Name}.{entity}")
+                    ?? $"entity-model/{served.Model.Name}/{entity}";
+                cache.Invalidator.Apply(new DataChangedNotice(dataset, "store", DateTimeOffset.UtcNow));
+            }
+        };
+        return new(() => options.CurrentValue, secrets, models, new GroupChangeRequests(state), access, written);
     }
 
     /// <summary>The group's server id, which the home's roles name (<c>server:&lt;id&gt;</c>): the instance id every instance of the group shares (O04a).</summary>

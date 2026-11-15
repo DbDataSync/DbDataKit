@@ -318,10 +318,10 @@ public sealed class McpServer(IReadOnlyList<McpTool> tools, McpApprovals approva
 /// <summary>The tools, the approvals and the protocol of the <c>mcp</c> module, made once per process: the module's listener and the management API's approval routes (the console's inbox, plan 27a AG33) answer from the same ones.</summary>
 public sealed class McpServices
 {
-    public McpServices(IOptionsMonitor<GatewayOptions> options, StateDatabase state, SecretsRuntime secrets, IServingServices serving, SemanticModels semantic, PublishedEntityModels models, GatewayViewsPublishing views, HomeCallers homeCallers)
+    public McpServices(IOptionsMonitor<GatewayOptions> options, StateDatabase state, SecretsRuntime secrets, IServingServices serving, SemanticModels semantic, PublishedEntityModels models, GatewayViewsPublishing views, HomeCallers homeCallers, GatewayCache? servingCache = null)
     {
         StoreCallers Callers() => homeCallers.GetAsync().AsTask().GetAwaiter().GetResult();
-        var tools = McpTools.Create(serving, semantic, GatewayStoreModule.ApiOf(options, state, secrets, models), () => views, Callers, options, new UserViewStore(state));
+        var tools = McpTools.Create(serving, semantic, GatewayStoreModule.ApiOf(options, state, secrets, models, servingCache), () => views, Callers, options, new UserViewStore(state));
         Approvals = new McpApprovals(state, Callers, tools.ToDictionary(t => t.Name, StringComparer.Ordinal), TimeSpan.FromMinutes(options.CurrentValue.Mcp.ApprovalMinutes));
         Server = new McpServer(tools, Approvals, typeof(McpServices).Assembly.GetName().Version?.ToString() ?? "0");
     }

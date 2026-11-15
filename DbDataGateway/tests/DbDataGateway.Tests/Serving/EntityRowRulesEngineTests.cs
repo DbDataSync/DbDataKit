@@ -114,6 +114,7 @@ public sealed class EntityRowRulesEngineTests : IDisposable
         public required List<string> Alerts { get; init; }
         public required Dictionary<string, string[]> Groups { get; init; }
         public GatewayAccessInspector Inspector { get; init; } = null!;
+        public PublishedEntityModels Models { get; init; } = null!;
 
         public void Execute(string sql)
         {
@@ -191,6 +192,7 @@ public sealed class EntityRowRulesEngineTests : IDisposable
         {
             Engine = engine, Connection = connection, Options = options, Time = clock, Alerts = fixture.Alerts, Groups = fixture.Groups,
             Access = rulesChanged, Api = new GroupStoreApi(() => options, secrets, models, null!, access),
+            Models = models,
             Inspector = new GatewayAccessInspector(rulesChanged, () => new DbDataKit.Serving.Semantic.SemanticModels(), models, _state, secrets, () => options),
         };
     }
@@ -334,6 +336,27 @@ public sealed class EntityRowRulesEngineTests : IDisposable
         // a person the home has no groups for reads nothing
         var stranger = await host.SendAsync(call with { SubjectId = "u9", SubjectName = "u9" }, CancellationToken.None);
         Assert.Empty(System.Text.Json.Nodes.JsonNode.Parse(stranger.Body)!["rows"]!.AsArray());
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public async Task A_write_through_the_gateway_clears_the_gateways_own_cache_for_the_entity_and_a_draft_or_a_refused_write_does_not(string engine)
+    {
+        // plan 24a UC13, the Store's share: no Store server sends data.changed any more; a write through the group's store tells this Gateway's cache, naming the entity's table as lineage names it
+        var f = Make(engine);
+        var cache = new GatewayCache(new DataSourceCatalog(new Monitor(f.Options), GatewaySources.Providers()), () => f.Options, () => new DbDataKit.Serving.Semantic.SemanticModels(), time: f.Time);
+        var api = DbDataGateway.Server.Hosting.GatewayStoreModule.ApiOf(new Monitor(f.Options), _state!, new SecretsRuntime(new Redactor(), new Monitor(f.Options), NullLoggerFactory.Instance), f.Models, cache);
+        var author = new StoreCaller("u4", "u4", false, ServerRole.Author, Groups: ["east"]);
+        byte[] Body(string code, int version) => System.Text.Encoding.UTF8.GetBytes($$$"""{"changes":[{"action":"update","entity":"territory","key":{"code":"{{{code}}}"},"expected_version":{{{version}}},"values":{"region":"East"}}]}""");
+
+        Assert.Equal(200, (await api.ChangesAsync(author, "sales", Body("W1", 1), null, CancellationToken.None)).Status);
+        var heard = cache.Invalidator.Activity;
+        Assert.Equal(1, heard.Received);
+        Assert.Equal(("store", GatewayLineageGraph.DatasetIdentity(f.Options.DataSources, (_, text) => text, "mdm_sql", "sales.territory")), (heard.LastProduct, heard.LastDataset));
+
+        // a draft keeps its writes apart from the data, and a refused write wrote nothing: the cache hears neither
+        Assert.Equal(200, (await api.ChangesAsync(author, "sales", Body("N1", 1), null, CancellationToken.None, draft: "preview-1")).Status);
+        Assert.Equal(409, (await api.ChangesAsync(author, "sales", Body("W1", 1), null, CancellationToken.None)).Status);
+        Assert.Equal(1, cache.Invalidator.Activity.Received);
     }
 
     [Theory, MemberData(nameof(Engines))]

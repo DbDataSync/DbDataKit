@@ -108,7 +108,7 @@ public sealed class GatewayViews
             Exporter = exporter,
             PageAssets = options.CurrentValue.Views.Export.PageAssets,
             // an action link's change is made by the group's Store as the viewer (plan 32 DBR53); no runner is connected to a Gateway, so a `task` says so
-            Actions = new GroupViewsActions(GatewayStoreModule.ApiOf(options, state, secrets, entityModels), homeCallers),
+            Actions = new GroupViewsActions(GatewayStoreModule.ApiOf(options, state, secrets, entityModels, servingCache), homeCallers),
             CustomApps = new GatewayCustomViewApps(() => new DbDataKit.Apps.AppInstanceStore(store),
                 () => options.CurrentValue.Modules.Contains(GatewayModules.Apps) ? DbDataGateway.Server.Hosting.GatewayAppsModule.PublicUrlOf(options.CurrentValue) : null),
             // the module's rows are kept for a few seconds (views.cacheSeconds) in a cache of its own, outside the serving cache: a rows entry is only served while nothing that decides what a viewer may read has changed (a rules table refreshed or a
