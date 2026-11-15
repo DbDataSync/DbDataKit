@@ -61,6 +61,8 @@ public sealed class ConsoleJoinsRunnerGroupTests
     [Theory, MemberData(nameof(Engines))]
     public async Task Pairing_joins_the_first_instance_and_a_second_is_joined_by_its_address_and_a_code_with_the_same_key(string engine)
     {
+        // the instance's store is read here without DPAPI, which a runner on Windows protects its key ring with
+        if (OperatingSystem.IsWindows()) Assert.Skip("reads the runner's key ring as Linux keeps it");
         var root = Path.Combine(Path.GetTempPath(), "ddk-e2e-join-" + Guid.NewGuid().ToString("N")[..8]);
         var (connection, drop) = await ProvisionAsync(engine);
         var started = new List<RealProcess>();
