@@ -311,7 +311,7 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
         var record = new PassRecord(
             pass.Item.RunId, Run.Id, Input.Replication, pass.Item.RunKind.ToString(), pass.Mapping,
             pass.Item.SegmentLabel == WorkQueueStore.NoSegment ? null : pass.Item.SegmentLabel, outcome.Status.ToString(), startedAt, DateTimeOffset.UtcNow,
-            outcome.RowsRead, outcome.RowsWritten, outcome.Summary, outcome.FailureKind, outcome.Detail, pass.Item.BulkLoadBatchId);
+            outcome.RowsRead, outcome.RowsWritten, outcome.Summary, outcome.FailureKind, outcome.Detail, pass.Item.BulkLoadBatchId, outcome.Timing);
         Step(DrainSteps.Pass, record).Repeatable().RunAsync(_ => Task.FromResult(record), CancellationToken.None).GetAwaiter().GetResult();
     }
 

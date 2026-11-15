@@ -49,7 +49,8 @@ if (!isWorker) {
 export const syncRunner = {
   directory: path.join(os.tmpdir(), 'ddk-e2e-syncrunner'),
   clientDirectory: path.join(os.tmpdir(), 'ddk-e2e-syncrunner-client'),
-  moveClientDirectory: path.join(os.tmpdir(), 'ddk-e2e-syncrunner-move'),   // the pairing of the story that moves a replication (`replication-runner-move.spec.ts`)
+  moveClientDirectory: path.join(os.tmpdir(), 'ddk-e2e-syncrunner-move'),   // the pairing of the story that runs a replication on the runner (`replication-runner-move.spec.ts`)
+  goldenClientDirectory: path.join(os.tmpdir(), 'ddk-e2e-syncrunner-golden'),   // the pairing of the golden path (`golden-path.spec.ts`), whose passes run on this runner (plan 28c E22)
   engineOutput: path.join(repoRoot, 'src/DbDataSync.TaskRunner/bin/Debug/net10.0'),
   runtime: path.join(os.tmpdir(), 'ddk-e2e-syncrunner-runtime'),
   port: 8641,
@@ -66,7 +67,7 @@ function runnerCommand(args: string[]): string {
   }
 }
 if (!isWorker) {
-  for (const directory of [syncRunner.directory, syncRunner.clientDirectory, syncRunner.moveClientDirectory, syncRunner.runtime]) {
+  for (const directory of [syncRunner.directory, syncRunner.clientDirectory, syncRunner.moveClientDirectory, syncRunner.goldenClientDirectory, syncRunner.runtime]) {
     fs.rmSync(directory, { recursive: true, force: true })
     fs.mkdirSync(directory, { recursive: true })
   }
@@ -85,6 +86,9 @@ if (!isWorker) {
   // a second code, for the story that moves a replication (a code pairs one machine's client directory once)
   const moveCode = runnerCommand(['server', 'pair', '--minutes', '120', '--repo', syncRunner.directory, '--max-role', 'viewer,operator,publisher,admin'])
   fs.writeFileSync(path.join(consoleScratch, 'sync-runner-move-pairing-code.txt'), /Pairing code: (\S+)/.exec(moveCode)![1])
+  // a third, for the golden path
+  const goldenCode = runnerCommand(['server', 'pair', '--minutes', '120', '--repo', syncRunner.directory, '--max-role', 'viewer,operator,publisher,admin'])
+  fs.writeFileSync(path.join(consoleScratch, 'sync-runner-golden-pairing-code.txt'), /Pairing code: (\S+)/.exec(goldenCode)![1])
 }
 
 // The environment variables the spawned worker's secret store falls back to (this sandbox has no OS keychain): the connection passwords the specs save, for the spawned worker to resolve.

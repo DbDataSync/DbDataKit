@@ -25,7 +25,7 @@ internal interface IDrainCheckpoints
 }
 
 /// <summary>How one pass ended, as the engine reported it through <see cref="IRunnerState.CompleteRun"/>.</summary>
-internal sealed record PassOutcome(Guid RunId, RunStatus Status, long RowsRead, long RowsWritten, string? Summary, string? FailureKind, string? Detail);
+internal sealed record PassOutcome(Guid RunId, RunStatus Status, long RowsRead, long RowsWritten, string? Summary, string? FailureKind, string? Detail, RunTiming? Timing = null);
 
 /// <summary>
 /// <see cref="IRunnerState"/> over the runner's protocol (plan 28c E03 and E11): the queue of the drain's own owner for claims, marks, releases and the cancel poll (the protocol's <c>ClaimWork</c>, <c>StartWork</c>,
@@ -143,7 +143,7 @@ internal sealed class ProtocolRunnerState(IDrainCheckpoints checkpoints, ILogger
         Guid runId, RunStatus status, long rowsRead, long rowsWritten, string? errorSummary,
         string? failureKind = null, RunTiming? timing = null, string? previousWatermark = null, string? newWatermark = null, string? errorDetail = null)
     {
-        _outcomes[runId] = new PassOutcome(runId, status, rowsRead, rowsWritten, errorSummary, failureKind, errorDetail);
+        _outcomes[runId] = new PassOutcome(runId, status, rowsRead, rowsWritten, errorSummary, failureKind, errorDetail, timing);
         if (_batchOfRun.TryGetValue(runId, out var batchId))
             bulkLoads?.SegmentFinished(runId, batchId, status == RunStatus.Succeeded, rowsRead, rowsWritten);
         if (newWatermark is not null) log.LogInformation("Position moved from {Previous} to {New}.", previousWatermark ?? "<none>", newWatermark);

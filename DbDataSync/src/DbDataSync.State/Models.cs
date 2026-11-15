@@ -277,9 +277,13 @@ public static class VerificationResultPayload
 
     /// <summary>
     /// The id the Sync API gives a runner's result in its routes: a positive number made of the payload's id (the runner keeps no numbered index). The routes of a replication owned by the runner look the result up among the runner's
-    /// records by this number, so a number that names no record of that replication is a 404.
+    /// records by this number, so a number that names no record of that replication is a 404. It has 53 bits, so a browser reads it as the number it is (a JSON number above 2^53 loses its last digits in JavaScript, and the
+    /// screen then asked for a result that does not exist).
     /// </summary>
-    public static long RouteIdOf(Guid payloadId) => BitConverter.ToInt64(payloadId.ToByteArray(), 0) & long.MaxValue;
+    public static long RouteIdOf(Guid payloadId) => BitConverter.ToInt64(payloadId.ToByteArray(), 0) & JavaScriptSafe;
+
+    /// <summary>The largest integer JavaScript holds exactly, 2^53 - 1.</summary>
+    public const long JavaScriptSafe = (1L << 53) - 1;
 
     public static string PathFor(Guid payloadId) => Prefix + payloadId.ToString("N");
 

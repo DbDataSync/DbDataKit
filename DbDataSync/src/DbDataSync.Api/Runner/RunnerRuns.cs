@@ -77,7 +77,10 @@ public sealed class RunnerRunSource(RunnerAccess runner, DbDataSync.Core.Config.
 
     /// <summary>The newest runs of a replication on the runner (its passes and the drains that did not succeed), at most <paramref name="limit"/>; none when no runner is linked or it cannot be asked (plan 28c E22 P5: the metrics and the lineage's runs).</summary>
     public async Task<IReadOnlyList<TaskRunRecord>> RecentAsync(string replication, int limit, CancellationToken ct) =>
-        AnyOwned ? (await PageAsync(replication, limit, null, ct).ConfigureAwait(false)).Runs : [];
+        AnyOwned ? (await PageAsync(replication, Math.Clamp(limit, 1, MostRunsAsked), null, ct).ConfigureAwait(false)).Runs : [];
+
+    /// <summary>The most runs or steps the runner lists in one answer (its runs and steps routes refuse a larger <c>limit</c>).</summary>
+    public const int MostRunsAsked = 500;
 
     /// <summary>The replications of this server (all of them the runner's since plan 28c E22), by the name of the task each one is on the runner.</summary>
     private IReadOnlyDictionary<string, string> OwnedTasks() =>

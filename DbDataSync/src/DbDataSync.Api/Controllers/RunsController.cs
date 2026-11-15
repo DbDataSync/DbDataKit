@@ -220,6 +220,9 @@ public sealed class RunsController(
     {
         var decodedCursor = RunHistoryCursorCodec.Decode(cursor, name, kind, mappingName, status);
         var page = taskRunStore.GetRunHistory(name, kind, mappingName, status, decodedCursor, limit);
+        // no runner linked: nothing runs, so this server's own history is all there is, and it is complete (the bulk loads read the same way)
+        if (!runnerRuns.AnyOwned)
+            return Ok(new RunHistoryResponse([.. page], page.NextCursor is { } own ? RunHistoryCursorCodec.Encode(own, name, kind, mappingName, status) : null, null));
         // the runs are the runner's (plan 28c E13, E22): its passes and its drains, merged with what this server holds from before the Runner ran everything
         var size = Math.Clamp(limit, 1, 200);
         // asked a little over a page, and from the cursor's own instant: runs that started at the same instant as the last one shown are not skipped, and the filter below drops the ones already seen
