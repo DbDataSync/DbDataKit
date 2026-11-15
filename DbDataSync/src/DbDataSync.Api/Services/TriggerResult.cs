@@ -15,9 +15,13 @@ public enum TriggerOutcome
 /// that's already queued or in flight is silently skipped (WorkQueueStore.Enqueue returns its
 /// existing RunId), not treated as a whole-trigger failure the way one shared lock used to be.
 /// </summary>
-public sealed record TriggerResult(TriggerOutcome Outcome, IReadOnlyList<Guid>? RunIds = null, string? Reason = null)
+/// <param name="JoinedSince">Set when nothing new was started because a run of the replication was already going (plan 28c E22, owner decision 2026-11-14): <see cref="RunIds"/> is that run, and this is when it began.</param>
+public sealed record TriggerResult(TriggerOutcome Outcome, IReadOnlyList<Guid>? RunIds = null, string? Reason = null, DateTimeOffset? JoinedSince = null)
 {
     public static TriggerResult Started(IReadOnlyList<Guid> runIds) => new(TriggerOutcome.Started, runIds);
+
+    /// <summary>The work was handed to a run that was already going: that run is the one to watch.</summary>
+    public static TriggerResult Joined(Guid runId, DateTimeOffset since) => new(TriggerOutcome.Started, [runId], JoinedSince: since);
     public static TriggerResult NotFound() => new(TriggerOutcome.ReplicationNotFound, Reason: "Replication not found.");
     public static TriggerResult FailedToStart(string reason) => new(TriggerOutcome.FailedToStart, Reason: reason);
 
