@@ -1,5 +1,6 @@
 import { RunnerHistoryNotice } from './RunnerHistoryNotice'
 import { JoinedRunNotice } from './JoinedRunNotice'
+import { RowsReadCell } from './RunningCounts'
 import { useEffect, useState } from 'react'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { RunDetailsDialog } from '../../components/RunDetailsDialog'
@@ -378,7 +379,7 @@ export function RunsPanel({ replicationName, command }: { replicationName: strin
               {/* Null for a run no worker ever claimed — still queued, or cancelled first — which
                   is a fact about the run rather than a missing reading. */}
               <span className="mono sm dim" data-testid={`run-pid-${r.runId}`}>{r.pid ?? '—'}</span>
-              <span>{r.rowsRead.toLocaleString()}</span>
+              <RowsReadCell run={r} />
               <span>{r.rowsWritten.toLocaleString()}</span>
               <span className="dim" title={queueTime(r) ?? undefined}>{processingTime(r)}</span>
               <WatermarkCell run={r} times={watermarkTimes?.[r.runId]} />
