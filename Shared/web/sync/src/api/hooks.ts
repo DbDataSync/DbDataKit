@@ -1175,9 +1175,8 @@ export async function followProvisioningRun(replicationName: string, started: Pr
 export function useApplyProvisioning(replicationName: string, mappingName: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    // plan 28c E21: the DDL runs on the runner, as the set's `provision` task under the signed-in person's name; the card follows that run to its end
-    mutationFn: async (action: string) =>
-      followProvisioningRun(replicationName, await api.provisioning.runOnRunner(replicationName, mappingName, action)),
+    // plan 28c E21: `followProvisioningRun` over `api.provisioning.runOnRunner` replaces this once a draft's mapping can be applied on the runner (step e); until then the server's own Apply
+    mutationFn: (action: string) => api.provisioning.apply(replicationName, mappingName, action),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.provisioning(replicationName, mappingName) }),
   })
 }
@@ -1199,8 +1198,7 @@ export function useReplicationProvisioningPlan(replicationName: string | undefin
 export function useApplyReplicationProvisioningPlan(replicationName: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (stepIds: string[]) =>
-      followProvisioningRun(replicationName, await api.provisioning.runStepsOnRunner(replicationName, stepIds)),
+    mutationFn: (stepIds: string[]) => api.provisioning.applyReplicationPlan(replicationName, stepIds),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.replicationProvisioningPlan(replicationName) }),
   })
 }

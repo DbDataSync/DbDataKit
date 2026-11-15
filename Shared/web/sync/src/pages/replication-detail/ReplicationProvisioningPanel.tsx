@@ -189,17 +189,12 @@ export function ReplicationProvisioningPanel({ replicationName }: { replicationN
       return next
     })
 
-  // the run on the runner reports each chosen step by its id and outcome (plan 28c E21)
-  const resultsById = new Map(
-    (apply.data?.steps ?? []).filter((r) => r.id).map((r) => [r.id!, {
-      id: r.id!, title: r.title, outcome: r.outcome ?? (r.succeeded ? 'Applied' : 'Failed'), error: r.error, warning: null, elapsedMs: 0,
-    } satisfies ReplicationProvisioningStepResult] as const),
-  )
+  const resultsById = new Map((apply.data?.steps ?? []).map((r) => [r.id, r] as const))
 
   const run = () => {
     const count = plan?.groups.flatMap((g) => g.steps).filter((s) => selected.has(s.id)).length ?? 0
     if (count === 0) return
-    if (window.confirm(`The runner will run ${count} selected provisioning statement(s) against their databases, under its run logins and your name. Continue?`))
+    if (window.confirm(`Run ${count} selected provisioning statement(s) against their databases?`))
       apply.mutate([...selected])
   }
 
@@ -217,20 +212,9 @@ export function ReplicationProvisioningPanel({ replicationName }: { replicationN
               disabled={apply.isPending || selected.size === 0}
               data-testid="provisioning-run-selected"
             >
-              {apply.isPending ? 'Running on the runner…' : `Run selected (${selected.size})`}
+              {apply.isPending ? 'Running…' : `Run selected (${selected.size})`}
             </button>
           </div>
-          {apply.data && (
-            <div className={`banner ${apply.data.steps.every((s) => s.succeeded) ? '' : 'warn'}`} role="status" data-testid="provisioning-run">
-              Run <span className="mono">{apply.data.runId}</span> of the task <span className="mono">provision</span> on the runner ({apply.data.outcome}).
-              {apply.data.steps.filter((s) => !s.id).map((s, i) => (
-                <div key={i}>
-                  {s.succeeded ? '✓' : '✗'} {s.title}
-                  {s.error && <div className="mono" style={{ fontSize: 12 }}>{s.error}</div>}
-                </div>
-              ))}
-            </div>
-          )}
 
           {plan.groups.length === 0 && plan.excluded.length === 0 && (
             <span style={{ color: 'var(--ink-4)' }}>Nothing to provision.</span>

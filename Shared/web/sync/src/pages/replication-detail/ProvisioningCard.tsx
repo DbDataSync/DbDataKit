@@ -4,7 +4,7 @@ import { InheritableToggle } from '../../components/InheritableToggle'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { useApplyProvisioning, useProvisioning } from '../../api/hooks'
 import type { EndpointSide } from '../../components/EndpointSidePair'
-import type { ProvisioningConfig, ProvisioningPlan, ProvisioningState, RunnerApplyResult } from '../../api/types'
+import type { ApplyResult, ProvisioningConfig, ProvisioningPlan, ProvisioningState } from '../../api/types'
 
 const dotByState: Record<ProvisioningState, string> = {
   Satisfied: 'dot-ok',
@@ -32,8 +32,8 @@ function PlanPanel({ label, side, testId, plan, onApply, applying, result }: {
   plan: ProvisioningPlan
   onApply: () => void
   applying: boolean
-  /** The last Apply's run on the runner and its per-step outcome, if there has been one in this session. */
-  result: RunnerApplyResult | undefined
+  /** The last Apply's per-step outcome, if there has been one in this session. */
+  result: ApplyResult | undefined
 }) {
   const sql = plan.steps.map((s) => s.commandText).join('\n')
 
@@ -47,7 +47,7 @@ function PlanPanel({ label, side, testId, plan, onApply, applying, result }: {
 
   const apply = () => {
     const summary = plan.steps.map((s) => `- ${s.title}`).join('\n')
-    if (window.confirm(`The runner will run the following against ${label.toLowerCase()}, under its run login and your name:\n\n${summary}\n\nContinue?`))
+    if (window.confirm(`This will run the following against ${label.toLowerCase()}:\n\n${summary}\n\nContinue?`))
       onApply()
   }
 
@@ -87,7 +87,7 @@ function PlanPanel({ label, side, testId, plan, onApply, applying, result }: {
                 disabled={applying}
                 data-testid={`${testId}-apply`}
               >
-                {applying ? 'Applying on the runner…' : 'Apply'}
+                {applying ? 'Applying…' : 'Apply'}
               </button>
             </div>
           </>
@@ -110,9 +110,6 @@ function PlanPanel({ label, side, testId, plan, onApply, applying, result }: {
               </div>
             ))}
             {result.steps.length === 0 && <div>Nothing was run.</div>}
-            <div style={{ fontSize: 12, color: 'var(--ink-4)' }} data-testid={`${testId}-run`}>
-              Run <span className="mono">{result.runId}</span> of the task <span className="mono">provision</span> on the runner ({result.outcome}).
-            </div>
           </div>
         )}
 
