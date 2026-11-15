@@ -8,6 +8,8 @@ to it in the pull request that makes the change; a release moves the entries int
 - **Apply on the Provisioning card and the replication-wide Provisioning page runs on the runner (plan 28c E21).** The DDL is now the replication set's manual task `provision`, run by the linked runner under the
   run login bound there and recorded under your name; the Sync server's own login no longer applies it from the screens. Bind the run login on the runner (`dbdatasync secret send --to runner <connection>`) before you
   apply; with no runner linked, Apply says so. The screen waits for the run and shows its id and each step's result.
+- **A connection's run login can be set on the Runner's screen (plan 28c E20d).** On a runner package's connections card, each bound slot whose connection names a login of the runner's own store
+  (`secret:<name>`) has a write-only field, *Set the login*, that stores it there (administrators; audited by name, never by value). This replaces `dbdatasync secret send --to runner` once the Sync server goes.
 - **Secrets are in a new store and are set again.** Connection passwords and the state database's password were in the operating system's
   credential store (through `ClrKernel.Core.Secrets`) under `dbdatasync:...` names. They are now in an encrypted file store, `secrets/` under
   the repository root, under `dbdatakit:sync:...` names, and nothing is imported. Set each connection's password again (save the connection

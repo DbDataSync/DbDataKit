@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { runnerApi, type BindRequest, type DefinitionDetail, type SlotTestAnswer } from '../api'
-import { bindingBlock, bindingsRequest, connectionNames, slotRows, unboundSlots, type BindingEdits, type SlotRow } from '../bindings'
+import { bindingBlock, bindingsRequest, connectionNames, slotRows, storeLoginOf, unboundSlots, type BindingEdits, type SlotRow } from '../bindings'
 
 export interface BindingsCardViewProps {
   channel: string
@@ -23,6 +23,25 @@ export interface BindingsCardViewProps {
   tested?: Record<string, SlotTestAnswer>
   trying?: string | null
   onTry?: (slot: string) => void
+  /** The name in the runner's store of the login a slot runs with, when this screen can set it (plan 28c E20d); optional like the test. */
+  loginOf?: (slot: string) => string | null
+  /** Stores the login typed for a slot; the answer of the last one by slot (true: stored) and the slot being stored now. */
+  onSetLogin?: (slot: string, name: string, value: string) => void
+  loginSet?: Record<string, { ok: boolean; message: string }>
+  settingLogin?: string | null
+}
+
+/** The write-only login field of a slot: the value is sent to the runner's store and never shown or kept on the page. */
+function LoginField({ slot, name, busy, answer, onSet }: { slot: string; name: string; busy: boolean; answer?: { ok: boolean; message: string }; onSet: (slot: string, name: string, value: string) => void }) {
+  const [value, setValue] = useState('')
+  return (
+    <span className="row" style={{ gap: 8, gridColumn: '1 / -1' }} data-testid="runner-binding-login" data-secret={name}>
+      <input className="input" type="password" autoComplete="new-password" value={value} placeholder="the login's password" aria-label={`Login for ${slot}`} onChange={(e) => setValue(e.target.value)} data-testid="runner-binding-login-input" />
+      <button type="button" className="btn" disabled={busy || value.length === 0} onClick={() => { onSet(slot, name, value); setValue('') }} data-testid="runner-binding-login-set">{busy ? 'Storing...' : 'Set the login'}</button>
+      <span className="hint">stored in this runner as <span className="mono">{name}</span>, never shown again</span>
+      {answer && <span className={answer.ok ? 'hint' : 'field-error'} role={answer.ok ? 'status' : 'alert'} data-testid="runner-binding-login-answer" data-ok={answer.ok}>{answer.message}</span>}
+    </span>
+  )
 }
 
 /** The connections of one channel without their calls: each slot the manifests declare, what it is bound to, and the change. Hook-free so a test can draw it and press its button. */
@@ -56,6 +75,9 @@ export function BindingsCardView(p: BindingsCardViewProps) {
                       <span className={p.tested[r.slot]!.ok ? 'hint' : 'field-error'} role={p.tested[r.slot]!.ok ? 'status' : 'alert'} data-testid="runner-binding-tried" data-ok={p.tested[r.slot]!.ok} data-step={p.tested[r.slot]!.step}>{p.tested[r.slot]!.message}</span>
                     )}
                   </span>
+                )}
+                {p.canEdit && p.onSetLogin && typed === undefined && p.loginOf?.(r.slot) && (
+                  <LoginField slot={r.slot} name={p.loginOf(r.slot)!} busy={p.settingLogin === r.slot} answer={p.loginSet?.[r.slot]} onSet={p.onSetLogin} />
                 )}
               </div>
             )
@@ -99,6 +121,14 @@ export function BindingsCard({ detail, channel, canEdit }: { detail: DefinitionD
     onSuccess: (answer, slot) => setTested((all) => ({ ...all, [slot]: answer })),
     onError: (error, slot) => setTested((all) => ({ ...all, [slot]: { slot, bound_to: null, ok: false, step: 'binding', message: error instanceof Error ? error.message : 'The runner did not answer.', connected: false } })),
   })
+  // plan 28c E20d: the run login of a bound connection is set here, into the runner's own store, once; no product server holds it
+  const [loginSet, setLoginSet] = useState<Record<string, { ok: boolean; message: string }>>({})
+  const setLogin = useMutation({
+    mutationFn: ({ name, value }: { slot: string; name: string; value: string }) => runnerApi.setSecret(name, value),
+    onSuccess: (answer, { slot }) => { setLoginSet((all) => ({ ...all, [slot]: { ok: true, message: `Stored as ${answer.name}.` } })); void client.invalidateQueries({ queryKey: ['runner'] }) },
+    onError: (error, { slot }) => setLoginSet((all) => ({ ...all, [slot]: { ok: false, message: error instanceof Error ? error.message : 'The runner did not answer.' } })),
+  })
+  const boundOf = Object.fromEntries(rows.map((r) => [r.slot, r.boundTo]))
   return (
     <BindingsCardView
       channel={channel} rows={rows} canEdit={canEdit} edits={edits} known={connectionNames(connections.data)} busy={save.isPending} saved={saved} failure={save.error}
@@ -106,6 +136,9 @@ export function BindingsCard({ detail, channel, canEdit }: { detail: DefinitionD
       onSave={() => { const request = bindingsRequest(rows, edits); if (request) save.mutate(request) }}
       tested={tested} trying={tryOne.isPending ? tryOne.variables ?? null : null}
       onTry={(slot) => tryOne.mutate(slot)}
+      loginOf={(slot) => storeLoginOf(connections.data, boundOf[slot] ?? null)}
+      onSetLogin={(slot, name, value) => setLogin.mutate({ slot, name, value })}
+      loginSet={loginSet} settingLogin={setLogin.isPending ? setLogin.variables?.slot ?? null : null}
     />
   )
 }

@@ -2,7 +2,7 @@ import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@dbdatakit/shell'
-import { slotRows } from '../bindings'
+import { slotRows, storeLoginOf } from '../bindings'
 import { BindingsCardView, type BindingsCardViewProps } from './BindingsCard'
 import { PublishingSettingsView, type PublishingSettingsViewProps } from './PublishingSettings'
 
@@ -98,5 +98,29 @@ describe('the require-signatures setting', () => {
     expect(renderToStaticMarkup(view)).toContain('needs the admin role')
     expect(renderToStaticMarkup(PublishingSettingsView(settings({ requireSignatures: null, loading: true })))).toContain('runner-settings-loading')
     expect(renderToStaticMarkup(PublishingSettingsView(settings({ requireSignatures: null, error: new ApiError(503, 'The runner did not answer', null) })))).toContain('The runner did not answer')
+  })
+})
+
+// plan 28c E20d: the run login of a bound connection is set on the runner's own screen, into its store, and never shown
+describe('the login of a bound slot', () => {
+  const connections = [
+    { name: 'erp', secret_ref: 'secret:dbdatakit:sync:connection:erp:read', run_secret_ref: 'secret:dbdatakit:sync:connection:erp:run' },
+    { name: 'warehouse', secret_ref: 'env:WAREHOUSE_PASSWORD' },
+  ]
+  it('names the run login of the store, and nothing for a login outside it or an unknown connection', () => {
+    expect(storeLoginOf(connections, 'erp')).toBe('dbdatakit:sync:connection:erp:run')
+    expect(storeLoginOf([{ name: 'erp', secret_ref: 'secret:dbdatakit:sync:connection:erp' }], 'erp')).toBe('dbdatakit:sync:connection:erp')
+    expect(storeLoginOf(connections, 'warehouse')).toBeNull()
+    expect(storeLoginOf(connections, 'other')).toBeNull()
+    expect(storeLoginOf(connections, null)).toBeNull()
+  })
+  it('offers a write-only field on the bound slot, for an administrator only', () => {
+    const over = { loginOf: (slot: string) => (slot === 'source' ? 'dbdatakit:sync:connection:erp:run' : null), onSetLogin: () => {}, loginSet: { source: { ok: true, message: 'Stored as dbdatakit:sync:connection:erp:run.' } } }
+    const text = html(over)
+    expect(text.match(/data-testid="runner-binding-login"/g)).toHaveLength(1)
+    expect(text).toContain('data-secret="dbdatakit:sync:connection:erp:run"')
+    expect(text).toContain('type="password"')
+    expect(text).toContain('Stored as dbdatakit:sync:connection:erp:run.')
+    expect(html({ ...over, canEdit: false })).not.toContain('runner-binding-login')
   })
 })

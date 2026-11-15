@@ -83,6 +83,17 @@ export function bindingsRequest(rows: SlotRow[], edits: BindingEdits): { slots: 
 }
 
 /** The connection names the runner knows (those its channels bind), to offer when typing; each once, in order. */
+/**
+ * The name in the runner's own store of the login a slot bound to <paramref name="boundTo"/> runs with (plan 28c E20d): the connection's run login when it has two, else its one login, when that reference is
+ * `secret:<name>` (a secret of the runner's store); null when the connection is not known here or names a login outside the store (the environment, a file), which this screen cannot set.
+ */
+export function storeLoginOf(connections: { name: string; secret_ref: string | null; run_secret_ref?: string | null }[] | undefined, boundTo: string | null): string | null {
+  if (!boundTo) return null
+  const connection = (connections ?? []).find((c) => c.name === boundTo)
+  const reference = connection?.run_secret_ref ?? connection?.secret_ref ?? null
+  return reference !== null && reference.startsWith('secret:') && reference.length > 'secret:'.length ? reference.slice('secret:'.length) : null
+}
+
 export const connectionNames = (connections: { name: string }[] | undefined) => [...new Set((connections ?? []).map((c) => c.name))].sort((a, b) => a.localeCompare(b))
 
 /** What the require-signatures switch says and what turning it on does while signature checking is not built (every publish is then refused). */

@@ -119,6 +119,8 @@ export interface RunnerConnection {
   name: string
   kind: string
   secret_ref: string | null
+  /** The run login's reference of a connection with two logins (plan 28c E20); absent on a runner too old to say. */
+  run_secret_ref?: string | null
   roles: string[]
   used_by: { process: string; name: string; version: string | null; group: string | null; instance: string | null; channel: string | null; role: string }[]
 }
@@ -219,6 +221,8 @@ export const runnerApi = {
   /** The group's instances, those that are gone included. */
   instances: () => request<{ group: string; this: string | null; instances: RunnerInstance[] }>('/api/v1/instances?all=true').then((r) => r.instances),
   connections: () => request<{ connections: RunnerConnection[] }>('/api/v1/connections').then((r) => r.connections),
+  /** Stores a login in the runner's encrypted store under its name (plan 28c E20d): write-only, the value never comes back; administrator, audited by name and length. */
+  setSecret: (name: string, value: string) => request<{ name: string }>(`/api/v1/secrets/${enc(name)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   runs: (filters: RunFilters) => request<{ runs: RunRecord[] }>(`/api/v1/runs${runsQuery(filters)}`).then((r) => r.runs),
   /** A run's output, the lines after the one with id `after` (from the start when none), at most `limit`; read again with the last id to follow a run that is going. */
   runLog: (id: string, after?: number, limit = 200) => request<{ run: string; lines: RunLogLine[] }>(`/api/v1/runs/${enc(id)}/logs?limit=${limit}${after === undefined ? '' : `&after=${after}`}`),
