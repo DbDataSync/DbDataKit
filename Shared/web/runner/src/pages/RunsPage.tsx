@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { OUTCOMES, runnerApi, type RunFilters, type RunRecord } from '../api'
@@ -32,10 +33,15 @@ function RunDetail({ run, onClose }: { run: RunRecord; onClose: () => void }) {
   )
 }
 
-/** The run history, newest first, with filters for the package, the channel and the outcome, and a run's detail. */
+/** The run history, newest first, with filters for the package, the channel and the outcome, and a run's detail. `?run=<id>` opens that run's detail (a link from another screen, such as a Store model's deploy in the Workspace, plan 33 SC24). */
 export function RunsPage() {
   const [filters, setFilters] = useState<RunFilters>({})
-  const [open, setOpen] = useState<RunRecord | null>(null)
+  const [picked, setOpen] = useState<RunRecord | null>(null)
+  const [search, setSearch] = useSearchParams()
+  const linked = search.get('run')
+  const fromLink = useQuery({ queryKey: ['runner', 'run', linked], queryFn: () => runnerApi.runById(linked!), enabled: !!linked && picked === null })
+  const open = picked ?? (linked ? fromLink.data ?? null : null)
+  const close = () => { setOpen(null); if (linked) setSearch((s) => { s.delete('run'); return s }, { replace: true }) }
   const runs = useQuery({ queryKey: ['runner', 'runs', filters], queryFn: () => runnerApi.runs(filters), refetchInterval: 5000 })
   const status = useQuery({ queryKey: ['runner', 'status'], queryFn: runnerApi.status })
   const packages = [...new Set((status.data?.tasks ?? []).map((t) => t.package))].sort()
@@ -61,7 +67,7 @@ export function RunsPage() {
             </select>
           </span>
         </div>
-        <ErrorBanner error={runs.error} />
+        <ErrorBanner error={runs.error ?? fromLink.error} />
         {runs.isSuccess && runs.data.length === 0 && <div className="empty" data-testid="runner-no-runs">No run matches.</div>}
         {(runs.data?.length ?? 0) > 0 && (
           <div className="card flush" data-testid="runner-runs">
@@ -82,7 +88,7 @@ export function RunsPage() {
             ))}
           </div>
         )}
-        {open && <RunDetail run={open} onClose={() => setOpen(null)} />}
+        {open && <RunDetail run={open} onClose={close} />}
       </div>
     </RunnerShell>
   )

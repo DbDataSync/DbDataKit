@@ -10,7 +10,7 @@ using DbDataKit.Web.Trust;
 namespace DbDataKit.Authoring.Server;
 
 /// <summary>What a person says when they publish what a kind made (plan 33 SC20d, SC21b, SC22b): for a Runner the <see cref="Channel"/> (and whether it serves at once, <see cref="Serve"/>, or is staged, the default; <see cref="ExpectedVersion"/> and the connections <see cref="Bind"/> fills, slot to connection name); for a Gateway the <see cref="DataSource"/> its tables are on, the models' own storage connection when none is named, and <see cref="Adopt"/> (plan 33 SC21f) the data sources made by hand that the person confirmed the models may go on (the Gateway records the adoption).</summary>
-public sealed record ArtifactPublishOptions(string? Channel = null, bool Serve = false, int? ExpectedVersion = null, IReadOnlyDictionary<string, string>? Bind = null, string? DataSource = null, IReadOnlyList<string>? Adopt = null);
+public sealed record ArtifactPublishOptions(string? Channel = null, bool Serve = false, int? ExpectedVersion = null, IReadOnlyDictionary<string, string>? Bind = null, string? DataSource = null, IReadOnlyList<string>? Adopt = null, string? Model = null);
 
 public sealed partial class WorkspacePublishing
 {
@@ -27,10 +27,22 @@ public sealed partial class WorkspacePublishing
         return route.What switch
         {
             "package" => await PublishPackageAsync(target, identity, artifactFolder, options, actor, step, ct),
+            "model-package" => await PublishPackageAsync(target, identity, ModelPackageFolder(artifactFolder, options.Model), options, actor, step, ct),
             "model" => await PublishModelsAsync(target, identity, role, artifactFolder, options, step, ct),
             "semantic-model" => await PublishSemanticModelsAsync(target, identity, role, Path.Combine(artifactFolder, "gateway"), options, step, ct),
             _ => throw new WorkspacePublishException($"A {kind.Name} project publishes '{route.What}' to a {route.Product}, which this server does not know how to send.", 409),
         };
+    }
+
+    /// <summary>The folder of one model's deploy package in a Store project's build (plan 33 SC24): the model the person named, or the only one when the project has one.</summary>
+    private static string ModelPackageFolder(string artifactFolder, string? model)
+    {
+        var root = Path.Combine(artifactFolder, StoreProjectKind.RunnerFolder);
+        var models = Directory.Exists(root) ? Directory.EnumerateDirectories(root).Select(Path.GetFileName).OfType<string>().Order(StringComparer.Ordinal).ToList() : [];
+        if (models.Count == 0) throw new WorkspacePublishException("This build has no deploy package of a model. Build the draft again: a build of a Store project makes one per model.", 409);
+        if (string.IsNullOrWhiteSpace(model))
+            return models.Count == 1 ? Path.Combine(root, models[0]) : throw new WorkspacePublishException($"Name the model to stage (\"model\"): this build has {string.Join(", ", models)}.", 400);
+        return models.Contains(model.Trim(), StringComparer.Ordinal) ? Path.Combine(root, model.Trim()) : throw new WorkspacePublishException($"This build has no model '{model.Trim()}'; it has {string.Join(", ", models)}.", 404);
     }
 
     private static async Task<JsonObject> PublishPackageAsync(PublishTarget target, ConsoleIdentity identity, string artifactFolder, ArtifactPublishOptions options, string actor, Action<string> step, CancellationToken ct)
@@ -77,7 +89,7 @@ public sealed partial class WorkspacePublishing
             var runId = await client.RunVersionAsync(target.Name, null, package, channel, task, version, inputs, actor, step, ct)
                 ?? throw new WorkspacePublishException($"{package}/{channel}/{task} is queued or running already on {target.Name}; wait for that run to end.", 409);
             step($"Started {task} of {package} version {version} on {channel}: run {runId}.");
-            return new JsonObject { ["run_id"] = runId, ["task"] = task, ["package"] = package, ["channel"] = channel, ["version"] = version, ["target"] = target.Name, ["runner"] = target.Url, ["on_behalf_of"] = actor };
+            return new JsonObject { ["run_id"] = runId, ["task"] = task, ["package"] = package, ["channel"] = channel, ["version"] = version, ["target"] = target.Name, ["runner"] = target.Url, ["instance"] = target.InstanceId, ["on_behalf_of"] = actor };
         }
         catch (RunnerClientException ex) { throw Refused(ex); }
     }

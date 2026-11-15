@@ -17,3 +17,6 @@ A Store model's tables deployed as a manual Runner task (plan 33 SC24, the Store
   login. Nothing of a secret is logged.
 
 `dbdatastore --runner` is the runtime's entry: it runs the task the runner names (`DBDATAKIT_TASK_NAME`).
+
+The Workspace makes these packages from a `store` project's build (`runner/<model>/` of the artifact) and stages one on a Runner from the
+**Deploy** tab of a store workspace; that tab runs `deploy` dry first and reads `deploy-report` back (plan 33 SC24).

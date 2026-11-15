@@ -519,7 +519,7 @@ public static class WorkspaceManagement
                     if (body?["bind"] is JsonObject slots)
                         foreach (var slot in slots)
                             if (slot.Value is JsonValue v && v.TryGetValue<string>(out var connection)) bind[slot.Key] = connection;
-                    var options = new ArtifactPublishOptions(body?["channel"]?.GetValue<string>(), body?["serve"]?.GetValue<bool>() ?? false, body?["expected_version"]?.GetValue<int>(), bind, body?["data_source"]?.GetValue<string>(), AdoptNames(body?["adopt"]));
+                    var options = new ArtifactPublishOptions(body?["channel"]?.GetValue<string>(), body?["serve"]?.GetValue<bool>() ?? false, body?["expected_version"]?.GetValue<int>(), bind, body?["data_source"]?.GetValue<string>(), AdoptNames(body?["adopt"]), body?["model"]?.GetValue<string>());
                     answer = await publishing.PublishArtifactAsync(producing, target, builds.ArtifactFolderOf(hosted.Id, buildId), options, Actor(token), steps.Add, context.RequestAborted);
                     answer["note"] = fullNote;
                     if (options.Adopt is { Count: > 0 }) Audit(token, "build.adopt", $"{target1} -> {target}", "confirmed adoption of " + string.Join(", ", options.Adopt));
@@ -532,7 +532,7 @@ public static class WorkspaceManagement
             }
             catch (Exception ex) when (ex is InvalidOperationException or FormatException)
             {
-                return Results.Json(new { error = "The body's \"channel\" and \"data_source\" are text, \"serve\" is true or false, \"expected_version\" a number and \"bind\" an object of slot to connection name." }, statusCode: StatusCodes.Status400BadRequest);
+                return Results.Json(new { error = "The body's \"channel\", \"data_source\" and \"model\" are text, \"serve\" is true or false, \"expected_version\" a number and \"bind\" an object of slot to connection name." }, statusCode: StatusCodes.Status400BadRequest);
             }
             catch (WorkspacePublishException ex)
             {
@@ -546,11 +546,12 @@ public static class WorkspaceManagement
 
         // ---- a manual task of the version a build staged on a Runner (plan 28c E21, step e: a draft's database setup applied before the set is published) ----
 
-        // the newest package this build staged or published on a Runner: its target, package, channel and version
-        (string Target, string Package, string Channel, string Version)? StagedOf(string project, Guid buildId)
+        // the newest package this build staged or published on a Runner (of the package named, when one is: a Store project's build stages one package per model, plan 33 SC24): its target, package, channel and version
+        (string Target, string Package, string Channel, string Version)? StagedOf(string project, Guid buildId, string? package = null)
         {
             foreach (var entry in builds.Publishes(project, buildId).OfType<JsonObject>().Reverse())
-                if (entry["ok"]?.GetValue<bool>() == true && entry["answer"] is JsonObject a && a["package"] is JsonValue && a["channel"] is JsonValue && a["version"] is JsonValue)
+                if (entry["ok"]?.GetValue<bool>() == true && entry["answer"] is JsonObject a && a["package"] is JsonValue && a["channel"] is JsonValue && a["version"] is JsonValue
+                    && (string.IsNullOrWhiteSpace(package) || (string?)a["package"] == package.Trim()))
                     return ((string)entry["target"]!, (string)a["package"]!, (string)a["channel"]!, a["version"]!.ToJsonString().Trim('"'));
             return null;
         }
@@ -561,19 +562,20 @@ public static class WorkspaceManagement
             if (!Guid.TryParse(build, out var buildId) || builds.Find(hosted.Id, id, buildId) is null) return Results.NotFound();
             var token = context.ManagementToken();
             var body = await Body(context);
-            string? task;
+            string? task, package = null;
             var inputs = new Dictionary<string, string>(StringComparer.Ordinal);
             try
             {
                 task = body?["task"]?.GetValue<string>();
+                package = body?["package"]?.GetValue<string>();
                 if (body?["inputs"] is JsonObject given)
                     foreach (var (name, value) in given) inputs[name] = value?.GetValue<string>() ?? "";
                 else if (body?["inputs"] is not null) task = null;
             }
             catch (InvalidOperationException) { task = null; }
             if (string.IsNullOrWhiteSpace(task))
-                return Results.Json(new { error = "The body is a JSON object with the \"task\" to run (a manual-only task of the package) and optionally its \"inputs\", an object of names and text values." }, statusCode: StatusCodes.Status400BadRequest);
-            if (StagedOf(hosted.Id, buildId) is not { } staged)
+                return Results.Json(new { error = "The body is a JSON object with the \"task\" to run (a manual-only task of the package), optionally its \"inputs\", an object of names and text values, and the \"package\" when the build staged more than one." }, statusCode: StatusCodes.Status400BadRequest);
+            if (StagedOf(hosted.Id, buildId, package) is not { } staged)
                 return Results.Json(new { error = "This build has not been staged on a Runner. Publish it to a Runner first (it is staged, not served, unless you say so); then its manual tasks can be run." }, statusCode: StatusCodes.Status409Conflict);
             var steps = new List<string>();
             var what = $"{hosted.Id}/{id}/{buildId}: {staged.Package}/{staged.Channel}/{task} v{staged.Version} on {staged.Target}";
@@ -590,12 +592,12 @@ public static class WorkspaceManagement
             }
         });
 
-        // a run started from a build, read back from the Runner it ran on (?step=<name>: the steps of that name the run recorded, such as provision-applied)
+        // a run started from a build, read back from the Runner it ran on (?step=<name>: the steps of that name the run recorded, such as provision-applied; ?package=<name>: the staged package it is of, when the build staged more than one)
         app.MapGet("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/runs/{run}", async (string project, string id, string build, string run, HttpContext context) =>
         {
             if (InProject(project, context, ServerRole.Viewer, out var hosted) is { } refused) return refused;
             if (!Guid.TryParse(build, out var buildId) || builds.Find(hosted.Id, id, buildId) is null || !Guid.TryParse(run, out var runId)) return Results.NotFound();
-            if (StagedOf(hosted.Id, buildId) is not { } staged) return Results.NotFound();
+            if (StagedOf(hosted.Id, buildId, context.Request.Query["package"].FirstOrDefault()) is not { } staged) return Results.NotFound();
             var step = context.Request.Query["step"].FirstOrDefault();
             try
             {

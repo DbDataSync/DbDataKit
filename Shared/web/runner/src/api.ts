@@ -224,6 +224,8 @@ export const runnerApi = {
   /** Stores a login in the runner's encrypted store under its name (plan 28c E20d): write-only, the value never comes back; administrator, audited by name and length. */
   setSecret: (name: string, value: string) => request<{ name: string }>(`/api/v1/secrets/${enc(name)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   runs: (filters: RunFilters) => request<{ runs: RunRecord[] }>(`/api/v1/runs${runsQuery(filters)}`).then((r) => r.runs),
+  /** One run by id (`GET /api/v1/runs/{id}`), the same record as a row of the list: what a link to a run (`runs?run=<id>`, from a product's screen) opens. */
+  runById: (id: string) => request<RunRecord>(`/api/v1/runs/${enc(id)}`),
   /** A run's output, the lines after the one with id `after` (from the start when none), at most `limit`; read again with the last id to follow a run that is going. */
   runLog: (id: string, after?: number, limit = 200) => request<{ run: string; lines: RunLogLine[] }>(`/api/v1/runs/${enc(id)}/logs?limit=${limit}${after === undefined ? '' : `&after=${after}`}`),
   /** Starts a run now; the inputs are the task's own (`name=value` of `tasks run`), as text. */

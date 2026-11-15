@@ -15,6 +15,7 @@ import { FileHistory } from './FileHistory'
 import { BuildFileEditor, NewBuildConnection, NewBuildModel } from './BuildFilePanel'
 import { CatalogPanel, useCatalogRead } from './CatalogPanel'
 import { SyncProvisioningPanel } from './SyncProvisioningPanel'
+import { StoreDeployPanel } from './StoreDeployPanel'
 import { SyncScriptsPanel } from './SyncScriptsPanel'
 import { SyncFileEditor, SyncSetOverview, findingsKey } from './SyncSetPanel'
 import { IntegrationManifestEditor, IntegrationOverview } from './IntegrationPanel'
@@ -204,7 +205,7 @@ export function WorkspacePage() {
   const client = useQueryClient()
   const canWrite = useIsAdmin()
   const [selected, setSelected] = useState<string | null>(null)
-  const [tab, setTab] = useState<'changes' | 'history' | 'builds' | 'check' | 'models' | 'compile' | 'views' | 'catalog' | 'scripts' | 'provisioning'>('changes')
+  const [tab, setTab] = useState<'changes' | 'history' | 'builds' | 'check' | 'models' | 'compile' | 'views' | 'catalog' | 'scripts' | 'provisioning' | 'deploy'>('changes')
   const [newPath, setNewPath] = useState('')
   const [asking, setAsking] = useState(false)
   const [merged, setMerged] = useState<{ sha: string | null } | null>(null)
@@ -315,6 +316,7 @@ export function WorkspacePage() {
                   {kind === 'build' && <button type="button" role="tab" aria-selected={tab === 'views'} className={`btn ${tab === 'views' ? 'btn-primary' : ''}`} data-testid="wsp-tab-views" onClick={() => setTab('views')}>Views</button>}
                   {kind === 'sync' && <button type="button" role="tab" aria-selected={tab === 'scripts'} className={`btn ${tab === 'scripts' ? 'btn-primary' : ''}`} data-testid="wsp-tab-scripts" onClick={() => setTab('scripts')}>Scripts</button>}
                   {kind === 'sync' && <button type="button" role="tab" aria-selected={tab === 'provisioning'} className={`btn ${tab === 'provisioning' ? 'btn-primary' : ''}`} data-testid="wsp-tab-provisioning" onClick={() => setTab('provisioning')}>Provisioning</button>}
+                  {kind === 'store' && <button type="button" role="tab" aria-selected={tab === 'deploy'} className={`btn ${tab === 'deploy' ? 'btn-primary' : ''}`} data-testid="wsp-tab-deploy" onClick={() => setTab('deploy')}>Deploy</button>}
                   {(kind === 'build' || kind === 'sync') && <button type="button" role="tab" aria-selected={tab === 'catalog'} className={`btn ${tab === 'catalog' ? 'btn-primary' : ''}`} data-testid="wsp-tab-catalog" onClick={() => setTab('catalog')}>Catalog</button>}
                   <button type="button" role="tab" aria-selected={tab === 'builds'} className={`btn ${tab === 'builds' ? 'btn-primary' : ''}`} data-testid="wsp-tab-builds" onClick={() => setTab('builds')}>Builds</button>
                   <button type="button" role="tab" aria-selected={tab === 'history'} className={`btn ${tab === 'history' ? 'btn-primary' : ''}`} data-testid="wsp-tab-history" onClick={() => setTab('history')}>History</button>
@@ -331,6 +333,8 @@ export function WorkspacePage() {
                     ? <SyncScriptsPanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} canWrite={editable && canWrite} busy={make.isPending} onOpen={setSelected} onCreate={(made) => make.mutate(made)} />
                   : tab === 'provisioning' && kind === 'sync'
                     ? <SyncProvisioningPanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} />
+                  : tab === 'deploy' && kind === 'store'
+                    ? <StoreDeployPanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} />
                   : tab === 'catalog' && (kind === 'build' || kind === 'sync')
                     ? <CatalogPanel project={project} id={id} onOpen={setSelected} canWrite={editable && canWrite} kind={kind} />
                   : tab === 'check'

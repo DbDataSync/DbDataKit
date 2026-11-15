@@ -59,13 +59,13 @@ export interface PublishedAnswer {
 }
 export interface PublishAnswer { steps: string[]; published: PublishedAnswer }
 /** A manual task of the version a build staged on a Runner, started for the signed-in person (`POST .../builds/{b}/run`, plan 28c E21 step e). */
-export interface StagedRunStarted { run_id: string; task: string; package: string; channel: string; version: string; target: string; runner: string; on_behalf_of: string }
+export interface StagedRunStarted { run_id: string; task: string; package: string; channel: string; version: string; target: string; runner: string; instance?: string; on_behalf_of: string }
 /** A run read back from the Runner (`GET .../builds/{b}/runs/{run}`): its outcome, its failure and, with `step`, the steps of that name it recorded (their results). */
 export interface StagedRun { id: string; task: string; outcome: string; started: string; finished: string | null; version: string | null; failure: { kind: string | null; message: string } | null; steps?: { key: string; started: string; completed: string | null; result: unknown }[] }
 /** What sending a build to the Gateway's preview channel answered (`POST .../builds/{b}/preview-data`). */
 export interface PreviewDataAnswer { steps: string[]; preview: PublishedAnswer }
 /** What a publish says besides the target and the note: for a Runner the channel (and whether it serves at once, the slots to bind), for a Gateway the data source of the models and, once the person confirmed it (plan 33 SC21f), the data sources made by hand the models may go on (`adopt`). */
-export interface PublishOptions { channel?: string; serve?: boolean; bind?: Record<string, string>; data_source?: string; adopt?: string[] }
+export interface PublishOptions { channel?: string; serve?: boolean; bind?: Record<string, string>; data_source?: string; adopt?: string[]; model?: string }
 /** The Gateway refused a publish for want of an adoption (SC21f): the data source a model would go on and who made it (`hand`: by hand or by an administrator). A screen asks the person, then publishes again with `adopt`. */
 export interface AdoptionRequest { data_source: string; made_by: string }
 /** What a refresh of the catalog cache answered (plan 33 SC20j): the connection, the Gateway's data source it was read from, and how much was cached. No row and no secret is in it. */
@@ -157,8 +157,12 @@ export const workspaceApi = {
   refreshCatalog: (project: string, id: string, body: CatalogRefreshRequest) => request<CatalogRefreshAnswer>(`/api/v1/projects/${enc(project)}/workspaces/${enc(id)}/catalog/refresh`, json(body)),
   publish: (project: string, id: string, build: string, target: string, note: string, options: PublishOptions = {}) => request<PublishAnswer>(`${builds(project, id)}/${enc(build)}/publish`, json({ target, ...(note ? { note } : {}), ...options })),
   /** Runs a manual-only task (Sync's `provision`) of the version this build last staged or published on a Runner, for the signed-in person; the Runner's bound logins do the work. */
-  runStaged: (project: string, id: string, build: string, task: string, inputs: Record<string, string>) => request<{ steps: string[]; run: StagedRunStarted }>(`${builds(project, id)}/${enc(build)}/run`, json({ task, inputs })),
-  stagedRun: (project: string, id: string, build: string, run: string, step?: string) => request<{ run: StagedRun }>(`${builds(project, id)}/${enc(build)}/runs/${enc(run)}${step ? `?step=${enc(step)}` : ''}`).then((r) => r.run),
+  runStaged: (project: string, id: string, build: string, task: string, inputs: Record<string, string>, pkg?: string) => request<{ steps: string[]; run: StagedRunStarted }>(`${builds(project, id)}/${enc(build)}/run`, json({ task, inputs, ...(pkg ? { package: pkg } : {}) })),
+  /** A run read back; `pkg` names the staged package it is of when the build staged more than one (a Store project's build stages one per model, plan 33 SC24). */
+  stagedRun: (project: string, id: string, build: string, run: string, step?: string, pkg?: string) => {
+    const query = [step ? `step=${enc(step)}` : '', pkg ? `package=${enc(pkg)}` : ''].filter(Boolean).join('&')
+    return request<{ run: StagedRun }>(`${builds(project, id)}/${enc(build)}/runs/${enc(run)}${query ? `?${query}` : ''}`).then((r) => r.run)
+  },
   previewWithData: (project: string, id: string, build: string, target: string, instance: string) => request<PreviewDataAnswer>(`${builds(project, id)}/${enc(build)}/preview-data`, json({ target, instance })),
   publisherKeys: () => request<{ keys: PublisherKey[] }>('/api/v1/publisher-keys').then((r) => r.keys),
   pairKey: (name: string, url: string, code: string) => request<PublisherKey>(`/api/v1/publisher-keys/${enc(name)}/pair`, json({ url, code })),

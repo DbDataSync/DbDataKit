@@ -142,7 +142,7 @@ public sealed class WorkspaceStorePublishTests
     }
 
     [Fact]
-    public async Task A_data_source_the_gateway_does_not_have_and_a_gateways_refusal_come_back_in_its_words_and_a_runner_is_not_a_target()
+    public async Task A_data_source_the_gateway_does_not_have_and_a_gateways_refusal_come_back_in_its_words_and_a_runner_gets_the_deploy_package()
     {
         await using var gateway = await FakeGateway.StartAsync();
         await using var runner = await FakeRunner.StartAsync();
@@ -162,9 +162,10 @@ public sealed class WorkspaceStorePublishTests
         var refused = await Publish(server, workspace, build, new JsonObject { ["target"] = "edge" });
         Assert.Contains("(400): The model does not load, so nothing was published.", (string)refused.Body!["error"]!);
 
-        var wrong = await Publish(server, workspace, build, new JsonObject { ["target"] = "jobs", ["channel"] = "prod" });
-        Assert.Equal(HttpStatusCode.Conflict, wrong.Response.StatusCode);
-        Assert.Contains("store kind of project is published to a gateway (model)", (string)wrong.Body!["error"]!);
+        // a Runner is a target since plan 33 SC24: it gets the model's deploy package, not the model to serve (WorkspaceStoreDeployTests)
+        var deploy = await Publish(server, workspace, build, new JsonObject { ["target"] = "jobs", ["channel"] = "prod" });
+        Assert.Equal(HttpStatusCode.OK, deploy.Response.StatusCode);
+        Assert.Equal("model-territories", (string)deploy.Body!["published"]!["package"]!);
     }
 
     [Fact]

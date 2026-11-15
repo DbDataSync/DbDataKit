@@ -2,13 +2,15 @@ using System.Text;
 using System.Text.RegularExpressions;
 using DbDataKit.Authoring;
 using DbDataKit.DataModel;
+using DbDataKit.DataModel.Runner;
 
 namespace DbDataKit.Authoring.Server;
 
 /// <summary>
 /// The <c>store</c> kind (plan 33 SC21a): master data models, <c>model/1</c> and <c>model/2</c> files, authored in a git workspace, one file per model in <c>models/</c>. The shared library that the Store reads them with,
 /// <see cref="DataModelLoader"/>, checks every file (the same file, line and column diagnostics the Store's editor shows), so the Workspace needs no copy of the Store and no child process. A model is published to a Gateway
-/// (SC21b); this kind is checked, not built.
+/// (SC21b); this kind is checked, not built. Each model is also made into its deploy package for a Runner (SC24, <see cref="ModelDeployPackage"/>): the manual task <c>deploy</c> that creates or expands the model's tables, run on the
+/// Runner with the login bound to its slot <c>storage</c> there, so the Workspace creates no table and holds no login.
 /// </summary>
 public sealed partial class StoreProjectKind : IProjectKind
 {
@@ -20,14 +22,19 @@ public sealed partial class StoreProjectKind : IProjectKind
     public bool Buildable => false;
     public string? GitIgnore => null;
 
+    /// <summary>Where a build keeps each model's deploy package: <c>runner/&lt;model&gt;/</c> of the artifact (<c>package.yaml</c> and <c>files/</c>).</summary>
+    public const string RunnerFolder = "runner";
+
     public IReadOnlyList<ProjectPublishRoute> Publishes { get; } =
-        [new("gateway", "model", "The models in the current format, published to a Gateway that serves them, on a data source the Gateway already has (the model's storage connection by default). The Workspace holds no connection and creates no table.")];
+        [new("gateway", "model", "The models in the current format, published to a Gateway that serves them, on a data source the Gateway already has (the model's storage connection by default). The Workspace holds no connection and creates no table."),
+         new("runner", "model-package", "One model's deploy package, staged on a channel of a Runner: the manual task deploy creates or expands the model's tables (a dry run first) with the login bound to the slot storage on the Runner.")];
 
     public bool Produces => true;
 
     /// <summary>
     /// What a publish sends: each model of <c>models/</c> in the current format (<see cref="DataModelLoader.WithCurrentVersion"/>, so a file at the previous format is published as the current one and the draft's file is left as written), with the
-    /// data source it names in <c>storage.connection</c>, as <c>models/&lt;name&gt;.yaml</c> of the artifact and <c>info</c> (<c>models</c>, <c>data_sources</c>: <c>name=connection</c>, comma separated).
+    /// data source it names in <c>storage.connection</c>, as <c>models/&lt;name&gt;.yaml</c> of the artifact and <c>info</c> (<c>models</c>, <c>data_sources</c>: <c>name=connection</c>, comma separated); and each model's deploy package for a
+    /// Runner as <c>runner/&lt;name&gt;/</c>.
     /// </summary>
     public Task<ProjectArtifact> ProduceAsync(string root, string projectId, string outputFolder, CancellationToken cancellationToken)
     {
@@ -43,6 +50,10 @@ public sealed partial class StoreProjectKind : IProjectKind
             if (loaded.Model is not { } model)
                 return Task.FromResult(new ProjectArtifact(false, $"{relative} is not a model that loads.", [new("error", "DBD-WS-STORE-LOAD", $"{relative} is not a model that loads.", relative)]));
             File.WriteAllText(Path.Combine(outputFolder, "models", model.Name + ".yaml"), DataModelLoader.WithCurrentVersion(text), Utf8);
+            var problems = new List<string>();
+            if (ModelDeployPackage.Build(text, problems) is not { } package)
+                return Task.FromResult(new ProjectArtifact(false, $"{relative} cannot be made into a deploy package: {string.Join(" ", problems)}", [new("error", "DBD-WS-STORE-PACKAGE", string.Join(" ", problems), relative)]));
+            ModelDeployPackage.Write(package, Path.Combine(outputFolder, RunnerFolder, model.Name));
             names.Add(model.Name);
             sources.Add(model.Name + "=" + model.Connection);
         }
