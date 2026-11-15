@@ -57,6 +57,8 @@ mirror and tag the result: `docker pull mirror.gcr.io/library/postgres:17 && doc
 package repositories (`apt-get` inside a build fails with 403), so a testenv image must be pulled whole, never built with a package install.
 Then `eval "$(testenv/testenv.sh env dbdatakit)"` sets `DBDATAKIT_TEST_SQLSERVER` and `DBDATAKIT_TEST_POSTGRES` for the state suites.
 
+Cloud sessions of this repository: `.claude/hooks/session-start.sh` already provides SQL Server (Docker, 1433) and PostgreSQL 16 with pgvector (5432) and exports `DBDATAKIT_TEST_SQLSERVER`, `DBDATAKIT_TEST_POSTGRES` and the canonical `DBDATAKIT_TEST_MSSQL*` / `DBDATAKIT_TEST_POSTGRES_*` names. Do not start the `mssql` or `postgres` profiles there (different ports, Postgres 17, and `testenv.sh env` would replace those variables); use testenv only for the other engines (`testenv/testenv.sh up mysql mariadb oracle ...`).
+
 Test engines (every variable of a test, harness or CI step is `DBDATAKIT_TEST_<NAME>`; `docs/testing-environment.md` has the old-to-new table):
 
 - One environment for every suite, `testenv/docker-compose.yml`, one profile per engine: `testenv/testenv.sh up mssql postgres`, then

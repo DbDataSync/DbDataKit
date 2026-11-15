@@ -49,8 +49,16 @@ SQL
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
   {
     echo 'export DBDATAKIT_TEST_POSTGRES="Host=localhost;Port=5432;Username=postgres;Password=$(cat /root/.postgres_password);Database=postgres"'
+    echo 'export DBDATAKIT_TEST_POSTGRES_HOST="localhost" DBDATAKIT_TEST_POSTGRES_PORT="5432" DBDATAKIT_TEST_POSTGRES_USER="postgres" DBDATAKIT_TEST_POSTGRES_DB="postgres"'
+    echo 'export DBDATAKIT_TEST_POSTGRES_PASSWORD="$(cat /root/.postgres_password)"'
     if [ -s "$MSSQL_PW_FILE" ]; then
       echo 'export DBDATAKIT_TEST_SQLSERVER="Server=localhost,1433;User Id=sa;Password=$(cat /root/.mssql_sa_password);TrustServerCertificate=True;Encrypt=False"'
+      # The canonical names testenv.sh would print (testenv/testenv.sh header), so Sync's and Gateway's suites find the engines without testenv.
+      echo 'export DBDATAKIT_TEST_MSSQL="$DBDATAKIT_TEST_SQLSERVER"'
+      echo 'export DBDATAKIT_TEST_MSSQL_SERVER="localhost,1433"'
+      echo 'export DBDATAKIT_TEST_MSSQL_USER="sa"'
+      echo 'export DBDATAKIT_TEST_MSSQL_PASSWORD="$(cat /root/.mssql_sa_password)"'
+      echo 'export DBDATAKIT_TEST_MSSQL_ODBC="Driver={ODBC Driver 18 for SQL Server};Server=localhost,1433;UID=sa;PWD=$(cat /root/.mssql_sa_password);TrustServerCertificate=Yes"'
     fi
   } >> "$CLAUDE_ENV_FILE"
 fi
@@ -60,7 +68,7 @@ fi
 cat <<'NOTE'
 Test engines in this cloud session are preconfigured, not started by testenv:
 - SQL Server 2025 runs in the Docker container "mssql" on localhost,1433; PostgreSQL 16 with the pgvector package runs on the machine on localhost:5432.
-- DBDATAKIT_TEST_SQLSERVER and DBDATAKIT_TEST_POSTGRES already point at them. The pgvector extension is available but is not created in any database until a test or CREATE EXTENSION vector does it.
+- DBDATAKIT_TEST_SQLSERVER, DBDATAKIT_TEST_POSTGRES and the canonical DBDATAKIT_TEST_MSSQL* / DBDATAKIT_TEST_POSTGRES_* names already point at them. The pgvector extension is available but is not created in any database until a test or CREATE EXTENSION vector does it.
 - Do NOT run `testenv/testenv.sh up mssql postgres` or `up` with no engine named, and do not eval `testenv/testenv.sh env` while mssql or postgres is among the running profiles: the testenv ports (14330, 15432) and Postgres 17 differ, and it would replace these variables.
 - The other engines (mssql-target, postgres-logical, mysql, mariadb, oracle, ...) may still be started by name with testenv, for example `testenv/testenv.sh up mysql mariadb`; the Docker daemon is already running.
 NOTE
