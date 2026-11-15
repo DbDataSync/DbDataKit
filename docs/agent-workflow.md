@@ -76,6 +76,15 @@ while it waits for CI to be idle:
 - The test host of an xunit v3 project may not start (`MSB1001`, handshake failures): run the built test executable (`-class`, `-method`).
 - Playwright for the console only needs the console server: the recipe is the `docs/ci-lessons.md` row "run a console-only spec locally".
 
+## Pacing against a usage limit (2026-11-15)
+
+When the owner's plan has a usage window (for example a 5-hour limit), the coordinator paces the agents against it:
+
+- Run agents in the background and ask the owner for the usage reading now and then; measure the rate (a fresh agent used about 0.8% of a 5-hour window a minute; an agent with a very large context about twice that).
+- Prefer a **fresh agent** with a complete brief over resuming one whose context is huge: it is cheaper per step. The brief carries everything (the rules, the decisions, the order of work, the push rule) because the agent starts cold.
+- Schedule a **wind-down** message before the limit (leave about 10% for the wind-down and the report): the agent stops at a clean point, commits what passes, backs up the rest (`scripts/backup_branches.py push`), deletes its build output and reports. Schedule the **resume** just after the window resets.
+- After each report: check CI on `main`, land what is only on a backup branch when CI is idle, remove the agent's worktree, pass the owner's decisions on, and record each decision in its plan row in the same commit as the work or right after.
+
 ## Brief template for an agent
 
 > You work in the DbDataKit monorepo (read `CLAUDE.md`, `docs/ci-lessons.md`, the plan rows named, `docs/testing-environment.md` end section). Your worktree starts from `main`
