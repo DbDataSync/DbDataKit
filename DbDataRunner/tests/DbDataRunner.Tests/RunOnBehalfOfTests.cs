@@ -29,6 +29,23 @@ public sealed class RunOnBehalfOfTests
     }
 
     [Fact]
+    public async Task A_run_of_a_named_version_is_queued_for_a_version_the_runner_holds_and_refused_for_one_it_does_not()
+    {
+        // plan 28c E21, step e: the route takes `version` (a staged version's manual task); the scheduler's own test covers a version that is not served
+        await using var h = new RunnerHarness(StateEngineIds.Sqlite);
+        var version = h.Install(SamplePackage.Task("ok")).Version.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        await h.StartAsync();
+
+        var (accepted, body) = await h.PostAsync("/api/v1/tasks/sample/dev/ok/run", ServerRole.Operator, new { version, on_behalf_of = "Ada via Workspace" });
+        Assert.Equal(HttpStatusCode.Accepted, accepted);
+        Assert.Equal(version, (string?)body!["version"]);
+        Assert.Contains($"\"version\":\"{version}\"", Assert.Single(h.Audit.Read(new AuditQuery(Verb: RunnerControl.RunVerb, Limit: 20))).Entry.Detail, StringComparison.Ordinal);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await h.PostAsync("/api/v1/tasks/sample/dev/ok/run", ServerRole.Operator, new { version = "999" })).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await h.PostAsync("/api/v1/tasks/sample/dev/ok/run", ServerRole.Operator, new { version = 3 })).Status);
+    }
+
+    [Fact]
     public void The_name_a_run_records_is_the_person_with_the_caller_beside_them_and_the_caller_alone_without_one()
     {
         var caller = new RunnerActor("client-1", "Build server", "api", "client-1");

@@ -339,7 +339,7 @@ public sealed partial class RunnerScheduler
 
     /// <summary>Puts one item of the task on the queue, or returns null when an earlier one is queued or running and the task does not allow overlap.</summary>
     private Guid? TryEnqueue(Served task, string trigger, IReadOnlyDictionary<string, string>? inputs, string? requestedBy,
-        string? part = null, int triggerDepth = 0, string? triggerSource = null, Action<System.Data.Common.DbConnection, System.Data.Common.DbTransaction, Guid>? alsoWrite = null)
+        string? part = null, int triggerDepth = 0, string? triggerSource = null, Action<System.Data.Common.DbConnection, System.Data.Common.DbTransaction, Guid>? alsoWrite = null, bool pinned = false)
     {
         var payload = new WorkPayload
         {
@@ -351,6 +351,7 @@ public sealed partial class RunnerScheduler
             RequestedBy = requestedBy,
             TriggerDepth = triggerDepth,
             TriggerSource = triggerSource,
+            Pinned = pinned ? true : null,
         };
         var concurrency = task.Limits.Concurrency;
         try
@@ -378,9 +379,13 @@ public sealed partial class RunnerScheduler
         // routing (plan 28 question 7): an item is claimed only by a runner that has every label its task requires; the others stay Pending
         var mine = MyLabels();
         // an activation waits for the runs of these packages: nothing of them starts until it has moved the version (plan 30 section 3.5)
+        // a package with a run of a named version waiting is claimed from too, though no version of it is served (a staged first version)
+        if (!_pinnedOwners.IsEmpty) owners = [.. owners.Concat(_pinnedOwners.Keys).Distinct(StringComparer.Ordinal)];
         var held = _holds.Held(DefinitionVersionSource.Kind).Select(h => $"{h.Name}/{h.Channel}").ToHashSet(StringComparer.Ordinal);
         if (held.Count > 0) owners = [.. owners.Where(o => !held.Contains(o))];
         var skip = owners.ToDictionary(o => o, o => (IReadOnlyCollection<string>)served.Where(t => OwnerOf(t.Ref) == o && !RoutingCheck.Serves(t.Row.RequiredLabels, mine)).Select(t => t.Ref.Task).ToList(), StringComparer.Ordinal);
+        foreach (var owner in _pinnedOwners.Keys)
+            if (_queue.ListInFlight(owner).Count == 0) _pinnedOwners.TryRemove(owner, out _);
         var claimed = 0;
         var progress = true;
         while (progress && _running.Count < _options.MaxConcurrentRuns && !_stop.IsCancellationRequested)
@@ -457,21 +462,23 @@ public sealed partial class RunnerScheduler
             return;
         }
 
-        var row = _projections.Get(taskRef.Package, taskRef.Channel, taskRef.Task);
-        if (row is null)
+        // a run of a named version (a staged one) keeps it and needs no projection row (plan 28c E21, step e)
+        var pinned = payload.Pinned == true;
+        var row = pinned ? null : _projections.Get(taskRef.Package, taskRef.Channel, taskRef.Task);
+        if (row is null && !pinned)
         {
             Drop(item, $"{taskRef} is no longer in the projection.");
             return;
         }
 
-        if (!ParseOrProblem(row, out _, out var rowProblem))
+        if (row is not null && !ParseOrProblem(row, out _, out var rowProblem))
         {
             Drop(item, $"{taskRef}'s projection row cannot be read: {rowProblem}");
             return;
         }
 
-        // an attempt that never started follows the active version; one that started keeps its own (DR8)
-        var version = payload.Started ? payload.Version : row.Version;
+        // an attempt that never started follows the active version; one that started keeps its own (DR8), and so does a run of a named version
+        var version = payload.Started || pinned ? payload.Version : row!.Version;
 
         // an earlier run left a record under this item's run id: a loop died (or stopped) on it. This run gets a record of its own, one attempt later, on the same chain.
         var earlierRunId = item.RunId;
@@ -837,6 +844,32 @@ public sealed partial class RunnerScheduler
         // a dry run (plan 27a IX16) is a manual run whose inputs carry the reserved word; the task process takes it out again before the job's input is bound
         if (dryRun) inputs = new Dictionary<string, string>(inputs ?? new Dictionary<string, string>(), StringComparer.Ordinal) { [RunnerProtocol.DryRunInput] = "true" };
         return TryEnqueue(served, WorkPayload.ManualTrigger, inputs, requestedBy);
+    }
+
+    /// <summary>The packages (owner <c>package/channel</c>) with a run of a named version on the queue, which this loop claims from though it may serve no version of them.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _pinnedOwners = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// A manual run of a version that is stored but not served, such as a staged one (plan 28c E21, step e: a person applies a draft's database setup before it is published). Only a manual-only task can be run this way (no schedule and no
+    /// trigger: a version that is not served starts nothing of its own), and only a version the channel holds; the run keeps that version (<see cref="WorkPayload.Pinned"/>) and runs with the channel's bindings as any run does.
+    /// Returns the run id, or null when a run of the task is queued or running already. Throws <see cref="InvalidOperationException"/> naming what is missing.
+    /// </summary>
+    public async Task<Guid?> RunVersionAsync(TaskRef task, string version, IReadOnlyDictionary<string, string>? inputs = null, string? requestedBy = null, bool dryRun = false, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+        if (!_options.Channels.Contains(task.Channel)) throw new InvalidOperationException($"This scheduler serves the channels {string.Join(", ", _options.Channels)}, not '{task.Channel}'.");
+        if (_options.Packages is not null && !_options.Packages.Contains(task.Package)) throw new InvalidOperationException($"This scheduler does not serve the package '{task.Package}'.");
+        var content = await _versions.GetAsync(task.Package, version, task.Channel, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"The version {version} of '{task.Package}' is not available on channel '{task.Channel}'.");
+        var row = ProjectionDocuments.RowsOf(content.Manifest, version).FirstOrDefault(r => r.Task == task.Task)
+            ?? throw new InvalidOperationException($"The version {version} of '{task.Package}' has no task '{task.Task}'.");
+        var projection = new TaskProjection(task.Package, task.Channel, task.Task, version, row.Schedule, row.Triggers, row.Limits, row.RequiredLabels, row.ProgressHash, _time.GetUtcNow());
+        if (!ParseOrProblem(projection, out var served, out var problem)) throw new InvalidOperationException($"{task} of version {version} cannot be read: {problem}");
+        if (served!.Schedule.HasSchedule || ProjectionDocuments.ParseTriggers(row.Triggers).Count > 0)
+            throw new InvalidOperationException($"{task} of version {version} has a schedule or a trigger: only a manual-only task is run from a version that is not served.");
+        if (dryRun) inputs = new Dictionary<string, string>(inputs ?? new Dictionary<string, string>(), StringComparer.Ordinal) { [RunnerProtocol.DryRunInput] = "true" };
+        _pinnedOwners[OwnerOf(task)] = 0;
+        return TryEnqueue(served, WorkPayload.ManualTrigger, inputs, requestedBy, pinned: true);
     }
 
     /// <summary>

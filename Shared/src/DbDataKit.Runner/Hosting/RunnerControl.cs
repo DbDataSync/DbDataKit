@@ -86,6 +86,20 @@ public sealed class RunnerControl
         return new RunNowResult(runId is not null, runId);
     }
 
+    /// <summary>
+    /// Queues a manual run of a version the channel holds but does not serve, such as a staged one (plan 28c E21, step e); a manual-only task only. Audited as <c>runner.task.run</c> with the version. Throws <see cref="UnknownTaskException"/>
+    /// when the version or the task is not there, or the task has a schedule or a trigger.
+    /// </summary>
+    public async Task<RunNowResult> RunVersionAsync(TaskRef task, string version, IReadOnlyDictionary<string, string>? inputs, RunnerActor actor, bool dryRun = false, string? onBehalfOf = null, CancellationToken ct = default)
+    {
+        var requestedBy = RequestedBy(actor, onBehalfOf);
+        Guid? runId;
+        try { runId = await _scheduler.RunVersionAsync(task, version, inputs, requestedBy, dryRun, ct).ConfigureAwait(false); }
+        catch (InvalidOperationException ex) { throw new UnknownTaskException(ex.Message); }
+        Record(RunVerb, task, actor, new { run_id = runId, queued = runId is not null, version, dry_run = dryRun, inputs = inputs?.Keys.Order(StringComparer.Ordinal).ToArray() ?? [], on_behalf_of = onBehalfOf });
+        return new RunNowResult(runId is not null, runId);
+    }
+
     /// <summary>The longest name of a person a caller may start a run for.</summary>
     public const int MaxOnBehalfOf = 200;
 

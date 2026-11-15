@@ -41,6 +41,12 @@ public sealed record WorkPayload
     /// <summary>True once a loop began an attempt on <see cref="Version"/>: from then on the version is not replaced.</summary>
     public bool Started { get; init; }
 
+    /// <summary>
+    /// A manual run of a named version (plan 28c E21, step e: a staged version's manual task, run before it is served): the run keeps <see cref="Version"/> even before it starts, where any other item follows the active version,
+    /// and it needs no row of the projection. Null (left out of the stored payload) for every other item.
+    /// </summary>
+    public bool? Pinned { get; init; }
+
     /// <summary>What queued the item: <see cref="ScheduleTrigger"/> or <see cref="ManualTrigger"/> (R13 adds more).</summary>
     public string Trigger { get; init; } = ScheduleTrigger;
 

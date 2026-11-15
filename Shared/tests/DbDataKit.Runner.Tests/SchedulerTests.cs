@@ -399,6 +399,32 @@ public sealed class SchedulerTests
     }
 
     [Theory, MemberData(nameof(Engines))]
+    public async Task A_manual_task_of_a_version_not_served_runs_that_version_and_a_scheduled_one_is_refused(string engine)
+    {
+        // plan 28c E21, step e: a staged version's manual task (a draft's database setup) runs before the version is served, and keeps its version when another one is activated meanwhile
+        using var h = new SchedulerHarness(engine);
+        var manifest = Manifest(Package, Def("provision"), Def("drain", Schedule.Interval(TimeSpan.FromHours(1))));
+        h.Versions.Add(Package, "3", manifest);                           // stored, not served: no projection row
+        var runner = new FakeRunner(h.Database);
+        var scheduler = h.NewScheduler(runner);
+        var provision = new TaskRef(Package, Channel, "provision");
+
+        var id = await scheduler.RunVersionAsync(provision, "3", new Dictionary<string, string> { ["replication"] = "orders" }, "Ada (sent by Workspace)");
+        Assert.NotNull(id);
+        Assert.Null(await scheduler.RunVersionAsync(provision, "3"));      // one at a time, as any run of the task
+        await Assert.ThrowsAsync<InvalidOperationException>(() => scheduler.RunVersionAsync(new TaskRef(Package, Channel, "drain"), "3"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => scheduler.RunVersionAsync(provision, "4"));
+        h.Activate(manifest, "2");                                         // another version is served before the item is claimed
+        await Tick(scheduler);
+        await Tick(scheduler);
+
+        var request = Assert.Single(runner.Requests, r => r.RunId == id);
+        Assert.Equal("3", request.PackageVersion);
+        Assert.Equal("orders", request.Inputs["replication"]);
+        Assert.Equal("Ada (sent by Workspace)", request.RequestedBy);
+    }
+
+    [Theory, MemberData(nameof(Engines))]
     public async Task A_task_whose_version_is_missing_fails_the_run_with_a_record_and_does_not_retry(string engine)
     {
         using var h = new SchedulerHarness(engine);

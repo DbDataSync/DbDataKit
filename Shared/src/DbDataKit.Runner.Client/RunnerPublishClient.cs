@@ -398,11 +398,22 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
     /// Queues a run of the task now for a person the caller signed in (<paramref name="onBehalfOf"/>, such as "Ada via Main console"): the run's record names the person with this client beside them, and a task that writes under a
     /// person's name (Build's apply, acknowledge and seed) writes theirs (plan 28c E21).
     /// </summary>
-    public async Task<string?> RunNowAsync(string server, string? code, string package, string channel, string task, IReadOnlyDictionary<string, string>? inputs, string? onBehalfOf, Action<string>? log = null, CancellationToken ct = default)
+    public Task<string?> RunNowAsync(string server, string? code, string package, string channel, string task, IReadOnlyDictionary<string, string>? inputs, string? onBehalfOf, Action<string>? log = null, CancellationToken ct = default) =>
+        QueueRunAsync(server, code, package, channel, task, null, inputs, onBehalfOf, log, ct);
+
+    /// <summary>
+    /// Queues a run of a manual-only task of <paramref name="version"/>, a version the runner holds but need not serve, such as a staged one (plan 28c E21, step e: a draft's database setup applied before it is published). Null when a
+    /// run of the task is queued or running already; a version or task the runner does not have, or a task with a schedule, is a refusal naming it.
+    /// </summary>
+    public Task<string?> RunVersionAsync(string server, string? code, string package, string channel, string task, string version, IReadOnlyDictionary<string, string>? inputs, string? onBehalfOf, Action<string>? log = null, CancellationToken ct = default) =>
+        QueueRunAsync(server, code, package, channel, task, version, inputs, onBehalfOf, log, ct);
+
+    private async Task<string?> QueueRunAsync(string server, string? code, string package, string channel, string task, string? version, IReadOnlyDictionary<string, string>? inputs, string? onBehalfOf, Action<string>? log, CancellationToken ct)
     {
         using var link = await OpenAsync(server, code, log, ct);
         var body = new JsonObject();
         if (!string.IsNullOrWhiteSpace(onBehalfOf)) body["on_behalf_of"] = onBehalfOf;
+        if (version is not null) body["version"] = version;
         if (inputs is { Count: > 0 })
         {
             var map = new JsonObject();

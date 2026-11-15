@@ -328,6 +328,7 @@ public static class RunnerApi
             var inputs = new Dictionary<string, string>(StringComparer.Ordinal);
             var dryRun = false;
             string? onBehalfOf = null;
+            string? version = null;
             if (context.Request.ContentLength is null or > 0)
             {
                 // a body is optional; a client may send it without a length (chunked), so it is read, not asked about
@@ -352,6 +353,13 @@ public static class RunnerApi
                             return Results.BadRequest(new { error = $"on_behalf_of is the name of a person, text of at most {RunnerControl.MaxOnBehalfOf} characters." });
                     }
 
+                    // a version the channel holds but does not serve, such as a staged one (plan 28c E21, step e): its manual-only task is run before it is served
+                    if (body["version"] is { } named)
+                    {
+                        if (named is not JsonValue versionValue || !versionValue.TryGetValue<string>(out version) || version.Length is 0 or > 64)
+                            return Results.BadRequest(new { error = "version is the text of a version of the package, at most 64 characters." });
+                    }
+
                     if (body["inputs"] is { } given)
                     {
                         if (given is not JsonObject map) return Results.BadRequest(new { error = "inputs is an object of names and text values." });
@@ -359,6 +367,17 @@ public static class RunnerApi
                             inputs[name] = value is JsonValue v && v.TryGetValue<string>(out var valueText) ? valueText : value?.ToJsonString() ?? "";
                     }
                 }
+            }
+
+            if (version is not null)
+            {
+                if (engine().Control is not { } staged) return Results.Json(new { error = "The runner is starting; try again in a moment." }, statusCode: StatusCodes.Status503ServiceUnavailable);
+                RunNowResult ran;
+                try { ran = await staged.RunVersionAsync(reference!, version, inputs, ActorOf(context), dryRun, onBehalfOf, context.RequestAborted); }
+                catch (UnknownTaskException ex) { return Results.NotFound(new { error = ex.Message }); }
+                return ran.Queued
+                    ? Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["version"] = version, ["run_id"] = ran.RunId!.Value.ToString() }, statusCode: StatusCodes.Status202Accepted)
+                    : Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["queued"] = false, ["error"] = $"{reference} is queued or running already." }, statusCode: StatusCodes.Status409Conflict);
             }
 
             return Control(engine(), control =>
