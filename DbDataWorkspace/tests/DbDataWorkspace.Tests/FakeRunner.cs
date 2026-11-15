@@ -30,6 +30,8 @@ internal sealed class FakeRunner : IAsyncDisposable
     public ConcurrentQueue<JsonObject> Bindings { get; } = new();
     public ConcurrentQueue<int> UploadsPerPublish { get; } = new();
     public string? RefuseWith { get; set; }
+    public ConcurrentQueue<JsonObject> Runs { get; } = new();
+    public DateTimeOffset RunStarted { get; } = DateTimeOffset.UtcNow.AddMinutes(-1);
 
     private readonly Dictionary<string, List<string>> signatures = new();
     private int uploadedSincePublish;
@@ -87,6 +89,30 @@ internal sealed class FakeRunner : IAsyncDisposable
             runner.Bindings.Enqueue(body);
             return Results.Json(new { name, channel, bindings = Array.Empty<object>() });
         }));
+        // a manual run of a version (plan 28c E21, step e): kept, answered with a run that succeeded at once and one step that names the run's inputs
+        app.MapPost("api/v1/tasks/{package}/{channel}/{task}/run", async (string package, string channel, string task, HttpContext context) =>
+        {
+            var token = context.ManagementToken();
+            runner.Calls.Enqueue($"{context.Request.Method} {context.Request.Path} as {token.SubjectId} ({token.SubjectName}) with {string.Join("+", ServerRoles.Names(token.Roles))}");
+            if (!ManagementAuthorization.Authorize(token, ServerRole.Operator).Allowed) return Results.Json(new { error = "This needs the operator role." }, statusCode: 403);
+            var body = (await System.Text.Json.JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body))!;
+            body["task"] = $"{package}/{channel}/{task}";
+            var id = Guid.NewGuid();
+            body["run_id"] = id.ToString("D");
+            runner.Runs.Enqueue(body);
+            return Results.Json(new { task = body["task"]!.ToString(), version = (string?)body["version"], run_id = id.ToString("D") }, statusCode: 202);
+        });
+        app.MapGet("api/v1/runs/{id:guid}", (Guid id, HttpContext context) =>
+        {
+            if (runner.Runs.FirstOrDefault(r => (string)r["run_id"]! == id.ToString("D")) is not { } run) return Results.NotFound(new { error = "no such run" });
+            return Results.Json(new { id = id.ToString("D"), task = ((string)run["task"]!).Split('/')[2], attempt = 1, outcome = "succeeded", started = runner.RunStarted.ToString("O"), finished = runner.RunStarted.AddSeconds(5).ToString("O"), package_version = (string?)run["version"] });
+        });
+        app.MapGet("api/v1/tasks/{package}/{channel}/{task}/steps/{step}", (string package, string channel, string task, string step, HttpContext context) =>
+            Results.Json(new { steps = new object[]
+            {
+                new { key = "orders", started = runner.RunStarted.AddSeconds(1).ToString("O"), completed = runner.RunStarted.AddSeconds(2).ToString("O"), result = new { step, steps = new[] { new { id = "create-orders", succeeded = true } } } },
+                new { key = "older", started = runner.RunStarted.AddDays(-1).ToString("O"), completed = runner.RunStarted.AddDays(-1).ToString("O"), result = new { step, steps = Array.Empty<object>() } },
+            } }));
         await app.StartAsync();
         runner.Url = new Uri(app.Urls.First().Replace("[::1]", "127.0.0.1"));
         return runner;

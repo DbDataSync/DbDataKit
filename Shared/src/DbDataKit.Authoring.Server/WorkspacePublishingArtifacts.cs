@@ -64,6 +64,60 @@ public sealed partial class WorkspacePublishing
         }
     }
 
+    /// <summary>
+    /// Runs the manual-only task <paramref name="task"/> of a version a build staged on a Runner (plan 28c E21, step e: a draft's database setup applied before it is published): the version is held by the Runner and not served, so no schedule
+    /// starts; the run is recorded for <paramref name="actor"/>, the person, with the publisher key's client beside them, and runs with the logins bound on the Runner's channel, never one of this server. The pairing must allow the operator
+    /// role (a run is an operator's act on a Runner); a Runner that refuses says so in its words.
+    /// </summary>
+    public async Task<JsonObject> RunStagedTaskAsync(string targetName, string package, string channel, string version, string task, IReadOnlyDictionary<string, string>? inputs, string actor, Action<string> step, CancellationToken ct = default)
+    {
+        var (target, client) = await RunnerClientAsync(targetName, actor, ct);
+        try
+        {
+            var runId = await client.RunVersionAsync(target.Name, null, package, channel, task, version, inputs, actor, step, ct)
+                ?? throw new WorkspacePublishException($"{package}/{channel}/{task} is queued or running already on {target.Name}; wait for that run to end.", 409);
+            step($"Started {task} of {package} version {version} on {channel}: run {runId}.");
+            return new JsonObject { ["run_id"] = runId, ["task"] = task, ["package"] = package, ["channel"] = channel, ["version"] = version, ["target"] = target.Name, ["runner"] = target.Url, ["on_behalf_of"] = actor };
+        }
+        catch (RunnerClientException ex) { throw Refused(ex); }
+    }
+
+    /// <summary>A run on the Runner of <paramref name="targetName"/> by its id, with the steps named <paramref name="stepName"/> of its task recorded while it ran (their results as JSON); null when the Runner has no such run.</summary>
+    public async Task<JsonObject?> RunOfAsync(string targetName, string package, string channel, Guid runId, string? stepName, string actor, CancellationToken ct = default)
+    {
+        var (target, client) = await RunnerClientAsync(targetName, actor, ct);
+        try
+        {
+            if (await client.RunAsync(target.Name, null, runId, null, ct) is not { } run) return null;
+            var answer = new JsonObject
+            {
+                ["id"] = run.Id, ["task"] = run.Task, ["outcome"] = run.Outcome, ["started"] = run.Started, ["finished"] = run.Finished, ["version"] = run.PackageVersion,
+                ["failure"] = run.FailureMessage is null ? null : new JsonObject { ["kind"] = run.FailureKind, ["message"] = run.FailureMessage },
+            };
+            if (stepName is not null)
+            {
+                // a step is keyed by what it is about, not by the run: the steps of this run are those that started while it ran
+                var steps = await client.StepsAsync(target.Name, null, package, channel, run.Task, stepName, 20, null, null, null, ct);
+                answer["steps"] = new JsonArray([.. steps.Where(s => s.Started >= run.Started && (run.Finished is null || s.Started <= run.Finished)).OrderBy(s => s.Started)
+                    .Select(s => (JsonNode?)new JsonObject { ["key"] = s.Key, ["started"] = s.Started, ["completed"] = s.Completed, ["result"] = s.Result is null ? null : JsonNode.Parse(s.Result) })]);
+            }
+            return answer;
+        }
+        catch (RunnerClientException ex) { throw Refused(ex); }
+    }
+
+    private async Task<(PublishTarget Target, RunnerPublishClient Client)> RunnerClientAsync(string targetName, string actor, CancellationToken ct)
+    {
+        var (target, key, _) = ResolveTarget(targetName, "a run of a task");
+        if (target.Product != PublishProducts.Runner) throw new WorkspacePublishException($"'{targetName}' is a {target.Product} ({target.Url}), not a Runner; only a Runner runs a task.", 409);
+        var identity = await KeyAsync(targetName, key.SecretRef, ct);
+        var runner = new PairedRunner(target.Name, target.Url, target.InstanceId, target.Fingerprint, target.Roles, target.PairedAt);
+        return (target, RunnerPublishClient.ForKey(runner, identity, "client:" + identity.Id, actor));
+    }
+
+    private static WorkspacePublishException Refused(RunnerClientException ex) =>
+        new(ex.Message, ex.Message.Contains("could not be reached", StringComparison.Ordinal) ? 502 : ex.Message.Contains("(403)", StringComparison.Ordinal) ? 403 : ex.Message.Contains("(404)", StringComparison.Ordinal) ? 404 : 409);
+
     /// <summary>The paired Gateway as the shared publish API's caller reaches it (plan 33 SW01): requests relative to <c>/api/v1/</c> over the pinned channel, each with a fresh token naming the publisher key's client, the target's client name and the role the pairing allows.</summary>
     private sealed class GatewayLink(PublishTarget target, ConsoleIdentity identity, ServerRole role, HttpClient http) : DbDataKit.State.IDefinitionsLink
     {

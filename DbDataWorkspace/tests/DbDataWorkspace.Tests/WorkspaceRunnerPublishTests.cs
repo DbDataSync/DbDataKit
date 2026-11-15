@@ -77,6 +77,61 @@ public sealed class WorkspaceRunnerPublishTests
     }
 
     [Fact]
+    public async Task The_manual_task_of_a_staged_draft_runs_on_the_runner_for_the_person_and_its_run_is_read_back()
+    {
+        // plan 28c E21, step e: a draft's database setup is applied before the set is published, as the task provision of the version the build staged
+        await using var runner = await FakeRunner.StartAsync();
+        await using var server = await WorkspaceHarness.StartAsync(syncExecutable: Fake());
+        await Pair(server, "jobs", runner.Url, runner.NewCode(ServerRole.Publisher | ServerRole.Operator));
+        var (workspace, build) = await BuildAsync(server);
+        var run = $"/api/v1/projects/{Project}/workspaces/{workspace}/builds/{build}/run";
+        var body = new JsonObject { ["task"] = "provision", ["inputs"] = new JsonObject { ["replication"] = "orders", ["mapping"] = "orders", ["action"] = "create" } };
+
+        // nothing staged yet: said, and nothing reaches the runner
+        var early = await server.Send("grace", ServerRole.Approver, HttpMethod.Post, run, body.ToJsonString());
+        Assert.Equal(HttpStatusCode.Conflict, early.Response.StatusCode);
+        Assert.Contains("has not been staged on a Runner", (string)early.Body!["error"]!);
+        Assert.Empty(runner.Runs);
+
+        Assert.Equal(HttpStatusCode.OK, (await Publish(server, workspace, build, new JsonObject { ["target"] = "jobs", ["channel"] = "prod" })).Response.StatusCode);
+        // an author may not run it; a body without a task is refused in words
+        Assert.Equal(HttpStatusCode.Forbidden, (await server.AsAda(HttpMethod.Post, run, body.ToJsonString())).Response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await server.Send("grace", ServerRole.Approver, HttpMethod.Post, run, """{"inputs":{}}""")).Response.StatusCode);
+
+        var started = await server.Send("grace", ServerRole.Approver, HttpMethod.Post, run, body.ToJsonString());
+        Assert.Equal(HttpStatusCode.Accepted, started.Response.StatusCode);
+        var sent = Assert.Single(runner.Runs);
+        // the staged version, the person on whose behalf, the inputs as given
+        Assert.Equal(("orders-set/prod/provision", "1", "grace"), ((string)sent["task"]!, (string)sent["version"]!, (string)sent["on_behalf_of"]!));
+        Assert.Equal("create", (string)sent["inputs"]!["action"]!);
+        var runId = (string)started.Body!["run"]!["run_id"]!;
+        Assert.Equal(runId, (string)sent["run_id"]!);
+        Assert.Contains(server.Audit(), a => a.Command == "build.run" && a.Outcome == "queued " + runId);
+
+        var read = await server.AsAda(HttpMethod.Get, $"/api/v1/projects/{Project}/workspaces/{workspace}/builds/{build}/runs/{runId}?step=provision-applied");
+        Assert.Equal(HttpStatusCode.OK, read.Response.StatusCode);
+        Assert.Equal(("succeeded", "1"), ((string)read.Body!["run"]!["outcome"]!, (string)read.Body["run"]!["version"]!));
+        // only the step recorded while this run ran
+        var step = Assert.Single(read.Body["run"]!["steps"]!.AsArray());
+        Assert.Equal("create-orders", (string)step!["result"]!["steps"]![0]!["id"]!);
+        Assert.Equal(HttpStatusCode.NotFound, (await server.AsAda(HttpMethod.Get, $"/api/v1/projects/{Project}/workspaces/{workspace}/builds/{build}/runs/{Guid.NewGuid()}")).Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_runner_paired_without_the_operator_role_refuses_the_run_in_its_words()
+    {
+        await using var runner = await FakeRunner.StartAsync();
+        await using var server = await WorkspaceHarness.StartAsync(syncExecutable: Fake());
+        await Pair(server, "jobs", runner.Url, runner.NewCode());
+        var (workspace, build) = await BuildAsync(server);
+        Assert.Equal(HttpStatusCode.OK, (await Publish(server, workspace, build, new JsonObject { ["target"] = "jobs", ["channel"] = "prod" })).Response.StatusCode);
+        var refused = await server.Send("grace", ServerRole.Approver, HttpMethod.Post, $"/api/v1/projects/{Project}/workspaces/{workspace}/builds/{build}/run", """{"task":"provision"}""");
+        Assert.Equal(HttpStatusCode.Forbidden, refused.Response.StatusCode);
+        Assert.Contains("operator role", (string)refused.Body!["error"]!);
+        Assert.Contains(server.Audit(), a => a.Command == "build.run" && a.Outcome!.StartsWith("refused:", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Publishing_the_same_set_again_sends_no_file_and_a_changed_mapping_stages_one_new_version_with_one_file()
     {
         await using var runner = await FakeRunner.StartAsync();
