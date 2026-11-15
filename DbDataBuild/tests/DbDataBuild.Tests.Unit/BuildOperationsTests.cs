@@ -47,7 +47,7 @@ public sealed class BuildOperationsTests : IDisposable
     }
 
     [Fact]
-    public void The_operations_package_has_three_manual_only_tasks_every_connection_as_a_slot_and_the_sources_but_no_plan_and_no_compiled_file()
+    public void The_operations_package_has_three_manual_only_tasks_the_used_connections_as_slots_and_the_sources_but_no_plan_and_no_compiled_file()
     {
         var built = Built();
         Assert.Equal(["apply_plan", "ack", "seed"], built.Manifest.Tasks.Select(t => t.Name));
@@ -57,7 +57,8 @@ public sealed class BuildOperationsTests : IDisposable
             Assert.Equal([TriggerKind.Manual], t.Triggers.Select(x => x.Kind));
             Assert.Equal(1, t.Limits.Concurrency);
             Assert.Null(t.Limits.Attempts);                                          // a write is never repeated by the runner
-            Assert.NotEmpty(t.Connections);
+            // only what the project uses (owner, 2026-11-15): its models build on `sqlserver`, so the built-in `postgres` and `fabric` it never touches are no slot
+            Assert.Equal(["sqlserver"], t.Connections.Select(c => c.Name));
             Assert.All(t.Connections, c => Assert.Equal(SlotEnvironmentFormats.BuildLogin, c.Env));
         });
         Assert.All(built.Manifest.Tasks, t => Assert.DoesNotContain('-', t.Name));   // a refresh task is `connection-plan`: a plan is never taken for an operation

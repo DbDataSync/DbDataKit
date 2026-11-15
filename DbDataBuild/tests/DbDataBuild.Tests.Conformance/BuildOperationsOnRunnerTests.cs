@@ -37,14 +37,10 @@ public partial class ApplyConformanceTests
             await using var runner = await ProjectPublishOnRunnerTests.Runner.StartAsync(BuildRuntimePackage.Directory());
             Directory.CreateDirectory(Path.Combine(runner.Settings.Directory, "connections"));
             File.WriteAllText(Path.Combine(runner.Settings.Directory, "connections", "wh.yaml"), RunnerConnectionFile(name));
-            // the package has a slot for every connection the project knows (the built-in ones too): those this plan never writes are bound to connections with no login
-            string[] others = [.. new[] { "sqlserver", "postgres", "fabric" }.Where(s => s != name)];
-            foreach (var other in others) File.WriteAllText(Path.Combine(runner.Settings.Directory, "connections", $"unused_{other}.yaml"), $"schema: connection/1\nname: unused_{other}\nengine: {other}\naddress: {{ host: 127.0.0.1, port: 1, database: unused }}\n");
-
-            // the operations package, its slot (the project's connection) bound to the runner's `wh`
+            // the operations package has a slot only for the connections the project uses (owner, 2026-11-15), here the one it builds on, bound to the runner's `wh`
             var o = new StringWriter(); var e = new StringWriter();
             var exit = DbDataBuild.Cli.CliApp.Run(["project", "publish", "--to", "runner", "--operations", "--project", run.Dir, "--package", "orders-ops", "--client-dir", client, "--server", runner.Url, "--code", runner.Code(),
-                "--channel", "dev", "--bind", $"{name}=wh", .. others.SelectMany(x => new[] { "--bind", $"{x}=unused_{x}" }), "--format", "json"], o, e, environment: _ => null);
+                "--channel", "dev", "--bind", $"{name}=wh", "--format", "json"], o, e, environment: _ => null);
             Assert.True(exit == 0, o + "\n" + e);
             var version = System.Text.Json.Nodes.JsonNode.Parse(o.ToString())!["data"]!["version"]!.GetValue<int>();
             await runner.WaitActiveAsync("orders-ops", "dev", version);

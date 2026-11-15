@@ -8,7 +8,7 @@ namespace DbDataBuild.Cli.Runner;
 
 /// <summary>
 /// A project's person-driven writes as a definition package of their own (plan 28c E21): the tasks `apply_plan`, `ack` and `seed` of <see cref="BuildOperations"/>, every one manual-only (no schedule, no trigger but a person's
-/// hand) and holding a slot for every connection of the project, so the runner's binding of the channel is where the write login comes from. It is a package apart from the refresh package (<see cref="RunnerProject"/>)
+/// hand) and holding a slot for every connection the project uses (<see cref="UsedConnections"/>), so the runner's binding of the channel is where the write login comes from. It is a package apart from the refresh package (<see cref="RunnerProject"/>)
 /// because it carries what the refresh package leaves out on purpose: the project's sources (`models/`, `seeds/`, `macros/`, `hooks/`, `views/`), which `ack definition` and `seed` read; the refresh package holds only what was compiled.
 /// It holds no plan and no secret: a plan is kept in the tracking tables or travels as an input of the run.
 /// </summary>
@@ -35,7 +35,7 @@ internal static class OperationsPackage
         if (configDiagnostics.Any(d => d.Severity == Severity.Error)) { diagnostics.AddRange(configDiagnostics.Where(d => d.Severity == Severity.Error)); return null; }
 
         var slots = new List<ConnectionSlot>();
-        foreach (var name in config.Connections.Keys.Order(StringComparer.Ordinal))
+        foreach (var name in UsedConnections(root, config))
         {
             if (config.EngineOf(name) is not { Length: > 0 } engine) { diagnostics.Add(new Diagnostic(DiagnosticCatalog.InvalidValue, new($"connections/{name}.yaml", 0, 0), $"The connection `{name}` has no engine.")); continue; }
             if (!PackageManifestValidator.IdentifierRule.IsMatch(name)) { diagnostics.Add(new Diagnostic(DiagnosticCatalog.InvalidValue, new($"connections/{name}.yaml", 0, 0), $"The connection `{name}` is a slot of the package, and a slot's name is lower-case letters, digits and `_`, starting with a letter, at most 64.")); continue; }
@@ -43,7 +43,7 @@ internal static class OperationsPackage
         }
 
         if (slots.Count == 0 && diagnostics.Count == before)
-            diagnostics.Add(new Diagnostic(DiagnosticCatalog.InvalidValue, new(ProductInfo.ConfigFile, 0, 0), "The project has no connection, so there is nothing for an operation to write to."));
+            diagnostics.Add(new Diagnostic(DiagnosticCatalog.InvalidValue, new(ProductInfo.ConfigFile, 0, 0), "No model of the project builds on a connection, so there is nothing for an operation to write to."));
         if (diagnostics.Count > before) return null;
 
         var tasks = BuildOperations.All.Select(task => new PackageTask(task, new TaskEntry(), new Schedule(), [TaskTrigger.ByHand()], BuildOperations.InputsOf(task), slots, ProgressDeclaration.Empty,
@@ -60,6 +60,18 @@ internal static class OperationsPackage
         }
 
         return new BuiltPackage(package, manifest, text, Files(root), []);
+    }
+
+    /// <summary>
+    /// The connections the project actually uses (owner, 2026-11-15): the connections its models build on (a copy's origins too, and a mapped model's connections), and the tracking connection each of them keeps
+    /// its records on (an apply and an acknowledgement write there). Not every connection the project knows: the built-in `sqlserver`, `postgres` and `fabric` are a slot only when a model builds on them.
+    /// </summary>
+    internal static IReadOnlyList<string> UsedConnections(string root, ProjectConfig config)
+    {
+        var used = new SortedSet<string>(UpdateSelection.All.ConnectionsOf(ProjectContext.Load(root)), StringComparer.Ordinal);
+        foreach (var name in used.ToList())
+            if (config.TrackingOf(name).Target is { } tracking) used.Add(tracking.Connection);
+        return [.. used];
     }
 
     private static List<PackageFile> Files(string root)
