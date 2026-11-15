@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ProvisioningPlan } from '../api'
-import { ProvisioningPlanView, SyncProvisioningPanel, stateWord } from './SyncProvisioningPanel'
+import type { BuildDetail, ProvisioningPlan, StagedRun } from '../api'
+import { ProvisioningPlanView, SyncProvisioningPanel, followStagedRun, reportedSteps, stagedVersionOf, stateWord } from './SyncProvisioningPanel'
 
 const plan: ProvisioningPlan = {
   replication: 'orders', cache_generated_at: '2026-11-12T10:00:00Z', cache_server: 'prod-gateway',
@@ -54,5 +54,37 @@ describe('the provisioning plan of a Sync draft', () => {
     expect(html).toContain('data-testid="wsp-prov-run"')
     expect(html.match(/<option/g)).toHaveLength(2)
     expect(panel(['README.md'])).toContain('wsp-prov-no-replication')
+  })
+
+  it('offers Apply on the Runner only for a side that would change or is not known, never for one with nothing to do', () => {
+    const html = renderToStaticMarkup(<ProvisioningPlanView answer={{ ok: true, diagnostics: [], data: plan }} onApply={() => {}} />)
+    expect(html.match(/data-testid="wsp-prov-apply"/g)).toHaveLength(2)
+    const satisfied = { ...plan, mappings: [{ ...plan.mappings[0]!, source_plan: { ...plan.mappings[0]!.source_plan!, state: 'satisfied' as const }, target_plan: null }] }
+    expect(renderToStaticMarkup(<ProvisioningPlanView answer={{ ok: true, diagnostics: [], data: satisfied }} onApply={() => {}} />)).not.toContain('wsp-prov-apply')
+  })
+})
+
+const build = (id: string, publishes: BuildDetail['publishes']): BuildDetail => ({
+  build: { id, workspace: 'd', status: 'succeeded', commit: null, requested_by: 'ada', message: null, requested: '', started: null, finished: null }, result: null, publishes,
+})
+
+describe('applying a draft on the Runner (plan 28c E21, step e)', () => {
+  it('takes the version of the newest build whose publish to a Runner worked, never a failed publish or an app', () => {
+    expect(stagedVersionOf([build('b2', [{ at: '', by: 'g', target: 'jobs', ok: false, error: 'no' }]), build('b1', [
+      { at: '', by: 'g', target: 'jobs', ok: true, answer: { package: 'orders-set', channel: 'prod', version: 1 } },
+      { at: '', by: 'g', target: 'jobs', ok: true, answer: { package: 'orders-set', channel: 'prod', version: 2 } },
+    ])])).toEqual({ build: 'b1', target: 'jobs', package: 'orders-set', channel: 'prod', version: '2' })
+    expect(stagedVersionOf([build('b1', [{ at: '', by: 'g', target: 'edge', ok: true, answer: { app: 'orders', version: 3 } }])])).toBeNull()
+  })
+  it('follows the run to its end and reads the statements it reports', async () => {
+    const running: StagedRun = { id: 'r', task: 'provision', outcome: 'running', started: 's', finished: null, version: '2', failure: null }
+    const done: StagedRun = { ...running, outcome: 'failed', finished: 'f', failure: { kind: 'error', message: 'a step failed' }, steps: [{ key: 'orders', started: 's', completed: 'f', result: { steps: [{ title: 'Create the table', succeeded: false, error: 'denied' }] } }] }
+    const reads = [running, running, done]
+    const run = await followStagedRun(async () => reads.shift()!, 1, 10)
+    expect(run.outcome).toBe('failed')
+    expect(reportedSteps(run)).toEqual([{ title: 'Create the table', succeeded: false, error: 'denied' }])
+    let n = 0
+    expect((await followStagedRun(async () => { n++; return running }, 1, 3)).finished).toBeNull()
+    expect(n).toBe(3)
   })
 })
