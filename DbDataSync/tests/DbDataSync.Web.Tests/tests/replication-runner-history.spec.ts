@@ -34,6 +34,9 @@ test('a runner that does not answer is said in the history, which still lists th
   expect(made.ok(), await made.text()).toBe(true)
 
   // no runner is linked: the history is this server's own and says nothing of a runner
+  // asked first, so the screen below is not read before its answer arrived (a banner that came late would pass a count of zero)
+  const own = (await (await page.request.get(`/api/replications/${REPLICATION}/runs`)).json()) as { runnerUnavailable: string | null }
+  expect(own.runnerUnavailable).toBeNull()
   await page.goto(`/replications/${REPLICATION}/monitoring/history`)
   await expect(page.getByTestId('run-history-table')).toBeVisible()
   await expect(page.getByTestId('runner-history-unavailable')).toHaveCount(0)

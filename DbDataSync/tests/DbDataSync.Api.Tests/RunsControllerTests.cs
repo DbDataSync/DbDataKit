@@ -20,7 +20,7 @@ public sealed class RunsControllerTests(TestApiFactory factory) : IClassFixture<
 
     /// <summary>Deserialization target for the history endpoint's page shape since phase 104 — mirrors
     /// <c>DbDataSync.Api.Models.RunHistoryResponse</c> field for field.</summary>
-    private sealed record RunHistoryResponseDto(List<TaskRunRecord> Runs, string? NextCursor);
+    private sealed record RunHistoryResponseDto(List<TaskRunRecord> Runs, string? NextCursor, string? RunnerUnavailable = null);
 
     [Fact]
     public async Task Trigger_WhenReplicationDoesNotExist_Returns404()
@@ -107,6 +107,23 @@ public sealed class RunsControllerTests(TestApiFactory factory) : IClassFixture<
 
         Assert.Empty(page.Runs);
         Assert.Null(page.NextCursor);
+    }
+
+    /// <summary>With no runner linked nothing runs, so this server's own history is the whole of it and says nothing of a runner (plan 28c E22): no "runner could not be asked" warning on a history that is complete.</summary>
+    [Fact]
+    public async Task History_WithNoRunnerLinked_IsThisServersOwn_AndWarnsOfNoRunner()
+    {
+        var taskName = $"runs-hist-{Guid.NewGuid():N}";
+        var queue = factory.Services.GetRequiredService<WorkQueueStore>();
+        var runs = factory.Services.GetRequiredService<TaskRunStore>();
+        var runId = queue.Enqueue(taskName, RunKind.Primary, "orders");
+        runs.BeginRun(runId, pid: null);
+        runs.CompleteRun(runId, RunStatus.Succeeded, 1, 1, null);
+
+        var page = await GetHistoryAsync(taskName);
+
+        Assert.Equal(runId, Assert.Single(page.Runs).RunId);
+        Assert.Null(page.RunnerUnavailable);
     }
 
     /// <summary>
