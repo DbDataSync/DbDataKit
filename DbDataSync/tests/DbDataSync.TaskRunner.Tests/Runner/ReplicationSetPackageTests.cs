@@ -27,7 +27,7 @@ public sealed class ReplicationSetPackageTests : IDisposable
 
     public void Dispose() => GitTempDirectory.DeleteRecursively(_root);
 
-    private void Replication(string name, ScheduleMode mode, string? cron = null, int? frequency = null, bool cached = true, bool enabled = true)
+    private void Replication(string name, ScheduleMode mode, string? cron = null, int? frequency = null, bool cached = true, bool enabled = true, bool targetCached = true)
     {
         _config.SaveReplicationTask(new ReplicationTaskConfig
         {
@@ -48,7 +48,7 @@ public sealed class ReplicationSetPackageTests : IDisposable
                 Sources = [new SourceTableSpec { ConnectionName = "crm-src", Database = "App", Schema = "dbo", Table = $"T{i}" }],
                 Targets = [new TableSpec { ConnectionName = "dwh", Database = "dw", Schema = "public", Table = $"t{i}" }],
                 SourceColumns = cached ? [new CachedColumn("id", "bigint", false, true, false, 1)] : [],
-                TargetColumns = cached ? [new CachedColumn("id", "bigint", false, true, false, 1)] : [],
+                TargetColumns = cached && targetCached ? [new CachedColumn("id", "bigint", false, true, false, 1)] : [],
             }, Author);
     }
 
@@ -170,6 +170,21 @@ public sealed class ReplicationSetPackageTests : IDisposable
         Assert.Contains(problems, p => p.Contains("t1.yaml") && p.Contains("Table mapping 't1' has no cached source column metadata"));
         Assert.Contains(problems, p => p.Contains("returns") && p.Contains("t2.yaml"));
         Assert.DoesNotContain(problems, p => p.Contains("orders"));
+    }
+
+    /// <summary>Plan 28c E21, owner decision 2026-11-15 (option 1): a target table that does not exist yet has no column cache, and the set is published all the same; the drain refuses until the
+    /// table exists (<c>RunExecutorIntegrationTests.AMappingWithProvisioningOff_NeverCreatesTheTargetItInspectedFor</c>) and the set's <c>provision</c> task, which a person runs, creates it.</summary>
+    [Fact]
+    public void AMappingWhoseTargetTableIsNotCachedYetIsPublished_AndItsSetCarriesTheProvisionTask()
+    {
+        Replication("returns", ScheduleMode.Periodic, cron: "0 3 * * *", targetCached: false);
+
+        var built = Build(out var problems);
+
+        Assert.Empty(problems);
+        Assert.NotNull(built);
+        Assert.Contains(built.Manifest.Tasks, t => t.Name == ReplicationSetPackage.ProvisionTask);
+        Assert.Single(built.Replications, r => r.Replication == "returns");
     }
 
     [Fact]

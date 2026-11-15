@@ -25,7 +25,8 @@ public sealed record BuiltReplicationSet(string Name, PackageManifest Manifest, 
 /// engine's runtime (`dbdatasync-runtime`), the definition under <c>repo/</c> in the package (the <c>repo_dir</c> a drain reads), the schedule from <see cref="SchedulingConfig"/>, a connection slot for every connection the replication reads or writes,
 /// and the checkpoint of the drain declared as the manifest's progress. It compiles and contacts nothing: the problems a replication would meet at its first run are found here and named, so nothing is sent that cannot run.
 /// <list type="bullet">
-/// <item>a mapping whose column cache is missing is refused with the text of <see cref="MetadataNotCachedException"/> (the engine reads the cache and nothing else, so a published mapping without one fails at its first pass);</item>
+/// <item>a mapping whose source column cache is missing is refused with the text of <see cref="MetadataNotCachedException"/> (the engine reads the cache and nothing else, so a published mapping without one fails at its first pass);
+/// one without a target cache is accepted: its table may not exist yet, the drain refuses until it does and the set's <c>provision</c> creates it (plan 28c E21, owner 2026-11-15);</item>
 /// <item>a schedule that does not validate (<see cref="Schedule.Validate"/>, <see cref="ConfigValidation.ValidateScheduling"/>) is refused naming the replication and the key;</item>
 /// <item>a replication or connection file that does not read is refused naming the file, by the strict readers the engine itself uses;</item>
 /// <item><c>secrets/</c>, the git history, the state and the script cache never go in: the package holds no secret (a connection's login is a slot, bound on the runner).</item>
@@ -168,10 +169,10 @@ public static class ReplicationSetPackage
                 }
                 catch (InvalidOperationException ex) { problems.Add($"{Paths.TableMappingFile(configRoot, task.Name, mappingName)}: {ex.Message}"); continue; }
 
+                // only the source's cache: a target without one is a table that may not exist yet (plan 28c E21, owner 2026-11-15), which the set's `provision` creates when a person applies the setup;
+                // until then its drain refuses, naming the table (TargetTableMissingException), and once the table is there the first pass reads its shape
                 if (mapping.SourceColumns.Count == 0)
                     problems.Add($"{Paths.TableMappingFile(configRoot, task.Name, mappingName)}: {new MetadataNotCachedException(mapping.Name, "source").Message}");
-                else if (mapping.TargetColumns.Count == 0 && !ProvisioningResolution.CreateTargetTableIfMissing(task, mapping))
-                    problems.Add($"{Paths.TableMappingFile(configRoot, task.Name, mappingName)}: {new MetadataNotCachedException(mapping.Name, "target").Message}");
             }
 
             var slots = new List<ConnectionSlot>();

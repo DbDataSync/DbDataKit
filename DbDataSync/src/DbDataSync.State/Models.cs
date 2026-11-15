@@ -236,6 +236,10 @@ public static class RunFailureKinds
     /// </summary>
     public const string MetadataNotCached = "MetadataNotCached";
 
+    /// <summary>The mapping's target table does not exist yet and the replication may not create it (plan 28c E21, owner 2026-11-15): the fix is to apply the
+    /// replication's database setup, which creates it — see <c>TargetTableMissingException</c>.</summary>
+    public const string TargetTableMissing = "TargetTableMissing";
+
     /// <summary>A mapping's own auto-triggered initial load lost its race against other in-flight work
     /// for the same mapping+segment (an operator's own concurrent reload, most likely) — see
     /// <c>WorkQueueCollisionException</c>. Unlike the two kinds above, the fix is not an operator action:

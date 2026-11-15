@@ -109,7 +109,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
     private Task CreateTargetAsync(string table) =>
         ExecuteAsync(_admin, $"CREATE TABLE dbo.[{table}] (Id INT NOT NULL PRIMARY KEY, Name NVARCHAR(50) NOT NULL);");
 
-    private async Task SaveReplicationAsync(string name, string targetTable, bool provision = false, SchedulingConfig? scheduling = null, string writer = MsSqlDriverKinds.Merge)
+    private async Task SaveReplicationAsync(string name, string targetTable, bool provision = false, SchedulingConfig? scheduling = null, string writer = MsSqlDriverKinds.Merge, bool cacheTarget = true)
     {
         _config.SaveReplicationTask(new ReplicationTaskConfig
         {
@@ -135,7 +135,7 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         };
         mapping.SourceColumns = await CachedColumnsAsync(_sourceTable);
         if (provision) mapping.Provisioning = new ProvisioningConfig { CreateTargetTableIfMissing = true };
-        else mapping.TargetColumns = await CachedColumnsAsync(targetTable);
+        else if (cacheTarget) mapping.TargetColumns = await CachedColumnsAsync(targetTable);
         _config.SaveTableMapping(name, mapping, Author);
     }
 
@@ -489,6 +489,44 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         var columns = System.Text.Json.JsonSerializer.Deserialize<ProvisionedColumnsReport>(Assert.Single(steps, s => s.Name == "provisioned-columns").ResultJson!, web)!;
         Assert.Equal(("provision-sync", "main"), (columns.Replication, columns.Mapping));
         Assert.Equal(["Id", "Name"], columns.Columns.Select(c => c.Name).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task AMappingWhoseTargetTableDoesNotExistYet_IsPublished_ItsDrainRefusesNamingTheTable_AndAfterTheSetupIsAppliedTheDrainDelivers()
+    {
+        // plan 28c E21, owner decision 2026-11-15 (option 1): the set carries a mapping whose target is not there (no target cache, create-if-missing off); its drain refuses, naming the table and
+        // saying to apply the setup; a person's Apply (the set's `provision`) creates it, and the next drain reads the new table's shape and delivers
+        var missing = $"NotYet_{Guid.NewGuid():N}";
+        await SaveReplicationAsync("setup-sync", missing, cacheTarget: false);
+        Assert.Empty(_config.LoadTableMapping("setup-sync", "main").TargetColumns);
+        var start = await CurrentVersionAsync();
+        await InsertRowsAsync(4);
+
+        var source = await PackageSourceAsync();
+        using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
+        rig.SeedWatermark("main", _watermarkKey, start);
+
+        var refused = await rig.Executor.RunAsync(await rig.DrainRequestAsync(source, "setup-sync", chain: "0197f0e0-0000-7000-8000-00000000d0f1"));
+
+        Assert.NotEqual(TaskEndState.Succeeded, refused.End.State);
+        var record = PassRecordText.TryParse(Assert.Single(new DbDataKit.State.StepStore(rig.Database, new DbDataKit.State.ProgressKey(RunnerRig.Package, RunnerRig.Channel, "drain")).Recent(PassRecordText.StepName)).ResultJson)!;
+        Assert.Equal(RunFailureKinds.TargetTableMissing, record.FailureKind);
+        Assert.Contains(missing, record.Summary, StringComparison.Ordinal);
+        Assert.Contains("Apply the replication's database setup", record.Summary, StringComparison.Ordinal);
+        Assert.Equal((start, 1L), (rig.Watermark("main", _watermarkKey)!.Value.Position, rig.Watermark("main", _watermarkKey)!.Value.Version));
+
+        var drain = await rig.DrainRequestAsync(source, "setup-sync", chain: "0197f0e0-0000-7000-8000-00000000d0f2");
+        var apply = drain with
+        {
+            Task = new TaskRef(RunnerRig.Package, RunnerRig.Channel, ReplicationSetPackage.ProvisionTask),
+            Inputs = new Dictionary<string, string> { ["replication"] = "setup-sync", ["mapping"] = "main", ["action"] = ProvisioningActions.CreateTargetTable, ["steps"] = "", ["repo_dir"] = "repo" },
+        };
+        var applied = await rig.Executor.RunAsync(apply);
+        Assert.True(applied.End.State == TaskEndState.Succeeded, Describe(rig, applied));
+
+        var again = await rig.Executor.RunAsync(await rig.DrainRequestAsync(source, "setup-sync", chain: "0197f0e0-0000-7000-8000-00000000d0f3", runAll: true));
+        Assert.True(again.End.State == TaskEndState.Succeeded, Describe(rig, again));
+        Assert.Equal(4, (await TargetFingerprintAsync(missing)).Count);
     }
 
     [Fact]

@@ -474,6 +474,15 @@ public sealed class RunExecutor(
                 errorDetail: ex.ToString());
             state.MarkFailed(item.Id);
         }
+        catch (TargetTableMissingException ex)
+        {
+            Log(item.RunId, LogSeverity.Error, ex.Message);
+            state.Flush();
+            state.CompleteRun(
+                item.RunId, RunStatus.Failed, 0, 0, ex.Message, RunFailureKinds.TargetTableMissing,
+                errorDetail: ex.ToString());
+            state.MarkFailed(item.Id);
+        }
         catch (ConnectivityException ex)
         {
             var shown = ex.Message;   // already the classified text, with the connection's name
@@ -1409,6 +1418,11 @@ public sealed class RunExecutor(
         // this gap survive into a *second* pass, and the reason a report that fails to land costs one
         // more pass rather than an operator's manual Refresh. Nothing to record when the plan could
         // not be worked out at all: there is no table this pass can vouch for.
+        // A table that is not there, a mapping with no picture of it and no permission to create it: nothing this pass can do will work, and the cause is not a stale cache but a setup nobody
+        // applied yet (plan 28c E21, owner 2026-11-15). Refused in those words, naming the table, rather than with the cache's "Refresh metadata", which cannot help.
+        if (plan.State == ProvisioningState.Missing && !mayRunDdl && uncached && plan.Action == ProvisioningActions.CreateTargetTable)
+            throw new TargetTableMissingException(mapping.Name, $"{target.Database}.{target.Schema}.{target.Table}");
+
         var ddlRan = plan.State == ProvisioningState.Missing && mayRunDdl;
         var uncachedButInShape = plan.State == ProvisioningState.Satisfied && mapping.TargetColumns.Count == 0;
         if (!ddlRan && !uncachedButInShape)

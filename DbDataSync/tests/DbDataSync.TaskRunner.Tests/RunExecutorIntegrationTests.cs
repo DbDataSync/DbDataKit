@@ -1344,6 +1344,11 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime, IDisposable
         Assert.Equal(RunStatus.Failed, load.Status);
         Assert.Empty(await CachedColumnsAsync("dbo", target));
         Assert.Empty(_configRepository.LoadTableMapping("prov-off", "main").TargetColumns);
+
+        // plan 28c E21 (owner 2026-11-15): refused as a setup nobody applied, naming the table and the way to create it, not as a cache to refresh
+        Assert.Equal(RunFailureKinds.TargetTableMissing, load.FailureKind);
+        Assert.Contains(target, load.ErrorSummary);
+        Assert.Contains("Apply the replication's database setup", load.ErrorSummary);
     }
 
     #endregion
