@@ -101,7 +101,7 @@ public static class SlotEnvironmentFormats
     /// <summary>Sync: one <c>DBDATAKIT_SECRET_&lt;NAME&gt;</c> per connection, the variable the engine's secret store reads for <c>dbdatakit:sync:connection:&lt;name&gt;</c>.</summary>
     public const string SyncSecret = "sync-secret";
 
-    /// <summary>Build: <c>DBDATAKIT_BUILD_&lt;CONNECTION&gt;_READ</c> and <c>_WRITE</c>, one per login role the connection has (<c>LoginEnvironment.Name</c>).</summary>
+    /// <summary>Build: <c>DBDATAKIT_BUILD_&lt;SLOT&gt;_READ</c> and <c>_WRITE</c> (the slot is the project's connection, whatever the channel binds it to), one per login role the bound connection has (<c>LoginEnvironment.Name</c>).</summary>
     public const string BuildLogin = "build-login";
 
     public static IReadOnlyList<string> All { get; } = [SyncSecret, BuildLogin];

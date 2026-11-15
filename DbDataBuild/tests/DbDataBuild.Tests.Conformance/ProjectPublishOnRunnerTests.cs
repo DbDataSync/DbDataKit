@@ -49,7 +49,8 @@ public class ProjectPublishOnRunnerTests
         public RunnerSettings Settings { get; private set; } = null!;
         public string Url { get; private set; } = "";
 
-        public static async Task<Runner> StartAsync()
+        /// <summary>With <paramref name="runtimeDirectory"/> (the published tool, <see cref="BuildRuntimePackage.Directory"/>) the runtime is the real one, so a task of a published package runs in a process of its own.</summary>
+        public static async Task<Runner> StartAsync(string? runtimeDirectory = null)
         {
             var runner = new Runner();
             var data = runner._root;
@@ -64,10 +65,13 @@ public class ProjectPublishOnRunnerTests
             runner.State = RunnerState.Open(data, runner.Settings.State, null, runner.Settings.Group);
 
             // the runtime package: a manifest of the shape scripts/publish-runtime.sh writes and a file for its command; nothing here runs it
-            var runtime = Path.Combine(data, "runtime-src");
-            Directory.CreateDirectory(Path.Combine(runtime, "files", "bin"));
-            File.WriteAllText(Path.Combine(runtime, "files", "bin", BuildRuntimePackage.ToolFile), "stand-in for the engine");
-            File.WriteAllText(Path.Combine(runtime, "package.yaml"), PackageManifestWriter.Write(BuildRuntimePackage.Manifest(BuildRuntimePackage.Rid, ProductVersion())));
+            var runtime = runtimeDirectory ?? Path.Combine(data, "runtime-src");
+            if (runtimeDirectory is null)
+            {
+                Directory.CreateDirectory(Path.Combine(runtime, "files", "bin"));
+                File.WriteAllText(Path.Combine(runtime, "files", "bin", BuildRuntimePackage.ToolFile), "stand-in for the engine");
+                File.WriteAllText(Path.Combine(runtime, "package.yaml"), PackageManifestWriter.Write(BuildRuntimePackage.Manifest(BuildRuntimePackage.Rid, ProductVersion())));
+            }
             foreach (var channel in new[] { "dev", "test" }) RunnerPackageInstaller.Install(runner.State, Path.Combine(runtime, "package.yaml"), Path.Combine(runtime, "files"), channel, "test");
 
             runner._app = RunnerServer.Build(runner.Settings, RunnerServer.Certificate(data), runner._log.Add, runner.State);

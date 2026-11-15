@@ -93,7 +93,7 @@ public sealed class RunnerSlotResolver(DefinitionPublisher publisher, IConnectio
                         // a role the connection has no login for gets no variable; a login whose secret is missing is an error, never the other role's login
                         if (role == LoginRole.Write && Definition(slot.Name, connection).Access == AccessMode.Readonly) continue;
                         if (await PrimarySecretAsync(slot.Name, connection, role, ct).ConfigureAwait(false) is { } value)
-                            variables[LoginEnvironment.Name("build", connection, role)] = value;
+                            variables[LoginEnvironment.Name("build", slot.Name, role)] = value;     // named after the slot: a Build project reads the login of its own connection, whatever the channel binds it to (plan 28c E21)
                     }
 
                     break;

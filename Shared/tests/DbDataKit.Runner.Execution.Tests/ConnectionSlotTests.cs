@@ -113,11 +113,11 @@ public sealed class ConnectionSlotTests : IDisposable
         var environ = (await File.ReadAllTextAsync($"/proc/{pid}/environ")).Split('\0', StringSplitOptions.RemoveEmptyEntries)
             .Select(e => e.Split('=', 2)).ToDictionary(p => p[0], p => p.Length > 1 ? p[1] : "");
         Assert.Equal(SrcSecret, environ["DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_SRC_DB"]);
-        Assert.Equal(DstRead, environ["DBDATAKIT_BUILD_DST_DB_READ"]);
-        Assert.Equal(DstWrite, environ["DBDATAKIT_BUILD_DST_DB_WRITE"]);
+        Assert.Equal(DstRead, environ["DBDATAKIT_BUILD_DST_READ"]);
+        Assert.Equal(DstWrite, environ["DBDATAKIT_BUILD_DST_WRITE"]);
         // Sync's second login (plan 28c E20): the runner's one login for the connection is given under the plain name and under the run name, and nothing else
         Assert.Equal(SrcSecret, environ["DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_SRC_DB_RUN"]);
-        Assert.Equal(["DBDATAKIT_BUILD_DST_DB_READ", "DBDATAKIT_BUILD_DST_DB_WRITE", "DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_SRC_DB", "DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_SRC_DB_RUN"], environ.Keys.Where(k => k.StartsWith("DBDATAKIT_SECRET_", StringComparison.Ordinal) || k.StartsWith("DBDATAKIT_BUILD_", StringComparison.Ordinal)).Order(StringComparer.Ordinal));
+        Assert.Equal(["DBDATAKIT_BUILD_DST_READ", "DBDATAKIT_BUILD_DST_WRITE", "DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_SRC_DB", "DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_SRC_DB_RUN"], environ.Keys.Where(k => k.StartsWith("DBDATAKIT_SECRET_", StringComparison.Ordinal) || k.StartsWith("DBDATAKIT_BUILD_", StringComparison.Ordinal)).Order(StringComparer.Ordinal));
 
         // not in argv, not in any file of the scratch directory or the package
         var cmdline = await File.ReadAllTextAsync($"/proc/{pid}/cmdline");
@@ -181,8 +181,8 @@ public sealed class ConnectionSlotTests : IDisposable
         var handles = rig.Resolver.Handles(new TaskRef(Package, "prod", "run"), slots);
         var variables = await rig.Resolver.EnvironmentAsync(handles, slots, CancellationToken.None);
 
-        Assert.Equal(["DBDATAKIT_BUILD_RO_DB_READ"], variables.Keys);
-        Assert.Equal(DstRead, variables["DBDATAKIT_BUILD_RO_DB_READ"]);
+        Assert.Equal(["DBDATAKIT_BUILD_RO_READ"], variables.Keys);
+        Assert.Equal(DstRead, variables["DBDATAKIT_BUILD_RO_READ"]);
         Assert.Equal(new Dictionary<string, string> { ["ro"] = "ro_db", ["plain"] = "src_db" }, handles);
     }
 
