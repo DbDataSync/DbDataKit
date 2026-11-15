@@ -12,8 +12,17 @@ namespace DbDataSync.Api.Controllers;
 /// exactly what it just planned, never a client-held preview.</summary>
 [ApiController]
 [Route("api/replications/{replicationName}/table-mappings/{mappingName}/provisioning")]
-public sealed class ProvisioningController(ProvisioningService provisioningService) : ControllerBase
+public sealed class ProvisioningController(ProvisioningService provisioningService, DbDataSync.Api.Runner.RunnerProvisioning onRunner, DbDataKit.Web.Auth.CurrentUser currentUser) : ControllerBase
 {
+    /// <summary>
+    /// The Setup card's Apply on the runner (plan 28c E21, step d): starts the set's manual task <c>provision</c> for this mapping's action under the signed-in person's name, and answers the run to follow (202); the DDL runs with
+    /// the runner's run login, never this server's. 409 when no runner is linked or it refused; the task re-plans and refuses an action it does not know.
+    /// </summary>
+    [Authorize(Policies.Admin)]
+    [HttpPost("{provisioningAction}/run")]
+    public Task<IActionResult> RunOnRunner(string replicationName, string mappingName, string provisioningAction, CancellationToken cancellationToken) =>
+        ProvisioningOnRunner.StartAsync(() => onRunner.ApplyMappingAsync(replicationName, mappingName, provisioningAction, ProvisioningOnRunner.PersonOf(currentUser), cancellationToken));
+
     [Authorize(Policies.Viewer)]
     [HttpGet]
     public async Task<ActionResult<ProvisioningPlanReport>> GetPlans(

@@ -62,6 +62,9 @@ public static class DrainRequestText
 /// <summary>The name a replication has as a task of its package on a runner (lower-case letters, digits, <c>-</c> and <c>_</c>, starting with a letter or digit: what is not allowed becomes <c>-</c>).</summary>
 public static class RunnerTaskNames
 {
+    /// <summary>The set's manual-only task that applies a replication's database setup (plan 28c E21); no replication may make a task of this name.</summary>
+    public const string Provision = "provision";
+
     public static string Of(string replication)
     {
         var name = System.Text.RegularExpressions.Regex.Replace(replication.ToLowerInvariant(), "[^a-z0-9_-]", "-").TrimStart('-', '_');

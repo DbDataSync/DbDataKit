@@ -12,7 +12,7 @@ import type {
   DriverType,
   ScriptDefinition, ScriptTestRequest, MetricsWindow, BulkLoadRequest, ReconcileDeletesRequest, ConnectionInput, ReplicationTaskConfig,
   RunHistoryFilters,
-  SegmentingStrategyConfig, SetMappingReadStateRequest, TableMappingConfig } from './types'
+  SegmentingStrategyConfig, SetMappingReadStateRequest, TableMappingConfig, ProvisioningRunStarted, RunnerApplyResult } from './types'
 
 // The admin screens' hooks are `@dbdatakit/admin`'s; re-exported so the rest of this app imports them from here as before.
 export {
@@ -1146,13 +1146,38 @@ export function useInferredNaturalKey(
   })
 }
 
+/** How often, and for how long, an Apply follows its run on the runner before it says where to look instead. */
+export const provisioningRunPoll = { intervalMs: 1000, timeoutMs: 10 * 60 * 1000 }
+
+/**
+ * Follows a provisioning run of the runner (plan 28c E21, step d) until it ends, and answers what it did. A run that ended without reporting its steps (it failed before it could) is one failed step that carries the
+ * runner's message, so the screen always says why.
+ */
+export async function followProvisioningRun(replicationName: string, started: ProvisioningRunStarted): Promise<RunnerApplyResult> {
+  if (!started.runId)
+    throw new Error('A provisioning run of this replication set is already queued or running on the runner. Apply again when it has ended.')
+  const deadline = Date.now() + provisioningRunPoll.timeoutMs
+  for (;;) {
+    const run = await api.provisioning.run(replicationName, started.runId)
+    if (run.finished) {
+      const steps = run.steps ?? [{ title: 'The provisioning run', succeeded: false, error: run.failure ?? `The run ended ${run.outcome} without reporting its steps.` }]
+      return { runId: run.runId, outcome: run.outcome, steps }
+    }
+    if (Date.now() > deadline)
+      throw new Error(`The provisioning run ${started.runId} has not ended yet; follow it on the Runner's runs.`)
+    await new Promise((resolve) => setTimeout(resolve, provisioningRunPoll.intervalMs))
+  }
+}
+
 /** Re-plans and applies one provisioning action. A mutation, not folded into the query above: Apply
  * is a deliberate, confirmed action against a live database, not something that should ever happen as
  * a side effect of a refetch. */
 export function useApplyProvisioning(replicationName: string, mappingName: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (action: string) => api.provisioning.apply(replicationName, mappingName, action),
+    // plan 28c E21: the DDL runs on the runner, as the set's `provision` task under the signed-in person's name; the card follows that run to its end
+    mutationFn: async (action: string) =>
+      followProvisioningRun(replicationName, await api.provisioning.runOnRunner(replicationName, mappingName, action)),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.provisioning(replicationName, mappingName) }),
   })
 }
@@ -1174,7 +1199,8 @@ export function useReplicationProvisioningPlan(replicationName: string | undefin
 export function useApplyReplicationProvisioningPlan(replicationName: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (stepIds: string[]) => api.provisioning.applyReplicationPlan(replicationName, stepIds),
+    mutationFn: async (stepIds: string[]) =>
+      followProvisioningRun(replicationName, await api.provisioning.runStepsOnRunner(replicationName, stepIds)),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.replicationProvisioningPlan(replicationName) }),
   })
 }

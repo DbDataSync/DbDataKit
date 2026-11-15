@@ -270,6 +270,7 @@ public static class DbDataSyncHost
         builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.RunnerLinkFile(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(sp.GetRequiredService<ApiOptions>().StateDbPath))!, DbDataSync.Api.Runner.RunnerLinkFile.FileName)));
         builder.Services.AddSingleton(sp => new DbDataSync.Api.Runner.RunnerAccess(sp.GetRequiredService<DbDataSync.Api.Runner.RunnerLinkFile>(), link => DbDataSync.Api.Runner.ClientRunnerSync.For(link, Environment.GetEnvironmentVariable)));
         builder.Services.AddSingleton<DbDataSync.Api.Runner.RunnerDispatch>();
+        builder.Services.AddSingleton<DbDataSync.Api.Runner.RunnerProvisioning>();   // a person's Apply of the database setup is the set's `provision` task on the runner (plan 28c E21, step d)
         builder.Services.AddSingleton<DbDataSync.Api.Runner.RunnerReadState>();
         // the publish action of plan 28c E08: the verb `package publish` as a child process with the stored link, the runner's package read and bound through the paired client, every call audited beside the state
         builder.Services.AddSingleton<DbDataSync.Api.Runner.IPackageLauncher>(sp => new DbDataSync.Api.Runner.CliPackageLauncher(sp.GetRequiredService<ApiOptions>()));

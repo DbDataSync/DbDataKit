@@ -53,7 +53,7 @@ public static class ReplicationSetPackage
     public const string RepoDir = DefinitionFiles.RepoDir;
 
     /// <summary>The name of the set's manual-only provisioning task (<see cref="ProvisionJob"/>, plan 28c E21); a replication may not take it.</summary>
-    public const string ProvisionTask = "provision";
+    public const string ProvisionTask = DbDataSync.State.RunnerTaskNames.Provision;
 
     /// <summary>Where the configuration repository keeps the files a message names (the layout of <c>ConfigPaths</c>, which is internal to the core).</summary>
     /// <summary>The .NET the package is built for: what this assembly targets (<c>net10.0</c> is "10.0"), not the runtime the Sync program happens to run on (it rolls forward to a newer major where one is installed).</summary>

@@ -22,8 +22,11 @@ public sealed record ProvisionInput(string Replication, string Mapping = "", str
 /// <summary>What one apply did: the steps it ran, as the Sync server's Apply answers them, a run output the Sync screens read.</summary>
 public sealed record ProvisionReport(string Replication, string Mapping, List<ProvisionStepReport> Steps);
 
-/// <summary>One step of an apply: its title, whether it was applied, and the error when it was not.</summary>
-public sealed record ProvisionStepReport(string Title, bool Succeeded, string? Error);
+/// <summary>
+/// One step of an apply: its title, whether it was applied, and the error when it was not; a step of the replication-wide plan also carries its id and outcome (<see cref="ProvisioningStepOutcome"/>), so the page that chose the steps
+/// shows each one's result on its row (a step the fresh plan no longer needs is not a failure).
+/// </summary>
+public sealed record ProvisionStepReport(string Title, bool Succeeded, string? Error, string? Id = null, string? Outcome = null);
 
 public static class ProvisionSteps
 {
@@ -80,7 +83,7 @@ public sealed class ProvisionJob : RunnerJob<ProvisionInput, NoProgress, NoSlots
             if (ids.Length == 0)
                 throw new TaskFailureException(TaskFailureKind.Permanent, $"The provisioning of '{Input.Replication}' chose no step of the replication's plan.");
             var result = await provisioner.ApplyReplicationPlanAsync(Input.Replication, ids, ct).ConfigureAwait(false);
-            report = new ProvisionReport(Input.Replication, "", [.. result.Steps.Select(s => new ProvisionStepReport(s.Title, s.Outcome == ProvisioningStepOutcome.Applied, s.Error))]);
+            report = new ProvisionReport(Input.Replication, "", [.. result.Steps.Select(s => new ProvisionStepReport(s.Title, s.Outcome is ProvisioningStepOutcome.Applied or ProvisioningStepOutcome.NoLongerNeeded, s.Error, s.Id, s.Outcome.ToString()))]);
         }
 
         Record(ProvisionSteps.Applied, report);

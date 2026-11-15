@@ -1045,6 +1045,39 @@ export interface ReplicationProvisioningStepResult {
   elapsedMs: number
 }
 
+/** The provisioning task started on the runner (plan 28c E21): the run to follow, null when one was already queued or running. */
+export interface ProvisioningRunStarted {
+  runId: string | null
+  task: string
+  onBehalfOf: string
+}
+
+/** A provisioning run as the runner holds it; `steps` is null until the task reported them. */
+export interface ProvisioningRunView {
+  runId: string
+  outcome: string
+  started: string
+  finished: string | null
+  failure: string | null
+  steps: RunnerApplyStep[] | null
+}
+
+/** One step a provisioning run reported; a step of the replication-wide plan carries its id and outcome. */
+export interface RunnerApplyStep {
+  title: string
+  succeeded: boolean
+  error: string | null
+  id?: string | null
+  outcome?: ProvisioningStepOutcome | null
+}
+
+/** What an Apply on the runner did, once its run ended: the run, and each step's outcome. */
+export interface RunnerApplyResult {
+  runId: string
+  outcome: string
+  steps: RunnerApplyStep[]
+}
+
 export interface ReplicationProvisioningApplyResult {
   steps: ReplicationProvisioningStepResult[]
 }

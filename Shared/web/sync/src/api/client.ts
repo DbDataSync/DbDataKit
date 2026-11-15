@@ -36,6 +36,8 @@ import type {
   ProvisioningPlanReport,
   ReplicationProvisioningPlan,
   ReplicationProvisioningApplyResult,
+  ProvisioningRunStarted,
+  ProvisioningRunView,
   QueryPreviewResult,
   ScriptCompileResult,
   ScriptDefinition,
@@ -302,6 +304,24 @@ export const api = {
         `/api/replications/${encodeURIComponent(replicationName)}/table-mappings/${encodeURIComponent(mappingName)}` +
           `/provisioning/${encodeURIComponent(action)}/apply`,
         { method: 'POST' },
+      ),
+    /** Starts the set's `provision` task on the runner for this mapping's action, under the signed-in person's name (plan 28c E21). */
+    runOnRunner: (replicationName: string, mappingName: string, action: string) =>
+      request<ProvisioningRunStarted>(
+        `/api/replications/${encodeURIComponent(replicationName)}/table-mappings/${encodeURIComponent(mappingName)}` +
+          `/provisioning/${encodeURIComponent(action)}/run`,
+        { method: 'POST' },
+      ),
+    /** Starts the set's `provision` task on the runner for the chosen steps of the replication-wide plan. */
+    runStepsOnRunner: (replicationName: string, stepIds: string[]) =>
+      request<ProvisioningRunStarted>(
+        `/api/replications/${encodeURIComponent(replicationName)}/provisioning/run`,
+        { method: 'POST', body: JSON.stringify({ stepIds }) },
+      ),
+    /** A provisioning run as the runner holds it. */
+    run: (replicationName: string, runId: string) =>
+      request<ProvisioningRunView>(
+        `/api/replications/${encodeURIComponent(replicationName)}/provisioning/runs/${encodeURIComponent(runId)}`,
       ),
     /** Every table mapping's provisioning, aggregated — phase 105's replication-wide Provisioning tab.
      * Distinct from `get` above, which is one mapping's Setup card. */

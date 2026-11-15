@@ -25,7 +25,7 @@ public sealed class RunnerDispatch(RunnerAccess runner)
         if (requests.Count > 0) inputs["requests"] = DrainRequestText.Serialize(requests);
         try
         {
-            var runId = await sync.RunNowAsync(RunnerAccess.TaskOf(replication), inputs, ct).ConfigureAwait(false);
+            var runId = await sync.RunNowAsync(RunnerAccess.TaskOf(replication), inputs, null, ct).ConfigureAwait(false);
             if (runId is not null && Guid.TryParse(runId, out var id))
                 return TriggerResult.Started([id]);
             // a drain is up (or queued) already: it takes the work from the task's own queue

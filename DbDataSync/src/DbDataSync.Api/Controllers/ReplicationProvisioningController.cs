@@ -14,8 +14,42 @@ namespace DbDataSync.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/replications/{replicationName}/provisioning")]
-public sealed class ReplicationProvisioningController(ProvisioningService provisioningService) : ControllerBase
+public sealed class ReplicationProvisioningController(ProvisioningService provisioningService, DbDataSync.Api.Runner.RunnerProvisioning onRunner, DbDataKit.Web.Auth.CurrentUser currentUser) : ControllerBase
 {
+    /// <summary>The replication-wide Apply on the runner (plan 28c E21, step d): the chosen steps become one run of the set's task <c>provision</c> for the signed-in person (202 with the run to follow).</summary>
+    [Authorize(Policies.Admin)]
+    [HttpPost("run")]
+    public async Task<IActionResult> RunOnRunner(string replicationName, [FromBody] ApplyReplicationProvisioningRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await ProvisioningOnRunner.StartAsync(() => onRunner.ApplyStepsAsync(replicationName, request.StepIds ?? [], ProvisioningOnRunner.PersonOf(currentUser), cancellationToken));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>A provisioning run as the runner holds it: its outcome and, once it ended, the steps it reported (404 when the runner has no such run of the task).</summary>
+    [Authorize(Policies.Viewer)]
+    [HttpGet("runs/{runId:guid}")]
+    public async Task<IActionResult> Run(string replicationName, Guid runId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await onRunner.RunAsync(runId, cancellationToken) is { } run ? Ok(run) : NotFound(new { error = $"The runner has no provisioning run {runId}." });
+        }
+        catch (DbDataSync.Api.Runner.OwnershipException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
+        catch (DbDataKit.Runner.Client.RunnerClientException ex)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = $"The runner could not be asked: {ex.Message}" });
+        }
+    }
+
     [Authorize(Policies.Viewer)]
     [HttpGet]
     public async Task<ActionResult<ReplicationProvisioningPlan>> GetPlan(
@@ -56,7 +90,7 @@ public sealed class ReplicationProvisioningController(ProvisioningService provis
         try
         {
             return Ok(await provisioningService.ApplyReplicationPlanAsync(
-                replicationName, request.StepIds, cancellationToken));
+                replicationName, request.StepIds ?? [], cancellationToken));
         }
         catch (FileNotFoundException)
         {
@@ -69,4 +103,27 @@ public sealed class ReplicationProvisioningController(ProvisioningService provis
     }
 }
 
-public sealed record ApplyReplicationProvisioningRequest(IReadOnlyList<string> StepIds);
+public sealed record ApplyReplicationProvisioningRequest(IReadOnlyList<string>? StepIds);
+
+/// <summary>The shared answer of the two Apply routes that start the provisioning task on the runner (plan 28c E21, step d).</summary>
+internal static class ProvisioningOnRunner
+{
+    /// <summary>The person the console vouched for, as the run records them beside this server; the system's name where nobody signed in.</summary>
+    public static string PersonOf(DbDataKit.Web.Auth.CurrentUser user) => user.Name is { Length: > 0 } name ? name : user.Author.Name;
+
+    public static async Task<IActionResult> StartAsync(Func<Task<DbDataSync.Api.Runner.ProvisioningRunStarted>> start)
+    {
+        try
+        {
+            return new ObjectResult(await start()) { StatusCode = StatusCodes.Status202Accepted };
+        }
+        catch (DbDataSync.Api.Runner.OwnershipException ex)
+        {
+            return new ConflictObjectResult(new { error = ex.Message });
+        }
+        catch (DbDataKit.Runner.Client.RunnerClientException ex)
+        {
+            return new ConflictObjectResult(new { error = $"The runner refused: {ex.Message}" });
+        }
+    }
+}

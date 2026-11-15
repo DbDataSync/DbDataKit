@@ -11,8 +11,8 @@ public interface IRunnerSync
 {
     Task<ClientTaskSchedule> ScheduleOfAsync(string task, CancellationToken ct);
 
-    /// <summary>The id of the run the runner queued, or null when one is queued or running already.</summary>
-    Task<string?> RunNowAsync(string task, IReadOnlyDictionary<string, string>? inputs, CancellationToken ct);
+    /// <summary>The id of the run the runner queued, or null when one is queued or running already. <paramref name="onBehalfOf"/> is the person the console vouched for, recorded as the run's requester beside this server (plan 28c E21); null for the server's own runs.</summary>
+    Task<string?> RunNowAsync(string task, IReadOnlyDictionary<string, string>? inputs, string? onBehalfOf, CancellationToken ct);
 
     Task PauseAsync(string task, CancellationToken ct);
 
@@ -48,7 +48,7 @@ public sealed class ClientRunnerSync(RunnerPublishClient client, RunnerLink link
 
     public Task<ClientTaskSchedule> ScheduleOfAsync(string task, CancellationToken ct) => client.ScheduleOfAsync(link.Server, null, link.Package, link.Channel, task, null, ct);
 
-    public Task<string?> RunNowAsync(string task, IReadOnlyDictionary<string, string>? inputs, CancellationToken ct) => client.RunNowAsync(link.Server, null, link.Package, link.Channel, task, inputs, null, ct);
+    public Task<string?> RunNowAsync(string task, IReadOnlyDictionary<string, string>? inputs, string? onBehalfOf, CancellationToken ct) => client.RunNowAsync(link.Server, null, link.Package, link.Channel, task, inputs, onBehalfOf, null, ct);
 
     public Task PauseAsync(string task, CancellationToken ct) => client.PauseAsync(link.Server, null, link.Package, link.Channel, task, null, ct);
 
