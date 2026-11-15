@@ -1434,6 +1434,8 @@ export interface PauseEvent {
 // whole replication — see architecture/implementation/done/phase-008-work-queue-schema.md.
 export interface TriggerResponse {
   runIds: string[]
+  /** Set when nothing new was started: a run of the replication was already going, `runIds` is that run, and this is when it began (owner decision 2026-11-14). */
+  joinedSince?: string | null
 }
 
 export interface ApiErrorBody {

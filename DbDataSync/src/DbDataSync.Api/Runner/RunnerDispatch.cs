@@ -31,6 +31,10 @@ public sealed class RunnerDispatch(RunnerAccess runner)
             // a drain is up (or queued) already: it takes the work from the task's own queue
             foreach (var request in requests)
                 await sync.EnqueueWorkAsync(RunnerAccess.TaskOf(replication), DrainRequestText.ItemKind, request.Mapping, request.Id!, DrainRequestText.SerializeOne(request), ct).ConfigureAwait(false);
+            // owner decision 2026-11-14: the caller joins the drain that is running (its id and when it began), so the screen shows that run and says nothing new was started; a drain only queued has no run to show yet
+            if (sync is IRunnerRuns runs
+                && (await runs.RunsAsync(RunnerAccess.TaskOf(replication), 5, null, "running", ct).ConfigureAwait(false)).OrderByDescending(r => r.Started).FirstOrDefault() is { } up)
+                return TriggerResult.Joined(up.Id, up.Started);
             return TriggerResult.Started([]);
         }
         catch (RunnerClientException ex)

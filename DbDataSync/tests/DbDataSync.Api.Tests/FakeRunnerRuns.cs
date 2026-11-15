@@ -124,7 +124,17 @@ public sealed class FakeRunnerRuns : IRunnerSync, IRunnerRuns
 
     public Task SetOwnerAsync(string task, string owner, string? reason, ClientSeed? seed, CancellationToken ct) => throw new NotSupportedException();
 
-    public Task<string?> RunNowAsync(string task, IReadOnlyDictionary<string, string>? inputs, CancellationToken ct) => throw new NotSupportedException();
+    /// <summary>As the runner answers a run now: no new run while one of the task is going (null), else a new run that is going.</summary>
+    public Task<string?> RunNowAsync(string task, IReadOnlyDictionary<string, string>? inputs, CancellationToken ct)
+    {
+        Enter(task);
+        lock (_gate)
+        {
+            if (_runs.Any(r => r.Task == task && r.Outcome == "running")) return Task.FromResult<string?>(null);
+        }
+
+        return Task.FromResult<string?>(AddRun(task, "running", DateTimeOffset.UtcNow).Id.ToString());
+    }
 
     public Task PauseAsync(string task, CancellationToken ct) => throw new NotSupportedException();
 

@@ -1,4 +1,5 @@
 import { RunnerHistoryNotice } from './RunnerHistoryNotice'
+import { JoinedRunNotice } from './JoinedRunNotice'
 import { useEffect, useState } from 'react'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { RunDetailsDialog } from '../../components/RunDetailsDialog'
@@ -56,6 +57,8 @@ const clock = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString() 
  */
 export function RunsPanel({ replicationName, command }: { replicationName: string; command: RunsCommand | null }) {
   const [activeRunId, setActiveRunId] = useState<string | undefined>(undefined)
+  // when Run now joined a run that was already going: when that run began (cleared with the panel)
+  const [joinedSince, setJoinedSince] = useState<string | null>(null)
   // Which traced run has its timing open. One at a time: this is read to answer a question about one
   // pass, and several expanded at once would push the rest of the history off the screen.
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
@@ -135,7 +138,7 @@ export function RunsPanel({ replicationName, command }: { replicationName: strin
       // Force a fresh history fetch now the final TaskRuns row is known to exist, rather than
       // waiting on the interval poll to land on one (see useInvalidateRunHistory).
       invalidateRunHistory()
-      const timeout = setTimeout(() => setActiveRunId(undefined), 3000)
+      const timeout = setTimeout(() => { setActiveRunId(undefined); setJoinedSince(null) }, 3000)
       return () => clearTimeout(timeout)
     }
   }, [completed, invalidateRunHistory])
@@ -153,7 +156,7 @@ export function RunsPanel({ replicationName, command }: { replicationName: strin
     }
     let cancelled = false
     trigger.mutateAsync().then(
-      (result) => { if (!cancelled) setActiveRunId(result.runIds[0]) },
+      (result) => { if (!cancelled) { setJoinedSince(result.joinedSince ?? null); setActiveRunId(result.runIds[0]) } },
       () => {},
     )
     return () => { cancelled = true }
@@ -187,6 +190,7 @@ export function RunsPanel({ replicationName, command }: { replicationName: strin
             )}
           </div>
           <div style={{ padding: '12px 14px' }}>
+            <JoinedRunNotice since={joinedSince} />
             <div className="log" data-testid="live-log-viewer">
               {logLines.length === 0 && <span className="log-time">Waiting for log output…</span>}
               {logLines.map((line) => (

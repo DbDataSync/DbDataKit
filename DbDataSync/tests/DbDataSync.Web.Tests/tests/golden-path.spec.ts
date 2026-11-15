@@ -334,6 +334,29 @@ test.describe.serial('golden path: define, configure, and run a replication end-
     }, { timeout: 30_000 }).toBe('0 read, 0 written')
   })
 
+  test('10b - Run now while a drain is going joins it and says so', async ({ page }) => {
+    // Owner decision 2026-11-14: a second Run now starts nothing new. It joins the drain that is going, and the panel says so and since when.
+    await runnerIdle(page, REPLICATION_NAME)
+    await page.goto(`/replications/${REPLICATION_NAME}/monitoring/history`)
+    await expect(page.getByTestId('run-history-table')).toBeVisible({ timeout: 20_000 })
+    const first = await page.request.post(`/api/replications/${REPLICATION_NAME}/runs`)
+    expect(first.status()).toBe(202)
+    const drainId = ((await first.json()) as { runIds: string[] }).runIds[0]
+    // pressed once the runner lists the drain as running (a drain still queued has no run to join yet)
+    await expect.poll(async () => ((await (await page.request.get(`/api/replications/${REPLICATION_NAME}/runner`)).json()) as { runner: { running: number } | null }).runner?.running ?? 0,
+      { intervals: [100], timeout: 15_000 }).toBe(1)
+    await page.getByTestId('trigger-run-button').click()
+
+    await expect(page.getByTestId('live-run-joined')).toContainText('Already running since', { timeout: 15_000 })
+    await expect(page.getByTestId('live-run-joined')).toContainText('nothing new was started')
+    await shot(page, '09b-run-now-joined.png')
+    await expect(page.getByTestId('live-run-panel')).toContainText('succeeded', { timeout: 90_000 })
+
+    // the run the press joined is the one the API started: no second drain ran
+    const runs = ((await (await page.request.get(`/api/runs/${drainId}`)).json()) as { status: string })
+    expect(runs.status).toBe('Succeeded')
+  })
+
   test('11 - settings expose live driver capabilities and per-stage options', async ({ page }) => {
     await page.goto(`/replications/${REPLICATION_NAME}`)
     await page.getByTestId('tab-overview').click()

@@ -33,7 +33,7 @@ public sealed class RunsController(
         var result = await runnerDispatch.SendAsync(name, [], runAll: true, cancellationToken);
         return result.Outcome switch
         {
-            TriggerOutcome.Started => Accepted(new { runIds = result.RunIds }),
+            TriggerOutcome.Started => Accepted(new { runIds = result.RunIds, joinedSince = result.JoinedSince }),
             TriggerOutcome.ReplicationNotFound => NotFound(new { error = result.Reason }),
             TriggerOutcome.FailedToStart => StatusCode(409, new { error = result.Reason }),
             _ => StatusCode(500, new { error = result.Reason }),
@@ -54,7 +54,7 @@ public sealed class RunsController(
         var result = await bulkLoadService.EnqueueAsync(name, mappingName, request, cancellationToken);
         return result.Outcome switch
         {
-            TriggerOutcome.Started => Accepted(new { runIds = result.RunIds }),
+            TriggerOutcome.Started => Accepted(new { runIds = result.RunIds, joinedSince = result.JoinedSince }),
             TriggerOutcome.ReplicationNotFound => NotFound(new { error = "Replication or table mapping not found." }),
             TriggerOutcome.Invalid => BadRequest(new { error = result.Reason }),
             _ => StatusCode(500, new { error = result.Reason }),
@@ -74,7 +74,7 @@ public sealed class RunsController(
         var result = await reconcileService.EnqueueAsync(name, mappingName, request, cancellationToken);
         return result.Outcome switch
         {
-            TriggerOutcome.Started => Accepted(new { runIds = result.RunIds }),
+            TriggerOutcome.Started => Accepted(new { runIds = result.RunIds, joinedSince = result.JoinedSince }),
             TriggerOutcome.ReplicationNotFound => NotFound(new { error = "Replication or table mapping not found." }),
             TriggerOutcome.Invalid => BadRequest(new { error = result.Reason }),
             _ => StatusCode(500, new { error = result.Reason }),
