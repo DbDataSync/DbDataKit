@@ -203,6 +203,8 @@ internal sealed class StateMoveRunner(StateManagementOptions options, Action<Sta
         try
         {
             var result = await service.MoveAsync(from, to, settingsFile, options.Modules, options.Scope, move, progress, _stop.Token).ConfigureAwait(false);
+            // the audit entry first, then the state a caller polls for: one that reads the audit once the move says it ended finds the entry (docs/ci-lessons.md)
+            Audit(caller, "ok", $"moved to {to.Engine} {run.ToConnection}; settings '{result.SettingsFile}' written, previous kept as '{result.BackupFile}'");
             lock (_lock)
             {
                 run.Result = result;
@@ -212,12 +214,11 @@ internal sealed class StateMoveRunner(StateManagementOptions options, Action<Sta
                 run.Message = Redact("The move is complete. " + result.RestartInstruction, to, secrets);
                 run.Finished = clock.GetUtcNow();
             }
-
-            Audit(caller, "ok", $"moved to {to.Engine} {run.ToConnection}; settings '{result.SettingsFile}' written, previous kept as '{result.BackupFile}'");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             var text = Redact(ex.Message, to, secrets);
+            Audit(caller, "failed", $"move to {to.Engine} {run.ToConnection} stopped: {FirstLine(text)}");
             lock (_lock)
             {
                 run.Error = text;
@@ -226,8 +227,6 @@ internal sealed class StateMoveRunner(StateManagementOptions options, Action<Sta
                 run.Message = "The move failed.";
                 if (ex is StateMoveException { SnapshotDirectory: { } kept }) run.KeptSnapshot = kept;
             }
-
-            Audit(caller, "failed", $"move to {to.Engine} {run.ToConnection} stopped: {FirstLine(text)}");
         }
     }
 
