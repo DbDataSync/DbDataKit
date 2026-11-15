@@ -67,7 +67,9 @@ public static class RunnerServer
         var secretStore = new RunnerSecretStore(settings.Directory);
         // plan 24a UC13: what a task's run reported writing is told to the serving groups this server is paired with (gateways.json), signed as the server itself; no pairing, nothing sent
         var dataChanges = settings.DataChanges ?? RunnerDataChanges.Create(settings.Directory, secretStore, new LineLoggerProvider(log).CreateLogger("DbDataRunner.DataChanged"));
-        settings = settings with { SecretStore = settings.SecretStore ?? secretStore.Provider, DataChanges = dataChanges };
+        // plan 28c E20d (group-wide): what is sent to any instance is kept in the group's state under the group's key, which the console hands each instance it joins; the instance's own store keeps the key and what it held before
+        var groupSecrets = new RunnerGroupSecrets(state, () => secretStore.Open(), secretStore.Provider, () => secretStore.Exists);
+        settings = settings with { SecretStore = settings.SecretStore ?? groupSecrets.Provider, DataChanges = dataChanges };
         var files = new PairingFiles(settings.ServerYaml, Group: state);
         var clients = files.Clients();
         var fingerprint = PairingProof.CertificateFingerprint(certificate);
@@ -116,9 +118,20 @@ public static class RunnerServer
         DbDataKit.Upgrade.UpgradeSetup.MapUpgrade(app, RunnerSettings.Product, Version, RunnerService.RegistrationName, settings.Listen.Port, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), () => [.. clients.All().Select(c => new DbDataKit.Upgrade.PeerGeneration(c.Name, c.Generation))]);
         RunnerApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), instanceId, new RunnerApiOptions("/api/v1", RunnerCallers.TokenResolver, RunnerSettings.Product, Version));
         RunnerPublishApi.Map(app, new RunnerPublishing(state, settings.MaxArtifactBytes, settings.SignatureVerifier, settings.InstanceLease, new DbDataKit.Runner.Staging.ActivationOptions { MaxWait = settings.ActivationMaxWait }));
-        RunnerSecretsApi.Map(app, state, () => secretStore.Open(), "/api/v1", RunnerCallers.TokenResolver,
+        RunnerSecretsApi.Map(app, state, () => groupSecrets.Store, "/api/v1", RunnerCallers.TokenResolver,
             connections: () => RunnerConnections.Inventory(state, app.Services.GetRequiredService<RunnerEngine>().Group, RunnerSettings.Product, settings.ToHostSettings().ConnectionsDirectory),
-            listHeld: async (opened, ct) => opened is DbDataKit.Secrets.Store.ISecretAdmin admin ? [.. (await admin.ListInfoAsync("", ct)).Select(i => new DbDataKit.Secrets.SecretHeld(i.Name, i.Updated == default ? null : i.Updated))] : await RunnerSecretsApi.NamesOnly(opened, ct));   // UI06: the overview
+            listHeld: (_, ct) => groupSecrets.ListHeldAsync(async (opened, c) => opened is DbDataKit.Secrets.Store.ISecretAdmin admin ? [.. (await admin.ListInfoAsync("", c)).Select(i => new DbDataKit.Secrets.SecretHeld(i.Name, i.Updated == default ? null : i.Updated))] : await RunnerSecretsApi.NamesOnly(opened, c), ct));   // UI06: the overview
+        // the console hands the group's key to an instance it joins (plan 28c E20d); audited as runner.group.join, never the key
+        var groupAudit = new AuditLog(state, RunnerState.ServiceId);
+        GroupKeyApi.Map(app, "/api/v1", () => groupSecrets.Key, (context, role) => RunnerCallers.TokenResolver(context).Authorize(role).Allowed,
+            (context, outcome, detail) =>
+            {
+                var actor = RunnerCallers.TokenResolver(context).Actor;
+                var engine = app.Services.GetRequiredService<RunnerEngine>();
+                groupAudit.Record(new AuditEvent("person", actor.Id, RunnerGroupSecrets.JoinVerb, outcome, ViaKind: actor.ViaKind, ViaId: actor.ViaId, TargetKind: "instance",
+                    TargetId: $"{engine.InstanceId?.ToString() ?? instanceId} ({System.Net.Dns.GetHostName()})", Detail: System.Text.Json.JsonSerializer.Serialize(detail)));
+            },
+            held: () => groupSecrets.Held);
         RunnerBindingTestApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>().Slots, "/api/v1", RunnerCallers.TokenResolver, RunnerConnectTest.Create(CatalogOf(settings, state)));   // UI08: try a slot's binding, up to the connection
         RunnerConnectionCopyApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);   // plan 27a IX23: the connections the console handed over (definition and secret references, never a value)
         RunnerGroupApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);

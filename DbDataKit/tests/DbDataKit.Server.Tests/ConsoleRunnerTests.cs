@@ -99,6 +99,8 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         server.MapPost("/api/v1/tracking/divergences/{id}/resolve", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { resolved = true })));
         server.MapGet("/api/v1/secrets/overview", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { secrets = Array.Empty<object>() })));
         server.MapGet("/api/v1/certificate", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { present = true })));
+        server.MapPut("/api/v1/secrets/{name}", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { name = "set" })));
+        server.MapGet("/api/v1/group/key", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { held = true })));
         // a server upgrades itself when the console says so (plan 24a UC09): the status is a viewer's, prepare and apply an administrator's
         server.MapGet("/api/v1/upgrade", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { state = "none" })));
         server.MapPost("/api/v1/upgrade", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { state = "prepared" })));
@@ -254,6 +256,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         ("GET", "api/v1/upgrade", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/certificate", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/secrets/overview", ServerRole.Admin, ServerRole.None),
+        ("PUT", "api/v1/secrets/{secret}", ServerRole.Admin, ServerRole.None), ("GET", "api/v1/group/key", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/definitions/integration", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/definitions/integration/{name}", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/instances/{id}/labels", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/tasks/{name}/{name}/{name}/schedule", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/tasks/{name}/{name}/{name}/decisions", ServerRole.Viewer, ServerRole.None),
@@ -279,7 +282,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
 
     /// <summary>A path the route's pattern matches (the fake runner answers any name).</summary>
     private static string Sample(ServerProducts.RunnerRoute route) =>
-        route.Pattern.Replace("{name}", "sample").Replace("{sha}", new string('a', 64)).Replace("{id}", "6f1c0f1e-1111-4222-8333-444455556666");
+        route.Pattern.Replace("{name}", "sample").Replace("{secret}", "dbdatakit:sync:connection:sample:run").Replace("{sha}", new string('a', 64)).Replace("{id}", "6f1c0f1e-1111-4222-8333-444455556666");
 
     private static ServerProducts.RunnerRoute RouteOf(string row) => ServerProducts.RunnerRoutes.Single(r => $"{r.Method} {r.Pattern}" == row);
 

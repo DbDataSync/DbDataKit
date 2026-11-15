@@ -71,9 +71,12 @@ internal sealed class RealProcess : IAsyncDisposable
     /// <summary>Runs a command of the program to its end and returns what it printed; a command that does not exit 0 fails the test with its output.</summary>
     public static async Task<string> RunAsync(string dll, params string[] arguments) => await RunWithInputAsync(dll, null, arguments);
 
-    public static async Task<string> RunWithInputAsync(string dll, string? input, params string[] arguments)
+    public static Task<string> RunWithInputAsync(string dll, string? input, params string[] arguments) => RunWithEnvironmentAsync(dll, input, null, arguments);
+
+    /// <summary>As <see cref="RunAsync"/>, with variables added to the program's environment (a state database the program shares with another, say).</summary>
+    public static async Task<string> RunWithEnvironmentAsync(string dll, string? input, IReadOnlyDictionary<string, string>? environment, params string[] arguments)
     {
-        await using var run = Start(dll, arguments, input);
+        await using var run = Start(dll, arguments, input, environment);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
         await run.process.WaitForExitAsync(timeout.Token);
         run.process.WaitForExit();   // lets the output readers finish

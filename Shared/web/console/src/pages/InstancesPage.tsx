@@ -49,6 +49,14 @@ export function InstancesPage() {
   const link = useMutation({
     mutationFn: () => consoleApi.instances.link(linkFrom, linkTo, null),
   })
+  // plan 28c E20d: another instance of a runner group (same state database) is given the group's key, so a login sent to any instance is read by all
+  const [joinServer, setJoinServer] = useState('')
+  const [joinUrl, setJoinUrl] = useState('')
+  const [joinCode, setJoinCode] = useState('')
+  const join = useMutation({
+    mutationFn: () => consoleApi.instances.join(joinServer, joinUrl.trim() || null, joinCode.trim() || null),
+    onSuccess: () => { setJoinUrl(''); setJoinCode('') },
+  })
   const forget = useMutation({
     mutationFn: (id: string) => consoleApi.instances.forget(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: instancesKey }),
@@ -57,6 +65,7 @@ export function InstancesPage() {
   const reachable = (instances.data ?? []).filter((i) => i.reachable)
   const linkers = linkableServers(reachable)
   const gateways = reachable.filter((i) => i.product === 'dbdatagateway')
+  const runnerGroups = reachable.filter((i) => i.product === 'dbdatarunner')
 
   if (!isAdmin) {
     return (
@@ -135,8 +144,35 @@ export function InstancesPage() {
             <button type="button" className="btn btn-primary" disabled={pair.isPending || !url.trim() || !code.trim()} onClick={() => pair.mutate()} data-testid="pair-button">
               {pair.isPending ? 'Pairing…' : 'Pair'}
             </button>
+            {pair.data?.groupJoin && <div className="hint" data-testid="pair-group-join">Paired, but not joined to its group: {pair.data.groupJoin}</div>}
           </div>
         </div>
+
+        {runnerGroups.length > 0 && (
+          <div className="card" style={{ marginTop: 20 }} data-testid="join-card">
+            <div className="card-head"><span className="card-title">Join an instance to a runner group</span></div>
+            <div className="card-body">
+              <span className="hint">Instances of a runner on one state database are one group. Pairing joins the instance paired with; join each other instance by its address and a code made on it (<span className="mono">dbdatarunner server pair</span>). The console hands it the group&apos;s key, so a login sent to any instance is read by all. Leave the address empty to give the registered instance the key again.</span>
+              <ErrorBanner error={join.error} />
+              <Field label="Runner group">
+                <select className="input" value={joinServer} onChange={(e) => { setJoinServer(e.target.value); join.reset() }} data-testid="join-server-select">
+                  <option value="">Choose…</option>
+                  {runnerGroups.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Instance address">
+                <input className="input" placeholder="https://runner-2.example:8480" value={joinUrl} onChange={(e) => setJoinUrl(e.target.value)} data-testid="join-url-input" />
+              </Field>
+              <Field label="Pairing code">
+                <input className="input mono" value={joinCode} onChange={(e) => setJoinCode(e.target.value)} data-testid="join-code-input" />
+              </Field>
+              <button type="button" className="btn btn-primary" disabled={join.isPending || !joinServer || (!!joinUrl.trim() && !joinCode.trim())} onClick={() => join.mutate()} data-testid="join-button">
+                {join.isPending ? 'Joining…' : 'Join'}
+              </button>
+              {join.isSuccess && <div className="hint" data-testid="join-done">{join.data.instance} {join.data.already ? 'already held' : 'now holds'} the key of {join.data.server}.</div>}
+            </div>
+          </div>
+        )}
 
         {linkers.length > 0 && gateways.length > 0 && (
           <div className="card" style={{ marginTop: 20 }} data-testid="link-card">

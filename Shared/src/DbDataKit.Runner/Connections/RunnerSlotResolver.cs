@@ -213,7 +213,7 @@ public sealed class RunnerSlotResolver(DefinitionPublisher publisher, IConnectio
                 using var value = await secrets.ResolveAsync(SecretRef.Parse(reference), ct).ConfigureAwait(false);
                 list.Add(new SecretCheck(path, reference, true, null));
             }
-            catch (SecretNotFoundException) { list.Add(new SecretCheck(path, reference, false, $"The secret '{reference}' is not in this runner's secret store, the environment or the credentials directory. Send it with `secret send --to <this runner>`, or set it there.")); }
+            catch (SecretNotFoundException ex) { list.Add(new SecretCheck(path, reference, false, ex.Detail ?? $"The secret '{reference}' is not in this runner's secret store, the environment or the credentials directory. Send it with `secret send --to <this runner>`, or set it there.")); }
             catch (Exception ex) when (ex is ArgumentException or FormatException) { list.Add(new SecretCheck(path, reference, false, $"'{reference}' is not a secret reference this runner can parse.")); }
         }
 

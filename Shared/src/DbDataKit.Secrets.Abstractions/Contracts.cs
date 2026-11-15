@@ -34,8 +34,11 @@ public interface ISecretAudit
     void Resolved(string reference, string? provider, bool found);
 }
 
-public sealed class SecretNotFoundException(string reference)
-    : Exception($"Secret '{reference}' was not found by any configured provider.")
+/// <summary>No provider has the secret; <c>detail</c>, when given, says why in words (a group's value this instance has no key for names the key), never a value.</summary>
+public sealed class SecretNotFoundException(string reference, string? detail = null)
+    : Exception($"Secret '{reference}' was not found by any configured provider." + (detail is null ? "" : " " + detail))
 {
+    public string? Detail { get; } = detail;
+
     public string Reference { get; } = reference;
 }

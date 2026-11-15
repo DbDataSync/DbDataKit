@@ -27,8 +27,8 @@ public static class ServerProducts
     {
         private const string Name = "[A-Za-z0-9._-]+";
 
-        /// <summary>The pattern as an expression over the path: <c>{name}</c> is one segment of letters, digits and <c>. _ -</c>, <c>{sha}</c> 64 hexadecimal digits, <c>{id}</c> an instance id.</summary>
-        public Regex Route { get; } = new("^" + Pattern.Replace("{name}", Name).Replace("{sha}", "[0-9a-fA-F]{64}").Replace("{id}", "[A-Za-z0-9-]+") + "/?$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+        /// <summary>The pattern as an expression over the path: <c>{name}</c> is one segment of letters, digits and <c>. _ -</c>, <c>{secret}</c> a secret name (colons too, escaped or not), <c>{sha}</c> 64 hexadecimal digits, <c>{id}</c> an instance id.</summary>
+        public Regex Route { get; } = new("^" + Pattern.Replace("{name}", Name).Replace("{secret}", "[A-Za-z0-9._:%-]+").Replace("{sha}", "[0-9a-fA-F]{64}").Replace("{id}", "[A-Za-z0-9-]+") + "/?$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         /// <summary>Whether a person who holds <paramref name="held"/> may make the call (the runner's own rule, with the implications of the roles: an administrator operates and reads).</summary>
         public bool Allows(ServerRole held) => ServerRoles.Allows(held, Role) || (Or != ServerRole.None && ServerRoles.Allows(held, Or));
@@ -62,6 +62,8 @@ public static class ServerProducts
         new("GET", "api/v1/upgrade", ServerRole.Viewer),                                                    // UC09: the status of its own upgrade
         new("GET", "api/v1/certificate", ServerRole.Viewer),                                                // UI10: days left and subject of the certificate it presents, for Monitoring
         new("GET", "api/v1/secrets/overview", ServerRole.Admin),                                            // UI06: names, dates and references of the secrets and what names them, never a value
+        new("PUT", "api/v1/secrets/{secret}", ServerRole.Admin),                                            // E20d: a run login set on the Packages page (BindingsCard); the group's state keeps it when the group has a key; write-only
+        new("GET", "api/v1/group/key", ServerRole.Viewer),                                                  // E20d: whether the instance answering holds the group's key (never the key)
         new("GET", "api/v1/definitions/integration", ServerRole.Viewer),
         new("GET", "api/v1/definitions/integration/{name}", ServerRole.Viewer),
         new("GET", "api/v1/instances/{id}/labels", ServerRole.Viewer),                                      // UE11

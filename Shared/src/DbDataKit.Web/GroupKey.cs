@@ -50,9 +50,24 @@ public static class GroupCipher
 }
 
 /// <summary>A group key that is missing, not a key, or not the group's; <see cref="Secret"/> names the secret that holds it on the instance.</summary>
-public sealed class GroupKeyException(string secret, string message) : InvalidOperationException(message)
+public sealed class GroupKeyException(string secret, string message, GroupKeyProblem problem = GroupKeyProblem.WrongKey) : InvalidOperationException(message)
 {
     public string Secret { get; } = secret;
+
+    public GroupKeyProblem Problem { get; } = problem;
+}
+
+/// <summary>What is wrong with a group key on an instance.</summary>
+public enum GroupKeyProblem
+{
+    /// <summary>The instance's store has no key and the key is not made there: the instance has not been joined to its group.</summary>
+    Missing,
+
+    /// <summary>The text is not a key (not base64 of 32 bytes).</summary>
+    NotAKey,
+
+    /// <summary>A key, but not the one the group's values are protected with.</summary>
+    WrongKey,
 }
 
 /// <summary>
@@ -118,7 +133,7 @@ public sealed class GroupKey(StateDatabase state, Func<ISecretStore> store, Grou
     {
         byte[] key;
         try { key = GroupCipher.Parse(keyText); }
-        catch (FormatException ex) { throw new GroupKeyException(spec.Secret, spec.NotAKeyText(ex.Message)); }
+        catch (FormatException ex) { throw new GroupKeyException(spec.Secret, spec.NotAKeyText(ex.Message), GroupKeyProblem.NotAKey); }
         Check(key, made: false, opened: null);
         lock (_gate)
         {
@@ -162,7 +177,7 @@ public sealed class GroupKey(StateDatabase state, Func<ISecretStore> store, Grou
             {
                 if (held is null)
                 {
-                    if (!spec.MakeWhenMissing) throw new GroupKeyException(spec.Secret, spec.MissingText);
+                    if (!spec.MakeWhenMissing) throw new GroupKeyException(spec.Secret, spec.MissingText, GroupKeyProblem.Missing);
                     text = GroupCipher.NewKey();
                     using var value = SecretValue.From(text);
                     opened.SetAsync(name, value).GetAwaiter().GetResult();
@@ -173,7 +188,7 @@ public sealed class GroupKey(StateDatabase state, Func<ISecretStore> store, Grou
 
             byte[] key;
             try { key = GroupCipher.Parse(text); }
-            catch (FormatException ex) { throw new GroupKeyException(spec.Secret, spec.NotAKeyText(ex.Message)); }
+            catch (FormatException ex) { throw new GroupKeyException(spec.Secret, spec.NotAKeyText(ex.Message), GroupKeyProblem.NotAKey); }
             Check(key, made, opened);
             _key = key;
             return key;

@@ -14,7 +14,12 @@ public sealed record PendingSummary(string Id, string Name, string Product, stri
 /// <param name="Embedded">True for the runner built into this console (plan 28a R20): it is listed only when the console runs it, has no pairing and cannot be forgotten.</param>
 /// <param name="Generation">The compatibility generation the server reported, or the one last recorded for it (24a UC05); null when it states none.</param>
 /// <param name="OutsideSupport">Set when the server is further from this console than N and N-1: the words that say how far apart they are and which side to upgrade.</param>
-public sealed record InstanceSummary(string Id, string Name, string Url, string? Product, string? Version, int? ApiVersion, bool Reachable, bool? Ready, string? Problem, DateTimeOffset? PairedAt, bool Embedded = false, int? Generation = null, string? OutsideSupport = null);
+/// <param name="GroupJoin">On a pairing of a server whose group takes its key from the console (a runner, plan 28c E20d): null when the instance was given the group's key, else why not (the pairing stands; join it again from the server's page).</param>
+public sealed record InstanceSummary(string Id, string Name, string Url, string? Product, string? Version, int? ApiVersion, bool Reachable, bool? Ready, string? Problem, DateTimeOffset? PairedAt, bool Embedded = false, int? Generation = null, string? OutsideSupport = null, string? GroupJoin = null);
+
+/// <param name="Url">The address of another instance of the group; empty to hand the key to the instance at the registered address again.</param>
+/// <param name="Code">A pairing code made on that instance (or any of the group): it proves the instance serves the group before the key is sent.</param>
+public sealed record JoinRequest(string? Url, string? Code);
 
 /// <summary>
 /// The servers this console manages: list them with how each is, pair another, forget one (plan 13, U12). Administrators only, by the fallback policy: pairing gives this console's signing key
@@ -36,7 +41,7 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
         try
         {
             var paired = await instances.ConfirmAsync(pending, id, cancellationToken);
-            return Ok(Summarise(await instances.StatusAsync(paired, cancellationToken)));
+            return Ok(await JoinedAsync(paired, cancellationToken));
         }
         catch (DbDataKit.Web.Trust.PairingFailedException ex) { return BadRequest(new { error = ex.Message }); }
         catch (DbDataKit.Web.Trust.IncompatibleServerException ex) { return BadRequest(new { error = ex.Message }); }
@@ -65,7 +70,7 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
         try
         {
             var paired = await instances.PairAsync(url, request.Code ?? "", request.Name, cancellationToken);
-            return Ok(Summarise(await instances.StatusAsync(paired, cancellationToken)));
+            return Ok(await JoinedAsync(paired, cancellationToken));
         }
         catch (DbDataKit.Web.Trust.PairingFailedException ex)
         {
@@ -119,6 +124,29 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
 
     [HttpDelete("{id}")]
     public IActionResult Forget(string id) => id == ConsoleRunnerSettings.ServerId ? BadRequest(new { error = "The console's embedded runner is part of the console and cannot be forgotten; turn it off with runner.enabled in settings.yaml." }) : instances.Remove(id) ? NoContent() : NotFound(new { error = "No such server is registered." });
+
+    /// <summary>The summary of a server just paired, after it was joined to its group when its group takes its key from the console (plan 28c E20d).</summary>
+    private async Task<InstanceSummary> JoinedAsync(DbDataKit.Web.Trust.RegisteredInstance paired, CancellationToken ct)
+    {
+        var join = await services.GetRequiredService<ConsoleGroupKeys>().JoinPairedAsync(paired, ct);
+        return Summarise(await instances.StatusAsync(paired, ct)) with { GroupJoin = join is { Ok: false } ? join.Error : null };
+    }
+
+    /// <summary>
+    /// Joins an instance to the group of a registered server (plan 28c E20d): hands it the group's key, which the console keeps, so what is sent to any instance of the group is read by every one. With an address and a code, the
+    /// instance at that address (another instance on the group's state database) is paired first, which proves it serves the group; without, the instance at the registered address is given the key again.
+    /// </summary>
+    [HttpPost("{id}/join")]
+    public async Task<IActionResult> Join(string id, [FromBody] JoinRequest request, CancellationToken cancellationToken)
+    {
+        if (instances.Registry.Find(id) is not { } group) return NotFound(new { error = "No such server is registered." });
+        if (!ConsoleGroupKeys.TakesKey((await instances.StatusAsync(group, cancellationToken)).Product))
+            return BadRequest(new { error = $"{group.Name} is not a server whose group takes its key from the console (a runner)." });
+        Uri? url = null;
+        if (!string.IsNullOrWhiteSpace(request.Url) && !Uri.TryCreate(request.Url.Trim(), UriKind.Absolute, out url)) return BadRequest(new { error = "The address is an https address, such as https://runner-2.example:8480." });
+        var join = await services.GetRequiredService<ConsoleGroupKeys>().JoinAsync(group, url, request.Code, cancellationToken);
+        return join.Ok ? Ok(new { server = group.Name, instance = join.Instance, already = join.Already }) : StatusCode(join.Status is >= 400 and < 600 ? join.Status : 502, new { error = join.Error });
+    }
 
     private static InstanceSummary Summarise(InstanceStatus s) => new(
         s.Instance.InstanceId, s.Instance.Name, s.Instance.Url.AbsoluteUri, s.Product, s.Version, s.ApiVersion ?? s.Instance.ApiVersion, s.Reachable, s.Ready, s.Problem, s.Instance.PairedAt, Generation: s.KnownGeneration, OutsideSupport: s.OutsideSupport);

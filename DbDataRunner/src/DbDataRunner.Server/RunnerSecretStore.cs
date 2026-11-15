@@ -27,6 +27,9 @@ public sealed class RunnerSecretStore(string directory, Func<string, string?>? e
         }
     }
 
+    /// <summary>Whether anything was ever stored here (the file exists); asking makes no key.</summary>
+    public bool Exists => File.Exists(Path.Combine(SecretKeys.StoreDirectory(directory), EncryptedFileSecretStore.FileName));
+
     /// <summary>The store as a provider that opens it on first use and answers "no value" when it cannot be opened or has no file yet.</summary>
     public ISecretProvider Provider => new Lazy(this, directory);
 
