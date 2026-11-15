@@ -54,3 +54,13 @@ if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
     fi
   } >> "$CLAUDE_ENV_FILE"
 fi
+
+# --- tell the model how this environment differs from the repository docs (stdout of a SessionStart hook reaches it) ---
+# Fixed wording only: nothing read from a file or a server is printed here.
+cat <<'NOTE'
+Test engines in this cloud session are preconfigured, not started by testenv:
+- SQL Server 2025 runs in the Docker container "mssql" on localhost,1433; PostgreSQL 16 with the pgvector package runs on the machine on localhost:5432.
+- DBDATAKIT_TEST_SQLSERVER and DBDATAKIT_TEST_POSTGRES already point at them. The pgvector extension is available but is not created in any database until a test or CREATE EXTENSION vector does it.
+- Do NOT run `testenv/testenv.sh up mssql postgres` or `up` with no engine named, and do not eval `testenv/testenv.sh env` while mssql or postgres is among the running profiles: the testenv ports (14330, 15432) and Postgres 17 differ, and it would replace these variables.
+- The other engines (mssql-target, postgres-logical, mysql, mariadb, oracle, ...) may still be started by name with testenv, for example `testenv/testenv.sh up mysql mariadb`; the Docker daemon is already running.
+NOTE
