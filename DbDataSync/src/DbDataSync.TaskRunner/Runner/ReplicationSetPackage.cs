@@ -52,6 +52,9 @@ public static class ReplicationSetPackage
     /// <summary>Where in the package the definition is: the <c>repo_dir</c> input of the drain.</summary>
     public const string RepoDir = DefinitionFiles.RepoDir;
 
+    /// <summary>The name of the set's manual-only provisioning task (<see cref="ProvisionJob"/>, plan 28c E21); a replication may not take it.</summary>
+    public const string ProvisionTask = "provision";
+
     /// <summary>Where the configuration repository keeps the files a message names (the layout of <c>ConfigPaths</c>, which is internal to the core).</summary>
     /// <summary>The .NET the package is built for: what this assembly targets (<c>net10.0</c> is "10.0"), not the runtime the Sync program happens to run on (it rolls forward to a newer major where one is installed).</summary>
     private static string TargetDotnet()
@@ -127,6 +130,7 @@ public static class ReplicationSetPackage
             if (!task.Enabled) continue;       // a replication that is switched off is not published: it would only be a task that never runs
             var taskName = NameOf(task.Name);
             if (!PackageManifestValidator.NameRule.IsMatch(taskName)) { problems.Add($"{file}: the replication `{task.Name}` makes the task name `{taskName}`, which is not 1 to 64 lower-case letters, digits, `-` or `_`."); continue; }
+            if (taskName == ProvisionTask) { problems.Add($"{file}: the replication `{task.Name}` makes the task `{taskName}`, the name of the set's provisioning task; rename the replication."); continue; }
             if (named.TryGetValue(taskName, out var other)) { problems.Add($"{file}: the replications `{other}` and `{task.Name}` both make the task `{taskName}`; rename one of them."); continue; }
             named[taskName] = task.Name;
 
@@ -204,6 +208,16 @@ public static class ReplicationSetPackage
         if (tasks.Count == 0 && problems.Count == before)
             problems.Add($"{Paths.ReplicationsDir(configRoot)}: the repository has no enabled replication to publish.");
         if (problems.Count > before) return null;
+
+        // the set's database setup (plan 28c E21): one manual-only task over every connection of the set, run by hand under the name of the person who asked, never on a schedule, never retried
+        var allSlots = tasks.SelectMany(t => t.Connections).GroupBy(s => s.Name, StringComparer.Ordinal).Select(g => g.First()).OrderBy(s => s.Name, StringComparer.Ordinal).ToList();
+        var provision = ManifestGenerator.TaskOf(typeof(ProvisionJob));
+        tasks.Add(provision with
+        {
+            Entry = new TaskEntry(), Schedule = new Schedule(), Triggers = [TaskTrigger.ByHand()], Connections = allSlots,
+            Inputs = [.. provision.Inputs.Select(i => i.Name == "repo_dir" ? i with { Default = RepoDir } : i)],
+            Limits = provision.Limits with { Attempts = 1 },
+        });
 
         var manifest = new PackageManifest(package, $"The Sync replication set {package}: {tasks.Count} replication(s)",
             new PackageLaunch(LaunchKind.Executable, Runtime: new RuntimeReference(RuntimeName, runtimeRange)),

@@ -458,6 +458,40 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
             entry => File.Exists(entry) ? Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(entry))) : "<directory>"));
 
     [Fact]
+    public async Task TheProvisionTask_CreatesTheTargetTable_UnderTheRunLogin_AndReportsWhatItDid_WithoutWritingIntoTheView()
+    {
+        // plan 28c E21 (Sync half, step c): a person's Apply of the Setup card's "create target table" runs as the set's manual task; the definition is a read-only view, so the columns are a run output
+        var provisioned = $"Provisioned_{Guid.NewGuid():N}";
+        await SaveReplicationAsync("provision-sync", provisioned, provision: true);
+        await ExecuteAsync(_admin, $"DROP TABLE IF EXISTS dbo.[{provisioned}];");
+
+        var source = await PackageSourceAsync();
+        using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
+        var drain = await rig.DrainRequestAsync(source, "provision-sync");
+        var request = drain with
+        {
+            Task = new TaskRef(RunnerRig.Package, RunnerRig.Channel, ReplicationSetPackage.ProvisionTask),
+            Inputs = new Dictionary<string, string> { ["replication"] = "provision-sync", ["mapping"] = "main", ["action"] = ProvisioningActions.CreateTargetTable, ["steps"] = "", ["repo_dir"] = "repo" },
+        };
+        var before = Snapshot(request.PackageDirectory!);
+
+        var result = await rig.Executor.RunAsync(request);
+
+        Assert.True(result.End.State == TaskEndState.Succeeded && result.ExitCode == 0, Describe(rig, result));
+        Assert.Equal(0, (await TargetFingerprintAsync(provisioned)).Count);   // the table is there, and empty: provisioning moves no data
+        Assert.Equal(before, Snapshot(request.PackageDirectory!));
+
+        var steps = new DbDataKit.State.StepStore(rig.Database, new DbDataKit.State.ProgressKey(RunnerRig.Package, RunnerRig.Channel, ReplicationSetPackage.ProvisionTask)).List(RunnerRig.Chain);
+        var web = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+        var applied = System.Text.Json.JsonSerializer.Deserialize<ProvisionReport>(Assert.Single(steps, s => s.Name == "provision-applied").ResultJson!, web)!;
+        Assert.NotEmpty(applied.Steps);
+        Assert.All(applied.Steps, s => Assert.True(s.Succeeded, s.Error));
+        var columns = System.Text.Json.JsonSerializer.Deserialize<ProvisionedColumnsReport>(Assert.Single(steps, s => s.Name == "provisioned-columns").ResultJson!, web)!;
+        Assert.Equal(("provision-sync", "main"), (columns.Replication, columns.Mapping));
+        Assert.Equal(["Id", "Name"], columns.Columns.Select(c => c.Name).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public async Task AProvisioningReport_IsARunOutput_NotAWriteIntoTheView_AndNothingInTheViewChanges()
     {
         // plan 28c ED8 and ED9: the target table does not exist and the mapping has no cached target columns, so the pass creates the table and reports its columns; the definition is a read-only view

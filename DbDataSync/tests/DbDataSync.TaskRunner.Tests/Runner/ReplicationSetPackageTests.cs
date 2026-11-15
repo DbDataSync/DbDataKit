@@ -74,7 +74,8 @@ public sealed class ReplicationSetPackageTests : IDisposable
         var built = Build(out var problems);
 
         Assert.Empty(problems);
-        Assert.Equal(["customers", "events", "orders"], built.Manifest.Tasks.Select(t => t.Name));
+        Assert.Equal(["customers", "events", "orders", ReplicationSetPackage.ProvisionTask], built.Manifest.Tasks.Select(t => t.Name));
+        var drains = built.Manifest.Tasks.Where(t => t.Name != ReplicationSetPackage.ProvisionTask).ToList();
         var orders = built.Manifest.Tasks.Single(t => t.Name == "orders");
         Assert.Equal("*/15 * * * *", orders.Schedule.Cron);
         Assert.Equal(TimeSpan.FromSeconds(30), built.Manifest.Tasks.Single(t => t.Name == "events").Schedule.Every);
@@ -84,14 +85,23 @@ public sealed class ReplicationSetPackageTests : IDisposable
         Assert.Equal("orders", orders.Inputs.Single(i => i.Name == "replication").Default);
         Assert.Equal(ReplicationSetPackage.RepoDir, orders.Inputs.Single(i => i.Name == "repo_dir").Default);
         // plan 28c E12g: a killed drain is run again by the retry chain, so a periodic bulk load does not wait for its next cron time; it survives the manifest's text
-        Assert.All(built.Manifest.Tasks, t => Assert.Equal((ReplicationSetPackage.DrainAttempts, ReplicationSetPackage.DrainBackoff, ReplicationSetPackage.DrainMaxBackoff), (t.Limits.Attempts, t.Limits.Backoff, t.Limits.MaxBackoff)));
+        Assert.All(drains, t => Assert.Equal((ReplicationSetPackage.DrainAttempts, ReplicationSetPackage.DrainBackoff, ReplicationSetPackage.DrainMaxBackoff), (t.Limits.Attempts, t.Limits.Backoff, t.Limits.MaxBackoff)));
         Assert.Contains("attempts: 3", built.ManifestText);
         Assert.Null(orders.Limits.Concurrency);   // plan 28c E12e: a package-wide limit would serialize the replications of the set, and a continuous drain would starve the others
         Assert.Equal((ReplicationSetPackage.RuntimeName, "2026.11.x"), (built.Manifest.Launch.Runtime!.Name, built.Manifest.Launch.Runtime.Range));
 
         // the checkpoint of the drain is declared, once per task, as the engine keeps it
         Assert.Contains("watermark", built.ManifestText);
-        Assert.All(built.Manifest.Tasks, t => Assert.NotEqual(DbDataKit.State.ProgressDeclaration.Empty, t.Progress));
+        Assert.All(drains, t => Assert.NotEqual(DbDataKit.State.ProgressDeclaration.Empty, t.Progress));
+
+        // plan 28c E21: the set's database setup is one manual-only task over every connection of the set, never scheduled, never retried
+        var provision = built.Manifest.Tasks.Single(t => t.Name == ReplicationSetPackage.ProvisionTask);
+        Assert.Null(provision.Schedule.Cron);
+        Assert.Null(provision.Schedule.Every);
+        Assert.Equal(1, provision.Limits.Attempts);
+        Assert.Equal(drains.SelectMany(t => t.Connections).Select(c => c.Name).Distinct().Order(StringComparer.Ordinal), provision.Connections.Select(c => c.Name));
+        Assert.Equal(["replication", "mapping", "action", "steps", "repo_dir"], provision.Inputs.Select(i => i.Name));
+        Assert.Equal(ReplicationSetPackage.RepoDir, provision.Inputs.Single(i => i.Name == "repo_dir").Default);
 
         var load = PackageManifestReader.Load(built.ManifestText, "package.yaml");
         Assert.True(load.Ok, string.Join("\n", load.Diagnostics));

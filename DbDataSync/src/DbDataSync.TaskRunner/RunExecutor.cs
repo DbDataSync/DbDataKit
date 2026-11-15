@@ -1894,8 +1894,13 @@ public sealed class RunExecutor(
     /// decide a reader and a read intent before spending a connection on a pass that turns out not to
     /// be allowed to run (phase 101).
     /// </summary>
-    private async Task<DbConnection> OpenAsync(
-        ConnectionConfig config, IDriver driver, CancellationToken cancellationToken)
+    private Task<DbConnection> OpenAsync(
+        ConnectionConfig config, IDriver driver, CancellationToken cancellationToken) =>
+        OpenWithRunLoginAsync(config, driver, libraryRegistry, repoRoot, secretStore, cancellationToken);
+
+    /// <summary>A connection opened with the connection's run login (plan 28c, E20), the way a pass opens one; the provisioning task on a runner opens its connections the same way (E21).</summary>
+    internal static async Task<DbConnection> OpenWithRunLoginAsync(
+        ConnectionConfig config, IDriver driver, LibraryRegistry libraryRegistry, string repoRoot, SecretStore secretStore, CancellationToken cancellationToken)
     {
         // Phase 144: this process is spawned fresh per replication and may be the very first thing to
         // ever touch a given built-in driver — nothing guarantees the API already opened a connection

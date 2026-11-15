@@ -166,9 +166,11 @@ public sealed class PackagePublishOnRealRunnerTests : IDisposable
 
         // what the runner stored: three tasks of the drain, each declaring the engine's checkpoint, which the planner reads
         var manifest = runner.Manifest(version);
-        Assert.Equal(["customers", "events", "orders"], manifest.Tasks.Select(t => t.Name).Order());
+        Assert.Equal(["customers", "events", "orders", ReplicationSetPackage.ProvisionTask], manifest.Tasks.Select(t => t.Name).Order(StringComparer.Ordinal));
         Assert.Equal(ReplicationSetPackage.RuntimeName, manifest.Launch.Runtime!.Name);
-        foreach (var task in manifest.Tasks)
+        // plan 28c E21: the set's manual provisioning task, over every connection of the set
+        Assert.Equal(["crm_src", "dwh"], manifest.Tasks.Single(t => t.Name == ReplicationSetPackage.ProvisionTask).Connections.Select(c => c.Name));
+        foreach (var task in manifest.Tasks.Where(t => t.Name != ReplicationSetPackage.ProvisionTask))
         {
             var watermark = Assert.Single(task.Progress.Checkpoints, c => c.Name == "watermark");
             Assert.Contains("position", watermark.Parts.Keys);

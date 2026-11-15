@@ -6,7 +6,7 @@ namespace DbDataSync.TaskRunner.Runner;
 
 /// <summary>
 /// What the engine does when a runner starts it (<c>DbDataSync.TaskRunner --runner</c>, the executable launch of the package, plan 28c ED3): connect to the runner with the token and endpoint in the environment, run
-/// the one task it was started for, and say how it ended. The task is named by the runner (<c>DBDATAKIT_TASK_NAME</c>): a published replication set has one task per replication, each named for its replication (<see cref="ReplicationSetPackage"/>, plan 28c E08), and every one runs the drain.
+/// the one task it was started for, and say how it ended. The task is named by the runner (<c>DBDATAKIT_TASK_NAME</c>): a published replication set has one task per replication, each named for its replication (<see cref="ReplicationSetPackage"/>, plan 28c E08), and every one runs the drain; the set's manual task <c>provision</c> runs <see cref="ProvisionJob"/> (E21).
 /// </summary>
 public static class RunnerEntry
 {
@@ -35,7 +35,10 @@ public static class RunnerEntry
             cts.Cancel();
         };
 
-        var result = await RemoteJobHost.RunAsync<DrainJob>(cts.Token, new RemoteRunOptions { Client = "DbDataSync", AnyTaskName = true }).ConfigureAwait(false);
+        // the set's provisioning task runs the database setup (plan 28c E21); every other task is a replication's drain
+        var result = task == ReplicationSetPackage.ProvisionTask
+            ? await RemoteJobHost.RunAsync<ProvisionJob>(cts.Token, new RemoteRunOptions { Client = "DbDataSync" }).ConfigureAwait(false)
+            : await RemoteJobHost.RunAsync<DrainJob>(cts.Token, new RemoteRunOptions { Client = "DbDataSync", AnyTaskName = true }).ConfigureAwait(false);
         Console.Out.WriteLine($"{TrafficPrefix}sent {RunnerSocketTraffic.BytesSent} bytes, received {RunnerSocketTraffic.BytesReceived} bytes.");
         return result.End.State == TaskEndState.Failed ? (int)ExitCode.DataError : (int)ExitCode.Success;
     }

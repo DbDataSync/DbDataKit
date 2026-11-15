@@ -54,21 +54,3 @@ public sealed class MetadataService(DriverConnectionFactory connections, Scripte
     private static IScriptDialect DialectFor(IDriver driver) =>
         ScriptDialectAdapter.For(driver) ?? DialectlessScriptDialect.Instance;
 }
-
-/// <summary>Stands in for a driver that names no dialect — ODBC and JDBC reaching an arbitrary engine.
-/// Every member throws, so a script that needs one is told plainly rather than silently given SQL
-/// Server's.</summary>
-internal sealed class DialectlessScriptDialect : IScriptDialect
-{
-    public static DialectlessScriptDialect Instance { get; } = new();
-
-    public string EngineName => "Unknown";
-
-    public string QuoteIdentifier(string identifier) => throw Unsupported();
-    public string ParameterReference(string name) => throw Unsupported();
-    public CanonicalType ToCanonicalType(string nativeType) => throw Unsupported();
-    public RenderedColumnType RenderColumnType(CanonicalType type) => throw Unsupported();
-
-    private static InvalidOperationException Unsupported() =>
-        new("This connection's driver does not name a SQL dialect, so a script cannot generate SQL for it.");
-}
