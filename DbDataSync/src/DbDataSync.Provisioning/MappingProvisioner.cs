@@ -20,11 +20,19 @@ namespace DbDataSync.Provisioning;
 /// would generate unattended — never a second implementation that could quietly disagree.
 /// </para>
 /// </summary>
-/// <param name="author">Who a mapping saved after an apply is committed as: the signed-in person on the Sync server, the person a run was asked for on a runner.</param>
+/// <param name="afterApply">What an apply records about the mapping: saved and committed on the Sync server, reported as run outputs by the provisioning task on a runner (plan 28c E21).</param>
 public class MappingProvisioner(
-    ConfigRepository configRepository, IConnectionFactory connections, Func<GitAuthor> author,
+    ConfigRepository configRepository, IConnectionFactory connections, IMappingAfterApply afterApply,
     MappingColumnReader columnReader, DriverRegistry driverRegistry)
 {
+    /// <summary>The Sync server's provisioner: a mapping changed by an apply is saved and committed as <paramref name="author"/>.</summary>
+    public MappingProvisioner(
+        ConfigRepository configRepository, IConnectionFactory connections, Func<GitAuthor> author,
+        MappingColumnReader columnReader, DriverRegistry driverRegistry)
+        : this(configRepository, connections, new SavedMappingAfterApply(configRepository, author), columnReader, driverRegistry)
+    {
+    }
+
     public async Task<ProvisioningPlanReport> GetPlansAsync(
         string replicationName, string mappingName, CancellationToken cancellationToken)
     {
@@ -737,7 +745,7 @@ public class MappingProvisioner(
         foreach (var rename in pending)
             rename.Applied = true;
 
-        configRepository.SaveTableMapping(replicationName, mapping, author());
+        afterApply.RenamesApplied(replicationName, mapping, pending);
     }
 
     /// <summary>
@@ -759,10 +767,9 @@ public class MappingProvisioner(
     /// beside it.
     /// </para>
     /// <para>
-    /// Re-loads the mapping rather than writing back the copy this request opened with: that copy is
-    /// as old as the start of the Apply, and <see cref="MarkRenamesApplied"/> may already have saved
-    /// it. This write is about one field, so it is applied to one field of the current file — the same
-    /// rule <c>LocalRunnerConfig</c> follows.
+    /// What happens to the shape is <see cref="IMappingAfterApply.TargetColumnsRead"/>'s: on the Sync
+    /// server one field of the current mapping file is updated (the same rule <c>LocalRunnerConfig</c>
+    /// follows), on a runner it is a run output.
     /// </para>
     /// </summary>
     private async Task CacheTargetColumnsAsync(
@@ -776,16 +783,7 @@ public class MappingProvisioner(
         if (read.Shape is not { } shape)
             return;
 
-        var mapping = configRepository.LoadTableMapping(replicationName, mappingName);
-        if (CachedColumn.SameShape(mapping.TargetColumns, shape))
-            return;
-
-        mapping.TargetColumns = shape;
-        // Stamped for the reason a Refresh stamps it: the target really was read just now, and the age
-        // on screen is what an operator decides staleness from.
-        mapping.ColumnsCapturedUtc = DateTime.UtcNow;
-
-        configRepository.SaveTableMapping(replicationName, mapping, author());
+        afterApply.TargetColumnsRead(replicationName, mappingName, shape);
     }
 
     private static ProvisioningPlan Unsupported(string action, string driverType) =>
