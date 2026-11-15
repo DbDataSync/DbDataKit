@@ -143,7 +143,11 @@ public sealed class RunnerRunSource(RunnerAccess runner, DbDataSync.Core.Config.
         if (owned.Count == 0) return null;
         var runs = Require();
         // a drain's id is what the live view asks about, every 750 ms: one call
-        if (await runs.RunAsync(runId, ct).ConfigureAwait(false) is { } drain && owned.TryGetValue(drain.Task, out var of)) return ToRun(drain, of);
+        if (await runs.RunAsync(runId, ct).ConfigureAwait(false) is { } drain && owned.TryGetValue(drain.Task, out var of))
+        {
+            var passes = (await runs.StepsAsync(drain.Task, PassRecordText.StepName, MostRunsAsked, null, null, ct).ConfigureAwait(false)).Select(s => PassRecordText.TryParse(s.Result)).OfType<PassRecord>();
+            return ToRun(drain, of, ReadBy(drain.Id, passes));
+        }
         foreach (var task in owned.Keys)
         {
             var step = (await runs.StepsAsync(task, PassRecordText.StepName, 1, null, runId.ToString("N"), ct).ConfigureAwait(false)).FirstOrDefault();
@@ -158,11 +162,14 @@ public sealed class RunnerRunSource(RunnerAccess runner, DbDataSync.Core.Config.
     {
         if (drain.Outcome == "succeeded") return null;
         if (drain.Outcome is "failed" or "completed_with_failures" && passes.Any(p => p.DrainRunId == drain.Id && p.Status == nameof(RunStatus.Failed))) return null;
-        return ToRun(drain, replication);
+        return ToRun(drain, replication, ReadBy(drain.Id, passes));
     }
 
+    /// <summary>The rows the passes of a drain read so far (owner decision 2026-11-14: a drain's row shows the sum of its passes, growing as each one finishes, final when the drain ends).</summary>
+    public static long ReadBy(Guid drain, IEnumerable<PassRecord> passes) => passes.Where(p => p.DrainRunId == drain).Sum(p => p.RowsRead);
+
     /// <summary>A drain as a run of Sync's: its status from the runner's outcome, the item it failed on as the mapping (the unit key is the mapping and a claim, <c>orders#1a2b3c4d</c>), and the runner's classification of the failure.</summary>
-    public static TaskRunRecord ToRun(ClientRun drain, string replication) => new(
+    public static TaskRunRecord ToRun(ClientRun drain, string replication, long rowsRead = 0) => new(
         drain.Id, replication, Pid: null,
         drain.Outcome switch
         {
@@ -173,7 +180,7 @@ public sealed class RunnerRunSource(RunnerAccess runner, DbDataSync.Core.Config.
         },
         RunKind.Primary, PassRecordText.MappingOf(drain.FailedItem), SegmentLabel: null,
         EnqueuedAtUtc: drain.Started, ClaimedAtUtc: drain.Started, StartedAtUtc: drain.Started, EndedAtUtc: drain.Finished,
-        RowsRead: 0, RowsWritten: drain.Rows ?? 0,
+        RowsRead: rowsRead, RowsWritten: drain.Rows ?? 0,
         ErrorSummary: drain.Outcome == "interrupted" ? "The runner's process went away before the drain ended." : drain.FailureMessage,
         FailureKind: drain.FailureKind);
 

@@ -52,9 +52,13 @@ public sealed class RunnerRunStreamer(RunnerRunSource runs, IHubContext<RunHub> 
                 _announced.Add(run.Id);
                 _watching.Remove(run.Id);
                 _lastLine.Remove(run.Id);
+                // the rows its passes read, summed (owner decision 2026-11-14): final now that the drain has ended; unknown when the runner cannot be asked for them
+                long? read = null;
+                try { read = (await runs.FindAsync(run.Id, ct).ConfigureAwait(false))?.RowsRead; }
+                catch (Exception ex) when (ex is RunnerUnavailableException or RunnerClientException) { }
                 await hub.Clients.Group(run.Id.ToString()).SendAsync(
                     "runCompleted",
-                    new { runId = run.Id, status = StatusOf(run.Outcome), RowsRead = (long?)null, RowsWritten = run.Rows, ErrorSummary = run.FailureMessage },
+                    new { runId = run.Id, status = StatusOf(run.Outcome), RowsRead = read, RowsWritten = run.Rows, ErrorSummary = run.FailureMessage },
                     ct).ConfigureAwait(false);
             }
         }
