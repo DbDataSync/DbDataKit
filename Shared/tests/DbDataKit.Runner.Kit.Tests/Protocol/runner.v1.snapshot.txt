@@ -212,6 +212,7 @@ message ResolveConnectionReply field 12 = connection_string_secret string oneof 
 message ResolveConnectionReply field 13 = token string oneof _token
 message ResolveConnectionReply field 14 = http_definition string oneof _http_definition
 message ResolveConnectionReply field 15 = http_secrets map<string,string>
+message ResolveConnectionReply field 16 = definition string oneof _definition
 message EnqueueWorkRequest = present
 message EnqueueWorkRequest field 1 = kind string
 message EnqueueWorkRequest field 2 = subject string
