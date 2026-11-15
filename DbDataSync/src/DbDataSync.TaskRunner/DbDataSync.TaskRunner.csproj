@@ -31,6 +31,7 @@
     <ProjectReference Include="..\DbDataSync.State\DbDataSync.State.csproj" />
     <ProjectReference Include="..\DbDataSync.Tracking\DbDataSync.Tracking.csproj" />   <!-- the follower of a runner-owned replication's units; plan 28c, E17 -->
     <ProjectReference Include="..\DbDataSync.Planning\DbDataSync.Planning.csproj" />   <!-- the planner a drain runs at the start of each cycle; plan 28c, E11 -->
+    <ProjectReference Include="..\DbDataSync.Provisioning\DbDataSync.Provisioning.csproj" />   <!-- a replication's database setup as a manual task; plan 28c, E21 -->
     <!-- the shared state types come with the project reference; StateDatabase is Sync's own (plan 13, U04) -->
     <Using Include="DbDataKit.State" />
     <Using Include="DbDataKit.Monitoring" />
