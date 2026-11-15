@@ -1,11 +1,11 @@
 using DbDataSync.Core.Sql;
 using DbDataSync.Core.Config;
 
-namespace DbDataSync.Api.Services;
+namespace DbDataSync.Provisioning;
 
 /// <summary>
 /// Reads one side of a mapping's catalog and says either what is there or why it could not look —
-/// the single introspection path behind both <see cref="MappingMetadataService"/>'s Refresh and the
+/// the single introspection path behind both <c>MappingMetadataService</c>'s Refresh and the
 /// capture <c>TableMappingsController.BulkCreate</c> performs as it creates.
 /// <para>
 /// It goes through <see cref="IColumnCatalog"/> rather than a driver catalog of its own, which is

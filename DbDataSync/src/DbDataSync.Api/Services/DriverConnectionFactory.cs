@@ -8,21 +8,6 @@ using DbDataSync.State;
 
 namespace DbDataSync.Api.Services;
 
-/// <summary>
-/// What <see cref="DriverConnectionFactory"/> does, named so a caller can depend on the behaviour
-/// rather than the concrete class — the seam <c>ProvisioningService</c>'s tests use to hand it a
-/// counting fake instead of a real network connection (phase 105 §5's "one connection per endpoint"
-/// guarantee is otherwise invisible to a test).
-/// </summary>
-public interface IConnectionFactory
-{
-    /// <summary>Opens the connection with its <see cref="CredentialRole.Read"/> login: what the server does for itself (browsing, tests, previews, planning). A write is <see cref="OpenAsync(string, CredentialRole, CancellationToken)"/> with <see cref="CredentialRole.Run"/> (plan 28c, E20).</summary>
-    Task<(DbConnection Connection, IDriver Driver)> OpenAsync(
-        string connectionName, CancellationToken cancellationToken) => OpenAsync(connectionName, CredentialRole.Read, cancellationToken);
-
-    Task<(DbConnection Connection, IDriver Driver)> OpenAsync(
-        string connectionName, CredentialRole role, CancellationToken cancellationToken);
-}
 
 /// <summary>
 /// Opens a driver connection for a configured connection name, resolving its credential through
