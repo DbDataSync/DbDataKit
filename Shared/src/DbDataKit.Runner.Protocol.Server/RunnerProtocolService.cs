@@ -567,6 +567,7 @@ internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.Ru
         if (grant.ConnectionStringSecret is not null) reply.ConnectionStringSecret = grant.ConnectionStringSecret;
         if (grant.Token is not null) reply.Token = grant.Token;
         if (grant.HttpDefinition is not null) reply.HttpDefinition = grant.HttpDefinition;
+        if (grant.Definition is not null) reply.Definition = grant.Definition;
         foreach (var (reference, value) in grant.HttpSecrets) reply.HttpSecrets[reference] = value;
         return reply;
     });

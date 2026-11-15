@@ -88,6 +88,25 @@ public sealed class ConnectionSlotProtocolTests
 
     [Theory]
     [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
+    public async Task A_database_grant_carries_the_connections_definition_for_what_the_grant_has_no_field_for(string engine)
+    {
+        // plan 33 SC24: an additive field of ResolveConnectionReply; a task that opens the connection itself reads TLS and timeouts from it (secret references only)
+        using var h = new Harness(engine, remote: true);
+        const string definition = "schema: connection/1\nname: storedb\nengine: postgres\nconnection_string: 'Host=db;Database=d'\ntls: { encrypt: false }\nauth: { mode: sql, user: u, password_secret: 'env:PW' }\n";
+        var resolver = new FakeResolver { Answer = (slot, connection, role) => new ConnectionGrant { Slot = slot, Connection = connection, Engine = "postgres", Role = role, AuthMode = "sql", User = "u", Password = "pw-1", Definition = definition } };
+        var token = Grant(h, resolver, new Dictionary<string, string> { ["source"] = "storedb" });
+        GrantReader.Last = null;
+
+        var result = await RemoteJobHost.RunAsync<GrantReader>(h.Host.Endpoint, token, CancellationToken.None, new RemoteRunOptions { HeartbeatInterval = TimeSpan.Zero });
+
+        Assert.Equal(TaskEndState.Succeeded, result.End.State);
+        Assert.Equal(definition, GrantReader.Last!.Definition);
+        Assert.Null(GrantReader.Last.HttpDefinition);
+        h.Host.Unregister(token);
+    }
+
+    [Theory]
+    [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
     public async Task A_run_for_another_task_than_the_jobs_is_refused_unless_the_host_says_one_job_serves_many_tasks(string engine)
     {
         // plan 28c E07: a published Build project has one task per refresh plan, named for it, and one job runs them all

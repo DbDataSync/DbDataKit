@@ -22,7 +22,8 @@ public sealed class ConsoleJoinsRunnerGroupTests
 
     public static TheoryData<string> Engines => ["mssql", "postgres"];
 
-    private static async Task<(string Connection, Func<Task> Drop)> ProvisionAsync(string engine)
+    /// <summary>A new, empty database on the engine (<c>mssql</c> or <c>postgres</c>, from <c>DBDATAKIT_TEST_SQLSERVER</c> / <c>DBDATAKIT_TEST_POSTGRES</c>), its connection string and how to drop it; skipped when the engine is not set.</summary>
+    internal static async Task<(string Connection, Func<Task> Drop)> ProvisionAsync(string engine)
     {
         var name = $"ddk_join_{Guid.NewGuid():N}"[..24];
         if (engine == "mssql")

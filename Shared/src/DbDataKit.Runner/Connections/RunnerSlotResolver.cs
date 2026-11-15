@@ -144,6 +144,7 @@ public sealed class RunnerSlotResolver(DefinitionPublisher publisher, IConnectio
             Password = password,
             ConnectionStringSecret = whole,
             Token = token,
+            Definition = catalog.Text(connection),   // plan 33 SC24: the task that opens the connection itself reads TLS and timeouts from it
         };
     }
 

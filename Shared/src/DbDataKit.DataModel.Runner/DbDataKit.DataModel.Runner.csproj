@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.DataModel.Runner</RootNamespace>
+    <PackageId>DbDataKit.DataModel.Runner</PackageId>
+    <Description>A Store model's tables deployed as a manual Runner task (plan 33 SC24): the deploy job (create, or expand what exists; a dry run says what it would do), the definition package of a model with its storage slot, and the connection a task opens from its slot's grant.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.DataModel\DbDataKit.DataModel.csproj" />
+    <ProjectReference Include="..\DbDataKit.Runner.Kit\DbDataKit.Runner.Kit.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections\DbDataKit.Connections.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections.SqlServer\DbDataKit.Connections.SqlServer.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections.Postgres\DbDataKit.Connections.Postgres.csproj" />
+  </ItemGroup>
+</Project>

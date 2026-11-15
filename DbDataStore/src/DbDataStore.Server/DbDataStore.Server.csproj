@@ -17,6 +17,7 @@
     <DbDataKitReference Include="Hosting.Certificates" />
     <DbDataKitReference Include="Security.Acl" />
     <DbDataKitReference Include="DataModel" />   <!-- model/1: the models the server holds -->
+    <DbDataKitReference Include="DataModel.Runner" />   <!-- the deploy task, run by this program as the runtime dbdatastore-runtime (dbdatastore with the runner flag); plan 33 SC24 -->
     <DbDataKitReference Include="Lineage" />   <!-- the models in the suite's lineage graph; plan 18, G12 -->
     <DbDataKitReference Include="Serving.Notify" />   <!-- data.changed to the serving groups this server is paired with, after an applied write; plan 24a UC13 -->
     <DbDataKitReference Include="Store" />   <!-- validated, audited row writes -->

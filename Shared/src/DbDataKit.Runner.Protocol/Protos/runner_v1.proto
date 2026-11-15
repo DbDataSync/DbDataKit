@@ -491,6 +491,8 @@ message ResolveConnectionReply {
   // an http connection (plan 27a IX10, second half; additive): the definition text as the runner keeps it (secret references, never a value) and every reference of it resolved on the runner, by the reference as written.
   optional string http_definition = 14;
   map<string, string> http_secrets = 15;
+  // a database connection (plan 33 SC24; additive): the definition text as the runner keeps it (secret references, never a value), so a task that opens the connection itself gets what the grant does not carry (TLS, timeouts, properties).
+  optional string definition = 16;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------

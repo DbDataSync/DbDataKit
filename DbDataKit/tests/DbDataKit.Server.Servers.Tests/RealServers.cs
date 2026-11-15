@@ -137,6 +137,16 @@ internal static class Programs
 
     public static string Runner => Built("DbDataRunner/src/DbDataRunner.Server", "dbdatarunner.dll");
 
+    /// <summary>The dbdatastore program as built, the files of the runtime package <c>dbdatastore-runtime</c> in the tests (plan 33 SC24).</summary>
+    public static string StoreBuildOutput
+    {
+        get
+        {
+            Built("DbDataStore/src/DbDataStore.Server", "dbdatastore.dll");
+            return Path.Combine(RepositoryRoot, "DbDataStore/src/DbDataStore.Server", "bin", Configuration, "net10.0");
+        }
+    }
+
     /// <summary>The Sync engine as built (the TaskRunner's output folder), the files of the runtime package <c>dbdatasync-runtime</c> in the tests.</summary>
     public static string EngineBuildOutput
     {

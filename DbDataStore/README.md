@@ -79,6 +79,18 @@ entities:
 
 A newer version of a model is migrated per copy with `POST /api/v1/models/{m}/migrate` (administrator, a dry run unless `?apply=true`): it adds new tables and new columns (nullable) and says what it left. Every saved model text is kept under its SHA-256, so a copy runs the version it was made at (`GET .../migrations`: `current`, `behind`, `unknown`). That is the expand step. The **contract step** is `POST /api/v1/models/{m}/migrate/contract` (also under `/instances/{i}`; administrator): it plans, for this copy's tables, dropping each column the model no longer has and making each column the model requires NOT NULL (an expand adds it nullable), and answers `steps` (the statements), `hash` (of exactly this plan), `blocked`, `notes` and `copies` (each copy of the model and whether it is `current`, `behind` or `unknown`, so a copy still at the old version is named before a column it reads is dropped). It changes nothing until it is approved: `?approve=<hash>` with the hash of a plan that was read runs that plan in one transaction, or nothing (a plan that changed since is refused, and so is a column that some row has no value for, naming the column and the count). A copy that has had both steps runs the model as it is now; a copy at the old version is untouched until it is asked. Retyping a column and changes to history or instances are not applied (planned changes of their own), and the contract step does not yet ask which published packages still read a column (plan 21 CH06).
 
+### Deploying on a Runner (no Store server)
+
+A model's tables are also deployed by a Runner, with no Store server installed (plan 33 SC24). `dbdatastore` is then a runtime:
+`DbDataStore/scripts/publish-runtime.sh [rid]` makes the runtime package `dbdatastore-runtime` (the program and the manifest of
+`scripts/runtime-manifest.sh`, which starts `dbdatastore --runner`). A model becomes a definition package with
+`ModelDeployPackage.Build` (`DbDataKit.DataModel.Runner`): one manual-only task, `deploy`, one connection slot, `storage`,
+and the model as `files/model/model.yaml`. A channel binds `storage` to the model's connection on the Runner (the login is the
+Runner's). Running `deploy` (`dry_run` is true unless `dry_run=false` is given; `schema` defaults to the model's name) creates
+the model's storage when the schema has nothing of it, adds what is missing when it has some (the expand step above), or does
+nothing; a change that would remove or retype is left for a contract step (noted in the run's `deploy-report` step) and a
+blocked one fails the run without writing. The run is recorded under the name of whoever started it.
+
 ## Writing data
 
 `ModelWriter` applies a batch of inserts, updates and deletes in one transaction: values are read as the type holds them, every rule above is checked (the cross-row rules once per batch on the touched groups, so a batch can move a total between rows), and **every rule broken is reported at once** (rule, entity, attribute, key, a sentence; HTTP 422), writing nothing. An update or delete **names the version it read**; a changed row is a conflict (409, with the current version). Keys do not change. A delete that leaves a row pointing at it is refused. Each change writes an audit record in the same transaction (UUID v7 id, who, the versions, before and after).

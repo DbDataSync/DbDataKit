@@ -51,6 +51,9 @@ public sealed class ConnectionGrant
     /// </summary>
     public string? HttpDefinition { get; init; }
 
+    /// <summary>A database connection (plan 33 SC24): its definition text as the runner keeps it, secret references only, for what the grant does not carry (TLS, timeouts, properties). Null when the runner has no text for it.</summary>
+    public string? Definition { get; init; }
+
     /// <summary>The secrets <see cref="HttpDefinition"/> names, resolved on the runner and keyed by the reference as written (<c>secret:name</c>). Held in memory for the run; never logged, never in a manifest.</summary>
     public IReadOnlyDictionary<string, string> HttpSecrets { get; init; } = new Dictionary<string, string>();
 
@@ -76,6 +79,7 @@ public sealed class ConnectionGrant
         ConnectionStringSecret = reply.HasConnectionStringSecret ? reply.ConnectionStringSecret : null,
         Token = reply.HasToken ? reply.Token : null,
         HttpDefinition = reply.HasHttpDefinition ? reply.HttpDefinition : null,
+        Definition = reply.HasDefinition ? reply.Definition : null,
         HttpSecrets = reply.HttpSecrets.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal),
         DryRun = dryRun,
     };

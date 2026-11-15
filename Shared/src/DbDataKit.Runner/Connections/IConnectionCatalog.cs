@@ -83,4 +83,13 @@ public sealed class DirectoryConnectionCatalog(string directory) : IConnectionCa
 
         return null;
     }
+
+    /// <summary>The text of the connection's file (secret references only), when it has one that loads (plan 33 SC24: a task that opens the connection itself reads TLS and timeouts from it).</summary>
+    public string? Text(string name)
+    {
+        if (Find(name) is null) return null;
+        foreach (var extension in new[] { ".yaml", ".yml" })
+            if (File.Exists(Path.Combine(Directory, name + extension))) return File.ReadAllText(Path.Combine(Directory, name + extension));
+        return null;
+    }
 }
