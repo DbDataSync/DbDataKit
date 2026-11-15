@@ -1,6 +1,7 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import { api } from './client'
+import { ApiError } from '@dbdatakit/shell'
 
 // Who the caller is and the notification feed are the shell's hooks, used by every product's console the same way.
 export { useAuthStatus, useMarkNotificationsSeen, useNotifications, useSignInWithWindows, useSignOut } from '@dbdatakit/shell'
@@ -1147,7 +1148,7 @@ export function useInferredNaturalKey(
 }
 
 /** How often, and for how long, an Apply follows its run on the runner before it says where to look instead. */
-export const provisioningRunPoll = { intervalMs: 1000, timeoutMs: 10 * 60 * 1000 }
+export const provisioningRunPoll = { intervalMs: 1000, timeoutMs: 10 * 60 * 1000, notStartedMs: 2 * 60 * 1000 }
 
 /**
  * Follows a provisioning run of the runner (plan 28c E21, step d) until it ends, and answers what it did. A run that ended without reporting its steps (it failed before it could) is one failed step that carries the
@@ -1156,9 +1157,18 @@ export const provisioningRunPoll = { intervalMs: 1000, timeoutMs: 10 * 60 * 1000
 export async function followProvisioningRun(replicationName: string, started: ProvisioningRunStarted): Promise<RunnerApplyResult> {
   if (!started.runId)
     throw new Error('A provisioning run of this replication set is already queued or running on the runner. Apply again when it has ended.')
-  const deadline = Date.now() + provisioningRunPoll.timeoutMs
+  const startedAt = Date.now()
+  const deadline = startedAt + provisioningRunPoll.timeoutMs
   for (;;) {
-    const run = await api.provisioning.run(replicationName, started.runId)
+    let run
+    try {
+      run = await api.provisioning.run(replicationName, started.runId)
+    } catch (error) {
+      // a run the runner queued has no record until a runner claims it: the read answers 404 until then, so the screen waits for it a while before it says the runner has no such run
+      if (!(error instanceof ApiError && error.status === 404) || Date.now() - startedAt > provisioningRunPoll.notStartedMs) throw error
+      await new Promise((resolve) => setTimeout(resolve, provisioningRunPoll.intervalMs))
+      continue
+    }
     if (run.finished) {
       const steps = run.steps ?? [{ title: 'The provisioning run', succeeded: false, error: run.failure ?? `The run ended ${run.outcome} without reporting its steps.` }]
       return { runId: run.runId, outcome: run.outcome, steps }
@@ -1175,8 +1185,9 @@ export async function followProvisioningRun(replicationName: string, started: Pr
 export function useApplyProvisioning(replicationName: string, mappingName: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    // plan 28c E21: `followProvisioningRun` over `api.provisioning.runOnRunner` replaces this once a draft's mapping can be applied on the runner (step e); until then the server's own Apply
-    mutationFn: (action: string) => api.provisioning.apply(replicationName, mappingName, action),
+    // plan 28c E21: the DDL runs on the runner, as the set's `provision` task under the signed-in person's name; the card follows that run to its end
+    mutationFn: async (action: string) =>
+      followProvisioningRun(replicationName, await api.provisioning.runOnRunner(replicationName, mappingName, action)),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.provisioning(replicationName, mappingName) }),
   })
 }
@@ -1198,7 +1209,8 @@ export function useReplicationProvisioningPlan(replicationName: string | undefin
 export function useApplyReplicationProvisioningPlan(replicationName: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (stepIds: string[]) => api.provisioning.applyReplicationPlan(replicationName, stepIds),
+    mutationFn: async (stepIds: string[]) =>
+      followProvisioningRun(replicationName, await api.provisioning.runStepsOnRunner(replicationName, stepIds)),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.replicationProvisioningPlan(replicationName) }),
   })
 }

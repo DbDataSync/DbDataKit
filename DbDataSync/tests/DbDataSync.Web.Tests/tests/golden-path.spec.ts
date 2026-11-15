@@ -822,11 +822,15 @@ new DropGadgets()
     await expect(targetPlan).toContainText('Description')
     await shot(page, '24-create-table-plan.png')
 
+    // The Apply runs on the runner, as the set's `provision` task under this person's name (plan 28c E21): the set is published first, with the mapping whose
+    // target is not there yet (owner decision 2026-11-15, option 1: it publishes, and its drain refuses until the table exists)
+    await publishToRunner(page, PROVISIONED_REPLICATION, [SRC_CONNECTION_NAME, TGT_CONNECTION_NAME])
     page.once('dialog', (d) => d.accept())
     await targetPlan.getByTestId('provisioning-plan-target-apply').click()
+    await expect(targetPlan.getByTestId('provisioning-plan-target-run')).toContainText('provision', { timeout: 60_000 })
 
     // Each step's outcome, not just the resulting state: a step can fail without the request failing.
-    await expect(targetPlan.getByTestId('provisioning-plan-target-result')).toContainText('✓', { timeout: 20_000 })
+    await expect(targetPlan.getByTestId('provisioning-plan-target-result')).toContainText('✓', { timeout: 60_000 })
     await expect(targetPlan).toContainText('satisfied', { timeout: 20_000 })
 
     // Applied down to nothing outstanding, and the badge goes entirely rather than reading "0".
@@ -842,8 +846,7 @@ new DropGadgets()
     // Monitoring, not Runs — Run Now is chrome, reachable from any tab (phase 103 moved Runs under
     // Monitoring as a sub-tab, and this proves the button still works from a tab that is not it).
     await page.getByTestId('tab-monitoring').click()
-    await publishToRunner(page, PROVISIONED_REPLICATION, [SRC_CONNECTION_NAME, TGT_CONNECTION_NAME])   // its pass runs on the runner too (plan 28c E22)
-    await runNow(page, PROVISIONED_REPLICATION)
+    await runNow(page, PROVISIONED_REPLICATION)   // its pass runs on the runner too (plan 28c E22), from the set published before the Apply
 
     await expect.poll(async () => {
       const response = await page.request.get(`/api/replications/${PROVISIONED_REPLICATION}/runs?limit=30`)

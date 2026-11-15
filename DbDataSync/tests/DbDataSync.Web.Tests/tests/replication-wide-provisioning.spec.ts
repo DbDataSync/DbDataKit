@@ -106,6 +106,8 @@ async function lastCopiedText(page: Page): Promise<string> {
   return page.evaluate(() => (window.__copied as string[]).at(-1) ?? '')
 }
 
+const RUN_ID = '0197f0e0-0000-7000-8000-0000000000a4'
+
 async function stub(page: Page, { planCallCount }: { planCallCount: { count: number } }) {
   const base = `/api/replications/${REPLICATION_NAME}`
 
@@ -130,9 +132,12 @@ async function stub(page: Page, { planCallCount }: { planCallCount: { count: num
     planCallCount.count += 1
     return route.fulfill(json(planPayload()))
   })
-  await page.route(`**${base}/provisioning/apply`, (route) => route.fulfill(json({
+  // the Apply runs on the runner (plan 28c E21): the page starts the set's `provision` task and follows the run, which reports each chosen step by its id and outcome
+  await page.route(`**${base}/provisioning/run`, (route) => route.fulfill(json({ runId: RUN_ID, task: 'provision', onBehalfOf: 'Playwright' })))
+  await page.route(`**${base}/provisioning/runs/*`, (route) => route.fulfill(json({
+    runId: RUN_ID, outcome: 'succeeded', started: '2026-11-15T10:00:00Z', finished: '2026-11-15T10:00:01Z', failure: null,
     steps: [
-      { id: TABLE_STEP.id, title: TABLE_STEP.title, outcome: 'Applied', error: null, warning: null, elapsedMs: 12 },
+      { id: TABLE_STEP.id, title: TABLE_STEP.title, succeeded: true, error: null, outcome: 'Applied' },
     ],
   })))
   await page.route(`**${base}`, (route) => route.fulfill(json(TASK)))
@@ -219,6 +224,7 @@ test.describe('replication detail: replication-wide provisioning (phase 105)', (
 
     const tableRow = page.getByTestId('provisioning-step').filter({ hasText: TABLE_STEP.title })
     await expect(tableRow.getByTestId('provisioning-step-result')).toContainText('applied')
+    await expect(page.getByTestId('provisioning-run')).toContainText(RUN_ID)
 
     // Apply's success invalidates the plan query, and the page re-fetches it — the same "re-plan after
     // Apply" rule the per-mapping Setup card follows, so selection is never left describing a plan that
