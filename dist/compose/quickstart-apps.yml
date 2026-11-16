@@ -1,6 +1,6 @@
 # The quickstart's Gateway also serving the identity home and the apps host, with the sample apps mounted (docs/apps-testing.md). Add it to the quickstart's file:
 #   docker compose -f dist/compose/quickstart.yml -f dist/compose/quickstart-apps.yml up -d --build --wait
-#   dist/compose/quickstart/apps-bootstrap.sh        # publishes the sample model and apps (run from the repository root)
+#   dist/compose/quickstart/apps-bootstrap.sh        # publishes the sample apps (run from the repository root)
 # People sign in at https://localhost:8817 (the identity home), apps are at https://localhost:8818/apps/<instance>/. Self-signed certificates; not for production.
 # The apps host signs in through a public client registered at the home: apps-gateway.sh makes it the first time the container starts and keeps its id in /data.
 services:
@@ -18,7 +18,4 @@ services:
       - "8818:8818"
     volumes:
       - ./quickstart/apps-gateway.sh:/quickstart/apps-gateway.sh:ro
-      - ../../DbDataGateway/templates/apps:/samples/apps:ro
-  store:
-    volumes:
       - ../../DbDataGateway/templates/apps:/samples/apps:ro

@@ -1,11 +1,11 @@
 # Testing the suite on a Windows test server
 
 How to install every DbDataKit service on one Windows machine with one command, then check that each one does its main job. Use a test
-machine, not your live Sync server. Each check in step 4 is pass or fail. If one fails, write down what happened: it becomes a new row of open
+machine, not a live install. Each check in step 4 is pass or fail. If one fails, write down what happened: it becomes a new row of open
 work, and the rest of the checks still count.
 
 **What CI already proves.** The suite release runs `dist/tests/suite-scoop-e2e.ps1` on a Windows runner (`suite-install-windows` in
-`suite-release.yml`, green since 2026-11-12). It installs `dbdatakit-full` with Scoop, starts all seven services, waits until each answers its health
+`suite-release.yml`). It installs `dbdatakit-full` with Scoop, starts all four services, waits until each answers its health
 check and the console lists it as paired and ready, then repeats the install, updates and uninstalls. Steps 1 to 3 below are that, by hand.
 Step 4 is what CI does not check yet: that each service does its main job.
 
@@ -28,8 +28,8 @@ Use `dist` instead of `dist-beta` for the newest stable release, and `dist-snaps
 
 When it returns:
 
-- every service is registered, running and paired with the console: `DbDataKit` (the console), `dbdatagateway`, `DbDataRunner`, `DbDataSync`,
-  `DbDataBuild`, `DbDataStore` and `DbDataWorkspace`;
+- every service is registered, running and paired with the console: `DbDataKit` (the console), `dbdatagateway`, `DbDataRunner` and
+  `DbDataWorkspace`;
 - the console's address and a **setup link** for the first administrator are printed. The link is also in
   `C:\ProgramData\DbDataKit\server\FIRST-RUN.txt`.
 
@@ -52,12 +52,12 @@ To open the console from another machine, use the machine's name instead of `loc
 
 ```powershell
 dbdatakit instance list
-Get-Service DbDataKit, dbdatagateway, DbDataRunner, DbDataSync, DbDataBuild, DbDataStore, DbDataWorkspace
+Get-Service DbDataKit, dbdatagateway, DbDataRunner, DbDataWorkspace
 ```
 
 In the console, open **Servers**. **Setup** in the rail lists the first steps and ticks each one off by what the console actually has.
 
-**Pass:** all six servers are listed as answering, with the same version, and all seven services are `Running`.
+**Pass:** the three servers are listed as answering, with the same version, and all four services are `Running`.
 
 ## 4. One task per service
 
@@ -78,17 +78,14 @@ Each task below names where its full description lives. The console's **Docs** h
 
 | # | Service | Task | Pass when | Details |
 | --- | --- | --- | --- | --- |
-| 4.1 | Sync | The Sync server was deleted (plan 33 SC23): a replication is authored in the Workspace and run by the Runner, as 4.9 checks | 4.9 passes | `DbDataSync/docs/getting-started.md` ("Your first replication") |
-| 4.2 | Build | Open Build from **Servers**, **Projects → New project** from a template, add a connection to `demo`, then in a workspace **Import from a connection** for `dbo.orders`, **Write the compiled files**, commit, and deploy the plan | the plan applies and the table or view it names exists in `demo` | `DbDataBuild/docs/interfaces.md` ("Starting a project, a model or an import from the console") |
 | 4.3 | Gateway | Add `demo` as a `sqlserver` data source (the Gateway's **Data sources** screen, or `server.yaml` as the Gateway README describes) open to everyone for this test (`everyone: true`; a source that names no group and is not open is refused), make a service account and token (`dbdatagateway identity service-account-add --name me`, then `identity token-create --account me --name test`), and query it | `dbdatagateway query run --insecure --user <account> --password <token> --datasource demo --sql "SELECT count(*) FROM dbo.orders"` prints 5 | `DbDataGateway/README.md` ("Quick start", "Data sources") |
-| 4.4 | Store | Open the Store from **Servers**, add a connection to `demo`, save a `model/1` with one entity whose `storage` names that connection, **create the tables**, and write a row | the row is in the entity's table and the model's history lists your save | `DbDataStore/README.md` ("The model", "Writing data", "The console's screens") |
 | 4.5 | Workspace | `dbdataworkspace project create hello --kind app`, then open the Workspace from **Servers** and edit, commit and merge a file of a workspace of `hello` | the commit is on the project's main branch | `DbDataWorkspace/README.md` |
 | 4.6 | Runner | Open the Runner from **Servers** and look at its packages, channels and runs | the Runner's pages open and say what it serves (none yet) | `DbDataRunner/README.md` |
 
 ### 4b. Build and Sync authored in the Workspace
 
-These checks are the test release the hand-over of Build's and Sync's authoring waits for (`docs/authoring-parity.md`). The Workspace runs the
-`dbdatabuild` and `dbdatasync` programs the package installed for its checks and builds.
+A build project (SQL models) and a sync project (replications) are authored in the Workspace and published to the Runner, which runs them. The
+Workspace runs the `dbdatabuild` and `dbdatasync` programs the package installed for its checks and builds.
 
 First pair the Workspace with the Runner as a publisher, once:
 
@@ -106,8 +103,7 @@ dbdataworkspace publisher pair runner --url https://127.0.0.1:8495 --code <code>
 
 What these tasks leave out, on purpose:
 
-- **The Runner runs no task here.** A task comes from a published package, and the release has no sample package to publish yet. Sync and Build
-  already run their work on their own servers.
+- **The Runner runs no task here** beyond what 4.8 and 4.9 publish: the release has no sample package of its own.
 - **The Workspace does not build apps here.** Building an app needs bun and a package store (`apps.packageStore`), and the package installs neither.
   Editing, committing and merging work without them.
 - **Sign-in with Windows accounts or Entra** is not part of this test.

@@ -6,7 +6,9 @@ public sealed class SuiteEnvironmentException(string message) : InvalidOperation
 /// <summary>
 /// The one reader of the variables that say where a service keeps its data and which database holds its state (plan 33 section 6c), so no product spells its own:
 /// <list type="bullet">
-/// <item><c>DBDATAKIT_DATA</c>: the data root of the install; each service keeps a folder under it named for it (<c>server</c>, <c>gateway</c>, <c>runner</c>, <c>sync</c>, <c>build</c>, <c>store</c>, <c>workspace</c>, <c>identity</c>).</item>
+/// <item><c>DBDATAKIT_DATA</c>: the data root of the install; each service keeps a folder under it named for it (<c>server</c>, <c>gateway</c>, <c>runner</c>, <c>workspace</c>, <c>identity</c>), and so does each command line that keeps
+/// files or a state of its own (<c>sync</c>: the configuration repository <c>dbdatasync</c> works on; <c>build</c>: the state of <c>dbdatabuild</c>'s checks; <c>store</c>: <c>dbdatastore</c>'s folder of models). The Build, Sync and Store
+/// servers were deleted (plan 33 SC23); their command lines still read these names.</item>
 /// <item><c>DBDATAKIT_DATA_&lt;X&gt;</c>: one service's folder (X is the service in capitals); it wins over the root.</item>
 /// <item><c>DBDATAKIT_STATE_ENGINE</c> and <c>DBDATAKIT_STATE_CONNECTION</c>: the state database of the whole install; <c>DBDATAKIT_STATE_&lt;X&gt;_ENGINE</c> and <c>_CONNECTION</c>: one service's, which wins.</item>
 /// </list>
@@ -25,7 +27,7 @@ public static class SuiteEnvironment
     /// <summary>The state connection string of the whole install.</summary>
     public const string StateConnectionVariable = "DBDATAKIT_STATE_CONNECTION";
 
-    /// <summary>The services and modules that have a folder, as the lowercase names the folders have. The DbDataKit service itself is <c>server</c> (plan 33 D9).</summary>
+    /// <summary>The services, modules and command lines that have a folder, as the lowercase names the folders have. The DbDataKit service itself is <c>server</c> (plan 33 D9); <c>sync</c>, <c>build</c> and <c>store</c> are the command lines'.</summary>
     public static IReadOnlyList<string> Services { get; } = ["server", "gateway", "runner", "sync", "build", "store", "workspace", "identity"];
 
     private static string Checked(string service)

@@ -1,4 +1,4 @@
-# Everything on one machine, for trying the suite out: the console and a Gateway (the Build and Sync servers were deleted, plan 33 SC23: a Build project or a replication is authored in a Workspace and runs on a Runner), and a PostgreSQL with demo data.
+# The console and a Gateway on one machine, for trying the suite out, and a PostgreSQL with demo data. The Workspace and the Runner have no image yet: they are installed from their packages (docs/quickstart.md).
 # Every server announces itself to the console and waits to be confirmed. See docs/quickstart.md. Run from the repository root:
 #   docker compose -f dist/compose/quickstart.yml up -d --build --wait
 # Not for production: the demo database has a published password and a published port.

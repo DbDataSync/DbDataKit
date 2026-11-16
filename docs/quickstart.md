@@ -1,6 +1,8 @@
 # QuickStart
 
-The whole suite on one machine in about ten minutes, with demo data to point it at. You need Docker with Compose and a checkout of this repository. Nothing here is meant for production: the demo database has a published password and port, and the servers use their own self-signed certificates.
+The console and a Gateway on one machine in about ten minutes, with demo data to point them at. You need Docker with Compose and a checkout of this repository. Nothing here is meant for production: the demo database has a published password and port, and the servers use their own self-signed certificates.
+
+The suite is four services: the console, the Workspace (where projects are authored), the Gateway (which serves data) and the Runner (which runs the published work). This quickstart has the two that have a container image, the console and the Gateway; the Workspace and the Runner are installed from their packages (`docs/suite-single-server-install.md` installs all four on one machine).
 
 ## 1. Start it
 
@@ -10,17 +12,15 @@ From the repository root:
 docker compose -f dist/compose/quickstart.yml up -d --build --wait
 ```
 
-The first build takes several minutes (five images). It starts:
+The first build takes several minutes (two images). It starts:
 
 | Service | What it is | Reachable at |
 | --- | --- | --- |
 | `console` | the web app that manages the others | https://localhost:8480 |
 | `gateway` | DbDataGateway, the Arrow Flight SQL gateway | `localhost:8815` (Flight), management inside the network |
-| `build` | DbDataBuild, tables and views from SQL models | through the console |
-| `store` | DbDataStore, master data models | through the console |
 | `demo-db` | PostgreSQL 17 with demo data | `localhost:15434`, user `demo`, password `demo` |
 
-The demo database `demo` holds `customers` (4 rows) and `orders` (5 rows). `demo_target` is empty, for a replication to write into; `mdm` is the Store's.
+The demo database `demo` holds `customers` (4 rows) and `orders` (5 rows). `demo_target` is empty, for a replication to write into; `mdm` is for a master data model.
 
 ## 2. Sign in
 
@@ -36,7 +36,7 @@ Open the link it prints (`https://localhost:8480/invite#<code>`) and register a 
 docker compose -f dist/compose/quickstart.yml exec console dotnet /app/dbdatakit.dll user invite --role admin --email you@example.com --url https://localhost:8480
 ```
 
-After you sign in, **Setup** in the rail lists the first steps (pair the servers, add a connection, make a first Build project) and finishes each one by what the console actually has.
+After you sign in, **Setup** in the rail lists the first steps (pair the servers, add a connection, make a first project in the Workspace) and finishes each one by what the console actually has.
 
 ## 3. Confirm the servers
 
@@ -54,10 +54,8 @@ A confirmed server shows as ready, with its version, and its screens open from i
 Use the demo database from any of the products. From inside the network it is host `demo-db`, port `5432`, user `demo`, password `demo`, database `demo`; from your machine it is `localhost:15434`.
 
 * **Look at the data** with any PostgreSQL client: `psql "host=localhost port=15434 user=demo password=demo dbname=demo" -c "select * from orders"`.
-* **Replicate** `demo` into `demo_target`: a replication is authored in a sync project of a Workspace and run by a Runner (the Sync server was deleted, plan 33 SC23); neither is in this quickstart yet.
-* **Serve it** through the Proxy: add `demo` as a data source and connect an Arrow Flight SQL client to `localhost:8815`.
-* **Model it** with Build: a Build project of SQL models over `demo`, planned and applied from the console.
-* **Master data** with the Store: it already has a connection `mdm` (`connections/mdm.yaml` in its directory, logging in through the `MDM_CONNECTION` environment variable of the compose file). Save a `model/1` file whose `storage: {connection: mdm}`, create its tables and write rows over the Store's management API through the console's relay, `/relay/<server>/api/v1/models/...`: `PUT /models/<name>`, `POST /models/<name>/storage/create`, `POST /models/<name>/changes`, `GET /models/<name>/entities/<entity>/rows`. `DbDataStore/README.md` has the details.
+* **Serve it** through the Gateway: add `demo` as a data source (the Gateway's **Data sources** screen, from **Servers**) and connect an Arrow Flight SQL client to `localhost:8815`.
+* **Replicate, model or keep master data**: a replication (a sync project), SQL models (a build project) or a master data model (a store project) is authored in the Workspace and published to a Runner, which runs it; a model's rows are written through a Gateway. Neither the Workspace nor the Runner is in this quickstart: add them from their packages, pair them with this console, and point them at `demo-db` (from your machine, `localhost:15434`).
 
 ## 5. Stop it
 
