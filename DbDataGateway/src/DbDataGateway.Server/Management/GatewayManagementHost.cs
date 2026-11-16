@@ -212,6 +212,17 @@ public static class GatewayManagementHost
             var result = await definitionsApi.StoreArtifactAsync(sha256, context.Request.Body, context.Request.ContentType, caller, context.RequestAborted);
             return Results.Json(result.Body, statusCode: result.Status);
         });
+        // the group's master data for the console's screens (plan 33 SC24): the store module's paths under /api/v1/store/models, as the person the token names, with the module's own rules; a write clears what this Gateway caches of it
+        if (GatewayModules.Has(options, GatewayModules.Store))
+            app.MapMethods($"{GatewayStoreManagement.Prefix}/{{**rest}}", ["GET", "POST", "DELETE"], async (HttpContext context) =>
+            {
+                var sp = app.Services;
+                var api = Hosting.GatewayStoreModule.ApiOf(sp.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>(), sp.GetRequiredService<DbDataKit.State.StateDatabase>(), sp.GetRequiredService<DbDataGateway.Server.Secrets.SecretsRuntime>(),
+                    sp.GetRequiredService<Serving.PublishedEntityModels>(), sp.GetService<Serving.GatewayCache>());
+                var body = await GatewayStoreManagement.BodyAsync(context.Request.Body, context.Request.Method, context.RequestAborted);
+                var result = await GatewayStoreManagement.HandleAsync(api, context.ManagementToken(), context.Request.Method, context.Request.Path.Value! + context.Request.QueryString, body, context.RequestAborted);
+                return Results.Json(result.Body, statusCode: result.Status);
+            });
         // the approvals of the mcp module, for the console's inbox (plan 27a AG33): the person the token names answers, with the module's own rules
         if (GatewayModules.Has(options, GatewayModules.Mcp))
             app.MapMethods($"{GatewayMcpManagement.Prefix}/{{**rest}}", ["GET", "POST"], async (HttpContext context) =>

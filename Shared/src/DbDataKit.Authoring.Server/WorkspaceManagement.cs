@@ -706,7 +706,7 @@ public static class WorkspaceManagement
                 ["targets"] = new JsonArray([.. store.PublisherKeys().Select(k => (JsonNode?)new JsonObject
                 {
                     ["name"] = k.Name,
-                    ["gateway"] = publishing.Find(k.Name)?.Url, ["product"] = publishing.Find(k.Name)?.Product,
+                    ["gateway"] = publishing.Find(k.Name)?.Url, ["product"] = publishing.Find(k.Name)?.Product, ["instance"] = publishing.Find(k.Name)?.InstanceId,
                     ["accepts"] = AcceptsFor(context, publishing.Find(k.Name)),
                     ["can_publish"] = publishing.Find(k.Name) is { } t && ServerRoles.TryParse(t.Roles, out var held) && (ServerRoles.Allows(held, ServerRole.Publisher) || ServerRoles.Allows(held, ServerRole.Admin)),
                 })]),

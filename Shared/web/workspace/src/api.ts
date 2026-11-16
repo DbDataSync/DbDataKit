@@ -40,7 +40,8 @@ export interface BuildReadiness {
   bun: { path: string; source: string } | null
   isolation: { setting: string; available: boolean }
 }
-export interface PublishTarget { name: string; gateway: string | null; product?: string | null; accepts?: boolean | null; can_publish: boolean }
+/** A paired target; `instance` is its instance id, which is also the console's name for the server (its relay is `/relay/<instance>/...`). */
+export interface PublishTarget { name: string; gateway: string | null; product?: string | null; instance?: string | null; accepts?: boolean | null; can_publish: boolean }
 
 /** A kind of project the server hosts (`GET /api/v1/project-kinds`) and what it publishes as, to which product (plan 33 SC20). */
 /** A starting point for a new project of a kind besides its plain one (plan 27a IX21): ordinary code the author then owns. */
