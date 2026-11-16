@@ -208,4 +208,8 @@ export interface SemanticCatalogView {
 }
 
 /** What a prune answers (plan 30 PB05): the versions removed or, in a dry run, the ones that would be, the candidates kept with the reason, and the files that go with them. */
+/** A slot's binding in a channel, as the shared API reads it (plan 33 SW02: who bound it and when). */
+export interface DefinitionBindingRow { channel: string; slot: string; bound_to: string; revision: number; bound_by?: string | null; bound_at?: string | null }
+/** A definition as the shared API describes it: what each channel serves, and the bindings. */
+export interface DefinitionDescription { kind: string; name: string; latest_version: number; channels: { channel: string; active: number | null; previous: number | null; staged: number | null }[]; bindings: DefinitionBindingRow[] }
 export interface PruneAnswer { kind: string; name: string; dry_run: boolean; remove: number[]; retained: { version: number; reason: string }[]; files: string[] }

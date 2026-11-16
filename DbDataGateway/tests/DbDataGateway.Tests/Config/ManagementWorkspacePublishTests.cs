@@ -149,6 +149,12 @@ public sealed partial class ManagementTests
         Assert.Equal(handMade, File.ReadAllText(ConnectionFile("by-hand")));
         Assert.Equal(1, app.Services.GetRequiredService<DbDataGateway.Server.Serving.PublishedSemanticModels>().Current("sales_catalog"));
         Assert.DoesNotContain(ConfigTestSupport.AuditEntries(dataDirectory), a => (string)a["command"]! == "data-source adopt");
+        // plan 33 SW02: the Models screen reads who bound the slot and when from the shared read
+        var described = await BodyAsync(await CallAsync(admin, HttpMethod.Get, "/api/v1/definitions/semantic-model/sales_catalog", ServerRole.Admin));
+        Assert.True(described["bindings"] is JsonArray, described.ToJsonString());
+        var binding = described["bindings"]!.AsArray().Single(b => (string)b!["slot"]! == "by-hand")!;
+        Assert.False(string.IsNullOrEmpty((string?)binding["bound_by"]));
+        Assert.NotNull((string?)binding["bound_at"]);
     }
 
     [Fact]

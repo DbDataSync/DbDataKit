@@ -225,7 +225,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
                 ["depends_on"] = new JsonArray([.. v.DependsOn.Select(d => (JsonNode)JsonValue.Create(d)!)]), ["files"] = publisher.Artifacts(kind, name, v.Version).Count,
             })]),
             ["channels"] = Heads(kind, name),
-            ["bindings"] = new JsonArray([.. publisher.HeadsOf(kind, name).SelectMany(h => publisher.Bindings(h.Channel, kind, name)).Select(b => (JsonNode)new JsonObject { ["channel"] = b.Channel, ["slot"] = b.Slot, ["bound_to"] = b.BoundTo, ["revision"] = b.Revision })]),
+            ["bindings"] = new JsonArray([.. publisher.HeadsOf(kind, name).SelectMany(h => publisher.Bindings(h.Channel, kind, name)).Select(b => (JsonNode)new JsonObject { ["channel"] = b.Channel, ["slot"] = b.Slot, ["bound_to"] = b.BoundTo, ["revision"] = b.Revision, ["bound_by"] = b.BoundBy, ["bound_at"] = b.BoundAt.UtcDateTime.ToString("O") })]),
         });
     }
 

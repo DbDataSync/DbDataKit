@@ -5,7 +5,7 @@ import type { AccessCoverage, AccessExplanation, AccessRulesAnswer } from './acc
 import type { CacheOverview } from './cacheTypes'
 import type { ReplayResult, RunDetail, RunResult, RunRow, SavedQueryRow, SavedQueryVersionRow } from './runTypes'
 import type {
-  AdoptAnswer, ExportComponentState, PruneAnswer, SemanticCatalogView, EntityModelDetail, EntityModelRow, SemanticModelDetail, SemanticModelRow, AppApprovals, AppCheck, AppDomainCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SecretWritten, SecretsList, ServerSettings, SettingsCheck, SettingsEdit, SettingsWritten, SessionRow, TestResult, WriteDataSourceResult,
+  AdoptAnswer, DefinitionDescription, ExportComponentState, PruneAnswer, SemanticCatalogView, EntityModelDetail, EntityModelRow, SemanticModelDetail, SemanticModelRow, AppApprovals, AppCheck, AppDomainCheck, AppDetail, AppInstances, AppsList, NavigationSetRow, ServerClient, CertificateInfo, JwtMapping, CommitDiff, CommitRow, DataSourceFile, DataSourceSummary, FailureRow, Identities, Limits, NotificationRow, Overview, QueryRow, SecretWritten, SecretsList, ServerSettings, SettingsCheck, SettingsEdit, SettingsWritten, SessionRow, TestResult, WriteDataSourceResult,
 } from './types'
 
 const v1 = '/api/v1'
@@ -28,6 +28,13 @@ export const gatewayApi = {
   /** Prune the versions of a definition of any serving kind (plan 30 PB05); `dry_run` true says what would go and removes nothing. An administrator's call. */
   definitions: {
     prune: (kind: string, name: string, body: { versions: number[]; dry_run: boolean }) => request<PruneAnswer>(`${v1}/definitions/${enc(kind)}/${enc(name)}/prune`, { method: 'POST', body: JSON.stringify(body) }),
+    /** A definition through the shared API: its versions, what each channel serves and the bindings of its slots (who bound each and when; plan 33 SW02). */
+    read: (kind: string, name: string) => request<DefinitionDescription>(`${v1}/definitions/${enc(kind)}/${enc(name)}`),
+    /** One version whole; its manifest names the slots it needs. */
+    version: (kind: string, name: string, version: number) => request<{ version: number; manifest: string }>(`${v1}/definitions/${enc(kind)}/${enc(name)}/versions/${version}`),
+    /** Binds slots in a channel (an administrator binds a data source made by hand; a publisher only its own). */
+    bind: (channel: string, kind: string, name: string, slots: Record<string, string>, expectedRevision?: number) => put<unknown>(`${v1}/bindings/${enc(channel)}/${enc(kind)}/${enc(name)}`, expectedRevision === undefined ? { slots } : { slots, expected_revision: expectedRevision }),
+    unbind: (channel: string, kind: string, name: string, slot: string) => request<unknown>(`${v1}/bindings/${enc(channel)}/${enc(kind)}/${enc(name)}/${enc(slot)}`, { method: 'DELETE' }),
   },
   /**
    * The trust store of the serving kinds (plan 30 PB03): the publisher keys each kind trusts, whether signed versions are required for it, and the group's mode (`test` makes signatures optional everywhere an administrator has not
