@@ -23,7 +23,7 @@ public sealed partial class GatewaySecrets(ISecretStore store, IAuditLog audit, 
     private sealed record WriteRequest(string? Value);
 
     /// <summary>The kind segment of this caller's secrets: its client id, made safe for a secret name.</summary>
-    private static string KindOf(ManagementCaller caller) => "managed-" + Unsafe().Replace(caller.Token is { } t ? OwnerScope.Stamp(t) : "local", "-");
+    internal static string KindOf(ManagementCaller caller) => "managed-" + Unsafe().Replace(caller.Token is { } t ? OwnerScope.Stamp(t) : "local", "-");
 
     public async Task<ManagementResult> HandleAsync(string method, string[] rest, string? body, ManagementCaller caller, CancellationToken cancellationToken)
     {

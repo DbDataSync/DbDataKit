@@ -379,10 +379,12 @@ public sealed partial class ManagementTests : IAsyncLifetime
         var ok = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Post, "/api/v1/data-sources/scratch/test", ServerRole.Admin)).Content.ReadAsStringAsync())!;
         Assert.True((bool)ok["ok"]!);
 
-        await CallAsync(server, HttpMethod.Put, "/api/v1/data-sources/nowhere", ServerRole.Admin,
-            Put(Conn.Yaml("nowhere", connectionString: "Server=127.0.0.1,1;Database=d;Connect Timeout=3", auth: "auth: { mode: sql, user: u, password_secret: 'env:NOWHERE_PW' }"), null));
         using (new EnvScope(("NOWHERE_PW", "pw")))
         {
+            // plan 30 PB02: the secret the file names is bound before the data source is written (the variable is set, so the Gateway holds it)
+            Assert.Equal(HttpStatusCode.OK, (await CallAsync(server, HttpMethod.Put, "/api/v1/bindings/prod/data-source/nowhere", ServerRole.Admin, SlotBody("env:NOWHERE_PW", "env:NOWHERE_PW"))).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await CallAsync(server, HttpMethod.Put, "/api/v1/data-sources/nowhere", ServerRole.Admin,
+                Put(Conn.Yaml("nowhere", connectionString: "Server=127.0.0.1,1;Database=d;Connect Timeout=3", auth: "auth: { mode: sql, user: u, password_secret: 'env:NOWHERE_PW' }"), null))).StatusCode);
             var failed = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Post, "/api/v1/data-sources/nowhere/test", ServerRole.Admin)).Content.ReadAsStringAsync())!;
             Assert.False((bool)failed["ok"]!);
             Assert.False(string.IsNullOrWhiteSpace((string)failed["message"]!));

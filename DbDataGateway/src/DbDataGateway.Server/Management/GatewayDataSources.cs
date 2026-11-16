@@ -24,7 +24,8 @@ namespace DbDataGateway.Server.Management;
 /// </summary>
 public sealed partial class GatewayDataSources(
     string configDirectory, GatewayManagement validation, Action reload, Func<DataSourceCatalog> catalog, IAuditLog audit, GitCommitService? git, TimeProvider? clock = null, Func<string, PairedClient?>? findClient = null,
-    DbDataGateway.Server.Serving.PublishedDataSources? published = null, DataSourceAdoptions? adoptions = null, Func<DbDataKit.Serving.IServingCatalog>? servingCatalog = null)
+    DbDataGateway.Server.Serving.PublishedDataSources? published = null, DataSourceAdoptions? adoptions = null, Func<DbDataKit.Serving.IServingCatalog>? servingCatalog = null,
+    DefinitionPublisher? registry = null, Func<string, bool>? secretHeld = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly WriteGuard _guard = new();
@@ -196,6 +197,8 @@ public sealed partial class GatewayDataSources(
         return ManagementResult.Ok(new JsonObject
         {
             ["name"] = name, ["text"] = text, ["version"] = VersionOf(text), ["group"] = group,
+            // plan 30 PB02: each secret the file names is a slot production binds before a version naming it is served
+            ["secret_slots"] = SecretSlotsView(name, text),
             ["grants"] = GrantsView(DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, name + ".yaml").Definition, group),
             ["policy"] = PolicyView(DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, name + ".yaml").Definition, text, group),
             // plan 33 SC21f: the publishing clients that put a model on this data source with `adopt` (who, when, for which model)
@@ -305,6 +308,13 @@ public sealed partial class GatewayDataSources(
         var candidate = validation.ValidateFiles(new Dictionary<string, string> { [$"connections/{name}.yaml"] = text });
         if (candidate.Body["valid"]?.GetValue<bool>() != true)
             return new ManagementResult(400, new JsonObject { ["error"] = "The data source is not valid, so nothing was written.", ["valid"] = false, ["diagnostics"] = candidate.Body["diagnostics"]!.DeepClone() });
+
+        // plan 30 PB02: a file that names a secret production has not bound is refused, whoever made the data source (a clean break: the refusal names the slot and how to bind it)
+        if (UnboundSlots(name, text) is { } unboundSlots)
+        {
+            Record(caller, "data-source write", name, "refused");
+            return unboundSlots;
+        }
 
         var expectedVersion = adopting ? VersionOf(existing!) : request.ExpectedVersion;   // a publisher cannot read a file made by hand: adopting replaces the file it finds, and the answer says what that was
         var changes = existing is null ? new JsonArray() : DefinitionChanges.Between(existing, text);

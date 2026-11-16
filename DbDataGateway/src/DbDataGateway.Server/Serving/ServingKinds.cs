@@ -8,8 +8,8 @@ namespace DbDataGateway.Server.Serving;
 
 /// <summary>
 /// The serving kinds in plan 30's registry (PB01): <c>semantic-model</c>, <c>data-source</c>, <c>entity-model</c> and the apps' <c>app</c>, <c>app-instance</c> and <c>app-nav</c>, next to the views' <c>dashboard</c> and <c>report</c> (those register
-/// themselves in <see cref="GatewayViewsPublishing"/>). Each has the validator the per-kind endpoint runs before it publishes, the formats its program reads (24a UC01) and target type <c>serving</c>, mode <c>serve</c>. Slots: a model names the data sources it needs as slots in its manifest (<c>slots</c>, plan 33 SW01), and a version that names one is refused until the channel binds it; the others declare none (a data source's
-/// secrets are pushed to the instance, see plan 30 PB02). A store from <see cref="StoreOf"/> publishes through this registry.
+/// themselves in <see cref="GatewayViewsPublishing"/>). Each has the validator the per-kind endpoint runs before it publishes, the formats its program reads (24a UC01) and target type <c>serving</c>, mode <c>serve</c>. Slots: a model names the data sources it needs as slots in its manifest (<c>slots</c>, plan 33 SW01), and a version that names one is refused until the channel binds it; a data source has a slot per secret
+/// reference its file names (<see cref="DataSourceSlots"/>, plan 30 PB02), bound to the secret of the same name the Gateway holds; the others declare none. A store from <see cref="StoreOf"/> publishes through this registry.
 /// </summary>
 public static class ServingKinds
 {
@@ -20,7 +20,8 @@ public static class ServingKinds
     public static DefinitionKinds Register(DefinitionKinds kinds)
     {
         kinds.Register(new DefinitionKind(PublishedSemanticModels.DefinitionKind, [TargetType], PublishMode.Serve) { Formats = DefinitionFormats.Of(2), Validator = ValidateModel, FormatOf = ModelFormat, SlotsOf = manifest => SlotsOfModel(PublishedSemanticModels.ContentOf(manifest)?.Slots, SlotAccess.Read) });
-        kinds.Register(new DefinitionKind(PublishedDataSources.DefinitionKind, [TargetType], PublishMode.Serve) { Formats = DefinitionFormats.Of(ConnectionDefinition.CurrentVersion), Validator = ValidateDataSource, FormatOf = text => ConnectionDefinitionLoader.FormatOfText(text) });
+        kinds.Register(new DefinitionKind(PublishedDataSources.DefinitionKind, [TargetType], PublishMode.Serve) { Formats = DefinitionFormats.Of(ConnectionDefinition.CurrentVersion), Validator = ValidateDataSource, FormatOf = text => ConnectionDefinitionLoader.FormatOfText(text),
+            SlotsOf = DataSourceSlots.Of, HowToBind = DataSourceSlots.HowToBind });
         kinds.Register(new DefinitionKind(PublishedEntityModels.DefinitionKind, [TargetType], PublishMode.Serve) { Formats = DefinitionFormats.Of(DataModelLoader.Version), Validator = ValidateEntityModel, FormatOf = EntityModelFormat, SlotsOf = manifest => SlotsOfModel(EntityModelSlots(manifest), SlotAccess.Write) });
         return DbDataKit.Apps.AppDefinitions.Register(kinds);
     }

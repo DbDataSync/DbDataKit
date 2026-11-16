@@ -64,6 +64,12 @@ public sealed record DefinitionKind(string Name, IReadOnlyList<string> TargetTyp
     /// <summary>Slots a version declares in its manifest, read from the manifest text; added to <see cref="Slots"/>.</summary>
     public Func<string, IReadOnlyList<DefinitionSlot>>? SlotsOf { get; init; }
 
+    /// <summary>
+    /// What the refusal of a version with unbound slots says after naming them: how to bind them, in the host's words (the Gateway's data sources name the screen and the call; plan 30 PB02). Given the definition's name, the channel and the unbound slots.
+    /// Null for the registry's own sentence (which, for a write slot outside production, adds that a write is never inherited).
+    /// </summary>
+    public Func<string, string, IReadOnlyList<string>, string>? HowToBind { get; init; }
+
     /// <summary>The slots a version with this manifest needs bound in a channel.</summary>
     public IReadOnlyList<DefinitionSlot> SlotsFor(string manifest)
     {

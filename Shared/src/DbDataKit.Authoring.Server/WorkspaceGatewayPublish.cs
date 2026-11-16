@@ -175,7 +175,23 @@ public sealed partial class WorkspaceGatewayPublish(IDefinitionsLink link, Conso
         if (held?.Manifest is { } current && !ReferenceLine().IsMatch(text) && ReferenceLine().Match(current) is { Success: true } login) text += login.Value.TrimEnd() + "\n";
         if (!ManagedByLine().IsMatch(text)) text += $"managed_by: {identity.Id}\n";
         step($"Sent the data source document of '{name}' (no login in it).");
-        var answer = await client.PublishAsync(new DefinitionPublishRequest(DataSourceKind, name, text, ExpectedVersion: held?.Latest ?? 0), ct);
+        var request = new DefinitionPublishRequest(DataSourceKind, name, text, ExpectedVersion: held?.Latest ?? 0);
+        var answer = await client.PublishAsync(request, ct);
+        // plan 30 PB02: every secret the document names (the login kept from the Gateway's file) is a slot the channel binds; the Workspace binds it itself where the Gateway lets this client (a secret it stored), an administrator otherwise
+        var slots = DbDataKit.Connections.ConnectionSecretSlots.OfText(text, name).Select(s => s.Slot).ToArray();
+        if (!answer.Ok && answer.Body["code"]?.GetValue<string>() == "unboundslot" && slots.Length > 0)
+        {
+            var bound = await client.BindAsync(Channel, DataSourceKind, name, slots.ToDictionary(s => s, s => s, StringComparer.Ordinal), null, ct);
+            if (!bound.Ok)
+            {
+                var call = $"PUT /api/v1/bindings/{Channel}/{DataSourceKind}/{name} {{\"slots\": {{{string.Join(", ", slots.Select(s => $"\"{s}\": \"{s}\""))}}}}}";
+                throw new WorkspacePublishException($"The Gateway refused the data source {name} ({answer.Status}): {answer.Error} The Workspace could not bind {(slots.Length == 1 ? "the secret" : "the secrets")} itself ({bound.Error}). "
+                    + $"An administrator of the Gateway binds {(slots.Length == 1 ? "it" : "them")} once: the Secret slots box of the data source on the Gateway's Data sources screen, or {call}.",
+                    409);
+            }
+            step($"Bound the {(slots.Length == 1 ? "secret" : "secrets")} {string.Join(", ", slots.Select(s => "'" + s + "'"))} of the data source '{name}' on the Gateway.");
+            answer = await client.PublishAsync(request, ct);
+        }
         if (!answer.Ok) throw Refused(answer, $"the data source {name}");
         return new JsonObject { ["name"] = name, ["version"] = (int?)answer.Body["version"], ["created"] = (bool?)answer.Body["created"] ?? held is null };
     }

@@ -97,7 +97,14 @@ public static class GatewayManagementHost
         var audit = new DbDataGateway.Server.State.StateAuditLog(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>());
         var adoptions = new DataSourceAdoptions(configDirectory);
         dataSources = new GatewayDataSources(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit, git, findClient: clients.Find, published: app.Services.GetRequiredService<Serving.PublishedDataSources>(), adoptions: adoptions,
-            servingCatalog: () => app.Services.GetRequiredService<DbDataKit.Serving.IServingServices>().Catalog);
+            servingCatalog: () => app.Services.GetRequiredService<DbDataKit.Serving.IServingServices>().Catalog,
+            // plan 30 PB02: the bindings of the data sources' secret slots, and whether the Gateway holds a secret a slot is bound to (resolved here, never returned)
+            registry: new DbDataKit.State.DefinitionPublisher(state, Serving.ServingKinds.All, targetType: Serving.ServingKinds.TargetType),
+            secretHeld: reference =>
+            {
+                try { return app.Services.GetRequiredService<Secrets.SecretsRuntime>().ResolveSecret("Gateway:DataSources:SecretSlot", reference) is { Length: > 0 }; }
+                catch (Secrets.SecretConfigurationException) { return false; }
+            });
         // the semantic models' route, which the shared publish API's hook for the kind also uses (plan 30 PB02)
         var semanticModels = new GatewaySemanticModels(app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(),
             () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue, configDirectory, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit, adoptions: adoptions, ruled: () => app.Services.GetRequiredService<Serving.RuledTables>());

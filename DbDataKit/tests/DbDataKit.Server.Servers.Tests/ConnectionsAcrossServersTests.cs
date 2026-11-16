@@ -26,7 +26,7 @@ public sealed class ConnectionsAcrossServersTests : IAsyncLifetime
     private string coreDirectory = null!;
 
     /// <summary>A Gateway of its own directory with a management listener, a certificate of its own and the data sources given (file name and text); its pairing code and the address of its management API.</summary>
-    private async Task<(string Code, Uri Url, RealProcess Process)> StartGatewayAsync(string directory, params (string Name, string Text)[] sources)
+    private async Task<(string Code, Uri Url, RealProcess Process)> StartGatewayAsync(string directory, IReadOnlyDictionary<string, string>? environment, params (string Name, string Text)[] sources)
     {
         var gateway = Programs.Gateway;
         Directory.CreateDirectory(Path.Combine(directory, "config", "connections"));
@@ -37,7 +37,7 @@ public sealed class ConnectionsAcrossServersTests : IAsyncLifetime
         var management = Programs.FreePort();
         var code = Programs.CodeIn(await RealProcess.RunAsync(gateway, "server", "pair", "--repo", directory, "--max-role", "admin"));
         var process = RealProcess.Start(gateway, ["server", "run", $"--Gateway:DataDirectory={directory}", "--Gateway:Listen:Address=127.0.0.1", $"--Gateway:Listen:Port={Programs.FreePort()}",
-            "--Gateway:Management:Enabled=true", "--Gateway:Management:Address=127.0.0.1", $"--Gateway:Management:Port={management}", "--Gateway:Management:LocalChannel=false"]);
+            "--Gateway:Management:Enabled=true", "--Gateway:Management:Address=127.0.0.1", $"--Gateway:Management:Port={management}", "--Gateway:Management:LocalChannel=false"], environment: environment);
         started.Add(process);
         return (code, new Uri($"https://127.0.0.1:{management}"), process);
     }
@@ -48,9 +48,10 @@ public sealed class ConnectionsAcrossServersTests : IAsyncLifetime
         var consoleDirectory = Path.Combine(root, "console");
 
         // two Gateways: the edge one has a data source made by hand, the core one has none
-        var edge = await StartGatewayAsync(edgeDirectory, ("erp",
+        var edge = await StartGatewayAsync(edgeDirectory, null, ("erp",
             "# the ERP reader\nschema: connection/1\nname: erp\nengine: sqlserver\naddress: { host: localhost, database: Erp }\nauth: { mode: sql, user: reader, password_secret: 'env:ERP_DB_PASSWORD' }\nextensions:\n  gateway:\n    allow_writes: false\n"));
-        var core = await StartGatewayAsync(coreDirectory);
+        // the core one has the variable the data source's login names, so an administrator can bind it there (plan 30 PB02)
+        var core = await StartGatewayAsync(coreDirectory, new Dictionary<string, string> { ["ERP_DB_PASSWORD"] = "not-a-real-password" });
         await Task.WhenAll(edge.Process.WaitUntilAsync(new Uri(edge.Url, "/health/live"), TimeSpan.FromSeconds(90)), core.Process.WaitUntilAsync(new Uri(core.Url, "/health/live"), TimeSpan.FromSeconds(90)));
 
         console = ConsoleHost.Build(new ConsoleSettings(consoleDirectory, new Uri("https://localhost:0")), ConsoleHost.Certificate(consoleDirectory), _ => { }, webRoot: Path.Combine(consoleDirectory, "none"));
@@ -92,6 +93,16 @@ public sealed class ConnectionsAcrossServersTests : IAsyncLifetime
         Assert.Empty(coreList.Body!["data_sources"]!.AsArray());
 
         // the edge Gateway to the core one: the file the core has is the edge's file under its new name, with the Gateway's own settings and the secret reference as written, and the core has validated it (it is in force: listed and valid)
+        // plan 30 PB02: the copy names a secret the core Gateway's production has not bound, so the core refuses it, naming the data source, the slot, the channel and how to bind it; nothing is written
+        var refused = await AsPerson(HttpMethod.Post, "/api/connections/copy", new { from = edgeId, name = "erp", to = coreId, newName = "erp-core" });
+        Assert.True(refused.Status == HttpStatusCode.Conflict, $"copy: {refused.Status} {refused.Body}");
+        Assert.Contains("data-source 'erp-core'", (string)refused.Body!["error"]!);
+        Assert.Contains("env:ERP_DB_PASSWORD", (string)refused.Body!["error"]!);
+        Assert.Contains("channel 'prod'", (string)refused.Body!["error"]!);
+        Assert.False(File.Exists(GatewayFile(coreDirectory, "erp-core")));
+        var bound = await AsPerson(HttpMethod.Put, $"/relay/{coreId}/api/v1/bindings/prod/data-source/erp-core", new { slots = new Dictionary<string, string> { ["env:ERP_DB_PASSWORD"] = "env:ERP_DB_PASSWORD" } });
+        Assert.True(bound.Status == HttpStatusCode.OK, $"bind: {bound.Status} {bound.Body}");
+
         var copied = await AsPerson(HttpMethod.Post, "/api/connections/copy", new { from = edgeId, name = "erp", to = coreId, newName = "erp-core" });
         Assert.True(copied.Status == HttpStatusCode.OK, $"copy: {copied.Status} {copied.Body}");
         var written = File.ReadAllText(GatewayFile(coreDirectory, "erp-core"));

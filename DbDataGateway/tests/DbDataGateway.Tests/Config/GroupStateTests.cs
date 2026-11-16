@@ -578,6 +578,8 @@ public sealed class GroupStateTests : IAsyncLifetime
             // the test engine's TLS certificate is a throwaway one, so a PostgreSQL source asks for encryption without verifying it, as its administrator would write it (PostgresEnv)
             var login = JsonNode.Parse(await (await Call(HttpMethod.Put, "/api/v1/secrets/sales-login", new { value = engine == "postgres" ? database + ";SSL Mode=Require" : database })).Content.ReadAsStringAsync())!;
             var reference = (string)login["reference"]!;
+            // plan 30 PB02: the secret the data source names is bound in production before the data source is written (its own secret, so the client binds it)
+            await Call(HttpMethod.Put, "/api/v1/bindings/prod/data-source/sales-ro", new { slots = new Dictionary<string, string> { [reference["secret:".Length..]] = reference["secret:".Length..] } });
             var source = $"schema: connection/1\nname: sales-ro\nengine: {(engine == "mssql" ? "sqlserver" : "postgres")}\naccess: readonly\nconnection_string_secret: '{reference}'\n";
             var written = JsonNode.Parse(await (await Call(HttpMethod.Put, "/api/v1/data-sources/sales-ro", new { text = source, expected_version = (string?)null })).Content.ReadAsStringAsync())!;
             Assert.True((bool)written["group"]!);
@@ -683,6 +685,8 @@ public sealed class GroupStateTests : IAsyncLifetime
                 return JsonNode.Parse(text)!;
             }
             var reference = (string)(await Call(HttpMethod.Put, "/api/v1/secrets/mdm-write", new { value = engine == "postgres" ? database + ";SSL Mode=Require" : database }))["reference"]!;
+            // plan 30 PB02: the secret the data source names is bound in production before the data source is written (its own secret, so the client binds it)
+            await Call(HttpMethod.Put, "/api/v1/bindings/prod/data-source/mdm", new { slots = new Dictionary<string, string> { [reference["secret:".Length..]] = reference["secret:".Length..] } });
             await Call(HttpMethod.Put, "/api/v1/data-sources/mdm", new { text = $"schema: connection/1\nname: mdm\nengine: {storageEngine}\nconnection_string_secret: '{reference}'\n", expected_version = (string?)null });
             Assert.Equal(1, (int)(await Call(HttpMethod.Put, "/api/v1/entity-models/territories", new Dictionary<string, object?> { ["model"] = Territories(null), ["data_source"] = "mdm", ["expected_version"] = null }))["version"]!);
 
@@ -766,6 +770,8 @@ public sealed class GroupStateTests : IAsyncLifetime
         var storageEngine = engine == "mssql" ? "sqlserver" : "postgres";
         var name = DbDataKit.DataModel.DataModelLoader.Load(modelText).Model!.Name;
         var reference = (string)(await Manage(HttpMethod.Put, "/api/v1/secrets/mdm-write", new { value = engine == "postgres" ? database + ";SSL Mode=Require" : database }))["reference"]!;
+        // plan 30 PB02: the secret the data source names is bound in production before the data source is written (its own secret, so the client binds it)
+        await Manage(HttpMethod.Put, "/api/v1/bindings/prod/data-source/mdm", new { slots = new Dictionary<string, string> { [reference["secret:".Length..]] = reference["secret:".Length..] } });
         await Manage(HttpMethod.Put, "/api/v1/data-sources/mdm", new { text = $"schema: connection/1\nname: mdm\nengine: {storageEngine}\nconnection_string_secret: '{reference}'\n", expected_version = (string?)null });
         await Manage(HttpMethod.Put, $"/api/v1/entity-models/{name}", new Dictionary<string, object?> { ["model"] = modelText, ["data_source"] = "mdm", ["expected_version"] = null });
         return paired.InstanceId;

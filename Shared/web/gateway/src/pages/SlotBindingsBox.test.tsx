@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { slotRows, slotsOfManifest } from './SlotBindingsBox'
-import type { DefinitionDescription } from '../types'
+import { mergeSecretSlots, refusedSlots, slotRows, slotsOfManifest } from './SlotBindingsBox'
+import type { DataSourceSecretSlot, DefinitionDescription } from '../types'
 
 describe('the slot bindings of a published model (plan 33 SW02)', () => {
   it('reads the slots a version names from its manifest, and none from a manifest that names none or is not JSON', () => {
@@ -20,5 +20,19 @@ describe('the slot bindings of a published model (plan 33 SW02)', () => {
       { channel: 'prod', version: 2, slot: 'by-hand', boundTo: 'by-hand', boundBy: 'admin:ada', boundAt: '2026-11-16T09:30:00Z', revision: 4 },
       { channel: 'prod', version: 2, slot: 'erp', boundTo: null, boundBy: null, boundAt: null, revision: null },
     ])
+  })
+})
+
+describe('the secret slots of a data source (plan 30 PB02)', () => {
+  const slot = (name: string, bound: string | null): DataSourceSecretSlot => ({ slot: name, path: 'connection_string_secret', reference: `secret:${name}`, channel: 'prod', stored: true, held: true, bound_to: bound, bound_by: bound ? 'Ada' : null, bound_at: null, revision: bound ? 1 : null })
+  it('reads the slots a refused write names only from a refusal for unbound slots', () => {
+    expect(refusedSlots({ code: 'unboundslot', slots: [slot('dbdatakit:gateway:managed-x:erp', null)] }).map((s) => s.slot)).toEqual(['dbdatakit:gateway:managed-x:erp'])
+    expect(refusedSlots({ error: 'not valid', diagnostics: [] })).toEqual([])
+    expect(refusedSlots(undefined)).toEqual([])
+  })
+  it('shows the slots of the file served with their bindings, and adds the ones the refused text names', () => {
+    const rows = mergeSecretSlots([slot('a', 'a')], [slot('a', null), slot('b', null)])
+    expect(rows.map((r) => [r.slot, r.bound_to])).toEqual([['a', 'a'], ['b', null]])
+    expect(mergeSecretSlots(undefined, undefined)).toEqual([])
   })
 })
