@@ -11,7 +11,6 @@ WORKDIR /src/Shared/web
 COPY Shared/web/package.json Shared/web/package-lock.json ./
 COPY Shared/web/shell/package.json shell/package.json
 COPY Shared/web/admin/package.json admin/package.json
-COPY Shared/web/sync/package.json sync/package.json
 COPY Shared/web/console/package.json console/package.json
 RUN npm ci
 COPY Shared/web .
