@@ -9,7 +9,7 @@ namespace DbDataKit.DataModel.Runner;
 public sealed record BuiltModelPackage(string Name, PackageManifest Manifest, string ManifestText, string Model, string ModelText);
 
 /// <summary>
-/// The definition package of a Store model on the Runner (plan 33 SC24): one manual-only task, <c>deploy</c> (<see cref="ModelDeployJob"/>), run by the <c>dbdatastore</c> runtime (<see cref="RuntimeName"/>), with the one slot
+/// The definition package of a Store model on the Runner (plan 33 SC24): two manual-only tasks, <c>deploy</c> (<see cref="ModelDeployJob"/>) and <c>contract</c> (<see cref="ModelContractJob"/>), run by the <c>dbdatastore</c> runtime (<see cref="RuntimeName"/>), with the one slot
 /// <c>storage</c> that a channel binds to the model's connection on the Runner, never on a schedule, never retried, under the name of the person who asks. The model goes in the package as written (in the current format), so what a run
 /// deploys is the version the channel serves.
 /// </summary>
@@ -22,6 +22,9 @@ public static class ModelDeployPackage
     public const string ModelFile = "model/model.yaml";
 
     public const string DeployTask = "deploy";
+
+    /// <summary>The contract step (<see cref="ModelContractJob"/>): a plan without an approval, exactly the approved plan with one.</summary>
+    public const string ContractTask = "contract";
 
     /// <summary>The package name of a model: <c>model-&lt;name&gt;</c>, with what a package name does not take made a dash.</summary>
     public static string NameOf(string model)
@@ -42,12 +45,12 @@ public static class ModelDeployPackage
             return null;
         }
 
-        var deploy = ManifestGenerator.TaskOf(typeof(ModelDeployJob));
-        var task = deploy with { Entry = new TaskEntry(), Schedule = new Schedule(), Triggers = [TaskTrigger.ByHand()], Limits = deploy.Limits with { Attempts = 1 } };
+        // both tasks are a person's act: by hand only, never scheduled, never retried
+        static PackageTask Manual(Type job) { var t = ManifestGenerator.TaskOf(job); return t with { Entry = new TaskEntry(), Schedule = new Schedule(), Triggers = [TaskTrigger.ByHand()], Limits = t.Limits with { Attempts = 1 } }; }
         var name = package ?? NameOf(model.Name);
         var manifest = new PackageManifest(name, $"The Store model {model.Name}: deploy its tables",
             new PackageLaunch(LaunchKind.Executable, Runtime: new RuntimeReference(RuntimeName, runtimeRange)),
-            new BuiltAgainst(TargetDotnet(), null, RunnerProtocol.V1), [task]);
+            new BuiltAgainst(TargetDotnet(), null, RunnerProtocol.V1), [Manual(typeof(ModelDeployJob)), Manual(typeof(ModelContractJob))]);
         var text = PackageManifestWriter.Write(manifest);
         var check = PackageManifestReader.Load(text, "package.yaml");
         if (!check.Ok)

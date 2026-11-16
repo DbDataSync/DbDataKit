@@ -31,6 +31,8 @@ internal sealed class FakeRunner : IAsyncDisposable
     public ConcurrentQueue<int> UploadsPerPublish { get; } = new();
     public string? RefuseWith { get; set; }
     public ConcurrentQueue<JsonObject> Runs { get; } = new();
+    /// <summary>What a task's steps route answers for a step name, when a test sets it: one step, keyed <c>main</c>, recorded during the newest run, with this result (a Store model's <c>contract-report</c>, plan 33 SC24).</summary>
+    public ConcurrentDictionary<string, JsonObject> StepResults { get; } = new();
     public DateTimeOffset RunStarted { get; } = DateTimeOffset.UtcNow.AddMinutes(-1);
 
     private readonly Dictionary<string, List<string>> signatures = new();
@@ -108,7 +110,9 @@ internal sealed class FakeRunner : IAsyncDisposable
             return Results.Json(new { id = id.ToString("D"), task = ((string)run["task"]!).Split('/')[2], attempt = 1, outcome = "succeeded", started = runner.RunStarted.ToString("O"), finished = runner.RunStarted.AddSeconds(5).ToString("O"), package_version = (string?)run["version"] });
         });
         app.MapGet("api/v1/tasks/{package}/{channel}/{task}/steps/{step}", (string package, string channel, string task, string step, HttpContext context) =>
-            Results.Json(new { steps = new object[]
+            runner.StepResults.TryGetValue(step, out var set)
+            ? Results.Json(new JsonObject { ["steps"] = new JsonArray(new JsonObject { ["key"] = "main", ["started"] = runner.RunStarted.AddSeconds(1).ToString("O"), ["completed"] = runner.RunStarted.AddSeconds(2).ToString("O"), ["result"] = set.DeepClone() }) })
+            : Results.Json(new { steps = new object[]
             {
                 new { key = "orders", started = runner.RunStarted.AddSeconds(1).ToString("O"), completed = runner.RunStarted.AddSeconds(2).ToString("O"), result = new { step, steps = new[] { new { id = "create-orders", succeeded = true } } } },
                 new { key = "older", started = runner.RunStarted.AddDays(-1).ToString("O"), completed = runner.RunStarted.AddDays(-1).ToString("O"), result = new { step, steps = Array.Empty<object>() } },

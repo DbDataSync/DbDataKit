@@ -1,3 +1,4 @@
+using DbDataKit.Lineage;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -125,6 +126,43 @@ public sealed partial class WorkspacePublishing
         var identity = await KeyAsync(targetName, key.SecretRef, ct);
         var runner = new PairedRunner(target.Name, target.Url, target.InstanceId, target.Fingerprint, target.Roles, target.PairedAt);
         return (target, RunnerPublishClient.ForKey(runner, identity, "client:" + identity.Id, actor));
+    }
+
+    /// <summary>
+    /// The lineage graph of each Gateway this server holds a publisher key for (plan 21 CH06, for a Store model's contract step, plan 33 SC24): <c>GET /api/v1/lineage</c> over the pinned channel as the key's client, with the role the pairing
+    /// allows; one graph per Gateway (a Gateway paired under two keys is asked once). A Gateway that does not answer, or answers what is not a graph, is named in <c>Unreachable</c> with why, never skipped: a caller refuses a step it cannot check.
+    /// </summary>
+    public async Task<(IReadOnlyList<(string Server, LineageGraph Graph)> Graphs, IReadOnlyList<(string Server, string Why)> Unreachable)> GatewayLineageAsync(CancellationToken ct = default)
+    {
+        var graphs = new List<(string, LineageGraph)>();
+        var unreachable = new List<(string, string)>();
+        var asked = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var key in store.PublisherKeys().OrderBy(k => k.Name, StringComparer.Ordinal))
+        {
+            if (Find(key.Name) is not { Product: PublishProducts.Gateway } paired || !asked.Add(paired.InstanceId)) continue;
+            try
+            {
+                var (target, _, role) = ResolveTarget(key.Name, "a read of its lineage");
+                var identity = await KeyAsync(key.Name, key.SecretRef, ct);
+                using var http = GatewayHttp(target);
+                using var response = await new GatewayLink(target, identity, role, http).SendAsync(HttpMethod.Get, "lineage", null, ct);
+                var text = await response.Content.ReadAsStringAsync(ct);
+                if (!response.IsSuccessStatusCode)
+                {
+                    string? detail = null;
+                    try { detail = (string?)(JsonNode.Parse(text) as JsonObject)?["error"]; } catch (System.Text.Json.JsonException) { }
+                    unreachable.Add((key.Name, $"it answered {(int)response.StatusCode}{(detail is { Length: > 0 } ? " " + detail : "")}"));
+                    continue;
+                }
+                graphs.Add((key.Name, LineageJson.Read(JsonNode.Parse(text))));
+            }
+            catch (Exception ex) when (ex is WorkspacePublishException or HttpRequestException or TaskCanceledException or System.Text.Json.JsonException or LineageGraphException or InvalidOperationException or FormatException)
+            {
+                if (ct.IsCancellationRequested) throw;
+                unreachable.Add((key.Name, ex is HttpRequestException or TaskCanceledException ? $"{paired.Url} could not be reached ({ex.Message})" : ex.Message));
+            }
+        }
+        return (graphs, unreachable);
     }
 
     private static WorkspacePublishException Refused(RunnerClientException ex) =>

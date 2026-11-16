@@ -7,7 +7,7 @@ namespace DbDataStore.Server;
 
 /// <summary>
 /// What <c>dbdatastore --runner</c> does (plan 33 SC24, the Store without its server): the program is the runtime <c>dbdatastore-runtime</c> that a model's definition package names; a runner starts it with the token and endpoint in the
-/// environment, and it runs the one task it was started for (<c>DBDATAKIT_TASK_NAME</c>) and says how it ended. The only task is <c>deploy</c> (<see cref="ModelDeployJob"/>).
+/// environment, and it runs the one task it was started for (<c>DBDATAKIT_TASK_NAME</c>) and says how it ended. The tasks are <c>deploy</c> (<see cref="ModelDeployJob"/>) and <c>contract</c> (<see cref="ModelContractJob"/>).
 /// </summary>
 public static class StoreRunnerEntry
 {
@@ -22,11 +22,11 @@ public static class StoreRunnerEntry
         }
 
         var task = Environment.GetEnvironmentVariable(RunnerProtocolNames.TaskVariable);
-        if (task != ModelDeployPackage.DeployTask)
+        if (task is not (ModelDeployPackage.DeployTask or ModelDeployPackage.ContractTask))
         {
             await Console.Error.WriteLineAsync(string.IsNullOrWhiteSpace(task)
                 ? $"{RunnerProtocolNames.TaskVariable} is not set: the runner tells dbdatastore which task it is run for."
-                : $"dbdatastore runs the task '{ModelDeployPackage.DeployTask}' of a model's package, not '{task}'.");
+                : $"dbdatastore runs the tasks '{ModelDeployPackage.DeployTask}' and '{ModelDeployPackage.ContractTask}' of a model's package, not '{task}'.");
             return 2;
         }
 
@@ -36,7 +36,10 @@ public static class StoreRunnerEntry
             e.Cancel = true;
             cts.Cancel();
         };
-        var result = await RemoteJobHost.RunAsync<ModelDeployJob>(cts.Token, new RemoteRunOptions { Client = "DbDataStore" }).ConfigureAwait(false);
+        var options = new RemoteRunOptions { Client = "DbDataStore" };
+        var result = task == ModelDeployPackage.ContractTask
+            ? await RemoteJobHost.RunAsync<ModelContractJob>(cts.Token, options).ConfigureAwait(false)
+            : await RemoteJobHost.RunAsync<ModelDeployJob>(cts.Token, options).ConfigureAwait(false);
         return result.End.State == TaskEndState.Failed ? 1 : 0;
     }
 }

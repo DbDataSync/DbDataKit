@@ -20,3 +20,8 @@ A Store model's tables deployed as a manual Runner task (plan 33 SC24, the Store
 
 The Workspace makes these packages from a `store` project's build (`runner/<model>/` of the artifact) and stages one on a Runner from the
 **Deploy** tab of a store workspace; that tab runs `deploy` dry first and reads `deploy-report` back (plan 33 SC24).
+
+- `ModelContractJob` is the task `contract` (the contract step of expand-then-contract): without `approve` it records the plan as the step
+  `contract-report` (`ModelContractReport`: the hash, the steps, blocked, notes, and the columns it drops as lineage names); with
+  `approve=<hash>` it runs exactly that plan in one transaction, or fails and changes nothing. It does not ask who reads a column: the
+  Workspace's contract route asks the paired Gateways (`ContractGuard`) before it passes the hash.

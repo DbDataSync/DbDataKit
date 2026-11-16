@@ -11,6 +11,28 @@ export const DeployStep = 'deploy-report'
 /** What a run of `deploy` reports (the step `deploy-report`): what it did or would do to the model's schema. */
 export interface DeployReport { model: string; schema: string; engine: string; action: 'create' | 'expand' | 'none' | string; dryRun: boolean; applied: boolean; statements: string[]; blocked: string[]; notes: string[] }
 
+/** The step the task `contract` records its report as (`ModelContractSteps.Report`). */
+export const ContractStep = 'contract-report'
+
+/** What a run of `contract` reports: the plan's hash (what an approval names), its steps, what blocks it, the notes and the columns it drops as the lineage graph names them. */
+export interface ContractReport {
+  model: string; schema: string; engine: string; hash: string; dryRun: boolean; applied: boolean
+  steps: { object: string; description: string; text: string; requiresEveryRowToHaveAValue: boolean }[]
+  blocked: string[]; notes: string[]; dropped: { description: string; columnId: string; datasetId: string }[]
+}
+
+/** The newest report of a run, of whatever task (null when it recorded none). */
+function reportOf<T>(run: StagedRun): T | null {
+  const step = [...(run.steps ?? [])].reverse().find((s) => s.result && typeof s.result === 'object')
+  return (step?.result as T | undefined) ?? null
+}
+
+/** Whether a contract plan may be approved: it has steps and nothing blocks it. */
+export const canContract = (r: ContractReport | null): boolean => !!r && r.dryRun && r.steps.length > 0 && r.blocked.length === 0
+
+/** The allowances a person typed (comma or space separated): `<name>@<channel>` or `gateway:<name>`. */
+export const allowancesOf = (text: string): string[] => text.split(/[\s,]+/).map((a) => a.trim()).filter(Boolean)
+
 /** The models of a draft: the names of `models/<name>.yaml`, in order. */
 export const modelsOf = (paths: readonly string[]): string[] =>
   paths.map((p) => /^models\/([^/]+)\.ya?ml$/.exec(p)?.[1]).filter((n): n is string => !!n).sort()
@@ -27,10 +49,10 @@ export function storageConnectionOf(text: string): string {
 }
 
 /** The report a run recorded (its newest `deploy-report` step), or null when it recorded none (a run that failed before it planned). */
-export function deployReportOf(run: StagedRun): DeployReport | null {
-  const step = [...(run.steps ?? [])].reverse().find((s) => s.result && typeof s.result === 'object')
-  return (step?.result as DeployReport | undefined) ?? null
-}
+export const deployReportOf = (run: StagedRun): DeployReport | null => reportOf<DeployReport>(run)
+
+/** The contract report a run recorded, or null. */
+export const contractReportOf = (run: StagedRun): ContractReport | null => reportOf<ContractReport>(run)
 
 /** Whether a dry run's report allows the deploy itself: it planned a change and nothing is blocked (a blocked change is the contract step's, not a deploy's). */
 export const canApply = (report: DeployReport | null): boolean => !!report && report.dryRun && report.statements.length > 0 && report.blocked.length === 0
@@ -56,23 +78,61 @@ export async function followBuild(read: () => Promise<BuildSummary>, intervalMs 
 
 interface Deployed { started: StagedRunStarted; run: StagedRun; build: string }
 
-export function DeployResult({ result }: { result: Deployed }) {
+/** A run's line: its id, package, version, channel and outcome, a link to it on the Runner's screens, and its failure. */
+function RunHead({ result }: { result: Deployed }) {
   const { run, started } = result
-  const report = deployReportOf(run)
   return (
-    <div className="card flush" style={{ marginTop: 8, padding: '6px 10px' }} data-testid="wsp-deploy-result" data-outcome={run.outcome} data-dry={report ? String(report.dryRun) : undefined}>
+    <>
       <div>
-        Run <span className="mono">{run.id}</span> of {started.package} version {run.version ?? started.version} on {started.channel}:{' '}
+        Run <span className="mono">{run.id}</span> of {started.task} of {started.package} version {run.version ?? started.version} on {started.channel}:{' '}
         <span className={run.outcome === 'succeeded' ? '' : 'error'}>{run.finished ? run.outcome : `${run.outcome}, not ended yet`}</span>
         {started.instance && <> (<ConsoleLink to={`/servers/${encodeURIComponent(started.instance)}/runs?run=${encodeURIComponent(run.id)}`} data-testid="wsp-deploy-run-link">the run on {started.target}</ConsoleLink>)</>}
       </div>
       {run.failure && <div className="error" data-testid="wsp-deploy-failure">{run.failure.message}</div>}
+    </>
+  )
+}
+
+export function DeployResult({ result }: { result: Deployed }) {
+  const { run } = result
+  const report = deployReportOf(run)
+  return (
+    <div className="card flush" style={{ marginTop: 8, padding: '6px 10px' }} data-testid="wsp-deploy-result" data-outcome={run.outcome} data-dry={report ? String(report.dryRun) : undefined}>
+      <RunHead result={result} />
       {report && (
         <>
           <div data-testid="wsp-deploy-line">{reportLine(report)}</div>
           {report.statements.map((s, i) => <div key={i} className="mono hint" data-testid="wsp-deploy-statement">{s}</div>)}
           {report.blocked.map((s, i) => <div key={i} className="error" data-testid="wsp-deploy-blocked">Blocked: {s}</div>)}
           {report.notes.map((s, i) => <div key={i} className="hint" data-testid="wsp-deploy-note">{s}</div>)}
+        </>
+      )}
+    </div>
+  )
+}
+
+/** A contract run: the plan (each step in words and as the statement), what blocks it, the notes, the columns it drops and its hash; or, after an approval, whether it ran. */
+export function ContractResult({ result }: { result: Deployed }) {
+  const report = contractReportOf(result.run)
+  return (
+    <div className="card flush" style={{ marginTop: 8, padding: '6px 10px' }} data-testid="wsp-contract-result" data-outcome={result.run.outcome} data-dry={report ? String(report.dryRun) : undefined}>
+      <RunHead result={result} />
+      {report && (
+        <>
+          <div data-testid="wsp-contract-line">
+            {report.dryRun
+              ? report.steps.length === 0 && report.blocked.length === 0 ? `The tables of ${report.model} in ${report.schema} have nothing to contract.` : `The contract of ${report.model} in ${report.schema} (${report.engine}) would run ${report.steps.length} step(s). Plan ${report.hash.slice(0, 12)}.`
+              : report.applied ? `Contracted: ${report.steps.length} step(s) ran on ${report.schema}.` : `Not contracted: ${report.schema} was left as it was.`}
+          </div>
+          {report.steps.map((s, i) => (
+            <div key={i} data-testid="wsp-contract-step">
+              <div className="hint">{s.description}{s.requiresEveryRowToHaveAValue ? ' (every row must have a value first)' : ''}</div>
+              <pre className="mono" style={{ margin: 0, overflow: 'auto', maxHeight: 160 }}>{s.text}</pre>
+            </div>
+          ))}
+          {report.blocked.map((s, i) => <div key={i} className="error" data-testid="wsp-contract-blocked">Blocked: {s}</div>)}
+          {report.notes.map((s, i) => <div key={i} className="hint" data-testid="wsp-contract-note">{s}</div>)}
+          {report.dryRun && report.dropped.length > 0 && <div className="hint" data-testid="wsp-contract-dropped">Before it runs, the paired Gateways are asked who reads: {report.dropped.map((d) => d.description).join('; ')}.</div>}
         </>
       )}
     </div>
@@ -104,27 +164,44 @@ export function StoreDeployPanel({ project, id, paths }: { project: string; id: 
     const started = (await workspaceApi.runStaged(project, id, build, 'deploy', inputs, pkg)).run
     return { started, build, run: await followStagedRun(() => workspaceApi.stagedRun(project, id, build, started.run_id, DeployStep, pkg)) }
   }
-  const dry = useMutation({
-    mutationFn: async (): Promise<Deployed> => {
-      if (!runner) throw new Error('No Runner is paired with this server. An administrator pairs one under Publisher keys; then a model can be deployed through it.')
-      if (!storage.trim()) throw new Error('Name the connection on the Runner the model\'s tables are in (the slot storage is bound to it).')
-      const requested = await workspaceApi.requestBuild(project, id)
-      const built = await followBuild(async () => (await workspaceApi.build(project, id, requested.id)).build)
-      if (built.status !== 'succeeded') throw new Error(`The build ${built.status === 'failed' ? 'failed' : 'did not end'}${built.message ? `: ${built.message}` : ''}. See the Builds tab.`)
-      await workspaceApi.publish(project, id, built.id, runner, '', { channel: channel.trim(), model, bind: { storage: storage.trim() } })
-      return run(built.id, true)
-    },
-  })
+  // builds the draft as it is and stages the model's package on the Runner's channel, its slot storage bound; the build that did it is what the tasks run of
+  const stage = async (): Promise<string> => {
+    if (!runner) throw new Error('No Runner is paired with this server. An administrator pairs one under Publisher keys; then a model can be deployed through it.')
+    if (!storage.trim()) throw new Error('Name the connection on the Runner the model\'s tables are in (the slot storage is bound to it).')
+    const requested = await workspaceApi.requestBuild(project, id)
+    const built = await followBuild(async () => (await workspaceApi.build(project, id, requested.id)).build)
+    if (built.status !== 'succeeded') throw new Error(`The build ${built.status === 'failed' ? 'failed' : 'did not end'}${built.message ? `: ${built.message}` : ''}. See the Builds tab.`)
+    await workspaceApi.publish(project, id, built.id, runner, '', { channel: channel.trim(), model, bind: { storage: storage.trim() } })
+    return built.id
+  }
+  const dry = useMutation({ mutationFn: async (): Promise<Deployed> => run(await stage(), true) })
   const apply = useMutation({ mutationFn: () => run(dry.data!.build, false) })
   const report = dry.data ? deployReportOf(dry.data.run) : null
-  const busy = dry.isPending || apply.isPending
+
+  const [allow, setAllow] = useState('')
+  const plan = useMutation({
+    mutationFn: async (): Promise<Deployed> => {
+      const build = dry.data?.build ?? await stage()
+      const started = (await workspaceApi.runStaged(project, id, build, 'contract', schema.trim() ? { schema: schema.trim() } : {}, pkg)).run
+      return { started, build, run: await followStagedRun(() => workspaceApi.stagedRun(project, id, build, started.run_id, ContractStep, pkg)) }
+    },
+  })
+  const planned = plan.data ? contractReportOf(plan.data.run) : null
+  const contract = useMutation({
+    mutationFn: async (): Promise<Deployed> => {
+      const { build, run: read } = plan.data!
+      const started = (await workspaceApi.contract(project, id, build, { package: pkg, plan_run: read.id, approve: planned!.hash, allow_consumer: allowancesOf(allow) })).run
+      return { started, build, run: await followStagedRun(() => workspaceApi.stagedRun(project, id, build, started.run_id, ContractStep, pkg)) }
+    },
+  })
+  const busy = dry.isPending || apply.isPending || plan.isPending || contract.isPending
 
   if (models.length === 0) return <div className="hint" data-testid="wsp-deploy-no-model">No model yet: a model's tables are deployed once the draft has one.</div>
   return (
     <div data-testid="wsp-deploy">
       <div className="hint" style={{ marginBottom: 6 }}>Creates the tables of a model, or adds what the model has gained, on a Runner: the draft is built and the model's package staged there (not served), then its task deploy runs for you with the Runner's login. A dry run comes first and writes nothing; removing a column or a table is never done here.</div>
       <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <select className="input mono" aria-label="Model" value={model} onChange={(e) => { setChosen(e.target.value); setConnection(null); dry.reset(); apply.reset() }} data-testid="wsp-deploy-model">
+        <select className="input mono" aria-label="Model" value={model} onChange={(e) => { setChosen(e.target.value); setConnection(null); dry.reset(); apply.reset(); plan.reset(); contract.reset() }} data-testid="wsp-deploy-model">
           {models.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
         <select className="input" aria-label="Runner" value={runner} onChange={(e) => setTarget(e.target.value)} data-testid="wsp-deploy-runner" disabled={runners.length === 0}>
@@ -140,6 +217,22 @@ export function StoreDeployPanel({ project, id, paths }: { project: string; id: 
       <ErrorBanner error={dry.error ?? apply.error} />
       {dry.data && <DeployResult result={dry.data} />}
       {apply.data && <DeployResult result={apply.data} />}
+
+      <div style={{ marginTop: 18 }} data-testid="wsp-contract">
+        <div className="hint" style={{ marginBottom: 6 }}>The contract step removes what the model no longer has (a column is dropped) and makes required what it now requires. Read the plan first; what runs is exactly the plan you approve, and only once no published dashboard, report, app or model member reads what it drops (or you allow each by name, which is recorded).</div>
+        <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button type="button" className="btn" disabled={busy || !runner || channel.trim() === ''} data-testid="wsp-contract-plan" onClick={() => { contract.reset(); plan.mutate() }}>{plan.isPending ? 'Reading the plan...' : 'Plan the contract'}</button>
+          {canContract(planned) && (
+            <>
+              <input className="input mono" style={{ minWidth: 220, flex: 1 }} aria-label="Allow" placeholder="allow: name@channel, gateway:name" value={allow} onChange={(e) => setAllow(e.target.value)} data-testid="wsp-contract-allow" />
+              <button type="button" className="btn btn-primary" disabled={busy} data-testid="wsp-contract-apply" onClick={() => contract.mutate()}>{contract.isPending ? 'Contracting...' : `Contract (plan ${planned!.hash.slice(0, 12)})`}</button>
+            </>
+          )}
+        </div>
+        <ErrorBanner error={plan.error ?? contract.error} />
+        {plan.data && <ContractResult result={plan.data} />}
+        {contract.data && <ContractResult result={contract.data} />}
+      </div>
     </div>
   )
 }

@@ -55,6 +55,10 @@ internal sealed class FakeGateway : IAsyncDisposable
     public HashSet<string> Instances { get; } = ["orders"];
     public string InstanceId { get; } = "fake-gateway-1";
 
+    /// <summary>The lineage graph <c>GET /api/v1/lineage</c> answers with (plan 21 CH06; the publisher role reads it); empty unless a test sets it. <see cref="LineageStatus"/> other than 200 answers that status instead.</summary>
+    public DbDataKit.Lineage.LineageGraph Lineage { get; set; } = new([], []);
+    public int LineageStatus { get; set; } = 200;
+
     private FakeGateway(WebApplication app, Uri url, string directory, PairingCodes codes) => (this.app, Url, this.directory, Codes) = (app, url, directory, codes);
 
     public static async Task<FakeGateway> StartAsync(string product = "dbdatagateway")
@@ -85,6 +89,13 @@ internal sealed class FakeGateway : IAsyncDisposable
         app.MapPut("/api/v1/definitions/{kind}/{name}", async (string kind, string name, HttpContext context) => await gateway.Definitions(context, kind, name));
         app.MapPut("/api/v1/bindings/{channel}/{kind}/{name}", async (string channel, string kind, string name, HttpContext context) => await gateway.Bindings(context, channel, kind, name));
         app.MapGet("/api/v1/trust/{kind}", async (string kind, HttpContext context) => await gateway.Definitions(context, "trust", kind));
+        app.MapGet("/api/v1/lineage", (HttpContext context) =>
+        {
+            var token = context.ManagementToken();
+            gateway.Owner.Calls.Enqueue($"GET /api/v1/lineage as {token.SubjectId} ({token.SubjectName}) with {string.Join("+", ServerRoles.Names(token.Roles))}");
+            if (!ManagementAuthorization.Authorize(token, ServerRole.Publisher).Allowed) return Results.Json(new { error = "Reading the lineage needs the publisher role." }, statusCode: 403);
+            return gateway.Owner.LineageStatus != 200 ? Results.Json(new { error = "the graph is being rebuilt" }, statusCode: gateway.Owner.LineageStatus) : Results.Json(DbDataKit.Lineage.LineageJson.Write(gateway.Owner.Lineage));
+        });
         app.MapPost("/api/v1/data-sources/{name}/schema", async (string name, HttpContext context) => await gateway.Schema(context, name));
         await app.StartAsync();
         var made = new FakeGateway(app, new Uri(app.Urls.First().Replace("[::1]", "127.0.0.1")), directory, codes);

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json.Nodes;
 using DbDataKit.DataModel.Runner;
 using DbDataKit.Runner;
 using DbDataKit.Runner.Api;
@@ -89,7 +90,7 @@ public sealed class StoreDeployOnRunnerTests
     }
 
     [Theory, MemberData(nameof(Engines))]
-    public async Task A_models_tables_are_deployed_by_a_runner_task_dry_run_first_then_created_then_expanded_and_a_removal_is_left_to_a_contract_step(string engine)
+    public async Task A_models_tables_are_deployed_by_a_runner_task_dry_run_first_then_created_then_expanded_and_a_removal_is_the_contract_task_of_the_approved_plan(string engine)
     {
         if (OperatingSystem.IsWindows()) Assert.Skip("the runtime manifest is made by a bash script");
         var root = Path.Combine(Path.GetTempPath(), "ddk-e2e-sc24-" + Guid.NewGuid().ToString("N")[..8]);
@@ -132,22 +133,26 @@ public sealed class StoreDeployOnRunnerTests
             var runs = new RunStore(state, RunnerNames.EngineService);
             var job = $"{package}/{Channel}/{ModelDeployPackage.DeployTask}";
 
-            async Task<RunOutcome> DeployAsync(params string[] inputs)
+            var contractJob = $"{package}/{Channel}/{ModelDeployPackage.ContractTask}";
+            Task<RunOutcome> DeployAsync(params string[] inputs) => RunAsync(job, inputs);
+            async Task<RunOutcome> RunAsync(string which, params string[] inputs)
             {
-                var before = runs.Read(new RunQuery(RunnerNames.EngineService, job)).Count;
-                await RealProcess.RunAsync(runner, ["tasks", "run", job, .. inputs, "--repo", runnerDirectory]);
+                var before = runs.Read(new RunQuery(RunnerNames.EngineService, which)).Count;
+                await RealProcess.RunAsync(runner, ["tasks", "run", which, .. inputs, "--repo", runnerDirectory]);
                 var until = DateTime.UtcNow.AddSeconds(120);
                 while (DateTime.UtcNow < until)
                 {
-                    var all = runs.Read(new RunQuery(RunnerNames.EngineService, job));
+                    var all = runs.Read(new RunQuery(RunnerNames.EngineService, which));
                     if (all.Count > before && all[0].Run.Outcome is not RunOutcome.Running and var done) return done;
                     await Task.Delay(500);
                 }
-                Assert.Fail($"The deploy did not end within 120 s.\n{server.Output}\n{Logs()}");
+                Assert.Fail($"The {which} run did not end within 120 s.\n{server.Output}\n{Logs(which)}");
                 return RunOutcome.Failed;
             }
 
-            string Logs() => string.Join("\n", runs.Read(new RunQuery(RunnerNames.EngineService, job)).Take(1).SelectMany(r => runs.Logs(r.Id, limit: 80)).Select(l => $"[{l.Level}] {l.Message}"));
+            string Logs(string? which = null) => string.Join("\n", runs.Read(new RunQuery(RunnerNames.EngineService, which ?? job)).Take(1).SelectMany(r => runs.Logs(r.Id, limit: 80)).Select(l => $"[{l.Level}] {l.Message}"));
+            // the newest report of the contract task, as the Runner's steps route serves it
+            JsonNode ContractReport() => JsonNode.Parse(new StepStore(state, new ProgressKey(package, Channel, ModelDeployPackage.ContractTask)).Recent("contract-report", 1, null, null).Single().ResultJson!)!;
 
             // a dry run (the default) says what it would do and changes nothing
             Assert.True(await DeployAsync() == RunOutcome.Succeeded, Logs());
@@ -170,9 +175,31 @@ public sealed class StoreDeployOnRunnerTests
             Assert.True(await DeployAsync("dry_run=false") == RunOutcome.Succeeded, Logs());
             Assert.Contains("territory.name", await ColumnsAsync(engine, connection));
 
+            // the contract task: without an approval a plan (the column to drop, as the lineage graph names it, and the plan's hash), changing nothing
+            Assert.True(await RunAsync(contractJob) == RunOutcome.Succeeded, Logs(contractJob));
+            var plan = ContractReport();
+            Assert.True((bool)plan["dryRun"]!);
+            Assert.False((bool)plan["applied"]!);
+            var hash = (string)plan["hash"]!;
+            // v3 has neither `name` nor v2's `manager`: both are dropped, each named as the lineage graph names a column
+            var dropped = plan["dropped"]!.AsArray().Select(d => ((string)d!["columnId"]!).ToLowerInvariant()).Order(StringComparer.Ordinal).ToList();
+            Assert.Collection(dropped, d => Assert.EndsWith(".territory#manager", d), d => Assert.EndsWith(".territory#name", d));
+            Assert.Contains("territory.name", await ColumnsAsync(engine, connection));
+            // an approval of another plan fails the run and changes nothing
+            Assert.True(await RunAsync(contractJob, "approve=" + new string('0', 64)) == RunOutcome.Failed);
+            Assert.Contains("territory.name", await ColumnsAsync(engine, connection));
+            // the approved plan runs: the column is dropped
+            Assert.True(await RunAsync(contractJob, "approve=" + hash) == RunOutcome.Succeeded, Logs(contractJob));
+            Assert.True((bool)ContractReport()["applied"]!);
+            var contracted = await ColumnsAsync(engine, connection);
+            Assert.DoesNotContain("territory.name", contracted);
+            Assert.DoesNotContain("territory.manager", contracted);
+            Assert.Contains("territory.code", contracted);
+
             // the login is in no log line of the runs or the runner
             Assert.DoesNotContain(password, server.Output);
             Assert.DoesNotContain(password, Logs());
+            Assert.DoesNotContain(password, Logs(contractJob));
         }
         finally
         {

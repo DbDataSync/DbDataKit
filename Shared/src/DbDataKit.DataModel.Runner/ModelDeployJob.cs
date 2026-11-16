@@ -39,17 +39,21 @@ public static class ModelDeploySteps
 [RunnerDeclarations(typeof(ModelDeploySteps))]
 public sealed class ModelDeployJob : RunnerJob<ModelDeployInput, NoProgress, ModelDeploySlots>
 {
-    protected override async Task RunAsync(CancellationToken ct)
+    /// <summary>The model a task of the package is about: <paramref name="modelFile"/> under the package's view, read with the Store's own reader; a missing or unreadable model fails the run for good.</summary>
+    internal static async Task<DataModel> ReadModelAsync(string modelFile, CancellationToken ct)
     {
         var package = Environment.GetEnvironmentVariable(RunnerProtocolNames.PackageDirectoryVariable)
             ?? throw new InvalidOperationException($"{RunnerProtocolNames.PackageDirectoryVariable} is not set: the runner tells a task where its package's view is.");
-        var file = Path.GetFullPath(Path.Combine(package, Input.ModelFile));
+        var file = Path.GetFullPath(Path.Combine(package, modelFile));
         if (!file.StartsWith(Path.GetFullPath(package), StringComparison.Ordinal) || !File.Exists(file))
-            throw new TaskFailureException(TaskFailureKind.Permanent, $"The package has no model at '{Input.ModelFile}'.");
-        var load = DataModelLoader.Load(await File.ReadAllTextAsync(file, ct).ConfigureAwait(false), Input.ModelFile);
-        if (load.Model is not { } model)
-            throw new TaskFailureException(TaskFailureKind.Permanent, $"The model in the package does not read: {string.Join(" ", load.Diagnostics.Select(d => d.ToString()))}");
+            throw new TaskFailureException(TaskFailureKind.Permanent, $"The package has no model at '{modelFile}'.");
+        var load = DataModelLoader.Load(await File.ReadAllTextAsync(file, ct).ConfigureAwait(false), modelFile);
+        return load.Model ?? throw new TaskFailureException(TaskFailureKind.Permanent, $"The model in the package does not read: {string.Join(" ", load.Diagnostics.Select(d => d.ToString()))}");
+    }
 
+    protected override async Task RunAsync(CancellationToken ct)
+    {
+        var model = await ReadModelAsync(Input.ModelFile, ct).ConfigureAwait(false);
         var grant = await Slots.Storage.OpenAsync(ct).ConfigureAwait(false);
         var engine = grant.Engine;
         var schema = Input.Schema.Length > 0 ? Input.Schema : model.Name;

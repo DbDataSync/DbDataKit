@@ -207,6 +207,8 @@ public static class ServerProducts
         // plan 28c E21 step e: a manual task (Sync's provision) of the version a build staged on a Runner, for the person, and that run read back
         ("POST", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/run", ServerRole.Approver),
         ("GET", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/runs/{b}", ServerRole.Viewer),
+        // plan 33 SC24: a Store model's approved contract, checked against the lineage of the paired Gateways before it runs on the Runner
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/contract", ServerRole.Approver),
         // GP35d: send the build to the Gateway's preview channel (a read-only preview instance with the instance's data); nothing goes to production, so the author may
         ("POST", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/preview-data", ServerRole.Author),
         ("GET", "api/v1/publish-targets", ServerRole.Approver),

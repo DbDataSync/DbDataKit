@@ -1,3 +1,5 @@
+using DbDataKit.DataModel.Runner;
+using DbDataKit.Lineage;
 using DbDataKit.Catalog;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -575,6 +577,9 @@ public static class WorkspaceManagement
             catch (InvalidOperationException) { task = null; }
             if (string.IsNullOrWhiteSpace(task))
                 return Results.Json(new { error = "The body is a JSON object with the \"task\" to run (a manual-only task of the package), optionally its \"inputs\", an object of names and text values, and the \"package\" when the build staged more than one." }, statusCode: StatusCodes.Status400BadRequest);
+            // a Store model's contract with an approval drops columns: it goes through .../contract, which asks the paired Gateways who reads them first (plan 21 CH06, plan 33 SC24)
+            if (task == ModelDeployPackage.ContractTask && inputs.TryGetValue("approve", out var approval) && approval.Trim().Length > 0)
+                return Results.Json(new { error = "An approved contract is run through .../contract, which checks with the paired Gateways that no published consumer reads what it drops. Run contract here without \"approve\" to read its plan." }, statusCode: StatusCodes.Status409Conflict);
             if (StagedOf(hosted.Id, buildId, package) is not { } staged)
                 return Results.Json(new { error = "This build has not been staged on a Runner. Publish it to a Runner first (it is staged, not served, unless you say so); then its manual tasks can be run." }, statusCode: StatusCodes.Status409Conflict);
             var steps = new List<string>();
@@ -606,6 +611,63 @@ public static class WorkspaceManagement
                     : Results.NotFound(new { error = $"{staged.Target} has no run {runId}." });
             }
             catch (WorkspacePublishException ex) { return Results.Json(new { error = ex.Message }, statusCode: ex.Status); }
+        });
+
+        // ---- a Store model's contract step (plan 33 SC24; plan 26 Z13b, plan 21 CH06) ----
+
+        // runs the contract plan a person read and approved: "plan_run" is the run of contract without an approval whose report has the hash "approve"; the columns that report drops are checked against the lineage of every Gateway this server
+        // is paired with (a consumer that reads one, in any channel, refuses the step by name until it is published without it, or a person allows it as <name>@<channel>, recorded in the audit; a Gateway that does not answer refuses it too,
+        // gateway:<name> allows that); then contract runs with that hash on the Runner, which runs exactly that plan or nothing
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/contract", async (string project, string id, string build, HttpContext context) =>
+        {
+            if (InProject(project, context, ServerRole.Approver, out var hosted) is { } refused) return refused;
+            if (!Guid.TryParse(build, out var buildId) || builds.Find(hosted.Id, id, buildId) is null) return Results.NotFound();
+            var token = context.ManagementToken();
+            var body = await Body(context);
+            string? package, approve, planRun;
+            var allowed = new List<string>();
+            try
+            {
+                (package, approve, planRun) = (body?["package"]?.GetValue<string>(), body?["approve"]?.GetValue<string>()?.Trim(), body?["plan_run"]?.GetValue<string>());
+                if (body?["allow_consumer"] is JsonArray given) allowed.AddRange(given.Select(a => a?.GetValue<string>()?.Trim()).OfType<string>().Where(a => a.Length > 0));
+            }
+            catch (InvalidOperationException) { package = approve = planRun = null; }
+            if (string.IsNullOrWhiteSpace(package) || string.IsNullOrWhiteSpace(approve) || !Guid.TryParse(planRun, out var planId))
+                return Results.Json(new { error = "The body is a JSON object with the \"package\" (the model's package this build staged), \"plan_run\" (the run of contract that read the plan), \"approve\" (that plan's hash) and optionally \"allow_consumer\", a list of <name>@<channel> or gateway:<name>." }, statusCode: StatusCodes.Status400BadRequest);
+            if (StagedOf(hosted.Id, buildId, package) is not { } staged)
+                return Results.Json(new { error = $"This build has not staged {package} on a Runner. Stage it and read the contract's plan first." }, statusCode: StatusCodes.Status409Conflict);
+            var what = $"{hosted.Id}/{id}/{buildId}: {staged.Package}/{staged.Channel}/contract v{staged.Version} on {staged.Target}";
+            try
+            {
+                // the plan the person read, from the Runner: its run of contract, its report, the hash it approved
+                if (await publishing.RunOfAsync(staged.Target, staged.Package, staged.Channel, planId, "contract-report", Actor(token), context.RequestAborted) is not { } read || (string?)read["task"] != ModelDeployPackage.ContractTask)
+                    return Results.Json(new { error = $"{staged.Target} has no run {planId} of contract of {staged.Package}. Read the plan again." }, statusCode: StatusCodes.Status409Conflict);
+                var report = (read["steps"] as JsonArray)?.Select(x => x?["result"]).OfType<JsonObject>().LastOrDefault();
+                if (report is null || report["dryRun"]?.GetValue<bool>() != true || !string.Equals((string?)report["hash"], approve, StringComparison.OrdinalIgnoreCase))
+                    return Results.Json(new { error = $"The run {planId} did not read a plan with the hash {approve}. Read the plan again and approve the hash it gives." }, statusCode: StatusCodes.Status409Conflict);
+                if (report["blocked"] is JsonArray { Count: > 0 } blocked)
+                    return Results.Json(new { error = "The plan has items a contract does not do, so it is not run: " + string.Join(" ", blocked.Select(b => (string?)b)), hash = approve }, statusCode: StatusCodes.Status409Conflict);
+                var changes = (report["dropped"] as JsonArray ?? []).OfType<JsonObject>()
+                    .Select(c => new ContractedColumn((string)c["description"]!, (string)c["columnId"]!, (string?)c["datasetId"])).ToList();
+                var (graphs, unreachable) = changes.Count == 0 ? ([], []) : await publishing.GatewayLineageAsync(context.RequestAborted);
+                var verdict = ContractGuard.Check(changes, graphs, unreachable, allowed, "allow");
+                if (verdict.Refusals.Count > 0)
+                {
+                    Audit(token, "build.contract", what, "refused: consumers");
+                    return Results.Json(new JsonObject { ["error"] = string.Join(" ", verdict.Refusals), ["consumers_refused"] = new JsonArray([.. verdict.Refusals.Select(r => (JsonNode?)r)]), ["hash"] = approve }, statusCode: StatusCodes.Status409Conflict);
+                }
+                foreach (var used in verdict.AllowancesUsed) Audit(token, "build.contract.allow-consumer", what, used);
+                var steps = new List<string>();
+                var inputs = new Dictionary<string, string>(StringComparer.Ordinal) { ["approve"] = approve!, ["schema"] = (string?)report["schema"] ?? "" };
+                var answer = await publishing.RunStagedTaskAsync(staged.Target, staged.Package, staged.Channel, staged.Version, ModelDeployPackage.ContractTask, inputs, Actor(token), steps.Add, context.RequestAborted);
+                Audit(token, "build.contract", what, $"queued {(string)answer["run_id"]!} for {approve![..Math.Min(12, approve.Length)]}");
+                return Results.Json(new JsonObject { ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]), ["run"] = answer, ["checked"] = changes.Count, ["gateways"] = graphs.Count }, statusCode: StatusCodes.Status202Accepted);
+            }
+            catch (WorkspacePublishException ex)
+            {
+                Audit(token, "build.contract", what, "refused: " + ex.Message);
+                return Results.Json(new { error = ex.Message }, statusCode: ex.Status);
+            }
         });
 
         // ---- the publisher's key reference ----

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json.Nodes;
+using DbDataKit.Lineage;
 using DbDataKit.Web.Trust;
 
 namespace DbDataWorkspace.Tests;
@@ -103,5 +104,76 @@ public sealed class WorkspaceStoreDeployTests
         var staged = await AsGrace(server, HttpMethod.Post, $"/api/v1/projects/{Project}/workspaces/{workspace}/builds/{build}/publish", new JsonObject { ["target"] = "jobs", ["channel"] = "prod" });
         Assert.Equal(HttpStatusCode.OK, staged.Response.StatusCode);
         Assert.Equal("model-territories", (string)staged.Body!["published"]!["package"]!);
+    }
+
+    [Fact]
+    public async Task An_approved_contract_runs_only_when_no_published_consumer_reads_what_it_drops_or_a_person_allows_each_by_name()
+    {
+        await using var runner = await FakeRunner.StartAsync();
+        await using var gateway = await FakeGateway.StartAsync();
+        await using var server = await WorkspaceHarness.StartAsync();
+        Assert.Equal(HttpStatusCode.Created, (await server.AsAdmin(HttpMethod.Post, "/api/v1/publisher-keys/jobs/pair",
+            new JsonObject { ["url"] = runner.Url.ToString(), ["code"] = runner.NewCode(ServerRole.Publisher | ServerRole.Operator) }.ToJsonString())).Response.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await server.AsAdmin(HttpMethod.Post, "/api/v1/publisher-keys/edge/pair",
+            new JsonObject { ["url"] = gateway.Url.ToString(), ["code"] = gateway.NewCode() }.ToJsonString())).Response.StatusCode);
+        var workspace = await DraftAsync(server);
+        var build = await BuildAsync(server, workspace);
+        var builds = $"/api/v1/projects/{Project}/workspaces/{workspace}/builds/{build}";
+        Assert.Equal(HttpStatusCode.OK, (await AsGrace(server, HttpMethod.Post, builds + "/publish", new JsonObject { ["target"] = "jobs", ["channel"] = "prod", ["bind"] = new JsonObject { ["storage"] = "mdm" } })).Response.StatusCode);
+
+        // an approved contract is never started through the plain run route: that would skip the check
+        var around = await AsGrace(server, HttpMethod.Post, builds + "/run", new JsonObject { ["task"] = "contract", ["package"] = "model-territories", ["inputs"] = new JsonObject { ["approve"] = "abc" } });
+        Assert.Equal(HttpStatusCode.Conflict, around.Response.StatusCode);
+        Assert.Contains(".../contract", (string)around.Body!["error"]!);
+
+        // the plan: a run of contract without an approval, whose report has the hash and the dropped column as the lineage graph names it
+        const string table = "postgres://db/mdm.territories.territory";
+        const string column = table + "#note";
+        var hash = new string('a', 64);
+        var plan = await AsGrace(server, HttpMethod.Post, builds + "/run", new JsonObject { ["task"] = "contract", ["package"] = "model-territories" });
+        Assert.Equal(HttpStatusCode.Accepted, plan.Response.StatusCode);
+        var planRun = (string)plan.Body!["run"]!["run_id"]!;
+        runner.StepResults["contract-report"] = new JsonObject
+        {
+            ["model"] = "territories", ["schema"] = "territories", ["engine"] = "postgres", ["hash"] = hash, ["dryRun"] = true, ["applied"] = false,
+            ["steps"] = new JsonArray(new JsonObject { ["object"] = "territory.note", ["description"] = "drop column territory.note", ["text"] = "ALTER TABLE ...", ["requiresEveryRowToHaveAValue"] = false }),
+            ["blocked"] = new JsonArray(), ["notes"] = new JsonArray(),
+            ["dropped"] = new JsonArray(new JsonObject { ["description"] = "drop the column 'note' of 'territories.territory'", ["columnId"] = column, ["datasetId"] = table }),
+        };
+        // a dashboard published in prod reads the column
+        var dashboard = new LineageNode("suite://g/dashboard/sales", NodeKind.Consumer, "sales", false, new Dictionary<string, string> { ["consumer"] = "dashboard" });
+        gateway.Lineage = new LineageGraph([new(table, NodeKind.Dataset, "territory"), new(column, NodeKind.Column, "note"), dashboard],
+            [new(column, dashboard.Id, EdgeKind.Reads, Granularity.Column, Confidence.Declared)]);
+
+        JsonObject Contract(string approve, params string[] allow) => new()
+        {
+            ["package"] = "model-territories", ["plan_run"] = planRun, ["approve"] = approve, ["allow_consumer"] = new JsonArray([.. allow.Select(a => (JsonNode?)a)]),
+        };
+        Assert.Equal(HttpStatusCode.Forbidden, (await server.AsAda(HttpMethod.Post, builds + "/contract", Contract(hash).ToJsonString())).Response.StatusCode);
+        var other = await AsGrace(server, HttpMethod.Post, builds + "/contract", Contract(new string('b', 64)));
+        Assert.Equal(HttpStatusCode.Conflict, other.Response.StatusCode);
+        Assert.Contains("did not read a plan with the hash", (string)other.Body!["error"]!);
+
+        var refused = await AsGrace(server, HttpMethod.Post, builds + "/contract", Contract(hash));
+        Assert.Equal(HttpStatusCode.Conflict, refused.Response.StatusCode);
+        Assert.Contains("the dashboard 'sales' published in channel 'prod'", (string)refused.Body!["error"]!);
+        Assert.Contains("allow sales@prod", (string)refused.Body["error"]!);
+        Assert.Contains(gateway.Calls, c => c.StartsWith("GET /api/v1/lineage as client:workspace-", StringComparison.Ordinal) && c.EndsWith("with publisher", StringComparison.Ordinal));
+        Assert.Single(runner.Runs);   // the plan and nothing more
+
+        // a Gateway that does not answer refuses the step too, until a person allows going on without it
+        gateway.LineageStatus = 503;
+        var silent = await AsGrace(server, HttpMethod.Post, builds + "/contract", Contract(hash, "sales@prod"));
+        Assert.Equal(HttpStatusCode.Conflict, silent.Response.StatusCode);
+        Assert.Contains("the paired server 'edge' did not give its lineage", (string)silent.Body!["error"]!);
+        gateway.LineageStatus = 200;
+
+        // allowed by name and channel: the approved plan runs on the Runner for the person, and who allowed what is in the audit
+        var started = await AsGrace(server, HttpMethod.Post, builds + "/contract", Contract(hash, "sales@prod"));
+        Assert.Equal(HttpStatusCode.Accepted, started.Response.StatusCode);
+        var sent = runner.Runs.Last();
+        Assert.Equal(("model-territories/prod/contract", "grace", hash, "territories"), ((string)sent["task"]!, (string)sent["on_behalf_of"]!, (string)sent["inputs"]!["approve"]!, (string)sent["inputs"]!["schema"]!));
+        Assert.Contains(server.Audit(), a => a.Command == "build.contract.allow-consumer" && a.Outcome == "sales@prod");
+        Assert.Contains(server.Audit(), a => a.Command == "build.contract" && a.Outcome!.StartsWith("queued ", StringComparison.Ordinal));
     }
 }

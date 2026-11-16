@@ -163,6 +163,8 @@ export const workspaceApi = {
     const query = [step ? `step=${enc(step)}` : '', pkg ? `package=${enc(pkg)}` : ''].filter(Boolean).join('&')
     return request<{ run: StagedRun }>(`${builds(project, id)}/${enc(build)}/runs/${enc(run)}${query ? `?${query}` : ''}`).then((r) => r.run)
   },
+  /** Runs the approved contract plan of a Store model (plan 33 SC24): `plan_run` is the run of `contract` that read the plan, `approve` its hash; the server asks its paired Gateways who reads the columns it drops first and refuses (409) naming them, unless each is allowed (`<name>@<channel>`, `gateway:<name>`). */
+  contract: (project: string, id: string, build: string, body: { package: string; plan_run: string; approve: string; allow_consumer: string[] }) => request<{ steps: string[]; run: StagedRunStarted; checked: number; gateways: number }>(`${builds(project, id)}/${enc(build)}/contract`, json(body)),
   previewWithData: (project: string, id: string, build: string, target: string, instance: string) => request<PreviewDataAnswer>(`${builds(project, id)}/${enc(build)}/preview-data`, json({ target, instance })),
   publisherKeys: () => request<{ keys: PublisherKey[] }>('/api/v1/publisher-keys').then((r) => r.keys),
   pairKey: (name: string, url: string, code: string) => request<PublisherKey>(`/api/v1/publisher-keys/${enc(name)}/pair`, json({ url, code })),

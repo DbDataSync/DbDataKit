@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { BuildSummary, StagedRun, StagedRunStarted } from '../api'
-import { DeployResult, StoreDeployPanel, canApply, deployReportOf, followBuild, modelsOf, packageOf, reportLine, storageConnectionOf, type DeployReport } from './StoreDeployPanel'
+import { ContractResult, DeployResult, StoreDeployPanel, allowancesOf, canApply, canContract, contractReportOf, deployReportOf, followBuild, modelsOf, packageOf, reportLine, storageConnectionOf, type ContractReport, type DeployReport } from './StoreDeployPanel'
 
 const report = (over: Partial<DeployReport> = {}): DeployReport =>
   ({ model: 'territories', schema: 'territories', engine: 'postgres', action: 'create', dryRun: true, applied: false, statements: ['create table territory', 'create table territory_history'], blocked: [], notes: [], ...over })
@@ -69,5 +69,46 @@ describe('deploying a Store model on a Runner (plan 33 SC24)', () => {
     expect(html).toContain('data-testid="wsp-deploy-dry"')
     // the deploy itself waits for a dry run
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*data-testid="wsp-deploy-apply"/)
+  })
+})
+
+describe('the contract step of a Store model on a Runner (plan 33 SC24)', () => {
+  const plan = (over: Partial<ContractReport> = {}): ContractReport => ({
+    model: 'territories', schema: 'territories', engine: 'postgres', hash: 'abcdef0123456789'.repeat(4), dryRun: true, applied: false,
+    steps: [{ object: 'territory.note', description: 'drop column territory.note', text: 'ALTER TABLE "territories"."territory" DROP COLUMN "note"', requiresEveryRowToHaveAValue: false },
+      { object: 'territory.region', description: 'make territory.region required', text: 'ALTER TABLE ... SET NOT NULL', requiresEveryRowToHaveAValue: true }],
+    blocked: [], notes: [], dropped: [{ description: "drop the column 'note' of 'territories.territory'", columnId: 'postgres://db/x#note', datasetId: 'postgres://db/x' }], ...over,
+  })
+  const contractRun = (r: ContractReport | null, over: Partial<StagedRun> = {}) => ({ build: 'b', started: { ...started, task: 'contract' }, run: run(null, { task: 'contract', steps: r ? [{ key: r.schema, started: '', completed: '', result: r }] : [], ...over }) })
+
+  it('approves only a plan that has steps and nothing blocked', () => {
+    expect(canContract(plan())).toBe(true)
+    expect(canContract(plan({ blocked: ['history keys'] }))).toBe(false)
+    expect(canContract(plan({ steps: [], dropped: [] }))).toBe(false)
+    expect(canContract(plan({ dryRun: false, applied: true }))).toBe(false)
+    expect(canContract(null)).toBe(false)
+  })
+  it('reads the allowances as typed, comma or space separated', () => {
+    expect(allowancesOf(' sales@prod, gateway:edge  report@test ')).toEqual(['sales@prod', 'gateway:edge', 'report@test'])
+    expect(allowancesOf('')).toEqual([])
+  })
+  it('draws the plan with each statement, the rows that must have a value, the hash and the columns the Gateways are asked about', () => {
+    expect(contractReportOf(contractRun(plan()).run)?.hash).toHaveLength(64)
+    const html = renderToStaticMarkup(<MemoryRouter><ContractResult result={contractRun(plan())} /></MemoryRouter>)
+    expect(html).toContain('would run 2 step(s). Plan abcdef012345.')
+    expect(html.match(/data-testid="wsp-contract-step"/g)).toHaveLength(2)
+    expect(html).toContain('(every row must have a value first)')
+    expect(html).toContain('the paired Gateways are asked who reads: drop the column &#x27;note&#x27; of &#x27;territories.territory&#x27;')
+    expect(html).toContain('of contract of model-territories')
+  })
+  it('says what an approved contract did, and what blocks a plan', () => {
+    expect(renderToStaticMarkup(<MemoryRouter><ContractResult result={contractRun(plan({ dryRun: false, applied: true }))} /></MemoryRouter>)).toContain('Contracted: 2 step(s) ran on territories.')
+    expect(renderToStaticMarkup(<MemoryRouter><ContractResult result={contractRun(plan({ blocked: ['the history keys change'] }))} /></MemoryRouter>)).toContain('Blocked: the history keys change')
+    expect(renderToStaticMarkup(<MemoryRouter><ContractResult result={contractRun(plan({ steps: [], dropped: [] }))} /></MemoryRouter>)).toContain('have nothing to contract')
+  })
+  it('offers to plan the contract beside the deploy, and the approval only after a plan', () => {
+    const html = renderToStaticMarkup(<MemoryRouter><QueryClientProvider client={new QueryClient()}><StoreDeployPanel project="p" id="d" paths={['models/territories.yaml']} /></QueryClientProvider></MemoryRouter>)
+    expect(html).toContain('data-testid="wsp-contract-plan"')
+    expect(html).not.toContain('data-testid="wsp-contract-apply"')
   })
 })
