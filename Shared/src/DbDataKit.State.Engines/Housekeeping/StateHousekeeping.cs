@@ -15,7 +15,7 @@ namespace DbDataKit.State.Engines.Housekeeping;
 /// <para>
 /// When a job is next due is read from its last recorded run (its start plus the interval), so a restart does not run it again early, and the instances of a group that share one state database
 /// and one service name share its schedule. A job that has never run is first due a short while after the start (<see cref="FirstRunDelay"/>, or the interval when that is shorter), so a server
-/// that starts does not write to its state at once.
+/// that starts does not write to its state at once; the loop does not even read its runs before then.
 /// </para>
 /// Composed by every server (the console, the Workspace, the Gateway, the Runner) as a hosted service; the jobs can also be run once (<see cref="RunRetention"/>, <see cref="RunBackupAsync"/>).
 /// </summary>
@@ -148,6 +148,12 @@ public sealed class StateHousekeeping : IHostedService, IAsyncDisposable
 
     private async Task LoopAsync(CancellationToken ct)
     {
+        // nothing is read or written at the start: the first look at the state is one first-run delay later (a server that starts, or a test that removes its state right after, is left alone)
+        var first = Settings.RetentionEvery < FirstRunDelay ? Settings.RetentionEvery : FirstRunDelay;
+        if (BackupDirectory is not null && Settings.BackupEvery < first) first = Settings.BackupEvery;
+        try { await Task.Delay(first, _state.Time, ct).ConfigureAwait(false); }
+        catch (OperationCanceledException) { return; }
+
         while (!ct.IsCancellationRequested)
         {
             var wait = TimeSpan.FromMinutes(1);
