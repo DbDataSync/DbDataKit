@@ -37,12 +37,13 @@ public sealed class StateHousekeepingTests : IDisposable
         Assert.Equal(Path.Combine(_scratch.Directory, "backups"), housekeeping.BackupDirectory);
 
         await housekeeping.StartAsync(CancellationToken.None);
-        var runs = new RunStore(database, "dbdatatest");
+        // the state is read only after the loop stopped: a read while a snapshot holds its transaction is what this suite's SQLite lock guard refuses; the folder says how far it got
+        // (each turn runs retention before the snapshot, so two snapshots mean two retentions)
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
-        while (DateTime.UtcNow < deadline &&
-               (runs.Read(new RunQuery("dbdatatest", StateHousekeeping.RetentionJobId, RunOutcome.Succeeded)).Count < 2 || runs.Read(new RunQuery("dbdatatest", StateHousekeeping.BackupJobId, RunOutcome.Succeeded)).Count < 2))
+        while (DateTime.UtcNow < deadline && StateBackupJob.List(Path.Combine(_scratch.Directory, "backups")).Count < 2)
             await Task.Delay(200);
         await housekeeping.StopAsync(CancellationToken.None);
+        var runs = new RunStore(database, "dbdatatest");
 
         var retention = runs.Read(new RunQuery("dbdatatest", StateHousekeeping.RetentionJobId));
         Assert.True(retention.Count(r => r.Run.Outcome == RunOutcome.Succeeded) >= 2, $"retention ran {retention.Count} times");
