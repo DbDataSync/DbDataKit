@@ -133,6 +133,11 @@ public sealed class ReplicationSetPackageTests : IDisposable
             Assert.DoesNotContain("secret-pw", File.ReadAllText(file));
         Assert.True(File.Exists(Path.Combine(directory, "package.yaml")));
         Assert.True(File.Exists(Path.Combine(directory, "files", "repo", "config", "replications", "orders", "task.yaml")));
+
+        // plan 18 G18: the replications' design lineage, by the identity of the repository's connections, for the Runner's lineage
+        var graph = DbDataKit.Lineage.PackageLineage.Read(File.ReadAllText(Path.Combine(directory, "files", "lineage", "design.json")), "lineage/design.json");
+        Assert.Contains(graph.Edges, e => e.Kind == DbDataKit.Lineage.EdgeKind.Replicates && e.Detail == "orders/t1");
+        Assert.All(graph.Nodes, n => Assert.Null(DbDataKit.Lineage.PackageLineage.SlotOf(n.Id)));
     }
 
     [Fact]

@@ -212,11 +212,11 @@ public sealed class PackagePublishOnRealRunnerTests : IDisposable
 
         Assert.True(second["changed"]!.GetValue<bool>());
         Assert.True(v2 > v1);
-        Assert.Equal(1, second["uploaded"]!.GetValue<int>());                                  // the one mapping file; everything else the runner had
-        Assert.Equal(before.Count - 1, second["skipped"]!.GetValue<int>());
+        Assert.Equal(2, second["uploaded"]!.GetValue<int>());                                  // the one mapping file and the design lineage that names its table (plan 18 G18); everything else the runner had
+        Assert.Equal(before.Count - 2, second["skipped"]!.GetValue<int>());
         var after = runner.Artifacts(v2).ToDictionary(a => a.Path, a => a.Sha256);
         var changed = after.Keys.Union(before.Keys).Where(k => !before.TryGetValue(k, out var x) || !after.TryGetValue(k, out var y) || x != y).ToList();
-        Assert.Equal(["repo/config/replications/orders/table-mappings/t1.yaml"], changed);
+        Assert.Equal(["lineage/design.json", "repo/config/replications/orders/table-mappings/t1.yaml"], changed.Order(StringComparer.Ordinal));
         await runner.WaitActiveAsync(v2);
     }
 

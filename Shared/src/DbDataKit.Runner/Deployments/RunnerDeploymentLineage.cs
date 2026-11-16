@@ -32,6 +32,17 @@ public static class RunnerDeploymentLineage
     /// </summary>
     public static (LineageGraph Graph, List<string> Problems) BuildWithProblems(StateDatabase state, string group, TimeSpan lease, int runsPerPackage = RunsPerPackage)
     {
+        var (graph, problems, _) = BuildWithDesign(state, group, lease, null, runsPerPackage);
+        return (graph, problems);
+    }
+
+    /// <summary>
+    /// <see cref="BuildWithProblems"/> and the design lineage of the packages (plan 18 G18): for each channel's active version of a package that carries <see cref="PackageLineage.Path"/> (Build's models and column edges, Sync's
+    /// replications), its graph, with a table named by its slot named by the connection the channel binds (<paramref name="connectionOf"/> finds the runner's connection by name; null names them by the slot), joined with the deployment;
+    /// and the runs along it: the newest run of a task that reported writing a table, laid on the edges into the table and its columns. A package whose graph does not read, or would close a circle, is left out and named in the problems.
+    /// </summary>
+    public static (LineageGraph Graph, List<string> Problems, IReadOnlyList<EdgeRun> Runs) BuildWithDesign(StateDatabase state, string group, TimeSpan lease, Func<string, DbDataKit.Connections.ConnectionDefinition?>? connectionOf, int runsPerPackage = RunsPerPackage)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(group);
         var publisher = new DefinitionPublisher(state, RunnerPackages.Kinds(), null, "runner");
         var instances = new RunnerInstances(state);
@@ -131,8 +142,65 @@ public static class RunnerDeploymentLineage
         }
 
         var problems = new List<string>();
-        var graph = OutsideSystems(new LineageGraph(nodes.Values, edges), new TaskLineageStore(state).Read(), group, kind, packages, problems);
-        return (graph, problems);
+        var taskLineage = new TaskLineageStore(state).Read();
+        var graph = OutsideSystems(new LineageGraph(nodes.Values, edges), taskLineage, group, kind, packages, problems);
+        graph = PackageDesigns(graph, state, publisher, kind, packages, connectionOf, problems);
+        return (graph, problems, DesignRuns(graph, state, taskLineage, packages));
+    }
+
+    /// <summary>
+    /// Lays beside <paramref name="graph"/> the design lineage each package's active versions carry (<see cref="PackageLineage"/>): one graph per channel that serves a version with the file, its slots named by what that channel binds them to.
+    /// </summary>
+    private static LineageGraph PackageDesigns(LineageGraph graph, StateDatabase state, DefinitionPublisher publisher, string kind, IEnumerable<string> packages, Func<string, DbDataKit.Connections.ConnectionDefinition?>? connectionOf, List<string> problems)
+    {
+        var payloads = new PayloadStore(state);
+        foreach (var name in packages.Order(StringComparer.Ordinal))
+            foreach (var head in publisher.HeadsOf(kind, name).OrderBy(h => h.Channel, StringComparer.Ordinal))
+            {
+                if (head.Active is not { } version) continue;
+                if (publisher.Artifacts(kind, name, version).FirstOrDefault(a => a.Path == PackageLineage.Path) is not { } file) continue;
+                var where = $"{name} v{version} on {head.Channel}";
+                try
+                {
+                    string text;
+                    using (var reader = new StreamReader(payloads.OpenRead(file.PayloadId))) text = reader.ReadToEnd();
+                    var bound = publisher.Bindings(head.Channel, kind, name).ToDictionary(b => b.Slot, b => b.BoundTo, StringComparer.Ordinal);
+                    var slotProblems = new List<string>();
+                    var design = PackageLineage.Resolve(PackageLineage.Read(text, $"{PackageLineage.Path} of {where}"),
+                        slot => connectionOf is not null && bound.TryGetValue(slot, out var connection) ? Find(connectionOf, connection) : null, slotProblems);
+                    graph = LineageGraph.Merge([graph, design]);
+                    problems.AddRange(slotProblems.Select(p => $"{where}: {p}"));
+                }
+                catch (Exception ex) when (ex is LineageGraphException or IOException or InvalidOperationException)
+                {
+                    problems.Add($"The design lineage of {where} is left out: {ex.Message}");
+                }
+            }
+        return graph;
+
+        static DbDataKit.Connections.ConnectionDefinition? Find(Func<string, DbDataKit.Connections.ConnectionDefinition?> connectionOf, string connection)
+        {
+            try { return connectionOf(connection); }
+            catch (InvalidDataException) { return null; }
+        }
+    }
+
+    /// <summary>The newest run of each task that reported writing a table of the graph, laid along the edges into it (<see cref="PackageLineage.Runs"/>); a run that has not ended is not laid.</summary>
+    private static IReadOnlyList<EdgeRun> DesignRuns(LineageGraph graph, StateDatabase state, IReadOnlyList<TaskLineageRow> rows, IReadOnlySet<string> packages)
+    {
+        var runs = new RunStore(state, RunnerNames.EngineService);
+        var ended = new Dictionary<Guid, (DateTimeOffset At, DbDataKit.Lineage.RunOutcome Outcome)?>();
+        var written = new List<(string, DateTimeOffset, DbDataKit.Lineage.RunOutcome)>();
+        foreach (var row in rows.Where(r => r.Direction == TaskLineageRow.Writes && r.LastRun is not null && packages.Contains(r.Package) && graph.Node(r.Name) is not null))
+        {
+            var id = row.LastRun!.Value;
+            if (!ended.TryGetValue(id, out var run))
+                ended[id] = run = runs.Get(id) is { Run.Finished: { } at } stored && stored.Run.Outcome != DbDataKit.Monitoring.RunOutcome.Running
+                    ? (at, stored.Run.Outcome == DbDataKit.Monitoring.RunOutcome.Succeeded ? DbDataKit.Lineage.RunOutcome.Succeeded : DbDataKit.Lineage.RunOutcome.Failed)
+                    : null;
+            if (run is { } r) written.Add((row.Name, r.At, r.Outcome));
+        }
+        return PackageLineage.Runs(graph, written);
     }
 
     /// <summary>The prefix of a lineage line that names an outside system: <c>external://&lt;kind&gt;/&lt;name&gt;</c> (<see cref="LineageIdentity.ExternalSystem"/>).</summary>

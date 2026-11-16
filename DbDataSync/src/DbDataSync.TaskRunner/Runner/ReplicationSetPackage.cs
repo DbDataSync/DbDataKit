@@ -4,6 +4,7 @@ using DbDataKit.Runner;
 using DbDataKit.Runner.Kit;
 using DbDataKit.Scheduling;
 using DbDataSync.Core.Config;
+using DbDataSync.Core.Lineage;
 using DbDataSync.Core.Secrets;
 using DbDataSync.Core.Sql;
 using DbDataSync.Drivers.Abstractions;
@@ -18,7 +19,8 @@ public sealed record SetPackageFile(string Path, string Source);
 public sealed record PublishedReplication(string Replication, string Task, string Mode, string? Cron, int? FrequencySeconds, IReadOnlyList<string> Slots, int Mappings, IReadOnlyDictionary<string, string>? SlotConnections = null);
 
 /// <summary>A replication set made into a `package/1` definition package: the manifest (text and model), the files of the definition and what each replication became.</summary>
-public sealed record BuiltReplicationSet(string Name, PackageManifest Manifest, string ManifestText, IReadOnlyList<SetPackageFile> Files, IReadOnlyList<PublishedReplication> Replications);
+/// <param name="Lineage">The design lineage the package carries (plan 18 G18, <see cref="DbDataKit.Lineage.PackageLineage"/>): the replications' tables and columns, by the identity of the repository's connections, as the drain reports what it wrote.</param>
+public sealed record BuiltReplicationSet(string Name, PackageManifest Manifest, string ManifestText, IReadOnlyList<SetPackageFile> Files, IReadOnlyList<PublishedReplication> Replications, string? Lineage = null);
 
 /// <summary>
 /// Makes a Sync repository (the folder that holds <c>config/</c>, <c>libraries/</c>, <c>drivers/</c> and <c>files/</c>) into a definition package for a runner (plan 28c E08, section 4.3): one task per enabled replication on the
@@ -233,7 +235,12 @@ public static class ReplicationSetPackage
             return null;
         }
 
-        return new BuiltReplicationSet(package, manifest, text, Files(repoRoot), published);
+        // the replications' design lineage (plan 18 G18): what the deleted Sync server's lineage served, carried by the package for the Runner's; a replication that does not read is already a problem above
+        var lineageProblems = new List<string>();
+        var (replications, lineageConnections) = SyncLineage.Load(config, lineageProblems);
+        var lineage = DbDataKit.Lineage.PackageLineage.Write(SyncLineage.Design([.. replications.Where(r => r.Task.Enabled)], lineageConnections));
+
+        return new BuiltReplicationSet(package, manifest, text, Files(repoRoot), published, lineage);
     }
 
     /// <summary>The schedule a replication has on the runner: a periodic one its cron expression (UTC, as the Sync scheduler reads it: its drain plans once, runs what is queued and ends), a continuous one its frequency as the schedule that starts the drain again when it has ended (a continuous drain stays up and plans between passes itself, with the planner of the API, until its idle timeout; plan 28c E11, E12). Who schedules the replication is its owner (`old`, `observe`, `runner`), which a publish does not change.</summary>
@@ -288,6 +295,13 @@ public static class ReplicationSetPackage
                 if (current != text) bytes = new UTF8Encoding(false).GetBytes(current);
             }
             File.WriteAllBytes(target, bytes);
+        }
+
+        if (package.Lineage is { } lineage)
+        {
+            var target = Path.Combine(directory, "files", DbDataKit.Lineage.PackageLineage.Path.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.WriteAllBytes(target, DbDataKit.Lineage.PackageLineage.Bytes(lineage));
         }
     }
 }

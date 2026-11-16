@@ -71,6 +71,7 @@ internal static class ProjectPublishCommand
             var tasks = o.Operations
                 ? built.Manifest.Tasks.Select(t => new { name = t.Name, connection = (string?)null, plan = (string?)null, schedule = (string?)null, time_zone = (string?)null, slots = t.Connections.Select(c => c.Name).ToList(), timeout_seconds = t.Limits.Timeout is { } limit ? (long?)limit.TotalSeconds : null }).ToList()
                 : built.Plans.Select(p => new { name = p.Task, connection = (string?)p.Connection, plan = (string?)p.Plan, schedule = p.Cron, time_zone = p.TimeZone, slots = p.Slots.ToList(), timeout_seconds = p.Timeout is { } t ? (long?)t.TotalSeconds : null }).ToList();
+            if (built.LineageProblem is { } lineageProblem) error.WriteLine(lineageProblem);
             output.Payload("package", package);
             output.Payload("files", built.Files.Count);
             output.Payload("tasks", tasks);

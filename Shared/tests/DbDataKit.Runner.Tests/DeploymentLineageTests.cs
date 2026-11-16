@@ -186,6 +186,53 @@ public sealed class DeploymentLineageTests
         Assert.DoesNotContain(graph.Nodes, n => n.Id == LineageIdentity.SuiteObject(Group, "task", $"{Name}/b"));
     }
 
+    [Theory, MemberData(nameof(Engines))]
+    public void A_package_carries_its_design_lineage_named_by_the_bound_connection_with_the_newest_run_along_it_and_an_unbound_slot_is_said(string engine)
+    {
+        // plan 18 G18: what the deleted Build and Sync servers served (models, column edges, replications) comes with the package; a table named by its slot is named by what the channel binds
+        using var rig = new Rig(engine);
+        var slot = DbDataKit.Lineage.PackageLineage.SlotConnection("wh", "sqlserver");
+        var warehouse = new DbDataKit.Connections.ConnectionDefinition { Name = "warehouse", Engine = "sqlserver", Address = new DbDataKit.Connections.AddressSpec { Host = "wh.example", Database = "dw" } };
+        var (raw, orders) = (LineageIdentity.Dataset(slot, "dbo", "raw"), LineageIdentity.Dataset(slot, "dbo", "orders"));
+        var design = new LineageGraph(
+            [new LineageNode(raw.ToString(), NodeKind.Dataset, "dbo.raw", true), new LineageNode(orders.ToString(), NodeKind.Dataset, "dbo.orders"),
+             new LineageNode(LineageIdentity.Column(slot, raw, "id"), NodeKind.Column, "id", true), new LineageNode(LineageIdentity.Column(slot, orders, "id"), NodeKind.Column, "id")],
+            [new LineageEdge(raw.ToString(), orders.ToString(), EdgeKind.Derives, Granularity.Table, Confidence.Derived),
+             new LineageEdge(LineageIdentity.Column(slot, raw, "id"), LineageIdentity.Column(slot, orders, "id"), EdgeKind.Derives, Granularity.Column, Confidence.Derived, "identity")]);
+        var files = new PublishArtifacts(new PayloadStore(rig.Database), rig.Publisher, "ada");
+        var artifact = files.Add(DbDataKit.Lineage.PackageLineage.Path, DbDataKit.Lineage.PackageLineage.Bytes(DbDataKit.Lineage.PackageLineage.Write(design)));
+        rig.Publisher.Publish(new PublishRequest(Kind, Name, "manifest", "ada", "prod", PublishMode.Serve, Artifacts: [artifact]));
+
+        // not bound yet: the tables keep the slot's name, and that is said
+        var (unbound, said, _) = RunnerDeploymentLineage.BuildWithDesign(rig.Database, Group, Lease, _ => warehouse);
+        Assert.NotNull(unbound.Node(orders.ToString()));
+        Assert.Contains(said, p => p.Contains("`wh`", StringComparison.Ordinal) && p.Contains($"{Name} v1 on prod", StringComparison.Ordinal));
+
+        rig.Publisher.Bind("prod", Kind, Name, "wh", "warehouse", "ada");
+        var runs = new RunStore(rig.Database, RunnerNames.EngineService);
+        var run = runs.Start("refresh", at: rig.Clock.GetUtcNow());
+        rig.Clock.Advance(TimeSpan.FromMinutes(1));
+        runs.Finish(run, DbDataKit.Monitoring.RunOutcome.Succeeded, at: rig.Clock.GetUtcNow());
+        var real = LineageIdentity.Dataset(warehouse, "dbo", "orders");
+        new TaskLineageStore(rig.Database).Record(Name, "prod", "refresh", run, [], [real.ToString()]);
+
+        var (graph, problems, laid) = RunnerDeploymentLineage.BuildWithDesign(rig.Database, Group, Lease, name => name == "warehouse" ? warehouse : null);
+        Assert.Empty(problems);
+        Assert.NotNull(graph.Node(real.ToString()));
+        Assert.Contains(graph.Edges, e => e.To == LineageIdentity.Column(warehouse, real, "id") && e.Granularity == Granularity.Column);
+        Assert.DoesNotContain(graph.Nodes, n => n.Id.Contains("://@", StringComparison.Ordinal));
+        Assert.NotNull(graph.Node(DeploymentIds.Package(Group, Kind, Name)));      // beside the deployment
+        Assert.Equal(2, laid.Count);
+        Assert.All(laid, r => Assert.Equal(DbDataKit.Lineage.RunOutcome.Succeeded, r.Outcome));
+        Assert.Contains(laid, r => r.To == real.ToString() && r.Kind == EdgeKind.Derives);
+
+        // a file the runner cannot read is said, and the rest of the graph stands
+        var broken = files.Add(DbDataKit.Lineage.PackageLineage.Path, "{\"schema\":\"package-lineage/9\"}"u8);
+        rig.Publisher.Publish(new PublishRequest(Kind, Name, "manifest 2", "ada", "prod", PublishMode.Serve, Artifacts: [broken]));
+        var (_, after, _) = RunnerDeploymentLineage.BuildWithDesign(rig.Database, Group, Lease, _ => warehouse);
+        Assert.Contains(after, p => p.Contains("package-lineage/9", StringComparison.Ordinal) && p.Contains($"{Name} v2 on prod", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void A_detail_survives_its_text_with_an_error_that_has_the_separator()
     {

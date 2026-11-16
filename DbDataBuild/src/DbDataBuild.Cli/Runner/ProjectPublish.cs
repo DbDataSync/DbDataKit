@@ -17,7 +17,8 @@ internal sealed record PackageFile(string Path, string Source);
 internal sealed record PublishedPlan(string Connection, string Plan, string Task, string File, string? Cron, string? TimeZone, IReadOnlyList<string> Slots, TimeSpan? Timeout);
 
 /// <summary>A project made into a `package/1` definition package: the manifest (text and model), the files and what each plan became.</summary>
-internal sealed record BuiltPackage(string Name, PackageManifest Manifest, string ManifestText, IReadOnlyList<PackageFile> Files, IReadOnlyList<PublishedPlan> Plans);
+/// <param name="Lineage">The design lineage the package carries (plan 18 G18, <see cref="DbDataKit.Lineage.PackageLineage"/>: the models and their column edges, the tables named by their slot), or null when it could not be made (<paramref name="LineageProblem"/> says why).</param>
+internal sealed record BuiltPackage(string Name, PackageManifest Manifest, string ManifestText, IReadOnlyList<PackageFile> Files, IReadOnlyList<PublishedPlan> Plans, string? Lineage = null, string? LineageProblem = null);
 
 /// <summary>
 /// Makes the committed files of a project into a definition package for a runner (plan 28c E07, section 4.3). It compiles nothing: it reads what `project compile` wrote (`rendered/`), checks that the committed files agree with each
@@ -174,7 +175,8 @@ internal static class RunnerProject
             return null;
         }
 
-        return new BuiltPackage(package, manifest, text, Files(root, rendered, extra), plans);
+        var (lineage, lineageProblem) = DesignLineage(root, package, config);
+        return new BuiltPackage(package, manifest, text, Files(root, rendered, extra), plans, lineage, lineageProblem);
     }
 
     /// <summary>
@@ -195,6 +197,24 @@ internal static class RunnerProject
         }
 
         return total + (Span(plan.Settings.MaxWait) ?? TimeSpan.Zero) + TimeoutGrace;
+    }
+
+    /// <summary>
+    /// The design lineage of the project as the package carries it (plan 18 G18): <see cref="BuildLineage.Design"/>, offline, with each connection named by its slot (the connection's name; the Runner names its tables again by the connection the
+    /// channel binds), so the Runner's lineage has the models, their column edges and the semantic members the deleted Build server served. A project whose graph cannot be made is published without it, and the reason is returned.
+    /// </summary>
+    internal static (string? Text, string? Problem) DesignLineage(string root, string package, ProjectConfig config)
+    {
+        try
+        {
+            var ctx = ProjectContext.Load(root);
+            var graph = BuildLineage.Design(ctx, name => DbDataKit.Lineage.PackageLineage.SlotConnection(name, config.EngineOf(name) ?? name), "runner-package-" + package);
+            return (DbDataKit.Lineage.PackageLineage.Write(graph), null);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return (null, $"The package carries no design lineage: the project's graph could not be made ({ex.GetType().Name}).");
+        }
     }
 
     private static List<PackageFile> Files(string root, string rendered, IEnumerable<string> extra)
@@ -235,6 +255,13 @@ internal static class RunnerProject
                 if (current != text) bytes = new UTF8Encoding(false).GetBytes(current);
             }
             File.WriteAllBytes(target, bytes);
+        }
+
+        if (package.Lineage is { } lineage)
+        {
+            var target = Path.Combine(directory, "files", DbDataKit.Lineage.PackageLineage.Path.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.WriteAllBytes(target, DbDataKit.Lineage.PackageLineage.Bytes(lineage));
         }
     }
 }

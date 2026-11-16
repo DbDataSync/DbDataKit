@@ -98,6 +98,24 @@ public class ProjectPublishTests
     }
 
     [Fact]
+    public void The_package_carries_the_projects_design_lineage_with_its_tables_named_by_their_slot()
+    {
+        // plan 18 G18: the models and their column edges the deleted Build server's lineage served, for the Runner's; the Runner names a slot's tables by the connection the channel binds
+        var dir = CompiledProject();
+        var built = Built(dir);
+        Assert.Null(built.LineageProblem);
+        var output = Path.Combine(dir, "out");
+        RunnerProject.Write(built, output);
+        var text = File.ReadAllText(Path.Combine(output, "files", "lineage", "design.json"));
+        var graph = DbDataKit.Lineage.PackageLineage.Read(text, "lineage/design.json");
+        var datasets = graph.Nodes.Where(n => n.Kind == DbDataKit.Lineage.NodeKind.Dataset).ToList();
+        Assert.NotEmpty(datasets);
+        Assert.All(datasets, n => Assert.Equal("sqlserver", DbDataKit.Lineage.PackageLineage.SlotOf(n.Id)));
+        Assert.Contains(graph.Edges, e => e.Granularity == DbDataKit.Lineage.Granularity.Column);
+        Assert.DoesNotContain("\r", text);
+    }
+
+    [Fact]
     public void A_connection_file_of_the_previous_format_is_published_as_the_current_one_and_the_file_in_the_project_stays_as_written()
     {
         // plan 33 6d, rule 5: nothing that leaves the machine carries an old number

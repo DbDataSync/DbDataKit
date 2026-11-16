@@ -8,7 +8,7 @@ Flags: **OWNER** waits for a decision only the owner can take (the decision is n
 
 [Plan 33](33-fewer-services.md) SC23 is built: the Build, Sync and Store servers are deleted and the install is four services (console, Workspace, Gateway, Runner); `docs/architecture.md` says how it is. Owner rules that steer the work are there: our code calls our code as a library, never as a CLI; shareable code goes into a shared library first; screens follow the work, not the servers; framework-dependent builds; fail forward (CI is the check).
 
-- **Next:** E20e (owner decision taken, see its row), E20f, the rows SC23 moved after it (SC20p, G18, SW01's remainder, SC20n, SC22i, SC22k), plan 30 PB02 and PB04 (the Gateway's per-kind publish routes, which still have callers that are not servers), and plan 35 I4 to I9 (the console-made link between a Gateway group and a Runner group, the two paths with the outbox, state logins per service and group, one backup set, structural tasks only from Control). What SC23 left open is in its row.
+- **Next:** E20e (owner decision taken, see its row), E20f, the rows SC23 moved after it (SC20p, SW01's remainder, SC20n, SC22i, SC22k), plan 30 PB02 and PB04 (the Gateway's per-kind publish routes, which still have callers that are not servers), and plan 35 I4 to I9 (the console-made link between a Gateway group and a Runner group, the two paths with the outbox, state logins per service and group, one backup set, structural tasks only from Control). What SC23 left open is in its row.
 - **How the work is run:** `docs/agent-workflow.md` (the coordinator, one worktree per agent, one commit per slice, push only when CI is idle, backups, pacing against a usage limit). Every decision is recorded in the plan row it belongs to; this page and the plans are the whole state, nothing lives elsewhere.
 
 ## Held and parked, first
@@ -114,7 +114,6 @@ Taken (not open any more): the word "unit" of Sync's state on a target is the **
 
 | Plan and row | What remains | Flag |
 | --- | --- | --- |
-| [18](18-lineage.md) G18 | Lineage without the Build and Sync servers: the Runner's lineage carries the published packages' models, column edges and replications | |
 | [35](35-isolation-by-trust.md) I1 to I9 | Isolation by trust: the housekeeping library in every server and the embedded runner's removal (I1, I2, inside SC23); after SC23, evaluation as a Runner task, the console-made Gateway-Runner link, path 1 with an outbox and the 10-second wait, path 2 for the contract guard and `data.changed`, state logins per service and group, one backup set, structural tasks only from Control | I1, I2, I3 built (2026-11-16) |
 | [22a](22a-gap-slices.md) GP29 | OpenTelemetry: what is left is the trace id in the serving contract and the hop through a module (the hosts' spans and counters, GP28, and the trace across the console's relay are built; `docs/observability.md`) | |
 | [22a](22a-gap-slices.md) GP23 | Descriptions and owners in lineage nodes: the emitters, once the definitions carry the text (the contract `LineageDescriptions` is built) | PARTLY |
