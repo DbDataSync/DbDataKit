@@ -118,6 +118,18 @@ public sealed class WorkspaceBuildPublishTests
         Assert.Equal(HttpStatusCode.OK, (await Publish(server, workspace, await BuildAsync(server, workspace), new JsonObject { ["target"] = "edge" })).Response.StatusCode);
         Assert.Contains("connection_string_secret: 'secret:dbdatakit:gateway:warehouse-read'", gateway.DataSourceDocs["warehouse"].Text);
         Assert.Contains("managed_by: workspace-", gateway.DataSourceDocs["warehouse"].Text);
+        // plan 30 PB02: the secret the kept login names is a slot of the data source, which the Workspace binds where the Gateway lets it, before the version is taken
+        Assert.True(gateway.Bindings.ContainsKey("data-source/warehouse/dbdatakit:gateway:warehouse-read"));
+
+        // a secret only an administrator binds: the publish is refused, saying where and how an administrator binds it
+        gateway.Bindings.Clear();
+        gateway.AdminSecrets.Add("dbdatakit:gateway:warehouse-read");
+        var refused = await Publish(server, workspace, await BuildAsync(server, workspace), new JsonObject { ["target"] = "edge" });
+        Assert.NotEqual(HttpStatusCode.OK, refused.Response.StatusCode);
+        var said = refused.Body!.ToJsonString();
+        Assert.Contains("Secret slots box of the data source", said);
+        Assert.Contains("PUT /api/v1/bindings/prod/data-source/warehouse", said);
+        gateway.AdminSecrets.Clear();
 
         // a data source the Gateway lacks is made from the build's document, without a login (an administrator sets that on the Gateway)
         gateway.DataSources.Remove("warehouse");

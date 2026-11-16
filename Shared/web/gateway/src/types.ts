@@ -27,7 +27,9 @@ export interface DataSourceSummary { name: string; version: string; valid: boole
 export interface ServerClient { id: string; name: string }
 /** The gateway's answer to a hand-over: `adopted` is false when the data source already was the client's. */
 export interface AdoptAnswer { name: string; managed_by: string; adopted: boolean; previous_owner?: string | null }
-export interface DataSourceFile { name: string; text: string; version: string; grants?: DataSourceGrants | null; policy?: DataSourcePolicy | null }
+/** One secret slot of a data source (plan 30 PB02): a secret its file names, and production's binding of it (who bound it and when); `held` says whether the Gateway holds the secret (null for an inline value). */
+export interface DataSourceSecretSlot { slot: string; path: string; reference: string; channel: string; stored: boolean; held: boolean | null; bound_to: string | null; bound_by: string | null; bound_at: string | null; revision: number | null }
+export interface DataSourceFile { name: string; text: string; version: string; grants?: DataSourceGrants | null; policy?: DataSourcePolicy | null; secret_slots?: DataSourceSecretSlot[] }
 export interface Diagnostic { code: string; severity: string; key: string | null; file: string; line: number; column: number; message: string; fix: string | null }
 export interface WriteDataSourceResult { name: string; version: string; created: boolean; diagnostics: Diagnostic[] }
 export interface TestResult { ok: boolean; message?: string; kind?: string; code?: string; elapsed_ms?: number }

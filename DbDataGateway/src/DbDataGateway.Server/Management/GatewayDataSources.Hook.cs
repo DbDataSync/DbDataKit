@@ -143,6 +143,8 @@ public sealed class DataSourceKindHook(GatewayDataSources dataSources, Signature
 
     public string? OwnerOf(string name) => dataSources.OwnerOfShared(name);
 
+    public void BeforeBind(BindingHookContext context) => dataSources.CheckSharedBind(context);
+
     public void BeforeRead(string name, DefinitionsCaller caller) => dataSources.CheckSharedRead(name, caller);
 
     public Task<DefinitionsResult?> ActAsync(LifecycleHookContext context, CancellationToken ct) => context.Act == "adopt" ? dataSources.AdoptSharedAsync(context, ct) : Task.FromResult<DefinitionsResult?>(null);

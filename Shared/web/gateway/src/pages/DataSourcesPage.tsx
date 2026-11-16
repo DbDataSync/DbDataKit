@@ -4,7 +4,8 @@ import { ApiError, ErrorBanner, Link, useIsAdmin, useNavigate } from '@dbdatakit
 import { gatewayApi } from '../api'
 import { GatewayShell } from '../GatewayShell'
 import { passwordLine } from '../secrets'
-import type { AdoptAnswer, DataSourceGrants, DataSourcePolicy, Diagnostic, ServerClient } from '../types'
+import { DataSourceSlotsBox, mergeSecretSlots, refusedSlots } from './SlotBindingsBox'
+import type { AdoptAnswer, DataSourceSecretSlot, DataSourceGrants, DataSourcePolicy, Diagnostic, ServerClient } from '../types'
 
 const COLUMNS = '1.6fr 0.9fr 0.8fr 0.6fr 1.2fr 2.2fr'
 
@@ -196,10 +197,12 @@ export function DataSourceEditPage({ name, isNew }: { name: string; isNew: boole
   const text = draft ?? file.data?.text ?? (isNew ? TEMPLATE(name) : '')
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([])
   const [notice, setNotice] = useState<string | null>(null)
+  const [unbound, setUnbound] = useState<DataSourceSecretSlot[]>([])
   const save = useMutation({
     mutationFn: () => gatewayApi.dataSources.write(name, text, isNew ? null : file.data?.version ?? null),
     onSuccess: async (result) => {
       setDiagnostics(result.diagnostics)
+      setUnbound([])
       setNotice(result.created ? 'Created and in use.' : 'Saved and in use.')
       setDraft(null)
       await queryClient.invalidateQueries({ queryKey: ['gateway'] })
@@ -209,6 +212,8 @@ export function DataSourceEditPage({ name, isNew }: { name: string; isNew: boole
       // a refused write carries the reasons; they are shown against the file, and the banner says only that it was refused
       setNotice(null)
       setDiagnostics(((error as ApiError).body as { diagnostics?: Diagnostic[] } | undefined)?.diagnostics ?? [])
+      // plan 30 PB02: a file naming a secret production has not bound is refused with its slots; they are shown below to bind, then the file is saved again
+      setUnbound(refusedSlots((error as ApiError).body))
     },
   })
   const test = useMutation({ mutationFn: () => gatewayApi.dataSources.test(name) })
@@ -231,6 +236,7 @@ export function DataSourceEditPage({ name, isNew }: { name: string; isNew: boole
         </div>
         <GrantsView grants={file.data?.grants} />
         <PolicyView policy={file.data?.policy} />
+        <DataSourceSlotsBox name={name} slots={mergeSecretSlots(file.data?.secret_slots, unbound)} onChanged={() => setUnbound([])} />
         <SecretReferences />
         {test.data && (
           <div className="hint" style={{ marginTop: 10 }} data-testid="data-source-test-result" data-ok={test.data.ok ? 'true' : 'false'}>

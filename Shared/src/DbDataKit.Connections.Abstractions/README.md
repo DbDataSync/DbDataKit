@@ -17,6 +17,7 @@ Contracts (plan 06) for the shared connection definition, provider interfaces, c
 - `IDbProvider`, `IConnectionStringComposer`, `ConnectionContext`, `ResolvedLogin`, `ReadOnlySession` (recipe: connection-string keys, session statements, honest `ReadOnlyEnforcement` level), `ConnectionTestResult`.
 - `ConnectionFailure { Kind, Code, Engine }`: `PublicMessage` is fixed text per kind, never driver text. `FailureClassifier` maps any exception through pluggable `IFailureMapper`s (engine packages), then SQLSTATE, then exception types. Raw text exists only when the classifier is built with `includeRaw: true`, and is passed through the Plan 02 redactor. `ConnectionFailureException` does not keep the inner exception.
 - `CredentialPolicy`: the deny-list for `properties` (shares `CredentialKeyDetector` with Plan 02) and the integrated-security key list used by pass-through injection.
+- `ConnectionSecretSlots` (plan 30 PB02): the secret slots of a data source, one per secret reference its file names (`connection_string_secret`, a login's `*_secret`, a credential key of the connection string whose value is a reference), each named by the secret (`secret:` its name, `env:`/`file:` as written, `dpapi:` a hash of the blob). A host that serves data sources (the Gateway) refuses a version whose channel has not bound a slot; a publisher (the Workspace) binds the slots of what it sends.
 
 ## Decisions
 

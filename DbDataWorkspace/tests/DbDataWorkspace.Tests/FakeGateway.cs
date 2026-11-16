@@ -48,6 +48,9 @@ internal sealed class FakeGateway : IAsyncDisposable
     /// <summary>The slots bound in production (plan 33 SW01), as <c>kind/name/slot</c>, and who bound them.</summary>
     public ConcurrentDictionary<string, string> Bindings { get; } = new();
 
+    /// <summary>The secrets the paired client did not store (an administrator's): a publishing client may not bind a data source's slot to one (plan 30 PB02).</summary>
+    public HashSet<string> AdminSecrets { get; } = [];
+
     /// <summary>The data sources a publish went over through a bound slot (no adopt), as <c>data source for model by client</c>.</summary>
     public ConcurrentQueue<string> SlotUses { get; } = new();
 
@@ -234,6 +237,13 @@ internal sealed class FakeGateway : IAsyncDisposable
                 {
                     if (!manifestText.Contains($"managed_by: {client}", StringComparison.Ordinal)) { await Reply(400, new { error = $"The file of a data source a publishing client sends says whose it is: add managed_by: {client}." }); return; }
                     if (Owner.HandMade.Contains(name)) { await Reply(409, new { error = $"The data source '{name}' was made by hand on this Gateway." }); return; }
+                    // plan 30 PB02: every secret the file names is a slot the channel binds first
+                    foreach (System.Text.RegularExpressions.Match secret in System.Text.RegularExpressions.Regex.Matches(manifestText, @"_secret: '?secret:([^'\s]+)"))
+                        if (!Owner.Bindings.ContainsKey($"data-source/{name}/{secret.Groups[1].Value}"))
+                        {
+                            await Reply(409, new { error = $"The data-source '{name}' needs the slot '{secret.Groups[1].Value}' bound in channel 'prod', and it has no binding there. Bind it on the Gateway's Data sources screen.", code = "unboundslot" });
+                            return;
+                        }
                     var was = Owner.DataSourceDocs.TryGetValue(name, out var existing) ? existing.Version : (int?)null;
                     if (was != expected && !(was is null && expected == 0)) { await Reply(409, new { error = "The data source changed since it was read.", code = "version_conflict", current_version = was }); return; }
                     var unchanged = was is not null && existing.Text == manifestText;
@@ -298,6 +308,11 @@ internal sealed class FakeGateway : IAsyncDisposable
             foreach (var (slot, value) in (JsonObject)body["slots"]!)
             {
                 var dataSource = (string)value!;
+                if (kind == "data-source" && Owner.AdminSecrets.Contains(dataSource))
+                {
+                    await Reply(403, new { error = $"'{dataSource}' is not a secret this client stored, and a publishing client binds only its own." });
+                    return;
+                }
                 if (Owner.HandMade.Contains(dataSource))
                 {
                     await Reply(403, new { error = $"'{dataSource}' was made by hand or by an administrator, not by this client, and a publishing client binds only the data sources it made. An administrator binds it once, for this {kind}: PUT /api/v1/bindings/{channel}/{kind}/{name}." });

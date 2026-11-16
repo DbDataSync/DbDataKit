@@ -679,6 +679,7 @@ public sealed partial class DefinitionPublisher
         if (unbound.Count == 0) return;
         var names = string.Join(", ", unbound.Select(r => $"'{r.Slot}'"));
         var message = $"The {kind} '{name}' version {version.Version} needs {(unbound.Count == 1 ? "the slot" : "the slots")} {names} bound in channel '{channel}', and {(unbound.Count == 1 ? "it has" : "they have")} no binding there.";
+        if (_kinds.Require(kind).HowToBind is { } how) throw new PublishRefusedException(PublishRefusal.UnboundSlot, message + " " + how(name, channel, [.. unbound.Select(r => r.Slot)]));
         // a write slot (and a slot that does not say it is only read) is never inherited from production
         if (channel != DefinitionStore.Production && unbound.Where(r => r.Access == SlotAccess.Write).Select(r => $"'{r.Slot}'").ToList() is { Count: > 0 } writes)
             message += $" No write binding in this channel: {string.Join(", ", writes)} {(writes.Count == 1 ? "is" : "are")} not declared `access: read`, and a write is never inherited from production.";

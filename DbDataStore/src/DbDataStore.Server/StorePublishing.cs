@@ -249,6 +249,10 @@ public sealed class StorePublisher(StoreProxies groups, ConsoleKeyStore identity
 
         var secret = await Send(HttpMethod.Put, $"/api/v1/secrets/{Uri.EscapeDataString(connection + "-write")}", new { value = login.ConnectionString });
         if (!secret.Ok || (string?)secret.Body?["reference"] is not { } reference) return new(false, $"the group did not keep the login of '{connection}' ({secret.Status})");
+        // plan 30 PB02: the secret the data source names is a slot production binds before the Gateway takes the data source; this client binds the secret it stored itself
+        var slot = reference.StartsWith("secret:", StringComparison.Ordinal) ? reference["secret:".Length..] : reference;
+        var bound = await Send(HttpMethod.Put, $"/api/v1/bindings/prod/data-source/{Uri.EscapeDataString(connection)}", new { slots = new Dictionary<string, string> { [slot] = slot } });
+        if (!bound.Ok) return new(false, $"the group did not bind the login of '{connection}' to its data source ({bound.Status})", bound.Body as JsonObject);
         var source = $"schema: {DbDataKit.Connections.ConnectionDefinition.CurrentSchemaId}\nname: {connection}\nengine: {login.Engine}\nconnection_string_secret: '{reference}'\n";
         var existing = await Send(HttpMethod.Get, $"/api/v1/data-sources/{Uri.EscapeDataString(connection)}");
         var written = await Send(HttpMethod.Put, $"/api/v1/data-sources/{Uri.EscapeDataString(connection)}", new { text = source, expected_version = existing.Ok ? (string?)existing.Body?["version"] : null });

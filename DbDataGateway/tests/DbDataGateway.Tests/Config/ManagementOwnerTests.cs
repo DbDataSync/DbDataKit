@@ -293,8 +293,11 @@ public sealed partial class ManagementTests
         var reference = (string)stored["reference"]!;
         await CallAsync(admin, HttpMethod.Put, "/api/v1/secrets/spare", ServerRole.Admin, SecretBody("another"));
         var ghost = "secret:dbdatakit:gateway:managed-nobody:ghost";
-        await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/ledger", ServerRole.Admin, Put(Conn.Yaml("ledger", "duckdb", "Data Source=:memory:", $"auth: {{ mode: sql, user: u, password_secret: '{reference}' }}"), null));
-        await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/crm", ServerRole.Admin, Put(Conn.Yaml("crm", "duckdb", "Data Source=:memory:", $"auth: {{ mode: sql, user: u, password_secret: '{ghost}' }}"), null));
+        var slot = reference["secret:".Length..];
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(admin, HttpMethod.Put, "/api/v1/bindings/prod/data-source/ledger", ServerRole.Admin, SlotBody(slot, slot))).StatusCode);   // plan 30 PB02
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/ledger", ServerRole.Admin, Put(Conn.Yaml("ledger", "duckdb", "Data Source=:memory:", $"auth: {{ mode: sql, user: u, password_secret: '{reference}' }}"), null))).StatusCode);
+        // a reference no secret answers can only be in a file made by hand on disk: the Gateway binds no secret it does not hold, so no write through it names one
+        File.WriteAllText(ConnectionFile("crm"), Conn.Yaml("crm", "duckdb", "Data Source=:memory:", $"auth: {{ mode: sql, user: u, password_secret: '{ghost}' }}"));
 
         var response = await CallAsync(admin, HttpMethod.Get, "/api/v1/secrets/overview", ServerRole.Admin);
         var text = await response.Content.ReadAsStringAsync();
@@ -398,6 +401,8 @@ public sealed partial class ManagementTests
         var reference = (string)JsonNode.Parse(await (await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/secrets/connection", ServerRole.Publisher, SecretBody("Data Source=:memory:"))).Content.ReadAsStringAsync())!["reference"]!;
 
         var text = $"schema: connection/1\nname: viaSecret\nengine: duckdb\nconnection_string_secret: '{reference}'\n";
+        var slot = reference["secret:".Length..];
+        Assert.Equal(HttpStatusCode.OK, (await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/bindings/prod/data-source/viaSecret", ServerRole.Publisher, SlotBody(slot, slot))).StatusCode);   // plan 30 PB02: its own secret
         var created = await CallAsAsync(build1, publisher, HttpMethod.Put, "/api/v1/data-sources/viaSecret", ServerRole.Publisher, Put(text, null));
         Assert.Equal(HttpStatusCode.OK, created.StatusCode);
 
