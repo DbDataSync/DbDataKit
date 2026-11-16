@@ -319,6 +319,8 @@ export default defineConfig({
       command: ['dotnet', 'exec', JSON.stringify(gatewayDll), 'server', 'run',
         `--Gateway:DataDirectory=${JSON.stringify(gatewayDirectory)}`, '--Gateway:Listen:Address=127.0.0.1', `--Gateway:Listen:Port=${gatewayPort}`,
         '--Gateway:Management:Enabled=true', '--Gateway:Management:Address=127.0.0.1', `--Gateway:Management:Port=${gatewayManagementPort}`].join(' '),
+      // the variable the ledger's login names, so the Connections story can bind it before its copy is taken (plan 30 PB02: the Gateway binds only a secret it holds)
+      env: { ...byHandEnvironment(), LEDGER_DB_PASSWORD: 'e2e-not-a-password' },
       url: `${gatewayUrl}/health/live`,
       ignoreHTTPSErrors: true,
       reuseExistingServer: false,

@@ -158,6 +158,12 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await expect(page.getByTestId('copy-submit')).toBeDisabled()   // a server first
   await page.getByTestId('copy-target').selectOption({ label: 'Gateway one (Gateway)' })
   await page.getByTestId('copy-name').fill('ledger-copy')
+  // plan 30 PB02: the copy names a secret the Gateway's production has not bound for 'ledger-copy', so it is refused in words, naming the data source, the slot and the channel; once bound, the same copy is taken
+  await page.getByTestId('copy-submit').click()
+  await expect(page.getByTestId('copy-failed')).toContainText("data-source 'ledger-copy' needs the slot 'env:LEDGER_DB_PASSWORD' bound in channel 'prod'")
+  const gatewayOne = ((await (await page.request.get('/api/instances')).json()) as { id: string; name: string }[]).find((i) => i.name === 'Gateway one')!
+  const bound = await page.request.put(`/relay/${gatewayOne.id}/api/v1/bindings/prod/data-source/ledger-copy`, { data: { slots: { 'env:LEDGER_DB_PASSWORD': 'env:LEDGER_DB_PASSWORD' } } })
+  expect(bound.status(), await bound.text()).toBe(200)
   await page.getByTestId('copy-submit').click()
   await expect(page.getByTestId('copy-done')).toContainText('Copied to Gateway one as ledger-copy')
   await expect(connection('Gateway one', 'ledger-copy')).toBeVisible()
