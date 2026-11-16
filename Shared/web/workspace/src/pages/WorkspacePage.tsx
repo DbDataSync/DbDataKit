@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, CodeEditor, DiffViewer, ErrorBanner, Link, useIsAdmin, useNavigate } from '@dbdatakit/shell'
 import { workspaceApi, type Change } from '../api'
@@ -15,6 +15,7 @@ import { FileHistory } from './FileHistory'
 import { BuildFileEditor, NewBuildConnection, NewBuildModel } from './BuildFilePanel'
 import { CatalogPanel, useCatalogRead } from './CatalogPanel'
 import { SyncProvisioningPanel } from './SyncProvisioningPanel'
+import { ProjectRunsPanel } from './ProjectRunsPanel'
 import { StoreDeployPanel } from './StoreDeployPanel'
 import { StoreRowsPanel } from './StoreRowsPanel'
 import { SyncScriptsPanel } from './SyncScriptsPanel'
@@ -206,7 +207,9 @@ export function WorkspacePage() {
   const client = useQueryClient()
   const canWrite = useIsAdmin()
   const [selected, setSelected] = useState<string | null>(null)
-  const [tab, setTab] = useState<'changes' | 'history' | 'builds' | 'check' | 'models' | 'compile' | 'views' | 'catalog' | 'scripts' | 'provisioning' | 'deploy' | 'rows'>('changes')
+  // `?tab=runs` opens the Runs tab: the address the Runner's screens link back to (plan 33 SC20o, SC22l)
+  const [search] = useSearchParams()
+  const [tab, setTab] = useState<'changes' | 'history' | 'builds' | 'check' | 'models' | 'compile' | 'views' | 'catalog' | 'scripts' | 'provisioning' | 'deploy' | 'rows' | 'runs'>(search.get('tab') === 'runs' ? 'runs' : 'changes')
   const [newPath, setNewPath] = useState('')
   const [asking, setAsking] = useState(false)
   const [merged, setMerged] = useState<{ sha: string | null } | null>(null)
@@ -320,6 +323,7 @@ export function WorkspacePage() {
                   {kind === 'store' && <button type="button" role="tab" aria-selected={tab === 'rows'} className={`btn ${tab === 'rows' ? 'btn-primary' : ''}`} data-testid="wsp-tab-rows" onClick={() => setTab('rows')}>Rows</button>}
                   {kind === 'store' && <button type="button" role="tab" aria-selected={tab === 'deploy'} className={`btn ${tab === 'deploy' ? 'btn-primary' : ''}`} data-testid="wsp-tab-deploy" onClick={() => setTab('deploy')}>Deploy</button>}
                   {(kind === 'build' || kind === 'sync') && <button type="button" role="tab" aria-selected={tab === 'catalog'} className={`btn ${tab === 'catalog' ? 'btn-primary' : ''}`} data-testid="wsp-tab-catalog" onClick={() => setTab('catalog')}>Catalog</button>}
+                  {kind === 'sync' && <button type="button" role="tab" aria-selected={tab === 'runs'} className={`btn ${tab === 'runs' ? 'btn-primary' : ''}`} data-testid="wsp-tab-runs" onClick={() => setTab('runs')}>Runs</button>}
                   <button type="button" role="tab" aria-selected={tab === 'builds'} className={`btn ${tab === 'builds' ? 'btn-primary' : ''}`} data-testid="wsp-tab-builds" onClick={() => setTab('builds')}>Builds</button>
                   <button type="button" role="tab" aria-selected={tab === 'history'} className={`btn ${tab === 'history' ? 'btn-primary' : ''}`} data-testid="wsp-tab-history" onClick={() => setTab('history')}>History</button>
                 </div>
@@ -335,6 +339,8 @@ export function WorkspacePage() {
                     ? <SyncScriptsPanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} canWrite={editable && canWrite} busy={make.isPending} onOpen={setSelected} onCreate={(made) => make.mutate(made)} />
                   : tab === 'provisioning' && kind === 'sync'
                     ? <SyncProvisioningPanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} />
+                  : tab === 'runs' && kind === 'sync'
+                    ? <ProjectRunsPanel project={project} id={id} kind={kind} paths={(files.data?.files ?? []).map((f) => f.path)} />
                   : tab === 'rows' && kind === 'store'
                     ? <StoreRowsPanel project={project} paths={(files.data?.files ?? []).map((f) => f.path)} canWrite />
                   : tab === 'deploy' && kind === 'store'

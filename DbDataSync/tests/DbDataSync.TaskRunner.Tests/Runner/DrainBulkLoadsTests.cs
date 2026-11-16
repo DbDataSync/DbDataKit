@@ -44,6 +44,14 @@ internal sealed class FakeLedger : IDrainLedger, IDrainCheckpoints
         return true;
     }
 
+    public bool AbandonPendingLoad(string key)
+    {
+        var item = Get(key);
+        if (item.Hold != ReadHold.Loading) return false;
+        Items[key] = item with { Hold = ReadHold.None, PendingPosition = null, PendingBatch = null };
+        return true;
+    }
+
     public BatchRecord? ReadBatch(string batchId) => Batches.GetValueOrDefault(batchId);
 
     public void WriteBatch(string batchId, BatchRecord batch) => Batches[batchId] = batch;
@@ -211,6 +219,54 @@ public sealed class DrainBulkLoadsTests : IDisposable
         var batch = ledger.Batches.Single().Value;
         Assert.Equal((2, 0), (batch.Succeeded, batch.Failed));
         Assert.Equal("0x42", state.GetWatermark("repl", "big", "k"));
+    }
+
+    [Fact]
+    public void ASegmentThatFindsTheTargetTableMissing_GivesUpTheInitialLoad_SoTheMappingIsNotHeldAsLoading()
+    {
+        // plan 33 SC22l: a set activated before its setup was applied; the load is given up at once, and the mapping's next pass (after `provision`) starts it again
+        SaveMapping("big", new ListSegment("Region", ["north"]), new ListSegment("Region", ["south"]));
+        var (_, queue, ledger, state, _) = Create();
+        state.RequestInitialLoad("repl", "big", "k", "0x42", At);
+        Assert.Equal(ReadHold.Loading, state.GetReadState("repl", "big", "k")!.Hold);
+
+        var first = Claim(state, queue);
+        state.CompleteRun(first.RunId, RunStatus.Failed, 0, 0, "The target table App.dbo.big ... does not exist yet", RunFailureKinds.TargetTableMissing);
+
+        var after = ledger.Items[WatermarkCheckpoint.ItemKey("big", "k")];
+        Assert.Equal(ReadHold.None, after.Hold);
+        Assert.Null(after.PendingPosition);
+        Assert.Null(after.Position);
+    }
+
+    [Fact]
+    public void APersonsBulkLoad_IsDividedByTheDrain_AsOneBatchWithNoPendingPosition_AndRefusedWhileOneIsInFlight()
+    {
+        // plan 33 SC22l: the request as asked (an automatic range), divided here as the deleted Sync API did; an empty list is the mapping's default segmenting
+        SaveMapping("big", new ListSegment("Region", ["north"]), new ListSegment("Region", ["south"]));
+        var (loads, queue, ledger, _, segments) = Create();
+        segments.Expand = asked => asked is [AutoSegment auto] ? [.. Enumerable.Range(0, auto.BucketCount).Select(i => new RangeSegment(auto.Column, $"{i * 10}", $"{i * 10 + 10}"))] : asked;
+
+        var (batch, count) = loads.RequestBulkLoad("repl", "big", [new AutoSegment("Id", 4)]);
+
+        Assert.Equal(4, count);
+        Assert.Equal(4, queue.Rows.Count(r => r.Kind == "BulkLoad"));
+        Assert.Equal((4, ""), (ledger.Batches[batch].Segments, ledger.Batches[batch].SourceKey));
+        Assert.Empty(ledger.Items);
+        var refused = Assert.Throws<InvalidOperationException>(() => loads.RequestBulkLoad("repl", "big", []));
+        Assert.Contains("'big'", refused.Message);
+    }
+
+    [Fact]
+    public void APersonsBulkLoad_WithNoSegments_IsTheMappingsDefaultSegmenting()
+    {
+        SaveMapping("big", new ListSegment("Region", ["north"]), new ListSegment("Region", ["south"]), new ListSegment("Region", ["east"]));
+        var (loads, queue, _, _, _) = Create();
+
+        var (_, count) = loads.RequestBulkLoad("repl", "big", []);
+
+        Assert.Equal(3, count);
+        Assert.Equal(3, queue.Rows.Count);
     }
 
     [Fact]

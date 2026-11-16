@@ -145,7 +145,7 @@ internal sealed class ProtocolRunnerState(IDrainCheckpoints checkpoints, ILogger
     {
         _outcomes[runId] = new PassOutcome(runId, status, rowsRead, rowsWritten, errorSummary, failureKind, errorDetail, timing);
         if (_batchOfRun.TryGetValue(runId, out var batchId))
-            bulkLoads?.SegmentFinished(runId, batchId, status == RunStatus.Succeeded, rowsRead, rowsWritten);
+            bulkLoads?.SegmentFinished(runId, batchId, status == RunStatus.Succeeded, rowsRead, rowsWritten, failureKind);
         if (newWatermark is not null) log.LogInformation("Position moved from {Previous} to {New}.", previousWatermark ?? "<none>", newWatermark);
     }
 

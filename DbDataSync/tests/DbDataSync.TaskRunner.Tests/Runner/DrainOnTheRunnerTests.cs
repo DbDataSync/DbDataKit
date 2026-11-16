@@ -530,6 +530,68 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
     }
 
     [Fact]
+    public async Task OnASetsFirstActivation_AMissingTargetRefusesTheFirstPassBeforeAnyLoadIsQueued_AndTheDrainAfterTheSetupLoadsEverything()
+    {
+        // plan 33 SC22l: the set is activated (its drain runs) before anyone applied its setup; the mapping has no position, so the first pass would capture one and queue the
+        // initial load, whose segments then failed on the missing table and left the mapping held as loading for good. Now the first pass refuses before it queues anything: no
+        // position, no hold, no batch; after `provision`, the next drain captures a position, loads every row and promotes it
+        var missing = $"FirstRun_{Guid.NewGuid():N}";
+        await SaveReplicationAsync("first-sync", missing, cacheTarget: false);
+        await InsertRowsAsync(5);
+
+        var source = await PackageSourceAsync();
+        using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
+        Assert.Null(rig.Watermark("main", _watermarkKey));
+
+        var refused = await rig.Executor.RunAsync(await rig.DrainRequestAsync(source, "first-sync", chain: "0197f0e0-0000-7000-8000-00000000d1f1"));
+
+        Assert.NotEqual(TaskEndState.Succeeded, refused.End.State);
+        var record = PassRecordText.TryParse(Assert.Single(new DbDataKit.State.StepStore(rig.Database, new DbDataKit.State.ProgressKey(RunnerRig.Package, RunnerRig.Channel, "drain")).Recent(PassRecordText.StepName)).ResultJson)!;
+        Assert.Equal((nameof(RunKind.Primary), RunFailureKinds.TargetTableMissing), (record.Kind, record.FailureKind));
+        Assert.Contains(missing, record.Summary, StringComparison.Ordinal);
+        Assert.Null(rig.Watermark("main", _watermarkKey));
+        Assert.DoesNotContain(rig.Work.ListAll(RunnerRig.WorkOwner), r => r.Kind == nameof(RunKind.BulkLoad));
+        var progress = new DbDataKit.State.ProgressStore(rig.Database, new DbDataKit.State.ProgressKey(RunnerRig.Package, RunnerRig.Channel, "drain"));
+        Assert.Empty(progress.ItemKeys("batch"));
+        var held = progress.GetCheckpoint("watermark", WatermarkCheckpoint.ItemKey("main", _watermarkKey));
+        Assert.True(held is null || !held.Parts.TryGetValue("hold", out var hold) || hold.AsText != "Loading", "the mapping is not held as loading");
+
+        var drain = await rig.DrainRequestAsync(source, "first-sync", chain: "0197f0e0-0000-7000-8000-00000000d1f2");
+        var applied = await rig.Executor.RunAsync(drain with
+        {
+            Task = new TaskRef(RunnerRig.Package, RunnerRig.Channel, ReplicationSetPackage.ProvisionTask),
+            Inputs = new Dictionary<string, string> { ["replication"] = "first-sync", ["mapping"] = "main", ["action"] = ProvisioningActions.CreateTargetTable, ["steps"] = "", ["repo_dir"] = "repo" },
+        });
+        Assert.True(applied.End.State == TaskEndState.Succeeded, Describe(rig, applied));
+
+        // the failed pass was this cron time's, so the planner's next own pass is at the next one; a person's Run now (run_all, what the Workspace's Runs tab sends) starts it at once
+        var again = await rig.Executor.RunAsync(await rig.DrainRequestAsync(source, "first-sync", chain: "0197f0e0-0000-7000-8000-00000000d1f3", runAll: true));
+        Assert.True(again.End.State == TaskEndState.Succeeded, Describe(rig, again));
+        Assert.True(5 == (await TargetFingerprintAsync(missing)).Count, Describe(rig, again));
+        Assert.NotNull(rig.Watermark("main", _watermarkKey));
+    }
+
+    [Fact]
+    public async Task APersonsBulkLoadAsAsked_IsDividedByTheDrainAgainstTheSource_AndReloadsEveryRow()
+    {
+        // plan 33 SC22l: what the Sync API did (auto-segment a person's bulk load against the source) the drain does: the request names an automatic range of 3 buckets and no segment
+        var start = await CurrentVersionAsync();
+        await InsertRowsAsync(9);
+        var source = await PackageSourceAsync();
+        using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
+        rig.SeedWatermark("main", _watermarkKey, start);
+        var requests = DrainRequestText.Serialize([new DrainRequest(nameof(RunKind.BulkLoad), "main", Id: "person-1", Segments: SegmentSerializer.SerializeMany([new AutoSegment("Id", 3)]))]);
+
+        var result = await rig.Executor.RunAsync(await rig.DrainRequestAsync(source, "runner-sync", requests: requests));
+
+        Assert.True(result.End.State == TaskEndState.Succeeded, Describe(rig, result));
+        var loads = rig.Work.ListAll(RunnerRig.WorkOwner).Where(r => r.Kind == nameof(RunKind.BulkLoad)).ToList();
+        Assert.True(loads.Count >= 2, $"the range was divided: {loads.Count} segment(s)");
+        Assert.All(loads, r => Assert.Equal(DbDataKit.Scheduling.WorkItemStatus.Done, r.Status));
+        Assert.Equal(9, (await TargetFingerprintAsync(_runnerTarget)).Count);
+    }
+
+    [Fact]
     public async Task AProvisioningReport_IsARunOutput_NotAWriteIntoTheView_AndNothingInTheViewChanges()
     {
         // plan 28c ED8 and ED9: the target table does not exist and the mapping has no cached target columns, so the pass creates the table and reports its columns; the definition is a read-only view

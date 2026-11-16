@@ -118,6 +118,32 @@ public sealed class WorkspaceRunnerPublishTests
     }
 
     [Fact]
+    public async Task A_replication_of_the_published_set_runs_as_served_from_the_project_page_and_the_version_names_its_workspace()
+    {
+        // plan 33 SC22l: the project's Runs tab starts a drain (a task with a schedule) of what the channel serves, for the person, with a bulk load as asked; the version the Runner keeps names the workspace it came from
+        await using var runner = await FakeRunner.StartAsync();
+        await using var server = await WorkspaceHarness.StartAsync(syncExecutable: Fake());
+        await Pair(server, "jobs", runner.Url, runner.NewCode(ServerRole.Publisher | ServerRole.Operator));
+        var (workspace, build) = await BuildAsync(server);
+        Assert.Equal(HttpStatusCode.OK, (await Publish(server, workspace, build, new JsonObject { ["target"] = "jobs", ["channel"] = "prod", ["serve"] = true })).Response.StatusCode);
+        var note = (string)Assert.Single(runner.Published)["note"]!;
+        Assert.Contains($"/{Project}/{workspace}]", note);
+        Assert.Contains("[workspace:", note);
+
+        var requests = """[{"kind":"BulkLoad","mapping":"orders","segments":"[{\"mode\":\"auto\",\"column\":\"id\",\"bucketCount\":4}]"}]""";
+        var body = new JsonObject { ["task"] = "orders", ["served"] = true, ["inputs"] = new JsonObject { ["requests"] = requests } };
+        var started = await server.Send("grace", ServerRole.Approver, HttpMethod.Post, $"/api/v1/projects/{Project}/workspaces/{workspace}/builds/{build}/run", body.ToJsonString());
+
+        Assert.Equal(HttpStatusCode.Accepted, started.Response.StatusCode);
+        var sent = Assert.Single(runner.Runs);
+        // no version: the Runner's Run now of what it serves, for the person, the inputs as given
+        Assert.Null(sent["version"]);
+        Assert.Equal(("orders-set/prod/orders", "grace", requests), ((string)sent["task"]!, (string)sent["on_behalf_of"]!, (string)sent["inputs"]!["requests"]!));
+        Assert.Equal("served", (string)started.Body!["run"]!["version"]!);
+        Assert.Contains(server.Audit(), a => a.Command == "build.run" && a.Target!.Contains("as served", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task A_runner_paired_without_the_operator_role_refuses_the_run_in_its_words()
     {
         await using var runner = await FakeRunner.StartAsync();

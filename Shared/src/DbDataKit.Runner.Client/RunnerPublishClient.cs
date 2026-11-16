@@ -134,7 +134,7 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         return runner;
     }
 
-    public async Task<ClientPublished> PublishAsync(string server, string? code, string manifestPath, string directory, string channel, bool stage, int? expectedVersion, Action<string>? log = null, CancellationToken ct = default)
+    public async Task<ClientPublished> PublishAsync(string server, string? code, string manifestPath, string directory, string channel, bool stage, int? expectedVersion, Action<string>? log = null, CancellationToken ct = default, string? note = null)
     {
         if (!File.Exists(manifestPath)) throw new RunnerClientException($"The manifest '{manifestPath}' does not exist.");
         if (!Directory.Exists(directory)) throw new RunnerClientException($"The package directory '{directory}' does not exist.");
@@ -187,6 +187,8 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
             ["artifacts"] = new JsonArray([.. files.Select(f => (JsonNode)new JsonObject { ["path"] = f.Path, ["sha256"] = f.Sha, ["size"] = f.Size })]),
         };
         if (expectedVersion is { } expected) body["expected_version"] = expected;
+        // where the version came from, kept with it on the runner (a Workspace names its project, so the Runner's screens link back to it, plan 33 SC22l)
+        if (!string.IsNullOrWhiteSpace(note)) body["note"] = note;
         using var publish = await Send(HttpMethod.Put, $"api/v1/definitions/integration/{Uri.EscapeDataString(manifest.PackageName)}", JsonContent.Create(body, options: Json));
         if (!publish.IsSuccessStatusCode) throw await Refused(publish, $"the package {manifest.PackageName}");
         var answer = JsonNode.Parse(await publish.Content.ReadAsStringAsync(ct))!;

@@ -11,7 +11,7 @@ using DbDataKit.Web.Trust;
 namespace DbDataKit.Authoring.Server;
 
 /// <summary>What a person says when they publish what a kind made (plan 33 SC20d, SC21b, SC22b): for a Runner the <see cref="Channel"/> (and whether it serves at once, <see cref="Serve"/>, or is staged, the default; <see cref="ExpectedVersion"/> and the connections <see cref="Bind"/> fills, slot to connection name); for a Gateway the <see cref="DataSource"/> its tables are on, the models' own storage connection when none is named, and <see cref="Adopt"/> (plan 33 SC21f) the data sources made by hand that the person confirmed the models may go on (the Gateway records the adoption).</summary>
-public sealed record ArtifactPublishOptions(string? Channel = null, bool Serve = false, int? ExpectedVersion = null, IReadOnlyDictionary<string, string>? Bind = null, string? DataSource = null, IReadOnlyList<string>? Adopt = null, string? Model = null);
+public sealed record ArtifactPublishOptions(string? Channel = null, bool Serve = false, int? ExpectedVersion = null, IReadOnlyDictionary<string, string>? Bind = null, string? DataSource = null, IReadOnlyList<string>? Adopt = null, string? Model = null, string? Note = null);
 
 public sealed partial class WorkspacePublishing
 {
@@ -63,7 +63,7 @@ public sealed partial class WorkspacePublishing
                 await client.BindAsync(target.Name, null, package, options.Channel, options.Bind, null, step, ct);
                 step($"Bound {string.Join(", ", options.Bind.Keys.Order(StringComparer.Ordinal))} in {options.Channel}.");
             }
-            var done = await client.PublishAsync(target.Name, null, manifestPath, Path.Combine(artifactFolder, "files"), options.Channel, stage: !options.Serve, options.ExpectedVersion, step, ct);
+            var done = await client.PublishAsync(target.Name, null, manifestPath, Path.Combine(artifactFolder, "files"), options.Channel, stage: !options.Serve, options.ExpectedVersion, step, ct, options.Note);
             step($"{(done.Mode == "stage" ? "Staged" : "Published")} {package} on {done.Channel}: version {done.Version}{(done.Changed ? "" : " (the same content as before, nothing changed)")}.");
             return new JsonObject
             {
@@ -91,6 +91,23 @@ public sealed partial class WorkspacePublishing
                 ?? throw new WorkspacePublishException($"{package}/{channel}/{task} is queued or running already on {target.Name}; wait for that run to end.", 409);
             step($"Started {task} of {package} version {version} on {channel}: run {runId}.");
             return new JsonObject { ["run_id"] = runId, ["task"] = task, ["package"] = package, ["channel"] = channel, ["version"] = version, ["target"] = target.Name, ["runner"] = target.Url, ["instance"] = target.InstanceId, ["on_behalf_of"] = actor };
+        }
+        catch (RunnerClientException ex) { throw Refused(ex); }
+    }
+
+    /// <summary>
+    /// Runs <paramref name="task"/> of the version the channel serves now, for <paramref name="actor"/> (plan 33 SC20o, SC22l): a scheduled task too (a replication's drain, a refresh), which <see cref="RunStagedTaskAsync"/> refuses because a
+    /// version that is not served starts nothing. The Runner's Run now, asked from the project's page so nobody has to find the Runner first; the pairing must allow the operator role.
+    /// </summary>
+    public async Task<JsonObject> RunServedTaskAsync(string targetName, string package, string channel, string task, IReadOnlyDictionary<string, string>? inputs, string actor, Action<string> step, CancellationToken ct = default)
+    {
+        var (target, client) = await RunnerClientAsync(targetName, actor, ct);
+        try
+        {
+            var runId = await client.RunNowAsync(target.Name, null, package, channel, task, inputs, actor, step, ct)
+                ?? throw new WorkspacePublishException($"{package}/{channel}/{task} is queued or running already on {target.Name}; wait for that run to end (a request to a drain that is running is sent with its next run).", 409);
+            step($"Started {task} of {package} as served on {channel}: run {runId}.");
+            return new JsonObject { ["run_id"] = runId, ["task"] = task, ["package"] = package, ["channel"] = channel, ["version"] = "served", ["target"] = target.Name, ["runner"] = target.Url, ["instance"] = target.InstanceId, ["on_behalf_of"] = actor };
         }
         catch (RunnerClientException ex) { throw Refused(ex); }
     }

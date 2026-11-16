@@ -23,6 +23,9 @@ internal interface IDrainLedger
     /// <summary>Moves the pending position to the position and clears the pending parts, the intent is <see cref="ReadIntent.Changes"/> and the hold <see cref="ReadHold.None"/>; false when the mapping is not held for loading or has no pending position.</summary>
     bool PromotePendingLoad(string key);
 
+    /// <summary>Gives up the initial load waiting on a batch (plan 33 SC22l): the pending parts are cleared and the loading hold lifted, the position the mapping had (if any) and its intent stay; false when it is not held for loading.</summary>
+    bool AbandonPendingLoad(string key);
+
     BatchRecord? ReadBatch(string batchId);
 
     void WriteBatch(string batchId, BatchRecord batch);
@@ -102,6 +105,29 @@ internal sealed class DrainBulkLoads(ConfigRepository config, IDrainQueue queue,
         log.LogInformation("'{Mapping}' has no position: its initial load is queued as batch {Batch} ({Count} segment(s)); the captured position is promoted when every segment succeeded.", mappingName, batchId, expanded.Count);
     }
 
+    /// <summary>
+    /// A person's bulk load of a mapping (plan 33 SC22l): the segments asked for (an empty list is the mapping's own default segmenting, and that empty is the whole table) divided against the source here, as the
+    /// Sync API did before it was deleted (an automatic range into its buckets, a custom strategy run), queued as one batch with its estimate. No position waits on it: a bulk load reloads rows and leaves the
+    /// mapping's position and intent as they are. Refused, naming the mapping, while a bulk load of the mapping is in flight. Returns the batch's id and how many segments it has.
+    /// </summary>
+    public (string BatchId, int Segments) RequestBulkLoad(string taskName, string mappingName, IReadOnlyList<BatchReloadSegment> requested)
+    {
+        if (InFlight(mappingName))
+            throw new InvalidOperationException($"A bulk load of '{mappingName}' is in flight already; wait for it to end, then ask again.");
+        var task = config.LoadReplicationTask(taskName);
+        var mapping = config.LoadTableMapping(taskName, mappingName);
+        IReadOnlyList<BatchReloadSegment> asked = requested.Count > 0 ? requested : mapping.DefaultSegmenting.Count == 0 ? [new FullSegment()] : mapping.DefaultSegmenting;
+        var expanded = segments.ExpandAsync(task, mapping, asked, null, CancellationToken.None).GetAwaiter().GetResult();
+        if (expanded.Count == 0)
+            throw new InvalidOperationException($"The bulk load of '{mappingName}' divided into no segment: the source has no rows in the ranges asked for.");
+        var batchId = Guid.NewGuid().ToString("N");
+        var (rows, caveat) = segments.EstimateAsync(task, mapping, CancellationToken.None).GetAwaiter().GetResult();
+        ledger.WriteBatch(batchId, new BatchRecord(mappingName, "", expanded.Count, 0, 0, 0, 0, rows, caveat, DateTimeOffset.UtcNow));
+        Enqueue(task, mapping, batchId, expanded);
+        log.LogInformation("The bulk load of '{Mapping}' is queued as batch {Batch} ({Count} segment(s)).", mappingName, batchId, expanded.Count);
+        return (batchId, expanded.Count);
+    }
+
     /// <summary>The segments a primary pass resolved (a custom strategy has run, an automatic range has been divided) as a batch of their own; null when a bulk load of the mapping is in flight.</summary>
     public string? RequestSegmentedLoad(string taskName, string mappingName, string segmentsJson)
     {
@@ -144,7 +170,7 @@ internal sealed class DrainBulkLoads(ConfigRepository config, IDrainQueue queue,
     /// A segment's pass ended. The batch counts it (once per run, so a retry of the same item changes its earlier count and does not add one), and when every segment is over and none failed, the position the initial
     /// load captured is promoted. A batch with a failed segment leaves the mapping loading, as the API's path does: an operator forces a fresh attempt through the read-state recovery.
     /// </summary>
-    public void SegmentFinished(Guid runId, string batchId, bool succeeded, long rowsRead, long rowsWritten)
+    public void SegmentFinished(Guid runId, string batchId, bool succeeded, long rowsRead, long rowsWritten, string? failureKind = null)
     {
         lock (_gate)
         {
@@ -161,7 +187,11 @@ internal sealed class DrainBulkLoads(ConfigRepository config, IDrainQueue queue,
             };
             _counted[runId] = (succeeded, rowsRead, rowsWritten);
             ledger.WriteBatch(batchId, updated);
-            if (updated.Finished && updated.Failed == 0 && ledger.PromotePendingLoad(updated.SourceKey))
+            // a segment that found the target table missing (the set was activated before its setup was applied, plan 33 SC22l): the initial load is given up at once, so the
+            // mapping is not held as loading for good; its next pass, once the set's `provision` has created the table, captures a position and asks for the load afresh
+            if (!succeeded && failureKind == RunFailureKinds.TargetTableMissing && updated.SourceKey.Length > 0 && ledger.AbandonPendingLoad(updated.SourceKey))
+                log.LogWarning("Batch {Batch} of '{Mapping}' found its target table missing: the initial load is given up, and the mapping's next pass after the setup is applied starts it again.", batchId, updated.Mapping);
+            else if (updated.Finished && updated.Failed == 0 && ledger.PromotePendingLoad(updated.SourceKey))
                 log.LogInformation("Batch {Batch} of '{Mapping}' is complete: its captured position is the mapping's position now.", batchId, updated.Mapping);
             else if (updated.Finished && updated.Failed > 0)
                 log.LogWarning("Batch {Batch} of '{Mapping}' ended with {Failed} failed segment(s): the mapping stays loading until an operator forces a fresh attempt.", batchId, updated.Mapping, updated.Failed);

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link as ConsoleLink } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { runnerApi, type OwnerBody, type TaskDecision, type TaskSchedule, type TaskStatus } from '../api'
@@ -8,6 +9,7 @@ import { CheckpointsCard } from './CheckpointsCard'
 import { DeadLettersCard } from './DeadLettersCard'
 import { InDoubtCard } from './InDoubtCard'
 import { when } from './format'
+import { workspaceOriginOf, workspaceRunsLink } from '../origin'
 
 export interface TaskPanelViewProps {
   task: TaskStatus
@@ -113,6 +115,19 @@ export function TaskPanelView(p: TaskPanelViewProps) {
   )
 }
 
+/** Where the task's served version was authored (plan 33 SC20o, SC22l): the Workspace project its note names, linked to that project's Runs tab, so the project and the Runner each lead to the other. Nothing when the version names none. */
+export function TaskOrigin({ task }: { task: TaskStatus }) {
+  const definition = useQuery({ queryKey: ['runner', 'definition', task.package], queryFn: () => runnerApi.definition(task.package), retry: false })
+  const version = definition.data?.versions.find((v) => String(v.version) === String(task.version))
+  const origin = workspaceOriginOf(version?.note)
+  if (!origin) return null
+  return (
+    <div className="hint" style={{ gridColumn: '1 / -1', marginTop: 6 }} data-testid="runner-task-origin">
+      Authored in the Workspace: project <span className="mono">{origin.project}</span>, workspace <span className="mono">{origin.workspace}</span> (<ConsoleLink to={workspaceRunsLink(origin)} data-testid="runner-task-origin-link">open its Runs</ConsoleLink>).
+    </div>
+  )
+}
+
 /** The details of one task, open under its row (plan 33, UE06): the schedule and decisions are read from the runner while it is open. */
 export function TaskPanel({ task, canAct }: { task: TaskStatus; canAct: boolean }) {
   const client = useQueryClient()
@@ -133,6 +148,7 @@ export function TaskPanel({ task, canAct }: { task: TaskStatus; canAct: boolean 
   })
   return (
     <>
+    <TaskOrigin task={task} />
     <TaskPanelView
       task={task} canAct={canAct} schedule={schedule.data} scheduleLoading={schedule.isLoading} scheduleError={schedule.error} decisions={owner === 'observe' ? decisions.data : undefined}
       form={form ?? openOwnerForm(owner, schedule.data)} inputsText={inputs} busy={move.isPending || run.isPending} moved={moved} failure={move.error ?? run.error}

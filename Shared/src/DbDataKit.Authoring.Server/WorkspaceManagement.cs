@@ -521,7 +521,9 @@ public static class WorkspaceManagement
                     if (body?["bind"] is JsonObject slots)
                         foreach (var slot in slots)
                             if (slot.Value is JsonValue v && v.TryGetValue<string>(out var connection)) bind[slot.Key] = connection;
-                    var options = new ArtifactPublishOptions(body?["channel"]?.GetValue<string>(), body?["serve"]?.GetValue<bool>() ?? false, body?["expected_version"]?.GetValue<int>(), bind, body?["data_source"]?.GetValue<string>(), AdoptNames(body?["adopt"]), body?["model"]?.GetValue<string>());
+                    // the version keeps where it came from, with the token the Runner's screens make a link back to this workspace of (plan 33 SC20o, SC22l)
+                    var options = new ArtifactPublishOptions(body?["channel"]?.GetValue<string>(), body?["serve"]?.GetValue<bool>() ?? false, body?["expected_version"]?.GetValue<int>(), bind, body?["data_source"]?.GetValue<string>(), AdoptNames(body?["adopt"]), body?["model"]?.GetValue<string>(),
+                        $"{fullNote} {WorkspaceOrigin.Token(instanceId, project, id)}");
                     answer = await publishing.PublishArtifactAsync(producing, target, builds.ArtifactFolderOf(hosted.Id, buildId), options, Actor(token), steps.Add, context.RequestAborted);
                     answer["note"] = fullNote;
                     if (options.Adopt is { Count: > 0 }) Audit(token, "build.adopt", $"{target1} -> {target}", "confirmed adoption of " + string.Join(", ", options.Adopt));
@@ -565,28 +567,33 @@ public static class WorkspaceManagement
             var token = context.ManagementToken();
             var body = await Body(context);
             string? task, package = null;
+            var served = false;
             var inputs = new Dictionary<string, string>(StringComparer.Ordinal);
             try
             {
                 task = body?["task"]?.GetValue<string>();
                 package = body?["package"]?.GetValue<string>();
+                served = body?["served"]?.GetValue<bool>() ?? false;
                 if (body?["inputs"] is JsonObject given)
                     foreach (var (name, value) in given) inputs[name] = value?.GetValue<string>() ?? "";
                 else if (body?["inputs"] is not null) task = null;
             }
             catch (InvalidOperationException) { task = null; }
             if (string.IsNullOrWhiteSpace(task))
-                return Results.Json(new { error = "The body is a JSON object with the \"task\" to run (a manual-only task of the package), optionally its \"inputs\", an object of names and text values, and the \"package\" when the build staged more than one." }, statusCode: StatusCodes.Status400BadRequest);
+                return Results.Json(new { error = "The body is a JSON object with the \"task\" to run (a manual-only task of the package, or any task with \"served\": true), optionally its \"inputs\", an object of names and text values, and the \"package\" when the build staged more than one." }, statusCode: StatusCodes.Status400BadRequest);
             // a Store model's contract with an approval drops columns: it goes through .../contract, which asks the paired Gateways who reads them first (plan 21 CH06, plan 33 SC24)
             if (task == ModelDeployPackage.ContractTask && inputs.TryGetValue("approve", out var approval) && approval.Trim().Length > 0)
                 return Results.Json(new { error = "An approved contract is run through .../contract, which checks with the paired Gateways that no published consumer reads what it drops. Run contract here without \"approve\" to read its plan." }, statusCode: StatusCodes.Status409Conflict);
             if (StagedOf(hosted.Id, buildId, package) is not { } staged)
                 return Results.Json(new { error = "This build has not been staged on a Runner. Publish it to a Runner first (it is staged, not served, unless you say so); then its manual tasks can be run." }, statusCode: StatusCodes.Status409Conflict);
             var steps = new List<string>();
-            var what = $"{hosted.Id}/{id}/{buildId}: {staged.Package}/{staged.Channel}/{task} v{staged.Version} on {staged.Target}";
+            var what = $"{hosted.Id}/{id}/{buildId}: {staged.Package}/{staged.Channel}/{task} {(served ? "as served" : "v" + staged.Version)} on {staged.Target}";
             try
             {
-                var answer = await publishing.RunStagedTaskAsync(staged.Target, staged.Package, staged.Channel, staged.Version, task, inputs, Actor(token), steps.Add, context.RequestAborted);
+                // "served": the version the channel serves now runs the task (a drain or a refresh, which have a schedule: plan 33 SC20o, SC22l); otherwise the version this build staged runs a manual-only task (plan 28c E21)
+                var answer = served
+                    ? await publishing.RunServedTaskAsync(staged.Target, staged.Package, staged.Channel, task, inputs, Actor(token), steps.Add, context.RequestAborted)
+                    : await publishing.RunStagedTaskAsync(staged.Target, staged.Package, staged.Channel, staged.Version, task, inputs, Actor(token), steps.Add, context.RequestAborted);
                 Audit(token, "build.run", what, "queued " + (string)answer["run_id"]!);
                 return Results.Json(new JsonObject { ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]), ["run"] = answer }, statusCode: StatusCodes.Status202Accepted);
             }

@@ -8,23 +8,23 @@ namespace DbDataSync.TaskRunner.Runner;
 /// <summary>Applies the <c>requests</c> input of a drain: each request becomes a row of the drain's queue (a bulk load also the record of its batch) before the first cycle.</summary>
 public static class DrainRequests
 {
-    internal static async Task ApplyAsync(string? text, string replication, IDrainQueue queue, IDrainCheckpoints checkpoints, IDrainLedger ledger, ILogger log, CancellationToken ct)
+    internal static async Task ApplyAsync(string? text, string replication, IDrainQueue queue, IDrainCheckpoints checkpoints, IDrainLedger ledger, ILogger log, CancellationToken ct, DrainBulkLoads? bulkLoads = null)
     {
         var requests = DrainRequestText.Parse(text);
         var applied = 0;
         foreach (var request in requests)
-            if (await ApplyOneAsync(request, replication, queue, checkpoints, ledger, log, ct).ConfigureAwait(false)) applied++;
+            if (await ApplyOneAsync(request, replication, queue, checkpoints, ledger, log, ct, bulkLoads).ConfigureAwait(false)) applied++;
         if (applied > 0)
             log.LogInformation("{Count} request(s) of the API were queued before the first cycle.", applied);
     }
 
     /// <summary>A request that came as a work item of the queue: applied, and the item finished (a request that cannot be applied fails the item and says why in the log).</summary>
-    internal static async Task ApplyItemAsync(RunnerWorkItem item, string replication, IDrainQueue queue, IDrainCheckpoints checkpoints, IDrainLedger ledger, ILogger log, CancellationToken ct)
+    internal static async Task ApplyItemAsync(RunnerWorkItem item, string replication, IDrainQueue queue, IDrainCheckpoints checkpoints, IDrainLedger ledger, ILogger log, CancellationToken ct, DrainBulkLoads? bulkLoads = null)
     {
         await queue.StartAsync(item.Id, CancellationToken.None).ConfigureAwait(false);
         try
         {
-            await ApplyOneAsync(DrainRequestText.ParseOne(item.Payload), replication, queue, checkpoints, ledger, log, ct).ConfigureAwait(false);
+            await ApplyOneAsync(DrainRequestText.ParseOne(item.Payload), replication, queue, checkpoints, ledger, log, ct, bulkLoads).ConfigureAwait(false);
             await queue.FinishAsync(item.Id, WorkFinish.Done, CancellationToken.None).ConfigureAwait(false);
         }
         catch (InvalidOperationException ex)
@@ -35,7 +35,7 @@ public static class DrainRequests
     }
 
     /// <summary>Applies one request, once per id: false when it was applied already (a retried run reads its input again).</summary>
-    internal static async Task<bool> ApplyOneAsync(DrainRequest request, string replication, IDrainQueue queue, IDrainCheckpoints checkpoints, IDrainLedger ledger, ILogger log, CancellationToken ct)
+    internal static async Task<bool> ApplyOneAsync(DrainRequest request, string replication, IDrainQueue queue, IDrainCheckpoints checkpoints, IDrainLedger ledger, ILogger log, CancellationToken ct, DrainBulkLoads? bulkLoads = null)
     {
         if (request.Id is { Length: > 0 } id && ledger.WasApplied(id))
         {
@@ -43,14 +43,27 @@ public static class DrainRequests
             return false;
         }
 
-        await ApplyAsyncCore(request, replication, queue, checkpoints, ledger, log, ct).ConfigureAwait(false);
+        await ApplyAsyncCore(request, replication, queue, checkpoints, ledger, log, ct, bulkLoads).ConfigureAwait(false);
         if (request.Id is { Length: > 0 } mark) ledger.TryMarkApplied(mark);
         return true;
     }
 
-    private static async Task ApplyAsyncCore(DrainRequest request, string replication, IDrainQueue queue, IDrainCheckpoints checkpoints, IDrainLedger ledger, ILogger log, CancellationToken ct)
+    private static async Task ApplyAsyncCore(DrainRequest request, string replication, IDrainQueue queue, IDrainCheckpoints checkpoints, IDrainLedger ledger, ILogger log, CancellationToken ct, DrainBulkLoads? bulkLoads)
     {
         {
+            // a person's bulk load as asked (plan 33 SC22l): the drain divides it against the source, as the deleted Sync API did
+            if (request.Kind == nameof(RunKind.BulkLoad) && request.Segments is { } asked)
+            {
+                if (bulkLoads is null)
+                    throw new InvalidOperationException($"The bulk load of '{request.Mapping}' asks to be divided, and this drain has nothing to divide it with.");
+                IReadOnlyList<BatchReloadSegment> requested;
+                try { requested = string.IsNullOrWhiteSpace(asked) ? [] : SegmentSerializer.DeserializeMany(asked); }
+                catch (System.Text.Json.JsonException ex) { throw new InvalidOperationException($"The segments of the bulk load of '{request.Mapping}' are not a list of segments (such as [{{\"mode\": \"full\"}}] or [{{\"mode\": \"auto\", \"column\": \"Id\", \"bucketCount\": 8}}]): {ex.Message}", ex); }
+                var (batch, count) = bulkLoads.RequestBulkLoad(replication, request.Mapping, requested);
+                log.LogInformation("Bulk load of '{Mapping}': {Count} segment(s) in batch {Batch}.", request.Mapping, count, batch);
+                return;
+            }
+
             if (request.Kind == "Position")
             {
                 if (string.IsNullOrEmpty(request.SourceKey) || string.IsNullOrEmpty(request.Position))

@@ -1336,12 +1336,11 @@ public sealed class RunExecutorIntegrationTests : IAsyncLifetime, IDisposable
         var runId = _workQueueStore.Enqueue("prov-off", RunKind.Primary, "main");
         await _executor.ExecuteWorkerAsync("prov-off", WorkerLanes.Uniform(1), CancellationToken.None);
 
-        // Phase 134: the Primary run itself only captures a position (Change Tracking); the
-        // missing-table refusal this test is about happens on the Bulk Load that pass requested
-        // instead.
-        Assert.Equal(RunStatus.Succeeded, _taskRunStore.GetRun(runId)!.Status);
-        var load = _taskRunStore.GetMappingRunHistory("prov-off", RunKind.BulkLoad, "main", limit: 1).Single();
+        // Plan 33 SC22l: the Primary pass of a mapping with no position refuses the missing table itself, before it captures a position or
+        // requests the Bulk Load (phase 134's path), so no load is queued that would fail and leave the mapping held as loading.
+        var load = _taskRunStore.GetRun(runId)!;
         Assert.Equal(RunStatus.Failed, load.Status);
+        Assert.Empty(_taskRunStore.GetMappingRunHistory("prov-off", RunKind.BulkLoad, "main", limit: 1));
         Assert.Empty(await CachedColumnsAsync("dbo", target));
         Assert.Empty(_configRepository.LoadTableMapping("prov-off", "main").TargetColumns);
 

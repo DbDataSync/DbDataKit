@@ -222,10 +222,10 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
         // a replication that asks for its state on the target (tracking: target|both) has its units copied into the runner's state after its passes (plan 28c E17)
         var tracking = new DrainTracking(Input.Replication, config, (name, token) => executor.OpenPlanningConnectionAsync(name, token), Tracking, (mapping, key) => state.GetWatermark(Input.Replication, mapping, key), Run.Log);
 
-        await DrainRequests.ApplyAsync(Input.Requests, Input.Replication, queue, checkpoints, checkpoints, Run.Log, ct).ConfigureAwait(false);
+        await DrainRequests.ApplyAsync(Input.Requests, Input.Replication, queue, checkpoints, checkpoints, Run.Log, ct, bulkLoads).ConfigureAwait(false);
 
         var drain = new DrainLoop(Input.Replication, config, planner, plannerState, state, queue, Input.RunAll, Math.Max(1, Input.DegreeOfParallelism), Run.Log, Status, outputs: outputs,
-            requestItem: item => DrainRequests.ApplyItemAsync(item, Input.Replication, queue, checkpoints, checkpoints, Run.Log, ct));
+            requestItem: item => DrainRequests.ApplyItemAsync(item, Input.Replication, queue, checkpoints, checkpoints, Run.Log, ct, bulkLoads));
         try
         {
             await drain.RunAsync(
@@ -417,6 +417,22 @@ public sealed class DrainJob : RunnerJob<DrainInput, DrainProgress, NoSlots>
                 promoted = true;
             });
             return promoted;
+        }
+
+        public bool AbandonPendingLoad(string key)
+        {
+            var abandoned = false;
+            Save(key, item =>
+            {
+                if (item.Hold != nameof(ReadHold.Loading))
+                    return;
+                item.Hold = nameof(ReadHold.None);
+                item.PendingPosition = null;
+                item.PendingPositionTime = null;
+                item.PendingBatch = null;
+                abandoned = true;
+            });
+            return abandoned;
         }
 
         public BatchRecord? ReadBatch(string batchId)

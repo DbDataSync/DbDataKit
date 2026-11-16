@@ -33,6 +33,17 @@ public sealed class DrainRequestsTests
     }
 
     [Fact]
+    public async Task ABulkLoadAsAsked_IsNotQueuedAsOneRow_ItIsDividedByTheDrain_AndSegmentsThatDoNotReadAreRefusedNamingTheMapping()
+    {
+        // plan 33 SC22l: `segments` marks a request a person made, which the drain divides (DrainBulkLoads.RequestBulkLoad, tested in DrainBulkLoadsTests); never a row of its own
+        var queue = new FakeDrainQueue();
+        var none = await Assert.ThrowsAsync<InvalidOperationException>(() => Apply(DrainRequestText.Serialize([new DrainRequest(nameof(RunKind.BulkLoad), "orders", Segments: "[]")]), queue, new FakeLedger()));
+        Assert.Contains("'orders'", none.Message);
+        Assert.Empty(queue.Rows);
+        Assert.Contains("\"segments\":\"[]\"", DrainRequestText.Serialize([new DrainRequest(nameof(RunKind.BulkLoad), "orders", Segments: "[]")]));
+    }
+
+    [Fact]
     public async Task AReconcile_KeepsItsGuardAndKinds_AndAVerification_IsAnItemWithNoSegment()
     {
         var queue = new FakeDrainQueue();

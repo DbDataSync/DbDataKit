@@ -843,6 +843,11 @@ public sealed class RunExecutor(
             if (item.RunKind == RunKind.Primary && intent == ReadIntent.InitialLoad
                 && reader is IPositionCapturing capturing)
             {
+                // Plan 33 SC22l: a target that is not there yet (a set activated before anyone applied its setup) refuses this pass now, before a position is captured and a
+                // load is queued. Queued first, the load's segments would fail on the missing table and leave the mapping held as loading until someone forced a fresh
+                // attempt; refused here, the mapping keeps no position and no hold, and its next pass after the set's `provision` starts the initial load afresh.
+                await ThrowIfTargetTableMissingAsync(task, sourceDriver, sourceConnection, source, target, mapping, cancellationToken);
+
                 var captured = await capturing.CapturePositionAsync(
                     sourceConnection, source, effectiveReader.Options, cancellationToken);
 
@@ -1321,6 +1326,32 @@ public sealed class RunExecutor(
     /// <c>CREATE</c> or <c>ALTER</c> without the setting that authorises it.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Refuses an initial load whose target table is missing and may not be created by a pass (create-if-missing off) and has no cached picture: the case of a set published
+    /// before its setup was applied (plan 28c E21, plan 33 SC22l). Asked before the load is queued, so nothing is held: the pass fails with <see cref="TargetTableMissingException"/>
+    /// and the next pass, once the set's <c>provision</c> has created the table, starts the load. A target that may be created, or whose shape is cached, is the load's own business.
+    /// </summary>
+    private async Task ThrowIfTargetTableMissingAsync(
+        ReplicationTaskConfig task, IDriver sourceDriver, DbConnection sourceConnection, SourceTableRef source, TableRef target, TableMappingConfig mapping, CancellationToken cancellationToken)
+    {
+        if (ProvisioningResolution.CreateTargetTableIfMissing(task, mapping) || mapping.TargetColumns.Count > 0 || string.IsNullOrWhiteSpace(source.Table))
+            return;
+
+        var (targetConnection, targetDriver) = await OpenConnectionAsync(target.ConnectionName, cancellationToken);
+        await using (targetConnection)
+        {
+            if (targetDriver is not IProvisioner provisioner)
+                return;
+            var sourceColumns = await sourceDriver.ListColumnsAsync(sourceConnection, source.Database, source.Schema, source.Table, cancellationToken);
+            var (columns, _) = ProvisioningColumnBuilder.Build(ResolveDialect(sourceDriver), sourceColumns.WithKey(mapping.PrimaryKey), mapping.ColumnMappings);
+            var writerKind = PipelineResolution.Writer(task, mapping).Kind;
+            var plan = await provisioner.PlanAsync(targetConnection, new ProvisioningRequest(
+                ProvisioningActions.CreateTargetTable, target, ReaderKind: null, ReaderOptions: new Dictionary<string, string>(), HistorizedProvisioning.Extend(columns, writerKind), writerKind), cancellationToken);
+            if (plan.State == ProvisioningState.Missing)
+                throw new TargetTableMissingException(mapping.Name, $"{target.Database}.{target.Schema}.{target.Table}");
+        }
+    }
+
     private async Task EnsureTargetTableProvisionedAsync(
         ReplicationTaskConfig task,
         IDriver sourceDriver, DbConnection sourceConnection, SourceTableRef source,

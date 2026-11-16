@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { runnerApi, type RunnerInstance, type TaskStatus } from '../api'
@@ -101,7 +102,10 @@ export function TasksPage() {
     onSuccess: () => client.invalidateQueries({ queryKey: ['runner'] }),
   })
   const [openTask, setOpenTask] = useState<string | null>(null)
-  const tasks = status.data?.tasks ?? []
+  // `?package=<name>`: the tasks of one package (the link of a Workspace project's Runs tab, plan 33 SC20o, SC22l)
+  const [search, setSearch] = useSearchParams()
+  const only = search.get('package')
+  const tasks = (status.data?.tasks ?? []).filter((t) => !only || t.package === only)
   const problems = status.data?.problems ?? []
 
   return (
@@ -115,7 +119,10 @@ export function TasksPage() {
         {problems.map((p) => <div key={`${p.subject}${p.at}`} className="empty" data-testid="runner-problem">{`${p.subject}: ${p.message}`}</div>)}
         <InstancesCard instances={instances.data ?? status.data?.instances ?? []} canEdit={canAct} />
 
-        <div className="page-head" style={{ marginTop: 24 }}><h2 className="page-title">Tasks</h2></div>
+        <div className="page-head" style={{ marginTop: 24 }}>
+          <h2 className="page-title">Tasks</h2>
+          {only && <span className="page-note" data-testid="runner-tasks-only">Of {only} only. <button type="button" className="btn-link" onClick={() => setSearch((s) => { s.delete('package'); return s }, { replace: true })} data-testid="runner-tasks-every">Show every package</button></span>}
+        </div>
         {status.isSuccess && tasks.length === 0 && <div className="empty" data-testid="runner-no-tasks">No package is served yet. Publish one to this runner.</div>}
         {tasks.length > 0 && (
           <div className="card flush" data-testid="runner-tasks">

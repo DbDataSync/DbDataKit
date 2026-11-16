@@ -35,16 +35,16 @@ function RunDetail({ run, onClose }: { run: RunRecord; onClose: () => void }) {
 
 /** The run history, newest first, with filters for the package, the channel and the outcome, and a run's detail. `?run=<id>` opens that run's detail (a link from another screen, such as a Store model's deploy in the Workspace, plan 33 SC24). */
 export function RunsPage() {
-  const [filters, setFilters] = useState<RunFilters>({})
-  const [picked, setOpen] = useState<RunRecord | null>(null)
   const [search, setSearch] = useSearchParams()
+  const [filters, setFilters] = useState<RunFilters>(() => (search.get('package') ? { package: search.get('package')! } : {}))
+  const [picked, setOpen] = useState<RunRecord | null>(null)
   const linked = search.get('run')
   const fromLink = useQuery({ queryKey: ['runner', 'run', linked], queryFn: () => runnerApi.runById(linked!), enabled: !!linked && picked === null })
   const open = picked ?? (linked ? fromLink.data ?? null : null)
   const close = () => { setOpen(null); if (linked) setSearch((s) => { s.delete('run'); return s }, { replace: true }) }
   const runs = useQuery({ queryKey: ['runner', 'runs', filters], queryFn: () => runnerApi.runs(filters), refetchInterval: 5000 })
   const status = useQuery({ queryKey: ['runner', 'status'], queryFn: runnerApi.status })
-  const packages = [...new Set((status.data?.tasks ?? []).map((t) => t.package))].sort()
+  const packages = [...new Set([...(status.data?.tasks ?? []).map((t) => t.package), ...(filters.package ? [filters.package] : [])])].sort()
   const set = (key: keyof RunFilters) => (e: { target: { value: string } }) => setFilters((f) => ({ ...f, [key]: e.target.value || undefined }))
 
   return (

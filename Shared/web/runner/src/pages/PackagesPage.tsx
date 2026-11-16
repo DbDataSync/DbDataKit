@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
+import { Link as ConsoleLink, useParams } from 'react-router-dom'
 import { ErrorBanner, Link, useIsAdmin, useModule } from '@dbdatakit/shell'
 import { runnerApi, type ActivationAnswer, type ChannelHead, type DefinitionDetail, type StagingInfo } from '../api'
 import { activationBody, headText, needsAnyway, stagingRows } from '../model'
@@ -14,6 +14,7 @@ import { PublishFromFiles } from './PublishFromFiles'
 import { PruneDialog } from './PruneDialog'
 import { PromoteDialog } from './PromoteDialog'
 import { hostedServer } from '../promote'
+import { noteText, workspaceOriginOf, workspaceRunsLink } from '../origin'
 
 /**
  * The activation of a staged version. When the progress migration the runner ran as a dry run would lose something, the dialog lists the losses and the person confirms them: the runner takes the confirmation only with the same list echoed back. When
@@ -132,7 +133,7 @@ function PackageDetail({ detail, isAdmin }: { detail: DefinitionDetail; isAdmin:
         <div className="grid-head" style={{ gridTemplateColumns: '0.6fr 1.6fr 1.4fr 3fr 1.2fr', gap: 14 }}><span>Version</span><span>Published</span><span>By</span><span>Note</span><span /></div>
         {detail.versions.map((v) => (
           <div key={v.version} className="grid-row" style={{ gridTemplateColumns: '0.6fr 1.6fr 1.4fr 3fr 1.2fr', gap: 14 }} data-testid="runner-version" data-version={v.version}>
-            <span>v{v.version}</span><span>{when(v.published_at)}</span><span>{v.published_by}</span><span>{v.note ?? ''} ({v.files} files)</span>
+            <span>v{v.version}</span><span>{when(v.published_at)}</span><span>{v.published_by}</span><span>{noteText(v.note)} ({v.files} files){workspaceOriginOf(v.note) && <> <ConsoleLink to={workspaceRunsLink(workspaceOriginOf(v.note)!)} data-testid="runner-version-origin">its project in the Workspace</ConsoleLink></>}</span>
             <span className="row" style={{ gap: 6 }}>
               {isAdmin && detail.channels.filter((h) => h.active !== v.version).map((head) => (
                 <button key={head.channel} type="button" className="btn btn-sm" onClick={() => setPending({ kind: 'switch', head, version: v.version })} data-testid="runner-switch">Serve on {head.channel}</button>

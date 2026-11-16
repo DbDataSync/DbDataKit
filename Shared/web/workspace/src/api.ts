@@ -159,6 +159,8 @@ export const workspaceApi = {
   publish: (project: string, id: string, build: string, target: string, note: string, options: PublishOptions = {}) => request<PublishAnswer>(`${builds(project, id)}/${enc(build)}/publish`, json({ target, ...(note ? { note } : {}), ...options })),
   /** Runs a manual-only task (Sync's `provision`) of the version this build last staged or published on a Runner, for the signed-in person; the Runner's bound logins do the work. */
   runStaged: (project: string, id: string, build: string, task: string, inputs: Record<string, string>, pkg?: string) => request<{ steps: string[]; run: StagedRunStarted }>(`${builds(project, id)}/${enc(build)}/run`, json({ task, inputs, ...(pkg ? { package: pkg } : {}) })),
+  /** Runs a task (a drain, a refresh: one with a schedule too) of the version the channel this build published to serves now, for the signed-in person: the Runner's Run now, asked from the project's page (plan 33 SC20o, SC22l). */
+  runServed: (project: string, id: string, build: string, task: string, inputs: Record<string, string>) => request<{ steps: string[]; run: StagedRunStarted }>(`${builds(project, id)}/${enc(build)}/run`, json({ task, inputs, served: true })),
   /** A run read back; `pkg` names the staged package it is of when the build staged more than one (a Store project's build stages one per model, plan 33 SC24). */
   stagedRun: (project: string, id: string, build: string, run: string, step?: string, pkg?: string) => {
     const query = [step ? `step=${enc(step)}` : '', pkg ? `package=${enc(pkg)}` : ''].filter(Boolean).join('&')

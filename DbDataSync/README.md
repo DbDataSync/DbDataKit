@@ -70,8 +70,27 @@ install. There is no service, installer or container image of Sync any more: the
 
 ## Where the screens are
 
-The screens are the dbdatakit console's: a sync project's in the Workspace (connections, replications, mappings, scripts, provisioning plans, publishing) and the
-Runner's for what runs (its Tasks, Runs and Packages pages: run now, pause, bulk loads, the logins bound to the set's slots).
+The screens are the dbdatakit console's: a sync project's in the Workspace (connections, replications, mappings, scripts, provisioning plans, publishing, and
+the **Runs** tab: run now and a bulk load of what the draft published, each run read back with what every pass did) and the Runner's for the rest of what runs
+(its Tasks, Runs and Packages pages: the schedule, pause and resume, cancel, the history and logs, the logins bound to the set's slots). The two link to each
+other: the Runs tab links to the package's tasks and runs on the Runner, and a version the Workspace published names its project, which the Runner's task
+details and version list link back to.
+
+### A set on a Runner: the order of its first runs
+
+A published set's drains run as soon as the version is served, and its database setup (the target tables) is the manual task `provision`, which a person applies
+(the Provisioning tab's **Apply on the Runner**). A mapping whose target table does not exist yet, may not be created by a pass (`createTargetTableIfMissing`
+off) and has no cached target columns refuses its first pass before anything is queued: the pass fails naming the table (`TargetTableMissing`), the mapping
+keeps no position and no hold, and the next pass after the setup is applied (its next scheduled time, or **Run now**) captures a position and starts the initial
+load. A segment of an initial load that finds its table gone gives the load up the same way rather than leaving the mapping held as loading.
+
+### A bulk load as a person asks it
+
+The drain's `requests` input takes a bulk load as asked, and the drain divides it against the source (as the Sync API did before the server was deleted):
+`[{"kind": "BulkLoad", "mapping": "orders", "segments": "[{\"mode\":\"auto\",\"column\":\"Id\",\"bucketCount\":8}]"}]`. `segments` is the list of
+segments as a mapping's `defaultSegmenting` writes them (`full`, `list`, `range`, `auto`, `custom`); `[]` is the mapping's own default segmenting (or the whole
+table). The segments become one batch of the drain's queue with the source's row estimate; a bulk load of a mapping already in flight is refused, naming it.
+The Workspace's Runs tab sends this request; a request without `segments` is queued as it is written (the form a cutover hands over).
 
 ## Next steps
 
