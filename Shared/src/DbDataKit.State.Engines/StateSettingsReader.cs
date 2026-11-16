@@ -17,13 +17,19 @@ namespace DbDataKit.State;
 ///     days: 30                          # a number of days, 0.25 is six hours
 ///     modules: { runs: 7 }
 ///     tables:  { runs.run: 14, audit.entry: forever }
+///   housekeeping:                       # the server's own upkeep of this state, in its own process (plan 35 I1)
+///     retention_every_minutes: 60
+///     backup_directory: backups         # none: no snapshot
+///     backup_every_hours: 24
+///     backup_keep: 7
 /// </code>
 /// </summary>
 public static class StateSettingsReader
 {
-    private static readonly string[] SectionKeys = ["engine", "connection", "registry", "namespaces", "retention"];
+    private static readonly string[] SectionKeys = ["engine", "connection", "registry", "namespaces", "retention", "housekeeping"];
     private static readonly string[] NamespaceKeys = ["schema", "prefix", "file"];
     private static readonly string[] RetentionKeys = ["days", "modules", "tables"];
+    private static readonly string[] HousekeepingKeys = ["retention_every_minutes", "backup_directory", "backup_every_hours", "backup_keep"];
 
     /// <summary>The settings in <paramref name="section"/>; null or empty is the defaults (SQLite, a file).</summary>
     /// <param name="section">The section as a YAML reader gives it: dictionaries, lists and scalars.</param>
@@ -37,7 +43,36 @@ public static class StateSettingsReader
         {
             Namespaces = ReadNamespaces(section, path),
             Retention = ReadRetention(section, path),
+            Housekeeping = ReadHousekeeping(section, path),
         };
+    }
+
+    private static StateHousekeepingSettings ReadHousekeeping(IReadOnlyDictionary<string, object?> section, string path)
+    {
+        var map = Map(section, "housekeeping", path);
+        if (map is null) return StateHousekeepingSettings.Defaults;
+        var at = $"{path}.housekeeping";
+        Known(map, HousekeepingKeys, at);
+        var result = StateHousekeepingSettings.Defaults;
+        if (Positive(map, "retention_every_minutes", at) is { } minutes) result = result with { RetentionEvery = TimeSpan.FromMinutes(minutes) };
+        if (Text(map, "backup_directory", at) is { Length: > 0 } directory) result = result with { BackupDirectory = directory };
+        if (Positive(map, "backup_every_hours", at) is { } hours) result = result with { BackupEvery = TimeSpan.FromHours(hours) };
+        if (Text(map, "backup_keep", at) is { } keepText)
+        {
+            if (!int.TryParse(keepText, NumberStyles.None, CultureInfo.InvariantCulture, out var keep) || keep < 1)
+                throw new InvalidOperationException($"{at}.backup_keep is '{keepText}'; write a whole number of at least 1.");
+            result = result with { BackupKeep = keep };
+        }
+
+        return result;
+    }
+
+    private static double? Positive(IReadOnlyDictionary<string, object?> map, string key, string path)
+    {
+        if (Text(map, key, path) is not { } text) return null;
+        if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || value <= 0 || double.IsInfinity(value))
+            throw new InvalidOperationException($"{path}.{key} is '{text}'; write a number above zero.");
+        return value;
     }
 
     private static StateNamespaceSettings ReadNamespaces(IReadOnlyDictionary<string, object?> section, string path)

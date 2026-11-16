@@ -6,7 +6,7 @@ What to back up, with which command, and how to get a lost install back. Each pa
 | --- | --- | --- |
 | **Definitions**: Sync configuration, Build projects, serving-layer configuration, connection definitions without secret values, app source, DbDataStore models | A **git remote** per configuration repository: every commit is pushed in the background, a remote that is down never fails a commit and catches up when it returns | the library `GitRemotePusher` (`DbDataKit.Config.Git`); **no product reads a `git.remote` setting yet** (see "Git remotes") |
 | **The secrets store's key** | A separate backup of the data keys under a passphrase. **Never in git**, and the passphrase is kept apart from the file | `secret key-backup <file>`, `secret key-restore <file>` |
-| **The state database**: identity home, pairing and trust, audit, approvals, change requests, run history, delivery outbox | On SQL Server or PostgreSQL: the database's own backups **and** `state backup`. On SQLite: `state backup` | `state backup --to <folder>`, `state restore --from <folder>`; the console's `state-backup` system task does it on a schedule (`runner.backup_directory`) |
+| **The state database**: identity home, pairing and trust, audit, approvals, change requests, run history, delivery outbox | On SQL Server or PostgreSQL: the database's own backups **and** `state backup`. On SQLite: `state backup` | `state backup --to <folder>`, `state restore --from <folder>`; every server does it on a schedule of its own when `state.housekeeping.backup_directory` is set |
 | **DbDataStore's data, the warehouse** | The customer's database backups; Build can rebuild the warehouse | not the suite's |
 
 ## The state backup
@@ -22,7 +22,7 @@ What to back up, with which command, and how to get a lost install back. Each pa
 
 `state verify --snapshot <backup> --db` then compares the restored database with the backup, table by table.
 
-The console runs the same snapshot as its system task `state-backup` (`runner.backup_directory`, `backup_every_hours`, `backup_keep`); the other servers' state is not backed up by it, so run `state backup` for each on a schedule of your own.
+Every server (the console, the Workspace, the Gateway, the Runner) runs the same snapshot of its own state in its own process when the `housekeeping:` part of its `state:` section names a folder (`backup_directory`, `backup_every_hours`, `backup_keep`; `Shared/src/DbDataKit.State.Engines/README.md`, "Housekeeping"); each run is recorded in the server's run history as `state-backup`. A console whose embedded runner is on still does it as the runner's system task `state-backup` with the `runner:` settings, until that runner is removed (plan 35 I2). One backup set for the four services, in one place the console sets, is plan 35 I8.
 
 ## The secrets key
 

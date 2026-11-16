@@ -81,6 +81,12 @@ public static class ConsoleHost
             builder.Services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(sp => sp.GetRequiredService<ConsoleRunner>());
             builder.Services.Configure<Microsoft.Extensions.Hosting.HostOptions>(h => h.ShutdownTimeout = TimeSpan.FromTicks(Math.Max(h.ShutdownTimeout.Ticks, (runnerSettings.CancellationGrace + TimeSpan.FromSeconds(30)).Ticks)));
         }
+        else
+        {
+            // the console's own state's retention and snapshot, in its process (plan 35 I1): state.housekeeping of settings.yaml; with the embedded runner on, its system tasks still do it until plan 35 I2 removes it
+            builder.Services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(sp => new DbDataKit.State.Engines.Housekeeping.StateHousekeeping(sp.GetRequiredService<StateDatabase>(), ConsoleState.Modules, StateScope.Install,
+                ConsoleState.ServiceId, settings.State ?? ConsoleState.Resolve(settings.Directory).Settings, settings.Directory, sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataKit.Server.Housekeeping")));
+        }
         builder.Services.AddSingleton(sp => new NotificationFeedStore(sp.GetRequiredService<StateDatabase>(), ConsoleState.ServiceId));
         builder.Services.AddSingleton(sp => new AuditLog(sp.GetRequiredService<StateDatabase>(), ConsoleState.ServiceId));
         builder.Services.AddSingleton(new ConsoleActivitySource(settings.State is { IsSqlite: false }));

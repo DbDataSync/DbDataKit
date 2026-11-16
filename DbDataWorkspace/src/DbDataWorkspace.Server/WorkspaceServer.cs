@@ -54,6 +54,9 @@ public static class WorkspaceServer
             ? IPAddress.Any
             : settings.Listen.Host == "localhost" ? IPAddress.Loopback : IPAddress.Parse(settings.Listen.Host);
         builder.WebHost.ConfigureKestrel(o => o.Listen(address, settings.Listen.Port, listen => listen.UseHttps(certificate)));
+        // its own state's retention and snapshot, in this process (plan 35 I1): the housekeeping: part of the state section
+        builder.Services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(new DbDataKit.State.Engines.Housekeeping.StateHousekeeping(state, WorkspaceState.Modules, WorkspaceState.Scope, WorkspaceState.ServiceId,
+            settings.State ?? WorkspaceState.Resolve(settings.Directory).Settings, settings.Directory));
 
         var app = builder.Build();
         app.UseManagementApiVersion();

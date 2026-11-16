@@ -12,7 +12,7 @@ namespace DbDataGateway.Server.Configuration;
 /// </summary>
 public static class GatewayStateConfig
 {
-    private static readonly string[] Canonical = ["engine", "connection", "registry", "namespaces", "retention", "days", "modules", "tables", "schema", "prefix", "file"];
+    private static readonly string[] Canonical = ["engine", "connection", "registry", "namespaces", "retention", "days", "modules", "tables", "schema", "prefix", "file", "housekeeping", "retention_every_minutes", "backup_directory", "backup_every_hours", "backup_keep"];
 
     /// <summary>The state settings and where each came from; raises <see cref="GatewayConfigException"/> naming the file (or variable) for an old key or a setting that is not one.</summary>
     public static ResolvedState Resolve(IConfigurationRoot configuration)

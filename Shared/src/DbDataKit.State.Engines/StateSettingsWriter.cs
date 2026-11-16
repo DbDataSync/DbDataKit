@@ -77,7 +77,7 @@ public sealed class StateSettingsWriter(Action<string, string>? replaceFile = nu
     /// <summary>The settings in <paramref name="path"/>'s <c>state:</c> section, read strictly (the defaults when the file or the section is absent): what a product reads at start.</summary>
     public static StateSettings Load(string path) => LoadSection(path).Settings;
 
-    /// <summary>Like <see cref="Load"/>, and says which keys the section has (<c>engine</c>, <c>connection</c>, <c>registry</c>, <c>namespaces</c>, <c>retention</c>), so a caller can tell a value the file gave from a default.</summary>
+    /// <summary>Like <see cref="Load"/>, and says which keys the section has (<c>engine</c>, <c>connection</c>, <c>registry</c>, <c>namespaces</c>, <c>retention</c>, <c>housekeeping</c>), so a caller can tell a value the file gave from a default.</summary>
     public static (StateSettings Settings, IReadOnlySet<string> Keys) LoadSection(string path)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -117,6 +117,15 @@ public sealed class StateSettingsWriter(Action<string, string>? replaceFile = nu
         if (retention.Tables.Count > 0) retentionLines.Add($"    tables: {{ {string.Join(", ", retention.Tables.Select(p => $"{YamlText.FlowScalar(p.Key)}: {Days(p.Value)}"))} }}");
         if (retentionLines.Count > 0) lines.AddRange(["  retention:", .. retentionLines]);
 
+        var housekeeping = settings.Housekeeping;
+        var standard = StateHousekeepingSettings.Defaults;
+        var housekeepingLines = new List<string>();
+        if (housekeeping.RetentionEvery != standard.RetentionEvery) housekeepingLines.Add($"    retention_every_minutes: {Number(housekeeping.RetentionEvery.TotalMinutes)}");
+        if (housekeeping.BackupDirectory is { Length: > 0 } backup) housekeepingLines.Add($"    backup_directory: {YamlText.Scalar(backup)}");
+        if (housekeeping.BackupEvery != standard.BackupEvery) housekeepingLines.Add($"    backup_every_hours: {Number(housekeeping.BackupEvery.TotalHours)}");
+        if (housekeeping.BackupKeep != standard.BackupKeep) housekeepingLines.Add($"    backup_keep: {housekeeping.BackupKeep.ToString(CultureInfo.InvariantCulture)}");
+        if (housekeepingLines.Count > 0) lines.AddRange(["  housekeeping:", .. housekeepingLines]);
+
         return lines.Count == 0 ? $"{Section}: {{}}{newline}" : $"{Section}:{newline}{string.Join(newline, lines)}{newline}";
     }
 
@@ -128,6 +137,8 @@ public sealed class StateSettingsWriter(Action<string, string>? replaceFile = nu
         if (setting.File is not null) parts.Add($"file: {YamlText.FlowScalar(setting.File)}");
         return parts.Count == 0 ? null : $"{{ {string.Join(", ", parts)} }}";
     }
+
+    private static string Number(double value) => value.ToString("R", CultureInfo.InvariantCulture);
 
     private static string Days(double days) => double.IsPositiveInfinity(days) ? "forever" : days.ToString("R", CultureInfo.InvariantCulture);
 

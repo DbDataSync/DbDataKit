@@ -5,7 +5,7 @@ namespace DbDataWorkspace.Server;
 
 /// <summary>
 /// The Workspace server's state database (plan 22a GP31): <c>state.db</c> in the server's directory, built from the <c>trust</c> module (the server's instance id, the clients paired with it, the pairing codes waiting) and the
-/// <c>workspace</c> module (projects, drafts, their history, builds, the publisher's key reference). It is kept per service, so two Workspace servers on one database each have their own copy.
+/// <c>workspace</c> module (projects, drafts, their history, builds, the publisher's key reference) and the <c>runs</c> module (the runs of its housekeeping, plan 35 I1). It is kept per service, so two Workspace servers on one database each have their own copy.
 /// </summary>
 public static class WorkspaceState
 {
@@ -16,7 +16,7 @@ public static class WorkspaceState
     public static StateScope Scope { get; } = new(Group: "main", Service: ServiceId);
 
     /// <summary>The modules the server's state is built from.</summary>
-    public static IReadOnlyList<StateModule> Modules { get; } = [TrustModule.Module, WorkspaceModule.Module];
+    public static IReadOnlyList<StateModule> Modules { get; } = [TrustModule.Module, WorkspaceModule.Module, RunsModule.Module];
 
     /// <summary>The state engine: <c>DBDATAKIT_STATE_WORKSPACE_ENGINE</c>, else <c>DBDATAKIT_STATE_ENGINE</c>.</summary>
     public static string EngineVariable => SuiteEnvironment.StateEngineVariableOf(WorkspaceSettings.ServiceName);

@@ -31,11 +31,25 @@ state:
     days: 30                         # 0.25 is six hours
     modules: { runs: 7 }
     tables:  { runs.run: 14, audit.entry: forever }
+  housekeeping:                      # the server's upkeep of its own state, in its own process (below)
+    retention_every_minutes: 60
+    backup_directory: backups        # relative to the server's directory; unset: no snapshot
+    backup_every_hours: 24
+    backup_keep: 7
 ```
+
+## Housekeeping: a server keeps its own state (plan 35 I1)
+
+`StateHousekeeping` (`DbDataKit.State.Engines.Housekeeping`) is the one library every server composes as a hosted service to keep **its own** state, in **its own process**: the console, the Workspace, the Gateway and the Runner. It runs the retention rules of the state's modules (`RetentionJob`) every `retention_every_minutes` (an hour by default), and, when `backup_directory` is set, a verified snapshot of the state (`StateBackupJob`, the newest `backup_keep` kept) every `backup_every_hours` (a day). Work on customer data is never housekeeping: it is the Runner's (`docs/architecture.md`, "Isolation by trust").
+
+- **Every run is recorded** in the state's `runs` module, under the server's service name, with the job `state-retention` or `state-backup`, its outcome, the rows it removed or wrote, and one log line saying what it did; a failed run is recorded as failed (with the reason) and the next one still happens. A server's state must have the `runs` module; the constructor says so otherwise.
+- **When a job is next due** is read from its last recorded run (its start plus the interval), so a restart does not run it early, and instances of a group that share one database and one service name share the schedule. A job that has never run is first due five minutes after the start (or one interval, when that is shorter), so a server that starts does not write to its state at once.
+- A retention setting that names a module or table the state does not have stops the server at its start. `RunRetention()` and `RunBackupAsync()` run a job once (and record it); a snapshot without a folder is refused naming `state.housekeeping.backup_directory`.
+- The settings are part of the `state:` section (`StateSettings.Housekeeping`): read strictly by `StateSettingsReader`, written back by `StateSettingsWriter` (only what differs from the defaults), carried through `state move` and `state init`. The Gateway takes them as `state.housekeeping` in its `server.yaml` like the other keys of the section. Restoring a snapshot is `state restore --from <folder>` into an empty database (`docs/backup-and-recovery.md`).
 
 ## One order for every product
 
-`StateSettingsResolver.Resolve(new StateSettingsInputs(settingsFile, engineFlag, ..., engineVariable, connectionVariable, environment))` is the order every product reads its state settings in (plan 29b C07): the flag, then the environment variable, then the `state:` section of the product's settings file (read strictly through `StateSettingsReader`; an error names the file and, for a misspelt key, the one that was meant), then the default (SQLite). The engine and the connection each come from the first place that names them; `registry`, `namespaces` and `retention` come from the file. The result (`ResolvedState`) says where each part came from (`StateSources`), which is what `state show` prints. The file is never created. The Gateway keeps its own layering of file, environment and command line and reports through the same types (`GatewayStateConfig`).
+`StateSettingsResolver.Resolve(new StateSettingsInputs(settingsFile, engineFlag, ..., engineVariable, connectionVariable, environment))` is the order every product reads its state settings in (plan 29b C07): the flag, then the environment variable, then the `state:` section of the product's settings file (read strictly through `StateSettingsReader`; an error names the file and, for a misspelt key, the one that was meant), then the default (SQLite). The engine and the connection each come from the first place that names them; `registry`, `namespaces`, `retention` and `housekeeping` come from the file. The result (`ResolvedState`) says where each part came from (`StateSources`), which is what `state show` prints. The file is never created. The Gateway keeps its own layering of file, environment and command line and reports through the same types (`GatewayStateConfig`).
 
 ## Writing the section
 

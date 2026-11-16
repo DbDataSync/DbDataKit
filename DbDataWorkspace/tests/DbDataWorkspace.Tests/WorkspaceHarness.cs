@@ -26,16 +26,17 @@ internal sealed class WorkspaceHarness : IAsyncDisposable
     private WorkspaceHarness(ScratchStateDatabase? scratch) => Scratch = scratch;
 
     /// <summary>Starts the server on <paramref name="engine"/> (<c>sqlite</c>, <c>postgres</c> or <c>mssql</c>; the test is skipped when that engine is not set up).</summary>
-    public static async Task<WorkspaceHarness> StartAsync(string engine = "sqlite", ServerRole ceiling = ServerRole.Admin | ServerRole.Author | ServerRole.Approver, WorkspaceAppSettings? apps = null, string? buildExecutable = null, string? syncExecutable = null, string? runnerExecutable = null, string? dotnetExecutable = null, IReadOnlyList<string>? integrationSources = null)
+    public static async Task<WorkspaceHarness> StartAsync(string engine = "sqlite", ServerRole ceiling = ServerRole.Admin | ServerRole.Author | ServerRole.Approver, WorkspaceAppSettings? apps = null, string? buildExecutable = null, string? syncExecutable = null, string? runnerExecutable = null, string? dotnetExecutable = null, IReadOnlyList<string>? integrationSources = null, StateHousekeepingSettings? housekeeping = null)
     {
         var harness = new WorkspaceHarness(engine == "sqlite" ? null : ScratchStateDatabase.For(engine));
-        await harness.StartAsync(ceiling, apps, buildExecutable, syncExecutable, runnerExecutable, dotnetExecutable, integrationSources);
+        await harness.StartAsync(ceiling, apps, buildExecutable, syncExecutable, runnerExecutable, dotnetExecutable, integrationSources, housekeeping);
         return harness;
     }
 
-    private async Task StartAsync(ServerRole ceiling, WorkspaceAppSettings? apps, string? buildExecutable, string? syncExecutable, string? runnerExecutable, string? dotnetExecutable, IReadOnlyList<string>? integrationSources)
+    private async Task StartAsync(ServerRole ceiling, WorkspaceAppSettings? apps, string? buildExecutable, string? syncExecutable, string? runnerExecutable, string? dotnetExecutable, IReadOnlyList<string>? integrationSources, StateHousekeepingSettings? housekeeping)
     {
-        if (Scratch is not null) new StateSettingsWriter().Write(Path.Combine(Directory, "server.yaml"), new StateSettings(Scratch.Engine, Scratch.Connection));
+        if (Scratch is not null || housekeeping is not null)
+            new StateSettingsWriter().Write(Path.Combine(Directory, "server.yaml"), new StateSettings(Scratch?.Engine, Scratch?.Connection) { Housekeeping = housekeeping ?? StateHousekeepingSettings.Defaults });
         var resolved = WorkspaceState.Resolve(Directory, Scratch is null ? null : Scratch.Environment);
         Settings = new WorkspaceSettings(Directory, new Uri("https://127.0.0.1:0")) { State = resolved.Settings, StateSources = resolved.Sources, Apps = apps, BuildExecutable = buildExecutable, SyncExecutable = syncExecutable, RunnerExecutable = runnerExecutable, DotnetExecutable = dotnetExecutable, IntegrationSources = integrationSources };
         app = WorkspaceServer.Build(Settings, WorkspaceServer.Certificate(Directory), Log.Add);

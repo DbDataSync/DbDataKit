@@ -95,6 +95,9 @@ public static class RunnerServer
         builder.Services.AddSingleton(state);
         builder.Services.AddSingleton(sp => new RunnerEngine(settings, state, sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataRunner.Engine")));
         builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<RunnerEngine>());
+        // its own state's retention and snapshot, in this process (plan 35 I1): state.housekeeping; the tasks' work on customer data is the engine's
+        builder.Services.AddSingleton<IHostedService>(sp => new DbDataKit.State.Engines.Housekeeping.StateHousekeeping(state, RunnerState.Modules, RunnerState.ScopeOf(settings.Group), RunnerState.ServiceId,
+            settings.State, settings.Directory, sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataRunner.Housekeeping")));
 
         var app = builder.Build();
         app.UseManagementApiVersion();
