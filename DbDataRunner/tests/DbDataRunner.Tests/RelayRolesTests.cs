@@ -36,6 +36,7 @@ public sealed class RelayRolesTests
         { "GET", "/api/v1/tasks/orders/dev/load/dead-letters", ServerRole.Operator }, { "POST", $"/api/v1/tasks/orders/dev/load/dead-letters/{Instance}/replay", ServerRole.Operator }, { "POST", $"/api/v1/tasks/orders/dev/load/dead-letters/{Instance}/discard", ServerRole.Operator },
         { "GET", "/api/v1/tasks/orders/dev/load/checkpoints", ServerRole.Operator }, { "GET", "/api/v1/tasks/orders/dev/load/checkpoints/watermark/history", ServerRole.Operator }, { "POST", "/api/v1/tasks/orders/dev/load/checkpoints/watermark/rewind", ServerRole.Operator },
         { "GET", "/api/v1/tracking", ServerRole.Viewer }, { "POST", "/api/v1/tracking/divergences/1/resolve", ServerRole.Admin },
+        { "GET", "/api/v1/quality", ServerRole.Viewer }, { "GET", "/api/v1/quality/history", ServerRole.Viewer }, { "POST", "/api/v1/quality/release", ServerRole.Admin },
         { "PUT", "/api/v1/settings/require_signatures", ServerRole.Admin }, { "PUT", "/api/v1/settings/require_sandbox_run", ServerRole.Admin }, { "PUT", $"/api/v1/instances/{Instance}/labels", ServerRole.Admin },
     };
 

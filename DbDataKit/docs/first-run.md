@@ -49,7 +49,7 @@ A single-machine bundle that installs the console and the servers together and p
 
 ### Alerts of failed checks
 
-The servers that evaluate data quality checks (Sync, Build) keep the results; the console watches them and sends a message through a delivery channel **when a check fails and once when it passes again**, not at every evaluation, and not again after the console restarts. Name the channel in `settings.yaml`:
+The Runner keeps the results of the data quality checks its tasks evaluate (a Build refresh evaluates the checks of the models it loaded); the console watches them and sends a message through a delivery channel **when a check fails and once when it passes again**, not at every evaluation, and not again after the console restarts. Name the channel in `settings.yaml`:
 
 ```yaml
 quality:

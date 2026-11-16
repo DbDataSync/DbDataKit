@@ -32,11 +32,11 @@ public sealed class UnknownDatasetException(string name) : Exception($"The datas
 }
 
 /// <summary>
-/// Evaluates the checks of a dataset (or of every dataset the source has) and writes the results through <see cref="QualityStore"/> (plan 23a FQ08): one <c>check_result</c> per check, the check's <c>check_status</c> and its block set or cleared in the
+/// Evaluates the checks of a dataset (or of every dataset the source has) and writes the results through <see cref="IQualityResults"/> (plan 23a FQ08; the <see cref="QualityStore"/> of a state this process holds, or the Runner's through the protocol for a task, plan 35 I3): one <c>check_result</c> per check, the check's <c>check_status</c> and its block set or cleared in the
 /// same transaction (the store's rules: a <c>block</c> check blocks while its latest result is <c>fail</c>; an error blocks only with <c>on_error: block</c> and lifts nothing). The shared command (<c>quality run</c>) and the runner task use this one service, so they
 /// cannot differ. A <c>row_count_change</c> check is compared with the previous successful evaluation of the same check (<see cref="QualityStore.Baseline"/>, QF3), and the first evaluation only records.
 /// </summary>
-public sealed class QualityRunService(IQualitySource source, QualityStore store, EvaluationLimits? limits = null, TimeProvider? time = null, IQualityAlerts? alerts = null)
+public sealed class QualityRunService(IQualitySource source, IQualityResults store, EvaluationLimits? limits = null, TimeProvider? time = null, IQualityAlerts? alerts = null)
 {
     /// <summary>Evaluates and records. <paramref name="dataset"/> is a dataset's identity or one of its names; null is every dataset of the source. <paramref name="runId"/> is stored with each result (the runner's run, Build's tracking id).</summary>
     /// <exception cref="UnknownDatasetException">A named dataset is not in the source.</exception>
@@ -53,7 +53,8 @@ public sealed class QualityRunService(IQualitySource source, QualityStore store,
             ct.ThrowIfCancellationRequested();
             var evaluator = new CheckEvaluator(one.Dialect, limits, time);
             // the baselines are read before the statements go out: a row-count check compares with the evaluation before this one
-            var baselines = one.Checks.Where(c => c.Kind == CheckKind.RowCountChange).ToDictionary(c => c.Id, c => store.Baseline(one.Identity, c.Id), StringComparer.Ordinal);
+            var baselines = new Dictionary<string, decimal?>(StringComparer.Ordinal);
+            foreach (var check in one.Checks.Where(c => c.Kind == CheckKind.RowCountChange)) baselines[check.Id] = await store.BaselineAsync(one.Identity, check.Id, ct).ConfigureAwait(false);
             var results = await evaluator.EvaluateAsync(one.Checks, one.OpenReadOnly, check => new EvaluationContext
             {
                 ResolveTable = one.ResolveTable,
@@ -67,9 +68,9 @@ public sealed class QualityRunService(IQualitySource source, QualityStore store,
             {
                 var check = one.Checks[i];
                 var result = results[i];
-                var previous = alerts is null ? null : store.Status(one.Identity, check.Id);
-                var status = store.Record(new CheckResultRecord(check.Id, one.Identity, Outcome(result.Status), result.EvaluatedAt, result.Measured, result.Threshold, result.SampleKeys, runId,
-                    CheckNames.Name(check.Severity), CheckNames.Name(check.OnError), result.Message, result.Observed));
+                var previous = alerts is null ? null : await store.StatusAsync(one.Identity, check.Id, ct).ConfigureAwait(false);
+                var status = await store.RecordAsync(new CheckResultRecord(check.Id, one.Identity, Outcome(result.Status), result.EvaluatedAt, result.Measured, result.Threshold, result.SampleKeys, runId,
+                    CheckNames.Name(check.Severity), CheckNames.Name(check.OnError), result.Message, result.Observed), ct).ConfigureAwait(false);
                 checks.Add(new CheckRunReport(check, result, status.Blocking));
                 if (alerts is not null && AlertFor(one, check, result, previous, status) is { } alert)
                 {

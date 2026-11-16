@@ -217,6 +217,19 @@ internal sealed class InProcessRun : IRunBackend
 
     public Task<int> TrackingSnapshotAsync(string identity, string table, IReadOnlyList<TrackingRow> rows, CancellationToken ct) => throw NoTracking();
 
+    // ---- data quality results (plan 35 I3): the quality module of this run's state when it has one (a run simulator's does), each result under this run's id
+
+    private QualityStore Quality() => _database.Layout?.Has(QualityModule.Name) == true ? new QualityStore(_database)
+        : throw new NotSupportedException("The results of data quality checks are kept by the runner (its quality module, written under the run's id), and this run's state has no quality module. Run the job through a runner.");
+
+    public Task<decimal?> QualityBaselineAsync(string dataset, string checkId, CancellationToken ct) => Task.FromResult(Quality().Baseline(dataset, checkId));
+
+    public Task<CheckStatusRow?> QualityStatusAsync(string dataset, string checkId, CancellationToken ct) => Task.FromResult(Quality().Status(dataset, checkId));
+
+    public Task<CheckStatusRow> QualityRecordAsync(CheckResultRecord result, CancellationToken ct) => Task.FromResult(Quality().Record(result with { RunId = Identity.RunId.ToString("D") }));
+
+    public Task<IReadOnlyList<CheckStatusRow>> QualityBlocksAsync(CancellationToken ct) => Task.FromResult(Quality().Blocks());
+
     // counts, the status line and lineage have no place in the state database yet (the lineage slice gives them one); the protocol server keeps them in memory for the runner
     public void Count(string name, long n)
     {

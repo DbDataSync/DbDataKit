@@ -25,6 +25,30 @@ internal static class ModelQuality
     /// <summary>The environment variable that names the results directory when <c>--check-results</c> is not given (a runner task has no flags of its own).</summary>
     public const string ResultsVariable = "DBDATAKIT_BUILD_CHECK_RESULTS";
 
+    private static readonly AsyncLocal<IQualityResults?> RunnerResults = new();
+
+    /// <summary>
+    /// Where a refresh run as a Runner task records its checks (plan 35 I3): the Runner's <c>quality</c> module through the protocol (the task's <c>EngineQuality</c>), set by the refresh task for the flow of the command it runs. With it set, a refresh
+    /// evaluates its checks after the loads with no results directory, and a model a check blocks is held back by what the Runner keeps; <c>--check-results</c> (or <see cref="ResultsVariable"/>) still names a directory of its own instead.
+    /// </summary>
+    public static IQualityResults? Runner => RunnerResults.Value;
+
+    /// <summary>Makes <paramref name="results"/> where the checks of the current flow are recorded until the returned scope is disposed.</summary>
+    public static IDisposable UseRunner(IQualityResults? results)
+    {
+        var previous = RunnerResults.Value;
+        RunnerResults.Value = results;
+        return new Restore(previous);
+    }
+
+    private sealed class Restore(IQualityResults? previous) : IDisposable
+    {
+        public void Dispose() => RunnerResults.Value = previous;
+    }
+
+    /// <summary>What a document says the results are in when the Runner keeps them.</summary>
+    public const string RunnerResultsIn = "runner";
+
     /// <summary>The datasets of the models in <paramref name="models"/> that carry checks and are built on <paramref name="connection"/>.</summary>
     public static (IQualitySource Source, IReadOnlyDictionary<string, string> ModelOfIdentity) Source(ProjectContext ctx, string connection, LoginSettings read, IReadOnlySet<string> models, DateTimeOffset loadedAt, Func<string, string?> env, List<string> notes)
     {
@@ -81,23 +105,26 @@ internal static class ModelQuality
     /// <summary>
     /// Evaluates and records. Never throws for a failure of the checks themselves (a check that cannot run is an <c>error</c> result); a state database that cannot be opened or written ends in <see cref="ModelQualityOutcome.Error"/>.
     /// </summary>
-    public static ModelQualityOutcome Run(string root, string connection, LoginSettings read, IReadOnlyCollection<string> loadedModels, string runId, string resultsDirectory, Func<string, string?> env, DateTimeOffset? at = null)
+    public static ModelQualityOutcome Run(string root, string connection, LoginSettings read, IReadOnlyCollection<string> loadedModels, string runId, string resultsDirectory, Func<string, string?> env, DateTimeOffset? at = null) =>
+        Run(root, connection, read, loadedModels, runId, resultsDirectory, () => new QualityStore(BuildState.Open(Path.GetFullPath(resultsDirectory), environment: env)), env, at);
+
+    /// <summary>The same, recording in <paramref name="results"/> (the Runner's, for a refresh run as a Runner task); <paramref name="resultsIn"/> is what the document says they are in.</summary>
+    public static ModelQualityOutcome Run(string root, string connection, LoginSettings read, IReadOnlyCollection<string> loadedModels, string runId, string resultsIn, Func<IQualityResults> results, Func<string, string?> env, DateTimeOffset? at = null)
     {
         var notes = new List<string>();
         try
         {
             var ctx = ProjectContext.Load(root);
-            var directory = Path.GetFullPath(resultsDirectory);
+            var directory = resultsIn == RunnerResultsIn ? resultsIn : Path.GetFullPath(resultsIn);
             var (source, modelOfIdentity) = Source(ctx, connection, read, loadedModels.ToHashSet(StringComparer.Ordinal), at ?? DateTimeOffset.UtcNow, env, notes);
-            var state = BuildState.Open(directory, environment: env);
-            var service = new QualityRunService(source, new QualityStore(state));
+            var service = new QualityRunService(source, results());
             var report = Task.Run(() => service.RunAsync(null, runId)).GetAwaiter().GetResult();
             return new ModelQualityOutcome(runId, directory, report, notes, null, modelOfIdentity);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // the words of the failure only: a state engine's message can carry a connection string
-            return new ModelQualityOutcome(runId, resultsDirectory, null, notes, $"The checks were not run: {Failures.Describe(ex)}.");
+            return new ModelQualityOutcome(runId, resultsIn, null, notes, $"The checks were not run: {Failures.Describe(ex)}.");
         }
     }
 
@@ -105,7 +132,14 @@ internal static class ModelQuality
     /// The datasets of this connection's models that a check blocks now (plan 23a FQ14), read from the results directory's <c>quality</c> state: the model's name and the reason a model that reads it gives. A state that cannot be read blocks nothing
     /// (a check that cannot be read has not shown the data to be bad, QF10) and the reason is returned in <paramref name="problem"/>.
     /// </summary>
-    public static IReadOnlyDictionary<string, string> Blocks(string root, string connection, string resultsDirectory, Func<string, string?> env, out string? problem)
+    public static IReadOnlyDictionary<string, string> Blocks(string root, string connection, string resultsDirectory, Func<string, string?> env, out string? problem) =>
+        Blocks(root, connection, () => new QualityStore(BuildState.Open(Path.GetFullPath(resultsDirectory), environment: env)).Blocks(), env, out problem);
+
+    /// <summary>The same, from <paramref name="results"/> (the Runner's, for a refresh run as a Runner task).</summary>
+    public static IReadOnlyDictionary<string, string> Blocks(string root, string connection, IQualityResults results, Func<string, string?> env, out string? problem) =>
+        Blocks(root, connection, () => Task.Run(() => results.BlocksAsync()).GetAwaiter().GetResult(), env, out problem);
+
+    private static IReadOnlyDictionary<string, string> Blocks(string root, string connection, Func<IReadOnlyList<CheckStatusRow>> blocks, Func<string, string?> env, out string? problem)
     {
         problem = null;
         try
@@ -119,9 +153,8 @@ internal static class ModelQuality
                 identityOf[LineageIdentity.Dataset(address, schema, name).ToString()] = model.Name;
             }
 
-            var state = BuildState.Open(Path.GetFullPath(resultsDirectory), environment: env);
             var blocked = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var block in new QualityStore(state).Blocks())
+            foreach (var block in blocks())
                 if (identityOf.TryGetValue(block.Dataset, out var model) && !blocked.ContainsKey(model))
                     blocked[model] = $"{model} is blocked by the check {block.CheckId} since {block.BlockedSince:u}";
             return blocked;

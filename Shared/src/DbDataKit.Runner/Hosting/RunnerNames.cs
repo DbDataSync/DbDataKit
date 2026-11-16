@@ -25,5 +25,7 @@ public static class RunnerNames
         PayloadStore.Module, AuditModule.Module, NotificationsModule.Module,
         // Build's tracking copy: the runner hosts it for the tasks that read a target's tracking tables (plan 28c E16)
         DbDataKit.Tracking.Build.BuildTrackingModule.Module, TrackingModule.Module,
+        // the results of the data quality checks its tasks evaluate, the group's own (plan 35 I3; GET /api/v1/quality)
+        QualityModule.GroupModule,
     ];
 }

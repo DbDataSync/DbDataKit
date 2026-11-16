@@ -141,6 +141,7 @@ public static class RunnerServer
         GatewayPairingApi.Map(app, "/api/v1", dataChanges.Pairings, () => Task.FromResult(RunnerDataChanges.Identity(secretStore)), () => dataChanges.Notifier, "DbDataRunner server");
         RunnerLineageApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver);
         RunnerTrackingApi.Map(app, state, "/api/v1", RunnerCallers.TokenResolver);   // plan 28c E18: the runner's own copy of Build's tracking, and the resolve of its divergences
+        RunnerQualityApi.Map(app, state, "/api/v1", RunnerCallers.TokenResolver);    // plan 35 I3: the results of the checks its tasks evaluated, their history and the release of a block
         return app;
     }
 }

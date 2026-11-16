@@ -115,6 +115,16 @@ internal interface IRunBackend
 
     Task<int> TrackingSnapshotAsync(string identity, string table, IReadOnlyList<TrackingRow> rows, CancellationToken ct);
 
+    // ---- data quality results (QualityBaseline, QualityStatus, QualityRecord, QualityBlocks; plan 35 I3): the runner's quality module, each result under the run's id
+
+    Task<decimal?> QualityBaselineAsync(string dataset, string checkId, CancellationToken ct);
+
+    Task<CheckStatusRow?> QualityStatusAsync(string dataset, string checkId, CancellationToken ct);
+
+    Task<CheckStatusRow> QualityRecordAsync(CheckResultRecord result, CancellationToken ct);
+
+    Task<IReadOnlyList<CheckStatusRow>> QualityBlocksAsync(CancellationToken ct);
+
     // ---- one-way (the protocol batches them): counts, the status line, lineage
     void Count(string name, long n);
 

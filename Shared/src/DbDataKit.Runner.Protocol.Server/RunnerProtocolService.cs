@@ -700,4 +700,25 @@ internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.Ru
 
     public override Task<TrackingSnapshotReply> TrackingSnapshot(TrackingSnapshotRequest request, ServerCallContext context) => Guard(() =>
         Task.FromResult(new TrackingSnapshotReply { Rows = Started(context).Tracking.ReplaceSnapshot(request.Identity, request.Table, Rows(request.Rows)) }));
+
+    // ---- data quality results (plan 35 I3): the runner's quality module, each result under this run's id
+
+    public override Task<QualityBaselineReply> QualityBaseline(QualityCheckRef request, ServerCallContext context) => Guard(() =>
+        Task.FromResult(new QualityBaselineReply { Value = WireConvert.Number(Started(context).Quality.Baseline(request.Dataset, request.CheckId)) }));
+
+    public override Task<QualityStatusReply> QualityStatus(QualityCheckRef request, ServerCallContext context) => Guard(() =>
+    {
+        var status = Started(context).Quality.Status(request.Dataset, request.CheckId);
+        return Task.FromResult(status is null ? new QualityStatusReply() : new QualityStatusReply { Status = WireConvert.ToWire(status) });
+    });
+
+    public override Task<QualityStatusReply> QualityRecord(QualityRecordRequest request, ServerCallContext context) => Guard(() =>
+        Task.FromResult(new QualityStatusReply { Status = WireConvert.ToWire(Started(context).Quality.Record(WireConvert.FromWire(request))) }));
+
+    public override Task<QualityBlocksReply> QualityBlocks(QualityBlocksRequest request, ServerCallContext context) => Guard(() =>
+    {
+        var reply = new QualityBlocksReply();
+        reply.Blocks.AddRange(Started(context).Quality.Blocks().Select(WireConvert.ToWire));
+        return Task.FromResult(reply);
+    });
 }

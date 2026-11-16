@@ -6,15 +6,15 @@ namespace DbDataKit.Server;
 public sealed record ServerQualityAnswer(string Server, string InstanceId, string? Product, JsonObject? Overview, string? Error);
 
 /// <summary>
-/// The suite's data quality as the console sees it (plan 23a FQ17): each server that evaluates checks is asked for its results through the relay, as the signed-in person, and the answers are joined by dataset identity, so a table one
-/// server writes and another reads is one dataset with the checks of both. No server of the suite keeps check results today: the Build, Sync and Store servers that did were deleted (plan 33 SC23), and the Runner does not evaluate the
-/// checks stored with a replication or a model yet (open in plan 33), so <see cref="PathOf"/> names none and the overview is empty; the alerts and the join stay for that server. A server that does not answer is named and left out; the others still show. The history of one check and an evaluation on request
-/// are the server's own calls (<c>/relay/{server}/api/...</c>): the console holds no results and decides no block.
+/// The suite's data quality as the console sees it (plan 23a FQ17): each server that keeps check results is asked for them through the relay, as the signed-in person, and the answers are joined by dataset identity, so a table one
+/// server writes and another reads is one dataset with the checks of both. The Runner keeps them (plan 35 I3): a task that loads a dataset evaluates its checks and the Runner records the results in its group's <c>quality</c> module and
+/// answers <c>/api/v1/quality</c>; the Build, Sync and Store servers that kept them before were deleted (plan 33 SC23). A server that does not answer is named and left out; the others still show. The history of one check and the release of
+/// a block are the server's own calls (<c>/relay/{server}/api/v1/quality/...</c>): the console holds no results and decides no block.
 /// </summary>
 public sealed class ConsoleQuality(ConsoleInstances instances, ConsoleRelay relay)
 {
-    /// <summary>The path of a product's check results on its management API, or null for a product that keeps none (yet): no product of the suite does today.</summary>
-    public static string? PathOf(string? product) => null;
+    /// <summary>The path of a product's check results on its management API, or null for a product that keeps none: the Runner keeps them (plan 35 I3), a Gateway and a Workspace server do not.</summary>
+    public static string? PathOf(string? product) => product == ServerProducts.Runner ? "/api/v1/quality" : null;
 
     /// <summary>The latest result of every check in an overview as the lineage graph reads it (plan 23a FQ16): one <see cref="DbDataKit.Lineage.NodeCheck"/> per check and server.</summary>
     public static IReadOnlyList<DbDataKit.Lineage.NodeCheck> ChecksOf(JsonObject overview)
@@ -77,7 +77,7 @@ public sealed class ConsoleQuality(ConsoleInstances instances, ConsoleRelay rela
     {
         var instance = status.Instance;
         if (!status.Reachable) return new(instance.Name, instance.InstanceId, status.Product, null, status.Problem ?? "It did not answer.");
-        if (PathOf(status.Product) is not { } path) return null;                      // a Gateway or a Store evaluates no checks yet: not part of this
+        if (PathOf(status.Product) is not { } path) return null;                      // a Gateway or a Workspace server keeps no check results: not part of this
         var (code, body) = await relay.CallAsync(instance, HttpMethod.Get, path, null, ct);
         if (code != 200 || body is not JsonObject overview) return new(instance.Name, instance.InstanceId, status.Product, null, (body as JsonObject)?["error"]?.GetValue<string>() ?? $"It answered {code}.");
         return new(instance.Name, instance.InstanceId, status.Product, overview, null);

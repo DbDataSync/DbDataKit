@@ -347,9 +347,12 @@ internal static class RefreshCommand
         var originAccess = new OriginAccess(config, env, limits);
         var execution = new RefreshExecution(units, (unit, session, ct) => PrepareAsync(byUnit[unit.Position], stepsOf[unit.Position], inputs[byUnit[unit.Position]], scripts, context, session, originAccess, dryRun ? output.WriteLine : null, ct), Downstream);
         // plan 23a FQ14: with a results directory, a model that reads a dataset a check blocks does not run, and says which check
-        if (!dryRun && (checkResults ?? env(ModelQuality.ResultsVariable)) is { Length: > 0 } blocksIn)
+        // plan 35 I3: a refresh run as a Runner task reads the blocks the Runner keeps, unless a results directory is named
+        var resultsDirectory = checkResults ?? env(ModelQuality.ResultsVariable);
+        if (!dryRun && (!string.IsNullOrEmpty(resultsDirectory) || ModelQuality.Runner is not null))
         {
-            var blocked = ModelQuality.Blocks(root, connection.Name, blocksIn, env, out var blocksProblem);
+            string? blocksProblem;
+            var blocked = !string.IsNullOrEmpty(resultsDirectory) ? ModelQuality.Blocks(root, connection.Name, resultsDirectory, env, out blocksProblem) : ModelQuality.Blocks(root, connection.Name, ModelQuality.Runner!, env, out blocksProblem);
             if (blocksProblem != null) output.WriteLine(blocksProblem);
             if (blocked.Count > 0)
                 execution = execution with { BlockedBy = model => blocked.Where(b => !string.Equals(b.Key, model, StringComparison.OrdinalIgnoreCase) && Downstream(b.Key).Contains(model)).Select(b => b.Value).FirstOrDefault() };
@@ -362,7 +365,7 @@ internal static class RefreshCommand
         var audit = settings.Refresh.Audit;
         var exit = ApplyCommand.RunPlan(spec, executable, audit == AuditLevel.Full ? (planText.Length > 0 ? planText : "direct: " + string.Join(", ", items.Select(i => $"{i.Entry.FullName} {i.Entry.Hash}")) + "\n") : "", planRelative ?? Relative(loadsPath), root, dryRun, allowRisky: false, allowDestructive: [], allowDirty,
             new ApplyCommand.ApplyMode(Refresh: true, PlanHash: planHash, RecordShapes: check == RefreshCheck.Live, Header: false, Run: run, Execution: execution, OnlyFailed: onlyFailed, Origins: originNames, Parallel: parallel, Limits: limits, Warnings: parallelWarnings,
-                AfterRefresh: ChecksAfter(root, connection.Name, read!, id, dryRun, checkResults ?? env(ModelQuality.ResultsVariable), env)), output, error, env);
+                AfterRefresh: ChecksAfter(root, connection.Name, read!, id, dryRun, resultsDirectory, env)), output, error, env);
         // a dry run resolved the inputs (the resolvers ran, read-only): the values it would have used, and where each came from
         if (dryRun)
             output.Payload("resolved_inputs", items.Select(i => new { model = i.Entry.Model, operation = i.Entry.Load, member = i.Membership, inputs = inputs[i].Select(x => new { name = x.Name, type = x.Type, source = x.Source, value = x.Value, resolver_hash = x.ResolverHash }).ToList() }).ToList());
@@ -370,12 +373,18 @@ internal static class RefreshCommand
     }
 
     /// <summary>
-    /// The checks stored with the models that loaded, run when the loads have ended (plan 23a FQ09), when a results directory is given (`--check-results`, else `DBDATAKIT_BUILD_CHECK_RESULTS`) and the run is not a dry run. Only models whose load ended
-    /// `done` are evaluated: a model that failed, was skipped or did not run was not refreshed, so its data says nothing about this run. The run id is the refresh's tracking id.
+    /// The checks stored with the models that loaded, run when the loads have ended (plan 23a FQ09), when a results directory is given (`--check-results`, else `DBDATAKIT_BUILD_CHECK_RESULTS`) or the refresh runs as a Runner task
+    /// (plan 35 I3: recorded in the Runner's quality module, <see cref="ModelQuality.Runner"/>), and the run is not a dry run. Only models whose load ended `done` are evaluated: a model that failed, was skipped or did not run was not refreshed,
+    /// so its data says nothing about this run. The run id is the refresh's tracking id (on a Runner, the Runner stores each result under its own run's id).
     /// </summary>
-    private static Func<RefreshSummary, ModelQualityOutcome?>? ChecksAfter(string root, string connection, LoginSettings read, string runId, bool dryRun, string? resultsDirectory, Func<string, string?> env) =>
-        dryRun || string.IsNullOrWhiteSpace(resultsDirectory) ? null
-            : summary => ModelQuality.Run(root, connection, read, summary.Loads.GroupBy(l => l.Unit.Model, StringComparer.Ordinal).Where(g => g.All(l => l.Status == LoadStatus.Done)).Select(g => g.Key).ToList(), runId, resultsDirectory, env);
+    private static Func<RefreshSummary, ModelQualityOutcome?>? ChecksAfter(string root, string connection, LoginSettings read, string runId, bool dryRun, string? resultsDirectory, Func<string, string?> env)
+    {
+        if (dryRun) return null;
+        static List<string> Loaded(RefreshSummary summary) => summary.Loads.GroupBy(l => l.Unit.Model, StringComparer.Ordinal).Where(g => g.All(l => l.Status == LoadStatus.Done)).Select(g => g.Key).ToList();
+        if (!string.IsNullOrWhiteSpace(resultsDirectory)) return summary => ModelQuality.Run(root, connection, read, Loaded(summary), runId, resultsDirectory, env);
+        if (ModelQuality.Runner is { } runner) return summary => ModelQuality.Run(root, connection, read, Loaded(summary), runId, ModelQuality.RunnerResultsIn, () => runner, env);
+        return null;
+    }
 
     /// <summary>
     /// The scheduler orders loads by the graph `loads.yml` carries. With more than one load at a time asked for and no graph in the file (it was compiled by an older version) the run goes one load at a time, in plan order

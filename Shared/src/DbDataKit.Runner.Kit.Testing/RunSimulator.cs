@@ -103,7 +103,7 @@ public sealed class RunSimulator<TJob> : IDisposable
     {
         _input = input;
         _directory = Directory.CreateTempSubdirectory("dbdatakit-sim-");
-        var layout = StateLayout.Create(StateEngineIds.Sqlite, [ProgressModule.Module, RunsModule.Module], StateScope.Standalone);
+        var layout = StateLayout.Create(StateEngineIds.Sqlite, [ProgressModule.Module, RunsModule.Module, QualityModule.Module], StateScope.Standalone);
         Database = new StateDatabase(Path.Combine(_directory.FullName, "state.db"), layout, null, null);
         _environment = new RunnerEnvironment(Database, package, channel)
         {

@@ -22,7 +22,7 @@ public sealed class HomeSubscriberDirectory(GatewayViews views) : ISubscriberDir
 }
 
 /// <summary>
-/// Scheduled delivery in the Gateway (plan 32 DBR18, decision: in process, as <c>quality-system</c> runs in its host): the system task <c>views-export / subscriptions</c> (<see cref="ViewsExportTasks"/>) composed over the Gateway's state, the views module's
+/// Scheduled delivery in the Gateway (plan 32 DBR18, decision: in process): the system task <c>views-export / subscriptions</c> (<see cref="ViewsExportTasks"/>) composed over the Gateway's state, the views module's
 /// <see cref="SubscriptionRenderer"/> (the document drawn <b>as the subscriber</b>: the identity home's user of that subject id, their groups, their data sources) and the delivery service, run every minute (<see cref="ViewsExportSettings.Every"/>) while the
 /// views module is on <b>and this instance can export</b> (<c>views.export</c>): an instance that could only fail a due subscription (no browser) does not claim it, so it waits for a process that can.
 /// <para><b>Channels.</b> The Gateway has no delivery channels of its own (a channel name is the console's binding and connection: plan 22a GP18, plan 27a), and needs none: it knows a channel by the <b>kind the console stored on the subscription</b>

@@ -39,7 +39,7 @@ public sealed record CheckStatusRow(string CheckId, string Dataset, string Sever
 /// A result older than the one the status holds is stored in the history and does not change the status, so two evaluators finishing out of order leave the latest one standing.
 /// </para>
 /// </summary>
-public sealed class QualityStore(StateDatabase database)
+public sealed class QualityStore(StateDatabase database) : IQualityResults
 {
     private const string Module = QualityModule.Name;
 
@@ -242,6 +242,14 @@ public sealed class QualityStore(StateDatabase database)
 
             transaction.Commit();
         });
+
+    Task<decimal?> IQualityResults.BaselineAsync(string dataset, string checkId, CancellationToken ct) => Task.FromResult(Baseline(dataset, checkId));
+
+    Task<CheckStatusRow?> IQualityResults.StatusAsync(string dataset, string checkId, CancellationToken ct) => Task.FromResult(Status(dataset, checkId));
+
+    Task<CheckStatusRow> IQualityResults.RecordAsync(CheckResultRecord result, CancellationToken ct) => Task.FromResult(Record(result));
+
+    Task<IReadOnlyList<CheckStatusRow>> IQualityResults.BlocksAsync(CancellationToken ct) => Task.FromResult(Blocks());
 
     /// <summary>
     /// An administrator's release of a block (plan 23a FQ17): the check still fails, but what depends on the dataset is no longer held for it. The release stands while the check keeps failing (a failing evaluation does not set the block again) and ends when

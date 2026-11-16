@@ -321,6 +321,23 @@ internal sealed class GrpcRunBackend : IRunBackend, IAsyncDisposable
         return (await CallAsync(h => _client.TrackingSnapshotAsync(request, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false)).Rows;
     }
 
+    // ---- data quality results (plan 35 I3)
+
+    public async Task<decimal?> QualityBaselineAsync(string dataset, string checkId, CancellationToken ct) =>
+        WireConvert.Number((await CallAsync(h => _client.QualityBaselineAsync(new QualityCheckRef { Dataset = dataset, CheckId = checkId }, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false)).Value);
+
+    public async Task<CheckStatusRow?> QualityStatusAsync(string dataset, string checkId, CancellationToken ct)
+    {
+        var reply = await CallAsync(h => _client.QualityStatusAsync(new QualityCheckRef { Dataset = dataset, CheckId = checkId }, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false);
+        return reply.Status is null ? null : WireConvert.FromWire(reply.Status);
+    }
+
+    public async Task<CheckStatusRow> QualityRecordAsync(CheckResultRecord result, CancellationToken ct) =>
+        WireConvert.FromWire((await CallAsync(h => _client.QualityRecordAsync(WireConvert.ToWire(result), h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false)).Status);
+
+    public async Task<IReadOnlyList<CheckStatusRow>> QualityBlocksAsync(CancellationToken ct) =>
+        [.. (await CallAsync(h => _client.QualityBlocksAsync(new QualityBlocksRequest(), h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false)).Blocks.Select(WireConvert.FromWire)];
+
     // ---- files, inbox, dead letters
 
     public async Task<bool> ClaimFileAsync(string connection, string path, long size, DateTimeOffset modified, string hash, CancellationToken ct)

@@ -140,4 +140,48 @@ internal static class WireConvert
 
     public static Guid ParseId(string text, string what) =>
         Guid.TryParse(text, out var id) ? id : throw new ArgumentException($"'{text}' is not a valid {what} (a UUID).");
+
+    // ---- data quality results (plan 35 I3): numbers as invariant text and times as ISO 8601, empty for none
+
+    private static readonly System.Globalization.CultureInfo Invariant = System.Globalization.CultureInfo.InvariantCulture;
+
+    public static string Number(decimal? value) => value?.ToString(Invariant) ?? "";
+
+    public static decimal? Number(string text) => string.IsNullOrEmpty(text) ? null : decimal.Parse(text, System.Globalization.NumberStyles.Number | System.Globalization.NumberStyles.AllowExponent, Invariant);
+
+    public static string Time(DateTimeOffset? value) => value?.ToString("o", Invariant) ?? "";
+
+    public static DateTimeOffset? Time(string text) => string.IsNullOrEmpty(text) ? null : DateTimeOffset.Parse(text, Invariant, System.Globalization.DateTimeStyles.RoundtripKind);
+
+    public static CheckOutcome Outcome(string text) => text switch
+    {
+        "pass" => CheckOutcome.Pass,
+        "fail" => CheckOutcome.Fail,
+        "error" => CheckOutcome.Error,
+        _ => throw new ArgumentException($"A check's status is pass, fail or error, not '{text}'."),
+    };
+
+    public static QualityStatusMessage ToWire(CheckStatusRow row) => new()
+    {
+        CheckId = row.CheckId, Dataset = row.Dataset, Severity = row.Severity, OnError = row.OnError, Status = QualityStore.Name(row.Outcome), StatusSince = Time(row.StatusSince), LastResultId = row.LastResultId.ToString("D"),
+        Measured = Number(row.Measured), Threshold = Number(row.Threshold), EvaluatedAt = Time(row.EvaluatedAt), Blocking = row.Blocking, BlockedSince = Time(row.BlockedSince), ReleasedSince = Time(row.ReleasedSince), ReleasedBy = row.ReleasedBy ?? "",
+    };
+
+    public static CheckStatusRow FromWire(QualityStatusMessage m) => new(m.CheckId, m.Dataset, m.Severity, m.OnError, Outcome(m.Status), Time(m.StatusSince)!.Value, Guid.Parse(m.LastResultId), Number(m.Measured), Number(m.Threshold),
+        Time(m.EvaluatedAt)!.Value, m.Blocking, Time(m.BlockedSince), Time(m.ReleasedSince), m.ReleasedBy.Length == 0 ? null : m.ReleasedBy);
+
+    public static QualityRecordRequest ToWire(CheckResultRecord r)
+    {
+        var request = new QualityRecordRequest
+        {
+            CheckId = r.CheckId, Dataset = r.Dataset, Status = QualityStore.Name(r.Outcome), EvaluatedAt = Time(r.EvaluatedAt), Measured = Number(r.Measured), Threshold = Number(r.Threshold),
+            Severity = r.Severity, OnError = r.OnError, Message = r.Message ?? "", Observed = Number(r.Observed),
+        };
+        request.SampleKeys.AddRange(r.SampleKeys ?? []);
+        return request;
+    }
+
+    /// <summary>The result a request carries; its run id is the server's to set (the run that sent it).</summary>
+    public static CheckResultRecord FromWire(QualityRecordRequest m) => new(m.CheckId, m.Dataset, Outcome(m.Status), Time(m.EvaluatedAt) ?? throw new ArgumentException($"The result of the check '{m.CheckId}' has no evaluated_at."),
+        Number(m.Measured), Number(m.Threshold), [.. m.SampleKeys], null, m.Severity, m.OnError, m.Message.Length == 0 ? null : m.Message, Number(m.Observed));
 }

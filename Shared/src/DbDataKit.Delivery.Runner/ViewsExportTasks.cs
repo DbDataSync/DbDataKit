@@ -16,7 +16,7 @@ public sealed record ViewsExportSettings(TimeSpan? Every = null);
 /// <item>The subscription's own schedule (a cron in its time zone) decides what is due; two runners never take one subscription for one occurrence (<see cref="SubscriptionStore.ClaimDue"/>).</item>
 /// <item>The run ends <c>succeeded</c> when every subscription taken sent (or stopped because its subscriber lost access, which is a result, not a failure), <c>completed with failures</c> when some could not render or had no channel (the owners were told), and <b>failed</b> when the host cannot export at all (no browser: the failure names the setting).</item>
 /// </list>
-/// <b>Where it runs.</b> It is a task of the process that has the views module and the install's state (as <c>quality-system</c> runs in the host's process), because rendering as the subscriber needs the serving core: the Gateway (or the single-server install's console) hosts it. A runner on another machine would call the
+/// <b>Where it runs.</b> It is a task of the process that has the views module and the install's state, because rendering as the subscriber needs the serving core: the Gateway (or the single-server install's console) hosts it. A runner on another machine would call the
 /// views module over HTTP with a token on behalf of the subscriber, which is not built (plan 22a, open decision).
 /// </summary>
 public sealed class ViewsExportTasks(SubscriptionService subscriptions, StateDatabase state, string service = "runner")

@@ -53,6 +53,8 @@ public static class ServerProducts
         new("GET", "api/v1/settings", ServerRole.Viewer),
         new("GET", "api/v1/lineage", ServerRole.Viewer),
         new("GET", "api/v1/tracking", ServerRole.Viewer),                                                   // E18: the runner's copy of Build's tracking, its divergences and their common points
+        new("GET", "api/v1/quality", ServerRole.Viewer),                                                    // plan 35 I3: the checks its tasks evaluated, the latest result and block of each
+        new("GET", "api/v1/quality/history", ServerRole.Viewer),                                            // plan 35 I3: the newest results of one check, with the run that made each
         new("GET", "api/v1/state", ServerRole.Viewer),                                                      // 29b C05: its state database, the modules, the instances of its group
         new("GET", "api/v1/state/maintenance", ServerRole.Viewer),                                          // 29b C05: maintenance mode and whether it is idle
         new("GET", "api/v1/state/move", ServerRole.Viewer),                                                 // 29b C06: the progress of a move of its state
@@ -102,6 +104,7 @@ public static class ServerProducts
         new("PUT", "api/v1/posture-choices", ServerRole.Admin),                                                    // R19: choose a loosened default (confirmed) or take it back; audited by the runner
         new("PUT", "api/v1/instances/{id}/labels", ServerRole.Admin),                                      // UE11
         new("POST", "api/v1/tracking/divergences/{id}/resolve", ServerRole.Admin),                         // E18: archive or reset the runner's copy from the common point (audited by the runner)
+        new("POST", "api/v1/quality/release", ServerRole.Admin),                                           // plan 35 I3: release the block a failing check set (audited by the runner)
         new("POST", "api/v1/state/maintenance", ServerRole.Admin),                                         // 29b C05: put it into maintenance (it claims nothing new and reports idle) or out of it; audited by the runner
         new("POST", "api/v1/state/move", ServerRole.Admin),                                                // 29b C06: move its state to another database (in maintenance and idle); audited by the runner
         new("POST", "api/v1/upgrade", ServerRole.Admin),                                                  // UC09: prepare and apply its own upgrade

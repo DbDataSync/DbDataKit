@@ -57,6 +57,9 @@ public abstract class RunnerJob<TInput, TProgress, TSlots> : RunnerJobBase
     /// <summary>The runner's copy of Build's tracking for the connections this run holds (plan 28c E16).</summary>
     protected EngineTracking Tracking => new(Context);
 
+    /// <summary>The runner's record of the data quality checks this run evaluates (plan 35 I3): baselines read and results written in the runner's quality module, each under this run's id.</summary>
+    protected EngineQuality Quality => new(Context);
+
     private RunContext Context => _context ?? throw new InvalidOperationException("The job is not running: start it with JobRunner.RunAsync.");
 
     protected abstract Task RunAsync(CancellationToken ct);

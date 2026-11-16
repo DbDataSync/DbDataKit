@@ -78,6 +78,12 @@ service RunnerApi {
   rpc TrackingUnsettled(TrackingUnsettledRequest) returns (TrackingUnsettledReply);
   rpc TrackingDivergence(TrackingDivergenceRequest) returns (TrackingDivergenceReply);
   rpc TrackingSnapshot(TrackingSnapshotRequest) returns (TrackingSnapshotReply);
+
+  // the results of data quality checks a task evaluated, kept in the runner's quality module (plan 35 I3: additive)
+  rpc QualityBaseline(QualityCheckRef) returns (QualityBaselineReply);
+  rpc QualityStatus(QualityCheckRef) returns (QualityStatusReply);
+  rpc QualityRecord(QualityRecordRequest) returns (QualityStatusReply);
+  rpc QualityBlocks(QualityBlocksRequest) returns (QualityBlocksReply);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
@@ -690,4 +696,59 @@ message TrackingSnapshotRequest {
 
 message TrackingSnapshotReply {
   int32 rows = 1;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// data quality results (plan 35 I3): a task evaluates the checks of the datasets it wrote and the runner records each result in its quality module,
+// with the store's block rules, under the run's own id. A number is its invariant text, empty for none; a time is ISO 8601 ("o"), empty for none.
+
+message QualityCheckRef {
+  string dataset = 1;    // the dataset's lineage identity
+  string check_id = 2;
+}
+
+message QualityBaselineReply {
+  string value = 1;      // the observed reading of the latest successful evaluation, empty for none
+}
+
+message QualityStatusMessage {
+  string check_id = 1;
+  string dataset = 2;
+  string severity = 3;   // warn or block
+  string on_error = 4;   // alert or block
+  string status = 5;     // pass, fail or error
+  string status_since = 6;
+  string last_result_id = 7;
+  string measured = 8;
+  string threshold = 9;
+  string evaluated_at = 10;
+  bool blocking = 11;
+  string blocked_since = 12;
+  string released_since = 13;
+  string released_by = 14;
+}
+
+message QualityStatusReply {
+  QualityStatusMessage status = 1;   // absent: the check has none
+}
+
+message QualityRecordRequest {
+  string check_id = 1;
+  string dataset = 2;
+  string status = 3;            // pass, fail or error
+  string evaluated_at = 4;
+  string measured = 5;
+  string threshold = 6;
+  repeated string sample_keys = 7;
+  string severity = 8;          // warn or block
+  string on_error = 9;          // alert or block
+  string message = 10;
+  string observed = 11;
+}
+
+message QualityBlocksRequest {
+}
+
+message QualityBlocksReply {
+  repeated QualityStatusMessage blocks = 1;
 }

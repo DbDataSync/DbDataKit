@@ -77,6 +77,8 @@ public sealed class RefreshJob : RunnerJob<RefreshInput, NoProgress, NoSlots>
         Status($"refresh {Input.Connection} {Input.Plan}");
         // a project whose tracking is state-first writes each record to the runner's state, through the protocol, before it writes the target (plan 28c E16)
         using var journalState = TrackingJournalSource.Use(new RemoteBuildTrackingSink(Tracking));
+        // the checks of the models that loaded are evaluated after the loads, in this process, and recorded in the Runner's quality module under this run (plan 35 I3)
+        using var qualityResults = ModelQuality.UseRunner(Quality);
         var (exit, document) = await Task.Run(() => Invoke(args, Env), ct).ConfigureAwait(false);
         using var _ = document;
 

@@ -82,6 +82,11 @@ internal sealed class RunSession
     /// <summary>The run's access to the runner's copy of Build's tracking (plan 28c E16): the connections the run holds decide which identities it may write.</summary>
     public RunTracking Tracking => _tracking ??= new RunTracking(Grant.Environment.Database, Grant.Start.ConnectionHandles);
 
+    private RunQuality? _quality;
+
+    /// <summary>The run's results of data quality checks (plan 35 I3), recorded in the runner's quality module under this run's id.</summary>
+    public RunQuality Quality => _quality ??= new RunQuality(Grant.Environment.Database, Grant.Start.RunId);
+
     public ProgressStore Progress { get; }
 
     public DateTimeOffset ExpiresAt { get; }
