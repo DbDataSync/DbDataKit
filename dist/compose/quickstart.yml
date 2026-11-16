@@ -1,4 +1,4 @@
-# Everything on one machine, for trying the suite out: the console, a Gateway, a Sync server, a Build server and a Store server, and a PostgreSQL with demo data.
+# Everything on one machine, for trying the suite out: the console, a Gateway, a Sync server and a Build server, and a PostgreSQL with demo data.
 # Every server announces itself to the console and waits to be confirmed. See docs/quickstart.md. Run from the repository root:
 #   docker compose -f dist/compose/quickstart.yml up -d --build --wait
 # Not for production: the demo database has a published password and a published port.
@@ -52,21 +52,6 @@ services:
       - build-data:/data
     depends_on:
       - console
-  store:
-    build:
-      context: ../..
-      dockerfile: DbDataStore/Dockerfile
-    hostname: store
-    environment:
-      <<: *announce
-      # the login of the connection file below; a real setup keeps this in a secret
-      MDM_CONNECTION: Host=demo-db;Port=5432;Username=demo;Password=demo;Database=mdm
-    volumes:
-      - store-data:/data
-      - ./quickstart/store-connection.yaml:/data/connections/mdm.yaml:ro
-    depends_on:
-      - console
-      - demo-db
   # Demo data to point the servers at: host demo-db, port 5432, user demo, password demo, databases demo, demo_target and mdm. From the machine: localhost:15434.
   demo-db:
     image: postgres:17
@@ -89,5 +74,4 @@ volumes:
   gateway-data:
   sync-data:
   build-data:
-  store-data:
   demo-data:

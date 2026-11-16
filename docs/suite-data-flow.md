@@ -16,7 +16,7 @@ flowchart LR
     subgraph BACK["Back-end servers (private)"]
         REP["DbDataSync<br/>replications"]
         MODELS["DbDataBuild<br/>models, loads, semantic packages"]
-        STOREDEF["DbDataStore server<br/>models, rules, structure"]
+        STOREDEF["Store models (a Workspace store project)<br/>models, rules, structure; deployed by a Runner"]
     end
 
     subgraph MANAGED["Managed databases (targets the suite writes)"]
@@ -98,7 +98,7 @@ flowchart LR
     subgraph SERVERS["Back-end servers"]
         S["DbDataSync"]
         B["DbDataBuild"]
-        D["DbDataStore server"]
+        D["Store models (Workspace, Runner)"]
     end
 
     CON -->|"sign-in (OpenID Connect client)"| ID

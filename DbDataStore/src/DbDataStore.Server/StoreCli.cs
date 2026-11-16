@@ -1,134 +1,44 @@
-using System.Net.Http;
 using DbDataKit.Cli;
-using DbDataKit.Hosting.Cli;
-using DbDataKit.Web.Trust;
 
 namespace DbDataStore.Server;
 
 /// <summary>
-/// The command line, in the grammar every DbData product shares (plan 13, C02): <c>dbdatastore server run|pair|clients|unpair</c>, <c>service</c> and <c>health check</c>. <c>--repo</c> names the server's directory
-/// (<see cref="StoreSettings.DirectoryVariable"/> by default), as it does for the other products' pairing verbs.
+/// What <c>dbdatastore</c> answers without <c>--runner</c> (plan 33 SC23: the Store server is deleted, the install is four services). The program is the runtime of a Store model's package (<see cref="StoreRunnerEntry"/>) and a command line on a
+/// folder (<see cref="Router"/>: a model put into it, its tables made, the model published to the Gateways it is paired with, over the Gateway's per-kind routes until plan 30 PB02 retires them); every command of the server it was answers with
+/// the sentence that names where its feature went (<see cref="Removed"/>).
 /// </summary>
 public static class StoreCli
 {
     public const string Program = "dbdatastore";
 
-    /// <summary>Where <c>health check</c> asks by default: the server's own address, as a container sees it.</summary>
-    public const string HealthUrl = "https://localhost:8490/health/live";
+    private const string Authoring = "a Store model is authored in a store project of the Workspace (dbdataworkspace)";
+    private const string Deploy = "its tables are created, expanded and contracted from the Deploy tab of the store workspace, as the Runner tasks deploy and contract of the model's package (dbdatastore --runner is that task's runtime)";
+    private const string Rows = "its rows are written on the Rows tab against a Gateway's store module, and change requests are decided on the console's Approvals page";
 
-    public static Task<int> RunAsync(string[] args) => RunAsync(args, CliContext.Console());
-
-    public static async Task<int> RunAsync(string[] args, CliContext context)
+    /// <summary>The server's commands, each with where its feature went.</summary>
+    public static RemovedCommands Removed { get; } = new(Program, new Dictionary<string, string>
     {
-        // Ctrl+C and the service manager's stop both end `server run` cleanly.
-        using var stop = new CancellationTokenSource();
-        ConsoleCancelEventHandler onCancel = (_, e) => { e.Cancel = true; stop.Cancel(); };
-        Console.CancelKeyPress += onCancel;
-        using var terminate = System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGTERM, c => { c.Cancel = true; stop.Cancel(); });
-        try { return await Router(invocation: args).RunAsync(args, context with { Cancellation = context.Cancellation.CanBeCanceled ? context.Cancellation : stop.Token }); }
-        finally { Console.CancelKeyPress -= onCancel; }
-    }
-
-    public static NounRouter Router(Func<string, string?>? environment = null, string[]? invocation = null) => new(Program,
-    [
-        ServerNoun.Create((args, context) => RunServerAsync(args, context, environment))
-            .With([.. PairingVerbs.Create(args => StoreState.Pairing(DirectoryOf(args, environment), environment))]),
-        StoreAdminCommand.Model(),
-        StoreAdminCommand.Storage(),
-        StoreAdminCommand.Proxy(),
-        StateNoun(environment),
-        // the store is opened (and its key made on first use) only for the secret verbs
-        .. invocation is ["secret", ..] ? new[] { SecretVerbs(invocation) } : Array.Empty<Noun>(),
-        StoreService.Noun(StoreServiceEnvironment.Real()),
-        HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl),
-    ], StoreServer.Version, () => DbDataKit.State.SuiteEnvironment.OldNameProblem(environment));
-
-    /// <summary>
-    /// The shared <c>secret</c> verbs over the server's own store (<c>dbdatastore secret set dbdatakit:server:state:&lt;name&gt; --stdin</c>, with <c>--repo</c> as for the pairing verbs), so a state connection a console names by secret reference can be resolved here (plan 29b, C06). The value of a
-    /// secret comes from a hidden prompt or standard input, never an argument.
-    /// </summary>
-    private static Noun SecretVerbs(string[] invocation)
-    {
-        var i = Array.LastIndexOf(invocation, "--repo");
-        var directory = Path.GetFullPath(i >= 0 && i + 1 < invocation.Length ? invocation[i + 1] : StoreSettings.DefaultDirectory(null));
-        var store = StorePublisher.OpenSecrets(directory);
-        var cli = new DbDataKit.Secrets.Cli.SecretCli(new DbDataKit.Secrets.SecretResolverChain([store]), store, store, () => []);
-        return new Noun("secret", "The server's secrets: the logins its state connection refers to (dbdatakit:server:state:<name>)",
-            DbDataKit.Secrets.Cli.SecretNoun.Create(cli, context => DbDataKit.Secrets.Cli.SecretNoun.Captured(context, new InputConsole(context.In))).Verbs
-                .Select(v => v with { Run = (args, context) => v.Run(WithoutRepo(args), context) }).ToList());
-    }
-
-    private static string[] WithoutRepo(string[] args)
-    {
-        var i = Array.IndexOf(args, "--repo");
-        return i < 0 ? args : [.. args.Take(i), .. args.Skip(i + 2)];
-    }
-
-    /// <summary>Where a secret's value is read from: the context's standard input when it is redirected (or not the process's own), a hidden prompt on the terminal otherwise.</summary>
-    private sealed class InputConsole(TextReader input) : DbDataKit.Secrets.Cli.IConsole
-    {
-        private bool OwnTerminal => ReferenceEquals(input, Console.In) && !Console.IsInputRedirected;
-
-        public void WriteLine(string text) => Console.Out.WriteLine(text);
-        public void WriteError(string text) => Console.Error.WriteLine(text);
-        public bool IsInputRedirected => !OwnTerminal;
-        public string ReadStdin() => input.ReadToEnd();
-        public string? ReadSecret(string prompt) => OwnTerminal ? new DbDataKit.Secrets.Cli.SystemConsole().ReadSecret(prompt) : null;
-    }
-
-    /// <summary>The shared <c>state show|test|grants|init</c> verbs over the server's state: its settings come from <c>--engine</c>, the environment (<see cref="StoreState.EngineVariable"/>) and the <c>state:</c> section of <c>server.yaml</c> in its directory, else SQLite in <c>state.db</c>; built from <see cref="StoreState.Modules"/>.</summary>
-    private static Noun StateNoun(Func<string, string?>? environment) => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(
-        Program, "the server",
-        args =>
-        {
-            var directory = Path.GetFullPath(args.Get("repo") ?? StoreSettings.DefaultDirectory(environment));
-            return DbDataKit.State.Cli.StateTarget.From(StoreState.Resolve(directory, environment, args.Get("engine"), engineFlagName: "--engine"), Path.Combine(directory, StoreState.FileName), () => StoreState.Secrets(directory, environment), StoreState.SettingsFile(directory));
-        },
-        StoreState.Modules, StoreState.Scope, ["engine", "repo"], "[--engine mssql|postgres] [--repo <server directory>]"));
-
-    /// <summary>The server's certificate is self-signed, so a probe of its own address cannot validate it; it is accepted for a loopback address only, where the answer is this machine and the probe reads a status code and no body.</summary>
-    private static HttpClient LoopbackTolerantClient() => new(new HttpClientHandler
-    {
-        ServerCertificateCustomValidationCallback = (request, _, _, errors) => errors == System.Net.Security.SslPolicyErrors.None || request.RequestUri is { IsLoopback: true },
+        ["server"] = $"the Store server was deleted (plan 33 SC23). {Capitalised(Authoring)}; {Deploy}; {Rows}.",
+        ["service"] = "the Store server was deleted (plan 33 SC23), so there is no service to register: the install is four services (console, Workspace, Gateway, Runner), and a Runner starts dbdatastore --runner for a model's tasks.",
+        ["health"] = "the Store server was deleted (plan 33 SC23), so there is no server to check: check the Workspace, the Gateway and the Runner that took over its work.",
+        ["state"] = "the Store server was deleted (plan 33 SC23) with its state database: a model's runs are the Runner's (its Runs page), a row's history and audit are kept by the Gateway's store module.",
+        ["secret"] = "the Store server was deleted (plan 33 SC23) with its secret store: the login a model's storage is opened with is bound to the slot storage on the Runner (its Packages page), and the Gateway keeps its own data sources' logins.",
     });
 
-    private static string DirectoryOf(string[] args, Func<string, string?>? environment)
+    /// <summary>What the program is now, first in its help.</summary>
+    public static string About => $"{Program} is the runtime a Runner starts for the tasks of a Store model's package ({Program} {StoreRunnerEntry.Flag}) and a command line on a folder of models. The Store server was deleted (plan 33 SC23): {Authoring}; {Deploy}; {Rows}.";
+
+    /// <summary>The command line on a folder (<c>--repo</c>, by default <see cref="StoreSettings.DefaultDirectory"/>): <c>model put|publish|unpublish</c>, <c>storage create</c>, <c>gateway add|list|remove</c>.</summary>
+    public static NounRouter Router(Func<string, string?>? environment = null) => new(Program,
+        [StoreAdminCommand.Model(), StoreAdminCommand.Storage(), StoreAdminCommand.Proxy()],
+        typeof(StoreCli).Assembly.GetName().Version?.ToString() ?? "0", () => DbDataKit.State.SuiteEnvironment.OldNameProblem(environment));
+
+    public static async Task<int> RunAsync(string[] args, TextWriter output, TextWriter error)
     {
-        // the last one wins, so an option given to the service command after the registered default overrides it
-        var i = Array.LastIndexOf(args, "--repo");
-        return Path.GetFullPath(i >= 0 && i + 1 < args.Length ? args[i + 1] : StoreSettings.DefaultDirectory(environment));
+        if (await Removed.TryAnswerAsync(args, error) is { } removed) return removed;
+        if (args is [] or ["help" or "--help" or "-h"]) await output.WriteLineAsync(About + "\n");
+        return await Router().RunAsync(args, new CliContext(output, error, Console.In));
     }
 
-    private static async Task<int> RunServerAsync(string[] args, CliContext context, Func<string, string?>? environment)
-    {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "listen", "state-engine", "state-connection" });
-        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
-        {
-            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>] [--state-engine sqlite|mssql|postgres --state-connection <connection string>].");
-            return CliExit.Usage;
-        }
-        if (!Uri.TryCreate(parsed.Get("listen") ?? StoreSettings.DefaultListen, UriKind.Absolute, out var listen) || listen.Scheme != Uri.UriSchemeHttps)
-        {
-            await context.Error.WriteLineAsync("--listen is an https address, such as https://127.0.0.1:8490.");
-            return CliExit.Usage;
-        }
-
-        var directory = DirectoryOf(args, environment);
-        DbDataKit.State.StateSettings state;
-        DbDataKit.State.StateSources sources;
-        try { (state, sources) = StoreState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection")); }
-        catch (InvalidOperationException ex)
-        {
-            await context.Error.WriteLineAsync(ex.Message);
-            return DbDataKit.State.Cli.StateExit.Settings;
-        }
-
-        var settings = new StoreSettings(directory, listen) { State = state, StateSources = sources };
-        Directory.CreateDirectory(settings.Directory);
-        var app = StoreServer.Build(settings, StoreServer.Certificate(settings.Directory), line => context.Error.WriteLine(line));
-        await context.Out.WriteLineAsync($"Serving on {listen} (instance {StoreServer.InstanceId(settings.Directory, state)}). Pair a client with: dbdatastore server pair --max-role <roles> [--repo <server directory>]");
-        // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
-        await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(app, context.Cancellation);
-        return CliExit.Ok;
-    }
+    private static string Capitalised(string text) => char.ToUpperInvariant(text[0]) + text[1..];
 }

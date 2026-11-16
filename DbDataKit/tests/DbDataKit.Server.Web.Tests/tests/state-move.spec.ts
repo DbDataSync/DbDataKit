@@ -7,18 +7,18 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
 
-// Plan 29b, C06: a real DbDataStore server is paired with the console, a PostgreSQL state connection is added and tested, the server is put into maintenance and moved onto it through the wizard, and after this test restarts the server
-// the panel shows the new engine. Needs a PostgreSQL to make a fresh database on (`DBDATAKIT_TEST_E2E_PG`, an Npgsql connection string to any database of it with the right to create one; CI starts one). The Store is started and restarted by the test itself
+// Plan 29b, C06: a real DbDataWorkspace server (a DbDataStore server until plan 33 SC23 deleted it) is paired with the console, a PostgreSQL state connection is added and tested, the server is put into maintenance and moved onto it through the wizard, and after this test restarts the server
+// the panel shows the new engine. Needs a PostgreSQL to make a fresh database on (`DBDATAKIT_TEST_E2E_PG`, an Npgsql connection string to any database of it with the right to create one; CI starts one). The Workspace server is started and restarted by the test itself
 // (a restart is what the move asks the operator for), in a directory of its own. The console is the one of playwright.config.ts (its directory is the same temporary folder).
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
 const consoleDll = path.join(repoRoot, 'DbDataKit/src/DbDataKit.Server/bin/Debug/net10.0/dbdatakit.dll')
-const storeDll = path.join(repoRoot, 'DbDataStore/src/DbDataStore.Server/bin/Debug/net10.0/dbdatastore.dll')
+const storeDll = path.join(repoRoot, 'DbDataWorkspace/src/DbDataWorkspace.Server/bin/Debug/net10.0/dbdataworkspace.dll')
 const scratchDirectory = process.env.DBDATAKIT_E2E_CONSOLE_DIR ?? path.join(os.tmpdir(), 'dbdatakit-console-e2e')
-const storeDirectory = path.join(os.tmpdir(), 'dbdatakit-console-e2e-state-store')
+const storeDirectory = path.join(os.tmpdir(), 'dbdatakit-console-e2e-state-workspace')
 const storePort = Number(process.env.DBDATAKIT_E2E_STATE_STORE_PORT ?? 8495)
 const storeUrl = `https://localhost:${storePort}`
 const admin = process.env.DBDATAKIT_TEST_E2E_PG
-const storeName = 'Store state e2e'
+const storeName = 'Workspace state e2e'
 const connectionName = 'e2e-state-pg'
 
 /**
@@ -51,7 +51,7 @@ async function startStore() {
     if (up) return
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
-  throw new Error('The Store server did not start.')
+  throw new Error('The Workspace server did not start.')
 }
 
 async function stopStore() {
@@ -106,10 +106,10 @@ test.describe.serial('moving a server\'s state from the console', () => {
     await client.end()
   })
 
-  test('add a PostgreSQL state connection, test it, move the Store onto it and see the new engine after its restart', async ({ page, context, baseURL }) => {
+  test('add a PostgreSQL state connection, test it, move a Workspace server onto it and see the new engine after its restart', async ({ page, context, baseURL }) => {
     await signInNewAdmin(page, context, baseURL!)
 
-    // pair the Store: a code from its own command line, the pairing form of the Servers page
+    // pair the server: a code from its own command line, the pairing form of the Servers page
     const code = /Pairing code: (\S+)/.exec(runStore('server', 'pair', '--max-role', 'admin'))![1]
     await page.goto('/instances')
     await page.getByTestId('pair-url-input').fill(storeUrl)
@@ -151,7 +151,7 @@ test.describe.serial('moving a server\'s state from the console', () => {
     // the wizard: the server cannot yet resolve the password, and says which command sets it on that machine
     await page.getByTestId('move-target').selectOption(connectionName)
     await page.getByTestId('move-check').click()
-    await expect(page.getByTestId('move-checks')).toContainText(`dbdatastore secret set dbdatakit:server:state:${connectionName}`)
+    await expect(page.getByTestId('move-checks')).toContainText(`dbdataworkspace secret set dbdatakit:server:state:${connectionName}`)
     await expect(page.getByTestId('move-start')).toHaveCount(0)
 
     // the operator sets it there, then the checks pass

@@ -15,7 +15,6 @@
     "@dbdatakit/build": "*",
     "@dbdatakit/gateway": "*",
     "@dbdatakit/runner": "*",
-    "@dbdatakit/store": "*",
     "@dbdatakit/store-ui": "*",
     "@dbdatakit/shell": "*",
     "@dbdatakit/sync": "*",

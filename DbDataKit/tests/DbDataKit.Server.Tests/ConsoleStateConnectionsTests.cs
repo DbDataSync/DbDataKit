@@ -34,11 +34,11 @@ public sealed class ConsoleStateConnectionsTests : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        store = await PairableServer.StartAsync(product: "dbdatastore", instanceId: "store-1", map: (server, _, _) =>
+        store = await PairableServer.StartAsync(product: "dbdataworkspace", instanceId: "store-1", map: (server, _, _) =>
         {
             server.MapGet("/api/v1/state", () => Results.Json(new JsonObject
             {
-                ["product"] = "dbdatastore", ["engine"] = serverEngine, ["connection"] = serverConnection, ["file"] = serverEngine == "Sqlite" ? "/var/store/state.db" : null,
+                ["product"] = "dbdataworkspace", ["engine"] = serverEngine, ["connection"] = serverConnection, ["file"] = serverEngine == "Sqlite" ? "/var/store/state.db" : null,
                 ["maintenance"] = new JsonObject { ["enabled"] = false, ["idle"] = false },
             }));
             server.MapPost("/api/v1/state/move", async (HttpContext context) =>
@@ -217,13 +217,13 @@ public sealed class ConsoleStateConnectionsTests : IAsyncLifetime
         dryRunReason = "secretmissing";
         var missing = (await Call(HttpMethod.Post, "/api/state-moves/preflight", new { server = "Store one", connection = "target" })).Body!;
         Assert.False((bool)missing["ok"]!);
-        Assert.Contains(missing["checks"]!.AsArray(), c => (string?)c!["name"] == "server has the secret" && ((string?)c["sentence"])!.Contains("dbdatastore secret set dbdatakit:server:state:target"));
+        Assert.Contains(missing["checks"]!.AsArray(), c => (string?)c!["name"] == "server has the secret" && ((string?)c["sentence"])!.Contains("dbdataworkspace secret set dbdatakit:server:state:target"));
 
         // a server too old for the call: the command line way
         offersMove = false;
         var old = (await Call(HttpMethod.Post, "/api/state-moves/preflight", new { server = "Store one", connection = "target" })).Body!;
         Assert.False((bool)old["ok"]!);
-        Assert.Contains(old["checks"]!.AsArray(), c => ((string?)c!["sentence"])!.Contains("dbdatastore state move --to-engine"));
+        Assert.Contains(old["checks"]!.AsArray(), c => ((string?)c!["sentence"])!.Contains("dbdataworkspace state move --to-engine"));
     }
 
     [Fact]

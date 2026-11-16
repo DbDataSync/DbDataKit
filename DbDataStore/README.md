@@ -1,29 +1,26 @@
 # DbDataStore
 
 Master data models kept in your own databases: entities, attributes, keys, references and rules written as `model/1` files, validated writes, history and audit, changes to structure by plan and approval (plans 15 and 19, lane Z).
-It is a server with a management API, paired with consoles like the other products; reads and writes of the data itself are served by the serving layer (plan 20).
+**The Store server was deleted (plan 33 SC23);** the install is four services (console, Workspace, Gateway, Runner), and what the server did is done where the work is:
+
+| What | Where it is now |
+| --- | --- |
+| Authoring a model (form and YAML, the check as you type) | a `store` project of the Workspace (`StoreModelPanel.tsx`) |
+| Its tables: create, expand (dry run first), contract by an approved plan | the Deploy tab of the store workspace, as the Runner tasks `deploy` and `contract` of the model's package, run by `dbdatastore --runner` |
+| Rows of an entity: validated writes, history, audit | the Gateway's store module (`GroupStoreApi`), edited on the Rows tab of the store workspace with the `@dbdatakit/store-ui` controls |
+| Change requests | the Gateway's store module, decided on the console's Approvals page |
+| Publishing a model to a Gateway | the Workspace's publish of the store project (an `entity-model` definition) |
+
+The program `dbdatastore` is that runtime and a command line on a folder of models (`--repo`, by default `DBDATAKIT_DATA_STORE` or the folder `store` under `DBDATAKIT_DATA`). The commands of the server (`server`, `service`, `health`, `state`, `secret`) answer with the sentence that names where their feature went.
 
 ```
-dbdatastore server run [--repo <server directory>] [--listen https://127.0.0.1:8490]
-dbdatastore server pair --max-role <roles> [--repo <server directory>]
-dbdatastore server clients | unpair <client> [--repo <server directory>]
-dbdatastore service install|uninstall|status|start|stop|restart|doctor|unit
-dbdatastore state init --topology service|group|install [--engine mssql|postgres --connection <connection with Password=secret:NAME or env:NAME>] [--login <role or user> [--migrate]] [--admin-connection <reference> --apply] [--group <name>] [--settings <file>] [--repo <server directory>]   # writes the state section of server.yaml (a SQLite file per service is the default)
-dbdatastore state show [--offline] [--engine mssql|postgres] [--repo <server directory>]      # the state database: engine, where each setting came from, namespaces, module versions, pending migrations; creates nothing
-dbdatastore state test [--repo <server directory>]                   # opens it read-only and checks rights, engine version and clashes; stops at the first failure with the fix
-dbdatastore state grants --login <database role or user> [--migrate] [--repo <server directory>]
-dbdatastore state export --to <directory> [--include-secrets-check] [--repo <server directory>]   # the pairings and pairing codes as a snapshot; stop the server first
-dbdatastore state import --from <directory> [--migrate-after true|false] [--repo <server directory>]   # into an empty directory's state
-dbdatastore state verify --snapshot <directory> [--db] [--rehash-payloads] [--repo <server directory>]   # the snapshot against itself, or the state against it
-dbdatastore state move --to-engine <engine> [--to-connection <string>] [--yes] [--repo <server directory>]   # the server's state is SQLite only for now: it says so and points to export and import
-dbdatastore secret set|list|delete|... [--repo <server directory>]   # the server's own secret store (the shared secret verbs): the password a console's state connection refers to is dbdatakit:server:state:<name> (plan 29b C06)
-dbdatastore model put --file <model.yaml> [--name <model>] [--repo <server directory>]      # checked first, then saved
-dbdatastore storage create --model <model> [--repo <server directory>]                      # the tables of the model's own copy, on connections/<name>.yaml
-dbdatastore gateway add <name> --url <https address> --code <code> [--repo <server directory>]   # pair with a serving group as a publishing client
-dbdatastore gateway list | remove <name> [--repo <server directory>]
-dbdatastore model publish <model> [--proxy <name>] [--dry-run] [--repo <server directory>]   # make the model as it is now available: its tables, then every group it is published to
-dbdatastore model unpublish <model> --proxy <name> [--repo <server directory>]
-dbdatastore health check [--url <url>]
+dbdatastore --runner                                                                          # what a Runner starts for a model's task (deploy, contract)
+dbdatastore model put --file <model.yaml> [--name <model>] [--repo <folder>]                  # checked first, then saved
+dbdatastore storage create --model <model> [--repo <folder>]                                  # the tables of the model's own copy, on connections/<name>.yaml
+dbdatastore gateway add <name> --url <https address> --code <code> [--repo <folder>]          # pair with a serving group as a publishing client
+dbdatastore gateway list | remove <name> [--repo <folder>]
+dbdatastore model publish <model> [--proxy <name>] [--dry-run] [--repo <folder>]              # its tables, then every group it is published to
+dbdatastore model unpublish <model> --proxy <name> [--repo <folder>]
 ```
 
 ## What it is for
@@ -33,7 +30,7 @@ Data that people and agents own and change, rather than data replicated, built o
 Principles:
 
 - **Master data is ordinary tables on an ordinary engine.** Every consumer reads it with what it already has (a connection, a mapped model, a data source). There is no special read protocol.
-- **Writes go through the service; reads do not have to.** Validation, history, approval and audit live in the write path (`DbDataKit.Store`, used by this server and by the serving layer's `store` module, plan 20).
+- **Writes go through the service; reads do not have to.** Validation, history, approval and audit live in the write path (`DbDataKit.Store`, used by the serving layer's `store` module, plan 20).
 - **User data is never broken.** A change to a model's structure keeps its rows, or is refused, or is an explicit approved migration.
 - **Agents propose, people approve** where the model says so.
 
@@ -77,11 +74,11 @@ entities:
 
 `ModelStorage.Plan(model, engine)` makes a schema named like the model, a table per entity (types from the shared dialect, NOT NULL for required and key attributes), primary and unique keys, foreign keys for references inside the model (a reference to another model is checked on write), a `_version` column and the `_audit` table. It only creates: a table already there refuses the whole creation. Statements are `DbDataKit.Schema`'s `TableDdl`, the table-structure planner that Build also uses (structure model, drift classification, risk-classed changes).
 
-A newer version of a model is migrated per copy with `POST /api/v1/models/{m}/migrate` (administrator, a dry run unless `?apply=true`): it adds new tables and new columns (nullable) and says what it left. Every saved model text is kept under its SHA-256, so a copy runs the version it was made at (`GET .../migrations`: `current`, `behind`, `unknown`). That is the expand step. The **contract step** is `POST /api/v1/models/{m}/migrate/contract` (also under `/instances/{i}`; administrator): it plans, for this copy's tables, dropping each column the model no longer has and making each column the model requires NOT NULL (an expand adds it nullable), and answers `steps` (the statements), `hash` (of exactly this plan), `blocked`, `notes` and `copies` (each copy of the model and whether it is `current`, `behind` or `unknown`, so a copy still at the old version is named before a column it reads is dropped). It changes nothing until it is approved: `?approve=<hash>` with the hash of a plan that was read runs that plan in one transaction, or nothing (a plan that changed since is refused, and so is a column that some row has no value for, naming the column and the count). A copy that has had both steps runs the model as it is now; a copy at the old version is untouched until it is asked. Retyping a column and changes to history or instances are not applied (planned changes of their own), and the contract step does not yet ask which published packages still read a column (plan 21 CH06).
+A newer version of a model is brought to its tables in two steps (`ModelStorage`): the **expand** step adds new tables and new columns (nullable) and says what it left; the **contract** step plans dropping each column the model no longer has and making each column it requires NOT NULL, answers the statements with a `hash` of exactly that plan, and changes nothing until that hash is approved, then runs that plan in one transaction or nothing. Both run on a Runner as the tasks `deploy` and `contract` below; the Workspace asks the Gateways it publishes to who reads a column before it starts an approved contract (plan 21 CH06).
 
-### Deploying on a Runner (no Store server)
+### Deploying on a Runner
 
-A model's tables are also deployed by a Runner, with no Store server installed (plan 33 SC24). `dbdatastore` is then a runtime:
+A model's tables are deployed by a Runner (plan 33 SC24; the Store server's own routes for this went with it in SC23). `dbdatastore` is then a runtime:
 `DbDataStore/scripts/publish-runtime.sh [rid]` makes the runtime package `dbdatastore-runtime` (the program and the manifest of
 `scripts/runtime-manifest.sh`, which starts `dbdatastore --runner`). A model becomes a definition package with
 `ModelDeployPackage.Build` (`DbDataKit.DataModel.Runner`): one manual-only task, `deploy`, one connection slot, `storage`,
@@ -91,69 +88,23 @@ the model's storage when the schema has nothing of it, adds what is missing when
 nothing; a change that would remove or retype is left for a contract step (noted in the run's `deploy-report` step) and a
 blocked one fails the run without writing. The run is recorded under the name of whoever started it.
 
-## Writing data
-
-`ModelWriter` applies a batch of inserts, updates and deletes in one transaction: values are read as the type holds them, every rule above is checked (the cross-row rules once per batch on the touched groups, so a batch can move a total between rows), and **every rule broken is reported at once** (rule, entity, attribute, key, a sentence; HTTP 422), writing nothing. An update or delete **names the version it read**; a changed row is a conflict (409, with the current version). Keys do not change. A delete that leaves a row pointing at it is refused. Each change writes an audit record in the same transaction (UUID v7 id, who, the versions, before and after).
-
-`GET .../entities/{e}/rows?limit=&offset=` lists a page, `.../row?key.<a>=<v>[&as_of=|&history=true]` reads one, `GET .../schema` describes the model for forms and typed clients. Roles: authors and administrators write; the token's user is the audit actor.
-
-## Change requests
-
-A write waits as a change request when it is an agent's (a token whose subject starts with `agent:`) and the model does not say `agents: direct`, or when anyone's and the model has `approval.changes` of `steward` or `owner` (`ChangeApproval`). Approving applies the changes as proposed through the same writer; a request they break stays pending. A steward's approval needs the author role, an owner's an administrator, and an agent never decides. Details are under "Change requests" below.
-
-## Change events
-
-An applied change (a direct write, or the approval of a change request; never a refused write or a rejected request) is one line of `events.jsonl` in the server's directory: `seq` (only grows), `change_id` (the change request's id when it waited, else the write's own), model, instance, the entities touched, how many changes, who, when. `GET /api/v1/events?after=<seq>&model=<m>&limit=<n>` (viewer; default 100, at most 1000) answers the events after the last sequence a consumer saw, with `last` to keep and `first` (the oldest sequence still kept: the file is cut to its newest half past 4 MB, so a reader that was away for long sees a `first` beyond what it asked for). A write whose event could not be recorded is not undone. The scheduler's "on change" trigger that would use this, and the events of a model published to a serving group (it is written there), are plan 15's.
-
-**Serving groups hear an applied write** (plan 24a UC13). The same applied write (a direct one or an approved change request; never a draft, a refused write or a rejected request) also tells the serving groups this server is paired with (`gateway add`, the pairing it publishes with) which entities changed: a `data.changed/1` message (`DbDataKit.Serving.Notify`) with the entity named as lineage names the model's table (`LineageIdentity.Dataset` over the model's connection address and the copy's schema), the change request's id as the run when there is one, and no row data. A completion has no person, so **the server signs as itself** (its own pairing key, the name `store server`, the Publisher role). A group whose lineage graph does not know the table does nothing, so the pairing may be a group that serves other things. Delivery is in the background, tried twice, and never fails the write that was committed; a failure is a line in the server's log and a counter. No pairing sends nothing. `StoreDataChangedTests` and, with PostgreSQL and SQL Server, `StoreDataChangedEngineTests`.
-
-## Drafts of previews: how long they live
-
-A draft with no write for `previews.idle_days` days (30) is removed with its writes; a notice goes into the notification feed `previews.notice_days` days (7) before, once, and one after the removal (kinds `PreviewExpiring`, `PreviewRemoved`). The pass runs hourly over every copy of every model and reads the `previews:` section of `server.yaml` again each time, so an edit applies without a restart (a section that does not parse is logged and the last good one stays; at start it stops the server, naming the file). `GET /api/v1/notifications[?since_id=n]` (viewer) is the feed the console's Monitoring shows. The same expiry runs on the Gateway for the drafts of its store module and the apps host's previews (`store.idleDays`, `store.noticeDays`).
-
-## Published models
-
-Reads and writes of the data itself are served by the serving layer from the models this server publishes to it, so they continue with this server stopped; see "Publishing to the serving layer" below. Structure changes stay here.
-
 ## Decisions
 
 - The name is DbDataStore; the table-structure planner is `DbDataKit.Schema`, shared with Build.
 - History is versioned and effective-dated; application-managed first.
-- Reads and writes are served by the serving layer (plan 20), not by a server of this product; this server keeps models and structure.
+- Reads and writes are served by the serving layer (plan 20); models are authored in the Workspace and their structure is deployed by a Runner (plan 33 SC23, SC24): there is no Store server.
 - Instances of a model are separate copies (schema or connection) or shared tables split by an instance id.
-
-## The state database
-
-`state.db` in the server's directory (SQLite) unless the `state:` section of `server.yaml` names another engine (plan 29b C07): `state: {engine: postgres, connection: "Host=db;Database=dbdatastore_state;Username=store;Password=env:STORE_STATE_PASSWORD", namespaces: {...}, retention: {days: 30}}`. The first place that names a setting wins: `server run --state-engine ... --state-connection ...` (the `state` verbs take `--engine`), then `DBDATAKIT_STATE_STORE_ENGINE` and `DBDATAKIT_STATE_STORE_CONNECTION` (else the install-wide `DBDATAKIT_STATE_ENGINE` and `DBDATAKIT_STATE_CONNECTION`), then the file, then SQLite. A password is a reference (`secret:` from the server's own store, or `env:`). A setting that is not one is refused naming `server.yaml` and the nearest setting that is; `state show` says where each value came from; `state init` writes this file. A server with no `state:` section behaves as before.
 
 ## Publishing to the serving layer
 
-Reads and writes of master data are served by the serving layer (plan 20), from the models this server publishes to it, so they go on with this server stopped. Pair once with the serving group as a publishing client, with a code its administrator made (`dbdatagateway server pair --max-role publisher`): `dbdatastore gateway add edge --url https://serving.example:8815 --code <code>`.
+The Workspace publishes a store project's models to a Gateway (the four-service way). The command line also publishes a model from a folder, over the Gateway's per-kind routes (until plan 30 PB02 retires them; it is what the apps stories and the compose quickstart use). Pair the folder once with the serving group as a publishing client, with a code its administrator made (`dbdatagateway server pair --max-role publisher`): `dbdatastore gateway add edge --url https://serving.example:8815 --code <code>`.
 
 **Publishing is the one act that makes the model you are working on available** (plan 20 O10b). Editing a model's file changes nothing for anyone; `dbdatastore model publish <model>` (the first time with `--proxy <name>`; after that, to every group the model is published to):
 
 1. brings the model's tables to it: creates them when there are none, otherwise only adds to them (a change that needs more, such as a narrower type, is refused and nothing is published);
-2. pins this server's copy to that version;
+2. pins the folder's copy to that version;
 3. sends that version to each group, with the write login of the model's connection (kept by the group as its secret, encrypted with its key) and a data source of the same name that refers to it.
 
-A change to rules only (a new `pattern`, a new `max`) is published the same way, with nothing to run on the tables. `--dry-run` lists the statements and the groups and changes nothing. A group that does not take the version (it cannot be reached) keeps the one it had, and the answer says so: the tables and this server's copy are at the new version, and publishing again sends it. Publishing again with no edit sends the same version, which a group takes as unchanged.
+A change to rules only (a new `pattern`, a new `max`) is published the same way, with nothing to run on the tables. `--dry-run` lists the statements and the groups and changes nothing. A group that does not take the version (it cannot be reached) keeps the one it had, and the answer says so: the tables and the folder's copy are at the new version, and publishing again sends it. Publishing again with no edit sends the same version, which a group takes as unchanged.
 
-**A published model is read and written in its groups only.** This server refuses its rows, changes and change requests (409, naming the groups), and applying a migration or creating its tables here, so one definition is ever enforced on its tables; a dry-run migration still answers. `dbdatastore model unpublish <model> --proxy <name>` takes it off a group; off every one, this server reads and writes it again. A model with instances cannot be published yet (a group serves a model's own copy only), and its approval settings go with it; permissions per entity are not in `model/1` yet.
-
-## What is served
-
-`/health` and `/version` answer without a token. Everything under `/api` needs a token a paired console issued, within the roles the pairing allowed. So far there is `GET /api/v1/info` (the product, its version and its instance id) and the state endpoints every server has: `GET /api/v1/state` (viewer: the engine, the connection with secrets masked, the modules' versions in the registry against this binary, the migrations pending, where each setting came from and the other live instances) and `GET`/`POST /api/v1/state/maintenance` (viewer reads, admin sets `{"enabled": true, "reason": "..."}`: the server answers 503 with `Retry-After` and the reason to everything but these calls, the health endpoints and an administrator, and reports `idle` when what was in flight has finished; audited as `state.maintenance`, refusals too; nothing is persisted, a restart leaves maintenance). See `Shared/src/DbDataKit.State.Api/README.md`. The Store keeps this audit in `management-audit.log` beside `server.yaml`. `GET`/`POST /api/v1/state/move` (plan 29b C06): the server moves its own state when a console asks, from a frozen server (maintenance and idle), writing the `state:` section of `server.yaml`; the console passes the password as a secret reference the server resolves in its own store (`dbdatastore secret set dbdatakit:server:state:<name> --stdin`).
-
-## In a container
-
-**Data quality checks on the entities (plan 23a FQ11).** The `checks:` section of a `model/2` file (the `check/1` kinds: `not_null`, `unique`, `accepted_values`, `range`, `referential`, `freshness`, `row_count_change`; severity `warn` or `block`) is evaluated **beyond the write rules**, which stay validation at write time: it finds rows made invalid in other ways (a direct insert or update, a model changed since). Each entity a check names is a dataset under the identity its table has on the model's connection (the one the lineage graph uses); the checks run over the model's connection through the provider's read-only recipe, with the connection file's `read_login` when it has one and its write login otherwise, one `SELECT` per check (the evaluator refuses any other statement); the sample keys are the entity's key columns. `POST /api/v1/quality/run` (body `{"dataset": "<entity or identity>"}`, empty for every dataset; administrator) evaluates and records the results in the `quality` module of the server's state database; `GET /api/v1/quality` (viewer) lists every dataset with each check's latest result and block, and `GET /api/v1/quality/history?dataset=...&check=...` its results with the keys of the rows that failed: the console's Quality page reads them (and its Evaluate button calls the first). A `block` check that fails sets a block for what depends on the entity, not for the Store's own writes (plan 23a D7). An administrator can **release** the block (`POST /api/v1/quality/release`, body `{"dataset": "<identity>", "check": "<id>"}`, audited in `management-audit.log`): the check still fails and is still recorded, what depends on the entity goes on, and the release ends when the check passes. A model that keeps a copy per instance is not evaluated (the answer says so). No schedule yet: on request, or by the runner's `quality-system` package once a runner publishes it.
-
-`DbDataStore/Dockerfile` (build from the repository root: `docker build -f DbDataStore/Dockerfile -t dbdatastore .`) runs the server as an unprivileged user on `https://0.0.0.0:8490`, with `/data` as its directory and a health check. `dist/compose/store.yml` starts it with the console image: the server announces itself on the console's private port and waits to be confirmed (`docker compose -f dist/compose/store.yml exec console dotnet /app/dbdatakit.dll instance confirm dbdatastore`, or in the console's Servers page). `dist/compose/check.sh dist/compose/store.yml dbdatastore` does it all and checks the console lists the server as ready.
-
-## The console's screens
-
-The console shows a Store at `/servers/<server>`: the models, and per model its definition (`/model/<name>`: a form and YAML of the same `model/1` text, the loader's diagnostics as you type, Save quoting the version read, remove for an administrator), its storage (create the tables, migrate by adding) and its change requests (read, approve, reject). Every text that is saved is kept under its version, and a journal beside it (`models/versions/<model>/journal.jsonl`) records who saved it and when (`created`, `saved`, `removed`; a save of the text the model already holds is not an entry; a text kept before the journal has the time its file was written and no author). `GET /api/v1/models/<m>/history` lists the entries newest first (viewer; `current` is the version held now, `exists` is false for a removed model, whose history stays readable) and `GET .../history/<version>` reads one text. The model page's History tab shows them with a diff against the model now; Restore is an ordinary save of that text quoting the version read, so it is checked, journalled and refused as stale like any save. `GET /api/v1/models/<m>` answers the text with `version` (the SHA-256 a save quotes as `PUT ...?expected_version=`; a model changed or removed since answers 409 with `current_version`) and `can` (`save`, `remove`, `admin`: what the caller's roles allow, so a screen offers only that; every route checks again).
-
-## Change requests
-
-A write that must wait for a person is kept as a change request. An agent's write waits unless the model says `approval: {agents: direct}`; anyone's waits when the model has `approval: {changes: steward}` or `owner`. `POST /api/v1/models/<m>/changes` first runs every rule and version check as a write would (a dry run in the same transaction, rolled back), so a proposal that breaks a rule, names a row that is not there or quotes a stale version is refused with the answer a direct write gets (422, 404, 409) and nothing is kept; when the database cannot be reached or has no tables yet the check cannot be made and the request is kept with `"checked": false` and `check_problem`. It then answers 202 with the request; `GET /requests[?state=pending]` lists them, `GET /requests/<id>` shows one, and `POST /requests/<id>/approve` (or `/reject`, each with an optional `{"note": "..."}`) decides it. Approving applies the changes as they were proposed, through the same writer and its rules; a request they break stays pending. A steward's approval needs the author role, an owner's an administrator, and an agent (a token whose subject starts with `agent:`) never decides. `GET /requests` also answers `can_decide` (whether this caller may decide on this model), `decision_needs` (the role the model's approval asks for) and `approval`, which the console's review screen uses to say why its buttons are off. A person may approve their own request: the Store has no such rule (`approval: owner` is how a model asks for an administrator).
+**A published model is read and written in its groups only** (the Gateway's store module). `dbdatastore model unpublish <model> --proxy <name>` takes it off a group. A model with instances cannot be published yet (a group serves a model's own copy only), and its approval settings go with it; permissions per entity are not in `model/1` yet.

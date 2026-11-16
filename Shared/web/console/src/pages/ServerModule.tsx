@@ -11,8 +11,12 @@ const BuildModule = lazy(() => import('@dbdatakit/build').then((m) => ({ default
 const GatewayModule = lazy(() => import('@dbdatakit/gateway').then((m) => ({ default: m.GatewayModule })))
 const IdentityHomeModule = lazy(() => import('@dbdatakit/gateway').then((m) => ({ default: m.IdentityHomeModule })))
 const RunnerModule = lazy(() => import('@dbdatakit/runner').then((m) => ({ default: m.RunnerModule })))
-const StoreModule = lazy(() => import('@dbdatakit/store').then((m) => ({ default: m.StoreModule })))
 const WorkspaceModule = lazy(() => import('@dbdatakit/workspace').then((m) => ({ default: m.WorkspaceModule })))
+
+/** The servers plan 33 SC23 deleted, with where their work went: a console that still lists one says so instead of "no screens yet". */
+export const removedProducts: Record<string, string> = {
+  dbdatastore: 'The Store server was deleted (plan 33 SC23): a model is authored in a store project of the Workspace, its tables are deployed from the Deploy tab there as Runner tasks, its rows are written on the Rows tab against a Gateway, and change requests are decided on the Approvals page.',
+}
 
 /** What a person sees while a module loads or when there is none for this server. */
 function Notice({ children, testId }: { children: string; testId: string }) {
@@ -35,7 +39,8 @@ export function ServerModule() {
   if (instances.isLoading) return null
   if (!found) return <Notice testId="module-no-server">That server is not paired with this console.</Notice>
   if (!found.reachable) return <Notice testId="module-unreachable">{`${found.name} is not answering: ${found.problem ?? 'no answer'}.`}</Notice>
-  const Module = found.product === 'dbdatasync' ? SyncModule : found.product === 'dbdatabuild' ? BuildModule : found.product === 'dbdatagateway' ? GatewayModule : found.product === 'dbdatastore' ? StoreModule : found.product === 'dbdatarunner' ? RunnerModule : found.product === 'dbdataworkspace' ? WorkspaceModule : found.product === 'dbdatakit-identity' ? IdentityHomeModule : null
+  const Module = found.product === 'dbdatasync' ? SyncModule : found.product === 'dbdatabuild' ? BuildModule : found.product === 'dbdatagateway' ? GatewayModule : found.product === 'dbdatarunner' ? RunnerModule : found.product === 'dbdataworkspace' ? WorkspaceModule : found.product === 'dbdatakit-identity' ? IdentityHomeModule : null
+  if (found.product && removedProducts[found.product]) return <Notice testId="module-removed">{removedProducts[found.product]}</Notice>
   if (Module === null) return <Notice testId="module-none">{`The console has no screens for ${found.product ?? 'this kind of server'} yet.`}</Notice>
 
   return (

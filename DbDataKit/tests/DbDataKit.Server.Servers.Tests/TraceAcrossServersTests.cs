@@ -5,14 +5,14 @@ using DbDataKit.Server;
 using DbDataKit.State;
 using DbDataKit.Telemetry;
 using DbDataKit.Web.Trust;
-using DbDataStore.Server;
+using DbDataWorkspace.Server;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DbDataKit.Server.Servers.Tests;
 
 /// <summary>
-/// Plan 22a GP29: a request to the console that it relays to a paired server (a real DbDataStore server, in this process) is one trace. The console's request span and the server's request span have the same trace id, the server's is a
+/// Plan 22a GP29: a request to the console that it relays to a paired server (a real DbDataWorkspace server, in this process; a Store server until plan 33 SC23 deleted it) is one trace. The console's request span and the server's request span have the same trace id, the server's is a
 /// child of the console's (the W3C <c>traceparent</c> header the relay adds), and a caller's own <c>traceparent</c> is the root of both. The bearer of the person's session, the signed management token and a query string are in no attribute.
 /// </summary>
 public sealed class TraceAcrossServersTests : IAsyncLifetime
@@ -35,16 +35,16 @@ public sealed class TraceAcrossServersTests : IAsyncLifetime
         File.WriteAllText(Path.Combine(storeDirectory, "server.yaml"), section);
         File.WriteAllText(Path.Combine(consoleDirectory, ConsoleSettings.SettingsFileName), section);
 
-        var storeSettings = new StoreSettings(storeDirectory, new Uri("https://127.0.0.1:0"));
-        store = StoreServer.Build(storeSettings, StoreServer.Certificate(storeDirectory), _ => { });
+        var storeSettings = new WorkspaceSettings(storeDirectory, new Uri("https://127.0.0.1:0"));
+        store = WorkspaceServer.Build(storeSettings, WorkspaceServer.Certificate(storeDirectory), _ => { });
         await store.StartAsync();
         var consoleSettings = new ConsoleSettings(consoleDirectory, new Uri("https://localhost:0"));
         console = ConsoleHost.Build(consoleSettings, ConsoleHost.Certificate(consoleDirectory), _ => { }, webRoot: Path.Combine(consoleDirectory, "none"));
         await console.StartAsync();
         http = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true, UseCookies = false }) { BaseAddress = new Uri(console.Urls.First()) };
         session = console.Services.GetRequiredService<ISessionStore>().Create(console.Services.GetRequiredService<IUserAccounts>().CreateUser("Admin person", null, UserRole.Admin).Id).Id;
-        var code = StoreState.Pairing(storeDirectory).Codes().Create(ServerRoles.Close(ServerRole.Viewer));
-        storeId = (await console.Services.GetRequiredService<ConsoleInstances>().PairAsync(new Uri(store.Urls.First()), code.Code, "Store", default)).InstanceId;
+        var code = WorkspaceState.Pairing(storeDirectory).Codes().Create(ServerRoles.Close(ServerRole.Viewer));
+        storeId = (await console.Services.GetRequiredService<ConsoleInstances>().PairAsync(new Uri(store.Urls.First()), code.Code, "Workspace", default)).InstanceId;
     }
 
     public async ValueTask DisposeAsync()
@@ -68,23 +68,23 @@ public sealed class TraceAcrossServersTests : IAsyncLifetime
     {
         var callerTrace = ActivityTraceId.CreateRandom();
         var callerSpan = ActivitySpanId.CreateRandom();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/relay/{storeId}/api/v1/info?secret_query=QUERY-SENTINEL-29");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/relay/{storeId}/api/v1/projects?secret_query=QUERY-SENTINEL-29");
         request.Headers.Add("Cookie", $"{ConsoleHost.Auth.SessionCookie}={session}");
         request.Headers.Add("traceparent", $"00-{callerTrace.ToHexString()}-{callerSpan.ToHexString()}-01");
         using var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("dbdatastore", (string)JsonNode.Parse(await response.Content.ReadAsStringAsync())!["product"]!);
+        Assert.NotNull(JsonNode.Parse(await response.Content.ReadAsStringAsync()));   // the Workspace relays a call of its table only (ServerProducts.WorkspaceRoutes): the list of projects
         capture.Flush(console.Services);
         capture.Flush(store.Services);
 
         var spans = Spans().Where(s => s.TraceId == callerTrace).ToList();
         var consoleSpan = Assert.Single(spans, s => Product(s) == "dbdatakit" && s.Kind == ActivityKind.Server);
         // the server's spans of this trace (the console also asks what the server is, on the same trace)
-        var storeSpans = spans.Where(s => Product(s) == "dbdatastore" && s.Kind == ActivityKind.Server).ToList();
+        var storeSpans = spans.Where(s => Product(s) == "dbdataworkspace" && s.Kind == ActivityKind.Server).ToList();
         Assert.NotEmpty(storeSpans);
         Assert.Equal(callerSpan, consoleSpan.ParentSpanId);            // the caller's traceparent is the root
         Assert.All(storeSpans, s => Assert.Equal(consoleSpan.SpanId, s.ParentSpanId));   // the relay passed the console's span on: W3C traceparent across the relay
-        Assert.Contains(storeSpans, s => (string?)s.GetTagItem("http.route") == "/api/v1/info");
+        Assert.Contains(storeSpans, s => (string?)s.GetTagItem("http.route") == "/api/v1/projects");
 
         // the scrub over every span and label of both hosts
         var everything = string.Join('\n', capture.AllAttributes());
@@ -97,14 +97,14 @@ public sealed class TraceAcrossServersTests : IAsyncLifetime
     [Fact]
     public async Task Without_a_traceparent_the_server_still_continues_the_trace_of_the_console_span()
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/relay/{storeId}/api/v1/info");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/relay/{storeId}/api/v1/projects");
         request.Headers.Add("Cookie", $"{ConsoleHost.Auth.SessionCookie}={session}");
         using var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         capture.Flush(console.Services);
         capture.Flush(store.Services);
 
-        var infos = Spans().Where(s => Product(s) == "dbdatastore" && (string?)s.GetTagItem("http.route") == "/api/v1/info").ToList();
+        var infos = Spans().Where(s => Product(s) == "dbdataworkspace" && (string?)s.GetTagItem("http.route") == "/api/v1/projects").ToList();
         var relayed = infos.First(s => s.ParentSpanId != default && Spans().Any(c => c.SpanId == s.ParentSpanId && Product(c) == "dbdatakit"));
         var parent = Spans().Single(s => s.SpanId == relayed.ParentSpanId);
         Assert.Equal(parent.TraceId, relayed.TraceId);

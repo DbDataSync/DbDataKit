@@ -432,7 +432,10 @@ jobs:
             sums="$dir/SHA256SUMS"
             [ -f "$sums" ] || { echo "::error::$product has no SHA256SUMS"; exit 1; }
             (cd "$dir" && sha256sum --check SHA256SUMS)
-            for want in '-win-x64.zip' '-win-x64.msi'; do
+            wants=('-win-x64.zip' '-win-x64.msi')
+            # the command-line tools and Runner runtimes whose servers plan 33 SC23 deleted: a zip each, no installer
+            case "$product" in dbdatastore) wants=('-win-x64.zip' '-linux-x64.zip') ;; esac
+            for want in "${wants[@]}"; do
               ls "$dir"/*"$want" > /dev/null || { echo "::error::$product has no *$want"; exit 1; }
               grep -q -- "$want" "$sums" || { echo "::error::$product's SHA256SUMS does not list *$want"; exit 1; }
             done

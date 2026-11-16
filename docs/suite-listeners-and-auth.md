@@ -24,7 +24,6 @@ What each service listens on and how each way of proving who you are is used. It
 | **DbDataBuild web page** (the local `web` command) | `127.0.0.1:<free port>` | HTTP, one page and its calls | none | The person who started it: the page carries a random token |
 | **DbDataBuild MCP** (`mcp`) | none: standard input and output | MCP (JSON-RPC) | n/a | The process that started it (an agent host), no network |
 | **DbDataBuild TUI** (`tui`) | none: the terminal | | | |
-| **DbDataStore server** | `https://127.0.0.1:8490` | HTTPS: `/api/v1/info`, `/api/v1/state` and `/api/v1/state/maintenance`, pairing, key rotation, `/health*`, `/version`; HTTPS only | the server's own certificate | A console (a signed token) |
 | **Child processes under `DbDataKit.Hosting.Children`** (a parent that starts a child) | a named pipe (Windows), a Unix socket (elsewhere), or loopback TCP when asked | the child's own message protocol | the operating system | The parent that started it |
 | **XMLA forwarder** (a test tool, `DbDataKit.Tools.XmlaForwarder`) | a TCP port it is told | raw TCP forwarding to SQL Server Analysis Services, with a recording | none | Test runs only; not shipped |
 
@@ -32,7 +31,7 @@ Every server that a console manages also answers the same four things on its man
 
 ### Default-port clashes to know about
 
-* No two services share a default port (plan 33 SC19; `scripts/check_default_ports.py` fails when two do): DbDataKit 8480, Build 8470, the Workspace 8471, the identity home on its own 8482, the Store 8490, the Runner 8495, Sync 5080 and the Gateway 8815 (Flight), 8816 (management), 8817 (identity), 8818 (apps), 8819 (store module), 8820 (views) and 8821 (mcp). The Workspace and the identity home moved from 8495 and 8490.
+* No two services share a default port (plan 33 SC19; `scripts/check_default_ports.py` fails when two do): DbDataKit 8480, Build 8470, the Workspace 8471, the identity home on its own 8482, the Runner 8495 (the Store server's 8490 went with it, plan 33 SC23), Sync 5080 and the Gateway 8815 (Flight), 8816 (management), 8817 (identity), 8818 (apps), 8819 (store module), 8820 (views) and 8821 (mcp). The Workspace and the identity home moved from 8495 and 8490.
 * The console (8480) and its announce port (8481 in the examples) are different listeners on purpose: the announce port is plain HTTP and takes nothing but the announcement.
 
 ### Safe defaults to know about

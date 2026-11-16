@@ -191,7 +191,7 @@ def _alias(meta):
 
 
 # The ceiling a console administrator may use on each server (plans 13 W12, 28a R19): what the pairing allows, never what anyone holds.
-_PAIR_ROLES = {"dbdatastore": "viewer,operator,author,approver,admin", "dbdataworkspace": "viewer,operator,author,admin"}
+_PAIR_ROLES = {"dbdataworkspace": "viewer,operator,author,admin"}
 _PAIR_ROLES_DEFAULT = "viewer,operator,admin"
 # The address a console pairs with, as each product's README gives its default listen address (the Gateway's is its management API, on by default and on this machine only, plan 33 D15).
 # A product not listed has no default this file can name, so the notes stay generic for it and the install script leaves it unpaired.
@@ -201,7 +201,6 @@ _MANAGEMENT_ADDRESS = {
     "dbdatagateway": "https://localhost:8816",
     "dbdatarunner": "https://127.0.0.1:8495",
     "dbdatabuild": "https://127.0.0.1:8470",
-    "dbdatastore": "https://127.0.0.1:8490",
     "dbdataworkspace": "https://127.0.0.1:8471",
 }
 

@@ -1,8 +1,4 @@
 using System.Text.Json.Nodes;
-using DbDataKit.Web.Trust;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Routing;
 
 namespace DbDataStore.Server;
 
@@ -77,31 +73,5 @@ public static class StoreModelHistory
         }
         // a removal is listed as the event it was, not as a text; the list the screen shows is the texts, so removals come with the version they removed
         return [.. entries.OrderByDescending(e => e.At).ThenBy(e => e.Version, StringComparer.Ordinal)];
-    }
-
-    private static IResult Denied(AuthorizationDecision decision) =>
-        Results.Json(new { error = $"This needs the {decision.Needed.ToString().ToLowerInvariant()} role." }, statusCode: StatusCodes.Status403Forbidden);
-
-    public static void Map(IEndpointRouteBuilder app, string directory)
-    {
-        app.MapGet("/api/v1/models/{name}/history", (string name, HttpContext context) =>
-        {
-            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
-            if (!decision.Allowed) return Denied(decision);
-            if (!StoreModels.IsValidName(name)) return Results.NotFound(new { error = $"There is no model '{name}'." });
-            var exists = File.Exists(StoreModels.FileOf(directory, name));
-            var entries = List(directory, name);
-            if (!exists && entries.Count == 0) return Results.NotFound(new { error = $"There is no model '{name}'." });
-            var current = exists ? StoreModels.VersionOf(File.ReadAllText(StoreModels.FileOf(directory, name))) : null;
-            return Results.Json(new JsonObject { ["name"] = name, ["exists"] = exists, ["current"] = current, ["versions"] = new JsonArray(entries.Select(e => (JsonNode)e.ToJson(current)).ToArray()) });
-        });
-
-        app.MapGet("/api/v1/models/{name}/history/{version}", (string name, string version, HttpContext context) =>
-        {
-            var decision = ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Viewer);
-            if (!decision.Allowed) return Denied(decision);
-            if (!StoreModels.IsValidName(name) || StoreModels.TextOfVersion(directory, name, version) is not { } text) return Results.NotFound(new { error = "There is no such version of this model." });
-            return Results.Json(new JsonObject { ["name"] = name, ["version"] = version, ["text"] = text });
-        });
     }
 }

@@ -1,35 +1,21 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <OutputType>Exe</OutputType>
     <AssemblyName>dbdatastore</AssemblyName>
-    <Description>DbDataStore: master data models, kept in your own databases, with validated writes, history and audit (plans 15 and 19, lane Z).</Description>
+    <Description>DbDataStore: the runtime of a Store model's package on a Runner (deploy and contract of the model's tables) and a command line on a folder of models. The Store server was deleted in plan 33 SC23.</Description>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
-    <DbDataKitReference Include="Cli" />   <!-- the shared noun-verb grammar -->
-    <DbDataKitReference Include="Hosting.Abstractions" />   <!-- the shared host: service and systemd modes, drain, /health and /version -->
-    <DbDataKitReference Include="Hosting" />
-    <DbDataKitReference Include="Hosting.Cli" />
-    <DbDataKitReference Include="State.Api" />   <!-- GET /api/v1/state and the maintenance mode; plan 29b, C05 -->
-    <DbDataKitReference Include="State.Cli" />   <!-- state show, test and grants; plan 29b, C01 -->
-    <DbDataKitReference Include="Hosting.WindowsService" />
-    <DbDataKitReference Include="Hosting.Systemd" />
-    <DbDataKitReference Include="Hosting.Certificates" />
-    <DbDataKitReference Include="Security.Acl" />
-    <DbDataKitReference Include="DataModel" />   <!-- model/1: the models the server holds -->
-    <DbDataKitReference Include="DataModel.Runner" />   <!-- the deploy task, run by this program as the runtime dbdatastore-runtime (dbdatastore with the runner flag); plan 33 SC24 -->
-    <DbDataKitReference Include="Lineage" />   <!-- the models in the suite's lineage graph; plan 18, G12 -->
-    <DbDataKitReference Include="Serving.Notify" />   <!-- data.changed to the serving groups this server is paired with, after an applied write; plan 24a UC13 -->
-    <DbDataKitReference Include="Store" />   <!-- validated, audited row writes -->
-    <DbDataKitReference Include="Quality.Runner" />   <!-- the entities' checks, evaluated and recorded; plan 23a FQ11 -->
+    <DbDataKitReference Include="Cli" />   <!-- RemovedCommands: the server's commands answer with where their feature went -->
+    <DbDataKitReference Include="DataModel.Runner" />   <!-- the deploy and contract tasks, run by this program as the runtime dbdatastore-runtime (dbdatastore with the runner flag); plan 33 SC24 -->
     <DbDataKitReference Include="Connections" />   <!-- the connection a model's tables live on -->
     <DbDataKitReference Include="Connections.SqlServer" />
     <DbDataKitReference Include="Connections.Postgres" />
     <DbDataKitReference Include="Secrets" />
-    <DbDataKitReference Include="Secrets.Cli" />   <!-- the secret verbs; plan 29b, C06 -->
-    <DbDataKitReference Include="Secrets.Store" />   <!-- this server's own key, as a client of the serving groups it publishes to (plan 20 O10) -->
-    <DbDataKitReference Include="Secrets.Windows" />
-    <DbDataKitReference Include="Web" />   <!-- pairing, key rotation, the version header and the token check -->
-    <DbDataKitReference Include="Upgrade" />   <!-- the server upgrades itself when the console says so; plan 24a UC09 -->
+    <DbDataKitReference Include="Secrets.Store" />   <!-- the folder's own key, as a client of the Gateways it publishes to (plan 20 O10) -->
+    <DbDataKitReference Include="DataModel" />   <!-- model/1: the models of the folder -->
+    <DbDataKitReference Include="Store" />
+    <DbDataKitReference Include="State.Engines" />   <!-- SuiteEnvironment: the suite's folder variables -->
+    <DbDataKitReference Include="Secrets.Windows" />   <!-- the folder's key store protected with DPAPI on Windows -->
+    <DbDataKitReference Include="Web" />   <!-- pairing with a Gateway as a publishing client -->
   </ItemGroup>
 </Project>

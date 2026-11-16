@@ -1,7 +1,7 @@
 {
   "product": "dbdatastore",
   "displayName": "DbDataStore",
-  "description": "The store: master data models kept in your own SQL Server or PostgreSQL databases, with validated writes, history and audit, over a management API a console pairs with. Needs the .NET 10 runtime (ASP.NET Core).",
+  "description": "The runtime of a Store model's package on a Runner: it creates, expands and contracts the model's tables as the Runner tasks deploy and contract. The Store server was deleted (plan 33 SC23). Needs the .NET 10 runtime.",
   "homepage": "https://github.com/DbDataSync/DbDataKit/tree/main/DbDataStore",
   "license": "MIT",
   "platforms": {
@@ -12,19 +12,6 @@
       "exe": "dbdatastore"
     }
   },
-  "windowsScope": "machine",
-  "announces": true,
-  "globalEnv": [
-    { "name": "DBDATAKIT_DATA", "programData": "DbDataKit" }
-  ],
-  "service": {
-    "name": "DbDataStore",
-    "register": "service install",
-    "unregister": "service uninstall"
-  },
   "requiresDotnet": "10.0",
-  "notes": "The server's state, certificate and models live in the server's data directory, away from the program files. The state database is a SQLite file in that directory; to put it in a database shared by a group or the install run: dbdatastore state init. Start it with: dbdatastore server run. Pair a console with it: dbdatastore server pair --max-role admin. A model's own tables are made on a SQL Server or PostgreSQL connection of the server's, not on SQLite.",
-  "msi": {
-    "upgradeCode": "EE2FB839-0034-4DB5-9514-13ACCBF068D5"
-  }
+  "notes": "A Runner starts it as dbdatastore --runner for a model's tasks; it has no commands of its own. A Store model is authored in a store project of the Workspace and deployed from its Deploy tab."
 }

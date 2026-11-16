@@ -1,3 +1,4 @@
+// A Store model's shape and the helpers around it (plan 33 SC21d), moved here from the Store server's screens when plan 33 SC23 deleted them: the Workspace's model editor is now the only one.
 import type { SchemaNode } from '@dbdatakit/shell'
 
 /** The name the form knows the model schema by. */
@@ -91,4 +92,32 @@ export const modelSchema: SchemaNode = {
       },
     },
   },
+}
+
+/** Where a model's name must fit: what the Workspace's store kind accepts. The check decides; this only keeps a button off for a name it will refuse. */
+export const modelNamePattern = /^[a-z0-9][a-z0-9_-]{0,63}$/
+export const isModelName = (name: string) => modelNamePattern.test(name)
+
+/** The text a new model starts from: valid as it stands, with one entity to change. */
+export function newModelText(name: string): string {
+  return [
+    'schemaVersion: 1',
+    `name: ${name || 'my_model'}`,
+    'title: ',
+    'storage: {connection: mdm_sql}',
+    'entities:',
+    '  item:',
+    '    key: [code]',
+    '    attributes:',
+    '      code: {type: VARCHAR(20), required: true}',
+    '      name: {type: VARCHAR(100), required: true}',
+    '',
+  ].join('\n').replace('title: \n', 'title: New model\n')
+}
+
+export function summaryOf(entities: Record<string, { attributes?: Record<string, unknown> }> | undefined): string {
+  const names = Object.keys(entities ?? {})
+  if (names.length === 0) return 'No entities yet.'
+  const attributes = names.reduce((n, e) => n + Object.keys(entities![e]?.attributes ?? {}).length, 0)
+  return `${names.length} ${names.length === 1 ? 'entity' : 'entities'}, ${attributes} ${attributes === 1 ? 'attribute' : 'attributes'}`
 }

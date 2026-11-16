@@ -114,7 +114,7 @@ public sealed class StorePublisher(StoreProxies groups, ConsoleKeyStore identity
     public async Task<PairedProxy> PairAsync(string name, Uri url, string code, CancellationToken ct)
     {
         var self = await identity.GetOrCreateAsync(ct);
-        var paired = await PairingClient.PairAsync(url, code, self, ClientKind.Server, $"DbDataStore server {StoreServer.InstanceId(Path.Combine(directory, "server.yaml"))}", ct);
+        var paired = await PairingClient.PairAsync(url, code, self, ClientKind.Server, $"DbDataStore command line ({Path.GetFileName(Path.TrimEndingDirectorySeparator(directory))})", ct);
         var proxy = new PairedProxy(name, paired.Url.ToString().TrimEnd('/'), paired.InstanceId, paired.CertificateFingerprint, DateTimeOffset.UtcNow);
         groups.Add(proxy);
         return proxy;

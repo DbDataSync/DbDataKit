@@ -13,7 +13,6 @@
   "dependencies": {
     "@dbdatakit/build": "*",
     "@dbdatakit/shell": "*",
-    "@dbdatakit/store": "*",
     "@dbdatakit/store-ui": "*",
     "@dbdatakit/views-editor": "*",
     "@dbdatakit/visuals": "*",

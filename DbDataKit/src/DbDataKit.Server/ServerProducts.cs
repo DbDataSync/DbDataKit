@@ -165,6 +165,10 @@ public static class ServerProducts
     [
         ("GET", "api/v1/projects", ServerRole.Viewer),
         ("GET", "api/v1/certificate", ServerRole.Viewer),   // UI10: days left and subject of the certificate it presents, for Monitoring
+        ("GET", "api/v1/state", ServerRole.Viewer),                 // 29b C05: its state database (the console's state panel; plan 33 SC23 moved the state-move story onto a Workspace when it deleted the Store server)
+        ("GET", "api/v1/state/maintenance", ServerRole.Viewer),     // 29b C05: maintenance mode and whether it is idle
+        ("POST", "api/v1/state/maintenance", ServerRole.Admin),     // 29b C05: put it into maintenance or out of it; audited by the server
+        ("GET", "api/v1/state/move", ServerRole.Viewer),            // 29b C06: the progress of a move of its state
         ("POST", "api/v1/projects", ServerRole.Admin),
         ("GET", "api/v1/projects/{p}/workspaces", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces", ServerRole.Author),

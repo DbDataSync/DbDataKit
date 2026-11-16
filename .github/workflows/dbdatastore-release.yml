@@ -6,9 +6,9 @@ name: DbDataStore release
 #   gh workflow run dbdatastore-release.yml --ref main -f sha=<an older commit on main>
 #
 # It releases the newest commit on main, or `sha` (which must be on main), and only if that exact commit has a green "DbDataStore CI" run.
-# It packages the zips for win-x64 and linux-x64 (framework-dependent, so one Ubuntu job builds both; DbDataStore/scripts/package.sh), builds the Windows installer from the
-# win-x64 one (dbdatastore-v<version>-win-x64.msi, dist/msi.py, on Ubuntu),
-# tags the commit dbdatastore/v<version> and publishes a GitHub Release in THIS repository (zip, msi, SHA256SUMS, and the standard install.ps1 /
+# It packages the zips for win-x64 and linux-x64 (framework-dependent, so one Ubuntu job builds both; DbDataStore/scripts/package.sh): the program is the runtime of a Store
+# model's package on a Runner, with no installer and no service since plan 33 SC23 deleted the server; it
+# tags the commit dbdatastore/v<version> and publishes a GitHub Release in THIS repository (zip, SHA256SUMS, and the standard install.ps1 /
 # Scoop manifest, bound by .github/actions/publish-dist from DbDataStore/dist.json). No branch is pushed or merged: a release is a tag and its
 # assets. Built-in GITHUB_TOKEN only.
 #
@@ -192,8 +192,7 @@ jobs:
           path: DbDataStore/artifacts/release/dbdatastore-v*.zip
           if-no-files-found: error
 
-  # Ubuntu, because the installer is built with wixl (apt) and the rest is shell. Nothing is tagged or published until the package and the
-  # installer both exist: a tag is a claim that this version shipped, so a failed run leaves nothing to clean up.
+  # Nothing is tagged or published until the package exists: a tag is a claim that this version shipped, so a failed run leaves nothing to clean up.
   release:
     needs: package
     runs-on: ubuntu-latest
@@ -212,14 +211,6 @@ jobs:
         with:
           name: dbdatastore-package
           path: assets
-
-      - uses: ./.github/actions/build-msi
-        with:
-          product: dbdatastore
-          meta: DbDataStore/dist.json
-          version: ${{ env.VERSION }}
-          zip: assets/dbdatastore-v${{ env.VERSION }}-win-x64.zip
-          out: assets
 
       - name: Checksums
         working-directory: assets
@@ -264,4 +255,3 @@ jobs:
           prerelease: ${{ env.PRERELEASE }}
           sums: assets/SHA256SUMS
           sha: ${{ env.SHA }}
-          msi: assets/dbdatastore-v${{ env.VERSION }}-win-x64.msi

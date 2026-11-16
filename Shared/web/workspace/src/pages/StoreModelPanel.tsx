@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { SchemaSet, parseYaml } from '@dbdatakit/shell'
-import { MODEL_SCHEMA, isModelName, modelSchema, newModelText, summaryOf } from '@dbdatakit/store'
+import { MODEL_SCHEMA, isModelName, modelSchema, newModelText, summaryOf } from '../storeModel'
 import type { CheckDiagnostic } from '../api'
 import { liveState } from '../editors'
 import type { LiveCheck } from '../useLiveCheck'

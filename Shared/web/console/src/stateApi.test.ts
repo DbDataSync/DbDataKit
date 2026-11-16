@@ -9,6 +9,8 @@ describe('stateApi helpers', () => {
   it('offers the panel for the products that mount the state API', () => {
     expect(offersState('dbdatagateway')).toBe(true)
     expect(offersState('dbdatarunner')).toBe(true)
+    expect(offersState('dbdataworkspace')).toBe(true)
+    expect(offersState('dbdatastore')).toBe(false)   // plan 33 SC23 deleted the Store server
     expect(offersState('dbdatasync')).toBe(false)
     expect(offersState(null)).toBe(false)
   })

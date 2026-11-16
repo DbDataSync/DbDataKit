@@ -264,11 +264,9 @@ jobs:
           rids: linux-x64
       - name: Build server and console
         run: dist/compose/check.sh dist/compose/build.yml dbdatabuild
-      - name: Store server and console
-        run: dist/compose/check.sh dist/compose/store.yml dbdatastore
       - name: Gateway and console
         run: dist/compose/check.sh dist/compose/gateway.yml dbdatagateway
       - name: Sync server and console
         run: dist/compose/check.sh dist/compose/sync.yml dbdatasync
       - name: The whole suite (docs/quickstart.md)
-        run: dist/compose/check.sh dist/compose/quickstart.yml dbdatagateway dbdatasync dbdatabuild dbdatastore
+        run: dist/compose/check.sh dist/compose/quickstart.yml dbdatagateway dbdatasync dbdatabuild

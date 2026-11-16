@@ -31,7 +31,8 @@ jobs:
     with:
       paths: '^(DbDataStore/|Shared/|Directory\.(Build|Packages)\.props|global\.json|\.github/(workflows/(dbdatastore-|_)|actions/setup-product))'
 
-  # The server, its pairing and its command line run on both systems; the Windows service registration is only exercised here against fakes.
+  # The program is the runtime of a model's package (plan 33 SC23 deleted the server): its command line on both systems. The deploy and contract tasks on a real runner and real engines are
+  # StoreDeployOnRunnerTests in the console's servers job (dbdatakit-ci.yml).
   test:
     needs: changes
     if: ${{ needs.changes.outputs.build == 'true' }}
@@ -50,25 +51,3 @@ jobs:
           duckdb: 'false'
       - run: dotnet build DbDataStore.slnf -c Release
       - run: dotnet test --project tests/DbDataStore.Tests -c Release --no-build --minimum-expected-tests 5
-
-  # The rows, storage and instances over a real PostgreSQL and a real SQL Server (plan 19, Z09, Z12): the same suite with both test engines up, so the tests that skip without one run (and fail, not skip, if one is missing).
-  engines:
-    needs: changes
-    if: ${{ needs.changes.outputs.build == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-product
-        with:
-          product: DbDataStore
-          global-json: DbDataStore/global.json
-          duckdb: 'false'
-      - name: Start the test engines
-        working-directory: .
-        run: |
-          testenv/testenv.sh up mssql postgres
-          testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
-          echo "DBDATAKIT_TEST_REQUIRE_POSTGRES=true" >> "$GITHUB_ENV"
-      - run: dotnet build DbDataStore.slnf -c Release
-      - run: dotnet test --project tests/DbDataStore.Tests -c Release --no-build --minimum-expected-tests 29
