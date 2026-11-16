@@ -22,6 +22,12 @@ lists rules its tests enforce.
 A product references a shared library as `<DbDataKitReference Include="Hosting.Cli" />` (its `Directory.Build.targets` turns it into a
 project reference in this repository, a package reference otherwise). Do not copy shared code into a product.
 
+**Reusable libraries live under `Shared/` (owner, 2026-11-16).** A library that more than one service, command line, engine or package composes, or
+that is written to be composed (a feature such as quality, lineage, delivery, a task a package can declare), is a project `Shared/src/DbDataKit.<Name>`
+with its tests in `Shared/tests/DbDataKit.<Name>.Tests`, never a project under a product's folder. A product's folder holds only what makes that
+product: its host, its command line, its own engine and that engine's internals. When code in a product folder turns out to be needed by a second
+product, it moves to `Shared/src/DbDataKit.*` first (an adapter in the product if that keeps the old tests passing), then the second product uses it.
+
 ## Build setup
 
 - The root `Directory.Build.props` (target framework, language version, nullable), `Directory.Packages.props` (**every** NuGet version)
