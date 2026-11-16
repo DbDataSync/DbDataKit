@@ -16,7 +16,7 @@ export interface ServerSecrets {
   server: string
   serverName: string
   product: string
-  /** Null when the server has no secrets route (an older version, the console's own embedded runner) or did not answer; `problem` says which. */
+  /** Null when the server has no secrets route (an older version) or did not answer; `problem` says which. */
   overview: SecretsOverview | null
   problem: string | null
 }

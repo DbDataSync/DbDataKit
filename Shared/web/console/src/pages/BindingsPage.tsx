@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CodeEditor, ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { ConsoleShell } from '../ConsoleShell'
+import { consoleApi, instancesKey } from '../api'
 import { BindingComparePanel, PostureListPanel } from './BindingCompare'
 import { agentsApi, type Diagnostic } from '../agents'
 import { deliveryApi } from '../delivery'
 import {
-  KIND_LABEL, bindingsApi, connectionsFor, copyWords, draftOf, draftProblem, isReleaseName, isSlotName, loadRunnerSlots, maxChoices, moveChoice, needsConfirmation, needsModel, orderedReleases, rowLine, runnerApi, runnerReleaseOk, runnerSlotBody, sameDraft, slotBody, unboundWords,
+  KIND_LABEL, bindingsApi, connectionsFor, copyWords, draftOf, draftProblem, isReleaseName, isSlotName, loadAllRunnerSlots, maxChoices, moveChoice, needsConfirmation, needsModel, orderedReleases, rowLine, runnerApi, runnerReleaseOk, runnerSlotBody, sameDraft, slotBody, unboundWords,
   type BindingConnection, type BindingEntry, type BindingSlot, type BindingsView, type SlotDraft, type SlotKind, type Unconfirmed,
 } from '../bindings'
 
@@ -37,7 +38,10 @@ export function BindingsPanel({ kinds, showRunner = true, showFile = true }: { k
   const wantRunner = showRunner && (kinds === undefined || kinds.includes('runner'))
   // the runner's slots show where its copy of each connection stands against the console's file, so they are read once the console's connections (and their versions) are known
   const versions = (view.data?.connections ?? []).map((c) => `${c.name}:${c.version ?? ''}`).join('|')
-  const runner = useQuery({ queryKey: ['bindings', 'runner', versions], queryFn: () => loadRunnerSlots('console-runner', view.data?.connections ?? []), enabled: wantRunner && view.isSuccess, retry: false })
+  // the slots of the packages of every paired Runner that answers (the console runs no package itself, plan 35 I2)
+  const servers = useQuery({ queryKey: instancesKey, queryFn: consoleApi.instances.list, enabled: wantRunner })
+  const runners = (servers.data ?? []).filter((s) => s.product === 'dbdatarunner' && s.reachable).map((s) => s.id)
+  const runner = useQuery({ queryKey: ['bindings', 'runner', versions, runners.join('|')], queryFn: () => loadAllRunnerSlots(runners, view.data?.connections ?? []), enabled: wantRunner && view.isSuccess && servers.isSuccess, retry: false })
   const [adding, setAdding] = useState<{ kind: SlotKind; name: string } | null>(null)
   const [newKind, setNewKind] = useState<SlotKind>(kinds?.[0] && kinds[0] !== 'runner' ? kinds[0] : 'model-chat')
   const [newName, setNewName] = useState('')
@@ -99,7 +103,7 @@ function SlotCard({ slot, view, isAdmin, onSaved, startEditing = false, onCancel
   })
   const remove = useMutation({ mutationFn: () => bindingsApi.removeSlot(slot.section, slot.name), onSuccess: onSaved })
   const resend = useMutation({
-    mutationFn: (name: string) => bindingsApi.sendConnection(slot.runner?.server ?? 'console-runner', name),
+    mutationFn: (name: string) => bindingsApi.sendConnection(slot.runner?.server ?? '', name),
     onSuccess: (r) => { setSent((s) => ({ ...s, [r.connection]: r.unresolved.length > 0 ? `sent (${r.version}); the runner cannot resolve ${r.unresolved.map((u) => u.reference).join(', ')}` : `sent (${r.version})` })); onSaved() },
   })
   const test = useMutation({
@@ -110,7 +114,7 @@ function SlotCard({ slot, view, isAdmin, onSaved, startEditing = false, onCancel
         return [key, { ok: a.message.status === 'sent', text: `through ${a.connection}: ${a.message.status}${a.message.lastDetail ? `: ${a.message.lastDetail}` : ''}` }]
       }
       if (slot.kind === 'runner' && slot.runner) {
-        const a = await runnerApi.test(v.release, slot.runner.package, slot.name.split('/').slice(1).join('/'))
+        const a = await runnerApi.test(slot.runner.server, v.release, slot.runner.package, slot.name.split('/').slice(1).join('/'))
         return [key, { ok: a.ok, text: a.message }]
       }
       const a = await agentsApi.testProvider(v.entry.connection, v.entry.model ?? '')

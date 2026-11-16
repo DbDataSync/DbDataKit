@@ -23,12 +23,11 @@ test('the console compares its bindings with a Gateway, adopts one value and pub
 
   await page.route('**/api/bindings', (route) => json(route, { file: 'bindings.yml', yaml: '', diagnostics: [], earlier: null, releaseChannels: ['prod'], connections: [], slots: [], postureSetting: 'production_binding_on_non_production', postureEffect: '' }))
   await page.route('**/api/delivery', (route) => json(route, { problem: null }))
-  await page.route('**/relay/console-runner/api/v1/definitions/integration', (route) => json(route, { definitions: [] }))
   await page.route('**/api/instances', (route) => json(route, [{ id: 'gateway-1', name: 'Gateway', url: 'https://gw', product: 'dbdatagateway', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null }]))
   await page.route(/\/api\/bindings\/compare\?/, (route) => {
     const server = new URL(route.request().url()).searchParams.get('server')
     return json(route, {
-      server, serverName: server === 'gateway-1' ? 'Gateway' : "the console's runner", product: server === 'gateway-1' ? 'dbdatagateway' : 'dbdatarunner', problems: [],
+      server, serverName: server === 'gateway-1' ? 'Gateway' : "Runner one", product: server === 'gateway-1' ? 'dbdatagateway' : 'dbdatarunner', problems: [],
       items: server === 'gateway-1' ? Object.entries(values).map(([channel, v]) => item(channel, state(v), v.here, v.there)) : [],
     })
   })
@@ -47,9 +46,9 @@ test('the console compares its bindings with a Gateway, adopts one value and pub
   await page.route('**/api/bindings/posture', (route) => json(route, {
     entries: [
       { setting: 'production_binding_on_non_production', scope: 'bindings/delivery/alerts/test', chosenBy: 'ada', chosenAt: '2026-11-10T09:00:00Z', note: 'the live hook', heldBy: ['console'], default: 'a sandbox', effect: 'A test message reaches production.' },
-      { setting: 'production_binding_on_non_production', scope: 'bindings/runner/orders/source/dev', chosenBy: 'bo', chosenAt: '2026-11-11T09:00:00Z', note: null, heldBy: ['console', "the console's runner"], default: 'a sandbox', effect: 'A write reaches production.' },
+      { setting: 'production_binding_on_non_production', scope: 'bindings/runner/orders/source/dev', chosenBy: 'bo', chosenAt: '2026-11-11T09:00:00Z', note: null, heldBy: ['console', "Runner one"], default: 'a sandbox', effect: 'A write reaches production.' },
     ],
-    sources: [{ holder: 'console', ok: true, choices: 2, problem: null }, { holder: "the console's runner", ok: true, choices: 1, problem: null }],
+    sources: [{ holder: 'console', ok: true, choices: 2, problem: null }, { holder: "Runner one", ok: true, choices: 1, problem: null }],
   }))
 
   await page.goto('/bindings')
@@ -86,7 +85,7 @@ test('the console compares its bindings with a Gateway, adopts one value and pub
   // the posture choices of both tables are one list; a choice both hold is on one line naming both
   await expect(page.getByTestId('posture-entry')).toHaveCount(2)
   const once = page.locator('[data-testid="posture-entry"][data-scope="bindings/runner/orders/source/dev"]')
-  await expect(once.getByTestId('posture-held')).toContainText("console and the console's runner")
+  await expect(once.getByTestId('posture-held')).toContainText("console and Runner one")
   await once.getByTestId('posture-effect-button').click()
   await expect(once.getByTestId('posture-effect')).toContainText('A write reaches production.')
 })

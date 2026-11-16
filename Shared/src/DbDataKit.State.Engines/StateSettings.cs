@@ -15,6 +15,9 @@ public sealed record StateSettings(string? Engine = null, string? ConnectionStri
     /// <summary>How long history is kept (plan 29 section 3.3); pass it to <see cref="RetentionJob"/>.</summary>
     public RetentionSettings Retention { get; init; } = RetentionSettings.Defaults;
 
+    /// <summary>How often the server runs its retention and writes a snapshot of its state (plan 35 I1); run by <c>StateHousekeeping</c>.</summary>
+    public StateHousekeepingSettings Housekeeping { get; init; } = StateHousekeepingSettings.Defaults;
+
     /// <summary>The engine id <see cref="StateEngineIds"/> uses for the name given, or a message saying what is accepted.</summary>
     public string EngineId => (Engine ?? "").Trim().ToLowerInvariant() switch
     {

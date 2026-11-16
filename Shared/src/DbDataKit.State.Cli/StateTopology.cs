@@ -58,7 +58,7 @@ public static class StateTopology
     public static StateSettings Settings(StateTopologyKind kind, StateSettings current, string? engine, string? connection, string program)
     {
         if (kind == StateTopologyKind.Service)
-            return new StateSettings("sqlite") { Namespaces = current.IsSqlite ? current.Namespaces : StateNamespaceSettings.Defaults, Retention = current.Retention };
+            return new StateSettings("sqlite") { Namespaces = current.IsSqlite ? current.Namespaces : StateNamespaceSettings.Defaults, Retention = current.Retention, Housekeeping = current.Housekeeping };
 
         var which = kind.ToString().ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(engine))
@@ -73,7 +73,7 @@ public static class StateTopology
         RequireReferencedPassword(connection, "--connection", program);
 
         var keep = !current.IsSqlite && current.EngineId == id;
-        return new StateSettings(EngineName(id), connection.Trim()) { Namespaces = keep ? current.Namespaces : StateNamespaceSettings.Defaults, Retention = current.Retention };
+        return new StateSettings(EngineName(id), connection.Trim()) { Namespaces = keep ? current.Namespaces : StateNamespaceSettings.Defaults, Retention = current.Retention, Housekeeping = current.Housekeeping };
     }
 
     /// <summary>Refuses a connection string with a password written in it, in a sentence that names the two ways to write it as a reference and how to store the secret.</summary>
@@ -107,7 +107,7 @@ public static class StateTopology
         a.EngineId == b.EngineId && (a.IsSqlite || string.Equals(a.ConnectionString?.Trim(), b.ConnectionString?.Trim(), StringComparison.Ordinal)) &&
         string.Equals(Normalized(a), Normalized(b), StringComparison.Ordinal);
 
-    private static string Normalized(StateSettings s) => StateSettingsWriter.Render(new StateSettings(EngineName(s.EngineId)) { Namespaces = s.Namespaces, Retention = s.Retention });
+    private static string Normalized(StateSettings s) => StateSettingsWriter.Render(new StateSettings(EngineName(s.EngineId)) { Namespaces = s.Namespaces, Retention = s.Retention, Housekeeping = s.Housekeeping });
 
     /// <summary>The statement that creates a schema when it is not there, for the engine; empty for SQLite.</summary>
     public static string CreateSchema(string engine, string schema) => engine switch

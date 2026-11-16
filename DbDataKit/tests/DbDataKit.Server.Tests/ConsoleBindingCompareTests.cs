@@ -16,7 +16,7 @@ namespace DbDataKit.Server.Tests;
 
 /// <summary>
 /// Plan 27a IX25 (owner, 2026-11-12): the console compares its bindings and the connections it keeps with a Runner's and a Gateway's, marks what differs, and per item adopts the other side's value or publishes its own through plan 30's shared
-/// route; one combined, read-only list of the posture choices of the console's table and the Runners'. A real console host with the embedded runner on, a Gateway and a second runner that are pairable fakes of the shared publish API (behind the
+/// route; one combined, read-only list of the posture choices of the console's table and the Runners'. A real console host paired with a runner in this process (<see cref="PairedRunner"/>, the real engine and routes; the console embeds none since plan 35 I2), a Gateway and a second runner that are pairable fakes of the shared publish API (behind the
 /// token check and the roles of a real server, <see cref="FakeGroup"/>).
 /// </summary>
 public sealed class ConsoleBindingCompareTests : IAsyncLifetime
@@ -74,15 +74,11 @@ public sealed class ConsoleBindingCompareTests : IAsyncLifetime
     private readonly FakeGroup _otherRunner = new();
     private PairableServer _gatewayServer = null!;
     private PairableServer _runnerServer = null!;
+    private PairedRunner _runner = null!;
     private WebApplication _app = null!;
     private HttpClient _http = null!;
     private string _admin = "";
     private string _viewer = "";
-
-    private sealed class NoRun : ITaskRunner
-    {
-        public Task<TaskRunResult> RunAsync(TaskRunRequest request, CancellationToken ct = default) => throw new InvalidOperationException("nothing is scheduled in this test");
-    }
 
     public async ValueTask InitializeAsync()
     {
@@ -100,14 +96,15 @@ public sealed class ConsoleBindingCompareTests : IAsyncLifetime
         _gatewayServer = await PairableServer.StartAsync(product: ServerProducts.Gateway, instanceId: "gateway-1", map: _gateway.Map);
         _runnerServer = await PairableServer.StartAsync(product: ServerProducts.Runner, instanceId: "runner-2", map: _otherRunner.Map);
 
-        var runner = new ConsoleRunnerSettings { Enabled = true, Tick = TimeSpan.FromMilliseconds(200), CancellationGrace = TimeSpan.FromSeconds(5), TaskHostPath = typeof(RunnerHost).Assembly.Location, WrapRunner = _ => new NoRun() };
-        var settings = new ConsoleSettings(_directory, new Uri("https://localhost:0")) { Runner = runner };
+        _runner = await PairedRunner.StartAsync("runner-1");
+        var settings = new ConsoleSettings(_directory, new Uri("https://localhost:0"));
         _app = ConsoleHost.Build(settings, ConsoleHost.Certificate(_directory), _ => { }, webRoot: _directory);
         await _app.StartAsync();
         _http = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true, UseCookies = false }) { BaseAddress = new Uri(_app.Urls.First()) };
         _admin = Session(UserRole.Admin);
         _viewer = Session(UserRole.Viewer);
         var instances = _app.Services.GetRequiredService<ConsoleInstances>();
+        await _runner.PairAsync(_app, "Runner one");
         await instances.PairAsync(_gatewayServer.Url, _gatewayServer.NewCodeWith(ServerRole.Admin | ServerRole.Operator), "Gateway", default);
         await instances.PairAsync(_runnerServer.Url, _runnerServer.NewCodeWith(ServerRole.Admin | ServerRole.Operator), "Other runner", default);
     }
@@ -120,6 +117,7 @@ public sealed class ConsoleBindingCompareTests : IAsyncLifetime
         await _app.DisposeAsync();
         await _gatewayServer.DisposeAsync();
         await _runnerServer.DisposeAsync();
+        await _runner.DisposeAsync();
         try { Directory.Delete(_directory, true); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
@@ -284,37 +282,37 @@ public sealed class ConsoleBindingCompareTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task The_embedded_runners_connection_copy_is_compared_by_version_published_by_the_connection_copy_call_and_adopted_back()
+    public async Task A_paired_runners_connection_copy_is_compared_by_version_published_by_the_connection_copy_call_and_adopted_back()
     {
-        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, "/api/bindings/runner/console-runner/orders/source", _admin, new RunnerSlotBody(new() { ["prod"] = "crm" }))).Status);
-        var items = await Items("console-runner");
+        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, "/api/bindings/runner/runner-1/orders/source", _admin, new RunnerSlotBody(new() { ["prod"] = "crm" }))).Status);
+        var items = await Items("runner-1");
         var same = Item(items, "connection/crm");
         Assert.Equal("same", (string)same["state"]!);
         Assert.Equal(ConnectionCopyVersion.Of(Crm), (string)same["there"]!);
 
         // the console's file changes: the runner's copy is older, publishing sends the connection again
         File.WriteAllText(Path.Combine(_directory, "connections", "crm.yml"), Crm + "# changed\n");
-        var differs = Item(await Items("console-runner"), "connection/crm");
+        var differs = Item(await Items("runner-1"), "connection/crm");
         Assert.Equal("differs", (string)differs["state"]!);
-        var (published, _) = await Call(HttpMethod.Post, "/api/bindings/compare/publish", _admin, Decision(differs, "console-runner"));
+        var (published, _) = await Call(HttpMethod.Post, "/api/bindings/compare/publish", _admin, Decision(differs, "runner-1"));
         Assert.Equal(HttpStatusCode.OK, published);
-        Assert.Equal("same", (string)Item(await Items("console-runner"), "connection/crm")["state"]!);
-        Assert.Equal(ConnectionCopyVersion.Of(Crm + "# changed\n"), new ConnectionCopies(State).Get("crm")!.Version);
+        Assert.Equal("same", (string)Item(await Items("runner-1"), "connection/crm")["state"]!);
+        Assert.Equal(ConnectionCopyVersion.Of(Crm + "# changed\n"), new ConnectionCopies(_runner.State).Get("crm")!.Version);
 
         // the runner's copy is changed on the runner; adopting writes it into the console's file
-        new RunnerConnectionService(State, ConsoleState.ServiceId).Put("crm", Crm + "# on the runner\n", new RunnerActor("ops", "ops", "command", "console-runner"));
-        var theirs = Item(await Items("console-runner"), "connection/crm");
+        new RunnerConnectionService(_runner.State).Put("crm", Crm + "# on the runner\n", new RunnerActor("ops", "ops", "command", "runner-1"));
+        var theirs = Item(await Items("runner-1"), "connection/crm");
         Assert.Equal("differs", (string)theirs["state"]!);
-        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Post, "/api/bindings/compare/adopt", _admin, Decision(theirs, "console-runner"))).Status);
+        Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Post, "/api/bindings/compare/adopt", _admin, Decision(theirs, "runner-1"))).Status);
         Assert.Contains("# on the runner", File.ReadAllText(Path.Combine(_directory, "connections", "crm.yml")));
-        Assert.Equal("same", (string)Item(await Items("console-runner"), "connection/crm")["state"]!);
+        Assert.Equal("same", (string)Item(await Items("runner-1"), "connection/crm")["state"]!);
     }
 
     [Fact]
     public async Task The_posture_choices_of_both_tables_are_one_read_only_list_and_a_production_binding_in_a_non_production_channel_appears_once_whichever_table_holds_it()
     {
         var consoleTable = new PostureChoices(State, BindingPostureModule.Name);
-        var runnerTable = new PostureChoices(State);                                   // the embedded runner's
+        var runnerTable = new PostureChoices(_runner.State);                           // the paired runner's own
         const string Setting = "production_binding_on_non_production";
         consoleTable.Record("bindings/delivery/alerts/test", Setting, "ada", "the live hook", new DateTimeOffset(2026, 11, 10, 9, 0, 0, TimeSpan.Zero));
         runnerTable.Record("bindings/runner/orders/source/dev", Setting, "bo", "the live crm", new DateTimeOffset(2026, 11, 11, 9, 0, 0, TimeSpan.Zero));
@@ -327,11 +325,11 @@ public sealed class ConsoleBindingCompareTests : IAsyncLifetime
         var entries = view!["entries"]!.AsArray();
         Assert.Equal(3, entries.Count);
         var once = Assert.Single(entries, e => (string)e!["scope"]! == "bindings/runner/orders/source/dev")!;
-        Assert.Equal(["console", "the console's runner"], once["heldBy"]!.AsArray().Select(h => (string)h!).ToArray());
+        Assert.Equal(["Runner one", "console"], once["heldBy"]!.AsArray().Select(h => (string)h!).ToArray());
         Assert.Equal("bo", (string)once["chosenBy"]!);                                  // the first record is the one shown
         Assert.Contains("that production uses", (string)once["effect"]!);
         Assert.Equal(["other runner"], entries.Where(e => (string)e!["setting"]! == "run_in_process").Select(e => ((string)e!["heldBy"]![0]!).ToLowerInvariant()).ToArray());
-        Assert.Equal(["console", "the console's runner", "Other runner"], view["sources"]!.AsArray().Select(s => (string)s!["holder"]!).ToArray());
+        Assert.Equal(["console", "Runner one", "Other runner"], view["sources"]!.AsArray().Select(s => (string)s!["holder"]!).ToArray());
         Assert.All(view["sources"]!.AsArray(), s => Assert.True((bool)s!["ok"]!));
 
         // read only: the list is a GET, enforcement stays with the table that holds the choice

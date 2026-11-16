@@ -28,7 +28,7 @@ public sealed record CompareOutcome(bool Done, int Status, string? Error, IReadO
 /// <summary>The combined list of posture choices: each choice once, and what could not be read.</summary>
 public sealed record PostureView(IReadOnlyList<PostureEntry> Entries, IReadOnlyList<PostureSource> Sources);
 
-/// <summary>A table the combined list read: the console's, the embedded runner's or a registered runner's, and whether it answered.</summary>
+/// <summary>A table the combined list read: the console's or a registered runner's, and whether it answered.</summary>
 public sealed record PostureSource(string Holder, bool Ok, int Choices, string? Problem);
 
 /// <summary>
@@ -45,7 +45,7 @@ public sealed record PostureSource(string Holder, bool Ok, int Choices, string? 
 /// <see cref="BindingValueText"/>: <c>connection/model, connection/model</c>.
 /// </para>
 /// </summary>
-public sealed class ConsoleBindingCompare(ConsoleBindings bindings, ConsoleConnections connections, ConsolePromotions promotions, ConsoleInstances instances, ConsoleRunnerBindings runners, ConsoleRelay relay, AuditLog audit, IServiceProvider services)
+public sealed class ConsoleBindingCompare(ConsoleBindings bindings, ConsoleConnections connections, ConsolePromotions promotions, ConsoleInstances instances, ConsoleRunnerBindings runners, ConsoleRelay relay, AuditLog audit)
 {
     public const string BindingFamily = "binding";
     public const string ConnectionFamily = "connection";
@@ -57,7 +57,6 @@ public sealed class ConsoleBindingCompare(ConsoleBindings bindings, ConsoleConne
 
     private async Task<(string? Product, string? Name, string? Problem)> ServerOfAsync(string server, CancellationToken ct)
     {
-        if (server == ConsoleRunnerSettings.ServerId) return services.GetService<ConsoleRunner>() is null ? (null, null, "The console's embedded runner is not running.") : (ServerProducts.Runner, "the console's runner", null);
         if (instances.Registry.Find(server) is not { } instance) return (null, null, $"No server '{server}' is registered.");
         var status = await instances.StatusAsync(instance, ct);
         return !status.Reachable ? (null, instance.Name, status.Problem ?? $"{instance.Name} is not answering.") : (status.Product, instance.Name, null);
@@ -270,7 +269,7 @@ public sealed class ConsoleBindingCompare(ConsoleBindings bindings, ConsoleConne
 
     // ---- the combined posture list ----
 
-    /// <summary>The console's table, the embedded runner's and each registered runner's, read and merged: a choice once whichever table holds it. A runner that does not answer is named, and the rest is still listed.</summary>
+    /// <summary>The console's table and each registered runner's, read and merged: a choice once whichever table holds it. A runner that does not answer is named, and the rest is still listed.</summary>
     public async Task<PostureView> PostureAsync(RelayPerson person, CancellationToken ct)
     {
         var holdings = new List<PostureHolding>();
@@ -279,13 +278,6 @@ public sealed class ConsoleBindingCompare(ConsoleBindings bindings, ConsoleConne
         var own = bindings.AllChoices();
         holdings.AddRange(own.Select(c => new PostureHolding("console", c)));
         sources.Add(new PostureSource("console", true, own.Count, null));
-
-        if (services.GetService<ConsoleRunner>() is { } embedded)
-        {
-            var list = embedded.Posture.Choices.List();
-            holdings.AddRange(list.Select(c => new PostureHolding("the console's runner", c)));
-            sources.Add(new PostureSource("the console's runner", true, list.Count, null));
-        }
 
         foreach (var instance in instances.Registry.All())
         {

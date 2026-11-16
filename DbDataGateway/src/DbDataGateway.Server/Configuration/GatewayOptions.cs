@@ -111,6 +111,7 @@ public sealed class GatewayOptions
 ///   connection: Host=db;Database=dbdatagateway_state;Username=gateway;Password=secret:state-db
 ///   namespaces: { default: { schema: dbdatagateway } }
 ///   retention: { days: 30 }
+///   housekeeping: { retention_every_minutes: 60, backup_directory: backups, backup_every_hours: 24, backup_keep: 7 }
 /// </code>
 /// </summary>
 public sealed class GatewayStateOptions
@@ -130,6 +131,9 @@ public sealed class GatewayStateOptions
     /// <summary>How long history is kept: <c>days</c>, and per module or table.</summary>
     public GatewayStateRetention Retention { get; set; } = new();
 
+    /// <summary>The Gateway's upkeep of its own state, in its own process (plan 35 I1): <c>retention_every_minutes</c>, <c>backup_directory</c>, <c>backup_every_hours</c>, <c>backup_keep</c>; the shared reader checks the keys.</summary>
+    public Dictionary<string, string> Housekeeping { get; set; } = new(StringComparer.Ordinal);
+
     /// <summary>The settings these options say, read through the shared reader (a setting it refuses raises <see cref="InvalidOperationException"/>).</summary>
     public DbDataKit.State.StateSettings ToSettings()
     {
@@ -139,6 +143,7 @@ public sealed class GatewayStateOptions
         if (Registry.ToMap() is { } registry) section["registry"] = registry;
         if (Namespaces.Count > 0) section["namespaces"] = Namespaces.ToDictionary(p => p.Key, p => (object?)(p.Value?.ToMap() ?? []), StringComparer.Ordinal);
         if (Retention.ToMap() is { } retention) section["retention"] = retention;
+        if (Housekeeping.Count > 0) section["housekeeping"] = Housekeeping.ToDictionary(p => p.Key, p => (object?)p.Value, StringComparer.Ordinal);
         return DbDataKit.State.StateSettingsReader.Read(section.Count == 0 ? null : section, "state");
     }
 }

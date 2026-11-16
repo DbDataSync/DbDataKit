@@ -363,6 +363,10 @@ public static class GatewayHost
         // the secrets a group's clients keep on it (plan 20 O04b); the state is looked up when a client's secret is first asked for, never to open the state itself
         builder.Services.AddSingleton(sp => new GroupSecretStore(() => sp.GetRequiredService<DbDataKit.State.StateDatabase>(), () => sp.GetRequiredService<DbDataGateway.Server.State.GroupSessionKey>()));
         builder.Services.AddHostedService<DbDataGateway.Server.State.GatewayStateStartup>();
+        // its own state's retention and snapshot, in this process (plan 35 I1): state.housekeeping
+        builder.Services.AddHostedService(sp => new DbDataKit.State.Engines.Housekeeping.StateHousekeeping(sp.GetRequiredService<DbDataKit.State.StateDatabase>(), DbDataGateway.Server.State.GatewayState.Modules,
+            DbDataGateway.Server.State.GatewayState.ScopeOf(), DbDataGateway.Server.State.GatewayState.ServiceId, options.State.ToSettings(), dataDirectory,
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataGateway.Housekeeping")));
         // this instance's row in the state; a second instance on a SQLite state is refused (plan 20 O02)
         builder.Services.AddSingleton<DbDataGateway.Server.State.ServingInstanceLease>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<DbDataGateway.Server.State.ServingInstanceLease>());

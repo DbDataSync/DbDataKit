@@ -23,13 +23,13 @@ public sealed record RunnerCaller(RunnerActor Actor, ServerRole Roles)
 public delegate RunnerCaller RunnerCallerResolver(HttpContext context);
 
 /// <summary>What differs between the hosts of the runner's management API.</summary>
-/// <param name="Prefix">The route prefix of the calls: <c>/api/v1</c> on <c>dbdatarunner</c>, <c>/api/embedded-runner</c> and <c>/relay/console-runner/api/v1</c> on the console.</param>
+/// <param name="Prefix">The route prefix of the calls: <c>/api/v1</c> on <c>dbdatarunner</c> (or a test's host).</param>
 /// <param name="Caller">Who is calling.</param>
 /// <param name="Product">What the status says the server is (<c>dbdatarunner</c>, <c>dbdatakit</c>).</param>
 /// <param name="Version">The program's version.</param>
 public sealed record RunnerApiOptions(string Prefix, RunnerCallerResolver Caller, string Product, string Version)
 {
-    /// <summary>Adds what the host knows to <c>GET status</c> (the console's embedded runner adds its posture and the warning that production schedules stop with the console).</summary>
+    /// <summary>Adds what the host knows to <c>GET status</c> (a host's own facts).</summary>
     public Action<System.Text.Json.Nodes.JsonObject>? DecorateStatus { get; init; }
 }
 

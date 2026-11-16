@@ -146,7 +146,7 @@ internal static class StateSnapshotSupport
             return null;
         }
 
-        var settings = new StateSettings(engine, connection) { Namespaces = namespaces, Retention = basis.Retention };
+        var settings = new StateSettings(engine, connection) { Namespaces = namespaces, Retention = basis.Retention, Housekeeping = basis.Housekeeping };
         try { _ = settings.EngineId; }
         catch (InvalidOperationException ex) { problem = ex.Message; return null; }
 

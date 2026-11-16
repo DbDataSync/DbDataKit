@@ -11,11 +11,10 @@ public sealed record LinkRequest(string From, string To, string? Name);
 
 public sealed record PendingSummary(string Id, string Name, string Product, string Url, DateTimeOffset LastSeen);
 
-/// <param name="Embedded">True for the runner built into this console (plan 28a R20): it is listed only when the console runs it, has no pairing and cannot be forgotten.</param>
 /// <param name="Generation">The compatibility generation the server reported, or the one last recorded for it (24a UC05); null when it states none.</param>
 /// <param name="OutsideSupport">Set when the server is further from this console than N and N-1: the words that say how far apart they are and which side to upgrade.</param>
 /// <param name="GroupJoin">On a pairing of a server whose group takes its key from the console (a runner, plan 28c E20d): null when the instance was given the group's key, else why not (the pairing stands; join it again from the server's page).</param>
-public sealed record InstanceSummary(string Id, string Name, string Url, string? Product, string? Version, int? ApiVersion, bool Reachable, bool? Ready, string? Problem, DateTimeOffset? PairedAt, bool Embedded = false, int? Generation = null, string? OutsideSupport = null, string? GroupJoin = null);
+public sealed record InstanceSummary(string Id, string Name, string Url, string? Product, string? Version, int? ApiVersion, bool Reachable, bool? Ready, string? Problem, DateTimeOffset? PairedAt, int? Generation = null, string? OutsideSupport = null, string? GroupJoin = null);
 
 /// <param name="Url">The address of another instance of the group; empty to hand the key to the instance at the registered address again.</param>
 /// <param name="Code">A pairing code made on that instance (or any of the group): it proves the instance serves the group before the key is sent.</param>
@@ -55,10 +54,6 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
     public async Task<ActionResult<IReadOnlyList<InstanceSummary>>> List(CancellationToken cancellationToken)
     {
         var list = (await instances.StatusOfAllAsync(cancellationToken)).Select(Summarise).ToList();
-        // the runner built into this console, when it runs one: first, because it is this console's own
-        if (services.GetService(typeof(ConsoleRunner)) is ConsoleRunner runner)
-            list.Insert(0, new InstanceSummary(ConsoleRunnerSettings.ServerId, "Console runner", $"{Request.Scheme}://{Request.Host}/", ServerProducts.Runner, runner.Version, null,
-                runner.Host is not null, runner.Host is not null, runner.Host is null ? "the embedded runner is not running" : null, null, Embedded: true));
         return Ok(list);
     }
 
@@ -123,7 +118,7 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
     }
 
     [HttpDelete("{id}")]
-    public IActionResult Forget(string id) => id == ConsoleRunnerSettings.ServerId ? BadRequest(new { error = "The console's embedded runner is part of the console and cannot be forgotten; turn it off with runner.enabled in settings.yaml." }) : instances.Remove(id) ? NoContent() : NotFound(new { error = "No such server is registered." });
+    public IActionResult Forget(string id) => instances.Remove(id) ? NoContent() : NotFound(new { error = "No such server is registered." });
 
     /// <summary>The summary of a server just paired, after it was joined to its group when its group takes its key from the console (plan 28c E20d).</summary>
     private async Task<InstanceSummary> JoinedAsync(DbDataKit.Web.Trust.RegisteredInstance paired, CancellationToken ct)

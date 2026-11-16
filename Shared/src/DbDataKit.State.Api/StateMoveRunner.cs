@@ -296,7 +296,7 @@ internal sealed class StateMoveRunner(StateManagementOptions options, Action<Sta
     private static StateEndpoint ParseTarget(string? engine, string? connection, string? schema, string? prefix, string? sqlitePath, StateSettings basis)
     {
         if (string.IsNullOrWhiteSpace(engine)) throw new ArgumentException("The engine is needed: mssql or postgres.");
-        var settings = new StateSettings(engine, connection) { Namespaces = basis.Namespaces, Retention = basis.Retention };
+        var settings = new StateSettings(engine, connection) { Namespaces = basis.Namespaces, Retention = basis.Retention, Housekeeping = basis.Housekeeping };
         try { _ = settings.EngineId; }
         catch (InvalidOperationException ex) { throw new ArgumentException(ex.Message); }
         if (settings.IsSqlite)
@@ -304,7 +304,7 @@ internal sealed class StateMoveRunner(StateManagementOptions options, Action<Sta
             // a SQLite state is a file on this server's machine (plan 29b C06): the path is as this server sees it
             if (string.IsNullOrWhiteSpace(sqlitePath) || !Path.IsPathRooted(sqlitePath)) throw new ArgumentException("A move to SQLite needs sqlite_path: the full path of the file, on this server's machine.");
             if (!string.IsNullOrWhiteSpace(connection)) throw new ArgumentException("A SQLite state has no connection string: send sqlite_path.");
-            return new StateEndpoint(settings with { Namespaces = basis.Namespaces, Retention = basis.Retention }, Path.GetFullPath(sqlitePath));
+            return new StateEndpoint(settings with { Namespaces = basis.Namespaces, Retention = basis.Retention, Housekeeping = basis.Housekeeping }, Path.GetFullPath(sqlitePath));
         }
 
         if (string.IsNullOrWhiteSpace(connection)) throw new ArgumentException($"The connection is needed for {engine}: a connection string whose password is a secret reference (Password=secret:state-db).");

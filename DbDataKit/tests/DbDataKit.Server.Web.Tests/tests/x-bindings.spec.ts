@@ -32,8 +32,10 @@ test('every slot of every kind is bound per release channel in one place: a mode
   })
   await page.route('**/api/delivery', (route) => json(route, { problem: null, canRender: false, renderNote: '', isAdmin: true, policy: { maxAttempts: 6, backoffSeconds: [30], leaseSeconds: 120 }, releaseChannels: ['prod', 'test'], connections: [], connectionKinds: [], outbox: {}, channels: [] }))
   await page.route('**/api/delivery/channels/alerts/test', (route) => json(route, { id: 'm1', releaseChannel: 'test', connection: 'slack-sandbox', attempts: [], message: { id: 'm1', channel: 'alerts', releaseChannel: 'test', subject: '[TEST]', recipients: [], source: 'test', ownerPerson: null, status: 'sent', attempts: 1, nextAttemptAt: 't', lastOutcome: 'sent', lastDetail: '200 OK', createdAt: 't', settledAt: 't', attachments: [] } }))
-  await page.route('**/relay/console-runner/api/v1/definitions/integration', (route) => json(route, { definitions: [{ name: 'orders' }] }))
-  await page.route('**/relay/console-runner/api/v1/definitions/integration/orders', (route) => json(route, { slots: [{ channel: 'dev', slot: 'source', kind: 'sqlserver', tasks: ['load'], versions: [1] }, { channel: 'prod', slot: 'source', kind: 'sqlserver', tasks: ['load'], versions: [1] }], bindings: [{ channel: 'dev', slot: 'source', bound_to: 'erp', revision: 1 }] }))
+  // the runner slots are a paired Runner's (the console embeds none since plan 35 I2)
+  await page.route('**/api/instances', (route) => json(route, [{ id: 'runner-1', name: 'Runner one', url: 'https://runner-1', product: 'dbdatarunner', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null }]))
+  await page.route('**/relay/runner-1/api/v1/definitions/integration', (route) => json(route, { definitions: [{ name: 'orders' }] }))
+  await page.route('**/relay/runner-1/api/v1/definitions/integration/orders', (route) => json(route, { slots: [{ channel: 'dev', slot: 'source', kind: 'sqlserver', tasks: ['load'], versions: [1] }, { channel: 'prod', slot: 'source', kind: 'sqlserver', tasks: ['load'], versions: [1] }], bindings: [{ channel: 'dev', slot: 'source', bound_to: 'erp', revision: 1 }] }))
 
   await page.goto('/bindings')
   await expect(page.getByTestId('bindings-panel')).toBeVisible()

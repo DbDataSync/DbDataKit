@@ -93,6 +93,7 @@ public static class StateSettingsResolver
         {
             Namespaces = fromFile.Namespaces,
             Retention = fromFile.Retention,
+            Housekeeping = fromFile.Housekeeping,
         };
         var namespacesSource = keys.Contains("namespaces") || keys.Contains("registry") ? new StateSource(StateSourceKind.File, file) : StateSource.Default;
         return new ResolvedState(settings, new StateSources(engineSource, connectionSource, namespacesSource, FromFile("retention")));
