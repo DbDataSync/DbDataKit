@@ -47,8 +47,17 @@ public class ProjectPublishTests
         var dir = CompiledProject();
         var built = Built(dir);
 
-        Assert.Equal(["sqlserver-hourly", "sqlserver-quiet", "catch-up"], built.Manifest.Tasks.Select(t => t.Name));       // the last is the follower on its own (plan 28c E16): on demand, holding the connections of the plans
+        // after the plans: the follower on its own (plan 28c E16), on demand, holding the connections of the plans; then the database-facing views, manual only (plan 33 SC20p)
+        Assert.Equal(["sqlserver-hourly", "sqlserver-quiet", "catch-up", "tests", "status", "compare"], built.Manifest.Tasks.Select(t => t.Name));
         var catchUp = built.Manifest.Tasks[2];
+        foreach (var view in built.Manifest.Tasks.Skip(3))
+        {
+            Assert.False(view.Schedule.HasSchedule);
+            Assert.Equal([TaskTrigger.ByHand()], view.Triggers);
+            Assert.Equal(catchUp.Connections, view.Connections);
+            Assert.Equal(["view-result"], view.StepList.Select(s => s.Name));
+        }
+        Assert.Equal(["connection", "plan"], built.Manifest.Tasks[4].Inputs.Select(i => i.Name));
         Assert.False(catchUp.Schedule.HasSchedule);
         Assert.Equal(built.Manifest.Tasks[0].Connections.Select(c => c.Name).Union(built.Manifest.Tasks[1].Connections.Select(c => c.Name)).Order(StringComparer.Ordinal), catchUp.Connections.Select(c => c.Name));
         var hourly = built.Manifest.Tasks[0];

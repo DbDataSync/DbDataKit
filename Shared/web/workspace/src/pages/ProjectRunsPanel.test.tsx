@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { BuildDetail, StagedRun } from '../api'
-import { ProjectRunsPanel, syncSlotOf, bulkLoadRequests, mappingsOfReplication, passesOf, publishedVersionOf, runnerScreens, segmentingProblem, syncTaskOf } from './ProjectRunsPanel'
+import { ProjectRunsPanel, buildConnectionsOf, isBuildView, viewProblem, viewResultOf, syncSlotOf, bulkLoadRequests, mappingsOfReplication, passesOf, publishedVersionOf, runnerScreens, segmentingProblem, syncTaskOf } from './ProjectRunsPanel'
 
 const detail = (id: string, publishes: BuildDetail['publishes']): BuildDetail => ({ build: { id } as BuildDetail['build'], result: null, publishes })
 
@@ -59,6 +59,20 @@ describe('the runs of what a draft published (plan 33 SC20o, SC22l)', () => {
     expect(html).toContain('after publish')
     expect(html).not.toContain('data-testid="wsp-runs-test-connection"')
   })
+  it('knows the read-only views of a Build package and what each needs (plan 33 SC20p)', () => {
+    expect(['tests', 'status', 'compare', 'sqlserver-hourly'].filter(isBuildView)).toEqual(['tests', 'status', 'compare'])
+    expect(viewProblem('status', {})).toContain('connection')
+    expect(viewProblem('status', { connection: 'sqlserver' })).toBeNull()
+    expect(viewProblem('compare', { connection: 'sqlserver', table: 'dbo.orders' })).toContain('compared with')
+    expect(viewProblem('compare', { connection: 'sqlserver', table: 'dbo.orders', against_schema: 'dev' })).toBeNull()
+    expect(viewProblem('tests', {})).toBeNull()
+    expect(buildConnectionsOf(['connections/sqlserver.yaml', 'models/a.yml', 'connections/pg.yml'])).toEqual(['pg', 'sqlserver'])
+  })
+  it('reads the document a view recorded, whole or its head', () => {
+    const run: StagedRun = { id: 'r', task: 'status', outcome: 'succeeded', started: '', finished: '', version: null, failure: null, steps: [{ key: 'status', started: '', completed: '', result: { view: 'status', exit_code: 1, document: { data: { drift: 2 } } } }] }
+    expect(viewResultOf(run)?.document).toEqual({ data: { drift: 2 } })
+    expect(viewResultOf({ ...run, steps: [] })).toBeNull()
+  })
   it('says what to do when nothing is published yet', () => {
     const html = renderToStaticMarkup(
       <QueryClientProvider client={new QueryClient()}><MemoryRouter><ProjectRunsPanel project="p" id="d" kind="sync" paths={['config/replications/orders/task.yaml']} /></MemoryRouter></QueryClientProvider>,
@@ -66,12 +80,12 @@ describe('the runs of what a draft published (plan 33 SC20o, SC22l)', () => {
     expect(html).toContain('data-testid="wsp-runs"')
     expect(html).toContain('apply the setup on the Provisioning tab')
   })
-  it('says for a Build project which views have no Runner task yet (plan 33 SC20o, SC20p)', () => {
+  it('says for a Build project that its views run read only on the Runner and what is not built (plan 33 SC20o, SC20p)', () => {
     const html = renderToStaticMarkup(
       <QueryClientProvider client={new QueryClient()}><MemoryRouter><ProjectRunsPanel project="p" id="d" kind="build" paths={['dbdatabuild.yml']} /></MemoryRouter></QueryClientProvider>,
     )
     expect(html).toContain('The tasks of the package this draft published')
-    expect(html).toContain('SC20p')
+    expect(html).toContain('run there too, read only')
     expect(html).not.toContain('wsp-runs-replication')
   })
 })

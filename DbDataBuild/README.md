@@ -37,10 +37,11 @@ of its features went:
 | --- | --- |
 | hosted projects; their files, models, graph, checks, compile, sample, import, views, deploy plans | a build project of the Workspace (`dbdataworkspace`), edited in the console |
 | ran refresh plans on their schedules (`server run --scheduler`, `server schedule`) | the Runner: `project publish --to runner` (or the Workspace's publish) and the Runner's own schedule; the runner schedules from the first activation |
+| the project's tests, the status of a connection, compare (its Tests, Status and Compare tabs) | the read-only manual tasks `tests`, `status` and `compare` of the refresh package, each recording the command's JSON document as the step `view-result`; the Workspace's Runs tab starts them and shows the document |
 | applied a plan, acknowledged a block, loaded seeds for a person | the manual tasks `apply_plan`, `ack` and `seed` of the operations package (`project publish --to runner --operations`), run on the Runner under the person's name |
 | kept the logins (`secret`, `secret send --to runner`) | the Runner: bind each login to the package's `build-login` slot (its Packages page) |
 | published data sources and semantic models to a paired Gateway (`server proxy`, `semantic publish`) | the Workspace's publish to a Gateway (the models and data sources `project publish --to gateway --out` writes, no login) |
-| `lineage`, `state`, `health`, `service` | the Workspace's Lineage panel and the Runner's run lineage; the Runner's state and health |
+| `lineage`, `state`, `health`, `service` | the Workspace's Lineage panel and the Runner's lineage (the package carries the project's design graph, `lineage/design.json`); the Runner's state and health |
 
 Each of those commands answers with that sentence and exit code 2 (a clean break, never a silent one).
 

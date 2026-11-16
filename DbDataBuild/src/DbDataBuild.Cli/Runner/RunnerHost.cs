@@ -25,6 +25,9 @@ public static class RunnerHost
                 case BuildOperations.Ack: await RemoteJobHost.RunAsync<AckJob>(cancel.Token, options).ConfigureAwait(false); break;
                 case BuildOperations.Seed: await RemoteJobHost.RunAsync<SeedJob>(cancel.Token, options).ConfigureAwait(false); break;
                 case CatchUpJob.TaskName: await RemoteJobHost.RunAsync<CatchUpJob>(cancel.Token, options).ConfigureAwait(false); break;
+                case BuildViews.Tests: await RemoteJobHost.RunAsync<TestsViewJob>(cancel.Token, options).ConfigureAwait(false); break;
+                case BuildViews.Status: await RemoteJobHost.RunAsync<StatusViewJob>(cancel.Token, options).ConfigureAwait(false); break;
+                case BuildViews.Compare: await RemoteJobHost.RunAsync<CompareViewJob>(cancel.Token, options).ConfigureAwait(false); break;
                 default: await RemoteJobHost.RunAsync<RefreshJob>(cancel.Token, options).ConfigureAwait(false); break;
             }
 

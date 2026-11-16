@@ -162,6 +162,14 @@ internal static class RunnerProject
         var catchUpSlots = tasks.SelectMany(t => t.Connections).GroupBy(c => c.Name, StringComparer.Ordinal).Select(g => g.First()).OrderBy(c => c.Name, StringComparer.Ordinal).ToList();
         tasks.Add(new PackageTask(CatchUpJob.TaskName, new TaskEntry(), new Schedule(), [], [new TaskInput("connection", ProgressType.Text, Default: "")], catchUpSlots, ProgressDeclaration.Empty, new TaskLimits(Timeout: TimeSpan.FromMinutes(10), Concurrency: 1), [], []));
 
+        // the database-facing views (plan 33 SC20p): the project's tests, the status of a connection and compare, manual only, with the read logins of every connection the plans use; each records its document as a step
+        foreach (var view in BuildViews.All)
+        {
+            if (named.TryGetValue(view, out var taken)) { diagnostics.Add(Invalid(RenderCommand.RenderedDir, $"The plan `{taken}` makes the task `{view}`, which is the name of a view the package runs by hand; rename the plan.")); return null; }
+            tasks.Add(new PackageTask(view, new TaskEntry(), new Schedule(), [TaskTrigger.ByHand()], BuildViews.InputsOf(view), catchUpSlots, ProgressDeclaration.Empty,
+                new TaskLimits(Timeout: TimeSpan.FromMinutes(30), Concurrency: 2, Attempts: 1), [], [], Steps: [new TaskStep(BuildViews.StepName)]));
+        }
+
         var manifest = new PackageManifest(package, $"The dbdatabuild project {package}: {refreshPlans} refresh plan(s)",
             new PackageLaunch(LaunchKind.Executable, Runtime: new RuntimeReference(RuntimeName, runtimeRange)),
             new BuiltAgainst($"{Environment.Version.Major}.{Environment.Version.Minor}", null, RunnerProtocol.V1), tasks);
