@@ -8,12 +8,13 @@ Runs the checks of a dataset and records what they found (plan 23a FQ08). The mo
   (`RunnerJob.Quality`), which writes through the runner protocol into the Runner's `quality` module under the run's own id (plan 35 I3). The Runner answers `/api/v1/quality` with them and the console's Quality page reads them there.
 - **`IQualitySource`** is what a caller gives: its datasets with checks, how to open each read-only, the tables the checks name, the key columns for sample keys, the last load. `StaticQualitySource` is a fixed list; `ConnectionFilesQualitySource` reads the `checks` of
   connection definitions (format 2, the serving layer's data sources). Build brings its own (`ModelQuality` in `DbDataBuild.Cli`: the models a refresh loaded).
+- **`QualityCheckTask` and `QualityCheckJob`** (plan 35 I3a): the `check` task a package declares (`QualityCheckTask.Declare(slots)`: by hand, the input `dataset`, the step `check-result`) and the job it runs (`QualityCheckJob`, a `RunnerJob` the package derives from with `[RunnerTask("check")]`, giving its `IQualitySource` in `SourceAsync`): the checks of the package's datasets are evaluated again, read only, with the package's own slots, and recorded through the kit's `Quality` exactly as after a load, so a block clears when the checks pass; nothing is loaded. Build's refresh package declares it (`CheckJob`); Sync and Store packages declare the same task once they have a source. The Runner's `POST /api/v1/quality/run` starts it for a dataset (the console's Quality page and the Workspace's Runs tab offer Re-check).
 - **`QualityAlertWatcher`** and **`DeliveryQualityAlerts`** send an alert once per failure and once per recovery (FQ13); the console runs the watcher over the servers' overviews.
 
 ## Who evaluates what (plan 35 I3)
 
 A dataset's checks are evaluated in the process of the Runner task that loads it, after its loads, with the read login that task already holds: a task never gets the files or the logins of another package to evaluate its checks. Today that is
-Build's `refresh`. The `checks:` of a Sync replication, of a Store model and of a Gateway's data sources have no evaluator yet (plan 35, the I3 row).
+Build's `refresh`, and again on request by the same package's `check` task (plan 35 I3a). The `checks:` of a Sync replication, of a Store model and of a Gateway's data sources have no evaluator yet (plan 35, the I3 row).
 
 ## Opening the `quality` module
 

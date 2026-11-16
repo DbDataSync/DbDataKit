@@ -81,6 +81,7 @@ public static class ServerProducts
         new("GET", "api/v1/tasks/{name}/{name}/{name}/checkpoints/{name}/history", ServerRole.Operator),    // 29a Q20
         // run now, pause, resume, and who schedules a task (operator)
         new("POST", "api/v1/tasks/{name}/{name}/{name}/run", ServerRole.Operator),
+        new("POST", "api/v1/quality/run", ServerRole.Operator),                                            // plan 35 I3a: re-check a dataset (queues the `check` task of the package that recorded its results)
         new("POST", "api/v1/tasks/{name}/{name}/{name}/pause", ServerRole.Operator),
         new("POST", "api/v1/tasks/{name}/{name}/{name}/resume", ServerRole.Operator),
         new("PUT", "api/v1/tasks/{name}/{name}/{name}/owner", ServerRole.Operator),                        // UE06

@@ -3,7 +3,7 @@
     <RootNamespace>DbDataKit.Quality</RootNamespace>
     <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
     <PackageId>DbDataKit.Quality.Runner</PackageId>
-    <Description>Runs the check/1 data quality checks of a dataset and records the results (plan 23a FQ08): the run service (evaluate, then write check_result and check_status with the block rules, into a state this process holds or a Runner's through its protocol), the sources of datasets and checks, and the alerts.</Description>
+    <Description>Runs the check/1 data quality checks of a dataset and records the results (plan 23a FQ08): the run service (evaluate, then write check_result and check_status with the block rules, into a state this process holds or a Runner's through its protocol), the sources of datasets and checks, the alerts, and the check task a package declares to evaluate its datasets again (plan 35 I3a).</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
@@ -12,5 +12,7 @@
     <ProjectReference Include="..\DbDataKit.Delivery\DbDataKit.Delivery.csproj" />
     <ProjectReference Include="..\DbDataKit.Connections\DbDataKit.Connections.csproj" />
     <ProjectReference Include="..\DbDataKit.Lineage\DbDataKit.Lineage.csproj" />
+    <!-- the check task (plan 35 I3a): a RunnerJob a package derives from -->
+    <ProjectReference Include="..\DbDataKit.Runner.Kit\DbDataKit.Runner.Kit.csproj" />
   </ItemGroup>
 </Project>

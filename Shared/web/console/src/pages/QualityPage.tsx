@@ -3,12 +3,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { ConsoleShell } from '../ConsoleShell'
-import { alertsLine, blockLine, datasetState, measureLine, qualityApi, releaseBlockedReason, runBlockedReason, sortDatasets, stateWord, type QualityCheck, type QualityDataset, type QualityRunAnswer, type QualityServer } from '../quality'
+import { alertsLine, blockLine, datasetState, measureLine, qualityApi, releaseBlockedReason, runAnswerLine, runBlockedReason, sortDatasets, stateWord, type QualityCheck, type QualityDataset, type QualityRunAnswer, type QualityServer } from '../quality'
 
 /**
  * The data quality of the suite's datasets (plan 23a FQ17), from the servers that evaluate checks joined by dataset identity: what is blocked, what is failing, and for each check its latest result, the measure and the history with the
- * keys of the rows that failed. A person with the admin role can evaluate a dataset's checks on a server that does it on request. A server that did not answer is named, not hidden. No server of the suite keeps check results today
- * (the Build, Sync and Store servers that did were deleted, plan 33 SC23); the alerts card still applies. The console holds none of this: it is read from the servers and evaluated by them.
+ * keys of the rows that failed. A person with the admin role can re-check a dataset: on a Runner (plan 35 I3a) that starts the `check` task of the package that recorded its results, which evaluates them again with that package's logins
+ * and loads nothing. A server that did not answer is named, not hidden. The console holds none of this: it is read from the servers and evaluated by them.
  */
 export function QualityPage() {
   const client = useQueryClient()
@@ -39,7 +39,7 @@ export function QualityPage() {
     setOutcome(null)
     try {
       const answer: QualityRunAnswer = await qualityApi.run(serverId, dataset)
-      setOutcome({ ok: true, text: `${serverName} evaluated ${answer.evaluated} check${answer.evaluated === 1 ? '' : 's'}: ${answer.passed} passed, ${answer.failed} failed, ${answer.errors} could not run.${answer.notes.length > 0 ? ' ' + answer.notes.join(' ') : ''}` })
+      setOutcome({ ok: true, text: runAnswerLine(serverName, answer) })
       await client.invalidateQueries({ queryKey: ['quality'] })
     } catch (e) {
       // the server's own words: a refusal for a role, an unknown dataset
@@ -129,7 +129,7 @@ function DatasetDetail(props: {
             return (
               <span key={serverId} style={{ marginRight: 12 }}>
                 <button type="button" className="btn btn-sm" disabled={why !== null || running !== null} title={why ?? undefined} onClick={() => void onRun(serverId, serverName, dataset.dataset)} data-testid={`quality-run-${serverId}`}>
-                  {running === serverId ? 'Evaluating…' : `Evaluate on ${serverName}`}
+                  {running === serverId ? 'Starting…' : `Re-check on ${serverName}`}
                 </button>
                 {why && <span className="hint" data-testid={`quality-run-why-${serverId}`}> {why}</span>}
               </span>

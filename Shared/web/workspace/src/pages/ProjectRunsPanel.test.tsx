@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { BuildDetail, StagedRun } from '../api'
-import { ProjectRunsPanel, buildConnectionsOf, isBuildView, viewProblem, viewResultOf, syncSlotOf, bulkLoadRequests, mappingsOfReplication, passesOf, publishedVersionOf, runnerScreens, segmentingProblem, syncTaskOf } from './ProjectRunsPanel'
+import { ProjectRunsPanel, checkResultOf, checkSummary, buildConnectionsOf, isBuildView, viewProblem, viewResultOf, syncSlotOf, bulkLoadRequests, mappingsOfReplication, passesOf, publishedVersionOf, runnerScreens, segmentingProblem, syncTaskOf } from './ProjectRunsPanel'
 
 const detail = (id: string, publishes: BuildDetail['publishes']): BuildDetail => ({ build: { id } as BuildDetail['build'], result: null, publishes })
 
@@ -72,6 +72,14 @@ describe('the runs of what a draft published (plan 33 SC20o, SC22l)', () => {
     const run: StagedRun = { id: 'r', task: 'status', outcome: 'succeeded', started: '', finished: '', version: null, failure: null, steps: [{ key: 'status', started: '', completed: '', result: { view: 'status', exit_code: 1, document: { data: { drift: 2 } } } }] }
     expect(viewResultOf(run)?.document).toEqual({ data: { drift: 2 } })
     expect(viewResultOf({ ...run, steps: [] })).toBeNull()
+  })
+  it('reads what a re-check recorded and says whether anything still blocks (plan 35 I3a)', () => {
+    const result = { task: 'check' as const, dataset: null, evaluated: 4, passed: 3, failed: 1, errors: 0, blocking: 1, notes: [], results: [{ dataset: 'mssql://x/db.marts.orders', name: 'marts.orders', check: 'customer_present', status: 'fail' as const, blocking: true }] }
+    const run: StagedRun = { id: 'r', task: 'check', outcome: 'succeeded', started: '', finished: '', version: null, failure: null, steps: [{ key: 'check', started: '', completed: '', result: result }] }
+    expect(checkResultOf(run)?.results?.[0].name).toBe('marts.orders')
+    expect(checkSummary(result)).toContain('1 still blocks')
+    expect(checkSummary({ ...result, failed: 0, passed: 4, blocking: 0 })).toContain('Nothing blocks')
+    expect(checkResultOf({ ...run, steps: [{ key: 'status', started: '', completed: '', result: { view: 'status' } }] })).toBeNull()
   })
   it('says what to do when nothing is published yet', () => {
     const html = renderToStaticMarkup(

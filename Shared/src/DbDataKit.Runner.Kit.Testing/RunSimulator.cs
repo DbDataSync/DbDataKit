@@ -99,12 +99,13 @@ public sealed class RunSimulator<TJob> : IDisposable
     /// <param name="maxParallelism">The most a unit loop may run at once, whatever the job asks (1 makes a test deterministic).</param>
     /// <param name="package">The package name progress is kept under.</param>
     /// <param name="channel">The channel name progress is kept under.</param>
-    public RunSimulator(object? input = null, SlotOpener? slots = null, StepOptions? steps = null, int? maxParallelism = null, string package = "simulator", string channel = "test", bool dryRun = false)
+    /// <param name="database">The state database of another simulator, so tasks of one package run against one state (what one task records, such as a check's block, is what the next reads); this simulator does not remove it.</param>
+    public RunSimulator(object? input = null, SlotOpener? slots = null, StepOptions? steps = null, int? maxParallelism = null, string package = "simulator", string channel = "test", bool dryRun = false, StateDatabase? database = null)
     {
         _input = input;
         _directory = Directory.CreateTempSubdirectory("dbdatakit-sim-");
         var layout = StateLayout.Create(StateEngineIds.Sqlite, [ProgressModule.Module, RunsModule.Module, QualityModule.Module], StateScope.Standalone);
-        Database = new StateDatabase(Path.Combine(_directory.FullName, "state.db"), layout, null, null);
+        Database = database ?? new StateDatabase(Path.Combine(_directory.FullName, "state.db"), layout, null, null);
         _environment = new RunnerEnvironment(Database, package, channel)
         {
             SlotOpener = slots,

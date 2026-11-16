@@ -115,7 +115,7 @@ Taken (not open any more): the word "unit" of Sync's state on a target is the **
 
 | Plan and row | What remains | Flag |
 | --- | --- | --- |
-| [35](35-isolation-by-trust.md) I1 to I9 | Isolation by trust: the housekeeping library in every server and the embedded runner's removal (I1, I2, inside SC23); after SC23, evaluation as a Runner task, the console-made Gateway-Runner link, path 1 with an outbox and the 10-second wait, path 2 for the contract guard and `data.changed`, state logins per service and group, one backup set, structural tasks only from Control | I1, I2, I3 built (2026-11-16) |
+| [35](35-isolation-by-trust.md) I1 to I9 | Isolation by trust: the housekeeping library in every server and the embedded runner's removal (I1, I2, inside SC23); after SC23, evaluation as a Runner task, the console-made Gateway-Runner link, path 1 with an outbox and the 10-second wait, path 2 for the contract guard and `data.changed`, state logins per service and group, one backup set, structural tasks only from Control | I1, I2, I3, I3a built (2026-11-16) |
 | [22a](22a-gap-slices.md) GP29 | OpenTelemetry: what is left is the trace id in the serving contract and the hop through a module (the hosts' spans and counters, GP28, and the trace across the console's relay are built; `docs/observability.md`) | |
 | [22a](22a-gap-slices.md) GP23 | Descriptions and owners in lineage nodes: the emitters, once the definitions carry the text (the contract `LineageDescriptions` is built) | PARTLY |
 | [24a](24a-upgrade-and-cache-slices.md) UC07 (program legs) | The compatibility job runs the previous release's programs against the current build (the contract check of generations and formats is built) | waits for the first stable release (owner 2026-11-14) |

@@ -48,12 +48,15 @@ public sealed class ConsoleQualityTests : IAsyncLifetime
         try { Directory.Delete(directory, true); } catch (IOException) { }
     }
 
-    private async Task<(HttpStatusCode Status, JsonNode? Body)> Get(string path, bool signedIn = true)
+    private Task<(HttpStatusCode Status, JsonNode? Body)> Get(string path, bool signedIn = true) => Send(HttpMethod.Get, path, signedIn ? UserRole.Viewer : null);
+
+    private async Task<(HttpStatusCode Status, JsonNode? Body)> Send(HttpMethod method, string path, UserRole? role, string? body = null)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, path);
-        if (signedIn)
+        var request = new HttpRequestMessage(method, path);
+        if (body is not null) request.Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+        if (role is { } signedIn)
         {
-            var session = app.Services.GetRequiredService<ISessionStore>().Create(app.Services.GetRequiredService<IUserAccounts>().CreateUser("Ana-" + Guid.NewGuid().ToString("N")[..6], null, UserRole.Viewer).Id).Id;
+            var session = app.Services.GetRequiredService<ISessionStore>().Create(app.Services.GetRequiredService<IUserAccounts>().CreateUser("Ana-" + Guid.NewGuid().ToString("N")[..6], null, signedIn).Id).Id;
             request.Headers.Add("Cookie", $"{ConsoleHost.Auth.SessionCookie}={session}");
         }
         var response = await http.SendAsync(request);
@@ -78,7 +81,7 @@ public sealed class ConsoleQualityTests : IAsyncLifetime
         var failing = dataset["checks"]!.AsArray().Single(c => (string?)c!["check_id"] == "orders_customer_present")!;
         Assert.Equal(("fail", true, "Runner one", "runner-1", "dbdatarunner"), ((string?)failing["status"], (bool)failing["blocking"]!, (string?)failing["server"], (string?)failing["server_id"], (string?)failing["product"]));
         var server = Assert.Single(body["servers"]!.AsArray());
-        Assert.Equal(("Runner one", 2, false, true), ((string?)server!["server"], (int)server["checks"]!, (bool)server["can_run"]!, (bool)server["can_release"]!));
+        Assert.Equal(("Runner one", 2, true, true), ((string?)server!["server"], (int)server["checks"]!, (bool)server["can_run"]!, (bool)server["can_release"]!));   // plan 35 I3a: a re-check is offered
         Assert.Null((string?)server["error"]);
         Assert.Equal(0, gatewayAsked);      // a Gateway keeps no results
 
@@ -86,6 +89,20 @@ public sealed class ConsoleQualityTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, read);
         var result = Assert.Single(history!["results"]!.AsArray());
         Assert.Equal((RunId, "order_id=7"), ((string?)result!["run_id"], (string?)result["sample_keys"]![0]));
+    }
+
+    [Fact]
+    public async Task A_recheck_goes_to_the_runner_through_the_relay_and_a_viewer_is_refused()
+    {
+        // plan 35 I3a: the Quality page's Re-check is the runner's own route; the runner says which package's task it would start, and here no run it knows recorded the results
+        new QualityStore(runner.State).Record(new CheckResultRecord("orders_customer_present", Dataset, CheckOutcome.Fail, DateTimeOffset.UtcNow, 2, 0, ["order_id=7"], RunId, "block"));
+        var body = $"{{\"dataset\": \"{Dataset}\"}}";
+
+        var (viewer, _) = await Send(HttpMethod.Post, "/relay/runner-1/api/v1/quality/run", UserRole.Viewer, body);
+        Assert.Equal(HttpStatusCode.Forbidden, viewer);
+        var (admin, answer) = await Send(HttpMethod.Post, "/relay/runner-1/api/v1/quality/run", UserRole.Admin, body);
+        Assert.Equal(HttpStatusCode.NotFound, admin);
+        Assert.Contains("no package is known", (string?)answer!["error"], StringComparison.Ordinal);
     }
 
     [Fact]

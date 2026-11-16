@@ -100,6 +100,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         server.MapGet("/api/v1/quality", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { datasets = Array.Empty<object>(), can_run = false, can_release = true })));
         server.MapGet("/api/v1/quality/history", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { results = Array.Empty<object>() })));
         server.MapPost("/api/v1/quality/release", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { released = true })));
+        server.MapPost("/api/v1/quality/run", (HttpContext c) => Needs(c, ServerRole.Operator, () => Results.Json(new { queued = true })));
         server.MapGet("/api/v1/secrets/overview", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { secrets = Array.Empty<object>() })));
         server.MapGet("/api/v1/certificate", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { present = true })));
         server.MapPut("/api/v1/secrets/{name}", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { name = "set" })));
@@ -268,7 +269,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         ("GET", "api/v1/posture-choices", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}/units", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}/steps", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/tasks/{name}/{name}/{name}/in-doubt", ServerRole.Operator, ServerRole.None), ("GET", "api/v1/tasks/{name}/{name}/{name}/dead-letters", ServerRole.Operator, ServerRole.None),
         ("GET", "api/v1/tasks/{name}/{name}/{name}/checkpoints", ServerRole.Operator, ServerRole.None), ("GET", "api/v1/tasks/{name}/{name}/{name}/checkpoints/{name}/history", ServerRole.Operator, ServerRole.None),
-        ("POST", "api/v1/tasks/{name}/{name}/{name}/run", ServerRole.Operator, ServerRole.None), ("POST", "api/v1/tasks/{name}/{name}/{name}/pause", ServerRole.Operator, ServerRole.None),
+        ("POST", "api/v1/tasks/{name}/{name}/{name}/run", ServerRole.Operator, ServerRole.None), ("POST", "api/v1/quality/run", ServerRole.Operator, ServerRole.None), ("POST", "api/v1/tasks/{name}/{name}/{name}/pause", ServerRole.Operator, ServerRole.None),
         ("POST", "api/v1/tasks/{name}/{name}/{name}/resume", ServerRole.Operator, ServerRole.None), ("PUT", "api/v1/tasks/{name}/{name}/{name}/owner", ServerRole.Operator, ServerRole.None),
         ("POST", "api/v1/tasks/{name}/{name}/{name}/steps/{name}/resolve", ServerRole.Operator, ServerRole.None), ("POST", "api/v1/tasks/{name}/{name}/{name}/dead-letters/{name}/replay", ServerRole.Operator, ServerRole.None),
         ("POST", "api/v1/tasks/{name}/{name}/{name}/dead-letters/{name}/discard", ServerRole.Operator, ServerRole.None), ("POST", "api/v1/tasks/{name}/{name}/{name}/checkpoints/{name}/rewind", ServerRole.Operator, ServerRole.None),

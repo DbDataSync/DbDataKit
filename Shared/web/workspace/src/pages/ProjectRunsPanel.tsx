@@ -117,6 +117,40 @@ function BuildViewRow({ view, connections, busy, onRun }: { view: BuildView; con
 export const buildConnectionsOf = (paths: readonly string[]): string[] =>
   paths.map((p) => /^connections\/([^/]+)\.ya?ml$/i.exec(p)?.[1]).filter((n): n is string => !!n).sort()
 
+/** The task that evaluates a package's checks again (plan 35 I3a, `QualityCheckTask`): read only, its results recorded on the Runner, a block cleared when the checks pass; the step `check-result` holds its document. */
+export const CHECK_TASK = 'check'
+export const CHECK_STEP = 'check-result'
+
+/** One check of a re-check's document. */
+export interface CheckLine { dataset: string; name?: string; check: string; kind?: string; severity?: string; status: 'pass' | 'fail' | 'error'; measured?: number | null; threshold?: number | null; sample_keys?: string[]; message?: string | null; blocking?: boolean }
+
+/** The document the `check` task recorded. */
+export interface CheckResult { task: 'check'; dataset?: string | null; datasets?: number; evaluated: number; passed: number; failed: number; errors: number; blocking: number; notes?: string[]; results?: CheckLine[]; truncated?: boolean }
+export const checkResultOf = (run: StagedRun): CheckResult | null =>
+  ((run.steps ?? []).map((s) => s.result as CheckResult | null).filter((r): r is CheckResult => !!r && typeof r === 'object' && (r as { task?: unknown }).task === CHECK_TASK).pop() ?? null)
+
+/** The line under a re-check: the counts and whether anything still blocks. */
+export function checkSummary(r: CheckResult): string {
+  if (r.evaluated === 0) return 'No check was evaluated.'
+  const counts = `${r.evaluated} check${r.evaluated === 1 ? '' : 's'}: ${r.passed} passed, ${r.failed} failed, ${r.errors} could not run.`
+  return r.blocking > 0
+    ? `${counts} ${r.blocking} still block${r.blocking === 1 ? 's' : ''} what depends on ${r.blocking === 1 ? 'its dataset' : 'their datasets'}: fix the data, then re-check again.`
+    : `${counts} Nothing blocks: the next refresh loads what was waiting.`
+}
+
+/** The re-check's line: an optional dataset (a model's name; blank: every model with checks) and Re-check. */
+function CheckRow({ busy, onRun }: { busy: boolean; onRun: (inputs: Record<string, string>) => void }) {
+  const [dataset, setDataset] = useState('')
+  return (
+    <div className="grid-row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }} data-testid="wsp-runs-check">
+      <span className="mono" style={{ minWidth: 80 }}>{CHECK_TASK}</span>
+      <input className="input mono" style={{ width: 220 }} aria-label="dataset" placeholder="model (blank: every model with checks)" value={dataset} onChange={(e) => setDataset(e.target.value)} data-testid="wsp-runs-check-dataset" />
+      <button type="button" className="btn btn-sm" disabled={busy} data-testid="wsp-runs-recheck" onClick={() => onRun(dataset.trim() ? { dataset: dataset.trim() } : {})}>Re-check</button>
+      <span className="hint">Evaluates the checks again, read only, and clears a block when they pass; nothing is loaded.</span>
+    </div>
+  )
+}
+
 /** A pass a drain recorded (`PassRecord`, the step `pass-record`): what the run did to each mapping. */
 interface PassStep { mapping?: string; kind?: string; segment?: string | null; status?: string; rowsRead?: number; rowsWritten?: number; summary?: string | null; failureKind?: string | null }
 export const passesOf = (run: StagedRun): PassStep[] => (run.steps ?? []).map((s) => (s.result ?? {}) as PassStep).filter((p) => !!p.mapping)
@@ -137,6 +171,29 @@ function RunLine({ result, instance }: { result: Started; instance: string | nul
           <summary className="hint">{viewResultOf(run)!.truncated ? `The document of ${viewResultOf(run)!.view} was ${viewResultOf(run)!.bytes} bytes; its head is kept` : `The document of ${viewResultOf(run)!.view} (exit code ${viewResultOf(run)!.exit_code})`}</summary>
           <pre className="mono" style={{ maxHeight: 360, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{viewResultOf(run)!.truncated ? viewResultOf(run)!.head : JSON.stringify(viewResultOf(run)!.document, null, 2)}</pre>
         </details>
+      )}
+      {checkResultOf(run) && (
+        <div data-testid="wsp-runs-check-result" data-blocking={checkResultOf(run)!.blocking}>
+          <div className={checkResultOf(run)!.blocking > 0 ? 'error' : 'hint'} data-testid="wsp-runs-check-summary">{checkSummary(checkResultOf(run)!)}</div>
+          {(checkResultOf(run)!.notes ?? []).map((n, i) => <div key={i} className="hint">{n}</div>)}
+          {(checkResultOf(run)!.results ?? []).length > 0 && (
+            <table className="table">
+              <thead><tr><th>Dataset</th><th>Check</th><th>Result</th><th>Measure</th><th>Blocks</th></tr></thead>
+              <tbody>
+                {checkResultOf(run)!.results!.map((c, i) => (
+                  <tr key={i} data-testid="wsp-runs-check-line" data-status={c.status}>
+                    <td className="mono">{c.name ?? c.dataset}</td>
+                    <td className="mono">{c.check}{c.severity ? ` (${c.severity})` : ''}</td>
+                    <td className={c.status === 'pass' ? '' : 'error'}>{c.status}{c.message ? `: ${c.message}` : ''}</td>
+                    <td>{c.measured ?? '-'}{c.threshold != null ? ` (allowed ${c.threshold})` : ''}{c.sample_keys && c.sample_keys.length > 0 ? `; for example ${c.sample_keys.slice(0, 3).join(' | ')}` : ''}</td>
+                    <td>{c.blocking ? 'yes' : 'no'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {checkResultOf(run)!.truncated && <div className="hint">The document was cut to fit; the Quality page has every result.</div>}
+        </div>
       )}
       {passesOf(run).map((p, i) => (
         <div key={i} className={p.status === 'Succeeded' ? 'hint' : 'error'} data-testid="wsp-runs-pass">
@@ -203,7 +260,7 @@ export function ProjectRunsPanel({ project, id, kind, paths }: { project: string
     mutationFn: async ({ task, inputs }: { task: string; inputs: Record<string, string> }): Promise<Started> => {
       if (!at) throw new Error('No build of this draft is published to a Runner. Build it and publish it to a Runner (Builds tab); then its tasks run from here.')
       const started = (await workspaceApi.runServed(project, id, at.build, task, inputs)).run
-      return { started, run: await followStagedRun(() => workspaceApi.stagedRun(project, id, at.build, started.run_id, kind === 'sync' ? 'pass-record' : isBuildView(task) ? 'view-result' : undefined)) }
+      return { started, run: await followStagedRun(() => workspaceApi.stagedRun(project, id, at.build, started.run_id, kind === 'sync' ? 'pass-record' : isBuildView(task) ? 'view-result' : task === CHECK_TASK ? CHECK_STEP : undefined)) }
     },
   })
   const screens = at && instance ? runnerScreens(instance, at.package) : null
@@ -218,14 +275,15 @@ export function ProjectRunsPanel({ project, id, kind, paths }: { project: string
   })
   const connections = kind === 'sync' ? connectionsOf(paths) : []
   const replications = replicationsOf(paths).filter((r) => !at || at.tasks.length === 0 || at.tasks.includes(syncTaskOf(r)))
-  const tasks = kind === 'sync' ? [] : (at?.tasks ?? []).filter((t) => !isBuildView(t))
+  const tasks = kind === 'sync' ? [] : (at?.tasks ?? []).filter((t) => !isBuildView(t) && t !== CHECK_TASK)
+  const recheck = kind !== 'sync' && (at?.tasks ?? []).includes(CHECK_TASK)
   const views = kind === 'sync' ? [] : (at?.tasks ?? []).filter(isBuildView)
   return (
     <div data-testid="wsp-runs">
       <div className="hint" style={{ marginBottom: 6 }}>
         {kind === 'sync'
           ? 'The replications of the set this draft published, run on the Runner as its channel serves them. A replication whose target table does not exist yet refuses its first pass, naming the table: apply the setup on the Provisioning tab, then Run now.'
-          : 'The tasks of the package this draft published, run on the Runner as its channel serves them. The project\'s tests, the status of a connection and compare run there too, read only, with the logins bound on the Runner, and their documents come back here. Initialise and Build\'s operations (apply a plan, acknowledge, seed) are the operations package\'s, which this server does not build yet.'}
+          : 'The tasks of the package this draft published, run on the Runner as its channel serves them. The project\'s tests, the status of a connection and compare run there too, read only, with the logins bound on the Runner, and their documents come back here. Re-check evaluates the checks of the project\'s models again (all, or one) and clears a block when they pass, without a refresh. Initialise and Build\'s operations (apply a plan, acknowledge, seed) are the operations package\'s, which this server does not build yet.'}
       </div>
       {published.isLoading ? null : at
         ? (
@@ -252,6 +310,7 @@ export function ProjectRunsPanel({ project, id, kind, paths }: { project: string
       ))}
       {at && views.length > 0 && <div className="hint" style={{ marginTop: 6 }}>Views, read only:</div>}
       {at && views.map((v) => <BuildViewRow key={v} view={v} connections={buildConnectionsOf(paths)} busy={start.isPending} onRun={(inputs) => start.mutate({ task: v, inputs })} />)}
+      {at && recheck && <CheckRow busy={start.isPending} onRun={(inputs) => start.mutate({ task: CHECK_TASK, inputs })} />}
       {start.isPending && <div className="hint" data-testid="wsp-runs-running">Running on the Runner...</div>}
       {start.data && <RunLine result={start.data} instance={start.data.started.instance ?? instance} />}
     </div>

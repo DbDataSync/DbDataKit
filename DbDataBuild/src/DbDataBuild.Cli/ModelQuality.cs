@@ -2,6 +2,7 @@ using DbDataBuild.Core;
 using DbDataBuild.Execution;
 using DbDataBuild.Models;
 using DbDataBuild.Semantic;
+using DbDataBuild.State;
 using DbDataKit.Dialect;
 using DbDataKit.Lineage;
 using DbDataKit.Quality;
@@ -50,7 +51,11 @@ internal static class ModelQuality
     public const string RunnerResultsIn = "runner";
 
     /// <summary>The datasets of the models in <paramref name="models"/> that carry checks and are built on <paramref name="connection"/>.</summary>
-    public static (IQualitySource Source, IReadOnlyDictionary<string, string> ModelOfIdentity) Source(ProjectContext ctx, string connection, LoginSettings read, IReadOnlySet<string> models, DateTimeOffset loadedAt, Func<string, string?> env, List<string> notes)
+    public static (IQualitySource Source, IReadOnlyDictionary<string, string> ModelOfIdentity) Source(ProjectContext ctx, string connection, LoginSettings read, IReadOnlySet<string> models, DateTimeOffset loadedAt, Func<string, string?> env, List<string> notes) =>
+        Source(ctx, connection, read, models, _ => loadedAt, env, notes);
+
+    /// <summary>The same, with when each model was last loaded (<paramref name="loadedAt"/> by the model's name; null when no successful load is known).</summary>
+    public static (IQualitySource Source, IReadOnlyDictionary<string, string> ModelOfIdentity) Source(ProjectContext ctx, string connection, LoginSettings read, IReadOnlySet<string> models, Func<string, DateTimeOffset?> loadedAt, Func<string, string?> env, List<string> notes)
     {
         var datasets = new List<QualityDataset>();
         if (!QualityAccess.Supports(read.Engine))
@@ -85,10 +90,71 @@ internal static class ModelQuality
             var identity = identityOf[model.Name];
             var checks = model.Checks.Select(c => c.Check with { Attachment = c.Check.Attachment with { Dataset = identity } }).Concat(KeyChecksOf(model, identity)).ToList();
             var keys = model.UniqueKey.Count > 0 ? model.UniqueKey : model.Grain;
-            datasets.Add(new QualityDataset(identity, checks, dialect, open, Resolve, Aliases: [model.Name], KeyColumns: keys, LastLoadedAt: loadedAt));
+            datasets.Add(new QualityDataset(identity, checks, dialect, open, Resolve, Aliases: [model.Name], KeyColumns: keys, LastLoadedAt: loadedAt(model.Name)));
         }
 
         return (new StaticQualitySource(datasets), identityOf.ToDictionary(p => p.Value, p => p.Key, StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The datasets of a package's <c>check</c> task (plan 35 I3a): every model of the project with checks, on each connection whose read login the environment has (on a Runner, the slots bound to the package; a connection without one
+    /// is a note, never another package's login), with the last successful load of each model read from the connection's tracking tables with the read login (for a <c>freshness</c> check without a column). Nothing is loaded and
+    /// nothing is written: the checks run over <see cref="QualityAccess"/>'s read-only connections.
+    /// </summary>
+    public static async Task<QualityCheckSource> PackageSourceAsync(string root, Func<string, string?> env, CancellationToken ct = default)
+    {
+        var ctx = ProjectContext.Load(root);
+        var notes = new List<string>();
+        var datasets = new List<QualityDataset>();
+        var names = new Dictionary<string, string>(StringComparer.Ordinal);
+        var connections = ctx.Project.BuiltModels.SelectMany(m => ctx.TargetsOf(m.Definition)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+        foreach (var connection in connections)
+        {
+            var models = ctx.Project.BuiltModels.Select(m => m.Definition)
+                .Where(m => ctx.TargetsOf(m).Contains(connection, StringComparer.Ordinal) && (m.Checks.Count > 0 || KeyChecksOf(m, "").Count > 0)).Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
+            if (models.Count == 0) continue;
+            var (read, missing) = LoginSettings.FromEnvironment(ctx.Config, connection, Login.Read, env);
+            if (read is null)
+            {
+                notes.Add($"The checks of {string.Join(", ", models.Order(StringComparer.Ordinal))} were not evaluated: the package has no read login for `{connection}` ({missing?.Found ?? "none is bound"}).");
+                continue;
+            }
+
+            var loads = await LastLoadsAsync(ctx, connection, read, env, notes, ct).ConfigureAwait(false);
+            var (source, modelOf) = Source(ctx, connection, read, models, model => loads.GetValueOrDefault(model), env, notes);
+            datasets.AddRange(await source.DatasetsAsync(ct).ConfigureAwait(false));
+            foreach (var (identity, model) in modelOf) names[identity] = model;
+        }
+
+        if (datasets.Count == 0 && notes.Count == 0) notes.Add("No model of the project has checks.");
+        return new QualityCheckSource(new StaticQualitySource(datasets), notes, identity => names.GetValueOrDefault(identity));
+    }
+
+    /// <summary>When each model of <paramref name="connection"/> last loaded successfully, from its tracking tables (<c>run_log</c>) with the read login; none when nothing is tracked or the tables cannot be read (a note says so).</summary>
+    private static async Task<IReadOnlyDictionary<string, DateTimeOffset?>> LastLoadsAsync(ProjectContext ctx, string connection, LoginSettings read, Func<string, string?> env, List<string> notes, CancellationToken ct)
+    {
+        var found = new Dictionary<string, DateTimeOffset?>(StringComparer.OrdinalIgnoreCase);
+        if (ctx.Config.TrackingOf(connection).Target is not { } target) return found;
+        try
+        {
+            var login = read;
+            if (target.Connection != connection)
+            {
+                var (other, missing) = LoginSettings.FromEnvironment(target.Connection, target.Engine, Login.Read, env);
+                if (other is null) { notes.Add($"When the models of `{connection}` were last loaded was not read: {missing?.Found}"); return found; }
+                login = other;
+            }
+
+            await using var session = await ReadSession.OpenAsync(login, ct).ConfigureAwait(false);
+            var loads = await BuildLineage.LastLoadsAsync(session, new TrackingScope(target.Engine, target.SchemaName, connection), ct).ConfigureAwait(false);
+            foreach (var l in loads.Where(l => l.Succeeded)) found[l.Model] = new DateTimeOffset(DateTime.SpecifyKind(l.EndedUtc, DateTimeKind.Utc));
+            return found;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            notes.Add($"When the models of `{connection}` were last loaded was not read ({Failures.Describe(ex)}); a freshness check without a column cannot measure its age.");
+            return found;
+        }
     }
 
     /// <summary>

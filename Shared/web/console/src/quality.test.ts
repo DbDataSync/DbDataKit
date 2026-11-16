@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { alertsLine, releaseBlockedReason, releasePath, runPath, blockLine, datasetState, historyPath, measureLine, panelLine, runBlockedReason, sortDatasets, stateWord, type QualityCheck, type QualityDataset, type QualityServer } from './quality'
+import { alertsLine, releaseBlockedReason, releasePath, runAnswerLine, runPath, blockLine, datasetState, historyPath, measureLine, panelLine, runBlockedReason, sortDatasets, stateWord, type QualityCheck, type QualityDataset, type QualityServer } from './quality'
 
 const check = (over: Partial<QualityCheck> = {}): QualityCheck => ({
   check_id: 'c', severity: 'block', on_error: 'alert', status: 'pass', status_since: 't', measured: 0, threshold: 0, evaluated_at: 't', blocking: false, blocked_since: null, server: 'Sync one', server_id: 'sync-1', product: 'dbdatasync', ...over,
@@ -58,6 +58,16 @@ describe('whether a check can be evaluated from the screen', () => {
     expect(runBlockedReason(server({ can_run: false, run_note: 'Build evaluates after a refresh.' }), true)).toBe('Build evaluates after a refresh.')
     expect(runBlockedReason(server({ can_run: false }), true)).toBe('Sync one cannot evaluate on request.')
     expect(runBlockedReason(server(), false)).toContain('admin role')
+  })
+})
+
+describe('what an answer to re-check says (plan 35 I3a)', () => {
+  it('names the run a Runner queued, and the counts of a server that evaluated at once', () => {
+    const queued = runAnswerLine('Runner one', { dataset: 'd', queued: true, run_id: 'r-1', task: 'sales/prod/check' })
+    expect(queued).toContain('sales/prod/check')
+    expect(queued).toContain('r-1')
+    expect(queued).toContain('loads nothing')
+    expect(runAnswerLine('Sync one', { dataset: 'd', evaluated: 2, passed: 1, failed: 1, errors: 0, blocking: 1, notes: ['n'] })).toBe('Sync one evaluated 2 checks: 1 passed, 1 failed, 0 could not run. n')
   })
 })
 

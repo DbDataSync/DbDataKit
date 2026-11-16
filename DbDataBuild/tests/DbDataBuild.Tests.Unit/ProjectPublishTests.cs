@@ -47,10 +47,17 @@ public class ProjectPublishTests
         var dir = CompiledProject();
         var built = Built(dir);
 
-        // after the plans: the follower on its own (plan 28c E16), on demand, holding the connections of the plans; then the database-facing views, manual only (plan 33 SC20p)
-        Assert.Equal(["sqlserver-hourly", "sqlserver-quiet", "catch-up", "tests", "status", "compare"], built.Manifest.Tasks.Select(t => t.Name));
+        // after the plans: the follower on its own (plan 28c E16), on demand, holding the connections of the plans; then the database-facing views, manual only (plan 33 SC20p); then the re-check of the checks (plan 35 I3a)
+        Assert.Equal(["sqlserver-hourly", "sqlserver-quiet", "catch-up", "tests", "status", "compare", "check"], built.Manifest.Tasks.Select(t => t.Name));
         var catchUp = built.Manifest.Tasks[2];
-        foreach (var view in built.Manifest.Tasks.Skip(3))
+        var check = built.Manifest.Tasks[6];
+        Assert.False(check.Schedule.HasSchedule);
+        Assert.Equal([TaskTrigger.ByHand()], check.Triggers);
+        Assert.Equal(catchUp.Connections, check.Connections);                 // the package's own slots, never another package's
+        Assert.Equal(["check-result"], check.StepList.Select(s => s.Name));
+        Assert.Equal([("dataset", "")], check.Inputs.Select(i => (i.Name, i.Default!)));
+        Assert.Equal((1, 1), (check.Limits.Concurrency, check.Limits.Attempts));
+        foreach (var view in built.Manifest.Tasks.Skip(3).Take(3))
         {
             Assert.False(view.Schedule.HasSchedule);
             Assert.Equal([TaskTrigger.ByHand()], view.Triggers);

@@ -29,7 +29,16 @@ export interface QualityAnswer { datasets: QualityDataset[]; servers: QualitySer
 
 export interface QualityResult { id: string; status: QualityCheck['status']; evaluated_at: string; measured: number | null; threshold: number | null; sample_keys: string[]; run_id: string | null; message: string | null }
 
-export interface QualityRunAnswer { replication?: string; dataset: string; evaluated: number; passed: number; failed: number; errors: number; blocking: number; notes: string[] }
+/** What a server said to "evaluate now": the counts when it evaluated at once, or (a Runner, plan 35 I3a) the run of the package's `check` task it queued. */
+export interface QualityRunAnswer { replication?: string; dataset: string; evaluated?: number; passed?: number; failed?: number; errors?: number; blocking?: number; notes?: string[]; queued?: boolean; run_id?: string; task?: string }
+
+/** The words for an answer to "evaluate now". */
+export function runAnswerLine(serverName: string, answer: QualityRunAnswer): string {
+  if (answer.queued) return `${serverName} started a re-check: the task ${answer.task ?? 'check'} (run ${answer.run_id ?? '?'}) evaluates the checks again with its package's logins and loads nothing. Ask the servers again when it ends; a block clears if the checks pass.`
+  const evaluated = answer.evaluated ?? 0
+  const notes = answer.notes ?? []
+  return `${serverName} evaluated ${evaluated} check${evaluated === 1 ? '' : 's'}: ${answer.passed ?? 0} passed, ${answer.failed ?? 0} failed, ${answer.errors ?? 0} could not run.${notes.length > 0 ? ' ' + notes.join(' ') : ''}`
+}
 
 /** What a dataset is as a whole, worst first: blocked, failing (a warn check failed), could not be checked, passing. */
 export type DatasetState = 'blocked' | 'failing' | 'error' | 'pass'
@@ -78,7 +87,7 @@ export function runBlockedReason(server: QualityServer | undefined, isAdmin: boo
   if (!server) return 'The server that evaluates this check is not paired any more.'
   if (server.error) return `${server.server} did not answer: ${server.error}`
   if (!server.can_run) return server.run_note ?? `${server.server} cannot evaluate on request.`
-  if (!isAdmin) return 'Evaluating opens connections to the data, so it needs the admin role.'
+  if (!isAdmin) return 'Evaluating opens connections to the data, so it needs the admin role here (the server checks its own role too).'
   return null
 }
 

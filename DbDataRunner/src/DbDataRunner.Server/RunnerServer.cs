@@ -142,7 +142,7 @@ public static class RunnerServer
         var lineageCatalog = CatalogOf(settings, state);
         RunnerLineageApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver, lineageCatalog.Find);   // plan 18 G18: a package's tables named by the bound connection
         RunnerTrackingApi.Map(app, state, "/api/v1", RunnerCallers.TokenResolver);   // plan 28c E18: the runner's own copy of Build's tracking, and the resolve of its divergences
-        RunnerQualityApi.Map(app, state, "/api/v1", RunnerCallers.TokenResolver);    // plan 35 I3: the results of the checks its tasks evaluated, their history and the release of a block
+        RunnerQualityApi.Map(app, state, "/api/v1", RunnerCallers.TokenResolver, engine: () => app.Services.GetRequiredService<RunnerEngine>());    // plan 35 I3: the results of the checks its tasks evaluated, their history and the release of a block; I3a: a re-check starts the package's `check` task
         return app;
     }
 }

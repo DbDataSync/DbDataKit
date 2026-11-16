@@ -170,6 +170,10 @@ internal static class RunnerProject
                 new TaskLimits(Timeout: TimeSpan.FromMinutes(30), Concurrency: 2, Attempts: 1), [], [], Steps: [new TaskStep(BuildViews.StepName)]));
         }
 
+        // the check task (plan 35 I3a): the checks of the project's models evaluated again, read only, with the same slots, by hand; the shared declaration is the one Sync and Store packages take too
+        if (named.TryGetValue(DbDataKit.Quality.QualityCheckTask.Name, out var checkClash)) { diagnostics.Add(Invalid(RenderCommand.RenderedDir, $"The plan `{checkClash}` makes the task `{DbDataKit.Quality.QualityCheckTask.Name}`, which is the name of the task that evaluates the checks again; rename the plan.")); return null; }
+        tasks.Add(DbDataKit.Quality.QualityCheckTask.Declare(catchUpSlots));
+
         var manifest = new PackageManifest(package, $"The dbdatabuild project {package}: {refreshPlans} refresh plan(s)",
             new PackageLaunch(LaunchKind.Executable, Runtime: new RuntimeReference(RuntimeName, runtimeRange)),
             new BuiltAgainst($"{Environment.Version.Major}.{Environment.Version.Minor}", null, RunnerProtocol.V1), tasks);
