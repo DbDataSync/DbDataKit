@@ -154,10 +154,7 @@ public static class LibraryCommand
     /// <c>dbdatasync library validate &lt;id&gt; --connection &lt;name&gt;</c> — phase 109j's
     /// deeper, connection-scoped check: drives the connection's own driver's *native* (first-registered)
     /// staging provider and writer against a real scratch table on the real target, with a handful of
-    /// synthetic rows. Deliberately not under <c>internal</c>: this is operator-facing (directly, or via
-    /// the API spawning this exact command as a child process — see
-    /// <c>DbDataSync.Api.Services.LibraryValidationLauncher</c>), and <c>InternalCommand</c> is
-    /// documented as build-only.
+    /// synthetic rows. Deliberately not under <c>internal</c>: this is operator-facing.
     /// <para>
     /// Resolves the connection through the same <see cref="ConfigRepository"/> + <see cref="SecretStore"/>
     /// path every other CLI command already uses — no new credential-resolution mechanism.

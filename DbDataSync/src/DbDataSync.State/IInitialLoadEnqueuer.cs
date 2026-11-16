@@ -1,15 +1,11 @@
 namespace DbDataSync.State;
 
 /// <summary>
-/// The segment-expansion/enqueue core behind "start a bulk load for this mapping" —
-/// <c>DbDataSync.Api.Services.BulkLoadService</c>'s own implementation, reached through this interface
-/// rather than a direct reference because <see cref="LocalRunnerState"/> lives in this project and
-/// <c>BulkLoadService</c> — which needs <c>ConfigRepository</c>, driver connections, a process
-/// supervisor, and script-backed segment expansion — does not belong down here, and this project is
-/// not allowed to reference <c>DbDataSync.Api</c> without creating a cycle (Api already references
-/// this project). Registered as <c>services.AddSingleton&lt;IInitialLoadEnqueuer&gt;(sp =>
-/// sp.GetRequiredService&lt;BulkLoadService&gt;())</c> in <c>DbDataSyncHost</c>, the same pattern
-/// <c>IConnectionFactory</c>/<c>DriverConnectionFactory</c> already uses.
+/// The segment-expansion/enqueue core behind "start a bulk load for this mapping", reached through this interface
+/// because <see cref="LocalRunnerState"/> lives in this project and an implementation needs <c>ConfigRepository</c>,
+/// driver connections and script-backed segment expansion, which do not belong down here. (The Sync server's
+/// <c>BulkLoadService</c> was its implementation until plan 33 SC23 deleted the server; on a Runner a bulk load is a
+/// request of the replication's drain, and the tests give their own.)
 /// <para>
 /// See phase 134's <c>IRunnerState.RequestInitialLoad</c> — <see cref="LocalRunnerState"/>'s
 /// implementation of it is this interface's only caller, and takes it as a <see cref="Lazy{T}"/> rather

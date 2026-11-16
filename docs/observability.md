@@ -36,7 +36,7 @@ No secret, token, password, statement text, parameter, row value or path with a 
 
 ## One trace across servers
 
-A request that the console relays to a paired server is one trace. The relay adds the W3C `traceparent` (and `tracestate`) of the console's own request span to the call it makes, and each server continues a trace whose header it receives. A caller's own `traceparent` on the request to the console is the root of both spans. The test is `TraceAcrossServersTests` (a real console and a real Store server in one process, both with in-memory exporters): the two spans have one trace id and the server's is a child of the console's.
+A request that the console relays to a paired server is one trace. The relay adds the W3C `traceparent` (and `tracestate`) of the console's own request span to the call it makes, and each server continues a trace whose header it receives. A caller's own `traceparent` on the request to the console is the root of both spans. The test is `TraceAcrossServersTests` (a real console and a real Workspace server in one process, both with in-memory exporters): the two spans have one trace id and the server's is a child of the console's.
 
 Not built yet: the trace id in the serving contract, and a hop through a module (a query from an app through the semantic module to a database as one trace).
 

@@ -10,7 +10,7 @@ namespace DbDataSync.Drivers.Generic;
 /// Beside <see cref="ProvisioningColumnBuilder"/>, which does the analogous job for a different
 /// question: translate the source's introspected <see cref="ColumnMetadata"/> through the mapping's
 /// <see cref="ColumnMapping"/> list into something expressed in the target's names. And shared for the
-/// same reason — <c>DbDataSync.Api.Services.ProvisioningService</c> previews what would be derived and
+/// same reason — the provisioning plan previews what would be derived and
 /// <c>DbDataSync.TaskRunner.RunExecutor</c> derives it at run time, and a preview computed by a second
 /// code path is a preview that can quietly disagree with what runs.
 /// </para>

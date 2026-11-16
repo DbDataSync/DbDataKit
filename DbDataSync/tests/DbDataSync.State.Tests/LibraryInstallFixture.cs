@@ -11,7 +11,7 @@ namespace DbDataSync.State.Tests;
 /// A real restore — a <c>dotnet publish</c> under the hood, per <see cref="LibraryInstaller"/> — is not
 /// something to repeat per test method (or even per test class): <c>xunit</c>'s <c>IClassFixture&lt;T&gt;</c>
 /// constructs this once per class, the same "install once, share the registry" shape
-/// <c>DbDataSync.Api.Tests</c>' <c>DescriptorDriverApiFactory</c> already uses for MySqlConnector.
+/// the descriptor-driver tests use for MySqlConnector.
 /// </para>
 /// </summary>
 public sealed class LibraryInstallFixture : IDisposable

@@ -12,10 +12,7 @@ public sealed partial class StateDatabase
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Lives here rather than in <c>DbDataSync.Api</c> (where <c>ApiOptions</c> is defined) because
-    /// <c>DbDataSync.Api</c> already depends on <c>DbDataSync.State</c> for <see cref="StateDatabase"/>
-    /// itself — an <c>ApiOptions</c> parameter here would be a dependency cycle. Takes the same values
-    /// as fields instead; <see cref="SecretStore"/> is already on this project's graph through the
+    /// Takes the settings as fields; <see cref="SecretStore"/> is already on this project's graph through the
     /// <c>DbDataSync.Core</c> project reference, so nothing new is added to <c>DbDataSync.State.csproj</c> for this.
     /// </para>
     /// <para>

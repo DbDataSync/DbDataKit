@@ -11,7 +11,7 @@
 
   <ItemGroup>
     <!--
-      Compile reference only: ExcludeAssets="runtime;native" keeps the managed DLL out of this project's and DbDataSync.Api/.Cli's
+      Compile reference only: ExcludeAssets="runtime;native" keeps the managed DLL out of this project's and DbDataSync.Cli's
       output (phase 109i, the treatment Microsoft.Data.SqlClient and Npgsql get). At first touch the assembly loads through
       LibraryRegistry's AssemblyLoadContext.Default.Resolving hook, once ServeCommand's unconditional install has put it under
       <repo>/libraries/duckdb/lib/ — see ServeCommand.EnsureDuckDbInstalledAsync.

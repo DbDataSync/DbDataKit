@@ -53,7 +53,7 @@ public sealed class LibraryLoadTests : IAsyncLifetime
         // DbDataSync.State.Tests.csproj's own comment on LibraryInstallFixture does.
         //
         // The legitimate references, the same split every other built-in driver's package has
-        // (e.g. Microsoft.Data.SqlClient in DbDataSync.Drivers.MsSql.csproj vs. DbDataSync.Api.Tests.csproj):
+        // (e.g. Microsoft.Data.SqlClient in DbDataSync.Drivers.MsSql.csproj vs. another test project):
         // the driver itself, and the hosts that run it (the shared composer is compiled against the driver's
         // types, plan 13 A09), all ExcludeAssets="runtime" so the assembly still isn't physically shipped by them
         // (loadable only through an installed library's armed resolver — BuiltInDriverLibraries, phase

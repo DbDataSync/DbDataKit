@@ -1,8 +1,8 @@
 # Testing dashboards and reports end to end
 
-A script for a tester (plan 32 DBR11b): publish the retail model and its dashboard to a Gateway, open them from the console as two people whose access differs, resize, switch layout and edit. It needs a Gateway, a console paired to it, the retail project's data on an engine the Gateway can read, and a Build server paired to the Gateway for the model.
+A script for a tester (plan 32 DBR11b): publish the retail model and its dashboard to a Gateway, open them from the console as two people whose access differs, resize, switch layout and edit. It needs a Gateway, a console paired to it, the retail project's data on an engine the Gateway can read, and a Workspace server paired with the console, with a publisher key paired with the Gateway, for the model.
 
-What is real today and what is not: the **model** is published by Build (it has the physical layer); the **dashboard** is published by the Gateway's own verb (`dbdatagateway views publish`) or from the console's editor; the dashboard is read through the Gateway's `views` module. **Different access** today is the data source's home groups (a person outside them gets a `denied` entry in every widget that needs the data): row-level rules are plan 22's and are not built, so two people never see two row sets yet. The report is listed but not drawn (DBR14).
+What is real today and what is not: the **model** is published from a build project of the Workspace (it has the physical layer); the **dashboard** is published by the Gateway's own verb (`dbdatagateway views publish`) or from the console's editor; the dashboard is read through the Gateway's `views` module. **Different access** today is the data source's home groups (a person outside them gets a `denied` entry in every widget that needs the data): row-level rules are plan 22's and are not built, so two people never see two row sets yet. The report is listed but not drawn (DBR14).
 
 ## 1. A Gateway with the module on
 
@@ -19,7 +19,7 @@ What is real today and what is not: the **model** is published by Build (it has 
 
 ## 2. Publish the model, then the dashboard
 
-1. **The model.** Build the retail project and publish its semantic model from the Build server (the Semantic screen's **Publish** to the paired Gateway, or `PUT /api/v1/semantic-models/retail_sales`). Its data source is created read-only on the Gateway. Give the data source a **home group** in the project's connection file (`grants: { groups: [analysts] }`, `schema: connection/2`, and publish again; plan 22a GP03): only that group may read it.
+1. **The model.** In the Workspace, make a build project from the `retail` template, build it and publish it to the paired Gateway (the **Builds** tab, **Publish** with the Gateway as the target): its semantic model goes through the Gateway's shared publish route. Its data source is created read-only on the Gateway. Give the data source a **home group** in the project's connection file (`grants: { groups: [analysts] }`, `schema: connection/2`, and publish again; plan 22a GP03): only that group may read it.
 2. **The dashboard**, from this repository:
 
    ```
@@ -62,14 +62,14 @@ What is real today and what is not: the **model** is published by Build (it has 
 
 ## 5b. Dashboards and reports as files of a Build project (plan 32 DBR29)
 
-Needs a Build server paired with the console and hosting a project made from the `retail` template (`dbdatabuild project create retail <dir>`, a git repository), and the console's Views tab of that project (`/servers/<build>/projects/retail/views`).
+Needs a Workspace server paired with the console and a build project made from the `retail` template; the tab **Views** of a workspace of it (`BuildViewsPanel.tsx`).
 
-1. **Start a workspace** (the author role; without it the buttons are off and say so). The sample dashboard and report of the template are listed as `dashboards/retail-sales-today.yaml` and `reports/retail-sales-monthly.yaml`.
-2. **New dashboard**: name it, give it a title, add a chart and a metric, place them, **Save**. The file `dashboards/<name>.yaml` is in the workspace (the Edit tab lists it; opening it there offers **Open in the dashboard editor**). The **Fields** of a widget list the measures and attributes of the project's own semantic model (read from the workspace, not from a Gateway); a project with no model says so and takes typed names.
+1. **Open a workspace** of the project (the author role; without it the buttons are off and say so). The sample dashboard and report of the template are listed as `dashboards/retail-sales-today.yaml` and `reports/retail-sales-monthly.yaml`.
+2. **New dashboard**: name it, give it a title, add a chart and a metric, place them, **Save**. The file `dashboards/<name>.yaml` is in the workspace (its files list it). The **Fields** of a widget list the measures and attributes of the project's own semantic model (read from the workspace, not from a Gateway); a project with no model says so and takes typed names.
 3. Type a field the model does not have (`products.colour`) into a well, Save, go back and press **Check the project**: the finding names the file, the line and the engine's code (`unknown_member`). `dbdatabuild project compile --check` says the same. A report in `dashboards/` is `DBD-VIEW-001`.
-4. Open the same file in two tabs, save in one, save in the other: a **conflict** naming the stored version (the file's hash), with a reload. Saving needs the author role of the server; a viewer's Save is off with the reason.
+4. Open the same file in two tabs, save in one, save in the other: a **conflict** naming the stored version (the file's hash), with a reload. Saving needs the author role of the project; a viewer's Save is off with the reason.
 5. **Rows from**: choose a paired Gateway that runs the views module and the widget previews draw its rows through the console's relay (the preview of an unsaved draft, as you). With none chosen the preview says how to get rows; saving and publishing do not need them.
-6. Commit and merge the workspace on the Edit tab. Back on the Views tab the project **as merged** lists the document under **Publish to a Gateway**. Publish the semantic model first (the Publish tab), then pick the Gateway and press **Publish** on the document (the approver role; the button says why it is off: no approver role, no paired Gateway, no Gateway chosen). The Gateway answers with the registry version and the model versions it now depends on; a conflict or a model it does not have is shown in its own words. `dbdatagateway views list` shows it.
+6. Commit and merge the workspace. Publishing a project's dashboards and reports to a Gateway from the Workspace is not built (plan 33 SC20n): publish the merged file with `dbdatagateway views publish --file <the file>`, after the model (step 2). `dbdatagateway views list` shows it.
 
 ## 6. Get a PDF (plan 32 DBR15)
 

@@ -22,7 +22,7 @@ namespace DbDataSync.TaskRunner;
 /// The read -> stage -> apply -> watermark-update pipeline from architecture/detailed-design.md §3.3,
 /// driven by a durable work queue rather than a fixed, up-front list of mappings — see
 /// architecture/implementation/done/phase-008-work-queue-schema.md. One process (spawned by
-/// DbDataSync.Api.Services.ProcessSupervisor) claims and drains a replication's pending WorkQueue items
+/// the Runner) claims and drains a replication's pending WorkQueue items
 /// with bounded internal concurrency, rather than one process being spawned per triggered run: a
 /// replication can have hundreds of table mappings, and bulk loads for many of them can be queued
 /// continuously, so a fixed-collection fan-out (Parallel.ForEach/Task.WhenAll over an enumerated list)
@@ -39,7 +39,7 @@ public sealed class RunExecutor(
     DriverRegistry driverRegistry,
     SecretStore secretStore,
     /// <summary>Phase 144: lets <see cref="OpenAsync"/> auto-seed a built-in driver's library the same
-    /// way <c>DbDataSync.Api</c>'s <c>DriverConnectionFactory</c> already does for its own connections —
+    /// way <c>DriverConnectionFactory</c> (<c>DbDataSync.Scripting</c>) does for its own connections —
     /// see <see cref="BuiltInDriverLibraries"/>'s own doc comment for why this process needs its own
     /// copy of that check rather than assuming the API already ran it.</summary>
     LibraryRegistry libraryRegistry,

@@ -8,7 +8,7 @@ namespace DbDataSync.Drivers.Generic;
 /// Turns a mapping's <see cref="ColumnMapping"/> list plus the source's introspected
 /// <see cref="ColumnMetadata"/> into the <see cref="ProvisioningColumn"/> list a
 /// <see cref="ProvisioningActions.CreateTargetTable"/> request carries — shared by
-/// <c>DbDataSync.Api.Services.ProvisioningService</c> (the Setup card's preview) and
+/// the provisioning plan (<c>dbdatasync provisioning plan</c>, the Workspace's preview) and
 /// <c>DbDataSync.TaskRunner.RunExecutor</c> (the automatic <c>CreateTargetTableIfMissing</c> path), so the
 /// column a run creates unattended is never computed by a second code path than the one an operator
 /// previewed.

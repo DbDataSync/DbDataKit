@@ -408,28 +408,15 @@ refused at save for now (plan 28c E17), a Flight SQL or DuckDB target never hold
   position is not read again. Reload the mapping after restoring such a target.
 * *A runner state that was lost or reset* while the target holds positions: the pass resumes from the target's position, except that a reader that captures its own position starts an initial load (its position is captured before the target is opened).
 
-The Overview tab's **Tracking** card and `GET /api/replications/{name}/tracking` say which mode applies, which was asked for and why they differ.
-
-**The copy in the state, and divergence.** In `target` and `both` the Sync server follows the table: a minute apart (and on **Follow now** of the card, an administrator's call) it copies the entries a replication
-recorded since its last checkpoint into the `tracking` module of the state (`tracking_row`, identity `syncposition:<engine>://<server>/<database>/<replication>@<connection>`), with the follower Build's tracking uses, so
-the rows and the checkpoint move in one transaction. A run never waits for it, and a target that is down is the card's "the last follow failed", not an error of any run. Two kinds of difference are **persisted**
-as a divergence (they stay until an administrator resolves them, and while one is open nothing is copied):
+**The copy in the state, and divergence.** In `target` and `both` the replication's drain on the Runner follows the table: after its passes (at most every 30 seconds) and once more when it ends, it copies the entries the replication recorded since its last checkpoint into the **runner's** state through the runner protocol (`tracking_row`, identity `syncposition:<engine>://<server>/<database>/<replication>@<connection>`, which must end with a connection the run holds a handle for), with the follower Build's tracking uses, so the rows and the checkpoint move in one transaction. A run never waits for it. Two kinds of difference are **persisted** as a divergence (they stay until an administrator resolves them, and while one is open nothing is copied):
 
 * *the table parts from its copy*: the target's newest entry is behind the checkpoint (a restore) or the copy holds entries the table does not;
-* *the state's position is not the target's*: for a mapping, the state's position is an older entry of the target (the target is **ahead** of the state), is no entry the target recorded (the sides **part**: a restore, a
-  replaced target), or the state has none (reset or lost). Only a difference the target has held for more than two minutes counts, because the pass that wrote an entry moves the state's position a moment later.
+* *the state's position is not the target's*: for a mapping, the drain's checkpoint is an older entry of the target (the target is **ahead**), is no entry the target recorded (the sides **part**: a restore, a
+  replaced target), or there is none (reset or lost). Only a difference the target has held for more than two minutes counts, because the pass that wrote an entry moves the position a moment later.
 
-Resolving is the same action as Build's (`POST /api/v1/tracking/divergences/{id}/resolve`, administrator, audited in the management audit log): **archive** keeps the copy's rows after the point where the sides last agree
-apart (out of the live stream), **reset** deletes them; the checkpoint goes back to that point and the next follow copies the target's entries from there. The resolve changes the *copy*; what heals a position difference is
-the pass itself, which already resumes from the primary. The replication's Tracking card shows the open divergence with its reason and both buttons (disabled for anyone but an administrator), and the console's
-**Tracking** page lists every replication's copy beside Build's and the runners', with its own mode and primary (the primary of a replication is the `tracking.primary` of its file, edited on the card). Every target
-that holds the replication's entries is followed: the replication's own and the one each mapping names.
+Resolving is the same action as Build's: the runner's `POST /api/v1/tracking/divergences/{id}/resolve` (administrator, audited as `runner.tracking.resolve`): **archive** keeps the copy's rows after the point where the sides last agree apart (out of the live stream), **reset** deletes them; the checkpoint goes back to that point and the next follow copies the target's entries from there. The resolve changes the *copy*; what heals a position difference is the pass itself, which already resumes from the primary. The runner's `GET /api/v1/tracking` lists the copy beside Build's (the setting itself travels in the published definition: the primary of a replication is the `tracking.primary` of its file, edited in the replication's form of the Workspace), and the console's **Tracking** page shows it and resolves it through the relay. Every target that holds the replication's entries is followed: the replication's own and the one each mapping names.
 
-**A replication the runner owns** is followed by its own drain, not by the Sync server (whose state does not hold that replication's positions): after its passes (at most every 30 seconds) and once more when it ends, the
-drain copies the entries into the **runner's** state through the runner protocol (rows and checkpoint in one transaction there, under the same `syncposition:...` identity, which must end with a connection the run holds a handle
-for) and compares the target's newest entry of each mapping with the position its own checkpoint holds, with the same two-minute grace. A divergence is recorded in the runner's state; the runner's own
-`GET /api/v1/tracking` lists it beside Build's copies (mode `both`, the target the primary: the setting itself travels in the published definition) and `POST /api/v1/tracking/divergences/{id}/resolve` (administrator,
-audited as `runner.tracking.resolve`) archives or resets it, the console's Tracking page reaching both through the runner relay. The follower never fails the run: a target that is down, a refused grant or a copy that
+The follower never fails the run: a target that is down, a refused grant or a copy that
 failed are lines in the run's log.
 
 **Retention of `dbdatasync.position_log`.** After each pass the mapping's old entries are removed in a transaction of their own: an entry goes only when it is older than 7 days **and** not among the newest 1000 entries of its

@@ -8,7 +8,7 @@ namespace DbDataSync.Drivers.Jdbc.Tests;
 /// Phase 176M (corrected): every real <c>java.sql.SQLException</c> this driver can throw gets translated
 /// to <see cref="JdbcSqlException"/> — a plain <see cref="System.Data.Common.DbException"/> — before it
 /// ever leaves this project, rather than shared, non-JDBC-aware code downstream (originally
-/// <c>DbDataSync.Api</c>'s own diagnostics helper) having to touch <c>java.sql</c> types itself to make
+/// a caller's own diagnostics helper) having to touch <c>java.sql</c> types itself to make
 /// sense of one. Driven against the same real Postgres fixture <see cref="JdbcConnectionTests"/> uses,
 /// with genuinely bad SQL rather than a hand-built exception — proves the translation against a real
 /// chained <c>java.sql.SQLException</c>, not an assumption about its shape.

@@ -57,7 +57,7 @@ public sealed class GitCommitService
     /// project's own tree), IsValid reports the *parent* repo as valid even though path itself has no
     /// .git of its own — silently skipping initialization here, then failing later when
     /// new Repository(path) (which does not discover) can't find one. Callers that need to
-    /// create-if-missing (e.g. DbDataSync.Api's startup) should check this before calling
+    /// create-if-missing should check this before calling
     /// LibGit2Sharp.Repository.Init(path).
     /// </summary>
     public static bool IsRepositoryAt(string path) => Directory.Exists(Path.Combine(path, ".git"));

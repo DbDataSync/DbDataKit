@@ -173,7 +173,7 @@ public partial class StateDatabase
     /// Opens a connection and re-verifies the schema exists on *every* call, not just once at
     /// construction — cheap (a single version read in the common case) and makes this self-healing
     /// against a real, still not fully root-caused problem observed in this project's sandboxed dev
-    /// environment: a long-lived process (DbDataSync.Api) that spawns child processes
+    /// environment: a long-lived process (a Runner) that spawns child processes
     /// (DbDataSync.TaskRunner) writing to this same file could, after the child had been running for
     /// tens of seconds, start seeing an apparently-schema-less view of the database on a fresh
     /// connection ("no such table"), despite migration having already run successfully at startup and

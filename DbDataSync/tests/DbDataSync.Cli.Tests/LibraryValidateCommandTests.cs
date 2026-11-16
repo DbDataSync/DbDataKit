@@ -9,7 +9,7 @@ namespace DbDataSync.Cli.Tests;
 /// <summary>
 /// Phase 109j item 4's own "how to verify" bar, at the CLI layer (<c>dbdatasync library
 /// validate</c>) rather than through the API's spawned-child-process endpoint (see
-/// <c>DbDataSync.Api.Tests.LibraryValidateIntegrationTests</c> for that half, including the no-DDL-rights
+/// the integration tests on the engines for that half, including the no-DDL-rights
 /// case and the assembly-residency isolation check).
 /// </summary>
 public sealed class LibraryValidateCommandTests : IDisposable

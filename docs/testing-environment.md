@@ -116,10 +116,10 @@ harness no longer refuses them: the password is `DBDATAKIT_TEST_PASSWORD`). GitH
 
 ## Building without JDBC (`SkipJdbc`)
 
-`DBDATAKIT_TEST_SKIP_JDBC=true` (or `-p:SkipJdbc=true`) leaves JDBC and IKVM out of the Sync build: `DbDataSync.Api` and `DbDataSync.TaskRunner` do not
-reference `DbDataSync.Drivers.Jdbc`, `DbDataSync.Api.Tests` has no IKVM, no pgJDBC jar and does not compile `JdbcTestQuery*` (the define `SKIP_JDBC` guards the
-rest), and `DbDataSync.Drivers.Jdbc` and `.Jdbc.Tests` build nothing (a message says so). No IKVM package is restored. Off by default, so CI is unchanged.
-Build the Sync projects one by one with it (not a solution that needs the Jdbc projects to produce output): `dotnet build DbDataSync/tests/DbDataSync.Api.Tests`.
+`DBDATAKIT_TEST_SKIP_JDBC=true` (or `-p:SkipJdbc=true`) leaves JDBC and IKVM out of the Sync build: `DbDataSync.TaskRunner` does not reference
+`DbDataSync.Drivers.Jdbc` (the define `SKIP_JDBC` guards the rest), and `DbDataSync.Drivers.Jdbc` and `.Jdbc.Tests` build nothing (a message says so). No IKVM
+package is restored. Off by default, so CI is unchanged. Build the Sync projects one by one with it (not a solution that needs the Jdbc projects to produce
+output): `dotnet build DbDataSync/tests/DbDataSync.TaskRunner.Tests`.
 
 ## Fast verifier runs
 
@@ -137,21 +137,15 @@ Measured on all the `DbDataSync` .NET suites under `SkipJdbc` (VSTest `--logger 
 
 | Group | Run time | How to skip it |
 | --- | --- | --- |
-| `DbDataSync.Api.Tests` as a whole (619 tests, 23 skipped, Windows-only ones among them) | 45 s | `-class` of the tests you changed |
-| `QualityEndpointTests.A_run_evaluates_the_replications_checks_and_records_a_result_even_when_the_target_cannot_be_reached` | 16 s (waits out an unreachable target) | `--filter "Category!=Slow"` (tagged) |
-| `RunnerOwnedRunsTests.A_line_of_a_run_on_the_runner_reaches_the_hub_within_a_second_of_being_written` | 3.2 s | `-class` |
 | `ScriptTestServiceTests` | 2.3 s in total | `-class` |
-| `DbDataSync.Certificates.Tests` (20 tests) | 4 s | |
 | `TaskRunner.Tests` `RunExecutorTests` (many tests of 15 to 17 s each; `ExecuteWorkerAsync_*` spawn the worker) | 135 s of 150 s | `--filter "FullyQualifiedName!~RunExecutorTests"` |
-| `Cli.Tests` `ReadinessChecksTests` (one test, 19.7 s, installs every built-in library) | 32 s | `-class` of what you changed |
-| `Cli.Tests` `SetupStepsTests` (`ApplyStateDatabase_*` install a library, 15 s) | 30 s | `-class` |
 | `State.Tests` `StateDatabaseFactoryTests` | 29 s | `-class` |
 | `Cli.Tests` `TabWiringTests` | 14.5 s | `-class` |
 | `Cli.Tests` `PackagePublishOnRealRunnerTests` | 9.4 s | `-class` |
 | `TaskRunner.Tests` `DrainLoopTests` | 7 s | `-class` |
 | `Libraries.Tests` `LibraryCompatibilityTests` | 5.5 s | `-class` |
 
-Whole projects under `SkipJdbc` with `Category!=Integration` (run time): `TaskRunner.Tests` 150 s (125 tests), `Cli.Tests` 103 s (347), `State.Tests` 55 s (227), `Api.Tests` 45 s (619), everything else under 6 s. The two Jdbc projects and `Loader.Tests` have no test outside `Category=Integration` and run nothing.
+Whole projects under `SkipJdbc` with `Category!=Integration` (run time): `TaskRunner.Tests` 150 s (125 tests), `Cli.Tests` 103 s (347), `State.Tests` 55 s (227), everything else under 6 s. The two Jdbc projects and `Loader.Tests` have no test outside `Category=Integration` and run nothing.
 
 Every other class of the projects above is under 5 s. Tests that shell out (cost is the child process, usually `dotnet publish` of a fixture project, a Bun bundle or a spawned host): `DbDataSync.Libraries.Tests/FixturePublisher.cs` and `Shared/tests/DbDataKit.Runner.Execution.Tests/PackageFixture.cs` (`dotnet publish`; run once per class fixture), `DbDataSync.Cli.Tests` (`LauncherTests`, `PackagePublishOnRealRunnerTests`: spawn the CLI and a runner), `DbDataSync.TaskRunner.Tests` (`RunnerWithoutItsOwnerTests`, `SyncRuntimePackageTests`: spawn the TaskRunner), `DbDataSync.Api.Tests/RunLifecycleIntegrationTests.cs`, `Shared/tests/DbDataKit.Apps.Bundling.Tests` (Bun), `Shared/tests/DbDataKit.Scripting.Tests/CsxCompilerTests.cs`, `DbDataGateway.Tests` (`WorkerFixture`, `WorkerProcessHostTests`: the 32-bit ODBC worker), `DbDataBuild.Tests.Conformance` (engines) and `DbDataRunner.Tests/SamplePackage.cs`. The ones that need an engine or the network already carry `Category=Integration`.
 

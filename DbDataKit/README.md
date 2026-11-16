@@ -1,6 +1,6 @@
 # dbdatakit, the console
 
-The one web interface for the DbData servers (plan 13, U07). It signs people in, holds the users, and (in the slices that follow) manages the Sync, Gateway and Build servers paired with it.
+The one web interface for the DbData servers (plan 13, U07). It signs people in, holds the users, and manages the Workspace, Runner and Gateway servers paired with it (the Build, Sync and Store servers were deleted, plan 33 SC23: a paired one is answered with where its features went).
 It is a separate host from the servers: a server runs without it, and it is not needed to run one.
 
 ```
@@ -71,11 +71,11 @@ In the web app, `/instances` lists them and `/servers/<id>/...` opens a server's
 
 ## Connections across servers
 
-**Lineage** (plan 18, G09): `GET /api/lineage` joins the design graphs of the paired Build and Sync servers by identity (a table Sync writes and a Build model reads is one node), with what each server said or why it gave none; `?node=<id>&direction=downstream|upstream&depth=<n>` is the impact or provenance of one node across all of them, and `?refresh=true` asks the servers again instead of using what was kept for 30 seconds.
+**Lineage** (plan 18, G09): `GET /api/lineage` joins the design graphs of the paired runners and Gateways by identity (a table one writes and another reads is one node), with what each server said or why it gave none; `?node=<id>&direction=downstream|upstream&depth=<n>` is the impact or provenance of one node across all of them, and `?refresh=true` asks the servers again instead of using what was kept for 30 seconds.
 
-**Data quality** (plan 23a, FQ17): `GET /api/quality` joins the results of the checks that the paired Sync (`/api/quality`) and Build (`/api/v1/quality`) servers evaluate, by dataset identity: every dataset with its checks, the latest result and the block of each, and what each server said (or why it gave none, `can_run`, and how a server that cannot evaluate on request does). The page `/quality` reads the history of a check from the evaluating server through the relay (`.../api/quality/history`) and evaluates on request (`POST .../api/quality/run`, a Sync server, admin); the console holds no results and decides no block.
+**Data quality** (plan 23a, FQ17): `GET /api/quality` joins the results of the checks the paired servers evaluate, by dataset identity: every dataset with its checks, the latest result and the block of each, and what each server said. No server of the suite keeps check results today (the Build, Sync and Store servers that did were deleted, plan 33 SC23), so the list is empty; the page `/quality` keeps the card of where the alerts of failed checks go. The console holds no results and decides no block.
 
-The Connections page (`/connections`, in the rail) lists the connections of every Sync server and the data sources of every Gateway the console manages, each asked of its server through the relay (a server that does not answer, or whose list it refuses, is named above the list and the others still show).
+The Connections page (`/connections`, in the rail) lists the data sources of every Gateway the console manages, each asked of its server through the relay (a server that does not answer, or whose list it refuses, is named above the list and the others still show).
 A Sync connection and a Gateway data source are the same `connection/1` file, so a connection on one server can be **copied to another**: *Copy to...* on a row, choose the server and the name it will have there (the same name when it is another server).
 
 The console makes the copy as the person signed in: it reads the file from the first server (`GET /api/connections/<name>/file` on Sync, `GET /api/v1/data-sources/<name>` on a Gateway), changes only what belongs to that server, and creates the file on the second

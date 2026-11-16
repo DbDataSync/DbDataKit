@@ -4,7 +4,7 @@ Trust between a console and the servers it manages (plan 13, W12).
 
 ## Rules
 
-* **The client calls the server; a server never calls a console.** A server needs no credentials for any console and keeps running (schedules, replication, queries) when every console is gone; monitoring, notifications and run history are pulled by the console. A server calls *another* server only as that server's paired client, for one purpose (a Build server publishing into a Gateway: see `OwnerScope`), never in a cycle.
+* **The client calls the server; a server never calls a console.** A server needs no credentials for any console and keeps running (schedules, replication, queries) when every console is gone; monitoring, notifications and run history are pulled by the console. A server calls *another* server only as that server's paired client, for one purpose (a Workspace publishing into a Gateway or a Runner, a Runner telling a Gateway's cache that data changed: see `OwnerScope`), never in a cycle.
 * **A server can be paired with several clients** (a team console and an operations console, a standby, another server). Each pairing has its own key and role ceiling and is revoked on its own; nothing assumes the other end is a console.
 * **The server is the security boundary.** A console hides what a user may not do, but the server checks every call itself and never trusts the UI.
 * **Transport.** The management API is always HTTPS on a listener of its own (on the Gateway never the Flight port, never on the query path). It binds to loopback when the console is on the same machine; a bind address that is not loopback and not covered by TLS gives a start-up warning. Certificates are self-signed by default because the client pins the fingerprint at pairing.
@@ -63,11 +63,11 @@ The role check per command and the audit are in `ManagementAuthorization` and `M
 
 ## Publishers and owner scope (`OwnerScope`)
 
-A server client that publishes into a server (a Build server creating Gateway data sources) holds `ServerRole.Publisher`, whose ceiling is set at pairing (`server pair --max-role publisher`). `OwnerScope.Authorize(token, action, object)` is the rule the called server applies on every call: a Publisher may create (the object is then stamped `managed_by: <client id>`, `OwnerScope.Stamp`) and may change or delete only objects carrying its own id; an object made by hand, one that belongs to another client and the server's own policy (`ManagedObject.IsServerPolicy`) are refused with a reason for the log. An Admin is not limited by owner. Taking an object over (`--adopt`) is `OwnerScope.AuthorizeAdopt`: a person's act with the admin role, never a server client's. Taking an object over is `OwnerScope.AuthorizeAdopt` (an administrator's act as a person, never a server client's); the Gateway offers it as `POST /api/v1/data-sources/{name}/adopt` naming the client that takes the data source over (plan 13a, T12).
+A server client that publishes into a server (a Workspace's publisher key creating Gateway data sources) holds `ServerRole.Publisher`, whose ceiling is set at pairing (`server pair --max-role publisher`). `OwnerScope.Authorize(token, action, object)` is the rule the called server applies on every call: a Publisher may create (the object is then stamped `managed_by: <client id>`, `OwnerScope.Stamp`) and may change or delete only objects carrying its own id; an object made by hand, one that belongs to another client and the server's own policy (`ManagedObject.IsServerPolicy`) are refused with a reason for the log. An Admin is not limited by owner. Taking an object over (`--adopt`) is `OwnerScope.AuthorizeAdopt`: a person's act with the admin role, never a server client's. Taking an object over is `OwnerScope.AuthorizeAdopt` (an administrator's act as a person, never a server client's); the Gateway offers it as `POST /api/v1/data-sources/{name}/adopt` naming the client that takes the data source over (plan 13a, T12).
 
 ## Authenticating calls (`ManagementAuthentication`)
 
-`UseManagementAuthentication(validator, refused)` puts the token check in front of every request under `/api/`: the token is read from the `X-DbData-Token` header and validated by `ConsoleTokenValidator`, and the validated token is on the request for the endpoint (`context.ManagementToken()`), which decides what the caller may do with `ManagementAuthorization`. A refused call is a `401` with no body; `refused` hears why, for the server's log. Pairing and key rotation are outside the prefix because a client that is not paired yet has no token. The first server to use it is the Build server (R01).
+`UseManagementAuthentication(validator, refused)` puts the token check in front of every request under `/api/`: the token is read from the `X-DbData-Token` header and validated by `ConsoleTokenValidator`, and the validated token is on the request for the endpoint (`context.ManagementToken()`), which decides what the caller may do with `ManagementAuthorization`. A refused call is a `401` with no body; `refused` hears why, for the server's log. Pairing and key rotation are outside the prefix because a client that is not paired yet has no token. Every server of the suite uses it.
 
 ## Audit and authorship
 
@@ -85,12 +85,12 @@ read from the thing itself every time, so a change made outside the guard is cau
 
 ## Session sign-in (`DbDataKit.Web.Auth`)
 
-How the people who use a product's own web console sign in (plan 13, U05), moved out of `DbDataSync.Api`: `SessionAuthenticationHandler` (the session cookie, re-read from the state database on every request, with the
+How the people who use the console sign in (plan 13, U05): `SessionAuthenticationHandler` (the session cookie, re-read from the state database on every request, with the
 loopback / remote network trust as the fallback), `PasskeyService` and `PasskeyOptions` (WebAuthn through fido2-net-lib, the relying-party checks), `WindowsSignIn` (a negotiated Windows identity and the admin / viewer
 groups), `BootstrapInvite` (the first-run invitation), `CurrentUser` (who is acting, and the author of a config commit) and `Policies`. The users, sessions and invites are `DbDataKit.State`'s.
 
-Nothing in it is one product's. `AuthProduct("DbDataSync")` derives the configuration section (`DbDataSync:Auth`), the cookie (`dbdatasync.session`), the scheme, the user-id claim, the invite command and the author a
+Nothing in it is one product's. `AuthProduct("DbDataKit")` derives the configuration section (`DbDataKit:Auth`), the cookie (`dbdatakit.session`), the scheme, the user-id claim, the invite command and the author a
 product's own changes are attributed to, so two products on one machine never share a cookie. A product passes its `AuthProduct` to `AuthOptions.FromConfiguration` and `PasskeyOptions.FromConfiguration` and registers
-the handler under `AuthProduct.SchemeName`. Sync's `SyncAuth` (in `DbDataSync.Api.Auth`) does that and adds static extensions so its call sites read as they always did.
+the handler under `AuthProduct.SchemeName`.
 
 `CertificateStatusEndpoint` (UI10): `app.MapCertificateStatus(() => certificate)` maps `GET /api/v1/certificate` for a server that presents one certificate (Build, Store, Runner; the Workspace server still has to add it): the subject, issuer, thumbprint, names, `days_left` and `needs_renewal` (inside 30 days of the end), in the shape of the Gateway's route, never the key. A paired console's token with any role is enough. The console's Monitoring reads it for every server and for the console itself.

@@ -33,7 +33,7 @@
     <Using Include="DbDataSync.State.StateDatabase" Alias="StateDatabase" />
     <!-- LibraryRegistry/LibraryInstaller/KnownLibraries — LibraryInstallFixture uses these to restore
          microsoft-data-sqlclient/npgsql for real, once per test class, the same way
-         DbDataSync.Api.Tests' DescriptorDriverApiFactory does for MySqlConnector. -->
+         the descriptor-driver tests do for MySqlConnector. -->
     <ProjectReference Include="..\..\src\DbDataSync.Libraries\DbDataSync.Libraries.csproj" />
   </ItemGroup>
 

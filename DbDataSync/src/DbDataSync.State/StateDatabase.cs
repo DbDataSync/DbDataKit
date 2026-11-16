@@ -3,7 +3,7 @@ using System.Data.Common;
 namespace DbDataSync.State;
 
 /// <summary>
-/// Sync's state database (architecture/detailed-design.md §3.7), shared by DbDataSync.Api and every DbDataSync.TaskRunner process: the shared <see cref="DbDataKit.State.StateDatabase"/> built from
+/// Sync's state database (architecture/detailed-design.md §3.7), shared by every DbDataSync.TaskRunner process: the shared <see cref="DbDataKit.State.StateDatabase"/> built from
 /// <see cref="SyncState.Modules"/> (plan 28c slice E14): Sync's own <c>sync_state</c> and the shared <c>runs</c>, <c>scheduling</c>, <c>notifications</c>, <c>audit</c> and <c>runner_progress</c> modules, each versioned
 /// on its own. SQLite by default; phase 63 added SQL Server and PostgreSQL as alternatives.
 /// <para>

@@ -43,8 +43,8 @@ public sealed class ChangeProcessingConfig
     /// <summary>
     /// How many of this replication's table mappings its worker's <b>change-processing lane</b>
     /// (<c>RunKind.Primary</c> — ongoing incremental sync) reads, stages and applies at once — the
-    /// number of consumers <c>RunExecutor</c> runs on that lane, passed to the runner as
-    /// <c>--degree-of-parallelism</c> by <c>DbDataSync.Api.Services.ProcessSupervisor</c>.
+    /// number of consumers <c>RunExecutor</c> runs on that lane, passed to the engine as
+    /// <c>--degree-of-parallelism</c>.
     /// <para>
     /// The worker runs two independent lanes (phase-108): this one, and a <b>bulk load lane</b>
     /// (<c>RunKind.BulkLoad</c> + <c>RunKind.Verification</c>) sized by

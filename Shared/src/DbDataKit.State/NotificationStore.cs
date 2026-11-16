@@ -54,7 +54,7 @@ public sealed class NotificationStore(StateDatabase database) : INotificationFee
     /// the same transaction. <see cref="Insert"/>'s own doc comment explains why every other producer
     /// goes through it as a joint write instead ("a public 'notify about anything' entry point would
     /// invite a second write from a caller with nothing to be atomic with"); phase 82's daily
-    /// certificate-expiry check (<c>DbDataSync.Api.Services.CertificateExpiryService</c>) is the first
+    /// certificate-expiry check of a server is the first
     /// caller that is genuinely standalone — it is not itself writing a row anywhere else this event
     /// could be paired with, so its own connection is the right shape rather than a second "insert on
     /// someone else's transaction" caller with no transaction to give it.

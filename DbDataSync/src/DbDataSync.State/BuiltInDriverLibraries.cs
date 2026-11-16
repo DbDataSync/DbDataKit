@@ -11,9 +11,9 @@ namespace DbDataSync.State;
 /// shipped and has to be *loadable* at first touch through an installed library's armed resolver
 /// instead.
 /// <para>
-/// **Phase 144**: this used to live only in <c>DbDataSync.Api</c>'s <c>DriverConnectionFactory</c> — the
-/// API opens a driver connection for schema browsing, provisioning, and bulk-load segmenting, and that
-/// was the one call site that ever auto-seeded a built-in driver's library. <c>DbDataSync.TaskRunner</c>
+/// **Phase 144**: this used to live only in <c>DriverConnectionFactory</c> (now <c>DbDataSync.Scripting</c>), which opens a
+/// driver connection for schema browsing, provisioning, and bulk-load segmenting, and that was the one call site that ever
+/// auto-seeded a built-in driver's library. <c>DbDataSync.TaskRunner</c>
 /// is a genuinely separate process, spawned fresh per replication by <c>ProcessSupervisor</c>, and had no
 /// equivalent — it depended entirely on the API process having already opened a connection for a given
 /// driver type before this process started, with nothing guaranteeing that ordering. When it wasn't true

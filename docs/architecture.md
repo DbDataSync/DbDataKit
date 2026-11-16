@@ -8,31 +8,34 @@ because source comments cite them). Where each part is described in detail: the 
 
 ```
  people (browsers) ──► dbdatakit console  (its own host and command line: shell, sign-in screens, the servers it manages, their screens,
-                       │                   cross-product views: connections, monitoring, notifications; docs of every module)
+                       │                   cross-product views: connections, monitoring, runs, approvals; docs of every module)
                        │  every call relayed by the console, as a signed token naming the person (D14, D16)
-        ┌──────────────┼─────────────────┬───────────────────┬──────────────────┐
-        ▼              ▼                 ▼                   ▼                  ▼
-   Sync           Build            Store               Runner             serving layer (DbDataGateway)
-   replication    many projects,   master data         scheduled and      the EDGE for end users: Flight SQL, semantic, store reads
-   engine,        scheduler,       models in your      batch work, a      and writes, apps; hosts the IDENTITY HOME by default (D20)
-   TaskRunner     monitoring,      own databases       process per task   │
-   (child         authoring        │                   │                  │
-   processes)     │                │                   │                  │
-        └─────────┴────────────────┴───────────────────┴──────────────────┘
-           each product: its own server with a management API on its own listener, its own state database, its own config directory;
+        ┌──────────────┼─────────────────────────────┬──────────────────────────────────┐
+        ▼                                            ▼                                  ▼
+   Workspace                                    Runner                             serving layer (DbDataGateway)
+   projects authored in git workspaces          scheduled and batch work: the      the EDGE for end users: Flight SQL, semantic,
+   (build, sync, store, app), checked and       tasks of published packages, a     store reads and writes, apps; hosts the
+   built with the products' command lines,      process per task (Build's refresh, IDENTITY HOME by default (D20)
+   published to a Runner or a Gateway           Sync's engine, a Store deploy)     │
+        └────────────────────────────────────────────┴──────────────────────────────────┘
+           each service: its own server with a management API on its own listener, its own state database, its own config directory;
            no web UI of its own. The console reaches a server only through that API, and a server never calls a console.
                                                    │
    Shared/ (shared libraries): Config · Secrets · Dialect · Connections (+ FlightSql) · Metadata · Transfer · Hosting · Scheduling ·
                                   Monitoring · Scripting (Roslyn + NuGet) · Cli (command surface, MCP) · Web (trust, sign-in) · State · Identity
+
+   dbdatabuild, dbdatasync, dbdatastore: command lines on a project folder, and the runtimes a Runner runs (no server of their own, plan 33 SC23)
 ```
 
-- **The console and the products are separate** (D1). A product is a server (an operating-system service with its own config directory, state store and
-  management API, and no UI of its own) plus a command line that works with or without the console. The console is the one UI, a host built from the
-  shared web packages (`Shared/web`). It holds the list of registered servers and each product's screens. A product keeps running (schedules,
+- **The console and the services are separate** (D1). The install is four services: the console, the Workspace, the Runner and the Gateway. Each of the
+  other three is a server (an operating-system service with its own config directory, state store and management API, and no UI of its own) plus a command
+  line that works with or without the console; Build, Sync and the Store are command lines and Runner runtimes, authored in the Workspace. The console is the one UI, a host built from the
+  shared web packages (`Shared/web`). It holds the list of registered servers and each product's screens. A server keeps running (schedules,
   replication, queries) while the console is down; only the screens are unavailable. One console manages several servers of each product, and one server
   can be paired with several consoles.
-- **A standalone install** is one product plus the console with that product registered. Each product ships on its own (its image, MSI and zips); the
-  console has its own MSI, and a product's MSI does not embed it. Pairing after installing both is a documented step (decided 2026-10-28; `dist/README.md`).
+- **A standalone install** is one service plus the console with that service registered; `dbdatakit-full` installs all four on one machine
+  (`docs/suite-single-server-install.md`). Each service ships on its own (its MSI and zips, an image for the console and the Gateway); the console has
+  its own MSI, and a service's MSI does not embed it. Pairing after installing both is a documented step (decided 2026-10-28; `dist/README.md`).
 - **The serving layer is the edge** for end users (plan 20). Management traffic (the console) and data traffic (clients of the Gateway) use different
   listeners, and the management API is never on a hot path.
 - **Identity home** (D20, plan 20): one identity component per install holds users, groups, role assignments and an OpenID Connect provider
@@ -100,6 +103,20 @@ drivers, secrets, users, sessions or state databases, and no legacy names are ke
 pointing to the documentation**. Release notes say plainly that an existing install is set up again. Users' own data (their databases and DuckDB files)
 is not ours to break and is outside this rule. (CLAUDE.md states the working rule: never silent, and a test says so.)
 
+### The Build, Sync and Store servers (deleted, plan 33 SC23)
+
+The install is four services. Build, Sync and the Store have no server: `dbdatabuild`, `dbdatasync` and `dbdatastore` are command lines on a folder and the
+runtimes a Runner runs, each released as a zip with no service, installer or image, and none is a member of `dist/suite.json`. What their servers did is done
+where the work is: a project is authored in the Workspace and published from there, its work runs as Runner tasks (refresh, `apply_plan`, `ack`, `seed`,
+a replication's drain, bulk loads and verifications, `provision`, a Store model's deploy) with the logins bound on the Runner, and a model's rows are written
+and its change requests decided through a Gateway's store module. The break is never silent:
+
+- a removed verb (`server`, `service`, `secret`, `state`, `health` and the rest) answers with the sentence naming where its feature went and exits 2
+  (`RemovedCommands`, `DbDataKit.Cli`; each program's `RemovedServer`);
+- the console refuses an announcement from such a server with the sentence, answers any call relayed to one still paired with it (410) and sends that server
+  nothing, and its Servers page shows the sentence beside it (`RemovedProducts`, the console's host and `ServerModule.tsx`);
+- the variables of their data folders (`DBDATAKIT_DATA_SYNC`, `_BUILD`, `_STORE`) stay, because the command lines read them.
+
 ## Decisions
 
 | # | Decision | Why |
@@ -118,11 +135,11 @@ is not ours to break and is outside this rule. (CLAUDE.md states the working rul
 | D12 | **Revised (owner, 2026-11-14):** isolating Build's native SQL library (polyglot) in a child process is not required: no crash has been reported and the library is pinned and hash-checked. Existing child-process calls stay until a slice touches them; see "Our code calls our code as a library". | A defensive cost with no reported failure behind it. |
 | D13 | A Build schedule lives in the project (committed with the refresh plan); an operator may pause or run now, not add. | Fits "everything is a file" and review of plans. |
 | D14 | Trust: a client calls a server, never the reverse; several clients per server, each with its own key and ceiling; short-lived signed tokens naming a person; ownership-scoped ceilings (Publisher) for server clients; the local CLI over a named pipe or Unix socket. | A server needs no credentials for any console and stays the security boundary (`DbDataKit.Web`). |
-| D15 | Authoring merges by pushing to the project's git remote and opening a pull request when one is configured, else inside the Build server with the author's identity. | The usual review path where a remote exists. |
+| D15 | Authoring merges by pushing to the project's git remote and opening a pull request when one is configured, else inside the Workspace server with the author's identity. | The usual review path where a remote exists. |
 | D16 | The console's back end relays every browser call to the servers; browsers never reach them. | Servers stay off the browser's network, pinned self-signed certificates work, no CORS, and live updates (SignalR) are relayed. |
 | D17 | A console and a server can differ in version: the management API carries an integer version, a client supports its own and the one before, and says which side to upgrade (since extended to the suite's compatibility generation, N and N-1). | Products release on their own. |
 | D18 | The Gateway has a state store (SQLite through `DbDataKit.State`) for its audit, notifications and per-console read state. | It had none. |
-| D19 | A Build server's projects come from a local path or a git remote and branch it clones and pulls before each scheduled run. | Both ways of working exist. |
+| D19 | A Workspace project comes from a local path or a git remote and branch it clones; what runs is the package published from it, so a Runner never pulls a project. | Both ways of working exist; a run is reproducible from the published version. |
 | D20 | One identity home per install, amended by plan 20: hosted by the serving layer by default. | End users must sign in without reaching the console; one list of people, roles assigned once. |
 
 ### Decisions recorded after plan 13
@@ -132,13 +149,12 @@ Decided by the owner after the table above was closed. The numbers are the ones 
 | # | Decision | Why | Details |
 | --- | --- | --- | --- |
 | 13c D12 | Relationships between built models are written as `foreign_keys:` on the model; semantic relationships are read from them. | One spelling for a foreign key in both formats. Whether models and semantic models become one format is a proposal (plan 19 J30). | `docs/semantic/models-and-semantic-models.md` |
-| 13c D20 | Sync has no sign-in of its own: it accepts a console's token and its task runner's token and answers `/api/health`. A `server.yaml` that sets `Auth:Windows` or `Auth:Network` is refused with a message naming the file. | One place to sign in (the console, or the identity home behind it); nothing to secure twice. | `DbDataSync/docs` |
 | 13c D22 | Installing a library adds `libraries/*/lib/` to the config repository's `.gitignore` (`LibraryPaths.EnsureStoreGitignored`). | The extracted packages are a local store; their DLLs must not be committed beside `library.lock`. | `DbDataSync/docs/drivers-and-libraries.md` |
 | 13c D24 | A person's external (Entra, Windows) groups count until their next sign-in through that source: no expiry, and signing out does not clear them. | The home records what the last sign-in carried; a person removed from a group at the provider loses the role at the next sign-in. A lifetime can be added if a tenant needs one. | `Shared/src/DbDataKit.Identity/README.md` |
 | 13c D25 | Entra's group overage (more than 200 groups, no `groups` claim) is left to the tenant: its administrator limits the groups with `groupMembershipClaims`; the home calls no Microsoft Graph. | Graph needs a credential and a permission of its own. Revisit if a tenant cannot limit its groups. | `Shared/src/DbDataKit.Identity/README.md` |
 | 13c D26 | An Entra sign-in links to an existing account on the token's UPN (preferred) or email, trusted (`trustEmail`); other OpenID sources link only on a verified address. | An Entra id token has no `email_verified`; a tenant that lets people set their own mail attribute must not be trusted, so it is a setting. | `Shared/src/DbDataKit.Identity/README.md` |
-| 13c D27 | Copying a connection to another server never copies a secret value: the copy names the reference the target must hold (for a Sync target the person types the password, sent to that server only). | The console never reads a secret. | `DbDataKit/README.md` |
-| 13c D28 | Sync's `extensions.sync` keys use the shared snake_case names (`segment_order`, `test_query`, `connect_timeout_seconds`, `command_timeout_seconds`), and its connection file API takes `{text, expected_version, password}` and answers a conflict with `current_version`, as the Gateway's data-source API does. | One spelling and one shape for the pair of file APIs the console copies between. | `DbDataSync/docs/configuration.md` |
+| 13c D27 | Copying a connection to another server never copies a secret value: the copy names the reference the target must hold. | The console never reads a secret. | `DbDataKit/README.md` |
+| 13c D28 | Sync's `extensions.sync` keys use the shared snake_case names (`segment_order`, `test_query`, `connect_timeout_seconds`, `command_timeout_seconds`). | One spelling for the keys every product reads from a `connection/1` file. | `DbDataSync/docs/configuration.md` |
 | 13c D29 | The slow test engines' images (BigQuery emulator, sqlflite, SQL Server 2025, Spark) are pinned by digest in `testenv/docker-compose.yml`; the file says how to move one. | A moving tag can turn the nightly run red without a change of ours. | `testenv/docker-compose.yml` |
 | 13c D30 | The identity home's admin API is the management API of whatever hosts the home; the console's screens use it through its relay and the commands stay. | One admin surface per host, no screens of the home's own. | `Shared/src/DbDataKit.Identity/README.md` |
 | 13c D31 | A home that runs on its own keeps the framework key ring in its `dataprotection/` directory (a backup holds the state and that directory); the serving layer's home protects its signing keys with `KeySigningKeyProtector` and a key in its secret store. | Simple for one home; a group of homes on one shared state needs the same key everywhere. | `DbDataKit/README.md`, `Shared/src/DbDataKit.Identity/README.md` |

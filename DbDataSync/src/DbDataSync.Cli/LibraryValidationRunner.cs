@@ -207,7 +207,7 @@ public static class LibraryValidationRunner
     /// **Real race found in CI, not hypothesized**: nothing about matching on <see cref="TablePrefix"/>
     /// alone distinguishes a genuinely orphaned table (left behind by a crashed run) from one a *sibling*
     /// validate run — a different process, racing this one against the same connection's target database
-    /// — created moments ago and is still actively staging into. `DbDataSync.Api.Tests` and
+    /// — created moments ago and is still actively staging into. the integration tests and
     /// `DbDataSync.Cli.Tests` both run real, `Category=Integration` validate calls against the same
     /// shared `master` database on the same container, in separate test-host processes `dotnet test` runs
     /// concurrently — each disables parallelization only within its own assembly, which does nothing to

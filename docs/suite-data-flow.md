@@ -49,7 +49,7 @@ flowchart LR
     MODELS -->|"create and load"| WH
     STOREDEF -->|"structure changes"| ENT
 
-    MODELS -.->|"publish semantic packages<br/>(read login only)"| SEM
+    MODELS -.->|"publish semantic packages<br/>(no login)"| SEM
     STOREDEF -.->|"publish models, rules,<br/>permissions"| STOREMOD
 
     WH --> DS
@@ -71,10 +71,12 @@ flowchart LR
 
 Reading it left to right:
 
-- **Sync** copies operational data into replicated tables.
-- **Build** turns replicated tables, sources and DbDataStore's entities into the warehouse. It publishes semantic packages to the serving
-  layer with the read login only; the write login never leaves Build.
-- **DbDataStore's server** owns the master data models, rules and structure changes, and publishes them to the serving layer.
+- **Sync** copies operational data into replicated tables (a sync project of the Workspace, run by the Runner).
+- **Build** turns replicated tables, sources and DbDataStore's entities into the warehouse (a build project of the Workspace, refreshed by
+  the Runner). The Workspace publishes its semantic models and the read-only data source documents to the serving layer, with no login:
+  the read login is the Gateway's, the write login is bound on the Runner.
+- **DbDataStore** models are authored in a store project of the Workspace; the Runner deploys their structure and the Workspace
+  publishes them to the serving layer.
 - **The serving layer** is the only thing end users reach. It reads the warehouse, SSAS and DbDataStore's database directly, and it
   writes DbDataStore's data through DbDataStore's own write path (validation, history, audit). It also hosts sign-in, apps and the
   agents' endpoint.
@@ -112,6 +114,6 @@ flowchart LR
 ```
 
 - **Monitoring and lineage are pulled.** Each server keeps its own runs, audit and lineage, and the console joins them (plans 13 W10 and 18).
-- **Publishers.** Build and DbDataStore's server pair with the serving group as Publishers (plan 13 W12, plan 20 section 6).
+- **Publishers.** The Workspace's publisher key pairs with the serving group and with the Runner as a Publisher (plan 13 W12, plan 20 section 6); a Runner pairs with the serving group to tell its cache that data changed.
 - **Identity faces users.** The identity home is a module of the serving group, so end users sign in without reaching the console. It can
   also run on its own behind the firewall, with the serving layer forwarding its endpoints.

@@ -35,8 +35,8 @@ After you sign in, **Setup** in the rail (administrators) lists the first steps,
 | --- | --- | --- |
 | Choose how people sign in | Users | a person has a passkey (or another way in) and is enabled |
 | Pair your first server | Servers | a server is paired |
-| Add your first connection | Connections | a Sync server or a Gateway has a connection |
-| Make a first Build project | Servers | a Build server hosts a project |
+| Add your first connection | Connections | a Gateway has a data source |
+| Make a first project in the Workspace | Servers | a Workspace server holds a project |
 | Set up where alerts are sent | Delivery | a delivery channel is configured |
 | Send failed checks to a channel | Quality | the section `quality: alerts:` of `settings.yaml` names a channel this install has |
 | Connect a git remote | | not available yet: it is listed so it is not forgotten, and never counts as left |

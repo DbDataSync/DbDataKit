@@ -4,7 +4,7 @@ namespace DbDataKit.Web.Auth;
 
 /// <summary>
 /// Which product's sign-in this is. Everything that has to be told apart between products on the same machine derives from the name, so two products never share a
-/// cookie, a configuration section or a claim: <c>DbDataSync</c> reads <c>DbDataSync:Auth</c> and sets the cookie <c>dbdatasync.session</c>.
+/// cookie, a configuration section or a claim: <c>DbDataKit</c> reads <c>DbDataKit:Auth</c> and sets the cookie <c>dbdatakit.session</c>.
 /// </summary>
 /// <param name="Name">The product's name; the cookie, scheme, section and claim derive from it.</param>
 /// <param name="InviteCommandText">The command that prints a fresh invitation when it is not <c>&lt;name&gt; invite</c> (the console's is <c>dbdatakit user invite</c>).</param>

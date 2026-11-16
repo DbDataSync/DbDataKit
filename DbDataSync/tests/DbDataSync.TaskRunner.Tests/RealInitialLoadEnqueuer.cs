@@ -6,9 +6,8 @@ namespace DbDataSync.TaskRunner.Tests;
 /// <summary>
 /// A real, test-local <see cref="IInitialLoadEnqueuer"/> — the only implementation anywhere in the test
 /// suite that actually enqueues processable work, rather than throwing (<see cref="NeverCalledInitialLoadEnqueuer"/>)
-/// or merely recording the call. The one real implementation, <c>DbDataSync.Api.Services.BulkLoadService</c>,
-/// lives in <c>DbDataSync.Api</c>, which this project does not (and should not) reference — phase 134's
-/// own <c>IInitialLoadEnqueuer</c> seam exists specifically so <c>DbDataSync.State</c> doesn't need to.
+/// or merely recording the call. The Sync server's implementation, <c>BulkLoadService</c>,
+/// was deleted with the server (plan 33 SC23).
 /// A test that wants a mapping's first pass to actually run its Bulk Load (rather than assert it never
 /// tries to) needs its own copy of the same minimal core: mint a <c>BulkLoadBatches</c> row and one
 /// <c>WorkQueue</c> row per segment, so the very same worker call already draining the Primary lane

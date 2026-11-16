@@ -23,7 +23,7 @@ public static class NotificationKinds
     public const string MetadataNotCached = "MetadataNotCached";
 
     /// <summary>The bound Windows certificate is within its configured warning window of
-    /// <c>NotAfter</c> — phase 82, raised by <c>DbDataSync.Api.Services.CertificateExpiryService</c> at
+    /// <c>NotAfter</c> — phase 82, raised by a server's certificate-expiry check at
     /// most once a day.</summary>
     public const string CertificateExpiring = "CertificateExpiring";
 

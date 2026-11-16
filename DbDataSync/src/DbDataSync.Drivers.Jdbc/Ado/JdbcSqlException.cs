@@ -15,7 +15,7 @@ public sealed record JdbcSqlError(string Message, string? SqlState, int ErrorCod
 /// <see cref="DbException"/> subtype carrying the same <c>SQLState</c>/<c>ErrorCode</c>/chained-message
 /// detail as plain <see cref="string"/>/<see cref="int"/> data.
 /// <para>
-/// **Why this exists, not a shared class in `DbDataSync.Api` that pattern-matches `java.sql.SQLException`
+/// **Why this exists, not a shared class elsewhere that pattern-matches `java.sql.SQLException`
 /// directly (an earlier, wrong version of this same idea):** IKVM.Java is a real, separately-installed
 /// library (`KnownLibraries`' `ikvm` entry), not bundled — a process that has never opened a JDBC
 /// connection doesn't have it loaded, and merely touching the *type* `java.sql.SQLException` (even inside
