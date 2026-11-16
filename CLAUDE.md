@@ -1,18 +1,18 @@
 # Working in the DbDataKit repository
 
-One repository, four products and the libraries they share. Read the product's own docs before changing it; `DbDataBuild/CLAUDE.md`
+One repository: the suite's four services (the console, Workspace, Gateway and Runner; the Build, Sync and Store servers were deleted in plan 33 SC23), the command lines and engines they run, and the libraries they share. Read the product's own docs before changing it; `DbDataBuild/CLAUDE.md`
 lists rules its tests enforce.
 
 | Folder | What it is | Owns |
 | --- | --- | --- |
 | `Shared/` | the shared libraries (`DbDataKit.*`, packages under `src/`, tests under `tests/`) | what two or more products need: config, connections, dialects, metadata, secrets, hosting, transfer |
-| `DbDataSync/` | replication tool: ASP.NET API (no web app of its own), its screens (`Shared/web/sync`, an npm workspace, shown by the console), per-run TaskRunner | the replication engine, its drivers, its UI |
+| `DbDataSync/` | replication: `dbdatasync`, a command line on a configuration repository, and the engine a Runner runs (per-run TaskRunner); no server since plan 33 SC23. It is authored as a Workspace sync project, run from that project's Runs tab and the Runner's screens | the replication engine, its drivers, its command line |
 | `DbDataGateway/` | Arrow Flight SQL gateway for relational databases | the Flight SQL server, its authentication, the 32-bit ODBC worker |
-| `DbDataKit/` | the product, the `dbdatakit` host (projects `DbDataKit.Server*`; "the console" is the web app of it): the web app (`Shared/web/console`): sign-in, users, invitations, the servers it manages and their screens, every module's docs (more arrive slice by slice) | the console's host and its command line |
+| `DbDataKit/` | the product, the `dbdatakit` host (projects `DbDataKit.Server*`; "the console" is the web app of it): the web app (`Shared/web/console`): sign-in, users, invitations, the servers it manages (Workspace, Gateway, Runner; a paired Build, Sync or Store server is told where its features went) and their screens, every module's docs (more arrive slice by slice) | the console's host and its command line |
 | `DbDataStore/` | master data models in your own databases (`model/1`, validated writes, history, audit; plan 15): no server since plan 33 SC23; `dbdatastore` is the runtime of a model's package on a Runner and a command line on a folder of models | the store's runtime and its command line |
 | `DbDataRunner/` | scheduled and batch work: the runner host (`dbdatarunner`; the engine is the library `DbDataKit.Runner`; plan 28 and 28a): a server of the suite's shape (`docs/architecture.md`) that runs the tasks of published packages, each in a process of its own | the host and its command line |
 | `DbDataWorkspace/` | the Workspace server (`dbdataworkspace`; plan 22a GP31, decision D8; the workspace calls are the library `DbDataKit.Authoring`): the projects people and agents author in git workspaces (an app today, plan 27 adds more kinds) and a record of what was done, a server of the suite's shape (`docs/architecture.md`); no builds yet | the host and its command line |
-| `DbDataBuild/` | CLI that builds tables and views from DuckDB-dialect SQL models | the model language, lowering, targets, plans |
+| `DbDataBuild/` | CLI that builds tables and views from DuckDB-dialect SQL models, and the runtime of a Build package on a Runner (no server since plan 33 SC23); authored as a Workspace build project | the model language, lowering, targets, plans |
 | `dist/` | install scripts, MSI and Scoop generation for every product | packaging |
 | `testenv/` | SQL Server and PostgreSQL containers shared by the suites | test engines |
 | `scripts/` | repository-wide checks (Python, standard library only) | rules about the repository as a whole |
@@ -111,7 +111,7 @@ The rule is about that, not about branches or merge style.
 - **Formats are listed and frozen** (plan 24a UC02): `docs/formats.json` has each definition and file format with its current and previous version and whether it is open or frozen.
   `scripts/check_formats.py` fails when the code declares another version than the file says (a bump needs its entry) and when a file of a frozen format changed (its sha256 is recorded).
   A frozen format is never edited: the change is the next number, with a new entry and new hashes (`python3 -I scripts/check_formats.py --hash <file>`).
-- **Everything built and published has an editor screen** (owner, 2026-11-08): a stored format, or a thing a person authors or publishes by file or command, is not finished until a screen in the console, the Build or Sync workspace or the Gateway edits it, or `docs/ui-editors.md` says `none (reason)` or names the slice (of the plan that owns the screen) that will; adding a row is described in that page, and `scripts/check_ui_editors.py` keeps it complete.
+- **Everything built and published has an editor screen** (owner, 2026-11-08): a stored format, or a thing a person authors or publishes by file or command, is not finished until a screen in the console, the Workspace (its build, sync and store projects), the Runner or the Gateway edits it, or `docs/ui-editors.md` says `none (reason)` or names the slice (of the plan that owns the screen) that will; adding a row is described in that page, and `scripts/check_ui_editors.py` keeps it complete.
   `scripts/check_ui_editors.py` fails, naming the format, when one registered in `docs/formats.json` has no row there; a slice that adds or widens an editor changes its row in the same commit.
 - Branches: pushing a work-in-progress branch is fine; leaving it behind is not. The workflow `delete-merged-branch.yml` deletes a pull request's branch
   when it merges; a branch that was pushed and then abandoned, or whose work moved into another branch, is deleted by whoever abandoned it, in the same
