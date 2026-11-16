@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { appRows, decideRequest, mcpDecisionPath, mcpRows, decisionPath, decisionProblem, sortApprovals, storeRows, waited, type ApprovalRow, type GatewayAppDetail, type StoreRequestList } from './approvals'
+import { appRows, decideRequest, gatewayStoreRows, mcpDecisionPath, mcpRows, decisionPath, decisionProblem, sortApprovals, storeRows, waited, type ApprovalRow, type GatewayAppDetail, type StoreRequestList } from './approvals'
 import type { InstanceSummary } from './api'
 
 const server = (id: string, name: string, product: string): InstanceSummary => ({ id, name, url: 'https://x', product, version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null })
@@ -143,5 +143,27 @@ describe('the steps agents asked through a Gateway\'s mcp module (AG33)', () => 
     expect(url).toBe('/relay/gw1/api/v1/mcp/approvals/a1/deny')
     expect(init.method).toBe('POST')
     expect(JSON.parse(init.body as string)).toEqual({ note: 'not now' })
+  })
+})
+
+describe('the change requests of a Gateway\'s store (plan 33 SC24)', () => {
+  const gateway = { id: 'gw1', name: 'Edge', product: 'dbdatagateway', reachable: true } as unknown as Parameters<typeof gatewayStoreRows>[0]
+  const list: StoreRequestList = {
+    requests: [
+      { id: 'r1', model: 'budgets', instance: 'default', state: 'pending', proposed_by: 'u1', proposed_by_name: 'Ada', by_agent: false, proposed_at: '2026-11-16T10:00:00Z', description: 'raise', change_count: 1 },
+      { id: 'r0', model: 'budgets', instance: 'default', state: 'approved', proposed_by: 'u1', proposed_by_name: 'Ada', by_agent: false, proposed_at: '2026-11-15T10:00:00Z', description: null, change_count: 1 },
+    ],
+    can_decide: true, decision_needs: 'an author or an administrator',
+  }
+  it('shows the pending ones as the Gateway\'s, decided here, and links to the Gateway', () => {
+    const [row, ...rest] = gatewayStoreRows(gateway, 'budgets', list)
+    expect(rest).toHaveLength(0)
+    expect(row).toMatchObject({ product: 'dbdatagateway', kind: 'change-request', subject: 'budgets', by: 'Ada', canDecide: true, link: '/servers/gw1', request: { model: 'budgets', instance: 'default', id: 'r1', gateway: true } })
+    expect(decisionProblem(row!, true, '')).toBeNull()
+  })
+  it('decides on the Gateway\'s store paths, through the relay', () => {
+    const [row] = gatewayStoreRows(gateway, 'budgets', list)
+    expect(decisionPath('gw1', row!.request!, true)).toBe('/relay/gw1/api/v1/store/models/budgets/requests/r1/approve')
+    expect(decisionPath('gw1', row!.request!, false)).toBe('/relay/gw1/api/v1/store/models/budgets/requests/r1/reject')
   })
 })

@@ -22,8 +22,8 @@ export interface ApprovalRow {
   canDecide: boolean
   /** The console route of the screen where it is read and decided. */
   link: string
-  /** A change request: which one, so it can be decided here (SC21c). Absent on an app version, which is decided on the Gateway's screen. */
-  request?: { model: string; instance: string; id: string }
+  /** A change request: which one, so it can be decided here (SC21c). Absent on an app version, which is decided on the Gateway's screen. `gateway`: a request of the Gateway's store (plan 33 SC24), decided on its store paths. */
+  request?: { model: string; instance: string; id: string; gateway?: boolean }
   /** A step an agent asked through the Gateway's `mcp` module (plan 27a AG33): its id, decided here as the signed-in person. */
   mcp?: { id: string }
 }
@@ -67,6 +67,14 @@ export function storeRows(server: InstanceSummary, model: string, list: StoreReq
   })
 }
 
+/**
+ * The pending change requests of a model a Gateway's store serves (plan 33 SC24: the Store's requests without its server): the same list as a Store's, read from the Gateway's store paths on its management API, the default copy only. Decided here,
+ * through the Gateway, as the signed-in person; the link goes to the Gateway's screens.
+ */
+export function gatewayStoreRows(server: InstanceSummary, model: string, list: StoreRequestList): ApprovalRow[] {
+  return storeRows(server, model, list).map((row) => ({ ...row, product: 'dbdatagateway' as const, link: `/servers/${server.id}`, request: { ...row.request!, instance: 'default', gateway: true } }))
+}
+
 /** The Gateway's `GET /api/v1/apps` and `GET /api/v1/apps/{name}`, as far as this view reads them. */
 export interface GatewayAppSummary { name: string }
 export interface GatewayAppDetail {
@@ -92,6 +100,7 @@ export function appRows(server: InstanceSummary, detail: GatewayAppDetail): Appr
 
 /** The relay address of a decision on a Store change request: the Store's own route for the model copy (`POST .../requests/{id}/approve` or `reject`), the one its Change requests tab calls. */
 export function decisionPath(server: string, request: NonNullable<ApprovalRow['request']>, approve: boolean): string {
+  if (request.gateway) return `/relay/${server}/api/v1/store/models/${encodeURIComponent(request.model)}/requests/${encodeURIComponent(request.id)}/${approve ? 'approve' : 'reject'}`
   const copy = request.instance && request.instance !== 'default' ? `/instances/${encodeURIComponent(request.instance)}` : ''
   return `/relay/${server}/api/v1/models/${encodeURIComponent(request.model)}${copy}/requests/${encodeURIComponent(request.id)}/${approve ? 'approve' : 'reject'}`
 }
@@ -156,6 +165,11 @@ export async function loadApprovals(servers: InstanceSummary[]): Promise<{ rows:
         const { apps } = await request<{ apps: GatewayAppSummary[] }>(relay(server, '/api/v1/apps'))
         const details = await Promise.all(apps.map((a) => request<GatewayAppDetail>(relay(server, `/api/v1/apps/${enc(a.name)}`))))
         details.forEach((d) => rows.push(...appRows(server, d)))
+        // the change requests of the models its store serves (plan 33 SC24): a Gateway without the store module (404) or a person without a role there (403) has none to show
+        await request<{ models: { name: string }[] }>(relay(server, '/api/v1/store/models')).then(async ({ models }) => {
+          const lists = await Promise.all(models.map((m) => request<StoreRequestList>(relay(server, `/api/v1/store/models/${enc(m.name)}/requests?state=pending`)).then((l) => ({ model: m.name, l }))))
+          lists.forEach(({ model, l }) => rows.push(...gatewayStoreRows(server, model, l)))
+        }, () => undefined)
         // the agents' steps of the mcp module: a Gateway without the module (404) or a person without the role to see them (403) has none to show
         await request<McpApprovalList>(relay(server, '/api/v1/mcp/approvals')).then((l) => rows.push(...mcpRows(server, l)), () => undefined)
       }

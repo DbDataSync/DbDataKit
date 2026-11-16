@@ -5,6 +5,7 @@ using DbDataKit.Web.Trust;
 using DbDataGateway.Server.Configuration;
 using DbDataGateway.Server.Management;
 using DbDataGateway.Server.Serving;
+using DbDataGateway.Server.State;
 
 namespace DbDataGateway.Tests.Serving;
 
@@ -40,12 +41,13 @@ public sealed class GatewayStoreManagementTests : IDisposable
         return new ValidatedToken(new PairedClient("console-1", "console", [], ServerRole.Admin | ServerRole.Approver), id, name, true, roles, new Dictionary<string, ServerRole>(), "t", now, now.AddMinutes(5));
     }
 
-    private GroupStoreApi Api()
+    private GroupStoreApi Api(bool requests = false)
     {
-        var layout = StateLayout.Create(StateEngineIds.Sqlite, [DefinitionsModule.Module], new StateScope(Group: "main"));
-        var models = new PublishedEntityModels(new DefinitionStore(new StateDatabase(file, layout)));
+        var layout = StateLayout.Create(StateEngineIds.Sqlite, requests ? [DefinitionsModule.Module, ServingModule.Module] : [DefinitionsModule.Module], new StateScope(Group: "main"));
+        var state = new StateDatabase(file, layout);
+        var models = new PublishedEntityModels(new DefinitionStore(state));
         models.Publish("sales", Model, "mdm_sql", null, "ada", format: 2);
-        return new GroupStoreApi(() => new GatewayOptions(), null!, models, null!);
+        return new GroupStoreApi(() => new GatewayOptions(), null!, models, requests ? new GroupChangeRequests(state) : null!);
     }
 
     private static Task<(int Status, JsonNode Body)> Call(GroupStoreApi api, ValidatedToken who, string method, string path, string? body = null) =>
@@ -54,7 +56,7 @@ public sealed class GatewayStoreManagementTests : IDisposable
     [Fact]
     public async Task The_store_paths_answer_the_person_the_console_names_with_their_roles_here()
     {
-        var api = Api();
+        var api = Api(requests: true);
         var ada = Person("u-ada", "Ada", ServerRole.Viewer);
         var none = Person("u-x", "Nobody", ServerRole.None);
 
@@ -75,6 +77,11 @@ public sealed class GatewayStoreManagementTests : IDisposable
         var write = await Call(api, ada, "POST", "/sales/changes", """{"changes":[{"action":"insert","entity":"territory","values":{"code":"N"}}]}""");
         Assert.Equal(403, write.Status);
         Assert.Equal(502, (await Call(api, ada, "GET", "/sales/entities/territory/rows?limit=5&offset=0")).Status);
+
+        // the change requests say whether this person may decide them (an author may here; a viewer may not), as a DbDataStore server's list does
+        var asViewer = await Call(api, ada, "GET", "/sales/requests?state=pending");
+        Assert.Equal((200, false, "an author or an administrator"), (asViewer.Status, (bool)asViewer.Body["can_decide"]!, (string)asViewer.Body["decision_needs"]!));
+        Assert.True((bool)(await Call(api, Person("u-bea", "Bea", ServerRole.Author), "GET", "/sales/requests"))!.Body["can_decide"]!);
 
         // a path the store does not have, or a method it does not take there, is a 404 naming it
         var unknown = await Call(api, ada, "PUT", "/sales/schema");

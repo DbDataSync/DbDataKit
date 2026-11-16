@@ -294,7 +294,15 @@ public sealed class GroupStoreApi(Func<GatewayOptions> options, SecretsRuntime s
     {
         if (Needs(caller, ServerRole.Viewer) is { } denied) return denied;
         if (state is { Length: > 0 } && state is not (GroupChangeRequest.Pending or GroupChangeRequest.Approved or GroupChangeRequest.Rejected)) return StoreAnswer.Error(400, "state is pending, approved or rejected.");
-        return StoreAnswer.Ok(new JsonObject { ["requests"] = new JsonArray([.. requests.List(name, state is { Length: > 0 } ? state : null).Select(r => (JsonNode)r.ToJson(withChanges: false))]) });
+        // whether this caller may decide them, by the rule DecideAsync applies (a DbDataStore server's list says the same): what the console's Approvals page shows beside each row
+        var (served, _) = Served(name);
+        var needs = served is not null && ChangeApproval.AdministratorDecides(served.Model) ? ServerRole.Admin : ServerRole.Author;
+        return StoreAnswer.Ok(new JsonObject
+        {
+            ["requests"] = new JsonArray([.. requests.List(name, state is { Length: > 0 } ? state : null).Select(r => (JsonNode)r.ToJson(withChanges: false))]),
+            ["can_decide"] = served is not null && !caller.IsAgent && Needs(caller, needs) is null,
+            ["decision_needs"] = needs == ServerRole.Admin ? "an administrator" : "an author or an administrator",
+        });
     }
 
     public StoreAnswer Request(StoreCaller caller, string name, string id)
