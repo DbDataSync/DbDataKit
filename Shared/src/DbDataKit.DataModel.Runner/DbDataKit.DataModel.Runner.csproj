@@ -2,7 +2,7 @@
   <PropertyGroup>
     <RootNamespace>DbDataKit.DataModel.Runner</RootNamespace>
     <PackageId>DbDataKit.DataModel.Runner</PackageId>
-    <Description>A Store model's tables deployed as a manual Runner task (plan 33 SC24): the deploy job (create, or expand what exists; a dry run says what it would do), the definition package of a model with its storage slot, and the connection a task opens from its slot's grant.</Description>
+    <Description>A Store model's tables deployed as a manual Runner task (plan 33 SC24): the deploy job (create, or expand what exists; a dry run says what it would do), the definition package of a model with its storage slot, and the storage slot a runtime opens (it references no database driver).</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
@@ -11,7 +11,5 @@
     <ProjectReference Include="..\DbDataKit.Runner.Kit\DbDataKit.Runner.Kit.csproj" />
     <ProjectReference Include="..\DbDataKit.Connections\DbDataKit.Connections.csproj" />
     <ProjectReference Include="..\DbDataKit.Lineage\DbDataKit.Lineage.csproj" />   <!-- the lineage names of the columns a contract drops -->
-    <ProjectReference Include="..\DbDataKit.Connections.SqlServer\DbDataKit.Connections.SqlServer.csproj" />
-    <ProjectReference Include="..\DbDataKit.Connections.Postgres\DbDataKit.Connections.Postgres.csproj" />
   </ItemGroup>
 </Project>

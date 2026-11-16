@@ -12,9 +12,9 @@ A Store model's tables deployed as a manual Runner task (plan 33 SC24, the Store
   nullable columns), or does nothing. A change that would remove or retype (a contract step) is reported as blocked and
   fails the run without writing. Everything runs in one transaction (`ModelStorage`). The report is the step
   `deploy-report` of the run (`ModelDeployReport`: action `create`, `expand` or `none`, the statements, blocked, notes).
-- `GrantConnections.OpenAsync(grant, role, ct)` opens a SQL Server or PostgreSQL connection inside a task from the slot's
-  grant: the connection's definition the runner keeps (TLS, timeouts; the grant's `Definition`) with the grant's address and
-  login. Nothing of a secret is logged.
+- `StorageGrant` is the slot `storage` as a task gets it: the grant, the definition it stands for and an opener. The opener is the
+  runtime's (`dbdatastore --runner` sets `RemoteRunOptions.SlotFactory` to `StoreGrantConnections.SlotFactory`, with the SQL Server and
+  PostgreSQL providers), so this library references no database driver and the Workspace, which builds the packages, reaches no data source.
 
 `dbdatastore --runner` is the runtime's entry: it runs the task the runner names (`DBDATAKIT_TASK_NAME`).
 

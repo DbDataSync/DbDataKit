@@ -20,7 +20,7 @@ public sealed class ModelDeploySlots : Slots
 {
     public const string StorageSlot = "storage";
 
-    public Slot<ConnectionGrant> Storage { get; } = new(StorageSlot, "database");
+    public Slot<StorageGrant> Storage { get; } = new(StorageSlot, "database");
 }
 
 public static class ModelDeploySteps
@@ -54,10 +54,10 @@ public sealed class ModelDeployJob : RunnerJob<ModelDeployInput, NoProgress, Mod
     protected override async Task RunAsync(CancellationToken ct)
     {
         var model = await ReadModelAsync(Input.ModelFile, ct).ConfigureAwait(false);
-        var grant = await Slots.Storage.OpenAsync(ct).ConfigureAwait(false);
-        var engine = grant.Engine;
+        var storage = await Slots.Storage.OpenAsync(ct).ConfigureAwait(false);
+        var engine = storage.Engine;
         var schema = Input.Schema.Length > 0 ? Input.Schema : model.Name;
-        await using var connection = await GrantConnections.OpenAsync(grant, LoginRole.Write, ct).ConfigureAwait(false);
+        await using var connection = await storage.OpenAsync(LoginRole.Write, ct).ConfigureAwait(false);
         var live = await ModelStorage.ReadLiveAsync(connection, schema, ct).ConfigureAwait(false);
 
         ModelDeployReport report;

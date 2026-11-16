@@ -41,12 +41,12 @@ public sealed class ModelContractJob : RunnerJob<ModelContractInput, NoProgress,
     protected override async Task RunAsync(CancellationToken ct)
     {
         var model = await ModelDeployJob.ReadModelAsync(Input.ModelFile, ct).ConfigureAwait(false);
-        var grant = await Slots.Storage.OpenAsync(ct).ConfigureAwait(false);
-        var engine = grant.Engine;
+        var storage = await Slots.Storage.OpenAsync(ct).ConfigureAwait(false);
+        var engine = storage.Engine;
         var schema = Input.Schema.Length > 0 ? Input.Schema : model.Name;
-        await using var connection = await GrantConnections.OpenAsync(grant, LoginRole.Write, ct).ConfigureAwait(false);
+        await using var connection = await storage.OpenAsync(LoginRole.Write, ct).ConfigureAwait(false);
         var plan = ModelStorage.PlanContract(model, engine, schema, await ModelStorage.ReadLiveAsync(connection, schema, ct).ConfigureAwait(false));
-        var address = GrantConnections.DefinitionOf(grant);
+        var address = storage.Definition;
         var dropped = plan.Steps.Where(s => s.DroppedColumn is not null && s.Table is not null).Select(s =>
         {
             var dataset = LineageIdentity.Dataset(address, schema, s.Table!);

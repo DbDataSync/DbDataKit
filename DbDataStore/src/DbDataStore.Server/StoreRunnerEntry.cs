@@ -36,7 +36,7 @@ public static class StoreRunnerEntry
             e.Cancel = true;
             cts.Cancel();
         };
-        var options = new RemoteRunOptions { Client = "DbDataStore" };
+        var options = new RemoteRunOptions { Client = "DbDataStore", SlotFactory = StoreGrantConnections.SlotFactory };
         var result = task == ModelDeployPackage.ContractTask
             ? await RemoteJobHost.RunAsync<ModelContractJob>(cts.Token, options).ConfigureAwait(false)
             : await RemoteJobHost.RunAsync<ModelDeployJob>(cts.Token, options).ConfigureAwait(false);
