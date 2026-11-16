@@ -33,7 +33,6 @@ public sealed class CommandTimeoutChokepointTests
         "DbDataSync.Drivers.MsSql",
         "DbDataSync.Drivers.Postgres",
         "DbDataSync.Scripting",
-        "DbDataSync.Api",
         "DbDataSync.TaskRunner",
         "DbDataSync.Verification",
     ];

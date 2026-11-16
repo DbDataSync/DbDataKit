@@ -1,7 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
-import { firstRunRunner, gatewayUrl, scratchDirectory, syncUrl } from '../playwright.config'
+import { firstRunRunner, gatewayUrl, scratchDirectory } from '../playwright.config'
 import { viewsStory } from './views'
 
 /** A browser-side authenticator that holds the passkeys, so the test can register one and sign in with it the way a person's device would. */
@@ -104,34 +104,6 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await instance.getByTestId('instance-forget-button').click()
   await expect(page.getByTestId('instances-empty')).toBeVisible()
 
-  // A Sync server: paired, then its own screens open inside the console, under the server's address, through the relay.
-  await page.getByTestId('pair-url-input').fill(syncUrl)
-  await page.getByTestId('pair-code-input').fill(fs.readFileSync(path.join(scratchDirectory, 'sync-pairing-code.txt'), 'utf8').trim())
-  await page.getByTestId('pair-name-input').fill('Sync one')
-  await page.getByTestId('pair-button').click()
-  const sync = page.getByTestId('instance-row-Sync one')
-  await expect(sync.getByTestId('instance-status')).toHaveText('Ready')
-  await expect(sync).toContainText('dbdatasync')
-  await sync.getByTestId('instance-open-link').click()
-
-  // Its replications screen (an empty list, from the Sync server, as the person who is signed in here) under /servers/<id>/replications.
-  await expect(page).toHaveURL(/\/servers\/sync-[0-9a-f]+\/replications$/)
-  await expect(page.getByTestId('rail-replications')).toBeVisible()
-  await expect(page.getByText('No replications yet.').first()).toBeVisible()
-  // Its links stay inside the console's address for this server, and a reload of a deep link returns to the same screen.
-  await page.getByTestId('rail-connections').click()
-  await expect(page).toHaveURL(/\/servers\/sync-[0-9a-f]+\/connections$/)
-  await page.reload()
-  await expect(page).toHaveURL(/\/servers\/sync-[0-9a-f]+\/connections$/)
-  await expect(page.getByTestId('rail-connections')).toBeVisible()
-  // An administrator opens the server's own configuration through the relay.
-  await page.getByTestId('rail-admin').click()
-  await expect(page).toHaveURL(/\/servers\/sync-[0-9a-f]+\/admin\/config$/)
-  await expect(page.getByTestId('admin-config-table')).toBeVisible()
-  // The way back to the console's list of servers.
-  await page.getByTestId('rail-home-link').click()
-  await expect(page.getByTestId('instances-page')).toBeVisible()
-
   // A Gateway: its screens open inside the console too. The overview, the data source it was started with, a JWT claim mapping made here, the certificate and the history of its configuration.
   await page.getByTestId('pair-url-input').fill(gatewayUrl)
   await page.getByTestId('pair-code-input').fill(fs.readFileSync(path.join(scratchDirectory, 'gateway-pairing-code.txt'), 'utf8').trim())
@@ -176,39 +148,24 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
 
   await page.getByTestId('rail-home-link').click()
 
-  // E05, the Connections view across servers: the Gateway's data sources are listed (the Sync server has none yet), one is copied to the Sync server and then back to the Gateway under another name. Each target reads the file with its own strict loader.
+  // E05, the Connections view: the Gateway's data sources are listed, and one is copied on the same Gateway under another name (a copy to or from a Sync server went with the Sync server, plan 33 SC23). The target reads
+  // the file with its own strict loader.
   await page.goto('/connections')
   await expect(page.getByTestId('connections-page')).toBeVisible()
   const connection = (server: string, name: string) => page.locator(`[data-testid=connection-row][data-server="${server}"][data-name="${name}"]`)
   await expect(connection('Gateway one', 'ledger')).toBeVisible()
-  await expect(page.locator('[data-testid=connection-row][data-server="Sync one"]')).toHaveCount(0)
   await connection('Gateway one', 'ledger').getByTestId('connection-copy-button').click()
   await expect(page.getByTestId('copy-submit')).toBeDisabled()   // a server first
-  await page.getByTestId('copy-target').selectOption({ label: 'Sync one (Sync)' })
-  await expect(page.getByTestId('copy-name')).toHaveValue('ledger')
-  // without a password Sync says what it lacks, naming the reference the copy would use, and nothing is kept
-  await page.getByTestId('copy-submit').click()
-  await expect(page.getByTestId('copy-failed')).toContainText('dbdatakit:sync:connection:ledger')
-  await expect(connection('Sync one', 'ledger')).toHaveCount(0)
-  // with the password typed once (it goes to Sync only, and is stored under the copy's own reference), the copy is made, with what was left out said
-  await page.getByTestId('copy-password').fill('e2e-password')
-  await page.getByTestId('copy-submit').click()
-  await expect(page.getByTestId('copy-done')).toContainText('Copied to Sync one as ledger')
-  await expect(page.getByTestId('copy-done')).toContainText('never copied')
-  await expect(connection('Sync one', 'ledger')).toBeVisible()
-  await expect(connection('Sync one', 'ledger').getByTestId('connection-detail')).toContainText('localhost')
-  // and from Sync to the Gateway, under another name; the Gateway has validated it when it is listed
-  await connection('Sync one', 'ledger').getByTestId('connection-copy-button').click()
   await page.getByTestId('copy-target').selectOption({ label: 'Gateway one (Gateway)' })
-  await page.getByTestId('copy-name').fill('ledger-from-sync')
+  await page.getByTestId('copy-name').fill('ledger-copy')
   await page.getByTestId('copy-submit').click()
-  await expect(page.getByTestId('copy-done')).toContainText('Copied to Gateway one as ledger-from-sync')
-  await expect(connection('Gateway one', 'ledger-from-sync')).toBeVisible()
+  await expect(page.getByTestId('copy-done')).toContainText('Copied to Gateway one as ledger-copy')
+  await expect(connection('Gateway one', 'ledger-copy')).toBeVisible()
   // a name the target already has is a conflict, and the file there is left alone
   await page.getByTestId('copy-submit').click()
   await expect(page.getByTestId('copy-failed')).toContainText('did not accept the copy')
 
-  // One view across the servers: the Sync and Gateway servers answer, and none has a replication yet (a failed run and a lagging replication need real runs, so the rows themselves are tested on what the servers return)
+  // One view across the servers: the Gateway answers and nothing is failing (the rows themselves are tested on what the servers return)
   await page.goto('/monitoring')   // the rail inside a server's screens is that product's own
   await expect(page.getByTestId('monitoring-none')).toBeVisible()
   await expect(page.getByTestId('monitoring-problem')).toHaveCount(0)

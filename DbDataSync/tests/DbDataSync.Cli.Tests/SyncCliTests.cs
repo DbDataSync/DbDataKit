@@ -4,7 +4,7 @@ using Json.Schema;
 
 namespace DbDataSync.Cli.Tests;
 
-/// <summary>Sync's command line on the shared router: every verb has a schema, the cert verbs are the ones <see cref="CertCommand"/> has, and a command's JSON document satisfies the checked-in schema (plan 13, C07).</summary>
+/// <summary>Sync's command line on the shared router: every verb has a schema, and a command's JSON document satisfies the checked-in schema (plan 13, C07). The Sync server's nouns are gone (plan 33 SC23, <c>RemovedServerTests</c>).</summary>
 public sealed class SyncCliTests
 {
     private static string SchemaPath()
@@ -16,49 +16,19 @@ public sealed class SyncCliTests
     }
 
     [Fact]
-    public void TheCertNounHasExactlyTheVerbsTheCertCommandRegisters() =>
-        Assert.Equal(CertCommand.VerbNames.Order(StringComparer.Ordinal), SyncCli.Router().Nouns.Single(n => n.Name == "cert").Verbs.Select(v => v.Name).Order(StringComparer.Ordinal));
-
-    [Fact]
     public void TheNounsAreTheSuiteGrammar() =>
-        Assert.Equal(["server", "service", "cert", "script", "provisioning", "secret", "library", "driver", "package", "config", "state", "lineage", "gateway", "health", "ui"], SyncCli.Router().Nouns.Select(n => n.Name));
-
-    /// <summary>Plan 28c, E14: <c>state show</c> lists the modules Sync's state is built from, each with the version this build has, and the version a database is at once it exists.</summary>
-    [Fact]
-    public async Task StateShowListsTheSyncModulesAndTheirVersions()
-    {
-        var repo = Directory.CreateTempSubdirectory("dbdatasync-state-show-").FullName;
-        try
-        {
-            var before = new StringWriter();
-            Assert.Equal(0, await SyncCli.Router("1.2.3").RunAsync(["state", "show", "--repo", repo], new CliContext(before, new StringWriter(), TextReader.Null)));
-            foreach (var module in DbDataSync.State.SyncState.Modules)
-                Assert.Matches($@"{module.Name}\S*\s+prefix \S+\s+binary v{module.Version}\s+registered -", before.ToString());
-            Assert.Contains(Path.Combine(repo, "state.db"), before.ToString());
-
-            _ = new DbDataSync.State.StateDatabase(Path.Combine(repo, "state.db"));
-
-            var after = new StringWriter();
-            Assert.Equal(0, await SyncCli.Router("1.2.3").RunAsync(["state", "show", "--repo", repo], new CliContext(after, new StringWriter(), TextReader.Null)));
-            foreach (var module in DbDataSync.State.SyncState.Modules)
-                Assert.Matches($@"{module.Name}\S*\s+prefix \S+\s+binary v{module.Version}\s+registered v{module.Version}\s+current", after.ToString());
-        }
-        finally
-        {
-            Directory.Delete(repo, recursive: true);
-        }
-    }
+        Assert.Equal(["script", "provisioning", "library", "driver", "package", "lineage", "ui"], SyncCli.Router().Nouns.Select(n => n.Name));
 
     [Fact]
     public void TheCommandsOutsideTheRouterAreTheOnesThatStayUnchanged() =>
-        Assert.Equal(["internal", "launcher", "tool", "update", "version"], SyncCli.Legacy.Order(StringComparer.Ordinal));
+        Assert.Equal(["tool", "version"], SyncCli.Legacy.Order(StringComparer.Ordinal));
 
     private static string McpToolsPath() => Path.Combine(Path.GetDirectoryName(SchemaPath())!, "mcp-tools.json");
 
     [Fact]
     public async Task TheCheckedInMcpToolListIsCurrent()
     {
-        var server = new McpServer(SyncCli.Router(), new McpOptions(new HashSet<string>(["secret set", "secret remove", "library validate", "server pair", "server unpair", "gateway add"])), SyncCli.Program, "0");
+        var server = new McpServer(SyncCli.Router(), new McpOptions(new HashSet<string>(["library validate"])), SyncCli.Program, "0");
         var reply = (await server.HandleAsync(System.Text.Json.Nodes.JsonNode.Parse("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}""")!)).Single();
         string actual = reply["result"]!.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }).Replace("\r\n", "\n") + "\n";
         if (Environment.GetEnvironmentVariable("UPDATE_GOLDEN") == "1") File.WriteAllText(McpToolsPath(), actual);
@@ -80,10 +50,9 @@ public sealed class SyncCliTests
     }
 
     [Theory]
-    [InlineData("health", "check", "--url", "http://127.0.0.1:1")]
     [InlineData("bogus")]
-    [InlineData("server", "start")]
-    [InlineData("cert", "not-a-cert-command")]
+    [InlineData("script", "not-a-script-command")]
+    [InlineData("package", "publish")]
     public async Task AFailingCommandStillWritesOneDocumentThatSatisfiesTheSchema(params string[] args)
     {
         var output = new StringWriter();
@@ -102,12 +71,11 @@ public sealed class SyncCliTests
         var output = new StringWriter();
         var originalOut = Console.Out;
 
-        var exit = await SyncCli.Router().RunAsync(["secret", "list", "dbdatakit:sync:test:json-capture", "--repo", Directory.CreateTempSubdirectory("dbdatasync-json-").FullName, "--format", "json"],
-            new CliContext(output, new StringWriter(), TextReader.Null));
+        var exit = await SyncCli.Router().RunAsync(["library", "list", "--format", "json"], new CliContext(output, new StringWriter(), TextReader.Null));
 
         using var document = JsonDocument.Parse(output.ToString());
         Assert.Equal(0, exit);
-        Assert.Contains("dbdatakit:sync:test:json-capture  not set", document.RootElement.GetProperty("messages")[0].GetString());
+        Assert.NotEqual(0, document.RootElement.GetProperty("messages").GetArrayLength());
         Assert.Same(originalOut, Console.Out);   // the scope puts the console back
     }
 }

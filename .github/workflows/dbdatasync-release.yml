@@ -6,10 +6,10 @@ name: DbDataSync release
 #   gh workflow run dbdatasync-release.yml --ref main -f sha=<an older commit on main>
 #
 # It releases the newest commit on main, or `sha` (which must be on main), and only if that exact commit has a green "DbDataSync CI" run.
-# It builds the standard zip packages, the Windows installer (.msi) and the install scripts (dist/README.md), checks them, tags the commit
+# It builds the standard zip packages and the install scripts (dist/README.md), checks them, tags the commit
 # dbdatasync/v<version> and publishes a GitHub Release in THIS repository with them attached. There is no dotnet tool package (owner decision
-# 2026-11-08). No branch is pushed or merged: a release is a tag and its assets. Everything runs on the built-in GITHUB_TOKEN; there is no
-# container image (dispatch dbdatasync-publish-image.yml by hand) and no GitHub App.
+# 2026-11-08), and no Windows installer, service or container image since plan 33 SC23 deleted the Sync server: dbdatasync is a command line
+# and the engine a Runner runs. No branch is pushed or merged: a release is a tag and its assets. Everything runs on the built-in GITHUB_TOKEN.
 
 on:
   workflow_dispatch:
@@ -195,17 +195,8 @@ jobs:
             (cd "artifacts/publish/$rid" && zip -qr "$OLDPWD/artifacts/dist/dbdatasync-v$SHIPPED-$rid.zip" .)
           done
 
-      # The Windows installer (dist/msi.py), built from the win-x64 zip; the checksums cover it too.
-      - uses: ./.github/actions/build-msi
-        with:
-          product: dbdatasync
-          meta: DbDataSync/dist.json
-          version: ${{ steps.version.outputs.version }}
-          zip: DbDataSync/artifacts/dist/dbdatasync-v${{ steps.version.outputs.version }}-win-x64.zip
-          out: DbDataSync/artifacts/dist
-
       - name: Checksums
-        run: (cd artifacts/dist && sha256sum *.zip *.msi > SHA256SUMS && cat SHA256SUMS)
+        run: (cd artifacts/dist && sha256sum *.zip > SHA256SUMS && cat SHA256SUMS)
 
       - name: Smoke test the linux-x64 zip
         env:
@@ -244,9 +235,8 @@ jobs:
           git tag "dbdatasync/v$VERSION"
           git push origin "refs/tags/dbdatasync/v$VERSION"
 
-      # Created in this repository against the tag pushed above. The assets are the zips, the MSI and SHA256SUMS (artifacts/dist); the
-      # install scripts and the Scoop manifest are attached by publish-dist below. ci.yml's package job builds a container image but only
-      # ever tags it dbdatasync:ci locally, so no image is attached here (dispatch dbdatasync-publish-image.yml for that).
+      # Created in this repository against the tag pushed above. The assets are the zips and SHA256SUMS (artifacts/dist); the
+      # install scripts and the Scoop manifest are attached by publish-dist below.
       # --latest=false because "latest" is one marker for the whole repository, not one per product.
       - name: Publish the GitHub Release
         if: ${{ !inputs.dry_run }}
@@ -261,7 +251,7 @@ jobs:
             echo "The version is the UTC date and time this release was built."
             [ "$PRERELEASE" = "true" ] && echo "**This is a prerelease.**"
             echo
-            echo "The zip packages (win-x64, linux-x64; they need the .NET 10 runtime) are installed with the install scripts attached to this release, or with Scoop on Windows; on Windows the .msi installs it (and registers the service) with a double-click. A container image is published by a separate workflow. There is no .NET tool package. See \`dist/README.md\` in the repository."
+            echo "The zip packages (win-x64, linux-x64; they need the .NET 10 runtime) are installed with the install scripts attached to this release, or with Scoop on Windows. The Sync server was deleted (plan 33 SC23): dbdatasync is a command line and the engine a Runner runs. There is no installer, service, container image or .NET tool package. See \`dist/README.md\` in the repository."
           } > /tmp/release-notes.md
           prerelease_flag=()
           [ "$PRERELEASE" = "true" ] && prerelease_flag=(--prerelease)
@@ -284,4 +274,3 @@ jobs:
           prerelease: ${{ steps.version.outputs.prerelease }}
           sums: DbDataSync/artifacts/dist/SHA256SUMS
           sha: ${{ env.SHA }}
-          msi: DbDataSync/artifacts/dist/dbdatasync-v${{ steps.version.outputs.version }}-win-x64.msi

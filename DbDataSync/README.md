@@ -2,12 +2,13 @@
 
 [![NuGet](https://img.shields.io/nuget/v/DbDataSync.svg?label=NuGet)](https://www.nuget.org/packages/DbDataSync)
 
-**DbDataSync** · [Install](docs/install.md) · [Configuration](docs/configuration.md) · [Getting started](docs/getting-started.md) · [Replication concepts](docs/replication-concepts.md) · [Drivers and libraries](docs/drivers-and-libraries.md) · [State database](docs/state-database.md) · [Building from source](docs/development.md)
+**DbDataSync** · [Install](docs/install.md) · [Configuration](docs/configuration.md) · [Getting started](docs/getting-started.md) · [Replication concepts](docs/replication-concepts.md) · [Drivers and libraries](docs/drivers-and-libraries.md) · [Building from source](docs/development.md)
 
-DbDataSync is a cross-database replication tool. You define a replication in the web app of the
-[dbdatakit console](https://github.com/DbDataSync/DbDataKit/blob/main/DbDataKit/README.md) — the source table, the target table, column mappings,
-a schedule, and how changes are processed — and DbDataSync keeps the target in sync. It does a full initial load, then applies incremental changes on a schedule
-or on demand.
+DbDataSync is a cross-database replication tool. You define a replication in a sync project of the Workspace (in the
+[dbdatakit console](https://github.com/DbDataSync/DbDataKit/blob/main/DbDataKit/README.md)) or as the files of a configuration repository — the source table,
+the target table, column mappings, a schedule, and how changes are processed — publish it to a **Runner**, and the Runner keeps the target in sync with
+DbDataSync's engine. It does a full initial load, then applies incremental changes on a schedule or on demand. The Sync server was deleted (plan 33 SC23):
+`dbdatasync` is a command line on a configuration repository, and the engine (`DbDataSync.TaskRunner`, the package `dbdatasync-runtime`) is what a Runner runs.
 
 A replication's source and target can be different engines — a SQL Server source can feed a
 PostgreSQL target, for example. Support varies by engine:
@@ -58,47 +59,29 @@ a YAML descriptor. See [Drivers and libraries](docs/drivers-and-libraries.md).
 
 ```powershell
 irm https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/install.ps1 | iex
-dbdatasync server setup
 ```
 
 ```bash
 curl -fsSL https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/install.sh | bash
-dbdatasync server setup
 ```
 
-This installs DbDataSync into your own profile and walks you through setup. It needs the .NET 10 runtime. See
-[Install](docs/install.md) for the Windows installer (MSI), Scoop, a Windows or
-systemd service, a machine-wide install, or running in a container. There is no .NET tool package any more.
+This installs the `dbdatasync` command line into your own profile. It needs the .NET 10 runtime. See [Install](docs/install.md) for Scoop and a machine-wide
+install. There is no service, installer or container image of Sync any more: the install of the suite is four services (console, Workspace, Gateway, Runner).
 
 ## Where the screens are
 
-`dbdatasync server run` is the server: the API, the scheduler and the runs. It serves **no web app of its own**: its address answers the API and the
-console's calls, and a browser pointed at it is told where the screens are. They are in the **dbdatakit console**, one web app for every DbData
-server, which you pair with the server once:
-
-```sh
-dbdatasync server pair                      # on the server: prints a single-use code
-dbdatakit instance add https://<this server>:5080 --code <code>     # or the console's Servers page
-```
-
-Then open the server on the console's **Servers** page (`/servers/<id>`). People sign in, and are made, in the console. The docs are in the console too, at
-**Docs** (`/docs/sync`) and at each Sync screen's **Docs** link; the pages in this folder are the same files. The server must be reachable over
-HTTPS for the console to pair with it (see [Install](docs/install.md#connecting-a-console)).
-
-Sync serves **https by default**, on `https://localhost:5080`: with no certificate configured, the first start makes a self-signed one in `tls/` of its data folder and prints
-where. Plain http is served only with `--url http://...`; a client that used `http://localhost:5080` is refused.
+The screens are the dbdatakit console's: a sync project's in the Workspace (connections, replications, mappings, scripts, provisioning plans, publishing) and the
+Runner's for what runs (its Tasks, Runs and Packages pages: run now, pause, bulk loads, the logins bound to the set's slots).
 
 ## Next steps
 
 - [**Configuration**](docs/configuration.md) —
-  every flag and environment variable.
+  the command line, the engine, connection files and logins.
 - [**Getting started**](docs/getting-started.md) —
-  set up your first replication, with screenshots.
+  set up your first replication.
 - [**Replication concepts**](docs/replication-concepts.md) —
   change detection, bulk loading, and delete reconciliation.
 - [**Drivers and libraries**](docs/drivers-and-libraries.md) —
   add another engine (MySQL, Oracle, ...) without a rebuild.
-- [**State database**](docs/state-database.md) —
-  what DbDataSync tracks about its own runs, and where it lives.
 - [**Building from source**](docs/development.md) —
   the dev loop, tests, and repository layout.

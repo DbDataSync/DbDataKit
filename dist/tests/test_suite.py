@@ -439,9 +439,9 @@ class SuiteInstallTestPlumbingTests(unittest.TestCase):
         self.assertIn("msi-announce-e2e.ps1", workflow)
 
     def test_every_service_product_announces_except_the_console(self):
-        for product in ("DbDataGateway", "DbDataSync", "DbDataRunner", "DbDataWorkspace"):
+        for product in ("DbDataGateway", "DbDataRunner", "DbDataWorkspace"):
             self.assertTrue(json.loads((REPO_ROOT / product / "dist.json").read_text())["announces"], product)
-        for product in ("DbDataStore", "DbDataBuild"):   # no Store or Build server since plan 33 SC23
+        for product in ("DbDataStore", "DbDataBuild", "DbDataSync"):   # no Store, Build or Sync server since plan 33 SC23
             self.assertNotIn("announces", json.loads((REPO_ROOT / product / "dist.json").read_text()))
         self.assertNotIn("announces", json.loads((REPO_ROOT / "DbDataKit" / "dist.json").read_text()))
 
@@ -462,7 +462,7 @@ class SuiteInstallTestPlumbingTests(unittest.TestCase):
 
 
 class ShippedSuiteTests(unittest.TestCase):
-    PRODUCTS = ["dbdatakit", "dbdatagateway", "dbdatarunner", "dbdatasync", "dbdataworkspace"]   # the Store and Build servers were deleted (plan 33 SC23)
+    PRODUCTS = ["dbdatakit", "dbdatagateway", "dbdatarunner", "dbdataworkspace"]   # the Store, Build and Sync servers were deleted (plan 33 SC23): four members
 
     def setUp(self):
         self.entries = json.loads((DIST / "suite.json").read_text())["members"]

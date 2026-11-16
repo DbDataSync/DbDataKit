@@ -156,7 +156,7 @@ class ShippedGlobalEnvTests(unittest.TestCase):
 
     SHARED = [{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}]
     # product folder -> the service name its folder has under the root
-    SERVICES = {"DbDataKit": "server", "DbDataRunner": "runner", "DbDataWorkspace": "workspace", "DbDataSync": "sync"}   # no Store or Build service since plan 33 SC23
+    SERVICES = {"DbDataKit": "server", "DbDataRunner": "runner", "DbDataWorkspace": "workspace"}   # no Store, Build or Sync service since plan 33 SC23
 
     def meta(self, path):
         return json.loads((REPO_ROOT / path).read_text(encoding="utf-8"))
@@ -172,7 +172,7 @@ class ShippedGlobalEnvTests(unittest.TestCase):
         self.assertIn('Environment.SpecialFolder.CommonApplicationData, Environment.SpecialFolderOption.Create), "DbDataKit", name)', engines)
         self.assertIn('/var/lib/dbdatakit/{name}', engines)
         listed = engines.split("Services { get; }")[1].split("]")[0]
-        for service in list(self.SERVICES.values()) + ["gateway", "build", "identity", "store"]:   # store: the folder the dbdatastore command line defaults to
+        for service in list(self.SERVICES.values()) + ["gateway", "build", "identity", "store", "sync"]:   # store, sync: the folders the dbdatastore and dbdatasync command lines default to
             self.assertIn(f'"{service}"', listed)
 
     def test_each_service_registers_the_folder_the_shared_reader_gives_it(self):
@@ -193,7 +193,13 @@ class ShippedGlobalEnvTests(unittest.TestCase):
             self.assertNotIn(key, meta)
         self.assertFalse((REPO_ROOT / "DbDataBuild/src/DbDataBuild.Cli/Server").exists())
 
-    def test_the_sync_manifest_names_the_folder_sync_defaults_to(self):
+    def test_sync_is_a_command_line_with_no_service_and_no_installer(self):
+        meta = self.meta("DbDataSync/dist.json")      # the Sync server was deleted (plan 33 SC23)
+        for key in ("service", "msi", "announces", "globalEnv", "windowsScope"):
+            self.assertNotIn(key, meta)
+        self.assertFalse((REPO_ROOT / "DbDataSync/src/DbDataSync.Api").exists())
+
+    def test_the_sync_command_line_defaults_to_the_folder_sync(self):
         cli = (REPO_ROOT / "DbDataSync/src/DbDataSync.Cli/CliOptions.cs").read_text(encoding="utf-8")
         self.assertIn('SuiteEnvironment.MachineFolder("sync")', cli)
         self.assertIn('SuiteEnvironment.ResolveServiceFolder("sync")', cli)

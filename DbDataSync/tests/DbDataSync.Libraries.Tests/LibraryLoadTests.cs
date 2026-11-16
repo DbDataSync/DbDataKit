@@ -79,7 +79,7 @@ public sealed class LibraryLoadTests : IAsyncLifetime
             new HashSet<string>
             {
                 "DbDataSync.Drivers.MySql.csproj", "DbDataSync.Drivers.MySql.Tests.csproj",
-                "DbDataSync.Api.csproj", "DbDataSync.TaskRunner.csproj", "DbDataSync.Cli.csproj",
+                "DbDataSync.TaskRunner.csproj", "DbDataSync.Cli.csproj",
                 "DbDataSync.TaskRunner.Tests.csproj",
             },
             referencingProjects.ToHashSet());

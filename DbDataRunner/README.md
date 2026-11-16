@@ -123,7 +123,7 @@ A **package** is a manifest (`package/1`, see `DbDataKit.Runner.Abstractions`) a
 
 ## Logins of a Sync replication set
 
-A replication set (plan 28c) runs with the **run** login of each of its connections and never sees the read login Sync's own screens use (Sync's docs, "Two logins: read and run"). The run login is sent with `dbdatasync secret send --to runner <connection>` (plan 28c E20d: an admin pairing; the runner keeps it in its encrypted store `secrets/` and the reference `secret:dbdatakit:sync:connection:<name>:run` resolves to it, after the environment and the credentials directory) or put on the runner's machine by hand, for each connection of the set:
+A replication set (plan 28c) runs with the **run** login of each of its connections and never sees a read login (Sync's docs, "Two logins: read and run"). The run login is set on the Packages page (plan 28c E20d: the group's state keeps it, and the reference `secret:dbdatakit:sync:connection:<name>:run` resolves to it, after the environment and the credentials directory) or put on the runner's machine by hand, for each connection of the set:
 
 1. `<runner directory>/connections/<name>.yaml`, a `connection/1` file named like the Sync connection, with `auth: {mode: sql, user: <run user>, password_secret: env:<NAME>_RUN_PASSWORD}`; `secret:dbdatakit:sync:connection:<name>:run` works too (the environment variable
    `DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_<NAME>_RUN`, or a file of that name in `CREDENTIALS_DIRECTORY`).

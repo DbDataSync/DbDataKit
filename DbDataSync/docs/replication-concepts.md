@@ -1,6 +1,6 @@
 # Replication concepts
 
-[DbDataSync](../README.md) · [Install](install.md) · [Configuration](configuration.md) · [Getting started](getting-started.md) · **Replication concepts** · [Drivers and libraries](drivers-and-libraries.md) · [State database](state-database.md) · [Building from source](development.md)
+[DbDataSync](../README.md) · [Install](install.md) · [Configuration](configuration.md) · [Getting started](getting-started.md) · **Replication concepts** · [Drivers and libraries](drivers-and-libraries.md) · [Building from source](development.md)
 
 [Getting started](getting-started.md) walks through setting up a replication end to end. This page is
 the reference for *how* it actually behaves once it's running: how DbDataSync detects changes at a
@@ -381,11 +381,9 @@ it can be found and paged back through the API.
 
 ## Telling a serving group that a table changed
 
-A Gateway can keep the answers of queries in a result cache. It empties the entries that read a table when it is told the table changed, and otherwise when their time-to-live ends. Sync tells it. When a run of a replication ends having written rows (a change-processing run, a bulk load or a reconcile of deletes; a run that wrote nothing, a verification and a cancelled run do not count, and a run that failed after rows went in does, because the old rows are stale either way), the server sends one `data.changed` message for each target table of the mapping to every serving group it is paired with. The message names the table the way the lineage graph does (`engine://server/database.schema.table`, the same node `GET /api/lineage` sends) and carries the run's id and time. It never carries rows or statement text.
-
-The server signs the message as itself, with the key of its own pairing, and the role Publisher; nobody's sign-in is involved. A group whose graph does not know the table ignores the message. A failed delivery is tried once more after 30 seconds and then given up on, with a line in the log and a counter, and never changes the run. A server with no pairing sends nothing.
-
-Pair a server with a group from the console (**Servers**, **Link**), or on the server: `dbdatasync gateway add <name> --url https://gateway:port --code <code>` with a code made on the Gateway by `dbdatagateway server pair --max-role publisher`. `dbdatasync gateway list` and `gateway remove` show and forget the pairings (`gateways.json` in the repository root). A replication owned by a Runner is not told from here: the Runner reports what its tasks wrote.
+A Gateway can keep the answers of queries in a result cache. It empties the entries that read a table when it is told the table changed, and otherwise when their time-to-live ends. The Runner tells it: when a run of a
+replication's drain ends having written rows, the Runner sends a `data.changed` message for each target table the run reported writing to every serving group it is paired with (`dbdatarunner gateway add`). The message names
+the table the way the lineage graph does (`engine://server/database.schema.table`) and carries the run's id and time, never rows or statement text. A failed delivery never changes the run.
 
 ## Where the tracking state lives
 

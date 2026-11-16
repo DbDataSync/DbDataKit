@@ -1,6 +1,6 @@
 # Drivers and libraries
 
-[DbDataSync](../README.md) · [Install](install.md) · [Configuration](configuration.md) · [Getting started](getting-started.md) · [Replication concepts](replication-concepts.md) · **Drivers and libraries** · [State database](state-database.md) · [Building from source](development.md)
+[DbDataSync](../README.md) · [Install](install.md) · [Configuration](configuration.md) · [Getting started](getting-started.md) · [Replication concepts](replication-concepts.md) · **Drivers and libraries** · [Building from source](development.md)
 
 Two separate concepts, easy to conflate because they usually show up together:
 
@@ -96,13 +96,6 @@ NuGet feed, and an install that cannot complete fails with the reason; nothing i
 | `dbdatasync library uninstall <id>` | deletes `<RepoRoot>/libraries/<id>` entirely |
 | `dbdatasync library validate <id> --connection <name>` | for a library backing a *built-in* driver only: opens the named connection for real and drives that driver's actual staging/writer pipeline against a real scratch table, reporting rows written — proof the library resolves correctly, not just that the manifest parses |
 
-### From the console
-
-The Admin → **Libraries** tab (on the server's screens in the dbdatakit console) does the same thing as `config library install`/`list`/`uninstall` —
-including a NuGet search box, gated by the same `DbDataSync:Nuget:Search:Mode` setting documented in
-[Configuration](configuration.md). Both paths write the identical `<RepoRoot>/libraries/*` files, so
-either one is visible to the other.
-
 ## Drivers
 
 ### Built-in drivers
@@ -177,7 +170,7 @@ talking to.
 ### Descriptor drivers
 
 A descriptor is a YAML file at `<RepoRoot>/drivers/<id>/driver.yaml`, loaded at process startup by both
-the API and `DbDataSync.TaskRunner` — no compiling, no restart-the-build. It describes an engine
+`dbdatasync` and `DbDataSync.TaskRunner` — no compiling, no restart-the-build. It describes an engine
 DbDataSync has no hand-written driver for in terms the existing generic readers/staging/writers already
 know how to drive: identifier quoting, parameter placeholders, row-limiting syntax, and a native-type →
 canonical-type map. It reads from `information_schema` for catalog discovery, so it fits any engine that
@@ -256,16 +249,10 @@ implementation yourself — and is out of scope for this page beyond the command
 | command | does |
 | --- | --- |
 | `dbdatasync driver list` | every driver on disk — descriptor (`library: <id>`) or compiled (`assembly:`/`type:`) — plus a `[FAILED TO PARSE: ...]` line for one that doesn't, rather than crashing |
-| `dbdatasync driver uninstall <id>` | deletes `<RepoRoot>/drivers/<id>`. Its library is untouched — `config library uninstall` separately if nothing else still needs it |
+| `dbdatasync driver uninstall <id>` | deletes `<RepoRoot>/drivers/<id>`. Its library is untouched — `library uninstall` separately if nothing else still needs it |
 
-### From the console
-
-Admin → **Drivers** (on the server's screens in the dbdatakit console) lists every registered driver — the five built-ins plus whatever descriptors or
-compiled plugins are on disk — and offers an "Add" flow for the same starter catalog `--from` draws
-from (`POST /api/drivers/from-catalog`). Admin → **Libraries** (above) is where the library a new
-driver needs gets installed, either before or as part of adding the driver. A newly installed driver
-needs a process restart to take effect — both the API and any already-running `TaskRunner` worker
-loaded their driver set once, at startup.
+A newly installed driver is picked up by the next process that loads the driver set: the next `dbdatasync` command, and the next run of the engine on a
+Runner once the repository is published again (its package carries the `drivers/` and `libraries/` folders it needs).
 
 ## Worked example: a descriptor driver, with no rebuild
 
@@ -287,22 +274,18 @@ a slower path, an engine that also has a compiled driver now.
    dbdatasync driver install mysql.generic --version 2.4.0 --from mysql.generic
    ```
 
-2. **Restart** the API (and any running worker) so the newly-written descriptor is picked up.
+2. **Publish again**, so the newly-written descriptor travels with the replication set (a Runner loads it at the next run).
 
 3. **Create the source connection**, the same shape a built-in driver's connection takes, just with
-   `DriverType` set to the descriptor's own id:
+   `engine` set to the descriptor's own id:
 
-   ```json
-   PUT /api/connections/mysql-src
-   {
-     "name": "mysql-src", "driverType": "mysql.generic",
-     "host": "localhost", "port": 3306, "database": "app",
-     "authMode": "SqlAuth", "userId": "app_user", "password": "..."
-   }
+   ```yaml
+   schema: connection/2
+   name: mysql-src
+   engine: mysql.generic
+   address: { host: localhost, port: 3306, database: app }
+   auth: { mode: sql, user: app_user, password_secret: secret:dbdatakit:sync:connection:mysql-src }
    ```
-
-   (The same form in the console, on the server's screens: Connections → New Connection → pick `mysql.generic` from the
-   driver dropdown, exactly as you would `MsSql` or `Postgres`.)
 
 4. **Create the target connection** the ordinary way, `DriverType: "MsSql"`.
 
@@ -314,15 +297,12 @@ a slower path, an engine that also has a compiled driver now.
 6. **Add a table mapping** and refresh its metadata, exactly as for any other driver — column discovery
    goes through the same `information_schema` path every descriptor driver uses.
 
-7. **Confirm it's really a descriptor driver, not a built-in one**: `GET /api/drivers` lists
-   `mysql.generic` with `"builtIn": false, "source": "descriptor"` alongside the five built-ins — added,
-   not substituted.
+7. **Confirm it's really a descriptor driver, not a built-in one**: `dbdatasync driver list` lists
+   `mysql.generic` as a descriptor alongside the five built-ins — added, not substituted.
 
 From here, running, backfilling, and monitoring this replication works exactly like any other — nothing
 about descriptor vs. built-in is visible anywhere past the driver dropdown.
 
-## Next: State database
+## Next: Building from source
 
-Drivers and libraries need somewhere to record what a replication has done and what it's about to do —
-see [The state database](state-database.md), which resolves its own `MsSql`/`Postgres` engine choice
-through this exact same library mechanism.
+See [Building from source](development.md).

@@ -12,35 +12,17 @@ GitOwnershipValidation.DisableIfInteractive();
 var command = args[0].ToLowerInvariant();
 var rest = args.Skip(1).ToArray();
 
+// The Sync server's commands are gone (plan 33 SC23): each answers with where its feature went (exit 2).
+if (await RemovedServer.Commands.TryAnswerAsync(args, Console.Error) is { } removed)
+    return removed;
+
 // The suite's grammar (<noun> <verb>, --format json) is the shared router's; the few commands that are not verbs of a noun keep the switch below.
 if (!SyncCli.Legacy.Contains(command))
-{
-    // A command that was renamed says so: a service or a script that still runs the old form should be told the new one, not just "unknown".
-    if (RetiredCommands.ReplacementFor(command) is { } replacement)
-    {
-        Console.Error.WriteLine($"'dbdatasync {command}' is now 'dbdatasync {replacement}'.");
-        return 2;
-    }
-    if (command == "config" && rest.Length > 0 && RetiredCommands.ConfigReplacementFor(rest[0]) is { } moved)
-    {
-        Console.Error.WriteLine($"'dbdatasync config {rest[0]}' is now 'dbdatasync {moved}'.");
-        return 2;
-    }
-    // A command that is gone and has no new form says what replaced it.
-    if (RetiredCommands.RemovedBecause(command) is { } removed)
-    {
-        Console.Error.WriteLine(removed);
-        return 2;
-    }
     return await SyncCli.Router(InformationalVersion()).RunAsync(args, DbDataKit.Cli.CliContext.Console());
-}
 
 return command switch
 {
     "tool" => ToolCommand.Run(rest),
-    "update" => await UpdateCommand.RunAsync(rest),
-    "launcher" => await LauncherCommand.RunAsync(rest),
-    "internal" => await InternalCommand.RunAsync(rest),
     "version" => Version(),
     _ => Unknown(command),
 };

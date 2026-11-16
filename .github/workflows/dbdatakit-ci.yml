@@ -58,10 +58,10 @@ jobs:
           testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
       - run: dotnet test --project tests/DbDataKit.Server.Tests -c Release --no-build --minimum-expected-tests 10
 
-  # The real programs in one run (plan 13a, T12; E05 adds a Sync server): a Gateway, a Sync server, a runner and a Workspace started from their built output, a console in the test between them (the Build server's
-  # publishing tests went with it, plan 33 SC23); a SQL Server and a PostgreSQL from testenv/ are up for that job.
-  # The fourth (plan 28c E12e) is a Sync replication that really is owned by a runner: a Sync server and a runner (both programs) with the engine as the runtime package, the replication set published with `dbdatasync package publish`,
-  # and a continuous and a periodic replication moved to the runner and back, SQL Server to PostgreSQL (and one SQL Server to SQL Server); it needs the PostgreSQL of testenv/ as well, and takes about five minutes.
+  # The real programs in one run (plan 13a, T12): Gateways, a runner and a Workspace started from their built output, a console in the test between them (the Build and Sync servers' tests went with them,
+  # plan 33 SC23); a SQL Server and a PostgreSQL from testenv/ are up for that job.
+  # The Sync stories (plan 28c E12e, plan 33 SC23d2) run replications on a runner with no Sync server: the repository written as files, published with `dbdatasync package publish`, the engine as the runtime
+  # package, SQL Server to PostgreSQL and SQL Server to SQL Server; they take about five minutes.
   servers:
     needs: changes
     if: ${{ needs.changes.outputs.build == 'true' }}
@@ -76,7 +76,7 @@ jobs:
       - name: Build a Gateway
         working-directory: DbDataGateway
         run: dotnet build src/DbDataGateway.Server -c Debug
-      - name: Build a Sync server
+      - name: Build dbdatasync
         working-directory: DbDataSync
         run: dotnet build src/DbDataSync.Cli -c Debug   # builds the engine (the TaskRunner) too: the runtime package of the runner story
       - name: Build a runner
@@ -91,7 +91,7 @@ jobs:
       - run: dotnet test --project tests/DbDataKit.Server.Servers.Tests -c Debug --no-build --minimum-expected-tests 4
 
   # The web app in a real browser against a real console: the first-run invitation, a passkey made in a virtual authenticator, signing out and back in with it, the users list,
-  # pairing a real runner, and (M12) the Monitoring page across a Sync replication that lags and a Gateway that locked a user out.
+  # pairing a real runner, and (M12) the Monitoring page with a Gateway that locked a user out.
   playwright:
     needs: changes
     if: ${{ needs.changes.outputs.build == 'true' }}
@@ -166,8 +166,8 @@ jobs:
         run: |
           scripts/fetch-native.sh
           dotnet build src/DbDataBuild.Cli -c Debug
-      # A real Sync server, for the console to host its screens.
-      - name: Build a Sync server
+      # dbdatasync, which a Workspace server runs as a child process for a sync project (the Sync server itself was deleted, plan 33 SC23).
+      - name: Build dbdatasync
         working-directory: DbDataSync
         run: dotnet build src/DbDataSync.Cli -c Debug
       # A real Gateway, with its management listener on.
@@ -248,13 +248,11 @@ jobs:
         working-directory: .
     steps:
       - uses: actions/checkout@v7
-      # the images of Gateway and Sync fetch the DuckDB engine; .duckdb-archives/ is inside their build context
+      # the Gateway's image fetches the DuckDB engine; .duckdb-archives/ is inside its build context
       - uses: ./.github/actions/duckdb-cache
         with:
           rids: linux-x64
       - name: Gateway and console
         run: dist/compose/check.sh dist/compose/gateway.yml dbdatagateway
-      - name: Sync server and console
-        run: dist/compose/check.sh dist/compose/sync.yml dbdatasync
       - name: The whole suite (docs/quickstart.md)
-        run: dist/compose/check.sh dist/compose/quickstart.yml dbdatagateway dbdatasync
+        run: dist/compose/check.sh dist/compose/quickstart.yml dbdatagateway

@@ -7,8 +7,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
 
     <!-- The command surface, not the web host: asking this tool for help should print text rather than starting Kestrel.
-         Not packed: there is no dotnet tool package (owner decision 2026-11-08). Sync ships as zips, an MSI, install scripts, Scoop
-         and a container image (dist/README.md), built by .github/workflows/dbdatasync-release.yml with `dotnet publish`. -->
+         Not packed: there is no dotnet tool package (owner decision 2026-11-08). Sync ships as zips (dist/README.md), built by
+         .github/workflows/dbdatasync-release.yml with `dotnet publish`; no installer, service or image since plan 33 SC23. -->
     <!--
       Every build not explicitly versioned gets a fresh alpha, dated and timed at evaluation, so a local build never reports a
       release version. -p:Version=X on the command line still wins outright: MSBuild treats a command-line property as global, and a
@@ -22,14 +22,12 @@
       actually built from a two-digit clock field often small enough to have one.
     -->
     <Version>$([System.DateTime]::UtcNow.ToString("yyyy.MM.dd.HHmm'-alpha.'s"))</Version>
-    <Description>Cross-database replication — a git-tracked config repo and a scheduler, managed from the dbdatakit console.</Description>
+    <Description>Cross-database replication: a command line on a configuration repository, and the engine a Runner runs (the Sync server was deleted, plan 33 SC23).</Description>
     <Authors>Dan Shryock</Authors>
 
     <!--
       Framework-dependent and RID-agnostic. LibGit2Sharp, SQLite and DuckDB.NET all ship their native
       assets under runtimes/(rid)/ and resolve at run time, so one build serves every platform.
-      Self-contained is ruled out anyway: ProcessSupervisor spawns `dotnet exec`, which needs the
-      muxer on PATH.
     -->
     <RollForward>latestMajor</RollForward>
   </PropertyGroup>
@@ -45,98 +43,25 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The `setup` command's TUI (phase 128) — this project's first real package dependency.
-         Managed-only (no runtimes/ native assets), net10.0-targeted like this project itself, so it
-         adds nothing to worry about for the zips or the container image. Pinned
-         exact, not a floating range, matching how this repo pins everywhere else. -->
-    <PackageReference Include="Terminal.Gui" />
-    <!-- Phase 136: WindowsServiceEventLog writes/registers directly against the Windows Event Log —
-         cross-platform to reference (its own APIs throw PlatformNotSupportedException off Windows,
-         which is why every call site is [SupportedOSPlatform("windows")]), same "safe to reference
-         everywhere, only does anything real on Windows" reasoning as
-         Microsoft.Extensions.Hosting.WindowsServices in DbDataSync.Api.csproj. Pinned to the same
-         "10.0.0" this repo already uses for that package and for Microsoft.Extensions.Hosting.Systemd. -->
-    <PackageReference Include="System.Diagnostics.EventLog" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\DbDataSync.Api\DbDataSync.Api.csproj" />
-    <ProjectReference Include="..\DbDataSync.Certificates\DbDataSync.Certificates.csproj" />
     <ProjectReference Include="..\DbDataSync.Drivers.Descriptor\DbDataSync.Drivers.Descriptor.csproj" />
     <ProjectReference Include="..\DbDataSync.Libraries\DbDataSync.Libraries.csproj" />
     <ProjectReference Include="..\DbDataSync.State\DbDataSync.State.csproj" />
-    <!-- the shared state types come with the project reference; StateDatabase is Sync's own (plan 13, U04) -->
-    <Using Include="DbDataKit.State" />
-    <Using Include="DbDataKit.Web.Auth" />
-    <Using Include="DbDataKit.Monitoring" />
-    <Using Include="DbDataSync.State.StateDatabase" Alias="StateDatabase" />
-    <!-- Referenced so the worker lands in the same output directory as the host that spawns it,
-         which is what ApiOptions' beside-the-assembly resolution then finds. -->
+    <ProjectReference Include="..\DbDataSync.Scripting\DbDataSync.Scripting.csproj" />   <!-- the script test (plan 33 SC23d1) -->
+    <ProjectReference Include="..\DbDataSync.Provisioning\DbDataSync.Provisioning.csproj" />   <!-- provisioning plan -->
+    <!-- the replication set's package (package publish) is the engine's own; its build output is the dbdatasync-runtime package of a Runner -->
     <ProjectReference Include="..\DbDataSync.TaskRunner\DbDataSync.TaskRunner.csproj" />
-    <ProjectReference Include="..\DbDataSync.Updates\DbDataSync.Updates.csproj" />
-    <!-- Phase 196L: built first, never referenced — its output is copied under launcher/ by the targets at the end. -->
-    <ProjectReference Include="..\DbDataSync.Launcher\DbDataSync.Launcher.csproj" ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The shared `cert` command's verb table (docs/plans/12-shared-tls-rollout.md, slice 7). -->
     <DbDataKitReference Include="Catalog.Cache" />   <!-- the catalog cache of a project draft: provisioning plan reads it offline; plan 33, SC22j -->
+    <DbDataKitReference Include="State.Engines" />   <!-- the suite's one reader of the data folder and the old variable names (SuiteEnvironment); plan 33 SC31 -->
     <DbDataKitReference Include="Cli" />   <!-- the shared noun-verb grammar and the JSON document; plan 13, C07 -->
-    <DbDataKitReference Include="State.Cli" />   <!-- state show, test, grants, init, export, import: the shared verbs over Sync's modules; plan 28c, E14 -->
-    <DbDataKitReference Include="Serving.Notify" />   <!-- the gateway noun: pair with the serving groups a run tells; plan 24a UC13 -->
     <DbDataKitReference Include="Lineage.Cli" />   <!-- the lineage noun over the replications of the repository; plan 18, G07b -->
-    <DbDataKitReference Include="Hosting.Cli" />
     <DbDataKitReference Include="Runner.Client" />   <!-- the shared publishing client: package publish; plan 28c, E08 -->
-    <DbDataKitReference Include="Hosting.Systemd" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="DbDataSync.Cli.Tests" />
   </ItemGroup>
-
-  <!--
-    Phase 196L: every publish carries the launcher, so any installed version can put it in place or repair it
-    (`service install`, `launcher repair`, and the automatic conversion of a pre-196L install). An apphost is a
-    native per-platform binary and this package is RID-agnostic, so it carries one complete launcher per RID under
-    launcher/<rid>/, and the installer picks by SlotPaths.PortableRuntimeIdentifier().
-
-    Publish builds every RID in LauncherRuntimeIdentifiers — this needs the apphost packs, so
-    network on first use; set it to `none` where no launcher is wanted (the container image).
-    An ordinary build copies only this machine's launcher, built without a RID, so the inner loop and the tests
-    need nothing new. Its directory is named by the portable RID the installer will look for — not by the SDK's
-    own, which a distribution's source-built SDK reports as e.g. ubuntu.24.04-x64.
-  -->
-  <PropertyGroup>
-    <LauncherProject>$(MSBuildProjectDirectory)/../DbDataSync.Launcher/DbDataSync.Launcher.csproj</LauncherProject>
-    <LauncherRuntimeIdentifiers Condition="'$(LauncherRuntimeIdentifiers)' == ''">win-x64;win-arm64;linux-x64;linux-arm64;linux-musl-x64;linux-musl-arm64;osx-x64;osx-arm64</LauncherRuntimeIdentifiers>
-    <_LauncherArch>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant())</_LauncherArch>
-    <_LauncherOwnRid Condition="$([MSBuild]::IsOSPlatform('Windows'))">win-$(_LauncherArch)</_LauncherOwnRid>
-    <_LauncherOwnRid Condition="$([MSBuild]::IsOSPlatform('OSX'))">osx-$(_LauncherArch)</_LauncherOwnRid>
-    <_LauncherOwnRid Condition="'$(_LauncherOwnRid)' == ''">linux-$(_LauncherArch)</_LauncherOwnRid>
-    <_DotnetForLauncher>$(DOTNET_HOST_PATH)</_DotnetForLauncher>
-    <_DotnetForLauncher Condition="'$(_DotnetForLauncher)' == ''">dotnet</_DotnetForLauncher>
-  </PropertyGroup>
-
-  <Target Name="CopyOwnLauncher" AfterTargets="Build">
-    <MSBuild Projects="$(LauncherProject)" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">
-      <Output TaskParameter="TargetOutputs" ItemName="_LauncherTarget" />
-    </MSBuild>
-    <ItemGroup>
-      <_OwnLauncherFile Include="%(_LauncherTarget.RootDir)%(_LauncherTarget.Directory)dbdatasync*" />
-    </ItemGroup>
-    <Copy SourceFiles="@(_OwnLauncherFile)" DestinationFolder="$(OutDir)launcher/$(_LauncherOwnRid)" SkipUnchangedFiles="true" />
-  </Target>
-
-  <Target Name="PublishLaunchers" BeforeTargets="Publish" Condition="'$(LauncherRuntimeIdentifiers)' != 'none'">
-    <ItemGroup>
-      <_LauncherRid Include="$(LauncherRuntimeIdentifiers)" />
-    </ItemGroup>
-    <RemoveDir Directories="$(IntermediateOutputPath)launchers" />
-    <Exec Command="&quot;$(_DotnetForLauncher)&quot; build &quot;$(LauncherProject)&quot; -c $(Configuration) -r %(_LauncherRid.Identity) --no-self-contained -o &quot;$(IntermediateOutputPath)launchers/%(_LauncherRid.Identity)&quot; -nologo -v q" />
-    <ItemGroup>
-      <_PublishedLauncher Include="$(IntermediateOutputPath)launchers/**/dbdatasync*" Exclude="$(IntermediateOutputPath)launchers/**/*.pdb" />
-    </ItemGroup>
-    <Copy SourceFiles="@(_PublishedLauncher)" DestinationFiles="@(_PublishedLauncher->'$(PublishDir)launcher/%(RecursiveDir)%(Filename)%(Extension)')" />
-  </Target>
 
 </Project>

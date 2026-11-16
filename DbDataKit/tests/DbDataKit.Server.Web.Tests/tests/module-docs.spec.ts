@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { scratchDirectory } from '../playwright.config'
 
 // The console's own docs entry (plan 13a, U11): every module that registers docs in its package.json is listed, and a module's docs open in the console's frame under /docs/<module>, through the same viewer
-// the module shows inside its server's screens (Sync's own Playwright suite covers that one). The person is a viewer made with the console's command line: the docs are readable by every role. This file is named to run after
+// the module showed inside its server's screens. The person is a viewer made with the console's command line: the docs are readable by every role. This file is named to run after
 // first-run.spec.ts (files run in name order): redeeming any invitation spends the first-run one, which that story needs, and a second administrator would change what it checks.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
 const consoleDll = path.join(repoRoot, 'DbDataKit/src/DbDataKit.Server/bin/Debug/net10.0/dbdatakit.dll')
@@ -35,14 +35,10 @@ test('the docs of every module are listed, and a module\'s page opens in the con
   await expect(nav.first()).toHaveText('Install')
   await expect(nav.nth(1)).toHaveText('Configuration')
 
-  // A page with pictures: served from the module's assets under /docs/sync, every one decoded.
+  // A page of the module under its own route (Sync's pages have no pictures since its screens went with the Sync server, plan 33 SC23; the generator's handling of pictures is moduleDocs.test.mjs's).
   await page.getByTestId('docs-nav').getByRole('link', { name: 'Getting started' }).click()
   await expect(page).toHaveURL(/\/docs\/sync\/getting-started$/)
-  const pictures = page.getByTestId('docs-content').locator('img')
-  await expect(pictures.first()).toBeVisible()
-  for (const src of await pictures.evaluateAll((imgs) => imgs.map((img) => (img as HTMLImageElement).getAttribute('src'))))
-    expect(src).toMatch(/^\/docs\/sync\/assets\/screenshots\/golden-path\/[A-Za-z0-9._-]+\.png$/)
-  await expect.poll(() => pictures.evaluateAll((imgs) => imgs.every((img) => (img as HTMLImageElement).naturalWidth > 0))).toBe(true)
+  await expect(page.getByTestId('docs-content')).toContainText('Your first replication')
 
   // A link between pages stays under the module's route and lands on the heading.
   await page.goto('/docs/sync/replication-concepts')

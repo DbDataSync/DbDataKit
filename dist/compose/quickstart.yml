@@ -1,4 +1,4 @@
-# Everything on one machine, for trying the suite out: the console, a Gateway and a Sync server (the Build server was deleted, plan 33 SC23: a Build project is authored in a Workspace and runs on a Runner), and a PostgreSQL with demo data.
+# Everything on one machine, for trying the suite out: the console and a Gateway (the Build and Sync servers were deleted, plan 33 SC23: a Build project or a replication is authored in a Workspace and runs on a Runner), and a PostgreSQL with demo data.
 # Every server announces itself to the console and waits to be confirmed. See docs/quickstart.md. Run from the repository root:
 #   docker compose -f dist/compose/quickstart.yml up -d --build --wait
 # Not for production: the demo database has a published password and a published port.
@@ -32,16 +32,6 @@ services:
       - gateway-data:/data
     depends_on:
       - console
-  sync:
-    build:
-      context: ../..
-      dockerfile: DbDataSync/Dockerfile
-    hostname: sync
-    environment: *announce
-    volumes:
-      - sync-data:/var/lib/dbdatasync
-    depends_on:
-      - console
   # Demo data to point the servers at: host demo-db, port 5432, user demo, password demo, databases demo, demo_target and mdm. From the machine: localhost:15434.
   demo-db:
     image: postgres:17
@@ -62,5 +52,4 @@ services:
 volumes:
   console-data:
   gateway-data:
-  sync-data:
   demo-data:

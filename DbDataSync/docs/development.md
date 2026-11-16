@@ -1,43 +1,14 @@
 # Building DbDataSync from source
 
-[DbDataSync](../README.md) · [Install](install.md) · [Configuration](configuration.md) · [Getting started](getting-started.md) · [Replication concepts](replication-concepts.md) · [Drivers and libraries](drivers-and-libraries.md) · [State database](state-database.md) · **Building from source**
+[DbDataSync](../README.md) · [Install](install.md) · [Configuration](configuration.md) · [Getting started](getting-started.md) · [Replication concepts](replication-concepts.md) · [Drivers and libraries](drivers-and-libraries.md) · **Building from source**
 
 This is for working on DbDataSync itself — contributing, running the dev loop, or building it rather
 than installing the packaged CLI. If you just want to run DbDataSync, see [Install](install.md)
 instead; nothing here is needed for that.
 
-## Quick start: the dev harness
-
-To get a working dev environment without following the manual steps below, one command does the lot —
-containers, databases, seed data, the API, the Sync screens' dev server, and a configured replication:
-
-```sh
-tools/dev-harness up          # tools\dev-harness up on Windows
-```
-
-Open `http://localhost:5173` (the Sync screens on their own dev server: the product's screens are the dbdatakit console's, see below) and pick the `dev-sync` replication. Ctrl+C stops the API and that server
-(the containers keep running; `tools/dev-harness down` stops those).
-
-In another terminal, put real traffic through it:
-
-```sh
-tools/dev-harness seed --rows 25000            # bulk-load the source
-tools/dev-harness workload --rate 20 --duration 2m   # live inserts/updates/deletes
-tools/dev-harness verify                       # compare source and target row by row
-tools/dev-harness drift                        # corrupt the target behind the replication's back
-```
-
-`drift` is the quickest way to see why batch reload exists: it changes the *target* only, so Change
-Tracking has nothing to report and no incremental run will ever repair it — `verify` keeps failing
-until you trigger a backfill with a reconciling writer.
-
-`tools/dev-harness help` lists every verb and option. The tool itself is
-`tools/DbDataSync.DevHarness`.
-
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Node.js 24+](https://nodejs.org/) and npm
 - [Docker](https://www.docker.com/) (for the test engines)
 
 ## 1. Start the test engines
@@ -59,7 +30,7 @@ not just two databases on one shared instance. The third is PostgreSQL with `wal
 Every engine uses the password `DbKit_Test_Pw1` (set `DBDATAKIT_TEST_PASSWORD` before `up` to change it; it is read when the containers
 are created) and the users `sa`, `root`, `dbdatasync` (PostgreSQL) and `dbkit` (Oracle). Nothing is kept between runs: `testenv/testenv.sh
 down` removes the containers and their data, and every test creates its own databases and tables. `up` waits for each engine's health
-check. `tools/dev-harness up` starts the three engines above itself.
+check.
 
 The tests read where the engines are from `DBDATAKIT_TEST_*` variables; print them for what is running and load them into your shell:
 
@@ -79,45 +50,10 @@ engines (password `DbKit_Test_Pw1`, PostgreSQL on 15433, Oracle user `dbkit`), s
 dotnet build
 ```
 
-The API spawns `DbDataSync.TaskRunner` as a child process per run and locates its build output
-relative to its own — build the whole solution at least once (not just `src/DbDataSync.Api`) before
-running the API.
-
-## 3. Run the API
-
-```sh
-dotnet run --project src/DbDataSync.Api
-```
-
-Listens on `http://localhost:5183`. On first run it creates a local `dbdatasync-repo/` directory
-(under `src/DbDataSync.Api/`, gitignored) as its git-backed config store and SQLite state database —
-no separate setup step needed. Override the location via the `DBDATAKIT_DATA_SYNC` variable (or the `--DbDataSync:App:RepoRoot=<folder>` option; the old `DbDataSync__App__RepoRoot` variable is refused) and
-`DbDataSync__State__DbPath` environment variables if you'd rather
-keep it elsewhere. This is one of several ways to start DbDataSync — see
-[Configuration](configuration.md) for the rest (the `dbdatasync` CLI, the Windows service, the
-container image) and everything each one can be configured with, including authentication.
-
-Secrets (connection passwords) are in the encrypted store under the repository root (`secrets/`, see "Secrets" in
-[Configuration](configuration.md)); the environment variables `DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_<NAME>` (the connection name in capitals)
-answer for a connection the store has no password for — set these before triggering a run if you would rather not store one locally.
-
-## 4. Run the screens
-
-The server serves no web app: the product's screens are the web app of the dbdatakit console (`Shared/web/console`), which shows Sync's at `/servers/<id>/...`
-once the server is paired with it ([Getting started](getting-started.md#open-the-server-in-the-console)). To work on the Sync screens themselves, run them on their own dev server against the API:
-
-```sh
-cd ../Shared/web
-npm install
-npm run dev -w @dbdatakit/sync
-```
-
-Open `http://localhost:5173`. It proxies `/api` and `/hubs` to the API (`http://localhost:5183` by
-default — override with the `DBDATAKIT_SYNC_API_URL` environment variable). It has no docs and no console around it; for those, and for
-what a person sees, run the console's dev server (`npm run dev -w @dbdatakit/console`, which proxies to a running console) or build it.
-
-From here, [Getting started](getting-started.md) walks through the same screens regardless of how
-DbDataSync was started.
+`DbDataSync.Cli` builds `dbdatasync`; `DbDataSync.TaskRunner` builds the engine, whose output is the package `dbdatasync-runtime` a Runner
+runs (`scripts/runtime-manifest.sh` prints its manifest). To run a replication end to end, publish a repository to a Runner of your own
+(`dbdatarunner server run`, see the Runner's README) with `dbdatasync package publish --to runner`; the console's servers suite does exactly that
+(`DbDataKit/tests/DbDataKit.Server.Servers.Tests`, `SyncOnRunner`).
 
 ## Running the tests
 
@@ -126,35 +62,12 @@ dotnet test --filter "Category!=Integration"   # fast, no external dependencies
 dotnet test --filter "Category=Integration"    # needs the engines from step 1 and the eval of `testenv.sh env dbdatasync`
 ```
 
-The Playwright end-to-end suite (`tests/DbDataSync.Web.Tests/`) drives the same golden-path
-scenario as [Getting started](getting-started.md) through a real browser. Sync serves no web app of its
-own, so the suite runs through the console: it starts a console and a real `dbdatasync server run`, signs
-the console in as an administrator with a passkey, pairs the server, and opens the screens at
-`/servers/<id>/...` in the console, whose relay carries their calls (`fixtures.ts` translates the specs'
-`/replications/...` and `/api/...` addresses; the specs are written in the server's own). It also starts
-its own scratch config repo, state database and disposable SQL Server test database. It needs the builds of
-the API, the worker, the CLI and the console server, and the console's web app (which includes these docs):
-
-```sh
-dotnet build src/DbDataSync.Api && dotnet build src/DbDataSync.TaskRunner && dotnet build src/DbDataSync.Cli
-(cd ../DbDataKit && dotnet build src/DbDataKit.Server)
-(cd ../Shared/web && npm ci && npm run build -w @dbdatakit/console)
-cd tests/DbDataSync.Web.Tests
-npm install
-npx playwright install chromium
-npx playwright test
-```
-
-The screens are shown inside the console's frame, so a run writes its pictures to a scratch folder and leaves the committed
-`screenshots/` alone (`DBDATAKIT_TEST_E2E_SCREENSHOTS=repo` replaces them on purpose).
-
 ## Repository layout
 
-- `src/DbDataSync.Api` — ASP.NET Core orchestrator: REST API, scheduler, process supervisor, SignalR
-  live-run hub.
-- `../Shared/web/sync` — the React/TypeScript Sync screens (`@dbdatakit/sync`), shown by the console (`../Shared/web/console`), which also serves these docs (generated from this folder).
+- `src/DbDataSync.Cli` — the `dbdatasync` command line.
 - `src/DbDataSync.Core` — config models, git-backed config store, secrets.
-- `src/DbDataSync.State` — shared SQLite state store (runs, logs, watermarks, locks).
+- `src/DbDataSync.State` — the engine's records (drain requests, batches, positions) kept in a Runner's state.
+- `src/DbDataSync.Scripting` — the script compiler and host, and the script test, schema browsing and opener of a configured connection a program composes.
 - `src/DbDataSync.Drivers.Abstractions` — the driver interfaces and capability discovery.
 - `src/DbDataSync.Drivers.Generic` — the engine-neutral implementations every driver gets for free: a
   SQL dialect, a watermark reader, a batch-reload reader, a batched-insert staging provider and a
@@ -163,10 +76,7 @@ The screens are shown inside the console's frame, so a run writes its pictures t
   reader, `SqlBulkCopy` staging, MERGE writers) alongside the generic ones.
 - `src/DbDataSync.Drivers.Postgres` — PostgreSQL, on Npgsql. Registers only the generic pipeline;
   batch and watermark mode, no CDC.
-- `src/DbDataSync.TaskRunner` — the console process actually spawned per replication run.
-- `tools/DbDataSync.DevHarness` — the dev harness above (environment setup, workload generation,
-  drift injection, source/target verification — including SQL Server → PostgreSQL, via
-  `--target-engine postgres`). Not part of the shipped product.
+- `src/DbDataSync.TaskRunner` — the engine a Runner starts for the replications' tasks (`--runner`).
 - `tools/DbDataSync.Benchmarks` — `tools/benchmarks`, which measures how much the in-memory shape of a
   change batch costs, through a real `SqlBulkCopy` and through a typed sink. Also not shipped.
 - `architecture/` — the project's design and planning records, for contributors; it is not part of the

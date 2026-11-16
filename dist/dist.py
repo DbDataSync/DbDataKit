@@ -197,7 +197,6 @@ _PAIR_ROLES_DEFAULT = "viewer,operator,admin"
 # A product not listed has no default this file can name, so the notes stay generic for it and the install script leaves it unpaired.
 _MANAGEMENT_ADDRESS = {
     "dbdatakit": "https://localhost:8480",
-    "dbdatasync": "https://localhost:5080",
     "dbdatagateway": "https://localhost:8816",
     "dbdatarunner": "https://127.0.0.1:8495",
     "dbdataworkspace": "https://127.0.0.1:8471",

@@ -33,22 +33,6 @@ if (!isWorker) {
   fs.writeFileSync(path.join(scratchDirectory, 'first-run-runner-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
-// A Sync server too, for the console to host its screens: a real one, https with a certificate exported from the SDK's development certificate (a server must present a certificate to be paired
-// with), a pairing code that lets the console grant admin, and a repository of its own.
-export const syncDirectory = path.join(os.tmpdir(), 'dbdatakit-console-e2e-sync')
-export const syncPort = 8483
-export const syncUrl = `https://localhost:${syncPort}`
-const syncDll = path.join(repoRoot, 'DbDataSync/src/DbDataSync.Cli/bin/Debug/net10.0/DbDataSync.Cli.dll')
-const syncCertificate = path.join(os.tmpdir(), 'dbdatakit-console-e2e-sync.pfx')
-const syncCertificatePassword = 'console-e2e'
-if (!isWorker) {
-  fs.rmSync(syncDirectory, { recursive: true, force: true })
-  fs.mkdirSync(syncDirectory, { recursive: true })
-  execFileSync('dotnet', ['dev-certs', 'https', '--export-path', syncCertificate, '--password', syncCertificatePassword, '--format', 'Pfx'], { stdio: 'inherit' })
-  const made = execFileSync('dotnet', ['exec', syncDll, 'server', 'pair', '--minutes', '120', '--repo', syncDirectory, '--max-role', 'admin'], { encoding: 'utf8' })
-  fs.writeFileSync(path.join(scratchDirectory, 'sync-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
-}
-
 // A Gateway too: a real one, with its management listener on, a self-signed certificate of its own, one data source (nothing needs to answer behind it) and a pairing code that lets the console grant admin.
 export const gatewayDirectory = path.join(os.tmpdir(), 'dbdatakit-console-e2e-gateway')
 export const gatewayPort = 8484
@@ -68,7 +52,7 @@ if (!isWorker) {
   fs.writeFileSync(path.join(gatewayDirectory, 'config', 'connections', 'legacy.yaml'), [
     'schema: connection/1', 'name: legacy', 'engine: sqlserver', 'address: { host: localhost, database: Legacy }',
     "auth: { mode: sql, user: reader, password_secret: 'env:LEGACY_DB_PASSWORD' }", ''].join('\n'))
-  // one for the Connections story to copy to a Sync server
+  // one for the Connections story to copy (on the same Gateway, under another name)
   fs.writeFileSync(path.join(gatewayDirectory, 'config', 'connections', 'ledger.yaml'), [
     'schema: connection/1', 'name: ledger', 'engine: sqlserver', 'address: { host: localhost, database: Ledger }',
     "auth: { mode: sql, user: reader, password_secret: 'env:LEDGER_DB_PASSWORD' }", ''].join('\n'))
@@ -91,26 +75,10 @@ if (!isWorker) {
   }
 }
 
-// A Sync server for the quality story (plan 23a, FQ17): its state database is seeded by the story with a blocking check's results, and a replication whose target cannot be reached is evaluated on request. Its own directory and port
-// (8531; 8481 to 8499, 8501, 8502 and 8511 to 8519 are taken), so nothing the other stories leave in the servers above is in its way.
-export const qualitySync = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-quality-sync'), port: 8531 }
-if (!isWorker) {
-  fs.rmSync(qualitySync.directory, { recursive: true, force: true })
-  fs.mkdirSync(qualitySync.directory, { recursive: true })
-  const madeQuality = execFileSync('dotnet', ['exec', syncDll, 'server', 'pair', '--minutes', '120', '--repo', qualitySync.directory, '--max-role', 'admin'], { encoding: 'utf8' })
-  fs.writeFileSync(path.join(scratchDirectory, 'quality-sync-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeQuality)![1])
-}
-
-// Servers for the monitoring story (plan 13a, M12): a Sync server for a replication made in the story, and a Gateway the story sends failed logins to (the Build server with a failing schedule went with the Build server, plan 33 SC23).
-// They are separate from the servers above, whose pairing codes the first-run story spends.
-export const monitorSync = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-monitor-sync'), port: 8490 }
+// A server for the monitoring story (plan 13a, M12): a Gateway the story sends failed logins to (the Build server with a failing schedule and the Sync server with a lagging replication went with those servers, plan 33 SC23).
+// It is separate from the servers above, whose pairing codes the first-run story spends.
 export const monitorGateway = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-monitor-gateway'), flightPort: 8491, managementPort: 8492 }
 if (!isWorker) {
-  fs.rmSync(monitorSync.directory, { recursive: true, force: true })
-  fs.mkdirSync(monitorSync.directory, { recursive: true })
-  const madeSync = execFileSync('dotnet', ['exec', syncDll, 'server', 'pair', '--minutes', '120', '--repo', monitorSync.directory, '--max-role', 'admin'], { encoding: 'utf8' })
-  fs.writeFileSync(path.join(scratchDirectory, 'monitor-sync-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeSync)![1])
-
   fs.rmSync(monitorGateway.directory, { recursive: true, force: true })
   fs.mkdirSync(path.join(monitorGateway.directory, 'config', 'gateway'), { recursive: true })
   fs.mkdirSync(path.join(monitorGateway.directory, 'config', 'connections'), { recursive: true })
@@ -119,16 +87,6 @@ if (!isWorker) {
   fs.copyFileSync(path.join(gatewayDirectory, 'config', 'connections', 'erp.yaml'), path.join(monitorGateway.directory, 'config', 'connections', 'erp.yaml'))
   const madeGateway = execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--minutes', '120', '--repo', monitorGateway.directory, '--max-role', 'admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'monitor-gateway-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeGateway)![1])
-}
-
-// The connection inventory story (plan 28c, E23): a Sync server the story gives a connection and a replication that uses it. It runs nothing: what is shown is what it reports about its connections and who uses them
-// (the Build server of that story went with the Build server, plan 33 SC23).
-export const inventorySync = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-inventory-sync'), port: 8502 }
-if (!isWorker) {
-  fs.rmSync(inventorySync.directory, { recursive: true, force: true })
-  fs.mkdirSync(inventorySync.directory, { recursive: true })
-  const madeSync = execFileSync('dotnet', ['exec', syncDll, 'server', 'pair', '--minutes', '120', '--repo', inventorySync.directory, '--max-role', 'admin'], { encoding: 'utf8' })
-  fs.writeFileSync(path.join(scratchDirectory, 'inventory-sync-pairing-code.txt'), /Pairing code: (\S+)/.exec(madeSync)![1])
 }
 
 // A runner for the runner story (plan 28a, R19): a real `dbdatarunner` with the sample package of the runner's tests (`DbDataKit.Runner.TestPackage`, published to a folder here) published on the `dev` channel by the story (as version 1, then 2), two tasks:
@@ -379,16 +337,6 @@ export default defineConfig({
       stderr: 'pipe' as const,
     },
     {
-      command: ['dotnet', 'exec', JSON.stringify(syncDll), 'server', 'run', '--repo', JSON.stringify(inventorySync.directory), '--url', `https://localhost:${inventorySync.port}`].join(' '),
-      url: `https://localhost:${inventorySync.port}/api/health`,
-      ignoreHTTPSErrors: true,
-      reuseExistingServer: false,
-      timeout: 90_000,
-      stdout: 'pipe' as const,
-      stderr: 'pipe' as const,
-      env: { Kestrel__Certificates__Default__Path: syncCertificate, Kestrel__Certificates__Default__Password: syncCertificatePassword },
-    },
-    {
       command: ['dotnet', 'exec', JSON.stringify(gatewayDll), 'server', 'run',
         `--Gateway:DataDirectory=${JSON.stringify(monitorGateway.directory)}`, '--Gateway:Listen:Address=127.0.0.1', `--Gateway:Listen:Port=${monitorGateway.flightPort}`,
         '--Gateway:Management:Enabled=true', '--Gateway:Management:Address=127.0.0.1', `--Gateway:Management:Port=${monitorGateway.managementPort}`].join(' '),
@@ -398,39 +346,6 @@ export default defineConfig({
       timeout: 60_000,
       stdout: 'pipe' as const,
       stderr: 'pipe' as const,
-    },
-    {
-      command: ['dotnet', 'exec', JSON.stringify(syncDll), 'server', 'run', '--repo', JSON.stringify(monitorSync.directory), '--url', `https://localhost:${monitorSync.port}`].join(' '),
-      url: `https://localhost:${monitorSync.port}/api/health`,
-      ignoreHTTPSErrors: true,
-      reuseExistingServer: false,
-      timeout: 90_000,
-      stdout: 'pipe' as const,
-      stderr: 'pipe' as const,
-      env: { Kestrel__Certificates__Default__Path: syncCertificate, Kestrel__Certificates__Default__Password: syncCertificatePassword },
-    },
-    {
-      command: ['dotnet', 'exec', JSON.stringify(syncDll), 'server', 'run', '--repo', JSON.stringify(qualitySync.directory), '--url', `https://localhost:${qualitySync.port}`].join(' '),
-      url: `https://localhost:${qualitySync.port}/api/health`,
-      ignoreHTTPSErrors: true,
-      reuseExistingServer: false,
-      timeout: 90_000,
-      stdout: 'pipe' as const,
-      stderr: 'pipe' as const,
-      env: { Kestrel__Certificates__Default__Path: syncCertificate, Kestrel__Certificates__Default__Password: syncCertificatePassword },
-    },
-    {
-      command: ['dotnet', 'exec', JSON.stringify(syncDll), 'server', 'run', '--repo', JSON.stringify(syncDirectory), '--url', syncUrl].join(' '),
-      url: `${syncUrl}/api/health`,
-      ignoreHTTPSErrors: true,
-      reuseExistingServer: false,
-      timeout: 90_000,
-      stdout: 'pipe',
-      stderr: 'pipe',
-      env: {
-        Kestrel__Certificates__Default__Path: syncCertificate,
-        Kestrel__Certificates__Default__Password: syncCertificatePassword,
-      },
     },
   ],
 })

@@ -22,8 +22,7 @@ truth; their header comments say how to dispatch them. What a release contains a
 - **NuGet publishing is paused.** No release workflow has a nuget.org push step today. Bringing it back needs a new step and a new Trusted
   Publishing policy, because that policy is bound to the repository and the workflow file name.
 - **DbDataSync has no dotnet tool package** (owner decision 2026-11-08): no `PackAsTool`, no `.nupkg`, no `.sha512`, no `dotnet tool install`. Every
-  product is distributed as zips, MSI, install scripts, Scoop and container images (`dist/README.md`). `dbdatasync update` still lists releases by tag, but
-  a new release has no `.nupkg` for it to install; it goes with the updater-removal slice.
+  product is distributed as zips, MSI, install scripts, Scoop and container images (`dist/README.md`). Sync's updater was deleted with the Sync server (plan 33 SC23).
 
 ## Shared code
 

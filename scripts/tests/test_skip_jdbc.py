@@ -19,7 +19,6 @@ class SkipJdbcTests(unittest.TestCase):
 
     def test_the_jdbc_references_are_conditional(self):
         for rel in (
-            "DbDataSync/src/DbDataSync.Api/DbDataSync.Api.csproj",
             "DbDataSync/src/DbDataSync.TaskRunner/DbDataSync.TaskRunner.csproj",
             "DbDataSync/tests/DbDataSync.Drivers.Jdbc.Tests/DbDataSync.Drivers.Jdbc.Tests.csproj",
         ):
@@ -33,7 +32,6 @@ class SkipJdbcTests(unittest.TestCase):
     def test_ikvm_is_only_referenced_when_not_skipped(self):
         for rel in (
             "DbDataSync/src/DbDataSync.Drivers.Jdbc/DbDataSync.Drivers.Jdbc.csproj",
-            "DbDataSync/tests/DbDataSync.Api.Tests/DbDataSync.Api.Tests.csproj",
             "DbDataSync/tests/DbDataSync.Drivers.Jdbc.Tests/DbDataSync.Drivers.Jdbc.Tests.csproj",
         ):
             with self.subTest(rel):
@@ -42,8 +40,7 @@ class SkipJdbcTests(unittest.TestCase):
 
     def test_the_projects_with_jdbc_dependent_code_define_skip_jdbc(self):
         for rel in (
-            "DbDataSync/src/DbDataSync.Api/DbDataSync.Api.csproj",
-            "DbDataSync/tests/DbDataSync.Api.Tests/DbDataSync.Api.Tests.csproj",
+            "DbDataSync/tests/DbDataSync.Drivers.Jdbc.Tests/DbDataSync.Drivers.Jdbc.Tests.csproj",
         ):
             with self.subTest(rel):
                 text = read(rel)

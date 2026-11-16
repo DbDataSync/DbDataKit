@@ -5,8 +5,6 @@ import { ModuleProvider } from '@dbdatakit/shell'
 import { consoleApi } from '../api'
 import { ConsoleShell } from '../ConsoleShell'
 
-// The Sync screens are large (an editor, a grid, a realtime client); a console that is only showing its servers does not load them.
-const SyncModule = lazy(() => import('@dbdatakit/sync').then((m) => ({ default: m.SyncModule })))
 const GatewayModule = lazy(() => import('@dbdatakit/gateway').then((m) => ({ default: m.GatewayModule })))
 const IdentityHomeModule = lazy(() => import('@dbdatakit/gateway').then((m) => ({ default: m.IdentityHomeModule })))
 const RunnerModule = lazy(() => import('@dbdatakit/runner').then((m) => ({ default: m.RunnerModule })))
@@ -15,6 +13,7 @@ const WorkspaceModule = lazy(() => import('@dbdatakit/workspace').then((m) => ({
 /** The servers plan 33 SC23 deleted, with where their work went: a console that still lists one says so instead of "no screens yet". */
 export const removedProducts: Record<string, string> = {
   dbdatabuild: 'The Build server was deleted (plan 33 SC23): a project is authored in a build project of the Workspace and published from there to a Runner and a Gateway; its refresh plans run on the Runner, and a plan is applied, a change acknowledged or seeds loaded as the manual Runner tasks apply_plan, ack and seed, with the logins bound on the Runner.',
+  dbdatasync: 'The Sync server was deleted (plan 33 SC23): a replication is authored in a sync project of the Workspace and published from there to a Runner, which runs it (run now, pause and resume, bulk loads, verifications and the provision task are Runner tasks), with the logins bound on the Runner.',
   dbdatastore: 'The Store server was deleted (plan 33 SC23): a model is authored in a store project of the Workspace, its tables are deployed from the Deploy tab there as Runner tasks, its rows are written on the Rows tab against a Gateway, and change requests are decided on the Approvals page.',
 }
 
@@ -39,7 +38,7 @@ export function ServerModule() {
   if (instances.isLoading) return null
   if (!found) return <Notice testId="module-no-server">That server is not paired with this console.</Notice>
   if (!found.reachable) return <Notice testId="module-unreachable">{`${found.name} is not answering: ${found.problem ?? 'no answer'}.`}</Notice>
-  const Module = found.product === 'dbdatasync' ? SyncModule : found.product === 'dbdatagateway' ? GatewayModule : found.product === 'dbdatarunner' ? RunnerModule : found.product === 'dbdataworkspace' ? WorkspaceModule : found.product === 'dbdatakit-identity' ? IdentityHomeModule : null
+  const Module = found.product === 'dbdatagateway' ? GatewayModule : found.product === 'dbdatarunner' ? RunnerModule : found.product === 'dbdataworkspace' ? WorkspaceModule : found.product === 'dbdatakit-identity' ? IdentityHomeModule : null
   if (found.product && removedProducts[found.product]) return <Notice testId="module-removed">{removedProducts[found.product]}</Notice>
   if (Module === null) return <Notice testId="module-none">{`The console has no screens for ${found.product ?? 'this kind of server'} yet.`}</Notice>
 

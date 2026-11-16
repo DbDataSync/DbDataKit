@@ -15,7 +15,7 @@ dbdatakit service restart
 
 What moves is everything the console keeps in its state: people and sessions, the setup checklist, delivery messages, the results of data quality checks and which of them were alerted (a failure alerted before the move is not alerted again after it), and the audit. What does **not** move is files, because they were never state: the servers the console is paired with, the console's certificate and secrets, `settings.yaml`, `bundle.json` and the bundle token. They stay where they are, and the console on the new engine still pairs with the servers of this machine by itself (see *First run*, the bundle).
 
-Do the same for each server of the machine (`dbdatasync state move`, ...) when it should share a database; `state show` and `state test` say where each one is.
+Do the same for each server of the machine (`dbdatarunner state move`, ...) when it should share a database; `state show` and `state test` say where each one is.
 
 ## 2. Put a server on another machine
 

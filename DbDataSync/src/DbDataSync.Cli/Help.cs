@@ -1,5 +1,3 @@
-using DbDataSync.Api.Configuration;
-
 namespace DbDataSync.Cli;
 
 public static class Help
@@ -7,25 +5,19 @@ public static class Help
     public static void Print()
     {
         Console.WriteLine($"""
-            dbdatasync — cross-database replication.
+            dbdatasync — cross-database replication: a command line on a configuration repository, and the engine a Runner runs.
 
-              dbdatasync server setup [--repo <path>]
-                  Interactive walk-through for a fresh install, or a review screen for an existing
-                  one. Refuses to run when stdin/stdout aren't a real console.
+              dbdatasync script list | test <name> [--rows <n>] [--repo <path>] [--json]
+                  The .csx scripts of the configuration, and a test of one against generated
+                  sample input.
 
-              dbdatasync server run [--repo <path>] [--state-db <path>] [--url <url>]
-                  Starts the API and the scheduler in one process (what the service runs); its screens are the dbdatakit console's.
-                  Defaults: --repo {CliOptions.DefaultRoot}, --url {ApiOptions.DefaultUrl}
+              dbdatasync provisioning plan <replication> --from-cache [--repo <path>] [--json]
+                  What a replication needs of its two databases, planned offline from the
+                  catalog cache. Applying it is the set's provision task on the Runner.
 
-              dbdatasync service install|uninstall|status|start|stop|restart|doctor [--repo <path>] [--url <url>] [--account <account>] [--password-stdin]
-                  On Windows: registers this tool as a Windows service (install again to update it), and starts,
-                  stops or restarts it, waiting until it gets there; doctor checks the registration. A named user
-                  account's password is read from standard input with --password-stdin. Needs an elevated prompt.
-              dbdatasync service install|uninstall|status [--repo <path>] [--url <url>] [--user <user>]
-                  On Linux: registers a systemd unit (default user: dbdatasync). Needs root
-                  (`sudo`); enables but does not start it — run `systemctl start dbdatasync` next.
-                  Either way the service runs the launcher, and a machine-wide install made before
-                  versioned slots is converted to them first (it says so).
+              dbdatasync package publish --to runner (--server <name or address> --channel <name> ... | --out <dir> | --check) [--repo <path>]
+                  Publishes the replications of the repository to a Runner as a package (or
+                  writes it to a folder, or only checks it). The Runner runs them.
 
               dbdatasync tool install|uninstall [--dir <path>]
                   Puts a `dotnet tool install --tool-path <dir>` copy of this CLI on the machine's
@@ -33,66 +25,9 @@ public static class Help
                   or the Machine PATH (Windows). Needs root/an elevated prompt. Defaults --dir to
                   this executable's own directory; see docs/install.md for the full sequence.
 
-              dbdatasync update [--list] [--channel stable|beta|snapshot|all] [--limit <n>] [--json]
-              dbdatasync update --to <version> [--stage-dir <dir>]
-                  Lists the versions available on each release channel (stable, beta, and
-                  snapshots of every promoted test build, all from this product's GitHub
-                  releases), lets you choose one, downloads and verifies it, and prints the
-                  commands that install it.
-                  Set GITHUB_TOKEN to raise GitHub's anonymous rate limit; it is never required.
-              dbdatasync update --to <version> --apply [--yes] [--url <url>] [--health-timeout <seconds>]
-                  Carries the update out instead of printing it: installs it into the slot that is not
-                  running, stops the service, switches slots, starts it and checks it answers — switching
-                  back if it does not. Needs root/an elevated prompt. The first run on a machine-wide
-                  install made before versioned slots converts it (it says so).
-              dbdatasync update --rollback [--yes] [--url <url>] [--health-timeout <seconds>]
-                  Switches back to the version in the other slot, the same way. Nothing is downloaded.
-              dbdatasync update --status
-                  Shows both slots, what the last update did, and the recent history.
-
-              dbdatasync launcher repair [--repo <path>]
-                  Re-copies the running version's launcher (what the service and PATH run) over the
-                  installed one and re-points a registered service at it. Rarely needed.
-
-              dbdatasync health check [--url <url>]
-                  Exits 0 if a running DbDataSync answers, 1 if it does not. What the container's
-                  health check runs.
-
-              dbdatasync config check [--repo <path>] [--json]
-                  Non-interactive readiness check — repo, state store, libraries/drivers,
-                  auth, binding. Exits 1 if anything fails; what `server setup`'s
-                  review screen runs.
-              dbdatasync config get <key> | set <key> <value> [--repo <path>]
-                  Reads or changes one setting of server.yaml.
-
-              dbdatasync state show|test|grants|init|export|import|backup|restore|verify|move [--repo <path>]
-                  The state database: where it is, the modules it is built from and the version
-                  of each, whether it works, and the rights it needs. An earlier release's state
-                  database is refused at start, not converted; `state show` names the file.
-
               dbdatasync lineage graph|impact|provenance [--repo <path>]
                   The lineage of the replications' tables and columns, built offline from the
                   configuration: the graph, what a change touches, where a value comes from.
-
-              dbdatasync gateway add|list|remove [--repo <path>]
-                  The serving groups (Gateways) this server tells when a run has written a
-                  dataset, so their result cache is cleared. A pairing is made with a code
-                  from `dbdatagateway server pair`; a failed message never fails a run.
-
-              dbdatasync cert use-pem --cert <path> --key <path> | use-pfx --pfx <path>
-                  Points Kestrel at a certificate file — unencrypted PEM key or
-                  unprotected PFX. Any platform.
-              dbdatasync cert status|list|new-self-signed|enroll|renew|retrieve|templates|bind
-                  Issues, installs, binds and renews a certificate from the Windows
-                  certificate store or an AD CS CA. `status` also works on any platform
-                  (reports whichever of the two above is configured); the rest are
-                  Windows only. Run `dbdatasync cert` with no subcommand to see
-                  every subcommand's flags.
-
-              dbdatasync secret set <ref> <value>|list [<ref> ...]|remove <ref>
-                  Stores, checks, or removes a secret in the encrypted secret store — e.g. the
-                  state database's password:
-                  dbdatasync secret set dbdatakit:sync:config:stateConnectionString "Password=..."
 
               dbdatasync library install <packageId>[ <packageId>...] [--as <id>] --version <v> [--factory-type type] [--source feed]
               dbdatasync library sync [<id>] | list | uninstall <id>
@@ -110,6 +45,10 @@ public static class Help
                   for what a descriptor can and can't do.
 
               dbdatasync version
+
+            The Sync server and its commands (server, service, cert, secret, config, state, health,
+            gateway, update, launcher) were deleted (plan 33 SC23): the Runner runs the replications,
+            and each of those commands says where its feature went.
             """);
     }
 }

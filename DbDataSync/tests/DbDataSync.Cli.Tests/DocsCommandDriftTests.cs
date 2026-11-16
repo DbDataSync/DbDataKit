@@ -63,11 +63,7 @@ public sealed class DocsCommandDriftTests
     public void EveryCommandTheDocsShow_IsOneTheCliHas()
     {
         var real = CommandWords(HelpText(), wholeTextIsCode: true).ToHashSet();
-        Assert.Contains("server", real); // the extraction found the help's commands at all
-
-        // Machinery a document may name without it being something to type: install.md says systemd runs
-        // `dbdatasync internal apply-update` before a start, and the command is deliberately absent from the help.
-        real.Add("internal");
+        Assert.Contains("package", real); // the extraction found the help's commands at all
 
         var unknown = new List<string>();
         foreach (var file in Directory.GetFiles(DocsDirectory(), "*.md"))

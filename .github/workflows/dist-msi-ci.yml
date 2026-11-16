@@ -39,12 +39,12 @@ jobs:
       - name: Build two MSIs per product from the newest published package
         run: |
           set -euo pipefail
-          declare -A META=( [dbdatagateway]=DbDataGateway [dbdatasync]=DbDataSync [dbdatakit]=DbDataKit [dbdatarunner]=DbDataRunner )
+          declare -A META=( [dbdatagateway]=DbDataGateway [dbdatakit]=DbDataKit [dbdatarunner]=DbDataRunner )
           # The console and the runner have no published release before their first one, so their packages are built here from this commit.
           mkdir -p work/dbdatakit out/dbdatakit work/dbdatarunner out/dbdatarunner
           DbDataKit/scripts/package.sh win-x64 2026.1.1.0 "$PWD/work/dbdatakit"
           DbDataRunner/scripts/package.sh win-x64 2026.1.1.0 "$PWD/work/dbdatarunner"
-          for product in dbdatagateway dbdatasync dbdatakit dbdatarunner; do   # DbDataBuild has no installer since plan 33 SC23 deleted its server
+          for product in dbdatagateway dbdatakit dbdatarunner; do   # DbDataBuild and DbDataSync have no installer since plan 33 SC23 deleted their servers
             work="work/$product"; mkdir -p "$work" "out/$product"
             if [ "$product" = dbdatakit ]; then
               unzip -q "$work/dbdatakit-v2026.1.1.0-win-x64.zip" -d "$work/payload"
@@ -90,14 +90,13 @@ jobs:
       matrix:
         include:
           - { product: dbdatagateway, display: DbDataGateway, exe: dbdatagateway.exe, service: dbdatagateway, runs: true,  path: false }
-          - { product: dbdatasync,  display: DbDataSync,  exe: dbdatasync.exe,  service: DbDataSync,  runs: false, path: true }
           - { product: dbdatakit,   display: DbDataKit,   exe: dbdatakit.exe,   service: DbDataKit, runs: false, path: false }
           - { product: dbdatarunner, display: DbDataRunner, exe: dbdatarunner.exe, service: DbDataRunner, runs: false, path: false }
     name: windows (${{ matrix.product }})
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
-        if: matrix.product == 'dbdatasync' || matrix.product == 'dbdatakit' || matrix.product == 'dbdatarunner'
+        if: matrix.product == 'dbdatakit' || matrix.product == 'dbdatarunner'
         with:
           dotnet-version: '10.0.x'
       - uses: actions/download-artifact@v8

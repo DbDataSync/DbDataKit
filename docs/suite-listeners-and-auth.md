@@ -17,9 +17,8 @@ What each service listens on and how each way of proving who you are is used. It
 | **DbDataGateway** (management listener) | `Management.Address` (loopback) : 8816, on by default (plan 33 D15; `management.enabled: false` turns it off; it needs TLS) | HTTPS (HTTP/1.1 and 2): `/api/v1/...` (with `/api/v1/state` and the maintenance mode), pairing, key rotation, `/health*`, `/version`. A management path on the Flight port is a 404 and the reverse | the same certificate | A console (a signed token) or a paired Build server (a publishing client) |
 | | local channel (`management.localChannel: true`) | one request per message on a named pipe (Windows) or a Unix socket (`channel.sock`) | none; the operating system's access list or file mode decides | The command line on the same machine, as an administrator |
 | **DbDataGateway 32-bit worker** (`dbdatagateway-worker`) | `127.0.0.1:<random port>` | gRPC (Flight) over HTTP/2 | none (loopback) | Only the Gateway that started it, with a per-launch secret |
-| **DbDataSync API** | `Url` (default `https://localhost:5080`, a self-signed certificate made on the first start; plain http only with an explicit `http://` URL; the compose image serves `https://...:8443`); on Windows HTTP.sys can replace Kestrel to share a port | HTTP(S): the web API behind the screens, SignalR hubs, pairing, key rotation, `/version`, `/health*` | optional (a certificate in `Kestrel:Certificates:Default` or the server's own) | The console's relay (a signed token); people on the screens; on loopback, the network-trust fallback |
 | | runner state endpoint, `127.0.0.1:<State.Port>` (0 picks a free port) | HTTP: the work queue and config the per-run TaskRunner children poll | none; IPv4 loopback only | Only the children this process started (the runner token) |
-| **DbDataSync TaskRunner** (per run) | none; it is a client of the runner state endpoint | | | |
+| **DbDataSync TaskRunner** (a Runner's task; the Sync server was deleted, plan 33 SC23) | none; it speaks the runner protocol to the Runner that started it | | | |
 | **DbDataBuild web page** (the local `web` command) | `127.0.0.1:<free port>` | HTTP, one page and its calls | none | The person who started it: the page carries a random token |
 | **DbDataBuild MCP** (`mcp`) | none: standard input and output | MCP (JSON-RPC) | n/a | The process that started it (an agent host), no network |
 | **DbDataBuild TUI** (`tui`) | none: the terminal | | | |
@@ -30,7 +29,7 @@ Every server that a console manages also answers the same four things on its man
 
 ### Default-port clashes to know about
 
-* No two services share a default port (plan 33 SC19; `scripts/check_default_ports.py` fails when two do): DbDataKit 8480, the Workspace 8471, the identity home on its own 8482, the Runner 8495 (the Store server's 8490 and the Build server's 8470 went with them, plan 33 SC23), Sync 5080 and the Gateway 8815 (Flight), 8816 (management), 8817 (identity), 8818 (apps), 8819 (store module), 8820 (views) and 8821 (mcp). The Workspace and the identity home moved from 8495 and 8490.
+* No two services share a default port (plan 33 SC19; `scripts/check_default_ports.py` fails when two do): DbDataKit 8480, the Workspace 8471, the identity home on its own 8482, the Runner 8495 (the Store server's 8490, the Build server's 8470 and the Sync server's 5080 went with them, plan 33 SC23) and the Gateway 8815 (Flight), 8816 (management), 8817 (identity), 8818 (apps), 8819 (store module), 8820 (views) and 8821 (mcp). The Workspace and the identity home moved from 8495 and 8490.
 * The console (8480) and its announce port (8481 in the examples) are different listeners on purpose: the announce port is plain HTTP and takes nothing but the announcement.
 
 ### Safe defaults to know about
@@ -74,7 +73,7 @@ Servers a console manages use one set of five roles, carried in the console toke
 | Service | To | How |
 | --- | --- | --- |
 | Gateway | the databases | the data source's connection (mapped account, pass-through, integrated, token) with secrets resolved through `secret:` references |
-| Sync | the databases, and a Gateway | the connection's own login; a Gateway as an Arrow Flight SQL source with the Flight handshake |
+| Sync | the databases, and a Gateway | the connection's run login (on a Runner, its binding of the set's slots); a Gateway as an Arrow Flight SQL source with the Flight handshake; no server since plan 33 SC23 |
 | Build | the databases | the `DBDATAKIT_BUILD_<TARGET>_<READ|WRITE>` logins (on a Runner, its binding of the package's slots); no server since plan 33 SC23 |
 | Console | every paired server | its signing key (kept in the secret store) and the server's pinned certificate |
 | Console | an identity home | the client id and secret of its OpenID client, over the home's HTTPS |

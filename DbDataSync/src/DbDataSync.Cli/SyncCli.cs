@@ -1,24 +1,22 @@
 using DbDataKit.Cli;
-using DbDataKit.Web.Trust;
-using DbDataSync.Api.Management;
 
 namespace DbDataSync.Cli;
 
 /// <summary>
 /// Sync's command line as nouns and verbs on the shared router (plan 13, C07): the same grammar and the same <c>--format json</c> document as the other products. Each verb forwards to the
 /// command class that has always done the work. Those classes write with <see cref="Console"/>, so while a verb runs the console is pointed at the command context (see
-/// <see cref="ContextScope"/>) and the JSON form captures what the text form prints. <c>tool</c>, <c>update</c>, <c>launcher</c>, <c>internal</c> and <c>version</c> are not verbs of a
-/// noun and keep their own dispatch in <c>Program.cs</c> until the updater is reopened (plan 13, D5).
+/// <see cref="ContextScope"/>) and the JSON form captures what the text form prints. <c>tool</c> and <c>version</c> are not verbs of a noun and keep their own dispatch in <c>Program.cs</c>.
+/// The Sync server's commands are gone (plan 33 SC23) and answer with where their feature went (<see cref="RemovedServer"/>).
 /// </summary>
 public static class SyncCli
 {
     public const string Program = "dbdatasync";
 
-    /// <summary>The commands that stay outside the router: flag-driven or retired from the suite's grammar for now.</summary>
-    public static readonly IReadOnlySet<string> Legacy = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "tool", "update", "launcher", "internal", "version" };
+    /// <summary>The commands that stay outside the router: flag-driven.</summary>
+    public static readonly IReadOnlySet<string> Legacy = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "tool", "version" };
 
-    /// <summary>What <c>ui mcp</c> never offers: nothing that sets a secret or loads an installed library, and nothing that is long-running or interactive (<see cref="McpOptions.Always"/>).</summary>
-    private static readonly string[] NotForAgents = ["secret set", "secret remove", "secret send", "library validate", "server pair", "server unpair", "gateway add"];
+    /// <summary>What <c>ui mcp</c> never offers: nothing that loads an installed library or opens a connection with a login, and nothing that is long-running or interactive (<see cref="McpOptions.Always"/>).</summary>
+    private static readonly string[] NotForAgents = ["library validate"];
 
     public static NounRouter Router(string version = "0", Func<string, string?>? environment = null)
     {
@@ -29,35 +27,6 @@ public static class SyncCli
 
     private static NounRouter Build(string version, Func<NounRouter> self, Func<string, string?>? environment) => new(Program,
     [
-        new Noun("server", "The long-running process and its first-run setup",
-        [
-            Forward("run", "Start the API and the scheduler in one foreground process (what the service runs; the screens are the dbdatakit console's)", EffectClass.OfflineOnly, "[--repo <path>] [--state-db <path>] [--url <url>]", ServeCommand.RunAsync),
-            Forward("setup", "The interactive first-run walk-through, or a review screen for an existing install", EffectClass.RepoFilesOnly, "[--repo <path>]", SetupCommand.RunAsync),
-        ]).With([.. PairingVerbs.Create(args => new PairingFiles(SyncManagement.ServerYamlIn(DbDataSyncRoot.Resolve(args))))]),
-        new Noun("service", "Registration of 'server run' with Windows or systemd",
-        [
-            Forward("install", "Register the service (run it again to update it); needs elevation", EffectClass.TargetWrites, "[--repo <path>] [--url <url>] [--account <account>] [--password-stdin]", a => Task.FromResult(ServiceCommand.Run(["install", .. a]))),
-            Forward("uninstall", "Remove the service registration; needs elevation", EffectClass.TargetWrites, "", a => Task.FromResult(ServiceCommand.Run(["uninstall", .. a]))),
-            Forward("status", "Whether the service is installed and running", EffectClass.OfflineOnly, "", a => Task.FromResult(ServiceCommand.Run(["status", .. a]))),
-            Forward("start", "Start the service; needs elevation", EffectClass.TargetWrites, "", a => Task.FromResult(ServiceCommand.Run(["start", .. a]))),
-            Forward("stop", "Stop the service; needs elevation", EffectClass.TargetWrites, "", a => Task.FromResult(ServiceCommand.Run(["stop", .. a]))),
-            Forward("restart", "Stop and start the service; needs elevation", EffectClass.TargetWrites, "", a => Task.FromResult(ServiceCommand.Run(["restart", .. a]))),
-            Forward("doctor", "Check the registration, the account and the directory permissions", EffectClass.OfflineOnly, "", a => Task.FromResult(ServiceCommand.Run(["doctor", .. a]))),
-        ]),
-        new Noun("cert", "The server's TLS certificate",
-        [
-            Cert("use-pem", "Point Kestrel at a PEM certificate and key", EffectClass.RepoFilesOnly, "--cert <path> --key <path> [--repo <path>]"),
-            Cert("use-pfx", "Point Kestrel at a PFX file", EffectClass.RepoFilesOnly, "--pfx <path> [--repo <path>]"),
-            Cert("status", "The certificate in use", EffectClass.OfflineOnly, "[--account <account>]"),
-            Cert("new-self-signed", "Create a self-signed certificate (a file anywhere, or in the Windows certificate store)", EffectClass.RepoFilesOnly, "[--file|--store] [--dns <names>] [--days <n>] [--repo <path>]"),
-            Cert("list", "List certificates in the Windows certificate store (Windows only)", EffectClass.OfflineOnly, "[--location LocalMachine|CurrentUser]"),
-            Cert("enroll", "Request a certificate from an AD CS CA (Windows only)", EffectClass.RepoFilesOnly, "--dns <names> [--ca <config>] [--template <name>] [--account <account>]"),
-            Cert("renew", "Renew the certificate (Windows only)", EffectClass.RepoFilesOnly, "[--ca <config>] [--template <name>] [--account <account>] [--days <n>]"),
-            Cert("retrieve", "Retrieve a pending request (Windows only)", EffectClass.RepoFilesOnly, "--request-id <id> [--account <account>]"),
-            Cert("templates", "List the CA's templates (Windows only)", EffectClass.OfflineOnly, "[--ca <config>]"),
-            Cert("discover", "Find the CA and template (Windows only)", EffectClass.RepoFilesOnly, "[--repo <path>]"),
-            Cert("bind", "Bind a thumbprint to the listener (Windows only)", EffectClass.RepoFilesOnly, "--thumbprint <thumbprint> [--location LocalMachine|CurrentUser] [--allow-invalid|--no-allow-invalid]"),
-        ]),
         new Noun("script", "The .csx scripts of the configuration",
         [
             new Verb("list", "The scripts and the slot each fills (--json: one JSON document, for the Workspace)", EffectClass.OfflineOnly, "[--repo <path>] [--json]", (args, context) => RunScript("list", args, context), ScriptCommand.ListSchema),
@@ -65,14 +34,7 @@ public static class SyncCli
         ]),
         new Noun("provisioning", "What a replication needs of its two databases",
         [
-            new Verb("plan", "Plan the create or alter of the target tables of a replication offline, from the catalog cache of the repository (--from-cache; --json: one JSON document, for the Workspace). Applying is the server's", EffectClass.OfflineOnly, "<replication> --from-cache [--repo <path>] [--json]", async (args, context) => { using var _ = ContextScope.Enter(context); return await ProvisioningCommand.RunAsync(["plan", .. args], context.Data); }, ProvisioningCommand.PlanSchema),
-        ]),
-        new Noun("secret", "The encrypted secret store",
-        [
-            Forward("set", "Store a secret under a dbdatakit:sync:... name", EffectClass.RepoFilesOnly, "<ref> <value> [--repo <path>]", a => Task.FromResult(SecretCommand.Run(["set", .. a]))),
-            Forward("list", "Whether each given reference is set, never the value", EffectClass.OfflineOnly, "[<ref> ...] [--repo <path>]", a => Task.FromResult(SecretCommand.Run(["list", .. a]))),
-            Forward("remove", "Remove a stored secret", EffectClass.RepoFilesOnly, "<ref> [--repo <path>]", a => Task.FromResult(SecretCommand.Run(["remove", .. a]))),
-            Forward("send", "Send a connection's run login to a runner's encrypted store (plan 28c E20d); the value is never printed", EffectClass.RepoFilesOnly, "--to runner <connection> --server <name or https address> [--code <pairing code>] [--repo <path>]", a => SecretCommand.SendAsync(a)),
+            new Verb("plan", "Plan the create or alter of the target tables of a replication offline, from the catalog cache of the repository (--from-cache; --json: one JSON document, for the Workspace). Applying is the set's provision task on the Runner", EffectClass.OfflineOnly, "<replication> --from-cache [--repo <path>] [--json]", async (args, context) => { using var _ = ContextScope.Enter(context); return await ProvisioningCommand.RunAsync(["plan", .. args], context.Data); }, ProvisioningCommand.PlanSchema),
         ]),
         new Noun("library", "ADO.NET libraries restored into the repository",
         [
@@ -80,7 +42,7 @@ public static class SyncCli
             Forward("sync", "Restore the libraries that are on record but not restored", EffectClass.RepoFilesOnly, "[<id>]", a => LibraryCommand.RunAsync(["sync", .. a])),
             Forward("list", "The installed libraries", EffectClass.OfflineOnly, "", a => LibraryCommand.RunAsync(["list", .. a])),
             Forward("uninstall", "Remove a library", EffectClass.RepoFilesOnly, "<id>", a => LibraryCommand.RunAsync(["uninstall", .. a])),
-            Forward("validate", "Check that a library works against a connection (run by the API in a child process)", EffectClass.TargetReadOnly, "<id> --connection <name> [--repo <path>]", a => LibraryCommand.RunAsync(["validate", .. a])),
+            Forward("validate", "Check that a library works against a connection", EffectClass.TargetReadOnly, "<id> --connection <name> [--repo <path>]", a => LibraryCommand.RunAsync(["validate", .. a])),
         ]),
         new Noun("driver", "Drivers added without a rebuild",
         [
@@ -94,51 +56,9 @@ public static class SyncCli
                 "--to runner (--server <name or https address> --channel <name> [--code <pairing code>] [--bind <slot>=<connection> ...] [--serve] [--expected-version <n>] | --out <directory> | --check) [--json] [--package <name>] [--platform linux-x64|win-x64] [--source <feed>] [--runtime-range <range>] [--client-dir <path>] [--repo <path>]",
                 a => PackageCommand.RunAsync(["publish", .. a])),
         ]),
-        new Noun("config", "The server's own configuration",
-        [
-            Forward("check", "Readiness check: repository, state store, libraries and drivers, auth, binding, first admin", EffectClass.OfflineOnly, "[--repo <path>]", a => ConfigCommand.RunAsync(["check", .. a])),
-            Forward("get", "One setting of server.yaml", EffectClass.OfflineOnly, "<key> [--repo <path>]", a => ConfigCommand.RunAsync(["get", .. a])),
-            Forward("set", "Change one setting of server.yaml", EffectClass.RepoFilesOnly, "<key> <value> [--repo <path>]", a => ConfigCommand.RunAsync(["set", .. a])),
-        ]),
-        StateNoun(),
         LineageCommand.Noun(),
-        // plan 24a UC13: the serving groups this server tells when a run wrote rows
-        DbDataKit.Serving.Notify.GatewayNoun.Create(args => SyncDataChanges.PairingsIn(DbDataSyncRoot.Resolve(args)),
-            args => SyncDataChanges.IdentityIn(DbDataSync.Core.Secrets.SecretStore.OpenInRepository(DbDataSyncRoot.Resolve(args))), "DbDataSync server", "[--repo <path>]", "repo"),
-        new Noun("health", "Is a running server answering",
-        [
-            new Verb("check", "Exit 0 when a running DbDataSync answers, 1 when it does not (what the container's health check runs)", EffectClass.OfflineOnly, "[--url <url>] [--repo <path>]",
-                async (args, context) =>
-                {
-                    using var _ = ContextScope.Enter(context);
-                    var exit = await HealthCommand.RunAsync(["check", .. args]);
-                    context.Data["healthy"] = exit == 0;
-                    return exit;
-                },
-                DataSchemas.Object([("healthy", DataSchemas.Boolean)], "healthy")),
-        ]),
         UiNoun.Create(self, Program, version, NotForAgents),
     ], version, () => DbDataKit.State.SuiteEnvironment.OldNameProblem(environment));
-
-    /// <summary>
-    /// The shared <c>state show|test|grants|init|export|import|verify|move</c> verbs over Sync's state, built from <see cref="DbDataSync.State.SyncState.Modules"/> (plan 28c, E14): <c>state show</c> lists the modules
-    /// and the version each is at. Where the state is comes from the same settings the server reads (<c>DbDataSync:State:Engine</c>, <c>ConnectionString</c> and <c>DbPath</c>, with the stored password), the repository
-    /// root from <c>--repo</c> as for every other command.
-    /// </summary>
-    private static Noun StateNoun() => DbDataKit.State.Cli.StateVerbs.Create(new DbDataKit.State.Cli.StateVerbContext(
-        Program, "DbDataSync",
-        args =>
-        {
-            var context = ReadinessChecks.BuildContext(args.Get("repo") is { } repo ? ["--repo", repo] : []);
-            var options = context.ApiOptions;
-            var connection = options.StateConnectionString;
-            if (connection is not null && DbDataSync.Core.Secrets.SecretStore.OpenInRepository(context.Root).TryResolve(DbDataSync.Core.Secrets.SecretRefs.ForAppSetting("stateConnectionString"), out var password))
-                connection = $"{connection};Password={password}";
-            // the state file is named by DbDataSync:State:DbPath, else it is state.db in the repository root this command was pointed at
-            var file = context.Configuration["DbDataSync:State:DbPath"] ?? Path.Combine(context.Root, "state.db");
-            return new DbDataKit.State.Cli.StateTarget(new DbDataKit.State.StateSettings(options.StateEngine, connection), file);
-        },
-        DbDataSync.State.SyncState.Modules, DbDataSync.State.SyncState.Scope, ["repo"], "[--repo <path>]"));
 
     private static Verb Forward(string name, string summary, EffectClass effect, string usage, Func<string[], Task<int>> run) =>
         new(name, summary, effect, usage, async (args, context) =>
@@ -153,8 +73,6 @@ public static class SyncCli
         return await ScriptCommand.RunAsync([verb, .. args], context.Data);
     }
 
-    private static Verb Cert(string name, string summary, EffectClass effect, string usage) =>
-        Forward(name, summary, effect, usage, a => Task.FromResult(CertCommand.Run([name, .. a])));
 }
 
 /// <summary>While a verb runs, <see cref="Console.Out"/>, <see cref="Console.Error"/> and <see cref="Console.In"/> are the command context's, so output goes where the router put it (the JSON form's <c>messages</c> and <c>errors</c>).</summary>

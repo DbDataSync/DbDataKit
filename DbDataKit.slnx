@@ -299,8 +299,6 @@
     <Project Path="DbDataStore/tests/DbDataStore.Tests/DbDataStore.Tests.csproj" />
   </Folder>
   <Folder Name="/DbDataSync/src/">
-    <Project Path="DbDataSync/src/DbDataSync.Api/DbDataSync.Api.csproj" />
-    <Project Path="DbDataSync/src/DbDataSync.Certificates/DbDataSync.Certificates.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.Cli/DbDataSync.Cli.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.Core/DbDataSync.Core.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.Drivers.Abstractions/DbDataSync.Drivers.Abstractions.csproj" />
@@ -313,7 +311,6 @@
     <Project Path="DbDataSync/src/DbDataSync.Drivers.MySql/DbDataSync.Drivers.MySql.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.Drivers.Oracle/DbDataSync.Drivers.Oracle.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.Drivers.Postgres/DbDataSync.Drivers.Postgres.csproj" />
-    <Project Path="DbDataSync/src/DbDataSync.Launcher/DbDataSync.Launcher.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.Libraries/DbDataSync.Libraries.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.Planning/DbDataSync.Planning.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.Provisioning/DbDataSync.Provisioning.csproj" />
@@ -322,12 +319,9 @@
     <Project Path="DbDataSync/src/DbDataSync.State/DbDataSync.State.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.Tracking/DbDataSync.Tracking.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.TaskRunner/DbDataSync.TaskRunner.csproj" />
-    <Project Path="DbDataSync/src/DbDataSync.Updates/DbDataSync.Updates.csproj" />
     <Project Path="DbDataSync/src/DbDataSync.Verification/DbDataSync.Verification.csproj" />
   </Folder>
   <Folder Name="/DbDataSync/tests/">
-    <Project Path="DbDataSync/tests/DbDataSync.Api.Tests/DbDataSync.Api.Tests.csproj" />
-    <Project Path="DbDataSync/tests/DbDataSync.Certificates.Tests/DbDataSync.Certificates.Tests.csproj" />
     <Project Path="DbDataSync/tests/DbDataSync.Cli.Tests/DbDataSync.Cli.Tests.csproj" />
     <Project Path="DbDataSync/tests/DbDataSync.Core.Tests/DbDataSync.Core.Tests.csproj" />
     <Project Path="DbDataSync/tests/DbDataSync.Drivers.Abstractions.Tests/DbDataSync.Drivers.Abstractions.Tests.csproj" />
@@ -345,7 +339,6 @@
     <Project Path="DbDataSync/tests/DbDataSync.Scripting.Tests/DbDataSync.Scripting.Tests.csproj" />
     <Project Path="DbDataSync/tests/DbDataSync.State.Tests/DbDataSync.State.Tests.csproj" />
     <Project Path="DbDataSync/tests/DbDataSync.TaskRunner.Tests/DbDataSync.TaskRunner.Tests.csproj" />
-    <Project Path="DbDataSync/tests/DbDataSync.Updates.Tests/DbDataSync.Updates.Tests.csproj" />
     <Project Path="DbDataSync/tests/DbDataSync.Verification.Tests/DbDataSync.Verification.Tests.csproj" />
     <Project Path="DbDataSync/tests/fixtures/DbDataSync.Libraries.CompatFixtureDriver/DbDataSync.Libraries.CompatFixtureDriver.csproj" />
     <Project Path="DbDataSync/tests/fixtures/DbDataSync.Libraries.CompatFixtureLibraryComplete/DbDataSync.Libraries.CompatFixtureLibraryComplete.csproj" />
@@ -357,6 +350,5 @@
   <Folder Name="/DbDataSync/tools/">
     <Project Path="DbDataSync/tools/DbDataSync.Benchmarks/DbDataSync.Benchmarks.csproj" />
     <Project Path="DbDataSync/tools/DbDataSync.Benchmarks.Staging/DbDataSync.Benchmarks.Staging.csproj" />
-    <Project Path="DbDataSync/tools/DbDataSync.DevHarness/DbDataSync.DevHarness.csproj" />
   </Folder>
 </Solution>

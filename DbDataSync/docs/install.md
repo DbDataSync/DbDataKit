@@ -1,86 +1,20 @@
 # Installing dbdatasync
 
-[DbDataSync](../README.md) · **Install** · [Configuration](configuration.md) · [Getting started](getting-started.md) · [Replication concepts](replication-concepts.md) · [Drivers and libraries](drivers-and-libraries.md) · [State database](state-database.md) · [Building from source](development.md)
+[DbDataSync](../README.md) · **Install** · [Configuration](configuration.md) · [Getting started](getting-started.md) · [Replication concepts](replication-concepts.md) · [Drivers and libraries](drivers-and-libraries.md) · [Building from source](development.md)
 
-`dbdatasync` ships as zips, a Windows installer (MSI), install scripts, a Scoop manifest and a container image; there is no .NET tool package (`dotnet tool install` is gone). Pick the install below that matches how you plan to run it. The routes are the suite's standard ones, described in full in [`dist/README.md`](https://github.com/DbDataSync/DbDataKit/blob/main/dist/README.md).
+`dbdatasync` is a command line on a configuration repository and the engine a Runner runs. The Sync server was deleted (plan 33 SC23): there is no
+service, no Windows installer and no container image of Sync any more. The install of the suite is four services (the dbdatakit console, the Workspace,
+the Gateway and the Runner); a Runner runs the replications, with the engine installed on it as the package `dbdatasync-runtime`.
 
 ## Prerequisites
 
-- **.NET 10 runtime** — needed to run `dbdatasync` from a zip, the MSI or Scoop (the container image has it)
-- **.NET SDK** — only to install drivers and libraries from the Drivers screens, which restore them with `dotnet publish`
-
-## User-local install
-
-Use this to try DbDataSync out, or for a single-user setup.
-
-```powershell
-irm https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/install.ps1 | iex
-dbdatasync server setup
-```
-
-```bash
-curl -fsSL https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/install.sh | bash
-dbdatasync server setup
-```
-
-This installs into your own profile (`%LOCALAPPDATA%\Programs\DbDataSync`, `~/.local/share/dbdatasync` with a link in `~/.local/bin`) and puts it on your
-`PATH` (open a new terminal). It's not suitable for a Windows or systemd service, or for a machine shared by more than one person — see the sections below for those.
-
-## Windows machine-wide install
-
-Use this to register DbDataSync as a Windows service, or to make `dbdatasync` available to every user on a shared machine. Either run the
-[MSI](#windows-installer-msi), or run the install script from an elevated prompt:
-
-```powershell
-irm https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/install.ps1 -OutFile install.ps1
-.\install.ps1 -Machine -InstallService
-dbdatasync config check
-```
-
-`-Machine` installs into `$env:ProgramFiles\DbDataSync` and the machine `PATH`; `-InstallService` also registers the `DbDataSync` service (it runs
-`dbdatasync service install`), stopped. To register it yourself, or to set the service account (`--account`; a connection using integrated
-authentication connects as that account):
-
-```powershell
-dbdatasync service install
-```
-
-To remove: Add/Remove Programs for the MSI, or `dbdatasync service uninstall` and delete the folder for a script install; or `scoop uninstall dbdatasync`.
-
-## Linux machine-wide install
-
-Use this to register DbDataSync as a systemd service, or to make `dbdatasync` available to every user on a shared machine. The same steps work on macOS
-for the program itself (there is no service on macOS).
-
-```sh
-curl -fsSL https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/install.sh | sudo bash -s -- --system
-```
-
-`--system` installs into `/opt/dbdatasync` and links `dbdatasync` from `/usr/local/bin`. To register the service:
-
-```sh
-sudo dbdatasync service install
-dbdatasync config check
-```
-
-This runs as a dedicated `dbdatasync` system user by default (`--user` to override). It's enabled but not started — start it with
-`sudo systemctl start dbdatasync`.
-
-To remove: `sudo dbdatasync service uninstall`, then delete the install folder and the link.
-
-## Windows installer (MSI)
-
-Each release has `dbdatasync-v<version>-win-x64.msi` (the newest at
-<https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/dbdatasync.msi>): copy it to the machine and double-click, or
-`msiexec /i dbdatasync-v<version>-win-x64.msi /qn`. It installs to `C:\Program Files\DbDataSync`, puts that folder on the machine PATH and registers
-the `DbDataSync` service, stopped (`INSTALLSERVICE=0` skips that). It needs the .NET 10 runtime and says so before changing anything
-(`SKIPDOTNETCHECK=1` skips the check). Install a newer MSI over it to upgrade; Add/Remove Programs removes it, and your data stays. It is not signed yet, so Windows shows "Unknown publisher".
+- **.NET 10 runtime**, to run `dbdatasync` from a zip.
+- **.NET SDK**, only to restore driver libraries (`dbdatasync library install`, `driver install` and `package publish`, which restore them with `dotnet publish`).
 
 ## Zip install (install script or Scoop)
 
-Every release also carries `dbdatasync-v<version>-<win-x64|linux-x64>.zip` and the repository's standard install scripts
-([`dist/README.md`](https://github.com/DbDataSync/DbDataKit/blob/main/dist/README.md)). The zip needs the .NET 10 runtime on the machine
-(and the SDK, to install drivers from the Drivers screens):
+Every release carries `dbdatasync-v<version>-<win-x64|linux-x64>.zip` and the repository's standard install scripts
+([`dist/README.md`](https://github.com/DbDataSync/DbDataKit/blob/main/dist/README.md)). Every installer checks the zip against the release's `SHA256SUMS`.
 
 ```powershell
 irm https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/install.ps1 | iex
@@ -91,193 +25,31 @@ scoop install https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasy
 curl -fsSL https://github.com/DbDataSync/DbDataKit/releases/download/dbdatasync/dist/install.sh | bash
 ```
 
-Upgrade by running the installer again (`-Version` / `--version` picks a release other than the newest stable one; a beta or snapshot is installed with its
-version or with Scoop's `dist-beta` / `dist-snapshot` manifest, see `dist/README.md`). Run it from an elevated prompt with `-Machine` (Program Files) when DbDataSync runs as a
-service: it stops the `DbDataSync` service, replaces the files and starts it again, and `-InstallService` also registers the service (`dbdatasync service install`).
-Every installer checks the zip against the release's `SHA256SUMS`.
+This installs into your own profile (`%LOCALAPPDATA%\Programs\DbDataSync`, `~/.local/share/dbdatasync` with a link in `~/.local/bin`) and puts it on your
+`PATH` (open a new terminal). `-Version` / `--version` picks a release other than the newest stable one.
+
+## Machine-wide
+
+To make `dbdatasync` available to every user of a machine, unpack the zip into `$env:ProgramFiles\DbDataSync` on Windows or `/opt/dbdatasync` on Linux
+(`/usr/local/dbdatasync` on macOS) and run `dbdatasync tool install` from an elevated prompt (or with `sudo`): it puts that folder on the machine `PATH`
+(a `/usr/local/bin` link, an `/etc/paths.d` entry on macOS, the machine `PATH` on Windows). `dbdatasync tool uninstall` takes it off again.
 
 ## Updating
 
-**To update, install the newer release the same way you installed this one:** a newer MSI over the old one, the install script again (or with `-Version`),
-`scoop update`, an unpacked zip over the old files, or `docker pull` of a newer tag. Releases no longer carry a `DbDataSync.<version>.nupkg` or its `.sha512`
-(the dotnet tool package is gone), so **`dbdatasync update` finds no release to install from the first release without them**. The rest of this section describes
-that command and the versioned slots; it is being removed.
+Install the newer release the same way you installed this one: the install script again (or with `-Version`), `scoop update`, or an unpacked zip over the
+old files. The engine a Runner runs is updated by installing a newer `dbdatasync-runtime` package on the Runner.
 
-`dbdatasync update` lists what can be installed and lets you choose. With `--apply` it installs the version you
-choose and switches to it ([below](#applying-it)). Without `--apply` it only prints what to do:
+## Running replications
 
-```sh
-dbdatasync update
-```
-
-```
-Installed: 2026.9.16.1005
-
-stable
-  1) 2026.9.18.1918      built 2026-09-18 19:18 UTC  newer
-  2) 2026.9.16.1005      built 2026-09-16 10:05 UTC  installed
-
-beta
-  3) 2026.9.12.721-beta  built 2026-09-12 07:21 UTC
-
-snapshot
-  4) 2026.9.19.1432-snapshot.g65615e7  built 2026-09-19 14:32 UTC  newer
-
-Install which one? Type a number or a version (empty to cancel):
-```
-
-Without `--apply` it changes nothing. Use `dbdatasync update --list` to only list, `--channel stable|beta|snapshot`
-to narrow it, `--json` for scripts, and `--to <version>` to skip the prompt.
-
-| channel | what it is | where it comes from |
-| --- | --- | --- |
-| `stable` | a release | a GitHub Release in the DbDataKit repository, tag `dbdatasync/v<version>` |
-| `beta` | a prerelease (`-beta`) | a GitHub prerelease, tag `dbdatasync/v<version>-beta` |
-| `snapshot` | the newest build that has passed CI, before any release is cut | a GitHub prerelease for every commit that passes CI on `main` (not published at present), tag `dbdatasync/v<version>-snapshot.g<sha>`; the newest 20 are kept |
-
-DbDataSync is built in a repository shared with other products, so a release is recognised as DbDataSync's by its
-tag prefix (`dbdatasync/`) and by carrying a `DbDataSync.<version>.nupkg` and its checksum (releases made before the tool package was dropped); releases of other products in
-the same repository are never listed. Snapshot publishing is not switched on yet, so that channel is empty for now.
-
-A release is downloaded for you into a per-user staging folder (`~/.local/share/DbDataSync/updates`,
-`%LOCALAPPDATA%\DbDataSync\updates`; `--stage-dir` to change it), checked against the SHA-512 published
-beside it, and installed from that folder — no token or private feed is involved.
-That checksum catches a corrupted or truncated download, **not** a tampered release; trust rests on TLS to
-`github.com` and who can publish to the repository. nuget.org is not used by `update` while NuGet publishing is paused.
-
-If this copy was not installed as a dotnet tool (a development build, a zip, the MSI) or is a container image, there is nothing to
-update in place and it says so. For a container, pull a newer image tag.
-
-The release list is read from public APIs, anonymously; GitHub limits that to 60 requests an hour per
-address. Set `GITHUB_TOKEN` (or `GH_TOKEN`) to raise it — it is never required.
-
-### Applying it
+`dbdatasync` runs no replication itself. Publish the repository's replications to a Runner, which runs them on their schedules:
 
 ```sh
-sudo dbdatasync update --to 2026.9.18.1918 --apply
+dbdatasync package publish --to runner --server <runner> --channel prod --code <pairing code> --bind <slot>=<connection> --serve
 ```
 
-On Windows, run the same command without `sudo` from an elevated prompt.
-
-A machine-wide install keeps **two versions side by side**, in two slots. The service and `PATH` run a small
-launcher, which runs whichever slot `current.txt` names. In `/opt/dbdatasync/` (Windows:
-`C:\Program Files\DbDataSync\`):
-
-- the launcher — the file named `dbdatasync` (`dbdatasync.exe`), which the service and `PATH` run
-- `current.txt` — `a` or `b`
-- `versions/a/` and `versions/b/` — one dotnet tool install each
-
-`--apply` does this:
-
-1. Installs the version into the slot that is **not** running. Nothing in use is touched, which is what makes this
-   work on Windows.
-2. Stops the service.
-3. Switches `current.txt`.
-4. Starts the service, and checks it answers.
-
-If the service does not answer, `--apply` switches back and starts the previous version again. There is nothing to
-reinstall. The previous version stays in the other slot, and this command switches back to it later:
-
-```sh
-sudo dbdatasync update --rollback
-```
-
-It asks first (`--yes` skips the prompt, and is required when there is no terminal). `--url` says where to check the
-service answers (default: the configured `DbDataSync:App:Url`). `--health-timeout` says how many seconds to wait
-(default 90). `dbdatasync update --status` shows both slots, what the last update did, and the history. Each run's
-commands and output are logged to `<data directory>/updates/update.log`.
-
-**An install from before versioned slots** converts itself the first time you run `--apply` or `service install`, and
-says so. The running version becomes slot `a`, and the launcher replaces the tool's own `dbdatasync` at the same path,
-so the service and `PATH` need no change. The old `.store` is removed on a later run. After that, update with
-`dbdatasync update`, not `dotnet tool update --tool-path`, which would write over the launcher.
-
-A **global tool** (`dotnet tool install -g`) cannot keep two versions side by side. There, `update` prints the
-`dotnet tool` commands to run instead.
-
-The launcher itself does not change when you update. `dbdatasync launcher repair` replaces it with the running
-version's copy and re-points a registered service at it; that is rarely needed.
-
-### From the console
-
-Open the server in the dbdatakit console (its **Servers** page), then Admin → **Updates**: it shows the running version and what each slot holds. It gives the commands above for this server,
-with its data directory filled in, each with a copy button. Each listed release has a **Commands…** button with that
-version's exact `--apply` command. The console does not apply updates itself: run the command on the server.
-
-While an update runs from a shell, the page shows its progress. The service is unreachable for a few seconds while it
-switches; the page keeps asking rather than reporting an error, and you don't have to sign in again (sessions live in
-the state database).
-
-Listing releases on the page calls GitHub, so it is **off by default**. Set `DbDataSync:Updates:Mode` to
-`manual` (Admin → Configuration, or `server.yaml`) to turn it on. The commands are shown either way. Only
-`stable` is listed unless you allow more with `DbDataSync:Updates:Channels` (`stable`, `beta`, `snapshot`,
-comma-separated). A snapshot is a development build: its download is checked only against a checksum published beside
-it, which catches corruption, not tampering.
-
-## Connecting a console
-
-`dbdatasync` serves no web app: the API, the scheduler and the runs are the server, and its screens are the web app of the **dbdatakit console**. Install and start the
-console once for all your servers (`DbDataKit/README.md` in the repository), then pair each server with it:
-
-```sh
-dbdatasync server pair                      # on the server: a single-use code, valid for a few minutes
-dbdatakit instance add https://sync.example:5080 --code <code>     # or the console's Servers page
-```
-
-Sync serves **https by default**: `https://localhost:5080`. Earlier releases served plain `http://localhost:5080`; a client that still uses that address is refused.
-With no certificate configured, the first start makes a self-signed one in `<repo>/tls` (`dbdatasync.pfx`, and `dbdatasync.cer` beside it, for the machine's name and `localhost`), prints where it wrote it, and the renewal service keeps it. A certificate you configure
-(`dbdatasync cert use-pem`, `use-pfx`, the Windows store) is used instead and nothing is generated. Plain http is served only when you ask for it with `--url http://...` (or `DbDataSync:App:Url`), and then no certificate is made.
-`dbdatasync health check` with no flags checks the default address and trusts the generated `dbdatasync.cer` for it.
-
-Pairing needs the server to listen on **HTTPS** (a certificate of its own: see [Certificates](certificates.md)), because the console pins the certificate the server
-presents. Behind a proxy that ends TLS, bind plain HTTP as described under [Plain HTTP and reverse proxies](configuration.md#plain-http-and-reverse-proxies) and give the
-server the fingerprint of the certificate the proxy presents in `DbDataSync:Management:CertificateFingerprint`. A person who opens the server's own address in a browser gets a message
-saying so; set `DbDataSync:Console:Url` (environment `DbDataSync__Console__Url`, or `DBDATAKIT_URL`) to the console's address and the message names it.
-
-## Running in a container
-
-Use this for a self-contained deployment with no `PATH` or service to manage.
-
-```sh
-docker run -p 8443:8443 -v dbdatasync-data:/var/lib/dbdatasync ghcr.io/dbdatasync/dbdatasync:latest
-```
-
-The image serves **https** on port 8443, as the other images of the suite do. On its first start the server makes a self-signed certificate in the volume (`tls/dbdatasync.pfx`, with its password beside it, bound in
-`dbdatasync.config.yaml` and renewed by the server's daily check). A console pins that certificate's fingerprint when it pairs, so nothing else needs to trust it; a browser or `curl` needs `-k` or the certificate added
-to its trust. To use a certificate of your own, put it in the volume and point `Kestrel:Certificates:Default:Path` at it (`dbdatasync cert use-pfx`, see [certificates](certificates.md)); the image makes none when one is configured.
-The image carries no web app (the screens are the console's: see [Connecting a console](#connecting-a-console)).
-
-Earlier images served plain HTTP on 8080. That port is gone: a client or script that used `http://localhost:8080` gets a refused connection, and the health check moved with it (`dbdatasync health check --url https://127.0.0.1:8443`).
-To run behind a proxy that ends TLS instead, override the entrypoint to bind plain HTTP, allow it, and turn the image's health check off or point it at that address
-(see [Plain HTTP and reverse proxies](configuration.md#plain-http-and-reverse-proxies)):
-
-```sh
-docker run -p 8080:8080 -v dbdatasync-data:/var/lib/dbdatasync \
-  -e DbDataSync__App__TrustedProxies=<proxy address> \
-  --health-cmd 'dotnet /app/DbDataSync.Cli.dll health check --url http://127.0.0.1:8080' \
-  --entrypoint dotnet ghcr.io/dbdatasync/dbdatasync:latest /app/DbDataSync.Cli.dll server run --url http://0.0.0.0:8080
-```
-
-Plain HTTP is then served only to the proxy's `X-Forwarded-Proto: https` requests and to the container itself (or to everyone, with `-e DbDataSync__App__AllowInsecureHttp=true`, which sends credentials in clear text).
-
-One volume, at `/var/lib/dbdatasync`, holds both the config repository and the state database. Images are published for
-**linux/amd64 and linux/arm64** (an Arm server, a Raspberry Pi 4 or 5, AWS Graviton); Docker picks the one that matches the
-machine.
-
-| tag | what it is |
-| --- | --- |
-| `latest`, `2026.9.20.2152` | the default image. It includes the .NET SDK, which the server does not need (it resolves libraries from a NuGet feed itself) |
-| `runtime`, `2026.9.20.2152-runtime` | the smaller image, with no SDK: it behaves the same; a catalog library at its pinned version is installed from the image with no network, any other needs the NuGet feed |
-
-`latest` and `runtime` follow the newest **stable** release. A beta gets only its exact version tags (`…-beta`,
-`…-beta-runtime`), so pulling `latest` never gives you a prerelease. To stay put on a version, use its tag.
-
-There is nothing to update in place: `dbdatasync update` inside a container says so. Pull a newer tag and start the container
-again — the volume keeps your data. The image reports the version it was built for: `docker run --rm --entrypoint dotnet <image> /app/DbDataSync.Cli.dll version`.
-
-To build it yourself from a checkout instead, `docker compose -f docker-compose.app.yml up` (run in `DbDataSync/`) builds the same Dockerfile. Building by hand, run `docker build -f DbDataSync/Dockerfile .` from the repository root: the image needs the sibling `Shared/` folder, so the root is the build context.
+The pairing code comes from the Runner (`dbdatarunner server pair`), and each slot is a connection of the set, bound to a connection the Runner holds. The
+Workspace publishes a sync project the same way from its screens. See [Getting started](getting-started.md).
 
 ## Next: Configuration
 
-Once DbDataSync is installed, see [Configuration](configuration.md) for every flag and environment
-variable it accepts.
+See [Configuration](configuration.md) for what configures the command line and the engine.

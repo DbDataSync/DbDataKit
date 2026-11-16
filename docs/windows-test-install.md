@@ -78,7 +78,7 @@ Each task below names where its full description lives. The console's **Docs** h
 
 | # | Service | Task | Pass when | Details |
 | --- | --- | --- | --- | --- |
-| 4.1 | Sync | Open Sync from **Servers**. Add a connection for `demo` and one for `demo_target`, make a replication from the first to the second, map `dbo.orders` and press **Runs → Run Now** | the run ends succeeded and `demo_target.dbo.orders` has 5 rows | `DbDataSync/docs/getting-started.md` ("Your first replication") |
+| 4.1 | Sync | The Sync server was deleted (plan 33 SC23): a replication is authored in the Workspace and run by the Runner, as 4.9 checks | 4.9 passes | `DbDataSync/docs/getting-started.md` ("Your first replication") |
 | 4.2 | Build | Open Build from **Servers**, **Projects → New project** from a template, add a connection to `demo`, then in a workspace **Import from a connection** for `dbo.orders`, **Write the compiled files**, commit, and deploy the plan | the plan applies and the table or view it names exists in `demo` | `DbDataBuild/docs/interfaces.md` ("Starting a project, a model or an import from the console") |
 | 4.3 | Gateway | Add `demo` as a `sqlserver` data source (the Gateway's **Data sources** screen, or `server.yaml` as the Gateway README describes) open to everyone for this test (`everyone: true`; a source that names no group and is not open is refused), make a service account and token (`dbdatagateway identity service-account-add --name me`, then `identity token-create --account me --name test`), and query it | `dbdatagateway query run --insecure --user <account> --password <token> --datasource demo --sql "SELECT count(*) FROM dbo.orders"` prints 5 | `DbDataGateway/README.md` ("Quick start", "Data sources") |
 | 4.4 | Store | Open the Store from **Servers**, add a connection to `demo`, save a `model/1` with one entity whose `storage` names that connection, **create the tables**, and write a row | the row is in the entity's table and the model's history lists your save | `DbDataStore/README.md` ("The model", "Writing data", "The console's screens") |
@@ -120,28 +120,6 @@ scoop uninstall -g dbdatakit-full   # removes the services, the pairings and the
 ```
 
 **Pass:** after an update, step 3 passes again with the new version; after an uninstall, no DbDataKit service is left.
-
-## 6. Moving an existing Sync install
-
-Do these against a **copy** of your old folder, never the live one. The full list, with the reason for each, is
-[`docs/plans/RELEASE-NOTES-PENDING.md`](plans/RELEASE-NOTES-PENDING.md) (the DbDataSync section); the ones that stop you first:
-
-1. **Settings are `server.yaml`.** `dbdatasync.config.yaml` and any `appsettings*.json` in the folder are refused, naming the file.
-   Set the server up again from `docs/configuration.md` (many key names changed).
-2. **Every config file needs a `schemaVersion`**, and unknown keys are errors. Run `dbdatasync config check --repo <copy>` and fix
-   what it names.
-3. **Passwords are not carried over.** Connection and state-database passwords moved to an encrypted store (`secrets\` in the folder,
-   `dbdatakit:sync:...` names). Set each again with `dbdatasync secret set dbdatakit:sync:connection:<name> <value>`.
-4. **Scripts are `.csx`.** `config\scripts\<name>.cs` files with an `entryType` are no longer read; rename them, drop `entryType`,
-   and end the script with an expression with no semicolon.
-5. **Users start fresh.** Nothing is read from Sync's old users, sessions or invitations; the console's first administrator is the
-   one you made in step 2.
-6. **The first start cancels queued work** (the work queue tables are replaced) and an on-demand reload that had not started must be
-   asked for again.
-7. **Some loads now fail where they used to store a wrong value** (for example a date sent into a text column on SQL Server). The
-   message names the table, the column and the types; the fix is a Transform on the mapped column.
-8. **MySQL, MariaDB and Oracle connections verify TLS by default.** A server with a private certificate needs the connection's
-   `SSL Mode` or `Encrypt` property set.
 
 ## 7. Known gaps
 

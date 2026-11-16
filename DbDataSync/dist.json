@@ -1,7 +1,7 @@
 {
   "product": "dbdatasync",
   "displayName": "DbDataSync",
-  "description": "Cross-database replication: a git-tracked config repository, a scheduler, and a web console. Needs the .NET 10 runtime (and SDK, to install drivers from the console).",
+  "description": "Cross-database replication: a command line on a git-tracked configuration repository, and the engine a Runner runs. Needs the .NET 10 runtime (and SDK, to restore driver libraries).",
   "homepage": "https://github.com/DbDataSync/DbDataKit/tree/main/DbDataSync",
   "license": "MIT",
   "platforms": {
@@ -12,19 +12,6 @@
       "exe": "dbdatasync"
     }
   },
-  "windowsScope": "user",
-  "announces": true,
-  "globalEnv": [
-    { "name": "DBDATAKIT_DATA", "programData": "DbDataKit" }
-  ],
-  "service": {
-    "name": "DbDataSync",
-    "register": "service install",
-    "unregister": "service uninstall"
-  },
   "requiresDotnet": "10.0",
-  "msi": {
-    "upgradeCode": "3C9A4F18-6D2E-4B75-A0E3-5F1B8C7D2A94",
-    "addToPath": true
-  }
+  "notes": "A command line on a Sync configuration repository (dbdatasync script test, provisioning plan, library, driver, lineage, package publish --to runner) and, as the dbdatasync-runtime package, the engine a Runner starts for the replications' tasks. The Sync server was deleted (plan 33 SC23): replications are authored in a sync project of the Workspace and published from there to a Runner, which runs them."
 }
