@@ -4,7 +4,6 @@
     { "product": "dbdatagateway", "meta": "DbDataGateway/dist.json", "folder": "gateway" },
     { "product": "dbdatarunner", "meta": "DbDataRunner/dist.json", "folder": "runner" },
     { "product": "dbdatasync", "meta": "DbDataSync/dist.json", "folder": "sync" },
-    { "product": "dbdatabuild", "meta": "DbDataBuild/dist.json", "folder": "build" },
     { "product": "dbdataworkspace", "meta": "DbDataWorkspace/dist.json", "folder": "workspace" }
   ]
 }

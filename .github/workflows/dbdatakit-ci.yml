@@ -58,8 +58,8 @@ jobs:
           testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
       - run: dotnet test --project tests/DbDataKit.Server.Tests -c Release --no-build --minimum-expected-tests 10
 
-  # The real programs in one run (plan 13a, T12; E05 adds a Sync server): a Build server and a Gateway started from their built output, a console in the test between them. A Build server publishes and updates its own data source on the Gateway, is refused on
-  # one made by hand and on extensions.gateway, cannot adopt for itself, and the Gateway's audit names the person and the Build server. The second test (J12) publishes a project's semantic model and queries it, so a SQL Server from testenv/ is up for that job.
+  # The real programs in one run (plan 13a, T12; E05 adds a Sync server): a Gateway, a Sync server, a runner and a Workspace started from their built output, a console in the test between them (the Build server's
+  # publishing tests went with it, plan 33 SC23); a SQL Server and a PostgreSQL from testenv/ are up for that job.
   # The fourth (plan 28c E12e) is a Sync replication that really is owned by a runner: a Sync server and a runner (both programs) with the engine as the runtime package, the replication set published with `dbdatasync package publish`,
   # and a continuous and a periodic replication moved to the runner and back, SQL Server to PostgreSQL (and one SQL Server to SQL Server); it needs the PostgreSQL of testenv/ as well, and takes about five minutes.
   servers:
@@ -73,12 +73,6 @@ jobs:
         with:
           product: DbDataKit
           global-json: DbDataKit/global.json
-      - uses: ./.github/actions/native-cache
-      - name: Build a Build server
-        working-directory: DbDataBuild
-        run: |
-          scripts/fetch-native.sh
-          dotnet build src/DbDataBuild.Cli -c Debug
       - name: Build a Gateway
         working-directory: DbDataGateway
         run: dotnet build src/DbDataGateway.Server -c Debug
@@ -97,13 +91,13 @@ jobs:
       - run: dotnet test --project tests/DbDataKit.Server.Servers.Tests -c Debug --no-build --minimum-expected-tests 4
 
   # The web app in a real browser against a real console: the first-run invitation, a passkey made in a virtual authenticator, signing out and back in with it, the users list,
-  # pairing a real Build server, and (M12) the Monitoring page across a Build server that runs a failing schedule, a Sync replication that lags and a Gateway that locked a user out.
+  # pairing a real runner, and (M12) the Monitoring page across a Sync replication that lags and a Gateway that locked a user out.
   playwright:
     needs: changes
     if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # A PostgreSQL for the deploy the browser test approves in the console.
+    # A PostgreSQL for the stories that need one (the apps host and authoring stories, the state move).
     services:
       postgres:
         image: postgres:17
@@ -120,7 +114,7 @@ jobs:
         with:
           product: DbDataKit
           global-json: DbDataKit/global.json
-          # the Build server the browser test pairs with links the pinned DuckDB engine
+          # the dbdatabuild a Workspace runs for a build project links the pinned DuckDB engine
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -165,9 +159,9 @@ jobs:
         working-directory: Shared/web
         run: npm run build:fixture-app -w @dbdatakit/visuals
       - run: dotnet build DbDataKit.slnf -c Debug
-      # A real Build server for the console to pair with (the pairing, the version and the health the console shows are its own).
+      # dbdatabuild, which a Workspace server runs as a child process for a build project (the Build server itself was deleted, plan 33 SC23).
       - uses: ./.github/actions/native-cache
-      - name: Build a Build server
+      - name: Build dbdatabuild
         working-directory: DbDataBuild
         run: |
           scripts/fetch-native.sh
@@ -254,19 +248,13 @@ jobs:
         working-directory: .
     steps:
       - uses: actions/checkout@v7
-      # the images of Build, Gateway and Sync fetch the DuckDB engine; .duckdb-archives/ is inside their build context
+      # the images of Gateway and Sync fetch the DuckDB engine; .duckdb-archives/ is inside their build context
       - uses: ./.github/actions/duckdb-cache
         with:
           rids: linux-x64
-      # the Build image also fetches the polyglot library; .native-archives/ is inside its build context
-      - uses: ./.github/actions/native-cache
-        with:
-          rids: linux-x64
-      - name: Build server and console
-        run: dist/compose/check.sh dist/compose/build.yml dbdatabuild
       - name: Gateway and console
         run: dist/compose/check.sh dist/compose/gateway.yml dbdatagateway
       - name: Sync server and console
         run: dist/compose/check.sh dist/compose/sync.yml dbdatasync
       - name: The whole suite (docs/quickstart.md)
-        run: dist/compose/check.sh dist/compose/quickstart.yml dbdatagateway dbdatasync dbdatabuild
+        run: dist/compose/check.sh dist/compose/quickstart.yml dbdatagateway dbdatasync

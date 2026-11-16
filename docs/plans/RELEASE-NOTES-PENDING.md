@@ -129,6 +129,17 @@ to it in the pull request that makes the change; a release moves the entries int
 - **New: the Edit tab writes the compiled files.** *Write the compiled files* runs `project compile` in the workspace (the author role) and says how many rendered files it wrote; before this the console could only check, so a project made in the console could not be deployed from it (a deploy refuses a `rendered/` that is not a fresh render, DDB-424). Write them, commit them with the rest of the draft and merge. The end-to-end story (create from a template, edit, commit, merge, plan, approve and apply by a second person on a PostgreSQL) runs in the console's Playwright suite. (W10)
 - **New: `dbdatabuild server schedule owners|observe|cutover|rollback|compare` moves a refresh plan's schedule from the Build server to a runner, one plan at a time.** `project publish --to runner` now records each published task on the runner as scheduled by the Build server (owner `old`) before the version can activate, so a published plan never runs from two schedulers: **a project that no Build server schedules, and that the runner is to schedule from the first activation, is published with `--runner-schedules`** (a pairing that may not set an owner, a publisher-only one, is refused with a message that says so). The Build server's `server.yaml` has a new `schedule:` section (`runner: {server, channel}` and `owners: {<project>/<connection>/<plan>: old|observe|runner}`), read strictly; the verbs write it. The runner's state gains two tables for it (`task_owner`, `task_decision`) in the same module version as the other unreleased runner changes. See `DbDataBuild/docs/operations.md` section 11. (28c E09)
 
+## DbDataBuild (the server)
+
+- **The Build server is gone (plan 33 SC23); dbdatabuild is a command line on a project folder and the runtime a Runner starts.** `dbdatabuild server` (with `project`, `proxy`
+  and `schedule`), `service`, `health`, `state`, `secret` (with `send --to runner`), `lineage` and `semantic publish|rollback` answer with a sentence that names where each feature went
+  (exit code 2), and the `DbDataBuild` service, its MSI, its container image, its compose file, its console screens and its place in `dbdatakit-full` are gone. Author a project in
+  a build project of the Workspace and publish it from there to a Runner and a Gateway; its refresh plans run on the Runner from the first activation (`--runner-schedules` is
+  accepted and changes nothing; nothing is handed back to a Build scheduler); apply a plan, acknowledge a block or load seeds as the manual Runner tasks `apply_plan`, `ack` and
+  `seed` of the operations package; bind the logins on the Runner (the package's `build-login` slots). `semantic describe|query|explain|members` take `--address`; `--gateway` and
+  `--server-dir` named the server's pairings and now say so. The server's state database, secret store, projects and pairings are not read any more: nothing is imported.
+  Unregister the old service (`sc delete DbDataBuild` or `systemctl disable --now dbdatabuild`) before you install this release.
+
 ## DbDataStore
 
 - **The Store server is gone (plan 33 SC23); the install is four services (console, Workspace, Gateway, Runner).** `dbdatastore server`, `service`, `health`, `state` and `secret`

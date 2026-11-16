@@ -1,5 +1,5 @@
 import { parseYaml } from '@dbdatakit/shell'
-import type { GraphEdge, GraphNode } from '@dbdatakit/build/graph'
+import type { GraphEdge, GraphNode } from './build/types'
 
 /** The graph of one or more connections' compiled loads, and what could not be read. */
 export interface LoadGraph {

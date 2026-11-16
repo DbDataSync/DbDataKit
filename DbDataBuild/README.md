@@ -29,9 +29,20 @@ scoop install https://github.com/DbDataSync/DbDataKit/releases/download/dbdatabu
 curl -fsSL https://github.com/DbDataSync/DbDataKit/releases/download/dbdatabuild/dist/install.sh | bash
 ```
 
-On Windows there is also an installer to copy and double-click: `dbdatabuild-v<version>-win-x64.msi` on each release, the newest at
-<https://github.com/DbDataSync/DbDataKit/releases/download/dbdatabuild/dist/dbdatabuild.msi> (installs to Program Files and puts it on the PATH;
-`dist/README.md` has the options).
+There is no Windows installer and no service: dbdatabuild is a command line on a project folder and the runtime a Runner starts for a project's tasks
+(`--runner-task`). The Build server (`dbdatabuild server`, its screens in the console, its scheduler and its service) was deleted (plan 33 SC23); where each <!-- retired-name-ok -->
+of its features went:
+
+| What the server did | Where it is now |
+| --- | --- |
+| hosted projects; their files, models, graph, checks, compile, sample, import, views, deploy plans | a build project of the Workspace (`dbdataworkspace`), edited in the console |
+| ran refresh plans on their schedules (`server run --scheduler`, `server schedule`) | the Runner: `project publish --to runner` (or the Workspace's publish) and the Runner's own schedule; the runner schedules from the first activation |
+| applied a plan, acknowledged a block, loaded seeds for a person | the manual tasks `apply_plan`, `ack` and `seed` of the operations package (`project publish --to runner --operations`), run on the Runner under the person's name |
+| kept the logins (`secret`, `secret send --to runner`) | the Runner: bind each login to the package's `build-login` slot (its Packages page) |
+| published data sources and semantic models to a paired Gateway (`server proxy`, `semantic publish`) | the Workspace's publish to a Gateway (the models and data sources `project publish --to gateway --out` writes, no login) |
+| `lineage`, `state`, `health`, `service` | the Workspace's Lineage panel and the Runner's run lineage; the Runner's state and health |
+
+Each of those commands answers with that sentence and exit code 2 (a clean break, never a silent one).
 
 ## A first look
 
@@ -101,5 +112,3 @@ The real-engine suite uses throwaway SQL Server and PostgreSQL containers (`test
 ## License
 
 MIT. See `LICENSE` and `THIRD-PARTY-NOTICES.md`.
-
-The server's state database (the scheduler's, used with `server run --scheduler`) is `state.db` in its directory unless the `state:` section of `server.yaml` names another engine (plan 29b C07, the section every product shares: `engine`, `connection` with a `Password=secret:NAME` or `env:NAME` reference, `namespaces`, `retention`). The first place that names a setting wins: `--state-engine` and `--state-connection` on `server run`, then `DBDATAKIT_STATE_BUILD_ENGINE` and `DBDATAKIT_STATE_BUILD_CONNECTION` (else the install-wide `DBDATAKIT_STATE_ENGINE` and `DBDATAKIT_STATE_CONNECTION`), then the file, then SQLite; a setting in the file that is not one is refused naming `server.yaml`. It can be looked at with `dbdatabuild state show` (engine, where each setting came from, namespaces, module versions, pending migrations; read-only) and `dbdatabuild state test` (opens it read-only, checks rights, engine version and clashes, and stops at the first failure with the fix); `dbdatabuild state grants` prints the `GRANT` statements for a server engine (SQLite has none). `dbdatabuild state init --topology service|group|install` (see `DbDataKit.State.Cli`) writes the `state` section of the server's `server.yaml` for a SQLite file per service (the default, which needs no call), one database per group or one for the install, and prints or, with `--admin-connection` and `--apply`, runs the schemas and the login's rights; the password in `--connection` must be a reference. `dbdatabuild state export --to <directory> [--repo <server directory>]` writes the scheduler's state as a snapshot (stop the server first), `dbdatabuild state import --from <directory>` loads it into an empty database's state, `dbdatabuild state verify --snapshot <directory> [--db]` compares a snapshot with itself or with the state, and `dbdatabuild state move --to-engine <engine> --to-connection <string>` exports, imports, verifies and then writes the `state:` section of the server's `server.yaml`, which is where the server reads it.

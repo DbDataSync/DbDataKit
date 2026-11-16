@@ -5,8 +5,8 @@ import json
 import os
 import sys
 
-# product folder -> program name; DbDataSync has no `state` noun yet, and DbDataStore has none since plan 33 SC23 deleted its server (they are not listed)
-PRODUCTS = {"DbDataKit": "dbdatakit", "DbDataGateway": "dbdatagateway", "DbDataBuild": "dbdatabuild", "DbDataRunner": "dbdatarunner", "DbDataWorkspace": "dbdataworkspace"}
+# product folder -> program name; DbDataSync has no `state` noun yet, and DbDataStore and DbDataBuild have none since plan 33 SC23 deleted their servers (they are not listed)
+PRODUCTS = {"DbDataKit": "dbdatakit", "DbDataGateway": "dbdatagateway", "DbDataRunner": "dbdatarunner", "DbDataWorkspace": "dbdataworkspace"}
 
 
 def problems(root):

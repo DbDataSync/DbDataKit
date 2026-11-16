@@ -1,4 +1,3 @@
-using DbDataBuild.Cli.Server;
 using DbDataBuild.Execution;
 using DbDataBuild.State;
 using DbDataKit.State.Tracking;
@@ -51,7 +50,7 @@ internal static class RunnerTrackingCopy
             var status = await TrackingStore.StatusAsync(read, scope.Engine, scope.SchemaName, ct).ConfigureAwait(false);
             if (status.State != TrackingState.Ready) return $"{connection}: the tracking tables are not at layout {TrackingSchema.Version} (`connection init --upgrade --apply`), so they are not copied";
             var identity = BuildTrackingIdentity.For(login, scope);
-            var source = new BuildTrackingSource(read, scope, identity, BuildTrackingHost.DefaultSettleLag);
+            var source = new BuildTrackingSource(read, scope, identity, TimeSpan.FromSeconds(5));
             var copier = new RemoteBuildTrackingCopier(identity, source, copy, (kind, json) => MetadataInfoRows.HasRows(kind) ? MetadataInfoRows.From(kind, json) : null);
             var result = await copier.RunAsync(budget, ct).ConfigureAwait(false);
             return result.Ok ? $"{connection}: {result.Copied} tracking row(s) copied{(result.CaughtUp ? "" : ", not caught up yet")}" : $"{connection}: {string.Join("; ", result.Problems)}";

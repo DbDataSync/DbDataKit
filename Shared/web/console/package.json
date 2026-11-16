@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@dbdatakit/admin": "*",
-    "@dbdatakit/build": "*",
     "@dbdatakit/gateway": "*",
     "@dbdatakit/runner": "*",
     "@dbdatakit/store-ui": "*",

@@ -9,8 +9,8 @@ param(
   [Parameter(Mandatory)][string]$ConsoleMsi,
   [Parameter(Mandatory)][string]$ProductMsi,
   [Parameter(Mandatory)][string]$ProductExe,           # built from this commit
-  [string]$ProductProduct = 'dbdatabuild',
-  [int]$ProductPort = 8470,
+  [string]$ProductProduct = 'dbdatarunner',
+  [int]$ProductPort = 18495,
   [int]$ConsolePort = 8480,
   [int]$AnnouncePort = 8481,
   [string]$LogDir = $env:RUNNER_TEMP

@@ -78,7 +78,7 @@ def member(product, exe=None, service=None, vc=False, win=True, env=None):
 MEMBERS = [
     ("dbdatakit", "console", member("dbdatakit", service={"name": "KitConsole", "register": "service install"}, env=[{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}, {"name": "KIT_DIR", "programData": "Kit\\console"}])),
     ("dbdatagateway", "gateway", member("dbdatagateway", service={"name": "gw", "register": "service install --name {name}"}, vc=True, env=[{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}])),
-    ("dbdatabuild", "build", member("dbdatabuild", env=[{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}, {"name": "BUILD_DIR", "programData": "Kit\\build"}])),          # no service: it is paired but not registered
+    ("dbdatarunner", "runner", member("dbdatarunner", env=[{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}, {"name": "RUNNER_DIR", "programData": "Kit\\runner"}])),          # no service: it is paired but not registered
 ]
 
 
@@ -149,8 +149,8 @@ class SuiteManifestTests(unittest.TestCase):
         n = len(MEMBERS)
         self.assertEqual(len(m["architecture"]["64bit"]["url"]), n)
         self.assertEqual(len(m["architecture"]["64bit"]["hash"]), n)
-        self.assertEqual(m["extract_to"], ["console", "gateway", "build"])
-        self.assertEqual(m["bin"], [["console\\dbdatakit.exe", "dbdatakit"], ["gateway\\dbdatagateway.exe", "dbdatagateway"], ["build\\dbdatabuild.exe", "dbdatabuild"]])
+        self.assertEqual(m["extract_to"], ["console", "gateway", "runner"])
+        self.assertEqual(m["bin"], [["console\\dbdatakit.exe", "dbdatakit"], ["gateway\\dbdatagateway.exe", "dbdatagateway"], ["runner\\dbdatarunner.exe", "dbdatarunner"]])
         for url, folder, (exe, alias) in zip(m["architecture"]["64bit"]["url"], m["extract_to"], m["bin"]):
             self.assertTrue(exe.startswith(folder + "\\"))
             self.assertIn(f"/{alias}/v", url)
@@ -168,7 +168,7 @@ class SuiteManifestTests(unittest.TestCase):
     def test_the_bound_member_list_is_in_start_order_with_each_services_commands(self):
         post = "\n".join(self.manifest()["post_install"])
         self.assertLess(post.index("Product = 'dbdatakit'"), post.index("Product = 'dbdatagateway'"))
-        self.assertLess(post.index("Product = 'dbdatagateway'"), post.index("Product = 'dbdatabuild'"))
+        self.assertLess(post.index("Product = 'dbdatagateway'"), post.index("Product = 'dbdatarunner'"))
         self.assertIn("Service = 'KitConsole'; Register = 'service install'; Unregister = ''", post)
         self.assertIn("Register = 'service install --name gw'", post)       # {name} is substituted
         self.assertIn("Service = ''; Register = ''", post)                   # a member with no service is bound without one and left alone
@@ -291,12 +291,12 @@ class SuiteManifestTests(unittest.TestCase):
     def test_the_variables_are_every_members_global_env_in_order(self):
         m = self.manifest()
         script = "\n".join(m["post_install"])
-        self.assertLess(script.index("KIT_DIR"), script.index("BUILD_DIR"))
+        self.assertLess(script.index("KIT_DIR"), script.index("RUNNER_DIR"))
         self.assertIn("Kit\\console", script)
-        self.assertIn("Kit\\build", script)
+        self.assertIn("Kit\\runner", script)
         undo = "\n".join(m["pre_uninstall"])
         self.assertIn("KIT_DIR", undo)
-        self.assertIn("BUILD_DIR", undo)
+        self.assertIn("RUNNER_DIR", undo)
         self.assertIn("Open a new terminal", m["notes"])
 
     def test_the_shared_data_root_is_set_once_and_never_removed_on_uninstall(self):
@@ -311,7 +311,7 @@ class SuiteManifestTests(unittest.TestCase):
         self.assertIn("DBDATAKIT_DATA is left in place", m["notes"])
 
     def test_members_that_disagree_on_a_variable_are_refused_naming_it(self):
-        members = [(p, f, dict(meta, globalEnv=[{"name": "DBDATAKIT_DATA", "programData": "Elsewhere"}]) if p == "dbdatabuild" else meta) for p, f, meta in MEMBERS]
+        members = [(p, f, dict(meta, globalEnv=[{"name": "DBDATAKIT_DATA", "programData": "Elsewhere"}]) if p == "dbdatarunner" else meta) for p, f, meta in MEMBERS]
         self.suite = lay_out(self.tmp, members=members)
         r, _ = self.bind()
         self.assertNotEqual(r.returncode, 0)
@@ -329,17 +329,17 @@ class SuiteManifestTests(unittest.TestCase):
         notes = self.manifest()["notes"]
         self.assertIn("dbdatakit service install", notes)
         self.assertIn("dbdatagateway service install --name gw", notes)
-        self.assertNotIn("dbdatabuild service install", notes)      # dbdatabuild lists no service
+        self.assertNotIn("dbdatarunner service install", notes)      # dbdatarunner lists no service here
         self.assertIn("dbdatakit server run", notes)
         self.assertIn("dbdatagateway server pair --max-role", notes)
-        self.assertIn("dbdatabuild server pair --max-role", notes)
+        self.assertIn("dbdatarunner server pair --max-role", notes)
         self.assertNotIn("dbdatakit server pair", notes)             # the console is not paired with itself
         # each member's management address is the product's default (the Gateway's is https://localhost:8816, on by default); a member this file knows no default for stays generic
         self.assertIn("dbdatakit instance add https://localhost:8816 --code <code>", notes)
-        self.assertIn("dbdatakit instance add https://127.0.0.1:8470 --code <code>", notes)
+        self.assertIn("dbdatakit instance add https://127.0.0.1:8495 --code <code>", notes)
         self.assertNotIn("<https address of that server>", notes)
         self.assertLess(notes.index("dbdatagateway server pair"), notes.index("instance add https://localhost:8816"))
-        self.assertLess(notes.index("dbdatabuild server pair"), notes.index("instance add https://127.0.0.1:8470"))
+        self.assertLess(notes.index("dbdatarunner server pair"), notes.index("instance add https://127.0.0.1:8495"))
         self.assertIn("one install route per machine", notes)
         self.assertLess(notes.index("dbdatakit service install"), notes.index("dbdatagateway service install"))
         self.assertLess(notes.index("dbdatagateway service install"), notes.index("dbdatagateway server pair"))
@@ -356,15 +356,15 @@ class SuiteManifestTests(unittest.TestCase):
         r, path = self.bind(table=table)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("dbdatagateway", r.stderr)
-        self.assertNotIn("dbdatabuild (", r.stderr)
+        self.assertNotIn("dbdatarunner (", r.stderr)
         self.assertFalse(path.exists())
 
     def test_a_member_with_no_win_x64_platform_is_refused_naming_it(self):
-        members = MEMBERS[:2] + [("dbdatabuild", "build", member("dbdatabuild", win=False))]
+        members = MEMBERS[:2] + [("dbdatarunner", "runner", member("dbdatarunner", win=False))]
         self.suite = lay_out(self.tmp, members)
         r, _ = self.bind()
         self.assertNotEqual(r.returncode, 0)
-        self.assertIn("dbdatabuild", r.stderr)
+        self.assertIn("dbdatarunner", r.stderr)
         self.assertIn("win-x64", r.stderr)
 
     def test_a_missing_member_dist_json_is_refused_naming_it(self):
@@ -439,9 +439,10 @@ class SuiteInstallTestPlumbingTests(unittest.TestCase):
         self.assertIn("msi-announce-e2e.ps1", workflow)
 
     def test_every_service_product_announces_except_the_console(self):
-        for product in ("DbDataGateway", "DbDataSync", "DbDataBuild", "DbDataRunner", "DbDataWorkspace"):
+        for product in ("DbDataGateway", "DbDataSync", "DbDataRunner", "DbDataWorkspace"):
             self.assertTrue(json.loads((REPO_ROOT / product / "dist.json").read_text())["announces"], product)
-        self.assertNotIn("announces", json.loads((REPO_ROOT / "DbDataStore" / "dist.json").read_text()))   # no Store server since plan 33 SC23
+        for product in ("DbDataStore", "DbDataBuild"):   # no Store or Build server since plan 33 SC23
+            self.assertNotIn("announces", json.loads((REPO_ROOT / product / "dist.json").read_text()))
         self.assertNotIn("announces", json.loads((REPO_ROOT / "DbDataKit" / "dist.json").read_text()))
 
     def test_the_job_runs_after_the_dry_run_checks_and_only_in_a_dry_run(self):
@@ -461,7 +462,7 @@ class SuiteInstallTestPlumbingTests(unittest.TestCase):
 
 
 class ShippedSuiteTests(unittest.TestCase):
-    PRODUCTS = ["dbdatakit", "dbdatagateway", "dbdatarunner", "dbdatasync", "dbdatabuild", "dbdataworkspace"]   # the Store server was deleted (plan 33 SC23)
+    PRODUCTS = ["dbdatakit", "dbdatagateway", "dbdatarunner", "dbdatasync", "dbdataworkspace"]   # the Store and Build servers were deleted (plan 33 SC23)
 
     def setUp(self):
         self.entries = json.loads((DIST / "suite.json").read_text())["members"]

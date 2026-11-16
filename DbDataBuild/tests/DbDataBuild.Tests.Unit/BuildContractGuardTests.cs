@@ -1,6 +1,5 @@
 using System.Net;
 using DbDataBuild.Cli;
-using DbDataBuild.Cli.Server;
 using DbDataBuild.Core;
 using DbDataBuild.Models;
 using DbDataBuild.Planning;
@@ -150,55 +149,11 @@ public sealed class BuildContractGuardTests
     }
 
     [Fact]
-    public async Task A_run_with_no_server_directory_says_it_asked_nobody()
+    public async Task A_run_given_no_lineage_says_it_asked_nobody()
     {
         var plan = PlanWith(Ddl("1", "marts.fct", "drop column price", "col.removed"));
         var (refusals, _, note) = await BuildContractGuard.CheckAsync(plan, Config(), name => Env.GetValueOrDefault(name), []);
         Assert.Empty(refusals);
-        Assert.Contains("no Build server directory", note);
-    }
-
-    [Fact]
-    public void The_allowances_used_are_written_in_the_servers_audit()
-    {
-        var dir = Path.Combine(Path.GetTempPath(), "ddb-guard-" + Guid.NewGuid().ToString("N")[..8]);
-        try
-        {
-            BuildContractGuard.Record(dir, "ada", "plan-1", ["sales@test"]);
-            var entry = Assert.Single(new FileAuditLog(Path.Combine(dir, "management-audit.log")).Read());
-            Assert.Equal("plan.apply.allow-consumer", entry.Command);
-            Assert.Equal("plan-1: sales@test", entry.Target);
-            Assert.Equal("ada", entry.UserId);
-        }
-        finally { try { Directory.Delete(dir, true); } catch (IOException) { } }
-    }
-
-    /// <summary>The whole command, as a server's child process runs it: the server's directory is in the environment, a paired Gateway that cannot be reached refuses the plan before any connection is made, and naming it allows the plan to go on.</summary>
-    [Fact]
-    public void The_command_refuses_a_plan_when_a_paired_gateway_cannot_be_asked_and_the_named_allowance_lets_it_go_on()
-    {
-        var server = Path.Combine(Path.GetTempPath(), "ddb-guard-srv-" + Guid.NewGuid().ToString("N")[..8]);
-        try
-        {
-            new ProxiesFile(server).Add(new PairedProxy("edge", "https://127.0.0.1:1", "gateway-1", "ab", DateTimeOffset.UnixEpoch));
-            var project = NewProjectDir();
-            var path = Path.Combine(project, "p.plan.yml");
-            TestFiles.WriteAllText(path, PlanDocument.Serialize(PlanWith(Ddl("1", "marts.fct", "drop column price", "col.removed"))));
-            Func<string, string?> env = name => name == "DBDATAKIT_BUILD_SERVER_DIRECTORY" ? server : Env.GetValueOrDefault(name);
-
-            string[] args = ["connection", "deploy", "--apply-plan", path, "--project", project, "--allow-destructive", "marts.fct"];
-            var (output, error) = (new StringWriter(), new StringWriter());
-            Assert.Equal(CliApp.ExitFindings, CliApp.Run(args, output, error, environment: env));
-            Assert.Contains("error DDB-444", error.ToString());
-            Assert.Contains("'edge' did not give its lineage", error.ToString());
-            Assert.Contains("--allow-consumer gateway:edge", error.ToString());
-            Assert.Contains("Nothing was executed.", output.ToString());
-
-            var (output2, error2) = (new StringWriter(), new StringWriter());
-            CliApp.Run([.. args, "--allow-consumer", "gateway:edge", "--dry-run"], output2, error2, environment: env);
-            Assert.DoesNotContain("DDB-444", error2.ToString());
-            Assert.Contains("Allowed to lose a column they read: gateway:edge.", output2.ToString());
-        }
-        finally { try { Directory.Delete(server, true); } catch (IOException) { } }
+        Assert.Contains("no Gateway lineage to ask", note);
     }
 }

@@ -39,12 +39,12 @@ jobs:
       - name: Build two MSIs per product from the newest published package
         run: |
           set -euo pipefail
-          declare -A META=( [dbdatagateway]=DbDataGateway [dbdatasync]=DbDataSync [dbdatabuild]=DbDataBuild [dbdatakit]=DbDataKit [dbdatarunner]=DbDataRunner )
+          declare -A META=( [dbdatagateway]=DbDataGateway [dbdatasync]=DbDataSync [dbdatakit]=DbDataKit [dbdatarunner]=DbDataRunner )
           # The console and the runner have no published release before their first one, so their packages are built here from this commit.
           mkdir -p work/dbdatakit out/dbdatakit work/dbdatarunner out/dbdatarunner
           DbDataKit/scripts/package.sh win-x64 2026.1.1.0 "$PWD/work/dbdatakit"
           DbDataRunner/scripts/package.sh win-x64 2026.1.1.0 "$PWD/work/dbdatarunner"
-          for product in dbdatagateway dbdatasync dbdatabuild dbdatakit dbdatarunner; do
+          for product in dbdatagateway dbdatasync dbdatakit dbdatarunner; do   # DbDataBuild has no installer since plan 33 SC23 deleted its server
             work="work/$product"; mkdir -p "$work" "out/$product"
             if [ "$product" = dbdatakit ]; then
               unzip -q "$work/dbdatakit-v2026.1.1.0-win-x64.zip" -d "$work/payload"
@@ -91,7 +91,6 @@ jobs:
         include:
           - { product: dbdatagateway, display: DbDataGateway, exe: dbdatagateway.exe, service: dbdatagateway, runs: true,  path: false }
           - { product: dbdatasync,  display: DbDataSync,  exe: dbdatasync.exe,  service: DbDataSync,  runs: false, path: true }
-          - { product: dbdatabuild, display: DbDataBuild, exe: dbdatabuild.exe, service: DbDataBuild, runs: false, path: true }
           - { product: dbdatakit,   display: DbDataKit,   exe: dbdatakit.exe,   service: DbDataKit, runs: false, path: false }
           - { product: dbdatarunner, display: DbDataRunner, exe: dbdatarunner.exe, service: DbDataRunner, runs: false, path: false }
     name: windows (${{ matrix.product }})
@@ -132,36 +131,25 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-product
+      - uses: actions/setup-dotnet@v6
         with:
-          product: DbDataBuild
-          duckdb: 'false'
-      - uses: ./.github/actions/duckdb-cache
-      - uses: ./.github/actions/native-cache
-      - name: Prebuilt polyglot library and pinned DuckDB engine
+          global-json-file: DbDataKit/global.json
+      # The product is built from this commit: the newest published package can predate `server pair`. A Runner (the Build server it was, plan 33 SC23, is gone).
+      - name: Publish DbDataRunner
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          (cd DbDataBuild && scripts/fetch-native.sh)
-          scripts/fetch-duckdb.sh
-      # The product is built from this commit: the newest published package can predate `server pair`.
-      - name: Publish DbDataBuild
-        shell: bash
-        working-directory: DbDataBuild
-        run: scripts/publish.sh win-x64 "$RUNNER_TEMP/build-out"
+        run: dotnet publish DbDataRunner/src/DbDataRunner.Server -c Release -r win-x64 --self-contained false -o "$RUNNER_TEMP/runner-out"
       - uses: actions/download-artifact@v8
         with:
           name: msi
           path: msi
-      - name: Install the console and pair DbDataBuild with it
+      - name: Install the console and pair DbDataRunner with it
         shell: pwsh
         run: |
-          ./dist/tests/msi-pairing-e2e.ps1 -ConsoleMsi "$PWD\msi\dbdatakit\v1.msi" -ProductExe "$env:RUNNER_TEMP\build-out\dbdatabuild.exe"
+          ./dist/tests/msi-pairing-e2e.ps1 -ConsoleMsi "$PWD\msi\dbdatakit\v1.msi" -ProductExe "$env:RUNNER_TEMP\runner-out\dbdatarunner.exe" -ProductPort 18495
       - name: A product installed with ANNOUNCEURL waits in the console's pending list
         shell: pwsh
         run: |
-          ./dist/tests/msi-announce-e2e.ps1 -ConsoleMsi "$PWD\msi\dbdatakit\v1.msi" -ProductMsi "$PWD\msi\dbdatabuild\v1.msi" -ProductExe "$env:RUNNER_TEMP\build-out\dbdatabuild.exe"
+          ./dist/tests/msi-announce-e2e.ps1 -ConsoleMsi "$PWD\msi\dbdatakit\v1.msi" -ProductMsi "$PWD\msi\dbdatarunner\v1.msi" -ProductExe "$env:RUNNER_TEMP\runner-out\dbdatarunner.exe" -ProductProduct dbdatarunner -ProductPort 18495
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

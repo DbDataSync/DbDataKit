@@ -1,5 +1,5 @@
 using System.Text.Json.Nodes;
-using DbDataBuild.Cli.Server;
+using DbDataBuild.Cli;
 using DbDataKit.Lineage;
 using DbDataKit.State;
 using Xunit;

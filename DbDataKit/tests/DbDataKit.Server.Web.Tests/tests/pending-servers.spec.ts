@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { announcers, scratchDirectory } from '../playwright.config'
 
-// Plan 13a, L03: servers that announce themselves wait on the Servers page for an administrator, who confirms or rejects each. Two real Build servers are started with the console's announce address and
+// Plan 13a, L03: servers that announce themselves wait on the Servers page for an administrator, who confirms or rejects each. Two real runners are started with the console's announce address and
 // the address to give (see playwright.config.ts); nobody pairs them with a code. The administrator here is made with the console's own command line (an invitation, redeemed with a passkey), so this
 // file does not depend on the first-run story having run before it.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
@@ -36,7 +36,7 @@ test.describe.serial('servers waiting for confirmation', () => {
     const row = page.getByTestId(`pending-row-${toReject.name}`)
     await expect(row).toBeVisible({ timeout: 30_000 })
     await expect(row.getByTestId('pending-url')).toHaveText(`https://localhost:${toReject.port}/`)
-    await expect(row).toContainText('dbdatabuild')
+    await expect(row).toContainText('dbdatarunner')
     await expect(row.getByTestId('pending-last-seen')).toContainText(/ago$/)
     // The code the server made for the console is never on the page.
     await expect(page.getByTestId('pending-card')).not.toContainText(/pairing code/i)
@@ -60,7 +60,7 @@ test.describe.serial('servers waiting for confirmation', () => {
     await expect(paired.getByTestId('instance-status')).toHaveText('Ready', { timeout: 30_000 })
     // plan 24a UC05: the row says the compatibility generation the server reported, and a server within N and N-1 of the console carries no warning
     await expect(paired.getByTestId('instance-generation')).toContainText(/generation \d+/)
-    await expect(paired).toContainText('dbdatabuild')
+    await expect(paired).toContainText('dbdatarunner')
     await expect(paired).toContainText(`https://localhost:${toConfirm.port}`)
     // It stays paired (and does not come back as waiting) when the page is read again.
     await page.reload()

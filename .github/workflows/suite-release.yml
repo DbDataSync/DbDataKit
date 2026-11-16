@@ -2,7 +2,7 @@ name: Suite release
 
 # One release of the whole suite from one commit (plan 13a, L06): the console's zips, MSI and image, and each product's own release (its zips, MSI and
 # install files), which this workflow calls: dbdatabuild-release.yml, dbdatagateway-release.yml, dbdatarunner-release.yml, dbdatastore-release.yml, dbdataworkspace-release.yml and dbdatasync-release.yml. Container images are
-# built for every product here and pushed to ghcr.io/<owner>/<product> (dbdatakit, dbdatabuild, dbdatagateway); DbDataSync's own image
+# built for every product here and pushed to ghcr.io/<owner>/<product> (dbdatakit, dbdatagateway); DbDataSync's own image
 # keeps its multi-architecture workflow, dbdatasync-publish-image.yml, and is only built here, to prove the commit makes one.
 #
 #   gh workflow run suite-release.yml --ref main -f dry_run=true                 build everything, tag and publish nothing
@@ -276,7 +276,6 @@ jobs:
       matrix:
         include:
           - { image: dbdatakit,   dockerfile: DbDataKit/Dockerfile, health: true,  push: true }
-          - { image: dbdatabuild, dockerfile: DbDataBuild/Dockerfile,   health: true,  push: true }
           - { image: dbdatagateway, dockerfile: DbDataGateway/Dockerfile,   health: false, push: true }
           - { image: dbdatasync,  dockerfile: DbDataSync/Dockerfile,    health: false, push: false }
     name: image (${{ matrix.image }})
@@ -434,7 +433,7 @@ jobs:
             (cd "$dir" && sha256sum --check SHA256SUMS)
             wants=('-win-x64.zip' '-win-x64.msi')
             # the command-line tools and Runner runtimes whose servers plan 33 SC23 deleted: a zip each, no installer
-            case "$product" in dbdatastore) wants=('-win-x64.zip' '-linux-x64.zip') ;; esac
+            case "$product" in dbdatastore|dbdatabuild) wants=('-win-x64.zip' '-linux-x64.zip') ;; esac
             for want in "${wants[@]}"; do
               ls "$dir"/*"$want" > /dev/null || { echo "::error::$product has no *$want"; exit 1; }
               grep -q -- "$want" "$sums" || { echo "::error::$product's SHA256SUMS does not list *$want"; exit 1; }

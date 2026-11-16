@@ -4,7 +4,6 @@ using DbDataBuild.Core;
 using DbDataBuild.Execution;
 using DbDataBuild.Models;
 using DbDataBuild.Planning;
-using DbDataBuild.Cli.Server;
 
 namespace DbDataBuild.Cli;
 
@@ -264,7 +263,7 @@ internal static class ApplyCommand
             return CliApp.ExitFindings;
         }
 
-        // plan 21 CH06: a column a published consumer reads is not dropped or retyped. The paired Gateways' lineage is asked (a dry run too, so it says what the apply would refuse); an allowance given by name is recorded
+        // plan 21 CH06: a column a published consumer reads is not dropped or retyped. The Gateways' lineage is asked when the run is given it (a dry run too, so it says what the apply would refuse); an allowance given by name is in the document
         if (!mode.Refresh)
         {
             var guard = BuildContractGuard.CheckAsync(plan, config, env, mode.AllowConsumers ?? []).GetAwaiter().GetResult();
@@ -279,7 +278,6 @@ internal static class ApplyCommand
             {
                 output.Payload("consumers_allowed", guard.AllowancesUsed);
                 output.WriteLine($"Allowed to lose a column they read: {string.Join(", ", guard.AllowancesUsed)}.");
-                if (!dryRun) BuildContractGuard.Record(env(TrackingJournals.ServerDirectoryVariable), Actor.Of(env, write?.User ?? Environment.UserName), plan.Id, guard.AllowancesUsed);
             }
         }
 

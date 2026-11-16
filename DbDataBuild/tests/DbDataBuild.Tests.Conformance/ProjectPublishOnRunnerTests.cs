@@ -220,114 +220,22 @@ public class ProjectPublishOnRunnerTests
     }
 
     [Fact]
-    public async Task A_published_task_is_recorded_as_the_build_servers_until_it_is_cut_over_unless_the_runner_is_to_schedule_it()
+    public async Task A_published_task_is_the_runners_to_schedule_from_the_first_activation_and_no_owner_is_recorded()
     {
         var project = Project();
         var client = Path.Combine(project, "client");
         await using var runner = await Runner.StartAsync();
         var owners = new TaskOwnerStore(runner.State);
 
-        // the default (plan 28c E09, ED6): the runner is told before the version can activate that the Build server schedules the plan, so it is never scheduled twice
+        // the Build server's scheduler is gone (plan 33 SC23): nothing is handed back to it, so the runner schedules the plan as soon as the version is active
         var first = Data(Publish(project, client, "--server", runner.Url, "--code", runner.Code(), "--channel", "dev", "--bind", "sqlserver=wh_dev"));
-        Assert.Equal(["sqlserver-hourly"], first["owner_old"]!.AsArray().Select(t => t!.GetValue<string>()));
-        var record = owners.Get("sales", "dev", "sqlserver-hourly")!;
-        Assert.Equal(TaskOwners.Old, record.Owner);
+        Assert.Null(first["owner_old"]);
+        Assert.Null(owners.Get("sales", "dev", "sqlserver-hourly"));
         await runner.WaitActiveAsync("sales", "dev", first["version"]!.GetValue<int>());
 
-        // publishing again keeps what is recorded (a cutover in between is not undone)
-        owners.Set("sales", "dev", "sqlserver-hourly", TaskOwners.Runner, "ada", "cut over");
-        var again = Data(Publish(project, client, "--server", runner.Url, "--channel", "dev"));
-        Assert.Empty(again["owner_old"]!.AsArray());
-        Assert.Equal(TaskOwners.Runner, owners.Get("sales", "dev", "sqlserver-hourly")!.Owner);
-
-        // a project no Build server schedules says so, and nothing is recorded: the runner schedules it from the first activation
+        // --runner-schedules is still accepted, and changes nothing
         var plain = Data(Publish(project, client, "--server", runner.Url, "--channel", "test", "--bind", "sqlserver=wh_test", "--runner-schedules"));
-        Assert.Empty(plain["owner_old"]!.AsArray());
+        Assert.Null(plain["owner_old"]);
         Assert.Null(owners.Get("sales", "test", "sqlserver-hourly"));
-    }
-
-    [Fact]
-    public async Task The_schedule_verbs_move_a_published_plan_to_the_runner_and_back_over_the_management_api()
-    {
-        var project = Project();
-        var client = Path.Combine(project, "client");
-        await using var runner = await Runner.StartAsync();
-        var published = Data(Publish(project, client, "--server", runner.Url, "--code", runner.Code(), "--channel", "dev", "--bind", "sqlserver=wh_dev"));
-        await runner.WaitActiveAsync("sales", "dev", published["version"]!.GetValue<int>());
-        var serverDirectory = Path.Combine(project, "build-server");
-        Directory.CreateDirectory(serverDirectory);
-        new DbDataBuild.Cli.Server.ProjectsFile(serverDirectory).Add(new DbDataBuild.Cli.Server.HostedProject("sales", project, null, null));
-        var owners = new TaskOwnerStore(runner.State);
-        const string Plan = "sales/sqlserver/hourly";
-
-        async Task<(int Exit, string Out, string Err)> Verb(params string[] args)
-        {
-            var (o, e) = (new StringWriter(), new StringWriter());
-            var exit = await DbDataBuild.Cli.Server.ScheduleVerb.RunAsync([.. args, "--runner", runner.Url, "--channel", "dev", "--client-dir", client, "--repo", serverDirectory], new DbDataKit.Cli.CliContext(o, e, TextReader.Null), null, null, (_, _) => Task.CompletedTask);
-            return (exit, o.ToString(), e.ToString());
-        }
-
-        Assert.Equal(TaskOwners.Old, owners.Get("sales", "dev", "sqlserver-hourly")!.Owner);     // published, the Build server's
-
-        var observe = await Verb("observe", Plan);
-        Assert.True(observe.Exit == 0, observe.Err);
-        Assert.Equal(TaskOwners.Observe, owners.Get("sales", "dev", "sqlserver-hourly")!.Owner);
-
-        var cutover = await Verb("cutover", Plan, "--reason", "go live");
-        Assert.True(cutover.Exit == 0, cutover.Err);
-        var record = owners.Get("sales", "dev", "sqlserver-hourly")!;
-        Assert.Equal((TaskOwners.Runner, "go live"), (record.Owner, record.Reason));
-        Assert.NotNull(new ModuleJobStateStore(runner.State, RunnerNames.EngineService).Get("sales/dev", "sqlserver-hourly")!.HandledUpTo);     // the position the Build server handed over
-        Assert.Contains(new AuditLog(runner.State, RunnerState.ServiceId).Read(new AuditQuery(VerbPrefix: RunnerControl.OwnerVerb)), e => e.Entry.TargetId == "sales/dev/sqlserver-hourly" && e.Entry.Detail!.Contains("\"to\":\"runner\""));
-
-        var listed = await Verb("owners");
-        Assert.Equal(0, listed.Exit);
-        Assert.Contains("this server: runner", listed.Out);
-
-        var rollback = await Verb("rollback", Plan);
-        Assert.True(rollback.Exit == 0, rollback.Err);
-        Assert.Equal(TaskOwners.Old, owners.Get("sales", "dev", "sqlserver-hourly")!.Owner);
-        Assert.Equal(TaskOwners.Old, DbDataBuild.Cli.Server.BuildScheduleSettings.Read(serverDirectory).OwnerOf("sales", "sqlserver", "hourly"));
-        Assert.NotNull(new ModuleJobStateStore(DbDataBuild.Cli.Server.BuildSchedulerSchema.Open(serverDirectory), DbDataBuild.Cli.Server.BuildSchedulerSchema.Service).Get("sales", "sqlserver/hourly")!.HandledUpTo);   // and the position came back
-    }
-
-    [Fact]
-    public async Task Pause_resume_and_run_now_of_a_plan_the_runner_owns_are_the_runners_through_the_clients_control()
-    {
-        var project = Project();
-        var client = Path.Combine(project, "client");
-        await using var runner = await Runner.StartAsync();
-        var published = Data(Publish(project, client, "--server", runner.Url, "--code", runner.Code(), "--channel", "dev", "--bind", "sqlserver=wh_dev"));
-        await runner.WaitActiveAsync("sales", "dev", published["version"]!.GetValue<int>());
-        var serverDirectory = Path.Combine(project, "build-server");
-        Directory.CreateDirectory(serverDirectory);
-        new DbDataBuild.Cli.Server.ProjectsFile(serverDirectory).Add(new DbDataBuild.Cli.Server.HostedProject("sales", project, null, null));
-        var link = new DbDataBuild.Cli.Server.ScheduleRunnerLink(runner.Url, "dev", client);
-        var (o, e) = (new StringWriter(), new StringWriter());
-        var exit = await DbDataBuild.Cli.Server.ScheduleVerb.RunAsync(["cutover", "sales/sqlserver/hourly", "--runner", runner.Url, "--channel", "dev", "--client-dir", client, "--repo", serverDirectory], new DbDataKit.Cli.CliContext(o, e, TextReader.Null), null, null, (_, _) => Task.CompletedTask);
-        Assert.True(exit == 0, e.ToString());
-
-        var control = DbDataBuild.Cli.Runner.ClientRunnerTaskControl.For(link, _ => null);
-        var (package, task) = (DbDataBuild.Cli.Runner.RunnerNaming.PackageOf("sales"), DbDataBuild.Cli.Runner.RunnerNaming.TaskOf("sqlserver", "hourly"));
-        var pauses = new ModuleJobPauseStore(runner.State, RunnerNames.EngineService);
-
-        var listed = await control.StatusAsync(package, task, CancellationToken.None);
-        Assert.Equal((TaskOwners.Runner, false), (listed!.Owner, listed.Paused));
-
-        await control.PauseAsync(package, task, CancellationToken.None);
-        Assert.NotNull(pauses.Get("sales/dev", task));
-        Assert.True((await control.StatusAsync(package, task, CancellationToken.None))!.Paused);
-
-        // run now is allowed on a paused plan (the person asked) and answers with the run's id; a second ask while that one is queued or going is refused, and
-        // after it has ended it starts a run of its own: the runner may finish the first before the second ask arrives, so the test asks for what is true either way
-        var runId = await control.RunNowAsync(package, task, CancellationToken.None);
-        Assert.False(string.IsNullOrEmpty(runId));
-        var second = await control.RunNowAsync(package, task, CancellationToken.None);
-        Assert.True(second is null || second != runId, "a second run now is refused while the first is queued or going, or it is a run of its own: never the first run again");
-
-        await control.ResumeAsync(package, task, CancellationToken.None);
-        Assert.Null(pauses.Get("sales/dev", task));
-        Assert.False((await control.StatusAsync(package, task, CancellationToken.None))!.Paused);
-        Assert.Null(await control.StatusAsync(package, "no-such-task", CancellationToken.None));
     }
 }

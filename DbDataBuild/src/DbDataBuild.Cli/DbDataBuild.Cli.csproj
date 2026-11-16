@@ -20,36 +20,20 @@
   <ItemGroup>
     <DbDataKitReference Include="Catalog.Cache" />   <!-- the catalog cache of a draft: project import reads it offline; plan 33, SC20k -->
     <DbDataKitReference Include="Cli" />
-    <DbDataKitReference Include="Authoring" />   <!-- the workspace list, create, abandon and git calls, the same for every project kind; plan 22a, GP30 -->
     <DbDataKitReference Include="Monitoring" />
-    <DbDataKitReference Include="Scheduling" />   <!-- the schedule evaluator and the work queue the server runs plans from; plan 13, M08 -->
-    <DbDataKitReference Include="State.Api" />   <!-- GET /api/v1/state and the maintenance mode; plan 29b, C05 -->
-    <DbDataKitReference Include="State.Cli" />   <!-- state show, test and grants; plan 29b, C01 -->
-    <DbDataKitReference Include="State" />   <!-- the health rules (overdue, slow) every product shares; plan 13, M09 -->
-    <DbDataKitReference Include="Web" />   <!-- the management API: pairing, tokens, roles; plan 13, R01 -->
-    <DbDataKitReference Include="Upgrade" />   <!-- the server upgrades itself when the console says so; plan 24a UC09 -->
-    <DbDataKitReference Include="Hosting.Abstractions" />   <!-- the shared host: service and systemd modes, drain, /health and /version, limits; plan 13, R05 -->
-    <DbDataKitReference Include="Hosting" />
-    <DbDataKitReference Include="Hosting.Cli" />
-    <DbDataKitReference Include="Hosting.WindowsService" />
-    <DbDataKitReference Include="Hosting.Systemd" />
-    <DbDataKitReference Include="Security.Acl" />
-    <DbDataKitReference Include="Hosting.Certificates" />
-    <DbDataKitReference Include="Secrets.Abstractions" />   <!-- the server's secret store and the logins it hands each command; plan 13, R04 -->
+    <DbDataKitReference Include="Scheduling" />   <!-- the schedule a refresh plan declares, which a Runner package carries; plan 13, M08 -->
+    <DbDataKitReference Include="State" />   <!-- the state database of a results directory; plan 23a FQ09 -->
+    <DbDataKitReference Include="State.Engines" />   <!-- the state settings of a results directory (SQLite, SQL Server, PostgreSQL) -->
+    <DbDataKitReference Include="Secrets.Abstractions" />   <!-- the references in a state connection string, resolved from the environment -->
     <DbDataKitReference Include="Secrets" />
-    <DbDataKitReference Include="Secrets.Store" />
-    <DbDataKitReference Include="Secrets.Cli" />
-    <DbDataKitReference Include="Secrets.Windows" />
     <DbDataKitReference Include="Connections.Abstractions" />
     <DbDataKitReference Include="Runner.Client" />   <!-- the publishing client: project publish to a runner; plan 28c, E07 -->
     <DbDataKitReference Include="Quality.Runner" />   <!-- the check evaluator, its run service and the quality state module: Build evaluates the checks of its models after a refresh; plan 23a, FQ09 -->
     <DbDataKitReference Include="Runner.Kit" />   <!-- the typed job surface: a refresh plan as a runner task; plan 28c, E01 -->
     <DbDataKitReference Include="Views" />   <!-- the loaders of dashboards and reports and their catalog check: project validate reads the dashboards/ and reports/ folders; plan 32, DBR29 -->
-    <DbDataKitReference Include="Serving.Notify" />   <!-- data.changed to the serving groups this server is paired with, after a refresh; plan 24a UC13 -->
+    <DbDataKitReference Include="Serving.Notify" />   <!-- the Gateway lineage client the contract guard asks; plan 21 CH06 -->
     <DbDataKitReference Include="Lineage" />   <!-- the lineage graph and the identity of a dataset; plan 18, G05 -->
-    <DbDataKitReference Include="Semantic.Cli" />   <!-- the semantic noun (describe, query, explain, members) on the server command line, over the shared Flight SQL client; plan 14a, SL22 -->
-    <DbDataKitReference Include="Lineage.Cli" />   <!-- the lineage noun on the server command line; plan 18, G05 -->
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <DbDataKitReference Include="Semantic.Cli" />   <!-- the semantic verbs (describe, query, explain, members) over the shared Flight SQL client; plan 14a, SL22 -->
     <PackageReference Include="System.CommandLine" />
   </ItemGroup>
 

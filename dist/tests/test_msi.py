@@ -223,12 +223,12 @@ class SourceTests(unittest.TestCase):
             msi.wxs(meta, "2026.10.19.509", make_payload(self.tmp / "p2"))
 
     def test_every_products_dist_json_describes_a_valid_installer(self):
-        for product in ("DbDataBuild", "DbDataSync", "DbDataGateway", "DbDataRunner", "DbDataWorkspace"):   # DbDataStore has no installer since plan 33 SC23
+        for product in ("DbDataSync", "DbDataGateway", "DbDataRunner", "DbDataWorkspace"):   # DbDataStore and DbDataBuild have no installer since plan 33 SC23
             meta = json.loads((DIST.parent / product / "dist.json").read_text())
             payload = make_payload(self.tmp / product, {meta["platforms"]["win-x64"]["exe"]: "x"})
             self.root(msi.wxs(meta, "2026.10.19.509", payload))
-        codes = {json.loads((DIST.parent / p / "dist.json").read_text())["msi"]["upgradeCode"] for p in ("DbDataBuild", "DbDataSync", "DbDataGateway", "DbDataRunner", "DbDataWorkspace")}
-        self.assertEqual(len(codes), 5)
+        codes = {json.loads((DIST.parent / p / "dist.json").read_text())["msi"]["upgradeCode"] for p in ("DbDataSync", "DbDataGateway", "DbDataRunner", "DbDataWorkspace")}
+        self.assertEqual(len(codes), 4)
 
 
 @unittest.skipUnless(WIXL and MSIINFO, "wixl and msiinfo (msitools) not installed")

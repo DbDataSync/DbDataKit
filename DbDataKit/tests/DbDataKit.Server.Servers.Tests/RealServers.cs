@@ -129,8 +129,6 @@ internal static class Programs
         return path;
     }
 
-    public static string Build => Built("DbDataBuild/src/DbDataBuild.Cli", "dbdatabuild.dll");
-
     public static string Gateway => Built("DbDataGateway/src/DbDataGateway.Server", "dbdatagateway.dll");
 
     public static string Sync => Built("DbDataSync/src/DbDataSync.Cli", "DbDataSync.Cli.dll");

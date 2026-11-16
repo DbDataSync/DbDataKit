@@ -156,7 +156,7 @@ class ShippedGlobalEnvTests(unittest.TestCase):
 
     SHARED = [{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}]
     # product folder -> the service name its folder has under the root
-    SERVICES = {"DbDataKit": "server", "DbDataRunner": "runner", "DbDataWorkspace": "workspace", "DbDataSync": "sync", "DbDataBuild": "build"}   # no Store service since plan 33 SC23
+    SERVICES = {"DbDataKit": "server", "DbDataRunner": "runner", "DbDataWorkspace": "workspace", "DbDataSync": "sync"}   # no Store or Build service since plan 33 SC23
 
     def meta(self, path):
         return json.loads((REPO_ROOT / path).read_text(encoding="utf-8"))
@@ -176,12 +176,10 @@ class ShippedGlobalEnvTests(unittest.TestCase):
             self.assertIn(f'"{service}"', listed)
 
     def test_each_service_registers_the_folder_the_shared_reader_gives_it(self):
-        for folder, service in (("DbDataKit", "server"), ("DbDataRunner", "runner"), ("DbDataWorkspace", "workspace"), ("DbDataBuild", "build")):
+        for folder, service in (("DbDataKit", "server"), ("DbDataRunner", "runner"), ("DbDataWorkspace", "workspace")):
             program = folder[6:]
             if folder == "DbDataKit":
                 path, settings, home = f"{folder}/src/DbDataKit.Server/ConsoleService.cs", "ConsoleSettings", f"{folder}/src/DbDataKit.Server/ConsoleSettings.cs"
-            elif folder == "DbDataBuild":
-                path, settings, home = f"{folder}/src/DbDataBuild.Cli/Server/BuildService.cs", "BuildServerSettings", f"{folder}/src/DbDataBuild.Cli/Server/BuildServer.cs"
             else:
                 path, settings, home = f"{folder}/src/{folder}.Server/{program}Service.cs", f"{program}Settings", f"{folder}/src/{folder}.Server/{program}Settings.cs"
             text = (REPO_ROOT / path).read_text(encoding="utf-8")
@@ -189,13 +187,11 @@ class ShippedGlobalEnvTests(unittest.TestCase):
             self.assertNotIn("CommonApplicationData", text, path)
             self.assertIn(f'ServiceName = "{service}"', (REPO_ROOT / home).read_text(encoding="utf-8"), home)
 
-    def test_builds_service_block_is_what_the_source_registers(self):
-        meta = self.meta("DbDataBuild/dist.json")
-        service = (REPO_ROOT / "DbDataBuild/src/DbDataBuild.Cli/Server/BuildService.cs").read_text(encoding="utf-8")
-        self.assertIn(f'RegistrationName = "{meta["service"]["name"]}"', service)
-        self.assertEqual(meta["service"]["register"], "service install")
-        self.assertEqual(meta["service"]["unregister"], "service uninstall")
-        self.assertEqual(meta["windowsScope"], "machine")      # a service belongs under Program Files
+    def test_build_is_a_command_line_with_no_service_and_no_installer(self):
+        meta = self.meta("DbDataBuild/dist.json")      # the Build server was deleted (plan 33 SC23)
+        for key in ("service", "msi", "announces", "globalEnv", "windowsScope"):
+            self.assertNotIn(key, meta)
+        self.assertFalse((REPO_ROOT / "DbDataBuild/src/DbDataBuild.Cli/Server").exists())
 
     def test_the_sync_manifest_names_the_folder_sync_defaults_to(self):
         cli = (REPO_ROOT / "DbDataSync/src/DbDataSync.Cli/CliOptions.cs").read_text(encoding="utf-8")

@@ -1,4 +1,4 @@
-# The console and a Sync server, paired by announcement; see build.yml for how, and for how the server is confirmed:
+# The console and a Sync server, paired by announcement; see gateway.yml for how, and for how the server is confirmed:
 #   docker compose -f dist/compose/sync.yml exec console dotnet /app/dbdatakit.dll instance confirm dbdatasync
 # The Sync image serves https on 8443 (a certificate it makes on its first start, which the console pins when it pairs); the server announces that port and its host name, which the console resolves on this network.
 # Run from the repository root.

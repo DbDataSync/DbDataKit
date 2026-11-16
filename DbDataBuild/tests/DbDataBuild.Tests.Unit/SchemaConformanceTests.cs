@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DbDataBuild.Core;
-using DbDataBuild.Cli.Server;
+using DbDataBuild.Cli;
 using DbDataBuild.Models;
 using Json.Schema;
 using YamlDotNet.Core;
@@ -310,17 +310,6 @@ public class FileSchemaTests
 
         Assert.Equal(configured, served);
         Assert.True(FileSchemas.All.ToList().FindIndex(a => a.Schema == "folder.schema.json") < FileSchemas.All.ToList().FindIndex(a => a.Schema == "model.schema.json"), "the folder file is matched before the model glob");
-    }
-
-    [Fact]
-    public void The_served_document_has_every_schema_an_association_names_and_the_ones_they_refer_to()
-    {
-        var document = FileSchemas.Document();
-        var schemas = document["schemas"]!.AsObject();
-
-        foreach (var a in document["associations"]!.AsArray()) Assert.True(schemas.ContainsKey(a!["schema"]!.GetValue<string>()), a["schema"]!.ToString());
-        Assert.True(schemas.ContainsKey("declared-model.schema.json"));
-        Assert.False(schemas.ContainsKey("output.schema.json"));       // 5,000 lines the console has no form for
     }
 
     public static readonly TheoryData<string, string, bool> ModelTests = new()

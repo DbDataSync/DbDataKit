@@ -88,27 +88,7 @@ internal static class ProjectPublishCommand
                 output.WriteLine($"Bound {string.Join(", ", bindings.Keys.Order(StringComparer.Ordinal))} in {o.Channel}.");
             }
 
-            // plan 28c E09, ED6: a published plan is scheduled by this project's Build server until it is cut over, so the runner is told so before the version can activate; a task the runner already has an owner for keeps it
-            var handedBack = new List<string>();
-            if (!o.RunnerSchedules)
-            {
-                foreach (var plan in built.Plans)
-                {
-                    var known = client.ScheduleOfAsync(o.Server!, o.Code, package, o.Channel!, plan.Task, null).GetAwaiter().GetResult();
-                    if (known.OwnerSetBy is not null) continue;
-                    try { client.SetOwnerAsync(o.Server!, o.Code, package, o.Channel!, plan.Task, DbDataKit.State.TaskOwners.Old, "published by `project publish`: the runner does not schedule it until `server schedule cutover`", null).GetAwaiter().GetResult(); }
-                    catch (RunnerClientException ex)
-                    {
-                        error.WriteLine($"{ex.Message}\nThe runner is told that the plans stay with the Build server's scheduler until they are cut over, which takes the operator role of this pairing. Pair with a code that allows it, or pass --runner-schedules to let the runner schedule the plans from the first activation.");
-                        output.WriteLine("Nothing was sent.");
-                        return CliApp.ExitFindings;
-                    }
-
-                    handedBack.Add(plan.Task);
-                }
-            }
-
-            output.Payload("owner_old", handedBack);
+            // a published plan is scheduled by the runner from its first activation: the Build server's scheduler, which a plan was handed back to until a cutover (plan 28c E09), was deleted (plan 33 SC23)
             var directory = Directory.CreateTempSubdirectory("ddb-publish-").FullName;
             try
             {

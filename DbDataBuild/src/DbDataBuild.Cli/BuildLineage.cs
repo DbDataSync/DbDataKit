@@ -226,7 +226,7 @@ internal static class BuildLineage
         AuditLog.LastLoadsAsync(read, scope, HookEvents.All.Select(e => e.Name).ToList(), ct: ct);
 
     /// <summary>
-    /// The design graph of one project, in the shape <c>LineageNoun.Create(source)</c> takes. The server's <c>lineage</c> noun (<see cref="Server.ServerLineage"/>) merges one of these per hosted project; Build's per-project command line has no <c>lineage</c> verb.
+    /// The design graph of one project, in the shape <c>LineageNoun.Create(source)</c> takes. The Build server's <c>lineage</c> noun (deleted with the server, plan 33 SC23) merged one of these per hosted project; Build's per-project command line has no <c>lineage</c> verb.
     /// </summary>
     public static Func<CancellationToken, Task<LineageGraph>> Source(string projectRoot, Func<string, string?> environment) => _ =>
     {

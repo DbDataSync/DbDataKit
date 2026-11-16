@@ -17,8 +17,8 @@ describe("Build's schemas, imported", () => {
     expect(Object.keys(BUILD_SCHEMAS)).toEqual(expect.arrayContaining(['model.schema.json', 'declared-model.schema.json', 'connection.schema.json', 'semantic.schema.json', 'folder.schema.json', 'config.schema.json']))
     expect(Object.keys(BUILD_SCHEMAS)).not.toContain('output.schema.json')
   })
-  it('are associated with files as the Build server does', () => {
-    const text = readFileSync(`${root}src/DbDataBuild.Cli/Server/FileSchemas.cs`, 'utf8')
+  it("are associated with files as Build's own table says", () => {
+    const text = readFileSync(`${root}src/DbDataBuild.Cli/FileSchemas.cs`, 'utf8')
     const server = [...text.matchAll(/new\("([^"]+)", "([^"]+)", "([^"]+)"\)/g)].map((m) => ({ pattern: m[1], schema: m[2], kind: m[3] }))
     expect(server.length).toBeGreaterThan(5)
     expect([...BUILD_ASSOCIATIONS]).toEqual(server)

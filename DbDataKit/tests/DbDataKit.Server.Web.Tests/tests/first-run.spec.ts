@@ -1,7 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
-import { buildUrl, gatewayUrl, scratchDirectory, syncUrl, warehouseConnection } from '../playwright.config'
+import { firstRunRunner, gatewayUrl, scratchDirectory, syncUrl } from '../playwright.config'
 import { viewsStory } from './views'
 
 /** A browser-side authenticator that holds the passkeys, so the test can register one and sign in with it the way a person's device would. */
@@ -19,7 +19,7 @@ function firstRunCode() {
 }
 
 // One story, in order: the person who installed the console redeems the first-run invitation, is signed in as the administrator, signs out and back in with the same
-// passkey, sees themselves in the users list, makes an invitation for someone else, and pairs a Build server with the code made on it. A test per step would each need the one before it.
+// passkey, sees themselves in the users list, makes an invitation for someone else, and pairs a runner with the code made on it (a Build server until plan 33 SC23 deleted it, with its screens and the publishing it did). A test per step would each need the one before it.
 test('first run: invitation, passkey, sign-in, users, servers', async ({ page, context }) => {
   await addAuthenticator(context, page)
 
@@ -74,152 +74,29 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await page.getByTestId('invite-create-button').click()
   await expect(page.getByTestId('invite-link')).toHaveValue(/\/invite#.+/)
 
-  // Servers: none yet; pair a real Build server with the code made on it, see it answer, forget it.
+  // Servers: none yet; pair a real runner with the code made on it, see it answer, forget it.
   await page.getByTestId('rail-instances').click()
   await expect(page.getByTestId('instances-empty')).toBeVisible()
 
   // A wrong code is refused in words and nothing is paired.
-  await page.getByTestId('pair-url-input').fill(buildUrl)
+  await page.getByTestId('pair-url-input').fill(firstRunRunner.url)
   await page.getByTestId('pair-code-input').fill('AAAAA-BBBBB-CCCCC-DDDDD')
   await page.getByTestId('pair-button').click()
   await expect(page.getByText('did not accept the code')).toBeVisible()
   await expect(page.getByTestId('instances-empty')).toBeVisible()
 
-  await page.getByTestId('pair-code-input').fill(fs.readFileSync(path.join(scratchDirectory, 'build-pairing-code.txt'), 'utf8').trim())
-  await page.getByTestId('pair-name-input').fill('Build one')
+  await page.getByTestId('pair-code-input').fill(fs.readFileSync(path.join(scratchDirectory, 'first-run-runner-pairing-code.txt'), 'utf8').trim())
+  await page.getByTestId('pair-name-input').fill('Runner one')
   await page.getByTestId('pair-button').click()
-  const instance = page.getByTestId('instance-row-Build one')
+  const instance = page.getByTestId('instance-row-Runner one')
   await expect(instance).toBeVisible()
   await expect(instance.getByTestId('instance-status')).toHaveText('Ready')
-  await expect(instance).toContainText('dbdatabuild')
+  await expect(instance).toContainText('dbdatarunner')
 
-  // Its screens open inside the console: the project it hosts, the models, the graph, a check.
+  // Its screens open inside the console, under the server's address, through the relay: the tasks it runs (none yet).
   await instance.getByTestId('instance-open-link').click()
-  await expect(page).toHaveURL(/\/servers\/build-[0-9a-f]+$/)
-  await expect(page.getByTestId('build-project-starter')).toBeVisible()
-  await page.getByTestId('build-project-starter').getByTestId('build-project-link').click()
-  await expect(page).toHaveURL(/\/servers\/build-[0-9a-f]+\/projects\/starter$/)
-  await expect(page.getByTestId('build-model-marts.orders')).toBeVisible()
-  await expect(page.getByTestId('build-model-raw.customers')).toBeVisible()
-  await page.getByTestId('build-tab-graph').click()
-  await expect(page.getByTestId('build-graph-node-marts.customers')).toBeVisible()
-  expect(await page.getByTestId('build-graph-edge').count()).toBeGreaterThan(5)
-  await page.getByTestId('build-tab-check').click()
-  await page.getByTestId('build-check-button').click()
-  await expect(page.getByTestId('build-check-models')).toHaveText('8 models')
-  await expect(page.getByTestId('build-check-errors')).toHaveText('0 errors')
-  await expect(page.getByTestId('build-check-out-of-date')).toBeVisible()   // the starter has never been compiled, so its rendered files are not written yet
-
-  // Editing, in a workspace of one's own: break a model and the compiler's diagnostic is on the file, then fix it and it is gone.
-  await page.getByTestId('build-tab-edit').click()
-  await page.getByTestId('build-edit-workspace-name').fill('draft')
-  await page.getByTestId('build-edit-workspace-make').click()
-
-  // Forms (W05): a file with a schema is a form as well as YAML, and both are the same text. A form changes the part it shows and leaves the rest of the file, comments included, as it was.
-  const expectYaml = async (...expected: (string | RegExp)[]) => { await page.getByTestId('build-edit-mode-yaml').click(); for (const e of expected) await expect(page.getByTestId('build-edit-editor')).toContainText(e); await page.getByTestId('build-edit-mode-form').click() }
-  await page.getByTestId('build-edit-file-models/staging/orders.yml').click()                       // a model: add a description with the add chip
-  await expect(page.getByTestId('form-field-name')).toHaveValue('staging.orders')
-  await expect(page.getByTestId('form-field-columns.0.name')).toHaveValue('order_id')
-  await page.getByTestId('form-add-description').click()
-  await page.getByTestId('form-field-description').fill('Orders with their statuses grouped')
-  await expectYaml('description: Orders with their statuses grouped', 'nullable: false')
-  await page.getByTestId('build-edit-save').click()
-  await expect(page.getByTestId('build-edit-clean')).toBeVisible()
-  await page.getByTestId('build-edit-file-models/staging/_dbdatabuild.yml').click()                // a folder's settings: a tag added to a list
-  await expect(page.getByTestId('form-field-defaults.tags.0')).toHaveValue('staging')
-  await page.getByTestId('form-append-defaults.tags').click()
-  await page.getByTestId('form-field-defaults.tags.1').fill('curated')
-  await expectYaml(/tags:\s*\[\s*staging,\s*curated\s*\]/)
-  await page.getByTestId('build-edit-save').click()
-  await expect(page.getByTestId('build-edit-clean')).toBeVisible()
-  await page.getByTestId('build-edit-file-tests/models/staging/orders.yml').click()                 // a model test: a case renamed, the header comments stay
-  await expect(page.getByTestId('form-field-cases.0.name')).toHaveValue('every raw status lands in one group')
-  await page.getByTestId('form-field-cases.0.name').fill('every raw status has a group')
-  await expectYaml('# description: staging.orders groups the raw statuses', '- name: every raw status has a group')
-  await page.getByTestId('build-edit-save').click()
-  await expect(page.getByTestId('build-edit-clean')).toBeVisible()
-  await page.getByTestId('build-edit-file-connections/sqlserver.yaml').click()                    // a connection file: its title (the tool's own settings are under extensions.build)
-  await page.getByTestId('form-field-extensions.build.title').fill('Main warehouse')
-  await expectYaml('Main warehouse', '# Connections are files (connection/1), one per connection')
-  await page.getByTestId('build-edit-save').click()
-  await expect(page.getByTestId('build-edit-clean')).toBeVisible()
-  await page.getByTestId('build-edit-file-models/staging/orders.sql').click()
-  await expect(page.getByTestId('build-edit-open')).toHaveText('models/staging/orders.sql')
-  await expect(page.getByTestId('build-edit-clean')).toBeVisible()
-  // the lowered text and sample rows beside the editor follow the saved file: limit the query and both change
-  await expect(page.getByTestId('build-preview-text').first()).toContainText('status_group')
-  await expect(page.getByTestId('build-preview-text').first()).not.toContainText('LIMIT 2')
-  await expect.poll(() => page.getByTestId('build-preview-row').count()).toBeGreaterThan(2)
-  await page.getByTestId('build-edit-editor').locator('.monaco-editor').click()
-  await page.keyboard.press('Control+End')
-  await page.keyboard.insertText(' LIMIT 2')   // inserted, not typed: typing lets the editor's suggestions finish the word
-  await page.getByTestId('build-edit-save').click()
-  await expect(page.getByTestId('build-preview-text').first()).toContainText('LIMIT 2')
-  await expect.poll(() => page.getByTestId('build-preview-row').count()).toBe(2)
-  await page.getByTestId('build-edit-editor').locator('.monaco-editor').click()
-  await page.keyboard.press('Control+End')
-  await page.keyboard.type(')')
-  await page.getByTestId('build-edit-save').click()
-  await expect(page.getByTestId('build-edit-diagnostic').first()).toContainText('DDB-306')
-  await expect(page.getByTestId('build-edit-editor').locator('.squiggly-error').first()).toBeVisible()
-  await page.getByTestId('build-edit-editor').locator('.monaco-editor').click()
-  await page.keyboard.press('Control+End')
-  await page.keyboard.press('Backspace')
-  await page.getByTestId('build-edit-save').click()
-  await expect(page.getByTestId('build-edit-clean')).toBeVisible()
-
-  // Taking the draft in: it shows the changed file, is committed, and merged into the project (an approver's act; the administrator is one), which ends the workspace.
-  await expect(page.getByTestId('build-git-change').filter({ hasText: 'models/staging/orders.sql' })).toHaveCount(1)
-  await expect(page.getByTestId('build-git-change')).toHaveCount(5)                // the four files edited through forms, and the model's query
-  await expect(page.getByTestId('build-git-merge')).toBeDisabled()
-  // the changed query is shown side by side: the text it had on the left, the saved one (with the limit) on the right
-  await page.getByTestId('build-git-change').filter({ hasText: 'models/staging/orders.sql' }).click()
-  const diff = page.getByTestId('build-git-diff-editor')
-  await expect(diff.locator('.monaco-diff-editor.side-by-side')).toBeVisible()
-  await expect(diff.locator('.editor.original')).toBeVisible()
-  await expect(diff.locator('.editor.modified')).toContainText('LIMIT 2')
-  await expect(diff.locator('.editor.original')).not.toContainText('LIMIT 2')
-  await page.getByTestId('build-git-message').fill('Limit staging orders')
-  await page.getByTestId('build-git-commit').click()
-  await expect(page.getByTestId('build-git-commit-row')).toContainText('Limit staging orders')
-  await page.getByTestId('build-git-merge').click()
-  await expect(page.getByTestId('build-edit-none')).toBeVisible()
-
-  // The models run on generated rows, offline.
-  await page.getByTestId('build-tab-sample').click()
-  await page.getByTestId('build-sample-button').click()
-  await expect(page.getByTestId('build-sample-table-marts.orders')).toContainText('rows')
-
-  // A deploy, when there is a PostgreSQL to deploy to: where it stands, a plan written and reviewed, a dry run, then approved and applied by the person at the console.
-  if (warehouseConnection) {
-    const serverUrl = page.url().replace(/\/projects\/starter\/sample$/, '')
-    await page.goto(`${serverUrl}/projects/warehouse/status`)
-    await expect(page.getByTestId('build-status-structure')).toHaveText('pending')
-    await expect(page.getByTestId('build-status-object-marts.orders').getByTestId('build-status-state')).toContainText('missing')
-    await page.getByTestId('build-tab-plans').click()
-    await expect(page.getByTestId('build-plans-empty')).toBeVisible()
-    await page.getByTestId('build-plan-write').click()
-    await expect(page.getByTestId('build-plan-review')).toBeVisible()
-    await expect(page.getByTestId('build-plan-facts')).toContainText('11 steps')
-    await page.getByTestId('build-plan-step-5').locator('summary').click()
-    await expect(page.getByTestId('build-plan-step-5')).toContainText('CREATE TABLE')
-    await page.getByTestId('build-plan-dry-run').click()
-    await expect(page.getByTestId('build-plan-dry-ok')).toBeVisible()
-    await page.getByTestId('build-plan-apply').click()
-    await expect(page.getByTestId('build-plan-applied')).toBeVisible()
-    await page.getByTestId('build-tab-status').click()
-    await page.getByTestId('build-status-refresh').click()
-    await expect(page.getByTestId('build-status-object-marts.orders').getByTestId('build-status-state')).not.toContainText('missing')
-
-    // Two of the deployed tables compared: counts and digests, never the values.
-    await page.getByTestId('build-tab-compare').click()
-    await page.getByTestId('build-compare-table').fill('marts.orders')
-    await page.getByTestId('build-compare-against').fill('staging.orders')
-    await page.getByTestId('build-compare-key').fill('order_id')
-    await page.getByTestId('build-compare-button').click()
-    await expect(page.getByTestId('build-compare-verdict')).toHaveText('Identical')
-    await expect(page.getByTestId('build-compare-rows')).toContainText('251 matched')
-  }
+  await expect(page).toHaveURL(/\/servers\/[^/]+$/)
+  await expect(page.getByTestId('runner-tasks-page')).toBeVisible()
 
   await page.getByTestId('rail-home-link').click()
   await expect(page.getByTestId('instances-page')).toBeVisible()
@@ -297,74 +174,7 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await page.getByTestId('rail-config').click()
   await expect(page.getByTestId('commits-table').locator('[data-testid^="commit-"]').first()).toBeVisible()
 
-  // Publishing (plan 13a, T11 and T12): the console links the Build server to the Gateway (no code typed), the Build screen publishes the starter's connection, and the Gateway lists the data source it made.
-  // The first Build pairing was forgotten above, so the server is paired again, with the second code made for it.
   await page.getByTestId('rail-home-link').click()
-  await page.getByTestId('pair-url-input').fill(buildUrl)
-  await page.getByTestId('pair-code-input').fill(fs.readFileSync(path.join(scratchDirectory, 'build-pairing-code-again.txt'), 'utf8').trim())
-  await page.getByTestId('pair-name-input').fill('Build one')
-  await page.getByTestId('pair-button').click()
-  await expect(page.getByTestId('instance-row-Build one').getByTestId('instance-status')).toHaveText('Ready')
-  await expect(page.getByTestId('link-card')).toBeVisible()
-  await page.getByTestId('link-from-select').selectOption({ label: 'Build one' })
-  await page.getByTestId('link-to-select').selectOption({ label: 'Gateway one' })
-  await page.getByTestId('link-button').click()
-  await expect(page.getByTestId('link-done')).toBeVisible()
-  await page.getByTestId('instance-row-Build one').getByTestId('instance-open-link').click()
-  await page.getByTestId('build-project-starter').getByTestId('build-project-link').click()
-  await page.getByTestId('build-tab-publish').click()
-  await expect(page.getByTestId('build-publish-button')).toBeDisabled()   // a gateway and a connection first
-  await page.getByTestId('build-publish-proxy').selectOption({ label: 'gateway-one' })
-  await page.getByTestId('build-publish-connection').fill('sqlserver')
-  await page.getByTestId('build-publish-data-source').fill('warehouse')
-  await page.getByTestId('build-publish-button').click()
-  await expect(page.getByTestId('build-publish-done')).toContainText('warehouse')
-  await expect(page.getByTestId('build-publish-done')).toContainText('(new)')
-  // a second time is a change to the data source the Build server made, not another one
-  await page.getByTestId('build-publish-button').click()
-  await expect(page.getByTestId('build-publish-done')).toContainText('updated')
-  await expect(page.getByTestId('build-publish-done')).not.toContainText('(new)')
-  // a data source made by hand on the Gateway (erp) is refused, in the Gateway's words, with the way an administrator settles it
-  await page.getByTestId('build-publish-data-source').fill('erp')
-  await page.getByTestId('build-publish-button').click()
-  await expect(page.getByTestId('build-publish-failed')).toContainText('not made by a publisher')
-  await expect(page.getByTestId('build-publish-adopt')).toBeVisible()
-  // T13: the administrator hands it over from the offer (the call goes to the Gateway through the console's relay), and the next publish is a change to a data source that is the Build server's now
-  await page.getByTestId('build-publish-adopt-button').click()
-  await expect(page.getByTestId('build-publish-adopted')).toContainText('erp')
-  await expect(page.getByTestId('build-publish-failed')).toHaveCount(0)
-  await page.getByTestId('build-publish-button').click()
-  await expect(page.getByTestId('build-publish-done')).toContainText('erp')
-  await expect(page.getByTestId('build-publish-done')).toContainText('updated')
-  // the other hand-made data source is refused the same way, and handed over from the Gateway's own page instead
-  await page.getByTestId('build-publish-data-source').fill('legacy')
-  await page.getByTestId('build-publish-button').click()
-  await expect(page.getByTestId('build-publish-failed')).toContainText('not made by a publisher')
-  await expect(page.getByTestId('build-publish-adopt')).toBeVisible()
-  // the Gateway shows what was made, and who manages each data source
-  await page.getByTestId('rail-home-link').click()
-  await page.getByTestId('instance-row-Gateway one').getByTestId('instance-open-link').click()
-  await page.getByTestId('rail-data-sources').click()
-  await expect(page.getByTestId('data-source-warehouse')).toBeVisible()
-  await expect(page.getByTestId('data-source-erp').getByTestId('data-source-owner')).not.toHaveText('by hand')
-  const legacy = page.getByTestId('data-source-legacy')
-  await expect(legacy.getByTestId('data-source-owner')).toHaveText('by hand')
-  await expect(legacy.getByTestId('hand-over-button')).toBeDisabled()   // a server first
-  await legacy.getByTestId('hand-over-client').selectOption({ index: 1 })
-  await legacy.getByTestId('hand-over-button').click()
-  await expect(legacy.getByTestId('hand-over-done')).toContainText('Handed to')
-  await expect(legacy.getByTestId('data-source-owner')).not.toHaveText('by hand')
-  // and the Build server publishes it now
-  await page.getByTestId('rail-home-link').click()
-  await page.getByTestId('instance-row-Build one').getByTestId('instance-open-link').click()
-  await page.getByTestId('build-project-starter').getByTestId('build-project-link').click()
-  await page.getByTestId('build-tab-publish').click()
-  await page.getByTestId('build-publish-proxy').selectOption({ label: 'gateway-one' })
-  await page.getByTestId('build-publish-connection').fill('sqlserver')
-  await page.getByTestId('build-publish-data-source').fill('legacy')
-  await page.getByTestId('build-publish-button').click()
-  await expect(page.getByTestId('build-publish-done')).toContainText('legacy')
-  await expect(page.getByTestId('build-publish-done')).toContainText('updated')
 
   // E05, the Connections view across servers: the Gateway's data sources are listed (the Sync server has none yet), one is copied to the Sync server and then back to the Gateway under another name. Each target reads the file with its own strict loader.
   await page.goto('/connections')
@@ -372,13 +182,6 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   const connection = (server: string, name: string) => page.locator(`[data-testid=connection-row][data-server="${server}"][data-name="${name}"]`)
   await expect(connection('Gateway one', 'ledger')).toBeVisible()
   await expect(page.locator('[data-testid=connection-row][data-server="Sync one"]')).toHaveCount(0)
-  // a data source Build republished holds its whole connection string in a secret; Sync cannot read that, and the copy says so
-  await expect(connection('Gateway one', 'legacy')).toBeVisible()
-  await connection('Gateway one', 'legacy').getByTestId('connection-copy-button').click()
-  await page.getByTestId('copy-target').selectOption({ label: 'Sync one (Sync)' })
-  await page.getByTestId('copy-submit').click()
-  await expect(page.getByTestId('copy-failed')).toContainText('whole connection string in a secret')
-  await page.goto('/connections')
   await connection('Gateway one', 'ledger').getByTestId('connection-copy-button').click()
   await expect(page.getByTestId('copy-submit')).toBeDisabled()   // a server first
   await page.getByTestId('copy-target').selectOption({ label: 'Sync one (Sync)' })
@@ -405,7 +208,7 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await page.getByTestId('copy-submit').click()
   await expect(page.getByTestId('copy-failed')).toContainText('did not accept the copy')
 
-  // One view across the servers: the Build, Sync and Gateway servers all answer, and none has a replication or a scheduled plan yet (a failed run and a lagging replication need real runs, so the rows themselves are tested on what the servers return)
+  // One view across the servers: the Sync and Gateway servers answer, and none has a replication yet (a failed run and a lagging replication need real runs, so the rows themselves are tested on what the servers return)
   await page.goto('/monitoring')   // the rail inside a server's screens is that product's own
   await expect(page.getByTestId('monitoring-none')).toBeVisible()
   await expect(page.getByTestId('monitoring-problem')).toHaveCount(0)

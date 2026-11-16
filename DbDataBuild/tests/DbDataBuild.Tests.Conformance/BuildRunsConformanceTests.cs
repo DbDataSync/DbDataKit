@@ -4,7 +4,7 @@ using Xunit;
 
 namespace DbDataBuild.Tests.Conformance;
 
-/// <summary>UI09 on the state engines: the <c>build_runs</c> module follows the conventions, applies once, and the store records and lists runs newest first on SQL Server and PostgreSQL (SQLite is in the unit suite, <c>BuildSchedulerTests</c>).</summary>
+/// <summary>UI09 on the state engines: the <c>build_runs</c> module follows the conventions, applies once, and the store records and lists runs newest first on SQL Server and PostgreSQL (the Build server that ran it on SQLite was deleted, plan 33 SC23).</summary>
 public class BuildRunsConformanceTests
 {
     public static TheoryData<string> Engines => new() { "sqlserver", "postgres" };

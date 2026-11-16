@@ -500,12 +500,12 @@ Usage: `dbdatabuild project publish [options]`
 | `--client-dir` `<text>` | Where this machine's pairings with runners are kept (default: DBDATAKIT_RUNNER_CLIENT_DIR, else a folder under the user's local application data) |
 | `--code` `<text>` | The single-use pairing code (from `dbdatarunner server pair --max-role publisher`), when this machine is not paired with the runner yet |
 | `--expected-version` `<number>` | The highest version the package has, as you saw it (0 for a first publish); a newer one is refused |
-| `--operations` | Publish the project's person-driven writes instead of its refresh plans (plan 28c E21): the manual-only tasks `apply_plan`, `ack` and `seed`, with the project's sources and a slot for every connection the project uses (the connections its models build on, a copy's origins and their tracking connections; a built-in connection no model builds on is no slot), as the package `<project>-ops` (or --package). The Build server starts them for the person who asked; the write login is the runner's binding, not the server's |
+| `--operations` | Publish the project's person-driven writes instead of its refresh plans (plan 28c E21): the manual-only tasks `apply_plan`, `ack` and `seed`, with the project's sources and a slot for every connection the project uses (the connections its models build on, a copy's origins and their tracking connections; a built-in connection no model builds on is no slot), as the package `<project>-ops` (or --package). A person starts them on the runner (or through the console), and the run is recorded under their name; the write login is the runner's binding |
 | `--out` `<text>` | Write the package (package.yaml and files/; for --to gateway gateway.json, models/ and data-sources/) to this directory and send nothing |
 | `--package` `<text>` | The package's name on the runner (default: the project folder's name) |
 | `--project` `<path>` | Project root |
 | `--promote-from` `<text>` | Do not publish: promote the version this channel serves to --channel (the same version; the runner's `switch`, which needs an administrator pairing) |
-| `--runner-schedules` | Let the runner schedule the plans from the first activation. By default each task is recorded on the runner as scheduled by the Build server (`server schedule`) until it is cut over, so a published plan never runs from two schedulers |
+| `--runner-schedules` | The runner schedules the plans from the first activation; always so since the Build server and its scheduler were deleted (plan 33 SC23), and the option is kept so a script that gives it still runs |
 | `--runtime-range` `<text>` | The engine versions the package accepts, instead of this tool's minor line (`0.4.x`, `>=0.4 <1`) |
 | `--serve` | Make the version active at once instead of staging it (staged is the default: runners prepare it, then it activates) |
 | `--server` `<text>` | The runner: the name it was paired under or its https address |
@@ -630,7 +630,7 @@ Usage: `dbdatabuild connection refresh [connection] [plan] [selectors]... [optio
 |---|---|
 | `--allow-dirty` | Run from a working tree with uncommitted changes (recorded) |
 | `--check` `<text>` | The safety check before the loads, instead of the project's `refresh.check`: none (nothing; the engine's errors are the check), project (this project was deployed here), objects (each object against what was last deployed), live (each object against the catalog now) |
-| `--check-results` `<path>` | Evaluate the data quality checks stored with the models that loaded, after the loads, and record the results in the state database of this server directory (the one `server run` uses; default: the environment variable DBDATAKIT_BUILD_CHECK_RESULTS, else the checks are not evaluated). The results carry the refresh's id; a failed check is reported and does not change how the loads ended |
+| `--check-results` `<path>` | Evaluate the data quality checks stored with the models that loaded, after the loads, and record the results in the state database of this directory (its `state.db`, or the engine its `server.yaml` or the environment names; default: the environment variable DBDATAKIT_BUILD_CHECK_RESULTS, else the checks are not evaluated). The results carry the refresh's id; a failed check is reported and does not change how the loads ended |
 | `--dry-run` | Run every check and print every statement; execute nothing |
 | `--input` `<text ...>` | `[model.]name=value`: the value of an input of a load to run, instead of its default or the plan's (repeatable); it replaces a resolver, which is then not run, and is recorded as coming from the flag. `model.name` is needed when more than one load has the input |
 | `--on-fail` `<text>` | What a failed check does, instead of the project's `refresh.on_fail`: block (stop before anything runs) or warn (report and run) |
@@ -801,13 +801,13 @@ Usage: `dbdatabuild semantic describe <model> [options]`
 
 | Option | Meaning |
 |---|---|
-| `--address` `<text>` | The Gateway's Flight SQL address, https://host:8815, instead of --gateway |
+| `--address` `<text>` | The Gateway's Flight SQL address, https://host:8815 |
 | `--ca-file` `<text>` | A PEM file with the certificate authority the Gateway's certificate is checked against |
-| `--flight-port` `<number>` | The Gateway's Flight SQL port with --gateway (default 8815) |
-| `--gateway` `<text>` | A Gateway this Build server is paired with (`server proxy list`); its host is used, with the Flight port |
+| `--flight-port` `<number>` | Gone with the Build server (plan 33 SC23): the port is part of --address |
+| `--gateway` `<text>` | Gone with the Build server (plan 33 SC23): answers that --address is given instead |
 | `--insecure` | Do not check the Gateway's certificate (a test Gateway only) |
 | `--max-rows` `<number>` | At most this many rows are read (default 100, at most 10000) |
-| `--server-dir` `<text>` | The Build server's directory, where its pairings are (default: the server's default directory) |
+| `--server-dir` `<text>` | Gone with the Build server (plan 33 SC23): answers that --address is given instead |
 
 ## semantic query
 
@@ -823,14 +823,14 @@ Usage: `dbdatabuild semantic query <model> [options]`
 
 | Option | Meaning |
 |---|---|
-| `--address` `<text>` | The Gateway's Flight SQL address, https://host:8815, instead of --gateway |
+| `--address` `<text>` | The Gateway's Flight SQL address, https://host:8815 |
 | `--ca-file` `<text>` | A PEM file with the certificate authority the Gateway's certificate is checked against |
-| `--flight-port` `<number>` | The Gateway's Flight SQL port with --gateway (default 8815) |
-| `--gateway` `<text>` | A Gateway this Build server is paired with (`server proxy list`); its host is used, with the Flight port |
+| `--flight-port` `<number>` | Gone with the Build server (plan 33 SC23): the port is part of --address |
+| `--gateway` `<text>` | Gone with the Build server (plan 33 SC23): answers that --address is given instead |
 | `--insecure` | Do not check the Gateway's certificate (a test Gateway only) |
 | `--max-rows` `<number>` | At most this many rows are read (default 100, at most 10000) |
 | `--request` `<text>` | A semantic request as a JSON object; give --sql or --request |
-| `--server-dir` `<text>` | The Build server's directory, where its pairings are (default: the server's default directory) |
+| `--server-dir` `<text>` | Gone with the Build server (plan 33 SC23): answers that --address is given instead |
 | `--sql` `<text>` | Semantic SQL (FROM names the model); give --sql or --request |
 
 ## semantic explain
@@ -847,14 +847,14 @@ Usage: `dbdatabuild semantic explain <model> [options]`
 
 | Option | Meaning |
 |---|---|
-| `--address` `<text>` | The Gateway's Flight SQL address, https://host:8815, instead of --gateway |
+| `--address` `<text>` | The Gateway's Flight SQL address, https://host:8815 |
 | `--ca-file` `<text>` | A PEM file with the certificate authority the Gateway's certificate is checked against |
-| `--flight-port` `<number>` | The Gateway's Flight SQL port with --gateway (default 8815) |
-| `--gateway` `<text>` | A Gateway this Build server is paired with (`server proxy list`); its host is used, with the Flight port |
+| `--flight-port` `<number>` | Gone with the Build server (plan 33 SC23): the port is part of --address |
+| `--gateway` `<text>` | Gone with the Build server (plan 33 SC23): answers that --address is given instead |
 | `--insecure` | Do not check the Gateway's certificate (a test Gateway only) |
 | `--max-rows` `<number>` | At most this many rows are read (default 100, at most 10000) |
 | `--request` `<text>` | A semantic request as a JSON object; give --sql or --request |
-| `--server-dir` `<text>` | The Build server's directory, where its pairings are (default: the server's default directory) |
+| `--server-dir` `<text>` | Gone with the Build server (plan 33 SC23): answers that --address is given instead |
 | `--sql` `<text>` | Semantic SQL (FROM names the model); give --sql or --request |
 
 ## semantic members
@@ -872,14 +872,14 @@ Usage: `dbdatabuild semantic members <model> <attribute> [options]`
 
 | Option | Meaning |
 |---|---|
-| `--address` `<text>` | The Gateway's Flight SQL address, https://host:8815, instead of --gateway |
+| `--address` `<text>` | The Gateway's Flight SQL address, https://host:8815 |
 | `--ca-file` `<text>` | A PEM file with the certificate authority the Gateway's certificate is checked against |
-| `--flight-port` `<number>` | The Gateway's Flight SQL port with --gateway (default 8815) |
-| `--gateway` `<text>` | A Gateway this Build server is paired with (`server proxy list`); its host is used, with the Flight port |
+| `--flight-port` `<number>` | Gone with the Build server (plan 33 SC23): the port is part of --address |
+| `--gateway` `<text>` | Gone with the Build server (plan 33 SC23): answers that --address is given instead |
 | `--insecure` | Do not check the Gateway's certificate (a test Gateway only) |
 | `--limit` `<number>` | At most this many values (default: the Gateway's) |
 | `--search` `<text>` | Only the values that contain this text |
-| `--server-dir` `<text>` | The Build server's directory, where its pairings are (default: the server's default directory) |
+| `--server-dir` `<text>` | Gone with the Build server (plan 33 SC23): answers that --address is given instead |
 
 ## ui terminal
 

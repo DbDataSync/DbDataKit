@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, ErrorBanner } from '@dbdatakit/shell'
-import { FOLDERS, semanticModelName, viewFileOf, workspaceViewsClient } from '@dbdatakit/build/files'
+import { FOLDERS, semanticModelName, viewFileOf, workspaceViewsClient } from '../build/workspaceStore'
 import { clientStore, type ViewKind } from '@dbdatakit/visuals'
 import { DashboardEditor, type EditorHost } from '@dbdatakit/views-editor'
 import { workspaceApi, type CheckDiagnostic } from '../api'

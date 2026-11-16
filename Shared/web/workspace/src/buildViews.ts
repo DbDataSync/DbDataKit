@@ -1,4 +1,4 @@
-import { FileRefusal, FOLDERS, semanticModelName, type FilesApi } from '@dbdatakit/build/files'
+import { FileRefusal, FOLDERS, semanticModelName, type FilesApi } from './build/workspaceStore'
 import { parseYaml } from '@dbdatakit/shell'
 import type { CheckDiagnostic } from './api'
 

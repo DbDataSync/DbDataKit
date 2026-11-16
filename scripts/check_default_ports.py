@@ -15,7 +15,6 @@ import sys
 LISTENERS = [
     ("DbDataKit (the console)", "DbDataKit/src/DbDataKit.Server/ConsoleSettings.cs", r'DefaultListen = "https://[^":]+:(\d+)"', 1),
     ("DbDataKit identity home on its own", "DbDataKit/src/DbDataKit.Server/IdentityHost.cs", r'DefaultListen = "https://[^":]+:(\d+)"', 1),
-    ("DbDataBuild", "DbDataBuild/src/DbDataBuild.Cli/Server/BuildServer.cs", r'DefaultListen = "https://[^":]+:(\d+)"', 1),
     ("DbDataWorkspace", "DbDataWorkspace/src/DbDataWorkspace.Server/WorkspaceSettings.cs", r'DefaultListen = "https://[^":]+:(\d+)"', 1),
     ("DbDataRunner", "DbDataRunner/src/DbDataRunner.Server/RunnerSettings.cs", r'DefaultListen = "https://[^":]+:(\d+)"', 1),
     ("DbDataSync", "DbDataSync/src/DbDataSync.Api/Configuration/ApiOptions.cs", r'DefaultUrl = "https?://[^":]+:(\d+)"', 1),

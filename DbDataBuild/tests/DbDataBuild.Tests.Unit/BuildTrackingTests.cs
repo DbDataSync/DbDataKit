@@ -1,5 +1,4 @@
 using DbDataBuild.Cli;
-using DbDataBuild.Cli.Server;
 using DbDataBuild.Execution;
 using DbDataKit.Tracking.Build;
 using DbDataBuild.State;
@@ -202,38 +201,6 @@ public sealed class BuildTrackingTests : IDisposable
         Assert.Contains(diagnostics, d => d.Found.Contains("runner_copy", StringComparison.Ordinal));
     }
 
-    // ---------- the setting ----------
-
-    private string ServerDirectory(string? yaml)
-    {
-        var dir = Path.Combine(_dir, "server" + Guid.NewGuid().ToString("N")[..6]);
-        Directory.CreateDirectory(dir);
-        if (yaml is not null) File.WriteAllText(Path.Combine(dir, "server.yaml"), yaml);
-        return dir;
-    }
-
-    [Fact]
-    public void The_setting_defaults_to_both_with_the_target_primary_and_reads_the_section()
-    {
-        Assert.Equal(TrackingSettings.Default, BuildTrackingSettings.Read(ServerDirectory(null)));
-        Assert.Equal(TrackingSettings.Default, BuildTrackingSettings.Read(ServerDirectory("instance_id: x\n")));
-        Assert.Equal(TrackingSettings.Default, BuildTrackingSettings.Read(ServerDirectory("tracking:\n  mode: both\n")));
-        Assert.Equal(TrackingSettings.TargetOnly, BuildTrackingSettings.Read(ServerDirectory("tracking:\n  mode: target\n")));
-    }
-
-    [Theory]
-    [InlineData("tracking:\n  mod: both\n", "tracking.mod is not a tracking setting", "did you mean 'mode'")]
-    [InlineData("tracking:\n  mode: sometimes\n", "'sometimes' is not one of target, state, both", "tracking")]
-    [InlineData("tracking:\n  mode: target\n  primary: target\n", "takes no primary", "tracking")]
-    public void A_setting_that_is_not_valid_stops_the_start_naming_the_file(string yaml, string says, string also)
-    {
-        var dir = ServerDirectory(yaml);
-        var ex = Assert.Throws<InvalidOperationException>(() => BuildTrackingSettings.Read(dir));
-        Assert.Contains(Path.Combine(dir, "server.yaml"), ex.Message);
-        Assert.Contains(says, ex.Message);
-        Assert.Contains(also, ex.Message);
-    }
-
     // ---------- layout 10 ----------
 
     [Theory]
@@ -251,33 +218,6 @@ public sealed class BuildTrackingTests : IDisposable
     }
 
     // ---------- state first (plan 28c E16, mode state with a state primary) ----------
-
-    [Fact]
-    public void A_state_primary_is_a_setting_the_server_reads_and_writes_back_keeping_the_rest_of_the_file()
-    {
-        Assert.Equal(TrackingSide.State, BuildTrackingSettings.Read(ServerDirectory("tracking:\n  mode: state\n")).PrimarySide);
-        Assert.Equal(TrackingSide.State, BuildTrackingSettings.Read(ServerDirectory("tracking:\n  mode: both\n  primary: state\n")).PrimarySide);
-
-        var none = ServerDirectory("instance_id: x\n");
-        Assert.False(BuildTrackingSettings.IsExplicit(none));
-        Assert.Null(BuildTrackingSettings.PrimaryOverride(none));       // no section: the projects' keys decide
-
-        var dir = ServerDirectory("# the server\ninstance_id: x\ntracking:\n  mode: both\n  primary: target\n");
-        Assert.Equal("target", BuildTrackingSettings.PrimaryOverride(dir));
-        BuildTrackingSettings.Write(dir, TrackingSettings.Both(TrackingSide.State));
-        Assert.Equal("state", BuildTrackingSettings.PrimaryOverride(dir));
-        var text = File.ReadAllText(Path.Combine(dir, "server.yaml"));
-        Assert.Contains("# the server", text);
-        Assert.Contains("instance_id: x", text);
-        BuildTrackingSettings.Write(dir, TrackingSettings.Both(TrackingSide.Target));
-        Assert.Equal(TrackingSettings.Default, BuildTrackingSettings.Read(dir));
-
-        // a server with no section gets one when it is switched
-        var fresh = ServerDirectory("instance_id: y\n");
-        BuildTrackingSettings.Write(fresh, TrackingSettings.Both(TrackingSide.State));
-        Assert.Equal("state", BuildTrackingSettings.PrimaryOverride(fresh));
-        Assert.Throws<ArgumentException>(() => BuildTrackingSettings.Write(fresh, TrackingSettings.TargetOnly));
-    }
 
     [Theory]
     [InlineData("tracking: {connection: sqlserver}\n", false)]
@@ -325,7 +265,7 @@ public sealed class BuildTrackingTests : IDisposable
         var stateFirst = ConfigOf("tracking: {connection: sqlserver, mode: state}\n");
         var ex = Assert.Throws<InvalidOperationException>(() => TrackingJournals.For(stateFirst, scope, TrackingLogin(), _ => null));
         Assert.Contains("state-first", ex.Message);
-        Assert.Contains(TrackingJournals.ServerDirectoryVariable, ex.Message);
+        Assert.Contains("A runner task has the runner's", ex.Message);
 
         // a host that has a state gives it to the flow, and the scope gets a journal for this tracking store's identity
         var sink = new StateBuildTrackingSink(new BuildTrackingStore(Open()));
@@ -341,7 +281,7 @@ public sealed class BuildTrackingTests : IDisposable
     }
 
     [Fact]
-    public void The_servers_primary_wins_over_the_projects_keys_for_the_commands_it_starts()
+    public void The_environments_primary_wins_over_the_projects_keys()
     {
         var targetFirst = ConfigOf("tracking: {connection: sqlserver}\n");
         var stateFirst = ConfigOf("tracking: {connection: sqlserver, mode: state}\n");
@@ -354,7 +294,7 @@ public sealed class BuildTrackingTests : IDisposable
     }
 
     [Fact]
-    public async Task A_state_first_project_has_no_follower_a_server_copies_only_for_the_comparison_of_a_switch()
+    public async Task A_state_first_project_has_no_follower()
     {
         var root = Project("defaults: {connections: [sqlserver]}\ntracking: {connection: sqlserver, mode: state}\n");
         string? Env(string v) => v == "DBDATAKIT_BUILD_SQLSERVER_READ" ? "Server=sql01;Database=wh;User Id=a;Password=b" : null;

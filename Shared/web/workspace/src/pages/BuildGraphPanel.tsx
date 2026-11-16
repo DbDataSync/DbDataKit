@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { ErrorBanner } from '@dbdatakit/shell'
-import { GraphView } from '@dbdatakit/build/graph'
+import { GraphView } from '../build/GraphView'
 import { workspaceApi } from '../api'
 import { graphOfLoads, type LoadGraph } from '../buildGraph'
 import { planFilesOf } from '../buildPlan'

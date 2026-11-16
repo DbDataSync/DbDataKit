@@ -1,5 +1,5 @@
 using System.Text.Json.Nodes;
-using DbDataBuild.Cli.Server;
+using DbDataBuild.Cli;
 using DbDataKit.Cli;
 using DbDataKit.Semantic.Cli;
 using Json.Schema;
@@ -7,7 +7,7 @@ using Json.Schema;
 namespace DbDataBuild.Tests.Unit;
 
 /// <summary>
-/// The <c>semantic</c> noun in Build (plan 14a SL22): the shared verbs and documents over a Gateway the server is paired with. The connection is the only part that is Build's, so a stand-in session
+/// The <c>semantic</c> verbs in Build (plan 14a SL22): the shared verbs and documents over a Gateway named by its Flight address (<c>--gateway</c> named the deleted Build server's pairings, plan 33 SC23, and answers so). The connection is the only part that is Build's, so a stand-in session
 /// answers here; the session class itself runs against a real Gateway in the Gateway's <c>SemanticFlightTests</c> (<c>TheSharedFlightSessionBuildUsesDescribesQueriesAndExplains...</c>).
 /// </summary>
 [Collection("BuildSemantic")]
@@ -37,60 +37,40 @@ public class BuildSemanticNounTests : IDisposable
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private async Task<(int Exit, string Out, string Err)> Run(params string[] args)
+    private static (int Exit, string Out, string Err) Run(params string[] args)
     {
         var (o, e) = (new StringWriter(), new StringWriter());
-        var exit = await ServerCli.RunAsync([.. args, "--repo", root], o, e, TextReader.Null);
+        var exit = CliApp.Run(args, o, e, environment: _ => null);
         return (exit, o.ToString(), e.ToString());
     }
 
     [Fact]
-    public async Task Describe_query_explain_and_members_answer_the_shared_documents_and_send_the_shared_statements()
-    {
-        var session = new FakeSession();
-        BuildSemantic.Connect = (_, _) => Task.FromResult<ISemanticSession>(session);
-
-        var query = await Run("semantic", "query", "shop", "--sql", "SELECT region, net FROM shop", "--gateway", "any", "--format", "json");
-        Assert.Equal(0, query.Exit);
-        var document = JsonNode.Parse(query.Out)!;
-        Assert.True(JsonSchema.FromText(ServerCli.OutputSchema(["semantic"])).Evaluate(document, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid, query.Out);
-        Assert.Equal(2, (int)document["data"]!["row_count"]!);
-        Assert.Equal("complete", (string)document["data"]!["notes"]!["qis.status"]!);
-
-        Assert.Equal(0, (await Run("semantic", "describe", "shop", "--gateway", "any")).Exit);
-        Assert.Equal(0, (await Run("semantic", "explain", "shop", "--sql", "SELECT 1", "--gateway", "any")).Exit);
-        Assert.Equal(0, (await Run("semantic", "members", "shop", "customer.region", "--limit", "5", "--gateway", "any")).Exit);
-        Assert.Equal([("shop", "SELECT region, net FROM shop"), ("shop", """{"kind": "describe"}"""), ("shop", "EXPLAIN SELECT 1"), ("shop", """{"kind":"members","attribute":"customer.region","limit":5}""")], session.Asked);
-    }
-
-    [Fact]
-    public async Task A_connection_without_a_token_is_refused_naming_the_variable_and_an_unpaired_gateway_is_refused_naming_the_pairing_verb()
+    public void A_connection_without_a_token_is_refused_naming_the_variable_and_a_gateway_by_pairing_name_answers_that_the_server_is_gone()
     {
         Environment.SetEnvironmentVariable(BuildSemantic.TokenVariable, null);
-        var noToken = await Run("semantic", "describe", "shop", "--gateway", "any");
+        var noToken = Run("semantic", "describe", "shop", "--address", "https://gateway.example.com:8815");
         Assert.NotEqual(0, noToken.Exit);
-        Assert.Contains(BuildSemantic.TokenVariable, noToken.Err);
+        Assert.Contains(BuildSemantic.TokenVariable, noToken.Err + noToken.Out);
 
         Environment.SetEnvironmentVariable(BuildSemantic.TokenVariable, "t0ken");
         try
         {
-            var unpaired = await Run("semantic", "describe", "shop", "--gateway", "nobody");
-            Assert.NotEqual(0, unpaired.Exit);
-            Assert.Contains("server proxy list", unpaired.Err);
-            Assert.DoesNotContain("t0ken", unpaired.Err + unpaired.Out);
+            var paired = Run("semantic", "describe", "shop", "--gateway", "nobody");
+            Assert.NotEqual(0, paired.Exit);
+            Assert.Contains("plan 33 SC23", paired.Err + paired.Out);
+            Assert.Contains("--address", paired.Err + paired.Out);
+            Assert.DoesNotContain("t0ken", paired.Err + paired.Out);
         }
         finally { Environment.SetEnvironmentVariable(BuildSemantic.TokenVariable, null); }
     }
 
     [Fact]
-    public void The_flight_address_is_the_paired_gateways_host_on_the_flight_port_or_the_one_given()
+    public void The_flight_address_is_the_one_given_and_a_pairing_name_is_refused_with_the_sentence()
     {
-        new ProxiesFile(root).Add(new PairedProxy("gw", "https://gateway.example.com:8443/", "inst", "ff", DateTimeOffset.UnixEpoch));
         CliArgs Parse(params string[] args) => CliArgs.Parse(args, new HashSet<string> { "insecure" }, new HashSet<string>(BuildSemantic.Options));
-        Assert.Equal("https://gateway.example.com:8815/", BuildSemantic.AddressOf(Parse("--gateway", "gw"), root).ToString());
-        Assert.Equal("https://gateway.example.com:9000/", BuildSemantic.AddressOf(Parse("--gateway", "gw", "--flight-port", "9000"), root).ToString());
-        Assert.Equal("https://other:1/", BuildSemantic.AddressOf(Parse("--address", "https://other:1"), root).ToString());
-        Assert.Throws<InvalidOperationException>(() => BuildSemantic.AddressOf(Parse("--flight-port", "9000"), root));
+        Assert.Equal("https://other:1/", BuildSemantic.AddressOf(Parse("--address", "https://other:1")).ToString());
+        Assert.Equal(BuildSemantic.GatewayGone, Assert.Throws<InvalidOperationException>(() => BuildSemantic.AddressOf(Parse("--gateway", "gw"))).Message);
+        Assert.Throws<InvalidOperationException>(() => BuildSemantic.AddressOf(Parse("--flight-port", "9000")));
     }
 
     [Fact]
@@ -103,7 +83,7 @@ public class BuildSemanticNounTests : IDisposable
         (int Exit, JsonNode Doc) Command(params string[] args)
         {
             var (o, e) = (new StringWriter(), new StringWriter());
-            var exit = DbDataBuild.Cli.CliApp.Run([.. args, "--gateway", "any", "--format", "json"], o, e, environment: _ => null);
+            var exit = DbDataBuild.Cli.CliApp.Run([.. args, "--address", "https://gateway.example.com:8815", "--format", "json"], o, e, environment: _ => null);
             var doc = JsonNode.Parse(o.ToString())!;
             Assert.True(schema.Evaluate(System.Text.Json.JsonSerializer.SerializeToNode(doc), new Json.Schema.EvaluationOptions { OutputFormat = Json.Schema.OutputFormat.List }).IsValid, o.ToString());
             return (exit, doc);
@@ -128,7 +108,7 @@ public class BuildSemanticNounTests : IDisposable
     }
 
     [Fact]
-    public void An_agent_is_offered_the_verbs_without_a_way_to_send_the_token_anywhere_but_to_a_paired_gateway_and_the_management_api_does_not_offer_them_at_all()
+    public void An_agent_is_offered_the_verbs_without_a_way_to_send_the_token_to_an_address_of_its_choosing()
     {
         var catalog = DbDataBuild.Cli.TuiCommand.CliHost.Catalog();
         var agent = new DbDataBuild.Cli.Mcp.ToolSurface(root, catalog.Where(c => c.Name is not ("ui terminal" or "ui mcp")));
@@ -140,8 +120,5 @@ public class BuildSemanticNounTests : IDisposable
         Assert.DoesNotContain("insecure", properties);
         Assert.DoesNotContain("ca_file", properties);
         Assert.DoesNotContain("server_dir", properties);
-
-        Assert.DoesNotContain(DbDataBuild.Cli.Server.BuildManagementApi.FullSurface(root, catalog).Tools.Keys, k => k.StartsWith("semantic_"));
-        Assert.DoesNotContain(DbDataBuild.Cli.Server.BuildManagementApi.ReadOnlySurface(root, catalog).Tools.Keys, k => k.StartsWith("semantic_"));
     }
 }

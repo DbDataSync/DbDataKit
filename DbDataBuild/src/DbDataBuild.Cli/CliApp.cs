@@ -13,8 +13,17 @@ public static class CliApp
     /// <param name="input">Where interactive answers are read from. Only used when <paramref name="interactive"/> is true.</param>
     /// <param name="interactive">Whether a person is there to answer questions (a terminal). Commands that ask refuse to run without one unless they are given everything.</param>
     /// <param name="environment">Where logins are read from (connection strings in environment variables). Defaults to the process environment.</param>
-    public static int Run(string[] args, TextWriter output, TextWriter error, TextReader? input = null, bool interactive = false, Func<string, string?>? environment = null) =>
-        Guarded(args, error, () => { DbDataBuild.Execution.DriverSettings.Apply(); return Build(output, error, input ?? TextReader.Null, interactive, environment ?? Environment.GetEnvironmentVariable).Parse(args, new ParserConfiguration { ResponseFileTokenReplacer = null }).Invoke(new InvocationConfiguration { Output = output, Error = error, EnableDefaultExceptionHandler = false }); }, output);
+    public static int Run(string[] args, TextWriter output, TextWriter error, TextReader? input = null, bool interactive = false, Func<string, string?>? environment = null)
+    {
+        // the Build server is gone (plan 33 SC23): its commands answer with where each feature went, never "not a command"
+        if (RemovedServer.Commands.AnswerFor(args) is { } removed)
+        {
+            error.WriteLine(removed);
+            return ExitUsage;
+        }
+
+        return Guarded(args, error, () => { DbDataBuild.Execution.DriverSettings.Apply(); return Build(output, error, input ?? TextReader.Null, interactive, environment ?? Environment.GetEnvironmentVariable).Parse(args, new ParserConfiguration { ResponseFileTokenReplacer = null }).Invoke(new InvocationConfiguration { Output = output, Error = error, EnableDefaultExceptionHandler = false }); }, output);
+    }
 
     /// <summary>
     /// The error number of a database exception (SQL Server's `Number`, PostgreSQL's `SqlState`), which says what went wrong (18456 is a failed login, 28P01 a wrong password) without the driver's message, which
@@ -150,8 +159,8 @@ public static class CliApp
                     var ppRange = new Option<string?>("--runtime-range") { Description = "The engine versions the package accepts, instead of this tool's minor line (`0.4.x`, `>=0.4 <1`)" };
                     var ppClientDir = new Option<string?>("--client-dir") { Description = "Where this machine's pairings with runners are kept (default: DBDATAKIT_RUNNER_CLIENT_DIR, else a folder under the user's local application data)" };
                     var ppOut = new Option<string?>("--out") { Description = "Write the package (package.yaml and files/; for --to gateway gateway.json, models/ and data-sources/) to this directory and send nothing" };
-                    var ppRunnerSchedules = new Option<bool>("--runner-schedules") { Description = "Let the runner schedule the plans from the first activation. By default each task is recorded on the runner as scheduled by the Build server (`server schedule`) until it is cut over, so a published plan never runs from two schedulers" };
-                    var ppOperations = new Option<bool>("--operations") { Description = "Publish the project's person-driven writes instead of its refresh plans (plan 28c E21): the manual-only tasks `apply_plan`, `ack` and `seed`, with the project's sources and a slot for every connection the project uses (the connections its models build on, a copy's origins and their tracking connections; a built-in connection no model builds on is no slot), as the package `<project>-ops` (or --package). The Build server starts them for the person who asked; the write login is the runner's binding, not the server's" };
+                    var ppRunnerSchedules = new Option<bool>("--runner-schedules") { Description = "The runner schedules the plans from the first activation; always so since the Build server and its scheduler were deleted (plan 33 SC23), and the option is kept so a script that gives it still runs" };
+                    var ppOperations = new Option<bool>("--operations") { Description = "Publish the project's person-driven writes instead of its refresh plans (plan 28c E21): the manual-only tasks `apply_plan`, `ack` and `seed`, with the project's sources and a slot for every connection the project uses (the connections its models build on, a copy's origins and their tracking connections; a built-in connection no model builds on is no slot), as the package `<project>-ops` (or --package). A person starts them on the runner (or through the console), and the run is recorded under their name; the write login is the runner's binding" };
                     cmd.Options.Add(ppOperations);
                     cmd.Options.Add(ppProject); cmd.Options.Add(ppTo); cmd.Options.Add(ppServer); cmd.Options.Add(ppCode); cmd.Options.Add(ppChannel); cmd.Options.Add(ppPackage); cmd.Options.Add(ppServe); cmd.Options.Add(ppExpected); cmd.Options.Add(ppBind); cmd.Options.Add(ppPromote); cmd.Options.Add(ppRange); cmd.Options.Add(ppClientDir); cmd.Options.Add(ppRunnerSchedules); cmd.Options.Add(ppOut);
                     cmd.SetAction(pr => Reported(pr, spec, (o, e) => Runner.ProjectPublishCommand.Run(spec, pr.GetValue(ppProject)!.FullName,
@@ -324,7 +333,7 @@ public static class CliApp
                     var runInput = new Option<string[]>("--input") { Description = "`[model.]name=value`: the value of an input of a load to run, instead of its default or the plan's (repeatable); it replaces a resolver, which is then not run, and is recorded as coming from the flag. `model.name` is needed when more than one load has the input", DefaultValueFactory = _ => [] };
                     var runOnlyFailed = new Option<bool>("--only-failed") { Description = "Run only the loads of the plan that did not end done in its last run: failed, skipped or not run (a full run again is also safe, loads are idempotent). Needs a plan and its recorded runs" };
                     var runParallel = new Option<int?>("--parallel") { Description = "How many loads may run at once, instead of the plan's `parallel` (1 to 64; default 1, one after another). A load starts when the loads of the plan that it reads are done; `max_parallel` on the connection caps it" };
-                    var runResults = new Option<DirectoryInfo?>("--check-results") { Description = "Evaluate the data quality checks stored with the models that loaded, after the loads, and record the results in the state database of this server directory (the one `server run` uses; default: the environment variable DBDATAKIT_BUILD_CHECK_RESULTS, else the checks are not evaluated). The results carry the refresh's id; a failed check is reported and does not change how the loads ended" };
+                    var runResults = new Option<DirectoryInfo?>("--check-results") { Description = "Evaluate the data quality checks stored with the models that loaded, after the loads, and record the results in the state database of this directory (its `state.db`, or the engine its `server.yaml` or the environment names; default: the environment variable DBDATAKIT_BUILD_CHECK_RESULTS, else the checks are not evaluated). The results carry the refresh's id; a failed check is reported and does not change how the loads ended" };
                     cmd.Arguments.Add(runTarget); cmd.Arguments.Add(runPlan); cmd.Arguments.Add(runModels);
                     cmd.Options.Add(runResults);
                     cmd.Options.Add(runProject); cmd.Options.Add(runCheck); cmd.Options.Add(runOnFail); cmd.Options.Add(runDirty); cmd.Options.Add(runDry); cmd.Options.Add(runInput); cmd.Options.Add(runOnlyFailed); cmd.Options.Add(runParallel);
@@ -489,12 +498,12 @@ public static class CliApp
                         var smMaxRows = verb is "query" or "explain" or "describe" ? new Option<int?>("--max-rows") { Description = "At most this many rows are read (default 100, at most 10000)" } : null;
                         var smSearch = verb == "members" ? new Option<string?>("--search") { Description = "Only the values that contain this text" } : null;
                         var smLimit = verb == "members" ? new Option<int?>("--limit") { Description = "At most this many values (default: the Gateway's)" } : null;
-                        var smGateway = new Option<string?>("--gateway") { Description = "A Gateway this Build server is paired with (`server proxy list`); its host is used, with the Flight port" };
-                        var smAddress = new Option<string?>("--address") { Description = "The Gateway's Flight SQL address, https://host:8815, instead of --gateway" };
-                        var smPort = new Option<int?>("--flight-port") { Description = "The Gateway's Flight SQL port with --gateway (default 8815)" };
+                        var smGateway = new Option<string?>("--gateway") { Description = "Gone with the Build server (plan 33 SC23): answers that --address is given instead" };
+                        var smAddress = new Option<string?>("--address") { Description = "The Gateway's Flight SQL address, https://host:8815" };
+                        var smPort = new Option<int?>("--flight-port") { Description = "Gone with the Build server (plan 33 SC23): the port is part of --address" };
                         var smCa = new Option<string?>("--ca-file") { Description = "A PEM file with the certificate authority the Gateway's certificate is checked against" };
                         var smInsecure = new Option<bool>("--insecure") { Description = "Do not check the Gateway's certificate (a test Gateway only)" };
-                        var smServerDir = new Option<string?>("--server-dir") { Description = "The Build server's directory, where its pairings are (default: the server's default directory)" };
+                        var smServerDir = new Option<string?>("--server-dir") { Description = "Gone with the Build server (plan 33 SC23): answers that --address is given instead" };
                         foreach (var o in new Option?[] { smSql, smRequest, smMaxRows, smSearch, smLimit }.OfType<Option>()) cmd.Options.Add(o);
                         foreach (var o in new Option[] { smGateway, smAddress, smPort, smCa, smInsecure, smServerDir }) cmd.Options.Add(o);
                         cmd.SetAction(pr => Reported(pr, spec, (o, e) => SemanticCommand.Run(spec, verb, pr.GetValue(smModel)!, smAttribute is null ? null : pr.GetValue(smAttribute),

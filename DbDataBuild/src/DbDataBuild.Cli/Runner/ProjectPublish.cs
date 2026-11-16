@@ -7,7 +7,6 @@ using DbDataKit.Monitoring;
 using DbDataKit.Runner;
 using DbDataKit.Scheduling;
 using DbDataKit.State;
-using DbDataBuild.Cli.Server;
 
 namespace DbDataBuild.Cli.Runner;
 
@@ -27,6 +26,14 @@ internal sealed record BuiltPackage(string Name, PackageManifest Manifest, strin
 /// </summary>
 internal static class RunnerProject
 {
+    /// <summary>What a compiled plan's settings say about when it runs: the schedule (null when it declares none) or why the one it declares is not valid; the manifest's schedule is made from it (plan 28c E07).</summary>
+    internal static (Schedule? Schedule, string? Problem) ScheduleOf(RefreshPlanSettingsText settings)
+    {
+        if (settings.Schedule is not { Length: > 0 } cron) return (null, null);
+        var schedule = Schedule.OnCron(cron, settings.TimeZone ?? "UTC");
+        return schedule.Validate() is { } why ? (null, why) : (schedule, null);
+    }
+
     /// <summary>The runtime package that runs a Build project (plan 28c E05): `scripts/publish-runtime.sh`'s package name.</summary>
     public const string RuntimeName = "dbdatabuild-runtime";
 
@@ -115,7 +122,7 @@ internal static class RunnerProject
                 foreach (var member in file.Members.Where(m => !loads.Loads.Any(l => l.Model == m.Model && l.Load == m.Load && l.Hash == m.LoadPlanHash)))
                     diagnostics.Add(new Diagnostic(DiagnosticCatalog.RefreshFileChanged, new(relative, 0, 0), $"The refresh plan names the load plan {member.LoadPlanHash[..Math.Min(12, member.LoadPlanHash.Length)]} of `{member.Model}.{member.Load}`, which `{Relative(loadsPath)}` does not have (it was compiled again since)."));
 
-                var (schedule, problem) = RefreshJobs.ScheduleOf(file.Settings);
+                var (schedule, problem) = ScheduleOf(file.Settings);
                 if (problem is not null) { diagnostics.Add(Invalid(relative, $"`schedule`: {problem}", "Standard cron fields, for example `15 * * * *` (minute 15 of every hour) or `0 2 * * 1-5`; `time_zone` names the zone it is read in. Correct it in the model's `refresh:` plans and run `project compile`.")); continue; }
 
                 var task = TaskName(connection, plan);

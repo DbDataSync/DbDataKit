@@ -8,9 +8,9 @@
 param(
   [Parameter(Mandatory)][string]$ConsoleMsi,
   [string]$ProductMsi = '',
-  [string]$ProductDisplayName = '',                    # DbDataBuild: where -ProductMsi installs it
+  [string]$ProductDisplayName = '',                    # DbDataRunner: where -ProductMsi installs it
   [Parameter(Mandatory)][string]$ProductExe,           # the product's executable: the installed one with -ProductMsi (a file name), else a full path
-  [int]$ProductPort = 8470,
+  [int]$ProductPort = 18495,
   [int]$ConsolePort = 8480,
   [string]$LogDir = $env:RUNNER_TEMP
 )

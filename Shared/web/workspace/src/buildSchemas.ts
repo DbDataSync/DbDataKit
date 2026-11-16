@@ -16,7 +16,7 @@ export const BUILD_SCHEMAS: Record<string, SchemaNode> = {
   [CHECK_SCHEMA_ID]: CHECK_SCHEMA,
 }
 
-/** Which schema a file of a project has: the same table as `FileSchemas.All` of the Build server (a test keeps the two equal). */
+/** Which schema a file of a project has: the same table as `FileSchemas.All` of dbdatabuild (a test keeps the two equal). */
 export const BUILD_ASSOCIATIONS: readonly SchemaAssociation[] = [
   { pattern: 'models/**/_dbdatabuild.yml', schema: 'folder.schema.json', kind: 'folder settings' },
   { pattern: 'models/**/*.yml', schema: 'model.schema.json', kind: 'model' },

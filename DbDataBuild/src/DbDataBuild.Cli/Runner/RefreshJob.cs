@@ -105,15 +105,15 @@ public sealed class RefreshJob : RunnerJob<RefreshInput, NoProgress, NoSlots>
     }
 
     /// <summary>
-    /// The loads that finished, as the run's lineage (plan 24a UC13): the Runner keeps the tables and its <c>RunnerDataChanges</c> tells the serving groups it is paired with that they changed, as the Build server's
-    /// <c>BuildDataChanges</c> did for its own refreshes, under the same names (<see cref="BuildLineage.LoadedDatasets"/>). A dry run and a refresh that loaded nothing report nothing; a failure to name them is a line of the log,
+    /// The loads that finished, as the run's lineage (plan 24a UC13): the Runner keeps the tables and its <c>RunnerDataChanges</c> tells the serving groups it is paired with that they changed, under the names the deleted Build server used
+    /// (plan 33 SC23) (<see cref="BuildLineage.LoadedDatasets"/>). A dry run and a refresh that loaded nothing report nothing; a failure to name them is a line of the log,
     /// never a failure of the run.
     /// </summary>
     private void ReportLineage(string project, Func<string, string?> env, JsonDocument document)
     {
         try
         {
-            var loaded = DbDataBuild.Cli.Server.BuildDataChanges.LoadedModels(document.RootElement.GetRawText());
+            var loaded = RefreshOutput.LoadedModels(document.RootElement.GetRawText());
             if (loaded.Count == 0) return;
             var datasets = BuildLineage.LoadedDatasets(ProjectContext.Load(project).Config, env, loaded);
             if (datasets.Count > 0) Run.Lineage([], datasets);
@@ -194,5 +194,25 @@ public sealed class CatchUpJob : RunnerJob<CatchUpInput, NoProgress, NoSlots>
         Status("catch up the tracking copy");
         foreach (var line in await RunnerTrackingCopy.CopyAsync(Tracking, project, Input.Connection, Environment.GetEnvironmentVariable, TimeSpan.FromMinutes(4), ct).ConfigureAwait(false))
             Console.Out.WriteLine("tracking " + line);
+    }
+}
+
+/// <summary>What the document of <c>connection refresh</c> says it loaded.</summary>
+internal static class RefreshOutput
+{
+    /// <summary>The datasets a refresh changed, from the document <c>connection refresh --format json</c> printed (<paramref name="output"/>); empty for anything else.</summary>
+    internal static IReadOnlyList<(string Connection, string Model)> LoadedModels(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output)) return [];
+        System.Text.Json.Nodes.JsonObject? data;
+        try { data = (System.Text.Json.Nodes.JsonNode.Parse(output) as System.Text.Json.Nodes.JsonObject)?["data"] as System.Text.Json.Nodes.JsonObject; }
+        catch (System.Text.Json.JsonException) { return []; }
+        if (data is null || data["dry_run"] is System.Text.Json.Nodes.JsonValue { } dry && dry.TryGetValue<bool>(out var isDry) && isDry) return [];
+        if (data["connection"] is not System.Text.Json.Nodes.JsonValue c || !c.TryGetValue<string>(out var connection) || connection.Length == 0 || data["results"] is not System.Text.Json.Nodes.JsonArray results) return [];
+        var loaded = new List<(string, string)>();
+        foreach (var result in results.OfType<System.Text.Json.Nodes.JsonObject>())
+            if (result["state"] is System.Text.Json.Nodes.JsonValue s && s.TryGetValue<string>(out var state) && state == "done" && result["model"] is System.Text.Json.Nodes.JsonValue m && m.TryGetValue<string>(out var model) && model.Length > 0)
+                loaded.Add((connection, model));
+        return loaded;
     }
 }

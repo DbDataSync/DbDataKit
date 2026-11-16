@@ -89,7 +89,7 @@ internal static class ModelQuality
             var ctx = ProjectContext.Load(root);
             var directory = Path.GetFullPath(resultsDirectory);
             var (source, modelOfIdentity) = Source(ctx, connection, read, loadedModels.ToHashSet(StringComparer.Ordinal), at ?? DateTimeOffset.UtcNow, env, notes);
-            var state = DbDataBuild.Cli.Server.BuildState.Open(directory, environment: env);
+            var state = BuildState.Open(directory, environment: env);
             var service = new QualityRunService(source, new QualityStore(state));
             var report = Task.Run(() => service.RunAsync(null, runId)).GetAwaiter().GetResult();
             return new ModelQualityOutcome(runId, directory, report, notes, null, modelOfIdentity);
@@ -119,7 +119,7 @@ internal static class ModelQuality
                 identityOf[LineageIdentity.Dataset(address, schema, name).ToString()] = model.Name;
             }
 
-            var state = DbDataBuild.Cli.Server.BuildState.Open(Path.GetFullPath(resultsDirectory), environment: env);
+            var state = BuildState.Open(Path.GetFullPath(resultsDirectory), environment: env);
             var blocked = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var block in new QualityStore(state).Blocks())
                 if (identityOf.TryGetValue(block.Dataset, out var model) && !blocked.ContainsKey(model))

@@ -1,17 +1,17 @@
-# Interfaces: terminal, web page, MCP server and MCP app
+# Interfaces: terminal, console, MCP server and MCP app
 
 All four are clients of the same command layer (`--format json` documents). None has logic or a database path of its own, and none can do more than the command line can.
 
 | | Start it with | What it is for |
 |---|---|---|
 | Terminal | `dbdatabuild ui terminal` | choose, plan and run commands interactively |
-| Console | `dbdatabuild server run --project <dir>`, with a console paired to it | a person works in a browser: projects, models, graph, check, status, deploy plans (review, dry run, approve, apply), compare, sample data |
+| Console | a build project of the Workspace (`dbdataworkspace`), opened in a console | a person works in a browser: files, models, graph, check, compile, sample, import, views, deploy plans; runs are the Runner's |
 | MCP server | `dbdatabuild ui mcp --project <dir>` | an AI agent works in the project: the commands as tools, the skill and schemas as resources, workflows as prompts |
 | MCP app | the same `ui mcp` server, in a host that supports MCP Apps | the web page inside the conversation: the person sees and decides, the model cannot press the buttons |
 
 ## Console
 
-The command `dbdatabuild ui web` is gone (plan 13, R09). Run `dbdatabuild server run --project .` (it listens on the loopback address by default), pair it with a DbDataKit console on the same machine, and open the project there. Applying a plan needs the `approver` role the console grants through the pairing, and the person who applies is recorded as the approver. The page the MCP server's `show` tool opens is still served by the MCP server, and goes with the MCP server's move to the shared surface. <!-- retired-name-ok -->
+The Build server (`dbdatabuild server run`) and its screens in the console were deleted (plan 33 SC23). A project is authored in a build project of the Workspace (`dbdataworkspace`, which runs this program as a child process, offline, for its checks, compile, sample and import), published from there to a Runner (refresh plans, and the manual tasks `apply_plan`, `ack` and `seed` of the operations package, which run under the person's name) and to a Gateway (the semantic models and data sources). The page the MCP server's `show` tool opens is still served by the MCP server. <!-- retired-name-ok -->
 
 ## MCP server
 
@@ -105,28 +105,6 @@ What differs between hosts is what is worth looking at. In Claude Desktop or VS 
 
 Report what you see with the host name and version.
 
-## A project on a git remote that needs a login
+## Projects on a git remote, new projects and imports
 
-`dbdatabuild server project add <id> --git <https address>` clones a remote into the server and `push` sends a workspace's branch back to it. When the remote asks for a login, the project names one credential, used for every author and for the server's own pulls:
-
-1. Make an access token at the provider with read and write access to that one repository: a personal, project or group access token on GitLab, a fine-grained or classic personal access token on GitHub, a personal access token (scope Code: read and write) on Azure DevOps.
-2. Store it under `dbdatakit:build:git:<name>` on the server: `dbdatabuild secret set dbdatakit:build:git:sales` (it asks for the value without showing it, or reads standard input). The value is the token; write `<user>:<token>` only when the provider needs a particular user name (the default, `oauth2`, is accepted by GitLab and, with a token, by GitHub and Azure DevOps).
-3. Register the project with it: `dbdatabuild server project add sales --git https://git.example.com/acme/sales.git --git-credential sales`. The entry in `build/projects.yaml` then holds only the name, `git_credential: secret:dbdatakit:build:git:sales`.
-
-The token is read from the server's secret store for each clone, pull and push and handed to git in memory; it is not in the address, the process list, `.git/config`, a log or an API answer. If the token is wrong, expired or may not push, the push says which credential was refused; if the secret is missing the message names it and the command above. SSH keys are not supported.
-
-After a push, the Edit tab links to the page where a pull request is opened, for a remote at github.com, dev.azure.com (or `*.visualstudio.com`) and gitlab.com, in their https and ssh forms. For any other remote there is no link and the branch is merged where the remote lives.
-
-## Starting a project, a model or an import from the console
-
-In the console, a person with the author role (an administrator, or a role the server's ceiling allows) has three more controls; everyone else does not see them, and the server refuses the calls all the same.
-
-- **New project** (the Projects page): choose a template from the list the server has (`GET /api/v1/templates`), name the project (lower-case letters, digits, `-` and `_`) and create it. The server writes the template into `projects/<name>` of its directory, makes it a git repository with the template as the first commit in your name, and hosts it. It needs the author role on the server itself. A name already hosted, or a folder already there, is refused in words and nothing is written.
-- **New model** (Edit tab, in a workspace): a name (`schema_name.object_name`), a kind (view, full table, incremental by key, incremental by time) and, when the project has several connections, which they are on. This runs `project model create` in your workspace: a definition and a query that runs. Open the query, change it, save, and press *Update the definition from the query*: the definition's columns are brought in line with it. When the tool has questions (the type of a new column, whether it can be NULL, a model's grain) they are shown as a form; nothing is answered for you, a proposal is taken only by its button, and the answers go to an answers file in the workspace and the update runs again.
-- **Import from a connection** (Edit tab, in a workspace): choose one of the project's connections, list its tables (read with the login the server holds for it, which is never shown), tick the ones to import and write them as mapped models in the workspace. Tables that are mapped already show as such, and what the tool says about them (a model whose table is gone, a column with no logical type) is listed with the compiler's markers.
-- **Write the compiled files** (Edit tab, in a workspace): runs `project compile` in your workspace, which writes the rendered files under `rendered/`. Saving a file only checks, and a deploy refuses a project whose committed `rendered/` differs from a fresh render (DDB-424), so write them before you commit; the button says how many of them are out of date, and the draft's changes list them like any file. It is the author's, like every command that writes the draft's files.
-
-
-## The state and the maintenance mode of a server
-
-A Build server's management API has the state endpoints every server has (plan 29b C05): `GET /api/v1/state` (a viewer: the engine of the scheduler's state, the connection with secrets masked, the module versions, the migrations pending, where each setting came from) and `GET`/`POST /api/v1/state/maintenance` (an administrator: `{"enabled": true, "reason": "..."}`). In maintenance the server answers every other call with 503, `Retry-After` and the reason (the state, `/health` and an administrator's calls still work), the scheduler keeps queueing what is due but claims nothing, and `idle` turns true when the commands in flight and the plans the scheduler started have ended. Changes and refusals are written to `management-audit.log` in the server's directory. Nothing is persisted: a restart leaves maintenance.
+These were the Build server's (`server project add --git`, the New project, New model and Import controls of its screens, and its state and maintenance mode); they went with it (plan 33 SC23). A Workspace keeps its projects in git (its own credentials, `DbDataWorkspace/README.md`), makes a new build project from Build's `starter` template, and offers New model, New connection and Import from the catalog cache of a draft.

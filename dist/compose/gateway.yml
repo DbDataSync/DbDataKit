@@ -1,4 +1,7 @@
-# The console and a Gateway, paired by announcement (see build.yml for the mechanism; the commands are the same with `-f dist/compose/gateway.yml`):
+# The console and a Gateway, paired by announcement. One setting is shared by the whole file: where the console takes announcements.
+# The console listens there (on a port that is not published, so only containers of this network reach it) and every server announces there;
+# the server announces its host name, which the console resolves on this network (so a server that gets a new IP address stays paired; its address is used when the name does not resolve). A server waits as pending until an administrator confirms it
+# (or in the web app); another server is another service with `environment: *announce`:
 #   docker compose -f dist/compose/gateway.yml exec console dotnet /app/dbdatakit.dll instance confirm dbdatagateway
 # The Gateway's management API is on by default and listens on the loopback address; here it listens on every address of the container (port 8816, not
 # published: only the console, on this network, reaches it) and the address the console is told to use is fixed in this file. The Flight port (8815) is published for clients.

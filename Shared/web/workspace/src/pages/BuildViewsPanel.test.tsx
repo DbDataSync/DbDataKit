@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { workspaceViewsClient } from '@dbdatakit/build/files'
+import { workspaceViewsClient } from '../build/workspaceStore'
 import { ViewsClientError } from '@dbdatakit/visuals'
 import type { CheckDiagnostic } from '../api'
 import { draftFilesApi, semanticModelOf, versionOf, viewFindings, type DraftFiles } from '../buildViews'

@@ -5,19 +5,17 @@ import http2 from 'node:http2'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
-import { monitorBuild, monitorGateway, monitorSync, scratchDirectory } from '../playwright.config'
+import { monitorGateway, monitorSync, scratchDirectory } from '../playwright.config'
 
-// Plan 13a, M12 (the done-when of M11): the console's Monitoring page across real servers. A Build server that runs schedules has a project whose plan runs every minute and fails (its connection has no login), a
-// Sync server has a replication that is an hour behind, and a Gateway has locked a user out; the page lists the failed run, the lagging replication and the Gateway's notice together, failed first. Pausing the plan
-// stops its next run, and releasing it lets the run happen again. The servers are the ones playwright.config.ts starts for this file (apart from the servers of the other stories, whose pairing codes those spend).
+// Plan 13a, M12 (the done-when of M11): the console's Monitoring page across real servers. A Sync server has a replication that is an hour behind, and a Gateway has locked a user out; the page lists the lagging
+// replication and the Gateway's notice together, the lagging one first. (The Build server whose scheduled plan failed, and the pause and resume of that plan, went with the Build server, plan 33 SC23: a scheduled
+// refresh is a runner task, paused and resumed on the runner's screens, runner-schedule.spec.ts.) The servers are the ones playwright.config.ts starts for this file.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
 const consoleDll = path.join(repoRoot, 'DbDataKit/src/DbDataKit.Server/bin/Debug/net10.0/dbdatakit.dll')
 
-const buildName = 'Monitor build'
 const syncName = 'Monitor sync'
 const gatewayName = 'Monitor gateway'
 const replication = 'hourly-orders'
-const planSubject = `${monitorBuild.project}: ${monitorBuild.connection}/${monitorBuild.plan}`
 
 async function signInAsAdmin(page: Page, context: BrowserContext, baseURL: string) {
   const cdp = await context.newCDPSession(page)
@@ -46,12 +44,6 @@ async function pair(page: Page, url: string, codeFile: string, name: string) {
 async function instanceId(request: APIRequestContext, name: string): Promise<string> {
   const list = await (await request.get('/api/instances')).json() as { id: string; name: string }[]
   return list.find((i) => i.name === name)!.id
-}
-
-interface Job { connection: string; plan: string; next_due: string | null; last_started: string | null; last_exit: number | null; paused: boolean }
-const schedule = async (request: APIRequestContext, build: string): Promise<Job> => {
-  const { jobs } = await (await request.get(`/relay/${build}/api/v1/projects/${monitorBuild.project}/schedule`)).json() as { jobs: Job[] }
-  return jobs.find((j) => j.plan === monitorBuild.plan)!
 }
 
 /** A replication of a SQL Server source with change data capture, whose last applied change is an hour older than where the source has got to: the figures the lag endpoint reads are the state database's. */
@@ -126,35 +118,23 @@ async function failLogins(port: number, user: string, times: number) {
 }
 
 test.describe.serial('monitoring across real servers', () => {
-  let build = ''
   let sync = ''
-  let gateway = ''
 
-  test('a failed plan, a lagging replication and a Gateway notice are listed together, failed first', async ({ page, context, baseURL }) => {
+  test('a lagging replication and a Gateway notice are listed together, the lagging one first', async ({ page, context, baseURL }) => {
     test.setTimeout(240_000)
     await signInAsAdmin(page, context, baseURL!)
-    await pair(page, `https://localhost:${monitorBuild.port}`, 'monitor-build-pairing-code.txt', buildName)
     await pair(page, `https://localhost:${monitorSync.port}`, 'monitor-sync-pairing-code.txt', syncName)
     await pair(page, `https://localhost:${monitorGateway.managementPort}`, 'monitor-gateway-pairing-code.txt', gatewayName)
-    build = await instanceId(page.request, buildName)
     sync = await instanceId(page.request, syncName)
-    gateway = await instanceId(page.request, gatewayName)
 
     await makeLaggingReplication(page.request, sync)
     await failLogins(monitorGateway.flightPort, 'intruder', 5)
 
-    // The scheduler notes the plan when it first sees it and runs it at the next minute; the run ends with an exit code because nothing is set up to log in with.
-    await expect.poll(async () => (await schedule(page.request, build)).last_exit, { timeout: 150_000, intervals: [3_000] }).not.toBeNull()
-    expect((await schedule(page.request, build)).last_exit).not.toBe(0)
-
     await page.goto('/monitoring')
     await expect(page.getByTestId('monitoring-page')).toBeVisible()
     const rows = page.getByTestId('monitoring-row')
-    const failed = rows.filter({ hasText: planSubject })
     const lagging = rows.filter({ hasText: replication })
     const notice = rows.filter({ hasText: 'Login locked out' })
-    await expect(failed).toHaveAttribute('data-state', 'failed')
-    await expect(failed).toContainText(buildName)
     await expect(lagging).toHaveAttribute('data-state', 'lagging')
     await expect(lagging).toContainText('60 min behind')
     await expect(lagging).toContainText(syncName)
@@ -163,39 +143,11 @@ test.describe.serial('monitoring across real servers', () => {
     await expect(notice).toContainText(gatewayName)
     await expect(notice.getByTestId('monitoring-toggle')).toHaveCount(0)
 
-    // Together at the top: before them only other failures, and after them nothing but notices, holds and what is fine.
+    // Before the lagging one only failures and other lagging rows, and after it the notices, holds and what is fine.
     const states = await rows.evaluateAll((all) => all.map((row) => row.getAttribute('data-state')))
     const subjects = await rows.evaluateAll((all) => all.map((row) => row.textContent ?? ''))
     const at = (text: string) => subjects.findIndex((s) => s.includes(text))
-    expect(states[at(planSubject)]).toBe('failed')
-    expect(states.slice(0, at(planSubject) + 1).every((s) => s === 'failed')).toBe(true)
-    expect(at(planSubject)).toBeLessThan(at(replication))
     expect(states.slice(0, at(replication) + 1).every((s) => s === 'failed' || s === 'lagging')).toBe(true)
     expect(at(replication)).toBeLessThan(at('Login locked out'))
-  })
-
-  test('pausing the plan stops its next run, and resuming lets it run again', async ({ page, context, baseURL }) => {
-    test.setTimeout(240_000)
-    await signInAsAdmin(page, context, baseURL!)
-    await page.goto('/monitoring')
-    const row = page.getByTestId('monitoring-row').filter({ hasText: planSubject })
-    await expect(row).toBeVisible()
-    const before = (await schedule(page.request, build)).last_started
-    expect(before).not.toBeNull()
-
-    await row.getByTestId('monitoring-toggle').click()
-    await expect(row.getByTestId('monitoring-toggle')).toHaveText('Resume')
-    await expect(row.getByTestId('monitoring-state')).toContainText('held')
-    expect((await schedule(page.request, build)).paused).toBe(true)
-
-    // The plan is due every minute: after two minute marks have passed nothing has run.
-    await page.waitForTimeout(125_000)
-    const held = await schedule(page.request, build)
-    expect(held.last_started).toBe(before)
-    expect(held.paused).toBe(true)
-
-    await row.getByTestId('monitoring-toggle').click()
-    await expect(row.getByTestId('monitoring-toggle')).toHaveText('Pause')
-    await expect.poll(async () => (await schedule(page.request, build)).last_started, { timeout: 100_000, intervals: [3_000] }).not.toBe(before)
   })
 })

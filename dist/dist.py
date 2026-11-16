@@ -200,7 +200,6 @@ _MANAGEMENT_ADDRESS = {
     "dbdatasync": "https://localhost:5080",
     "dbdatagateway": "https://localhost:8816",
     "dbdatarunner": "https://127.0.0.1:8495",
-    "dbdatabuild": "https://127.0.0.1:8470",
     "dbdataworkspace": "https://127.0.0.1:8471",
 }
 

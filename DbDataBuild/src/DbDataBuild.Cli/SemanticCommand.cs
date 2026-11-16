@@ -1,24 +1,19 @@
 using System.Globalization;
-using DbDataBuild.Cli.Server;
 using DbDataBuild.Core;
 using DbDataKit.Cli;
 
 namespace DbDataBuild.Cli;
 
 /// <summary>
-/// <c>dbdatabuild semantic describe|query|explain|members</c> as commands of the command tree (plan 14a SL22, remainder): the same four verbs, documents and closed <c>data</c> schema as the server command line's
-/// <c>semantic</c> noun (<see cref="BuildSemantic"/>, the shared <c>SemanticNoun</c>), so <c>ui mcp</c> and the terminal catalog offer them to an agent that is writing a view over a published model. Nothing is
-/// written twice: the command builds the verb's own arguments and runs the verb, then moves the verb's values into the document's <c>data</c>.
-/// The Gateway is one the Build server is paired with (<c>--gateway</c>, read from the server's directory, <c>--server-dir</c> when it is not the default one) or <c>--address</c>; the credential is the personal access
-/// token in <c>DBDATAKIT_GATEWAY_TOKEN</c>, never an argument, and the statement runs as the person it names. The management API's tool route does not offer these commands (<see cref="Server.BuildManagementApi"/>): a
-/// token in the server's environment must not be usable by whoever may call a tool, and <c>--address</c> would let a caller make the server connect anywhere.
+/// <c>dbdatabuild semantic describe|query|explain|members</c> as commands of the command tree (plan 14a SL22, remainder): the same four verbs, documents and closed <c>data</c> schema as the shared <c>SemanticNoun</c>
+/// (<see cref="BuildSemantic"/>), so <c>ui mcp</c> and the terminal catalog offer them to an agent that is writing a view over a published model. Nothing is written twice: the command builds the verb's own arguments and runs the verb,
+/// then moves the verb's values into the document's <c>data</c>. The Gateway is named by its Flight address (<c>--address</c>; <c>--gateway</c> and <c>--server-dir</c> named the Build server's pairings and answer that the server was deleted,
+/// plan 33 SC23); the credential is the personal access token in <c>DBDATAKIT_GATEWAY_TOKEN</c>, never an argument, and the statement runs as the person it names.
 /// </summary>
 internal static class SemanticCommand
 {
     public const string Group = "semantic";
 
-    /// <summary>True for the commands of this group, which the management API's tool route does not offer.</summary>
-    public static bool IsSemantic(string commandName) => commandName.StartsWith(Group + " ", StringComparison.Ordinal);
 
     public sealed record Connection(string? Gateway, string? Address, int? FlightPort, string? CaFile, bool Insecure, string? ServerDirectory);
 

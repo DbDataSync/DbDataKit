@@ -3,15 +3,14 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { inventoryBuild, inventorySync, scratchDirectory } from '../playwright.config'
+import { inventorySync, scratchDirectory } from '../playwright.config'
 
 // The file name matters: the specs run one at a time in the order of their names, and first-run.spec.ts and identity-home.spec.ts need a console that has no user yet. This story invites its own administrator, so it must sort after them (as monitoring.spec.ts does).
-// Plan 28c, E23 (ED17, the condition of ED16): the Connections page shows one table over the paired servers with where each connection goes, the reference of its secret and the processes that use it. A Build server hosts a project with a connection
-// file and a scheduled plan; a Sync server is given a connection and a replication that uses it. The table lists both with their users, the filters answer "where is this connection used" and "what does this task connect to", and removing the Sync
+// Plan 28c, E23 (ED17, the condition of ED16): the Connections page shows one table over the paired servers with where each connection goes, the reference of its secret and the processes that use it. A Sync server is given a connection and a
+// replication that uses it (the Build server of this story went with the Build server, plan 33 SC23). The table lists it with its users, the filters answer "where is this connection used" and "what does this task connect to", and removing the Sync
 // connection while the replication uses it is refused naming the replication. No password reaches the page. (A runner's part, the task and instances that use a bound slot, is covered by DbDataRunner.Tests' ConnectionInventoryTests and the web unit tests.)
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
 const consoleDll = path.join(repoRoot, 'DbDataKit/src/DbDataKit.Server/bin/Debug/net10.0/dbdatakit.dll')
-const buildName = 'Inventory build'
 const syncName = 'Inventory sync'
 const password = 'inventory-password-91c3'
 
@@ -47,7 +46,6 @@ const row = (page: Page, server: string, name: string) => page.locator(`[data-te
 test('the Connections page shows where each connection is used, answers the two questions and refuses to remove a used one', async ({ page, context, baseURL }) => {
   test.setTimeout(180_000)
   await signInAsAdmin(page, context, baseURL!)
-  await pair(page, `https://localhost:${inventoryBuild.port}`, 'inventory-build-pairing-code.txt', buildName)
   await pair(page, `https://localhost:${inventorySync.port}`, 'inventory-sync-pairing-code.txt', syncName)
   const sync = await instanceId(page.request, syncName)
 
@@ -64,16 +62,9 @@ test('the Connections page shows where each connection is used, answers the two 
   await page.goto('/connections')
   await expect(page.getByTestId('connection-inventory')).toBeVisible()
 
-  // Build: the connection file's engine, the reference of the read login, the server, the scheduled plan and the flows that write
-  const build = row(page, buildName, inventoryBuild.connection)
-  await expect(build).toBeVisible({ timeout: 30_000 })
-  await expect(build.getByTestId('inventory-secret')).toHaveText('secret:dbdatakit:build:connection:sqlserver:read')
-  await expect(build.locator(`[data-testid="inventory-use"][data-process="plan"]`)).toContainText(`${inventoryBuild.project}/${inventoryBuild.connection}/${inventoryBuild.plan}`)
-  await expect(build.locator('[data-testid="inventory-use"][data-process="flow"]').first()).toContainText('write login')
-  await expect(build.locator('[data-testid="inventory-use"][data-process="server"]')).toContainText('read login')
-
   // Sync: the address, the reference, the server and the replication
   const erp = row(page, syncName, 'erp')
+  await expect(erp).toBeVisible({ timeout: 30_000 })
   await expect(erp.getByTestId('inventory-address')).toHaveText('sql01:1433/Erp')
   await expect(erp.getByTestId('inventory-secret')).toContainText('secret:')
   await expect(erp.locator('[data-testid="inventory-use"][data-process="replication"]')).toContainText('replication erp-orders, run login')
@@ -82,9 +73,6 @@ test('the Connections page shows where each connection is used, answers the two 
   await page.getByTestId('inventory-filter-connection').fill('erp')
   await expect(page.getByTestId('inventory-row')).toHaveCount(1)
   await page.getByTestId('inventory-filter-connection').fill('')
-  await page.getByTestId('inventory-filter-user').fill(`${inventoryBuild.plan}`)
-  await expect(page.getByTestId('inventory-row')).toHaveCount(1)
-  await expect(page.getByTestId('inventory-row')).toHaveAttribute('data-name', inventoryBuild.connection)
   await page.getByTestId('inventory-filter-user').fill('erp-orders')
   await expect(page.getByTestId('inventory-row')).toHaveAttribute('data-name', 'erp')
   await page.getByTestId('inventory-filter-user').fill('')
