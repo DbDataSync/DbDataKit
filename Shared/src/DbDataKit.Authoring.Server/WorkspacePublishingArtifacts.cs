@@ -243,8 +243,13 @@ public sealed partial class WorkspacePublishing
         using var http = GatewayHttp(target);
         try
         {
-            var (models, dataSources) = await new WorkspaceGatewayPublish(new GatewayLink(target, identity, role, http), identity, step, ct).PublishSemanticModelsAsync(folder, options.Adopt);
-            return new JsonObject { ["models"] = models, ["data_sources"] = dataSources, ["target"] = target.Name, ["gateway"] = target.Url };
+            var publish = new WorkspaceGatewayPublish(new GatewayLink(target, identity, role, http), identity, step, ct);
+            var (models, dataSources) = await publish.PublishSemanticModelsAsync(folder, options.Adopt);
+            // the dashboards and reports of the project, after the models they query (plan 33 SC20n)
+            var views = await publish.PublishViewsAsync(folder);
+            var answer = new JsonObject { ["models"] = models, ["data_sources"] = dataSources, ["target"] = target.Name, ["gateway"] = target.Url };
+            if (views.Count > 0) answer["views"] = views;
+            return answer;
         }
         catch (HttpRequestException ex) { throw new WorkspacePublishException($"{target.Url} could not be reached ({ex.Message}).", 502); }
     }

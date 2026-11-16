@@ -114,6 +114,37 @@ public sealed partial class WorkspaceGatewayPublish(IDefinitionsLink link, Conso
         return (models, sources);
     }
 
+    /// <summary>
+    /// The dashboards and reports of a Build project (plan 33 SC20n: <c>views/dashboards/</c> and <c>views/reports/</c> of the build's models folder) to the Gateway as <c>dashboard</c> and <c>report</c> definitions, after the models they query:
+    /// each depends on the version of each model it queries that the Gateway serves now (<see cref="DbDataKit.Views.ViewDefinitions.DependsOn"/>), so the Gateway's validator checks every widget against that catalog and refuses in its words.
+    /// A document named as a definition is its file's name in lower case. Nothing is sent when the build has no views.
+    /// </summary>
+    public async Task<JsonArray> PublishViewsAsync(string folder)
+    {
+        var published = new JsonArray();
+        var versions = new Dictionary<string, int?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, kind) in BuildProjectKind.ViewFolders)
+        {
+            var directory = Path.Combine(folder, "views", name);
+            if (!Directory.Exists(directory)) continue;
+            foreach (var file in Directory.EnumerateFiles(directory).Where(f => Path.GetExtension(f) is ".yaml" or ".yml").Order(StringComparer.Ordinal))
+            {
+                var text = File.ReadAllText(file);
+                var definition = Path.GetFileNameWithoutExtension(file).ToLowerInvariant();
+                var models = DbDataKit.Views.ViewDefinitions.DependsOn(kind, definition, text, _ => 0);
+                foreach (var model in models.Select(d => d.Split(':', 2)[1].Split('@')[0]).Where(m => !versions.ContainsKey(m)))
+                    versions[model] = (await ServedAsync(ModelKind, model, $"reading the model {model} the {kind} {definition} queries"))?.Active;
+                var dependsOn = DbDataKit.Views.ViewDefinitions.DependsOn(kind, definition, text, m => versions.GetValueOrDefault(m.ToLowerInvariant()));
+                var held = await ServedAsync(kind, definition, $"reading the {kind} {definition}");
+                var answer = await client.PublishAsync(new DefinitionPublishRequest(kind, definition, text, ExpectedVersion: held?.Latest ?? 0, DependsOn: [.. dependsOn]), ct);
+                if (!answer.Ok) throw Refused(answer, $"the {kind} {definition}");
+                step($"Published the {kind} {definition} to the Gateway.");
+                published.Add(new JsonObject { ["kind"] = kind, ["name"] = definition, ["version"] = (int?)answer.Body["version"], ["unchanged"] = (bool?)answer.Body["unchanged"], ["depends_on"] = new JsonArray([.. dependsOn.Select(d => (JsonNode?)d)]) });
+            }
+        }
+        return published;
+    }
+
     /// <summary>The names of the data-source definitions the publishing client owns: the Gateway lists a caller that only publishes the names it owns and no others.</summary>
     private async Task<HashSet<string>> OwnedAsync()
     {

@@ -73,6 +73,55 @@ public sealed partial class ManagementTests
         Assert.Contains(audit, a => (string)a["command"]! == "semantic-model publish" && (string)a["target"]! == "sales_catalog" && (string)a["consoleId"]! == "build-1");
     }
 
+    private const string SalesDashboard = """
+        schemaVersion: 1
+        kind: dashboard
+        title: Sales by region
+        widgets:
+          by_region:
+            type: table
+            encodings:
+              columns: [{field: customers.region}, {field: orders.net_revenue}]
+            query: {model: sales_catalog, limit: 100}
+        layouts:
+          - name: desk
+            type: reflow
+            default: true
+            grid: {columns: 12, rows: 6}
+            tiles:
+              - {widget: by_region, x: 0, y: 0, w: 12, h: 5}
+        """;
+
+    [Fact]
+    public async Task A_build_projects_dashboard_is_published_after_its_model_pinned_to_the_served_version_and_one_that_queries_a_field_the_model_lacks_is_refused_in_the_gateways_words()
+    {
+        // plan 33 SC20n: the dashboards and reports of a Build project travel with its models, as dashboard and report definitions through the shared routes
+        await StartAsync();
+        var first = await PairPublisherAsync(build1);
+        var publish = new WorkspaceGatewayPublish(new WorkspaceLink(this, build1, first), build1, _ => { });
+        var folder = BuildFolder("sales_catalog", "sales-ro", ("sales-ro", SalesData("sales-ro")));
+        await publish.PublishSemanticModelsAsync(folder, null);
+        Directory.CreateDirectory(Path.Combine(folder, "views", "dashboards"));
+        File.WriteAllText(Path.Combine(folder, "views", "dashboards", "Sales.yaml"), SalesDashboard);
+
+        // a group requires signed dashboards by default (plan 30 PB03): until an administrator trusts the Workspace's key for them, the refusal names the call
+        var untrusted = await Assert.ThrowsAsync<WorkspacePublishException>(() => publish.PublishViewsAsync(folder));
+        Assert.Contains("PUT /api/v1/trust/dashboard/keys", untrusted.Message);
+        var admin = await PairAsync();
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(admin, HttpMethod.Put, "/api/v1/trust/dashboard/keys", ServerRole.Admin, JsonSerializer(new { public_key = DbDataKit.State.Api.Url.Encode(build1.Key.PublicKey), label = "workspace" }))).StatusCode);
+
+        var views = await publish.PublishViewsAsync(folder);
+
+        var view = Assert.Single(views)!;
+        Assert.Equal(("dashboard", "sales", 1), ((string)view["kind"]!, (string)view["name"]!, (int)view["version"]!));
+        Assert.Equal("semantic-model:sales_catalog@1", (string)Assert.Single(view["depends_on"]!.AsArray())!);
+
+        File.WriteAllText(Path.Combine(folder, "views", "dashboards", "Sales.yaml"), SalesDashboard.Replace("orders.net_revenue", "orders.no_such_measure"));
+        var refused = await Assert.ThrowsAsync<WorkspacePublishException>(() => publish.PublishViewsAsync(folder));
+        Assert.Contains("The Gateway refused the dashboard sales", refused.Message);
+        Assert.Contains("no_such_measure", refused.Message);
+    }
+
     [Fact]
     public async Task A_workspace_publish_over_a_data_source_made_by_hand_is_refused_naming_who_binds_it_and_after_the_administrator_binds_the_slot_it_goes_with_no_confirmation()
     {

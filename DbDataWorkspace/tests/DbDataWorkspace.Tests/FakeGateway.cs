@@ -25,6 +25,9 @@ internal sealed class FakeGateway : IAsyncDisposable
     public Uri Url { get; }
     public PairingCodes Codes { get; }
     public ConcurrentQueue<JsonObject> Published { get; } = new();
+
+    /// <summary>The dashboards and reports the paired client published (plan 33 SC20n): kind/name to the version, the document and what it depends on.</summary>
+    public ConcurrentDictionary<string, (int Version, string Text, string[] DependsOn)> Views { get; } = new();
     public ConcurrentQueue<string> Calls { get; } = new();
     public string? RefuseWith { get; set; }
 
@@ -170,6 +173,7 @@ internal sealed class FakeGateway : IAsyncDisposable
                     "data-source" => Owner.DataSourceDocs.TryGetValue(name, out var d) ? (d.Version, d.Text) : ((int, string)?)null,
                     "entity-model" => Owner.Models.TryGetValue(name, out var m) ? (m.Version, System.Text.Json.JsonSerializer.Serialize(new { model = m.Text, dataSource = m.DataSource, managedBy = client }, Web)) : ((int, string)?)null,
                     "semantic-model" => Owner.SemanticModels.TryGetValue(name, out var sm) ? (sm.Version, System.Text.Json.JsonSerializer.Serialize(new { catalog = sm.Catalog, managedBy = client, sources = sm.Sources, ssas = new { } }, Web)) : ((int, string)?)null,
+                    "dashboard" or "report" => Owner.Views.TryGetValue($"{kind}/{name}", out var v) ? (v.Version, v.Text) : ((int, string)?)null,
                     _ => null,
                 };
                 if (held is null) { await Reply(404, new { error = $"There is no {kind} '{name}'." }); return; }
@@ -182,8 +186,22 @@ internal sealed class FakeGateway : IAsyncDisposable
             var body = (await System.Text.Json.JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body))!;
             if (Owner.RefuseWith is { } refusal) { await Reply(400, new { error = refusal }); return; }
             var manifestText = (string)body["manifest"]!;
-            var manifest = kind == "data-source" ? null : JsonNode.Parse(manifestText) as JsonObject;   // a data source is the connection/2 file as text, the models are JSON
             var expected = (int?)body["expected_version"];
+            if (kind is "dashboard" or "report")
+            {
+                var key = $"{kind}/{name}";
+                var dependsOn = (body["depends_on"] as JsonArray)?.Select(d => (string)d!).ToArray() ?? [];
+                if (dependsOn.Any(d => !d.Contains('@'))) { await Reply(400, new { error = $"The {kind} '{name}' depends on a model with no version." }); return; }
+                var was = Owner.Views.TryGetValue(key, out var existing) ? existing.Version : (int?)null;
+                if ((was ?? 0) != (expected ?? 0)) { await Reply(409, new { error = "The document changed since it was read.", code = "version_conflict", current_version = was }); return; }
+                var same = was is not null && existing.Text == manifestText;
+                var number = same ? was!.Value : (was ?? 0) + 1;
+                Owner.Views[key] = (number, manifestText, dependsOn);
+                Owner.Published.Enqueue(body);
+                await Reply(200, new { kind, name, version = number, created = was is null, unchanged = same });
+                return;
+            }
+            var manifest = kind == "data-source" ? null : JsonNode.Parse(manifestText) as JsonObject;   // a data source is the connection/2 file as text, the models are JSON
             var slots = ((manifest?["slots"] as JsonArray)?.Select(x => (string?)x).Where(x => x is not null).Select(x => x!).ToList()) ?? [];
             var adopt = body["adopt"] switch { JsonArray list => list.Select(a => (string?)a).ToList(), JsonValue one => [(string?)one], _ => [] };
 

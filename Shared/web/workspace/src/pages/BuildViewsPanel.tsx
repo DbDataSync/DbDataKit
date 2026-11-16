@@ -49,7 +49,7 @@ export const draftOf = (project: string, id: string): DraftFiles => ({
 
 /**
  * The Views tab of a Build project's workspace (plan 33 SC20n): the project's `dashboards/` and `reports/` as files of the draft, edited with the shared editor of `@dbdatakit/views-editor` over the draft (the same editor Build's Views tab and the console have),
- * checked by the draft's check (the findings of those folders are listed). Publishing a dashboard to a Gateway is not here: it goes with the project, as Build's Views tab does it.
+ * checked by the draft's check (the findings of those folders are listed). Publishing is not here: a build of the draft publishes its dashboards and reports to a Gateway with the models they query (plan 33 SC20n).
  */
 export function BuildViewsPanel({ project, id, paths, canWrite }: { project: string; id: string; paths: readonly string[]; canWrite: boolean }) {
   const client = useQueryClient()
@@ -101,7 +101,7 @@ export function BuildViewsPanel({ project, id, paths, canWrite }: { project: str
             <ErrorBanner error={check.error} />
             {findings && findings.length === 0 && <div className="hint" data-testid="wsp-views-clean">The check found nothing to fix in the dashboards and reports.</div>}
             {(findings ?? []).map((d, i) => <div key={i} className={d.severity === 'error' ? 'error' : 'hint'} data-testid="wsp-views-finding" data-code={d.code}>{d.file}{d.line ? `:${d.line}` : ''} {d.code}: {d.message}</div>)}
-            <div className="hint" style={{ marginTop: 10 }}>The wells offer the measures and dimensions of the draft's own semantic files (read from the files as typed, nothing compiled: a model that does not compile is the check's to say). Publishing a dashboard to a Gateway stays with Build's Views tab, as the project's data sources do (SC20e).</div>
+            <div className="hint" style={{ marginTop: 10 }}>The wells offer the measures and dimensions of the draft's own semantic files (read from the files as typed, nothing compiled: a model that does not compile is the check's to say). A build of the draft published to a Gateway (Builds tab) sends these dashboards and reports after the models they query, each pinned to the version the Gateway serves; a group that requires signed dashboards needs its administrator to trust this server's publisher key for them first.</div>
           </>}
     </div>
   )

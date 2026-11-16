@@ -77,7 +77,33 @@ public sealed partial class BuildProjectKind(BuildTool tool) : IProjectKind, IDr
                 dataSources.AddRange(d.EnumerateArray().Select(x => x.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "").Where(x => x.Length > 0));
         }
         catch (JsonException) { return new(false, "gateway.json of the models is not a document.", [new("error", "DBD-WS-PACKAGE", "gateway.json of the models is not a document.")]); }
-        return new(true, $"The models: {string.Join(", ", models)}.", [], new Dictionary<string, string> { ["models"] = string.Join(", ", models), ["data_sources"] = string.Join(", ", dataSources) });
+        // the dashboards and reports of the project (plan 33 SC20n) travel with the models they query: copied as the draft has them into views/, published after the models
+        var views = CopyViews(root, folder);
+        var info = new Dictionary<string, string> { ["models"] = string.Join(", ", models), ["data_sources"] = string.Join(", ", dataSources) };
+        if (views.Count > 0) info["views"] = string.Join(", ", views);
+        return new(true, $"The models: {string.Join(", ", models)}." + (views.Count > 0 ? $" The views: {string.Join(", ", views)}." : ""), [], info);
+    }
+
+    /// <summary>The folders of a project's dashboards and reports, as the Views tab and Build's `dashboard`/`report` commands keep them.</summary>
+    public static readonly IReadOnlyList<(string Folder, string Kind)> ViewFolders = [("dashboards", "dashboard"), ("reports", "report")];
+
+    /// <summary>Copies <c>dashboards/*.yaml</c> and <c>reports/*.yaml</c> of the draft into <c>views/</c> of the models' folder; returns them as <c>kind:name</c>.</summary>
+    internal static List<string> CopyViews(string root, string folder)
+    {
+        var copied = new List<string>();
+        foreach (var (name, kind) in ViewFolders)
+        {
+            var source = Path.Combine(root, name);
+            if (!Directory.Exists(source)) continue;
+            foreach (var file in Directory.EnumerateFiles(source).Where(f => Path.GetExtension(f) is ".yaml" or ".yml").Order(StringComparer.Ordinal))
+            {
+                var target = Path.Combine(folder, "views", name, Path.GetFileName(file));
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.Copy(file, target, overwrite: true);
+                copied.Add($"{kind}:{Path.GetFileNameWithoutExtension(file)}");
+            }
+        }
+        return copied;
     }
 
     private async Task<ProjectArtifact> ProducePackageAsync(string root, string projectId, string outputFolder, CancellationToken cancellationToken)

@@ -127,6 +127,34 @@ public sealed class WorkspaceBuildPublishTests
     }
 
     [Fact]
+    public async Task The_dashboards_and_reports_of_a_build_project_are_published_after_its_models_each_pinned_to_the_model_the_gateway_serves()
+    {
+        // plan 33 SC20n: what the Views tab edits travels with the models it queries
+        await using var gateway = await FakeGateway.StartAsync();
+        await using var server = await WorkspaceHarness.StartAsync(buildExecutable: Fake());
+        Assert.Equal(HttpStatusCode.Created, (await server.AsAdmin(HttpMethod.Post, "/api/v1/publisher-keys/edge/pair", new JsonObject { ["url"] = gateway.Url.ToString(), ["code"] = gateway.NewCode() }.ToJsonString())).Response.StatusCode);
+        var workspace = await DraftAsync(server);
+        async Task Put(string path, string text) => Assert.True((await server.AsAda(HttpMethod.Put, $"/api/v1/projects/{Project}/workspaces/{workspace}/files/{path}", new JsonObject { ["content"] = text }.ToJsonString())).Response.IsSuccessStatusCode);
+        await Put("semantic/sales.yml", "name: sales\n");
+        await Put("dashboards/Overview.yaml", "schemaVersion: 1\nkind: dashboard\ntitle: Overview\nwidgets:\n  t:\n    type: table\n    encodings:\n      columns: [{field: orders.revenue}]\n    query: {model: sales, limit: 100}\nlayouts:\n  - name: desk\n    type: reflow\n    default: true\n    grid: {columns: 12, rows: 6}\n    tiles:\n      - {widget: t, x: 0, y: 0, w: 12, h: 5}\n");
+        await Put("reports/monthly.yaml", "schemaVersion: 1\nkind: report\ntitle: Monthly\n");
+        gateway.DataSources.Add("warehouse");
+
+        var published = await Publish(server, workspace, await BuildAsync(server, workspace), new JsonObject { ["target"] = "edge" });
+
+        Assert.Equal(HttpStatusCode.OK, published.Response.StatusCode);
+        var views = published.Body!["published"]!["views"]!.AsArray();
+        Assert.Equal([("dashboard", "overview"), ("report", "monthly")], views.Select(v => ((string)v!["kind"]!, (string)v["name"]!)));
+        Assert.Equal(["semantic-model:sales@1"], gateway.Views["dashboard/overview"].DependsOn);
+        Assert.Empty(gateway.Views["report/monthly"].DependsOn);
+        // the models first, then the documents that query them
+        Assert.Equal("semantic-model", gateway.Published.Select(p => (string)p["manifest"]!).Select(m => m.StartsWith("{", StringComparison.Ordinal) ? "semantic-model" : m.Contains("kind: dashboard", StringComparison.Ordinal) || m.Contains("kind: report", StringComparison.Ordinal) ? "view" : "data-source").Distinct().ToArray()[1]);
+
+        var again = (await Publish(server, workspace, await BuildAsync(server, workspace), new JsonObject { ["target"] = "edge" })).Body!["published"]!["views"]![0]!;
+        Assert.Equal((1, true), ((int)again["version"]!, (bool)again["unchanged"]!));
+    }
+
+    [Fact]
     public async Task The_semantic_models_of_a_build_project_go_over_a_hand_made_data_source_only_with_the_confirmation_naming_it()
     {
         await using var gateway = await FakeGateway.StartAsync();
