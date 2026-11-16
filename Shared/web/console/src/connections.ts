@@ -1,8 +1,8 @@
 import { ApiError, request } from '@dbdatakit/shell'
 import type { InstanceSummary } from './api'
 
-/** The products whose servers keep connections the console lists and copies between: a Sync server's connections and a Gateway's data sources are the same `connection/1` file. */
-export const CONNECTION_PRODUCTS = ['dbdatasync', 'dbdatagateway'] as const
+/** The products whose servers keep connections the console lists and copies between: a Gateway's data sources, each a `connection/1` file. */
+export const CONNECTION_PRODUCTS = ['dbdatagateway'] as const
 export type ConnectionProduct = (typeof CONNECTION_PRODUCTS)[number]
 
 export const keepsConnections = (server: InstanceSummary): boolean => server.reachable && (CONNECTION_PRODUCTS as readonly (string | null)[]).includes(server.product)
@@ -24,17 +24,10 @@ export interface ConnectionRow {
   valid: boolean
 }
 
-interface SyncConnection { name: string; driverType: string; host: string | null; port: number | null; database: string | null; connectionString: string | null }
 interface GatewayDataSource { name: string; engine: string | null; access: string | null; valid: boolean; managed_by: string | null }
 
 const enc = encodeURIComponent
 const relay = (server: InstanceSummary, path: string) => `/relay/${enc(server.id)}${path}`
-
-/** A Sync connection: its driver, and its address (host, port and database, or "connection string"; the string itself can hold what should not be shown). */
-export function syncConnectionRow(server: InstanceSummary, c: SyncConnection): ConnectionRow {
-  const address = c.host ? `${c.host}${c.port ? `:${c.port}` : ''}${c.database ? `/${c.database}` : ''}` : c.connectionString ? 'connection string' : 'no address'
-  return { key: `${server.id}/${c.name}`, server: server.id, serverName: server.name, product: 'dbdatasync', name: c.name, kind: 'database', engine: c.driverType, detail: address, valid: true }
-}
 
 /** A Gateway data source: its engine, whether it can write, and who manages it. */
 export function gatewayConnectionRow(server: InstanceSummary, d: GatewayDataSource): ConnectionRow {
@@ -49,20 +42,15 @@ export function gatewayConnectionRow(server: InstanceSummary, d: GatewayDataSour
 export const sortConnections = (rows: ConnectionRow[]) => [...rows].sort((a, b) => a.serverName.localeCompare(b.serverName) || a.name.localeCompare(b.name))
 
 /**
- * The connections of every server that keeps them, each asked through the relay (as the monitoring view does). A server that does not answer, or whose list the server refuses (a Sync repository that still holds a connection in the form of earlier releases says so,
- * naming the file), is named in `problems`, and the others still show.
+ * The data sources of every Gateway, each asked through the relay (as the monitoring view does). A Gateway that does not answer, or refuses the list, is named in `problems`, and the others still show.
  */
 export async function loadConnections(servers: InstanceSummary[]): Promise<{ rows: ConnectionRow[]; problems: { server: string; message: string }[] }> {
   const rows: ConnectionRow[] = []
   const problems: { server: string; message: string }[] = []
   await Promise.all(servers.filter(keepsConnections).map(async (server) => {
     try {
-      if (server.product === 'dbdatasync') {
-        rows.push(...(await request<SyncConnection[]>(relay(server, '/api/connections'))).map((c) => syncConnectionRow(server, c)))
-      } else {
-        const { data_sources } = await request<{ data_sources: GatewayDataSource[] }>(relay(server, '/api/v1/data-sources'))
-        rows.push(...data_sources.map((d) => gatewayConnectionRow(server, d)))
-      }
+      const { data_sources } = await request<{ data_sources: GatewayDataSource[] }>(relay(server, '/api/v1/data-sources'))
+      rows.push(...data_sources.map((d) => gatewayConnectionRow(server, d)))
     } catch (error) {
       problems.push({ server: server.name, message: error instanceof Error ? error.message : 'No answer' })
     }
@@ -87,11 +75,11 @@ export function copyFailure(error: unknown): CopyFailure {
   return { message: error instanceof Error ? error.message : 'No answer', status: 0, diagnostics: [], notes: [] }
 }
 
-export interface CopyRequest { from: string; name: string; to: string; newName: string; password: string }
+export interface CopyRequest { from: string; name: string; to: string; newName: string }
 
 /** A copy, made by the console: it reads the file from one server and writes it to the other as the signed-in person; the target's own reading of the file is the validation. */
 export const copyConnection = (r: CopyRequest) =>
-  request<CopyDone>('/api/connections/copy', { method: 'POST', body: JSON.stringify({ from: r.from, name: r.name, to: r.to, newName: r.newName.trim() || null, password: r.password || null }) })
+  request<CopyDone>('/api/connections/copy', { method: 'POST', body: JSON.stringify({ from: r.from, name: r.name, to: r.to, newName: r.newName.trim() || null }) })
 
 /** Whether a copy can be tried: the target is chosen, and it is not the same name on the same server. */
 export const canCopy = (row: ConnectionRow, target: string, newName: string) => target !== '' && !(target === row.server && (newName.trim() === '' || newName.trim() === row.name))

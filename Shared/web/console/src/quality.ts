@@ -57,7 +57,7 @@ export function measureLine(check: Pick<QualityCheck, 'status' | 'measured' | 't
   return check.threshold === null ? `measured ${check.measured}` : `measured ${check.measured}, allowed ${check.threshold}`
 }
 
-/** What a block is and how it ends. There is no release by hand yet for a block of Build or Sync: it ends when the check passes; the serving layer's administrator release is plan 23a FQ15. */
+/** What a block is and how it ends: it ends when the check passes, or when an administrator releases it on the server that set it. */
 export function blockLine(check: Pick<QualityCheck, 'blocking' | 'blocked_since'> & Partial<Pick<QualityCheck, 'released_since' | 'released_by'>>): string | null {
   if (!check.blocking && check.released_since) return `Released by ${check.released_by ?? 'an administrator'} on ${check.released_since}: the check still fails, but what depends on the dataset is not held for it. The release ends when the check passes.`
   if (!check.blocking) return null
@@ -96,14 +96,14 @@ export function panelLine(dataset: QualityDataset | undefined): string {
 
 const relay = (serverId: string, path: string) => `/relay/${encodeURIComponent(serverId)}${path}`
 
-/** The history of a check is the evaluating server's own route; the path is the one its product serves. */
-export const historyPath = (product: string | null) => (product === 'dbdatabuild' || product === 'dbdatastore' ? '/api/v1/quality/history' : '/api/quality/history')
+/** The history of a check is the evaluating server's own route (`/api/v1/quality/...` of its management API). */
+export const historyPath = '/api/v1/quality/history'
 
 /** The server's own route that releases a block (an administrator; audited there). */
-export const releasePath = (product: string | null) => (product === 'dbdatabuild' || product === 'dbdatastore' ? '/api/v1/quality/release' : '/api/quality/release')
+export const releasePath = '/api/v1/quality/release'
 
-/** The server's own route that evaluates a dataset's checks on request: a Sync server's is under `/api`, the Store's under `/api/v1`. */
-export const runPath = (product: string | null) => (product === 'dbdatastore' ? '/api/v1/quality/run' : '/api/quality/run')
+/** The server's own route that evaluates a dataset's checks on request. */
+export const runPath = '/api/v1/quality/run'
 
 /** Where the alerts of failed checks go (`GET /api/quality/alerts`, the section `quality: alerts:` of settings.yaml). */
 export interface QualityAlertsState { configured: boolean; channel: string | null; channelKnown: boolean; problem: string | null; recipients: string[] }
@@ -119,10 +119,10 @@ export function alertsLine(a: QualityAlertsState): string {
 export const qualityApi = {
   overview: () => request<QualityAnswer>('/api/quality'),
   alerts: () => request<QualityAlertsState>('/api/quality/alerts'),
-  history: (check: Pick<QualityCheck, 'server_id' | 'product' | 'check_id'>, dataset: string) =>
-    request<{ results: QualityResult[] }>(relay(check.server_id, `${historyPath(check.product)}?dataset=${encodeURIComponent(dataset)}&check=${encodeURIComponent(check.check_id)}`)),
+  history: (check: Pick<QualityCheck, 'server_id' | 'check_id'>, dataset: string) =>
+    request<{ results: QualityResult[] }>(relay(check.server_id, `${historyPath}?dataset=${encodeURIComponent(dataset)}&check=${encodeURIComponent(check.check_id)}`)),
   /** Releases the block a check set, on the server that owns the check (an administrator; the server audits it). */
-  release: (serverId: string, dataset: string, check: string, product: string | null) => request<{ released: boolean }>(relay(serverId, releasePath(product)), { method: 'POST', body: JSON.stringify({ dataset, check }) }),
-  /** Evaluates the dataset's checks now, on the server that owns them (a Sync server or a Store; the server answers 403 for anyone but an administrator). */
-  run: (serverId: string, dataset: string, product: string | null = null) => request<QualityRunAnswer>(relay(serverId, runPath(product)), { method: 'POST', body: JSON.stringify({ dataset }) }),
+  release: (serverId: string, dataset: string, check: string) => request<{ released: boolean }>(relay(serverId, releasePath), { method: 'POST', body: JSON.stringify({ dataset, check }) }),
+  /** Evaluates the dataset's checks now, on the server that owns them (the server answers 403 for anyone but an administrator). */
+  run: (serverId: string, dataset: string) => request<QualityRunAnswer>(relay(serverId, runPath), { method: 'POST', body: JSON.stringify({ dataset }) }),
 }

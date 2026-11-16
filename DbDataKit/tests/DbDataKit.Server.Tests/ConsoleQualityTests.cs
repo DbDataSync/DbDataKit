@@ -9,47 +9,29 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DbDataKit.Server.Tests;
 
-/// <summary>The suite's data quality in the console (plan 23a FQ17): a Sync server and a Build server each send the results of their checks, and a table Sync writes and a Build model reads is one dataset with the checks of both.</summary>
+/// <summary>
+/// The suite's data quality in the console (plan 23a FQ17). The servers that evaluated checks (Build, Sync, Store) were deleted (plan 33 SC23) and no server of the suite keeps check results today, so no server is asked and the overview is
+/// empty, whatever a server would answer; the join of answers by dataset identity stays for the server that will.
+/// </summary>
 public sealed class ConsoleQualityTests : IAsyncLifetime
 {
-    private const string Warehouse = "postgres://pg01/dwh.public.customers";
-    private const string Model = "postgres://pg01/dwh.marts.dim_customer";
-
-    private readonly string directory = Path.Combine(Path.GetTempPath(), "ddk-console-lineage-" + Guid.NewGuid().ToString("N")[..8]);
-    private bool syncFails;
+    private readonly string directory = Path.Combine(Path.GetTempPath(), "ddk-console-quality-" + Guid.NewGuid().ToString("N")[..8]);
+    private int asked;
     private WebApplication app = null!;
     private HttpClient http = null!;
-    private PairableServer sync = null!;
-    private PairableServer build = null!;
+    private PairableServer runner = null!;
     private PairableServer gateway = null!;
-
-    private static JsonObject Check(string id, string status, bool blocking, string severity = "block") => new()
-    {
-        ["check_id"] = id, ["severity"] = severity, ["on_error"] = "alert", ["status"] = status, ["status_since"] = "2026-11-08T12:00:00+00:00", ["measured"] = status == "fail" ? 2 : 0, ["threshold"] = 0,
-        ["evaluated_at"] = "2026-11-08T12:00:00+00:00", ["blocking"] = blocking, ["blocked_since"] = blocking ? "2026-11-08T12:00:00+00:00" : null,
-    };
-
-    private static JsonObject Overview(bool canRun, string? note, params (string Dataset, JsonObject[] Checks)[] datasets) => new()
-    {
-        ["datasets"] = new JsonArray(datasets.Select(d => (JsonNode)new JsonObject { ["dataset"] = d.Dataset, ["blocking"] = d.Checks.Count(c => (bool)c["blocking"]!), ["checks"] = new JsonArray(d.Checks.Select(c => (JsonNode)c).ToArray()) }).ToArray()),
-        ["can_run"] = canRun, ["run_note"] = note,
-    };
 
     public async ValueTask InitializeAsync()
     {
-        sync = await PairableServer.StartAsync(product: "dbdatasync", instanceId: "sync-1", map: (server, _, _) =>
-            server.MapGet("/api/quality", () => syncFails
-                ? Results.Json(new { error = "the state database cannot be read" }, statusCode: 500)
-                : Results.Json(Overview(true, null, (Warehouse, [Check("customers_fresh", "fail", true)])))));
-        build = await PairableServer.StartAsync(product: "dbdatabuild", instanceId: "build-1", map: (server, _, _) =>
-            server.MapGet("/api/v1/quality", () => Results.Json(Overview(false, "Build evaluates after a refresh.", (Warehouse, [Check("customers_id_unique", "pass", false)]), (Model, [Check("dim_customer_key_not_null", "pass", false, "warn")])))));
+        runner = await PairableServer.StartAsync(product: "dbdatarunner", instanceId: "runner-1", map: (server, _, _) =>
+            server.MapGet("/api/v1/quality", () => { Interlocked.Increment(ref asked); return Results.Json(new { datasets = Array.Empty<object>() }); }));
         gateway = await PairableServer.StartAsync(product: "dbdatagateway", instanceId: "gateway-1");
         app = ConsoleHost.Build(new ConsoleSettings(directory, new Uri("https://localhost:0")), ConsoleHost.Certificate(directory), _ => { }, webRoot: Path.Combine(directory, "none"));
         await app.StartAsync();
         http = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true, UseCookies = false }) { BaseAddress = new Uri(app.Urls.First()) };
         var instances = app.Services.GetRequiredService<ConsoleInstances>();
-        await instances.PairAsync(sync.Url, sync.NewCodeWith(ServerRole.Viewer), "Sync one", default);
-        await instances.PairAsync(build.Url, build.NewCodeWith(ServerRole.Viewer), "Build one", default);
+        await instances.PairAsync(runner.Url, runner.NewCodeWith(ServerRole.Viewer), "Runner one", default);
         await instances.PairAsync(gateway.Url, gateway.NewCodeWith(ServerRole.Viewer), "Gateway one", default);
     }
 
@@ -58,7 +40,7 @@ public sealed class ConsoleQualityTests : IAsyncLifetime
         http.Dispose();
         await app.StopAsync();
         await app.DisposeAsync();
-        foreach (var s in new[] { sync, build, gateway }) await s.DisposeAsync();
+        foreach (var s in new[] { runner, gateway }) await s.DisposeAsync();
         try { Directory.Delete(directory, true); } catch (IOException) { }
     }
 
@@ -76,35 +58,14 @@ public sealed class ConsoleQualityTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_table_two_servers_check_is_one_dataset_with_the_checks_of_both_and_each_says_which_server_it_is_from()
+    public async Task No_server_of_the_suite_keeps_check_results_so_none_is_asked_and_the_overview_is_empty()
     {
         var (status, body) = await Get("/api/quality");
 
         Assert.Equal(HttpStatusCode.OK, status);
-        var datasets = body!["datasets"]!.AsArray();
-        Assert.Equal([Model, Warehouse], datasets.Select(d => (string)d!["dataset"]!));                // by identity
-        var warehouse = datasets[1]!;
-        Assert.Equal(1, (int)warehouse["blocking"]!);                                                  // Sync's freshness check blocks; Build's unique check passes
-        Assert.Equal([("customers_fresh", "Sync one"), ("customers_id_unique", "Build one")], warehouse["checks"]!.AsArray().Select(c => ((string)c!["check_id"]!, (string)c["server"]!)));
-        var servers = body["servers"]!.AsArray();
-        Assert.Equal(["Build one", "Sync one"], servers.Select(s => (string)s!["server"]!));            // the Gateway evaluates no checks and is not part of this
-        Assert.Equal((false, true), ((bool)servers[0]!["can_run"]!, (bool)servers[1]!["can_run"]!));
-        Assert.Equal("Build evaluates after a refresh.", (string)servers[0]!["run_note"]!);
-        Assert.Equal(["build-1", "sync-1"], servers.Select(s => (string)s!["server_id"]!));              // what the relay is addressed by (history and run go to the server itself)
-        Assert.Equal("sync-1", (string)warehouse["checks"]![0]!["server_id"]!);
-    }
-
-    [Fact]
-    public async Task A_server_that_fails_is_named_with_its_reason_and_left_out_and_the_others_still_show()
-    {
-        syncFails = true;
-
-        var (_, body) = await Get("/api/quality");
-
-        var failed = Assert.Single(body!["servers"]!.AsArray(), s => (string)s!["server"]! == "Sync one")!;
-        Assert.Equal("the state database cannot be read", (string)failed["error"]!);
-        Assert.Equal(2, body["datasets"]!.AsArray().Count);
-        Assert.DoesNotContain(body["datasets"]!.AsArray().SelectMany(d => d!["checks"]!.AsArray()), c => (string)c!["server"]! == "Sync one");
+        Assert.Empty(body!["datasets"]!.AsArray());
+        Assert.Empty(body["servers"]!.AsArray());
+        Assert.Equal(0, asked);
     }
 
     [Fact]
@@ -114,11 +75,9 @@ public sealed class ConsoleQualityTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Each_product_that_evaluates_checks_has_its_path_and_the_ones_that_do_not_have_none()
+    public void No_product_has_a_path_for_its_checks()
     {
-        Assert.Equal("/api/quality", ConsoleQuality.PathOf(ServerProducts.Sync));
-        Assert.Equal("/api/v1/quality", ConsoleQuality.PathOf(ServerProducts.Build));
-        Assert.Equal("/api/v1/quality", ConsoleQuality.PathOf(ServerProducts.Store));        // plan 23a FQ11
-        Assert.Null(ConsoleQuality.PathOf(ServerProducts.Gateway));
+        foreach (var product in new[] { ServerProducts.Gateway, ServerProducts.Runner, ServerProducts.Workspace, RemovedProducts.Build, RemovedProducts.Sync, RemovedProducts.Store, null })
+            Assert.Null(ConsoleQuality.PathOf(product));
     }
 }

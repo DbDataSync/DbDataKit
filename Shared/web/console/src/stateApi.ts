@@ -107,7 +107,7 @@ export const stateApi = {
 }
 
 /** The products whose state a console moves: the ones that mount the move call. */
-export const MOVABLE_PRODUCTS = ['dbdatagateway', 'dbdatabuild', 'dbdatarunner', 'dbdataworkspace'] as const
+export const MOVABLE_PRODUCTS = ['dbdatagateway', 'dbdatarunner', 'dbdataworkspace'] as const
 export const offersState = (product: string | null) => (MOVABLE_PRODUCTS as readonly (string | null)[]).includes(product)
 
 /** The engine as a person says it. */

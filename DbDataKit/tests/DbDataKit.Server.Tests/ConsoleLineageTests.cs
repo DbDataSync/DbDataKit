@@ -10,7 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DbDataKit.Server.Tests;
 
-/// <summary>The suite's lineage in the console (plan 18, G09): a Sync server and a Build server each send their graph, and a table Sync writes and a Build model reads is one node.</summary>
+/// <summary>The suite's lineage in the console (plan 18, G09): two runners each send their graph (one replicates a table, the other derives a model from it), and the table one writes and the other reads is one node.</summary>
 public sealed class ConsoleLineageTests : IAsyncLifetime
 {
     private const string Crm = "sqlserver://sql01/crm.dbo.customers";
@@ -36,19 +36,9 @@ public sealed class ConsoleLineageTests : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        sync = await PairableServer.StartAsync(product: "dbdatasync", instanceId: "sync-1", map: (server, _, _) =>
+        sync = await PairableServer.StartAsync(product: "dbdatarunner", instanceId: "sync-1", map: (server, _, _) =>
         {
-            // what Sync's checks say of the warehouse table (plan 23a FQ16): a block that stops the model Build derives from it
-            server.MapGet("/api/quality", () => Results.Json(new JsonObject
-            {
-                ["datasets"] = new JsonArray(new JsonObject
-                {
-                    ["dataset"] = Warehouse, ["blocking"] = 1,
-                    ["checks"] = new JsonArray(new JsonObject { ["check_id"] = "customers_fresh", ["status"] = "fail", ["blocking"] = true, ["blocked_since"] = "2026-11-08T12:00:00+00:00" }),
-                }),
-                ["can_run"] = true,
-            }));
-            server.MapGet("/api/lineage", () =>
+            server.MapGet("/api/v1/lineage", () =>
             {
                 Interlocked.Increment(ref syncCalls);
                 if (syncFails) return Results.Json(new { error = "the configuration cannot be read" }, statusCode: 500);
@@ -63,7 +53,7 @@ public sealed class ConsoleLineageTests : IAsyncLifetime
                 return Results.Json(document);
             });
         });
-        build = await PairableServer.StartAsync(product: "dbdatabuild", instanceId: "build-1", map: (server, _, _) =>
+        build = await PairableServer.StartAsync(product: "dbdatarunner", instanceId: "build-1", map: (server, _, _) =>
             server.MapGet("/api/v1/lineage", () => { var document = LineageJson.Write(BuildGraph()); document["problems"] = new JsonArray(); return Results.Json(document); }));
         gateway = await PairableServer.StartAsync(product: "dbdatagateway", instanceId: "gateway-1", map: (server, _, _) =>
             server.MapGet("/api/v1/lineage", () => Results.Json(LineageJson.Write(LineageGraph.Empty))));
@@ -71,8 +61,8 @@ public sealed class ConsoleLineageTests : IAsyncLifetime
         await app.StartAsync();
         http = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true, UseCookies = false }) { BaseAddress = new Uri(app.Urls.First()) };
         var instances = app.Services.GetRequiredService<ConsoleInstances>();
-        await instances.PairAsync(sync.Url, sync.NewCodeWith(ServerRole.Viewer), "Sync one", default);
-        await instances.PairAsync(build.Url, build.NewCodeWith(ServerRole.Viewer), "Build one", default);
+        await instances.PairAsync(sync.Url, sync.NewCodeWith(ServerRole.Viewer), "Runner sync", default);
+        await instances.PairAsync(build.Url, build.NewCodeWith(ServerRole.Viewer), "Runner build", default);
         await instances.PairAsync(gateway.Url, gateway.NewCodeWith(ServerRole.Viewer), "Gateway one", default);
     }
 
@@ -102,27 +92,11 @@ public sealed class ConsoleLineageTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, status);
         var graph = LineageJson.Read(body);
         Assert.Equal(3, graph.Nodes.Count);                                                  // the warehouse table is one node
-        Assert.False(graph.Node(Warehouse)!.UnknownUpstream);                                // Build did not know its upstream; Sync does
+        Assert.False(graph.Node(Warehouse)!.UnknownUpstream);                                // the build runner did not know its upstream; the sync runner does
         Assert.Equal(2, graph.Edges.Count);
         var servers = body["servers"]!.AsArray();
-        Assert.Equal(["Build one", "Gateway one", "Sync one"], servers.Select(s => (string)s!["server"]!));   // the Gateway has none to add here, and is asked
+        Assert.Equal(["Gateway one", "Runner build", "Runner sync"], servers.Select(s => (string)s!["server"]!));   // the Gateway has none to add here, and is asked
         Assert.Contains(servers[2]!["problems"]!.AsArray(), p => ((string)p!).Contains("Replication 'old' is left out"));
-    }
-
-    [Fact]
-    public async Task A_node_shows_the_status_of_its_checks_and_the_graph_says_what_each_block_stops()
-    {
-        var (status, body) = await Get("/api/lineage");
-
-        Assert.Equal(HttpStatusCode.OK, status);
-        var graph = LineageJson.Read(body);
-        Assert.Equal("blocked", graph.Node(Warehouse)!.PropertyMap[LineageQuality.StatusProperty]);
-        Assert.Equal("customers_fresh", graph.Node(Warehouse)!.PropertyMap[LineageQuality.BlockingIdsProperty]);
-        Assert.False(graph.Node(Crm)!.PropertyMap.ContainsKey(LineageQuality.StatusProperty));
-        var block = Assert.Single(body["blocks"]!.AsArray())!;
-        Assert.Equal(Warehouse, (string)block["node"]!);
-        Assert.Equal(["customers_fresh"], block["checks"]!.AsArray().Select(c => (string)c!));
-        Assert.Equal([Model], block["stops"]!.AsArray().Select(r => (string)r!["id"]!));
     }
 
     [Fact]
@@ -157,8 +131,8 @@ public sealed class ConsoleLineageTests : IAsyncLifetime
         await Get("/api/lineage?refresh=true");
         Assert.Equal(2, syncCalls);
         var (_, body) = await Get("/api/lineage");
-        var failed = body["servers"]!.AsArray().Single(s => (string)s!["server"]! == "Sync one");
+        var failed = body["servers"]!.AsArray().Single(s => (string)s!["server"]! == "Runner sync");
         Assert.Contains("the configuration cannot be read", (string)failed!["error"]!);
-        Assert.Equal(2, LineageJson.Read(body).Nodes.Count);                                 // Build's graph alone
+        Assert.Equal(2, LineageJson.Read(body).Nodes.Count);                                 // the build runner's graph alone
     }
 }

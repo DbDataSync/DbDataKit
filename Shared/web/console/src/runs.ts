@@ -1,14 +1,14 @@
 import { request } from '@dbdatakit/shell'
 import type { InstanceSummary } from './api'
 
-/** One run of a Sync replication or of a runner's task, as one line of the history across servers. */
+/** One run of a runner's task, as one line of the history across runners. */
 export interface RunRow {
   /** Unique among the rows: the server and the run. */
   key: string
   server: string
   serverName: string
-  product: 'dbdatasync' | 'dbdatarunner' | 'dbdatabuild'
-  /** What ran: `<replication>` (and the mapping or segment) for Sync, `<package>/<channel>/<task>` for a runner, `<project> <connection>/<plan>` for a Build plan. */
+  product: 'dbdatarunner'
+  /** What ran: `<package>/<channel>/<task>`. */
   subject: string
   state: 'failed' | 'running' | 'queued' | 'stopped' | 'succeeded'
   /** The failure in a sentence, or what the run did (rows written, items processed); empty when nothing is known. */
@@ -19,24 +19,6 @@ export interface RunRow {
   ended: string | null
   /** The console route of the screen that shows the run and what can be done about it. */
   link: string
-}
-
-/** A Sync run, as `GET /api/replications/{name}/runs` lists it (`TaskRunRecord`), as far as this view reads it. */
-export interface SyncRun {
-  runId: string; taskName: string; status: 'Queued' | 'Pending' | 'Running' | 'Succeeded' | 'Failed' | 'Cancelled'; runKind: string; mappingName: string; segmentLabel: string | null
-  enqueuedAtUtc: string | null; startedAtUtc: string | null; endedAtUtc: string | null; rowsRead: number; rowsWritten: number; errorSummary: string | null
-}
-
-const syncState: Record<SyncRun['status'], RunRow['state']> = { Queued: 'queued', Pending: 'queued', Running: 'running', Succeeded: 'succeeded', Failed: 'failed', Cancelled: 'stopped' }
-
-/** One run of a Sync replication. A bulk load or a reconcile says so, since it is not the ordinary pass. */
-export function syncRunRow(server: InstanceSummary, replication: string, run: SyncRun): RunRow {
-  const state = syncState[run.status] ?? 'queued'
-  const kind = run.runKind === 'BulkLoad' ? 'bulk load' : run.runKind === 'ReconcileDeletes' ? 'reconcile' : ''
-  const part = [run.mappingName, run.segmentLabel].filter((p) => p && p !== '').join(' ')
-  const subject = [replication, part, kind && `(${kind})`].filter((p) => p !== '' && p !== null).join(' ')
-  const detail = state === 'failed' ? (run.errorSummary ?? 'The run failed') : state === 'succeeded' ? `${run.rowsRead} read, ${run.rowsWritten} written` : run.errorSummary ?? ''
-  return { key: `${server.id}/sync/${run.runId}`, server: server.id, serverName: server.name, product: 'dbdatasync', subject, state, detail, queued: run.enqueuedAtUtc, started: run.startedAtUtc, ended: run.endedAtUtc, link: `/servers/${server.id}/replications/${encodeURIComponent(replication)}/monitoring/history` }
 }
 
 /** A runner's run, as `GET /api/v1/runs` lists it, as far as this view reads it. */
@@ -56,16 +38,6 @@ export function runnerRunRow(server: InstanceSummary, run: RunnerRun): RunRow {
   else if (run.outcome === 'interrupted') detail = 'Interrupted: the runner stopped before it finished'
   else if (run.rows !== null && state === 'succeeded') detail = `${run.rows} item${run.rows === 1 ? '' : 's'} processed`
   return { key: `${server.id}/runner/${run.id}`, server: server.id, serverName: server.name, product: 'dbdatarunner', subject: `${run.package}/${run.channel}/${run.task}`, state, detail, queued: null, started: run.started, ended: run.finished, link: `/servers/${server.id}/runs` }
-}
-
-/** A run of a scheduled Build plan, as `GET /api/v1/plan-runs` lists it (UI09), as far as this view reads it. */
-export interface BuildPlanRun { id: string; project: string; plan: string; started: string; finished: string; exit: number; outcome: string }
-
-/** One run of a scheduled Build plan: the exit code says how it ended (0 succeeded, -1 it could not be started). */
-export function buildRunRow(server: InstanceSummary, run: BuildPlanRun): RunRow {
-  const failed = run.exit !== 0
-  const detail = !failed ? '' : run.exit === -1 ? 'The scheduled run could not be started' : `The refresh ended with exit code ${run.exit}`
-  return { key: `${server.id}/build/${run.id}`, server: server.id, serverName: server.name, product: 'dbdatabuild', subject: `${run.project} ${run.plan}`, state: failed ? 'failed' : 'succeeded', detail, queued: null, started: run.started, ended: run.finished, link: `/servers/${server.id}/projects/${encodeURIComponent(run.project)}` }
 }
 
 /** The moment a row is ordered by: when it started, else when it was queued; unknown last. */
@@ -90,29 +62,19 @@ export function took(row: Pick<RunRow, 'started' | 'queued' | 'ended'>): string 
 /** The runs the page shows: all of them, or only the ones that failed (what somebody has to look at). */
 export const visible = (rows: RunRow[], onlyFailures: boolean): RunRow[] => (onlyFailures ? rows.filter((r) => r.state === 'failed') : rows)
 
-/** How many recent runs are asked of each replication and of each runner: the page is the newest of every server, not an archive (a replication's own page holds the full history). */
+/** How many recent runs are asked of each runner (ten times this): the page is the newest of every runner, not an archive (a runner's own Runs page holds the full history). */
 export const PER_SOURCE = 10
 
 const relay = (server: InstanceSummary, path: string) => `/relay/${server.id}${path}`
-const enc = encodeURIComponent
 
-/** The recent runs of every reachable Sync, Build and runner server. A server that does not answer is reported beside the rows, never as a row, and never stops the others. */
+/** The recent runs of every reachable runner. A server that does not answer is reported beside the rows, never as a row, and never stops the others. */
 export async function loadRuns(servers: InstanceSummary[]): Promise<{ rows: RunRow[]; problems: { server: string; message: string }[] }> {
   const rows: RunRow[] = []
   const problems: { server: string; message: string }[] = []
-  await Promise.all(servers.filter((s) => s.reachable).map(async (server) => {
+  await Promise.all(servers.filter((s) => s.reachable && s.product === 'dbdatarunner').map(async (server) => {
     try {
-      if (server.product === 'dbdatasync') {
-        const names = await request<string[]>(relay(server, '/api/replications'))
-        const lists = await Promise.all(names.map(async (name) => ({ name, page: await request<{ runs: SyncRun[] }>(relay(server, `/api/replications/${enc(name)}/runs?limit=${PER_SOURCE}`)) })))
-        for (const { name, page } of lists) rows.push(...page.runs.map((r) => syncRunRow(server, name, r)))
-      } else if (server.product === 'dbdatarunner') {
-        const { runs } = await request<{ runs: RunnerRun[] }>(relay(server, `/api/v1/runs?limit=${PER_SOURCE * 10}`))
-        rows.push(...runs.map((r) => runnerRunRow(server, r)))
-      } else if (server.product === 'dbdatabuild') {
-        const { runs } = await request<{ runs: BuildPlanRun[] }>(relay(server, `/api/v1/plan-runs?limit=${PER_SOURCE * 5}`))
-        rows.push(...runs.map((r) => buildRunRow(server, r)))
-      }
+      const { runs } = await request<{ runs: RunnerRun[] }>(relay(server, `/api/v1/runs?limit=${PER_SOURCE * 10}`))
+      rows.push(...runs.map((r) => runnerRunRow(server, r)))
     } catch (error) {
       problems.push({ server: server.name, message: error instanceof Error ? error.message : 'No answer' })
     }

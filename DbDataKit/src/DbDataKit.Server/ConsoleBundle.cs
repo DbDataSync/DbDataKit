@@ -9,7 +9,7 @@ namespace DbDataKit.Server;
 /// The single-machine bundle's description (plan 23a FQ18, D8): <c>bundle.json</c> beside the console's data, <c>schema: bundle/1</c>. It says which products are the bundle's members and where the <b>bundle token</b> is; nothing secret is in it.
 /// </summary>
 /// <param name="TokenFile">The file that holds the token, relative to the console's directory (or absolute).</param>
-/// <param name="Members">The products (<c>dbdatasync</c>, <c>dbdatabuild</c>, ...) whose announcements the console pairs with by itself; empty: any product the console manages.</param>
+/// <param name="Members">The products (<c>dbdatarunner</c>, <c>dbdataworkspace</c>, ...) whose announcements the console pairs with by itself; empty: any product the console manages.</param>
 public sealed record BundleFile(string TokenFile, IReadOnlyList<string> Members)
 {
     public const string Schema = "bundle/1";

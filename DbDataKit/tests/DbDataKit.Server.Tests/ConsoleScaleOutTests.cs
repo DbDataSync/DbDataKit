@@ -36,7 +36,7 @@ public sealed class ConsoleScaleOutTests : IDisposable
         var directory = Path.Combine(root, "console");
         var connection = databases.Provision(engine);
         var environment = databases.EnvFor(null, null);
-        Assert.Equal(0, (await Run(environment, "bundle", "init", "--members", "dbdatasync,dbdatabuild", "--repo", directory)).Exit);
+        Assert.Equal(0, (await Run(environment, "bundle", "init", "--members", "dbdatarunner,dbdataworkspace", "--repo", directory)).Exit);
 
         // a console that has been in use: a person, a skipped step, a failing block check and the alert it sent
         var dataset = "mssql://sales/dbo.orders";
@@ -67,6 +67,6 @@ public sealed class ConsoleScaleOutTests : IDisposable
         // the bundle is files, not state: the token and the pairing stay where they were, and the console still pairs the servers of this machine by itself
         var (bundle, problem) = ConsoleBundle.Load(directory);
         Assert.Null(problem);
-        Assert.Equal(["dbdatasync", "dbdatabuild"], bundle!.Members);
+        Assert.Equal(["dbdatarunner", "dbdataworkspace"], bundle!.Members);
     }
 }

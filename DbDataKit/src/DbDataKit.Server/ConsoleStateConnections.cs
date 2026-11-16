@@ -32,7 +32,7 @@ public sealed partial class ConsoleStateConnections(string directory, EncryptedF
 
     public static bool ValidName(string? name) => name is not null && NameRegex().IsMatch(name);
 
-    /// <summary>The secret that holds the password of a connection: the name the console stores it under, and the name a server needs it under (<c>dbdatastore secret set dbdatakit:server:state:&lt;name&gt;</c>).</summary>
+    /// <summary>The secret that holds the password of a connection: the name the console stores it under, and the name a server needs it under (<c>dbdatagateway secret set dbdatakit:server:state:&lt;name&gt;</c>).</summary>
     public static SecretName SecretNameOf(string name) => new("server", "state", name);
 
     public static string ReferenceOf(string name) => SecretNameOf(name).ToRef().ToString();

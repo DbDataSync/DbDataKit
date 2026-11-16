@@ -6,11 +6,10 @@ using Microsoft.AspNetCore.Mvc;
 namespace DbDataKit.Server;
 
 /// <param name="From">The server the connection is on: its id or name.</param>
-/// <param name="Name">The connection (a Sync connection, a Gateway data source) to copy.</param>
+/// <param name="Name">The connection (a Gateway data source) to copy.</param>
 /// <param name="To">The server to copy it to: its id or name.</param>
 /// <param name="NewName">What the copy is called there; the same name when empty.</param>
-/// <param name="Password">The password of a connection that logs in with one, for a Sync target, which stores it under the copy's own secret reference. It is sent on to that one server and kept nowhere here.</param>
-public sealed record CopyConnectionRequest(string From, string Name, string To, string? NewName, string? Password);
+public sealed record CopyConnectionRequest(string From, string Name, string To, string? NewName);
 
 /// <summary>
 /// Copying a connection from one server to another (plan 13a, E05). The list is the browser's own (it asks each server through the relay, as the monitoring view does); a copy is made here, because it reads one server's file and writes it to another as the signed-in
@@ -34,14 +33,10 @@ public sealed class ConnectionsController(ConsoleInstances instances, ConsoleRel
         var (from, to) = (await instances.StatusAsync(fromInstance, cancellationToken), await instances.StatusAsync(toInstance, cancellationToken));
         foreach (var (status, role) in new[] { (from, "copy from"), (to, "copy to") })
             if (!status.Reachable || ConnectionCopy.ExtensionKey(status.Product) is null)
-                return BadRequest(new { error = $"{status.Instance.Name} cannot be used to {role}: {(status.Reachable ? $"connections are kept by Sync and Gateway servers, and it is {status.Product}" : status.Problem ?? "it is not answering")}." });
-        if (request.Password is { Length: > 0 } && to.Product != ConnectionCopy.Sync)
-            return BadRequest(new { error = $"{toInstance.Name} takes a password from its own secret store; a password cannot be sent to it." });
+                return BadRequest(new { error = $"{status.Instance.Name} cannot be used to {role}: {(status.Reachable ? $"connections are kept by Gateways, and it is {status.Product}" : status.Problem ?? "it is not answering")}." });
 
         // the source's file, as its server keeps it
-        var read = from.Product == ConnectionCopy.Sync
-            ? await relay.CallAsync(fromInstance, HttpMethod.Get, $"/api/connections/{Uri.EscapeDataString(request.Name)}/file", null, cancellationToken)
-            : await relay.CallAsync(fromInstance, HttpMethod.Get, $"/api/v1/data-sources/{Uri.EscapeDataString(request.Name)}", null, cancellationToken);
+        var read = await relay.CallAsync(fromInstance, HttpMethod.Get, $"/api/v1/data-sources/{Uri.EscapeDataString(request.Name)}", null, cancellationToken);
         if (read.Status != 200 || read.Body?["text"]?.GetValue<string>() is not { } sourceText)
             return Failure(read.Status, read.Body, $"{fromInstance.Name} would not give the connection '{request.Name}'");
 
@@ -49,17 +44,13 @@ public sealed class ConnectionsController(ConsoleInstances instances, ConsoleRel
         if (plan.Text is null) return BadRequest(new { error = plan.Problem });
 
         // the target creates it (no version: a name that is taken is a conflict, never overwritten) and validates it with its own reading of the file
-        var write = to.Product == ConnectionCopy.Sync
-            ? await relay.CallAsync(toInstance, HttpMethod.Put, $"/api/connections/{Uri.EscapeDataString(newName)}/file", new { text = plan.Text, expected_version = (string?)null, password = string.IsNullOrEmpty(request.Password) ? null : request.Password }, cancellationToken)
-            : await relay.CallAsync(toInstance, HttpMethod.Put, $"/api/v1/data-sources/{Uri.EscapeDataString(newName)}", new { text = plan.Text, expected_version = (string?)null }, cancellationToken);
+        var write = await relay.CallAsync(toInstance, HttpMethod.Put, $"/api/v1/data-sources/{Uri.EscapeDataString(newName)}", new { text = plan.Text, expected_version = (string?)null }, cancellationToken);
         if (write.Status != 200)
             return Failure(write.Status, write.Body, $"{toInstance.Name} did not accept the copy", plan.Notes);
 
-        var notes = plan.Notes.ToList();
-        if (to.Product == ConnectionCopy.Sync && !string.IsNullOrEmpty(request.Password)) notes.Add("The password you typed was stored on the target under the copy's own reference.");
         return Ok(new
         {
-            from = fromInstance.Name, to = toInstance.Name, name = newName, notes,
+            from = fromInstance.Name, to = toInstance.Name, name = newName, notes = plan.Notes,
             secrets = plan.Secrets, version = write.Body?["version"]?.GetValue<string>(),
             diagnostics = write.Body?["diagnostics"] ?? new JsonArray(),
         });

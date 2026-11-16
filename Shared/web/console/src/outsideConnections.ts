@@ -1,7 +1,7 @@
 import { request } from '@dbdatakit/shell'
 import type { Diagnostic } from './agents'
 
-/** The kinds of connection the console keeps itself (plan 27a IX01): an API, a model provider, and (the delivery channels, plan 22a GP18) a mail server. A database connection is kept by the Sync or Gateway server that uses it. A webhook is an `http` connection with a `webhook:` section. */
+/** The kinds of connection the console keeps itself (plan 27a IX01): an API, a model provider, and (the delivery channels, plan 22a GP18) a mail server. A database connection is kept by the Runner or Gateway that uses it. A webhook is an `http` connection with a `webhook:` section. */
 export const OUTSIDE_KINDS = ['http', 'model-provider', 'smtp', 'sftp', 'scp', 'ftps', 'smb', 's3', 'azure-blob', 'report-catalog'] as const
 export type OutsideKind = (typeof OUTSIDE_KINDS)[number]
 

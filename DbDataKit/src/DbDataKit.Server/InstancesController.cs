@@ -61,7 +61,7 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
     public async Task<ActionResult<InstanceSummary>> Pair([FromBody] PairRequest request, CancellationToken cancellationToken)
     {
         if (!Uri.TryCreate(request.Url?.Trim(), UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps)
-            return BadRequest(new { error = "The address is an https address, such as https://build.example:8470." });
+            return BadRequest(new { error = "The address is an https address, such as https://runner.example:8480." });
         try
         {
             var paired = await instances.PairAsync(url, request.Code ?? "", request.Name, cancellationToken);
@@ -78,8 +78,8 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
     }
 
     /// <summary>
-    /// Pairs two servers this console manages (plan 13, T11): the Gateway makes a single-use code for a publisher, and the Build server pairs with it, both as the signed-in person, so no code is typed. The Gateway's address is the one this console uses; the Build
-    /// server must be able to reach it too.
+    /// Pairs two servers this console manages (plan 13, T11; plan 24a UC13): the Gateway makes a single-use code, and the runner pairs with it, both as the signed-in person, so no code is typed; the runner then tells the Gateway's cache when
+    /// it wrote data. The Gateway's address is the one this console uses; the runner must be able to reach it too.
     /// </summary>
     [HttpPost("link")]
     public async Task<IActionResult> Link([FromBody] LinkRequest request, CancellationToken cancellationToken)
@@ -88,9 +88,9 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
             return NotFound(new { error = "Both servers must be registered here." });
         if (publisher.InstanceId == target.InstanceId) return BadRequest(new { error = "A server cannot be paired with itself." });
         var (from, to) = (await instances.StatusAsync(publisher, cancellationToken), await instances.StatusAsync(target, cancellationToken));
-        // what each kind of server is told to pair with a gateway through (plan 13 T11; plan 24a UC13 adds Sync and the Runner, which pair only to tell the gateway's cache that data changed)
-        if (from.Product is null || !LinkRoutes.TryGetValue(from.Product, out var route) || to.Product != "dbdatagateway")
-            return BadRequest(new { error = $"Linking pairs a Build, Sync or Runner server with a gateway; {publisher.Name} is {from.Product ?? "not reachable"} and {target.Name} is {to.Product ?? "not reachable"}." });
+        // what each kind of server is told to pair with a gateway through (plan 13 T11; plan 24a UC13: a runner pairs only to tell the gateway's cache that data changed)
+        if (from.Product is null || !LinkRoutes.TryGetValue(from.Product, out var route) || to.Product != ServerProducts.Gateway)
+            return BadRequest(new { error = $"Linking pairs a runner with a gateway; {publisher.Name} is {from.Product ?? "not reachable"} and {target.Name} is {to.Product ?? "not reachable"}." });
 
         var name = string.IsNullOrWhiteSpace(request.Name) ? Slug(target.Name) : request.Name.Trim();
         var (codeStatus, code) = await relay.CallAsync(target, HttpMethod.Post, DbDataKit.Web.Trust.PairingCodeIssuer.Path, new { name = $"{publisher.Name} ({LinkLabels[from.Product]})", minutes = 5 }, cancellationToken);
@@ -103,13 +103,10 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
             : StatusCode(status is >= 400 and < 600 ? status : 502, new { error = $"{publisher.Name} could not pair with {target.Name}: {answer?["error"]?.GetValue<string>() ?? "no answer"}" });
     }
 
-    /// <summary>The call that makes a server pair with a gateway, by product: Build's publishing pairing, and the pairings Sync and the Runner keep to tell a gateway's cache that data changed.</summary>
-    private static readonly Dictionary<string, string> LinkRoutes = new(StringComparer.Ordinal)
-    {
-        ["dbdatabuild"] = "/api/v1/proxies", ["dbdatasync"] = "/api/gateways", ["dbdatarunner"] = "/api/v1/gateways",
-    };
+    /// <summary>The call that makes a server pair with a gateway, by product: the pairing a runner keeps to tell a gateway's cache that data changed.</summary>
+    private static readonly Dictionary<string, string> LinkRoutes = new(StringComparer.Ordinal) { [ServerProducts.Runner] = "/api/v1/gateways" };
 
-    private static readonly Dictionary<string, string> LinkLabels = new(StringComparer.Ordinal) { ["dbdatabuild"] = "Build", ["dbdatasync"] = "Sync", ["dbdatarunner"] = "Runner" };
+    private static readonly Dictionary<string, string> LinkLabels = new(StringComparer.Ordinal) { [ServerProducts.Runner] = "Runner" };
 
     private static string Slug(string name)
     {

@@ -30,15 +30,15 @@ function fleet(script: Record<string, { can_apply?: boolean; reason?: string; pr
 
 describe('planUpgrade (plan 24a UC10, QU4)', () => {
   it('puts the serving layer before the back-ends, by name inside a group, and lists what it will not do and why', async () => {
-    const { api } = fleet({ gw: {}, build: {}, store: { can_apply: false, reason: 'it runs in a container' } })
+    const { api } = fleet({ gw: {}, runner: {}, image: { can_apply: false, reason: 'it runs in a container' } })
     const plan = await planUpgrade([
-      row('store', 'dbdatastore'), row('sync', 'dbdatasync'), row('gw', 'dbdatagateway'), row('build', 'dbdatabuild'),
-      row('old', 'dbdatabuild', { newerAvailable: false }), row('far', 'dbdatarunner', { outsideAfterRelease: 'it is generation 5 and this console 2' }),
+      row('image', 'dbdatarunner'), row('ws', 'dbdataworkspace'), row('gw', 'dbdatagateway'), row('runner', 'dbdatarunner'),
+      row('old', 'dbdatarunner', { newerAvailable: false }), row('far', 'dbdatarunner', { outsideAfterRelease: 'it is generation 5 and this console 2' }),
     ], api)
     expect(plan.map((e) => `${e.group}:${e.name}:${e.action}`)).toEqual([
-      'serving:gw:upgrade', 'back-end:build:upgrade', 'back-end:far:blocked', 'back-end:old:current', 'back-end:store:instruction', 'back-end:sync:manual',
+      'serving:gw:upgrade', 'back-end:far:blocked', 'back-end:image:instruction', 'back-end:old:current', 'back-end:runner:upgrade', 'back-end:ws:manual',
     ])
-    expect(plan.find((e) => e.name === 'store')!.note).toBe('it runs in a container')
+    expect(plan.find((e) => e.name === 'image')!.note).toBe('it runs in a container')
     expect(plan.find((e) => e.name === 'far')!.note).toContain('Upgrade the console first')
     expect(groupOf('dbdatagateway')).toBe('serving')
     expect(groupOf(null)).toBe('back-end')
@@ -46,7 +46,7 @@ describe('planUpgrade (plan 24a UC10, QU4)', () => {
 
   it('does not stop the plan for a server that will not say how it is installed', async () => {
     const api: PlanApi = { status: async () => { throw new Error('nothing answered') }, prepare: async () => prepared, apply: async () => status() }
-    const plan = await planUpgrade([row('build', 'dbdatabuild')], api)
+    const plan = await planUpgrade([row('runner', 'dbdatarunner')], api)
     expect(plan[0]).toMatchObject({ action: 'manual' })
     expect(plan[0].note).toContain('nothing answered')
   })
@@ -54,7 +54,7 @@ describe('planUpgrade (plan 24a UC10, QU4)', () => {
 
 describe('runUpgradePlan (plan 24a UC10)', () => {
   const entries = (...names: [string, PlanEntry['action']?][]): PlanEntry[] =>
-    names.map(([name, action]) => ({ id: `${name}-id`, name, product: 'dbdatabuild', from: '1.0.0', to: '2.0.0', group: 'back-end', action: action ?? 'upgrade', note: null }))
+    names.map(([name, action]) => ({ id: `${name}-id`, name, product: 'dbdatarunner', from: '1.0.0', to: '2.0.0', group: 'back-end', action: action ?? 'upgrade', note: null }))
 
   it('upgrades one server at a time in the order given and leaves a server that is not an upgrade alone', async () => {
     const { api, calls } = fleet({ a: {}, b: {} })

@@ -1,15 +1,15 @@
 import { request } from '@dbdatakit/shell'
 import type { InstanceSummary } from './api'
 
-/** One thing that waits for a person's decision, on one server: a change request of a Store model, or an app version of a Gateway that asks to be trusted and has no approval for its exact files. */
+/** One thing that waits for a person's decision, on one Gateway: a change request of a model its store serves, a step an agent asked through its `mcp` module, or an app version that asks to be trusted and has no approval for its exact files. */
 export interface ApprovalRow {
   /** Unique among the rows: the server and what waits. */
   key: string
   server: string
   serverName: string
-  product: 'dbdatastore' | 'dbdatagateway'
+  product: 'dbdatagateway'
   kind: 'change-request' | 'app-trust' | 'mcp-step'
-  /** What waits, as the owning screen names it: the model (and instance), or `<app> version <n>`. */
+  /** What waits, as the owning screen names it: the model, the agent's tool, or `<app> version <n>`. */
   subject: string
   detail: string
   /** Who proposed or published it; null when the server did not say. */
@@ -22,8 +22,8 @@ export interface ApprovalRow {
   canDecide: boolean
   /** The console route of the screen where it is read and decided. */
   link: string
-  /** A change request: which one, so it can be decided here (SC21c). Absent on an app version, which is decided on the Gateway's screen. `gateway`: a request of the Gateway's store (plan 33 SC24), decided on its store paths. */
-  request?: { model: string; instance: string; id: string; gateway?: boolean }
+  /** A change request of the Gateway's store (plan 33 SC24): which one, so it can be decided here (SC21c). Absent on an app version, which is decided on the Gateway's screen. */
+  request?: { model: string; id: string }
   /** A step an agent asked through the Gateway's `mcp` module (plan 27a AG33): its id, decided here as the signed-in person. */
   mcp?: { id: string }
 }
@@ -45,34 +45,28 @@ export function mcpRows(server: InstanceSummary, list: McpApprovalList): Approva
 /** The relay address of an answer to an agent's step on a Gateway's `mcp` module. */
 export const mcpDecisionPath = (server: string, id: string, approve: boolean): string => `/relay/${server}/api/v1/mcp/approvals/${encodeURIComponent(id)}/${approve ? 'approve' : 'deny'}`
 
-/** The Store's list of a model's requests (`GET /api/v1/models/{m}/requests?state=pending`). */
+/** A Gateway's list of a model's requests (`GET /api/v1/store/models/{m}/requests?state=pending`). */
 export interface StoreRequestList {
   requests: { id: string; model: string; instance: string; state: string; proposed_by: string; proposed_by_name: string | null; by_agent: boolean; proposed_at: string; description: string | null; change_count: number }[]
   can_decide: boolean
   decision_needs: string
 }
 
-/** The pending requests of one model copy as rows. */
-export function storeRows(server: InstanceSummary, model: string, list: StoreRequestList): ApprovalRow[] {
-  return list.requests.filter((r) => r.state === 'pending').map((r) => {
-    const instance = r.instance && r.instance !== 'default' ? ` (instance ${r.instance})` : ''
-    const changes = `${r.change_count} change${r.change_count === 1 ? '' : 's'}`
-    return {
-      key: `${server.id}/${model}/${r.instance}/${r.id}`, server: server.id, serverName: server.name, product: 'dbdatastore', kind: 'change-request',
-      subject: `${model}${instance}`, detail: r.description ? `${r.description} (${changes})` : changes,
-      by: r.proposed_by_name ?? r.proposed_by, byAgent: r.by_agent, since: r.proposed_at, canDecide: list.can_decide,
-      link: `/servers/${server.id}/model/${encodeURIComponent(model)}/changes`,
-      request: { model, instance: r.instance || 'default', id: r.id },
-    }
-  })
-}
-
 /**
- * The pending change requests of a model a Gateway's store serves (plan 33 SC24: the Store's requests without its server): the same list as a Store's, read from the Gateway's store paths on its management API, the default copy only. Decided here,
- * through the Gateway, as the signed-in person; the link goes to the Gateway's screens.
+ * The pending change requests of a model a Gateway's store serves (plan 33 SC24), the default copy only, read from the Gateway's store paths on its management API. Decided here, through the Gateway, as the signed-in person; the link goes
+ * to the Gateway's screens.
  */
 export function gatewayStoreRows(server: InstanceSummary, model: string, list: StoreRequestList): ApprovalRow[] {
-  return storeRows(server, model, list).map((row) => ({ ...row, product: 'dbdatagateway' as const, link: `/servers/${server.id}`, request: { ...row.request!, instance: 'default', gateway: true } }))
+  return list.requests.filter((r) => r.state === 'pending').map((r) => {
+    const changes = `${r.change_count} change${r.change_count === 1 ? '' : 's'}`
+    return {
+      key: `${server.id}/${model}/${r.id}`, server: server.id, serverName: server.name, product: 'dbdatagateway', kind: 'change-request',
+      subject: model, detail: r.description ? `${r.description} (${changes})` : changes,
+      by: r.proposed_by_name ?? r.proposed_by, byAgent: r.by_agent, since: r.proposed_at, canDecide: list.can_decide,
+      link: `/servers/${server.id}`,
+      request: { model, id: r.id },
+    }
+  })
 }
 
 /** The Gateway's `GET /api/v1/apps` and `GET /api/v1/apps/{name}`, as far as this view reads them. */
@@ -98,11 +92,9 @@ export function appRows(server: InstanceSummary, detail: GatewayAppDetail): Appr
   }))
 }
 
-/** The relay address of a decision on a Store change request: the Store's own route for the model copy (`POST .../requests/{id}/approve` or `reject`), the one its Change requests tab calls. */
+/** The relay address of a decision on a change request: the Gateway's store route (`POST /api/v1/store/models/{m}/requests/{id}/approve` or `reject`). */
 export function decisionPath(server: string, request: NonNullable<ApprovalRow['request']>, approve: boolean): string {
-  if (request.gateway) return `/relay/${server}/api/v1/store/models/${encodeURIComponent(request.model)}/requests/${encodeURIComponent(request.id)}/${approve ? 'approve' : 'reject'}`
-  const copy = request.instance && request.instance !== 'default' ? `/instances/${encodeURIComponent(request.instance)}` : ''
-  return `/relay/${server}/api/v1/models/${encodeURIComponent(request.model)}${copy}/requests/${encodeURIComponent(request.id)}/${approve ? 'approve' : 'reject'}`
+  return `/relay/${server}/api/v1/store/models/${encodeURIComponent(request.model)}/requests/${encodeURIComponent(request.id)}/${approve ? 'approve' : 'reject'}`
 }
 
 /** Why a decision cannot be sent yet, in words; null when it can. A rejection needs its reason written (the person who proposed it reads it), an approval needs none. */
@@ -114,7 +106,7 @@ export function decisionProblem(row: ApprovalRow, approve: boolean, note: string
 }
 
 /**
- * Decides a change request through the relay as the signed-in person. The Store applies the rows exactly as proposed through its own rules (a request that breaks one stays waiting and its answer says why), checks the role again
+ * Decides a change request through the relay as the signed-in person. The Gateway's store applies the rows exactly as proposed through its own rules (a request that breaks one stays waiting and its answer says why), checks the role again
  * and records who decided; this only sends the decision and the note.
  */
 export function decideRequest(row: ApprovalRow, approve: boolean, note: string): Promise<unknown> {
@@ -145,23 +137,15 @@ const relay = (server: InstanceSummary, path: string) => `/relay/${server.id}${p
 const enc = encodeURIComponent
 
 /**
- * Everything that waits, from every reachable Store and Gateway. A server that does not answer is reported beside the rows, never as a row, and never stops the others.
- * The decisions are made on the owning screens (the Store's Change requests tab, the Gateway's Apps screen), which show what is proposed and apply the server's own rules; this view only says that something waits.
+ * Everything that waits, from every reachable Gateway. A server that does not answer is reported beside the rows, never as a row, and never stops the others. A change request and an agent's step are decided here as the signed-in person
+ * (the Gateway applies its own rules); an app version is decided on the Gateway's Apps screen, and this view only says that it waits.
  */
 export async function loadApprovals(servers: InstanceSummary[]): Promise<{ rows: ApprovalRow[]; problems: { server: string; message: string }[] }> {
   const rows: ApprovalRow[] = []
   const problems: { server: string; message: string }[] = []
   await Promise.all(servers.filter((s) => s.reachable).map(async (server) => {
     try {
-      if (server.product === 'dbdatastore') {
-        const { models } = await request<{ models: { name: string }[] }>(relay(server, '/api/v1/models'))
-        await Promise.all(models.map(async (m) => {
-          const instances = await request<{ instances: { name: string }[] }>(relay(server, `/api/v1/models/${enc(m.name)}/instances`)).then((r) => r.instances, () => [])
-          const copies = ['default', ...instances.map((i) => i.name)]
-          const lists = await Promise.all(copies.map((c) => request<StoreRequestList>(relay(server, `/api/v1/models/${enc(m.name)}${c === 'default' ? '' : `/instances/${enc(c)}`}/requests?state=pending`))))
-          lists.forEach((l) => rows.push(...storeRows(server, m.name, l)))
-        }))
-      } else if (server.product === 'dbdatagateway') {
+      if (server.product === 'dbdatagateway') {
         const { apps } = await request<{ apps: GatewayAppSummary[] }>(relay(server, '/api/v1/apps'))
         const details = await Promise.all(apps.map((a) => request<GatewayAppDetail>(relay(server, `/api/v1/apps/${enc(a.name)}`))))
         details.forEach((d) => rows.push(...appRows(server, d)))

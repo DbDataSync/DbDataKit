@@ -15,12 +15,12 @@ export interface SetupItemDef {
 
 export const SETUP_ITEMS: SetupItemDef[] = [
   { id: 'sign-in', title: 'Choose how people sign in', why: 'Passkeys are on from the start. Connect an identity home for Windows, OpenID Connect or Entra ID sign-in, and invite the people who need access.', to: '/users', unavailable: null },
-  { id: 'servers', title: 'Pair your first server', why: 'The console manages servers (Build, Sync, the Gateway, the Store, a runner). A server on this machine can be confirmed from its announcement; one on another machine is paired with its address and code.', to: '/instances', unavailable: null },
-  { id: 'connections', title: 'Add your first connection', why: 'A connection says where the data is: a Sync source or target, or a data source the Gateway serves.', to: '/connections', unavailable: null },
+  { id: 'servers', title: 'Pair your first server', why: 'The console manages servers (the Workspace, a Runner, the Gateway). A server on this machine can be confirmed from its announcement; one on another machine is paired with its address and code.', to: '/instances', unavailable: null },
+  { id: 'connections', title: 'Add your first connection', why: 'A connection says where the data is: one a Runner task uses, or a data source the Gateway serves.', to: '/connections', unavailable: null },
   { id: 'git-remotes', title: 'Connect a git remote for the configuration', why: 'Definitions are kept in a git repository so every change has an author and a history.', to: '/instances', unavailable: 'Not built yet (plan 22a GP19).' },
   { id: 'delivery-channels', title: 'Set up where alerts are sent', why: 'A delivery channel (mail, Slack, Teams or a signed webhook) is a connection the console sends through; alerts, reports and subscriptions use it.', to: '/delivery', unavailable: null },
   { id: 'quality-alerts', title: 'Send failed checks to a channel', why: 'Name a delivery channel and the people who get a message when a data quality check fails and when it passes again (the section quality: alerts: of settings.yaml).', to: '/quality', unavailable: null },
-  { id: 'build-project', title: 'Make a first Build project from a template', why: 'A template gives a project with models, a connection and a plan to run.', to: '/instances', unavailable: null },
+  { id: 'build-project', title: 'Make a first project in the Workspace', why: 'A project (build, sync, store or app) is authored in the Workspace and published from there to a Runner or a Gateway.', to: '/instances', unavailable: null },
 ]
 
 /** What the install has, read from the pages' own data: a step is finished by this and by nothing a person clicks. */
@@ -33,8 +33,8 @@ export interface SetupFacts {
   deliveryChannels: boolean
   /** The alerts of failed checks name a channel the install has. */
   qualityAlerts: boolean
-  /** Build servers that answered, and how many projects they host: null when no Build server answered. */
-  buildProjects: number | null
+  /** Workspace servers that answered, and how many projects they hold: null when no Workspace server answered. */
+  projects: number | null
 }
 
 export type SetupStatus = 'done' | 'todo' | 'skipped' | 'unavailable'
@@ -49,7 +49,7 @@ export interface SetupRow extends SetupItemDef {
  */
 export function checklist(facts: SetupFacts, skipped: ReadonlySet<string>): SetupRow[] {
   const done: Record<string, boolean> = {
-    'sign-in': facts.signIn, servers: facts.servers, connections: facts.connections, 'delivery-channels': facts.deliveryChannels, 'quality-alerts': facts.qualityAlerts, 'build-project': (facts.buildProjects ?? 0) > 0,
+    'sign-in': facts.signIn, servers: facts.servers, connections: facts.connections, 'delivery-channels': facts.deliveryChannels, 'quality-alerts': facts.qualityAlerts, 'build-project': (facts.projects ?? 0) > 0,
   }
   return SETUP_ITEMS.map((item) => ({
     ...item,
@@ -67,10 +67,10 @@ export const setupApi = {
   skip: (item: string, skipped: boolean) => request<void>(`/api/setup/items/${encodeURIComponent(item)}`, { method: 'PUT', body: JSON.stringify({ skipped }) }),
 }
 
-/** Reads the facts: the users, the paired servers, the connections and the Build servers' projects. A page that does not answer counts as nothing there (the step stays to do). */
+/** Reads the facts: the users, the paired servers, the connections and the Workspace servers' projects. A page that does not answer counts as nothing there (the step stays to do). */
 export async function loadFacts(servers: InstanceSummary[], users: UserSummary[]): Promise<SetupFacts> {
-  const builds = servers.filter((s) => s.reachable && s.product === 'dbdatabuild')
-  const projects = await Promise.all(builds.map(async (s) => {
+  const workspaces = servers.filter((s) => s.reachable && s.product === 'dbdataworkspace')
+  const projects = await Promise.all(workspaces.map(async (s) => {
     try { return (await request<{ projects: unknown[] }>(`/relay/${encodeURIComponent(s.id)}/api/v1/projects`)).projects.length } catch { return null }
   }))
   const answered = projects.filter((p): p is number => p !== null)
@@ -86,6 +86,6 @@ export async function loadFacts(servers: InstanceSummary[], users: UserSummary[]
     connections,
     deliveryChannels,
     qualityAlerts,
-    buildProjects: answered.length === 0 ? null : answered.reduce((a, b) => a + b, 0),
+    projects: answered.length === 0 ? null : answered.reduce((a, b) => a + b, 0),
   }
 }

@@ -10,7 +10,7 @@ const stateText: Record<RunRow['state'], string> = { failed: 'Failed', running: 
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '')
 
 /**
- * The newest runs of the replications of every Sync server and of every runner, in one list, newest first, with a switch to show only the ones that failed. Monitoring says which replication or task failed last; this says what each did
+ * The newest runs of the tasks of every runner, in one list, newest first, with a switch to show only the ones that failed. Monitoring says which replication or task failed last; this says what each did
  * over the last runs, whichever server it is on, and each row opens the screen that holds the whole history and the actions on a run. Read only: nothing is started, cancelled or resynchronised here. Asked of each server through the relay
  * every thirty seconds; a server that does not answer is named above the list, and the others still show.
  */
@@ -33,14 +33,14 @@ export function RunsPage() {
       <div className="pane" data-testid="runs-page">
         <div className="page-head">
           <h1 className="page-title">Runs</h1>
-          <span className="page-note">The latest runs of your replications, scheduled Build plans and runner tasks, whichever server they ran on.</span>
+          <span className="page-note">The latest runs of your runner tasks (replications, refreshes and the rest), whichever runner they ran on.</span>
         </div>
         <ErrorBanner error={instances.error ?? view.error} />
         {(view.data?.problems ?? []).map((p) => (
           <div key={p.server} className="empty" data-testid="runs-problem">{`${p.server} did not answer: ${p.message}`}</div>
         ))}
         {view.isLoading && <div className="hint" data-testid="runs-loading">Asking the servers…</div>}
-        {view.isSuccess && all.length === 0 && <div className="empty" data-testid="runs-none">No run on the Sync, Build and runner servers that answered.</div>}
+        {view.isSuccess && all.length === 0 && <div className="empty" data-testid="runs-none">No run on the runners that answered.</div>}
         {all.length > 0 && (
           <>
             <label className="row" style={{ gap: 8, marginBottom: 10 }}>

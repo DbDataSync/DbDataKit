@@ -8,7 +8,7 @@ import { decideRequest, decisionProblem, loadApprovals, waited, type ApprovalRow
 
 const kindText: Record<ApprovalRow['kind'], string> = { 'change-request': 'Change request', 'app-trust': 'App to approve', 'mcp-step': 'Agent step' }
 
-/** A change request's decision: a note and the two buttons, each off with its reason; the Store decides and its sentence comes back when it refuses (SC21c). */
+/** A change request's decision: a note and the two buttons, each off with its reason; the Gateway decides and its sentence comes back when it refuses (SC21c). */
 function Decision({ row, onDecided }: { row: ApprovalRow; onDecided: () => void }) {
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -33,8 +33,9 @@ function Decision({ row, onDecided }: { row: ApprovalRow; onDecided: () => void 
 }
 
 /**
- * What waits for a decision on the servers of the suite, in one list: the change requests of the Store's models (an agent's write, or a model that asks for approval) and the app versions of a Gateway that ask to be trusted and
- * have no approval for their exact files. The longest wait is first, and an agent's write comes before a person's. A row says whether you may decide it and opens the screen where it is read and decided; a change request is approved or rejected here (SC21c: the note, then the Store's own rules decide), and the proposed rows are read on the Store's screen the row opens; an app version is decided on the Gateway's screen. Asked of each server through the relay every thirty seconds; a server that does not answer is named above the list, and the others still show.
+ * What waits for a decision on the Gateways of the suite, in one list: the change requests of the models their stores serve (an agent's write, or a model that asks for approval), the steps agents asked through the `mcp` module, and the app
+ * versions that ask to be trusted and have no approval for their exact files. The longest wait is first, and an agent's write comes before a person's. A row says whether you may decide it; a change request is approved or rejected here
+ * (SC21c: the note, then the Gateway's store rules decide); an app version is decided on the Gateway's screen. Asked of each server through the relay every thirty seconds; a server that does not answer is named above the list, and the others still show.
  */
 export function ApprovalsPage() {
   const client = useQueryClient()
@@ -54,7 +55,7 @@ export function ApprovalsPage() {
       <div className="pane" data-testid="approvals-page">
         <div className="page-head">
           <h1 className="page-title">Approvals</h1>
-          <span className="page-note">What waits for a decision on your Store and Gateway servers.</span>
+          <span className="page-note">What waits for a decision on your Gateways.</span>
         </div>
         <ErrorBanner error={instances.error ?? view.error} />
         {(view.data?.problems ?? []).map((p) => (

@@ -11,24 +11,22 @@ namespace DbDataKit.Server;
 public sealed record CopyPlan(string? Text, string? Problem, IReadOnlyList<string> Notes, IReadOnlyList<string> Secrets);
 
 /// <summary>
-/// Copying a connection from one server to another (plan 13, E05). Every product keeps a connection as the same <c>connection/1</c> file, so a copy is the source's file with only what belongs to the source's own server changed, and the target
-/// decides whether it can use the result: it reads the file with its own strict loader and refuses what it does not support, naming the key and line. Nothing is converted or guessed.
+/// Copying a connection from one server to another (plan 13, E05): a Gateway's data source to a Gateway (the same one under another name, or another). A data source is a <c>connection/1</c> file, so a copy is the source's file with only what
+/// belongs to the source's own server changed, and the target decides whether it can use the result: it reads the file with its own strict loader and refuses what it does not support, naming the key and line. Nothing is converted or guessed.
 /// <list type="bullet">
 /// <item><c>name</c> is the new name (the file name on the target is the name).</item>
 /// <item><c>managed_by</c> is dropped: it names a client of the source's server, which means nothing on the target (the person who copies is its administrator).</item>
-/// <item><c>extensions.&lt;product&gt;</c> of another product is dropped, since the target does not read it; the target's own (a copy between two Sync servers, or two Gateways) is kept.</item>
-/// <item>A password is a reference, never a value, and is not copied. Sync keeps a connection's password under <c>secret:dbdatakit:sync:connection:&lt;name&gt;</c> only, so a copy to Sync names that for the new name (and a Gateway's copy of a Sync connection names
-/// <c>secret:dbdatakit:gateway:connection:&lt;name&gt;</c>, not Sync's store); every other reference is kept as written. The copy says which references the target must hold.</item>
+/// <item><c>extensions.&lt;product&gt;</c> of another product is dropped, since the target does not read it; the target's own (<c>extensions.gateway</c>) is kept.</item>
+/// <item>A password is a reference, never a value, and is not copied: every reference is kept as written. The copy says which references the target must hold.</item>
 /// </list>
 /// The text is edited in place (<see cref="YamlEditor"/>), so the source's comments, key order and quoting stay.
 /// </summary>
 public static partial class ConnectionCopy
 {
-    public const string Sync = "dbdatasync";
     public const string Gateway = "dbdatagateway";
 
-    /// <summary>The products the Connections view lists and copies between, and the key each reads under <c>extensions</c>.</summary>
-    public static string? ExtensionKey(string? product) => product switch { Sync => "sync", Gateway => "gateway", _ => null };
+    /// <summary>The products the Connections view lists and copies between (a Gateway; the Sync server that kept connections too was deleted, plan 33 SC23), and the key each reads under <c>extensions</c>.</summary>
+    public static string? ExtensionKey(string? product) => product switch { Gateway => "gateway", _ => null };
 
     [GeneratedRegex("^[A-Za-z][A-Za-z0-9_.-]{0,63}$")]
     private static partial Regex NamePattern();
@@ -74,41 +72,16 @@ public static partial class ConnectionCopy
             notes.Add($"The settings under extensions.{string.Join(", extensions.", foreign)} were left out: the target does not read them.");
         }
 
-        // Sync's loader refuses the settings only a Gateway reads; they go, and the copy says which
-        var dropped = new List<string>();
-        if (targetProduct == Sync)
-        {
-            var map = StrictYamlReader.Read(sourceText, "source", []) as YamlMapping;
-            foreach (var key in new[] { "tls", "read_login", "write_login", "connection_string_secret", "access" })
-                if (problem is null && map?.GetEntry(key) is not null)
-                {
-                    problem = Edit(t => YamlEditor.Remove(t, key));
-                    dropped.Add(key);
-                }
-            if (dropped.Count > 0) notes.Add($"{string.Join(", ", dropped)} {(dropped.Count == 1 ? "was" : "were")} left out: Sync does not use {(dropped.Count == 1 ? "it" : "them")}.");
-        }
-
-        // a password is named by reference; Sync reads one name only, and a Sync reference means nothing in a Gateway's store
-        var logins = new[] { ("auth", source.Auth), ("read_login", dropped.Contains("read_login") ? null : source.ReadLogin), ("write_login", dropped.Contains("write_login") ? null : source.WriteLogin) };
+        // a password is named by reference, kept as written: the target must hold each one
         var secrets = new List<string>();
-        foreach (var (path, login) in logins)
+        foreach (var login in new[] { source.Auth, source.ReadLogin, source.WriteLogin })
         {
             if (login is null) continue;
-            if (login.PasswordSecret is { } reference)
-            {
-                var named = reference;
-                if (targetProduct == Sync && path == "auth") named = $"secret:dbdatakit:sync:connection:{newName}";
-                else if (targetProduct == Gateway && reference.StartsWith("secret:dbdatakit:sync:", StringComparison.OrdinalIgnoreCase)) named = $"secret:dbdatakit:gateway:connection:{newName}";
-                if (named != reference && problem is null) problem = Edit(t => YamlEditor.Set(t, path + ".password_secret", named));
-                secrets.Add(named);
-            }
+            if (login.PasswordSecret is { } reference) secrets.Add(reference);
             if (login.ConnectionStringSecret is { } whole) secrets.Add(whole);
             if (login.TokenSecret is { } token) secrets.Add(token);
         }
-        if (!dropped.Contains("connection_string_secret") && source.ConnectionStringSecret is { } wholeString) secrets.Add(wholeString);
-
-        if (targetProduct == Sync && source.Address is null && string.IsNullOrEmpty(source.ConnectionString))
-            return Refused("Sync reads a connection by `address` or `connection_string`, and this one holds its whole connection string in a secret, which Sync cannot use. Give it an address first.");
+        if (source.ConnectionStringSecret is { } wholeString) secrets.Add(wholeString);
 
         if (problem is not null) return Refused("The file could not be changed for the target: " + problem);
 
@@ -118,11 +91,9 @@ public static partial class ConnectionCopy
 
         if (secrets.Count > 0)
             notes.Add("The password itself is never copied. The copy refers to " + string.Join(", ", secrets.Distinct().Select(s => $"`{s}`")) + ", which the target must hold.");
-        if (targetProduct == Sync && source.Extensions.Items.TryGetValue("sync", out var sync) && sync is YamlMapping mapping && (mapping.Get("scripts") is not null || mapping.Get("hooks") is not null))
-            notes.Add("The connection's scripts and hooks are kept; the scripts they name must exist on the target.");
 
         return new CopyPlan(text, null, notes, [.. secrets.Distinct()]);
     }
 
-    private static string SourceName(string product) => product == Sync ? "a Sync server" : product == Gateway ? "a Gateway" : "its server";
+    private static string SourceName(string product) => product == Gateway ? "a Gateway" : "its server";
 }

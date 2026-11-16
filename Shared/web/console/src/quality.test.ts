@@ -62,12 +62,9 @@ describe('whether a check can be evaluated from the screen', () => {
 })
 
 describe('where the history of a check is read', () => {
-  it('is the evaluating product\'s own route', () => {
-    expect(historyPath('dbdatabuild')).toBe('/api/v1/quality/history')
-    expect(historyPath('dbdatasync')).toBe('/api/quality/history')
-    expect(historyPath('dbdatastore')).toBe('/api/v1/quality/history')
-    expect(runPath('dbdatastore')).toBe('/api/v1/quality/run')
-    expect(runPath('dbdatasync')).toBe('/api/quality/run')
+  it('is the evaluating server\'s own route', () => {
+    expect(historyPath).toBe('/api/v1/quality/history')
+    expect(runPath).toBe('/api/v1/quality/run')
   })
 })
 
@@ -91,9 +88,7 @@ describe('the release of a block (plan 23a FQ17)', () => {
     expect(releaseBlockedReason(undefined, true)).toContain('not paired any more')
   })
   it("goes to the server's own route and says so when a block was released and the check still fails", () => {
-    expect(releasePath('dbdatastore')).toBe('/api/v1/quality/release')
-    expect(releasePath('dbdatabuild')).toBe('/api/v1/quality/release')
-    expect(releasePath('dbdatasync')).toBe('/api/quality/release')
+    expect(releasePath).toBe('/api/v1/quality/release')
     expect(blockLine({ blocking: false, blocked_since: null, released_since: '2026-11-12T10:00:00Z', released_by: 'ada' })).toContain('Released by ada on 2026-11-12T10:00:00Z')
     expect(blockLine({ blocking: false, blocked_since: null })).toBeNull()
   })

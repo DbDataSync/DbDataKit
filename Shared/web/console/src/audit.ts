@@ -91,7 +91,7 @@ export function what(e: AuditEntry): string {
     case 'server.confirm': return `confirmed the waiting server ${server}`
     case 'server.reject': return `rejected the waiting server ${server}`
     case 'server.forget': return `removed the server ${server}`
-    case 'server.link': return 'paired a Build server with a Gateway'
+    case 'server.link': return 'paired a server with a Gateway'
     case 'state.connection.save': return `saved the state database ${e.targetId ?? ''}`.trim()
     case 'state.connection.remove': return `removed the state database ${e.targetId ?? ''}`.trim()
     case 'state.move.check': return 'checked a state move before starting it'

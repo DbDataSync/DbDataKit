@@ -89,7 +89,7 @@ public sealed class ConsoleBundleTests : IAsyncLifetime
     [Fact]
     public async Task A_product_that_is_not_a_member_waits()
     {
-        var tokenFile = MakeBundle("dbdatasync");
+        var tokenFile = MakeBundle("dbdatarunner");
         using var client = new HttpClient();
 
         Assert.True(await Announcer(tokenFile).AnnounceOnceAsync(client));       // this one announces as dbdatagateway
@@ -106,13 +106,13 @@ public sealed class ConsoleBundleTests : IAsyncLifetime
         Assert.Null(problem);
         var token = File.ReadAllText(bundle!.TokenFile).Trim();
 
-        Assert.True(bundle.Accepts(token, "dbdatasync", IPAddress.Loopback));
-        Assert.True(bundle.Accepts(token, "dbdatasync", IPAddress.IPv6Loopback));
-        Assert.True(bundle.Accepts(token, "dbdatasync", IPAddress.Loopback.MapToIPv6()));
-        Assert.False(bundle.Accepts(token, "dbdatasync", IPAddress.Parse("10.1.2.3")));       // another machine, even with the token
-        Assert.False(bundle.Accepts(token + "x", "dbdatasync", IPAddress.Loopback));
-        Assert.False(bundle.Accepts(null, "dbdatasync", IPAddress.Loopback));
-        Assert.False(bundle.Accepts(token, "dbdatasync", null));
+        Assert.True(bundle.Accepts(token, "dbdatarunner", IPAddress.Loopback));
+        Assert.True(bundle.Accepts(token, "dbdatarunner", IPAddress.IPv6Loopback));
+        Assert.True(bundle.Accepts(token, "dbdatarunner", IPAddress.Loopback.MapToIPv6()));
+        Assert.False(bundle.Accepts(token, "dbdatarunner", IPAddress.Parse("10.1.2.3")));       // another machine, even with the token
+        Assert.False(bundle.Accepts(token + "x", "dbdatarunner", IPAddress.Loopback));
+        Assert.False(bundle.Accepts(null, "dbdatarunner", IPAddress.Loopback));
+        Assert.False(bundle.Accepts(token, "dbdatarunner", null));
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public sealed class ConsoleBundleTests : IAsyncLifetime
             return (await ConsoleCli.RunAsync(args, context), context.Data);
         }
 
-        var first = await Run("bundle", "init", "--members", "dbdatasync,dbdatabuild", "--repo", directory);
+        var first = await Run("bundle", "init", "--members", "dbdatarunner,dbdataworkspace", "--repo", directory);
         Assert.Equal(0, first.Exit);
         var tokenFile = (string)first.Data["token_file"]!;
         var token = File.ReadAllText(tokenFile);

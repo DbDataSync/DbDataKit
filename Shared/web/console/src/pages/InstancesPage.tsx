@@ -3,9 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner, Field, useIsAdmin } from '@dbdatakit/shell'
 import { consoleApi, instancesKey, type InstanceSummary } from '../api'
 import { PendingServers } from './PendingServers'
+import { removedProducts } from './ServerModule'
 import { Link } from 'react-router-dom'
 import { ConsoleShell } from '../ConsoleShell'
-import { linkDone, linkPurpose, linkableServers, publishesToGateway } from '../linkServers'
+import { linkDone, linkPurpose, linkableServers } from '../linkServers'
 import { offersState } from '../stateApi'
 import { availableKey, upgradeApi } from '../upgradeApi'
 
@@ -105,6 +106,7 @@ export function InstancesPage() {
                 <span className="mono">{instance.product ?? '—'} {instance.version ?? ''}{instance.generation ? <span className="hint" data-testid="instance-generation"> generation {instance.generation}</span> : null}</span>
                 <span>
                   <span data-testid="instance-status" data-tone={status.tone}>{status.text}</span>
+                  {instance.product && removedProducts[instance.product] && <div className="hint" data-testid="instance-removed">{removedProducts[instance.product]} Forget it here once its work has moved.</div>}
                   {(() => {
                     const row = available.data?.servers.find((s) => s.id === instance.id)
                     return row?.newerAvailable
@@ -114,7 +116,7 @@ export function InstancesPage() {
                 </span>
                 <span className="mono">{instance.url}</span>
                 <span className="row" style={{ gap: 8 }}>
-                  {instance.reachable && (instance.product === 'dbdatasync' || instance.product === 'dbdatabuild' || instance.product === 'dbdatagateway' || instance.product === 'dbdatarunner' || instance.product === 'dbdataworkspace' || instance.product === 'dbdatakit-identity') && (
+                  {instance.reachable && (instance.product === 'dbdatagateway' || instance.product === 'dbdatarunner' || instance.product === 'dbdataworkspace' || instance.product === 'dbdatakit-identity') && (
                     <Link to={`/servers/${instance.id}`} className="btn btn-primary" data-testid="instance-open-link">Open</Link>
                   )}
                   {instance.reachable && offersState(instance.product) && (
@@ -178,8 +180,7 @@ export function InstancesPage() {
           <div className="card" style={{ marginTop: 20 }} data-testid="link-card">
             <div className="card-head"><span className="card-title">Link a server to a gateway</span></div>
             <div className="card-body">
-              <span className="hint" data-testid="link-purpose">{linkPurpose(linkers.find((i) => i.id === linkFrom)?.product)}</span>
-              {publishesToGateway(linkers.find((i) => i.id === linkFrom)?.product) && <span className="hint" style={{ display: 'block', marginTop: 4 }} data-testid="link-trust">The Publisher role is high-trust: a linked Build server chooses the serving policy of the data sources it publishes (pass-through login, limits, statement check, batch size, compression), everything except <span className="mono">allow_writes</span> and <span className="mono">allowed_directories</span>, which a published definition never carries (a published data source is read-only). Link only a Build server whose operators you trust with that.</span>}
+              <span className="hint" data-testid="link-purpose">{linkPurpose()}</span>
               <ErrorBanner error={link.error} />
               <Field label="Server">
                 <select className="input" value={linkFrom} onChange={(e) => { setLinkFrom(e.target.value); link.reset() }} data-testid="link-from-select">
@@ -196,7 +197,7 @@ export function InstancesPage() {
               <button type="button" className="btn btn-primary" disabled={link.isPending || !linkFrom || !linkTo} onClick={() => link.mutate()} data-testid="link-button">
                 {link.isPending ? 'Linking…' : 'Link'}
               </button>
-              {link.isSuccess && <div className="hint" data-testid="link-done">{linkDone(linkers.find((i) => i.id === linkFrom)?.product, link.data.from, link.data.to, link.data.name)}</div>}
+              {link.isSuccess && <div className="hint" data-testid="link-done">{linkDone(link.data.from, link.data.to, link.data.name)}</div>}
             </div>
           </div>
         )}

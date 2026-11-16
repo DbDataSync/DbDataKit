@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { checklist, loadFacts, remaining, SETUP_ITEMS, type SetupFacts } from './setup'
 
-const none: SetupFacts = { signIn: false, servers: false, connections: false, deliveryChannels: false, qualityAlerts: false, buildProjects: null }
+const none: SetupFacts = { signIn: false, servers: false, connections: false, deliveryChannels: false, qualityAlerts: false, projects: null }
 const status = (facts: SetupFacts, skipped: string[] = []) => Object.fromEntries(checklist(facts, new Set(skipped)).map((r) => [r.id, r.status]))
 
 describe('the setup checklist (plan 23a FQ21)', () => {
@@ -17,19 +17,19 @@ describe('the setup checklist (plan 23a FQ21)', () => {
   })
 
   it('marks a step finished by what the install has, not by a click: done wins over skipped', () => {
-    const rows = status({ ...none, signIn: true, servers: true, buildProjects: 2 }, ['servers', 'connections'])
+    const rows = status({ ...none, signIn: true, servers: true, projects: 2 }, ['servers', 'connections'])
     expect(rows['sign-in']).toBe('done')
     expect(rows.servers).toBe('done')                  // skipped before the server was paired: it is done now
     expect(rows.connections).toBe('skipped')
     expect(rows['build-project']).toBe('done')
-    expect(status({ ...none, buildProjects: 0 })['build-project']).toBe('todo')   // a Build server with no project has not done it
+    expect(status({ ...none, projects: 0 })['build-project']).toBe('todo')   // a Workspace with no project has not done it
   })
 
   it('counts only what is still to do for the banner: a skipped step leaves it and stays on the list', () => {
     const skipped = checklist(none, new Set(['connections']))
     expect(remaining(skipped).map((r) => r.id)).toEqual(['sign-in', 'servers', 'delivery-channels', 'quality-alerts', 'build-project'])
     expect(skipped.find((r) => r.id === 'connections')!.status).toBe('skipped')           // still in the checklist
-    expect(remaining(checklist({ signIn: true, servers: true, connections: true, deliveryChannels: true, qualityAlerts: true, buildProjects: 1 }, new Set()))).toEqual([])
+    expect(remaining(checklist({ signIn: true, servers: true, connections: true, deliveryChannels: true, qualityAlerts: true, projects: 1 }, new Set()))).toEqual([])
   })
 })
 
@@ -37,7 +37,7 @@ describe('loadFacts', () => {
   it('reads the people and the servers, and counts nothing for a page that does not answer', async () => {
     const user = (over: object) => ({ id: 'u', displayName: 'Ada', email: null, emailVerified: false, role: 'Admin', enabled: true, credentials: [{ id: 'c' }], ...over }) as never
     const facts = await loadFacts([], [user({})])
-    expect(facts).toEqual({ signIn: true, servers: false, connections: false, deliveryChannels: false, qualityAlerts: false, buildProjects: null })
+    expect(facts).toEqual({ signIn: true, servers: false, connections: false, deliveryChannels: false, qualityAlerts: false, projects: null })
     expect((await loadFacts([], [user({ credentials: [] })])).signIn).toBe(false)           // a person with no way in is not a way in
     expect((await loadFacts([], [user({ enabled: false })])).signIn).toBe(false)
   })

@@ -43,9 +43,9 @@ export interface PrepareReport {
 /** The path of a server's upgrade API through the console's relay. */
 export const upgradeBase = (id: string) => `/relay/${encodeURIComponent(id)}/api/v1/upgrade`
 
-/** The products whose servers mount the upgrade endpoints (Sync's management API has its own sign-in and is not wired yet). */
+/** The products whose servers mount the upgrade endpoints: the Gateway and the Runner (the Workspace server does not yet). */
 export function offersUpgrade(product: string | null): boolean {
-  return product === 'dbdatabuild' || product === 'dbdatagateway' || product === 'dbdatastore' || product === 'dbdatarunner'
+  return product === 'dbdatagateway' || product === 'dbdatarunner'
 }
 
 export const upgradeRunApi = {

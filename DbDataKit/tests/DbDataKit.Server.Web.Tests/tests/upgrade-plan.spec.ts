@@ -2,14 +2,14 @@ import { expect, test } from '@playwright/test'
 import { signInNewAdmin } from './people'
 
 // Plan 24a UC10: "Upgrade everything" on the Upgrades screen. The console's list of what is available and the servers' own upgrade calls (`/relay/<id>/api/v1/upgrade`, UC09) are answered in the page, because a real
-// upgrade needs a service (the library's tests cover the swap and the rollback). The story: three servers have a newer release; the plan puts the Gateway first, then Build, then the Store; the Store is a container, so it is
-// shown with its reason and left out; the Gateway is upgraded; Build is rolled back by its health check, so the run stops there. Sorts after `identity-home` and `first-run`, which use the first-run invitation.
+// upgrade needs a service (the library's tests cover the swap and the rollback). The story: three servers have a newer release; the plan puts the Gateway first, then the two runners by name; the second runner is a container, so it
+// is shown with its reason and left out; the Gateway is upgraded; the first runner is rolled back by its health check, so the run stops there. Sorts after `identity-home` and `first-run`, which use the first-run invitation.
 const server = (id: string, name: string, product: string) => ({
   id, name, product, version: '1.0.0', generation: 1, newest: '2.0.0', newerAvailable: true, newestGeneration: 1, notesUrl: null, outsideAfterRelease: null,
 })
 const available = {
   feed: 'mirror', channel: 'stable', mirror: true, at: '2026-11-11T08:00:00+00:00', consoleGeneration: 1, consoleVersion: '1.0.0',
-  products: [], servers: [server('s-build', 'Plan build', 'dbdatabuild'), server('s-gw', 'Plan gateway', 'dbdatagateway'), server('s-store', 'Plan store', 'dbdatastore')],
+  products: [], servers: [server('s-build', 'Plan runner', 'dbdatarunner'), server('s-gw', 'Plan gateway', 'dbdatagateway'), server('s-store', 'Plan worker', 'dbdatarunner')],
 }
 const status = (over: Record<string, unknown>) => ({ product: 'x', version: '1.0.0', generation: 1, install_method: 'Archive', can_apply: true, reason: null, state: 'none', problem: null, draining: false, active_work: 0, ...over })
 
@@ -36,15 +36,15 @@ test('the plan upgrades the serving layer first, leaves a container alone, and s
   const entries = page.getByTestId('upgrade-plan-list').getByRole('listitem')
   await expect(entries).toHaveCount(3)
   await expect(entries.nth(0)).toContainText('Plan gateway')
-  await expect(entries.nth(1)).toContainText('Plan build')
-  await expect(entries.nth(2)).toContainText('Plan store')
-  await expect(page.getByTestId('upgrade-plan-entry-Plan store')).toHaveAttribute('data-action', 'instruction')
-  await expect(page.getByTestId('upgrade-plan-note-Plan store')).toContainText('it runs in a container')
+  await expect(entries.nth(1)).toContainText('Plan runner')
+  await expect(entries.nth(2)).toContainText('Plan worker')
+  await expect(page.getByTestId('upgrade-plan-entry-Plan worker')).toHaveAttribute('data-action', 'instruction')
+  await expect(page.getByTestId('upgrade-plan-note-Plan worker')).toContainText('it runs in a container')
 
   await page.getByTestId('upgrade-plan-start').click()
   await expect(page.getByTestId('upgrade-plan-done-Plan gateway')).toContainText('Upgraded', { timeout: 30_000 })
-  await expect(page.getByTestId('upgrade-plan-failed-Plan build')).toContainText('did not become healthy', { timeout: 30_000 })
+  await expect(page.getByTestId('upgrade-plan-failed-Plan runner')).toContainText('did not become healthy', { timeout: 30_000 })
   await expect(page.getByTestId('upgrade-plan-summary')).toHaveAttribute('data-stopped', 'true')
-  await expect(page.getByTestId('upgrade-plan-summary')).toContainText('Stopped at Plan build')
-  expect(applied).toEqual(['s-gw', 's-build'])           // the Store was never asked
+  await expect(page.getByTestId('upgrade-plan-summary')).toContainText('Stopped at Plan runner')
+  expect(applied).toEqual(['s-gw', 's-build'])           // the container was never asked
 })

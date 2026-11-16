@@ -10,17 +10,14 @@ namespace DbDataKit.Server;
 /// </summary>
 public static class ServerProducts
 {
-    public const string Build = "dbdatabuild";
-    public const string Sync = "dbdatasync";
     public const string Gateway = "dbdatagateway";
-    public const string Store = "dbdatastore";
     /// <summary>The runner (plan 28): scheduled and batch work, the tasks of published packages.</summary>
     public const string Runner = "dbdatarunner";
     /// <summary>The Workspace server (plan 22a GP31): projects and the git workspaces people author them in.</summary>
     public const string Workspace = "dbdataworkspace";
 
-    /// <summary>The products a server may announce itself as.</summary>
-    public static readonly IReadOnlyList<string> Announced = [Build, Sync, Gateway, Store, Runner, Workspace];
+    /// <summary>The products a server may announce itself as (the four services of the suite but the console itself; the Build, Sync and Store servers were deleted, <see cref="RemovedProducts"/>).</summary>
+    public static readonly IReadOnlyList<string> Announced = [Gateway, Runner, Workspace];
 
     /// <summary>One call of a runner's API the relay may pass: the method, the route (the path without its query) and the role the runner asks of the caller. <see cref="Or"/> is the other role the runner accepts for the call (a publisher may upload and publish).</summary>
     public sealed record RunnerRoute(string Method, string Pattern, ServerRole Role, ServerRole Or = ServerRole.None)

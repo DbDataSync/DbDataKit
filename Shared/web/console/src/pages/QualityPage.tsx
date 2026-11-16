@@ -6,9 +6,9 @@ import { ConsoleShell } from '../ConsoleShell'
 import { alertsLine, blockLine, datasetState, measureLine, qualityApi, releaseBlockedReason, runBlockedReason, sortDatasets, stateWord, type QualityCheck, type QualityDataset, type QualityRunAnswer, type QualityServer } from '../quality'
 
 /**
- * The data quality of the suite's datasets (plan 23a FQ17), from the servers that evaluate checks (Sync's replications, Build's models) joined by dataset identity: what is blocked, what is failing, and for each check its latest result,
- * the measure and the history with the keys of the rows that failed. A person with the admin role can evaluate a dataset's checks on a server that does it on request (Sync); Build evaluates after a refresh and says so. A server that
- * did not answer is named, not hidden. The console holds none of this: it is read from the servers and evaluated by them.
+ * The data quality of the suite's datasets (plan 23a FQ17), from the servers that evaluate checks joined by dataset identity: what is blocked, what is failing, and for each check its latest result, the measure and the history with the
+ * keys of the rows that failed. A person with the admin role can evaluate a dataset's checks on a server that does it on request. A server that did not answer is named, not hidden. No server of the suite keeps check results today
+ * (the Build, Sync and Store servers that did were deleted, plan 33 SC23); the alerts card still applies. The console holds none of this: it is read from the servers and evaluated by them.
  */
 export function QualityPage() {
   const client = useQueryClient()
@@ -26,7 +26,7 @@ export function QualityPage() {
   const release = async (serverId: string, dataset: string, check: string) => {
     setOutcome(null)
     try {
-      await qualityApi.release(serverId, dataset, check, data?.servers.find((x) => x.server_id === serverId)?.product ?? null)
+      await qualityApi.release(serverId, dataset, check)
       setOutcome({ ok: true, text: `The block of ${check} is released: it still fails, and what depends on the dataset is no longer held for it. It ends when the check passes.` })
       await client.invalidateQueries({ queryKey: ['quality'] })
     } catch (e) {
@@ -38,7 +38,7 @@ export function QualityPage() {
     setRunning(serverId)
     setOutcome(null)
     try {
-      const answer: QualityRunAnswer = await qualityApi.run(serverId, dataset, data?.servers.find((x) => x.server_id === serverId)?.product ?? null)
+      const answer: QualityRunAnswer = await qualityApi.run(serverId, dataset)
       setOutcome({ ok: true, text: `${serverName} evaluated ${answer.evaluated} check${answer.evaluated === 1 ? '' : 's'}: ${answer.passed} passed, ${answer.failed} failed, ${answer.errors} could not run.${answer.notes.length > 0 ? ' ' + answer.notes.join(' ') : ''}` })
       await client.invalidateQueries({ queryKey: ['quality'] })
     } catch (e) {
@@ -64,7 +64,7 @@ export function QualityPage() {
         {data && (
           <div className="card" style={{ marginBottom: 14 }} data-testid="quality-servers">
             <div className="card-body">
-              {data.servers.length === 0 && <span data-testid="quality-no-servers">No paired server evaluates checks yet (Build and Sync servers do).</span>}
+              {data.servers.length === 0 && <span data-testid="quality-no-servers">No paired server evaluates checks.</span>}
               {data.servers.map((s) => (
                 <div key={s.server_id} data-testid="quality-server" data-server={s.server}>
                   <strong>{s.server}</strong>{' '}

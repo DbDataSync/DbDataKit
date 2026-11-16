@@ -10,7 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DbDataKit.Server.Tests;
 
 /// <summary>
-/// Plan 18 G11b: the console's graph shows a measure's path from the source table through the Sync replication and the Build model to the Gateway that serves it. Each server sends what it knows (Sync the replication of a column, Build the model
+/// Plan 18 G11b: the console's graph shows a measure's path from the source table through the Sync replication and the Build model to the Gateway that serves it. Each server sends what it knows (a runner the replication of a column, another the model
 /// that reads it, the Gateway the measure bound to the column and the model it serves), and the three meet on the identity of the column.
 /// </summary>
 public sealed class ConsoleGatewayLineageTests : IAsyncLifetime
@@ -45,8 +45,8 @@ public sealed class ConsoleGatewayLineageTests : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        sync = await PairableServer.StartAsync(product: "dbdatasync", instanceId: "sync-1", map: (server, _, _) => server.MapGet("/api/lineage", () => Results.Json(LineageJson.Write(SyncGraph()))));
-        build = await PairableServer.StartAsync(product: "dbdatabuild", instanceId: "build-1", map: (server, _, _) => server.MapGet("/api/v1/lineage", () => Results.Json(LineageJson.Write(BuildGraph()))));
+        sync = await PairableServer.StartAsync(product: "dbdatarunner", instanceId: "sync-1", map: (server, _, _) => server.MapGet("/api/v1/lineage", () => Results.Json(LineageJson.Write(SyncGraph()))));
+        build = await PairableServer.StartAsync(product: "dbdatarunner", instanceId: "build-1", map: (server, _, _) => server.MapGet("/api/v1/lineage", () => Results.Json(LineageJson.Write(BuildGraph()))));
         gateway = await PairableServer.StartAsync(product: "dbdatagateway", instanceId: "gateway-1", map: (server, _, _) => server.MapGet("/api/v1/lineage", () =>
         {
             // what the Gateway sends: its graph and the last read of a served table as a run along its edge, with the lateness its product says (G10b)

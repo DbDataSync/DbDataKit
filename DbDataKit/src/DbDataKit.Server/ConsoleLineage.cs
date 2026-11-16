@@ -11,8 +11,8 @@ public sealed record ServerLineageAnswer(string Server, string InstanceId, strin
 public sealed record JoinedLineage(LineageGraph Graph, IReadOnlyList<ServerLineageAnswer> Servers, string? JoinError, IReadOnlyList<EdgeRun>? Runs = null);
 
 /// <summary>
-/// The suite's lineage as the console sees it: each server that keeps one (a Build server, a Sync server) is asked for its design graph through the relay, as the signed-in person, and the graphs are joined by identity, so a
-/// table Sync writes and a Build model reads is one node and the flow runs through it. An answer is kept for <see cref="Lifetime"/> and asked again after that or when a refresh is asked for. A server that does not answer, or
+/// The suite's lineage as the console sees it: each server that keeps one (a runner, a Gateway) is asked for its design graph through the relay, as the signed-in person, and the graphs are joined by identity, so a
+/// table one server writes and another reads is one node and the flow runs through it. An answer is kept for <see cref="Lifetime"/> and asked again after that or when a refresh is asked for. A server that does not answer, or
 /// answers something that is not a graph, is named and left out; the others still show. Graphs that cannot be joined (together they would make data flow in a circle) are said, and the answers are still returned.
 /// </summary>
 public sealed class ConsoleLineage(ConsoleInstances instances, ConsoleRelay relay, TimeProvider? clock = null)
@@ -23,7 +23,7 @@ public sealed class ConsoleLineage(ConsoleInstances instances, ConsoleRelay rela
     private readonly ConcurrentDictionary<string, ServerLineageAnswer> _answers = new(StringComparer.Ordinal);
 
     /// <summary>The path of a product's lineage on its management API, or null for a product that keeps none (yet).</summary>
-    public static string? PathOf(string? product) => product switch { "dbdatabuild" => "/api/v1/lineage", "dbdatasync" => "/api/lineage", "dbdatarunner" => "/api/v1/lineage", "dbdatagateway" => "/api/v1/lineage", "dbdatastore" => "/api/v1/lineage", _ => null };
+    public static string? PathOf(string? product) => product switch { ServerProducts.Runner => "/api/v1/lineage", ServerProducts.Gateway => "/api/v1/lineage", _ => null };
 
     public async Task<JoinedLineage> JoinedAsync(bool refresh, CancellationToken ct)
     {

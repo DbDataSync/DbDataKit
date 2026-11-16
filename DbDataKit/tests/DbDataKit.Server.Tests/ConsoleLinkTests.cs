@@ -10,17 +10,15 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DbDataKit.Server.Tests;
 
-/// <summary>The console brokers a pairing between two servers it manages (plan 13, T11): the gateway makes a publisher code, the build server pairs with it, as the signed-in person, and nobody types a code.</summary>
+/// <summary>The console brokers a pairing between two servers it manages (plan 13, T11; plan 24a UC13): the gateway makes a code, the runner pairs with it to tell the gateway's cache when it wrote data, as the signed-in person, and nobody types a code.</summary>
 public sealed class ConsoleLinkTests : IAsyncLifetime
 {
     private readonly string directory = Path.Combine(Path.GetTempPath(), "ddk-console-" + Guid.NewGuid().ToString("N")[..8]);
-    private readonly List<JsonNode> pairedWith = [];
     private readonly List<string> codeAskers = [];
     private WebApplication app = null!;
     private HttpClient http = null!;
     private PairableServer gateway = null!;
-    private PairableServer build = null!;
-    private PairableServer sync = null!;
+    private PairableServer workspace = null!;
     private PairableServer runner = null!;
     private readonly List<(string Route, JsonNode Body)> tellers = [];
 
@@ -34,35 +32,23 @@ public sealed class ConsoleLinkTests : IAsyncLifetime
                 var (status, body) = PairingCodeIssuer.Issue(codes, ManagementAuthorization.Authorize(token, ServerRole.Admin).Allowed, null);
                 return Results.Json(body, statusCode: status);
             }));
-        build = await PairableServer.StartAsync(product: "dbdatabuild", instanceId: "build-1", map: (server, _, _) =>
-            server.MapPost("/api/v1/proxies", async (HttpContext context) =>
+        runner = await PairableServer.StartAsync(product: "dbdatarunner", instanceId: "runner-1", map: (server, _, _) =>
+            server.MapPost("/api/v1/gateways", async (HttpContext context) =>
             {
-                var body = (await context.Request.ReadFromJsonAsync<JsonObject>())!;
                 if (!ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin).Allowed) return Results.Json(new { error = "needs admin" }, statusCode: 403);
-                pairedWith.Add(body);
+                var body = (await context.Request.ReadFromJsonAsync<JsonObject>())!;
+                tellers.Add(("/api/v1/gateways", body));
                 return Results.Json(new { name = (string?)body["name"] });
             }));
-        // plan 24a UC13: Sync and the Runner pair with a gateway only to tell its cache that data changed, each through its own route
-        Task<IResult> Teller(string route, JsonObject body, HttpContext context)
-        {
-            if (!ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin).Allowed) return Task.FromResult(Results.Json(new { error = "needs admin" }, statusCode: 403));
-            tellers.Add((route, body));
-            return Task.FromResult(Results.Json(new { name = (string?)body["name"] }));
-        }
-
-        sync = await PairableServer.StartAsync(product: "dbdatasync", instanceId: "sync-1", map: (server, _, _) =>
-            server.MapPost("/api/gateways", async (HttpContext context) => await Teller("/api/gateways", (await context.Request.ReadFromJsonAsync<JsonObject>())!, context)));
-        runner = await PairableServer.StartAsync(product: "dbdatarunner", instanceId: "runner-1", map: (server, _, _) =>
-            server.MapPost("/api/v1/gateways", async (HttpContext context) => await Teller("/api/v1/gateways", (await context.Request.ReadFromJsonAsync<JsonObject>())!, context)));
+        workspace = await PairableServer.StartAsync(product: "dbdataworkspace", instanceId: "workspace-1");
         app = ConsoleHost.Build(new ConsoleSettings(directory, new Uri("https://localhost:0")), ConsoleHost.Certificate(directory), _ => { }, webRoot: Path.Combine(directory, "none"));
         await app.StartAsync();
         http = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true, UseCookies = false }) { BaseAddress = new Uri(app.Urls.First()) };
         var instances = app.Services.GetRequiredService<ConsoleInstances>();
         var every = ServerRole.Admin | ServerRole.Operator | ServerRole.Author | ServerRole.Approver;
         await instances.PairAsync(gateway.Url, gateway.NewCodeWith(every), "Edge gateway", default);
-        await instances.PairAsync(build.Url, build.NewCodeWith(every), "Warehouse build", default);
-        await instances.PairAsync(sync.Url, sync.NewCodeWith(every), "Sync", default);
         await instances.PairAsync(runner.Url, runner.NewCodeWith(every), "Runner", default);
+        await instances.PairAsync(workspace.Url, workspace.NewCodeWith(every), "Authoring", default);
     }
 
     public async ValueTask DisposeAsync()
@@ -70,7 +56,7 @@ public sealed class ConsoleLinkTests : IAsyncLifetime
         http.Dispose();
         await app.StopAsync();
         await app.DisposeAsync();
-        foreach (var s in new[] { gateway, build, sync, runner }) await s.DisposeAsync();
+        foreach (var s in new[] { gateway, runner, workspace }) await s.DisposeAsync();
         try { Directory.Delete(directory, true); } catch (IOException) { }
     }
 
@@ -83,51 +69,37 @@ public sealed class ConsoleLinkTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task An_administrator_pairs_a_build_server_with_a_gateway_and_no_code_is_typed()
+    public async Task A_runner_is_linked_to_a_gateway_through_its_own_route_with_a_code_the_gateway_made_for_it_and_no_code_is_typed()
     {
-        var response = await Link(UserRole.Admin, new { from = "build-1", to = "gateway-1" });
+        Assert.Equal(HttpStatusCode.OK, (await Link(UserRole.Admin, new { from = "runner-1", to = "gateway-1" })).StatusCode);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var paired = Assert.Single(pairedWith);
+        var (route, paired) = Assert.Single(tellers);
+        Assert.Equal("/api/v1/gateways", route);
         Assert.Equal("edge-gateway", (string)paired["name"]!);                                   // the gateway's name, made into an id
         Assert.Equal(gateway.Url.AbsoluteUri.TrimEnd('/'), (string)paired["url"]!);
         Assert.Equal(["Ana"], codeAskers);                                                     // the gateway made the code for the signed-in person
-        // the code the build server received is the one the gateway made: it works once, and carries the publisher ceiling and nothing else
-        var grant = gateway.Codes.Redeem((string)paired["code"]!);
-        Assert.Equal(ServerRole.Publisher, grant!.Ceiling);
+        // the code the runner received is the one the gateway made: it works once, and carries the publisher ceiling and nothing else
+        Assert.Equal(ServerRole.Publisher, gateway.Codes.Redeem((string)paired["code"]!)!.Ceiling);
     }
 
     [Fact]
-    public async Task A_sync_server_and_a_runner_are_linked_to_a_gateway_through_their_own_routes_with_a_code_the_gateway_made_for_them()
+    public async Task A_name_can_be_given_and_only_a_runner_and_a_gateway_can_be_linked()
     {
-        Assert.Equal(HttpStatusCode.OK, (await Link(UserRole.Admin, new { from = "sync-1", to = "gateway-1" })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await Link(UserRole.Admin, new { from = "runner-1", to = "gateway-1", name = "edge" })).StatusCode);
+        Assert.Equal("edge", (string)tellers.Single().Body["name"]!);
 
-        Assert.Equal(["/api/gateways", "/api/v1/gateways"], tellers.Select(t => t.Route));
-        Assert.Equal(["edge-gateway", "edge"], tellers.Select(t => (string)t.Body["name"]!));
-        Assert.All(tellers, t => Assert.Equal(gateway.Url.AbsoluteUri.TrimEnd('/'), (string)t.Body["url"]!));
-        Assert.All(tellers, t => Assert.Equal(ServerRole.Publisher, gateway.Codes.Redeem((string)t.Body["code"]!)!.Ceiling));
-        Assert.Empty(pairedWith);                                                              // Build's own route was not used
-    }
-
-    [Fact]
-    public async Task A_name_can_be_given_and_only_a_build_sync_or_runner_server_and_a_gateway_can_be_linked()
-    {
-        Assert.Equal(HttpStatusCode.OK, (await Link(UserRole.Admin, new { from = "build-1", to = "gateway-1", name = "reports" })).StatusCode);
-        Assert.Equal("reports", (string)pairedWith.Single()["name"]!);
-
-        foreach (var wrong in new[] { new { from = "build-1", to = "sync-1", name = (string?)null }, new { from = "gateway-1", to = "build-1", name = (string?)null }, new { from = "build-1", to = "build-1", name = (string?)null } })
+        foreach (var wrong in new[] { new { from = "workspace-1", to = "gateway-1", name = (string?)null }, new { from = "runner-1", to = "workspace-1", name = (string?)null }, new { from = "gateway-1", to = "runner-1", name = (string?)null }, new { from = "runner-1", to = "runner-1", name = (string?)null } })
             Assert.Equal(HttpStatusCode.BadRequest, (await Link(UserRole.Admin, wrong)).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await Link(UserRole.Admin, new { from = "build-1", to = "nobody" })).StatusCode);
-        Assert.Single(pairedWith);
+        Assert.Equal(HttpStatusCode.NotFound, (await Link(UserRole.Admin, new { from = "runner-1", to = "nobody" })).StatusCode);
+        Assert.Single(tellers);
     }
 
     [Fact]
     public async Task A_viewer_cannot_link_servers()
     {
-        var response = await Link(UserRole.Viewer, new { from = "build-1", to = "gateway-1" });
+        var response = await Link(UserRole.Viewer, new { from = "runner-1", to = "gateway-1" });
         Assert.True(response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized, response.StatusCode.ToString());
-        Assert.Empty(pairedWith);
+        Assert.Empty(tellers);
         Assert.Empty(codeAskers);
     }
 }

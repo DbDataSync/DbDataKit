@@ -146,7 +146,7 @@ export const consoleApi = {
     /** Joins another instance of a runner group (its address and a pairing code made on it), or the registered one again (no address): the console hands it the group's key (plan 28c E20d). */
     join: (id: string, url: string | null, code: string | null) =>
       request<{ server: string; instance: string; already: boolean }>(`/api/instances/${encodeURIComponent(id)}/join`, { method: 'POST', body: JSON.stringify({ url, code }) }),
-    /** Pairs a Build server with a gateway so Build can publish to it; no code is typed (T11). */
+    /** Pairs a Runner with a gateway so it can tell the gateway's cache when it wrote data; no code is typed (T11, 24a UC13). */
     link: (from: string, to: string, name: string | null) =>
       request<{ from: string; to: string; name: string }>('/api/instances/link', { method: 'POST', body: JSON.stringify({ from, to, name }) }),
   },

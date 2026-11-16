@@ -2,8 +2,8 @@ import { request } from '@dbdatakit/shell'
 import type { InstanceSummary } from './api'
 import { copyInfo, type BindingConnection, type RunnerCopy } from './bindings'
 
-/** The products whose management API answers `GET /api/v1/connections` (plan 28c E23): Build, Sync and a runner. */
-export const INVENTORY_PRODUCTS = ['dbdatabuild', 'dbdatasync', 'dbdatarunner'] as const
+/** The products whose management API answers `GET /api/v1/connections` (plan 28c E23): a runner. */
+export const INVENTORY_PRODUCTS = ['dbdatarunner'] as const
 export type InventoryProduct = (typeof INVENTORY_PRODUCTS)[number]
 
 export const hasInventory = (server: InstanceSummary): boolean => server.reachable && (INVENTORY_PRODUCTS as readonly (string | null)[]).includes(server.product)
@@ -45,7 +45,7 @@ interface Answer {
   connections: { name: string; kind: string; engine: string | null; host: string | null; database: string | null; secret_ref: string | null; roles: string[]; used_by: InventoryUse[]; source?: string | null; version?: string | null }[]
 }
 
-export const productLabel: Record<InventoryProduct, string> = { dbdatabuild: 'Build', dbdatasync: 'Sync', dbdatarunner: 'Runner' }
+export const productLabel: Record<InventoryProduct, string> = { dbdatarunner: 'Runner' }
 
 export function inventoryRows(server: InstanceSummary, answer: Answer): InventoryRow[] {
   return answer.connections.map((c) => ({
@@ -102,15 +102,10 @@ export function filterInventory(rows: InventoryRow[], filter: InventoryFilter): 
 /** Where a connection goes, in a few words: host and database, the engine alone, or what the product knows. */
 export const addressOf = (row: InventoryRow): string => (row.host ? `${row.host}${row.database ? `/${row.database}` : ''}` : row.engine ?? row.kind)
 
-/** Whether a connection can be removed from the console: only a Sync server removes connections over its API; the server decides, and refuses one a replication uses. */
-export const canRemove = (row: InventoryRow): boolean => row.product === 'dbdatasync'
-
-export const removeConnection = (row: InventoryRow) => request<unknown>(`/relay/${encodeURIComponent(row.server)}/api/connections/${encodeURIComponent(row.name)}`, { method: 'DELETE' })
-
 /**
  * Where a runner's definition of a connection stands against the console's file (plan 28c E27, ED17), beside the use: `current` (the runner's copy is the console's file as it is now), `stale` (the console's file changed since it was sent), `missing` (the console has
  * the file and the runner has no copy: a run bound to it would fail), `runner's own` (a file of the runner's own folder answers first, or a name or reference the console does not keep). It is the Bindings page's comparison (`copyInfo`, the version both sides compute from
- * the text), not a second one. Null for a product that has no copies (Build, Sync) and for a name nobody holds.
+ * the text), not a second one. Null for a row that says no source and for a name nobody holds.
  */
 export type RunnerCopyState = 'current' | 'stale' | 'missing' | "runner's own"
 

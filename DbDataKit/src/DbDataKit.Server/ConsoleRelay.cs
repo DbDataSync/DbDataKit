@@ -14,8 +14,9 @@ namespace DbDataKit.Server;
 /// that server with a short-lived signed token naming the signed-in person, and answers with what the server answered. The browser never holds a credential for a server and never reaches one directly; the server decides
 /// what the person may do from the roles in the token, which the console's ceiling for that server limits.
 /// <para>
-/// Only <c>api/...</c> and <c>hubs/...</c> are relayed, only to a registered server, and the path is not interpreted: nothing the browser sends can name another host. A runner is the one server whose calls are limited further
-/// (<see cref="ServerProducts.RunnerRoutes"/>): only the routes of its table pass, and only for a person who holds the role the runner asks for there; a product's reports and a webhook are not a console's to make.
+/// Only <c>api/...</c> and <c>hubs/...</c> are relayed, only to a registered server, and the path is not interpreted: nothing the browser sends can name another host. A runner and a Workspace server are limited further
+/// (<see cref="ServerProducts.RunnerRoutes"/>, <see cref="ServerProducts.WorkspaceRoutes"/>): only the routes of their tables pass, and only for a person who holds the role asked for there; a product's reports and a webhook are not a
+/// console's to make. A server of a deleted product (<see cref="RemovedProducts"/>) still paired is answered with the sentence that says where its features went (410), and nothing is sent to it.
 /// </para>
 /// </summary>
 public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore keys, CurrentUser current, ILogger<ConsoleRelay> log, DbDataKit.Identity.FederatedUsers? federated = null, RelayTimeouts? timeouts = null) : IBuildRelay
@@ -124,6 +125,7 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
     {
         if (!(path.StartsWith("api/", StringComparison.Ordinal)) || path.Split('/').Any(s => s is ".." or ".")) return Failure(400, "Only the server's api/... calls are relayed.");
         var product = await ProductOfAsync(instance, ct);
+        if (RemovedProducts.Message(product) is { } removed) return Failure(410, removed);
         if (!ServerProducts.Relayable(product, method.Method, path)) return Failure(403, ServerProducts.RefusalFor(product, instance.Name));
         if (ServerProducts.RouteOf(product, method.Method, path) is { } wanted)
         {
@@ -161,8 +163,9 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
     async Task<(int Status, System.Text.Json.Nodes.JsonNode? Body)> IBuildRelay.CallAsync(string server, RelayPerson person, HttpMethod method, string path, object? body, CancellationToken ct)
     {
         if (instances.Registry.Find(server) is not { } instance) return (404, new System.Text.Json.Nodes.JsonObject { ["error"] = $"No server '{server}' is registered." });
-        if (await ProductOfAsync(instance, ct) != ServerProducts.Build) return (409, new System.Text.Json.Nodes.JsonObject { ["error"] = $"'{instance.Name}' is not a Build server." });
-        return await CallAsAsync(instance, person.Id, person.Name, person.Role, method, path, body, ct);
+        // the Build server an agent worked on was deleted (plan 33 SC23): a paired one is told where its features went, and nothing is sent to it
+        var product = await ProductOfAsync(instance, ct);
+        return (product == RemovedProducts.Build ? 410 : 409, new System.Text.Json.Nodes.JsonObject { ["error"] = RemovedProducts.Message(product) ?? $"'{instance.Name}' is not a Build server." });
     }
 
     public async Task RelayAsync(HttpContext context, string server, string path)
@@ -184,6 +187,11 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
         }
         // a runner has calls for its publishers and the serving layer that a console does not make: only the documented management calls pass
         var product = await ProductOfAsync(instance, context.RequestAborted);
+        if (RemovedProducts.Message(product) is { } removed)
+        {
+            await Refuse(context, StatusCodes.Status410Gone, removed);
+            return;
+        }
         if (!ServerProducts.Relayable(product, context.Request.Method, path))
         {
             await Refuse(context, StatusCodes.Status403Forbidden, ServerProducts.RefusalFor(product, instance.Name));

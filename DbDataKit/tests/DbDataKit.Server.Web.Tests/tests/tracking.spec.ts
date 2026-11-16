@@ -1,14 +1,14 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 import { signInNewAdmin } from './people'
 
-// Plan 28c, E18: the console's Tracking page. The two servers are mocked in the page (the Build server's and the runner's `GET /api/v1/tracking` and the resolve: the server side is pinned by BuildServerTrackingApiTests, RunnerTrackingApiTests and the
-// conformance tests of the copy; what this shows is the screen). A Build server holds the copy of a restored target and shows it diverged with the row where the two sides part; the administrator resolves it by archiving, after which it is in step and
-// the divergence is listed as resolved; asking for a switch of the primary is refused with its reason, and refused naming the server when it goes down. Sorts after `first-run` and `identity-home`: it invites an administrator.
+// Plan 28c, E18: the console's Tracking page. The two runners are mocked in the page (their `GET /api/v1/tracking` and the resolve: the server side is pinned by RunnerTrackingApiTests and the conformance tests of the copy; what this
+// shows is the screen). A runner holds the copy of a restored target and shows it diverged with the row where the two sides part; the administrator resolves it by archiving, after which it is in step and the divergence is listed as
+// resolved; asking for a switch of the primary says where it is changed (the published project), and refuses naming the runner when it goes down. Sorts after `first-run` and `identity-home`: it invites an administrator.
 const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
 
 const identity = 'buildtracking:mssql://sql01/wh.dbdatabuild.tracking@sales'
 const point = (key: string, time: string) => ({ order: 1, key, time })
-const BUILD = { id: 'b-track', name: 'Tracking build', url: 'https://build.example', product: 'dbdatabuild', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: '2026-11-11T09:00:00Z' }
+const BUILD = { id: 'b-track', name: 'Tracking build', url: 'https://runner-b.example', product: 'dbdatarunner', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: '2026-11-11T09:00:00Z' }
 const RUNNER = { id: 'r-track', name: 'Tracking runner', url: 'https://runner.example', product: 'dbdatarunner', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: '2026-11-11T09:00:00Z' }
 
 function document(holder: string, divergence: 'open' | 'archived' | 'none', primary: 'target' | 'state' = 'target') {
@@ -25,27 +25,21 @@ function document(holder: string, divergence: 'open' | 'archived' | 'none', prim
 }
 
 async function mockServers(page: Page) {
-  const state = { divergence: 'open' as 'open' | 'archived', buildUp: true, resolves: [] as unknown[], primary: 'target' as 'target' | 'state', switches: [] as unknown[], levelUp: false }
+  const state = { divergence: 'open' as 'open' | 'archived', buildUp: true, resolves: [] as unknown[], switches: 0 }
   await page.route('**/api/instances', (route) => route.request().method() === 'GET' ? json(route, [BUILD, { ...RUNNER }]) : route.fallback())
-  await page.route(`**/relay/${BUILD.id}/api/v1/tracking`, (route) => state.buildUp ? json(route, document('build-server', state.divergence, state.primary)) : json(route, { error: 'The server did not answer.' }, 502))
+  await page.route(`**/relay/${BUILD.id}/api/v1/tracking`, (route) => state.buildUp ? json(route, document('runner', state.divergence)) : json(route, { error: 'The server did not answer.' }, 502))
   await page.route(`**/relay/${RUNNER.id}/api/v1/tracking`, (route) => json(route, document('runner', 'none')))
   await page.route(`**/relay/${BUILD.id}/api/v1/tracking/divergences/7/resolve`, (route) => {
     state.resolves.push(route.request().postDataJSON())
     state.divergence = 'archived'
     return json(route, { resolved: true })
   })
-  // the switch of the primary: the server compares the two sides and answers in a sentence; it refuses while the target does not answer and goes through once it does
-  await page.route(`**/relay/${BUILD.id}/api/v1/tracking/primary`, (route) => {
-    const body = route.request().postDataJSON() as { primary: 'target' | 'state' }
-    state.switches.push(body)
-    if (!state.levelUp) return json(route, { switched: false, error: 'Not switched: the two sides could not be made level (the target does not answer). A side may be down or a divergence open; resolve that and try again.' }, 409)
-    state.primary = body.primary
-    return json(route, { switched: true, mode: 'both', primary: body.primary })
-  })
+  // a switch is never sent: a runner's primary is the published project's
+  await page.route('**/api/v1/tracking/primary', (route) => { state.switches++; return json(route, { error: 'not a runner call' }, 404) })
   return state
 }
 
-test('a restored target shows diverged with the common point, the administrator archives, and the switch of the primary refuses with its reason', async ({ page, context, baseURL }) => {
+test('a restored target shows diverged with the common point, the administrator archives, and the switch of the primary says where it is changed', async ({ page, context, baseURL }) => {
   await signInNewAdmin(page, context, baseURL!, 'Tracking Tester', `tracking-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`)
   const mock = await mockServers(page)
 
@@ -77,27 +71,14 @@ test('a restored target shows diverged with the common point, the administrator 
   await expect(page.getByTestId('tracking-resolved-by')).toContainText('tracking-admin')
   await expect(build.getByTestId('tracking-state')).toHaveText('In step')
 
-  // both sides in step, but the server cannot make them level (the target does not answer): it refuses in a sentence and nothing changes
+  // both sides in step: the switch says where the primary is changed, and nothing is sent
   await build.getByTestId('tracking-switch').click()
-  await expect(page.getByTestId('tracking-switch-message')).toContainText('the two sides could not be made level')
+  await expect(page.getByTestId('tracking-switch-message')).toContainText('package it runs')
   await expect(page.getByTestId('tracking-switch-message')).toHaveAttribute('data-switched', 'false')
   await expect(build.getByTestId('tracking-primary')).toHaveText('target')
-  expect(mock.switches).toEqual([{ primary: 'state' }])
+  expect(mock.switches).toBe(0)
 
-  // the target answers: the switch goes through, Build writes its records to the state first, and the page shows the new primary
-  mock.levelUp = true
-  await build.getByTestId('tracking-switch').click()
-  await expect(page.getByTestId('tracking-switch-message')).toContainText('writes Build\'s records to the state first')
-  await expect(page.getByTestId('tracking-switch-message')).toHaveAttribute('data-switched', 'true')
-  await expect(build.getByTestId('tracking-primary')).toHaveText('state')
-  expect(mock.switches).toEqual([{ primary: 'state' }, { primary: 'state' }])
-
-  // and back: the target is the primary again
-  await build.getByTestId('tracking-switch').click()
-  await expect(build.getByTestId('tracking-primary')).toHaveText('target')
-  expect(mock.switches.at(-1)).toEqual({ primary: 'target' })
-
-  // the Build server goes down: its copy stays on the page marked old, the server is named, and the switch refuses naming it
+  // the runner goes down: its copy stays on the page marked old, the runner is named, and the switch refuses naming it
   mock.buildUp = false
   await page.getByTestId('rail-runs').click()
   await page.getByTestId('rail-tracking').click()

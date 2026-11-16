@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { appRows, decideRequest, gatewayStoreRows, mcpDecisionPath, mcpRows, decisionPath, decisionProblem, sortApprovals, storeRows, waited, type ApprovalRow, type GatewayAppDetail, type StoreRequestList } from './approvals'
+import { appRows, decideRequest, gatewayStoreRows, mcpDecisionPath, mcpRows, decisionPath, decisionProblem, sortApprovals, waited, type ApprovalRow, type GatewayAppDetail, type StoreRequestList } from './approvals'
 import type { InstanceSummary } from './api'
 
 const server = (id: string, name: string, product: string): InstanceSummary => ({ id, name, url: 'https://x', product, version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null })
-const store = server('st1', 'Master data', 'dbdatastore')
 const gateway = server('gw1', 'Gateway prod', 'dbdatagateway')
 
 const request = (over: Partial<StoreRequestList['requests'][number]> = {}) => ({
@@ -11,20 +10,20 @@ const request = (over: Partial<StoreRequestList['requests'][number]> = {}) => ({
 })
 const list = (...requests: StoreRequestList['requests']): StoreRequestList => ({ requests, can_decide: true, decision_needs: 'author' })
 
-describe('a Store model\'s change requests', () => {
-  it('shows each pending request with who proposed it, how many changes, and the screen that decides it', () => {
-    const [row] = storeRows(store, 'budgets', list(request()))
-    expect(row).toMatchObject({ kind: 'change-request', subject: 'budgets', detail: 'Add B1 (1 change)', by: 'Ada', byAgent: false, canDecide: true, link: '/servers/st1/model/budgets/changes' })
+describe('a Gateway store model\'s change requests (plan 33 SC24)', () => {
+  it('shows each pending request with who proposed it, how many changes, and the Gateway as the screen to open', () => {
+    const [row] = gatewayStoreRows(gateway, 'budgets', list(request()))
+    expect(row).toMatchObject({ product: 'dbdatagateway', kind: 'change-request', subject: 'budgets', detail: 'Add B1 (1 change)', by: 'Ada', byAgent: false, canDecide: true, link: '/servers/gw1' })
   })
 
-  it('leaves out a decided request, names an instance, and falls back to the subject id when no name is known', () => {
-    const rows = storeRows(store, 'budgets', list(request({ state: 'approved' }), request({ id: 'r2', instance: 'north', proposed_by_name: null, description: null, change_count: 3, by_agent: true })))
+  it('leaves out a decided request and falls back to the subject id when no name is known', () => {
+    const rows = gatewayStoreRows(gateway, 'budgets', list(request({ state: 'approved' }), request({ id: 'r2', proposed_by_name: null, description: null, change_count: 3, by_agent: true })))
     expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({ subject: 'budgets (instance north)', detail: '3 changes', by: 'u1', byAgent: true })
+    expect(rows[0]).toMatchObject({ subject: 'budgets', detail: '3 changes', by: 'u1', byAgent: true })
   })
 
   it('says a person who may not decide may not, as the server said it', () => {
-    expect(storeRows(store, 'budgets', { ...list(request()), can_decide: false })[0]!.canDecide).toBe(false)
+    expect(gatewayStoreRows(gateway, 'budgets', { ...list(request()), can_decide: false })[0]!.canDecide).toBe(false)
   })
 })
 
@@ -49,7 +48,7 @@ describe('a Gateway app asking to be trusted', () => {
 })
 
 describe('the order and the wait', () => {
-  const row = (over: Partial<ApprovalRow>): ApprovalRow => ({ key: 'k', server: 's', serverName: 'A', product: 'dbdatastore', kind: 'change-request', subject: 's', detail: '', by: null, byAgent: false, since: null, canDecide: true, link: '/', ...over })
+  const row = (over: Partial<ApprovalRow>): ApprovalRow => ({ key: 'k', server: 's', serverName: 'A', product: 'dbdatagateway', kind: 'change-request', subject: 's', detail: '', by: null, byAgent: false, since: null, canDecide: true, link: '/', ...over })
 
   it('puts the longest wait first, an agent before a person of the same age, and an unknown time last', () => {
     const sorted = sortApprovals([
@@ -75,16 +74,16 @@ describe('the order and the wait', () => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('deciding a change request here (SC21c)', () => {
-  const pending = (instance = 'default'): ApprovalRow => storeRows(store, 'budgets', list(request({ instance })))[0]!
+  const pending = (): ApprovalRow => gatewayStoreRows(gateway, 'budgets', list(request()))[0]!
 
-  it('carries which request a row is, so it can be decided without opening the Store\'s screen', () => {
-    expect(pending().request).toEqual({ model: 'budgets', instance: 'default', id: 'r1' })
+  it('carries which request a row is, so it can be decided without opening the Gateway\'s screen', () => {
+    expect(pending().request).toEqual({ model: 'budgets', id: 'r1' })
     expect(appRows(gateway, detail(null, version(1)))[0]!.request).toBeUndefined()
   })
 
-  it('addresses the Store\'s own approve and reject routes through the relay, the instance in the path when it is not the default', () => {
-    expect(decisionPath('st1', pending().request!, true)).toBe('/relay/st1/api/v1/models/budgets/requests/r1/approve')
-    expect(decisionPath('st1', pending('north').request!, false)).toBe('/relay/st1/api/v1/models/budgets/instances/north/requests/r1/reject')
+  it('addresses the Gateway\'s store approve and reject routes through the relay', () => {
+    expect(decisionPath('gw1', pending().request!, true)).toBe('/relay/gw1/api/v1/store/models/budgets/requests/r1/approve')
+    expect(decisionPath('gw1', pending().request!, false)).toBe('/relay/gw1/api/v1/store/models/budgets/requests/r1/reject')
   })
 
   it('asks for the reason before a rejection, never before an approval, and refuses what is not the person\'s to decide', () => {
@@ -100,12 +99,12 @@ describe('deciding a change request here (SC21c)', () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => { calls.push({ url, init }); return new Response(JSON.stringify({ id: 'r1', state: 'approved' }), { status: 200, headers: { 'Content-Type': 'application/json' } }) }))
     await decideRequest(pending(), true, ' fine ')
     expect(calls).toHaveLength(1)
-    expect(calls[0]!.url).toBe('/relay/st1/api/v1/models/budgets/requests/r1/approve')
+    expect(calls[0]!.url).toBe('/relay/gw1/api/v1/store/models/budgets/requests/r1/approve')
     expect(calls[0]!.init.method).toBe('POST')
     expect(JSON.parse(calls[0]!.init.body as string)).toEqual({ note: 'fine' })
   })
 
-  it('sends an empty body for an approval with no note, and carries the Store\'s own sentence when it refuses', async () => {
+  it('sends an empty body for an approval with no note, and carries the Gateway\'s own sentence when it refuses', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'The row no longer exists' }), { status: 409, headers: { 'Content-Type': 'application/json' } })))
     await expect(decideRequest(pending(), true, '')).rejects.toThrow('The row no longer exists')
     const fetchMock = vi.fn(async () => new Response(null, { status: 204 }))
@@ -143,27 +142,5 @@ describe('the steps agents asked through a Gateway\'s mcp module (AG33)', () => 
     expect(url).toBe('/relay/gw1/api/v1/mcp/approvals/a1/deny')
     expect(init.method).toBe('POST')
     expect(JSON.parse(init.body as string)).toEqual({ note: 'not now' })
-  })
-})
-
-describe('the change requests of a Gateway\'s store (plan 33 SC24)', () => {
-  const gateway = { id: 'gw1', name: 'Edge', product: 'dbdatagateway', reachable: true } as unknown as Parameters<typeof gatewayStoreRows>[0]
-  const list: StoreRequestList = {
-    requests: [
-      { id: 'r1', model: 'budgets', instance: 'default', state: 'pending', proposed_by: 'u1', proposed_by_name: 'Ada', by_agent: false, proposed_at: '2026-11-16T10:00:00Z', description: 'raise', change_count: 1 },
-      { id: 'r0', model: 'budgets', instance: 'default', state: 'approved', proposed_by: 'u1', proposed_by_name: 'Ada', by_agent: false, proposed_at: '2026-11-15T10:00:00Z', description: null, change_count: 1 },
-    ],
-    can_decide: true, decision_needs: 'an author or an administrator',
-  }
-  it('shows the pending ones as the Gateway\'s, decided here, and links to the Gateway', () => {
-    const [row, ...rest] = gatewayStoreRows(gateway, 'budgets', list)
-    expect(rest).toHaveLength(0)
-    expect(row).toMatchObject({ product: 'dbdatagateway', kind: 'change-request', subject: 'budgets', by: 'Ada', canDecide: true, link: '/servers/gw1', request: { model: 'budgets', instance: 'default', id: 'r1', gateway: true } })
-    expect(decisionProblem(row!, true, '')).toBeNull()
-  })
-  it('decides on the Gateway\'s store paths, through the relay', () => {
-    const [row] = gatewayStoreRows(gateway, 'budgets', list)
-    expect(decisionPath('gw1', row!.request!, true)).toBe('/relay/gw1/api/v1/store/models/budgets/requests/r1/approve')
-    expect(decisionPath('gw1', row!.request!, false)).toBe('/relay/gw1/api/v1/store/models/budgets/requests/r1/reject')
   })
 })

@@ -24,7 +24,7 @@ public sealed record StateMoveRequest(string Server, string Connection);
 public sealed class StateConnectionsController(ConsoleStateConnections connections, ConsoleInstances instances, ConsoleRelay relay, ConsoleSettings settings) : ControllerBase
 {
     /// <summary>The products whose state a console can move: the ones whose server mounts the move call.</summary>
-    private static readonly Dictionary<string, string> Programs = new() { ["dbdatagateway"] = "dbdatagateway", ["dbdatabuild"] = "dbdatabuild", ["dbdatarunner"] = "dbdatarunner", ["dbdataworkspace"] = "dbdataworkspace" };   // the Store went with its server (plan 33 SC23)
+    private static readonly Dictionary<string, string> Programs = new() { [ServerProducts.Gateway] = "dbdatagateway", [ServerProducts.Runner] = "dbdatarunner", [ServerProducts.Workspace] = "dbdataworkspace" };
 
     private static readonly TimeSpan CheckTimeout = TimeSpan.FromSeconds(15);
 

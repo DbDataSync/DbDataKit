@@ -6,14 +6,15 @@ namespace DbDataKit.Server;
 public sealed record ServerQualityAnswer(string Server, string InstanceId, string? Product, JsonObject? Overview, string? Error);
 
 /// <summary>
-/// The suite's data quality as the console sees it (plan 23a FQ17): each server that evaluates checks (a Sync server, a Build server) is asked for its results through the relay, as the signed-in person, and the answers are joined by dataset
-/// identity, so a table that Sync writes and a Build model reads is one dataset with the checks of both. A server that does not answer is named and left out; the others still show. The history of one check and an evaluation on request
+/// The suite's data quality as the console sees it (plan 23a FQ17): each server that evaluates checks is asked for its results through the relay, as the signed-in person, and the answers are joined by dataset identity, so a table one
+/// server writes and another reads is one dataset with the checks of both. No server of the suite keeps check results today: the Build, Sync and Store servers that did were deleted (plan 33 SC23), and the Runner does not evaluate the
+/// checks stored with a replication or a model yet (open in plan 33), so <see cref="PathOf"/> names none and the overview is empty; the alerts and the join stay for that server. A server that does not answer is named and left out; the others still show. The history of one check and an evaluation on request
 /// are the server's own calls (<c>/relay/{server}/api/...</c>): the console holds no results and decides no block.
 /// </summary>
 public sealed class ConsoleQuality(ConsoleInstances instances, ConsoleRelay relay)
 {
-    /// <summary>The path of a product's check results on its management API, or null for a product that keeps none (yet).</summary>
-    public static string? PathOf(string? product) => product switch { ServerProducts.Build => "/api/v1/quality", ServerProducts.Sync => "/api/quality", ServerProducts.Store => "/api/v1/quality", _ => null };
+    /// <summary>The path of a product's check results on its management API, or null for a product that keeps none (yet): no product of the suite does today.</summary>
+    public static string? PathOf(string? product) => null;
 
     /// <summary>The latest result of every check in an overview as the lineage graph reads it (plan 23a FQ16): one <see cref="DbDataKit.Lineage.NodeCheck"/> per check and server.</summary>
     public static IReadOnlyList<DbDataKit.Lineage.NodeCheck> ChecksOf(JsonObject overview)

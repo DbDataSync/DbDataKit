@@ -9,12 +9,12 @@ import { OutsideConnections } from './OutsideConnections'
 import { StateConnections } from './StateConnections'
 
 const columns = '1.2fr 1.6fr 0.8fr 1fr 2.2fr 1fr'
-const product: Record<ConnectionRow['product'], string> = { dbdatasync: 'Sync', dbdatagateway: 'Gateway' }
+const product: Record<ConnectionRow['product'], string> = { dbdatagateway: 'Gateway' }
 
 /**
- * The connections of every server that keeps them, in one list (plan 13a, E05): a Sync server's connections and a Gateway's data sources are the same `connection/1` file, so a connection on one can be copied to another. The copy is made by the console as the signed-in person:
- * it reads the file from the first server, leaves out what belongs to that server (its owner, another product's settings), points a password at the target's own secret reference and writes it to the second. The target reads the file with its own strict loader, and what it
- * refuses comes back here with the line of each fault; nothing is written then. A password is never copied: it is a reference, and the target must hold it (a Sync target is given a typed one, once, to store).
+ * The data sources of every Gateway, in one list (plan 13a, E05): each is a `connection/1` file, so one can be copied to another Gateway (or the same one under another name). The copy is made by the console as the signed-in person: it reads
+ * the file from the first Gateway, leaves out what belongs to that server (its owner, another product's settings) and writes it to the second. The target reads the file with its own strict loader, and what it refuses comes back here with
+ * the line of each fault; nothing is written then. A password is never copied: it is a reference, and the target must hold it.
  */
 export function ConnectionsPage() {
   const client = useQueryClient()
@@ -34,7 +34,7 @@ export function ConnectionsPage() {
       <div className="pane" data-testid="connections-page">
         <div className="page-head">
           <h1 className="page-title">Connections</h1>
-          <span className="page-note">The database connections of your Sync servers and Gateways (copy one to another server), and the connections to outside systems and model providers this console keeps.</span>
+          <span className="page-note">The data sources of your Gateways (copy one to another Gateway), and the connections to outside systems and model providers this console keeps.</span>
         </div>
         <ErrorBanner error={instances.error ?? view.error} />
         {(view.data?.problems ?? []).map((p) => (
@@ -78,11 +78,9 @@ export function ConnectionsPage() {
 function CopyPanel({ row, targets, onCopied, onClose }: { row: ConnectionRow; targets: { id: string; name: string; product: string | null }[]; onCopied: () => void; onClose: () => void }) {
   const [target, setTarget] = useState('')
   const [newName, setNewName] = useState(row.name)
-  const [password, setPassword] = useState('')
-  const targetProduct = targets.find((t) => t.id === target)?.product
   const copy = useMutation({
-    mutationFn: () => copyConnection({ from: row.server, name: row.name, to: target, newName, password: targetProduct === 'dbdatasync' ? password : '' }),
-    onSuccess: () => { setPassword(''); onCopied() },
+    mutationFn: () => copyConnection({ from: row.server, name: row.name, to: target, newName }),
+    onSuccess: () => onCopied(),
   })
   const failure: CopyFailure | null = copy.isError ? copyFailure(copy.error) : null
 
@@ -93,17 +91,12 @@ function CopyPanel({ row, targets, onCopied, onClose }: { row: ConnectionRow; ta
         <Field label="To server">
           <select className="input" value={target} onChange={(e) => { setTarget(e.target.value); copy.reset() }} data-testid="copy-target">
             <option value="">Choose a server</option>
-            {targets.map((t) => <option key={t.id} value={t.id}>{`${t.name} (${t.product === 'dbdatasync' ? 'Sync' : 'Gateway'})`}</option>)}
+            {targets.map((t) => <option key={t.id} value={t.id}>{`${t.name} (Gateway)`}</option>)}
           </select>
         </Field>
         <Field label="Called">
           <input className="input mono" value={newName} onChange={(e) => { setNewName(e.target.value); copy.reset() }} data-testid="copy-name" />
         </Field>
-        {targetProduct === 'dbdatasync' && (
-          <Field label="Password (if it logs in with one)">
-            <input className="input" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} data-testid="copy-password" />
-          </Field>
-        )}
         <button type="button" className="btn btn-primary" disabled={!canCopy(row, target, newName) || copy.isPending} onClick={() => copy.mutate()} data-testid="copy-submit">Copy</button>
         <button type="button" className="btn" onClick={onClose} data-testid="copy-close">Close</button>
       </div>

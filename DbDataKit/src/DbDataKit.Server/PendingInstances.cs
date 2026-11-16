@@ -27,6 +27,7 @@ public sealed partial class PendingInstances(string path, TimeProvider? clock = 
     public string? Announce(Announcement announcement, System.Net.IPAddress? from, bool hostResolves = false)
     {
         if (RenamedProducts.Message(announcement.Product) is { } renamed) return renamed;
+        if (RemovedProducts.Message(announcement.Product) is { } removed) return removed;
         if (!ServerProducts.Announced.Contains(announcement.Product)) return "the product is not one this console manages";
         if (announcement.InstanceId is not { } id || !IdPattern().IsMatch(id)) return "the instance id is missing or not valid";
         if (string.IsNullOrWhiteSpace(announcement.Name) || announcement.Name.Length > 100 || announcement.Name.Any(char.IsControl)) return "the name is missing, too long or has control characters";

@@ -9,7 +9,7 @@ import { checkLine, checkStatusOf, exactCard, findCards, serverNote, usageLine, 
 import { panelLine, qualityApi } from '../quality'
 
 /**
- * What feeds what, across the servers (plan 18, G10): the graphs of the Build and Sync servers joined by identity, drawn at the table level with a dataset opening to its columns. Pick a card (click it, or search) and what feeds
+ * What feeds what, across the servers (plan 18, G10): the graphs of the Runners and Gateways joined by identity, drawn at the table level with a dataset opening to its columns. Pick a card (click it, or search) and what feeds
  * it is marked on the left of it and what it feeds on the right; the rest dims. Each server is named with what it said, and a server that did not answer is named, not hidden.
  */
 export function LineagePage() {
@@ -40,14 +40,14 @@ export function LineagePage() {
       <div className="pane" data-testid="lineage-page">
         <div className="page-head">
           <h1 className="page-title">Lineage</h1>
-          <span className="page-note">What feeds what across your Build, Sync, Gateway and Runner servers. Choose a table to see where it comes from and where it goes.</span>
+          <span className="page-note">What feeds what across your Runners and Gateways. Choose a table to see where it comes from and where it goes.</span>
         </div>
         <ErrorBanner error={lineage.error} />
         {graph?.error && <div className="empty" data-testid="lineage-join-error">{graph.error}</div>}
         {graph && (
           <div className="card" style={{ marginBottom: 14 }} data-testid="lineage-servers">
             <div className="card-body">
-              {graph.servers.length === 0 && <span data-testid="lineage-no-servers">No paired server keeps a lineage yet (Build, Sync, Gateway and Runner servers do).</span>}
+              {graph.servers.length === 0 && <span data-testid="lineage-no-servers">No paired server keeps a lineage yet (Runners and Gateways do).</span>}
               {graph.servers.map((s) => (
                 <div key={s.server} data-testid="lineage-server" data-server={s.server}>
                   <strong>{s.server}</strong> <span className="hint">{serverNote(s)}</span>
