@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
-    Real servers in one run (plan 13a, T12): a Gateway, a Sync server and a runner as the programs they are, started from their built output, with a console in this process between them. The programs are not
+    Real servers in one run (plan 13a, T12): Gateways and a runner as the programs they are (Sync runs on the runner, published with `dbdatasync package publish`), started from their built output, with a console in this process between them. The programs are not
     project references on purpose: this project builds on its own, and the job that runs it (dbdatakit-ci.yml, `servers`) builds them first, as the Playwright job does. (The Build server's publishing tests went with it, plan 33 SC23.)
   -->
   <PropertyGroup>
@@ -19,5 +19,6 @@
     <ProjectReference Include="..\..\..\DbDataWorkspace\src\DbDataWorkspace.Server\DbDataWorkspace.Server.csproj" />   <!-- a real Workspace server in this process: the trace across the relay (plan 22a GP29) -->
     <ProjectReference Include="..\..\..\DbDataGateway\src\DbDataGateway.Core\DbDataGateway.Core.csproj" />   <!-- the Flight client (a library; the Gateway itself is still the program) -->
     <DbDataKitReference Include="Secrets" />
+    <DbDataKitReference Include="Runner.Client" />   <!-- the client `dbdatasync package publish` pairs: what only a paired client may ask a runner (plan 33 SC23d2) -->
   </ItemGroup>
 </Project>

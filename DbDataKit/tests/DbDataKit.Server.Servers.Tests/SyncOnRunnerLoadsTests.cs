@@ -4,8 +4,8 @@ using System.Text.Json.Nodes;
 namespace DbDataKit.Server.Servers.Tests;
 
 /// <summary>
-/// The proofs of plan 28c E12 that were "still proved only in pieces", with every program real (a Sync server, a runner, the engine in its own task process, SQL Server): a bulk load of 20 segments whose drain process is killed after the
-/// twelfth segment and is finished by the next drain, and the refusal of a move while a mapping is loading.
+/// The proofs of plan 28c E12 that were "still proved only in pieces", with every program real (a runner, the engine in its own task process, SQL Server; no Sync server since plan 33 SC23d2): a bulk load of 20 segments whose drain
+/// process is killed after the twelfth segment and is finished by the next drain. The load is the drain's <c>requests</c> input (or, while the drain is up, items of its queue), as the Sync API sent it.
 /// </summary>
 [Collection(SyncOnRunnerExtrasFixture.Name)]
 public sealed class SyncOnRunnerLoadsTests(SyncOnRunnerExtrasFixture fixture) : SyncOnRunnerExtrasTest(fixture)
@@ -21,8 +21,19 @@ public sealed class SyncOnRunnerLoadsTests(SyncOnRunnerExtrasFixture fixture) : 
         await H.ExecuteDwAsync("TRUNCATE TABLE dbo.bulk_tgt");   // the reload starts from an empty target, so the rows that arrive are the segments' rows
         H.Step("bulk: loaded, target emptied");
 
-        var segmentList = Enumerable.Range(0, segments).Select(i => new { mode = "range", column = "id", rangeMin = (i * perSegment + 1).ToString(), rangeMax = ((i + 1) * perSegment + 1).ToString() }).ToArray();
-        await Ok(H.Sync(HttpMethod.Post, "/api/replications/bulk/mappings/main/bulk-load", new { readerKind = "MsSqlBatchReload", cacheKind = "MsSqlStagingTable", writerKind = "MsSqlMerge", segmentOrder = "OneAtATime", segments = segmentList }), "bulk load", HttpStatusCode.Accepted);
+        // the reload: one request per segment, one batch, run one segment at a time (the segments are given, so nothing is divided against the source)
+        var batch = Guid.NewGuid().ToString("N");
+        var requests = Enumerable.Range(0, segments).Select(i =>
+        {
+            var (min, max) = ((i * perSegment + 1).ToString(), ((i + 1) * perSegment + 1).ToString());
+            return new JsonObject
+            {
+                ["kind"] = "BulkLoad", ["mapping"] = "main", ["label"] = $"id [{min}, {max})",
+                ["segmentJson"] = new JsonObject { ["mode"] = "range", ["column"] = "id", ["rangeMin"] = min, ["rangeMax"] = max }.ToJsonString(),
+                ["readerKind"] = "MsSqlBatchReload", ["cacheKind"] = "MsSqlStagingTable", ["writerKind"] = "MsSqlMerge", ["oneAtATime"] = true, ["batchId"] = batch, ["batchSegments"] = segments,
+            };
+        }).ToArray();
+        await H.SendAsync("bulk", requests);
 
         // the kill: the drain's task process (a process of the runner's own tree), once twelve segments' rows are in the target
         await H.WaitAsync(async () => (await H.TargetAsync("bulk")).Rows >= 12L * perSegment, "twelve segments of the reload in the target", 240);
@@ -41,16 +52,15 @@ public sealed class SyncOnRunnerLoadsTests(SyncOnRunnerExtrasFixture fixture) : 
         Assert.True(runs.Count >= 2, "the killed drain and the one that finished the load are two runs: " + string.Join(", ", runs.Select(r => (string?)r["outcome"])));
         Assert.Contains(runs, r => (string?)r["outcome"] is not ("succeeded" or "running"));   // the killed one did not succeed
 
-        // the batch is one batch of 20 segments, all succeeded, in the Sync API's bulk-load card (read from the runner's checkpoint), and its rows are counted once: a segment is not counted twice
-        JsonNode? batch = null;
+        // the batch is one batch of 20 segments, all succeeded, in the drain's checkpoint `batch` on the runner (what the bulk-load card reads), and its rows are counted once: a segment is not counted twice
+        IReadOnlyDictionary<string, string>? parts = null;
         await H.WaitAsync(async () =>
         {
-            var batches = (await Ok(H.Sync(HttpMethod.Get, "/api/replications/bulk/bulk-loads"), "bulk loads of bulk")).AsArray();
-            batch = batches.FirstOrDefault(b => (int)b!["segmentCount"]! == segments && (int)b["segmentsSucceeded"]! == segments);
-            return batch is not null;
+            parts = (await H.CheckpointAsync("bulk", "batch")).FirstOrDefault(i => i.Key == batch)?.Parts;
+            return parts is not null && parts.GetValueOrDefault("succeeded") == segments.ToString();
         }, "the batch of 20 segments to be completed on the runner", 120);
-        Assert.Equal("Completed", (string?)batch!["state"]);
-        Assert.Equal(0, (int)batch["segmentsFailed"]!);
-        Assert.Equal(segments * perSegment, (long)batch["rowsCopied"]!);
+        Assert.Equal(segments.ToString(), parts!["segments"]);
+        Assert.Equal("0", parts.GetValueOrDefault("failed") ?? "0");
+        Assert.Equal((segments * perSegment).ToString(), parts["rows_written"]);
     }
 }

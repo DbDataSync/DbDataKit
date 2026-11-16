@@ -1,9 +1,8 @@
 using System.Data.Common;
 using System.Net;
 using System.Net.Http.Json;
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
 using System.Text.Json.Nodes;
+using DbDataKit.Runner.Client;
 using DbDataKit.Server;
 using DbDataKit.Secrets;
 using DbDataKit.State;
@@ -15,14 +14,16 @@ using Npgsql;
 namespace DbDataKit.Server.Servers.Tests;
 
 /// <summary>
-/// The end-to-end harness of plan 28c E12e: a replication that really is owned by a runner, SQL Server to PostgreSQL, with every piece the programs they are.
+/// The end-to-end harness of plan 28c E12e, without a Sync server (plan 33 SC23d2): replications that really are run by a runner, SQL Server to PostgreSQL and SQL Server to SQL Server, with every piece the program it is.
 /// <list type="bullet">
-/// <item>a <b>Sync server</b> (<c>DbDataSync.Cli server run</c>, its own directory; since plan 28c E22 it starts no process of its own) and a <b>runner</b> (<c>dbdatarunner server run</c>, its own directory), both processes;</item>
-/// <item>the engine as the runtime package <c>dbdatasync-runtime</c>, installed and active in the channel (the TaskRunner's build output with the manifest <c>scripts/runtime-manifest.sh</c> prints);</item>
-/// <item>the replication set published with the real <c>dbdatasync package publish --to runner</c>, its slots bound to the connections the runner knows: <c>connection/1</c> files in the runner's <c>connections</c> directory and the
+/// <item>the configuration repository is <b>files</b> (<c>config/connections</c>, <c>config/replications/&lt;name&gt;/task.yaml</c> and its mappings with their column cache), as a person or the Workspace writes them; no Sync server reads them;</item>
+/// <item>a <b>runner</b> (<c>dbdatarunner server run</c>, its own directory) with the engine as the runtime package <c>dbdatasync-runtime</c>, installed and active in the channel (the TaskRunner's build output with the manifest
+/// <c>scripts/runtime-manifest.sh</c> prints);</item>
+/// <item>the replication set published with the real <c>dbdatasync package publish --to runner</c>, its slots bound to the connections the runner knows: <c>connection/2</c> files in the runner's <c>connections</c> directory and the
 /// logins as <c>DBDATAKIT_SECRET_*</c> in the runner's environment (plan 28c E02);</item>
-/// <item>the Sync API called as Sync's screens call it: through a <b>console</b> in this process that is paired with both servers (<c>PUT /api/runner</c>), because the API takes the console's signed token and a
-/// real server is what the move has to be proved against; the runner is read the same way.</item>
+/// <item>the tasks (a replication's drain, <c>provision</c>) run on the runner with their inputs (<c>run_all</c>, <c>requests</c>: a bulk load, a verification, a resync; <c>provision</c>'s replication, mapping and action): run now, pause
+/// and resume through a <b>console</b> in this process paired with the runner, as a person on the Runner's screens does; what only a paired client may do (a work item for a drain that is up, a checkpoint, a step and its payload) with the
+/// client the publish paired, as the Sync server's API did.</item>
 /// </list>
 /// </summary>
 internal sealed class SyncOnRunner : IAsyncDisposable
@@ -44,6 +45,7 @@ internal sealed class SyncOnRunner : IAsyncDisposable
 
     public string Root { get; } = Path.Combine(Path.GetTempPath(), "ddk-e12e-" + Guid.NewGuid().ToString("N")[..8]);
 
+    /// <summary>The configuration repository: the files <c>package publish</c> reads (nothing else is in it).</summary>
     public string SyncDirectory => Path.Combine(Root, "sync");
 
     public string RunnerDirectory => Path.Combine(Root, "runner");
@@ -57,30 +59,31 @@ internal sealed class SyncOnRunner : IAsyncDisposable
     /// <summary>The second SQL Server database, the target of <c>inc</c>: PostgreSQL has no upsert writer for incremental passes, so the replication that proves positions and a merge writer is SQL Server to SQL Server.</summary>
     public string DwDatabase { get; } = "e12e_dw_" + Guid.NewGuid().ToString("N")[..10];
 
-    public Uri SyncUrl { get; private set; } = null!;
-
     public Uri RunnerUrl { get; private set; } = null!;
-
-    public string SyncId { get; private set; } = null!;
 
     public string RunnerId { get; private set; } = null!;
 
-    public RealProcess SyncProcess { get; private set; } = null!;
-
     public RealProcess RunnerProcess { get; private set; } = null!;
+
+    /// <summary>The client <c>package publish</c> paired with the runner (its store is <see cref="ClientDirectory"/>).</summary>
+    private RunnerPublishClient client = null!;
 
     public static string? EnginesMissing =>
         Environment.GetEnvironmentVariable("DBDATAKIT_TEST_SQLSERVER") is null || Environment.GetEnvironmentVariable("DBDATAKIT_TEST_POSTGRES") is null
             ? "set DBDATAKIT_TEST_SQLSERVER and DBDATAKIT_TEST_POSTGRES (testenv/testenv.sh up mssql postgres; eval \"$(testenv/testenv.sh env dbdatakit)\") to run a replication on a real runner"
             : null;
 
-    /// <summary>The replications of the loads story (<c>SyncOnRunnerLoadsTests</c>) beside the three of the move: <c>bulk</c> (SQL Server to SQL Server, Change Tracking and merge, for a reload in segments), <c>ver</c> (the same pair, periodic, its mapping has a verification check).</summary>
+    /// <summary>The replications of the loads story (<c>SyncOnRunnerLoadsTests</c>) beside the four of the main story: <c>bulk</c> (SQL Server to SQL Server, Change Tracking and merge, for a reload in segments), <c>ver</c> (the same pair, periodic, its mapping has a verification check).</summary>
     public bool Extras { get; init; }
 
-    private string[] Tables => Extras ? ["cont", "per", "inc", "bulk", "ver"] : ["cont", "per", "inc"];
+    private string[] Tables => Extras ? ["cont", "per", "inc", "prov", "bulk", "ver"] : ["cont", "per", "inc", "prov"];
 
     /// <summary>The replications whose target is the SQL Server database <see cref="DwDatabase"/> (the others write to PostgreSQL).</summary>
-    private static bool IsDw(string table) => table is "inc" or "bulk" or "ver";
+    private static bool IsDw(string table) => table is "inc" or "prov" or "bulk" or "ver";
+
+    /// <summary>The replication whose target table is not made by the harness: the set's <c>provision</c> task creates it (plan 28c E21), and its mapping has no target column cache, as a table that does not exist yet has none. Its
+    /// first drain (the activation's) fails naming the missing table.</summary>
+    public const string Provisioned = "prov";
 
     public static async Task<SyncOnRunner> StartAsync(bool extras = false)
     {
@@ -129,6 +132,7 @@ internal sealed class SyncOnRunner : IAsyncDisposable
         foreach (var table in tables)
         {
             await Exec(source, $"CREATE TABLE dbo.[{table}_src] (id INT NOT NULL PRIMARY KEY, name NVARCHAR(50) NOT NULL); ALTER TABLE dbo.[{table}_src] ENABLE CHANGE_TRACKING;");
+            if (table == Provisioned) continue;
             if (IsDw(table)) await Exec(dw, $"CREATE TABLE dbo.{table}_tgt (id INT NOT NULL PRIMARY KEY, name NVARCHAR(50) NOT NULL)");
             else await Exec(target, $"CREATE TABLE public.{table}_tgt (id integer PRIMARY KEY, name text NOT NULL)");
         }
@@ -220,53 +224,29 @@ internal sealed class SyncOnRunner : IAsyncDisposable
 
         Step("runtime package installed");
 
-        // the Sync server, with a certificate made here (a server must present one to be paired with)
-        var certificate = Path.Combine(Root, "sync.pfx");
-        using (var key = RSA.Create(2048))
+        // the configuration repository, as files: the connections (a login is a reference, never a value), the replications and their mappings with the column cache the engine reads
+        WriteConnections();
+        WriteReplication("cont", "  frequencySeconds: 2\n  idleTimeoutSeconds: 5\n", "tgt");
+        WriteReplication("per", "  mode: Periodic\n  cronExpression: 0 3 * * *\n", "tgt");   // never due while the test runs: it runs when it is asked to
+        WriteReplication("inc", "  frequencySeconds: 2\n  idleTimeoutSeconds: 5\n", "dw");
+        WriteReplication(Provisioned, "  mode: Periodic\n  cronExpression: 0 3 * * *\n", "dw");
+        if (Extras)
         {
-            var request = new CertificateRequest("CN=localhost", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-            var names = new SubjectAlternativeNameBuilder();
-            names.AddDnsName("localhost");
-            names.AddIpAddress(IPAddress.Loopback);
-            request.CertificateExtensions.Add(names.Build());
-            using var made = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(30));
-            File.WriteAllBytes(certificate, made.Export(X509ContentType.Pfx, "servers-e2e"));
+            WriteReplication("bulk", "  frequencySeconds: 2\n  idleTimeoutSeconds: 5\n", "dw");
+            WriteReplication("ver", "  mode: Periodic\n  cronExpression: 0 3 * * *\n", "dw", verify: true);
         }
 
-        var syncCode = Programs.CodeIn(await RealProcess.RunAsync(sync, "server", "pair", "--repo", SyncDirectory, "--max-role", "admin"));
-        SyncUrl = new Uri($"https://127.0.0.1:{Programs.FreePort()}");
-        SyncProcess = RealProcess.Start(sync, ["server", "run", "--repo", SyncDirectory, "--url", SyncUrl.AbsoluteUri.TrimEnd('/')], environment: new Dictionary<string, string>
-        {
-            ["Kestrel__Certificates__Default__Path"] = certificate, ["Kestrel__Certificates__Default__Password"] = "servers-e2e",
-        });
-        started.Add(SyncProcess);
-        await SyncProcess.WaitUntilAsync(new Uri(SyncUrl, "/api/health"), TimeSpan.FromSeconds(120));
+        Step("connections and replications written");
 
-        Step("Sync is up");
-
-        // the console, here: paired with Sync, so it can speak for a signed-in person to it
+        // the console, here: what a person reaches the runner's screens through
         var consoleDirectory = Path.Combine(Root, "console");
         console = ConsoleHost.Build(new ConsoleSettings(consoleDirectory, new Uri("https://localhost:0")), ConsoleHost.Certificate(consoleDirectory), _ => { }, webRoot: Path.Combine(consoleDirectory, "none"));
         await console.StartAsync();
-        http = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true, UseCookies = false }) { BaseAddress = new Uri(console.Urls.First()), Timeout = TimeSpan.FromMinutes(8) };   // a cutover or a rollback waits for the work in flight
+        http = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true, UseCookies = false }) { BaseAddress = new Uri(console.Urls.First()), Timeout = TimeSpan.FromMinutes(8) };
         var instances = console.Services.GetRequiredService<ConsoleInstances>();
-        SyncId = (await instances.PairAsync(SyncUrl, syncCode, "Sync")).InstanceId;
         personId = console.Services.GetRequiredService<IUserAccounts>().CreateUser("Ada Admin", null, UserRole.Admin).Id;
 
-        // the logins and the definitions, made on Sync as its screens make them
-        await CreateConnectionsAsync();
-        await CreateReplicationAsync("cont", new { mode = "Continuous", frequencySeconds = 2, idleTimeoutSeconds = 5 }, "tgt");
-        await CreateReplicationAsync("per", new { mode = "Periodic", cronExpression = "0 3 * * *" }, "tgt");   // never due while the test runs: it runs when it is asked to
-        await CreateReplicationAsync("inc", new { mode = "Continuous", frequencySeconds = 2, idleTimeoutSeconds = 5 }, "dw");
-        if (Extras)
-        {
-            await CreateReplicationAsync("bulk", new { mode = "Continuous", frequencySeconds = 2, idleTimeoutSeconds = 5 }, "dw");
-            await CreateReplicationAsync("ver", new { mode = "Periodic", cronExpression = "0 3 * * *" }, "dw", verify: true);
-        }
-
-        Step("connections and replications made");
-
-        // the runner: the connections it knows are the files Sync has, and the logins reach it as environment secrets (plan 28c E02)
+        // the runner: the connections it knows are the repository's files, and the logins reach it as environment secrets (plan 28c E02)
         var connections = Path.Combine(RunnerDirectory, "connections");
         Directory.CreateDirectory(connections);
         var environment = new Dictionary<string, string>();
@@ -286,15 +266,12 @@ internal sealed class SyncOnRunner : IAsyncDisposable
 
         Step("runner is up");
 
-        // the replication set, published as the verb publishes it, with the slots bound to the runner's connections (the verb pairs the Sync side's client with the code)
+        // the replication set, published as the verb publishes it, with the slots bound to the runner's connections (the verb pairs its client with the code)
         var published = await RealProcess.RunAsync(sync, "package", "publish", "--to", "runner", "--repo", SyncDirectory, "--server", RunnerUrl.AbsoluteUri.TrimEnd('/'), "--channel", Channel, "--package", Package,
             "--code", syncClientCode, "--client-dir", ClientDirectory, "--bind", "src=src", "--bind", "tgt=tgt", "--bind", "dw=dw", "--runtime-range", "*", "--serve");
         Assert.Contains("Published", published);
+        client = new RunnerPublishClient(new RunnerClientStore(ClientDirectory), Environment.GetEnvironmentVariable);
         Step("replication set published");
-
-        // the link of Sync to the runner, through the API as the Runner tab does
-        var link = await Sync(HttpMethod.Put, "/api/runner", new { server = RunnerUrl.AbsoluteUri.TrimEnd('/'), channel = Channel, package = Package, clientDirectory = ClientDirectory });
-        Assert.True(link.Status == HttpStatusCode.OK, $"link: {link.Status} {link.Body}");
     }
 
     private string RuntimeManifest() =>
@@ -311,56 +288,113 @@ internal sealed class SyncOnRunner : IAsyncDisposable
         }
     }
 
-    private async Task CreateConnectionsAsync()
+    // ---- the configuration repository, as files (what the Sync server's screens wrote before plan 33 SC23)
+
+    private void Write(string relative, string text)
     {
-        var mssql = SqlServerLogin;
-        var made = await Sync(HttpMethod.Put, "/api/connections/src", new
-        {
-            name = "src", driverType = "MsSql", host = mssql.DataSource.Split(',')[0], port = int.Parse(mssql.DataSource.Split(',')[1]), database = SourceDatabase, authMode = "SqlAuth", userId = mssql.UserID, password = mssql.Password,
-            properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true", ["Encrypt"] = "false" },
-        });
-        Assert.True(made.Status == HttpStatusCode.OK, $"src: {made.Status} {made.Body}");
-        var pg = PostgresLogin;
-        made = await Sync(HttpMethod.Put, "/api/connections/tgt", new
-        {
-            name = "tgt", driverType = "Postgres", host = pg.Host, port = pg.Port, database = TargetDatabase, authMode = "SqlAuth", userId = pg.Username, password = pg.Password,
-            properties = new Dictionary<string, string> { ["SslMode"] = "Disable" },
-        });
-        Assert.True(made.Status == HttpStatusCode.OK, $"tgt: {made.Status} {made.Body}");
-        made = await Sync(HttpMethod.Put, "/api/connections/dw", new
-        {
-            name = "dw", driverType = "MsSql", host = mssql.DataSource.Split(',')[0], port = int.Parse(mssql.DataSource.Split(',')[1]), database = DwDatabase, authMode = "SqlAuth", userId = mssql.UserID, password = mssql.Password,
-            properties = new Dictionary<string, string> { ["TrustServerCertificate"] = "true", ["Encrypt"] = "false" },
-        });
-        Assert.True(made.Status == HttpStatusCode.OK, $"dw: {made.Status} {made.Body}");
+        var path = Path.Combine(SyncDirectory, "config", relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, text);
     }
 
-    private async Task CreateReplicationAsync(string name, object scheduling, string target, bool verify = false)
+    private void WriteConnections()
+    {
+        var mssql = SqlServerLogin;
+        var (host, port) = (mssql.DataSource.Split(',')[0], mssql.DataSource.Split(',')[1]);
+        var pg = PostgresLogin;
+        foreach (var (name, database) in new[] { ("src", SourceDatabase), ("dw", DwDatabase) })
+            Write($"connections/{name}.yaml", $"""
+                schema: connection/2
+                name: {name}
+                engine: sqlserver
+                address:
+                  host: {host}
+                  port: {port}
+                  database: {database}
+                auth:
+                  mode: sql
+                  user: {mssql.UserID}
+                  password_secret: secret:dbdatakit:sync:connection:{name}
+                extensions:
+                  sync:
+                    properties:
+                      TrustServerCertificate: true
+                      Encrypt: false
+
+                """);
+        Write("connections/tgt.yaml", $"""
+            schema: connection/2
+            name: tgt
+            engine: postgres
+            address:
+              host: {pg.Host}
+              port: {pg.Port}
+              database: {TargetDatabase}
+            auth:
+              mode: sql
+              user: {pg.Username}
+              password_secret: secret:dbdatakit:sync:connection:tgt
+            extensions:
+              sync:
+                properties:
+                  SslMode: Disable
+
+            """);
+    }
+
+    /// <summary>A replication from <c>dbo.&lt;name&gt;_src</c> of the source to <c>&lt;name&gt;_tgt</c> of <paramref name="target"/>, with one mapping <c>main</c> and its column cache (what <c>refresh-metadata</c> recorded on the deleted server).</summary>
+    private void WriteReplication(string name, string scheduling, string target, bool verify = false)
     {
         // PostgreSQL has no upsert writer, so a replication to it reloads the table each pass (BatchReload, DeleteInsert); SQL Server to SQL Server reads Change Tracking and merges
-        var processing = target == "tgt"
-            ? new { reader = new { kind = "BatchReload" }, cache = new { kind = "StagingTable" }, writer = new { kind = "DeleteInsert" } }
-            : new { reader = new { kind = "MsSqlChangeTracking" }, cache = new { kind = "MsSqlStagingTable" }, writer = new { kind = "MsSqlMerge" } };
-        var task = await Sync(HttpMethod.Put, $"/api/replications/{name}", new
-        {
-            name,
-            enabled = true,
-            endpoints = new { source = new { connectionName = "src", database = SourceDatabase }, target = new { connectionName = target, database = target == "tgt" ? TargetDatabase : DwDatabase } },
-            scheduling,
-            changeProcessing = processing,
-        });
-        Assert.True(task.Status == HttpStatusCode.OK, $"{name}: {task.Status} {task.Body}");
-        var mapping = await Sync(HttpMethod.Put, $"/api/replications/{name}/table-mappings/main", new
-        {
-            name = "main",
-            sources = new[] { new { schema = "dbo", table = name + "_src" } },
-            targets = new[] { new { schema = target == "tgt" ? "public" : "dbo", table = name + "_tgt" } },
-            columnMappings = new[] { new { sourceColumn = "id", targetColumn = "id" }, new { sourceColumn = "name", targetColumn = "name" } },
-            verification = verify ? (object[])[new { name = "counts", kind = "RowCount", groupBy = new[] { "id" } }] : [],
-        });
-        Assert.True(mapping.Status == HttpStatusCode.OK, $"{name} mapping: {mapping.Status} {mapping.Body}");
-        var cached = await Sync(HttpMethod.Post, $"/api/replications/{name}/table-mappings/main/refresh-metadata");
-        Assert.True(cached.Status == HttpStatusCode.OK, $"{name} metadata: {cached.Status} {cached.Body}");
+        var (reader, cache, writer) = target == "tgt" ? ("BatchReload", "StagingTable", "DeleteInsert") : ("MsSqlChangeTracking", "MsSqlStagingTable", "MsSqlMerge");
+        Write($"replications/{name}/task.yaml", $"""
+            schemaVersion: 2
+            name: {name}
+            scheduling:
+            {scheduling}changeProcessing:
+              reader:
+                kind: {reader}
+              cache:
+                kind: {cache}
+              writer:
+                kind: {writer}
+            endpoints:
+              source:
+                connectionName: src
+                database: {SourceDatabase}
+              target:
+                connectionName: {target}
+                database: {(target == "tgt" ? TargetDatabase : DwDatabase)}
+
+            """);
+        var targetColumns = name == Provisioned
+            ? ""   // the table does not exist yet: the set's provision task creates it
+            : target == "tgt"
+                ? "targetColumns:\n- name: id\n  nativeType: integer\n  isPrimaryKey: true\n  keyOrdinal: 1\n- name: name\n  nativeType: text\n"
+                : "targetColumns:\n- name: id\n  nativeType: int\n  isPrimaryKey: true\n  keyOrdinal: 1\n- name: name\n  nativeType: nvarchar(50)\n";
+        Write($"replications/{name}/table-mappings/main.yaml", $"""
+            schemaVersion: 1
+            name: main
+            sources:
+            - schema: dbo
+              table: {name}_src
+            targets:
+            - schema: {(target == "tgt" ? "public" : "dbo")}
+              table: {name}_tgt
+            columnMappings:
+            - sourceColumn: id
+              targetColumn: id
+            - sourceColumn: name
+              targetColumn: name
+            {(verify ? "verification:\n- name: counts\n  groupBy:\n  - id\n" : "")}sourceColumns:
+            - name: id
+              nativeType: int
+              isPrimaryKey: true
+              keyOrdinal: 1
+            - name: name
+              nativeType: nvarchar(50)
+            {targetColumns}
+            """);
     }
 
     // ---- calls
@@ -375,14 +409,57 @@ internal sealed class SyncOnRunner : IAsyncDisposable
         return (response.StatusCode, text.Length > 0 ? JsonNode.Parse(text) : null);
     }
 
-    /// <summary>A call to the Sync API as a signed-in administrator, through the console's relay.</summary>
-    public Task<(HttpStatusCode Status, JsonNode? Body)> Sync(HttpMethod method, string path, object? body = null) => As(method, $"/relay/{SyncId}{path}", body);
-
-    /// <summary>A call to the runner's management API the same way.</summary>
+    /// <summary>A call to the runner's management API as a signed-in administrator, through the console's relay (what the Runner's screens call).</summary>
     public Task<(HttpStatusCode Status, JsonNode? Body)> Runner(HttpMethod method, string path, object? body = null) => As(method, $"/relay/{RunnerId}/api/v1{path}", body);
 
+    private static string TaskPath(string task) => $"/tasks/{Package}/{Channel}/{task}";
+
+    /// <summary>Run now of a task of the set with its inputs, through the relay: 202 with the run's id, or 409 when a run of the task is queued or running (the runner has one drain of a replication at a time).</summary>
+    public Task<(HttpStatusCode Status, JsonNode? Body)> RunNow(string task, IReadOnlyDictionary<string, string>? inputs = null) =>
+        Runner(HttpMethod.Post, TaskPath(task) + "/run", new { inputs = inputs ?? new Dictionary<string, string>() });
+
+    public Task<(HttpStatusCode Status, JsonNode? Body)> Pause(string task) => Runner(HttpMethod.Post, TaskPath(task) + "/pause");
+
+    public Task<(HttpStatusCode Status, JsonNode? Body)> Resume(string task) => Runner(HttpMethod.Post, TaskPath(task) + "/resume");
+
+    /// <summary>The runner's row of a task of the set in its status (running, queued, paused and the last run), or null when it has none.</summary>
+    public async Task<JsonNode?> TaskStatus(string task)
+    {
+        var (status, body) = await Runner(HttpMethod.Get, "/status");
+        Assert.True(status == HttpStatusCode.OK, $"status: {status} {body}");
+        return body!["tasks"]!.AsArray().FirstOrDefault(t => (string?)t!["package"] == Package && (string?)t["channel"] == Channel && (string?)t["task"] == task);
+    }
+
+    /// <summary>
+    /// Requests of a replication's drain (a bulk load's segments, a verification, a resync), as the Sync API sent them (<c>DrainRequest</c> of <c>DbDataSync.State</c>, the <c>requests</c> input): one run now with the requests as
+    /// its input, or, when the drain is queued or running already, each request as an item of the task's own queue, which that drain takes in its next sweep. Every request gets an id, which the drain applies once.
+    /// </summary>
+    public async Task SendAsync(string replication, params JsonObject[] requests)
+    {
+        foreach (var request in requests) request["id"] ??= Guid.NewGuid().ToString("N");
+        var text = new JsonArray([.. requests.Select(r => (JsonNode)r.DeepClone())]).ToJsonString();
+        var (status, body) = await RunNow(replication, new Dictionary<string, string> { ["requests"] = text });
+        if (status == HttpStatusCode.Accepted) return;
+        Assert.True(status == HttpStatusCode.Conflict, $"run now of {replication} with requests: {status} {body}");
+        foreach (var request in requests)
+            await client.EnqueueWorkAsync(RunnerUrl.AbsoluteUri.TrimEnd('/'), null, Package, Channel, replication, "Request", (string)request["mapping"]!, (string)request["id"]!, request.ToJsonString());
+    }
+
+    /// <summary>The items of a checkpoint of a task, read with the paired client (the relay serves a person the list of checkpoints, not one).</summary>
+    public Task<IReadOnlyList<ClientCheckpointItem>> CheckpointAsync(string task, string name) => client.CheckpointAsync(RunnerUrl.AbsoluteUri.TrimEnd('/'), null, Package, Channel, task, name);
+
+    /// <summary>The recorded steps of one name of a task, newest first, read with the paired client.</summary>
+    public Task<IReadOnlyList<ClientStep>> StepsAsync(string task, string step) => client.StepsAsync(RunnerUrl.AbsoluteUri.TrimEnd('/'), null, Package, Channel, task, step);
+
+    /// <summary>The streamed result of a step (a verification's parquet file), or null when the runner no longer has it.</summary>
+    public async Task<byte[]?> StepPayloadAsync(string task, string step, Guid payload)
+    {
+        using var buffer = new MemoryStream();
+        return await client.StepPayloadAsync(RunnerUrl.AbsoluteUri.TrimEnd('/'), null, Package, Channel, task, step, payload, buffer) ? buffer.ToArray() : null;
+    }
+
     /// <summary>Waits until <paramref name="condition"/> holds, asking every 500 ms; fails with <paramref name="what"/> and the end of both servers' output.</summary>
-    public async Task WaitAsync(Func<Task<bool>> condition, string what, int seconds = 120)
+    public async Task WaitAsync(Func<Task<bool>> condition, string what, int seconds = 120, string task = "inc")
     {
         var until = DateTime.UtcNow.AddSeconds(seconds);
         while (DateTime.UtcNow < until)
@@ -391,7 +468,7 @@ internal sealed class SyncOnRunner : IAsyncDisposable
             await Task.Delay(500);
         }
 
-        Assert.Fail($"Waited {seconds} s for {what}.\n{string.Join('\n', Steps)}\n--- the runner's runs:\n{await Diagnose()}\n--- Sync:\n{Tail(SyncProcess.Output)}\n--- runner:\n{Tail(RunnerProcess.Output)}");
+        Assert.Fail($"Waited {seconds} s for {what}.\n{string.Join('\n', Steps)}\n--- the runner's runs:\n{await Diagnose(task)}\n--- runner:\n{Tail(RunnerProcess.Output)}");
     }
 
     /// <summary>What the runner says of the package's runs and tasks, and the last lines of the log of its latest runs of <paramref name="task"/>: what a failure of the story needs to be read from.</summary>
@@ -432,7 +509,7 @@ internal sealed class SyncOnRunner : IAsyncDisposable
         if (Environment.GetEnvironmentVariable("DBDATAKIT_TEST_E12E_KEEP") == "1")
         {
             File.WriteAllText(Path.Combine(Path.GetTempPath(), "e12e-runner-output.txt"), RunnerProcess.Output);
-            File.WriteAllText(Path.Combine(Path.GetTempPath(), "e12e-keep.txt"), $"root {Root}\nsync {SyncUrl}\nrunner {RunnerUrl}\nsource {SourceDatabase}\ndw {DwDatabase}\ntarget {TargetDatabase}\n");
+            File.WriteAllText(Path.Combine(Path.GetTempPath(), "e12e-keep.txt"), $"root {Root}\nrunner {RunnerUrl}\nsource {SourceDatabase}\ndw {DwDatabase}\ntarget {TargetDatabase}\n");
             return;
         }
 
