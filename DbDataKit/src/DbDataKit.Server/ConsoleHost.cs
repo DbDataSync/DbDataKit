@@ -71,22 +71,12 @@ public static class ConsoleHost
             .AddApplicationPart(typeof(AuthController).Assembly)
             .AddApplicationPart(typeof(ConsoleHost).Assembly)
             .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
-        var runnerSettings = settings.RunnerOrFile();
-        builder.Services.AddSingleton(_ => ConsoleState.Open(settings.Directory, settings.State, runner: runnerSettings));
-        if (runnerSettings.Enabled)
-        {
-            // the runner embedded in the console (plan 28a R20): off unless settings.yaml says runner.enabled; stopping the console stops it, and stopping waits for its tasks to take their cancellation
-            builder.Services.AddSingleton(runnerSettings);
-            builder.Services.AddSingleton(sp => new ConsoleRunner(runnerSettings, settings, sp.GetRequiredService<StateDatabase>(), sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataKit.Server.Runner")));
-            builder.Services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(sp => sp.GetRequiredService<ConsoleRunner>());
-            builder.Services.Configure<Microsoft.Extensions.Hosting.HostOptions>(h => h.ShutdownTimeout = TimeSpan.FromTicks(Math.Max(h.ShutdownTimeout.Ticks, (runnerSettings.CancellationGrace + TimeSpan.FromSeconds(30)).Ticks)));
-        }
-        else
-        {
-            // the console's own state's retention and snapshot, in its process (plan 35 I1): state.housekeeping of settings.yaml; with the embedded runner on, its system tasks still do it until plan 35 I2 removes it
-            builder.Services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(sp => new DbDataKit.State.Engines.Housekeeping.StateHousekeeping(sp.GetRequiredService<StateDatabase>(), ConsoleState.Modules, StateScope.Install,
-                ConsoleState.ServiceId, settings.State ?? ConsoleState.Resolve(settings.Directory).Settings, settings.Directory, sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataKit.Server.Housekeeping")));
-        }
+        // the console embeds no runner (plan 35 I2): a settings.yaml that still has the runner: section is refused, naming where its settings went
+        RemovedEmbeddedRunner.Refuse(settings.Directory);
+        builder.Services.AddSingleton(_ => ConsoleState.Open(settings.Directory, settings.State));
+        // the console's own state's retention and snapshot, in its process (plan 35 I1): state.housekeeping of settings.yaml. Packages run on a paired Runner, never here
+        builder.Services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(sp => new DbDataKit.State.Engines.Housekeeping.StateHousekeeping(sp.GetRequiredService<StateDatabase>(), ConsoleState.Modules, StateScope.Install,
+            ConsoleState.ServiceId, settings.State ?? ConsoleState.Resolve(settings.Directory).Settings, settings.Directory, sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataKit.Server.Housekeeping")));
         builder.Services.AddSingleton(sp => new NotificationFeedStore(sp.GetRequiredService<StateDatabase>(), ConsoleState.ServiceId));
         builder.Services.AddSingleton(sp => new AuditLog(sp.GetRequiredService<StateDatabase>(), ConsoleState.ServiceId));
         builder.Services.AddSingleton(new ConsoleActivitySource(settings.State is { IsSqlite: false }));
@@ -237,7 +227,6 @@ public static class ConsoleHost
         MapState(app, settings, maintenance);
         // the certificate this console presents: days left and subject, for its own Monitoring row (UI10); the shape of every server's `GET /api/v1/certificate`
         app.MapGet(CertificateStatusEndpoint.Path, () => Results.Json(CertificateStatusEndpoint.Describe(certificate, "self-signed", TimeProvider.System.GetUtcNow()))).RequireAuthorization(DbDataKit.Web.Auth.Policies.Viewer);
-        app.MapEmbeddedRunner();
         app.MapRelay();
         if (settings.Home is not null) app.MapFederation();
 
@@ -277,7 +266,7 @@ public static class ConsoleHost
                     () => new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(settings.Directory), new DbDataKit.Secrets.EnvSecretProvider()]),
                     ConsoleState.SettingsFileIn(settings.Directory), settings.StateSources ?? resolved.Sources);
             },
-            ConsoleState.ModulesFor(settings.RunnerOrFile()), ConsoleState.ScopeFor(settings.RunnerOrFile()), maintenance, new DbDataKit.State.Api.StateAuditSink(app.Services.GetRequiredService<StateDatabase>(), ConsoleState.ServiceId),
+            ConsoleState.Modules, StateScope.Install, maintenance, new DbDataKit.State.Api.StateAuditSink(app.Services.GetRequiredService<StateDatabase>(), ConsoleState.ServiceId),
             Version: Version));
         app.MapState(api, context =>
         {

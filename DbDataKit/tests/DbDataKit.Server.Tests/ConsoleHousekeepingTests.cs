@@ -8,7 +8,10 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DbDataKit.Server.Tests;
 
-/// <summary>Plan 35 I1: the console keeps its own state in its own process (the shared <see cref="StateHousekeeping"/>): retention and a snapshot on a short interval, each run recorded, over SQLite, PostgreSQL and SQL Server.</summary>
+/// <summary>
+/// Plan 35 I1 and I2: the console keeps its own state in its own process (the shared <see cref="StateHousekeeping"/>): retention and a snapshot on a short interval, each run recorded, over SQLite, PostgreSQL and SQL Server, with no Runner paired
+/// and no runner module in its state. The embedded runner is gone: a <c>runner:</c> section of <c>settings.yaml</c> stops the console naming the file, and the <c>runner</c> commands say where their feature went.
+/// </summary>
 public sealed class ConsoleHousekeepingTests : IDisposable
 {
     private readonly List<string> _directories = [];
@@ -52,11 +55,46 @@ public sealed class ConsoleHousekeepingTests : IDisposable
             var kept = StateBackupJob.List(Path.Combine(directory, "backups"));
             Assert.InRange(kept.Count, 1, 2);
             Assert.All(kept, k => Assert.True(File.Exists(Path.Combine(k, "manifest.json"))));
+
+            // no runner is paired and the console's state holds no module of a runner's (plan 35 I2)
+            Assert.Empty(app.Services.GetRequiredService<ConsoleInstances>().Registry.All());
+            var layout = app.Services.GetRequiredService<StateDatabase>().Layout!;
+            foreach (var module in new[] { RunnerModule.Name, DefinitionsModule.Name, DbDataKit.Scheduling.SchedulingModule.Name })
+                Assert.False(layout.Has(module), $"the console's state has the runner's module {module}");
         }
         finally
         {
             await app.StopAsync();
             await app.DisposeAsync();
         }
+    }
+
+    [Fact]
+    public void A_settings_file_with_the_runner_section_of_the_embedded_runner_stops_the_console_naming_the_file_and_where_its_settings_went()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ddk-console-no-runner-" + Guid.NewGuid().ToString("N")[..8]);
+        _directories.Add(directory);
+        Directory.CreateDirectory(directory);
+        var file = ConsoleState.SettingsFileIn(directory);
+        File.WriteAllText(file, "runner:\n  enabled: true\n  backup_directory: backups\n");
+
+        var refused = Assert.Throws<InvalidOperationException>(() => ConsoleHost.Build(new ConsoleSettings(directory, new Uri("https://localhost:0")), ConsoleHost.Certificate(directory), _ => { }, webRoot: directory));
+
+        Assert.Contains(file, refused.Message, StringComparison.Ordinal);
+        Assert.Contains("state.housekeeping", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("DbDataRunner", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_runner_commands_of_the_embedded_runner_say_where_their_feature_went()
+    {
+        var output = new StringWriter();
+        var error = new StringWriter();
+
+        var exit = await ConsoleCli.RunAsync(["runner", "accept-production", "--yes"], new DbDataKit.Cli.CliContext(output, error, TextReader.Null));
+
+        Assert.Equal(DbDataKit.Cli.CliExit.Usage, exit);
+        Assert.Contains("'dbdatakit runner' is gone", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("DbDataRunner server", error.ToString(), StringComparison.Ordinal);
     }
 }

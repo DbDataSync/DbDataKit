@@ -14,12 +14,6 @@ public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUr
     /// <summary>Where each state setting came from (a flag, the environment, <c>settings.yaml</c>, the default), for <c>GET /api/v1/state</c>; null: not said, the file and the environment are read.</summary>
     public StateSources? StateSources { get; init; }
 
-    /// <summary>The runner embedded in the console (plan 28 section 6a, plan 28a R20); null: the <c>runner:</c> section of <c>settings.yaml</c> in the directory says (<see cref="ConsoleRunnerSettings.Load"/>), and without one the runner is off.</summary>
-    public ConsoleRunnerSettings? Runner { get; init; }
-
-    /// <summary>The runner settings in effect: the given ones, else the settings file's.</summary>
-    public ConsoleRunnerSettings RunnerOrFile() => Runner ?? ConsoleRunnerSettings.Load(Directory);
-
     /// <summary>The address a browser opens, and the origin a passkey is bound to.</summary>
     public Uri Public => PublicUrl ?? (IsEveryAddress(Listen.Host) ? new UriBuilder(Listen) { Host = "localhost" }.Uri : Listen);
 
@@ -66,24 +60,6 @@ public static class ConsoleState
 
     public static IReadOnlyList<StateModule> Modules { get; } = [IdentityModule.Module, NotificationsModule.Module, DbDataKit.Identity.FederationModule.Module, RunsModule.Module, AuditModule.Module, AgentsModule.Module, SetupModule.Module, DeliveryModule.Module, BindingPostureModule.Module, QualityModule.Module, BacklogModule.Module, ReleasesModule.Module];
 
-    /// <summary>
-    /// The modules of a console whose embedded runner is <paramref name="runner"/>: the console's own, and when the runner is enabled the runner's (<c>runner</c>, <c>runner_progress</c>, <c>scheduling</c>, <c>definitions</c>, <c>payloads</c>, and
-    /// <c>trust</c> for the publishing settings). A console that does not enable the runner has none of them, so its state gains no table.
-    /// </summary>
-    public static IReadOnlyList<StateModule> ModulesFor(ConsoleRunnerSettings? runner)
-    {
-        if (runner is not { Enabled: true }) return Modules;
-        var names = Modules.Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
-        return [.. Modules, .. DbDataKit.Runner.RunnerNames.EngineModules.Append(DbDataKit.Web.Trust.TrustModule.Module).Where(m => names.Add(m.Name))];
-    }
-
-    /// <summary>The scope of the console's state: the install, and with the embedded runner the group <c>console</c> (its modules <c>runner</c>, <c>runner_progress</c> and <c>definitions</c> are per group; the console's own are per install and do not change).</summary>
-    public static StateScope ScopeFor(ConsoleRunnerSettings? runner) =>
-        runner is { Enabled: true } ? new StateScope(Group: ConsoleRunnerSettings.Group, Service: ServiceId) : StateScope.Install;
-
-    /// <summary>The embedded runner's settings as the console's directory says them (off when there is no <c>runner:</c> section).</summary>
-    public static ConsoleRunnerSettings RunnerIn(string directory) => ConsoleRunnerSettings.Load(directory);
-
     private static string AppliedBy => $"{ConsoleSettings.Product} {typeof(ConsoleState).Assembly.GetName().Version}";
 
     /// <summary>The state engine of the service: <c>DBDATAKIT_STATE_SERVER_ENGINE</c>, else <c>DBDATAKIT_STATE_ENGINE</c>.</summary>
@@ -115,14 +91,12 @@ public static class ConsoleState
         return SuiteEnvironment.ResolveState(ConsoleSettings.ServiceName, environment, engineFlag, connectionFlag);
     }
 
-    /// <param name="runner">The embedded runner's settings; null reads the <c>runner:</c> section of <c>settings.yaml</c> in <paramref name="directory"/>.</param>
-    public static StateDatabase Open(string directory, StateSettings? settings = null, Func<string, string?>? environment = null, ConsoleRunnerSettings? runner = null)
+    public static StateDatabase Open(string directory, StateSettings? settings = null, Func<string, string?>? environment = null)
     {
         System.IO.Directory.CreateDirectory(directory);
         settings ??= new StateSettings();
-        runner ??= RunnerIn(directory);
-        var modules = ModulesFor(runner);
-        var scope = ScopeFor(runner);
+        var modules = Modules;
+        var scope = StateScope.Install;
         if (settings.IsSqlite) return StateOpener.Open(settings, System.IO.Path.Combine(directory, "state.db"), modules, scope, appliedBy: AppliedBy);
         // the password of a server engine is a secret reference: the console's store, then the environment
         var secrets = new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]);

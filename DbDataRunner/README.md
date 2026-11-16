@@ -149,15 +149,9 @@ What the kit leaves to a person is answered on the runner's task screens and ove
 - **Checkpoints.** `GET .../checkpoints`, `.../checkpoints/{name}/history` and `POST .../checkpoints/{name}/rewind` (`runner.checkpoint.rewind`).
 - **Units of a run.** `GET /api/v1/runs/{id}/units` (the table: state, rows, duration, error, with the totals) and `/steps`, read from the attempt chain the run's work item carries; a run that a retry replaced (the item has a newer run id) answers 404.
 
-## The console's embedded runner
+## No runner in the console
 
-The console hosts a copy of the engine (`RunnerHost`) as a group of one instance named `console`, with its state in the console's state database (scope `console`); its screens are the runner screens, reached at `/relay/console-runner/api/v1/...` and `/api/embedded-runner/...`. It exists for evaluation runs (plan 27), system tasks of the console and the install (retention of the console's own state; `state-retention` is a task of it) and development packages, so a single-machine install has a working runner with nothing more to install.
-
-* It accepts by default **only non-production channels and the console's own task kinds**. An administrator can let it run production packages as an explicit, recorded choice (`AcceptProductionOnConsoleRunner`), and the console then warns that production schedules stop when the console does.
-* The same isolation as any runner: a process per task, time and memory limits, and a low-privilege account that is not the console's own. Because no account switch exists yet, `account_separate` is always false and `console_runner.require_separate_account: true` refuses every package of its own (system tasks only).
-* A cap on what it runs at once (`max_concurrent`), so a heavy run cannot slow the console's screens; stopping the console cancels the running tasks within the grace period and leaves no run running.
-* Its version is the console's, so a package it accepts must be compatible with the console's release (N and N-1). A product's own housekeeping stays with the product: retention of a serving group's or a server's state runs in that server, so it keeps running while the console is down.
-* `evaluation` is a placeholder until plan 27 builds evaluation runs.
+The console embeds no copy of the engine (plan 35 I2): a single-machine install has a DbDataRunner beside it (`dbdatakit-full`), every package runs on a Runner, and the console's own housekeeping (retention and a snapshot of its state) runs in the console's process on the shared `StateHousekeeping`, as this server's does in this process (`Shared/src/DbDataKit.State.Engines/README.md`, "Housekeeping"; the runs are recorded as `state-retention` and `state-backup` under the service `dbdatarunner`, apart from the tasks' runs).
 
 ## What the process does
 

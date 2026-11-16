@@ -190,7 +190,7 @@ public sealed class ConsoleReleasesTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.BadRequest, await Make(GatewayItem("integration", "orders", 1)));                                    // a runner's kind
         Assert.Equal(HttpStatusCode.BadRequest, await Make(GatewayItem("app-instance", "orders-app", 1)));                              // an instance belongs to one group
         Assert.Equal(HttpStatusCode.BadRequest, await Make(new { product = "gateway", kind = "dashboard", target = "runner-prod", name = "sales", version = 1, fromChannel = "test", toChannel = "prod" }));
-        Assert.Equal(HttpStatusCode.BadRequest, await Make(new { product = "gateway", kind = "dashboard", target = ConsoleRunnerSettings.ServerId, name = "sales", version = 1, fromChannel = "test", toChannel = "prod" }));
+        Assert.Equal(HttpStatusCode.BadRequest, await Make(new { product = "gateway", kind = "dashboard", target = "console-runner", name = "sales", version = 1, fromChannel = "test", toChannel = "prod" }));
         Assert.Equal(HttpStatusCode.BadRequest, await Make(new { target = "gateway-prod", name = "orders", version = 1, fromChannel = "test", toChannel = "prod" }));   // a runner item to a Gateway
         Assert.Equal(HttpStatusCode.BadRequest, await Make(new { product = "gateway", kind = "dashboard", target = "gateway-prod", name = "sales", version = 0, fromChannel = "test", toChannel = "prod" }));
     }

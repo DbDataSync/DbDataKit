@@ -10,7 +10,7 @@ namespace DbDataKit.Server;
 /// channel to the next, reading it from the item's source server (the target itself when none is named), through <see cref="ConsolePromotions"/> as the person who started or resumed the release.
 /// <b>The approval permission of an item is the administrator role on its target server</b> (owner default, 2026-11-12): what the promotion itself needs there, as the person holds it (the identity home's roles, or the console's own, within what the server lets this console grant).
 /// </summary>
-public sealed class ConsoleReleases(StateDatabase state, ConsoleInstances instances, ConsoleRelay relay, ConsolePromotions promotions, IUserAccounts users, IServiceProvider services)
+public sealed class ConsoleReleases(StateDatabase state, ConsoleInstances instances, ConsoleRelay relay, ConsolePromotions promotions, IUserAccounts users)
 {
     public const string Product = "runner";
     public const string Kind = "integration";
@@ -25,13 +25,12 @@ public sealed class ConsoleReleases(StateDatabase state, ConsoleInstances instan
 
     public ReleaseStore Store { get; } = new(state);
 
-    private bool KnownServer(string server) => server == ConsoleRunnerSettings.ServerId ? services.GetService<ConsoleRunner>() is not null : instances.Registry.Find(server) is not null;
+    private bool KnownServer(string server) => instances.Registry.Find(server) is not null;
 
-    /// <summary>Whether the server is of the product the item names (a Gateway is a registered server; a runner is one or the console's own).</summary>
+    /// <summary>Whether the server is of the product the item names (a registered Gateway or runner).</summary>
     private async Task<string?> WrongProductAsync(string server, string product, CancellationToken ct)
     {
         var want = product == GatewayProduct ? ServerProducts.Gateway : ServerProducts.Runner;
-        if (server == ConsoleRunnerSettings.ServerId) return want == ServerProducts.Runner ? null : $"'{server}' is the console's own runner, not a Gateway.";
         var found = instances.Registry.Find(server);
         if (found is null) return $"No server '{server}' is registered.";
         var actual = await relay.ProductOfAsync(found, ct);
@@ -58,7 +57,6 @@ public sealed class ConsoleReleases(StateDatabase state, ConsoleInstances instan
         public bool Holds(string approver, ReleaseItem item)
         {
             if (users.Get(approver) is not { Enabled: true } user) return false;
-            if (item.Target == ConsoleRunnerSettings.ServerId) return item.Product == Product && ServerRoles.Allows(ConsoleRunner.RolesOf(user.Role), ServerRole.Admin);
             return instances.Registry.Find(item.Target) is { } instance && ServerRoles.Allows(relay.RolesHeldOn(instance, user.Id, user.Role), ServerRole.Admin);
         }
     }

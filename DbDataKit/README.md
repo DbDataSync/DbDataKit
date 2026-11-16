@@ -89,32 +89,24 @@ What changes in the file, and what the page tells the person:
 - What the target does not support is its refusal, in its words: the Gateway serves `sqlserver`, `odbc`, `duckdb`, `postgres` and `flightsql` and refuses another engine; Sync refuses `tls`, `read_login`, `write_login`, `connection_string_secret` and `access`.
 - What a person may do is each server's decision from the token (the roles the console grants that person there, never above the server's ceiling): a Gateway takes a copy from an administrator only.
 
-## The embedded runner
+## The console's own state, and no runner of its own
 
-The console can host **a copy of the runner engine** (`DbDataKit.Runner`) as a runner group of one, `console` (plan 28 section 6a, plan 28a R20), with its own state in the console's state database (the scope becomes group `console`; the `runner`, `runner_progress`, `definitions`, `scheduling`, `payloads` and `trust` modules are added, and a console that does not turn it on has none of them). **It is off by default**, per install: a console that is updated gains no tables, no child processes and no dependency on the task host until an administrator writes this in `settings.yaml` in the console's directory:
+The console keeps **its own state** in its own process (plan 35 I1, `docs/architecture.md` "Isolation by trust"): the shared `StateHousekeeping` runs the retention rules of its state hourly and, when a folder is set, writes a verified snapshot of it, each run recorded in the console's run history as `state-retention` or `state-backup` (`Shared/src/DbDataKit.State.Engines/README.md`, "Housekeeping"). The settings are the `housekeeping:` part of the `state:` section of `settings.yaml`:
 
 ```yaml
-runner:
-  enabled: true
-  channels: [dev, preview]        # the non-production channels it serves (the default); the channel `system` is always served
-  max_concurrent: 2               # runs at once (the default), so a heavy run cannot slow the console's screens
-  data_directory: runner          # cache, scratch and socket; default: `runner` in the console's directory
-  require_separate_account: false # true: packages of its own are refused while their tasks would run under the console's account
-  retention_every_minutes: 60     # how often the console's own state-retention task runs
-  backup_directory: backups       # a folder (relative to the console's directory): the state-backup task writes a verified snapshot of the console's state there; unset: no backup task
-  backup_every_hours: 24          # how often (a day by default)
-  backup_keep: 7                  # how many stay: the newest (7 by default)
+state:
+  housekeeping:
+    retention_every_minutes: 60   # how often the retention rules run (an hour by default)
+    backup_directory: backups     # relative to the console's directory; unset: no snapshot
+    backup_every_hours: 24
+    backup_keep: 7                # the newest seven stay
 ```
 
-What it runs: the tasks of packages published to a channel it serves, each **in a process of its own** with the time and memory limits of any runner, and the console's own system tasks (package `console-system`, channel `system`), which run in the console's process: `state-retention` (the shared retention job over the console's state, on its schedule), `state-backup` (only with `runner.backup_directory`: a snapshot of the console's state written to that folder, checked against its own manifest, the newest `backup_keep` kept, a failed one pruning nothing and leaving no half-written folder; restore is `dbdatakit state import --from <folder>` into an empty database; on SQL Server the export reads committed rows table by table) and `evaluation`, a placeholder for plan 27's evaluation runs. A product's own housekeeping stays with the product. The runner's version is the console's.
+A snapshot is the one `state export` writes, checked against its own manifest; a failed one prunes nothing and leaves no half-written folder; restore is `dbdatakit state restore --from <folder>` into an empty database (on SQL Server the export reads committed rows table by table).
 
-A console **without** the embedded runner keeps its own state in its own process all the same (plan 35 I1): the shared `StateHousekeeping` runs its retention hourly and, when `state.housekeeping.backup_directory` is set in `settings.yaml`, a verified snapshot (`retention_every_minutes`, `backup_every_hours`, `backup_keep` beside it), each run recorded in the console's run history as `state-retention` or `state-backup` (`Shared/src/DbDataKit.State.Engines/README.md`, "Housekeeping"). The embedded runner is removed in plan 35 I2, and then that is the only way.
+**The console runs no package** (plan 35 I2): packages, evaluation runs and every other task run on a DbDataRunner server paired with the console (`dbdatakit-full` installs one). The embedded runner the console once had is gone: a `settings.yaml` that still has its `runner:` section stops the console with a message naming the file and where each setting went, and the console's old `runner` noun answers with the same sentence (exit 2). The Bindings page lists the slots of every paired Runner that answers, and Compare picks a paired Runner or Gateway.
 
-**Production is an administrator's recorded choice.** Until then publishing or activating into the production channel (`prod`) is refused with a message that names the choice, and the runner serves no production channel. `dbdatakit runner accept-production --yes [--note <text>]` records it (audited: who and when; so does `POST /api/embedded-runner/accept-production` with `{"confirmed": true}` for an administrator) and the console then logs, and the runner screens show, the warning that **production schedules stop when the console stops**. `dbdatakit runner revoke-production` takes it back.
-
-**Releases** (plan 21 CH02) are the console's: ordered promotions of runner packages with one approval, made, approved, started and resumed on the Releases screen or `api/releases` as the signed-in person (the approval needs the administrator role on every item's server). `dbdatakit release list` and `dbdatakit release show <id>` read them.
-
-In the web app the runner is the first entry of the Servers page (id `console-runner`, flagged `embedded`, never paired and not forgettable) and opens the same runner screens as a `dbdatarunner`: the calls are the runner's own management API, served in the console at `/api/embedded-runner/...` and at `/relay/console-runner/api/v1/...` for people signed in (a viewer reads, an administrator runs, pauses, resumes, activates, switches, rolls back and retires); every other call under that id is 403. Stopping the console stops the runner: running tasks are cancelled, given their grace period, and no run is left running. The task host is published beside the console (`taskhost/`) as it is beside `dbdatarunner`.
+**Releases** (plan 21 CH02) are the console's: ordered promotions of runner packages and Gateway definitions between paired groups with one approval, made, approved, started and resumed on the Releases screen or `api/releases` as the signed-in person (the approval needs the administrator role on every item's server). `dbdatakit release list` and `dbdatakit release show <id>` read them.
 
 ## What is served
 

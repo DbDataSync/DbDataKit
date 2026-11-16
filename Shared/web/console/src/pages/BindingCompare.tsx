@@ -7,7 +7,6 @@ import {
   type CompareItem, type CompareOutcome,
 } from '../bindingCompare'
 
-const EMBEDDED = 'console-runner'
 const COMPARABLE = new Set(['dbdatarunner', 'dbdatagateway'])
 
 /**
@@ -19,10 +18,12 @@ export function BindingComparePanel() {
   const client = useQueryClient()
   const isAdmin = useIsAdmin()
   const servers = useQuery({ queryKey: instancesKey, queryFn: consoleApi.instances.list })
-  const options = [{ id: EMBEDDED, name: "The console's runner" }, ...(servers.data ?? []).filter((s) => s.product !== null && COMPARABLE.has(s.product) && s.reachable).map((s) => ({ id: s.id, name: `${s.name} (${s.product === 'dbdatagateway' ? 'Gateway' : 'Runner'})` }))]
-  const [server, setServer] = useState(EMBEDDED)
+  const options = (servers.data ?? []).filter((s) => s.product !== null && COMPARABLE.has(s.product) && s.reachable).map((s) => ({ id: s.id, name: `${s.name} (${s.product === 'dbdatagateway' ? 'Gateway' : 'Runner'})` }))
+  const [chosen, setServer] = useState('')
+  // the first Runner or Gateway that answers until a person picks one (the console has no runner of its own to compare with, plan 35 I2)
+  const server = chosen || options[0]?.id || ''
   const [onlyDifferences, setOnlyDifferences] = useState(true)
-  const view = useQuery({ queryKey: ['bindings', 'compare', server], queryFn: () => compareApi.compare(server), retry: false })
+  const view = useQuery({ queryKey: ['bindings', 'compare', server], queryFn: () => compareApi.compare(server), retry: false, enabled: server !== '' })
   const [said, setSaid] = useState<Record<string, string>>({})
   const done = (what: string) => (r: CompareOutcome, item: CompareItem) => {
     setSaid((s) => ({ ...s, [item.id]: what }))
@@ -55,6 +56,7 @@ export function BindingComparePanel() {
         <button type="button" className="btn btn-sm" onClick={() => void view.refetch()} data-testid="compare-refresh">Compare again</button>
         {view.data && <span className="hint" data-testid="compare-summary">{summary(items)}</span>}
       </div>
+      {servers.isSuccess && options.length === 0 && <div className="empty" data-testid="compare-no-server">No paired Runner or Gateway answers. Pair one on the Servers page to compare the console&apos;s bindings with it.</div>}
       <ErrorBanner error={view.error} />
       {view.data?.problems.map((p, i) => <div key={i} className="banner" data-testid="compare-problem">{p}</div>)}
       {view.isSuccess && shown.length === 0 && <div className="empty" data-testid="compare-empty">{items.length === 0 ? 'Nothing here is held by both sides.' : 'Everything is the same.'}</div>}

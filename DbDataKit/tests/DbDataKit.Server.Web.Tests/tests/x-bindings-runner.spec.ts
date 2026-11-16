@@ -18,21 +18,23 @@ test('a runner slot is bound to a console connection, its copy is compared with 
 
   await page.route('**/api/bindings', (route) => json(route, view()))
   await page.route('**/api/delivery', (route) => json(route, { problem: null }))
-  await page.route('**/relay/console-runner/api/v1/definitions/integration', (route) => json(route, { definitions: [{ name: 'orders' }] }))
-  await page.route('**/relay/console-runner/api/v1/definitions/integration/orders', (route) => json(route, {
+  // the runner slots are a paired Runner's (the console embeds none since plan 35 I2)
+  await page.route('**/api/instances', (route) => json(route, [{ id: 'runner-1', name: 'Runner one', url: 'https://runner-1', product: 'dbdatarunner', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null }]))
+  await page.route('**/relay/runner-1/api/v1/definitions/integration', (route) => json(route, { definitions: [{ name: 'orders' }] }))
+  await page.route('**/relay/runner-1/api/v1/definitions/integration/orders', (route) => json(route, {
     slots: [{ channel: 'prod', slot: 'api', kind: 'http', tasks: ['pull'], versions: [1] }, { channel: 'dev', slot: 'api', kind: 'http', tasks: ['pull'], versions: [1] }],
     bindings: [{ channel: 'prod', slot: 'api', bound_to: 'crm', revision: 1, shares_production: false, confirmed: false }, ...(devBound ? [{ channel: 'dev', slot: 'api', bound_to: devBound, revision: 1, shares_production: true, confirmed: true }] : [])],
   }))
-  await page.route('**/relay/console-runner/api/v1/connection-copies', (route) => json(route, { copies: copyVersion ? [{
+  await page.route('**/relay/runner-1/api/v1/connection-copies', (route) => json(route, { copies: copyVersion ? [{
     name: 'crm', version: copyVersion, kind: 'http', sent_by: 'ada', sent_at: '2026-11-11T10:00:00Z', shadowed_by_file: false, used_by: [], problem: null, unresolved: 1,
     secrets: [{ path: 'sign_in.key_secret', reference: 'secret:dbdatakit:server:connection:crm:key', resolves: false, problem: 'It is not in the runner\'s secret store.' }],
   }] : [] }))
-  await page.route('**/api/bindings/runner/console-runner/connections/crm/send', (route) => {
+  await page.route('**/api/bindings/runner/runner-1/connections/crm/send', (route) => {
     calls.push({ method: 'POST', path: new URL(route.request().url()).pathname, body: null })
     copyVersion = consoleVersion
     return json(route, { connection: 'crm', version: consoleVersion, unresolved: [] })
   })
-  await page.route('**/api/bindings/runner/console-runner/orders/api', (route) => {
+  await page.route('**/api/bindings/runner/runner-1/orders/api', (route) => {
     const body = route.request().postDataJSON()
     calls.push({ method: 'PUT', path: new URL(route.request().url()).pathname, body })
     if (body.channels.dev === 'crm' && !body.confirm)
@@ -52,7 +54,7 @@ test('a runner slot is bound to a console connection, its copy is compared with 
   // Send again: the copy is the console's file afterwards
   await page.getByTestId('binding-send-orders/api-prod').click()
   await expect.poll(() => calls.length).toBe(1)
-  expect(calls[0].path).toBe('/api/bindings/runner/console-runner/connections/crm/send')
+  expect(calls[0].path).toBe('/api/bindings/runner/runner-1/connections/crm/send')
   await expect(page.getByTestId(prod)).toHaveAttribute('data-copy', 'current')
 
   // the console file changes: the copy is stale again, the screen says so
@@ -68,7 +70,7 @@ test('a runner slot is bound to a console connection, its copy is compared with 
   await page.getByTestId('binding-confirm-note-orders/api').fill('the dev crm is the live one this week')
   await page.getByTestId('binding-save-orders/api').click()
   await expect.poll(() => calls.length).toBe(2)   // the console asks for the confirmation itself (production's connection in a dev channel), so only the confirmed save reaches the runner
-  expect(calls[1].path).toBe('/api/bindings/runner/console-runner/orders/api')
+  expect(calls[1].path).toBe('/api/bindings/runner/runner-1/orders/api')
   expect(calls[1].body.confirm).toEqual(['bindings/runner/orders/api/dev'])
   expect(calls[1].body.note).toBe('the dev crm is the live one this week')
   expect(calls[1].body.channels).toEqual({ prod: 'crm', dev: 'crm' })

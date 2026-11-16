@@ -12,9 +12,9 @@ const entry = (name: string, source: string, version: string | null, extra: obje
 
 test('the runner rows say where each connection goes, how the runner holds it against the console file and who uses it, and an unused copy is listed', async ({ page, context, baseURL }) => {
   await signInNewAdmin(page, context, baseURL!, 'Inventory Runner', `inventory-runner-${Date.now()}@example.com`)
-  await page.route('**/api/instances', (route) => json(route, [{ id: 'console-runner', name: 'Console runner', url: baseURL, product: 'dbdatarunner', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null }]))
+  await page.route('**/api/instances', (route) => json(route, [{ id: 'runner-1', name: 'Runner one', url: baseURL, product: 'dbdatarunner', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null }]))
   await page.route('**/api/bindings', (route) => json(route, { file: 'bindings.yml', yaml: '', diagnostics: [], earlier: null, releaseChannels: ['prod'], connections: [mine('erp', 'sha256:aaaa111122223333'), mine('crm', 'sha256:cccc111122223333'), mine('wh', 'sha256:dddd111122223333')], slots: [], postureSetting: 'production_binding_on_non_production', postureEffect: '' }))
-  await page.route('**/relay/console-runner/api/v1/connections', (route) => json(route, {
+  await page.route('**/relay/runner-1/api/v1/connections', (route) => json(route, {
     product: 'dbdatarunner',
     connections: [
       entry('erp', 'copy', 'sha256:old0111122223333', { used_by: [use] }),             // the console's file changed since it was sent: stale

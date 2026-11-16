@@ -12,7 +12,8 @@ namespace DbDataKit.Server.Tests;
 
 /// <summary>
 /// Plan 27a IX23, owner decision of 2026-11-11: the Runner is a separate server and does not read the console's connections folder; the console hands it a connection DEFINITION with secret REFERENCES (never a value) when a runner slot is bound or sent again, and
-/// the runner keeps its own copy. A real console host with the embedded runner on, over SQLite (the runner's own routes are tested with the real runner host in <c>DbDataRunner.Tests</c>).
+/// the runner keeps its own copy. A real console host paired with a runner in this process (<see cref="PairedRunner"/>: the real engine and routes behind the token check), over SQLite; the console embeds no runner since plan 35 I2
+/// (the runner's own server is tested in <c>DbDataRunner.Tests</c>).
 /// </summary>
 public sealed class ConsoleRunnerBindingsTests : IAsyncLifetime
 {
@@ -21,6 +22,7 @@ public sealed class ConsoleRunnerBindingsTests : IAsyncLifetime
 
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "ddk-runner-bindings-" + Guid.NewGuid().ToString("N")[..8]);
     private WebApplication _app = null!;
+    private PairedRunner _runner = null!;
     private HttpClient _http = null!;
     private string _admin = "";
     private string _viewer = "";
@@ -28,23 +30,19 @@ public sealed class ConsoleRunnerBindingsTests : IAsyncLifetime
     private static string Crm(string comment = "") =>
         $"schema: connection/2\nname: crm\nkind: http\nendpoint: https://crm.example/api\nsign_in:\n  method: api_key\n  name: X-Key\n  key_secret: 'env:{Variable}'\n{comment}";
 
-    private sealed class NoRun : ITaskRunner
-    {
-        public Task<TaskRunResult> RunAsync(TaskRunRequest request, CancellationToken ct = default) => throw new InvalidOperationException("nothing is scheduled in this test");
-    }
-
     public async ValueTask InitializeAsync()
     {
         Environment.SetEnvironmentVariable(Variable, null);
         Directory.CreateDirectory(Path.Combine(_directory, "connections"));
         File.WriteAllText(Path.Combine(_directory, "connections", "crm.yml"), Crm());
+        _runner = await PairedRunner.StartAsync(RunnerId);
         await StartAsync();
+        await _runner.PairAsync(_app);
     }
 
     private async Task StartAsync()
     {
-        var runner = new ConsoleRunnerSettings { Enabled = true, Tick = TimeSpan.FromMilliseconds(200), CancellationGrace = TimeSpan.FromSeconds(5), TaskHostPath = typeof(RunnerHost).Assembly.Location, WrapRunner = _ => new NoRun() };
-        var settings = new ConsoleSettings(_directory, new Uri("https://localhost:0")) { Runner = runner };
+        var settings = new ConsoleSettings(_directory, new Uri("https://localhost:0"));
         _app = ConsoleHost.Build(settings, ConsoleHost.Certificate(_directory), _ => { }, webRoot: _directory);
         await _app.StartAsync();
         _http = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true, UseCookies = false }) { BaseAddress = new Uri(_app.Urls.First()) };
@@ -60,6 +58,7 @@ public sealed class ConsoleRunnerBindingsTests : IAsyncLifetime
         Environment.SetEnvironmentVariable(Variable, null);
         try { await _app.StopAsync(); } catch (ObjectDisposedException) { }
         await _app.DisposeAsync();
+        if (_stopRunner) await _runner.DisposeAsync();
         try { Directory.Delete(_directory, true); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
@@ -75,8 +74,15 @@ public sealed class ConsoleRunnerBindingsTests : IAsyncLifetime
         return (response.StatusCode, json);
     }
 
-    private const string Slot = "/api/bindings/runner/console-runner/orders/source";
-    private StateDatabase State => _app.Services.GetRequiredService<StateDatabase>();
+    private const string RunnerId = "runner-1";
+    private const string Slot = "/api/bindings/runner/" + RunnerId + "/orders/source";
+    private bool _stopRunner = true;
+
+    /// <summary>The runner's own state.</summary>
+    private StateDatabase State => _runner.State;
+
+    /// <summary>The console's own state.</summary>
+    private StateDatabase Console => _app.Services.GetRequiredService<StateDatabase>();
 
     [Fact]
     public async Task Binding_a_runner_slot_sends_the_definition_with_its_references_the_runner_keeps_its_own_copy_and_the_screen_compares_versions_and_sends_again()
@@ -94,7 +100,7 @@ public sealed class ConsoleRunnerBindingsTests : IAsyncLifetime
         var copy = new ConnectionCopies(State).Get("crm")!;
         Assert.Equal(version, copy.Version);
         Assert.DoesNotContain(KeyValue, copy.Definition);
-        var (_, listed) = await Call(HttpMethod.Get, "/relay/console-runner/api/v1/connection-copies", _viewer);
+        var (_, listed) = await Call(HttpMethod.Get, "/relay/runner-1/api/v1/connection-copies", _viewer);
         var mine = Assert.Single(listed!["copies"]!.AsArray())!;
         Assert.Equal(1, (int)mine["unresolved"]!);
         Assert.Equal("orders", (string)mine["used_by"]![0]!["package"]!);
@@ -110,18 +116,18 @@ public sealed class ConsoleRunnerBindingsTests : IAsyncLifetime
         var newer = ConnectionCopyVersion.Of(Crm("# changed\n"));
         Assert.NotEqual(version, newer);
         Assert.Equal(newer, (string)(await Call(HttpMethod.Get, "/api/bindings", _viewer)).Body!["connections"]!.AsArray().Single(c => (string)c!["name"]! == "crm")!["version"]!);
-        Assert.Equal(version, (string)(await Call(HttpMethod.Get, "/relay/console-runner/api/v1/connection-copies", _viewer)).Body!["copies"]![0]!["version"]!);
+        Assert.Equal(version, (string)(await Call(HttpMethod.Get, "/relay/runner-1/api/v1/connection-copies", _viewer)).Body!["copies"]![0]!["version"]!);
 
         Environment.SetEnvironmentVariable(Variable, KeyValue);
-        var (again, resent) = await Call(HttpMethod.Post, "/api/bindings/runner/console-runner/connections/crm/send", _admin);
+        var (again, resent) = await Call(HttpMethod.Post, "/api/bindings/runner/runner-1/connections/crm/send", _admin);
         Assert.Equal(HttpStatusCode.OK, again);
         Assert.Equal(newer, (string)resent!["version"]!);
         Assert.Empty(resent["unresolved"]!.AsArray());                           // the runner resolves it now, on the runner
-        Assert.Equal(newer, (string)(await Call(HttpMethod.Get, "/relay/console-runner/api/v1/connection-copies", _viewer)).Body!["copies"]![0]!["version"]!);
+        Assert.Equal(newer, (string)(await Call(HttpMethod.Get, "/relay/runner-1/api/v1/connection-copies", _viewer)).Body!["copies"]![0]!["version"]!);
         Assert.DoesNotContain(KeyValue, resent.ToJsonString());
 
         // audited by the runner with the name and version only
-        var audit = new AuditLog(State, ConsoleState.ServiceId).Read(new AuditQuery(VerbPrefix: "runner.connection.put"));
+        var audit = new AuditLog(State, DbDataKit.Runner.RunnerNames.ServiceId).Read(new AuditQuery(VerbPrefix: "runner.connection.put"));
         Assert.Equal(2, audit.Count);
         Assert.DoesNotContain(audit, e => (e.Entry.Detail ?? "").Contains(KeyValue));
     }
@@ -130,14 +136,14 @@ public sealed class ConsoleRunnerBindingsTests : IAsyncLifetime
     public async Task Only_an_administrator_changes_a_runner_slot_or_sends_a_connection_and_a_connection_the_console_does_not_keep_is_bound_by_name_with_nothing_sent()
     {
         Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Put, Slot, _viewer, new RunnerSlotBody(new() { ["prod"] = "crm" }))).Status);
-        Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Post, "/api/bindings/runner/console-runner/connections/crm/send", _viewer)).Status);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Call(HttpMethod.Post, "/api/bindings/runner/runner-1/connections/crm/send", _viewer)).Status);
         Assert.Empty(new ConnectionCopies(State).List());
 
         var (status, answer) = await Call(HttpMethod.Put, Slot, _admin, new RunnerSlotBody(new() { ["prod"] = "erp" }));   // a name the runner knows itself
         Assert.Equal(HttpStatusCode.OK, status);
         Assert.Empty(answer!["sent"]!.AsArray());
         Assert.Empty(new ConnectionCopies(State).List());
-        Assert.Equal(HttpStatusCode.NotFound, (await Call(HttpMethod.Post, "/api/bindings/runner/console-runner/connections/nothing/send", _admin)).Status);
+        Assert.Equal(HttpStatusCode.NotFound, (await Call(HttpMethod.Post, "/api/bindings/runner/runner-1/connections/nothing/send", _admin)).Status);
     }
 
     [Fact]
@@ -158,7 +164,7 @@ public sealed class ConsoleRunnerBindingsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, ok);
         var choice = Assert.Single(new PostureChoices(State).List());
         Assert.Equal(("bindings/runner/orders/source/dev", PostureSetting.ProductionBindingOnNonProduction.Name, "the dev crm is the live one this week"), (choice.Scope, choice.Setting, choice.Note));
-        Assert.Empty(new PostureChoices(State, BindingPostureModule.Name).List());       // the console's own table is for its own bindings
+        Assert.Empty(new PostureChoices(Console, BindingPostureModule.Name).List());       // the console's own table is for its own bindings
 
         // its own connection takes the choice back
         Assert.Equal(HttpStatusCode.OK, (await Call(HttpMethod.Put, Slot, _admin, new RunnerSlotBody(new() { ["dev"] = "crm-sandbox" }))).Status);
@@ -168,7 +174,9 @@ public sealed class ConsoleRunnerBindingsTests : IAsyncLifetime
     [Fact]
     public async Task The_choices_of_the_earlier_file_move_into_the_consoles_own_table_once_keeping_who_and_when_and_the_file_is_renamed_never_deleted()
     {
+        _stopRunner = false;
         await DisposeAsync();
+        _stopRunner = true;
         Directory.CreateDirectory(_directory);
         Directory.CreateDirectory(Path.Combine(_directory, "connections"));
         File.WriteAllText(Path.Combine(_directory, ConsoleBindings.EarlierChoicesFileName),
@@ -182,7 +190,7 @@ public sealed class ConsoleRunnerBindingsTests : IAsyncLifetime
         Assert.Equal(new DateTimeOffset(2026, 11, 10, 9, 30, 0, TimeSpan.Zero), choice.ChosenAt);
         Assert.False(File.Exists(Path.Combine(_directory, ConsoleBindings.EarlierChoicesFileName)));
         Assert.True(File.Exists(Path.Combine(_directory, ConsoleBindings.EarlierChoicesFileName + ".moved")));
-        Assert.Single(new PostureChoices(State, BindingPostureModule.Name).List());
-        Assert.Contains(new AuditLog(State, ConsoleState.ServiceId).Read(new AuditQuery(VerbPrefix: "bindings.posture.move")), e => e.Entry.Outcome == AuditEvent.Ok);
+        Assert.Single(new PostureChoices(Console, BindingPostureModule.Name).List());
+        Assert.Contains(new AuditLog(Console, ConsoleState.ServiceId).Read(new AuditQuery(VerbPrefix: "bindings.posture.move")), e => e.Entry.Outcome == AuditEvent.Ok);
     }
 }

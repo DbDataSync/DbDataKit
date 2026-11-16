@@ -19,7 +19,7 @@ public sealed class PostureGuardTests : IDisposable
     [Fact]
     public void Every_setting_has_a_name_a_default_and_a_one_sentence_effect()
     {
-        Assert.Equal(7, PostureSetting.All.Count);
+        Assert.Equal(6, PostureSetting.All.Count);
         Assert.Equal(PostureSetting.All.Count, PostureSetting.All.Select(s => s.Name).Distinct().Count());
         foreach (var setting in PostureSetting.All)
         {
@@ -106,16 +106,16 @@ public sealed class PostureGuardTests : IDisposable
         var database = Open(engine);
         var guard = Guard(database);
 
-        guard.Choose(PostureSetting.AcceptProductionOnConsoleRunner, RunnerModule.AllPackages, "ada", "small install", confirmed: true);
+        guard.Choose(PostureSetting.PerPackageAccount, RunnerModule.AllPackages, "ada", "small install", confirmed: true);
         _clock.Advance(TimeSpan.FromHours(2));
-        guard.Revoke(PostureSetting.AcceptProductionOnConsoleRunner, RunnerModule.AllPackages, "grace");
-        guard.Revoke(PostureSetting.AcceptProductionOnConsoleRunner, RunnerModule.AllPackages, "grace"); // nothing to revoke: nothing to audit
+        guard.Revoke(PostureSetting.PerPackageAccount, RunnerModule.AllPackages, "grace");
+        guard.Revoke(PostureSetting.PerPackageAccount, RunnerModule.AllPackages, "grace"); // nothing to revoke: nothing to audit
 
         var entries = new AuditLog(database, "console").Read(new AuditQuery(VerbPrefix: "runner.posture."));
         Assert.Equal(2, entries.Count);
         var revoke = entries[0];
         var choose = entries[1];
-        Assert.Equal(("runner.posture.choose", "ada", "accept_production_on_console_runner", Start, "console"), (choose.Entry.Verb, choose.Entry.ActorId, choose.Entry.TargetId, choose.At, choose.ServiceId));
+        Assert.Equal(("runner.posture.choose", "ada", "per_package_account", Start, "console"), (choose.Entry.Verb, choose.Entry.ActorId, choose.Entry.TargetId, choose.At, choose.ServiceId));
         Assert.Equal(("runner.posture.revoke", "grace", Start.AddHours(2)), (revoke.Entry.Verb, revoke.Entry.ActorId, revoke.At));
         Assert.Equal(AuditEvent.Ok, choose.Entry.Outcome);
         using var detail = System.Text.Json.JsonDocument.Parse(choose.Entry.Detail!); // PostgreSQL's jsonb reformats the text, so read it, not match it

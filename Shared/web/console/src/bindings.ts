@@ -185,22 +185,29 @@ export function runnerSlots(server: string, packageName: string, detail: RunnerD
 
 export interface RunnerTestAnswer { slot: string; bound_to: string | null; ok: boolean; step: string; message: string; connected: boolean }
 
-const RUNNER = '/relay/console-runner/api/v1'
+/** A paired runner's management calls, through the console's relay (the console embeds no runner since plan 35 I2). */
+const runnerBase = (server: string) => `/relay/${encodeURIComponent(server)}/api/v1`
 export const runnerApi = {
-  definitions: () => request<RunnerDefinitions>(`${RUNNER}/definitions/integration`),
-  detail: (name: string) => request<RunnerDetail>(`${RUNNER}/definitions/integration/${encodeURIComponent(name)}`),
-  test: (channel: string, name: string, slot: string) => request<RunnerTestAnswer>(`${RUNNER}/bindings/${encodeURIComponent(channel)}/integration/${encodeURIComponent(name)}/test`, json('POST', { slot, role: 'default' })),
-  copies: () => request<{ copies: RunnerCopy[] }>(`${RUNNER}/connection-copies`),
+  definitions: (server: string) => request<RunnerDefinitions>(`${runnerBase(server)}/definitions/integration`),
+  detail: (server: string, name: string) => request<RunnerDetail>(`${runnerBase(server)}/definitions/integration/${encodeURIComponent(name)}`),
+  test: (server: string, channel: string, name: string, slot: string) => request<RunnerTestAnswer>(`${runnerBase(server)}/bindings/${encodeURIComponent(channel)}/integration/${encodeURIComponent(name)}/test`, json('POST', { slot, role: 'default' })),
+  copies: (server: string) => request<{ copies: RunnerCopy[] }>(`${runnerBase(server)}/connection-copies`),
 }
 
-/** Every package slot of the runner, as binding slots, with where the runner's copy of each connection stands against the console's; a runner that does not answer gives none (the screen says it could not be read). */
-export async function loadRunnerSlots(server = 'console-runner', consoleConnections: BindingConnection[] = []): Promise<BindingSlot[]> {
-  const list = await runnerApi.definitions()
+/** Every package slot of the runner `server` (a paired one), as binding slots, with where the runner's copy of each connection stands against the console's. */
+export async function loadRunnerSlots(server: string, consoleConnections: BindingConnection[] = []): Promise<BindingSlot[]> {
+  const list = await runnerApi.definitions(server)
   // a runner that does not have the copies call yet (an older one) has no copies; the slots still show
-  const copies = await runnerApi.copies().then((c) => c.copies).catch(() => [] as RunnerCopy[])
+  const copies = await runnerApi.copies(server).then((c) => c.copies).catch(() => [] as RunnerCopy[])
   const out: BindingSlot[] = []
-  for (const d of list.definitions) out.push(...runnerSlots(server, d.name, await runnerApi.detail(d.name), consoleConnections, copies))
+  for (const d of list.definitions) out.push(...runnerSlots(server, d.name, await runnerApi.detail(server, d.name), consoleConnections, copies))
   return out
+}
+
+/** The slots of every paired runner that answers; a runner that does not answer gives none (the screen says it could not be read). */
+export async function loadAllRunnerSlots(servers: string[], consoleConnections: BindingConnection[] = []): Promise<BindingSlot[]> {
+  const all = await Promise.all(servers.map((s) => loadRunnerSlots(s, consoleConnections)))
+  return all.flat()
 }
 
 /**
