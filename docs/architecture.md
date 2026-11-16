@@ -77,6 +77,20 @@ In those cases the process is a host with a typed protocol. The calls that exist
 Sync runtimes by their command lines) stay until a slice touches them anyway; nothing is converted for its own sake. Whether `dbdatabuild`, `dbdatasync` and
 `dbdatastore` stay as command lines is then only a question of a tool for people.
 
+## Isolation by trust (owner, 2026-11-16)
+
+Work is placed by what it can touch, not by product or by how it is started (plan 35, `docs/plans/35-isolation-by-trust.md`, has the slices):
+
+- **Serving** (the Gateway group) is request/response only and holds read logins and the Store's person-attributed row-write login.
+- **Work** (the Runner group) runs everything scheduled or queued and all trusted custom code, each task in a process of its own, and holds the bulk-write and
+  schema-change logins bound to slots and the integration secrets. It faces nothing outside.
+- **Control** (the console and the Workspace) authors, approves, publishes, binds, starts manual tasks and monitors, and holds no customer data login.
+- Every server holds a login to its own state database only, and keeps its own state (retention, its own snapshot, key rotation) in its own process, on one
+  shared housekeeping library.
+
+**The console is the root of trust.** It pairs every server and makes every group key (a Serving key per Gateway group, a Work key per Runner group, and its
+own); nothing else issues trust, and a secret is sealed to the place that uses it. A server whose partner is missing warns and still starts.
+
 ## Clean break
 
 The new releases start from nothing. No migration, import, upgrade path or compatibility reader is written for existing configs, scripts, libraries,
