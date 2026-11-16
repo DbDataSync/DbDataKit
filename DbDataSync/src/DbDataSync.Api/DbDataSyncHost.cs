@@ -246,7 +246,9 @@ public static class DbDataSyncHost
             return registry;
         });
         builder.Services.AddSingleton<ScriptedMetadata>();
-        builder.Services.AddSingleton<DriverConnectionFactory>();
+        // a library since plan 33 SC23d1 (DbDataSync.Scripting): it is told the repository root its built-in drivers' libraries are seeded into
+        builder.Services.AddSingleton(sp => new DriverConnectionFactory(sp.GetRequiredService<ConfigRepository>(), sp.GetRequiredService<DriverRegistry>(),
+            sp.GetRequiredService<SecretStore>(), sp.GetRequiredService<LibraryRegistry>(), sp.GetRequiredService<ApiOptions>().RepoRoot));
         // Registered by interface as well, not instead — see IConnectionFactory's doc comment.
         // ProvisioningService depends on the interface so a test can hand it a counting fake; every
         // other caller still resolves the concrete type.

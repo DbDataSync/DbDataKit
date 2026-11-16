@@ -69,6 +69,8 @@
     <Using Include="DbDataSync.Planning" />
     <ProjectReference Include="..\DbDataSync.Provisioning\DbDataSync.Provisioning.csproj" />   <!-- a replication's database setup, shared with the engine's provisioning task (plan 28c E21); a global using, so the API names the types as it did -->
     <Using Include="DbDataSync.Provisioning" />
+    <!-- the script test, schema browsing and the opener of a configured connection are DbDataSync.Scripting's since plan 33 SC23d1; a global using, so the API names them as it did -->
+    <Using Include="DbDataSync.Scripting" />
     <!-- the shared state types come with the project reference; StateDatabase is Sync's own (plan 13, U04) -->
     <Using Include="DbDataKit.State" />
     <Using Include="DbDataKit.Web.Auth" />

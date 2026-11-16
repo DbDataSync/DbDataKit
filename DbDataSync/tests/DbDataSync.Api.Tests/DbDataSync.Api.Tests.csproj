@@ -53,6 +53,8 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <!-- ScriptTestService, MetadataService and DriverConnectionFactory moved to DbDataSync.Scripting (plan 33 SC23d1); the tests name them as they did -->
+    <Using Include="DbDataSync.Scripting" />
   </ItemGroup>
 
   <ItemGroup>

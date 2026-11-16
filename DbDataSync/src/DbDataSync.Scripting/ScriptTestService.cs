@@ -3,11 +3,11 @@ using System.Globalization;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
-using DbDataSync.Scripting;
 using DbDataSync.Scripting.Abstractions;
 using DbDataSync.Core.Sql;
+using DbDataSync.Provisioning;
 
-namespace DbDataSync.Api.Services;
+namespace DbDataSync.Scripting;
 
 /// <summary>What a script did to one input.</summary>
 /// <param name="Note">Why the output is what it is, when that is not obvious — "dropped", "unchanged".</param>
@@ -104,12 +104,12 @@ public sealed record ScriptTestRequest(
 public sealed class ScriptTestService(
     ConfigRepository configRepository,
     ScriptCompiler compiler,
-    DriverConnectionFactory? connectionFactory = null,
-    MetadataService? metadataFactory = null)
+    IConnectionFactory? connectionFactory = null,
+    IColumnCatalog? metadataFactory = null)
 {
     // Null for a test that touches no system (the command line's generated-input test); a live test, or a mapping's own connection, needs them.
-    private DriverConnectionFactory connections => connectionFactory ?? throw new InvalidOperationException("This test needs a connection, and none is available here.");
-    private MetadataService metadataService => metadataFactory ?? throw new InvalidOperationException("This test needs a connection's metadata, and none is available here.");
+    private IConnectionFactory connections => connectionFactory ?? throw new InvalidOperationException("This test needs a connection, and none is available here.");
+    private IColumnCatalog metadataService => metadataFactory ?? throw new InvalidOperationException("This test needs a connection's metadata, and none is available here.");
 
     private const int MaxLiveRows = 20;
 

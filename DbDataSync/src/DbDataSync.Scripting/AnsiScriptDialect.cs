@@ -2,7 +2,7 @@ using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Scripting.Abstractions;
 using DbDataSync.Core.Sql;
 
-namespace DbDataSync.Api.Services;
+namespace DbDataSync.Scripting;
 
 /// <summary>
 /// A neutral dialect for testing a script that is not bound to anything yet.

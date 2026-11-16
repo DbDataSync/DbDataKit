@@ -1,27 +1,28 @@
 using System.Data.Common;
 using DbDataSync.Core.Secrets;
-using DbDataSync.Api.Configuration;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Libraries;
+using DbDataSync.Provisioning;
 using DbDataSync.State;
 
-namespace DbDataSync.Api.Services;
+namespace DbDataSync.Scripting;
 
 
 /// <summary>
 /// Opens a driver connection for a configured connection name, resolving its credential through
-/// SecretStore at connect time. The API process legitimately opens driver connections for work that
-/// isn't data movement — schema browsing (<see cref="MetadataService"/>) and computing a bulk load's
-/// segment bounds (<see cref="BulkLoadService"/>) — and this is the one place that happens, so
-/// credential resolution isn't repeated per caller.
+/// SecretStore at connect time. A program that is not moving data still opens driver connections —
+/// schema browsing (<see cref="MetadataService"/>), a live script test (<see cref="ScriptTestService"/>),
+/// a bulk load's segment bounds — and this is the one place that happens, so credential resolution
+/// isn't repeated per caller. A library since plan 33 SC23d1, so it outlives the Sync server; the
+/// program that composes it names the repository root its driver libraries are restored into.
 /// </summary>
 public sealed class DriverConnectionFactory(
     ConfigRepository configRepository,
     DriverRegistry driverRegistry,
     SecretStore secretStore,
     LibraryRegistry libraryRegistry,
-    ApiOptions apiOptions) : IConnectionFactory
+    string repoRoot) : IConnectionFactory
 {
     public Task<(DbConnection Connection, IDriver Driver)> OpenAsync(
         string connectionName, CancellationToken cancellationToken) => OpenAsync(connectionName, CredentialRole.Read, cancellationToken);
@@ -76,5 +77,5 @@ public sealed class DriverConnectionFactory(
     /// </para>
     /// </summary>
     private Task EnsureLibraryInstalledAsync(string driverType, CancellationToken cancellationToken) =>
-        BuiltInDriverLibraries.EnsureInstalledAsync(libraryRegistry, apiOptions.RepoRoot, driverType, cancellationToken);
+        BuiltInDriverLibraries.EnsureInstalledAsync(libraryRegistry, repoRoot, driverType, cancellationToken);
 }
