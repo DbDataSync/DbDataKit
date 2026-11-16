@@ -323,7 +323,7 @@ export function WorkspacePage() {
                   {kind === 'store' && <button type="button" role="tab" aria-selected={tab === 'rows'} className={`btn ${tab === 'rows' ? 'btn-primary' : ''}`} data-testid="wsp-tab-rows" onClick={() => setTab('rows')}>Rows</button>}
                   {kind === 'store' && <button type="button" role="tab" aria-selected={tab === 'deploy'} className={`btn ${tab === 'deploy' ? 'btn-primary' : ''}`} data-testid="wsp-tab-deploy" onClick={() => setTab('deploy')}>Deploy</button>}
                   {(kind === 'build' || kind === 'sync') && <button type="button" role="tab" aria-selected={tab === 'catalog'} className={`btn ${tab === 'catalog' ? 'btn-primary' : ''}`} data-testid="wsp-tab-catalog" onClick={() => setTab('catalog')}>Catalog</button>}
-                  {kind === 'sync' && <button type="button" role="tab" aria-selected={tab === 'runs'} className={`btn ${tab === 'runs' ? 'btn-primary' : ''}`} data-testid="wsp-tab-runs" onClick={() => setTab('runs')}>Runs</button>}
+                  {(kind === 'build' || kind === 'sync') && <button type="button" role="tab" aria-selected={tab === 'runs'} className={`btn ${tab === 'runs' ? 'btn-primary' : ''}`} data-testid="wsp-tab-runs" onClick={() => setTab('runs')}>Runs</button>}
                   <button type="button" role="tab" aria-selected={tab === 'builds'} className={`btn ${tab === 'builds' ? 'btn-primary' : ''}`} data-testid="wsp-tab-builds" onClick={() => setTab('builds')}>Builds</button>
                   <button type="button" role="tab" aria-selected={tab === 'history'} className={`btn ${tab === 'history' ? 'btn-primary' : ''}`} data-testid="wsp-tab-history" onClick={() => setTab('history')}>History</button>
                 </div>
@@ -339,7 +339,7 @@ export function WorkspacePage() {
                     ? <SyncScriptsPanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} canWrite={editable && canWrite} busy={make.isPending} onOpen={setSelected} onCreate={(made) => make.mutate(made)} />
                   : tab === 'provisioning' && kind === 'sync'
                     ? <SyncProvisioningPanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} />
-                  : tab === 'runs' && kind === 'sync'
+                  : tab === 'runs' && (kind === 'build' || kind === 'sync')
                     ? <ProjectRunsPanel project={project} id={id} kind={kind} paths={(files.data?.files ?? []).map((f) => f.path)} />
                   : tab === 'rows' && kind === 'store'
                     ? <StoreRowsPanel project={project} paths={(files.data?.files ?? []).map((f) => f.path)} canWrite />

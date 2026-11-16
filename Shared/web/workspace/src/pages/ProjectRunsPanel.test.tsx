@@ -53,4 +53,12 @@ describe('the runs of what a draft published (plan 33 SC20o, SC22l)', () => {
     expect(html).toContain('data-testid="wsp-runs"')
     expect(html).toContain('apply the setup on the Provisioning tab')
   })
+  it('says for a Build project which views have no Runner task yet (plan 33 SC20o, SC20p)', () => {
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={new QueryClient()}><MemoryRouter><ProjectRunsPanel project="p" id="d" kind="build" paths={['dbdatabuild.yml']} /></MemoryRouter></QueryClientProvider>,
+    )
+    expect(html).toContain('The tasks of the package this draft published')
+    expect(html).toContain('SC20p')
+    expect(html).not.toContain('wsp-runs-replication')
+  })
 })
