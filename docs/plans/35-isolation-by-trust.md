@@ -1,0 +1,97 @@
+# Plan 35: Isolation by trust
+
+Status: **decided, not started** (the owner accepted the design and all its recommendations on 2026-11-16). Slice ids `I1`... (`I` followed by a number is free in every plan).
+I1 and I2 replace [plan 33](33-fewer-services.md) SC23b (the console's embedded runner) inside SC23; I3 to I9 come after SC23. Same rules as the other slice plans
+(`CLAUDE.md`, "Making changes"): one slice, one commit whose message starts with its id, "done" is a test, the status goes in the slice's row in the same commit.
+
+## The rule
+
+**Work is placed by what it can touch, not by product or by how it is started.** There are three places, and each holds only the logins its work needs.
+
+| Place | Servers | What runs there | Logins it holds | Faces |
+| --- | --- | --- | --- | --- |
+| **Serving** | the Gateway group | request/response only: our serving code, views, the apps host, agents' tools, front-end custom code | read logins, and the Store's person-attributed row-write login | end users, BI tools, agents |
+| **Work** | the Runner group | everything scheduled or queued, and all trusted custom code (integrations, actions, the engines: Build, Sync, Store deploy), each task in a process of its own | the bulk-write and schema-change logins, bound to slots; the integration secrets | nothing outside |
+| **Control** | the console and the Workspace | authoring, approvals, publishing, binding, starting manual tasks, Monitoring | no customer data login; the console makes every group key | people who administer and author |
+
+Every server holds a login to **its own state database only**.
+
+### How the three axes map
+
+| Axis | Where |
+| --- | --- |
+| Reading | Serving, as the person. A Work task may read in bulk through its slot. |
+| Person-scale data changes | Serving (Store rows, a view's change actions). |
+| Bulk or system data changes | Work. |
+| Structural changes | Work only, as a manual task started from Control under a person's name against an approved plan hash. |
+| Request/response with safe code | Serving. |
+| Request/response with trusted code | A high-priority Runner run the caller waits on for 10 seconds, then a link to the run. |
+| Scheduled and queued | Work, including subscriptions, catalog reads and evaluation. |
+| Front-end code | No logins: it calls the governed APIs as the viewer, and acts by asking for a run. |
+| Integration and action code | Work. |
+
+### Housekeeping
+
+A server's work on **its own state** (retention, its own snapshot, key rotation) stays in its own process, on one shared housekeeping library (I1). Work on
+**customer data** goes to the Runner. So the console needs no runner to keep its own state, and a Runner is never handed a login to another server's state.
+
+### The three paths
+
+1. **Serving to Work:** "run this task", through the link the console made between a Gateway group and a Runner group, with a durable outbox (I4, I5).
+2. **Work to Serving:** "data changed", governed reads as a person (subscriptions, the contract guard's question of which columns are served), and publishing
+   definitions (I6).
+3. **Control to either:** publish, bind, approve, start a manual task (exists today through pairing; I9 makes it the only way to run a structural task).
+
+**A missing partner warns and never refuses.** A Gateway group with no linked Runner group, or the reverse, shows a warning on Monitoring and on the feature that
+needs it; neither server refuses to start, and requests wait in the outbox until the partner is there.
+
+### Configuration and backup
+
+- **Fixed shape:** four services, with one Gateway group and one Runner group linked by the console by default (I4).
+- **Keys by place:** a Serving key per Gateway group, a Work key per Runner group, and the console's own key. Secrets are sealed to the place that uses them
+  (the group keys of plan 28c E20d and E20e are the first of these).
+- **One database server per install**, with a database or schema and a login per service and group (I7); SQLite remains the single-machine default.
+- **One backup set** (I8): each server snapshots its state through the housekeeping library into one location the console sets; Monitoring shows the snapshot's
+  age per service; the console backs up the keys file once, under one passphrase. Restore is one drill.
+
+## What exists (read in the code, 2026-11-16)
+
+- **Retention** is the shared `RetentionJob` (`DbDataKit.State`, over each module's `RetentionRule`s), and a **snapshot** is `StateBackupJob`
+  (`DbDataKit.State.Engines.Snapshots`, verified and pruned). Only the console runs them on a schedule, as the system tasks `state-retention` and `state-backup` of
+  its embedded runner (`ConsoleSystemTasks`, package `console-system` on the channel `system`, settings in `runner:` of `settings.yaml`). The Gateway reads a
+  `retention:` setting in its `state:` section but nothing runs it; the Workspace and the Runner run no retention of their own state; Sync's server prunes runs itself
+  and goes with SC23d.
+- **The embedded runner** (`ConsoleRunner`, `ConsoleRunnerApi`, `ConsoleRunnerSettings`, the `taskhost/` the console's publish carries) is opt-in and, when on,
+  adds the runner's modules to the console's state (`ConsoleState.ModulesFor`). The bindings, releases and promotions screens offer it as the server
+  `console-runner`. Plan 28a R20 (owner, 2026-11-14, S10) dropped it, sending the system tasks to an installed Runner; decision 1 below reverses the second half.
+- **Evaluation** is a placeholder task of the embedded runner that fails saying it is not built.
+- **Group keys:** the console makes a Runner group's key and hands it to each joined instance (28c E20d); the Gateway's is E20e.
+- **The contract guard** (plan 21 CH06) asks nobody outside a test since SC23c (that slice's default).
+
+## Decisions (owner, 2026-11-16)
+
+| # | Decision | Why |
+| --- | --- | --- |
+| 1 | **Housekeeping is in-process**, on one shared library, in every server. This reverses part of 28a R20 (S10): the console's retention and backup do not move to the Runner. | A server's own state is its own; handing a Runner a login to it widens what Work can touch. A console alone keeps its state healthy. |
+| 2 | **The Store's row-write login stays on Serving.** | Row writes are person-scale and attributed to the person; they need no queue. |
+| 3 | **A manual task marked structural accepts a run only from Control** (the Workspace route, which asks the linked Gateways first); the Runner's screen shows it read-only. | A schema change is approved against a plan hash and must not be started from a place that skipped the question. |
+| 4 | **The console is the root of trust** (recorded in `docs/architecture.md`). | It pairs every server and makes every group key; nothing else issues trust. |
+| 5 | **Trusted request/response waits 10 seconds**, then answers with a link to the run. | Long enough for a small action, short enough that a request does not hold a connection. |
+| 6 | **Subscriptions and catalog reads run on Work** and read through path 2 as the subscriber, after I3. | They are scheduled; the read stays governed because it is made as the person. |
+| 7 | **A missing partner warns and does not refuse.** | A partial install must still start; the outbox keeps the requests. |
+
+## Slices
+
+| Slice | What | Needs | Size | Done when |
+| --- | --- | --- | --- | --- |
+| I1 | **A housekeeping library**: the interval loop, the run record and the settings (retention every, backup every, backup keep), composed into the console, the Workspace, the Gateway and the Runner, each over its own state | none | M | each server's tests run retention and a snapshot on a short interval and record the run |
+| I2 | **The console's embedded runner is deleted** (was plan 33 SC23b), with the console's housekeeping running through I1: `ConsoleRunner`, its API, its settings' runner part, `ConsoleSystemTasks`, the `taskhost/` in the console's package, the `console-runner` entry of the bindings, releases and promotions | I1 | M | a console with no Runner paired runs retention and backup, and no runner module is in its state |
+| I3 | **Evaluation as a Runner task** of the package `quality-system`, its results written through the owning server's API; the evaluation placeholder deleted | SC23 | M | a Runner evaluates a dataset's checks after a refresh, and the console's quality screen shows them |
+| I4 | **The console-made link** between a Gateway group and a Runner group, made by default | SC23 | M | a new install's Gateway and Runner are linked with no setting, and Monitoring shows an unlinked group |
+| I5 | **Path 1** with an outbox and the 10-second wait | I4 | M | a view action starts a Runner task and returns its result within the wait or a link to the run, and with the Runner down it waits and then runs |
+| I6 | **Path 2** for the contract guard's lineage read and `data.changed`; closes SC23c's default that the guard asks nobody | I4 | M | Build `apply_plan` and the Store contract refuse to drop a column a linked Gateway serves |
+| I7 | **State logins per service and group** on the one database server | SC23 | M | a Gateway's state login is refused on a Runner's tables, on SQL Server and PostgreSQL |
+| I8 | **One backup set**: every server snapshots into the location the console sets, Monitoring shows each snapshot's age, the console backs up the keys file under one passphrase | I1, SC23 | M | the restore drill brings back all four services from one set in the servers suite |
+| I9 | **Structural manual tasks accept runs only from Control** (decision 3) | SC23 | S | the Runner's run route refuses a structural task without a Control-signed request, and the Workspace route runs it |
+
+Order: I1, then I2 (inside SC23, in place of SC23b); after SC23, I3, I4, I7 and I9 can go in any order, I5 and I6 after I4, I8 after I1.
