@@ -1,4 +1,6 @@
 using DbDataKit.Connections;
+using DbDataKit.Connections.MySql;
+using DbDataKit.Connections.Oracle;
 using DbDataKit.Connections.Postgres;
 using DbDataKit.Connections.SqlServer;
 using DbDataKit.Runner.Api;
@@ -11,16 +13,17 @@ namespace DbDataRunner.Server;
 /// <summary>
 /// The connect step of a slot's binding test (UI08): opens the resolved grant with the engine's provider (<c>IDbProvider.TestAsync</c>) and answers null when it opened, else a fixed sentence naming the class of the failure
 /// (<see cref="ConnectionFailure.PublicMessage"/>: text per kind plus the engine's error code), never a driver message and never a value. The grant's login is built into a <see cref="ResolvedLogin"/> that is disposed here. The
-/// connection's own document supplies what the grant does not carry (TLS, timeouts, properties) when the runner's catalog has it. SQL Server and PostgreSQL only, the engines a runner's tasks have a provider for here; another engine
+/// connection's own document supplies what the grant does not carry (TLS, timeouts, properties) when the runner's catalog has it. SQL Server, PostgreSQL, MySQL and MariaDB, and Oracle (every Sync engine, plan 33 SC22h); another engine
 /// is answered as not tried, so the test says the connection was not opened rather than that it failed.
 /// </summary>
 public static class RunnerConnectTest
 {
-    private static readonly ProviderRegistry Providers = new ProviderRegistry().Register(new SqlServerProvider()).Register(new PostgresProvider());
+    // every engine a Sync set or a Build project runs on (plan 33 SC22h): MariaDB is the MySQL provider
+    private static readonly ProviderRegistry Providers = new ProviderRegistry().Register(new SqlServerProvider()).Register(new PostgresProvider()).Register(new MySqlProvider(), "mariadb").Register(new OracleProvider());
 
     public static RunnerBindingTestApi.ConnectTest Create(IConnectionCatalog catalog) => async (grant, ct) =>
     {
-        if (!Providers.TryGet(grant.Engine, out var provider)) return $"The engine '{grant.Engine}' cannot be tried from this runner yet (sqlserver and postgres can); the login resolved and no connection was opened.";
+        if (!Providers.TryGet(grant.Engine, out var provider)) return $"The engine '{grant.Engine}' cannot be tried from this runner yet (sqlserver, postgres, mysql, mariadb and oracle can); the login resolved and no connection was opened.";
         var role = grant.Role switch { "read" => LoginRole.Read, "write" => LoginRole.Write, _ => LoginRole.Default };
         ConnectionDefinition definition;
         try { definition = catalog.Find(grant.Connection) ?? new ConnectionDefinition { Name = grant.Connection, Engine = grant.Engine }; }

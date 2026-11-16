@@ -144,6 +144,55 @@ public sealed class WorkspaceRunnerPublishTests
     }
 
     [Fact]
+    public async Task A_connection_of_the_published_set_is_tried_by_the_runner_with_its_bound_login_and_only_after_publish()
+    {
+        // plan 33 SC22h (owner, 2026-11-14): through the Runner, after publish only; the Runner's slot binding test needs its administrator role
+        await using var runner = await FakeRunner.StartAsync();
+        await using var server = await WorkspaceHarness.StartAsync(syncExecutable: Fake());
+        await Pair(server, "jobs", runner.Url, runner.NewCode(ServerRole.Publisher | ServerRole.Admin));
+        var (workspace, build) = await BuildAsync(server);
+        var test = $"/api/v1/projects/{Project}/workspaces/{workspace}/builds/{build}/binding-test";
+
+        // before publish: said, and nothing reaches the runner
+        var early = await server.Send("grace", ServerRole.Approver, HttpMethod.Post, test, """{"slot":"source_db"}""");
+        Assert.Equal(HttpStatusCode.Conflict, early.Response.StatusCode);
+        Assert.Contains("has not been published to a Runner", (string)early.Body!["error"]!);
+        Assert.Empty(runner.BindingTests);
+
+        Assert.Equal(HttpStatusCode.OK, (await Publish(server, workspace, build, new JsonObject { ["target"] = "jobs", ["channel"] = "prod", ["bind"] = new JsonObject { ["source_db"] = "crm" } })).Response.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await server.AsAda(HttpMethod.Post, test, """{"slot":"source_db"}""")).Response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await server.Send("grace", ServerRole.Approver, HttpMethod.Post, test, """{"slot":"source_db","role":"owner"}""")).Response.StatusCode);
+
+        var fine = await server.Send("grace", ServerRole.Approver, HttpMethod.Post, test, """{"slot":"source_db"}""");
+        Assert.Equal(HttpStatusCode.OK, fine.Response.StatusCode);
+        var answer = fine.Body!["test"]!;
+        Assert.Equal(("source_db", true, "connect", true, "jobs"), ((string)answer["slot"]!, (bool)answer["ok"]!, (string)answer["step"]!, (bool)answer["connected"]!, (string)answer["target"]!));
+        var sent = Assert.Single(runner.BindingTests);
+        Assert.Equal(("orders-set/prod", "source_db", "default"), ((string)sent["test"]!, (string)sent["slot"]!, (string)sent["role"]!));
+        Assert.Contains(runner.Calls, c => c.Contains("/test as client:workspace-", StringComparison.Ordinal) && c.Contains("(grace)", StringComparison.Ordinal));
+
+        var unbound = await server.Send("grace", ServerRole.Approver, HttpMethod.Post, test, """{"slot":"missing","role":"read"}""");
+        Assert.Equal((false, "binding"), ((bool)unbound.Body!["test"]!["ok"]!, (string)unbound.Body["test"]!["step"]!));
+        Assert.Contains(server.Audit(), a => a.Command == "build.binding-test" && a.Outcome == "ok");
+        Assert.Contains(server.Audit(), a => a.Command == "build.binding-test" && a.Outcome == "failed: binding");
+    }
+
+    [Fact]
+    public async Task A_runner_paired_without_the_admin_role_refuses_the_binding_test_in_its_words()
+    {
+        await using var runner = await FakeRunner.StartAsync();
+        await using var server = await WorkspaceHarness.StartAsync(syncExecutable: Fake());
+        await Pair(server, "jobs", runner.Url, runner.NewCode(ServerRole.Publisher | ServerRole.Operator));
+        var (workspace, build) = await BuildAsync(server);
+        Assert.Equal(HttpStatusCode.OK, (await Publish(server, workspace, build, new JsonObject { ["target"] = "jobs", ["channel"] = "prod" })).Response.StatusCode);
+        var refused = await server.Send("grace", ServerRole.Approver, HttpMethod.Post, $"/api/v1/projects/{Project}/workspaces/{workspace}/builds/{build}/binding-test", """{"slot":"source_db"}""");
+        Assert.Equal(HttpStatusCode.Forbidden, refused.Response.StatusCode);
+        Assert.Contains("admin role", (string)refused.Body!["error"]!);
+        Assert.Empty(runner.BindingTests);
+        Assert.Contains(server.Audit(), a => a.Command == "build.binding-test" && a.Outcome!.StartsWith("refused:", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task A_runner_paired_without_the_operator_role_refuses_the_run_in_its_words()
     {
         await using var runner = await FakeRunner.StartAsync();

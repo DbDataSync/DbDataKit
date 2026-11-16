@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { BuildDetail, StagedRun } from '../api'
-import { ProjectRunsPanel, bulkLoadRequests, mappingsOfReplication, passesOf, publishedVersionOf, runnerScreens, segmentingProblem, syncTaskOf } from './ProjectRunsPanel'
+import { ProjectRunsPanel, syncSlotOf, bulkLoadRequests, mappingsOfReplication, passesOf, publishedVersionOf, runnerScreens, segmentingProblem, syncTaskOf } from './ProjectRunsPanel'
 
 const detail = (id: string, publishes: BuildDetail['publishes']): BuildDetail => ({ build: { id } as BuildDetail['build'], result: null, publishes })
 
@@ -45,6 +45,19 @@ describe('the runs of what a draft published (plan 33 SC20o, SC22l)', () => {
     ] }
     expect(passesOf(run)).toHaveLength(1)
     expect(passesOf(run)[0].failureKind).toBe('TargetTableMissing')
+  })
+  it('names a connection\'s slot as the Sync package does (plan 33 SC22h)', () => {
+    expect(syncSlotOf('source-db')).toBe('source_db')
+    expect(syncSlotOf('CRM')).toBe('crm')
+    expect(syncSlotOf('1st')).toBe('c_1st')
+  })
+  it('says a connection is tested after publish only (plan 33 SC22h)', () => {
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={new QueryClient()}><MemoryRouter><ProjectRunsPanel project="p" id="d" kind="sync" paths={['config/connections/source-db.yaml']} /></MemoryRouter></QueryClientProvider>,
+    )
+    expect(html).toContain('data-testid="wsp-runs-connections"')
+    expect(html).toContain('after publish')
+    expect(html).not.toContain('data-testid="wsp-runs-test-connection"')
   })
   it('says what to do when nothing is published yet', () => {
     const html = renderToStaticMarkup(

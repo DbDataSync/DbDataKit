@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { Link as ConsoleLink } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ErrorBanner } from '@dbdatakit/shell'
-import { workspaceApi, type BuildDetail, type StagedRun, type StagedRunStarted } from '../api'
-import { replicationsOf } from '../syncSchemas'
+import { workspaceApi, type BindingTestAnswer, type BuildDetail, type StagedRun, type StagedRunStarted } from '../api'
+import { connectionsOf, replicationsOf } from '../syncSchemas'
 import { followStagedRun } from './SyncProvisioningPanel'
 
 /** The version a build of this draft last published (staged or served) on a Runner, with the tasks the Runner answered and how it was sent. */
@@ -49,6 +49,26 @@ export const runnerScreens = (instance: string, pkg: string) => ({
   runs: `/servers/${encodeURIComponent(instance)}/runs?package=${encodeURIComponent(pkg)}`,
   run: (id: string) => `/servers/${encodeURIComponent(instance)}/runs?run=${encodeURIComponent(id)}`,
 })
+
+/** The slot a Sync connection is in its package on a Runner (`ReplicationSetPackage.SlotNameOf`): lower case, what is not a letter, digit or `_` made `_`, `c_` before a name that does not start with a letter, at most 64. */
+export function syncSlotOf(connection: string): string {
+  let name = connection.toLowerCase().replace(/[^a-z0-9_]/g, '_')
+  if (name.length === 0 || !/^[a-z]/.test(name)) name = 'c_' + name
+  return name.slice(0, 64)
+}
+
+/** A connection's line on the Runs tab: Test tries the login the published channel binds to its slot, on the Runner (plan 33 SC22h), and says how far it got. */
+function ConnectionTestRow({ connection, onTest, busy, answer, error }: { connection: string; onTest: () => void; busy: boolean; answer?: BindingTestAnswer; error?: string }) {
+  return (
+    <div className="grid-row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }} data-testid="wsp-runs-connection" data-name={connection}>
+      <span className="mono" style={{ minWidth: 120 }}>{connection}</span>
+      <span className="hint mono">slot {syncSlotOf(connection)}</span>
+      <button type="button" className="btn btn-sm" disabled={busy} data-testid="wsp-runs-test-connection" onClick={onTest}>Test</button>
+      {answer && <span className={answer.ok ? 'hint' : 'error'} data-testid="wsp-runs-test-result" data-ok={answer.ok} data-step={answer.step}>{answer.ok ? 'Works' : `Stopped at ${answer.step}`}: {answer.message}</span>}
+      {error && <span className="error" data-testid="wsp-runs-test-error">{error}</span>}
+    </div>
+  )
+}
 
 /** A pass a drain recorded (`PassRecord`, the step `pass-record`): what the run did to each mapping. */
 interface PassStep { mapping?: string; kind?: string; segment?: string | null; status?: string; rowsRead?: number; rowsWritten?: number; summary?: string | null; failureKind?: string | null }
@@ -134,6 +154,16 @@ export function ProjectRunsPanel({ project, id, kind, paths }: { project: string
     },
   })
   const screens = at && instance ? runnerScreens(instance, at.package) : null
+  const [tests, setTests] = useState<Record<string, { answer?: BindingTestAnswer; error?: string }>>({})
+  const test = useMutation({
+    mutationFn: async (connection: string): Promise<{ connection: string; answer?: BindingTestAnswer; error?: string }> => {
+      if (!at) throw new Error('Nothing is published yet.')
+      try { return { connection, answer: await workspaceApi.bindingTest(project, id, at.build, syncSlotOf(connection)) } }
+      catch (e) { return { connection, error: e instanceof Error ? e.message : String(e) } }
+    },
+    onSuccess: ({ connection, ...result }) => setTests((t) => ({ ...t, [connection]: result })),
+  })
+  const connections = kind === 'sync' ? connectionsOf(paths) : []
   const replications = replicationsOf(paths).filter((r) => !at || at.tasks.length === 0 || at.tasks.includes(syncTaskOf(r)))
   const tasks = kind === 'sync' ? [] : (at?.tasks ?? [])
   return (
@@ -152,6 +182,12 @@ export function ProjectRunsPanel({ project, id, kind, paths }: { project: string
         )
         : <div className="hint" data-testid="wsp-runs-none">No build of this draft is published to a Runner yet: build it and publish it on the Builds tab, then its runs are here.</div>}
       <ErrorBanner error={published.error ?? start.error} />
+      {kind === 'sync' && connections.length > 0 && (
+        <div style={{ margin: '6px 0' }} data-testid="wsp-runs-connections">
+          <div className="hint">Connections: Test tries, on the Runner, the login the published channel binds to each one's slot, the way a run would ({at ? 'the pairing needs the Runner\'s admin role' : 'after publish: nothing is bound before the set is published'}).</div>
+          {at && connections.map((c) => <ConnectionTestRow key={c} connection={c} busy={test.isPending} onTest={() => test.mutate(c)} answer={tests[c]?.answer} error={tests[c]?.error} />)}
+        </div>
+      )}
       {at && kind === 'sync' && replications.length === 0 && <div className="hint" data-testid="wsp-runs-no-replication">No replication of this draft is in the published version.</div>}
       {at && kind === 'sync' && replications.map((r) => <ReplicationRow key={r} replication={r} mappings={mappingsOfReplication(paths, r)} busy={start.isPending} onRun={(task, inputs) => start.mutate({ task, inputs })} />)}
       {at && tasks.map((t) => (

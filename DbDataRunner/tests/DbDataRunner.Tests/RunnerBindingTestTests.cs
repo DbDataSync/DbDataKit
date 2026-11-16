@@ -86,6 +86,32 @@ public sealed class RunnerBindingTestTests
         Assert.Contains(h.Audit.Read(new AuditQuery(VerbPrefix: RunnerBindingTestApi.Verb)), e => e.Entry.Outcome == AuditEvent.Refused);
     }
 
+    /// <summary>Plan 33 SC22h: the connect step is tried for every Sync engine, MySQL (MariaDB is its provider) and Oracle beside SQL Server and PostgreSQL; nothing listens at the address, so each says the class of the failure, not that it was not tried.</summary>
+    [Theory]
+    [InlineData("mysql", "Server=127.0.0.1;Port=1;Database=d;Connection Timeout=5")]
+    [InlineData("mariadb", "Server=127.0.0.1;Port=1;Database=d;Connection Timeout=5")]
+    [InlineData("oracle", "Data Source=127.0.0.1:1/orcl;Connection Timeout=5")]
+    public async Task The_connect_step_is_tried_on_MySQL_MariaDB_and_Oracle_too(string engine, string connectionString)
+    {
+        Environment.SetEnvironmentVariable(Variable, Password);
+        try
+        {
+            await using var h = new RunnerHarness(StateEngineIds.Sqlite);
+            await Bind(h, "erp");
+            await h.StartAsync();
+            Directory.CreateDirectory(Path.Combine(h.Directory, "connections"));
+            File.WriteAllText(Path.Combine(h.Directory, "connections", "erp.yaml"),
+                $"schema: connection/1\nname: erp\nengine: {engine}\nconnection_string: '{connectionString}'\nauth: {{ mode: sql, user: u, password_secret: 'env:{Variable}' }}\n");
+            var (_, tried) = await h.CallAsync(HttpMethod.Post, "/api/v1/bindings/dev/integration/sample/test", ServerRole.Admin, new { slot = "source" });
+            Assert.False((bool)tried!["ok"]!);
+            Assert.Equal("connect", (string)tried["step"]!);
+            Assert.False((bool)tried["connected"]!);
+            Assert.DoesNotContain("cannot be tried", (string)tried["message"]!);
+            Assert.DoesNotContain(Password, tried.ToJsonString());
+        }
+        finally { Environment.SetEnvironmentVariable(Variable, null); }
+    }
+
     /// <summary>UI08, the connect step on a real SQL Server (<c>DBDATAKIT_TEST_SQLSERVER</c>): a right login opens a connection, a wrong password is the class "login rejected", and neither answer holds a value.</summary>
     [Fact]
     public async Task The_connect_step_opens_the_connection_on_SQL_Server_and_a_wrong_password_is_said_as_a_class_never_the_value()

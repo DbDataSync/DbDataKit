@@ -60,6 +60,8 @@ export interface PublishedAnswer {
 }
 export interface PublishAnswer { steps: string[]; published: PublishedAnswer }
 /** A manual task of the version a build staged on a Runner, started for the signed-in person (`POST .../builds/{b}/run`, plan 28c E21 step e). */
+/** The Runner's test of a slot's binding, relayed for a build that published (plan 33 SC22h): how far the bound login got and where it was tried; never a value. */
+export interface BindingTestAnswer { slot: string; ok: boolean; step: string; message: string; connected: boolean; package: string; channel: string; target: string; instance?: string }
 export interface StagedRunStarted { run_id: string; task: string; package: string; channel: string; version: string; target: string; runner: string; instance?: string; on_behalf_of: string }
 /** A run read back from the Runner (`GET .../builds/{b}/runs/{run}`): its outcome, its failure and, with `step`, the steps of that name it recorded (their results). */
 export interface StagedRun { id: string; task: string; outcome: string; started: string; finished: string | null; version: string | null; failure: { kind: string | null; message: string } | null; steps?: { key: string; started: string; completed: string | null; result: unknown }[] }
@@ -161,6 +163,8 @@ export const workspaceApi = {
   runStaged: (project: string, id: string, build: string, task: string, inputs: Record<string, string>, pkg?: string) => request<{ steps: string[]; run: StagedRunStarted }>(`${builds(project, id)}/${enc(build)}/run`, json({ task, inputs, ...(pkg ? { package: pkg } : {}) })),
   /** Runs a task (a drain, a refresh: one with a schedule too) of the version the channel this build published to serves now, for the signed-in person: the Runner's Run now, asked from the project's page (plan 33 SC20o, SC22l). */
   runServed: (project: string, id: string, build: string, task: string, inputs: Record<string, string>) => request<{ steps: string[]; run: StagedRunStarted }>(`${builds(project, id)}/${enc(build)}/run`, json({ task, inputs, served: true })),
+  /** Tries a connection of what this build published on the Runner, with the login its channel binds to the slot (the Runner's binding test; the pairing needs the Runner's admin role). */
+  bindingTest: (project: string, id: string, build: string, slot: string, role: 'default' | 'read' | 'write' = 'default') => request<{ test: BindingTestAnswer }>(`${builds(project, id)}/${enc(build)}/binding-test`, json({ slot, role })).then((r) => r.test),
   /** A run read back; `pkg` names the staged package it is of when the build staged more than one (a Store project's build stages one per model, plan 33 SC24). */
   stagedRun: (project: string, id: string, build: string, run: string, step?: string, pkg?: string) => {
     const query = [step ? `step=${enc(step)}` : '', pkg ? `package=${enc(pkg)}` : ''].filter(Boolean).join('&')

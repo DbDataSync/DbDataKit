@@ -31,6 +31,7 @@ internal sealed class FakeRunner : IAsyncDisposable
     public ConcurrentQueue<int> UploadsPerPublish { get; } = new();
     public string? RefuseWith { get; set; }
     public ConcurrentQueue<JsonObject> Runs { get; } = new();
+    public ConcurrentQueue<JsonObject> BindingTests { get; } = new();
     /// <summary>What a task's steps route answers for a step name, when a test sets it: one step, keyed <c>main</c>, recorded during the newest run, with this result (a Store model's <c>contract-report</c>, plan 33 SC24).</summary>
     public ConcurrentDictionary<string, JsonObject> StepResults { get; } = new();
     public DateTimeOffset RunStarted { get; } = DateTimeOffset.UtcNow.AddMinutes(-1);
@@ -103,6 +104,20 @@ internal sealed class FakeRunner : IAsyncDisposable
             body["run_id"] = id.ToString("D");
             runner.Runs.Enqueue(body);
             return Results.Json(new { task = body["task"]!.ToString(), version = (string?)body["version"], run_id = id.ToString("D") }, statusCode: 202);
+        });
+        // the slot binding test (UI08), as the Runner's: an administrator's; a slot named "missing" is not bound, any other opens
+        app.MapPost("api/v1/bindings/{channel}/integration/{name}/test", async (string channel, string name, HttpContext context) =>
+        {
+            var token = context.ManagementToken();
+            runner.Calls.Enqueue($"{context.Request.Method} {context.Request.Path} as {token.SubjectId} ({token.SubjectName}) with {string.Join("+", ServerRoles.Names(token.Roles))}");
+            if (!ManagementAuthorization.Authorize(token, ServerRole.Admin).Allowed) return Results.Json(new { error = "This needs the admin role." }, statusCode: 403);
+            var body = (await System.Text.Json.JsonSerializer.DeserializeAsync<JsonObject>(context.Request.Body))!;
+            body["test"] = $"{name}/{channel}";
+            runner.BindingTests.Enqueue(body);
+            var slot = (string)body["slot"]!;
+            return slot == "missing"
+                ? Results.Json(new { slot, bound_to = (string?)null, ok = false, step = "binding", message = $"The slot '{slot}' is not bound in channel '{channel}'.", connected = false })
+                : Results.Json(new { slot, bound_to = "crm", ok = true, step = "connect", message = $"The slot '{slot}' opened a connection through 'crm'.", connected = true });
         });
         app.MapGet("api/v1/runs/{id:guid}", (Guid id, HttpContext context) =>
         {

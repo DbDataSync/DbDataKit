@@ -91,6 +91,7 @@ export function SyncSetPanel({ paths, canWrite, busy, onOpen, onCreate, findings
             <div key={c} className="grid-row" style={{ gap: 8 }} data-testid="wsp-sync-connection" data-name={c} data-errors={bad}>
               <button type="button" className="btn-link mono" data-testid="wsp-sync-open-connection" onClick={() => onOpen(connectionPath(c))}>{c}</button>
               {bad > 0 && <span className="error">{bad} to fix</span>}
+              <span className="hint" data-testid="wsp-sync-connection-test">Test: on the Runs tab, after publish</span>
             </div>
           )
         })}

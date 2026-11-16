@@ -41,6 +41,8 @@
     <DbDataKitReference Include="Connections" />   <!-- UI08: the slot binding test opens the connection with the engine's provider -->
     <DbDataKitReference Include="Connections.SqlServer" />
     <DbDataKitReference Include="Connections.Postgres" />
+    <DbDataKitReference Include="Connections.MySql" />   <!-- plan 33 SC22h: the binding test tries every Sync engine (MySQL and MariaDB, Oracle) -->
+    <DbDataKitReference Include="Connections.Oracle" />
     <DbDataKitReference Include="Web" />   <!-- pairing, key rotation, the version header and the token check -->
     <DbDataKitReference Include="Upgrade" />   <!-- the server upgrades itself when the console says so; plan 24a UC09 -->
   </ItemGroup>

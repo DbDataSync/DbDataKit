@@ -136,6 +136,26 @@ public sealed partial class WorkspacePublishing
         catch (RunnerClientException ex) { throw Refused(ex); }
     }
 
+    /// <summary>
+    /// The Runner's own test of a slot's binding (plan 33 SC22h, the Runner's UI08 call): the slot is bound in the channel, the Runner has the connection it names, the login resolves and the connection opens, tried on the Runner the way a run
+    /// would, so the login is the published set's bound one and never reaches this server. The Runner asks for its administrator role; a pairing without it is refused by the Runner in its words, which this passes on.
+    /// The answer is the Runner's (<c>slot, ok, step, message, connected</c>) with where it was tried; no value is in it.
+    /// </summary>
+    public async Task<JsonObject> TestBindingAsync(string targetName, string package, string channel, string slot, string role, string actor, CancellationToken ct = default)
+    {
+        var (target, client) = await RunnerClientAsync(targetName, actor, ct);
+        try
+        {
+            var check = await client.TestBindingAsync(target.Name, null, package, channel, slot, role, null, ct);
+            return new JsonObject
+            {
+                ["slot"] = slot, ["ok"] = check.Ok, ["step"] = check.Step, ["message"] = check.Message, ["connected"] = check.Connected,
+                ["package"] = package, ["channel"] = channel, ["target"] = target.Name, ["instance"] = target.InstanceId,
+            };
+        }
+        catch (RunnerClientException ex) { throw Refused(ex); }
+    }
+
     private async Task<(PublishTarget Target, RunnerPublishClient Client)> RunnerClientAsync(string targetName, string actor, CancellationToken ct)
     {
         var (target, key, _) = ResolveTarget(targetName, "a run of a task");

@@ -620,6 +620,35 @@ public static class WorkspaceManagement
             catch (WorkspacePublishException ex) { return Results.Json(new { error = ex.Message }, statusCode: ex.Status); }
         });
 
+        // a connection of what a build published, tried on the Runner (plan 33 SC22h, owner 2026-11-14: through the Runner, after publish only): the Runner's slot binding test of the login the channel binds to the slot, relayed with the
+        // publisher key; before the build is published there is nothing to try, and that is said. Nothing is tried here: this server holds no login.
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/binding-test", async (string project, string id, string build, HttpContext context) =>
+        {
+            if (InProject(project, context, ServerRole.Approver, out var hosted) is { } refused) return refused;
+            if (!Guid.TryParse(build, out var buildId) || builds.Find(hosted.Id, id, buildId) is null) return Results.NotFound();
+            var token = context.ManagementToken();
+            var body = await Body(context);
+            string? slot, role, package;
+            try { (slot, role, package) = (body?["slot"]?.GetValue<string>()?.Trim(), body?["role"]?.GetValue<string>()?.Trim() ?? "default", body?["package"]?.GetValue<string>()); }
+            catch (InvalidOperationException) { slot = role = package = null; }
+            if (string.IsNullOrWhiteSpace(slot) || slot.Length > 64 || role is not ("default" or "read" or "write"))
+                return Results.Json(new { error = "The body is a JSON object with the \"slot\" to try (the connection's slot in the published package), optionally the \"role\" of its login (default, read or write) and the \"package\" when the build published more than one." }, statusCode: StatusCodes.Status400BadRequest);
+            if (StagedOf(hosted.Id, buildId, package) is not { } staged)
+                return Results.Json(new { error = "This build has not been published to a Runner, so there is no bound login to try. Publish it to a Runner and bind its connections there; then Test tries the login the Runner would use." }, statusCode: StatusCodes.Status409Conflict);
+            var what = $"{hosted.Id}/{id}/{buildId}: {staged.Package}/{staged.Channel}/{slot} on {staged.Target}";
+            try
+            {
+                var answer = await publishing.TestBindingAsync(staged.Target, staged.Package, staged.Channel, slot, role, Actor(token), context.RequestAborted);
+                Audit(token, "build.binding-test", what, (bool)answer["ok"]! ? "ok" : "failed: " + (string?)answer["step"]);
+                return Results.Json(new JsonObject { ["test"] = answer });
+            }
+            catch (WorkspacePublishException ex)
+            {
+                Audit(token, "build.binding-test", what, "refused: " + ex.Message);
+                return Results.Json(new { error = ex.Message }, statusCode: ex.Status);
+            }
+        });
+
         // ---- a Store model's contract step (plan 33 SC24; plan 26 Z13b, plan 21 CH06) ----
 
         // runs the contract plan a person read and approved: "plan_run" is the run of contract without an approval whose report has the hash "approve"; the columns that report drops are checked against the lineage of every Gateway this server
