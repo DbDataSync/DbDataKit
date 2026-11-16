@@ -252,7 +252,15 @@ public static class ReplicationSetPackage
     /// </summary>
     public static async Task<BuiltReplicationSet> AddLibrariesAsync(BuiltReplicationSet built, string repoRoot, string partDirectory, string platform, string? nugetSource = null, CancellationToken cancellationToken = default)
     {
-        await DriverLibrariesPart.BuildAsync(repoRoot, partDirectory, platform, nugetSource, cancellationToken);
+        // the built-in drivers' libraries the set's connections need travel too, when the repository does not hold them (the deleted Sync server seeded them into it at a connection's first open; plan 33 SC23d2)
+        var config = ConfigRepository.ReadOnly(Path.Combine(repoRoot, "config"), SecretStore.ForProviders());
+        var driverTypes = new List<string>();
+        foreach (var name in config.ListConnections())
+        {
+            try { driverTypes.Add(config.LoadConnection(name).DriverType); }
+            catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or ConfigValidationException or FileNotFoundException) { /* the check names a connection it cannot read */ }
+        }
+        await DriverLibrariesPart.BuildAsync(repoRoot, partDirectory, platform, DbDataSync.State.BuiltInDriverLibraries.CatalogManifestsFor(driverTypes), nugetSource, cancellationToken);
         var files = built.Files.ToDictionary(f => f.Path, StringComparer.Ordinal);
         foreach (var path in Directory.EnumerateFiles(partDirectory, "*", SearchOption.AllDirectories))
             files[RepoDir + "/" + Path.GetRelativePath(partDirectory, path).Replace('\\', '/')] = new SetPackageFile(RepoDir + "/" + Path.GetRelativePath(partDirectory, path).Replace('\\', '/'), path);

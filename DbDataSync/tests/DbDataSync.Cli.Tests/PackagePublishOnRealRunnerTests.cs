@@ -232,6 +232,14 @@ public sealed class PackagePublishOnRealRunnerTests : IDisposable
         var library = Path.Combine(_repo.Root, "libraries", "Microsoft.Data.Sqlite");
         Directory.CreateDirectory(library);
         File.WriteAllText(Path.Combine(library, "library.csx"), $"#r \"nuget: Microsoft.Data.Sqlite, {version}\"\n");
+        // the built-in drivers' libraries, held by the repository at the versions the machine's folder has: without them the publish restores the catalog's pinned versions into the package (plan 33 SC23d2), which
+        // this offline source does not have
+        foreach (var (id, package) in new[] { ("microsoft-data-sqlclient", "Microsoft.Data.SqlClient"), ("npgsql", "Npgsql") })
+        {
+            var held = Directory.GetDirectories(Path.Combine(NuGetFeed()!, package.ToLowerInvariant())).Select(Path.GetFileName).Where(n => n is not null && !n!.Contains('-')).OrderBy(n => Version.TryParse(n, out var parsed) ? parsed : new Version(0, 0)).Last()!;
+            Directory.CreateDirectory(Path.Combine(_repo.Root, "libraries", id));
+            File.WriteAllText(Path.Combine(_repo.Root, "libraries", id, "library.csx"), $"#r \"nuget: {package}, {held}\"\n");
+        }
         var scripts = Path.Combine(_repo.Root, "config", "scripts");
         Directory.CreateDirectory(scripts);
         File.WriteAllText(Path.Combine(scripts, "normalize.csx"), "// a transform script of the replication set\nreturn Value?.ToString()?.Trim();\n");

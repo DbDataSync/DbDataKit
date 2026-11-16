@@ -49,6 +49,15 @@ public static class BuiltInDriverLibraries
     /// warrants on its own.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The catalog libraries (<see cref="KnownLibraries"/>, at their pinned versions) the built-in drivers of <paramref name="driverTypes"/> need, as manifests: what a publish restores into the package's driver-libraries part when the
+    /// repository holds none of its own (plan 33 SC23d2), so a runner's read-only view has them and no run tries to seed one.
+    /// </summary>
+    public static IReadOnlyList<LibraryManifest> CatalogManifestsFor(IEnumerable<string> driverTypes) =>
+        [.. driverTypes.Select(t => LibraryIds.GetValueOrDefault(t)).OfType<string>().Distinct(StringComparer.Ordinal)
+            .Select(id => KnownLibraries.TryGetById(id)!)
+            .Select(entry => new LibraryManifest(entry.Id, entry.FactoryType, [new PackageRef(entry.PackageId, entry.PinnedVersion)]))];
+
     private static readonly SemaphoreSlim InstallLock = new(1, 1);
 
     /// <summary>

@@ -246,8 +246,13 @@ public sealed class ReplicationSetPackageTests : IDisposable
         var withPart = await ReplicationSetPackage.AddLibrariesAsync(built, _root, part, "linux-x64");
 
         Assert.Contains(withPart.Files, f => f.Path == "repo/driver-libraries.json");
-        Assert.Equal(built.Files.Count + 1, withPart.Files.Count);
-        Assert.Equal("linux-x64", DbDataSync.Libraries.DriverLibrariesPart.ReadIndex(part)!.Platform);
+        var index = DbDataSync.Libraries.DriverLibrariesPart.ReadIndex(part)!;
+        Assert.Equal("linux-x64", index.Platform);
+        // the repository holds no library: the built-in drivers' catalog libraries its connections need are restored into the part (the deleted Sync server seeded them
+        // into the repository at a connection's first open; plan 33 SC23d2), and the repository is not written
+        Assert.Equal(["microsoft-data-sqlclient", "npgsql"], index.Entries.Select(e => e.Id).Order(StringComparer.Ordinal));
+        Assert.Contains(withPart.Files, f => f.Path == "repo/libraries/npgsql/library.csx");
+        Assert.False(Directory.Exists(Path.Combine(_root, "libraries")));
     }
 
     private static Dictionary<string, string> Hashes(BuiltReplicationSet set) =>

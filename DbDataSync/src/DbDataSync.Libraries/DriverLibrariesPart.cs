@@ -45,8 +45,17 @@ public static class DriverLibrariesPart
     /// Restores every library and compiled driver of <paramref name="repoRoot"/> into <paramref name="partRoot"/> for <paramref name="platform"/> and writes the index. <paramref name="partRoot"/> must be empty or absent: the part is
     /// rebuilt whole, never merged into an older one.
     /// </summary>
+    public static Task<DriverLibrariesPartIndex> BuildAsync(
+        string repoRoot, string partRoot, string platform, string? nugetSource = null, CancellationToken cancellationToken = default) =>
+        BuildAsync(repoRoot, partRoot, platform, [], nugetSource, cancellationToken);
+
+    /// <summary>
+    /// As <see cref="BuildAsync(string, string, string, string?, CancellationToken)"/>, and each of <paramref name="builtIns"/> (the catalog library of a built-in driver the published set uses) the repository does not hold under
+    /// <c>libraries/</c> is restored into the part too, from its manifest alone (plan 33 SC23d2: the Sync server seeded a built-in driver's library into the repository when it first opened a connection; with no server, the publish
+    /// is what puts it where a runner's read-only view finds it, and the repository is not written).
+    /// </summary>
     public static async Task<DriverLibrariesPartIndex> BuildAsync(
-        string repoRoot, string partRoot, string platform, string? nugetSource = null, CancellationToken cancellationToken = default)
+        string repoRoot, string partRoot, string platform, IReadOnlyCollection<LibraryManifest> builtIns, string? nugetSource = null, CancellationToken cancellationToken = default)
     {
         var rids = RidChainOf(platform);
         if (Directory.Exists(partRoot) && Directory.EnumerateFileSystemEntries(partRoot).Any())
@@ -107,6 +116,29 @@ public static class DriverLibrariesPart
                     kind, id, [.. closure.Packages.Select(p => $"{p.Id} {p.Version}")],
                     Directory.EnumerateFiles(targetDir, "*", SearchOption.AllDirectories).Count()));
             }
+        }
+
+        // the built-in drivers' catalog libraries the repository does not hold: written into the part only
+        foreach (var manifest in builtIns.OrderBy(m => m.Id, StringComparer.Ordinal))
+        {
+            var targetDir = Path.Combine(partRoot, "libraries", manifest.Id);
+            if (Directory.Exists(targetDir) || manifest.Packages.Count == 0) continue;
+            Directory.CreateDirectory(targetDir);
+            manifest.Write(LibraryPaths.ManifestPath(targetDir));
+            Closure closure;
+            try { closure = await LibraryResolution.RestoreAsync(targetDir, manifest.Packages, nugetSource, cancellationToken, LibraryResolution.LockFileName, rids); }
+            catch (Exception ex) when (ex is PackageResolutionException or PackageIntegrityException)
+            {
+                throw new InvalidOperationException($"library '{manifest.Id}' (of a built-in driver) cannot be restored for {platform}: {ex.Message}", ex);
+            }
+            try { await LibraryResolution.LoadAsync(targetDir, manifest.Packages, cancellationToken, LibraryResolution.LockFileName, rids); }
+            catch (Exception ex) when (ex is PackageResolutionException or PackageIntegrityException)
+            {
+                throw new InvalidOperationException($"library '{manifest.Id}' (of a built-in driver) does not load from its own store for {platform}: {ex.Message}", ex);
+            }
+            entries.Add(new DriverLibrariesPartEntry(
+                "library", manifest.Id, [.. closure.Packages.Select(p => $"{p.Id} {p.Version}")],
+                Directory.EnumerateFiles(targetDir, "*", SearchOption.AllDirectories).Count()));
         }
 
         var index = new DriverLibrariesPartIndex(IndexFormat, platform, duckDb, entries);
