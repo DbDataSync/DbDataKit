@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """The planning folder stays consistent (planning/ROLES.md). Checks:
 
-  index      planning/README.md links every subject file (planning/<SLUG>.md other than README.md and ROLES.md), every subject it links exists,
-             and a number in its Tasks column equals the subject's task count
+  index      planning/README.md links every subject file (planning/<SLUG>.md other than README.md and ROLES.md), and every subject it links exists
+             (it carries no task counts, so a subject PR never has to touch it)
   slug       a subject file's name is its slug: capitals and digits, at least 8 characters, starting with a letter
   tasks      a task is a table row whose first cell is `<SLUG>-<n>`; every task id in a subject file starts with that file's slug, and no id is
              used twice anywhere
@@ -53,14 +53,13 @@ def problems(root):
     if not os.path.exists(readme_path):
         return ["planning/README.md does not exist"]
     subjects = subject_files(planning)
-    tasks, proposals, counts = {}, {}, {}
+    tasks, proposals = {}, {}
 
     for name in subjects:
         slug = name[:-3]
         if not SLUG.match(slug):
             out.append(f"planning/{name}: the slug '{slug}' must be capitals and digits, at least 8 characters, starting with a letter")
         text = read(os.path.join(planning, name))
-        counts[slug] = 0
         for prefix, number in TASK_ROW.findall(text):
             ident = f"{prefix}-{number}"
             if prefix != slug:
@@ -68,7 +67,6 @@ def problems(root):
             if ident in tasks:
                 out.append(f"planning/{name}: task {ident} is also in planning/{tasks[ident]}")
             tasks[ident] = name
-            counts[slug] += 1
         for prefix, number in PROPOSAL_HEADING.findall(text):
             ident = f"{prefix}-P{number}"
             if prefix != slug:
@@ -88,9 +86,6 @@ def problems(root):
             if not os.path.exists(os.path.join(planning, base)):
                 out.append(f"planning/README.md: links {base}, which does not exist")
                 continue
-            cells = [c.strip() for c in line.strip().strip("|").split("|")]
-            if cells and cells[-1].isdigit() and int(cells[-1]) != counts.get(base[:-3], -1):
-                out.append(f"planning/README.md: says {base[:-3]} has {cells[-1]} tasks; its file has {counts.get(base[:-3])}")
     for name in subjects:
         if name not in listed:
             out.append(f"planning/README.md: does not list the subject planning/{name}")

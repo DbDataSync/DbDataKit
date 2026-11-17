@@ -18,8 +18,8 @@ def tree(files):
 
 
 def index(*rows):
-    return ("# Planning\n\n| # | Subject | Goal | Status | Assigned | Tasks |\n| --- | --- | --- | --- | --- | --- |\n"
-            + "".join(f"| {i + 1} | [{slug}]({slug}.md) | goal | queued | unassigned | {n} |\n" for i, (slug, n) in enumerate(rows)))
+    return ("# Planning\n\n| # | Subject | Goal | Status | Assigned |\n| --- | --- | --- | --- | --- |\n"
+            + "".join(f"| {i + 1} | [{slug}]({slug}.md) | goal | queued | unassigned |\n" for i, (slug, n) in enumerate(rows)))
 
 
 def subject(slug, tasks=(), proposals=(), needs=""):
@@ -54,10 +54,6 @@ class CheckPlans(unittest.TestCase):
     def test_an_index_line_without_its_file_is_named(self):
         found = self.problems({"planning/README.md": index(("ALPHABETA", 2), ("GAMMADELTA", 1), ("EPSILONZETA", 0))})
         self.assertTrue(any("links EPSILONZETA.md, which does not exist" in p for p in found), found)
-
-    def test_a_wrong_task_count_in_the_index_is_named(self):
-        found = self.problems({"planning/README.md": index(("ALPHABETA", 3), ("GAMMADELTA", 1))})
-        self.assertTrue(any("says ALPHABETA has 3 tasks; its file has 2" in p for p in found), found)
 
     def test_a_short_or_lower_case_slug_is_refused(self):
         files = {"planning/README.md": index(("ALPHABETA", 2), ("GAMMADELTA", 1), ("Short", 0)), "planning/Short.md": subject("Short")}
