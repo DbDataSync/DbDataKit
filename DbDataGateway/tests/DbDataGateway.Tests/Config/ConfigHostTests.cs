@@ -228,6 +228,36 @@ public sealed class ConfigStartupTests
     }
 
     [Fact]
+    public async Task A_start_that_fails_leaves_its_cause_in_the_data_folder_for_a_service_that_has_no_console()
+    {
+        using var env = new EnvScope(("DBDATAKIT_DATA_GATEWAY", DataDir));
+        var file = Path.Combine(DataDir, StartFailure.FileName);
+        File.Delete(file);
+        var original = Console.Error;
+        Console.SetError(new StringWriter());
+        try { Assert.Equal(2, await Cli.RunAsync(["server", "run", "--Gateway:Bogus=1", "--Gateway:Tls:CertificatePassword=FailSecret-31"])); }
+        finally { Console.SetError(original); }
+        var text = File.ReadAllText(file);
+        Assert.Contains("did not start", text);
+        Assert.Contains("Account: ", text);
+        Assert.Contains(DataDir, text);
+        Assert.Contains("Gateway:Bogus", text);
+        Assert.DoesNotContain("FailSecret-31", text);
+        File.Delete(file);
+    }
+
+    [Fact]
+    public void A_port_Windows_will_not_give_is_named_with_where_to_look()
+    {
+        var bind = new IOException("Failed to bind to address https://0.0.0.0:8815.", new System.Net.Sockets.SocketException((int)System.Net.Sockets.SocketError.AccessDenied));
+        var text = StartFailure.Describe(bind, "C:\\ProgramData\\DbDataKit\\gateway", DateTimeOffset.UnixEpoch, "NT SERVICE\\dbdatagateway");
+        Assert.Contains("8815", text);
+        Assert.Contains("excludedportrange", text);
+        Assert.Contains("NT SERVICE\\dbdatagateway", text);
+        Assert.DoesNotContain("excludedportrange", StartFailure.Describe(new InvalidOperationException("other"), null, DateTimeOffset.UnixEpoch, "me"));
+    }
+
+    [Fact]
     public async Task Invalid_startup_with_the_run_verb_or_without_it_is_the_same()
     {
         var original = Console.Error;

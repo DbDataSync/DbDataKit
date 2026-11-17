@@ -106,17 +106,28 @@ public static class Cli
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context)
     {
+        string? dataDirectory = null;
+        var started = false;
         try
         {
+            dataDirectory = GatewayConfigFile.ResolveDataDirectory(args);
             var app = GatewayHost.Build(args);
+            app.Lifetime.ApplicationStarted.Register(() => { started = true; StartFailure.Clear(dataDirectory); });
             await app.RunAsync(context.Cancellation);
             return CliExit.Ok;
         }
         catch (Exception ex) when (ex is GatewayConfigException or Secrets.PlainSecretNotAllowedException)
         {
-            // Invalid configuration: one precise message (key paths and sources, no secret values) and the documented exit code.
+            // Invalid configuration: one precise message (key paths and sources, no secret values) and the documented exit code. A service has no console: the record says it too.
+            StartFailure.Record(ex, dataDirectory);
             await context.Error.WriteLineAsync(ex.Message);
             return GatewayConfigException.ExitCode;
+        }
+        catch (Exception ex) when (!started && ex is not OperationCanceledException)
+        {
+            // a start that fails (a port Windows reserves, a key file, the state) is written down with the account and the folder before the process ends
+            StartFailure.Record(ex, dataDirectory);
+            throw;
         }
     }
 

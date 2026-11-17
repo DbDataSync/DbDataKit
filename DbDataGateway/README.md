@@ -88,7 +88,10 @@ service account, or `--account DOMAIN\user` with a password. `--account LocalSys
 A password is never put on the service command line; give it with `--password-secret env:NAME` or `file:PATH`, or type it at the
 prompt. `--password` is still accepted but prints a warning, because command lines are visible to other users.
 `service doctor` checks the service settings and directory permissions. The service restarts after a crash (5 s, 5 s, 60 s;
-the counter resets after a day) and starts at boot.
+the counter resets after a day) and starts at boot. A start that fails ("Cannot start service") writes why to `start-failure.txt` in the data folder
+(`%ProgramData%\DbDataKit\gateway`) and, as a service, to the Application event log (source `.NET Runtime`, event 1000): the account it ran as, the folder and the
+exception, with a hint when a port could not be bound (Windows reserves ranges of ports: `netsh int ipv4 show excludedportrange protocol=tcp`). The next start
+that succeeds removes the file.
 
 The gateway answers `GET /health`, `/health/live`, `/health/ready` and `/version` on its HTTP/2 listener, and on stop waits for
 running queries (`Gateway:Hosting:DrainSeconds`, default 30) before shutting down. `Gateway:Hosting:MaxConcurrentRequests`
