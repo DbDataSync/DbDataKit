@@ -52,11 +52,18 @@ function Services { foreach ($m in $members) { $meta = Get-Content (Join-Path $r
 function Diagnose {
   Write-Host '--- services'
   foreach ($s in Services) { & sc.exe qc $s.Name 2>&1 | Out-Host; & sc.exe query $s.Name 2>&1 | Out-Host }
-  Write-Host '--- recent System and Application events'
+  Write-Host "--- DBDATAKIT_DATA: machine '$([Environment]::GetEnvironmentVariable('DBDATAKIT_DATA', 'Machine'))', this process '$env:DBDATAKIT_DATA'"
+  Write-Host '--- recent System and Application events (the members'' own logs, .NET Runtime crashes, the Service Control Manager)'
   foreach ($l in 'System', 'Application') {
-    Get-WinEvent -FilterHashtable @{ LogName = $l; StartTime = (Get-Date).AddMinutes(-20) } -ErrorAction SilentlyContinue |
-      Where-Object { $_.ProviderName -like '*DbData*' -or $_.ProviderName -like '*.NET*' -or $_.ProviderName -eq 'Service Control Manager' } | Select-Object -First 40 |
-      ForEach-Object { Write-Host ("{0} {1}: {2}" -f $_.TimeCreated.ToString('HH:mm:ss'), $_.ProviderName, ($_.Message -replace '\s+', ' ')) }
+    Get-WinEvent -FilterHashtable @{ LogName = $l; StartTime = (Get-Date).AddMinutes(-90) } -ErrorAction SilentlyContinue |
+      Where-Object { $_.ProviderName -like '*DbData*' -or $_.ProviderName -like '*.NET*' -or $_.ProviderName -eq 'Application Error' -or $_.ProviderName -eq 'Service Control Manager' } | Select-Object -First 150 |
+      ForEach-Object { Write-Host ("{0} {1} {2}: {3}" -f $_.TimeCreated.ToString('HH:mm:ss'), $l, $_.ProviderName, ($_.Message -replace '\s+', ' ')) }
+  }
+  Write-Host '--- the access lists of the data folders and the key rings'
+  foreach ($f in @(Get-ChildItem -LiteralPath $data -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'bin' })) {
+    & icacls $f.FullName 2>&1 | Out-Host
+    foreach ($k in @(Get-ChildItem -LiteralPath (Join-Path $f.FullName 'secrets\keys') -ErrorAction SilentlyContinue)) { & icacls $k.FullName 2>&1 | Out-Host }
+    Get-ChildItem -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue | ForEach-Object { Write-Host ("   {0} {1} {2}" -f $_.LastWriteTime.ToString('HH:mm:ss'), $_.Length, $_.Name) }
   }
 }
 function AssertEveryMemberRunsPairedAndHealthy([string]$why) {
@@ -76,6 +83,48 @@ function AssertEveryMemberRunsPairedAndHealthy([string]$why) {
     Assert ($listed.Text -match ("(?m)^{0}\s.*\s\sready(\s|$)" -f [regex]::Escape($s.Product))) "$why : the console lists $($s.Product) as ready"
   }
 }
+
+# The commands an administrator runs on the machine while the services are up (the install runs some of them, a person the rest): each answers, none ends in an unhandled exception.
+# An elevated command line opens the files the services made, the key rings first, and must accept the services' accounts on them.
+function AssertAdminCommandsWork([string]$why) {
+  $commands = @(
+    @{ Product = 'dbdatakit'; Arguments = @('health', 'check') },
+    @{ Product = 'dbdatakit'; Arguments = @('instance', 'list', '--offline') },
+    @{ Product = 'dbdatagateway'; Arguments = @('health', 'check') },
+    @{ Product = 'dbdatagateway'; Arguments = @('server', 'pair', '--max-role', 'viewer,operator,admin') },
+    @{ Product = 'dbdatagateway'; Arguments = @('server', 'clients') },
+    @{ Product = 'dbdatagateway'; Arguments = @('secret', 'list') },
+    @{ Product = 'dbdatarunner'; Arguments = @('server', 'clients') },
+    @{ Product = 'dbdataworkspace'; Arguments = @('server', 'clients') },
+    @{ Product = 'dbdataworkspace'; Arguments = @('secret', 'list') }
+  )
+  foreach ($c in $commands) {
+    $exe = Exe $c.Product
+    $arguments = $c.Arguments
+    $said = "$($c.Product) $($arguments -join ' ')"
+    # a pairing code is not written to the log
+    $r = Native ("admin-{0}-{1}" -f $c.Product, ($arguments[0..1] -join '-')) { & $exe @arguments 2>&1 | ForEach-Object { ([string]$_) -replace 'Pairing code: \S+', 'Pairing code: ***' } }
+    Assert ($r.Text -notmatch 'Unhandled exception|KeyPermissionException|SQLite Error') "$why : '$said' run by the administrator ends without a crash"
+    Assert ($r.Code -eq 0) "$why : '$said' run by the administrator succeeds"
+  }
+}
+
+# A service key only SYSTEM may read, as security software keeps its own on a workstation (the administrator may still delete it). The elevated command line reads the
+# registrations of the services to know whose accounts may be on the key files; one key it cannot read must not hide the others.
+$protectedKey = 'HKLM:\SYSTEM\CurrentControlSet\Services\zzDbDataKitE2eProtected'
+function AddUnreadableServiceKey {
+  New-Item -Path $protectedKey -Force | Out-Null
+  New-ItemProperty -Path $protectedKey -Name ImagePath -Value 'C:\Windows\System32\cmd.exe' -PropertyType ExpandString -Force | Out-Null
+  $acl = New-Object System.Security.AccessControl.RegistrySecurity
+  $acl.SetAccessRuleProtection($true, $false)
+  $acl.AddAccessRule((New-Object System.Security.AccessControl.RegistryAccessRule((New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')), 'FullControl', 'Allow')))
+  $acl.AddAccessRule((New-Object System.Security.AccessControl.RegistryAccessRule((New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544')), 'Delete, ChangePermissions', 'Allow')))
+  Set-Acl -Path $protectedKey -AclObject $acl
+  $readable = $true
+  try { Get-ItemProperty $protectedKey -ErrorAction Stop | Out-Null } catch { $readable = $false }
+  Assert (-not $readable) 'a service key the administrator cannot read is in place'
+}
+function RemoveUnreadableServiceKey { if (Test-Path $protectedKey) { Remove-Item -Path $protectedKey -Force -ErrorAction SilentlyContinue } }
 
 # --- Scoop, and the packages served on this machine as the manifest's urls
 Heading 'Scoop'
@@ -144,6 +193,7 @@ try {
   $install = Native 'install' { scoop install -g $manifest }
   Assert ($install.Code -eq 0) 'scoop install -g succeeded'
   AssertEveryMemberRunsPairedAndHealthy 'after install'
+  AssertAdminCommandsWork 'after install'
   Assert ($install.Text -notmatch 'Pairing code:') 'no pairing code is in the install output'
   Assert (Test-Path (Join-Path $data 'server\FIRST-RUN.txt')) 'the console wrote its first-run invitation'
   $before = (Native 'instance-ids' { & (Exe 'dbdatakit') instance list --offline }).Text
@@ -172,6 +222,7 @@ try {
   $current = (Get-Item (Join-Path $scoopApp 'current')).Target
   Write-Host "   current -> $current"
   AssertEveryMemberRunsPairedAndHealthy 'after the update'
+  AssertAdminCommandsWork 'after the update'
   $afterUpdate = (Native 'instance-ids-update' { & (Exe 'dbdatakit') instance list --offline }).Text
   Assert ($before -eq $afterUpdate) 'the update did not pair anything again'
 
@@ -182,9 +233,27 @@ try {
   Assert ($remove.Code -eq 0) 'scoop uninstall -g succeeded'
   foreach ($s in Services) { Assert (-not (ServiceExists $s.Name)) "$($s.Name) no longer exists" }
   $listed = Native 'instance-list-after' { & (Join-Path $copy 'dbdatakit.exe') instance list --offline }
+  # the data stays, and so do the key files the service made: the administrator still opens them once the service is gone
+  Assert ($listed.Code -eq 0 -and $listed.Text -notmatch 'Unhandled exception|KeyPermissionException') 'the administrator reads the console''s list after the uninstall'
   foreach ($s in Services) { if ($s.Product -ne 'dbdatakit') { Assert ($listed.Text -notmatch [regex]::Escape($s.Product)) "the console no longer lists $($s.Product)" } }
   Assert (-not (Test-Path (Join-Path $env:ProgramData 'DbDataKit\bin'))) 'the copy of the program files is removed'
   Assert (Test-Path $data) 'the settings and data under %ProgramData% remain'
+
+  Heading 'A clean install on a machine that had the suite: DBDATAKIT_DATA is a machine variable before it starts, and one service key cannot be read'
+  # as on a workstation where the suite was removed by hand (services, data and package) and installed again: the machine variable stays from the earlier install, so the
+  # services see it from their first start; security software keeps a service key the administrator cannot read
+  Remove-Item -LiteralPath $data -Recurse -Force -ErrorAction SilentlyContinue
+  Assert (-not (Test-Path $data)) 'the data folder is removed'
+  [Environment]::SetEnvironmentVariable('DBDATAKIT_DATA', $data, 'Machine')
+  AddUnreadableServiceKey
+  $again = Native 'install-again' { scoop install -g $manifest }
+  Assert ($again.Code -eq 0) 'scoop install -g succeeded on the machine that had the suite'
+  AssertEveryMemberRunsPairedAndHealthy 'after the second install'
+  AssertAdminCommandsWork 'after the second install'
+  $removeAgain = Native 'uninstall-again' { scoop uninstall -g dbdatakit-full }
+  Assert ($removeAgain.Code -eq 0) 'scoop uninstall -g succeeded again'
+  foreach ($s in Services) { Assert (-not (ServiceExists $s.Name)) "$($s.Name) no longer exists after the second uninstall" }
+  RemoveUnreadableServiceKey
   Write-Host 'Suite install end-to-end: OK'
 }
 catch {
@@ -194,6 +263,7 @@ catch {
 finally {
   if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force }
   # leave nothing behind on a failure
+  RemoveUnreadableServiceKey
   & scoop uninstall -g dbdatakit-full 2>&1 | Out-Null
   foreach ($s in Services) { if (ServiceExists $s.Name) { & sc.exe stop $s.Name | Out-Null; Start-Sleep -Seconds 2; & sc.exe delete $s.Name | Out-Null } }
 }

@@ -235,7 +235,8 @@ public sealed class KeyRing : IKeySource
             var report = AclHelper.Verify(path, _identities);
             if (!report.InSync)
                 throw new KeyPermissionException(path, "has an access list that lets others in (" + string.Join("; ", report.Drift.Select(d => d.Description)) + ")",
-                    "Restrict it to the service account, SYSTEM and Administrators.");
+                    "Restrict it to the service account, SYSTEM and Administrators. This command runs as " + AclHelper.DescribeCurrentUser() + " and accepts " + AclHelper.DescribeIdentities(_identities) +
+                    ": a service account it calls unexpected is not registered on this folder, or its registration could not be read.");
             return;
         }
         var mode = File.GetUnixFileMode(path);

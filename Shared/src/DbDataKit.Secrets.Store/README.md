@@ -25,6 +25,12 @@ The shared secret store (plan 13, W13): secrets encrypted in a file, with the ke
 `SecretKeys.Open` checks the whole ring at start-up. A key has an id, kept beside every value it encrypts, so an old key stays until the last value has moved to a new one.
 A key file made by one kind of protection is never read as another (a DPAPI key on a machine without it, a raw key where DPAPI is expected).
 
+On Windows the service and the elevated command line (the install, `instance add`, `secret set`) open the same files, whichever made them first, so the list a file must have is
+the current user (an elevated administrator counts through Administrators), SYSTEM, Administrators and the accounts of the Windows services that run on the data directory
+(`WindowsServiceAccounts`): a service whose registered command line names the directory (`server run --repo <dir>`), or one of the suite's executables registered with no folder
+(the Gateway's `server run`) whose folder, resolved from the service's environment as the product resolves it (`DBDATAKIT_DATA_<X>`, `DBDATAKIT_DATA\<x>`, `%ProgramData%\DbDataKit\<x>`),
+is the directory; and on a folder named for a service of the suite (`server`, `gateway`, `runner`, `workspace`), that service's virtual account `NT SERVICE\<name>` even after the service was removed (an uninstall keeps the data and the files it made). The registrations are read one key at a time; a key the caller may not read (security software protects its own) is passed over. Any other grant is refused.
+
 The file's owner is asked of the system's `stat` and `id` (.NET has no call for it); where they are missing the mode check alone stands.
 
 ## Backup

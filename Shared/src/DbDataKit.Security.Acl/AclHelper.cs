@@ -191,6 +191,25 @@ public static class AclHelper
         }
     }
 
+    /// <summary>The identities as account names (Windows), for a message that says who a check accepted: <c>CurrentUser</c> is the account this process runs as, an identity that does not resolve stays as written.</summary>
+    public static string DescribeIdentities(IEnumerable<string> identities)
+    {
+        if (!OperatingSystem.IsWindows()) return string.Join(", ", identities);
+        var names = new List<string>();
+        foreach (var identity in identities)
+        {
+            string name;
+            try { name = Describe(ResolveIdentity(identity)); }
+            catch (Exception e) when (e is IdentityNotMappedException or ArgumentException or SystemException) { name = identity; }
+            if (!names.Contains(name, StringComparer.OrdinalIgnoreCase)) names.Add(name);
+        }
+        return string.Join(", ", names);
+    }
+
+    /// <summary>The account this process runs as, and whether it is an elevated administrator (Windows).</summary>
+    public static string DescribeCurrentUser() =>
+        OperatingSystem.IsWindows() ? WindowsIdentity.GetCurrent().Name + (IsElevatedAdministrator() ? " (elevated, through Administrators)" : " (not elevated)") : Environment.UserName;
+
     private static string Octal(UnixFileMode m) => "0" + Convert.ToString((int)m, 8);
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
