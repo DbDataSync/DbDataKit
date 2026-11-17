@@ -28,7 +28,7 @@ FILES = {
         "Not names: dbdata_roles, `{dbdata: 'app/1'}`, postMessage({dbdata:'app/1'}), type R = { dbdata: string }, dbdatakit:server:x, console:state.\n"),
     "docs/ci-lessons.md": "the lesson names `dbdata:build:connection:x:read`\n",
     "docs/plans/33-fewer-services.md": "old `dbdata:console:` new `dbdatakit:server:`\n",
-    "docs/plans/RELEASE-NOTES-PENDING.md": "- unreleased `dbdata:sync:config:x`\n<!-- secret-names:begin -->\n| `dbdata:console:state:x` | `dbdatakit:server:state:x` |\n<!-- secret-names:end -->\n",
+    "docs/release-notes-pending.md": "- unreleased `dbdata:sync:config:x`\n<!-- secret-names:begin -->\n| `dbdata:console:state:x` | `dbdatakit:server:state:x` |\n<!-- secret-names:end -->\n",
     "Shared/tests/DbDataKit.State.Engines.Tests/SuiteEnvironmentTests.cs": '"DBDATA_SECRET_DBDATA_SYNC_CONNECTION_ORDERS", "DBDATAKIT_SECRET_DBDATA_SYNC_CONNECTION_ORDERS"\n',
     "scripts/rename_proxy_to_gateway.py": 'SECRET_PREFIX = re.compile(r"dbdata:proxy:")\n',
     "scripts/rename_secret_names.py": "dbdata:console:\n",
@@ -108,7 +108,7 @@ class RenameSecretNames(unittest.TestCase):
         rename.run(root, dry_run=False)
         self.assertEqual(
             "- unreleased `dbdatakit:sync:config:x`\n<!-- secret-names:begin -->\n| `dbdata:console:state:x` | `dbdatakit:server:state:x` |\n<!-- secret-names:end -->\n",
-            read(root, "docs/plans/RELEASE-NOTES-PENDING.md"))
+            read(root, "docs/release-notes-pending.md"))
 
     def test_dry_run_touches_nothing(self):
         root = make()

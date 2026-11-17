@@ -4,7 +4,7 @@ The names `DbDataConsole` and `DbDataKitConsole` are gone, with no transition fr
 any tracked text file that holds either of them, except:
 
   * the files that name them on purpose and are exempt for good (`EXEMPT_FILES`, `EXEMPT_PREFIXES`): the scripts of earlier renames and their tests,
-    the history files (`docs/ci-lessons.md`, `docs/releases.md`, `docs/plans/RELEASE-NOTES-PENDING.md`) and this check with its test;
+    the history files (`docs/ci-lessons.md`, `docs/releases.md`, `docs/release-notes-pending.md`) and this check with its test;
   * the files in `scripts/product_name_baseline.txt`, one `path: count` per line, up to that many occurrences (a plan that explains the rename
     names the old words; it is deleted when its last slice lands). The baseline only shrinks: a count that is higher than the file's fails the
     check, and so does a count that is higher than what is left, or an entry for a file with none, so delete or lower the line.
@@ -24,7 +24,7 @@ BASELINE = "scripts/product_name_baseline.txt"
 EXEMPT_FILES = {
     "docs/ci-lessons.md": "CI lessons name the workflow and the jobs of the day they were learnt",
     "docs/releases.md": "the release history names the products and workflows of its time",
-    "docs/plans/RELEASE-NOTES-PENDING.md": "release notes: old and new names, on purpose",
+    "docs/release-notes-pending.md": "release notes: old and new names, on purpose",
     "scripts/check_product_name.py": "this script holds the patterns",
     "scripts/tests/test_check_product_name.py": "the test of this script",
 }

@@ -1,6 +1,6 @@
 # Knowledge and search: what exists today
 
-**DbDataKnowledge is partly built: the library, a search by words and, where the engine can hold vectors, by meaning, not the product.** `DbDataKit.Knowledge` reads the item format and `DbDataKit.Knowledge.Index` finds chunks by their words, their meaning or both on a state database; there is no built-in embedding model, no `knowledge` command and no knowledge app. [Plan 27](plans/27-knowledge-agents-integrations-work.md) section 2 is the decided design; [plan 27a](plans/27a-knowledge-slices.md) slices it. This page lists the pieces that are built and that the design stands on, so a reader does not mistake the design for a feature.
+**DbDataKnowledge is partly built: the library, a search by words and, where the engine can hold vectors, by meaning, not the product.** `DbDataKit.Knowledge` reads the item format and `DbDataKit.Knowledge.Index` finds chunks by their words, their meaning or both on a state database; there is no built-in embedding model, no `knowledge` command and no knowledge app. The work left is [planning/KNOWLEDGE.md](../planning/KNOWLEDGE.md). This page lists the pieces that are built and that the design stands on, so a reader does not mistake the design for a feature.
 
 ## What a person or an agent can use now
 
@@ -47,7 +47,7 @@
 | The serving layer's `knowledge` module, approvals at the edge (the owner's decision, the Workspace server's collection: KN20), the knowledge app, `@dbdatakit/knowledge-ui` | not started; the suggestions themselves are built (above) |
 | Verified queries (`verified-query` items, "Verify this answer", re-verification when a model changes) | the kind, the index table, the noun `query run-verified` and the re-check when a model changes are built (above) and the console starts and shows one; "Verify this answer" is not (KN23); no serving host offers the noun or subscribes the re-check to the models yet |
 | Access-filtered search | not started; the identity home maps directory groups to attributes (plan 22a GP04, built), but the row and column rules a search would apply are not (GP01, GP02 and GP10 to GP15 follow the owner's decision of 2026-11-12, QG2: rules are data in a rules table; not built) |
-| `catalog search` and `catalog show` (were plan 22a GP25) | dropped (owner, 2026-11-09): the `knowledge` commands of [27a](plans/27a-knowledge-slices.md) KN16 are the search over generated knowledge |
+| `catalog search` and `catalog show` (were plan 22a GP25) | dropped (owner, 2026-11-09): the `knowledge` commands (KNOWLEDGE-6) are the search over generated knowledge |
 | Workspace search (exact text in a project's files) | not started; needs the Workspace server (plan 22a GP31) |
 
 ## The console's knowledge screens (plan 27a KN28, KN36, KN37, KN38)

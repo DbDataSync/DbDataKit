@@ -50,11 +50,11 @@ class CheckSecretNames(unittest.TestCase):
     def test_the_files_that_tell_history_are_exempt(self):
         text = "dbdata:sync:connection:x\n"
         files = {path: text for path in (
-            "docs/plans/RELEASE-NOTES-PENDING.md", "docs/plans/33-fewer-services.md", "docs/ci-lessons.md", "scripts/rename_secret_names.py",
+            "docs/release-notes-pending.md", "docs/ci-lessons.md", "scripts/rename_secret_names.py",
             "scripts/tests/test_rename_secret_names.py", "scripts/check_secret_names.py", "scripts/tests/test_check_secret_names.py")}
         self.assertEqual([], self.problems(files))
-        # and another plan is not
-        self.assertEqual(1, len(self.problems({"docs/plans/28c-engines-on-runner.md": text})))
+        # and a subject file is not
+        self.assertEqual(1, len(self.problems({"planning/TASKENGINE.md": text})))
 
     def test_binary_files_are_skipped(self):
         self.assertEqual([], self.problems({"a.bin": b"\x00\x01dbdata:sync:connection:x\n"}))

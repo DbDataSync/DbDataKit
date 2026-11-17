@@ -1,7 +1,7 @@
 # How data flows through the suite (future state)
 
 A high-level picture of the planned suite: where data enters, which product moves or shapes it, and who reads it. It is drawn from
-plans 13 to 20 (`docs/plans/`), with plan 20's single serving layer as the only edge end users reach. Some parts are not built yet; the
+plans 13 to 20, with plan 20's single serving layer as the only edge end users reach. Some parts are not built yet; the
 labels say "later" where a plan schedules them after the first version.
 
 ## Data

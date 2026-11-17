@@ -46,7 +46,7 @@ class CheckProductName(unittest.TestCase):
     def test_the_rename_scripts_and_the_history_files_are_exempt(self):
         problems, _ = self.run_check({
             "scripts/rename_x.py": OLD, "scripts/tests/test_rename_x.py": OLD, "docs/ci-lessons.md": OLD,
-            "docs/releases.md": OLD, "docs/plans/RELEASE-NOTES-PENDING.md": OLD,
+            "docs/releases.md": OLD, "docs/release-notes-pending.md": OLD,
         })
         self.assertEqual([], problems)
 

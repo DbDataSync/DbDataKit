@@ -1,6 +1,6 @@
 # Agents and the suite: what exists today
 
-An AI agent can drive the suite today **from the outside**, through the commands each product already has. There is **a first agent inside the suite**: the console runs back-end agents (below); there is no model provider yet, no front-end agent and no `mcp` module in the serving layer. [Plan 27](plans/27-knowledge-agents-integrations-work.md) decides what the embedded agents will be; [plan 27a](plans/27a-knowledge-slices.md) slices it and says, row by row, what is built. This page is the built half: what an agent can use now, and where each piece is described.
+An AI agent can drive the suite today **from the outside**, through the commands each product already has. There is **a first agent inside the suite**: the console runs back-end agents (below); there is no model provider yet, no front-end agent and no `mcp` module in the serving layer. The design of the agents is in [agents/](agents/); the work left is [planning/KNOWLEDGE.md](../planning/KNOWLEDGE.md). This page is the built half: what an agent can use now, and where each piece is described.
 
 ## The commands are the tools
 
@@ -47,6 +47,15 @@ The console runs `DbDataKit.Agents` for back-end agents (`ConsoleAgents`, `Agent
 - **The build helper** (`build-helper`, AG14): made on the Agents tab from what a Build server offered an agent. The Build server was deleted (plan 33 SC23), so it is not made and cannot run today: the console answers its calls with where Build's work went, until AG14 points it at a build project of the Workspace. It works on one Build project as **you**: its tools are Build's commands run on that server through the console's relay with a token that names you and the roles you hold there, never the console's own authority. It is offered only what you may run and only commands that read or change the project's own files; a command that touches a database (deploy, refresh, init, seeds, publish of metadata) and `project publish` are never offered, whatever your role. It changes files only in a workspace you name when you start the conversation (a branch of the project that is yours), and each such step waits for you (asked once per conversation by default); a denied step is not sent, so the workspace is unchanged. The skill it is given is the one of the Build server's own version.
 - **See the record**: per session who (the person), which agent and version, and each step asked, approved, denied, refused or run; usage per person, agent and install. The words of a conversation are kept 30 days; the audit rows stay (the `agents` state module).
 - **Approvals of outside agents**: `POST /api/agents/outside/ask` puts a step an outside client could not ask its own person about in the inbox, `GET /api/agents/outside/ask/{id}` is polled for the answer, and `POST /api/agents/outside/events` adds what ran to the record.
+
+## Where agents run
+
+- **Back-end agents** run in the console, acting for the signed-in person on the Workspace's projects.
+- **Front-end agents** run in the Gateway's `mcp` module, acting as the signed-in person, so they reach only what that person may read.
+- **Unattended agents** run inside a Runner task: the agent runtime is a library in the task's own process, the agent definition is published with the
+  package as a dependency, and its model connection is a slot of the package bound per channel. Example: a nightly integration that classifies support
+  tickets calls the `triage` agent in its task; the model it uses is whatever the `prod` channel binds to the package's `model` slot. Evaluation sets run
+  the same way, as Runner tasks.
 
 ## What is not built
 

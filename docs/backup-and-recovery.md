@@ -22,7 +22,7 @@ What to back up, with which command, and how to get a lost install back. Each pa
 
 `state verify --snapshot <backup> --db` then compares the restored database with the backup, table by table.
 
-Every server (the console, the Workspace, the Gateway, the Runner) runs the same snapshot of its own state in its own process when the `housekeeping:` part of its `state:` section names a folder (`backup_directory`, `backup_every_hours`, `backup_keep`; `Shared/src/DbDataKit.State.Engines/README.md`, "Housekeeping"); each run is recorded in the server's run history as `state-backup`. A console whose embedded runner is on still does it as the runner's system task `state-backup` with the `runner:` settings, until that runner is removed (plan 35 I2). One backup set for the four services, in one place the console sets, is plan 35 I8.
+Every server (the console, the Workspace, the Gateway, the Runner) runs the same snapshot of its own state in its own process when the `housekeeping:` part of its `state:` section names a folder (`backup_directory`, `backup_every_hours`, `backup_keep`; `Shared/src/DbDataKit.State.Engines/README.md`, "Housekeeping"); each run is recorded in the server's run history as `state-backup`. One backup set for the four services, in one place the console sets, is plan 35 I8.
 
 ## The secrets key
 

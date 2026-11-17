@@ -81,7 +81,7 @@ The write gate is the one choke point for database writes. These rules hold for 
 
 ## Not done
 
-Owned by [plan 07](../../../docs/plans/07-data-transfer.md) (slices TR01 to TR08): the `ITransferVerifier` implementation, Arrow-first and Parquet staging (after a benchmark), Sync's adoption of the gate, the MySQL and Oracle bulk writers, SCD2 and Snapshot as shared strategies, segmenting and worker lanes in a shared package, and the Windows ACL on the statement log.
+Parked (`planning/README.md`, "Parked"): the `ITransferVerifier` implementation, Arrow-first and Parquet staging (after a benchmark), Sync's adoption of the gate, the MySQL and Oracle bulk writers, SCD2 and Snapshot as shared strategies, segmenting and worker lanes in a shared package, and the Windows ACL on the statement log.
 
 ## Strategy semantics in Sync and in Build
 

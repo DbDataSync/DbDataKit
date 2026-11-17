@@ -9,7 +9,7 @@ import check_ui_editors as check  # noqa: E402
 
 HEADER = "| Feature | Authored | Format | Editor | State | Gap |\n| --- | --- | --- | --- | --- | --- |\n"
 COUNTS = "Counts: full {full}, partial {partial}, view-only {view}, none {none}, planned {planned}.\n"
-PLAN = "| DBR27 | a screen |\n| GP18 | another |\n"
+PLAN = "| PAGEFORMAT-3 | a screen |\n| ALERTING-2 | another |\n"
 
 
 def formats(*ids):
@@ -18,7 +18,7 @@ def formats(*ids):
 
 def tree(rows, ids=("alpha",), counts=None, plan=PLAN, extra=None):
     root = tempfile.mkdtemp()
-    files = {"docs/formats.json": formats(*ids), "docs/plans/32-example.md": plan,
+    files = {"docs/formats.json": formats(*ids), "planning/PAGEFORMAT.md": plan,
              "docs/ui-editors.md": HEADER + "".join(r + "\n" for r in rows) + "\n" + (counts or "")}
     files.update(extra or {})
     for rel, text in files.items():
@@ -48,34 +48,31 @@ class CheckUiEditors(unittest.TestCase):
     def test_an_exemption_in_the_state_cell_passes(self):
         self.assertEqual([], check.problems(tree(["| A | x | `alpha` | none | none (generated, never edited by hand) | |"], counts=c(none=1))))
 
-    def test_a_gap_that_names_a_slice_passes(self):
-        self.assertEqual([], check.problems(tree(["| A | x | `alpha` | none | none | GP18 |"], counts=c(none=1))))
+    def test_a_gap_that_names_a_task_passes(self):
+        self.assertEqual([], check.problems(tree(["| A | x | `alpha` | none | none | ALERTING-2 |"], counts=c(none=1))))
 
-    def test_a_slice_split_into_lettered_parts_is_found_in_a_plan(self):
-        plan = "| SL13a | the editor |\n| **SL13b** | the storage |\n"
-        self.assertEqual([], check.problems(tree(["| A | x | `alpha` | none | planned | SL13b |"], counts=c(planned=1), plan=plan)))
-        found = check.problems(tree(["| A | x | `alpha` | none | planned | SL13c |"], counts=c(planned=1), plan=plan))
+    def test_a_named_task_must_exist_in_any_state(self):
+        self.assertEqual([], check.problems(tree(["| A | x | `alpha` | none | planned | PAGEFORMAT-3 |"], counts=c(planned=1))))
+        for state, key in (("planned", "planned"), ("partial", "partial"), ("none (x)", "none")):
+            with self.subTest(state=state):
+                found = check.problems(tree([f"| A | x | `alpha` | none | {state} | PAGEFORMAT-99 |"], counts=c(**{key: 1})))
+                self.assertEqual(1, len(found))
+                self.assertIn("PAGEFORMAT-99, which is not a task", found[0])
+
+    def test_a_row_whose_subject_was_deleted_fails(self):
+        found = check.problems(tree(["| A | x | `alpha` | none | planned | PAGEFORMAT-3 |"], counts=c(planned=1), plan=""))
         self.assertEqual(1, len(found))
-        self.assertIn("SL13c", found[0])
+        self.assertIn("PAGEFORMAT-3", found[0])
 
-    def test_a_planned_row_names_a_slice_of_a_plan_that_exists(self):
-        self.assertEqual([], check.problems(tree(["| A | x | `alpha` | none | planned | DBR27 |"], counts=c(planned=1))))
-        found = check.problems(tree(["| A | x | `alpha` | none | planned | DBR99 |"], counts=c(planned=1)))
+    def test_an_old_slice_id_is_history_and_does_not_close_a_gap(self):
+        found = check.problems(tree(["| A | x | `alpha` | none | partial | closed by FQ17 once built |"], counts=c(partial=1)))
         self.assertEqual(1, len(found))
-        self.assertIn("DBR99", found[0])
+        self.assertIn("neither which task", found[0])
 
-    def test_a_planned_row_whose_plan_was_deleted_fails(self):
-        found = check.problems(tree(["| A | x | `alpha` | none | planned | DBR27 |"], counts=c(planned=1), plan=""))
-        self.assertEqual(1, len(found))
-        self.assertIn("DBR27", found[0])
-
-    def test_a_slice_of_a_built_row_is_history_and_is_not_looked_up(self):
-        self.assertEqual([], check.problems(tree(["| A | x | `alpha` | none | partial | closed by FQ17 once built |"], counts=c(partial=1))))
-
-    def test_a_gap_with_no_slice_and_no_reason_fails(self):
+    def test_a_gap_with_no_task_and_no_reason_fails(self):
         found = check.problems(tree(["| A | x | `alpha` | none | none | later |"], counts=c(none=1)))
         self.assertEqual(1, len(found))
-        self.assertIn("neither which slice", found[0])
+        self.assertIn("neither which task", found[0])
 
     def test_a_reference_to_the_removed_editors_plan_fails_in_any_cell(self):
         found = check.problems(tree(["| A | x | `alpha` | none | full | UE09 built: the form |"], counts=c(full=1)))
@@ -83,7 +80,7 @@ class CheckUiEditors(unittest.TestCase):
         self.assertIn("UE09", found[0])
 
     def test_an_unknown_state_fails(self):
-        found = check.problems(tree(["| A | x | `alpha` | none | mostly | GP18 |"], counts=c()))
+        found = check.problems(tree(["| A | x | `alpha` | none | mostly | ALERTING-2 |"], counts=c()))
         self.assertTrue(any("state 'mostly'" in f for f in found))
 
     def test_a_format_that_is_not_registered_fails(self):

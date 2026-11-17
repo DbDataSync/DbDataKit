@@ -65,10 +65,10 @@ class CheckEnvNames(unittest.TestCase):
             "Shared/src/DbDataKit.State.Engines/SuiteEnvironment.cs",
             "Shared/tests/DbDataKit.State.Engines.Tests/SuiteEnvironmentTests.cs",
             "DbDataRunner/tests/DbDataRunner.Tests/SuiteEnvironmentRefusalTests.cs",
-            "docs/plans/RELEASE-NOTES-PENDING.md", "docs/plans/33-fewer-services.md", "docs/ci-lessons.md", "docs/testing-environment.md")}
+            "docs/release-notes-pending.md", "docs/ci-lessons.md", "docs/testing-environment.md")}
         self.assertEqual([], self.problems(files))
-        # and another plan is not
-        self.assertEqual(2, len(self.problems({"docs/plans/28c-engines-on-runner.md": text})))
+        # and a subject file is not
+        self.assertEqual(2, len(self.problems({"planning/TASKENGINE.md": text})))
 
     def test_binary_files_are_skipped(self):
         self.assertEqual([], self.problems({"a.bin": b"\x00\x01DBGATEWAY_PASSWORD\n"}))

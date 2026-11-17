@@ -1,6 +1,6 @@
 # Testing app publishing end to end
 
-How to walk an app through its whole life on one machine: write, validate, publish, approve, run, navigate, update, roll back, revoke, remove. [apps.md](apps.md) is the design as built; [plans/26-app-publishing.md](plans/26-app-publishing.md) holds the work that is left. This page is the audit of what a tester can do **today** (2026-11-08, `main` plus the slices AP20 to AP24 and AP26), a script to do it, and the gaps.
+How to walk an app through its whole life on one machine: write, validate, publish, approve, run, navigate, update, roll back, revoke, remove. [apps.md](apps.md) is the design as built; the work that is left is in [planning/APPHOSTING.md](../planning/APPHOSTING.md) and [planning/PUBLISHING.md](../planning/PUBLISHING.md). This page is the audit of what a tester can do **today** (2026-11-08, `main` plus the slices AP20 to AP24 and AP26), a script to do it, and the gaps.
 
 ## Prerequisites
 

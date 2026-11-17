@@ -1,6 +1,6 @@
 # Publishing: how a definition reaches the serving layer and the runner
 
-What is built of plan 30 ("one way to publish"), read from the code on 2026-11-09. What is left is [plan 30](plans/30-publishing.md). Channels and promotion rules are [plan 21](plans/21-channels-and-previews.md).
+What is built of plan 30 ("one way to publish"), read from the code on 2026-11-09. What is left is [planning/PUBLISHING.md](../planning/PUBLISHING.md) and [planning/CHANNELS.md](../planning/CHANNELS.md).
 
 Back-end products (Build, the apps back end, DbDataStore, DbDataIntegration) **publish versioned definitions** to a *target group*: a serving group (the Gateway, plan 20) or a runner group (DbDataRunner, plan 28). The target runs from what was published and does not call the publisher. One mechanism, the `definitions` state module, serves both.
 
@@ -45,5 +45,49 @@ The Gateway's stores (`PublishedSemanticModels`, `PublishedDataSources`, `Publis
 
 - **A channel is part of a version's key** (preview, test, prod). Promotion publishes the same version to the next channel; bindings, not the definition, differ between channels.
 - **The publisher is a paired Publisher** with an owner scope (plan 13 W12): it sees and changes only what it published.
-- **Versions are kept** until an administrator prunes them (owner, 2026-11-04), through an API and a screen that show the active, staged and previous versions, each instance's status and what pruning would remove; an artifact goes when no kept version names it. `DefinitionPublisher.Prune` removes the versions an administrator names (or all but the newest N), never one a channel has active, staged or as its previous, nor one another version pins in `depends_on`; a file goes when no kept version names it. It is `POST /api/v1/definitions/integration/{name}/prune` on the runner and `POST /api/v1/definitions/{kind}/{name}/prune` on the Gateway's management listener (administrator; body `keep` or `versions`, and `dry_run`, which is true unless the call says false). The runner's `PackagesPage.tsx` and the Gateway's models screen show the dry run before the button that removes works. The console's versions panel of dashboards and reports (UE04) uses it too; plan 14a SL07 does not yet.
+- **Versions are kept** until an administrator prunes them, through an API and a screen that show the active, staged and previous versions, each instance's status and what pruning would remove; an artifact goes when no kept version names it. `DefinitionPublisher.Prune` removes the versions an administrator names (or all but the newest N), never one a channel has active, staged or as its previous, nor one another version pins in `depends_on`; a file goes when no kept version names it. It is `POST /api/v1/definitions/integration/{name}/prune` on the runner and `POST /api/v1/definitions/{kind}/{name}/prune` on the Gateway's management listener (administrator; body `keep` or `versions`, and `dry_run`, which is true unless the call says false). The runner's `PackagesPage.tsx` and the Gateway's models screen show the dry run before the button that removes works. The console's versions panel of dashboards and reports (UE04) uses it too; plan 14a SL07 does not yet.
 - **Clean break, not silent:** a version in a format the program does not read is refused naming the kind, the name and both numbers.
+
+## How publishing is meant to work everywhere
+
+The parts above are built; these rules also bind what is still open ([planning/PUBLISHING.md](../planning/PUBLISHING.md)).
+
+- **One publish API for every kind and target.** The per-kind routes (`PUT /api/v1/data-sources/{name}`, `/api/v1/semantic-models/{name}`, the apps
+  command's own publishing) are removed once every caller is on the shared API, and answer with a sentence naming the shared route. One route means one
+  set of checks, signatures and audit.
+- **Data-source secrets are slots, bound per channel.** Every secret reference a data source names is a slot; each channel binds it to a secret the
+  Gateway holds, and a data source with an unbound slot is blocked in that channel until it is bound. Example: `sales` names `warehouse-read`; in `prod`
+  it is bound to the Gateway's secret `warehouse-read`, in `test` to `warehouse-read-test`; until `test` binds it, `sales` does not serve in `test`.
+- **Promotion between groups is a deploy of the same version** to the other group: artifacts are sent by hash, bindings are that group's own. There is no
+  activation at a set time.
+- **Code is published compiled, with its source.** The compiled code runs; recompiling on the instance is an option, off by default. The publisher signs
+  the manifest (Ed25519), each group keeps a trust store of publishers per kind and every instance verifies at preparation. **Approvals of trusted code are
+  signed too**, with the approver's key from the identity home. Signatures are required by default; an administrator may allow unsigned versions for a
+  kind as a recorded choice. Packages are published as the whole `.nupkg` closure by hash, so a runner needs no feed.
+- **Apps are published file by file** (a manifest with a list of files; only files the target lacks are sent) and served from a local disk cache filled
+  when the instance prepares the version (hash and signature checked), with an in-memory index, compressed text and the hash as `ETag`; serving a file
+  never reads the state database.
+
+## Channels
+
+- **Channels live in one install**, not an install per environment. Promotion publishes the same version to the next channel; what changes is what it is
+  bound to.
+- **Promotion is per product, with dependency checks and releases.** A promotion is refused when something it depends on is not in the target channel at
+  a compatible version. A release is a named, ordered list of promotions: it runs in order, stops at the first failure, says where and can be resumed; it is
+  a sequence, not a transaction. One approval covers a release, by an approver who may approve every item in it.
+- **Reads are inherited, writes never.** A channel uses production's binding of a read slot unless it overrides it; a write binding in a non-production
+  channel is an explicit override that points elsewhere, and without one the channel cannot write to that connection. Lineage shows a dataset reached
+  through an override as its own node, marked with the channel.
+- **Expand, then contract.** Channels share databases, so a change to a shared structure goes in three steps: add, move the consumers, remove later. Where
+  the suite sees the consumers it refuses the contract step, naming the package and the channel (a Build plan that drops a column a published package in
+  any channel still reads).
+- **Store writes in a preview or test channel go to a draft layer** only that channel or preview sees; reads show the draft on top of the real data.
+  Previews are read-only unless the author turns writes on. Drafts are never promoted: "submit as change requests" turns draft rows into ordinary change
+  requests in production. Drafts are visible to everything the serving layer answers in that channel (apps, dashboards, semantic queries, agents) and not to
+  Build unless a Build run into an overridden target opts in. A preview lives with its workspace, is removed with its draft when the branch is merged or
+  abandoned, and expires after 30 idle days (configurable) with a notice first.
+- **Build's test target is made by an explicit command**, never automatically (`channel target create dw --channel test` makes `dw_test` and records the
+  override as a binding of the write slot); it is filled by deferring to production: only the models changed in the version and their dependents are
+  built, the rest is read from production's target.
+- **Sync runs in production only.** An additive change goes to production by promotion; a risky one gets a trial run: a one-off, row-limited run into an
+  overridden target in a test channel, never a continuous replication per channel.

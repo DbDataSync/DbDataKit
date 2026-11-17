@@ -21,7 +21,7 @@ these are rewritten, in code, tests, documents, plans, workflows, scripts, TypeS
 
 Left alone: this script and its test, `scripts/check_secret_names.py` and its test, `docs/ci-lessons.md` and `docs/plans/33-fewer-services.md` (they tell history),
 the records of the rename DbDataProxy to DbDataGateway (`scripts/rename_proxy_to_gateway.py`, its test and `docs/release-notes/dbdatagateway-rename.md`), the tests of
-the refusal of old environment variables (`SuiteEnvironmentTests.cs`: the variables, not the secrets), the block of `docs/plans/RELEASE-NOTES-PENDING.md` between
+the refusal of old environment variables (`SuiteEnvironmentTests.cs`: the variables, not the secrets), the block of `docs/release-notes-pending.md` between
 `<!-- secret-names:begin -->` and `<!-- secret-names:end -->` (the table of old and new), and `{dbdata: 'app/1'}`, the message of an app's frame, which is not a secret.
 
 A file of a frozen format in `docs/formats.json` is never edited: when one holds an old name the script stops before changing anything and lists it.

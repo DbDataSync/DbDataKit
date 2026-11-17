@@ -14,7 +14,7 @@ registry `docs/formats.json`. It then builds the matrix of pairs the suite promi
 and fails, naming the pair, when a row does not hold: a previous release more than one generation from this build (in either direction), or one that writes
 a format this code no longer reads. A release that predates the generation (its source has no SuiteCompatibility.cs) or the registry (no docs/formats.json)
 is taken to be in range, as the pairing check does, and the matrix says so. Running the previous release's programs against this build is the part this
-script does not do (see docs/plans/24a-upgrade-and-cache-slices.md, UC07); the contract it proves is the one both sides declare.
+script does not do (see planning/INSTALLER.md, INSTALLER-29); the contract it proves is the one both sides declare.
 
   python3 -I scripts/check_compatibility.py [root] [--matrix] [--previous-dir <dir>]
 

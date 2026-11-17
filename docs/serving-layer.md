@@ -14,16 +14,16 @@ Why one layer, in the owner's words:
 | Layer | What it is | Who reaches it |
 | --- | --- | --- |
 | **Serving layer** | every end-user endpoint, as modules; runs from published definitions; reads and writes the data stores directly | end users, their tools, apps, agents; behind a load balancer when scaled out |
-| **Back-end servers** (DbDataSync, DbDataBuild, DbDataStore's server, DbDataRunner) | definitions and data movement: replications, models and loads, master data models and structure changes, scheduled work; they publish what the serving layer needs | the console, and the serving layer only for what the outage table names |
+| **Work and authoring** (the Runner group; the Workspace) | the Runner runs everything scheduled or queued (Build's refreshes, Sync's replications, a Store model's deploy, integrations) with the bulk-write and schema-change logins; the Workspace authors and publishes what the serving layer needs | the console; the serving layer only through the paths of `docs/architecture.md`, "Isolation by trust" |
 | **Control plane** (the console) | administration through the management APIs | administrators, on the private side |
 
 A console calls servers and a server never calls a console. The serving layer is one more paired server (a *serving group*).
 
 ## Principles
 
-1. **It runs from published definitions.** Back-ends publish versioned definitions to the serving group: semantic packages and their data sources from Build (`semantic-model/<name>`, `data-source/<name>`), entity models from DbDataStore (`entity-model/<name>`), app versions and instances (`app/<name>`, `app-instance/<name>`). They live in the group's `DefinitionStore` (`DbDataKit.State`), keyed by channel and version, each recording what it depends on. Each instance follows the store (`DefinitionFollower`, polled every `state.definitionPollSeconds`, 5 by default), builds a new version before it replaces the one served, switches atomically and keeps the last good version; a version an instance cannot load is reported and leaves the old one serving. Nothing at runtime calls a back-end, so an offline back-end only delays the next publish.
-2. **Data paths are direct.** Reads go straight to the databases with read logins. DbDataStore's reads and writes happen in the serving layer, through the `DbDataKit.Store` write path against the model's tables; nothing is forwarded to DbDataStore's server, and a published model is refused by the store server's own data API (one data path per model).
-3. **The logins stay split by job.** Build's write login for its targets never leaves Build. DbDataStore's data write login lives in the serving layer, kept as the group's secret encrypted with the group key. DbDataStore's structure login (DDL, `DbDataKit.Schema`) stays in its server.
+1. **It runs from published definitions.** The Workspace (and the command lines) publish versioned definitions to the serving group: semantic packages and their data sources of a build project (`semantic-model/<name>`, `data-source/<name>`), entity models of a store project (`entity-model/<name>`), app versions and instances (`app/<name>`, `app-instance/<name>`). They live in the group's `DefinitionStore` (`DbDataKit.State`), keyed by channel and version, each recording what it depends on. Each instance follows the store (`DefinitionFollower`, polled every `state.definitionPollSeconds`, 5 by default), builds a new version before it replaces the one served, switches atomically and keeps the last good version; a version an instance cannot load is reported and leaves the old one serving. Nothing at runtime calls the Workspace or a Runner, so an offline one only delays the next publish or run.
+2. **Data paths are direct.** Reads go straight to the databases with read logins. DbDataStore's reads and writes happen in the serving layer, through the `DbDataKit.Store` write path against the model's tables; there is no other data path to a model's rows.
+3. **The logins stay split by place** (`docs/architecture.md`, "Isolation by trust"). The serving layer holds read logins and the Store's person-attributed row-write login, kept as the group's secret encrypted with the group key. Bulk-write and schema-change logins (Build's targets, Sync's targets, a Store model's DDL) are bound to slots on the Runner and never reach the serving layer.
 4. **Modules, enabled per instance.** One process can host every module, or each instance a few. `modules:` in `server.yaml` lists them (`flightsql`, the default, `identity`, `apps`, `store`); an unknown or repeated name is refused naming the file; an instance without `flightsql` opens no Flight port.
 5. **Untrusted or heavy work runs in child processes**: app code, the semantic combine, extraction from documents. A crash or a limit stops that one job, not the instance. (Today the combine runs in process under limits; see plan 20.)
 
@@ -69,7 +69,7 @@ Tests of the rows with the back-end not running: `OutageTests` (a serving instan
 
 ## The result cache
 
-The core keeps a **result cache** in front of the query service (plan 24a UC12 to UC14 and UC16; `ServingCache.cs` in `DbDataKit.Serving.Abstractions`, wired by the Gateway as `GatewayCache`). It is **off for every definition that does not turn it on**: an owner writes a `cache:` section in the definition (a `connection/2` data source or the semantic package; the keys `enabled`, `ttl`, `scope`, `dataset` of [plan 24a UC03](plans/24a-upgrade-and-cache-slices.md)), and publishes it, so the setting is promoted with the definition. Dashboards, reports and apps read through the same query service, so they take the cache setting of what they read; they have no `cache:` key of their own.
+The core keeps a **result cache** in front of the query service (plan 24a UC12 to UC14 and UC16; `ServingCache.cs` in `DbDataKit.Serving.Abstractions`, wired by the Gateway as `GatewayCache`). It is **off for every definition that does not turn it on**: an owner writes a `cache:` section in the definition (a `connection/2` data source or the semantic package; the keys `enabled`, `ttl`, `scope`, `dataset` ), and publishes it, so the setting is promoted with the definition. Dashboards, reports and apps read through the same query service, so they take the cache setting of what they read; they have no `cache:` key of their own.
 
 What is cached, and what never is:
 
@@ -131,7 +131,7 @@ The rules are applied in the core, so the question for every module is whether i
 
 ## Known limits of what is built
 
-What a reader of the code should not assume; each is either a deliberate limit or owned by a slice of [plan 20](plans/20-serving-layer.md).
+What a reader of the code should not assume; each is either a deliberate limit or owned by a task in [planning/](../planning/README.md).
 
 - **Modules** (O01): the identity home, the apps host and the store module implement `IServingModule` for its name, drain and health but start themselves as hosted services on their own listeners; `StartAsync(IServingServices)` is their ordinary start, they are not handed the core services.
 - **Identity keys** (O02b): `dbdatakit identity run` protects its signing keys with ASP.NET data protection keys in its own directory, so a group of those homes needs the folder copied (O06b). Entra's group overage (more than 200 groups) gives no groups; Windows on Linux with a keytab is built but untested, there being no KDC in the test environment; `identity run` does not offer the upstreams yet (O06b).

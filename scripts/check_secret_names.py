@@ -27,8 +27,7 @@ OLD_CONSTANT = re.compile(r'\bRoot = "dbdata";')
 
 # Files that name old secrets on purpose: path (relative, '/') -> why.
 EXEMPT_FILES = {
-    "docs/plans/RELEASE-NOTES-PENDING.md": "release notes: old and new names, on purpose",
-    "docs/plans/33-fewer-services.md": "the plan of the rename: the old-name column",
+    "docs/release-notes-pending.md": "release notes: old and new names, on purpose",
     "docs/ci-lessons.md": "CI lessons name the secrets of the day they were learnt",
     "docs/release-notes/dbdatagateway-rename.md": "the release note of the rename DbDataProxy to DbDataGateway",
     "scripts/rename_proxy_to_gateway.py": "the script of the rename DbDataProxy to DbDataGateway",

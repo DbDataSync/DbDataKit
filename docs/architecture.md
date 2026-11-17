@@ -80,19 +80,42 @@ In those cases the process is a host with a typed protocol. The calls that exist
 Sync runtimes by their command lines) stay until a slice touches them anyway; nothing is converted for its own sake. Whether `dbdatabuild`, `dbdatasync` and
 `dbdatastore` stay as command lines is then only a question of a tool for people.
 
-## Isolation by trust (owner, 2026-11-16)
+## Isolation by trust
 
-Work is placed by what it can touch, not by product or by how it is started (plan 35, `docs/plans/35-isolation-by-trust.md`, has the slices):
+Work is placed by what it can touch, not by product or by how it is started. There are three places, and each holds only the logins its work needs
+(the work left is [planning/TRUSTZONES.md](../planning/TRUSTZONES.md)):
 
-- **Serving** (the Gateway group) is request/response only and holds read logins and the Store's person-attributed row-write login.
-- **Work** (the Runner group) runs everything scheduled or queued and all trusted custom code, each task in a process of its own, and holds the bulk-write and
-  schema-change logins bound to slots and the integration secrets. It faces nothing outside.
-- **Control** (the console and the Workspace) authors, approves, publishes, binds, starts manual tasks and monitors, and holds no customer data login.
-- Every server holds a login to its own state database only, and keeps its own state (retention, its own snapshot, key rotation) in its own process, on one
-  shared housekeeping library.
+| Place | Servers | What runs there | Logins it holds |
+| --- | --- | --- | --- |
+| **Serving** | the Gateway group | request/response only: our serving code, views, the apps host, agents' tools, front-end custom code | read logins, and the Store's person-attributed row-write login |
+| **Work** | the Runner group | everything scheduled or queued and all trusted custom code (integrations, actions, the Build, Sync and Store runtimes), each task in a process of its own | the bulk-write and schema-change logins bound to slots, the integration secrets |
+| **Control** | the console and the Workspace | authoring, approvals, publishing, binding, starting manual tasks, Monitoring | no customer data login |
 
-**The console is the root of trust.** It pairs every server and makes every group key (a Serving key per Gateway group, a Work key per Runner group, and its
-own); nothing else issues trust, and a secret is sealed to the place that uses it. A server whose partner is missing warns and still starts.
+- **Every server holds a login to its own state database only.** Retention, its own snapshot and key rotation run in its own process on the shared
+  housekeeping library (`StateHousekeeping`); work on customer data goes to the Runner. A console alone keeps its state healthy, and a Runner is never
+  handed a login to another server's state.
+- **The Store's row writes stay on Serving.** They are person-scale and attributed to the person, so they need no queue. Example: a person saves a
+  customer's address on an app screen; the Gateway's store module writes it with the row-write login and records the person.
+- **A structural change runs only from Control.** A manual task marked structural accepts a run only from the Workspace route, which checks the plan's
+  consumers first; the Runner's screen shows it read only. A schema change is approved against a plan hash and must not start from a place that skipped
+  the question.
+- **Trusted request/response is a Runner run the caller waits on for 10 seconds**, then the answer is a link to the run: long enough for a small action,
+  short enough that a request does not hold a connection. Example: a view's "re-send invoice" button starts an integration task; the person sees its
+  result if it ends within 10 seconds, otherwise a link to the run.
+- **Scheduled reads run on Work as the person.** Subscriptions, report-catalog reads and evaluation are scheduled, so they are Runner tasks; a read for a
+  subscription is made through the Gateway as the subscriber, so the subscriber's rules apply.
+- **Webhooks arrive on Serving.** The Gateway is the public endpoint: it checks the signature, keeps the body and hands it to a Runner's inbox, so a Runner
+  needs no inbound address from outside.
+- **A missing partner warns and never refuses.** A Gateway group with no linked Runner group, or the reverse, shows a warning on Monitoring and on the
+  feature that needs it; neither server refuses to start, and requests wait in the outbox until the partner is there. A partial install must still start.
+
+**The three paths between places.** (1) Serving to Work: "run this task", through the link the console makes between a Gateway group and a Runner group,
+with a durable outbox. (2) Work to Serving: "data changed", reads as a person, and publishing definitions. (3) Control to either: publish, bind, approve,
+start a manual task.
+
+**The console is the root of trust.** It pairs every server and makes every group key (a Serving key per Gateway group, a Work key per Runner group, and
+its own); nothing else issues trust, and a secret is sealed to the place that uses it. One database server per install holds a database or schema and a
+login per service and group; SQLite stays the single-machine default. One backup set holds every server's snapshot, and the console backs up the keys once.
 
 ## Clean break
 
@@ -125,7 +148,7 @@ and its change requests decided through a Gateway's store module. The break is n
 | D2 | One YAML format for every product (Gateway moved off JSON); no migration from `appsettings.json`. | One reader, one editor, one history; the clean break makes migration code unnecessary. |
 | D3 | Each product keeps its own CLI; `dbdatakit` is the console's CLI only; lower-case executables; `<noun> <verb>` everywhere, old forms removed. | One grammar to learn; a console CLI that forwarded to products would hide which server a command touches. |
 | D4 | Each product is a standalone install option; the suite release (console image and MSI included) comes from the same workflow and commit; separate MSIs, pairing at install is a documented step. | Nothing forces a user to install products they do not use; one workflow keeps the cost low (`docs/releases.md`). |
-| D5 | The updater is deleted (plan 08, the six `DbDataKit.Update*` packages and Sync's updater). Images, MSI and the install scripts are the distribution. | The updater was shelved and never settled; the other routes cover installing and upgrading. |
+| D5 | No self-updater runs beside a product (Sync's updater and launcher went with the Sync server). Images, MSIs, Scoop and the install scripts are the distribution; the console's upgrades (`DbDataKit.Upgrade`) reuse the `DbDataKit.Update`, `.Update.Service` and `.Update.Detect` libraries to download, verify and apply a release on a server. | One distribution route per platform; the update libraries' signed-manifest and verification code is reused, not written twice. |
 | D6 | DuckDB 2.0.0 at once with the released engine pinned (`duckdb.pin`) and DuckDB.NET packages that carry no engine. Done. | Waiting for DuckDB.NET 2.0 would hold every product back. |
 | D7 | No DuckDB 1.x after 2.0; code that existed only for 1.x is deleted. Done. | One engine to test. |
 | D8 | Anything Build cannot reproduce exactly on DuckDB 2.0 is refused with a named diagnostic; `%` and `//` by zero follow 2.0 and the targets (they raise). Done. | A refusal is honest; a silent difference is a data bug. |
@@ -134,7 +157,7 @@ and its change requests decided through a Gateway's store module. The break is n
 | D11 | **Decided (owner, 2026-11-14): framework-dependent everywhere.** Every program of the suite needs the .NET 10 runtime (ASP.NET Core for the servers) installed on the machine, as the console, Runner, Sync, Store and Workspace already do; Build's single self-contained file and the Gateway's self-contained Windows build become framework-dependent like the rest (plan 33 SC25). **One exception:** the Gateway's 32-bit ODBC worker (`DbDataGateway.Worker`, win-x86) stays self-contained, so a machine with 32-bit drivers needs no second, 32-bit .NET runtime. | One prerequisite for every program, one publish mode in the scripts, smaller zips and runtime packages, and .NET's security fixes arrive through one runtime the machine updates (Microsoft Update on Windows, the package manager on Linux) instead of a rebuild of the suite. |
 | D12 | **Revised (owner, 2026-11-14):** isolating Build's native SQL library (polyglot) in a child process is not required: no crash has been reported and the library is pinned and hash-checked. Existing child-process calls stay until a slice touches them; see "Our code calls our code as a library". | A defensive cost with no reported failure behind it. |
 | D13 | A Build schedule lives in the project (committed with the refresh plan); an operator may pause or run now, not add. | Fits "everything is a file" and review of plans. |
-| D14 | Trust: a client calls a server, never the reverse; several clients per server, each with its own key and ceiling; short-lived signed tokens naming a person; ownership-scoped ceilings (Publisher) for server clients; the local CLI over a named pipe or Unix socket. | A server needs no credentials for any console and stays the security boundary (`DbDataKit.Web`). |
+| D14 | Trust: a client calls a server, never the reverse (a server will call the console once, to join it: `docs/install.md`); several clients per server, each with its own key and ceiling; short-lived signed tokens naming a person; ownership-scoped ceilings (Publisher) for server clients; the local CLI over a named pipe or Unix socket. | A server needs no credentials for any console and stays the security boundary (`DbDataKit.Web`). |
 | D15 | Authoring merges by pushing to the project's git remote and opening a pull request when one is configured, else inside the Workspace server with the author's identity. | The usual review path where a remote exists. |
 | D16 | The console's back end relays every browser call to the servers; browsers never reach them. | Servers stay off the browser's network, pinned self-signed certificates work, no CORS, and live updates (SignalR) are relayed. |
 | D17 | A console and a server can differ in version: the management API carries an integer version, a client supports its own and the one before, and says which side to upgrade (since extended to the suite's compatibility generation, N and N-1). | Products release on their own. |

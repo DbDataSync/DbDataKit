@@ -16,8 +16,9 @@ import os
 import re
 import sys
 
-SKIP_DIRS = {"node_modules", "bin", "obj", ".git", "__pycache__", "tests", "architecture", "progress", "research", "plans", "review"}
-SKIP_FILES = {"RELEASE-NOTES-PENDING.md", "CHANGELOG.md", "review.md", "security-review.md"}  # the four pre-monorepo reviews (docs/needs-review.md)
+SKIP_DIRS = {"node_modules", "bin", "obj", ".git", "__pycache__", "tests", "architecture", "progress", "research", "plans", "planning", "review"}  # planning/ names commands its tasks will add
+SKIP_PATHS = {"docs/install.md"}  # the design planning/INSTALLER.md builds: its commands arrive with it
+SKIP_FILES = {"release-notes-pending.md", "CHANGELOG.md", "review.md", "security-review.md"}  # the four pre-monorepo reviews (docs/needs-review.md)
 OK_MARK = "retired-name-ok"   # a line that must name the old form on purpose (a transitional step) says so, on itself or the line above
 EXTENSIONS = (".md", ".yml", ".yaml", ".ps1", ".sh", ".service", ".wxs", ".json", ".py", ".txt")
 
@@ -71,11 +72,14 @@ def read(path):
         return ""
 
 
-def files(root):
+def files(root, repository=None):
+    """The files to read under root; SKIP_PATHS are relative to the repository (root unless given)."""
     for dirpath, dirnames, names in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
         for name in names:
             if name in SKIP_FILES or not name.endswith(EXTENSIONS):
+                continue
+            if os.path.relpath(os.path.join(dirpath, name), repository or root).replace(os.sep, "/") in SKIP_PATHS:
                 continue
             yield os.path.join(dirpath, name)
 
@@ -182,7 +186,7 @@ def check_web_app(root):
     sync = os.path.join(root, "DbDataSync")
     if not os.path.isdir(sync):
         return problems
-    for path in files(sync):
+    for path in files(sync, root):
         if not path.endswith(".md"):
             continue
         rel = os.path.relpath(path, root).replace(os.sep, "/")

@@ -1,6 +1,6 @@
 # Authoring parity: what the standalone screens do and what the Workspace does
 
-The owner's decision (2026-11-11): **no standalone authoring screen or route is retired until the Workspace has feature parity with it and the owner has tested it in a snapshot release.** The three hand-over rows of [plan 33](plans/33-fewer-services.md) (SC20g Build, SC21d Store, SC22e Sync) are on hold for that reason: first parity, then the owner's snapshot test, then the owner's go. The standalone products keep working unchanged meanwhile (decision D3).
+The owner's decision (2026-11-11): **no standalone authoring screen or route is retired until the Workspace has feature parity with it and the owner has tested it in a snapshot release.** The Build, Sync and Store servers were deleted after their authoring moved; the rule still holds for any screen that is replaced: first parity, then the owner's snapshot test, then the owner's go. The standalone products keep working unchanged meanwhile (decision D3).
 
 This page is the list that parity is measured against: every thing a person can do on a standalone authoring screen (`Shared/web/build`, `Shared/web/store`, `Shared/web/sync`), what the Workspace (`Shared/web/workspace`, with the console's Approvals page for the Store) does for it today, and the plan row that owns each gap. Read from the code as of 2026-11-11, not by clicking through every screen. Keep it current in the same commit that builds a row.
 

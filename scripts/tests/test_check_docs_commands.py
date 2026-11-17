@@ -39,8 +39,13 @@ class CheckDocsCommands(unittest.TestCase):
         self.assertEqual([], check.check(root))
 
     def test_history_is_not_checked(self):
-        root = tree({"docs/plans/13-x.md": "dbdatasync serve\n", "DbDataSync/architecture/implementation/p.md": "dbdatasync setup\n", "docs/RELEASE-NOTES-PENDING.md": "dbdatasync serve\n"})
+        root = tree({"docs/plans/13-x.md": "dbdatasync serve\n", "DbDataSync/architecture/implementation/p.md": "dbdatasync setup\n", "docs/release-notes-pending.md": "dbdatasync serve\n"})
         self.assertEqual([], check.check(root))
+
+    def test_planning_and_the_install_design_are_not_checked_but_another_install_md_is(self):
+        root = tree({"planning/INSTALLER.md": "dbdatasync serve\n", "docs/install.md": "dbdatasync serve\n"})
+        self.assertEqual([], check.check(root))
+        self.assertEqual(1, len(check.check(tree({"DbDataSync/docs/install.md": "dbdatasync serve\n"}))))
 
     def test_the_four_pre_monorepo_reviews_are_not_read(self):
         # docs/needs-review.md: they predate the monorepo, wait for review and cleanup, and are skipped by the scripts

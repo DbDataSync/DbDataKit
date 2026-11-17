@@ -6,10 +6,10 @@ The table is written by hand (read the code, do not guess); this check keeps it 
      cannot arrive without a row that says whether it has an editor;
   2. every backticked id in a Format column is a registered format;
   3. every row has a state: full, partial, view-only, none or planned (the first word of the State cell);
-  4. a state other than full says why or what closes it: a slice id in the Gap column (a slice of a plan in docs/plans, such as DBR27) or a
-     reason in parentheses in the State cell (`none (reason)`, the documented exemption);
-  5. a planned row names a slice that is a row of a plan in docs/plans (every slice id of its Gap cell that has the shape of one, so a plan
-     that is deleted or renamed cannot leave a row pointing at nothing); no cell names a `UEnn`, the slices of the plan that was removed;
+  4. a state other than full says why or what closes it: a task id in the Gap column (`<SLUG>-<n>`, a task of a subject in planning/, such as
+     PAGEFORMAT-3) or a reason in parentheses in the State cell (`none (reason)`, the documented exemption);
+  5. every task id a row names is a task (a table row) of a subject file in planning/, so a subject that is finished or renamed cannot leave a row
+     pointing at nothing; no cell names a `UEnn`, the slices of a plan that was removed;
   6. every `Name.tsx` named in the Editor column exists under Shared/web/*/src;
   7. the `Counts:` line equals the count of the rows' states.
 Run from anywhere: python3 scripts/check_ui_editors.py [root]
@@ -22,14 +22,14 @@ import sys
 STATES = ("full", "partial", "view-only", "none", "planned")
 HEADER = re.compile(r"^\|\s*Feature\s*\|")
 CELL_SPLIT = re.compile(r"(?<!\\)\|")
-SLICE_ID = re.compile(r"\b[A-Z]{1,3}\d+[a-z]?\b")
+TASK_ID = re.compile(r"\b[A-Z][A-Z0-9]{7,}-\d+\b")
 UE_ID = re.compile(r"\bUE\d+[a-z]?\b")
-PLAN_ROW = re.compile(r"^\|\s*\**([A-Z]{1,3}\d+[a-z]?)\**\s*\|", re.M)
+TASK_ROW = re.compile(r"^\|\s*\**([A-Z][A-Z0-9]{7,}-\d+)\**\s*\|", re.M)
 BACKTICKED = re.compile(r"`([^`]+)`")
 TSX = re.compile(r"`([A-Za-z0-9_]+\.tsx)`")
 COUNTS = re.compile(r"^Counts: full (\d+), partial (\d+), view-only (\d+), none (\d+), planned (\d+)\.\s*$", re.M)
 DOC = "docs/ui-editors.md"
-PLANS = os.path.join("docs", "plans")
+PLANNING = "planning"
 
 
 def read(path):
@@ -55,15 +55,15 @@ def rows(text):
     return found
 
 
-def plan_slices(root):
-    """Every slice id that is the first cell of a table row in a plan under docs/plans."""
+def planned_tasks(root):
+    """Every task id that is the first cell of a table row in a subject file under planning/."""
     found = set()
-    folder = os.path.join(root, PLANS)
+    folder = os.path.join(root, PLANNING)
     if not os.path.isdir(folder):
         return found
     for name in os.listdir(folder):
-        if name.endswith(".md"):
-            found.update(PLAN_ROW.findall(read(os.path.join(folder, name))))
+        if name.endswith(".md") and os.path.isfile(os.path.join(folder, name)):
+            found.update(TASK_ROW.findall(read(os.path.join(folder, name))))
     return found
 
 
@@ -87,7 +87,7 @@ def problems(root):
     out = []
     registry_path = os.path.join(root, "docs", "formats.json")
     registered = [f["id"] for f in json.loads(read(registry_path))["formats"]] if os.path.exists(registry_path) else []
-    slices = plan_slices(root)
+    tasks = planned_tasks(root)
     table = rows(text)
     if not table:
         return [f"{DOC} has no table whose header starts with | Feature |"]
@@ -108,14 +108,13 @@ def problems(root):
             out.append(f"{DOC}: '{feature}' has state '{state}': the first word is one of {', '.join(STATES)}")
             continue
         counts[word] += 1
-        if word != "full" and not SLICE_ID.search(gap) and "(" not in state:
-            out.append(f"{DOC}: '{feature}' is {word} and says neither which slice closes the gap nor why not: name a slice in the last cell or write `{word} (reason)`")
+        if word != "full" and not TASK_ID.search(gap) and "(" not in state:
+            out.append(f"{DOC}: '{feature}' is {word} and says neither which task closes the gap nor why not: name a task of planning/ in the last cell or write `{word} (reason)`")
         for ue in UE_ID.findall(" ".join(cells)):
             out.append(f"{DOC}: '{feature}' names {ue}, a slice of the removed editors plan: say what was built, or name the slice of the plan that owns the screen")
-        if word == "planned":
-            for ident in sorted(set(SLICE_ID.findall(gap))):
-                if ident not in slices:
-                    out.append(f"{DOC}: '{feature}' is planned and names {ident}, which is not a slice (a table row) of any plan in {PLANS}")
+        for ident in sorted(set(TASK_ID.findall(" ".join(cells)))):
+            if ident not in tasks:
+                out.append(f"{DOC}: '{feature}' names {ident}, which is not a task (a table row) of any subject in {PLANNING}/")
         for name in TSX.findall(editor):
             if name not in existing:
                 out.append(f"{DOC}: '{feature}' names {name}, which is not a file under Shared/web/*/src")

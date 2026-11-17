@@ -1,58 +1,26 @@
-# Working with many agents
+# Running several agents on one machine
 
-How a long session with several agents at once is run here without git, CI or machine-resource trouble. It is the pattern of the overnight run of
-2026-11-11 (about 40 agent branches merged, a few hundred commits, one main). `CLAUDE.md` has the rules of the repository; this page is how one
-person's session coordinates agents inside them. The skill `agent-batches` (`.claude/skills/agent-batches/SKILL.md`) is the short checklist.
+Who does what, and how work reaches `main`, is [planning/ROLES.md](../planning/ROLES.md) (the owner, one agent per subject, one coordinator, pull
+requests merged one at a time). This page is the machine side of a session with several agents: worktrees, backups, build slots, pacing and the traps
+already met. The skill `agent-batches` (`.claude/skills/agent-batches/SKILL.md`) is the short checklist.
 
-**Owner decision (2026-11-11), until further notice:** finished work goes straight to `main`, with no pull request, and Windows and CI problems are
-fixed afterwards by the CI agent. A pull request per batch (`CLAUDE.md`, "Making changes") is the rule again whenever the owner says so.
+## Worktrees and branches
 
-## Roles
-
-| Role | Does | Never does |
-| --- | --- | --- |
-| **Coordinator** (the main conversation) | Writes the briefs, starts agents, merges finished branches into the local `main` of the main checkout, resolves conflicts, runs the repository checks, answers the owner, keeps the list of what is open | Builds big things itself, or edits a branch an agent still works on |
-| **Slice agent** | One area, in its own git worktree on a local branch `work/<name>`; audits the plan rows against the code first, builds the open slices in dependency order, **one commit per slice** with the plan row's status set in the same commit | Pushes, opens a pull request, edits a frozen format, touches another agent's area |
-| **CI agent** | The only agent that pushes. Pushes local `main` when no CI run is in progress, watches the run set, reruns infrastructure flakes, fixes real failures on its own branch (`work/ci-<n>`) with a `docs/ci-lessons.md` row each | Skips or disables a test to get green, force-pushes |
-| **Verifier / integrator** (when needed) | Builds and tests a combination of branches that were written without a build, fixes the breakage, one commit per fix | Redesigns |
-
-At most five to seven agents run at once. More is possible on paper; the machine decides (see Resources).
-
-## The loop of the coordinator
-
-1. **Brief an agent** (template below). Give it one area and name the areas the others hold.
-2. **Wait.** Reports arrive as messages. Read the report for what was built, what was skipped and why, what was run with counts, what is unverified and the decisions
-   it left open. Pass decisions to the owner; take defaults only for routine ones and say so ("default taken").
-3. **Merge:** in the main checkout, `git fetch origin main`, `git merge origin/main`, then `git merge work/<name>`. Conflicts are almost always text in shared tables:
-   - `docs/ui-editors.md` counts line (take the numbers `scripts/check_ui_editors.py` prints for the rows after the merge);
-   - plan rows renumbered or rewritten on both sides (keep the side whose status describes what the code does);
-   - `docs/ci-lessons.md`, `docs/ui-coverage.md` (keep both sides' rows);
-   - real code (a Program/Host file wired by two agents): keep both, in the order that makes sense (for example an auth gate before an audit middleware), and ask the CI agent to watch it.
-4. **Check:** `python3 -I scripts/check_*.py` (all of them). `check_solution.py` and `check_docs_commands.py` also scan `.claude/worktrees`, so they can fail
-   only because agent worktrees exist: run them from a clean path or ignore a complaint that names only a worktree path.
-5. **Remove the finished agent's worktree** (`git worktree remove -f -f .claude/worktrees/agent-<id>`); the branch stays.
-6. **Start the next agent** from the list of open work, so slots are not idle.
-7. **Back up** (`python3 scripts/backup_branches.py push`), then **push to main only when no run is in progress** (next sections).
-
-## Pushing
-
-A push to `main` starts a run set and **cancels** the one still running. So:
-
-- `gh api "repos/<owner>/<repo>/actions/runs?branch=main&per_page=14" --jq '.workflow_runs[]|select(.status!="completed")|"\(.name) \(.status) \(.head_sha[0:8])"'`;
-  push only when it prints nothing. Manually dispatched workflows (a suite dry run) have no concurrency group and are not cancelled by a push.
-- Fast-forward only. If the push is refused, the CI agent pushed in between: `git fetch`, `git merge origin/main`, check again.
-- **The coordinator works on the local branch `backup/main`**, not on `main`: it tracks `origin/backup/main`, `scripts/backup_branches.py push` keeps it backed up under its own name, and local `main` only follows `origin/main` (`git branch -f main origin/main` after a fetch). Merge finished agent branches into `backup/main`, and publish with `git fetch origin main && git merge origin/main && git push origin backup/main:main` only when no run is in progress. Agents merge `backup/main` (not `main`) to get the integrated work that is not published yet. A stop hook that counts unpushed commits of `main` then has nothing to report, because `main` is never ahead.
-- One push per completed run set. The CI agent does it on its own cadence; the coordinator pushes when a stop hook demands it and nothing runs.
-- A big merge that was never built together is pushed anyway **after** the checks pass; CI is its first real build, which is why the CI agent is told to watch that run set hardest.
+- Each agent works in its own git worktree on its own branch (in a cloud session the harness names it). It starts from the current `main`, and merges
+  `main` into its branch before it opens a pull request and whenever `main` moves under an open one. It never rewrites a pushed branch (no amend, squash,
+  rebase or reset of commits already pushed).
+- Commit messages start with the task id (`INSTALLER-3: ...`). Work-in-progress notes go in `planning/wip/<SLUG>/<TASK-ID>.md` on the branch
+  (`planning/ROLES.md`).
+- A finished worktree is removed (`git worktree remove -f -f .claude/worktrees/agent-<id>`); its branch stays until its pull request merges.
+- `check_solution.py` and `check_docs_commands.py` also scan `.claude/worktrees`, so in the main checkout they can fail only because agent worktrees exist:
+  run them from a clean path or ignore a complaint that names only a worktree path.
 
 ## Backups
 
-The machine is temporary: work that exists only in a local `main` or in an agent's local branch is lost with it. Pending work is therefore pushed to **backup branches**
-while it waits for CI to be idle:
+The machine is temporary: work that exists only in a local branch is lost with it. Work not yet on a pushed branch is therefore pushed to **backup branches**:
 
 - `python3 scripts/backup_branches.py push` pushes local `main` to `backup/main` and every local `work/*` branch that `origin/main` does not contain yet to `backup/<branch>`
-  (for example `backup/work/delivery2`). Plain pushes, never forced: the branches only grow, so each push is a fast-forward. **The coordinator runs it after every merge into the local
-  main** (and the CI agent at the start of each cycle). Pushes to `backup/*` start no CI run (workflows run on pushes to `main` only).
+  (for example `backup/work/delivery2`). Plain pushes, never forced: the branches only grow, so each push is a fast-forward. Run it before a long build, before a pause and at the end of a session. Pushes to `backup/*` start no CI run (workflows run on pushes to `main` only).
 - **Agents never rewrite their branch** (no amend, squash, rebase or reset of commits already made): the backups are plain pushes. If a branch is rewritten anyway, the next push goes to
   `backup/<branch>-2` (then `-3`...) and the cleanup removes the old name once `main` has the same files (it compares content, not only history, so a squash or rebase is covered).
 - Only **committed** work is covered: one commit per slice is why the rule exists. An agent's uncommitted files are not backed up; ask a long-running agent to commit work in progress to its branch.
@@ -83,25 +51,16 @@ When the owner's plan has a usage window (for example a 5-hour limit), the coord
 - Run agents in the background and ask the owner for the usage reading now and then; measure the rate (a fresh agent used about 0.8% of a 5-hour window a minute; an agent with a very large context about twice that).
 - Prefer a **fresh agent** with a complete brief over resuming one whose context is huge: it is cheaper per step. The brief carries everything (the rules, the decisions, the order of work, the push rule) because the agent starts cold.
 - Schedule a **wind-down** message before the limit (leave about 10% for the wind-down and the report): the agent stops at a clean point, commits what passes, backs up the rest (`scripts/backup_branches.py push`), deletes its build output and reports. Schedule the **resume** just after the window resets.
-- After each report: check CI on `main`, land what is only on a backup branch when CI is idle, remove the agent's worktree, pass the owner's decisions on, and record each decision in its plan row in the same commit as the work or right after.
-
-## Brief template for an agent
-
-> You work in the DbDataKit monorepo (read `CLAUDE.md`, `docs/ci-lessons.md`, the plan rows named, `docs/testing-environment.md` end section). Your worktree starts from `main`
-> (if your base is older, `git merge main` first). **Goal:** the open slices of <plan> in dependency order; audit each against the code first (the plan text may be behind).
-> **Rules:** one commit per slice on local branch `work/<name>`, message starts with the slice id, the plan row's status set in the same commit; do not push, no pull request;
-> frozen formats are never edited; new formats are registered (`docs/formats.json`) with an editor row (`docs/ui-editors.md`); screens for new capabilities;
-> `check_*.py` pass. **Other agents work on:** <areas>: stay out. **Build rules:** (the Resources list). **Report:** branch, commit ids, slices built and skipped (why), what was
-> run with counts, what is unverified, decisions unsettled.
+- After each report: check CI, remove the agent's worktree, and pass the agent's open questions to the owner as the proposed decisions of its subject (`planning/ROLES.md`).
 
 ## What went wrong, and the fix
 
 | Trap | Fix |
 | --- | --- |
-| A worktree starts from an older commit than local `main` | Tell agents to `git merge main` (or reset an empty branch) before starting; report the base commit |
-| Two agents rewrite the same plan rows (renumbered slice ids) | Keep one owner per plan section; the merge keeps the side that matches the code |
-| A verifier was started on an old branch and its all-clear covered an old tree | Start the verifier from the current local `main`; check `git log` of its branch against `main` before trusting the report |
-| Specs written without a browser | The CI agent or a Playwright agent runs them; every spec that signs in a new administrator sorts after `first-run` and `identity-home` |
+| A worktree starts from an older commit than `main` | `git merge main` before starting; report the base commit |
+| Two agents rewrite the same rows | One agent per subject, and a subject agent edits only its own subject file (`planning/ROLES.md`) |
+| A verifier was started on an old branch and its all-clear covered an old tree | Start it from the current `main`; check `git log` of its branch against `main` before trusting the report |
+| Specs written without a browser | Run them in CI before the pull request merges; every spec that signs in a new administrator sorts after `first-run` and `identity-home` |
 | Reserved words (`exit`, `identity`) as column names | Only the engine legs find them; run the SQL Server and PostgreSQL legs of a new module before the first push when disk allows |
 | A stop hook nags to push while CI runs | Answer with the run state; push when idle |
 | Disk full | Prune docker images, remove finished worktrees, one build at a time |

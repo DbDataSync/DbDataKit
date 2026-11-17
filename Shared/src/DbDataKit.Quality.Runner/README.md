@@ -14,7 +14,20 @@ Runs the checks of a dataset and records what they found (plan 23a FQ08). The mo
 ## Who evaluates what (plan 35 I3)
 
 A dataset's checks are evaluated in the process of the Runner task that loads it, after its loads, with the read login that task already holds: a task never gets the files or the logins of another package to evaluate its checks. Today that is
-Build's `refresh`, and again on request by the same package's `check` task (plan 35 I3a). The `checks:` of a Sync replication, of a Store model and of a Gateway's data sources have no evaluator yet (plan 35, the I3 row).
+Build's `refresh`, and again on request by the same package's `check` task (plan 35 I3a). The `checks:` of a Sync replication, of a Store model and of a Gateway's data sources have no evaluator yet (`planning/DATAQUALITY.md`).
+
+### Re-check without a load
+
+The `check` task re-evaluates the checks of a package's datasets with the package's own slots and read login, records the results exactly as after a load,
+and loads nothing. Example: Build project `sales`, model `orders` has a blocking `not_null(customer_id)`; the 2:00 refresh records 40 failing rows, so
+`orders` is blocked and `orders_summary` waits; at 10:00 someone fixes the rows and presses Re-check; the check passes, the block clears, and the next
+refresh loads `orders_summary`. No other package's files or logins are used, which keeps each task to what its own package may touch.
+
+### No quality system of its own
+
+There is no separate quality package or service: the in-host quality task wrapper (the `quality-system` package) is gone, and evaluation lives in the
+packages that own the data. The shared libraries (`DbDataKit.Quality`, `.Quality.Evaluation`, `.Quality.Runner`, `.Quality.Cli`) are what every package
+composes. A general data quality system, separate from the packages, is a possible later product, not part of the suite today.
 
 ## Opening the `quality` module
 

@@ -17,112 +17,90 @@ def tree(files):
     return root
 
 
-def readme(*rows, extra=""):
-    return "# Plans\n\n| # | Plan |\n|---|---|\n" + "".join(f"| {n} | [{n}]({f}) |\n" for n, f in rows) + extra
+def index(*rows):
+    return ("# Planning\n\n| # | Subject | Goal | Status | Assigned | Tasks |\n| --- | --- | --- | --- | --- | --- |\n"
+            + "".join(f"| {i + 1} | [{slug}]({slug}.md) | goal | queued | unassigned | {n} |\n" for i, (slug, n) in enumerate(rows)))
+
+
+def subject(slug, tasks=(), proposals=(), needs=""):
+    rows = "".join(f"| {slug}-{n} | what | {dep} | S | a test |\n" for n, dep in tasks)
+    props = "".join(f"### {slug}-P{n}: a question\n\nScenario.\n\n" for n in proposals)
+    return (f"# {slug}\n\n## Goal\n\nx\n\n## Tasks\n\n| Task | What | Depends on | Size | Done when |\n| --- | --- | --- | --- | --- |\n{rows}\n"
+            f"## Needs from other subjects\n\n{needs}\n\n## Proposed decisions\n\n{props}")
 
 
 GOOD = {
-    "docs/plans/01-a.md": "# A\n\nStatus: done.\n",
-    "docs/plans/02-b.md": "# B\n\nStatus: proposed. See [A](01-a.md).\n",
-    "docs/plans/README.md": readme(("01", "01-a.md"), ("02", "02-b.md")),
+    "planning/README.md": index(("ALPHABETA", 2), ("GAMMADELTA", 1)),
+    "planning/ROLES.md": "# Roles\n",
+    "planning/ALPHABETA.md": subject("ALPHABETA", [(1, "none"), (2, "ALPHABETA-1")], [1]),
+    "planning/GAMMADELTA.md": subject("GAMMADELTA", [(1, "ALPHABETA-2")], needs="- ALPHABETA-1: the thing; see ALPHABETA-P1."),
+    "docs/a.md": "See [the plan](../planning/ALPHABETA.md).\n",
 }
 
 
-def table(*statuses):
-    return "| Id | Slice | Done when |\n|---|---|---|\n" + "".join(f"| R{i + 1:02d} | slice | test {s} |\n" for i, s in enumerate(statuses))
-
-
 class CheckPlans(unittest.TestCase):
-    def problems(self, files, baseline=None):
-        files = dict(files)
-        if baseline is not None:
-            files["scripts/plan_check_baseline.txt"] = baseline
-        return check.check(tree(files))
+    def problems(self, changes=None, drop=()):
+        files = {k: v for k, v in GOOD.items() if k not in drop}
+        files.update(changes or {})
+        return check.problems(tree(files))
 
-    def test_a_consistent_tree_passes(self):
-        self.assertEqual(([], []), self.problems(GOOD))
+    def test_a_consistent_planning_folder_passes(self):
+        self.assertEqual([], self.problems())
 
-    def test_a_link_to_a_missing_plan_is_found(self):
-        files = dict(GOOD, **{"docs/plans/02-b.md": "# B\n\nStatus: proposed. See [C](03-c.md#x).\n"})
-        problems, _ = self.problems(files)
-        self.assertEqual(1, len(problems))
-        self.assertIn("03-c.md", problems[0])
+    def test_a_subject_missing_from_the_index_is_named(self):
+        found = self.problems({"planning/README.md": index(("ALPHABETA", 2))})
+        self.assertTrue(any("does not list the subject planning/GAMMADELTA.md" in p for p in found), found)
 
-    def test_links_to_other_files_are_not_checked(self):
-        files = dict(GOOD, **{"docs/plans/02-b.md": "# B\n\nStatus: proposed. [x](../ui-coverage.md) [y](https://e.com/z-1.md)\n"})
-        self.assertEqual(([], []), self.problems(files))
+    def test_an_index_line_without_its_file_is_named(self):
+        found = self.problems({"planning/README.md": index(("ALPHABETA", 2), ("GAMMADELTA", 1), ("EPSILONZETA", 0))})
+        self.assertTrue(any("links EPSILONZETA.md, which does not exist" in p for p in found), found)
 
-    def test_a_plan_number_without_a_file_in_the_readme_is_found(self):
-        files = dict(GOOD, **{"docs/plans/README.md": readme(("01", "01-a.md"), ("02", "02-b.md"), extra="See plans 01 to 07 and plan 2.\n")})
-        problems, _ = self.problems(files)
-        self.assertEqual(1, len(problems))
-        self.assertIn("plan 07", problems[0])
+    def test_a_wrong_task_count_in_the_index_is_named(self):
+        found = self.problems({"planning/README.md": index(("ALPHABETA", 3), ("GAMMADELTA", 1))})
+        self.assertTrue(any("says ALPHABETA has 3 tasks; its file has 2" in p for p in found), found)
 
-    def test_a_list_of_plans_names_each(self):
-        files = dict(GOOD, **{"docs/plans/README.md": readme(("01", "01-a.md"), ("02", "02-b.md"), extra="plans 1, 2 and 9\n")})
-        problems, _ = self.problems(files)
-        self.assertEqual(1, len(problems))
-        self.assertIn("plan 9", problems[0])
+    def test_a_short_or_lower_case_slug_is_refused(self):
+        files = {"planning/README.md": index(("ALPHABETA", 2), ("GAMMADELTA", 1), ("Short", 0)), "planning/Short.md": subject("Short")}
+        found = self.problems(files)
+        self.assertTrue(any("the slug 'Short'" in p for p in found), found)
 
-    def test_a_finished_plans_pointer_row_keeps_its_number_known(self):
-        files = dict(GOOD, **{"docs/plans/README.md": readme(("01", "01-a.md"), ("02", "02-b.md"), ("09", "../done.md"), extra="plan 9\n")})
-        self.assertEqual(([], []), self.problems(files))
+    def test_a_task_with_another_subjects_prefix_is_refused(self):
+        found = self.problems({"planning/GAMMADELTA.md": subject("GAMMADELTA", [(1, "none")]) + "\n| ALPHABETA-9 | x | none | S | t |\n"})
+        self.assertTrue(any("task ALPHABETA-9 does not start with the slug GAMMADELTA" in p for p in found), found)
 
-    def test_a_row_pointing_at_the_merged_file_of_a_plan_keeps_its_number_known(self):
-        files = {"docs/plans/01-a.md": "# A\n\nStatus: done.\n", "docs/plans/02a-c.md": "# C\n\nStatus: done.\n", "docs/plans/README.md": readme(("01", "01-a.md"), ("02", "02a-c.md"), ("02a", "02a-c.md"), extra="plan 2\n")}
-        self.assertEqual(([], []), self.problems(files))
+    def test_a_task_id_used_twice_is_refused(self):
+        found = self.problems({"planning/ALPHABETA.md": subject("ALPHABETA", [(1, "none"), (1, "none")], [1])})
+        self.assertTrue(any("task ALPHABETA-1 is also in" in p for p in found), found)
 
-    def test_a_suffixed_number_resolves_to_its_file(self):
-        files = dict(GOOD, **{"docs/plans/02a-c.md": "# C\n\nStatus: done.\n", "docs/plans/README.md": readme(("01", "01-a.md"), ("02", "02-b.md"), ("02a", "02a-c.md"), extra="plan 2a\n")})
-        self.assertEqual(([], []), self.problems(files))
+    def test_a_need_naming_a_task_that_does_not_exist_is_named(self):
+        found = self.problems({"planning/GAMMADELTA.md": subject("GAMMADELTA", [(1, "none")], needs="- ALPHABETA-7: missing")})
+        self.assertTrue(any("names ALPHABETA-7, which is not a task" in p for p in found), found)
 
-    def test_the_index_must_list_every_plan_and_no_missing_one(self):
-        files = dict(GOOD, **{"docs/plans/03-c.md": "# C\n\nStatus: done.\n", "docs/plans/README.md": readme(("01", "01-a.md"), ("02", "02-b.md"), ("04", "04-d.md"))})
-        problems, _ = self.problems(files)
-        text = "\n".join(problems)
-        self.assertIn("does not list 03-c.md", text)
-        self.assertIn("lists 04-d.md, which does not exist", text)
+    def test_a_proposed_decision_with_another_prefix_or_twice_is_refused(self):
+        text = subject("GAMMADELTA", [(1, "none")]) + "\n### ALPHABETA-P4: x\n\n### GAMMADELTA-P1: y\n\n### GAMMADELTA-P1: z\n"
+        found = self.problems({"planning/GAMMADELTA.md": text})
+        self.assertTrue(any("proposed decision ALPHABETA-P4 does not start with the slug GAMMADELTA" in p for p in found), found)
+        self.assertTrue(any("proposed decision GAMMADELTA-P1 is also in" in p for p in found), found)
 
-    def test_an_open_plan_with_every_row_done_is_flagged(self):
-        files = dict(GOOD, **{"docs/plans/02-b.md": "# B\n\nStatus: **proposed** (2026-11-07).\n\n" + table("**Status: done**", "Status: built")})
-        problems, _ = self.problems(files)
-        self.assertEqual(1, len(problems))
-        self.assertIn("all 2 slice rows are done", problems[0])
+    def test_a_reference_to_a_proposal_that_does_not_exist_is_named(self):
+        found = self.problems({"planning/GAMMADELTA.md": subject("GAMMADELTA", [(1, "ALPHABETA-P8")])})
+        self.assertTrue(any("names ALPHABETA-P8, which is not a proposed decision" in p for p in found), found)
 
-    def test_a_plan_that_says_it_is_closed_dropped_or_superseded_is_flagged(self):
-        for status in ("**closed (owner, 2026-11-09)**.", "Dropped.", "Superseded by plan 01.", "**Marked for deletion**."):
-            files = dict(GOOD, **{"docs/plans/02-b.md": f"# B\n\nStatus: {status}\n"})
-            problems, _ = self.problems(files)
-            self.assertEqual(1, len(problems), status)
-            self.assertIn("delete it", problems[0])
+    def test_a_document_that_names_docs_plans_is_refused(self):
+        found = self.problems({"DbDataKit/README.md": "See `docs/plans/35-isolation.md`.\n", "docs/b.md": "[old](plans/26-app.md)\n"})
+        self.assertTrue(any(p.startswith("DbDataKit/README.md: names docs/plans/") for p in found), found)
+        self.assertTrue(any(p.startswith("docs/b.md: names docs/plans/") for p in found), found)
 
-    def test_an_open_plan_with_a_row_left_is_fine(self):
-        files = dict(GOOD, **{"docs/plans/02-b.md": "# B\n\nStatus: in progress.\n\n" + table("Status: done", "not built")})
-        self.assertEqual(([], []), self.problems(files))
+    def test_a_link_to_a_deleted_subject_is_refused(self):
+        found = self.problems({"docs/c.md": "Owned by [OLDSUBJECT](../planning/OLDSUBJECT.md).\n"})
+        self.assertTrue(any("docs/c.md: links ../planning/OLDSUBJECT.md, which does not exist" in p for p in found), found)
 
-    def test_a_plan_without_slice_rows_is_never_flagged(self):
-        files = dict(GOOD, **{"docs/plans/02-b.md": "# B\n\nStatus: proposed.\n\n| Q | question |\n|---|---|\n| a question | Status: done |\n"})
-        self.assertEqual(([], []), self.problems(files))
+    def test_wip_notes_are_not_read_here(self):
+        self.assertEqual([], self.problems({"planning/wip/ALPHABETA/ALPHABETA-1.md": "# notes\n- names NOSUCHTASK-3\n"}))
 
-    def test_a_plan_that_is_done_is_not_flagged_for_its_status_alone(self):
-        files = dict(GOOD, **{"docs/plans/02-b.md": "# B\n\nStatus: done.\n\n" + table("Status: done")})
-        self.assertEqual(([], []), self.problems(files))
-
-    def test_the_baseline_turns_a_violation_into_a_warning(self):
-        files = dict(GOOD, **{"docs/plans/02-b.md": "# B\n\nStatus: proposed. [C](03-c.md)\n"})
-        problems, warnings = self.problems(files, "# note\n02-b.md: links\n")
-        self.assertEqual([], problems)
-        self.assertEqual(1, len(warnings))
-
-    def test_a_baseline_line_without_a_violation_fails(self):
-        problems, _ = self.problems(GOOD, "02-b.md: links\n")
-        self.assertEqual(1, len(problems))
-        self.assertIn("remove the line", problems[0])
-
-    def test_the_repository_itself_passes(self):
+    def test_the_repository_is_consistent(self):
         root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        problems, _ = check.check(root)
-        self.assertEqual([], problems)
+        self.assertEqual([], check.problems(root))
 
 
 if __name__ == "__main__":
