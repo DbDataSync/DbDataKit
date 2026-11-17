@@ -230,6 +230,8 @@ public sealed class ConfigStartupTests
     [Fact]
     public async Task A_start_that_fails_leaves_its_cause_in_the_data_folder_for_a_service_that_has_no_console()
     {
+        // the folder is there, as the install makes it (the record is never written into a folder that is not); the tests of this class share it and may run in any order
+        Directory.CreateDirectory(DataDir);
         using var env = new EnvScope(("DBDATAKIT_DATA_GATEWAY", DataDir));
         var file = Path.Combine(DataDir, StartFailure.FileName);
         File.Delete(file);
