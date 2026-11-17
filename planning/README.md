@@ -11,20 +11,21 @@ Subjects in priority order. The owner sets the order, the status and the assignm
 | 1 | [INSTALLER](INSTALLER.md) | Services own their data, start one way, fail in words, join the console by a generated command; no pairing codes | active | unassigned |
 | 2 | [ENDPOINTS](ENDPOINTS.md) | The Gateway listens on one public HTTPS port routed by path, plus Flight SQL and management | next | unassigned |
 | 3 | [TRUSTZONES](TRUSTZONES.md) | The console links Gateway and Runner groups; Serving asks Work through an outbox; Work tells and reads Serving; logins per service | next | unassigned |
-| 4 | [ALERTING](ALERTING.md) | Failed runs, checks, approvals, a silent console or a dead server reach a person, from the console and from each service | queued | unassigned |
-| 5 | [DATAQUALITY](DATAQUALITY.md) | The checks of replications, Store models, data sources and catalogs are evaluated; a blocked dataset keeps its last good version served | queued | unassigned |
-| 6 | [AUTHORING](AUTHORING.md) | Everything the deleted servers did is done from Workspace projects, with browser stories | queued | unassigned |
-| 7 | [PAGEFORMAT](PAGEFORMAT.md) | `page/1` replaces `dashboard/1`, `report/1` and `view-spec/1` | queued | unassigned |
-| 8 | [PUBLISHING](PUBLISHING.md) | Every kind on the one publish API: per-kind routes gone, apps by file, the approver's signature, `blocked_by_check` | queued | unassigned |
-| 9 | [SUBSCRIPTIONS](SUBSCRIPTIONS.md) | Subscriptions and report-catalog reads run as Runner tasks, as the subscriber | queued | unassigned |
-| 10 | [APPHOSTING](APPHOSTING.md) | Several sites with their own host names, certificates and sign-in on one Gateway | queued | unassigned |
-| 11 | [BACKUPRESTORE](BACKUPRESTORE.md) | One backup set, one key backup, one restore drill in CI | queued | unassigned |
-| 12 | [KNOWLEDGE](KNOWLEDGE.md) | Knowledge served by the Gateway, agents front and back, actions on path 1 | queued | unassigned |
-| 13 | [CHANNELS](CHANNELS.md) | Build test targets and Sync trial runs from the Workspace; previews removed on merge | queued | unassigned |
-| 14 | [SEMANTICS](SEMANTICS.md) | Semantic models checked, typed, described and configurable; SSAS bounded | queued | unassigned |
-| 15 | [MASTERDATA](MASTERDATA.md) | A change feed on the store module, native entity ids, instances, entities over Flight SQL | queued | unassigned |
-| 16 | [TASKENGINE](TASKENGINE.md) | Runner limits and accounts, Sync state on the target, lineage retention, availability tests | queued | unassigned |
-| 17 | [CODECLEANUP](CODECLEANUP.md) | No dead code or stale docs of the deleted servers; the old state path gone | queued | unassigned |
+| 4 | [CERTIFICATES](CERTIFICATES.md) | Every server can serve an enterprise (AD CS) certificate, renew it, and replace it without breaking its link to the console | needs review | unassigned |
+| 5 | [ALERTING](ALERTING.md) | Failed runs, checks, approvals, a silent console or a dead server reach a person, from the console and from each service | queued | unassigned |
+| 6 | [DATAQUALITY](DATAQUALITY.md) | The checks of replications, Store models, data sources and catalogs are evaluated; a blocked dataset keeps its last good version served | queued | unassigned |
+| 7 | [AUTHORING](AUTHORING.md) | Everything the deleted servers did is done from Workspace projects, with browser stories | queued | unassigned |
+| 8 | [PAGEFORMAT](PAGEFORMAT.md) | `page/1` replaces `dashboard/1`, `report/1` and `view-spec/1` | queued | unassigned |
+| 9 | [PUBLISHING](PUBLISHING.md) | Every kind on the one publish API: per-kind routes gone, apps by file, the approver's signature, `blocked_by_check` | queued | unassigned |
+| 10 | [SUBSCRIPTIONS](SUBSCRIPTIONS.md) | Subscriptions and report-catalog reads run as Runner tasks, as the subscriber | queued | unassigned |
+| 11 | [APPHOSTING](APPHOSTING.md) | Several sites with their own host names, certificates and sign-in on one Gateway | queued | unassigned |
+| 12 | [BACKUPRESTORE](BACKUPRESTORE.md) | One backup set, one key backup, one restore drill in CI | queued | unassigned |
+| 13 | [KNOWLEDGE](KNOWLEDGE.md) | Knowledge served by the Gateway, agents front and back, actions on path 1 | queued | unassigned |
+| 14 | [CHANNELS](CHANNELS.md) | Build test targets and Sync trial runs from the Workspace; previews removed on merge | queued | unassigned |
+| 15 | [SEMANTICS](SEMANTICS.md) | Semantic models checked, typed, described and configurable; SSAS bounded | queued | unassigned |
+| 16 | [MASTERDATA](MASTERDATA.md) | A change feed on the store module, native entity ids, instances, entities over Flight SQL | queued | unassigned |
+| 17 | [TASKENGINE](TASKENGINE.md) | Runner limits and accounts, Sync state on the target, lineage retention, availability tests | queued | unassigned |
+| 18 | [CODECLEANUP](CODECLEANUP.md) | No dead code or stale docs of the deleted servers; the old state path gone | queued | unassigned |
 
 ## Parked
 
@@ -45,6 +46,6 @@ Not scheduled; a line each. The owner un-parks one by adding a subject.
 - **RDL without a report server**: rendering RDL files in the suite (Majorsilence Reporting, or FastReport if its spike fails); verifying the Flight SQL
   ODBC driver on a report server; published semantic views in semantic SQL.
 - **Ad hoc semantic registrations** (SL25 to SL27): registrations and their review, and the combine in a child process, until an app or an agent needs them.
-- **DbDataKit Studio, trust lists and the `dbdatakit` admin tool** (a 2026-11-02 proposal found on an old branch; in git under the old plans folder's `needs-review/`, before
-  `planning/` was created): the rename to Studio is overtaken by the product name DbDataKit; certificate rollover with trust
-  lists and AD CS from a workstation are not planned.
+- **DbDataKit Studio and a separate admin tool** (a 2026-11-02 proposal found on an old branch, in git under the old plans folder's `needs-review/`): the rename
+  and the separate tool are overtaken (the console keeps its name; `dbdatakit` is its command line). Its certificate design (AD CS, trust lists, rollover,
+  renewal) is the subject CERTIFICATES.

@@ -6,7 +6,7 @@ Three roles: the owner, one subject agent per subject, and one coordinator. The 
 ## The owner
 
 - Answers proposed decisions.
-- Sets the order of subjects, their status (active, next, queued, parked) and their priority.
+- Sets the order of subjects, their status (active, next, queued, parked, or needs review: a subject written for the owner to accept or change before any work starts) and their priority.
 - Assigns a subject to a session or a machine (the Assigned column of the index).
 - Configures branch protection and the merge queue on GitHub.
 
