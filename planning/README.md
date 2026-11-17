@@ -11,7 +11,7 @@ Subjects in priority order. The owner sets the order, the status and the assignm
 | 1 | [INSTALLER](INSTALLER.md) | Services own their data, start one way, fail in words, join the console by a generated command; no pairing codes | active | unassigned |
 | 2 | [ENDPOINTS](ENDPOINTS.md) | The Gateway listens on one public HTTPS port routed by path, plus Flight SQL and management | next | unassigned |
 | 3 | [TRUSTZONES](TRUSTZONES.md) | The console links Gateway and Runner groups; Serving asks Work through an outbox; Work tells and reads Serving; logins per service | next | unassigned |
-| 4 | [CERTIFICATES](CERTIFICATES.md) | Every server can serve an enterprise (AD CS) certificate, renew it, and replace it without breaking its link to the console | needs review | unassigned |
+| 4 | [CERTIFICATES](CERTIFICATES.md) | Enterprise certificates on the console's and the Gateway's user-facing endpoints; management certificates renew themselves without breaking a link (has open designs) | needs review | unassigned |
 | 5 | [ALERTING](ALERTING.md) | Failed runs, checks, approvals, a silent console or a dead server reach a person, from the console and from each service | queued | unassigned |
 | 6 | [DATAQUALITY](DATAQUALITY.md) | The checks of replications, Store models, data sources and catalogs are evaluated; a blocked dataset keeps its last good version served | queued | unassigned |
 | 7 | [AUTHORING](AUTHORING.md) | Everything the deleted servers did is done from Workspace projects, with browser stories | queued | unassigned |

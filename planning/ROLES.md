@@ -6,7 +6,7 @@ Three roles: the owner, one subject agent per subject, and one coordinator. The 
 ## The owner
 
 - Answers proposed decisions.
-- Sets the order of subjects, their status (active, next, queued, parked, or needs review: a subject written for the owner to accept or change before any work starts) and their priority.
+- Sets the order of subjects, their status (active, next, queued, parked, needs review: a subject written for the owner to accept or change before any work starts, or open design: a subject that is only open designs) and their priority.
 - Assigns a subject to a session or a machine (the Assigned column of the index).
 - Configures branch protection and the merge queue on GitHub.
 
@@ -44,6 +44,13 @@ A proposed decision moves through these places, and only these:
    does it names the proposal id and says `answered by the owner: <the answer>`.
 
 A subject file never holds decided content beyond its goal and tasks; a product doc never holds an agent's default.
+
+## Open designs
+
+Work that is partly designed and not scheduled is kept, not dropped: a subject file has an "Open designs" section after its needs, one heading per design,
+with what it would do, why, and its open questions, and no task ids, so nothing reads as scheduled work. A subject that holds only open designs has the
+status open design in the index. When the owner schedules a design, the subject agent turns it into tasks and removes it from the section. Nothing is
+ever dropped from planning without the owner saying so: a design or task judged overtaken is put to the owner as a proposed decision first.
 
 ## The coordinator
 
