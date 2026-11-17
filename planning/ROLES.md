@@ -75,5 +75,6 @@ task through "Needs from other subjects", a product doc and `docs/ui-editors.md`
 
 ## Old plan ids
 
-Source comments and docs cite ids of the deleted plans (`plan 33 SC23`, `28c E17`). They are history: git has the plans (the old plans folder before the commit
-that created `planning/`). They are not task ids, and nothing new cites them.
+Source comments and docs cite ids of the deleted plans (`plan 33 SC23`, `28c E17`). They are not task ids, and nothing new cites them:
+CODECLEANUP-6 adds a check that refuses new ones, and CODECLEANUP-7 to CODECLEANUP-11 remove the existing ones with the comments that are out of date.
+Git keeps the plans (the old plans folder before the commit that created `planning/`).
