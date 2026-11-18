@@ -32,14 +32,12 @@ configurable by form, and Analysis Services sources are bounded and cancellable.
 | --- | --- | --- | --- | --- |
 | SEMANTICS-1 | The Gateway reads the registry for every engine: the old engine switches retired | none | S | `DbDataGateway.Tests`: every `supported` engine opens a data source, every other is refused naming the note |
 | SEMANTICS-2 | The SQL Server leg of the mapped-column check: run `ManagementSemanticTests`' mapped-column cases (a catalog mapping a column the data source lacks) against a SQL Server data source, and fix what it finds | none | S | the cases pass on SQL Server in CI: the refusal names `table.column` and the serving version is unchanged |
-| SEMANTICS-3 | `describe` lists column types and a saved query's output columns | none | S | `SemanticNounTests`: `describe` has the types; the CLI document validates against its schema |
-| SEMANTICS-4 | Decimals stay decimals: a measure over a decimal column is Arrow `decimal128` with the source's scale | none | M | a decimal measure round-trips 38 digits through Flight; the fixtures' rows equal the old ones read as decimals |
-| SEMANTICS-5 | Build's metadata documents carry the semantic models; `project show semantic` says whether a relationship came from a key or the file | none | S | the retail template validates with the key; a file relationship and a key relationship are told apart |
 | SEMANTICS-6 | The `semantic:` form: hand-set models, the data source of each source and the SSAS connections (secret references) | none | M | vitest: the fields round-trip the sample file; Playwright: save a change and the Gateway applies it without a restart |
-| SEMANTICS-7 | Promote a saved query into its model: the entry the person copies into the project's file, compiled and published | AUTHORING-5 | S | the promoted entry loads and runs with the same rows; Playwright: promote, paste, publish |
+| SEMANTICS-7 | The Playwright leg of promoting a saved query into its model (the promote itself is built: `docs/semantic/architecture.md`, "Saved queries"): promote on the Gateway's saved-queries screen, paste the entry into a Workspace build project, publish | AUTHORING-5 | S | Playwright: promote, paste into a Workspace build project, publish; the promoted query runs with the same rows |
 | SEMANTICS-8 | A row cap in the DAX text (`TOPN (n + 1, ...)`) when no `limit` is asked | none | S | the `semantic-ssas` job: a query of a thousand-row table with `limit` 10 returns 10 and `truncated` |
 | SEMANTICS-9 | The SSAS executor: asynchronous, one connection per host source, the command timeout from the data source, a role that can write refused at start | none | M | `SsasExecutorGuardTests` and the `semantic-ssas` job: a slow query is cancelled by the timeout; a writing role is refused naming it |
 | SEMANTICS-10 | Access-rule tests of their own for saved queries and REST feeds (low priority: they run the same path as a semantic request, which is tested): a saved query and a feed each apply row rules and column rules as the caller | none | S | on SQL Server and PostgreSQL data sources: two callers with different row rules get different rows from the same saved query and the same feed; a hidden column is missing from both and a masked one is masked |
+| SEMANTICS-11 | An agent's Gateway address from the environment (`DbDataBuild/DESIGN.md`, "The `semantic` commands"): Build's `semantic describe\|query\|explain\|members` read `DBDATAKIT_GATEWAY_ADDRESS` (and the CA file's variable beside it) when `--address` is absent; `ui mcp` keeps withholding `--address`, `--insecure`, `--ca-file` and `--server-dir`; with neither, the sentence names the variable | none | S | `BuildSemanticNounTests`: with the variable set and no `--address` a verb runs against the stand-in session at that address; a tool call cannot set an address (the MCP tool's schema has no such argument); with neither, the sentence names `DBDATAKIT_GATEWAY_ADDRESS`; `check_env_names.py` passes |
 
 ## Needs from other subjects
 
@@ -47,25 +45,7 @@ configurable by form, and Analysis Services sources are bounded and cancellable.
 
 ## Proposed decisions
 
-### SEMANTICS-P1: SEMANTICS-3, -4, -5 and -7 restate built work (awaiting the owner)
-
-SEMANTICS-3 (types in `describe`), SEMANTICS-4 (decimals as `decimal128`), SEMANTICS-5 (the semantic models in Build's metadata and a relationship's
-origin) and SEMANTICS-7 (promote a saved query) were written from the old plan's open list, but the old plan records them as built (its slices SL08,
-SL09, SL10 and SL19) and the code confirms it (the `type` column of `describe`, `ArrowRows.cs`, `SemanticShowCommand.cs`, `SavedQueriesPage.tsx`).
-What is left of SEMANTICS-7 is its Playwright leg (promote, paste into a Workspace build project, publish), which needs AUTHORING-5. Scenario: a worker
-takes SEMANTICS-4 and finds the decimals already round-trip; it spends the task proving built work. Option A: remove SEMANTICS-3, -4 and -5, and rewrite
-SEMANTICS-7 as its Playwright leg only. Option B: keep them as verification tasks (run each one's "Done when" against the code and close it). Option C:
-keep them as they are. Recommendation: A.
-
-### SEMANTICS-P2: where an agent's Gateway address comes from for Build's `semantic` noun (awaiting the owner)
-
-`dbdatabuild semantic describe|query|explain|members` needs `--address`; `ui mcp` withholds `--address`, `--insecure`, `--ca-file` and `--server-dir`
-from the tools, so an agent cannot send the person's token (`DBDATAKIT_GATEWAY_TOKEN`) to an address of its choosing. With the Build server's pairings
-gone, an agent's semantic tools answer with the sentence that says to give `--address` (`DbDataBuild/DESIGN.md`). Scenario: an author asks an agent in
-a Build project to check a measure's totals. Option A: the address comes from where the token comes from, never from the tool call: a variable
-`DBDATAKIT_GATEWAY_ADDRESS` (and its CA file) set by the person who starts the agent, read by the verbs when `--address` is absent. Option B: Build's
-agent tools leave semantics to the Gateway's `mcp` module (KNOWLEDGE-17), and `ui mcp` stops offering the four verbs. Option C: the Workspace project
-names its Gateway, and the agent's tools use that. Recommendation: A, the smallest change that keeps the address out of the agent's hands.
+None open.
 
 ## Open designs
 

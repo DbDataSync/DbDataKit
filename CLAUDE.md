@@ -96,7 +96,9 @@ How the work is run is [planning/ROLES.md](planning/ROLES.md): the owner, the se
   subject's tasks on `backup/<slug>-<n>` (`backup/installer-3`), edits only its subject file and the code and docs its tasks need, starts each commit
   message with the task id (`INSTALLER-3: ...`), merges `main` into its branch when `main` moves, and reports defaults and questions without deciding them.
   The reviewer combines ready task branches into `work/<slug>` and merges its pull request (title starting with the slug) into `main`, one at a time.
-  Planning changes outside a subject's tasks go on `planning/<topic>`. A harness that starts on another branch name switches to the standard one before
+  Planning changes outside a subject's tasks go on `planning/<topic>`.
+- **Nothing stays only on one machine:** every commit is pushed to its branch as soon as it is made; a commit for `main` that must wait is first pushed to a
+  `backup/<topic>` branch; a report names the branch and commit where the work is pushed. A harness that starts on another branch name switches to the standard one before
   its first push.
 - **Work in progress lives in `planning/wip/<SLUG>/<SLUG>-<n>.md`** on the task's branch, never in the subject file or a product doc: what is built so far,
   open questions, defaults taken (each with an example). A task branch is ready when it has none: finished work leaves the subject file, an answered
