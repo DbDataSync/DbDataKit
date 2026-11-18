@@ -71,6 +71,11 @@ too (so a picker can offer a schema that has no table yet), and its tables and v
 keys, and foreign keys with the table and columns they reference. A connection whose databases were not read (a Gateway's answer) has `databases: []` and
 tables without a database.
 
+The tables are one flat list, each naming its database and schema, beside the `databases` list that holds every schema, the empty ones included; tables
+are not nested under their databases and schemas. Every reader (Build's import, Sync's provisioning plan, the pickers) works on a list of tables, and a
+diff of the file stays one line per table; what matters is that each table knows its database, so `crm.dbo.orders` and `crm_archive.dbo.orders` are two
+entries that never merge. Unique keys are kept, since `discover` answers them and the cache records what it answers.
+
 ```yaml
 schema: catalog-cache/2
 generated_at: 2026-11-18T10:00:04Z
@@ -96,7 +101,10 @@ The strict reader (`DbDataKit.Catalog.Cache`, and its twin `catalogCache.ts` in 
 a key that would carry a row, a value or a statistic of values (`rows`, `sample`, `min`, `distinct`...) or a login is refused by name, and a value that
 looks like a password, a connection string, an address with a login or a secret reference is refused wherever it stands. A table names a listed database
 and one of its schemas when the connection lists databases. A file of `catalog-cache/1` is refused naming the file: it is deleted and each connection
-refreshed, which writes it again as format 2.
+refreshed, which writes it again as format 2. It is never converted, and a refresh of one connection is refused too while the file is format 1, so
+nothing is dropped silently: Ana opens a draft with a format-1 cache of `crm` and `dw` and presses Refresh on `crm`; the refresh says the file is
+format 1 and to delete it, and she deletes it and refreshes both. The draft's check, the Catalog tab, `provisioning plan --from-cache` and
+`import --from-cache` refuse it the same way.
 
 **Refresh on request, with the difference shown.** Nothing refreshes by itself. **Refresh** on a connection or on one table reads again in the channel the
 cache says it came from; the Designer shows what changed (columns added, removed, retyped) before the cache is replaced, and the draft's check then names

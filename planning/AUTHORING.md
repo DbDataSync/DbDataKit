@@ -62,25 +62,6 @@ Option A: in the Runner's run record as the step result (kept under retention). 
 Scenario: an engineer previews `customers` (20 rows, one with an email address). Under A the rows are readable later by anyone who can read that run; under
 B they are shown once and gone; under C the engineer runs a trial run instead. Recommendation: B.
 
-### AUTHORING-P2: how `catalog-cache/2` lays out databases, and whether it keeps unique keys (default, awaiting the owner)
-
-Built as the default: a connection has a flat `tables:` list as in format 1, each table naming its `database`, beside a `databases:` list of
-`{name, schemas: [...]}` that holds the empty schemas too; a table must name a listed database and schema. Unique keys are kept (`unique_keys`) because
-`discover` answers them and the row of AUTHORING-23 says its answer is what the cache records. Scenario: Ana refreshes `crm` (SQL Server, databases `crm` and
-`crm_archive`, the schema `staging` empty). Option A (built): one list of tables, each with `database: crm`; `staging` appears only under `databases`.
-Option B: tables nested under `databases[].schemas[].tables`, so the empty schema is a schema with `tables: []` and nothing is repeated; every reader walks
-three levels. Option C: as A without `unique_keys` (a unique key is dropped from the answer). Recommendation: A, since every reader (Build's import, Sync's
-provisioning plan, the pickers) works on a table list, and a diff of the file stays one line per table.
-
-### AUTHORING-P3: a draft whose `catalog-cache.yaml` is still format 1 (default, awaiting the owner)
-
-Built as the default: the file is refused naming it (the draft's check, the Catalog tab, `provisioning plan --from-cache`, `import --from-cache`) and a
-refresh of any connection is refused too until the file is deleted, so nothing is converted or dropped silently. Scenario: Ana opens a draft committed last
-week with a format-1 cache of `crm` and `dw`, and presses Refresh on `crm`. Option A (built): the refresh says the file is format 1 and to delete it; she
-deletes it and refreshes both. Option B: the refresh replaces the whole file with only `crm`, saying `dw` was dropped. Option C: the reader converts a
-format-1 file (no databases, `read` from its `source`, no channel). Recommendation: A for this release (no released install holds a cache yet); C if one
-does by the next release.
-
 ## Shared areas touched
 
 - `DbDataKit.Authoring`, `DbDataKit.Authoring.Server`, `Shared/web/workspace`, `Shared/web/console` (posture, secrets overview), `DbDataKit.Agents`.
