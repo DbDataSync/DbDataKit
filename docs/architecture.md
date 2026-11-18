@@ -35,7 +35,9 @@ because source comments cite them). Where each part is described in detail: the 
   can be paired with several consoles.
 - **A standalone install** is one service plus the console with that service registered; `dbdatakit-full` installs all four on one machine
   (`docs/suite-single-server-install.md`). Each service ships on its own (its MSI and zips, an image for the console and the Gateway); the console has
-  its own MSI, and a service's MSI does not embed it. Pairing after installing both is a documented step (decided 2026-10-28; `dist/README.md`).
+  its own MSI, and a service's MSI does not embed it. The console pairs: it generates a single-use command that the administrator runs on the service's
+  machine, and the service joins the console at its next start; on one machine `dbdatakit setup single-server` does it for every service installed
+  there (`docs/install.md`, "Pairing").
 - **The serving layer is the edge** for end users (plan 20). Management traffic (the console) and data traffic (clients of the Gateway) use different
   listeners, and the management API is never on a hot path.
 - **Identity home** (D20, plan 20): one identity component per install holds users, groups, role assignments and an OpenID Connect provider
@@ -160,7 +162,7 @@ and its change requests decided through a Gateway's store module. The break is n
 
 - a removed verb (`server`, `service`, `secret`, `state`, `health` and the rest) answers with the sentence naming where its feature went and exits 2
   (`RemovedCommands`, `DbDataKit.Cli`; each program's `RemovedServer`);
-- the console refuses an announcement from such a server with the sentence, answers any call relayed to one still paired with it (410) and sends that server
+- the console refuses such a server's join (`docs/install.md`, "Pairing"), and its announcement while that old way exists, with the sentence, answers any call relayed to one still paired with it (410) and sends that server
   nothing, and its Servers page shows the sentence beside it (`RemovedProducts`, the console's host and `ServerModule.tsx`);
 - the variables of their data folders (`DBDATAKIT_DATA_SYNC`, `_BUILD`, `_STORE`) stay, because the command lines read them.
 
@@ -171,7 +173,7 @@ and its change requests decided through a Gateway's store module. The break is n
 | D1 | The console and the products are separate: servers with a management API and no UI; one shared console UI. | A product must keep working with the console down; one UI avoids three web apps. |
 | D2 | One YAML format for every product (Gateway moved off JSON); no migration from `appsettings.json`. | One reader, one editor, one history; the clean break makes migration code unnecessary. |
 | D3 | Each product keeps its own CLI; `dbdatakit` is the console's CLI only; lower-case executables; `<noun> <verb>` everywhere, old forms removed. | One grammar to learn; a console CLI that forwarded to products would hide which server a command touches. |
-| D4 | Each product is a standalone install option; the suite release (console image and MSI included) comes from the same workflow and commit; separate MSIs, pairing at install is a documented step. | Nothing forces a user to install products they do not use; one workflow keeps the cost low (`docs/releases.md`). |
+| D4 | Each product is a standalone install option; the suite release (console image and MSI included) comes from the same workflow and commit; separate MSIs; a service joins the console by the single-use command the console generates (`dbdatakit setup invite`, or `dbdatakit setup single-server` for every service on one machine; `docs/install.md`). | Nothing forces a user to install products they do not use; one workflow keeps the cost low (`docs/releases.md`). |
 | D5 | No self-updater runs beside a product (Sync's updater and launcher went with the Sync server). Images, MSIs, Scoop and the install scripts are the distribution; the console's upgrades (`DbDataKit.Upgrade`) reuse the `DbDataKit.Update`, `.Update.Service` and `.Update.Detect` libraries to download, verify and apply a release on a server. | One distribution route per platform; the update libraries' signed-manifest and verification code is reused, not written twice. |
 | D6 | DuckDB 2.0.0 at once with the released engine pinned (`duckdb.pin`) and DuckDB.NET packages that carry no engine. Done. | Waiting for DuckDB.NET 2.0 would hold every product back. |
 | D7 | No DuckDB 1.x after 2.0; code that existed only for 1.x is deleted. Done. | One engine to test. |
