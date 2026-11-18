@@ -43,6 +43,10 @@ Example: in the sync project `erp-sync`, an engineer opens the draft `add-order-
 
 The Designer is not built yet; today every project shows Files only. Sync is the first kind to get a Designer, and it covers what lives inside a replication; a sync project's connections and scripts are edited in Files.
 
+## Reading a database while authoring
+
+The Workspace holds no login of a customer database and never opens one. What a project's databases hold is read on a Runner, as a task run as the person who asked, with the login a channel binds to the project's slot: discovery of databases, schemas, tables and columns, a query's columns, the connection test, and each package's `preflight` before it is served in production. Before anything is published, **Set up for development** binds a slot in a non-production channel on the Runner with a login the person types once (it is sent to the Runner and kept nowhere in the Workspace). What discovery finds is committed in the draft as `catalog-cache.yaml` with the channel and Runner group it was read from, refreshed only on request with the difference shown, and read offline by the pickers and the draft's check; no row, sample, value statistic, login or address is kept. The design, with what is built and examples: [docs/authoring-metadata.md](../docs/authoring-metadata.md).
+
 ## The server's directory
 
 | Path | What |

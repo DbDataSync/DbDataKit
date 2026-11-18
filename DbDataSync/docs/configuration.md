@@ -151,12 +151,12 @@ connections fail with a message naming each such file and this form (`dbdatasync
 
 ## Two logins: read and run
 
-A connection has one login by default, and it does everything. It may have **two**, because the person who looks after a database may want a replication to use a login that can write where browsing and previews use one that can only read
-(plan 28c, E20):
+A connection has one login by default, and it does everything. It may have **two**, because the person who looks after a database may want a replication to use a login that can write where reading the database's shape while authoring uses one that can only read
+(plan 28c, E20). Both are kept on the Runner, never in the Workspace: the Workspace holds no login of a customer database, and every read made while a project is authored (discovery, a query's columns, the connection test, the checks before a version is served) runs on the Runner with the login a channel binds to the connection's slot ([Reading a database while a project is authored](../../docs/authoring-metadata.md)):
 
 | Login | What uses it | Where it is kept |
 | --- | --- | --- |
-| **read** (`auth.user`, `auth.password_secret`) | browsing metadata and previews where they are made (the Workspace), a provisioning plan's reading | where the program that opens it keeps logins |
+| **read** (`auth.user`, `auth.password_secret`) | reading the database's shape while a project is authored (the Runner's metadata tasks and connection test, run with the slot's `read` role where a channel binds one), a provisioning plan's reading; `dbdatasync` on a configuration repository opens it from the repository's `secrets/` store | on a Runner, the binding's `read` role (the run login serves when none is bound); never the Workspace |
 | **run** (`extensions.sync.run_user`, `extensions.sync.run_password_secret`) | what a replication does: reading the source and writing the target in a pass, and the steps a provisioning **apply** runs; the login a runner is given | the encrypted store, `dbdatakit:sync:connection:<name>:run` (on a runner, see below) |
 
 Without a run login the read login serves both, exactly as before. `run_user` is optional (the read user when absent); `run_password_secret` is `secret:dbdatakit:sync:connection:<name>:run`, and a file that names another connection's secret is refused.
@@ -173,7 +173,7 @@ A file with a misspelled key (`run_pasword_secret`) is refused naming the file, 
 
 ### On a runner
 
-A runner never has the read login. A replication set published to a runner declares a slot per connection; the administrator of the runner binds each slot to a connection of the runner's own (the Runner's Packages page, or `package publish --bind`), and the runner puts
+A replication's run never gets the read login: where a channel binds a `read` role to a slot, only the reads made while the project is authored use it. A replication set published to a runner declares a slot per connection; the administrator of the runner binds each slot to a connection of the runner's own (the Runner's Packages page, or `package publish --bind`), and the runner puts
 that connection's login in the engine's environment under both `DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_<NAME>` and `DBDATAKIT_SECRET_DBDATAKIT_SYNC_CONNECTION_<NAME>_RUN` (the engine reads whichever its connection names; it opens with the run role only). The
 value reaches the runner from the Runner's Packages page (a run login set there is kept in the group's state, plan 28c E20d; step 2 below is then not needed), or by hand. For each connection of the set:
 

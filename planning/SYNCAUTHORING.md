@@ -52,7 +52,7 @@ Under `96601f27^:Shared/web/sync/src/`, with the old Sync API call each used and
 | Overview sub-tabs Notes (`components/NotesPanel.tsx`), Pipeline (`MappingPipelineCard.tsx`, and `ReconcileConfigCard.tsx` for the `reconcile:` settings), Provisioning (`ReplicationProvisioningPanel.tsx`), Custom Transforms (`components/ScriptBindings.tsx`), Bulk Load (`SegmentingStrategiesCard.tsx`) | config; `GET .../provisioning`; a connection's capabilities; `/api/scripts`, `/api/scripts/slots` | `task.yaml`; the readers, staging providers and writers as a ported service; the draft's scripts from the `scripts` route the Workspace has and their slots as a ported service; the plan from `POST .../provisioning-plan`; its apply stays the Runner's `provision` task as `SyncProvisioningPanel.tsx` starts it today; a strategy's **Try** reads a database (AUTHORING-3) |
 | Table Mappings sidebar and Overview (`TableMappingsPanel.tsx`, `MappingsOverview.tsx`): the source's tables, mapping counts, ticks, **Create mappings** | `GET .../table-mappings`, metadata, `POST .../table-mappings/bulk` | the mapping files; tables from the catalog cache; bulk create as a ported service (below) |
 | Mapping editor (`TableMappingForm.tsx`, `MappingSide.tsx`, `components/InheritableToggle.tsx`, `SourceFilterCard.tsx`, `QuerySourcePanel.tsx` without its rows, `SavedMappingHeading.tsx`) | config; metadata | the mapping file; the catalog cache |
-| Column Mapping (`ColumnMappingEditor.tsx`, `suggestMappings.ts`, `PrimaryKeyCard.tsx`, `naturalKey.ts`, `RelationshipsCard.tsx`, `CachedMetadataCard.tsx`, `components/ColumnMultiPicker.tsx`) | metadata; `.../provisioning/inferred-column-types`, `inferred-natural-key`, `.../refresh-metadata` | the mapping file and the catalog cache; inferred types and key as a ported service; refresh is the Catalog's refresh through a Gateway (AUTHORING-6); `MappingColumns.tsx` folds into it |
+| Column Mapping (`ColumnMappingEditor.tsx`, `suggestMappings.ts`, `PrimaryKeyCard.tsx`, `naturalKey.ts`, `RelationshipsCard.tsx`, `CachedMetadataCard.tsx`, `components/ColumnMultiPicker.tsx`) | metadata; `.../provisioning/inferred-column-types`, `inferred-natural-key`, `.../refresh-metadata` | the mapping file and the catalog cache; inferred types and key as a ported service; refresh is the shared **Refresh** from a Runner channel (AUTHORING-6); `MappingColumns.tsx` folds into it |
 | Mapping sub-tabs Notes, Custom Transforms, Bulk Load (`DefaultSegmentingCard.tsx`), Provisioning (`ProvisioningCard.tsx`, the plan only), Pipeline (the overrides), Diagnostics (`traceTiming`), Verify (`ChecksCard.tsx`, the `verification:` list only) | config; `.../provisioning` | the mapping file; the plan |
 | Quality Checks (`ReplicationChecksPanel.tsx`, `checkForms.ts`) | `GET\|PUT .../checks` | `checks:` of `task.yaml` (`check/1`) |
 | Helpers with tests: `api/readerNotes.ts`, the writer defaults of `api/types.ts` (`writerDefaults.test.ts`), `api/resolveEndpoint.ts`, `api/canonicalJson.ts`, `api/tableExists.ts`, `components/icons.tsx`, `StatusBadge.tsx`, `mappingTabs.ts`; the shared pieces the replication's cards use: `components/CodeEditor.tsx` (a filter, a query), `ParameterForm.tsx` and `parameterValues.ts` (a script's parameters in `ScriptBindings.tsx`) | | restored with their tests |
@@ -85,7 +85,7 @@ replication, a mapping or `checks:`, and reading the draft's connections and scr
 | --- | --- | --- |
 | `ScriptsController` slots | the script slots a binding can name (Custom Transforms, `ScriptBindings.tsx`) | `DbDataSync.Scripting` (`ScriptHost`) |
 | `ConnectionsController` capabilities; `Services/SyncEngines.cs` | what a connection's driver can do: its readers, staging providers and writers (the Overview's and a mapping's Pipeline, `useReplicationCapabilities`) | `DbDataSync.Drivers.Abstractions` (`DriverRegistry`), `DbDataSync.Drivers.Descriptor`, `DbDataKit.Connections.Descriptor` (the engine registry) |
-| `MetadataController` (databases, tables, columns) | a connection's metadata | the draft's catalog cache (`DbDataKit.Catalog.Cache`); how the cache is filled and refreshed, and what is checked live, is AUTHORING-P2 and SYNCAUTHORING-P9 |
+| `MetadataController` (databases, tables, columns) | a connection's metadata | the draft's catalog cache (`DbDataKit.Catalog.Cache`); how the cache is filled and refreshed is `docs/authoring-metadata.md`, what is checked live SYNCAUTHORING-P9 |
 | `ProvisioningController` inferred column types and natural key; `Services/MappingMetadataService.cs`, `MappingMetadataCapture.cs`; `TableMappingsController` bulk create | the target types and key of a mapping from its source columns; a mapping file per ticked table with its columns and key | `DbDataSync.Provisioning` (`MappingColumnReader`) over the catalog cache |
 | `ProvisioningController` and `ReplicationProvisioningController` plan | a mapping's and a replication's provisioning plan | the Workspace's `provisioning-plan` route (exists) |
 
@@ -120,8 +120,9 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
   until it lands the Designer uses the list `SyncSetPanel.tsx` has today. Ownership is SYNCAUTHORING-P7.
 - AUTHORING-3: a segmenting strategy's **Try** (SYNCAUTHORING-4); until then it says it waits on a Runner task.
 - AUTHORING-4: the source side of the Provisioning sub-tabs (SYNCAUTHORING-4, SYNCAUTHORING-5); until then the source is "not known".
-- AUTHORING-6: the catalog cache of a Sync connection, which the table pickers, Create mappings, Column Mapping and the metadata routes read
-  (SYNCAUTHORING-3, SYNCAUTHORING-5); who fills it, a connection's test before publish and the live checks wait on AUTHORING-P2 and SYNCAUTHORING-P9.
+- AUTHORING-17, AUTHORING-18, AUTHORING-19, AUTHORING-21 and AUTHORING-6: the catalog cache of a Sync connection filled from a Runner channel, which the
+  table pickers, Create mappings, Column Mapping and the metadata routes read (SYNCAUTHORING-3, SYNCAUTHORING-5), the connection test before publish
+  and Set up for development (`docs/authoring-metadata.md`); until they land the Designer reads the cache as the Files area does today.
 - AUTHORING-9: its stories of the Sync forms stay the stories of the Files area; this subject's stories cover the Designer (no story is written twice).
 - AUTHORING-12: reconcile deletes and resync stay paused; they come back with the monitoring pass, not in the Designer's authoring screens.
 
@@ -160,15 +161,15 @@ comes with the Scripts page, outside a replication, later).
 
 ### SYNCAUTHORING-P9: discovering and checking a replication's source and target in the Designer (awaiting the owner)
 
-Who reads a database, with which login, and where the answer is kept is AUTHORING-P2 (recommended: Runner tasks through a channel's binding; the
+Who reads a database, with which login, and where the answer is kept is `docs/authoring-metadata.md` (Runner tasks through a channel's binding; the
 Workspace holds no login). This proposal is what a sync project discovers and checks under that rule, case by case. Until both are answered, this
 subject's Designer reads only the catalog cache, as the Files area does today.
 
 **Discovery.**
 
 - *A new replication.* Ana presses **New replication** in the Designer's navigation and, on the new replication's Overview, picks `crm` and `dw`. The database pickers list the cache's databases of each connection
-  (`catalog-cache/2`, AUTHORING-P2); a connection with no cache shows **Refresh catalog** with the channel picker, which runs the built-in `discover` task on
-  the Runner (AUTHORING-P2, scenario 1) and fills the pickers when it ends.
+  (`catalog-cache/2`, AUTHORING-20); a connection with no cache shows **Refresh catalog** with the channel picker, which runs the built-in `discover` task on
+  the Runner (`docs/authoring-metadata.md`) and fills the pickers when it ends.
 - *Table Mappings.* The Overview lists the source's cached tables with their mapping counts; **Create mappings** writes a mapping file per ticked table from
   the cache (columns, types, key; the target's types inferred by the ported `MappingColumnReader` over the cache). **Refresh** on the Overview reads the
   connection again; **Refresh** on a mapping's cached-metadata card reads one table; both show the difference before the cache changes, and the Check tab
@@ -202,17 +203,17 @@ the run login the replication will use):
 | where the replication's state is kept (the `tracking:` schema on the target, TASKENGINE-6) | the configured place is named | the schema and tables exist or the login may create them |
 
 **The connection test.** Each endpoint card's **Test** (and the Connections page's, when that page comes back: the open design "Outside a replication,
-later") runs the binding test in the chosen channel (AUTHORING-P2, scenario 5):
+later") runs the binding test in the chosen channel (`docs/authoring-metadata.md`, "Testing a connection"):
 binding, document, the login's secrets, then reach, TLS and login, with the server's version; the old page's **Test all** and its reachable column are the
 monitoring pass's. The old test's sample rows are not restored.
 
 **Where the Designer shows it.** The Check tab's count includes the offline findings; the Provisioning sub-tabs show the offline plan, and the newest
 `preflight` run of the chosen channel (time, run link, findings per mapping); the publish panel runs `preflight` on the staged version before activation
-(AUTHORING-P2, scenario 6). Nothing live is committed into the draft; the cache and a query's column cache are.
+(`docs/authoring-metadata.md`, "Checking before production"). Nothing live is committed into the draft; the cache and a query's column cache are.
 
 **Options.** A: as above: offline checks in the Check tab and the plan, live checks as one `preflight` task of the replication set's package, run on the
 staged version (before publish to a channel) or the served one (Re-check). B: no live check in authoring; the first pass fails naming what is missing,
-as it does today. C: the live checks as tasks of the built-in package (AUTHORING-P2) instead of the set's own, so they run before any build exists, at the
+as it does today. C: the live checks as tasks of the built-in package (AUTHORING-17) instead of the set's own, so they run before any build exists, at the
 cost of the built-in package learning each reader's strategy and Sync's drivers. Scenario: Ana maps `crm.dbo.orders` with the change-tracking reader and
 publishes to `prod`, where change tracking is off on that table. Under A the staging's `preflight` reports "change tracking is off on dbo.orders" with the
 statement that enables it, before the version is served; under B the first scheduled pass fails at 02:00; under C the same as A, from a package that has to
@@ -221,7 +222,7 @@ follow every release of Sync's readers. Recommendation: A.
 **If accepted, the tasks:** the Sync package's manual read-only task `preflight` (every check above, per mapping, findings as step outputs; AUTHORING-4
 folds into it); the offline checks in the sync draft's check (columns, the filter's columns, types, keys, compatibility) over the cache; `describe` into a
 mapping's column cache; the set's own `discover` and `describe` for Sync's own drivers; the Designer's Refresh, Describe, Test and newest-check card on
-the shared pieces of AUTHORING-P2.
+the shared pieces of AUTHORING-6.
 
 ## Open designs
 
@@ -271,7 +272,7 @@ a sync project with their own navigation entries, or Designer pages shared by ev
   test. Needs: the driver's connection parameters and the parameter check (`connection-parameters`, `Services/ParameterCheck.cs`), a driver's
   capabilities by type (`/api/drivers/{type}/capabilities`), a connection's credential source (`credential-source`), ported as the services above are
   (SYNCAUTHORING-P8); the secret findings of the draft's check; a link to the project's secrets overview (the AUTHORING subject's); the test as the binding test
-  in a channel (AUTHORING-P2, SYNCAUTHORING-P9), without the old test's sample rows.
+  in a channel (`docs/authoring-metadata.md`, SYNCAUTHORING-P9), without the old test's sample rows.
 - **The Scripts list** (`ScriptsPage.tsx`): kind, language, where each script is bound, enabled, **New script**. Needs: the draft's `config/scripts/`
   (the `scripts` route exists) and where each script is bound (`Services/ScriptUsageScanner.cs`).
 - **A script's page** (`ScriptEditPage.tsx`, `script-edit/ScriptTestPanel.tsx`): the manifest's fields, the code in the code editor, compile
