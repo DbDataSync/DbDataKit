@@ -27,7 +27,8 @@ today, before the services create their own data (above):
 
 - When git refuses the repository for its owner and the service's account can write both the folder and its `.git`, the Gateway allows that one folder
   the way git allows one, a `safe.directory` entry in git settings of the Gateway's own, and opens it. The ownership check stays on: no other folder is
-  allowed, and it is never switched off for the process.
+  allowed, and it is never switched off for the process. The Gateway's git settings include the account's earlier global ones, so a `safe.directory`
+  an administrator already set there for the account (`*` among them) still applies: that was the machine's choice.
 - When the account cannot write the folder, the start fails with a message that names the folder, its owner, the account and the fix, written to the
   start-failure file like any failed start.
 

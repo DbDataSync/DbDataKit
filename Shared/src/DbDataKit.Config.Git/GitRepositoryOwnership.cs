@@ -199,26 +199,27 @@ public static class GitSafeDirectory
             foreach (var folder in folders) Allowed.Add(folder);
             Directory.CreateDirectory(home);
             File.WriteAllText(Path.Combine(home, FileName), Text(_previous, Allowed));
-            if (_home is null)
-            {
-                GlobalSettings.SetConfigSearchPaths(ConfigurationLevel.Global, home);
-                _home = home;
-            }
+            // set every time, so the folders stay allowed even if something else in the process moved the global search path since
+            GlobalSettings.SetConfigSearchPaths(ConfigurationLevel.Global, home);
+            _home = home;
         }
     }
 
-    /// <summary>The settings file: the earlier global file included first, then one <c>safe.directory</c> line per folder, so an empty entry in the earlier file cannot clear them.</summary>
+    /// <summary>
+    /// The settings file: the earlier global file included first, then one <c>safe.directory</c> line per folder, so an empty entry in the earlier file
+    /// cannot clear them. Lines end in <c>\n</c> on every system; git reads either ending.
+    /// </summary>
     public static string Text(string? previous, IEnumerable<string> folders)
     {
         var text = new StringBuilder();
-        text.AppendLine("# Written by the server at start: git refused its configuration repository for its owner, and this account can write it.");
+        text.Append("# Written by the server at start: git refused its configuration repository for its owner, and this account can write it.\n");
         if (previous is not null)
         {
-            text.AppendLine("[include]");
-            text.AppendLine($"\tpath = {Quote(previous.Replace('\\', '/'))}");
+            text.Append("[include]\n");
+            text.Append($"\tpath = {Quote(previous.Replace('\\', '/'))}\n");
         }
-        text.AppendLine("[safe]");
-        foreach (var folder in folders) text.AppendLine($"\tdirectory = {Quote(folder)}");
+        text.Append("[safe]\n");
+        foreach (var folder in folders) text.Append($"\tdirectory = {Quote(folder)}\n");
         return text.ToString();
     }
 
