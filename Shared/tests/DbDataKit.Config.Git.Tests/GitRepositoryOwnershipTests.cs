@@ -93,11 +93,23 @@ public class GitRepositoryOwnershipTests
         Assert.DoesNotContain("directory = \"*\"", text);
         Assert.DoesNotContain("[include]", GitSafeDirectory.Text(null, ["/srv/config"]));
     }
+}
 
+/// <summary>The tests that change libgit2's settings for the whole process: they run alone, never beside another test of the assembly.</summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class Libgit2GlobalSettings
+{
+    public const string Name = "libgit2 global settings";
+}
+
+[Collection(Libgit2GlobalSettings.Name)]
+public class GitSafeDirectoryLibgit2Tests
+{
     /// <summary>
     /// libgit2 itself: a repository whose folder another user owns is refused, opened once allowed, and a second such repository stays refused. Needs a
     /// second owner, which only root (or passwordless sudo, as on the hosted Linux runner) can give; Windows needs the restore privilege for it and is
-    /// checked on a workstation.
+    /// checked on a workstation. The global, XDG, system and ProgramData git settings point at an empty folder while it runs, so an allow list of the
+    /// machine (a <c>safe.directory</c> in the runner image's git settings) cannot open the folder the test expects refused.
     /// </summary>
     [Fact]
     public void Libgit2_opens_the_allowed_folder_another_user_owns_and_still_refuses_any_other()
@@ -108,8 +120,13 @@ public class GitRepositoryOwnershipTests
         using var allowedRepo = new Repo();
         using var otherRepo = new Repo();
         var home = Directory.CreateTempSubdirectory("dbdata-git-home-").FullName;
+        var empty = Directory.CreateTempSubdirectory("dbdata-git-empty-").FullName;
+        // the levels libgit2 keeps a search path for (the repository's own and the worktree's have none)
+        ConfigurationLevel[] levels = [ConfigurationLevel.Global, ConfigurationLevel.Xdg, ConfigurationLevel.System, ConfigurationLevel.ProgramData];
+        var saved = levels.ToDictionary(l => l, l => GlobalSettings.GetConfigSearchPaths(l).ToArray());
         try
         {
+            foreach (var level in levels) GlobalSettings.SetConfigSearchPaths(level, empty);
             foreach (var root in new[] { allowedRepo.Root, otherRepo.Root }) GiveAway(root);
             Assert.True(GitRepositoryOwnership.IsNotOwned(Assert.ThrowsAny<LibGit2SharpException>(() => new Repository(allowedRepo.Root))));
 
@@ -121,6 +138,7 @@ public class GitRepositoryOwnershipTests
         }
         finally
         {
+            foreach (var (level, paths) in saved) GlobalSettings.SetConfigSearchPaths(level, paths);
             foreach (var root in new[] { allowedRepo.Root, otherRepo.Root }) TakeBack(root);
         }
     }
