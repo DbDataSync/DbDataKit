@@ -7,7 +7,7 @@ on:
   pull_request:
     paths:
       - '**/*.cs'
-      - '**/*.md'
+      - '**.md'
       - '**/*.json'
       - '**/*.yml'
       - '**/*.yaml'
@@ -31,6 +31,9 @@ on:
       - 'docs/ui-editors.md'
       - 'docs/formats.json'
       - 'planning/**'
+      - 'docs/**'
+      - '**/docs/**'
+      - '.claude/**'
       - 'Shared/web/*/src/pages/**'
       - '.github/workflows/**'
       - '.github/actions/**'
@@ -50,7 +53,11 @@ on:
       - '**/*.props'
       - '**/*.targets'
       - 'scripts/**'
+      - '**.md'
       - 'planning/**'
+      - 'docs/**'
+      - '**/docs/**'
+      - '.claude/**'
       - '.github/workflows/**'
       - '.github/actions/**'
       - '**/Dockerfile'
@@ -64,6 +71,14 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # A change to planning, documentation or Markdown alone (scripts/ci_paths.py, PRODUCT_IGNORE) runs only the Python checks and the compatibility
+  # matrix: the solution build and the pin downloads are skipped (the run still reports success). The expression is PRODUCT_IGNORE's; a test keeps them equal.
+  changes:
+    uses: ./.github/workflows/_changes.yml
+    with:
+      paths: '.'
+      ignore: '^(planning/|\.claude/|docs/|DbDataKit/docs/|DbDataSync/docs/|DbDataBuild/docs/|DbDataGateway/docs/)|\.md$'
+
   package-versions:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -83,24 +98,32 @@ jobs:
       - run: python3 -I scripts/check_secret_names.py
       - run: python3 -I scripts/check_default_ports.py
       - run: python3 -I scripts/check_product_name.py
+      - run: python3 -I scripts/check_doc_inputs.py
 
   solution:
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - run: python3 -I scripts/check_solution.py
-      - uses: actions/setup-dotnet@v6
+      - if: ${{ needs.changes.outputs.build == 'true' }}
+        uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-      - uses: ./.github/actions/duckdb-cache
+      - if: ${{ needs.changes.outputs.build == 'true' }}
+        uses: ./.github/actions/duckdb-cache
       - name: Fetch the pinned DuckDB engine (the projects that use it stop the build without it)
+        if: ${{ needs.changes.outputs.build == 'true' }}
         run: scripts/fetch-duckdb.sh
-      - run: dotnet build DbDataKit.slnx -c Release
+      - if: ${{ needs.changes.outputs.build == 'true' }}
+        run: dotnet build DbDataKit.slnx -c Release
 
   # The DuckDB pin (duckdb.pin): every platform's archive and library download and match their recorded hashes, and the PowerShell
   # script does the same on Windows, in Windows PowerShell 5.1 and in PowerShell 7.
   duckdb-pin-linux:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -113,6 +136,8 @@ jobs:
       - run: scripts/fetch-duckdb.sh all   # the second run finds every library current
 
   duckdb-pin-windows:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -130,6 +155,8 @@ jobs:
   # The polyglot pin (DbDataBuild/scripts/polyglot.pin): both platforms' archives download (or come from the cache) and match their recorded hashes,
   # and the library is installed from the cache folder (a file:// base; on Windows that is file:///D:/a/...).
   native-pin-linux:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -141,6 +168,8 @@ jobs:
       - run: DbDataBuild/scripts/fetch-native.sh all   # the second run finds every library current
 
   native-pin-windows:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -155,6 +184,8 @@ jobs:
   # The Chromium pin (chromium.pin, plan 32 DBR15a): both platforms' archives and executables download from Chrome for Testing and match their recorded
   # hashes, and the PowerShell script does the same on Windows, in Windows PowerShell 5.1 and in PowerShell 7.
   chromium-pin-linux:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -169,6 +200,8 @@ jobs:
           test "$got" = "$want"
 
   chromium-pin-windows:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -183,6 +216,8 @@ jobs:
   # The font pin (fonts.pin, plan 32 DBR15b): every family's archive, font files and licence text download and match their recorded hashes; the PowerShell script
   # does the same on Windows, in Windows PowerShell 5.1 and in PowerShell 7.
   fonts-pin-linux:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -193,6 +228,8 @@ jobs:
         run: test "$(find .fonts -name '*.woff2' | wc -l)" = "$(grep -c '^FILE=' fonts.pin)"
 
   fonts-pin-windows:
+    needs: changes
+    if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
