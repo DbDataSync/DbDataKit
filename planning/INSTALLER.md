@@ -12,7 +12,9 @@ rules are in [docs/install.md](../docs/install.md).
 - `dbdatakit-full` (Scoop, `dist/suite-scripts.ps1`, `dist/suite.json`) copies the programs to `%ProgramData%\DbDataKit\bin\<version>`, runs each
   member's `service install` elevated, pairs each member by `server pair` and `dbdatakit instance add --code`, and prints the setup link.
 - The elevated `service install` creates the data folders, so they are owned by the administrator; the Gateway's `EnsureStarter` writes its configuration
-  repository during install (the cause of the workstation failure `not owned by current user`).
+  folder during install (the cause of the workstation failure `not owned by current user`). The Gateway now opens a configuration repository another
+  account owns when its own account can write it, allowing only that folder, and otherwise fails naming the folder, its owner and the fix
+  (`docs/install.md`, "The Gateway's configuration repository"); the install still makes the folder.
 - Only the Gateway writes a start failure (`StartFailure.cs`, `start-failure.txt` in its data folder).
 - The Gateway's service is registered as `dbdatagateway`; the others as `DbDataKit`, `DbDataRunner`, `DbDataWorkspace`.
 - Ports are fixed defaults: console 8480, identity home 8482, Workspace 8471, Runner 8495, Gateway 8815 to 8822 (`scripts/check_default_ports.py`).
@@ -31,7 +33,6 @@ rules are in [docs/install.md](../docs/install.md).
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| INSTALLER-30 | Quick fix (the owner's priority): the Gateway opens its own configuration repository (`config` in its data folder) when another account owns it and the service's account can read and write it, by allowing that one folder (git's `safe.directory`, scoped to it, never the ownership check switched off); when the account cannot write it, the start fails with a message naming the folder, its owner and the fix instead of LibGit2Sharp's `is not owned by current user`. Install and the other startup steps are unchanged (INSTALLER-6) | none | S | unit tests: a repository another account owns and this one can write opens with only that folder allowed; one it cannot write fails naming the folder, the owner and the fix; the owner's workstation (a clean `scoop install -g dbdatakit-full` with the new snapshot) starts the Gateway service, checked by hand there |
 | INSTALLER-1 | `doctor` becomes `service check` in the shared `ServiceCommand`, `HostingNouns` and the Gateway's `ServiceCli` and `Cli`; `service doctor` answers the sentence naming `service check` (`RemovedCommands`); a repository check fails on any command or subcommand named `doctor`; docs updated | none | S | the check's unit test fails on a command tree with a `doctor` verb and passes on the repository; the products' CLI tests call `service check`; `check_docs_commands.py` passes |
 | INSTALLER-2 | The startup library `DbDataKit.Hosting.Startup`: `StartupSequence` (the six steps of `docs/install.md`, "One startup sequence": folder, keys, certificate, state, ports, join, as named steps a server fills in, each failure saying what that table names), the `logs` subfolder and the failure file made before the first step, a failed step writing the file and the process exiting non-zero, the shared `logs` folder and its protection, `startup-failure-<service>.txt` ("starting since <time>, step: <step>, not finished" rewritten as each step begins, deleted on success, the full reason on failure: account, folders, exception chain, hints for an excluded port), the `SuiteServices` table | none | M | `DbDataKit.Hosting.Startup.Tests` on Linux and Windows CI: a clean sequence leaves no file; a failing step writes the account, the folders and the exception chain, and what that step's failure says (one test per step: the folder and its owner; the key file and the grant; the certificate's file and the account; the engine, database and migration; the port and the excluded ranges; the console's address and its answer), and the process exits non-zero; a process killed in a step leaves "step: <name>, not finished"; on Windows a second service account cannot open the first's file; on Linux the file is mode 0600 |
 | INSTALLER-3 | The four servers start through the sequence (`server run`, as a service or not); the Gateway's `StartFailure.cs` and its `start-failure.txt` in the data folder (`80655d9b`) are replaced by the shared `startup-failure-dbdatagateway.txt` (its test now looks in the shared path and says so); the event log line stays; `service check` prints the failure file | INSTALLER-2 | M | each server's test starts it with its port held by another listener and finds `startup-failure-<service>.txt` with the account, the folder, the exception and the ports step's message (the port, the excluded ranges), and a non-zero exit; a clean start leaves none; no `start-failure.txt` is written; Linux and Windows CI |
@@ -78,6 +79,17 @@ Today `dbdatarunner package publish --code` pairs the person's machine with a Ru
 console registers it with the target; option B, command lines stop publishing and only the Workspace publishes. Scenario: a developer runs
 `dbdatabuild project publish --to runner` from a laptop; under A it works after one `client join`, under B it answers "publish from the Workspace".
 Recommendation: A, so the command lines stay usable without the Workspace.
+
+### INSTALLER-P4: where the Gateway records the one folder git may open despite its owner (default, awaiting the owner)
+
+The Gateway opens its `config` repository when another account owns it and the service's account can write it (the folder and its `.git`). libgit2
+reads git's allow list (`safe.directory`) only from the global and system git settings files, and LibGit2Sharp's other switch turns the ownership check
+off for every repository. Scenario: on a workstation the service starts, git refuses `C:\ProgramData\DbDataKit\gateway\config` (owned by
+`CONTOSO\ada`); the Gateway writes `C:\ProgramData\DbDataKit\gateway\git\.gitconfig` (the account's earlier global git settings included, then
+`safe.directory` for that folder alone), makes it the process's global git settings, and opens the repository. Options: A (built, the default) that file in
+the data folder; B the same file in a temporary folder of the account, made again at every start; C no allow list: the service copies the repository into
+a folder it creates and so owns (a repair that moves data, which INSTALLER-6 makes unnecessary for new installs). Recommendation: A, until INSTALLER-6 has
+the service create the folder itself, after which the allow list is never needed and the file is no longer written.
 
 ## Shared areas touched
 

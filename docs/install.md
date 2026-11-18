@@ -26,14 +26,13 @@ so a folder an elevated install made on a Windows client (owned by the administr
 today, before the services create their own data (above):
 
 - When git refuses the repository for its owner and the service's account can write both the folder and its `.git`, the Gateway allows that one folder
-  the way git allows one, a `safe.directory` entry, and opens it. The entry is written to a git settings file of the Gateway's own, `git/.gitconfig` in its
-  data folder, which also includes the global git settings file the account had before. The ownership check stays on: no other folder is allowed, and it
-  is never switched off for the process.
+  the way git allows one, a `safe.directory` entry in git settings of the Gateway's own, and opens it. The ownership check stays on: no other folder is
+  allowed, and it is never switched off for the process.
 - When the account cannot write the folder, the start fails with a message that names the folder, its owner, the account and the fix, written to the
   start-failure file like any failed start.
 
 Example: on a workstation, `scoop install -g dbdatakit-full` as `CONTOSO\ada` leaves `C:\ProgramData\DbDataKit\gateway\config` owned by `CONTOSO\ada`;
-`NT SERVICE\dbdatagateway` can write it, so the service starts and `C:\ProgramData\DbDataKit\gateway\git\.gitconfig` lists that one folder. Had the
+`NT SERVICE\dbdatagateway` can write it, so the service starts with that one folder allowed. Had the
 folder's access list not let the service write, the start-failure file would say: `The configuration repository 'C:\ProgramData\DbDataKit\gateway\config'
 cannot be opened: '...\config' is owned by CONTOSO\ada, and NT SERVICE\dbdatagateway, the account this runs as, cannot write to it, so git refuses the
 repository. As an administrator, make NT SERVICE\dbdatagateway the owner of the folder (icacls "...\config" /setowner "NT SERVICE\dbdatagateway" /T /C)
