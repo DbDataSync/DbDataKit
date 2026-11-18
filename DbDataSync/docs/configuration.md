@@ -152,7 +152,7 @@ connections fail with a message naming each such file and this form (`dbdatasync
 ## Two logins: read and run
 
 A connection has one login by default, and it does everything. It may have **two**, because the person who looks after a database may want a replication to use a login that can write where reading the database's shape while authoring uses one that can only read
-(plan 28c, E20). Both are kept on the Runner, never in the Workspace: the Workspace holds no login of a customer database, and every read made while a project is authored (discovery, a query's columns, the connection test, the checks before a version is served) runs on the Runner with the login a channel binds to the connection's slot ([Reading a database while a project is authored](../../docs/authoring-metadata.md)):
+(plan 28c, E20). Both are kept on the Runner, never in the Workspace: the Workspace holds no login of a customer database, and every read made while a project is authored (discovery, a query's columns, the connection test, the checks before a version is served) runs on the Runner with the login a channel binds to the connection's slot (the repository's `docs/authoring-metadata.md`, "Reading a database while a project is authored"):
 
 | Login | What uses it | Where it is kept |
 | --- | --- | --- |
