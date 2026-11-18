@@ -113,20 +113,15 @@ jobs:
       # What a re-run would not establish better is what is worth asserting: that a green run for this exact commit exists. That is false
       # for a commit that reached main some other way (a bot push, a skipped run), which is the case this gate is for. Any successful run
       # counts, not merely the newest: a flake that was re-run to green is what a human would have accepted by hand.
-      - name: Require a green CI run for this exact commit
+      # A commit that changes only what the CI ignores (planning, documentation, Markdown) has no run of its own: the nearest commit before it that has
+      # a green run covers it, with its own green Repository checks run (scripts/ci_paths.py).
+      - name: Require a green CI run that covers this commit
         if: ${{ !inputs.dry_run && !inputs.snapshot }}
+        shell: bash
         working-directory: .
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          green=$(gh api \
-            "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$SHA&status=success" \
-            --jq '[.workflow_runs[] | select(.name == "DbDataSync CI")] | length')
-          echo "successful CI runs for $SHA: $green"
-          if [ "$green" -lt 1 ]; then
-            echo "::error::No successful DbDataSync CI run for $SHA. Releasing a commit whose CI has not passed is exactly what this check exists to prevent. Dispatch 'DbDataSync CI' on main, or pick a commit that has a run."
-            exit 1
-          fi
+        run: python3 -I scripts/ci_paths.py require-green --workflow .github/workflows/dbdatasync-ci.yml --sha "$SHA"
 
       - uses: actions/setup-dotnet@v6
         with:

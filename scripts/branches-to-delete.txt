@@ -181,3 +181,5 @@ planning/doc-merge-rule
 # --- group 14: AUTHORING-P2 and SYNCAUTHORING (2026-11-18): planning/authoring-metadata (which carried planning/sync-authoring-ui) was pushed to main as a planning and documentation change (e497c008); every commit of both is on main
 planning/authoring-metadata
 planning/sync-authoring-ui
+# --- group 15: CI paths (2026-11-18): backup/ci-paths-probe was a throwaway probe (one whitespace commit in planning/ROLES.md, db941bd2) that is never merged
+backup/ci-paths-probe
