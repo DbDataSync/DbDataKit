@@ -13,7 +13,7 @@ client and on Server.
 
 The install only registers the service and creates its top folder with its access list. Everything inside (subfolders, keys, certificate, state, the
 configuration repository, logs) is created at first start by the service's own account. An admin command that needs a service's data goes through the
-service's local API (a named pipe or Unix socket); opening the files directly is a recovery mode, allowed only while the service is stopped.
+service's local API (a named pipe or Unix socket); opening the files directly is a recovery mode, allowed only while the service is stopped. The install gives the top folder the Administrators group as owner on every Windows edition (a workstation would otherwise make the administrator who ran it the owner) and grants the service's account Modify on it.
 
 Example: `dbdatagateway secret set warehouse` with the service running asks the service to store the value; no file in its folder is touched by the
 administrator's account. With the service stopped, `secret set --recovery` writes the file and gives it the service's account as owner.
@@ -22,7 +22,7 @@ administrator's account. With the service stopped, `secret set --recovery` write
 
 Every server's `server run` (as a service or not) runs the same steps before it serves anything, from one shared library, on Windows and Linux: settle the
 folder and its permissions, then keys, then the certificate, then the state and its migrations, then bind the ports, then join the console. A failure in a
-step looks the same in every product, and a fix reaches all four.
+step looks the same in every product, and a fix reaches all four. The library is `Shared/src/DbDataKit.Hosting.Startup`; the join it ends with lives in `DbDataKit.Web`. The library reads one table, `SuiteServices` (each service's name, account, description, program, data and log folders, port sub-block and start order), the only place a service's name is spelled.
 
 | Step | What it does | What a failure says |
 | --- | --- | --- |
@@ -50,6 +50,8 @@ port ranges). No file means a clean start; a leftover "not finished" line means 
 service account creates and owns only its own subfolder and its own failure file; no service reads another's. Installers and `setup` print the file, so
 "Cannot start service" always comes with its reason.
 
+`<service>` in these names is the program in lower case (`dbdatagateway`), the same as its systemd unit. On Windows the `logs` folder gives Administrators and SYSTEM full control, each service account "create files" and "create folders" on that folder only, and CREATOR OWNER full control, so each service owns what it creates there and nothing else; on Linux it is `root:dbdatakit` with mode `1770`, and files are `0600`. A service that finds its own subfolder or failure file owned by another account writes nothing there and says so in the event log.
+
 ## Service names, accounts and descriptions
 
 The Windows services are exactly `DbDataKit`, `DbDataGateway`, `DbDataRunner` and `DbDataWorkspace`, each running as `NT SERVICE\<that name>`. Their
@@ -70,7 +72,7 @@ range 49152 to 65535) and common developer ports. Each service has a sub-block: 
 Runner 7840 to 7859 (default 7840), the Workspace 7860 to 7879 (default 7860); 7880 to 7899 are spare. With no port configured, a service takes a free
 port of its sub-block at first start and pins it in its own settings. Windows' excluded port ranges (Hyper-V and WinNAT reserve ranges that move at boot)
 are still skipped, because a machine whose dynamic range was lowered can reserve inside any range; when the whole sub-block is excluded the service fails
-and the failure file names the ranges. A configured port (Docker Compose, for example) is never moved. The service reports its address to the console
+and the failure file names the ranges. A configured port (Docker Compose, for example) is never moved. A free port is found by binding it: a port in an excluded range refuses with WSAEACCES and is skipped like a taken one. The identity home, when it runs on its own, keeps a port in the console's sub-block. The service reports its address to the console
 when it joins.
 
 Example: on a workstation with WSL, 7840 is inside a reserved range; the Runner takes 7841, pins it, and the console's Servers page shows
@@ -104,7 +106,7 @@ the web console, a command for the administrator to run on the remote machine:
 dbdatarunner pair --host https://console:7800 --token <single-use> --console-thumbprint sha256:<hex>
 ```
 
-The token is single-use, short-lived (15 minutes by default) and scoped to one product, a role ceiling and the group it joins; the thumbprint makes the
+The token is 128 random bits, shown once when it is made, single-use, short-lived (15 minutes by default; `--minutes` sets up to 24 hours) and scoped to one product, a role ceiling and the group it joins; the thumbprint makes the
 first connection trusted. `pair` only records the join settings and (re)starts the service; the service joins at start as its own account, sends its
 address and certificate fingerprint, and the console calls back once to confirm and pins it. A server calls the console once, to join; every other call is
 the console calling the server. Users never copy codes between services except by running the generated command. `--token -` reads the token from
