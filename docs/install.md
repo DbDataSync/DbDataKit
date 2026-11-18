@@ -66,9 +66,10 @@ shared logs folder.
 ## Ports
 
 The suite uses one range, **7800 to 7899**, outside Windows' default ports (80, 443, 135, 445, 3389, 5040, 5357, 5985, 5986, 7680, 47001, the dynamic
-range 49152 to 65535) and common developer ports. Each service has a sub-block and a default: the console 7800 (7800 to 7819), the Gateway 7820 to 7839,
-the Runner 7840 (7840 to 7859), the Workspace 7860 (7860 to 7879); 7880 to 7899 are spare. With no port configured, a service takes a free port of its
-sub-block at first start and pins it in its own settings. Windows' excluded port ranges (Hyper-V and WinNAT reserve ranges that move at boot) are skipped;
+range 49152 to 65535) and common developer ports. Each service has a sub-block and a default: the console 7800 (7800 to 7819), the Gateway 7820 to 7839 (its
+listeners take any free values of its sub-block, with no fixed split between them), the Runner 7840 (7840 to 7859), the Workspace 7860 (7860 to 7879); 7880 to 7899 are spare. With no port configured, a service takes a free port of its
+sub-block at first start and pins it in its own settings. Windows' excluded port ranges (Hyper-V and WinNAT reserve ranges that move at boot) are still skipped, because a machine whose dynamic range
+was lowered can reserve inside any range;
 when the whole sub-block is excluded the service fails and the failure file names the ranges. A configured port (Docker Compose, for example) is never
 moved. The service reports its address to the console when it joins.
 
