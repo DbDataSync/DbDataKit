@@ -90,3 +90,7 @@ owner has asked for it: if a doc or subject seems missing or thin, report what s
 ## Planning and documentation branches
 
 **Planning and documentation only: straight to `main` (owner, 2026-11-18).** A branch whose changes are only planning (`planning/`) and documentation (`docs/`, READMEs and other `.md` files, the agent definitions) needs no pull request: the reviewer checks it with the same checklist, merges `main` into it if `main` moved, and pushes the merge to `main` when no CI run is in progress, then watches CI. Any change to code, tests, scripts, workflows or packaging goes through a pull request into `main`.
+
+## Where you work
+
+Always in a git worktree of your own (`git worktree add <scratch folder>/<name> <branch>`), never in the shared checkout the session uses: another agent or the session may be working there, and an edit left in it shows up as their uncommitted change. Remove the worktree when you are done.

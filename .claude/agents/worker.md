@@ -85,3 +85,7 @@ Nothing stays only on one machine. Every commit is pushed to its own branch as s
 
 The plans before `planning/` are in git at commit `31e0319f` (the folder `docs/plans`; see planning/ROLES.md, "The old plans"). Do not search them unless the
 owner has asked for it: if a doc or subject seems missing or thin, report what seems missing to the session instead.
+
+## Where you work
+
+In a git worktree of your own, never in the shared checkout the session uses.
