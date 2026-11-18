@@ -18,6 +18,8 @@ buttons in `.actions` at the right end) and `pages/replication-detail/OverviewPa
 
 ## What exists today
 
+As it was before the grouped navigation was built (kept for the open designs and the proposals below).
+
 Read from the code of `Shared/web/*` on 2026-11-18 and rendered at 1440x900 with the console built and its API answered by a mock.
 
 - **The chrome** (`Shared/web/shell/src/components/Shell.tsx`): a 46px icon rail (`RailItem[]`: route, title, icon, test id, `adminOnly`), a
@@ -64,7 +66,9 @@ Read from the code of `Shared/web/*` on 2026-11-18 and rendered at 1440x900 with
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| NAVIGATION-4 | A check that keeps it from becoming a jumble again: every route of the console and of each module is either an entry of the navigation or listed, with the page that links to it, as a page under an entry (`/state/<id>` under Servers, `/models/<name>` under Models) | none (the grouped navigation is built) | S | a vitest fails, naming the route, when a route is added to `App.tsx` or a module with neither an entry nor a parent; a test of the vitest proves it fails on such a route |
+
+None open: the four tasks are built (the arrangement is in `DbDataKit/README.md`, "Finding a screen: the navigation"). What remains waits for the owner:
+the proposed decisions and the open designs below.
 
 ## Proposed decisions
 
