@@ -63,6 +63,8 @@ Besides, it:
 - fixes mechanical conflicts only (both sides' entries in a shared list, a moved line); a conflict between two designs goes back to the session as a
   question for the owner.
 
+**Planning and documentation only: straight to `main` (owner, 2026-11-18).** A branch whose changes are only planning (`planning/`) and documentation (`docs/`, READMEs and other `.md` files, the agent definitions) needs no pull request: the reviewer checks it with the same checklist, merges `main` into it if `main` moved, and pushes the merge to `main` when no CI run is in progress, then watches CI. Any change to code, tests, scripts, workflows or packaging goes through a pull request into `main`.
+
 ## Branches
 
 | Branch | Who | For |
