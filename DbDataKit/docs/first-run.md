@@ -29,7 +29,7 @@ A refused invitation says only that it is not valid, used or expired, so a perso
 
 ## The setup checklist
 
-After you sign in, **Setup** in the rail (administrators) lists the first steps, and **Home** says how many are left:
+After you sign in, **Setup** (under **Settings** in the navigation on the left; administrators) lists the first steps, and **Home** says how many are left:
 
 | Step | Opens | Finished when |
 | --- | --- | --- |

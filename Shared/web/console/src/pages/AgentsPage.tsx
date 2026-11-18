@@ -25,18 +25,20 @@ export function AgentsPage() {
   const tab = (TABS.find((t) => t.id === params.get('tab'))?.id ?? 'chat') as Tab
   const pending = useQuery({ queryKey: ['agents', 'approvals', true], queryFn: () => agentsApi.approvals(true, false), refetchInterval: 3000 })
   return (
-    <ConsoleShell crumbs={[{ label: 'Agents', heading: true }]}>
+    <ConsoleShell
+      crumbs={[{ label: 'Agents', heading: true }]}
+      tabs={<>
+      {TABS.map((t) => (
+        <button key={t.id} type="button" className={`tab ${tab === t.id ? 'active' : ''}`} onClick={() => setParams({ tab: t.id })} data-testid={`agents-tab-${t.id}`}>
+          {t.label}{t.id === 'inbox' && (pending.data?.length ?? 0) > 0 ? ` (${pending.data!.length})` : ''}
+        </button>
+      ))}
+      </>}
+    >
       <div className="pane" data-testid="agents-page">
         <div className="page-head">
           <h1 className="page-title">Agents</h1>
           <span className="page-note">Talk to an agent, answer what it asks, and see what agents did and on whose word.</span>
-        </div>
-        <div className="subtabbar" data-testid="agents-tabs">
-          {TABS.map((t) => (
-            <button key={t.id} type="button" className={`subtab ${tab === t.id ? 'active' : ''}`} onClick={() => setParams({ tab: t.id })} data-testid={`agents-tab-${t.id}`}>
-              {t.label}{t.id === 'inbox' && (pending.data?.length ?? 0) > 0 ? ` (${pending.data!.length})` : ''}
-            </button>
-          ))}
         </div>
         {tab === 'chat' && <ChatTab />}
         {tab === 'inbox' && <InboxTab />}

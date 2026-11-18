@@ -84,9 +84,9 @@ export function SettingsView(p: SettingsViewProps) {
               server.yaml changed since you read it (someone else saved it, or it was edited by hand). Your draft is kept below; read the file again to see what changed. <button type="button" className="btn btn-sm" onClick={p.onReload} data-testid="settings-reload">Read it again and drop my draft</button>
             </div>
           )}
-          <div className="row" style={{ gap: 8, marginBottom: 8 }} role="tablist">
-            <button type="button" role="tab" aria-selected={p.tab === 'form'} className={p.tab === 'form' ? 'btn btn-primary' : 'btn'} onClick={() => p.onTab('form')} data-testid="settings-tab-form">Form</button>
-            <button type="button" role="tab" aria-selected={p.tab === 'yaml'} className={p.tab === 'yaml' ? 'btn btn-primary' : 'btn'} onClick={() => p.onTab('yaml')} data-testid="settings-tab-yaml">server.yaml</button>
+          <div className="subtabbar" style={{ marginBottom: 8 }} role="tablist">
+            <button type="button" role="tab" aria-selected={p.tab === 'form'} className={`subtab ${p.tab === 'form' ? 'active' : ''}`} onClick={() => p.onTab('form')} data-testid="settings-tab-form">Form</button>
+            <button type="button" role="tab" aria-selected={p.tab === 'yaml'} className={`subtab ${p.tab === 'yaml' ? 'active' : ''}`} onClick={() => p.onTab('yaml')} data-testid="settings-tab-yaml">server.yaml</button>
           </div>
           {p.masked && <p className="hint" data-testid="settings-masked-note">A password or key in the file is shown as '********'. Leave it as it is to keep the value; type over it to replace it. The value is never sent here.</p>}
 
