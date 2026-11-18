@@ -140,6 +140,14 @@ button { font-family: inherit; }
 .rail-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rail-group-title { font: 600 10.5px var(--ui); letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-7); padding: 9px 8px 2px; }
 .rail-toggle { margin-top: 8px; }
+/* A server's own entries, nested under its entry while its screens are open. */
+.rail-nested { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 2px 0 4px; }
+.rail.collapsed .rail-nested { border-left: 2px solid var(--accent-tint); }
+.rail.wide .rail-nested { align-items: stretch; margin-left: 10px; padding-left: 6px; border-left: 1px solid var(--chrome-edge); }
+.rail-group-title.nested { padding: 5px 8px 1px; font-size: 9.5px; }
+.rail-note { margin-left: auto; font: 500 10px var(--ui); color: var(--ink-7); white-space: nowrap; }
+.rail-item.unreachable { color: var(--idle); }
+.rail-item.unreachable .rail-note { color: var(--bad); }
 .rail.wide .rail-toggle { color: var(--ink-7); }
 
 .app { flex: 1; min-width: 0; display: flex; flex-direction: column; }
