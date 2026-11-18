@@ -60,8 +60,12 @@ inputs; an empty `version` means the clock now).
 **The guard.** Unless it is a snapshot, a release refuses to run when dispatched against anything but `main`, and when the commit (the tip, or
 `sha`) is not on `main`. It also needs a gate on that exact commit:
 
-- the console, Gateway and Sync look up a successful run of the product's CI workflow for the commit (a lookup, not a re-run; any successful run
-  counts, so a flake that was re-run to green is accepted);
+- the console, Gateway, Runner, Store, Workspace and Sync look up a successful run of the product's CI workflow for the commit (a lookup, not a re-run;
+  any successful run counts, so a flake that was re-run to green is accepted). A commit that changes only planning, documentation or Markdown starts no
+  product CI, so it has no run of its own: the nearest commit before it that has one covers it when nothing but those paths changed since, and the
+  commit's own Repository checks run (which checks what the builds read from those files) is green. For example, a release of `main` right after a
+  planning merge is covered by the green run of the code merge before it. `scripts/ci_paths.py require-green` is that guard
+  (`docs/ci-lessons.md`, "Which changes start which workflow");
 - Build runs the full conformance suite on every engine on that commit, then the unit suite and a smoke test of each executable.
 
 **Inputs.** `beta` adds `-beta` and marks the release a prerelease. `snapshot` cuts a prerelease from any branch or commit with none of the

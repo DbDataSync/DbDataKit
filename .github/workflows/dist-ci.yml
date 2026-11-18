@@ -10,6 +10,7 @@ on:
       - '**/dist.json'
       - '.github/actions/publish-dist/**'
       - '.github/workflows/dist-ci.yml'
+      - '!**.md'    # Markdown alone starts nothing (scripts/ci_paths.py); last, since the last match wins
   push:
     branches: [main]
     paths:
@@ -17,6 +18,7 @@ on:
       - '**/dist.json'
       - '.github/actions/publish-dist/**'
       - '.github/workflows/dist-ci.yml'
+      - '!**.md'    # Markdown alone starts nothing (scripts/ci_paths.py); last, since the last match wins
   workflow_dispatch:
 
 permissions:

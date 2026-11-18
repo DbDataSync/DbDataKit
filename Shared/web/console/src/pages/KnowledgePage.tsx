@@ -24,18 +24,20 @@ export function KnowledgePage() {
   const tab = (TABS.find((t) => t.id === params.get('tab'))?.id ?? 'overview') as Tab
   const overview = useQuery({ queryKey: ['knowledge', 'overview'], queryFn: knowledgeApi.overview })
   return (
-    <ConsoleShell crumbs={[{ label: 'Knowledge', heading: true }]}>
+    <ConsoleShell
+      crumbs={[{ label: 'Knowledge', heading: true }]}
+      tabs={<>
+      {TABS.map((t) => (
+        <button key={t.id} type="button" className={`tab ${tab === t.id ? 'active' : ''}`} onClick={() => setParams({ tab: t.id })} data-testid={`knowledge-tab-${t.id}`}>
+          {t.label}{t.id === 'worklist' && (overview.data?.worklists.reduce((n, l) => n + l.work.length, 0) ?? 0) > 0 ? ` (${overview.data!.worklists.reduce((n, l) => n + l.work.length, 0)})` : ''}
+        </button>
+      ))}
+      </>}
+    >
       <div className="pane" data-testid="knowledge-page">
         <div className="page-head">
           <h1 className="page-title">Knowledge</h1>
           <span className="page-note">What people have written down for agents and for each other, whose it is, and what an agent would be given.</span>
-        </div>
-        <div className="subtabbar" data-testid="knowledge-tabs">
-          {TABS.map((t) => (
-            <button key={t.id} type="button" className={`subtab ${tab === t.id ? 'active' : ''}`} onClick={() => setParams({ tab: t.id })} data-testid={`knowledge-tab-${t.id}`}>
-              {t.label}{t.id === 'worklist' && (overview.data?.worklists.reduce((n, l) => n + l.work.length, 0) ?? 0) > 0 ? ` (${overview.data!.worklists.reduce((n, l) => n + l.work.length, 0)})` : ''}
-            </button>
-          ))}
         </div>
         <ErrorBanner error={overview.error} />
         {overview.data && tab === 'overview' && <OverviewTab overview={overview.data} />}

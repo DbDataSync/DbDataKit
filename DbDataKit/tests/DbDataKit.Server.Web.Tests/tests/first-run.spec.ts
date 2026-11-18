@@ -98,7 +98,7 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await expect(page).toHaveURL(/\/servers\/[^/]+$/)
   await expect(page.getByTestId('runner-tasks-page')).toBeVisible()
 
-  await page.getByTestId('rail-home-link').click()
+  await page.getByTestId('rail-instances').click()
   await expect(page.getByTestId('instances-page')).toBeVisible()
 
   await instance.getByTestId('instance-forget-button').click()
@@ -146,7 +146,7 @@ test('first run: invitation, passkey, sign-in, users, servers', async ({ page, c
   await page.getByTestId('rail-config').click()
   await expect(page.getByTestId('commits-table').locator('[data-testid^="commit-"]').first()).toBeVisible()
 
-  await page.getByTestId('rail-home-link').click()
+  await page.getByTestId('rail-instances').click()
 
   // E05, the Connections view: the Gateway's data sources are listed, and one is copied on the same Gateway under another name (a copy to or from a Sync server went with the Sync server, plan 33 SC23). The target reads
   // the file with its own strict loader.

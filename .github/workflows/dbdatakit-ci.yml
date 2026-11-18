@@ -5,10 +5,30 @@ name: DbDataKit CI
 # settings changed; the run then still reports success. The shared libraries' own suite is shared-ci.yml, run once, not per product.
 
 on:
+  # Planning, documentation and Markdown alone start nothing here (scripts/ci_paths.py, PRODUCT_IGNORE): scripts/check_doc_inputs.py in
+  # Repository checks reads what the build takes from them. The two lists are the same, so a pull request and its merge agree.
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'planning/**'
+      - '.claude/**'
+      - 'docs/**'
+      - '**.md'
+      - 'DbDataKit/docs/**'
+      - 'DbDataSync/docs/**'
+      - 'DbDataBuild/docs/**'
+      - 'DbDataGateway/docs/**'
   push:
     branches: [main]
+    paths-ignore:
+      - 'planning/**'
+      - '.claude/**'
+      - 'docs/**'
+      - '**.md'
+      - 'DbDataKit/docs/**'
+      - 'DbDataSync/docs/**'
+      - 'DbDataBuild/docs/**'
+      - 'DbDataGateway/docs/**'
   # Everything, whatever changed.
   workflow_dispatch:
   workflow_call:

@@ -12,12 +12,17 @@ const consoleDll = path.join(repoRoot, 'DbDataKit/src/DbDataKit.Server/bin/Debug
  * context of their own: a passkey lives in one authenticator, and a session in one context. The first-run invitation is not used (the first-run story spends it).
  */
 export async function signInNewAdmin(page: Page, context: BrowserContext, baseURL: string, name: string, email: string) {
+  await signInNewPerson(page, context, baseURL, name, email, 'admin')
+}
+
+/** The same as `signInNewAdmin`, for a person of the role given (`viewer` sees only what a viewer may). */
+export async function signInNewPerson(page: Page, context: BrowserContext, baseURL: string, name: string, email: string, role: 'admin' | 'viewer') {
   const cdp = await context.newCDPSession(page)
   await cdp.send('WebAuthn.enable')
   await cdp.send('WebAuthn.addVirtualAuthenticator', {
     options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
   })
-  const made = execFileSync('dotnet', ['exec', consoleDll, 'user', 'invite', '--email', email, '--role', 'admin', '--url', baseURL, '--repo', scratchDirectory], { encoding: 'utf8' })
+  const made = execFileSync('dotnet', ['exec', consoleDll, 'user', 'invite', '--email', email, '--role', role, '--url', baseURL, '--repo', scratchDirectory], { encoding: 'utf8' })
   await page.goto(`/invite#${/\/invite#(\S+)/.exec(made)![1]}`)
   await page.getByTestId('invite-name-input').fill(name)
   await page.getByTestId('invite-enrol-button').click()

@@ -25,7 +25,11 @@ Ana's login would offer a table no run can read.
 A person never reads with a login of their own. A login a person types is used in one way only: as the login of a slot in a non-production channel, sent
 to the Runner once (below). Integrated sign-in (Windows, Entra) cannot be typed or delegated from a browser to a server in any case.
 
-Who may ask: in `prod`, the project's approvers (as for the binding test); in every other channel, its authors.
+Who may ask: anyone with access to the project, in every channel, `prod` included. A read in `prod` is shown with a clear warning that it reads
+production (the database and the channel named, shape only, no row) and then goes ahead; no approver role is needed. Some syncs are designed between
+systems that have no development copy, and they cannot be designed without reading production's shape. How the suite treats such actions:
+[architecture.md](architecture.md#risky-actions-allowed-with-a-clear-warning-owner-2026-11-18). A setting an administrator may turn on to restrict
+production reads is a later hardening option.
 
 ## The built-in package `dbdatakit-metadata`
 
