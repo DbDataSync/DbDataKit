@@ -113,19 +113,6 @@ Scenario: an administrator opens `gateway-east`'s Data sources; a viewer signs i
   servers** (`rail-instances`) where it pressed the arrow.
 - **Other option:** the breadcrumb starts with the console (`dbdatakit / Servers / gateway-east / Data sources`), one crumb longer on every server page.
 
-### NAVIGATION-P8: may a viewer of the console open the servers' screens (awaiting the owner)
-
-Scenario: a person invited to the console as a viewer wants to read a Gateway's models, or a runner's runs. Found while building the Gateway's groups:
-the console answers its list of servers (`GET /api/instances`) to an administrator only (a viewer gets 403), so a viewer's navigation lists no server
-and `/servers/<id>` stays empty for them; the Gateway's entries a viewer may use (Overview, Models, Saved queries, Apps, Result cache, Access rules,
-Publishers) are shown only to a viewer who reaches a server's screens, which today no console viewer does. The browser story `navigation-gateway.spec.ts`
-gives the viewer's page the administrator's list to prove the hiding against the real Gateway.
-
-- **Option A (recommended):** the list of servers is answered to a viewer too, so a
-  viewer finds the servers in the navigation and opens the screens their role on each server allows. A change to the console's server, outside this
-  quick pass.
-- **Option B:** keep the servers an administrators' area; a viewer reaches what servers hold only through the console's own pages (Views, Runs, Lineage).
-
 ## Needs from other subjects
 
 None. Subjects that add console screens put them into a group of this tree when they land: INSTALLER-13 (the Add a server screen, under Servers),
@@ -144,6 +131,17 @@ run, publish). Why it waits: the owner will refine once the navigation is in use
 
 What: Home lists nothing and says no server is paired even when servers are. Why it waits: what a person lands on (their waiting approvals, failed runs,
 recent projects) is a choice about roles and should come after the groups are settled. Open question: one Home for everyone, or per role.
+
+### Who sees which servers
+
+What: whether a person invited to the console as a viewer finds the servers in the navigation and opens the screens their role on each server allows,
+or the servers stay an administrators' area and a viewer reaches what they hold only through the console's own pages (Views, Runs, Lineage). Today the
+console answers its list of servers (`GET /api/instances`) to an administrator only (a viewer gets 403), so a viewer's navigation lists no server and
+`/servers/<id>` stays empty for them; the Gateway's entries a viewer may use (Overview, Models, Saved queries, Apps, Result cache, Access rules,
+Publishers) are shown only to a viewer who reaches a server's screens, which today no console viewer does. The browser story `navigation-gateway.spec.ts`
+gives the viewer's page the administrator's list to prove the hiding against the real Gateway. Why it waits: the owner, 2026-11-18, "We haven't done a
+strong enough design on roles to make this decision valuable right now"; it is settled with the design of roles. Open questions: which console roles
+see which servers, and whether a server's own roles for a person decide what they see there.
 
 ## Shared areas touched
 
