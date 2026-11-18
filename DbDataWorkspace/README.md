@@ -26,6 +26,23 @@ dbdataworkspace secret set|list|delete|... [--repo <server directory>]   # the s
 dbdataworkspace health check [--url <url>]
 ```
 
+## A project's two views: Files and Designer
+
+A draft is edited in one of two views, chosen in the project's navigation, the same two for every kind of project:
+
+- **Files** is the stock editor every kind has: the file tree, each file as the form generated from its format's schema or as YAML in the code editor, and the draft's tabs (Changes, Check, the kind's own tabs, Builds, History). Every file of every project can always be read and changed here.
+- **Designer** is the kind's own designed screens: pages laid out around what the person authors rather than around files (for a sync project, a replication's page with its tabs, the table mappings with the source and target side by side, the connections and scripts lists). A Designer reads and writes the same files of the same draft; it adds no format of its own.
+
+The choice is the project's, not a file's: the navigation offers **Files** and **Designer** once, at the top of the draft's page, and the whole page follows it. A kind without a Designer shows Files only and no switch. A kind with one opens on Designer. The view is part of the address (`.../files/...` or `.../designer/...`), so a reload or a shared link opens the same view and the same place, and the browser remembers each person's last choice per project.
+
+Both views edit one draft: an edit not yet saved in the Designer is still there, not saved, when the person switches to Files, and the reverse; the draft's chrome (**not saved** with **Save**, the check's count, **Commit…**) is the same in both, and the check runs on the files whichever view changed them. A file the Designer cannot show (it does not parse, or it is of a format version newer than the screens know) is shown in the Designer as a line naming the file with a link that opens it in Files, never as an empty or partial screen. History, diffs and earlier texts of a file are the Files view's (History, Changes, a file's earlier texts); a Designer does not repeat them.
+
+Why: one way to move between designed screens and raw files for every kind, so a person who learned it on one kind knows it on the next, and the stock editor is always there as the fallback for whatever a Designer does not offer yet (a key the screens do not show, a file they cannot read).
+
+Example: in the sync project `erp-sync`, an engineer opens the draft `add-order-lines` and lands on Designer, on the replication `erp-to-dw`. On the mapping `customers` she ticks two key columns, then wants `relationshipColumns`, which the Column Mapping tab does not offer: she clicks **Files**, the mapping file is open as a form with her two key columns already in it (not saved), she sets the key in YAML, clicks **Designer** and is back on the mapping's Column Mapping tab, saves once and commits.
+
+The switch is not built yet; today every project shows the Files view only. Sync is the first kind to get a Designer.
+
 ## The server's directory
 
 | Path | What |
