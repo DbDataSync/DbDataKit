@@ -101,6 +101,10 @@ that the Sync server's screens used: the rail, the breadcrumb bar, the `tabbar` 
 a level down, the `subtabbar`. They replace the four tab styles pages had grown. The arrangement is deliberately plain: today's pages regrouped and
 labelled, with no page redesigned.
 
+**Every screen has a place.** A route of the console, or of a server's screens, is either an entry of the navigation or a page listed under one, with
+the page that links to it (`Shared/web/console/src/navigationPages.ts`: a dashboard `/views/dashboards/<name>` under Views, a server's state under All
+servers, a Gateway's model under Models); the console's test `routes.test.ts` fails, naming the route, when a new one is neither.
+
 Example: an operator signs in to find why last night's refresh failed. They read the heading **Operate**, open **Runs**, and see the failed run; from
 it, `runner-a` under **Servers** shows that runner's own Runs one click away.
 
