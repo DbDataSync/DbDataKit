@@ -101,9 +101,29 @@ stops every suite service on the machine. Docker Compose uses the same path, wit
 ## Scoop
 
 Scoop installs no service by itself: the services are registered against Scoop's `current` folder, which Scoop repoints on update, and no program files
-are copied. `post_install` prints the next commands. To update, stop the services (`dbdatakit setup single-server --stop`, or `Stop-Service`), run
-`scoop update`, then `dbdatakit setup single-server`. On an uninstall `pre_uninstall` stops the services and prints the `sc.exe delete` commands.
-What runs as an elevated script inside another program cannot be tested like our own code, so the script stays this small.
+are copied. `post_install` (and the manifest's notes) print the next commands: `dbdatakit setup single-server`, and how to update. On an uninstall
+`pre_uninstall` stops the services and prints the `sc.exe delete` commands that remove them. No other service command is run by the Scoop scripts: what
+runs as an elevated script inside another program cannot be tested like our own code, so the script stays this small.
+
+**Updating.** Scoop refuses to update an app while a process runs from its folder ("Running process detected, skip updating"), and it does so **before
+any hook runs**; that refusal is why the package once copied the programs to `%ProgramData%\DbDataKit\bin\<version>` and ran the services from the copy.
+Copying the programs is not an option, so an update is three commands:
+
+```
+dbdatakit setup single-server --stop     # or Stop-Service on each service
+scoop update -g dbdatakit-full
+dbdatakit setup single-server
+```
+
+Whether it can become one command depends on two facts about Scoop:
+
+- **Which `pre_uninstall` runs.** During `scoop update` the hook that runs is the one in the **installed** version's manifest, not the new one's. A new
+  manifest alone therefore cannot show what an update does: the check installs a version N whose manifest carries the hook, then updates to N+1.
+- **The running-process check.** Scoop looks for processes running from the app's folder before it runs the hooks, unless Scoop's setting
+  `ignore_running_processes` is set.
+
+If both allow it, `pre_uninstall` stops the services itself and an update is `scoop update` followed by `dbdatakit setup single-server`; otherwise
+stopping the services stays the user's first step. What the check found, against the Scoop version CI installs, is recorded in `docs/ci-lessons.md`.
 
 ## Commands named `check`
 
