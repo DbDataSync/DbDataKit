@@ -52,6 +52,13 @@ is sealed to the Runner group and kept in its store; it never reaches the Worksp
 way: the Workspace refuses `prod`, whose bindings stay the administrator's. The console's posture page lists the non-production bindings made from the
 Workspace.
 
+**Until Set up for development is built, a development login is bound by hand.** The project's package must be on the Runner, and the Runner's own
+bindings screen (its Packages page, Bindings) binds the slots of a version it holds: publish a build of the draft to the Runner's `dev` channel staged,
+not served (the Workspace's Builds tab, whose publish can also bind each slot to a connection); then an administrator binds the connection's slot in
+`dev` on that screen, the console sending the connection's copy with its secret references, and the development login's secret is put in the Runner's
+own store, never typed into the Workspace. Refresh then reads in `dev`; a channel that binds no slot is named by the channel picker with this way to bind
+one.
+
 ## The catalog cache
 
 What discovery finds is written into the draft's `catalog-cache.yaml`, an unsaved edit the person commits with the draft, so a build, a review and an agent
