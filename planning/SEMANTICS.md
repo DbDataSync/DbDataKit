@@ -37,6 +37,7 @@ configurable by form, and Analysis Services sources are bounded and cancellable.
 | SEMANTICS-8 | A row cap in the DAX text (`TOPN (n + 1, ...)`) when no `limit` is asked | none | S | the `semantic-ssas` job: a query of a thousand-row table with `limit` 10 returns 10 and `truncated` |
 | SEMANTICS-9 | The SSAS executor: asynchronous, one connection per host source, the command timeout from the data source, a role that can write refused at start | none | M | `SsasExecutorGuardTests` and the `semantic-ssas` job: a slow query is cancelled by the timeout; a writing role is refused naming it |
 | SEMANTICS-10 | Access-rule tests of their own for saved queries and REST feeds (low priority: they run the same path as a semantic request, which is tested): a saved query and a feed each apply row rules and column rules as the caller | none | S | on SQL Server and PostgreSQL data sources: two callers with different row rules get different rows from the same saved query and the same feed; a hidden column is missing from both and a masked one is masked |
+| SEMANTICS-11 | An agent's Gateway address from the environment (`DbDataBuild/DESIGN.md`, "The `semantic` commands"): Build's `semantic describe\|query\|explain\|members` read `DBDATAKIT_GATEWAY_ADDRESS` (and the CA file's variable beside it) when `--address` is absent; `ui mcp` keeps withholding `--address`, `--insecure`, `--ca-file` and `--server-dir`; with neither, the sentence names the variable | none | S | `BuildSemanticNounTests`: with the variable set and no `--address` a verb runs against the stand-in session at that address; a tool call cannot set an address (the MCP tool's schema has no such argument); with neither, the sentence names `DBDATAKIT_GATEWAY_ADDRESS`; `check_env_names.py` passes |
 
 ## Needs from other subjects
 
@@ -44,15 +45,7 @@ configurable by form, and Analysis Services sources are bounded and cancellable.
 
 ## Proposed decisions
 
-### SEMANTICS-P2: where an agent's Gateway address comes from for Build's `semantic` noun (awaiting the owner)
-
-`dbdatabuild semantic describe|query|explain|members` needs `--address`; `ui mcp` withholds `--address`, `--insecure`, `--ca-file` and `--server-dir`
-from the tools, so an agent cannot send the person's token (`DBDATAKIT_GATEWAY_TOKEN`) to an address of its choosing. With the Build server's pairings
-gone, an agent's semantic tools answer with the sentence that says to give `--address` (`DbDataBuild/DESIGN.md`). Scenario: an author asks an agent in
-a Build project to check a measure's totals. Option A: the address comes from where the token comes from, never from the tool call: a variable
-`DBDATAKIT_GATEWAY_ADDRESS` (and its CA file) set by the person who starts the agent, read by the verbs when `--address` is absent. Option B: Build's
-agent tools leave semantics to the Gateway's `mcp` module (KNOWLEDGE-17), and `ui mcp` stops offering the four verbs. Option C: the Workspace project
-names its Gateway, and the agent's tools use that. Recommendation: A, the smallest change that keeps the address out of the agent's hands.
+None open.
 
 ## Open designs
 
