@@ -79,7 +79,7 @@ From `96601f27^:DbDataSync/src/DbDataSync.Api/` (and the libraries it composed).
 | --- | --- | --- |
 | `ScriptsController` slots and compile, `Services/ScriptUsageScanner.cs` | the script slots a binding can name; a script's compile diagnostics; where each script is bound | `DbDataSync.Scripting` (`ScriptHost`), `DbDataSync.Core` (`ConfigRepository`) |
 | `ConnectionsController` capabilities, `connection-parameters`, `credential-source`; `Services/ParameterCheck.cs`, `Services/SyncEngines.cs` | what a driver can do, its connection parameters, which login a connection uses, the parameter check | `DbDataSync.Drivers.Abstractions` (`DriverRegistry`), `DbDataSync.Drivers.Descriptor`, `DbDataKit.Connections.Descriptor` (the engine registry) |
-| `MetadataController` (databases, tables, columns) | a connection's metadata | the draft's catalog cache (`DbDataKit.Catalog.Cache`), never a live connection in this pass |
+| `MetadataController` (databases, tables, columns) | a connection's metadata | the draft's catalog cache (`DbDataKit.Catalog.Cache`); how the cache is filled and refreshed, and what is checked live, is AUTHORING-P2 and SYNCAUTHORING-P9 |
 | `ProvisioningController` inferred column types and natural key; `Services/MappingMetadataService.cs`, `MappingMetadataCapture.cs`; `TableMappingsController` bulk create | the target types and key of a mapping from its source columns; a mapping file per ticked table with its columns and key | `DbDataSync.Provisioning` (`MappingColumnReader`) over the catalog cache |
 | `ProvisioningController` and `ReplicationProvisioningController` plan | a mapping's and a replication's provisioning plan | the Workspace's `provisioning-plan` route (exists) |
 
@@ -111,7 +111,7 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 - AUTHORING-3: a segmenting strategy's **Try** (SYNCAUTHORING-4); until then it says it waits on a Runner task.
 - AUTHORING-4: the source side of the Provisioning sub-tabs (SYNCAUTHORING-4, SYNCAUTHORING-5); until then the source is "not known".
 - AUTHORING-6: the catalog cache of a Sync connection, which the table pickers, Create mappings, Column Mapping and the metadata routes read
-  (SYNCAUTHORING-3, SYNCAUTHORING-5); a connection's test before publish waits on its read logins.
+  (SYNCAUTHORING-3, SYNCAUTHORING-5); who fills it, a connection's test before publish and the live checks wait on AUTHORING-P2 and SYNCAUTHORING-P9.
 - AUTHORING-9: its stories of the Sync forms stay the stories of the Files view; this subject's stories cover the Designer (no story is written twice).
 - AUTHORING-10: the secrets overview of the project, which the Connections page links to (SYNCAUTHORING-6).
 - AUTHORING-12: reconcile deletes and resync stay paused; they come back with the monitoring pass, not in the Designer's authoring screens.
@@ -146,6 +146,70 @@ scripts list and the provisioning plan today; nothing moves. Under A each answer
 type) and the libraries become the suite's; under B the Workspace stays free of Sync's assemblies and the verbs are usable from a terminal, at the cost
 of a process per call. Recommendation: A for the configuration model, descriptors and the column reader, B for anything that compiles or runs a
 person's script.
+
+### SYNCAUTHORING-P9: discovering and checking a replication's source and target in the Designer (awaiting the owner)
+
+Who reads a database, with which login, and where the answer is kept is AUTHORING-P2 (recommended: Runner tasks through a channel's binding; the
+Workspace holds no login). This proposal is what a sync project discovers and checks under that rule, case by case. Until both are answered, this
+subject's Designer reads only the catalog cache, as the Files view does today.
+
+**Discovery.**
+
+- *A new replication.* Ana presses **New Replication** and picks `crm` and `dw`. The database pickers list the cache's databases of each connection
+  (`catalog-cache/2`, AUTHORING-P2); a connection with no cache shows **Refresh catalog** with the channel picker, which runs the built-in `discover` task on
+  the Runner (AUTHORING-P2, scenario 1) and fills the pickers when it ends.
+- *Table Mappings.* The Overview lists the source's cached tables with their mapping counts; **Create mappings** writes a mapping file per ticked table from
+  the cache (columns, types, key; the target's types inferred by the ported `MappingColumnReader` over the cache). **Refresh** on the Overview reads the
+  connection again; **Refresh** on a mapping's cached-metadata card reads one table; both show the difference before the cache changes, and the Check tab
+  then lists the mappings it touches (a mapped column gone, a type changed).
+- *A query source.* **Custom query, not a table**, then **Describe columns**: the built-in `describe` task in the chosen channel (read-only policy first,
+  zero rows) gives the columns, written into the mapping's column cache; the query's rows stay AUTHORING-P1's question.
+- *A connection whose driver is Sync's own* (a YAML driver, or a connection with a `metadataProvider` script): the built-in package does not run Sync's
+  drivers or scripts, so discovery and describe run as the tasks `discover` and `describe` of the project's own package (Sync's `MetadataService` behind
+  them), which needs a build staged in that channel; the Designer says so and offers **Build and stage for dev**.
+
+**Checking the source** (each item says whether it is offline, from the cache and the files, or live, as a check of the package's `preflight` task with
+the run login the replication will use):
+
+| Check | Offline | Live (`preflight`, run login, read-only) |
+| --- | --- | --- |
+| the table and every mapped column exist | yes, against the cache | yes, the catalog read again |
+| the filter's columns exist and the filter compiles | the column names the filter names, against the cache; a filter the dialect's tokenizer cannot read is "not checked offline" | a zero-row read `WHERE (<filter>) AND 1 = 0` |
+| the login can read the table | no | the engine's privilege function (`HAS_PERMS_BY_NAME`, `has_table_privilege`), then the same zero-row read |
+| change tracking, CDC or a logical slot is on where the reader's strategy needs it | no (today's offline plan says `unknown`) | the database's and the table's setting, `wal_level`, the slot and the publication; a missing one is a provisioning step of the source side (absorbs AUTHORING-4) |
+| every source type is one the driver reads | yes, the driver's type map over the cached type text | the engine's own type of each column |
+| a key for a reader or writer that needs one | yes, from the cache's key flags | yes |
+
+**Checking the target.**
+
+| Check | Offline | Live (`preflight`, run login, nothing written) |
+| --- | --- | --- |
+| the table exists, or provisioning can create it | the provisioning plan from the cache (built), the create or alter statements shown | the plan again from the live catalog, as the `provision` task plans before it applies |
+| the login can insert, update and delete; for provisioning, create in the schema and alter the table | no | the engine's privilege functions on the table and the schema; never a trial write |
+| types are compatible with the mapping (each source column's inferred type against the target column's) | yes, against the cache | yes |
+| the keys agree (the mapping's key against the target's primary or unique key; no key column nullable) | yes | yes |
+| where the replication's state is kept (the `tracking:` schema on the target, TASKENGINE-6) | the configured place is named | the schema and tables exist or the login may create them |
+
+**The connection test.** The Connections page's **Test**, and each endpoint card's, run the binding test in the chosen channel (AUTHORING-P2, scenario 5):
+binding, document, the login's secrets, then reach, TLS and login, with the server's version; the old page's **Test all** and its reachable column are the
+monitoring pass's. The old test's sample rows are not restored.
+
+**Where the Designer shows it.** The Check tab's count includes the offline findings; the Provisioning sub-tabs show the offline plan, and the newest
+`preflight` run of the chosen channel (time, run link, findings per mapping); the publish panel runs `preflight` on the staged version before activation
+(AUTHORING-P2, scenario 6). Nothing live is committed into the draft; the cache and a query's column cache are.
+
+**Options.** A: as above: offline checks in the Check tab and the plan, live checks as one `preflight` task of the replication set's package, run on the
+staged version (before publish to a channel) or the served one (Re-check). B: no live check in authoring; the first pass fails naming what is missing,
+as it does today. C: the live checks as tasks of the built-in package (AUTHORING-P2) instead of the set's own, so they run before any build exists, at the
+cost of the built-in package learning each reader's strategy and Sync's drivers. Scenario: Ana maps `crm.dbo.orders` with the change-tracking reader and
+publishes to `prod`, where change tracking is off on that table. Under A the staging's `preflight` reports "change tracking is off on dbo.orders" with the
+statement that enables it, before the version is served; under B the first scheduled pass fails at 02:00; under C the same as A, from a package that has to
+follow every release of Sync's readers. Recommendation: A.
+
+**If accepted, the tasks:** the Sync package's manual read-only task `preflight` (every check above, per mapping, findings as step outputs; AUTHORING-4
+folds into it); the offline checks in the sync draft's check (columns, the filter's columns, types, keys, compatibility) over the cache; `describe` into a
+mapping's column cache; the set's own `discover` and `describe` for Sync's own drivers; the Designer's Refresh, Describe, Test and newest-check card on
+the shared pieces of AUTHORING-P2.
 
 ## Open designs
 
