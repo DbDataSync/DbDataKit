@@ -133,7 +133,23 @@ subcommand is named `doctor`; a repository check keeps it so.
 ## Clean break
 
 Installs made before this design are set up again: existing pairings, data folders made by the administrator's account, and clients set to the old
-ports (console 8480, identity home 8482, Workspace 8471, Runner 8495, Gateway 8815 to 8822). A server paired the old way, an old data folder, an old
-service name or a removed command (`server pair`, `instance add --code`, `instance pending`, `instance confirm`, `publisher pair --code`, `bundle init`,
-`service doctor`) gives a message naming what it found and what to do; never silent. Keeping the old pairings and folders would keep the bug this design
-removes.
+ports. Keeping the old pairings and folders would keep the bug this design removes. Nothing is silent: each thing an old install leaves behind is found
+by someone, who says what it found and what to do.
+
+| What is found | Who says it | What it says |
+| --- | --- | --- |
+| a file inside a service's top folder, other than `join-request.yaml`, owned by another account than the service (the old install made it) | the service, at the folder step | the file, its owner, and: stop the service, move the folder aside, run `dbdatakit setup single-server` (an install made before this design is set up again) |
+| `server.yaml` listing a console paired the old way (a code, an announcement or the bundle) | the service at start (a warning), `service check`; the pairing is not used | the console and the command that pairs it again |
+| `instances.yaml` with entries paired the old way | `dbdatakit setup single-server` (it removes them, naming each, and pairs this machine's services again), the Servers page (the entry says "paired the old way" with the generated command) | the server and the command |
+| a service registered as `dbdatagateway` | `setup single-server` (it stops and removes it, registers `DbDataGateway` on the same folder, and says so) | both names |
+| services registered from `%ProgramData%\DbDataKit\bin\<version>` | `setup single-server` (it registers them against the program folder and removes the copy, saying so) | the old and the new path |
+| `bundle.json` in the console's folder, `--announce-listen` | the console refuses to start | the file or option and what replaced it (as the console refuses the removed `runner:` section) |
+| `DBDATAKIT_ANNOUNCE_URL` set | the service, a warning at every start | the variable, that it is not read, and how to remove it |
+| a client, a connection string or an `instances.yaml` entry using an old default port (console 8480, identity home 8482, Workspace 8471, Runner 8495, Gateway 8815 to 8822) | nobody at run time (nothing listens there any more); the release notes and `docs/suite-single-server-install.md` list the old and the new defaults; the Servers page shows each server's reported address | the old and the new port |
+| `service doctor` | the program (exit 2, `RemovedCommands`) | `service check` |
+| `server pair`, `instance add --code`, `instance pending`, `instance confirm`, `publisher pair --code`, `bundle init` | the program (exit 2, `RemovedCommands`) | the sentence naming the new command |
+
+Example: an administrator upgrades a machine whose Gateway was registered as `dbdatagateway` from `%ProgramData%\DbDataKit\bin\<version>` and paired by
+a code. `dbdatakit setup single-server` says it removed `dbdatagateway` and registered `DbDataGateway` on the same folder, registered it against the
+program folder and removed the copy, and removed the old `instances.yaml` entry and joined the Gateway again; the Gateway's folder step then names any file
+the old install's administrator made and says to move the folder aside and run `setup single-server` again.
