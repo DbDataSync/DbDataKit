@@ -120,6 +120,9 @@ A person subscribes to a dashboard or a report on a schedule: `SubscriptionSpec.
 - **A source that cannot be read** ends the pass with the reason (`AlertRunResult.Problems`) and tells nothing as recovered; a channel that is not configured or not bound is a problem of the pass and nothing is remembered, so the next pass tries again.
 - **Sources.** `HealthAlertSource` maps `HealthEvaluator` findings (failed run; overdue, lagging and failed checks as late data); `RunHistoryAlertSource` reads the last run of each job in the `runs` module. Approvals and previews have no source yet: a host registers its own `IAlertSource`.
 - The console runs the pass every minute (`ConsoleAlertSender`) and edits the rules on the Delivery page, tab Alerts (`/api/delivery/alerts`).
+- **A fixed set, not a rule language.** The kinds are a closed list a person turns on or off per install, with recipients (a channel and
+  addresses); what makes a source fail (how late is late, how many failures) is a setting of the source, never an expression an administrator writes.
+  A fixed set can be tested kind by kind and explained in a sentence on the Alerts tab; a new need is a new kind.
 
 ## Opening the module
 

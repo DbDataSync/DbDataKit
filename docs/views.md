@@ -542,6 +542,27 @@ What needs the catalog (an encoded field the model does not have, an invalid req
 written in the lowest number that can say it. `schemas/bundled/dashboard.schema.json` and `report.schema.json` are the same schemas as one file each (references inlined under the prefixes `core__`, `view__`, `vega_lite_subset__`), for an editor that reads one file; `python3 -I scripts/bundle_views_schemas.py` writes them, and a test of the scripts fails when they differ from the sources. `schemas/views-format.lock.json` records the number and the hashes of `core`, `dashboard` and `report`; a test fails when a schema changes without the lock (while the format
 is open the lock is edited with the schema; once frozen a change is the next number of both kinds).
 
+## Rules of a document, its widgets and its layouts
+
+- **Counting or summing a Store entity is a semantic request** over a model of the entities, run by the engine under the viewer's access; the Store
+  has no aggregating read. A small app that needs one may need a semantic model generated from an entity (a template can generate one). One engine
+  computes every total, so a total never differs between a dashboard and a query.
+- **Widgets are versioned with their documents**: the shared core is versioned with both kinds, so a document never meets a widget newer than the
+  format it says.
+- **No per-page subtotals and no "carried forward" in format 1**: they are computations, and a query with `totals` covers the need. A sparkline in a
+  `metric` and a `gauge` widget come later, in the next format.
+- **Layouts may show different widgets**, except the default layout, which places all of them; a layout that drops a required parameter's control is
+  refused, and a widget a layout does not place is not queried.
+- **A canvas whose aspect does not match the window is letterboxed, never cropped.** Choosing a layout does not measure the aspect; an author who
+  wants another arrangement for a tall or wide screen uses an `orientation` or `aspect` selector.
+- **Cross-filter belongs to fit layouts.** In a `flow` layout on screen a click sets parameters and follows drill links only; nothing is interactive in
+  print.
+- **Fonts: a small bundled set plus host fonts an administrator lists.** The export component carries Noto Sans, Noto Serif and Noto Sans Mono (SIL
+  OFL), loaded by the export page with `@font-face` from the loopback page, so nothing is installed into the operating system and a PDF is the same on
+  Windows and Linux. The font stack is a theme token ending in the bundled families. A document may name another font only if it is listed in
+  `views.export.fonts.allowed` (the setting is read today; refusing a font it does not list is not built yet); a listed host font missing on the
+  host falls back to the bundled family with a warning.
+
 ## Resolving a layout
 
 `WidgetResolver.ResolveAsync(context, document, layout, parameters, only)` (`DbDataKit.Views`) is steps b to d of plan 32 section 2.6: for a document, the layout in play, the viewer's parameter values and optionally the widget ids to

@@ -40,6 +40,14 @@ A request that the console relays to a paired server is one trace. The relay add
 
 Not built yet: the trace id in the serving contract, and a hop through a module (a query from an app through the semantic module to a database as one trace).
 
+## Metrics go out over OTLP; no `/metrics` endpoint
+
+A server pushes its metrics with the traces, over OTLP to the collector; it never serves a Prometheus `/metrics` endpoint of its own. An install that
+uses Prometheus scrapes the collector, through the collector's own Prometheus exporter. Why: one way out for every signal, one setting per server, no
+extra listener on a server to protect, and the in-process Prometheus exporter package is a prerelease. For example, `telemetry: {enabled: true,
+endpoint: http://collector.internal:4317}` on each server and a `prometheus` exporter in the collector's configuration give Prometheus every server's
+`dbdatakit.http.server.requests`.
+
 ## For tests
 
 `TelemetryCapture.Start()` makes the hosts built after it (in the same test) export to in-memory lists; `Flush(services)` exports what is pending, `Spans`, `Sum` and `AllAttributes` read it. The instruments are static, so two hosts in one process see each other's spans: filter by `dbdatakit.product`.

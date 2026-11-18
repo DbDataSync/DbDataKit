@@ -1,6 +1,6 @@
 # Knowledge and search: what exists today
 
-**DbDataKnowledge is partly built: the library, a search by words and, where the engine can hold vectors, by meaning, not the product.** `DbDataKit.Knowledge` reads the item format and `DbDataKit.Knowledge.Index` finds chunks by their words, their meaning or both on a state database; there is no built-in embedding model, no `knowledge` command and no knowledge app. The work left is [planning/KNOWLEDGE.md](../planning/KNOWLEDGE.md). This page lists the pieces that are built and that the design stands on, so a reader does not mistake the design for a feature.
+**DbDataKnowledge is partly built: the library, a search by words and, where the engine can hold vectors, by meaning, not the product.** `DbDataKit.Knowledge` reads the item format and `DbDataKit.Knowledge.Index` finds chunks by their words, their meaning or both on a state database; there is no built-in embedding model, no `knowledge` command and no knowledge app. The work left, and the design it builds (publishing and activation, generated knowledge, verified queries, the knowledge app and its components, search over several sources, actions and elevated actions), is [planning/KNOWLEDGE.md](../planning/KNOWLEDGE.md). This page lists the pieces that are built and that the design stands on, so a reader does not mistake the design for a feature.
 
 ## What a person or an agent can use now
 
@@ -38,7 +38,7 @@
 
 ## What does not exist
 
-| Designed in plan 27 section 2 | State today |
+| Designed (the "Open designs" of [planning/KNOWLEDGE.md](../planning/KNOWLEDGE.md)) | State today |
 | --- | --- |
 | The `knowledge/1` item format (role, scope, owner), `_knowledge.yml` defaults, knowledge projects in git | **built as a library** (above); not published, not served, no editor screen yet |
 | Generated knowledge from published definitions (the host that subscribes); the `build-metadata` kind (Build publishing its metadata to the serving group) | the renderers for a semantic model and for Build's metadata are built, and the module as a library follows `build-metadata` (above); nothing in the Gateway subscribes yet, Build does not publish the kind yet, and entity models, data sources and apps are not rendered; the published kinds are `semantic-model`, `entity-model`, `data-source`, `app` |

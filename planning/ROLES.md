@@ -34,6 +34,8 @@ subject keep colliding, the subject is split into two subjects (the owner's call
 
 A subagent (`.claude/agents/worker.md`) limited to one subject, often one task. A worker:
 
+- before it builds, checks its task against the code: work the task plans that is already built is reported to the session (a task that re-plans
+  built work goes to the owner as a proposed decision, never silently dropped or rebuilt);
 - builds its tasks on its branch `backup/<slug>-<n>` and keeps the task's wip file (below);
 - reports its defaults and questions back to the session that started it, and **never decides**: a default it takes is a proposal until the owner answers;
 - edits only its subject file and the code and docs its tasks need; it never edits another subject's file and never edits `planning/README.md`;
@@ -131,7 +133,14 @@ Nothing is dropped from planning without the owner saying so: a design or a task
 that removes design text from planning or from a doc says in its message where it went (into a product doc, into another subject, or dropped on the
 owner's word), and the reviewer checks it the way it checks a removed proposal.
 
+Parked work keeps its design. A line under "Parked" in the index is one line; where the parked work has real design (what it does, how, why), that
+design lives in an open-design subject (status "open design", or listed from the parked line) or in a product doc, and the parked line names where.
+
 ## Statuses in the index
+
+The index states order, status, assignment and a goal, never a judgment: a line never says that something is overtaken, obsolete or dropped unless it
+cites the owner's words (`dropped by the owner, <date>`); otherwise the question is a proposed decision in a subject first. Whoever edits it (a session
+or the reviewer) does so only on the owner's word.
 
 | Status | Means |
 | --- | --- |
@@ -176,5 +185,6 @@ A comment describes the code it sits on and never cites a plan, a task, a propos
 
 ## Old plan ids
 
-Source comments and docs cite ids of the deleted plans (`plan 33 SC23`, `28c E17`). They are history: git has the plans (the old plans folder before the commit
-that created `planning/`). They are not task ids, and nothing new cites them.
+Source comments and docs cite ids of the deleted plans (`plan 33 SC23`, `28c E17`). They are not task ids, and nothing new cites them:
+CODECLEANUP-6 adds a check that refuses new ones, and CODECLEANUP-7 to CODECLEANUP-11 remove the existing ones with the comments that are out of date.
+Git keeps the plans (the old plans folder before the commit that created `planning/`).

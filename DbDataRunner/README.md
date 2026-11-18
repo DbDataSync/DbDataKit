@@ -122,6 +122,54 @@ The runner serves the channels `prod` and `dev` by default (`--channels`, or `DB
 
 A **package** is a manifest (`package/1`, see `DbDataKit.Runner.Abstractions`) and its code, versioned and published per channel; the runner switches to a new version atomically and keeps the last good one. The runner starts two things: a **.NET assembly** through the task host (a compiled project, or a `.csx` script published compiled: the runner never compiles) and an **executable** (any language; it speaks the runner protocol, `DbDataKit.Runner.Protocol`, or only exits, and an executable inside a package names an interpreter). A **runtime package** (`runtime: true`) is an engine published once that definition packages name in `launch.runtime`; Sync's and Build's engines run this way (plan 28c). A notebook kind (a .NET notebook over a project, run headless) is not built.
 
+## How the engines run on a Runner
+
+Sync's engine and Build's runtime are not plain assemblies, and the way they run on a Runner follows from that:
+
+- **An engine is a runtime package; a replication set or a Build project is a definition package that names it** (`launch.runtime` and a version
+  range; a Runner too old to know `launch.runtime` refuses the manifest naming the key). Upgrading an engine is one runtime package, not a new version
+  of every replication set: content addressing makes a shared file free, but
+  activating forty packages for one engine upgrade would be the cost. Both engines are built for `win-x64` and `linux-x64`; macOS is a development
+  platform only.
+- **No kind of their own.** Both are the `integration` kind, with a manifest the Workspace generates (a replication set: tasks `drain`, `reload`,
+  `verify`, `reconcile`, `provision`; a Build project: a task per scheduled or manual refresh plan, and the operations tasks). A kind is added only when
+  a validator the `integration` one cannot express appears; "replication" and "build plan" are labels a screen may show.
+- **Both start as the `Executable` launch kind**, with a runner entry compiled into the engine, not through the task host: Sync binds client libraries
+  into the default load context on purpose (a separate load context would split `SqlConnection` types), and Build's executable is one self-contained
+  file with natives that unpack beside it.
+- **The unit of a run is what ran in one process before:** one drain of one replication (its lanes and consumers stay inside the process) and one
+  refresh plan. A continuous replication keeps its process alive between passes until the idle timeout, rather than a short process per tick, because
+  starting one per tick is the churn the idle timeout exists to avoid.
+- **Rows never go through the Runner.** The protocol carries claims, marks, positions, counts, outcomes and log lines; the engine talks source to
+  target directly. A test counts the bytes of a 1,000,000-row replication across the socket and fails above a bound.
+- **A package's files are read-only to the task.** An engine writes to the run's scratch folder and the Runner's data directory only; Build's
+  single-file unpack folder (`DOTNET_BUNDLE_EXTRACT_BASE_DIR`) is set by the Runner's executor to `<data>/cache/runtimes/<runtime>@<version>`, shared
+  by runs of one version and written once, because a single-file executable unpacks before any of its own code runs.
+- **What cannot be packaged is a capability.** ODBC drivers are installed on the machine; the Runner probes the driver manager (`odbcinst -q -d`, or
+  the Windows registry) and reports the drivers as read-only labels (`odbc:<driver>`) a task can require. A JDBC image and its jars are files of the
+  replication set.
+- **Credentials reach an engine as environment secrets resolved by the Runner for the run**, in the form the engine already reads
+  (`DBDATAKIT_SECRET_...` for Sync, `DBDATAKIT_BUILD_<CONNECTION>_<READ|WRITE>` for Build); never in a package, an argument or a file. Sync's
+  connections have a `read` and a `run` role (both one secret unless set apart; "Logins of a Sync replication set", below).
+- **A durable queue only where a batch outlives a process:** bulk-load and reload segments. Ordinary passes are planned inside the drain as units with
+  no durable row; a crashed reload is retried as an attempt chain that skips finished units. A reload asked for again by hand does not resume (units
+  skip within an attempt chain only): a long reload sets more attempts, and "continue" starts a new run that resumes from the units already done.
+- **Where Sync's state lives depends on the target's writer.** Where the writer can put a state row in the same transaction as the data (the SQL
+  engines), the target holds the primary copy and the Runner's state follows; where it cannot (Flight SQL targets, drivers without transactions,
+  DuckDB files), the state is the primary and the screens say why. A target never gets a state row that is not committed with its data.
+- **Sync's state from before the Runner is not converted.** An old state file is refused at start, naming the file, and left untouched. Recovery is
+  not a full reload: a replication replays changes from the earliest position the source still has (its log or change-tracking retention), and only a
+  table whose position is gone is reloaded.
+- **Retention:** Build's tracking streams that are like runs are kept 365 days, and its schema versions, migration log, block log and metadata documents
+  never expire; Sync's run detail is kept 30 days with its run and its change checks 7.
+- **Where a connection is used is a screen, not a search.** Every product reports its connections (name, kind, engine, host, database, the secret
+  reference, never the value) and, for each, the processes that use it and the login role (`read`, `run`, `write`) each use needs; the console shows one
+  table across its servers, answering "where is this connection used?" and "what does this task connect to?".
+- **Deployment is lineage.** For each published definition the lineage graph records where it is deployed and on which version: package, channel,
+  kind and name, the active and previous version, which Runners have it ready or active, who activated or rolled it back and when, and the runtime
+  version it runs on. A run's record names the definition version it ran, so "which version produced this table" and "which tasks run version N" have
+  answers.
+
 ## Logins of a Sync replication set
 
 A replication set (plan 28c) runs with the **run** login of each of its connections and never sees a read login (Sync's docs, "Two logins: read and run"). The run login is set on the Packages page (plan 28c E20d: the group's state keeps it, and the reference `secret:dbdatakit:sync:connection:<name>:run` resolves to it, after the environment and the credentials directory) or put on the runner's machine by hand, for each connection of the set:

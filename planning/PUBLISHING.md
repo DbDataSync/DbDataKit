@@ -26,14 +26,37 @@ definition that reads a blocked dataset is refused.
 | PUBLISHING-3 | The approver's second signature for trusted code, with the approver's key from the identity home; required by default, an administrator may allow unsigned for a kind as a recorded choice | none | M | a trusted version without the approver's signature is refused at preparation naming it; with it, it activates |
 | PUBLISHING-4 | Prune screens for entity models and apps, and the console's call of a semantic model's prune | none | S | vitest and Playwright: publish three versions, prune to one; the served version and a rollback target stay |
 | PUBLISHING-5 | `blocked_by_check`: a publish or promotion of a definition that reads a dataset a check blocks is refused, naming the check and the dataset | none | M | the publish API refuses a model reading a blocked dataset with the check's name; clearing the block lets it through |
+| PUBLISHING-6 | A rules table no published Build model produces is refused: a publish of a semantic model or an entity model whose access rules name a rules table that the group's `build-metadata` definitions do not name for that data source is refused naming the rule, the table and what to publish (today it is accepted with a warning, because no `build-metadata` is published); the Store's publish reads its rules table the same way | KNOWLEDGE-4 | S | with a `build-metadata` definition published for the data source, a model whose rules table it does not name is refused naming rule and table; with none published the warning stays; a Store model's rules table is checked the same way |
 
 ## Needs from other subjects
 
+- KNOWLEDGE-4: Build publishes `build-metadata`, before PUBLISHING-6 can refuse an unknown rules table.
 - INSTALLER-16: publisher keys registered by the console (the Publishers screens keep showing them).
 
 ## Proposed decisions
 
 None.
+
+## Open designs
+
+Not scheduled. Each becomes tasks only when the owner schedules it.
+
+### Comparing a reproducible build from the console
+
+**What.** An action on a published version (in the console's screens of a Runner or a Gateway) that rebuilds the version from its published source and
+compares the result with the published compiled code, file by file by hash, and says whether they are the same. **Why.** Code is published compiled,
+with its source, and the compiled code runs; a comparison lets an approver check that the code that runs is what the source says, without trusting the
+publisher's machine. It is offered, not required: approval does not depend on it. **Open questions:** where the rebuild runs (a Runner task, so the
+console builds nothing), which kinds can be rebuilt deterministically (C# projects need deterministic compilation and pinned packages; `.csx` scripts are
+compiled on the instance already), and what a difference shows to the person.
+
+### An approval chain across groups
+
+**What.** Today one approval covers a release, by an approver who may approve every item in it. A chain would ask for approvals in order across several
+groups (for example the data's owners, then security, then the administrators) before a version or a release moves, each recorded. **Why.** An
+organisation whose rules need more than one approver per change, from different groups, cannot express that with one approval. **Open questions:** how
+a chain is declared (per kind, per channel, per release), what happens to the earlier approvals when a later approver rejects, and how it meets the
+approver's signature (PUBLISHING-3) and the Store's own change requests.
 
 ## Shared areas touched
 
