@@ -132,7 +132,7 @@ an address (the cache's strict reader already refuses them by key and by look).
 target's state is the refresh package's `status` task (built), which becomes Build's `preflight`. Store: a model's storage connection is tested (scenario 5)
 and checked by the model package's `deploy` dry run and `contract` plan (built), which are its `preflight`; it browses nothing. Sync: SYNCAUTHORING-P9. The
 built-in package, the cache, the channel picker, the test and the check card are one implementation (`DbDataKit.Authoring`, `Shared/web/workspace`) that
-each kind's Designer and Files view use.
+each kind's Designer and Files area use.
 
 **Recommendation.** A for every read, through a binding in a channel: discovery, a query's columns and the test with the built-in package's tasks; the
 checks with each package's `preflight` on its staged version. C stays as a second producer of the cache for a connection that is already a Gateway data
