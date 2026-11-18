@@ -77,3 +77,20 @@ One pull request at a time across the whole repository.
 To the session: the branches combined (and those sent back, with why), the pull request and its merge commit, CI results, the checklist findings, the
 proposals and defaults it adds or removes, and the needs carried. When the pull request merges, the `backup/<slug>-<n>` branches of its tasks are deleted
 by the workflow `Delete merged branch` (`docs/branch-cleanup.md`); report any that it kept.
+
+## Pushing
+
+Nothing stays only on one machine. Every commit is pushed to its own branch as soon as it is made, and before any wait, report or stop; a commit meant for `main` that has to wait (for CI to go idle, for a review) is first pushed to a `backup/<topic>` branch. Every report to a session names the branch and commit where its work is pushed, so the owner never has to ask whether something is stored.
+
+## The old plans
+
+The plans before `planning/` are in git at commit `31e0319f` (the folder `docs/plans`; see planning/ROLES.md, "The old plans"). Do not search them unless the
+owner has asked for it: if a doc or subject seems missing or thin, report what seems missing to the session instead.
+
+## Planning and documentation branches
+
+**Planning and documentation only: straight to `main` (owner, 2026-11-18).** A branch whose changes are only planning (`planning/`) and documentation (`docs/`, READMEs and other `.md` files, the agent definitions) needs no pull request: the reviewer checks it with the same checklist, merges `main` into it if `main` moved, and pushes the merge to `main` when no CI run is in progress, then watches CI. Any change to code, tests, scripts, workflows or packaging goes through a pull request into `main`.
+
+## Where you work
+
+Always in a git worktree of your own (`git worktree add <scratch folder>/<name> <branch>`), never in the shared checkout the session uses: another agent or the session may be working there, and an edit left in it shows up as their uncommitted change. Remove the worktree when you are done.

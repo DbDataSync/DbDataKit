@@ -15,19 +15,20 @@ Subjects in priority order. The owner sets the order, the status and the assignm
 | 5 | [ALERTING](ALERTING.md) | Failed runs, checks, approvals, a silent console or a dead server reach a person, from the console and from each service | queued | unassigned |
 | 6 | [DATAQUALITY](DATAQUALITY.md) | The checks of replications, Store models, data sources and catalogs are evaluated; a blocked dataset keeps its last good version served | queued | unassigned |
 | 7 | [AUTHORING](AUTHORING.md) | Everything the deleted servers did is done from Workspace projects, with browser stories | queued | unassigned |
-| 8 | [PAGEFORMAT](PAGEFORMAT.md) | `page/1` replaces `dashboard/1`, `report/1` and `view-spec/1` | queued | unassigned |
-| 9 | [PUBLISHING](PUBLISHING.md) | Every kind on the one publish API: per-kind routes gone, apps by file, the approver's signature, `blocked_by_check` | queued | unassigned |
-| 10 | [SUBSCRIPTIONS](SUBSCRIPTIONS.md) | Subscriptions run as Runner tasks, as the subscriber | queued | unassigned |
-| 11 | [REPORTCATALOGS](REPORTCATALOGS.md) | Reports on outside report servers found in the suite: a Runner task reads each catalog, the Gateway shows it per person, each entry links out | queued | unassigned |
-| 12 | [APPHOSTING](APPHOSTING.md) | Several sites with their own host names, certificates and sign-in on one Gateway | queued | unassigned |
-| 13 | [BACKUPRESTORE](BACKUPRESTORE.md) | One backup set, one key backup, one restore drill in CI | queued | unassigned |
-| 14 | [KNOWLEDGE](KNOWLEDGE.md) | Knowledge served by the Gateway, agents front and back, actions on path 1 | queued | unassigned |
-| 15 | [CHANNELS](CHANNELS.md) | Build test targets and Sync trial runs from the Workspace; previews removed on merge | queued | unassigned |
-| 16 | [SEMANTICS](SEMANTICS.md) | Semantic models checked, typed, described and configurable; SSAS bounded | queued | unassigned |
-| 17 | [MASTERDATA](MASTERDATA.md) | A change feed on the store module, native entity ids, instances, entities over Flight SQL | queued | unassigned |
-| 18 | [TASKENGINE](TASKENGINE.md) | Runner limits and accounts, Sync state on the target, lineage retention, availability tests | queued | unassigned |
-| 19 | [CODECLEANUP](CODECLEANUP.md) | No dead code or stale docs of the deleted servers; the old state path gone | queued | unassigned |
-| 20 | [FABRICSERVING](FABRICSERVING.md) | A Fabric warehouse as a Gateway data source, signed in with Entra; close to working, low priority until the product is consistent | open design | unassigned |
+| 8 | [SYNCAUTHORING](SYNCAUTHORING.md) | A Workspace sync project's replications are authored in the Sync screens restored as its Designer, with Files beside it as the fallback | queued | unassigned |
+| 9 | [PAGEFORMAT](PAGEFORMAT.md) | `page/1` replaces `dashboard/1`, `report/1` and `view-spec/1` | queued | unassigned |
+| 10 | [PUBLISHING](PUBLISHING.md) | Every kind on the one publish API: per-kind routes gone, apps by file, the approver's signature, `blocked_by_check` | queued | unassigned |
+| 11 | [SUBSCRIPTIONS](SUBSCRIPTIONS.md) | Subscriptions run as Runner tasks, as the subscriber | queued | unassigned |
+| 12 | [REPORTCATALOGS](REPORTCATALOGS.md) | Reports on outside report servers found in the suite: a Runner task reads each catalog, the Gateway shows it per person, each entry links out | queued | unassigned |
+| 13 | [APPHOSTING](APPHOSTING.md) | Several sites with their own host names, certificates and sign-in on one Gateway | queued | unassigned |
+| 14 | [BACKUPRESTORE](BACKUPRESTORE.md) | One backup set, one key backup, one restore drill in CI | queued | unassigned |
+| 15 | [KNOWLEDGE](KNOWLEDGE.md) | Knowledge served by the Gateway, agents front and back, actions on path 1 | queued | unassigned |
+| 16 | [CHANNELS](CHANNELS.md) | Build test targets and Sync trial runs from the Workspace; previews removed on merge | queued | unassigned |
+| 17 | [SEMANTICS](SEMANTICS.md) | Semantic models checked, typed, described and configurable; SSAS bounded | queued | unassigned |
+| 18 | [MASTERDATA](MASTERDATA.md) | A change feed on the store module, native entity ids, instances, entities over Flight SQL | queued | unassigned |
+| 19 | [TASKENGINE](TASKENGINE.md) | Runner limits and accounts, Sync state on the target, lineage retention, availability tests | queued | unassigned |
+| 20 | [CODECLEANUP](CODECLEANUP.md) | No dead code or stale docs of the deleted servers; the old state path gone | queued | unassigned |
+| 21 | [FABRICSERVING](FABRICSERVING.md) | A Fabric warehouse as a Gateway data source, signed in with Entra; close to working, low priority until the product is consistent | open design | unassigned |
 
 ## Parked
 

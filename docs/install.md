@@ -13,25 +13,44 @@ client and on Server.
 
 The install only registers the service and creates its top folder with its access list. Everything inside (subfolders, keys, certificate, state, the
 configuration repository, logs) is created at first start by the service's own account. An admin command that needs a service's data goes through the
-service's local API (a named pipe or Unix socket); opening the files directly is a recovery mode, allowed only while the service is stopped.
+service's local API (a named pipe or Unix socket); opening the files directly is a recovery mode, allowed only while the service is stopped. The install gives the top folder the Administrators group as owner on every Windows edition (a workstation would otherwise make the administrator who ran it the owner) and grants the service's account Modify on it.
 
 Example: `dbdatagateway secret set warehouse` with the service running asks the service to store the value; no file in its folder is touched by the
 administrator's account. With the service stopped, `secret set --recovery` writes the file and gives it the service's account as owner.
 
 ## One startup sequence
 
-Every server runs the same steps before it serves anything, from one shared library, on Windows and Linux: settle the folder and its permissions, then
-keys, then the certificate, then the state and its migrations, then bind the ports, then join the console. A failure in a step looks the same in every
-product, and a fix reaches all four.
+Every server's `server run` (as a service or not) runs the same steps before it serves anything, from one shared library, on Windows and Linux: settle the
+folder and its permissions, then keys, then the certificate, then the state and its migrations, then bind the ports, then join the console. A failure in a
+step looks the same in every product, and a fix reaches all four. The library is `Shared/src/DbDataKit.Hosting.Startup`; the join it ends with lives in `DbDataKit.Web`. The library reads one table, `SuiteServices` (each service's name, account, description, program, data and log folders, port sub-block and start order), the only place a service's name is spelled.
+
+| Step | What it does | What a failure says |
+| --- | --- | --- |
+| folder | the top folder exists and its owner and access list are as the install set them (or `--skip-folder-permissions-check` says otherwise); creates the subfolders it needs | the folder, its owner, the account the service runs as, and that `dbdatakit setup single-server` sets it up |
+| keys | opens or makes the key ring and secret store as itself | the key file and which grant is unexpected |
+| certificate | opens or makes its certificate | the file and the account |
+| state | opens or makes the state database and runs its migrations | the engine, the database and the migration |
+| ports | binds each listener: the configured port, or a pinned one, or a free one of its sub-block ("Ports" below) | the port, who holds it if Windows says, the excluded ranges |
+| join | consumes `join-request.yaml` if there is one and joins the console ("Pairing" below); otherwise checks it is paired | the console's address, what it answered |
+
+The `logs` subfolder and the failure file come before the first step. A step that fails writes the failure file and the process exits non-zero (the
+service manager records the failure); `service check` and `setup single-server` print the file.
+
+Example: the Gateway's service starts on a folder an administrator's account made before this design. It stops at the folder step, and
+`C:\ProgramData\DbDataKit\logs\startup-failure-dbdatagateway.txt` names the folder, its owner, the account `NT SERVICE\DbDataGateway`, and that
+`dbdatakit setup single-server` sets it up; `services.msc` shows a failed start, and `setup single-server` prints the same file.
 
 ## Logs and the startup-failure file
 
 Logs are in one place: `C:\ProgramData\DbDataKit\logs\<service>\` (Linux `/var/log/dbdatakit/<service>/`). A failed start is reported in
-`C:\ProgramData\DbDataKit\logs\startup-failure-<service>.txt`: at each start the service writes "starting since <time>, not finished"; it deletes the
+`C:\ProgramData\DbDataKit\logs\startup-failure-<service>.txt`: at each start the service writes "starting since <time>, step: <step>, not finished",
+rewritten as each step begins ("starting since 2026-11-17T09:12:03Z, step: certificate, not finished"), so a crash says how far it got; it deletes the
 file when startup succeeds; when startup fails it writes the full reason (the account, the folders, the exception chain, hints such as Windows' excluded
 port ranges). No file means a clean start; a leftover "not finished" line means a crash the service could not report. The install creates `logs`; each
 service account creates and owns only its own subfolder and its own failure file; no service reads another's. Installers and `setup` print the file, so
 "Cannot start service" always comes with its reason.
+
+`<service>` in these names is the program in lower case (`dbdatagateway`), the same as its systemd unit. On Windows the `logs` folder gives Administrators and SYSTEM full control, each service account "create files" and "create folders" on that folder only, and CREATOR OWNER full control, so each service owns what it creates there and nothing else; on Linux it is `root:dbdatakit` with mode `1770`, and files are `0600`. A service that finds its own subfolder or failure file owned by another account writes nothing there and says so in the event log.
 
 ## Service names, accounts and descriptions
 
@@ -49,18 +68,31 @@ shared logs folder.
 ## Ports
 
 The suite uses one range, **7800 to 7899**, outside Windows' default ports (80, 443, 135, 445, 3389, 5040, 5357, 5985, 5986, 7680, 47001, the dynamic
-range 49152 to 65535) and common developer ports. Each service has a sub-block and a default: the console 7800 (7800 to 7819), the Gateway 7820 to 7839,
-the Runner 7840 (7840 to 7859), the Workspace 7860 (7860 to 7879); 7880 to 7899 are spare. With no port configured, a service takes a free port of its
-sub-block at first start and pins it in its own settings. Windows' excluded port ranges (Hyper-V and WinNAT reserve ranges that move at boot) are skipped;
-when the whole sub-block is excluded the service fails and the failure file names the ranges. A configured port (Docker Compose, for example) is never
-moved. The service reports its address to the console when it joins.
+range 49152 to 65535) and common developer ports. Each service has a sub-block: the console 7800 to 7819 (default 7800), the Gateway 7820 to 7839, the
+Runner 7840 to 7859 (default 7840), the Workspace 7860 to 7879 (default 7860); 7880 to 7899 are spare. With no port configured, a service takes a free
+port of its sub-block at first start and pins it in its own settings. Windows' excluded port ranges (Hyper-V and WinNAT reserve ranges that move at boot)
+are still skipped, because a machine whose dynamic range was lowered can reserve inside any range; when the whole sub-block is excluded the service fails
+and the failure file names the ranges. A configured port (Docker Compose, for example) is never moved. A free port is found by binding it: a port in an excluded range refuses with WSAEACCES and is skipped like a taken one. The identity home, when it runs on its own, keeps a port in the console's sub-block. The service reports its address to the console
+when it joins.
 
 Example: on a workstation with WSL, 7840 is inside a reserved range; the Runner takes 7841, pins it, and the console's Servers page shows
 `https://host:7841`.
 
+**The Gateway's listeners are consistent, not fixed.** Every listener of a Gateway (the public HTTPS listener, Flight SQL, management, and later the
+PostgreSQL wire listener) takes a free value of the Gateway's sub-block at the first start of its group's first instance, and pins it. No listener is
+special: Flight SQL has no fixed default, because an HTTPS address serving apps has the same need (a client set once keeps working), and both get it the
+same way. When a further Gateway joins an existing group, the join hands over the group's pinned ports and they become that instance's exact
+configuration: if one is taken on the new machine, the instance fails at the ports step naming the port, and never picks another. So every instance of a
+group listens on the same ports, and a client or a balancer set for one instance is right for all of them.
+
+Example: the first Gateway of group `sales` takes 7820, 7821 and 7822 for its public, Flight SQL and management listeners (or the next free values) and
+pins them. A second instance joined to `sales` on another machine gets 7820, 7821 and 7822 from its join; if 7821 is held there, its
+`startup-failure-dbdatagateway.txt` names 7821 (and the program holding it, if Windows says) and the instance does not start until the port is freed.
+
 ## Skipping the folder permissions check
 
-`--skip-folder-permissions-check` (and the setting `startup.skip_folder_permissions_check: true`) lets the folder step accept a folder whose owner or
+`--skip-folder-permissions-check` (on `server run`, `service install` and `dbdatakit setup single-server`, which record it in the registered service's
+settings), and the setting `startup.skip_folder_permissions_check: true`, let the folder step accept a folder whose owner or
 access list is not the strict one: a test's temporary folder, a checkout, a test install. It is accepted everywhere, under a service manager too: the user
 decides. It is always visible: a warning at every start, a line in `service check`, and the server marked on the console's posture page. Without a named
 switch, strict checks get loosened in code "just for this case" and stay loose.
@@ -74,11 +106,31 @@ the web console, a command for the administrator to run on the remote machine:
 dbdatarunner pair --host https://console:7800 --token <single-use> --console-thumbprint sha256:<hex>
 ```
 
-The token is single-use, short-lived (15 minutes by default) and scoped to one product, a role ceiling and the group it joins; the thumbprint makes the
+The token is 128 random bits, shown once when it is made, single-use, short-lived (15 minutes by default; `--minutes` sets up to 24 hours) and scoped to one product, a role ceiling and the group it joins; the thumbprint makes the
 first connection trusted. `pair` only records the join settings and (re)starts the service; the service joins at start as its own account, sends its
 address and certificate fingerprint, and the console calls back once to confirm and pins it. A server calls the console once, to join; every other call is
 the console calling the server. Users never copy codes between services except by running the generated command. `--token -` reads the token from
 standard input for whoever prefers that. All automation is a subcommand of our programs, never an OS-specific script.
+
+```
+console (CLI or Servers page)               remote machine (administrator)                 the service, as itself
+ invite: product, role, group  ─────►  dbdatarunner pair --host ... --token ... --console-thumbprint ...
+   keeps the token's hash                   writes join-request.yaml, (re)starts ─────►  startup step "join":
+                                                                                           POST <host>/api/v1/join, TLS pinned to the thumbprint
+                                                                                           {token proof, product, address, certificate fingerprint, public key}
+   checks the token (product, group,  ◄────────────────────────────────────────────────
+   expiry, unused), calls back the address
+   with the fingerprint pinned  ─────────────────────────────────────────────────────►   answers the callback
+   records the instance, spends the token,
+   hands the group key and any link  ─────────────────────────────────────────────────►  keeps console key, group key, link; deletes the request
+```
+
+**The token never travels in clear.** The join carries a proof made from it, as a pairing proof was made from a code, over TLS pinned to the console's
+thumbprint, so a machine in the middle neither learns the token nor passes for the console. A wrong thumbprint, an expired or spent token, another product
+or another group is refused, and audited with who made the token and nothing of its value.
+
+**Join tokens are rows of the console's state**: a table of the `trust` module, added by its own migration, holding the token's hash, its product, role
+ceiling and group, who made it and when it ends. The Servers page lists the tokens still waiting and cancels them.
 
 **Groups.** Runner and Gateway groups never pair with each other directly. The token names the group (a new Gateway group X, or join Runner group Y);
 the console makes the group key when it makes the group and hands it over during the join. Linking a Gateway group with a Runner group is a console
@@ -86,24 +138,68 @@ action (`docs/architecture.md`, "Isolation by trust"); a new instance of a linke
 
 **Publisher keys.** The Workspace's publisher key on a Gateway or a Runner is handed over by the console; the Workspace never pairs with a code.
 
-**Networks where a server cannot reach the console.** The console can start the pairing instead: it generates the command, takes or waits for the
-remote's address, and connects to the server, pinning it with the same token scope and single use.
+**Networks where a server cannot reach the console.** The console can start the pairing instead. It still generates the command for the remote machine,
+code included; it then either takes the remote's address up front, or waits for the user to run the command there and enter the address the command
+prints. The console then connects to the server and pins it, with the same token scope and single use. Example: a Runner in a network that the console
+can reach but that cannot reach the console's 7800; the administrator runs the generated command on it, types the address it prints into the console's
+Add a server screen, and the Runner is listed ready.
 
 ## Setting up one machine, or inviting another
 
 `dbdatakit setup single-server` registers, starts and joins every suite service installed on the machine, through the shared service library (a library
-call, not a command line), each with a single-use join token in its settings. It prints per-service progress (registered, started, listening, joined)
-and, for a service that fails to start, its startup-failure file; it ends with a summary and is safe to run again. `dbdatakit setup single-server --stop`
-stops every suite service on the machine. Docker Compose uses the same path, with the tokens passed through a shared volume.
+call, not a command line), each with a single-use join token in its settings:
 
-`dbdatakit setup invite <gateway|runner|workspace>` prints the pairing command for a remote machine; the console's Add a server screen does the same.
+1. It finds the suite's programs installed beside `dbdatakit` (the folders of the suite's table of services, the layout every package uses) and, for each,
+   the service it should register.
+2. For each, in start order: it registers the service if it is not registered (or registers it again when it points elsewhere); sets the top folder's
+   owner and access list; sets the program folder's access list (Administrators and SYSTEM full control, everyone else read and execute, inheritance cut,
+   so a user cannot plant a file beside a program a service runs); mints a join token and writes the join request; starts the service.
+3. It waits for each to be listening and joined, printing `registered · started · listening · joined` per service and, for a service that fails, the
+   contents of its `startup-failure-<service>.txt`.
+4. It ends with a summary: what is ready, what is not, the console's address, and the first administrator's setup link from `FIRST-RUN.txt`. Run again,
+   it skips what is done: a service registered here, running and joined is left alone, so it picks up where it stopped.
+
+`--skip-folder-permissions-check` given to `setup single-server` is passed on to the services it registers and recorded in their settings ("Skipping the
+folder permissions check" above). `dbdatakit setup single-server --stop` stops every suite service on the machine (before `scoop update`, for example).
+
+Example: on a fresh machine `dbdatakit setup single-server` prints four lines that reach `joined`, then the console's address `https://host:7800` and the
+setup link; if the Runner's configured port is held, its line stops at `started`, the contents of `startup-failure-dbdatarunner.txt` follow, the summary
+names the Runner as not ready, and a second run after the port is freed finishes it and leaves the other three alone.
+
+`dbdatakit setup invite <gateway|runner|workspace> [--role <ceiling>] [--group <g>]` mints a join token and prints the pairing command for a remote
+machine; the console's Add a server screen makes the same call.
+
+**Docker Compose** uses the same path, with the tokens passed through a shared volume rather than environment variables (a variable would need the token
+before the console exists, so it would have to be a long-lived secret written in the compose file). The console's container lists its members in its
+settings (`setup.members`), writes their join requests into the shared volume `join` at its first start, and each member's container consumes its own at
+its start. A port in the compose file is configured, so it is never moved. The quickstart has no `instance pending` and `instance confirm` steps.
 
 ## Scoop
 
 Scoop installs no service by itself: the services are registered against Scoop's `current` folder, which Scoop repoints on update, and no program files
-are copied. `post_install` prints the next commands. To update, stop the services (`dbdatakit setup single-server --stop`, or `Stop-Service`), run
-`scoop update`, then `dbdatakit setup single-server`. On an uninstall `pre_uninstall` stops the services and prints the `sc.exe delete` commands.
-What runs as an elevated script inside another program cannot be tested like our own code, so the script stays this small.
+are copied. `post_install` (and the manifest's notes) print the next commands: `dbdatakit setup single-server`, and how to update. On an uninstall
+`pre_uninstall` stops the services and prints the `sc.exe delete` commands that remove them. No other service command is run by the Scoop scripts: what
+runs as an elevated script inside another program cannot be tested like our own code, so the script stays this small.
+
+**Updating.** Scoop refuses to update an app while a process runs from its folder ("Running process detected, skip updating"), and it does so **before
+any hook runs**; that refusal is why the package once copied the programs to `%ProgramData%\DbDataKit\bin\<version>` and ran the services from the copy.
+Copying the programs is not an option, so an update is three commands:
+
+```
+dbdatakit setup single-server --stop     # or Stop-Service on each service
+scoop update -g dbdatakit-full
+dbdatakit setup single-server
+```
+
+Whether it can become one command depends on two facts about Scoop:
+
+- **Which `pre_uninstall` runs.** During `scoop update` the hook that runs is the one in the **installed** version's manifest, not the new one's. A new
+  manifest alone therefore cannot show what an update does: the check installs a version N whose manifest carries the hook, then updates to N+1.
+- **The running-process check.** Scoop looks for processes running from the app's folder before it runs the hooks, unless Scoop's setting
+  `ignore_running_processes` is set.
+
+If both allow it, `pre_uninstall` stops the services itself and an update is `scoop update` followed by `dbdatakit setup single-server`; otherwise
+stopping the services stays the user's first step. What the check found, against the Scoop version CI installs, is recorded in `docs/ci-lessons.md`.
 
 ## Commands named `check`
 
@@ -113,7 +209,23 @@ subcommand is named `doctor`; a repository check keeps it so.
 ## Clean break
 
 Installs made before this design are set up again: existing pairings, data folders made by the administrator's account, and clients set to the old
-ports (console 8480, identity home 8482, Workspace 8471, Runner 8495, Gateway 8815 to 8822). A server paired the old way, an old data folder, an old
-service name or a removed command (`server pair`, `instance add --code`, `instance pending`, `instance confirm`, `publisher pair --code`, `bundle init`,
-`service doctor`) gives a message naming what it found and what to do; never silent. Keeping the old pairings and folders would keep the bug this design
-removes.
+ports. Keeping the old pairings and folders would keep the bug this design removes. Nothing is silent: each thing an old install leaves behind is found
+by someone, who says what it found and what to do.
+
+| What is found | Who says it | What it says |
+| --- | --- | --- |
+| a file inside a service's top folder, other than `join-request.yaml`, owned by another account than the service (the old install made it) | the service, at the folder step | the file, its owner, and: stop the service, move the folder aside, run `dbdatakit setup single-server` (an install made before this design is set up again) |
+| `server.yaml` listing a console paired the old way (a code, an announcement or the bundle) | the service at start (a warning), `service check`; the pairing is not used | the console and the command that pairs it again |
+| `instances.yaml` with entries paired the old way | `dbdatakit setup single-server` (it removes them, naming each, and pairs this machine's services again), the Servers page (the entry says "paired the old way" with the generated command) | the server and the command |
+| a service registered as `dbdatagateway` | `setup single-server` (it stops and removes it, registers `DbDataGateway` on the same folder, and says so) | both names |
+| services registered from `%ProgramData%\DbDataKit\bin\<version>` | `setup single-server` (it registers them against the program folder and removes the copy, saying so) | the old and the new path |
+| `bundle.json` in the console's folder, `--announce-listen` | the console refuses to start | the file or option and what replaced it (as the console refuses the removed `runner:` section) |
+| `DBDATAKIT_ANNOUNCE_URL` set | the service, a warning at every start | the variable, that it is not read, and how to remove it |
+| a client, a connection string or an `instances.yaml` entry using an old default port (console 8480, identity home 8482, Workspace 8471, Runner 8495, Gateway 8815 to 8822) | nobody at run time (nothing listens there any more); the release notes and `docs/suite-single-server-install.md` list the old and the new defaults; the Servers page shows each server's reported address | the old and the new port |
+| `service doctor` | the program (exit 2, `RemovedCommands`) | `service check` |
+| `server pair`, `instance add --code`, `instance pending`, `instance confirm`, `publisher pair --code`, `bundle init` | the program (exit 2, `RemovedCommands`) | the sentence naming the new command |
+
+Example: an administrator upgrades a machine whose Gateway was registered as `dbdatagateway` from `%ProgramData%\DbDataKit\bin\<version>` and paired by
+a code. `dbdatakit setup single-server` says it removed `dbdatagateway` and registered `DbDataGateway` on the same folder, registered it against the
+program folder and removed the copy, and removed the old `instances.yaml` entry and joined the Gateway again; the Gateway's folder step then names any file
+the old install's administrator made and says to move the folder aside and run `setup single-server` again.

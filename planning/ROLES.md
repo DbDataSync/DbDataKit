@@ -63,6 +63,8 @@ Besides, it:
 - fixes mechanical conflicts only (both sides' entries in a shared list, a moved line); a conflict between two designs goes back to the session as a
   question for the owner.
 
+**Planning and documentation only: straight to `main` (owner, 2026-11-18).** A branch whose changes are only planning (`planning/`) and documentation (`docs/`, READMEs and other `.md` files, the agent definitions) needs no pull request: the reviewer checks it with the same checklist, merges `main` into it if `main` moved, and pushes the merge to `main` when no CI run is in progress, then watches CI. Any change to code, tests, scripts, workflows or packaging goes through a pull request into `main`.
+
 ## Branches
 
 | Branch | Who | For |
@@ -70,6 +72,8 @@ Besides, it:
 | `backup/<slug>-<n>` (`backup/installer-3`: the slug in lower case, then the task number) | a worker | one task in progress, pushed often as backup and handover |
 | `work/<slug>` (`work/installer`) | the reviewer | the subject's ready task branches combined; the pull request into `main`, whose title starts with the slug |
 | `planning/<topic>` | a session | planning and design changes outside a subject's tasks |
+
+**Pushing.** Nothing stays only on one machine. Every commit is pushed to its own branch as soon as it is made, and before any wait, report or stop; a commit meant for `main` that has to wait (for CI to go idle, for a review) is first pushed to a `backup/<topic>` branch. Every report to a session names the branch and commit where its work is pushed, so the owner never has to ask whether something is stored.
 
 A cloud session or worker whose harness started it on a branch of another name switches to the standard name before its first push and keeps pushing there.
 One worker on a subject takes the same path: its ready branch is merged into `work/<slug>` once, and that is the pull request.
@@ -182,6 +186,27 @@ task through "Needs from other subjects", a product doc and `docs/ui-editors.md`
 
 A comment describes the code it sits on and never cites a plan, a task, a proposal or a subject; it may point at a finished doc as
 `Design: docs/<path>.md#<anchor>`. The rule is `docs/code-comments.md`.
+
+## The old plans (before `planning/`)
+
+Until 2026-11-17 the open work was in the folder `docs/plans` (numbered plans such as `33-fewer-services.md`, the index `README.md` of that folder,
+`open-work.md`, `needs-review`, and `RELEASE-NOTES-PENDING.md` in that folder). Commit
+`127c80e89700f324624d8448c4da12d7999cd928` ("Planning: replace docs/plans with planning/ subjects, roles and the wip check") deleted them and created
+`planning/`. The last commit that has the old tree is its parent, **`31e0319f9cd7108c52ad64d8f6d8f852df676c35`**:
+
+```
+git ls-tree -r --name-only 31e0319f -- docs/plans     # the old files
+git show 31e0319f:<a path that listed>                # one old file
+git grep -n "<words>" 31e0319f -- docs/plans          # search them
+```
+
+The audit that traced every old item to where it went (`planning/wip/MIGRATION/trace.md`, 1,699 items, and `scripts/audit_plan_migration.py`) was
+deleted after the owner signed it off; the last commit that has it is the parent of `c3265139d5679542458bd9409c13afde6f0d0e8f`
+(`git show c3265139^:planning/wip/MIGRATION/trace.md`). Old plan and row ids (`plan 33 SC23`, `28c E17`) found in code or docs are looked up there.
+
+**Nobody searches the old tree unless the owner asks for it.** A session, worker or reviewer that meets a doc or a subject that seems missing or thin
+says so to the owner (naming what seems missing), and searches the old tree only when the owner asks; what it finds goes back through the normal path
+(a subject's task or open design, or a product doc as design).
 
 ## Old plan ids
 
