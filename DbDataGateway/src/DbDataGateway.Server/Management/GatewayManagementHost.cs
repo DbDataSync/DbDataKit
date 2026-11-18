@@ -84,7 +84,8 @@ public static class GatewayManagementHost
         var clients = files.Clients();
         var configDirectory = GatewayConfigFile.DirectoryIn(dataDirectory);
         var provider = configuration.Providers.OfType<GatewayConfigDirectoryProvider>().Single();
-        var git = new GitCommitService(configDirectory);
+        // a folder another account made (an elevated install on a Windows client edition) is opened when this account can write it, else the start fails naming the folder and its owner
+        var git = new GitRepositoryOwnership(Path.Combine(dataDirectory, "git")).Open(configDirectory);
         // The history starts with the configuration as it was found, so the first change made through the API reads as a change to something.
         if (git.GetHistory("", 1).Count == 0 && Directory.EnumerateFiles(configDirectory, "*.yaml", SearchOption.AllDirectories).ToList() is { Count: > 0 } found)
             git.CommitChanges(found, "Configuration as found", new GitAuthor("dbdatagateway", "dbdatagateway@local.invalid"));
