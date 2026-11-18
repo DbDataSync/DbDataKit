@@ -244,10 +244,10 @@
     {
       "id": "catalog-cache",
       "title": "Catalog cache of a Workspace draft (catalog-cache.yaml, schema: catalog-cache/N)",
-      "current": 1,
+      "current": 2,
       "previous": 1,
       "status": "open",
-      "note": "new with plan 33 SC20i (decision D20): the tables and columns of a project's connections as a paired server answered a read-only call, committed in the draft so the build child, which has no network and no login, can offer a mapping its columns; it holds no secret and no row (a key that would carry one, or a value that looks like a password, a connection string, an address with a login or a secret reference, is refused with file, line and key path); the C# reader is the definition and Shared/web/workspace/src/catalogCache.ts its twin, both run over DbDataWorkspace/tests/DbDataWorkspace.Tests/Fixtures/catalog-cache",
+      "note": "new with plan 33 SC20i (decision D20): the tables and columns of a project's connections as a paired server answered a read-only call, committed in the draft so the build child, which has no network and no login, can offer a mapping its columns; it holds no secret and no row (a key that would carry one, or a value that looks like a password, a connection string, an address with a login or a secret reference, is refused with file, line and key path); the C# reader is the definition and Shared/web/workspace/src/catalogCache.ts its twin, both run over DbDataWorkspace/tests/DbDataWorkspace.Tests/Fixtures/catalog-cache. Format 2 (docs/authoring-metadata.md, the catalog cache): per connection `read: {server, product, channel, at}` (where and when it was read; a Runner names the channel whose binding gave the login, a Gateway none) in place of the file's one `source`, `databases` with every schema of each (empty ones too), a table's `database`, `unique_keys` and `foreign_keys`; a statistic of values (min, max, distinct, bounds) is refused by key like a row. A clean break: a file of format 1 is refused naming the file and saying to delete it and refresh each connection; the TypeScript twin also writes the file (writeCatalogCache), held to the C# writer's text by the fixture sound.written.txt",
       "version_source": { "file": "Shared/src/DbDataKit.Catalog.Cache/CatalogCache.cs", "pattern": "public const int Version = (\\d+);" },
       "files": [ { "path": "Shared/src/DbDataKit.Catalog.Cache/CatalogCache.cs", "sha256": null } ]
     },

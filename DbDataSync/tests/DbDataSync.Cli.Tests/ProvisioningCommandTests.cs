@@ -53,11 +53,11 @@ public sealed class ProvisioningCommandTests : IDisposable
     }
 
     private void Cache(string connections) =>
-        File.WriteAllText(Path.Combine(_root, "catalog-cache.yaml"), "schema: catalog-cache/1\ngenerated_at: 2026-11-12T10:00:00Z\nsource: {server: prod-gateway, product: gateway}\nconnections:\n" + connections);
+        File.WriteAllText(Path.Combine(_root, "catalog-cache.yaml"), "schema: catalog-cache/2\ngenerated_at: 2026-11-12T10:00:00Z\nconnections:\n" + connections);
 
-    private const string TargetWithoutTable = "  dwh:\n    engine: postgres\n    tables:\n      - schema: public\n        name: other\n        kind: table\n        columns:\n          - {name: x, type: integer, nullable: false}\n";
+    private const string TargetWithoutTable = "  dwh:\n    engine: postgres\n    read: {server: prod-gateway, product: gateway, at: 2026-11-12T10:00:00Z}\n    databases: []\n    tables:\n      - schema: public\n        name: other\n        kind: table\n        columns:\n          - {name: x, type: integer, nullable: false}\n";
 
-    private const string TargetMissingAColumn = "  dwh:\n    engine: postgres\n    tables:\n      - schema: public\n        name: t1\n        kind: table\n        columns:\n          - {name: id, type: bigint, nullable: false, key: true}\n";
+    private const string TargetMissingAColumn = "  dwh:\n    engine: postgres\n    read: {server: prod-gateway, product: gateway, at: 2026-11-12T10:00:00Z}\n    databases: []\n    tables:\n      - schema: public\n        name: t1\n        kind: table\n        columns:\n          - {name: id, type: bigint, nullable: false, key: true}\n";
 
     private async Task<(int Exit, JsonElement Document, string Error)> PlanAsync(string replication)
     {
@@ -120,7 +120,7 @@ public sealed class ProvisioningCommandTests : IDisposable
     [Fact]
     public async Task AConnectionTheCacheHasNoEntryFor_IsUnknownNotCreate_AndTheSourceThatNeedsTheLiveServerSaysSo()
     {
-        Cache("  other-db:\n    engine: postgres\n    tables: []\n");
+        Cache("  other-db:\n    engine: postgres\n    read: {server: prod-gateway, product: gateway, at: 2026-11-12T10:00:00Z}\n    databases: []\n    tables: []\n");
 
         var (exit, document, _) = await PlanAsync("orders");
 
@@ -150,7 +150,7 @@ public sealed class ProvisioningCommandTests : IDisposable
     [Fact]
     public async Task ACacheTheStrictReaderRefuses_IsNotPlannedFrom()
     {
-        File.WriteAllText(Path.Combine(_root, "catalog-cache.yaml"), "schema: catalog-cache/1\ngenerated_at: 2026-11-12T10:00:00Z\nsource: {server: s, product: gateway}\nconnections:\n  dwh:\n    engine: postgres\n    tables:\n      - schema: public\n        name: t1\n        kind: table\n        rows: []\n        columns: []\n");
+        File.WriteAllText(Path.Combine(_root, "catalog-cache.yaml"), "schema: catalog-cache/2\ngenerated_at: 2026-11-12T10:00:00Z\nconnections:\n  dwh:\n    engine: postgres\n    read: {server: prod-gateway, product: gateway, at: 2026-11-12T10:00:00Z}\n    databases: []\n    tables:\n      - schema: public\n        name: t1\n        kind: table\n        rows: []\n        columns: []\n");
 
         var (exit, _, error) = await PlanAsync("scan");
 

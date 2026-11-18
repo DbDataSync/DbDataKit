@@ -1,0 +1,28 @@
+schema: catalog-cache/2
+generated_at: 2026-11-18T10:00:00Z
+connections:
+  crm:
+    engine: sqlserver
+    read: {server: runners-eu, product: runner, at: 2026-11-18T10:00:00Z}
+    databases:
+      - {name: crm, schemas: [dbo, empty]}
+    tables:
+      - database: crm
+        schema: sales
+        name: orders
+        kind: table
+        columns:
+          - {name: id, type: int, nullable: false, key: true}
+        unique_keys:
+          - {columns: [number]}
+      - database: hr
+        schema: dbo
+        name: people
+        kind: table
+        columns:
+          - {name: id, type: int}
+      - schema: dbo
+        name: loose
+        kind: view
+        columns:
+          - {name: id, type: int}

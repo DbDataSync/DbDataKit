@@ -29,6 +29,10 @@ release moves the entries into its notes and empties this file.
   `systemctl disable --now dbdatasync`) before you install this release.
   The Runner's own screen sets a connection's run login on a runner package's connections card (*Set the login*), in place of
   `dbdatasync secret send --to runner`; a replication set's Apply (provisioning) runs as its `provision` task on the Runner.
+- **The catalog cache of a draft is `catalog-cache/2`.** `catalog-cache.yaml` now records, per connection, where and when it was read (`read`), its databases
+  and schemas (the empty ones too) and foreign and unique keys. A draft's `catalog-cache.yaml` of format 1 is refused by the draft's check, the Catalog tab,
+  `dbdatasync provisioning plan --from-cache` and `dbdatabuild project import --from-cache`, naming the file: delete it and refresh the catalog of each
+  connection (the Catalog tab), then commit the new file.
 
 ## Names
 

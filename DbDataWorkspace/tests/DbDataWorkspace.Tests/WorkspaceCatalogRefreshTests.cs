@@ -8,7 +8,7 @@ namespace DbDataWorkspace.Tests;
 
 /// <summary>
 /// The producer of <c>catalog-cache.yaml</c> (plan 33 SC20j, D20): the Workspace asks a paired Gateway, which holds the data source's login, for the tables and columns of a data source, and writes the answer into the draft in the format
-/// <c>catalog-cache/1</c> after the strict reader accepted it. The Workspace holds no login and reads no row; a data source made by hand is asked for only with the person's confirmation (<c>adopt</c>). The Gateway here is a fake with real pairing.
+/// <c>catalog-cache/2</c> after the strict reader accepted it. The Workspace holds no login and reads no row; a data source made by hand is asked for only with the person's confirmation (<c>adopt</c>). The Gateway here is a fake with real pairing.
 /// </summary>
 [Collection(ServerCollection.Name)]
 public sealed class WorkspaceCatalogRefreshTests
@@ -61,8 +61,7 @@ public sealed class WorkspaceCatalogRefreshTests
         Assert.True(load.Ok, string.Join("; ", load.Diagnostics));
         var warehouse = load.Cache!.Connections["warehouse"];
         Assert.Equal("postgres", warehouse.Engine);
-        Assert.Equal("edge", load.Cache.Server);
-        Assert.Equal("gateway", load.Cache.Product);
+        Assert.Equal(("edge", "gateway", (string?)null), (warehouse.Read!.Server, warehouse.Read.Product, warehouse.Read.Channel));
         var orders = warehouse.Tables.Single(t => t.Name == "orders");
         Assert.Equal(("public", "table"), (orders.Schema, orders.Kind));
         Assert.Equal([("id", "int64", false, true), ("placed_at", "timestamp", true, false)], orders.Columns.Select(c => (c.Name, c.Type, c.Nullable, c.Key)));
@@ -127,7 +126,7 @@ public sealed class WorkspaceCatalogRefreshTests
         Assert.Equal(HttpStatusCode.BadRequest, (await Refresh(server, workspace, new JsonObject { ["target"] = "edge" })).Response.StatusCode);
 
         gateway.Schemas["warehouse"] = Warehouse();
-        Assert.True((await server.AsAda(HttpMethod.Put, file, """{"content":"schema: catalog-cache/1\nrows: [1]\n"}""")).Response.IsSuccessStatusCode);
+        Assert.True((await server.AsAda(HttpMethod.Put, file, """{"content":"schema: catalog-cache/2\nrows: [1]\n"}""")).Response.IsSuccessStatusCode);
         var damaged = await Refresh(server, workspace, new JsonObject { ["target"] = "edge", ["connection"] = "warehouse" });
         Assert.Equal(HttpStatusCode.Conflict, damaged.Response.StatusCode);
         Assert.Contains("is damaged", (string)damaged.Body!["error"]!);

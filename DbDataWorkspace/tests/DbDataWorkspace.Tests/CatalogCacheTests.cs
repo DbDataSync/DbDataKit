@@ -6,7 +6,7 @@ using DbDataKit.Catalog;
 
 namespace DbDataWorkspace.Tests;
 
-/// <summary>The catalog cache, format <c>catalog-cache/1</c> (plan 33 D20, SC20i): the strict reader over the fixtures the TypeScript twin also reads, and the draft's check reporting a damaged cache.</summary>
+/// <summary>The catalog cache, format <c>catalog-cache/2</c>: the strict reader over the fixtures the TypeScript twin also reads, the writer read back by it, and the draft's check reporting a damaged cache.</summary>
 [Collection(ServerCollection.Name)]
 public sealed class CatalogCacheTests
 {
@@ -19,7 +19,7 @@ public sealed class CatalogCacheTests
     public void Every_fixture_gives_exactly_the_findings_the_file_lists()
     {
         var expected = Expected();
-        Assert.True(expected.Count >= 7);
+        Assert.True(expected.Count >= 9);
         foreach (var (file, findings) in expected)
         {
             var loaded = CatalogCache.Load(File.ReadAllText(Path.Combine(Fixtures, file)), file);
@@ -34,15 +34,64 @@ public sealed class CatalogCacheTests
     {
         var loaded = CatalogCache.Load(File.ReadAllText(Path.Combine(Fixtures, "sound.yaml")), "sound.yaml");
         var cache = loaded.Cache!;
-        Assert.Equal(("prod-gateway", "gateway"), (cache.Server, cache.Product));
         Assert.Equal(["source-db", "target-db"], cache.Connections.Keys.Order(StringComparer.Ordinal));
-        var orders = cache.Connections["source-db"].Tables[0];
-        Assert.Equal(("public", "orders", "table"), (orders.Schema, orders.Name, orders.Kind));
+        var source = cache.Connections["source-db"];
+        Assert.Equal(new CacheRead("runners-eu", "runner", "dev", "2026-11-18T10:00:00Z"), source.Read);
+        Assert.Equal(new CacheRead("prod-gateway", "gateway", null, "2026-11-11T10:00:00Z"), cache.Connections["target-db"].Read);
+        var shop = Assert.Single(source.Databases);
+        Assert.Equal("shop", shop.Name);
+        Assert.Equal(["public", "archive"], shop.Schemas);
+        var orders = source.Tables[0];
+        Assert.Equal(("shop", "public", "orders", "table"), (orders.Database, orders.Schema, orders.Name, orders.Kind));
         Assert.True(orders.Columns[0].Key);
         Assert.False(orders.Columns[0].Nullable);
         Assert.True(orders.Columns[2].Nullable);
         Assert.Contains(orders.Columns, c => c.Name == "password");
-        Assert.Equal("view", cache.Connections["source-db"].Tables[1].Kind);
+        Assert.Equal(["customer_id", "placed_at"], Assert.Single(orders.UniqueKeys).Columns);
+        var fk = Assert.Single(orders.ForeignKeys);
+        Assert.Equal(("fk_orders_customers", "public", "customers"), (fk.Name, fk.Schema, fk.Table));
+        Assert.Equal(["id"], fk.References);
+        Assert.Equal("view", source.Tables[1].Kind);
+    }
+
+    [Fact]
+    public void What_the_writer_writes_the_reader_reads_back_the_same()
+    {
+        var cache = CatalogCache.Load(File.ReadAllText(Path.Combine(Fixtures, "sound.yaml")), "sound.yaml").Cache!;
+        var text = CatalogCache.Write(cache);
+        Assert.StartsWith("schema: catalog-cache/2\n", text, StringComparison.Ordinal);
+        // the TypeScript writer is held to the same text (catalogCache.test.ts)
+        Assert.Equal(File.ReadAllText(Path.Combine(Fixtures, "sound.written.txt")).ReplaceLineEndings("\n"), text);
+        var again = CatalogCache.Load(text, "catalog-cache.yaml");
+        Assert.True(again.Ok, string.Join("; ", again.Diagnostics));
+        Assert.Equal(text, CatalogCache.Write(again.Cache!));
+        var orders = again.Cache!.Connections["source-db"].Tables.Single(t => t.Name == "orders");
+        Assert.Equal(("shop", 1, 1), (orders.Database, orders.UniqueKeys.Count, orders.ForeignKeys.Count));
+        Assert.Equal(["archive", "public"], again.Cache.Connections["source-db"].Databases.Single().Schemas);
+        Assert.Null(again.Cache.Connections["target-db"].Read!.Channel);
+    }
+
+    [Fact]
+    public void An_answer_becomes_a_connection_with_where_it_was_read_and_its_empty_schemas()
+    {
+        var answer = (JsonObject)JsonNode.Parse("""
+            {"engine": "postgres", "databases": [{"name": "shop", "schemas": ["public", "empty"]}],
+             "tables": [{"database": "shop", "schema": "public", "name": "orders", "kind": "table", "rows": [[1]],
+                         "columns": [{"name": "id", "type": "integer", "nullable": false, "key": true}, {"name": "customer_id", "type": "integer", "nullable": false}],
+                         "foreign_keys": [{"name": "fk", "columns": ["customer_id"], "references": {"schema": "public", "table": "customers", "columns": ["id"]}}]},
+                        {"database": "shop", "schema": "public", "name": "nothing", "kind": "table", "columns": []}]}
+            """)!;
+        var connection = CatalogCache.FromAnswer(answer, new CacheRead("runners-eu", "runner", "dev", "2026-11-18T10:00:00Z"));
+        var file = CatalogCache.WithConnection(null, "shop-db", connection, DateTimeOffset.Parse("2026-11-18T10:00:05Z", System.Globalization.CultureInfo.InvariantCulture));
+        var text = CatalogCache.Write(file);
+        Assert.DoesNotContain("rows", text, StringComparison.Ordinal);
+        var read = CatalogCache.Load(text);
+        Assert.True(read.Ok, string.Join("; ", read.Diagnostics));
+        var c = read.Cache!.Connections["shop-db"];
+        Assert.Equal("dev", c.Read!.Channel);
+        Assert.Contains("empty", c.Databases.Single().Schemas);
+        Assert.Equal("orders", Assert.Single(c.Tables).Name);
+        Assert.Equal("customers", Assert.Single(c.Tables[0].ForeignKeys).Table);
     }
 
     [Fact]
@@ -51,8 +100,8 @@ public sealed class CatalogCacheTests
         var loaded = CatalogCache.Load(File.ReadAllText(Path.Combine(Fixtures, "row.yaml")), "catalog-cache.yaml");
         var d = Assert.Single(loaded.Diagnostics);
         Assert.Equal("catalog-cache.yaml", d.Path);
-        Assert.Equal(13, d.Line);
-        Assert.Contains("never a row and never a secret", d.Message);
+        Assert.Equal(14, d.Line);
+        Assert.Contains("never a row, a value or a statistic of values, and never a secret", d.Message);
     }
 
     [Fact]
@@ -60,6 +109,17 @@ public sealed class CatalogCacheTests
     {
         var loaded = CatalogCache.Load(File.ReadAllText(Path.Combine(Fixtures, "newer.yaml")), "catalog-cache.yaml");
         Assert.Contains("catalog-cache.yaml", Assert.Single(loaded.Diagnostics).Message);
+    }
+
+    [Fact]
+    public void A_file_of_format_1_is_refused_naming_the_file_and_saying_how_to_make_it_again()
+    {
+        var loaded = CatalogCache.Load(File.ReadAllText(Path.Combine(Fixtures, "format1.yaml")), "catalog-cache.yaml");
+        Assert.False(loaded.Ok);
+        var d = Assert.Single(loaded.Diagnostics);
+        Assert.Equal(CatalogCache.BadSchema, d.Code);
+        Assert.Contains("catalog-cache.yaml is in format catalog-cache/1", d.Message);
+        Assert.Contains("refresh the catalog", d.Message);
     }
 
     [Fact]

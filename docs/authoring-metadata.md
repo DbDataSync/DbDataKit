@@ -5,7 +5,7 @@ tables and columns a connection reaches, what a query returns, whether a connect
 project asks of it. This page says who reads the database for that, with which login, what is kept and where, and what is checked without a
 connection at all. It applies to every kind of project; what a sync project checks is [its own section](#a-sync-project).
 
-**Built today:** the catalog cache (`catalog-cache.yaml`, `catalog-cache/1`) filled from a paired Gateway's read-only schema call; the offline readers of the
+**Built today:** the catalog cache (`catalog-cache.yaml`, `catalog-cache/2`, below) filled from a paired Gateway's read-only schema call; the offline readers of the
 cache (pickers, a Sync mapping's columns, the target side of Sync's provisioning plan, Build's import of models from the cache); the Runner's slot binding
 test of a published version; a staged version's manual tasks (Sync's `provision`, Build's `status` and `check`, the Store's `deploy` dry run and `contract`
 plan). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
@@ -63,8 +63,40 @@ one.
 
 What discovery finds is written into the draft's `catalog-cache.yaml`, an unsaved edit the person commits with the draft, so a build, a review and an agent
 read the same thing. The cache records, per connection, where and when it was read: the Runner group and the channel (`{server, product, channel}`), so a
-mapping made against `dev`'s shape is checked against `prod`'s at staging (below). The next version of the format, `catalog-cache/2`, adds the databases
-and schemas of a connection (empty ones too), foreign keys and that record of where; a file of `catalog-cache/1` is refused naming the file.
+mapping made against `dev`'s shape is checked against `prod`'s at staging (below).
+
+The format is `catalog-cache/2`. Per connection it holds the engine, where and when it was read (`read`: the server's name and product, never an
+address; the channel for a Runner, none for a Gateway, which reads with its own login), the databases it reaches with every schema of each, the empty ones
+too (so a picker can offer a schema that has no table yet), and its tables and views: columns with their type text, nullability and primary key, unique
+keys, and foreign keys with the table and columns they reference. A connection whose databases were not read (a Gateway's answer) has `databases: []` and
+tables without a database.
+
+```yaml
+schema: catalog-cache/2
+generated_at: 2026-11-18T10:00:04Z
+connections:
+  crm:
+    engine: sqlserver
+    read: {server: runners-eu, product: runner, channel: dev, at: 2026-11-18T10:00:04Z}
+    databases:
+      - {name: crm, schemas: [dbo, staging]}      # staging has no table yet
+    tables:
+      - database: crm
+        schema: dbo
+        name: orders
+        kind: table
+        columns:
+          - {name: id, type: int, nullable: false, key: true}
+          - {name: customer_id, type: int, nullable: false}
+        foreign_keys:
+          - {name: fk_orders_customers, columns: [customer_id], references: {schema: dbo, table: customers, columns: [id]}}
+```
+
+The strict reader (`DbDataKit.Catalog.Cache`, and its twin `catalogCache.ts` in the browser, run over the same fixtures) accepts these keys and no other:
+a key that would carry a row, a value or a statistic of values (`rows`, `sample`, `min`, `distinct`...) or a login is refused by name, and a value that
+looks like a password, a connection string, an address with a login or a secret reference is refused wherever it stands. A table names a listed database
+and one of its schemas when the connection lists databases. A file of `catalog-cache/1` is refused naming the file: it is deleted and each connection
+refreshed, which writes it again as format 2.
 
 **Refresh on request, with the difference shown.** Nothing refreshes by itself. **Refresh** on a connection or on one table reads again in the channel the
 cache says it came from; the Designer shows what changed (columns added, removed, retyped) before the cache is replaced, and the draft's check then names
