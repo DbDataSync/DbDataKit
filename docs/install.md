@@ -18,6 +18,26 @@ service's local API (a named pipe or Unix socket); opening the files directly is
 Example: `dbdatagateway secret set warehouse` with the service running asks the service to store the value; no file in its folder is touched by the
 administrator's account. With the service stopped, `secret set --recovery` writes the file and gives it the service's account as owner.
 
+## The Gateway's configuration repository
+
+The Gateway keeps its settings in a git repository, the `config` folder of its data folder. Git refuses a repository whose folder another account owns,
+so a folder an elevated install made on a Windows client (owned by the administrator who ran it) stopped the service at start with LibGit2Sharp's
+`repository path '.../gateway/config' is not owned by current user`, although the folder's access list gave the service's account Modify. This is built
+today, before the services create their own data (above):
+
+- When git refuses the repository for its owner and the service's account can write both the folder and its `.git`, the Gateway allows that one folder
+  the way git allows one, a `safe.directory` entry in git settings of the Gateway's own, and opens it. The ownership check stays on: no other folder is
+  allowed, and it is never switched off for the process.
+- When the account cannot write the folder, the start fails with a message that names the folder, its owner, the account and the fix, written to the
+  start-failure file like any failed start.
+
+Example: on a workstation, `scoop install -g dbdatakit-full` as `CONTOSO\ada` leaves `C:\ProgramData\DbDataKit\gateway\config` owned by `CONTOSO\ada`;
+`NT SERVICE\dbdatagateway` can write it, so the service starts with that one folder allowed. Had the
+folder's access list not let the service write, the start-failure file would say: `The configuration repository 'C:\ProgramData\DbDataKit\gateway\config'
+cannot be opened: '...\config' is owned by CONTOSO\ada, and NT SERVICE\dbdatagateway, the account this runs as, cannot write to it, so git refuses the
+repository. As an administrator, make NT SERVICE\dbdatagateway the owner of the folder (icacls "...\config" /setowner "NT SERVICE\dbdatagateway" /T /C)
+or give it Modify access to the folder, then start it again.`
+
 ## One startup sequence
 
 Every server's `server run` (as a service or not) runs the same steps before it serves anything, from one shared library, on Windows and Linux: settle the

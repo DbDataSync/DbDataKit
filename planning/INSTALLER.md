@@ -12,7 +12,9 @@ rules are in [docs/install.md](../docs/install.md).
 - `dbdatakit-full` (Scoop, `dist/suite-scripts.ps1`, `dist/suite.json`) copies the programs to `%ProgramData%\DbDataKit\bin\<version>`, runs each
   member's `service install` elevated, pairs each member by `server pair` and `dbdatakit instance add --code`, and prints the setup link.
 - The elevated `service install` creates the data folders, so they are owned by the administrator; the Gateway's `EnsureStarter` writes its configuration
-  repository during install (the cause of the workstation failure `not owned by current user`).
+  folder during install (the cause of the workstation failure `not owned by current user`). The Gateway now opens a configuration repository another
+  account owns when its own account can write it, allowing only that folder, and otherwise fails naming the folder, its owner and the fix
+  (`docs/install.md`, "The Gateway's configuration repository"); the install still makes the folder.
 - Only the Gateway writes a start failure (`StartFailure.cs`, `start-failure.txt` in its data folder).
 - The Gateway's service is registered as `dbdatagateway`; the others as `DbDataKit`, `DbDataRunner`, `DbDataWorkspace`.
 - Ports are fixed defaults: console 8480, identity home 8482, Workspace 8471, Runner 8495, Gateway 8815 to 8822 (`scripts/check_default_ports.py`).
@@ -77,6 +79,17 @@ Today `dbdatarunner package publish --code` pairs the person's machine with a Ru
 console registers it with the target; option B, command lines stop publishing and only the Workspace publishes. Scenario: a developer runs
 `dbdatabuild project publish --to runner` from a laptop; under A it works after one `client join`, under B it answers "publish from the Workspace".
 Recommendation: A, so the command lines stay usable without the Workspace.
+
+### INSTALLER-P4: where the Gateway records the one folder git may open despite its owner (default, awaiting the owner)
+
+The Gateway opens its `config` repository when another account owns it and the service's account can write it (the folder and its `.git`). libgit2
+reads git's allow list (`safe.directory`) only from the global and system git settings files, and LibGit2Sharp's other switch turns the ownership check
+off for every repository. Scenario: on a workstation the service starts, git refuses `C:\ProgramData\DbDataKit\gateway\config` (owned by
+`CONTOSO\ada`); the Gateway writes `C:\ProgramData\DbDataKit\gateway\git\.gitconfig` (the account's earlier global git settings included, then
+`safe.directory` for that folder alone), makes it the process's global git settings, and opens the repository. Options: A (built, the default) that file in
+the data folder; B the same file in a temporary folder of the account, made again at every start; C no allow list: the service copies the repository into
+a folder it creates and so owns (a repair that moves data, which INSTALLER-6 makes unnecessary for new installs). Recommendation: A, until INSTALLER-6 has
+the service create the folder itself, after which the allow list is never needed and the file is no longer written.
 
 ## Shared areas touched
 
