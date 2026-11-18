@@ -22,6 +22,7 @@ snapshot's age; one documented drill restores all four services, and CI runs it.
 | BACKUPRESTORE-3 | The recovery page on the console, the `health` lines (no backup in N days), and the CI drill that restores all four services from one set | BACKUPRESTORE-1 | M | the drill in the servers suite: four services restored from one set serve their published definitions and runs; Playwright of the recovery page |
 | BACKUPRESTORE-4 | `git.remote` on Workspace projects (one remote per project) with its `health` line; then the Gateway's and the console's configuration repositories | none | M | a commit in a project is pushed to a test remote; a failing push shows on the health line and the commit stands |
 | BACKUPRESTORE-5 | A group key change as BACKUPRESTORE-P1 says | BACKUPRESTORE-P1, INSTALLER-15 | M | after the change the old key opens nothing and every instance serves with the new one |
+| BACKUPRESTORE-6 | The console's setup checklist gets its git-remote step: today it lists the git remote as "not available"; the step opens the screen where a Workspace project's `git.remote` is set and is finished when a project has a remote whose last push succeeded (never by a click), skippable like the other steps | BACKUPRESTORE-4 | S | vitest of the checklist: the step is open with no remote, finished once a project's health line shows a successful push; Playwright: the step opens the remote's screen |
 
 ## Needs from other subjects
 
