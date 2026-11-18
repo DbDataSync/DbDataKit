@@ -76,3 +76,7 @@ and the product's build and the suites your change can affect (`CLAUDE.md`, "Bui
 To the session that started you: the branch and its head commit; ready or not (and what is left); what was built; the tests run with counts and what was
 not run; every default you took and every open question (as written in the wip file or as the proposals you added); needs from other subjects. Never
 merge into `main` or into `work/<slug>`: the reviewer does.
+
+## Pushing
+
+Nothing stays only on one machine. Every commit is pushed to its own branch as soon as it is made, and before any wait, report or stop; a commit meant for `main` that has to wait (for CI to go idle, for a review) is first pushed to a `backup/<topic>` branch. Every report to a session names the branch and commit where its work is pushed, so the owner never has to ask whether something is stored.
