@@ -64,7 +64,6 @@ Read from the code of `Shared/web/*` on 2026-11-18 and rendered at 1440x900 with
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| NAVIGATION-3 | The Gateway's entries in the sub-groups Serving, Access and Server (`DbDataKit/README.md`), its administrators' pages hidden from a viewer the way the console's are; the Runner's and the Workspace's few entries stay ungrouped | none (the grouped navigation is built) | S | browser story against the paired test Gateway: an administrator sees its entries under their group names; a viewer sees no entry whose page answers "for administrators"; `first-run.spec.ts`, `gateway-apps.spec.ts` and `views-apps-addresses.spec.ts` pass unchanged |
 | NAVIGATION-4 | A check that keeps it from becoming a jumble again: every route of the console and of each module is either an entry of the navigation or listed, with the page that links to it, as a page under an entry (`/state/<id>` under Servers, `/models/<name>` under Models) | none (the grouped navigation is built) | S | a vitest fails, naming the route, when a route is added to `App.tsx` or a module with neither an entry nor a parent; a test of the vitest proves it fails on such a route |
 
 ## Proposed decisions
@@ -109,6 +108,19 @@ Scenario: an administrator opens `gateway-east`'s Data sources; a viewer signs i
   `rail-console-<name>` (the console's Runs beside a runner's Runs), and the module's back arrow is gone, so `first-run.spec.ts` opens **All
   servers** (`rail-instances`) where it pressed the arrow.
 - **Other option:** the breadcrumb starts with the console (`dbdatakit / Servers / gateway-east / Data sources`), one crumb longer on every server page.
+
+### NAVIGATION-P8: may a viewer of the console open the servers' screens (awaiting the owner)
+
+Scenario: a person invited to the console as a viewer wants to read a Gateway's models, or a runner's runs. Found while building the Gateway's groups:
+the console answers its list of servers (`GET /api/instances`) to an administrator only (a viewer gets 403), so a viewer's navigation lists no server
+and `/servers/<id>` stays empty for them; the Gateway's entries a viewer may use (Overview, Models, Saved queries, Apps, Result cache, Access rules,
+Publishers) are shown only to a viewer who reaches a server's screens, which today no console viewer does. The browser story `navigation-gateway.spec.ts`
+gives the viewer's page the administrator's list to prove the hiding against the real Gateway.
+
+- **Option A (recommended):** the list of servers is answered to a viewer too, so a
+  viewer finds the servers in the navigation and opens the screens their role on each server allows. A change to the console's server, outside this
+  quick pass.
+- **Option B:** keep the servers an administrators' area; a viewer reaches what servers hold only through the console's own pages (Views, Runs, Lineage).
 
 ## Needs from other subjects
 
