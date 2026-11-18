@@ -106,7 +106,7 @@ the web console, a command for the administrator to run on the remote machine:
 dbdatarunner pair --host https://console:7800 --token <single-use> --console-thumbprint sha256:<hex>
 ```
 
-The token is single-use, short-lived (15 minutes by default) and scoped to one product, a role ceiling and the group it joins; the thumbprint makes the
+The token is 128 random bits, shown once when it is made, single-use, short-lived (15 minutes by default; `--minutes` sets up to 24 hours) and scoped to one product, a role ceiling and the group it joins; the thumbprint makes the
 first connection trusted. `pair` only records the join settings and (re)starts the service; the service joins at start as its own account, sends its
 address and certificate fingerprint, and the console calls back once to confirm and pins it. A server calls the console once, to join; every other call is
 the console calling the server. Users never copy codes between services except by running the generated command. `--token -` reads the token from
