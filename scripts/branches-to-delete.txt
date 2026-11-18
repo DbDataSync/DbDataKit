@@ -185,3 +185,6 @@ planning/sync-authoring-ui
 backup/ci-paths-probe
 # --- group 16: NAVIGATION accepted (2026-11-18): planning/navigation was merged with main (dedf88e6) and pushed to main as a planning and documentation change; every commit is on main
 planning/navigation
+# --- group 17: owner answers and the Sync UI's first slice (2026-11-18): planning/owner-answers-2026-11-18 was merged with main (a058a815) and planning/sync-first-slice with main (121752fc) and both merges were pushed to main as planning and documentation changes; every commit of both is on main (git rev-list <branch> --not main is empty)
+planning/owner-answers-2026-11-18
+planning/sync-first-slice
