@@ -171,3 +171,6 @@ planning/migration-fixes
 claude/festive-wozniak-p4joyh
 # --- group 10: the owner's push rule (2026-11-18): planning/push-rule was merged into main with a merge commit (05c2f39e); every commit is on main
 planning/push-rule
+# --- group 11: the old plans' location and the install design restored (2026-11-18): planning/old-plans-cutover was merged into main with a merge commit (fb26a541) and planning/installer-restore with another (9f742aab); every commit of both is on main
+planning/old-plans-cutover
+planning/installer-restore
