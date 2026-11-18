@@ -22,7 +22,16 @@ export function DeliveryPage() {
   const overview = useQuery({ queryKey: ['delivery'], queryFn: deliveryApi.overview })
   const failed = overview.data?.outbox.dead ?? 0
   return (
-    <ConsoleShell crumbs={[{ label: 'Delivery', heading: true }]}>
+    <ConsoleShell
+      crumbs={[{ label: 'Delivery', heading: true }]}
+      tabs={<>
+      {TABS.map((t) => (
+        <button key={t.id} type="button" className={`tab ${tab === t.id ? 'active' : ''}`} onClick={() => setParams({ tab: t.id })} data-testid={`delivery-tab-${t.id}`}>
+          {t.label}{t.id === 'history' && failed > 0 ? ` (${failed} failed)` : ''}
+        </button>
+      ))}
+      </>}
+    >
       <div className="pane" data-testid="delivery-page">
         <div className="page-head">
           <h1 className="page-title">Delivery</h1>
@@ -30,13 +39,6 @@ export function DeliveryPage() {
         </div>
         <ErrorBanner error={overview.error} />
         {overview.data?.problem && <div className="error" role="alert" data-testid="delivery-problem">The delivery settings cannot be used: {overview.data.problem}</div>}
-        <div className="subtabbar" data-testid="delivery-tabs">
-          {TABS.map((t) => (
-            <button key={t.id} type="button" className={`subtab ${tab === t.id ? 'active' : ''}`} onClick={() => setParams({ tab: t.id })} data-testid={`delivery-tab-${t.id}`}>
-              {t.label}{t.id === 'history' && failed > 0 ? ` (${failed} failed)` : ''}
-            </button>
-          ))}
-        </div>
         {overview.data && tab === 'channels' && <ChannelsTab overview={overview.data} />}
         {overview.data && tab === 'subscriptions' && <SubscriptionsTab overview={overview.data} />}
         {overview.data && tab === 'alerts' && <AlertsTab />}

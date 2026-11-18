@@ -2,3 +2,5 @@
 export { GatewayModule } from './GatewayModule'
 // the identity home's administration (13a U21): inside the Gateway's screens, and on its own for `dbdatakit identity run`
 export { IdentityHomeModule } from './identity/IdentityHomeModule'
+export { gatewayNav } from './GatewayShell'
+export { identityHomeNav } from './identity/IdentityHomeModule'

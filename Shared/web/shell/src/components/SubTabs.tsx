@@ -45,3 +45,26 @@ export function SubTabs({ base, tabs, testId }: { base: string; tabs: SubTab[]; 
     </div>
   )
 }
+
+/**
+ * A page's own tabs, each one a real route, for the shell's tab bar (`Shell`'s `tabs`, under the breadcrumb): the same entries as `SubTabs`, drawn as
+ * the `.tabbar`'s `.tab` links. A page has one row of these; a row a level down, inside a panel, is `SubTabs`.
+ */
+export function TabLinks({ base, tabs }: { base: string; tabs: SubTab[] }) {
+  return (
+    <>
+      {tabs.map((tab) => (
+        <NavLink
+          key={tab.testId}
+          to={tab.to ?? (tab.path === null ? base : `${base}/${tab.path}`)}
+          end={tab.path === null}
+          className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}
+          data-testid={tab.testId}
+        >
+          {tab.label}
+          {!!tab.badge && <span className="subtab-badge" data-testid={`${tab.testId}-badge`}>{tab.badge}</span>}
+        </NavLink>
+      ))}
+    </>
+  )
+}

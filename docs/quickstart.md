@@ -36,7 +36,7 @@ Open the link it prints (`https://localhost:8480/invite#<code>`) and register a 
 docker compose -f dist/compose/quickstart.yml exec console dotnet /app/dbdatakit.dll user invite --role admin --email you@example.com --url https://localhost:8480
 ```
 
-After you sign in, **Setup** in the rail lists the first steps (pair the servers, add a connection, make a first project in the Workspace) and finishes each one by what the console actually has.
+After you sign in, **Setup** (under **Settings** in the navigation on the left) lists the first steps (pair the servers, add a connection, make a first project in the Workspace) and finishes each one by what the console actually has.
 
 ## 3. Confirm the servers
 
