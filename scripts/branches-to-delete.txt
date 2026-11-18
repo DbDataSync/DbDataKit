@@ -178,3 +178,6 @@ planning/installer-restore
 planning/installer-p1
 # --- group 13: the doc merge rule (2026-11-18): planning/doc-merge-rule was merged into main with a merge commit (ae80ac63); every commit is on main
 planning/doc-merge-rule
+# --- group 14: AUTHORING-P2 and SYNCAUTHORING (2026-11-18): planning/authoring-metadata (which carried planning/sync-authoring-ui) was pushed to main as a planning and documentation change (e497c008); every commit of both is on main
+planning/authoring-metadata
+planning/sync-authoring-ui
