@@ -77,7 +77,8 @@ Example: on a workstation with WSL, 7840 is inside a reserved range; the Runner 
 
 ## Skipping the folder permissions check
 
-`--skip-folder-permissions-check` (and the setting `startup.skip_folder_permissions_check: true`) lets the folder step accept a folder whose owner or
+`--skip-folder-permissions-check` (on `server run`, `service install` and `dbdatakit setup single-server`, which record it in the registered service's
+settings), and the setting `startup.skip_folder_permissions_check: true`, let the folder step accept a folder whose owner or
 access list is not the strict one: a test's temporary folder, a checkout, a test install. It is accepted everywhere, under a service manager too: the user
 decides. It is always visible: a warning at every start, a line in `service check`, and the server marked on the console's posture page. Without a named
 switch, strict checks get loosened in code "just for this case" and stay loose.
@@ -132,11 +133,32 @@ Add a server screen, and the Runner is listed ready.
 ## Setting up one machine, or inviting another
 
 `dbdatakit setup single-server` registers, starts and joins every suite service installed on the machine, through the shared service library (a library
-call, not a command line), each with a single-use join token in its settings. It prints per-service progress (registered, started, listening, joined)
-and, for a service that fails to start, its startup-failure file; it ends with a summary and is safe to run again. `dbdatakit setup single-server --stop`
-stops every suite service on the machine. Docker Compose uses the same path, with the tokens passed through a shared volume.
+call, not a command line), each with a single-use join token in its settings:
 
-`dbdatakit setup invite <gateway|runner|workspace>` prints the pairing command for a remote machine; the console's Add a server screen does the same.
+1. It finds the suite's programs installed beside `dbdatakit` (the folders of the suite's table of services, the layout every package uses) and, for each,
+   the service it should register.
+2. For each, in start order: it registers the service if it is not registered (or registers it again when it points elsewhere); sets the top folder's
+   owner and access list; sets the program folder's access list (Administrators and SYSTEM full control, everyone else read and execute, inheritance cut,
+   so a user cannot plant a file beside a program a service runs); mints a join token and writes the join request; starts the service.
+3. It waits for each to be listening and joined, printing `registered · started · listening · joined` per service and, for a service that fails, the
+   contents of its `startup-failure-<service>.txt`.
+4. It ends with a summary: what is ready, what is not, the console's address, and the first administrator's setup link from `FIRST-RUN.txt`. Run again,
+   it skips what is done: a service registered here, running and joined is left alone, so it picks up where it stopped.
+
+`--skip-folder-permissions-check` given to `setup single-server` is passed on to the services it registers and recorded in their settings ("Skipping the
+folder permissions check" above). `dbdatakit setup single-server --stop` stops every suite service on the machine (before `scoop update`, for example).
+
+Example: on a fresh machine `dbdatakit setup single-server` prints four lines that reach `joined`, then the console's address `https://host:7800` and the
+setup link; if the Runner's configured port is held, its line stops at `started`, the contents of `startup-failure-dbdatarunner.txt` follow, the summary
+names the Runner as not ready, and a second run after the port is freed finishes it and leaves the other three alone.
+
+`dbdatakit setup invite <gateway|runner|workspace> [--role <ceiling>] [--group <g>]` mints a join token and prints the pairing command for a remote
+machine; the console's Add a server screen makes the same call.
+
+**Docker Compose** uses the same path, with the tokens passed through a shared volume rather than environment variables (a variable would need the token
+before the console exists, so it would have to be a long-lived secret written in the compose file). The console's container lists its members in its
+settings (`setup.members`), writes their join requests into the shared volume `join` at its first start, and each member's container consumes its own at
+its start. A port in the compose file is configured, so it is never moved. The quickstart has no `instance pending` and `instance confirm` steps.
 
 ## Scoop
 
