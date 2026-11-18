@@ -58,7 +58,7 @@ rules are in [docs/install.md](../docs/install.md).
 | INSTALLER-26 | Container images for the Runner and the Workspace, so the Compose quickstart runs all four services (queued: wanted, not yet) | INSTALLER-18 | M | `dist/compose/check.sh` runs four containers joined, and a Build refresh task runs on the Runner's container |
 | INSTALLER-27 | Console-started pairing for networks where a server cannot reach the console (low priority): the console connects to the server, which shows the generated code | INSTALLER-12, INSTALLER-13 | M | Servers suite: a Runner whose calls to the console are blocked joins by this path and is listed ready; a reused or expired code is refused; a Playwright story of entering the address |
 | INSTALLER-28 | Serving groups upgrade rolling, draining first (waits for the first stable release) | TASKENGINE-9 | L | the servers suite upgrades a two-instance group with a query running; no query fails; the second instance waits for the first |
-| INSTALLER-29 | The compatibility job runs the previous release's programs against the current build (waits for the first stable release) | none | M | the `compatibility` job pairs the previous stable console with the current Gateway and Runner and the reverse, and a publish and a query pass |
+| INSTALLER-29 | The compatibility job runs the previous release's programs against the current build (waits for the first stable release); the release workflows write `release.json` with the compatibility generation, so the console's "outside N-1" mark shows for a release from GitHub, not only from a mirror | none | M | the `compatibility` job pairs the previous stable console with the current Gateway and Runner and the reverse, and a publish and a query pass; a snapshot release carries `release.json` with its generation and the console's Upgrades page marks a release outside N-1 from it |
 
 ## Needs from other subjects
 
@@ -79,9 +79,11 @@ These were taken by the agent that wrote the old plan; the owner was not asked. 
 3. `<service>` in log folders and failure files is the program name in lower case (`dbdatagateway`), the same as the systemd unit.
 4. The "not finished" line names the step: `starting since 2026-11-17T09:12:03Z, step: certificate, not finished`.
 5. The shared `logs` folder: on Windows Administrators and SYSTEM full control, each service account "create files" and "create folders" on that folder only,
-   CREATOR OWNER full control; on Linux `root:dbdatakit` mode `1770`, files `0600`.
+   CREATOR OWNER full control; on Linux `root:dbdatakit` mode `1770`, files `0600`. A service that finds its own subfolder or failure file owned by
+   another account writes nothing there and says so in the event log.
 6. The install sets the top folder's owner to the Administrators group on every Windows edition and grants the service account Modify.
-7. A free port is found by binding; an excluded port refuses with WSAEACCES and is skipped like a taken one.
+7. A free port is found by binding; an excluded port refuses with WSAEACCES and is skipped like a taken one; the failure file lists the excluded
+   ranges when the whole sub-block is unusable. The identity home, running on its own, keeps a port in the console's sub-block.
 8. The join token is 128 random bits, shown once, ends in 15 minutes (`--minutes` up to 24 hours), spent when the console's callback confirms.
 9. `pair` writes one file, `join-request.yaml` (`join-request/1`), into the service's top folder; the service reads and deletes it at its next start.
 10. Docker Compose passes tokens through a shared volume, not environment variables.
