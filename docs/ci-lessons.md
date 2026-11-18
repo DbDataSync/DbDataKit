@@ -409,6 +409,39 @@ How it works now, and what to keep true when you add a job:
 | --- | --- | --- |
 | dispatching `suite-release.yml` fails at once with `failed to parse workflow: error parsing called workflow ... dbdatabuild-release.yml (Line: 192, Col: 14): Unexpected value ''`, `Unexpected value 'rids'`; no run starts | a step's `with:` has its input at the same indent (`rids:` under `with:` in the `duckdb-cache` step), so the input is not under it; a called workflow that does not parse stops every release that calls it, and nothing runs the file until a release is cut | indent the input under `with:`; `scripts/tests/test_workflow_with_blocks.py` fails for any `with:` whose next line is not indented under it |
 
+### Which changes start which workflow
+
+A push to `main` or a pull request that changes **only** planning, documentation or Markdown starts no product suite. The list is `PRODUCT_IGNORE` in
+`scripts/ci_paths.py`, written as the same `paths-ignore` on both triggers (`push` and `pull_request`) of every product CI, so a pull request and its merge
+behave alike (`scripts/tests/test_ci_paths.py` keeps the workflows and the list equal):
+
+| Changed path | Product CIs (Build incl. its conformance groups, Gateway, Kit, Runner, Store, Sync, Workspace) | Shared CI, Distribution files, Distribution MSI | Repository checks | Planning work in progress |
+| --- | --- | --- | --- | --- |
+| `planning/**`, `.claude/**`, `docs/**` (`docs/formats.json` included) | not started | not started | runs; its solution build and pin downloads are skipped | runs |
+| any `*.md` (READMEs, `CLAUDE.md`, `DESIGN.md`, the agent kit's `SKILL.md`, template READMEs) | not started | not started (`!**.md` last in their `paths`) | as above | runs |
+| `DbDataKit/docs/**`, `DbDataSync/docs/**` (the console's module docs, `order.txt` included), `DbDataBuild/docs/**`, `DbDataGateway/docs/**` | not started | not started | as above | runs |
+| anything else, or any of the above together with anything else | as before: started, and the first job (`changes`, `_changes.yml`) decides per product | as before | runs everything | runs |
+
+Some of those files are read by a build or a test (the console's build turns `DbDataKit/docs` and `DbDataSync/docs` into `/docs/<module>/` and a
+Playwright story opens them; Sync's suite reads `docs/install.md` and the commands of its docs; Shared's suite compares `docs/engine-support.md` and
+three READMEs with the engine registry; Build's suite reads `docs/commands.md`, `DESIGN.md` and the agent kit's `SKILL.md`; packages carry READMEs).
+`scripts/check_doc_inputs.py` checks what those builds and tests read, in seconds and without a build, in Repository checks: the module docs build's
+rules and every page link and `#anchor`, Sync's install folder, the engine support table against the READMEs' generated sections, Build's command index,
+skill and DESIGN.md markers, and every Markdown file a project packs or a package script copies. What it cannot see (a generated file that no longer
+matches its generator, an example the loader refuses) fails the product suite on the next change to that product; the release builds every product
+(the console's build reads the module docs again) and Build's release runs its full conformance, but the other products' release guards look up a
+green run rather than run the tests again. `scripts/check_docs_commands.py` keeps checking the commands every document names.
+
+| Signature | Cause | Fix |
+| --- | --- | --- |
+| a pull request or a push to `main` shows only **Repository checks** and **Planning work in progress** (and Backup branch cleanup on `main`); no product CI run exists for the commit | the change is planning, documentation or Markdown only, so the product CIs were not started; this is the filter, not a fault | nothing to do. To tell a skipped workflow from one that is missing: `gh api "repos/<owner>/<repo>/actions/runs?head_sha=<sha>" --jq '.workflow_runs[].name'` lists what started; run `python3 -I -c "import sys; sys.path.insert(0, 'scripts'); import ci_paths; print([f for f in sys.argv[1:] if not ci_paths.matches(ci_paths.PRODUCT_IGNORE, f)])" $(git diff --name-only <base>...<sha>)`: an empty list means every product CI was skipped by design; a path listed there means the product CIs should have started, so look for a YAML error in the workflow (the Actions tab shows a failed run with no jobs) or a run still queued |
+| a product CI run exists but every job after `changes` is skipped and the run is green | the change touched files outside `PRODUCT_IGNORE` but none of that product's paths (its `_changes.yml` expression) | expected; the run still counts as green for a release |
+| a release fails at `Require a green CI run that covers this commit` with `... changed after the nearest green run and has not been tested` | a commit between the nearest green run and the one released changed code, and no run of the product's CI covers it (a skipped or cancelled run, a commit in the middle of a push) | dispatch the product's CI on `main`, or release the commit that has the run (`-f sha=`); the guard is `scripts/ci_paths.py require-green` |
+| a release of a planning-only commit fails with `... has no successful 'Repository checks' run` | the commit has no run of the product's CI (planning only), so the guard needs the standalone checks of that commit to be green | wait for Repository checks on that commit, or dispatch it |
+| a pull request with more than 300 changed files does not start a product CI it should | GitHub evaluates path filters on the first 300 changed files only; if those are all planning and docs, the code beyond them is not seen | split the change, or dispatch the product's CI on the branch (`gh workflow run <product>-ci.yml --ref <branch>`, which runs everything) |
+| a required status check stays "Expected — Waiting for status to be reported" and the pull request cannot merge | branch protection requires a check from a workflow whose path filter skipped it: a workflow that does not start reports nothing, so the check never arrives (a job skipped by its `if:` inside a started run does report, as success) | keep required checks to workflows with no trigger filter (Repository checks' `package-versions` job, Planning work in progress), or give the filtered workflow's checks a twin: a small workflow with the inverse filter (`paths` = `PRODUCT_IGNORE`) whose job has the same name and only reports success. Branch protection is not on yet; whoever turns it on picks the required checks with this in mind |
+| a new workflow runs its suite on every planning merge | it triggers on `push`/`pull_request` to `main` without a path filter | give it `PRODUCT_IGNORE` as `paths-ignore` and add it to `PRODUCT_WORKFLOWS` in `scripts/ci_paths.py` (or, if it is fast, to the list in `scripts/tests/test_ci_paths.py`); the test fails until one is done |
+
 ### Telemetry tests (plan 22a GP28, GP29)
 
 | Signature | Cause | Fix |
