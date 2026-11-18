@@ -6,16 +6,22 @@
           `backup/<branch>-N` instead. Run it after every merge into the local main.
   clean   delete the remote `backup/*` branches that origin/main has caught up with: the tip is contained in origin/main, or every file the backup changed since
           the merge-base is identical in origin/main (a squashed or rebased branch) (default: at once; --hours N keeps one younger than N hours as a margin). Dry run unless --apply. The workflow `backup-branch-cleanup.yml` runs it with --apply on every push to main and hourly.
+  tasks   delete the task branches `backup/<slug>-<n>` of a merged pull request: every task id `<SLUG>-<n>:` that starts a commit message in
+          BASE..HEAD names one, and it is deleted when HEAD (the pull request's head) or origin/main carries its tip; one with commits the pull request
+          did not carry is kept and listed. Dry run unless --apply. The workflow `delete-merged-branch.yml` runs it when a `work/<slug>` pull request merges.
 
 Only committed work is backed up: an agent's uncommitted files are not. Intent: docs/agent-workflow.md ("Backups").
-Run from a clone of the repository: python3 scripts/backup_branches.py push | clean [--apply] [--hours N] [--remote origin]
+Run from a clone of the repository: python3 scripts/backup_branches.py push | clean [--apply] [--hours N] | tasks --base BASE --head HEAD [--apply] [--remote origin]
 """
 import argparse
+import re
 import subprocess
 import sys
 import time
 
 PREFIX = "backup/"
+# A task id at the start of a commit message: `INSTALLER-3: ...` (the slug rule of scripts/check_plans.py).
+TASK_ID = re.compile(r"^([A-Z][A-Z0-9]{7,})-(\d+):")
 
 
 def git(*args, check=True):
@@ -41,7 +47,7 @@ def local_branches():
 def push(remote, dry_run=False):
     main_ref = f"{remote}/main"
     pushed = []
-    # `backup/main` is the coordinator's integration branch (docs/agent-workflow.md): it is its own backup, pushed under its own name.
+    # `backup/main` is already a backup (of a local main that holds merges not yet pushed): it is pushed under its own name.
     wanted = ["main", "backup/main"] + [b for b in local_branches() if b.startswith("work/")]
     for branch in wanted:
         if not ref_exists(branch):
@@ -129,13 +135,59 @@ def clean(remote, hours, apply, now=None):
     return deleted
 
 
+def task_ids(messages):
+    """The task ids (`INSTALLER-3`) that start the given commit messages, in order of first appearance, each once."""
+    found = []
+    for message in messages:
+        match = TASK_ID.match(message.lstrip())
+        if match:
+            ident = f"{match.group(1)}-{match.group(2)}"
+            if ident not in found:
+                found.append(ident)
+    return found
+
+
+def task_branch(task_id):
+    """The branch of a task: `INSTALLER-3` -> `backup/installer-3`."""
+    return PREFIX + task_id.lower()
+
+
+def commit_messages(base, head):
+    out = git("log", "--format=%B%x00", f"{base}..{head}").stdout
+    return [m.strip() for m in out.split("\0") if m.strip()]
+
+
+def clean_tasks(remote, base, head, apply):
+    """Delete the `backup/<slug>-<n>` branches of the task ids that start the commit messages of base..head, when head or main carries their tip."""
+    main_ref = f"{remote}/main"
+    rows = []
+    for ident in task_ids(commit_messages(base, head)):
+        name = task_branch(ident)
+        ref = f"refs/remotes/{remote}/{name}"
+        if not ref_exists(ref):
+            continue  # no such branch (already deleted, or the task was never pushed on its own branch)
+        sha = git("rev-parse", ref).stdout.strip()
+        carried = is_ancestor(sha, head) or (ref_exists(main_ref) and (is_ancestor(sha, main_ref) or content_in_main(sha, main_ref)))
+        if not carried:
+            rows.append((name, "kept: it has commits the pull request did not carry"))
+            continue
+        if apply:
+            result = git("push", remote, "--delete", name, check=False)
+            rows.append((name, "deleted" if result.returncode == 0 else "FAILED: " + result.stderr.strip()))
+        else:
+            rows.append((name, f"would delete ({ident} is in the pull request)"))
+    return rows
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("mode", choices=["push", "clean"])
+    parser.add_argument("mode", choices=["push", "clean", "tasks"])
     parser.add_argument("--remote", default="origin")
     parser.add_argument("--hours", type=float, default=0)
     parser.add_argument("--apply", action="store_true", help="clean: delete (default is a dry run)")
     parser.add_argument("--dry-run", action="store_true", help="push: list only")
+    parser.add_argument("--base", help="tasks: the pull request's base commit")
+    parser.add_argument("--head", help="tasks: the pull request's head commit (fetched)")
     args = parser.parse_args(argv)
     if args.mode == "push":
         rows = push(args.remote, args.dry_run)
@@ -145,6 +197,15 @@ def main(argv=None):
             print("nothing to back up")
         return 1 if any(state.startswith("FAILED") for _, _, state in rows) else 0
     git("fetch", "--quiet", args.remote, "main", f"+refs/heads/{PREFIX}*:refs/remotes/{args.remote}/{PREFIX}*", check=False)
+    if args.mode == "tasks":
+        if not args.base or not args.head:
+            parser.error("tasks needs --base and --head")
+        rows = clean_tasks(args.remote, args.base, args.head, args.apply)
+        for name, state in rows:
+            print(f"{name}: {state}")
+        if not rows:
+            print("no task branches named by the pull request")
+        return 1 if any(state.startswith("FAILED") for _, state in rows) else 0
     rows = clean(args.remote, args.hours, args.apply)
     for name, state in rows:
         print(f"{name}: {state}")

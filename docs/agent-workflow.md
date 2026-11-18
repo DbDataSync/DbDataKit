@@ -1,23 +1,27 @@
-# Running several agents on one machine
+# Running several workers on one machine
 
-Who does what, and how work reaches `main`, is [planning/ROLES.md](../planning/ROLES.md) (the owner, one agent per subject, one coordinator, pull
-requests merged one at a time). This page is the machine side of a session with several agents: worktrees, backups, build slots, pacing and the traps
-already met. The skill `agent-batches` (`.claude/skills/agent-batches/SKILL.md`) is the short checklist.
+Who does what, and how work reaches `main`, is [planning/ROLES.md](../planning/ROLES.md) (the owner; sessions, which plan and start subagents but do no
+product code work; workers, one subject each on `backup/<slug>-<n>`; the reviewer, which combines them into `work/<slug>` and merges one pull request at
+a time). This page is the machine side of a session with several workers: worktrees, backups, build slots, pacing and the traps already met. The skill `agent-batches` (`.claude/skills/agent-batches/SKILL.md`) is the short checklist.
 
 ## Worktrees and branches
 
-- Each agent works in its own git worktree on its own branch (in a cloud session the harness names it). It starts from the current `main`, and merges
-  `main` into its branch before it opens a pull request and whenever `main` moves under an open one. It never rewrites a pushed branch (no amend, squash,
-  rebase or reset of commits already pushed).
-- Commit messages start with the task id (`INSTALLER-3: ...`). Work-in-progress notes go in `planning/wip/<SLUG>/<TASK-ID>.md` on the branch
+- Each worker works in its own git worktree on its task's branch `backup/<slug>-<n>` (`backup/installer-3`); the reviewer on `work/<slug>`; a session's
+  own planning changes on `planning/<topic>`. A harness that names the branch otherwise is switched to the standard name before the first push. A branch
+  starts from the current `main` and merges `main` whenever `main` moves. Nobody rewrites a pushed branch (no amend, squash, rebase or reset of commits
+  already pushed).
+- Commit messages start with the task id (`INSTALLER-3: ...`). Work-in-progress notes go in `planning/wip/<SLUG>/<SLUG>-<n>.md` on the task's branch
   (`planning/ROLES.md`).
-- A finished worktree is removed (`git worktree remove -f -f .claude/worktrees/agent-<id>`); its branch stays until its pull request merges.
+- A finished worktree is removed (`git worktree remove -f -f .claude/worktrees/agent-<id>`); its branch stays until the `work/<slug>` pull request that
+  carries it merges (`docs/branch-cleanup.md`).
 - `check_solution.py` and `check_docs_commands.py` also scan `.claude/worktrees`, so in the main checkout they can fail only because agent worktrees exist:
   run them from a clean path or ignore a complaint that names only a worktree path.
 
 ## Backups
 
-The machine is temporary: work that exists only in a local branch is lost with it. Work not yet on a pushed branch is therefore pushed to **backup branches**:
+The machine is temporary: work that exists only in a local branch is lost with it. A worker's task branch is itself a backup branch (`backup/<slug>-<n>`),
+pushed at every stopping point; with its wip file it is the handover when a session or machine goes away. Other local work not yet on a pushed branch
+is pushed to **backup branches** too:
 
 - `python3 scripts/backup_branches.py push` pushes local `main` to `backup/main` and every local `work/*` branch that `origin/main` does not contain yet to `backup/<branch>`
   (for example `backup/work/delivery2`). Plain pushes, never forced: the branches only grow, so each push is a fast-forward. Run it before a long build, before a pause and at the end of a session. Pushes to `backup/*` start no CI run (workflows run on pushes to `main` only).
@@ -25,7 +29,7 @@ The machine is temporary: work that exists only in a local branch is lost with i
   `backup/<branch>-2` (then `-3`...) and the cleanup removes the old name once `main` has the same files (it compares content, not only history, so a squash or rebase is covered).
 - Only **committed** work is covered: one commit per slice is why the rule exists. An agent's uncommitted files are not backed up; ask a long-running agent to commit work in progress to its branch.
 - The workflow **Backup branch cleanup** (`.github/workflows/backup-branch-cleanup.yml`) runs `python3 scripts/backup_branches.py clean --apply` on every push to `main` (and hourly as a net): a `backup/*` branch is deleted
-  **as soon as** its tip is contained in `origin/main`. Merging a branch with `git merge` (not a squash or cherry-pick) is what keeps its tip contained, so a merged agent branch's backup goes with the next push to main.
+  **as soon as** its tip is contained in `origin/main`. Merging a branch with `git merge` (not a squash or cherry-pick) is what keeps its tip contained, so a merged task branch goes with the next push to main. When a `work/<slug>` pull request merges, the workflow **Delete merged branch** also deletes the `backup/<slug>-<n>` branches of the task ids its commits start with, when the pull request carried their tip (so a squash merge is covered too; `docs/branch-cleanup.md`).
   A backup main has not caught up with is never deleted. `--hours N` keeps a young backup as a margin if ever wanted. By hand: Actions tab, "Run workflow"
   (a dry run unless `apply` is true).
 - To recover after a lost machine: `git fetch origin 'refs/heads/backup/*:refs/remotes/origin/backup/*'`, then merge or check out the backup branches (`backup/main` first).
@@ -46,19 +50,19 @@ The machine is temporary: work that exists only in a local branch is lost with i
 
 ## Pacing against a usage limit (2026-11-15)
 
-When the owner's plan has a usage window (for example a 5-hour limit), the coordinator paces the agents against it:
+When the owner's plan has a usage window (for example a 5-hour limit), the session paces its workers against it:
 
 - Run agents in the background and ask the owner for the usage reading now and then; measure the rate (a fresh agent used about 0.8% of a 5-hour window a minute; an agent with a very large context about twice that).
 - Prefer a **fresh agent** with a complete brief over resuming one whose context is huge: it is cheaper per step. The brief carries everything (the rules, the decisions, the order of work, the push rule) because the agent starts cold.
 - Schedule a **wind-down** message before the limit (leave about 10% for the wind-down and the report): the agent stops at a clean point, commits what passes, backs up the rest (`scripts/backup_branches.py push`), deletes its build output and reports. Schedule the **resume** just after the window resets.
-- After each report: check CI, remove the agent's worktree, and pass the agent's open questions to the owner as the proposed decisions of its subject (`planning/ROLES.md`).
+- After each report: check CI, remove the worker's worktree, and take the worker's defaults and open questions to the owner (they reach the subject file as proposed decisions when the worker resolves its wip file; `planning/ROLES.md`).
 
 ## What went wrong, and the fix
 
 | Trap | Fix |
 | --- | --- |
 | A worktree starts from an older commit than `main` | `git merge main` before starting; report the base commit |
-| Two agents rewrite the same rows | One agent per subject, and a subject agent edits only its own subject file (`planning/ROLES.md`) |
+| Two agents rewrite the same rows | A worker edits only its own subject file; two tasks that change the same code go to one worker or one after the other (`planning/ROLES.md`) |
 | A verifier was started on an old branch and its all-clear covered an old tree | Start it from the current `main`; check `git log` of its branch against `main` before trusting the report |
 | Specs written without a browser | Run them in CI before the pull request merges; every spec that signs in a new administrator sorts after `first-run` and `identity-home` |
 | Reserved words (`exit`, `identity`) as column names | Only the engine legs find them; run the SQL Server and PostgreSQL legs of a new module before the first push when disk allows |

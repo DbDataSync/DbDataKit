@@ -1,7 +1,7 @@
 name: Planning work in progress
 
-# Nothing under planning/wip/ reaches main (planning/ROLES.md): a subject agent keeps its work-in-progress notes there on its branch and resolves and
-# deletes them before its pull request merges. This runs on every pull request into main (no path filter, so a pull request that only adds a wip file
+# Nothing under planning/wip/ reaches main (planning/ROLES.md): a worker keeps its work-in-progress notes there on its task's branch and resolves and
+# deletes them before it reports the branch ready. This runs on every pull request into main (no path filter, so a pull request that only adds a wip file
 # is still checked) and on every push to main; it does not run on pushes to other branches, so a branch that carries wip files stays green.
 # Make the job "No work in progress" a required check of main's branch protection.
 

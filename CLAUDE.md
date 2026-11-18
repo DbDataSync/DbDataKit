@@ -86,28 +86,38 @@ Test engines (every variable of a test, harness or CI step is `DBDATAKIT_TEST_<N
 
 ## Making changes
 
-How the work is run is [planning/ROLES.md](planning/ROLES.md): the owner, one agent per subject, one coordinator. In short:
+How the work is run is [planning/ROLES.md](planning/ROLES.md): the owner, the sessions the owner talks with, the workers they start
+(`.claude/agents/worker.md`) and the reviewer that merges (`.claude/agents/reviewer.md`). In short:
 
-- Open work is a **subject** in `planning/` (`planning/README.md` is the only index). A subject agent edits only its subject file and the code and docs its
-  tasks need, works on its own branch, opens small pull requests whose title starts with the slug, and starts each commit message with the task id
-  (`INSTALLER-3: ...`). It merges `main` into its branch before opening a pull request and whenever `main` moves under an open one.
-- **Work in progress lives in `planning/wip/<SLUG>/<TASK-ID>.md`**, never in the subject file or a product doc: what is built so far, defaults taken,
-  decisions needed, needs from other subjects. A branch may carry it; a pull request into `main` cannot merge while any file exists under `planning/wip/`
-  (`scripts/check_no_wip.py`, run by CI on pull requests into `main` and on pushes to `main`). Before merging, each item is resolved: finished work leaves
-  the subject file, an unanswered question becomes a proposed decision `<SLUG>-P<n>` (a concrete scenario with options and a recommendation), a need goes
-  under "Needs from other subjects".
+- **A session does no product code work.** A conversation with the owner talks, designs, writes and changes planning (subject files, proposed decisions,
+  open designs) and starts workers and reviewers; it writes no product code, fixes no tests and resolves no merge conflicts. That work is a worker's
+  (code, tests) or the reviewer's (mechanical conflicts while combining).
+- Open work is a **subject** in `planning/` (`planning/README.md` is the only index; the owner sets its order, status and assignment). A worker builds one
+  subject's tasks on `backup/<slug>-<n>` (`backup/installer-3`), edits only its subject file and the code and docs its tasks need, starts each commit
+  message with the task id (`INSTALLER-3: ...`), merges `main` into its branch when `main` moves, and reports defaults and questions without deciding them.
+  The reviewer combines ready task branches into `work/<slug>` and merges its pull request (title starting with the slug) into `main`, one at a time.
+  Planning changes outside a subject's tasks go on `planning/<topic>`. A harness that starts on another branch name switches to the standard one before
+  its first push.
+- **Work in progress lives in `planning/wip/<SLUG>/<SLUG>-<n>.md`** on the task's branch, never in the subject file or a product doc: what is built so far,
+  open questions, defaults taken (each with an example). A task branch is ready when it has none: finished work leaves the subject file, an answered
+  question becomes design in the product doc, an unanswered question or a default becomes a proposed decision `<SLUG>-P<n>` (a concrete scenario with
+  options and a recommendation), a need goes under "Needs from other subjects". A pull request into `main` cannot merge while any file exists under
+  `planning/wip/` (`scripts/check_no_wip.py`, run by CI on pull requests into `main` and on pushes to `main`).
 - **Product docs describe how the product is**: what it does, why and an example, never as a list of decisions. When the owner answers a proposed
-  decision, the proposal leaves the subject file and its outcome is written into the doc that describes that part, in a commit whose message names the
-  proposal id and says `answered by the owner: <the answer>`.
+  decision (in any session; the answer is recorded under the proposal), the proposal leaves the subject file and its outcome is written into the doc that
+  describes that part, in a commit whose message names the proposal id and says `answered by the owner: <the answer>`. Nothing is dropped from planning
+  without the owner's word, and a commit that removes design text says where it went.
 - **A finished subject becomes product documentation**: the pull request that lands its last task writes what is still useful into the docs beside the code
   and deletes the subject file. `scripts/check_plans.py` keeps `planning/` consistent (the index, slugs, task and proposal ids, references between
   subjects) and refuses any document that links to the old plans folder or to a subject that is gone.
+- **Code comments describe the code** (what it does and why), never a plan, task id, proposal or subject; a comment may point at a finished doc as
+  `Design: docs/<path>.md#<anchor>` ([docs/code-comments.md](docs/code-comments.md)).
 - Before anything is pushed, read `docs/ci-lessons.md` and run its "before you push" list. A new CI problem and its fix are added to that file in the same
   commit that fixes it.
 - Shared files (`docs/ci-lessons.md`, `docs/formats.json`, `docs/ui-editors.md`, `Directory.Packages.props`, `DbDataKit.slnx`, the check baselines) are
-  edited by adding entries, never by rewriting others' entries.
+  edited by adding entries, never by rewriting others' entries; release notes are never cut.
 - A task that deletes code lists the tasks and documents it voids and updates them in the same pull request.
-- Machine resources, build slots and backups for a session with several agents: `docs/agent-workflow.md` (and the skill `agent-batches`).
+- Machine resources, build slots and backups for a session with several workers: `docs/agent-workflow.md` (and the skill `agent-batches`).
 - **Done means its test passes:** a task's "Done when" is a test run in CI, or it says what is checked by hand and why.
 - **Adapter first, delete second:** a task that replaces code keeps the old tests passing unchanged; deleting the old code is its own task, or the last step when the tests already pass.
 - A clean break is allowed, but never a silent one: a changed file format fails with a message naming the file, and a test says so.
@@ -119,4 +129,4 @@ How the work is run is [planning/ROLES.md](planning/ROLES.md): the owner, one ag
 - Branches: pushing a work-in-progress branch is fine; leaving it behind is not. The workflow `delete-merged-branch.yml` deletes a pull request's branch
   when it merges; a branch that was pushed and then abandoned, or whose work moved into another branch, is deleted by whoever abandoned it, in the same
   session. Sessions cannot delete remote branches themselves: the list `scripts/branches-to-delete.txt` and the workflow `delete-listed-branches.yml`
-  (see `docs/branch-cleanup.md`) do it. Bring a branch up to date by merging `main` into it rather than copying it to a new name. `backup/*` branches (`scripts/backup_branches.py`, `docs/agent-workflow.md`) are the exception: pending work is pushed there as a backup and they are deleted automatically as soon as `main` contains them.
+  (see `docs/branch-cleanup.md`) do it. Bring a branch up to date by merging `main` into it rather than copying it to a new name. `backup/*` branches (`scripts/backup_branches.py`, `docs/agent-workflow.md`) are the exception: pending work is pushed there as a backup and they are deleted automatically as soon as `main` contains them, or when the `work/<slug>` pull request that names their task merges.

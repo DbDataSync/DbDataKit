@@ -1,26 +1,26 @@
 ---
 name: agent-batches
 description: >-
-  Run several subagents on the DbDataKit monorepo without git, CI or machine-resource trouble, under the roles of planning/ROLES.md: one agent per
-  subject in planning/, its own worktree and branch, work-in-progress notes in planning/wip/, small pull requests merged one at a time by the
-  coordinator, builds serialised with build slots, backups of unpushed work. Use this whenever the user asks to run agents in parallel, "keep agents
-  busy", work overnight, start more subagents, merge subject pull requests, or explains the work pattern ("it works well, document it").
+  Run several subagents on the DbDataKit monorepo without git, CI or machine-resource trouble, under planning/ROLES.md: the owner decides, a session
+  plans and starts workers (one subject each, on backup/<slug>-<n>, with a wip file in planning/wip/) and the reviewer (combines ready task branches
+  into work/<slug> and merges one pull request at a time), builds serialised with build slots, backups of unpushed work. Use this whenever the user
+  asks to run agents in parallel, "keep agents busy", work overnight, start more subagents, merge subject work, or explains the work pattern ("it works
+  well, document it").
 ---
 
-# Running many agents on DbDataKit
+# Running many workers on DbDataKit
 
-Roles and the merge rules: `planning/ROLES.md`. Machine side (worktrees, backups, build slots, pacing, traps): `docs/agent-workflow.md`. This is the checklist.
+Roles, branches and the merge rules: `planning/ROLES.md`. Machine side (worktrees, backups, build slots, pacing, traps): `docs/agent-workflow.md`. The
+subagents: `.claude/agents/worker.md` and `.claude/agents/reviewer.md`. This is the checklist.
 
-**Roles.** The owner answers proposed decisions, orders and assigns subjects. One subject agent per subject (`planning/<SLUG>.md`), on its own branch,
-editing only its subject file and the code and docs its tasks need. One coordinator merges pull requests one at a time, keeps `planning/README.md`,
-carries "Needs from other subjects" across, and builds no features.
+**Roles.** The owner answers proposed decisions, sets the order, status and assignment of subjects, and decides concurrency (no two sessions running
+workers on one subject, no two reviewers at once). A session talks with the owner, plans, starts workers and reviewers and brings back their results;
+it does no product code work (no code, no fixing tests, no merge conflicts). A worker builds one subject's tasks and never decides. The reviewer
+combines and merges and builds no features.
 
-**Starting a subject agent.** Name the subject and the tasks in order; it reads `CLAUDE.md`, `planning/ROLES.md`, its subject file and
-`docs/ci-lessons.md`, and audits each task against the code first. Rules in the brief: commit messages start with the task id; work-in-progress notes,
-defaults and questions go in `planning/wip/<SLUG>/<TASK-ID>.md`, never in the subject file or a product doc; before the pull request, resolve each wip
-item (finished work out of the task table, open questions as `<SLUG>-P<n>` proposals, needs as "Needs from other subjects") and delete the wip files;
-frozen formats are never edited; new formats get a `docs/formats.json` entry and a `docs/ui-editors.md` row; shared files are edited by adding entries;
-`scripts/check_*.py` pass; `git merge main` first if the worktree base is old.
+**Starting a worker.** Use the `worker` subagent. Name the subject, the task ids in order and what the owner said about them. One task per branch
+`backup/<slug>-<n>`; several workers on one subject only on tasks that do not change the same code (otherwise one after the other, or one worker for
+both). Resuming after a lost session or machine: start a worker on the existing `backup/<slug>-<n>`; its wip file says where it stopped.
 
 **Machine rules (put them in every brief).**
 - Every build or test: `scripts/build-slot.sh <command>` with `-p:UseSharedCompilation=false` and `MSBUILDDISABLENODEREUSE=1`.
@@ -28,13 +28,18 @@ frozen formats are never edited; new formats get a `docs/formats.json` entry and
 - Sync only with `DBDATAKIT_TEST_SKIP_JDBC=true`; never restore IKVM.
 - Prune unused docker images when disk is low; pull again through the mirror when engines are needed.
 
-**Merging (coordinator).** One pull request at a time. Refuse it while any file exists under `planning/wip/` (`scripts/check_no_wip.py`). Check that
-each proposal it removes from a subject file has a commit message `answered by the owner: ...` backed by what the owner actually said, and that no
-agent default reached a product doc. With branch protection and the merge queue on, they prove "merges cleanly, CI green on the combined result";
-until then merge `main` into the branch and wait for CI. Resolve only mechanical conflicts; send semantic ones back to the subject agent.
+**Merging.** Only when the owner says so (until branch protection and the merge queue are on), start the `reviewer` subagent with the subject and its
+ready branches (a branch is ready when its head has no wip file). It merges them into `work/<slug>` one at a time, building and testing after each, then
+merges the pull request into `main`, one pull request at a time, after its checklist: no wip, CI green on the combined result, consistency across
+subjects and docs, every removed proposal backed by a recorded owner answer, every removed design text saying where it went, shared files only
+appended, the index changed only on the owner's word. Mechanical conflicts it resolves; a design conflict comes back to you for the owner.
 
-**Backups.** `python3 scripts/backup_branches.py push` pushes unpushed local work to `backup/<branch>`; the cleanup workflow deletes a backup once
-`main` contains it. Agents never rewrite a pushed branch.
+**Answers.** When the owner answers a proposal in this session for another subject, record the exact words under the proposal
+(`Answer from the owner, <date>: ...`) on a `planning/<topic>` branch, or ask the reviewer to; the next worker for that subject acts on it.
 
-**Reporting to the owner.** Per merged pull request: what was built, tests with counts, what was not run, and the new proposed decisions (never decide
-a design question silently; a default is a proposal until the owner answers).
+**Backups.** Workers push their `backup/<slug>-<n>` at every stopping point; `python3 scripts/backup_branches.py push` pushes other unpushed local work.
+The cleanup deletes a backup once `main` contains it, and a task's branch when the `work/<slug>` pull request naming the task merges. Nobody rewrites a
+pushed branch.
+
+**Reporting to the owner.** Per merged pull request: what was built, tests with counts, what was not run, and the new proposed decisions and defaults
+(never decide a design question silently; a default is a proposal until the owner answers).

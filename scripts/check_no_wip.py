@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Nothing under planning/wip/ reaches main (planning/ROLES.md).
 
-A subject agent keeps its work-in-progress notes in planning/wip/<SLUG>/<TASK-ID>.md while it works: what is built and what is not, defaults it took,
-decisions it needs, things for other subjects. Before its pull request merges it resolves each item (finished work out of the subject file, an open
-question into the subject's proposed decisions, a need into "Needs from other subjects") and deletes the file. This check fails while any file exists
+A worker keeps its work-in-progress notes in planning/wip/<SLUG>/<SLUG>-<n>.md on its task's branch while it works: what is built and what is not,
+open questions, defaults it took, things for other subjects. Before it reports the branch ready it resolves each item (finished work out of the subject
+file, an answer into the product docs, an open question or a default into the subject's proposed decisions, a need into "Needs from other subjects")
+and deletes the file. This check fails while any file exists
 under planning/wip/ and lists each file with its open items (its headings and list lines). It ignores nothing: the folder normally does not exist.
 CI runs it on pull requests into main and on pushes to main only, so a branch may carry wip files.
 Run from anywhere: python3 -I scripts/check_no_wip.py [root]
