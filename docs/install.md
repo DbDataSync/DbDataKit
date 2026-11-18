@@ -66,15 +66,26 @@ shared logs folder.
 ## Ports
 
 The suite uses one range, **7800 to 7899**, outside Windows' default ports (80, 443, 135, 445, 3389, 5040, 5357, 5985, 5986, 7680, 47001, the dynamic
-range 49152 to 65535) and common developer ports. Each service has a sub-block and a default: the console 7800 (7800 to 7819), the Gateway 7820 to 7839 (its
-listeners take any free values of its sub-block, with no fixed split between them), the Runner 7840 (7840 to 7859), the Workspace 7860 (7860 to 7879); 7880 to 7899 are spare. With no port configured, a service takes a free port of its
-sub-block at first start and pins it in its own settings. Windows' excluded port ranges (Hyper-V and WinNAT reserve ranges that move at boot) are still skipped, because a machine whose dynamic range
-was lowered can reserve inside any range;
-when the whole sub-block is excluded the service fails and the failure file names the ranges. A configured port (Docker Compose, for example) is never
-moved. The service reports its address to the console when it joins.
+range 49152 to 65535) and common developer ports. Each service has a sub-block: the console 7800 to 7819 (default 7800), the Gateway 7820 to 7839, the
+Runner 7840 to 7859 (default 7840), the Workspace 7860 to 7879 (default 7860); 7880 to 7899 are spare. With no port configured, a service takes a free
+port of its sub-block at first start and pins it in its own settings. Windows' excluded port ranges (Hyper-V and WinNAT reserve ranges that move at boot)
+are still skipped, because a machine whose dynamic range was lowered can reserve inside any range; when the whole sub-block is excluded the service fails
+and the failure file names the ranges. A configured port (Docker Compose, for example) is never moved. The service reports its address to the console
+when it joins.
 
 Example: on a workstation with WSL, 7840 is inside a reserved range; the Runner takes 7841, pins it, and the console's Servers page shows
 `https://host:7841`.
+
+**The Gateway's listeners are consistent, not fixed.** Every listener of a Gateway (the public HTTPS listener, Flight SQL, management, and later the
+PostgreSQL wire listener) takes a free value of the Gateway's sub-block at the first start of its group's first instance, and pins it. No listener is
+special: Flight SQL has no fixed default, because an HTTPS address serving apps has the same need (a client set once keeps working), and both get it the
+same way. When a further Gateway joins an existing group, the join hands over the group's pinned ports and they become that instance's exact
+configuration: if one is taken on the new machine, the instance fails at the ports step naming the port, and never picks another. So every instance of a
+group listens on the same ports, and a client or a balancer set for one instance is right for all of them.
+
+Example: the first Gateway of group `sales` takes 7820, 7821 and 7822 for its public, Flight SQL and management listeners (or the next free values) and
+pins them. A second instance joined to `sales` on another machine gets 7820, 7821 and 7822 from its join; if 7821 is held there, its
+`startup-failure-dbdatagateway.txt` names 7821 (and the program holding it, if Windows says) and the instance does not start until the port is freed.
 
 ## Skipping the folder permissions check
 
