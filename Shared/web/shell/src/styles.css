@@ -128,6 +128,20 @@ button { font-family: inherit; }
 .rail-item.active { background: var(--accent-tint); color: var(--accent); }
 .rail-spacer { margin-top: auto; }
 
+/* The navigation's named groups (see Shell.tsx): opened, the rail widens to show each entry's name beside its icon and each group's heading; collapsed,
+   it is the 46px icon rail with a short rule between groups. */
+.rail-group { flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.rail-group-rule { width: 22px; border-top: 1px solid var(--chrome-edge); margin: 5px 0 3px; }
+.rail.wide { width: 210px; align-items: stretch; padding: 9px 8px; }
+.rail.wide .rail-mark { margin-left: 4px; }
+.rail.wide .rail-group { align-items: stretch; gap: 1px; }
+.rail.wide .rail-item { width: auto; height: 28px; justify-content: flex-start; gap: 9px; padding: 0 8px; font: 500 12.5px var(--ui); }
+.rail.wide .rail-item > svg { flex: none; }
+.rail-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rail-group-title { font: 600 10.5px var(--ui); letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-7); padding: 11px 8px 3px; }
+.rail-toggle { margin-top: 8px; }
+.rail.wide .rail-toggle { color: var(--ink-7); }
+
 .app { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 .topbar {
@@ -173,6 +187,8 @@ button { font-family: inherit; }
   display: flex; align-items: stretch;
   padding: 0 13px;
   gap: 18px;
+  /* a page with many tabs in a narrow window scrolls its tabs, not the page */
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: thin;
 }
 /* Element-agnostic: tabs are <a> now that every one of them is a real route, so that middle-click,
    copy-link and the browser's own back button work on them. */
@@ -677,6 +693,9 @@ select.select {
   font: 600 10px var(--ui);
 }
 .subtab-panel { display: flex; flex-direction: column; gap: 14px; }
+/* A tab or sub-tab that is a button (a tab kept in component state or `?tab=`) looks like one that is a link: no button border or fill. */
+.tabbar .tab { flex: none; white-space: nowrap; }
+button.subtab { background: none; border: none; border-bottom: 2px solid transparent; }
 
 /* ── Markdown (see Markdown.tsx) ────────────────────────────────────────────── */
 /* Notes are prose in a product that is otherwise dense controls, so this deliberately reads like a

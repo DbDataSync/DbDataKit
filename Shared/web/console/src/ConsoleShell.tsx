@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Shell, type Crumb, type RailItem } from '@dbdatakit/shell'
+import { Shell, type Crumb, type NavGroup } from '@dbdatakit/shell'
 
 export const PRODUCT = 'dbdatakit'
 
@@ -63,38 +63,87 @@ const DocsIcon = () => (
     <path d="M4 5.5C4 4.7 4.7 4 5.5 4H12v16H5.5C4.7 20 4 19.3 4 18.5z" /><path d="M20 5.5c0-.8-.7-1.5-1.5-1.5H12v16h6.5c.8 0 1.5-.7 1.5-1.5z" />
   </svg>
 )
+const icon = (path: ReactNode) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>{path}</svg>
+)
+const RunsIcon = () => icon(<><circle cx="12" cy="12" r="8.5" /><path d="M10 8.5l5 3.5-5 3.5z" /></>)
+const TrackingIcon = () => icon(<><path d="M4 4v16h16" /><path d="M7 15l4-4 3 3 5-6" /></>)
+const ApprovalsIcon = () => icon(<><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4V3h6v1" /><path d="M9 13l2 2 4-4" /></>)
+const SetupIcon = () => icon(<><path d="M9 6h11M9 12h11M9 18h11" /><path d="M3.5 6l1 1 2-2M3.5 12l1 1 2-2M3.5 18l1 1 2-2" /></>)
+const DeploymentsIcon = () => icon(<><path d="M12 3v12" /><path d="M7 10l5 5 5-5" /><path d="M4 19h16" /></>)
+const ReleasesIcon = () => icon(<><path d="M3 12V4h8l10 10-8 8z" /><circle cx="7.5" cy="8" r="1.3" /></>)
+const DeliveryIcon = () => icon(<><path d="M3 11l18-8-8 18-2-8z" /><path d="M11 13l10-10" /></>)
+const BindingsIcon = () => icon(<><path d="M9 15l6-6" /><path d="M11 6l1.5-1.5a4 4 0 015.7 5.7L16.5 12" /><path d="M13 18l-1.5 1.5a4 4 0 01-5.7-5.7L7.5 12" /></>)
+const AuditIcon = () => icon(<><circle cx="11" cy="11" r="6" /><path d="M20 20l-4.5-4.5" /><path d="M8.5 11h5M11 8.5v5" /></>)
+const SecretsIcon = () => icon(<><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 018 0v3" /><path d="M12 15v2" /></>)
+
 const Mark = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6" /><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
   </svg>
 )
 
-/** The console's rail: where the people who sign in are managed, and (in the slices that follow) the servers they manage. */
-const rail: RailItem[] = [
-  { to: '/', title: 'Home', icon: <HomeIcon />, testId: 'rail-home' },
-  { to: '/instances', title: 'Servers', icon: <ServersIcon />, testId: 'rail-instances', adminOnly: true },
-  { to: '/connections', title: 'Connections', icon: <ConnectionsIcon />, testId: 'rail-connections-all' },
-  { to: '/monitoring', title: 'Monitoring', icon: <MonitoringIcon />, testId: 'rail-monitoring' },
-  { to: '/runs', title: 'Runs', icon: <MonitoringIcon />, testId: 'rail-runs' },
-  { to: '/tracking', title: 'Tracking', icon: <LineageIcon />, testId: 'rail-tracking' },
-  { to: '/approvals', title: 'Approvals', icon: <QualityIcon />, testId: 'rail-approvals' },
-  { to: '/lineage', title: 'Lineage', icon: <LineageIcon />, testId: 'rail-lineage' },
-  { to: '/quality', title: 'Quality', icon: <QualityIcon />, testId: 'rail-quality' },
-  { to: '/setup', title: 'Setup', icon: <HomeIcon />, testId: 'rail-setup', adminOnly: true },
-  { to: '/deployments', title: 'Deployments', icon: <LineageIcon />, testId: 'rail-deployments' },
-  { to: '/releases', title: 'Releases', icon: <LineageIcon />, testId: 'rail-releases' },
-  { to: '/agents', title: 'Agents', icon: <AgentsIcon />, testId: 'rail-agents' },
-  { to: '/knowledge', title: 'Knowledge', icon: <KnowledgeIcon />, testId: 'rail-knowledge' },
-  { to: '/backlog', title: 'Backlog', icon: <BacklogIcon />, testId: 'rail-backlog' },
-  { to: '/delivery', title: 'Delivery', icon: <MonitoringIcon />, testId: 'rail-delivery' },
-  { to: '/bindings', title: 'Bindings', icon: <ConnectionsIcon />, testId: 'rail-bindings' },
-  { to: '/views', title: 'Views', icon: <ViewsIcon />, testId: 'rail-views' },
-  { to: '/docs', title: 'Docs', icon: <DocsIcon />, testId: 'rail-docs' },
-  { to: '/users', title: 'Users', icon: <UsersIcon />, testId: 'rail-users', adminOnly: true },
-  { to: '/audit', title: 'Audit', icon: <QualityIcon />, testId: 'rail-audit', adminOnly: true },
-  { to: '/secrets', title: 'Secrets', icon: <UsersIcon />, testId: 'rail-secrets', adminOnly: true },
+/**
+ * The console's navigation: Home, six groups named for what a person is doing, and Docs (administrators' entries are hidden from a viewer). A page
+ * reached from an entry, with no entry of its own, is listed under it in `pages`, so the entry stays lit there.
+ *
+ * Design: DbDataKit/README.md#finding-a-screen-the-navigation
+ */
+export const consoleNav: NavGroup[] = [
+  { items: [{ to: '/', title: 'Home', icon: <HomeIcon />, testId: 'rail-home' }] },
+  {
+    title: 'Explore',
+    items: [
+      { to: '/views', title: 'Views', icon: <ViewsIcon />, testId: 'rail-views' },
+      { to: '/lineage', title: 'Lineage', icon: <LineageIcon />, testId: 'rail-lineage' },
+      { to: '/quality', title: 'Quality', icon: <QualityIcon />, testId: 'rail-quality' },
+    ],
+  },
+  {
+    title: 'Build and release',
+    items: [
+      { to: '/releases', title: 'Releases', icon: <ReleasesIcon />, testId: 'rail-releases' },
+      { to: '/deployments', title: 'Deployments', icon: <DeploymentsIcon />, testId: 'rail-deployments' },
+      { to: '/backlog', title: 'Backlog', icon: <BacklogIcon />, testId: 'rail-backlog' },
+    ],
+  },
+  {
+    title: 'Operate',
+    items: [
+      { to: '/monitoring', title: 'Monitoring', icon: <MonitoringIcon />, testId: 'rail-monitoring' },
+      { to: '/runs', title: 'Runs', icon: <RunsIcon />, testId: 'rail-runs' },
+      { to: '/approvals', title: 'Approvals', icon: <ApprovalsIcon />, testId: 'rail-approvals' },
+      { to: '/delivery', title: 'Delivery', icon: <DeliveryIcon />, testId: 'rail-delivery' },
+      { to: '/tracking', title: 'Tracking', icon: <TrackingIcon />, testId: 'rail-tracking' },
+    ],
+  },
+  {
+    title: 'Agents and knowledge',
+    items: [
+      { to: '/agents', title: 'Agents', icon: <AgentsIcon />, testId: 'rail-agents' },
+      { to: '/knowledge', title: 'Knowledge', icon: <KnowledgeIcon />, testId: 'rail-knowledge' },
+    ],
+  },
+  {
+    title: 'Servers',
+    items: [
+      { to: '/instances', title: 'All servers', icon: <ServersIcon />, testId: 'rail-instances', adminOnly: true, pages: ['/upgrades', '/state', '/servers'] },
+    ],
+  },
+  {
+    title: 'Settings',
+    items: [
+      { to: '/connections', title: 'Connections', icon: <ConnectionsIcon />, testId: 'rail-connections-all' },
+      { to: '/bindings', title: 'Bindings', icon: <BindingsIcon />, testId: 'rail-bindings' },
+      { to: '/secrets', title: 'Secrets', icon: <SecretsIcon />, testId: 'rail-secrets', adminOnly: true },
+      { to: '/users', title: 'Users', icon: <UsersIcon />, testId: 'rail-users', adminOnly: true },
+      { to: '/audit', title: 'Audit', icon: <AuditIcon />, testId: 'rail-audit', adminOnly: true },
+      { to: '/setup', title: 'Setup', icon: <SetupIcon />, testId: 'rail-setup', adminOnly: true },
+    ],
+  },
+  { items: [{ to: '/docs', title: 'Docs', icon: <DocsIcon />, testId: 'rail-docs' }] },
 ]
 
 export function ConsoleShell(props: { crumbs: Crumb[]; tabs?: ReactNode; actions?: ReactNode; children: ReactNode }) {
-  return <Shell brand={PRODUCT} mark={<Mark />} rail={rail} {...props} />
+  return <Shell brand={PRODUCT} mark={<Mark />} rail={consoleNav} {...props} />
 }
