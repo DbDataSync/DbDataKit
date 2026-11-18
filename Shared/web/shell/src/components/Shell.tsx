@@ -1,36 +1,72 @@
-import type { ReactNode } from 'react'
-import { NavLink as RouterNavLink } from 'react-router-dom'
-import { NavLink, useModule } from '../module'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { flushSync } from 'react-dom'
+import { NavLink as RouterNavLink, useLocation } from 'react-router-dom'
+import { NavLink, useModule, usePathInModule } from '../module'
 import { NotificationBell } from './NotificationBell'
 import { SignedInAs } from './SignIn'
 import { useIsAdmin } from './useIsAdmin'
+import { groupTestId, isEntryActive, NAV_COLLAPSE_BELOW, NAV_COLLAPSED_KEY, startsCollapsed, toGroups, visibleGroups, type Nav, type RailItem } from './nav'
 
-/** One destination in the icon rail. `inert` draws the icon with nothing behind it (a placeholder the product has not built yet). */
-export interface RailItem {
-  /** The route; a section stays lit while the location is anywhere inside it. Omit for an `inert` item. */
-  to?: string
-  title: string
-  icon: ReactNode
-  /** `data-testid` of the link. */
-  testId?: string
-  /** Shown only to an admin. The API enforces the role for real; hiding the item only avoids offering a viewer a destination that would 403 on arrival. */
-  adminOnly?: boolean
-  inert?: boolean
+export type { Nav, NavGroup, RailItem } from './nav'
+
+function readCollapsed(): string | null {
+  try { return window.localStorage.getItem(NAV_COLLAPSED_KEY) } catch { return null }
+}
+function keepCollapsed(collapsed: boolean) {
+  try { window.localStorage.setItem(NAV_COLLAPSED_KEY, String(collapsed)) } catch { /* a browser that keeps nothing still collapses for this page */ }
 }
 
 /**
- * The chrome every screen sits in: a 46px icon rail, a 42px breadcrumb bar and a 46px tab bar. The product says what is in it: its name, its mark and its rail
- * (plan 13, U02); the signed-in identity and the notification bell are the shell's own, on every screen, absent where the deployment does not authenticate.
+ * Whether the navigation is the icon rail: the person's choice, kept in the browser, and always the rail while the window is narrower than 1000 pixels
+ * (a window made narrow collapses it; made wide again, it goes back to the person's choice).
+ */
+function useCollapsed(): [boolean, () => void] {
+  const [collapsed, setCollapsed] = useState(() => startsCollapsed(readCollapsed(), window.innerWidth))
+  useEffect(() => {
+    let narrow = window.innerWidth < NAV_COLLAPSE_BELOW
+    const onResize = () => {
+      const now = window.innerWidth < NAV_COLLAPSE_BELOW
+      // drawn at once, inside the resize, so what measures itself on this resize (a report sheet that fits its frame) sees the new width
+      if (now !== narrow) flushSync(() => setCollapsed(startsCollapsed(readCollapsed(), window.innerWidth)))
+      narrow = now
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  // The page beside the navigation gained or lost its width without the window changing: a page that fits itself to the window (a dashboard, a
+  // report's sheet) measured before the navigation changed, so it is told the room changed once the new width is drawn.
+  const drawn = useRef(collapsed)
+  useEffect(() => {
+    if (drawn.current === collapsed) return
+    drawn.current = collapsed
+    window.dispatchEvent(new Event('resize'))
+  }, [collapsed])
+  return [collapsed, () => setCollapsed((was) => { keepCollapsed(!was); return !was })]
+}
+
+const ChevronIcon = ({ left }: { left: boolean }) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    {left ? <path d="M14 6l-6 6 6 6M19 6l-6 6 6 6" /> : <path d="M10 6l6 6-6 6M5 6l6 6-6 6" />}
+  </svg>
+)
+
+/**
+ * The chrome every screen sits in: the navigation on the left (named groups of labelled entries, collapsible to a 46px icon rail), a 42px breadcrumb
+ * bar and a 46px tab bar. The product says what is in it: its name, its mark and its navigation (plan 13, U02); the signed-in identity and the
+ * notification bell are the shell's own, on every screen, absent where the deployment does not authenticate.
  *
  * The mockups also show an environment pill, an Activity tab and a health roll-up in this bar. None of those have anything behind them, and a console that displays an
  * invented reading is worse than one that displays none.
+ *
+ * Design: DbDataKit/README.md#finding-a-screen-the-navigation
  */
 export function Shell({ brand, mark, rail, crumbs, tabs, actions, children }: {
   /** The product's name, first in the breadcrumb bar. */
   brand: string
-  /** The product's mark, at the top of the rail. */
+  /** The product's mark, at the top of the navigation. */
   mark: ReactNode
-  rail: RailItem[]
+  /** The entries, as named groups or as one flat list. */
+  rail: Nav
   crumbs: Crumb[]
   tabs?: ReactNode
   actions?: ReactNode
@@ -38,33 +74,49 @@ export function Shell({ brand, mark, rail, crumbs, tabs, actions, children }: {
 }) {
   const isAdmin = useIsAdmin()
   const { home } = useModule()
+  const here = usePathInModule(useLocation().pathname)
+  const [collapsed, toggle] = useCollapsed()
+  const groups = visibleGroups(toGroups(rail), isAdmin)
+
+  const entry = (item: RailItem) => item.inert || !item.to ? (
+    <span key={item.title} className="rail-item" style={{ color: 'var(--ink-faint)', cursor: 'default' }} title={item.title}>
+      {item.icon}{!collapsed && <span className="rail-label">{item.title}</span>}
+    </span>
+  ) : (
+    // A section stays lit while you are anywhere inside it, or on a page under it, which is what the navigation is for.
+    <NavLink
+      key={item.to}
+      to={item.to}
+      className={`rail-item ${isEntryActive(here, item) ? 'active' : ''}`}
+      title={item.title}
+      aria-label={item.title}
+      data-testid={item.testId}
+    >
+      {item.icon}{!collapsed && <span className="rail-label">{item.title}</span>}
+    </NavLink>
+  )
 
   return (
     <>
-      <nav className="rail">
+      <nav className={`rail ${collapsed ? 'collapsed' : 'wide'}`} data-testid="nav" data-collapsed={collapsed}>
         <div className="rail-mark">{mark}</div>
         {/* Inside the console, the way back to it comes first; its link is not under the module's base. */}
         {home && (
-          <RouterNavLink to={home.to} end className="rail-item" title={home.title} data-testid="rail-home-link">
+          <RouterNavLink to={home.to} end className="rail-item" title={home.title} aria-label={home.title} data-testid="rail-home-link">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M15 6l-6 6 6 6" /></svg>
+            {!collapsed && <span className="rail-label">{home.title}</span>}
           </RouterNavLink>
         )}
-        {rail.filter(item => !item.adminOnly || isAdmin).map(item => item.inert || !item.to ? (
-          <span key={item.title} className="rail-item" style={{ color: 'var(--ink-faint)', cursor: 'default' }} title={item.title}>
-            {item.icon}
-          </span>
-        ) : (
-          // Not `end`: a section stays lit while you are anywhere inside it, which is what the rail is for.
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={({ isActive }) => `rail-item ${isActive ? 'active' : ''}`}
-            title={item.title}
-            data-testid={item.testId}
-          >
-            {item.icon}
-          </NavLink>
+        {groups.map((group, i) => (
+          <div key={group.title ?? `group-${i}`} className="rail-group" data-testid={groupTestId(group)}>
+            {group.title && (collapsed ? <div className="rail-group-rule" aria-hidden /> : <div className="rail-group-title">{group.title}</div>)}
+            {group.items.map(entry)}
+          </div>
         ))}
+        <div className="rail-spacer" />
+        <button type="button" className="rail-item rail-toggle" onClick={toggle} aria-expanded={!collapsed} title={collapsed ? 'Show the names' : 'Collapse to icons'} data-testid="nav-toggle">
+          <ChevronIcon left={!collapsed} />{!collapsed && <span className="rail-label">Collapse</span>}
+        </button>
       </nav>
 
       <div className="app">

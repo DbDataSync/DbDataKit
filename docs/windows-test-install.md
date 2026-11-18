@@ -55,7 +55,7 @@ dbdatakit instance list
 Get-Service DbDataKit, dbdatagateway, DbDataRunner, DbDataWorkspace
 ```
 
-In the console, open **Servers**. **Setup** in the rail lists the first steps and ticks each one off by what the console actually has.
+In the console, open **All servers** (under **Servers** in the navigation). **Setup** (under **Settings**) lists the first steps and ticks each one off by what the console actually has.
 
 **Pass:** the three servers are listed as answering, with the same version, and all four services are `Running`.
 
