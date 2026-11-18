@@ -74,6 +74,38 @@ A subset of DuckDB SQL with `MEASURE()`, translated to and from the JSON request
 - Build keeps three query compilers apart: Build writes table SQL, the semantic engine writes aggregate-query SQL over Build's tables, the serving layer writes none.
 - The federated combine must not take the service down: limits today, a child process if they prove too soft.
 
+
+## Saved queries, run records and the explorer
+
+- **Two owners of a saved query.** A saved query belongs to a model (published with it in its catalog's `queries:`, run as the caller) or to a person
+  (kept in the Gateway's state, shared with a person, a group or everyone, with its history and a promote to the model). It is a query, never a
+  procedure: it has parameters and returns rows, and changes nothing.
+- **A person's saved queries are keyed by email or UPN** from the identity home (trimmed, lower case), not by the display name, which two people may
+  share; `user:` grantees are emails or UPNs. A caller the home does not know (a pass-through or Windows sign-in) is keyed by its name in the same form,
+  which is as exact as that name is. The display name as of the last save is kept beside the key and shown beside the email. Run records key their
+  caller the same way.
+- **Where the API lives.** A person's saved queries are the Gateway's management API, `/api/v1/my/queries`, as `/api/v1/my/views` is for a person's
+  dashboards: saving needs no query to run, and the console already relays it.
+- **Who may browse a model.** A read route returns a model's catalog to anyone who may query the model (Viewer and up on the Gateway), without
+  connection strings or secrets; publishing and the full definition stay an administrator's or a publisher's.
+- **A run record per query**: the request, its hash, the status, the warnings, the plan text, timings and the caller, **never rows**, kept 30 days, and
+  the count of refusals by `unsupported` reason code (what the engine does not do yet, measured).
+- **The explorer runs through one route**, `POST /api/v1/my/runs` (`{model, sql | request, parameters?, explain?, limit?}`, viewer role, as the person
+  the console's token names, through the same semantic module as every protocol, so access, limits and the run record apply), behind one client
+  function so a REST listener can replace it. Dashboards' widgets still run through the views module's preview.
+- **The explorer's matrix and chart are the server renderer's.** The explorer does not build a matrix or a chart from rows in the browser: it asks the
+  Gateway, which hands the result and a view document of the closed subset of `presentation.md` to `ViewRenderer`, the code a dashboard widget goes
+  through, so the two can never disagree on a cell (totals, rollups, formats and refused encodings are the engine's). A run with `keep: true` or a
+  `view` keeps its result ten minutes (32 per instance) and answers `result_id`; `POST /api/v1/my/runs/{result_id}/render` draws the kept result again
+  as another view, for its owner only, running nothing; a result that is gone is `410 result_gone` and the client runs again. A refused view is a 200
+  whose `rendered_view` says `failed` with the engine's errors.
+- **A column the renderer cannot read does not fail the explorer**: the run answers the table with a notice `view_unavailable` naming the column and
+  its type ("matrix and chart are unavailable: column X has type Y"). The client keeps no second rule set for views: its only check is that each
+  required encoding slot is filled, and an engine error is shown with its code, its path and its message. A replay (`POST /api/v1/my/runs/{id}/replay`)
+  takes `keep` and `view` like a run and shares its code; an administrator replaying someone else's record runs and draws with their own access.
+- **The registry describes the built-in engines.** An engine a person adds without a rebuild (a Sync driver written in YAML) is outside the registry
+  and shown as custom.
+
 ## What is not built
 
 The work left is in [planning/SEMANTICS.md](../../planning/SEMANTICS.md): the Gateway reading the registry for every engine, the SQL Server leg of the mapped-column check, the form of the `semantic:` settings and the SSAS executor's hardening are its tasks. The design of MDX and XMLA for Excel PivotTables, the PostgreSQL wire protocol, Quack and Entra tokens for Power Query (low priority, owner 2026-11-09, not scheduled) is written down in its "Open designs": the MDX Excel sends translated into semantic requests with Excel's recorded traffic as the specification, XMLA over HTTPS, semantic SQL only on the PostgreSQL wire with flat member names and `pg_catalog` emulated tool by tool.
