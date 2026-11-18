@@ -20,14 +20,31 @@ administrator's account. With the service stopped, `secret set --recovery` write
 
 ## One startup sequence
 
-Every server runs the same steps before it serves anything, from one shared library, on Windows and Linux: settle the folder and its permissions, then
-keys, then the certificate, then the state and its migrations, then bind the ports, then join the console. A failure in a step looks the same in every
-product, and a fix reaches all four.
+Every server's `server run` (as a service or not) runs the same steps before it serves anything, from one shared library, on Windows and Linux: settle the
+folder and its permissions, then keys, then the certificate, then the state and its migrations, then bind the ports, then join the console. A failure in a
+step looks the same in every product, and a fix reaches all four.
+
+| Step | What it does | What a failure says |
+| --- | --- | --- |
+| folder | the top folder exists and its owner and access list are as the install set them (or `--skip-folder-permissions-check` says otherwise); creates the subfolders it needs | the folder, its owner, the account the service runs as, and that `dbdatakit setup single-server` sets it up |
+| keys | opens or makes the key ring and secret store as itself | the key file and which grant is unexpected |
+| certificate | opens or makes its certificate | the file and the account |
+| state | opens or makes the state database and runs its migrations | the engine, the database and the migration |
+| ports | binds each listener: the configured port, or a pinned one, or a free one of its sub-block ("Ports" below) | the port, who holds it if Windows says, the excluded ranges |
+| join | consumes `join-request.yaml` if there is one and joins the console ("Pairing" below); otherwise checks it is paired | the console's address, what it answered |
+
+The `logs` subfolder and the failure file come before the first step. A step that fails writes the failure file and the process exits non-zero (the
+service manager records the failure); `service check` and `setup single-server` print the file.
+
+Example: the Gateway's service starts on a folder an administrator's account made before this design. It stops at the folder step, and
+`C:\ProgramData\DbDataKit\logs\startup-failure-dbdatagateway.txt` names the folder, its owner, the account `NT SERVICE\DbDataGateway`, and that
+`dbdatakit setup single-server` sets it up; `services.msc` shows a failed start, and `setup single-server` prints the same file.
 
 ## Logs and the startup-failure file
 
 Logs are in one place: `C:\ProgramData\DbDataKit\logs\<service>\` (Linux `/var/log/dbdatakit/<service>/`). A failed start is reported in
-`C:\ProgramData\DbDataKit\logs\startup-failure-<service>.txt`: at each start the service writes "starting since <time>, not finished"; it deletes the
+`C:\ProgramData\DbDataKit\logs\startup-failure-<service>.txt`: at each start the service writes "starting since <time>, step: <step>, not finished",
+rewritten as each step begins ("starting since 2026-11-17T09:12:03Z, step: certificate, not finished"), so a crash says how far it got; it deletes the
 file when startup succeeds; when startup fails it writes the full reason (the account, the folders, the exception chain, hints such as Windows' excluded
 port ranges). No file means a clean start; a leftover "not finished" line means a crash the service could not report. The install creates `logs`; each
 service account creates and owns only its own subfolder and its own failure file; no service reads another's. Installers and `setup` print the file, so
