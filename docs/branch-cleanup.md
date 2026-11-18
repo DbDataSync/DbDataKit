@@ -25,3 +25,18 @@ To delete another branch later, add it to the list (with a comment saying why) a
 ## Backup branches
 
 `backup/*` branches hold pending work while it waits for CI (`docs/agent-workflow.md`, "Backups"). They clean themselves: the workflow **Backup branch cleanup** deletes a backup as soon as its tip is contained in `main`, on every push to `main` and hourly (`scripts/backup_branches.py clean`). Do not list them in `scripts/branches-to-delete.txt`.
+
+## Task branches
+
+A worker builds a task on `backup/<slug>-<n>` (`backup/installer-3` for the task `INSTALLER-3`), and the reviewer merges the ready task branches of a
+subject into `work/<slug>`, whose pull request goes into `main` (`planning/ROLES.md`, "Branches"). Two things delete a task branch:
+
+- the **Backup branch cleanup** above, once `main` contains its tip (the pull request was merged with a merge commit) or every file it changed;
+- the job `task-branches` of the workflow **Delete merged branch**, when a pull request from a `work/*` branch merges: it reads the commits of the pull
+  request (from its base to its head), takes each task id that starts a commit message (`INSTALLER-3: ...`), and deletes `backup/installer-3` when the
+  pull request's head or `main` carries that branch's tip. This covers a squash merge, after which `main` does not contain the tips. A task branch with
+  commits the pull request did not carry (its worker went on after the combine) is kept and listed in the job's log; it goes later, with the pull
+  request that carries the rest, or by the cleanup above.
+
+By hand, from a clone: `python3 scripts/backup_branches.py tasks --base <base commit> --head <head commit>` is a dry run; `--apply` deletes. `work/<slug>`
+itself goes with its pull request, like any merged branch.

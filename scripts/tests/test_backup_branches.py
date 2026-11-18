@@ -117,6 +117,61 @@ class BackupBranches(unittest.TestCase):
         self.assertEqual(done["backup/work/sq"], "deleted")  # the old two-commit backup: same content as main
         self.assertEqual(done["backup/work/sq-2"], "deleted")
 
+    def commit_as(self, name, message):
+        with open(os.path.join(self.work, name + ".txt"), "w") as f:
+            f.write(name + "\n")
+        run(self.work, "add", name + ".txt")
+        run(self.work, "commit", "-m", message)
+
+    def test_task_ids_are_read_from_the_start_of_commit_messages(self):
+        messages = ["INSTALLER-3: the start sequence", "INSTALLER-3: its test", "Merge branch 'main' into work/installer",
+                    "ENDPOINTS-12: one port\n\nbody naming INSTALLER-9: not at the start", "see INSTALLER-4: not at the start", "Planning: x", "BAD-1: short slug"]
+        self.assertEqual(backup_branches.task_ids(messages), ["INSTALLER-3", "ENDPOINTS-12"])
+        self.assertEqual(backup_branches.task_branch("INSTALLER-3"), "backup/installer-3")
+
+    def test_tasks_deletes_the_task_branches_a_squash_merged_work_pull_request_carried(self):
+        base = run(self.work, "rev-parse", "main")
+        # two workers' task branches, one task branch of another subject, and one task branch that went on after it was combined
+        for branch, message in [("backup/installer-3", "INSTALLER-3: start sequence"), ("backup/installer-4", "INSTALLER-4: failure file"),
+                                ("backup/installer-5", "INSTALLER-5: later work"), ("backup/endpoints-2", "ENDPOINTS-2: other subject")]:
+            run(self.work, "checkout", "-b", branch, base)
+            self.commit_as(branch.replace("/", "_"), message)
+            run(self.work, "push", "origin", branch)
+        # the reviewer combines installer-3, -4 and -5 into work/installer
+        run(self.work, "checkout", "-b", "work/installer", base)
+        for branch in ("backup/installer-3", "backup/installer-4", "backup/installer-5"):
+            run(self.work, "merge", "--no-ff", "-m", f"Merge {branch} into work/installer", branch)
+        head = run(self.work, "rev-parse", "HEAD")
+        # the worker of installer-5 pushes more after the combine
+        run(self.work, "checkout", "backup/installer-5")
+        self.commit_as("five_more", "INSTALLER-5: more")
+        run(self.work, "push", "origin", "backup/installer-5")
+        # main takes the pull request as a squash: the task branches' tips are not contained in main
+        run(self.work, "checkout", "main")
+        run(self.work, "merge", "--squash", "work/installer")
+        run(self.work, "commit", "-m", "INSTALLER: the start sequence (squashed)")
+        run(self.work, "push", "origin", "main")
+        run(self.work, "fetch", "origin", "+refs/heads/backup/*:refs/remotes/origin/backup/*")
+        dry = dict(backup_branches.clean_tasks("origin", base, head, apply=False))
+        self.assertTrue(dry["backup/installer-3"].startswith("would delete"), dry)
+        self.assertTrue(dry["backup/installer-4"].startswith("would delete"), dry)
+        self.assertTrue(dry["backup/installer-5"].startswith("kept"), dry)
+        self.assertNotIn("backup/endpoints-2", dry)  # not named by the pull request
+        self.assertIn("refs/heads/backup/installer-3", "\n".join(self.remote_branches()))  # the dry run deleted nothing
+        done = dict(backup_branches.clean_tasks("origin", base, head, apply=True))
+        self.assertEqual(done["backup/installer-3"], "deleted")
+        self.assertEqual(done["backup/installer-4"], "deleted")
+        heads = "\n".join(self.remote_branches())
+        self.assertNotIn("backup/installer-3", heads)
+        self.assertNotIn("backup/installer-4", heads)
+        self.assertIn("backup/installer-5", heads)
+        self.assertIn("backup/endpoints-2", heads)
+        # the existing cleanup keeps what main has not caught up with: the squash left the tips out of main, and installer-5 has more
+        run(self.work, "fetch", "--prune", "origin", "+refs/heads/backup/*:refs/remotes/origin/backup/*")
+        rest = dict(backup_branches.clean("origin", 0, apply=False))
+        self.assertTrue(rest["backup/installer-5"].startswith("kept"), rest)
+        self.assertTrue(rest["backup/endpoints-2"].startswith("kept"), rest)
+
 
 if __name__ == "__main__":
     unittest.main()
