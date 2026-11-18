@@ -138,6 +138,17 @@ is not configured. Proven with a stand-in tenant (the challenge names the tenant
 Query refresh recorded on the Excel VM. Open question: whether it waits for the Excel work or comes first, since it serves Power Query rather than
 PivotTables.
 
+### Ad hoc registrations, and the combine in a child process
+
+Not yet (decided 2026-11-09, the owner delegated): they wait until an app or an agent needs them. **Registrations:** a state module `semantic_adhoc`
+in the Gateway holds a person's registered tables (with descriptors), bindings and value maps, at the scopes `session` and `personal` (per user), with a
+row cap and expiry, served as the request kinds that need them; `shared` needs an owner's approval and `governed` is a commit to the Build project, so
+neither is stored there. The documents used are those of `docs/semantic/combine.md` as they are. **A screen** lets a person upload and list their
+registrations; a proposal to share goes to the model's owner, who approves or rejects with a reason, and an approved map is offered as a change to the
+Build project (the Store's promotion of a value map is MASTERDATA's open design). **The combine in a child process** is taken only if the in-process
+limits prove too soft (a recorded incident or a load test beating `memory_mb`): a combine beyond its memory limit stops its own process and the Gateway
+answers `ResourceExhausted` while another query on the same instance finishes.
+
 ### Access rules: the rest
 
 - **Lineage draws a rules table.** A rules table is matched to the model it filters by its identity in `GatewayAccess`, but the lineage graph does not
