@@ -183,43 +183,6 @@ there, and nothing on the server answers metadata. Option B (keep the route): th
 unless the client sends its unsaved cache with each call. Recommendation: A; SYNCAUTHORING-3 keeps its other routes (slots, capabilities, inferred types
 and key, bulk create).
 
-### SYNCAUTHORING-P2: where the screens read the engine registry from (default, awaiting the owner)
-
-The engine lists (`useSyncEngines`) read the registry's descriptors (`Shared/src/DbDataKit.Connections.Descriptor/engines/*.engine.yaml`) into the web
-build, as the Build forms read Build's schemas; no server is asked. Scenario: a release marks `sync_target` of `duckdb` as `supported`; the console of
-that release offers DuckDB as a target, whatever version the Workspace or the Runner runs. Option A (as built): the console's build is the list, no
-route, no relay row. Option B: a Workspace route answers the registry of the Workspace's own build (`GET .../sync/engines`, with SYNCAUTHORING-3's
-routes), so the list follows the server that checks and packages the draft, at the cost of a route and a relay row. Recommendation: A until the
-console and the Workspace can run different releases in one install; then B.
-
-### SYNCAUTHORING-P3: what a project's own driver is offered as (default, awaiting the owner)
-
-A driver the project carries (`drivers/<id>/driver.yaml` or `driver.csx`) is listed as custom and offered as both a source and a target, with the
-note that what it reads and writes is checked when the draft is checked. Scenario: Ana adds `drivers/legacy/driver.yaml` whose `capabilities` list
-readers and no writer; the new-connection form offers `legacy (custom): source and target`, and only the draft's check says it cannot be a target.
-Option A (as built): offered as both. Option B: the screens read `capabilities` of the `driver.yaml` text (a `driver.csx` stays both, being code), so
-`legacy` is offered as a source only. Option C: SYNCAUTHORING-3's capabilities route answers it from the driver registry, as the old server did.
-Recommendation: C with SYNCAUTHORING-3, A until then.
-
-### SYNCAUTHORING-P4: what a Files form saves on its own (default, awaiting the owner)
-
-A form in Files saves its file into the draft a moment after the last keystroke, so the draft's check can run on it. With the Designer's edits kept
-not saved in the frame, the form now saves only what was typed in that editor since it opened. Scenario: Ana turns **Enabled** off on a replication's
-page, then opens its `task.yaml` in Files to look: the form shows `enabled: false` marked not saved and leaves it so; the check beside the form is
-about the saved text until she presses Save or types in the form. Option A (as built): the Designer's edits stay not saved until Save (the chrome's or
-the editor's). Option B: opening a file in Files saves whatever edit it has, as the form did before (the edit made in the Designer is saved by a
-look). Recommendation: A, since a look should not save.
-
-### SYNCAUTHORING-P5: what writes at once and what is an unsaved edit (default, awaiting the owner)
-
-The frame keeps unsaved edits for both areas. What the Files area always wrote straight into the draft still does: **New file**, the forms that make
-a file (New connection and New replication of Sync's set overview, New model, New script), **Move** and **Delete**; a file made only as an unsaved
-edit is deleted by dropping the edit. The Designer's own edits (a field, Enabled, a mapping) are unsaved edits until Save. Scenario: Ana makes the
-connection `crm` from the set overview in Files: it is in the draft at once; she then picks `crm` as the source on a replication's Overview: that
-change is marked not saved. Option A (as built). Option B: every change, the making of a file too, is an unsaved edit until Save. Recommendation: A
-for this slice; B when the Designer covers connections and scripts. Beside it (as built): the navigation always shows the Designer's entries and
-the Files tree, and the kind's overview cards (Sync's set overview, an integration's package) stay in the Files area only.
-
 ## Open designs
 
 ### Monitoring and operations, second pass
