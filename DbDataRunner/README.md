@@ -127,7 +127,8 @@ A **package** is a manifest (`package/1`, see `DbDataKit.Runner.Abstractions`) a
 Sync's engine and Build's runtime are not plain assemblies, and the way they run on a Runner follows from that:
 
 - **An engine is a runtime package; a replication set or a Build project is a definition package that names it** (`launch.runtime` and a version
-  range). Upgrading an engine is one runtime package, not a new version of every replication set: content addressing makes a shared file free, but
+  range; a Runner too old to know `launch.runtime` refuses the manifest naming the key). Upgrading an engine is one runtime package, not a new version
+  of every replication set: content addressing makes a shared file free, but
   activating forty packages for one engine upgrade would be the cost. Both engines are built for `win-x64` and `linux-x64`; macOS is a development
   platform only.
 - **No kind of their own.** Both are the `integration` kind, with a manifest the Workspace generates (a replication set: tasks `drain`, `reload`,
