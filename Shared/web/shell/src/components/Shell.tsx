@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { flushSync } from 'react-dom'
 import { NavLink as RouterNavLink, useLocation } from 'react-router-dom'
 import { NavLink, useModule, usePathInModule } from '../module'
 import { NotificationBell } from './NotificationBell'
@@ -25,12 +26,21 @@ function useCollapsed(): [boolean, () => void] {
     let narrow = window.innerWidth < NAV_COLLAPSE_BELOW
     const onResize = () => {
       const now = window.innerWidth < NAV_COLLAPSE_BELOW
-      if (now !== narrow) setCollapsed(startsCollapsed(readCollapsed(), window.innerWidth))
+      // drawn at once, inside the resize, so what measures itself on this resize (a report sheet that fits its frame) sees the new width
+      if (now !== narrow) flushSync(() => setCollapsed(startsCollapsed(readCollapsed(), window.innerWidth)))
       narrow = now
     }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
+  // The page beside the navigation gained or lost its width without the window changing: a page that fits itself to the window (a dashboard, a
+  // report's sheet) measured before the navigation changed, so it is told the room changed once the new width is drawn.
+  const drawn = useRef(collapsed)
+  useEffect(() => {
+    if (drawn.current === collapsed) return
+    drawn.current = collapsed
+    window.dispatchEvent(new Event('resize'))
+  }, [collapsed])
   return [collapsed, () => setCollapsed((was) => { keepCollapsed(!was); return !was })]
 }
 

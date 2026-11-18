@@ -135,10 +135,10 @@ button { font-family: inherit; }
 .rail.wide { width: 210px; align-items: stretch; padding: 9px 8px; }
 .rail.wide .rail-mark { margin-left: 4px; }
 .rail.wide .rail-group { align-items: stretch; gap: 1px; }
-.rail.wide .rail-item { width: auto; height: 28px; justify-content: flex-start; gap: 9px; padding: 0 8px; font: 500 12.5px var(--ui); }
+.rail.wide .rail-item { width: auto; height: 26px; justify-content: flex-start; gap: 9px; padding: 0 8px; font: 500 12.5px var(--ui); }
 .rail.wide .rail-item > svg { flex: none; }
 .rail-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rail-group-title { font: 600 10.5px var(--ui); letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-7); padding: 11px 8px 3px; }
+.rail-group-title { font: 600 10.5px var(--ui); letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-7); padding: 9px 8px 2px; }
 .rail-toggle { margin-top: 8px; }
 .rail.wide .rail-toggle { color: var(--ink-7); }
 

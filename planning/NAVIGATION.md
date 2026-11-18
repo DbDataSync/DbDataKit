@@ -64,10 +64,31 @@ Read from the code of `Shared/web/*` on 2026-11-18 and rendered at 1440x900 with
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| NAVIGATION-1 | The shell's left navigation and page tabs, in the old Sync screens' styles (see above): named groups of labelled entries (each with its icon and name) built from the `.rail` / `.rail-item` styles widened to show names, a group hidden when the person may see none of its entries, a section lit while the location is anywhere inside it, scrolling inside itself; a button collapses it to the icon rail and back, kept in the browser, collapsed below 1000 pixels wide, none in kiosk mode. A flat `RailItem[]` is still accepted as one untitled group, so the Gateway, Runner and Workspace modules are unchanged by this task. The console's entries arranged as `DbDataKit/README.md` says, Upgrades and a server's state lit under Servers. The four in-page tab styles (Views' `SubTabs`, the `subtab` buttons of Agents, Knowledge and Delivery, Backlog's and the Gateway's Server settings' button toggles) become the shell's `tabbar` with `.actions` at its right end, and `subtabbar` a level down; a workspace's toggle row too, its tabs unchanged. No page is otherwise redesigned. Every entry keeps its `rail-*` test id; groups get `nav-group-<name>`; every entry gets an icon of its own. `docs/quickstart.md` and `DbDataKit/docs/first-run.md` name where Setup now is | none | M | vitest of the grouping (admin filter, empty group hidden, active section, collapsed below 1000 pixels); a browser story `navigation.spec.ts`: an administrator sees the groups and entries of the README in order, each by its name, and every entry opens its page with that entry lit; a viewer sees no administrators' entry and no empty group; `views-dashboards.spec.ts` still fits at 800x450; the stories that click a `rail-*` id pass unchanged |
-| NAVIGATION-2 | The servers in the navigation: the Servers group lists each paired server by its name and product (marked when it does not answer, from `/api/instances`), and the Workspace's projects get the Projects entry under Build and release; inside a server, the console's navigation stays and the server's entries are nested under its name in the Servers group (the module's back arrow goes; the `docs/ci-lessons.md` row about clicking a console `rail-*` id from a server's page gets a new row saying it no longer applies), and the breadcrumb names the server (`gateway-east`), not only the product | NAVIGATION-1 | M | browser story: from Lineage, open `runner-a` in the navigation, see its Tasks, Runs and Packages, open Runs, then reach Approvals in one click; with two Gateways paired, both are listed and each opens its own screens; the breadcrumb on a Gateway page names that Gateway |
-| NAVIGATION-3 | The Gateway's entries in the sub-groups Serving, Access and Server (`DbDataKit/README.md`), its administrators' pages hidden from a viewer the way the console's are; the Runner's and the Workspace's few entries stay ungrouped | NAVIGATION-1 | S | browser story against the paired test Gateway: an administrator sees its entries under their group names; a viewer sees no entry whose page answers "for administrators"; `first-run.spec.ts`, `gateway-apps.spec.ts` and `views-apps-addresses.spec.ts` pass unchanged |
-| NAVIGATION-4 | A check that keeps it from becoming a jumble again: every route of the console and of each module is either an entry of the navigation or listed, with the page that links to it, as a page under an entry (`/state/<id>` under Servers, `/models/<name>` under Models) | NAVIGATION-1 | S | a vitest fails, naming the route, when a route is added to `App.tsx` or a module with neither an entry nor a parent; a test of the vitest proves it fails on such a route |
+| NAVIGATION-2 | The servers in the navigation: the Servers group lists each paired server by its name and product (marked when it does not answer, from `/api/instances`), and the Workspace's projects get the Projects entry under Build and release; inside a server, the console's navigation stays and the server's entries are nested under its name in the Servers group (the module's back arrow goes; the `docs/ci-lessons.md` row about clicking a console `rail-*` id from a server's page gets a new row saying it no longer applies), and the breadcrumb names the server (`gateway-east`), not only the product | none (the grouped navigation is built) | M | browser story: from Lineage, open `runner-a` in the navigation, see its Tasks, Runs and Packages, open Runs, then reach Approvals in one click; with two Gateways paired, both are listed and each opens its own screens; the breadcrumb on a Gateway page names that Gateway |
+| NAVIGATION-3 | The Gateway's entries in the sub-groups Serving, Access and Server (`DbDataKit/README.md`), its administrators' pages hidden from a viewer the way the console's are; the Runner's and the Workspace's few entries stay ungrouped | none (the grouped navigation is built) | S | browser story against the paired test Gateway: an administrator sees its entries under their group names; a viewer sees no entry whose page answers "for administrators"; `first-run.spec.ts`, `gateway-apps.spec.ts` and `views-apps-addresses.spec.ts` pass unchanged |
+| NAVIGATION-4 | A check that keeps it from becoming a jumble again: every route of the console and of each module is either an entry of the navigation or listed, with the page that links to it, as a page under an entry (`/state/<id>` under Servers, `/models/<name>` under Models) | none (the grouped navigation is built) | S | a vitest fails, naming the route, when a route is added to `App.tsx` or a module with neither an entry nor a parent; a test of the vitest proves it fails on such a route |
+
+## Proposed decisions
+
+### NAVIGATION-P4: when the navigation is the icon rail (default, awaiting the owner)
+
+Scenario: a person opens the navigation on a 1440-pixel laptop and leaves it open; the same browser later shows a dashboard in an 800-pixel window, then
+the window is made wide again.
+
+- **Option A (built, recommended): under 1000 pixels it always starts as the icon rail**, whatever the person chose; at 1000 and more it is as they last
+  left it (the browser keeps it), and open when they never chose. Made narrow, it collapses at once; made wide again, it goes back to their choice. The
+  button still opens it in a narrow window for that page.
+- **Option B: the person's choice wins at every width**; only a person who never chose gets the rail under 1000 pixels. A dashboard at 800 pixels then
+  loses 164 pixels to the names for whoever once left it open.
+
+### NAVIGATION-P5: which tab rows are the page's tab bar and which are a level down (default, awaiting the owner)
+
+Scenario: a person opens Agents, then a workspace of a build project, then a Gateway's Server settings.
+
+- **Built (recommended for now):** the tabs that choose what a whole page shows (Views, Agents, Knowledge, Delivery, Backlog) are the shell's tab bar
+  under the breadcrumb (`.tabbar`); the rows inside a page (a workspace's row under its file editor, Server settings' Form and server.yaml) are the
+  `.subtabbar` a level down, where they were. A workspace's row was left inside the page because it belongs to the file column, not to the whole page.
+- **Other option:** a workspace's row in the tab bar too (the file list and editor would sit under it). It waits for the open design "Tabs inside pages".
 
 ## Needs from other subjects
 
@@ -77,9 +98,9 @@ existing pages).
 
 ## Open designs
 
-### Tabs inside pages: what remains after NAVIGATION-1
+### Tabs inside pages: what remains now the tab style is settled
 
-What: the tab style is settled (the old Sync screens' `tabbar` and `subtabbar`, NAVIGATION-1). Left open: whether a tab is always in the address (as
+What: the tab style is settled (the old Sync screens' `tabbar` and `subtabbar`, built). Left open: whether a tab is always in the address (as
 `?tab=` is for Agents, Knowledge and Delivery but not for a workspace except `runs`), and how a workspace's up to 11 tabs are grouped (edit, check,
 run, publish). Why it waits: the owner will refine once the navigation is in use.
 
