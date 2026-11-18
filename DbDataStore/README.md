@@ -70,6 +70,16 @@ entities:
 - **Roles for the semantic layer**: an entity can say it is a `dimension`, `mapping` or `calendar`; it is read and validated and nothing consumes it yet (the semantic layer does not read it).
 - **Instances** (plan 26): `storage.instances` keeps one copy per instance, as `schema` (`<model>__<instance>` on the connection), `connection`, or `column` (shared tables, `_instance` first in every key). Routes under `/api/v1/models/{m}/instances/{i}/...`; the old paths are the `default` instance.
 
+### Approval of changes
+
+`approval.changes` says whether a write needs a second step. With `none` a person's write is applied directly: change requests are not required. With
+`steward` or `owner` a write becomes a change request that a steward (who needs the author role) or an owner (the administrator role) decides; an
+agent never decides one, and an agent's write is a change request unless the model says `agents: direct`. Approving your **own** request is not
+blocked: the Changes screen says "You proposed this request" beside the buttons and lets you decide it. The reason is that the model, not a global
+rule, says how many people a change needs: a model that wants a second person says so with `approval: owner`. For example, a steward who edits `sales_territories` (`approval: {changes: steward}`) sees their own request and may approve it; a
+model with `approval: {changes: owner}` waits for an administrator. A rule against approving one's own request would be a further setting of a model,
+not a change to this default.
+
 ## Tables and structure
 
 `ModelStorage.Plan(model, engine)` makes a schema named like the model, a table per entity (types from the shared dialect, NOT NULL for required and key attributes), primary and unique keys, foreign keys for references inside the model (a reference to another model is checked on write), a `_version` column and the `_audit` table. It only creates: a table already there refuses the whole creation. Statements are `DbDataKit.Schema`'s `TableDdl`, the table-structure planner that Build also uses (structure model, drift classification, risk-classed changes).
