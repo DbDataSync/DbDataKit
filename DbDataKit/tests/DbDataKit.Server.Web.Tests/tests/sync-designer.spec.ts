@@ -25,6 +25,12 @@ async function makeDraft(page: Page, id: string, kind: string, workspace: string
 
 const area = (page: Page) => page.getByTestId('wsp-page')
 
+/** A picture of the screen for people reviewing the Designer, written only when DBDATAKIT_TEST_SHOTS names a folder (not in CI). */
+async function shot(page: Page, name: string) {
+  const folder = process.env.DBDATAKIT_TEST_SHOTS
+  if (folder) await page.screenshot({ path: `${folder}/${name}.png`, fullPage: false })
+}
+
 test('a draft has two areas: an app draft shows Files only, a sync draft opens on its Designer, and an unsaved edit and the address survive moving between them', async ({ page, context, baseURL }) => {
   await signInNewAdmin(page, context, baseURL!, 'Sync Designer', `sync-designer-${Date.now()}@example.com`)
   await mockWorkspace(page)
@@ -42,6 +48,7 @@ test('a draft has two areas: an app draft shows Files only, a sync draft opens o
   await expect(page.locator('[data-testid="sd-nav-replication"]')).toHaveCount(1)
   await expect(page.locator('[data-testid="sd-nav-replication"][data-name="orders"]')).toHaveAttribute('aria-current', 'page')
   await expect(page.locator('[data-testid="wsp-file"][data-path="config/replications/orders/task.yaml"]')).toBeVisible()
+  await shot(page, '01-designer-landing')
 
   // an edit in Files left not saved is still there, not saved, after a click into the Designer and back
   await page.getByTestId('wsp-nav-files').click()
@@ -60,6 +67,7 @@ test('a draft has two areas: an app draft shows Files only, a sync draft opens o
   await page.locator('[data-testid="wsp-file"][data-path="notes.md"]').click()
   await expect(page.getByTestId('wsp-dirty')).toBeVisible()
   await expect(page.getByTestId('wsp-code')).toContainText('Orders move every quarter hour.')
+  await shot(page, '02-files-unsaved-edit')
 
   // the chrome's Save is the same in both areas
   await page.getByTestId('wsp-save-all').click()
