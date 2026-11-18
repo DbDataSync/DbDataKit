@@ -58,6 +58,24 @@ by TRUSTZONES-3 and checked under B. Recommendation: A, because a structural tas
 The console signs a link credential per pair of groups, scoped to the three paths, rotated with the group keys. Scenario: a Gateway instance is stolen;
 revoking its group key also revokes its link. Recommendation: accept.
 
+## Open designs
+
+Not scheduled. Each becomes tasks only when the owner schedules it.
+
+### Admin lock-down settings
+
+**What.** Settings an administrator may turn on later to restrict risky actions that the suite allows by default with a clear warning
+(`docs/architecture.md`, "Risky actions: allowed, with a clear warning"). The first is production reads for authoring: discovery and describe in
+`prod` (`docs/authoring-metadata.md`), which anyone with access to the project may run after a production warning. Others follow as
+they are found (a run started in `prod` from a draft, a structural task, overwriting another person's file).
+
+**Why.** Some organisations' rules require that only named roles touch production, even to read its shape. The default stays open, so the suite is not
+crippled for everyone else; a setting is a hardening follow-up an administrator chooses.
+
+**Open questions.** Where a setting lives (the console's installation settings, a Runner group, a channel, a project); whether it restricts to a role
+(the project's approvers, an administrator) or turns the action off; which server enforces it (the Runner, which runs the read, so a caller cannot skip
+it, and the Workspace, which hides or explains the button); how a refused person learns who may do it; and that the audit records a change of the setting.
+
 ## Shared areas touched
 
 - `DbDataKit.Web` (link credential), `DbDataKit.Serving.Notify` (deleted pairing), `DbDataKit.Runner.Api` (start grants, run route), `DbDataKit.Views`

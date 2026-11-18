@@ -101,6 +101,10 @@ that the Sync server's screens used: the rail, the breadcrumb bar, the `tabbar` 
 a level down, the `subtabbar`. They replace the four tab styles pages had grown. The arrangement is deliberately plain: today's pages regrouped and
 labelled, with no page redesigned.
 
+**Every screen has a place.** A route of the console, or of a server's screens, is either an entry of the navigation or a page listed under one, with
+the page that links to it (`Shared/web/console/src/navigationPages.ts`: a dashboard `/views/dashboards/<name>` under Views, a server's state under All
+servers, a Gateway's model under Models); the console's test `routes.test.ts` fails, naming the route, when a new one is neither.
+
 Example: an operator signs in to find why last night's refresh failed. They read the heading **Operate**, open **Runs**, and see the failed run; from
 it, `runner-a` under **Servers** shows that runner's own Runs one click away.
 
@@ -110,7 +114,7 @@ it, `runner-a` under **Servers** shows that runner's own Runs one click away.
 
 **Data quality** (plan 23a, FQ17): `GET /api/quality` joins the results of the checks the paired servers evaluate, by dataset identity: every dataset with its checks, the latest result and the block of each, and what each server said. No server of the suite keeps check results today (the Build, Sync and Store servers that did were deleted, plan 33 SC23), so the list is empty; the page `/quality` keeps the card of where the alerts of failed checks go. The console holds no results and decides no block.
 
-The Connections page (`/connections`, in the rail) lists the data sources of every Gateway the console manages, each asked of its server through the relay (a server that does not answer, or whose list it refuses, is named above the list and the others still show).
+The Connections page (`/connections`, under **Settings** in the navigation) lists the data sources of every Gateway the console manages, each asked of its server through the relay (a server that does not answer, or whose list it refuses, is named above the list and the others still show).
 A Sync connection and a Gateway data source are the same `connection/1` file, so a connection on one server can be **copied to another**: *Copy to...* on a row, choose the server and the name it will have there (the same name when it is another server).
 
 The console makes the copy as the person signed in: it reads the file from the first server (`GET /api/connections/<name>/file` on Sync, `GET /api/v1/data-sources/<name>` on a Gateway), changes only what belongs to that server, and creates the file on the second

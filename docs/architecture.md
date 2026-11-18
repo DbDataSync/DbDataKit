@@ -82,6 +82,25 @@ In those cases the process is a host with a typed protocol. The calls that exist
 Sync runtimes by their command lines) stay until a slice touches them anyway; nothing is converted for its own sake. Whether `dbdatabuild`, `dbdatasync` and
 `dbdatastore` stay as command lines is then only a question of a tool for people.
 
+## Risky actions: allowed, with a clear warning (owner, 2026-11-18)
+
+A person who has access to do a thing can do it without being blocked, as long as every concern is clear to that person. The suite does not build a
+crippled system on principle: where an action carries a risk (reading production, running against production, overwriting what someone else wrote), the
+screen or the command says so plainly, at the moment of the action, and lets the person go on. Access is the line that holds (a role, a project's
+membership, a binding the administrator made); within it, a warning and a clear message replace a refusal.
+
+- **Warn where the action is taken**, in words that name the risk and the thing at risk (the channel, the database, the object), not a generic
+  "are you sure". The run or the change is recorded under the person's name, as every action is.
+- **Refuse only what access does not allow**, or what cannot work (a format the reader does not know, a login the binding lacks); a refusal names the rule.
+- **Lock-down is a later hardening option.** Settings an administrator may turn on to restrict a risky action further (production reads first) are
+  follow-up work ([planning/TRUSTZONES.md](../planning/TRUSTZONES.md), "Admin lock-down settings"); until one exists and is turned on, the default is
+  allowed with a warning.
+
+Example: Ana authors a sync project whose source has no development copy. In the Designer she picks the channel `prod` and presses **Refresh**; the
+Workspace shows "This reads the production database `erp` with the login bound for `prod`; only its shape is read, no row", and she goes on. The Runner
+runs `discover` as Ana, with production's bound read login, and the catalog cache records that it was read from `prod`. She needed no approver: having
+access to the project is enough ([authoring-metadata.md](authoring-metadata.md#who-reads-the-runner-with-the-login-the-channel-binds)).
+
 ## Isolation by trust
 
 Work is placed by what it can touch, not by product or by how it is started. There are three places, and each holds only the logins its work needs

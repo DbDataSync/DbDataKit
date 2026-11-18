@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { ModuleProvider } from '@dbdatakit/shell'
 import { consoleApi } from '../api'
-import { ConsoleShell } from '../ConsoleShell'
+import { ConsoleShell, useConsoleNav } from '../ConsoleShell'
 
 const GatewayModule = lazy(() => import('@dbdatakit/gateway').then((m) => ({ default: m.GatewayModule })))
 const IdentityHomeModule = lazy(() => import('@dbdatakit/gateway').then((m) => ({ default: m.IdentityHomeModule })))
@@ -28,12 +28,13 @@ function Notice({ children, testId }: { children: string; testId: string }) {
 
 /**
  * The screens of the product a server runs (plan 13, U08), mounted under the server's own address in the console: its links keep working under `/servers/<id>/<product>`, its `/api` calls go to the console's relay
- * for this server, and it has a cache of its own. Which module is chosen by what the server says it is.
+ * for this server, and it has a cache of its own. The console's navigation stays, with the server's own entries nested under its name. Which module is chosen by what the server says it is.
  */
 export function ServerModule() {
   const { instance = '' } = useParams()
   const instances = useQuery({ queryKey: ['instances'], queryFn: consoleApi.instances.list })
   const found = (instances.data ?? []).find((i) => i.id === instance)
+  const nav = useConsoleNav()
 
   if (instances.isLoading) return null
   if (!found) return <Notice testId="module-no-server">That server is not paired with this console.</Notice>
@@ -43,7 +44,7 @@ export function ServerModule() {
   if (Module === null) return <Notice testId="module-none">{`The console has no screens for ${found.product ?? 'this kind of server'} yet.`}</Notice>
 
   return (
-    <ModuleProvider info={{ basePath: `/servers/${found.id}`, apiBase: `/relay/${found.id}`, home: { to: '/instances', title: 'Servers' } }}>
+    <ModuleProvider info={{ basePath: `/servers/${found.id}`, apiBase: `/relay/${found.id}`, host: { nav, serverId: found.id, serverName: found.name } }}>
       <Suspense fallback={null}>
         <Module />
       </Suspense>

@@ -25,7 +25,11 @@ Ana's login would offer a table no run can read.
 A person never reads with a login of their own. A login a person types is used in one way only: as the login of a slot in a non-production channel, sent
 to the Runner once (below). Integrated sign-in (Windows, Entra) cannot be typed or delegated from a browser to a server in any case.
 
-Who may ask: in `prod`, the project's approvers (as for the binding test); in every other channel, its authors.
+Who may ask: anyone with access to the project, in every channel, `prod` included. A read in `prod` is shown with a clear warning that it reads
+production (the database and the channel named, shape only, no row) and then goes ahead; no approver role is needed. Some syncs are designed between
+systems that have no development copy, and they cannot be designed without reading production's shape. How the suite treats such actions:
+[architecture.md](architecture.md#risky-actions-allowed-with-a-clear-warning-owner-2026-11-18). A setting an administrator may turn on to restrict
+production reads is a later hardening option.
 
 ## The built-in package `dbdatakit-metadata`
 
@@ -51,6 +55,13 @@ and that login to the Runner and binds the slot in that channel (the same calls 
 is sealed to the Runner group and kept in its store; it never reaches the Workspace's state, audit or log. Only a non-production channel is set up this
 way: the Workspace refuses `prod`, whose bindings stay the administrator's. The console's posture page lists the non-production bindings made from the
 Workspace.
+
+**Until Set up for development is built, a development login is bound by hand.** The project's package must be on the Runner, and the Runner's own
+bindings screen (its Packages page, Bindings) binds the slots of a version it holds: publish a build of the draft to the Runner's `dev` channel staged,
+not served (the Workspace's Builds tab, whose publish can also bind each slot to a connection); then an administrator binds the connection's slot in
+`dev` on that screen, the console sending the connection's copy with its secret references, and the development login's secret is put in the Runner's
+own store, never typed into the Workspace. Refresh then reads in `dev`; a channel that binds no slot is named by the channel picker with this way to bind
+one.
 
 ## The catalog cache
 
@@ -121,6 +132,11 @@ The built-in package, the cache, the channel picker, **Refresh**, **Describe**, 
 writes a mapping file per ticked table from the cache (columns, types, key; the target's types inferred by Sync's mapping column reader over the cache).
 **Refresh** on that overview reads the connection again, on a mapping's cached-metadata card one table, each showing the difference first. **Custom
 query, not a table**, then **Describe columns**, writes the query's columns into the mapping's column cache.
+
+The pickers, the overview and Column Mapping read the databases, tables and columns from the draft's `catalog-cache.yaml` in the browser
+(`catalogCache.ts`), fetched through the Workspace's existing route that reads a draft's file; a refresh not yet saved is held in the browser as an
+unsaved edit and read the same way. No server route answers metadata: the server would read the saved file and miss the unsaved edit. Example: Ana
+presses Refresh on `accounts`, accepts "1 column added", and opens Column Mapping before saving; the new column is there.
 
 A connection whose driver is Sync's own (a YAML driver, or a `metadataProvider` script) is read by the tasks `discover` and `describe` of the replication
 set's own package (Sync's metadata service behind them), which needs a build staged in that channel; the Designer says so and offers **Build and stage

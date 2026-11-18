@@ -46,7 +46,12 @@ export function BacklogPage() {
   }
 
   return (
-    <ConsoleShell crumbs={[{ label: 'Backlog', heading: true }]}>
+    <ConsoleShell
+      crumbs={[{ label: 'Backlog', heading: true }]}
+      tabs={project && workflow.data && items.data && sprints.data
+        ? TABS.map((t) => <button key={t.id} type="button" className={`tab ${tab === t.id ? 'active' : ''}`} onClick={() => set({ tab: t.id })} data-testid={`backlog-tab-${t.id}`}>{t.label}</button>)
+        : undefined}
+    >
       <div className="pane" data-testid="backlog-page">
         <div className="page-head">
           <h1 className="page-title">Backlog</h1>
@@ -65,9 +70,6 @@ export function BacklogPage() {
         {projects.data?.length === 0 && <div className="empty" data-testid="backlog-none">{role === 'lead' ? 'There is no backlog yet. Make the first one above.' : 'There is no backlog yet; an administrator makes it.'}</div>}
         {project && workflow.data && items.data && sprints.data && (
           <>
-            <div className="subtabbar" role="tablist" style={{ marginBottom: 10 }}>
-              {TABS.map((t) => <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={'btn btn-sm' + (tab === t.id ? ' btn-primary' : '')} onClick={() => set({ tab: t.id })} data-testid={`backlog-tab-${t.id}`}>{t.label}</button>)}
-            </div>
             {tab === 'backlog' && <BacklogList project={project} workflow={workflow.data} items={items.data} sprints={sprints.data} canEdit={canEdit} act={act} open={(id) => set({ item: id })} />}
             {tab === 'board' && <Board workflow={workflow.data} items={items.data} sprints={sprints.data} canEdit={canEdit} act={act} open={(id) => set({ item: id })} />}
             {tab === 'sprints' && <Sprints project={project} workflow={workflow.data} items={items.data} sprints={sprints.data} role={role} act={act} />}

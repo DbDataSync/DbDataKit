@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react'
-import { Shell, type Crumb, type RailItem } from '@dbdatakit/shell'
+import { Shell, type Crumb, type NavGroup, type RailItem } from '@dbdatakit/shell'
 
 const icon = (path: ReactNode) => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>{path}</svg>
 )
 
-const rail: RailItem[] = [
+const entries: Record<string, RailItem> = Object.fromEntries(([
   { to: '/', title: 'Overview', testId: 'rail-overview', icon: icon(<><path d="M3 12h4l3-8 4 16 3-8h4" /></>) },
   { to: '/data-sources', title: 'Data sources', testId: 'rail-data-sources', icon: icon(<><ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6" /><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" /></>) },
   { to: '/identities', title: 'Users and sign-in', testId: 'rail-identities', icon: icon(<><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5" /><path d="M16 4.5a3.5 3.5 0 010 7" /></>) },
@@ -21,11 +21,26 @@ const rail: RailItem[] = [
   { to: '/activity', title: 'Activity', testId: 'rail-activity', icon: icon(<><path d="M4 19V9M10 19V5M16 19v-7M22 19H2" /></>) },
   { to: '/settings', title: 'Server settings', testId: 'rail-settings', icon: icon(<><path d="M4 7h10M18 7h2M4 17h2M10 17h10" /><circle cx="16" cy="7" r="2" /><circle cx="8" cy="17" r="2" /></>) },
   { to: '/config', title: 'Configuration history', testId: 'rail-config', icon: icon(<><circle cx="6" cy="6" r="2.5" /><circle cx="6" cy="18" r="2.5" /><circle cx="18" cy="12" r="2.5" /><path d="M6 8.5v7M8.5 6.5c5 0 7 2 7 5" /></>) },
+] as RailItem[]).map((item) => [item.testId!, item]))
+
+const admin = (testId: string): RailItem => ({ ...entries[testId], adminOnly: true })
+
+/**
+ * DbDataGateway's navigation: Overview, then what it serves, who may reach it, and the server itself. The administrators' pages (they answer "This screen
+ * is for administrators" to anyone else) are hidden from a viewer.
+ *
+ * Design: DbDataKit/README.md#finding-a-screen-the-navigation
+ */
+export const gatewayNav: NavGroup[] = [
+  { items: [entries['rail-overview']] },
+  { title: 'Serving', items: [admin('rail-data-sources'), entries['rail-models'], entries['rail-saved-queries'], entries['rail-apps'], entries['rail-cache']] },
+  { title: 'Access', items: [entries['rail-access'], admin('rail-identities'), admin('rail-identity-home'), entries['rail-trust'], admin('rail-secrets')] },
+  { title: 'Server', items: [admin('rail-tls'), admin('rail-activity'), admin('rail-settings'), admin('rail-config')] },
 ]
 
 const Mark = () => icon(<><path d="M3 7l9-4 9 4-9 4-9-4z" /><path d="M3 12l9 4 9-4" /><path d="M3 17l9 4 9-4" /></>)
 
-/** DbDataGateway's rail inside a host. */
+/** DbDataGateway's screens inside a host. */
 export function GatewayShell(props: { crumbs: Crumb[]; tabs?: ReactNode; actions?: ReactNode; children: ReactNode }) {
-  return <Shell brand="DbDataGateway" mark={<Mark />} rail={rail} {...props} />
+  return <Shell brand="DbDataGateway" mark={<Mark />} rail={gatewayNav} {...props} />
 }

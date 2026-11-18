@@ -12,6 +12,7 @@ on:
       - 'DbDataRunner/scripts/**'
       - '**/dist.json'
       - '.github/workflows/dist-msi-ci.yml'
+      - '!**.md'    # Markdown alone starts nothing (scripts/ci_paths.py); last, since the last match wins
   workflow_dispatch:
 
 permissions:
