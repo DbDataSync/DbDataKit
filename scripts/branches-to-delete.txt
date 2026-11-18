@@ -166,3 +166,6 @@ backup/work/removal2
 work/suite-install-acl
 # --- group 8: the branch of the working-process commit (2026-11-18): pushed to main directly (it creates the reviewer, so it could not go through one); every commit is on main
 planning/roles-and-process
+# --- group 9: the migration audit's sign-off (2026-11-18): planning/migration-fixes was merged into main with a merge commit (7bb989b0) and carried the session branch claude/festive-wozniak-p4joyh; every commit of both is on main (git rev-list <branch> --not main is empty)
+planning/migration-fixes
+claude/festive-wozniak-p4joyh
