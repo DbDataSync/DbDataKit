@@ -3,7 +3,7 @@
 A person who authors a build, sync or store project in the Workspace needs to know what the project's databases hold: which databases, schemas,
 tables and columns a connection reaches, what a query returns, whether a connection opens, and whether the login a run will use may do what the
 project asks of it. This page says who reads the database for that, with which login, what is kept and where, and what is checked without a
-connection at all. It applies to every kind of project.
+connection at all. It applies to every kind of project; what a sync project checks is [its own section](#a-sync-project).
 
 **Built today:** the catalog cache (`catalog-cache.yaml`, `catalog-cache/1`) filled from a paired Gateway's read-only schema call; the offline readers of the
 cache (pickers, a Sync mapping's columns, the target side of Sync's provisioning plan, Build's import of models from the cache); the Runner's slot binding
@@ -101,7 +101,7 @@ binding, never a staged or served version.
 
 ## Checking before production: `preflight`
 
-Each kind's package has a read-only manual task `preflight`: Build's is its `status`, the Store's the `deploy` dry run and the `contract` plan, Sync's its checks of a replication's source and target. The publish panel stages the version in `prod` (staged, not served), runs `preflight` there with production's bound logins, shows its
+Each kind's package has a read-only manual task `preflight`: Build's is its `status`, the Store's the `deploy` dry run and the `contract` plan, Sync's its checks of a replication's source and target ([A sync project](#a-sync-project)). The publish panel stages the version in `prod` (staged, not served), runs `preflight` there with production's bound logins, shows its
 findings and activates only when the person goes on: a warning shows with its run link; an error refuses activation unless the person confirms, and the
 confirmation is recorded. After publish the same task is **Re-check** on the Runs tab.
 
@@ -112,7 +112,50 @@ The built-in package, the cache, the channel picker, **Refresh**, **Describe**, 
 
 - **Build**: discovery of source tables into the cache, then import of models from it; its target's state is its `preflight`.
 - **Store**: browses nothing; a model's storage connection is tested and checked by its `preflight`.
-- **Sync**: discovery for its pickers and Create mappings, a query source's columns, and its `preflight`'s checks of the source and the target.
+- **Sync**: [below](#a-sync-project).
+
+## A sync project
+
+**Discovery.** On a new replication's Overview the database pickers list the cache's databases of each connection; a connection with no cache shows
+**Refresh catalog** with the channel picker, which runs `discover`. The Table Mappings overview lists the source's cached tables; **Create mappings**
+writes a mapping file per ticked table from the cache (columns, types, key; the target's types inferred by Sync's mapping column reader over the cache).
+**Refresh** on that overview reads the connection again, on a mapping's cached-metadata card one table, each showing the difference first. **Custom
+query, not a table**, then **Describe columns**, writes the query's columns into the mapping's column cache.
+
+A connection whose driver is Sync's own (a YAML driver, or a `metadataProvider` script) is read by the tasks `discover` and `describe` of the replication
+set's own package (Sync's metadata service behind them), which needs a build staged in that channel; the Designer says so and offers **Build and stage
+for dev**.
+
+**The source.** Offline: from the cache and the files. Live: as checks of the set's `preflight`, with the run login the replication will use, read-only.
+
+| Check | Offline | Live |
+| --- | --- | --- |
+| the table and every mapped column exist | against the cache | the catalog read again |
+| the filter's columns exist and the filter compiles | the columns the filter names, against the cache; a filter the dialect's tokenizer cannot read is "not checked offline" | a zero-row read `WHERE (<filter>) AND 1 = 0` |
+| the login can read the table | no | the engine's privilege function (`HAS_PERMS_BY_NAME`, `has_table_privilege`), then the same zero-row read |
+| change tracking, CDC or a logical slot is on where the reader's strategy needs it | no (`unknown`) | the database's and the table's setting, `wal_level`, the slot and the publication; a missing one is a provisioning step of the source side |
+| every source type is one the driver reads | the driver's type map over the cached type text | the engine's own type of each column |
+| a key for a reader or writer that needs one | the cache's key flags | the same, read again |
+
+**The target.** Nothing is written, ever, to check it.
+
+| Check | Offline | Live |
+| --- | --- | --- |
+| the table exists, or provisioning can create it | the provisioning plan from the cache, its create or alter statements shown | the plan again from the live catalog, as `provision` plans before it applies |
+| the login can insert, update and delete; for provisioning, create in the schema and alter the table | no | the engine's privilege functions on the table and the schema; never a trial write |
+| types are compatible with the mapping | each source column's inferred type against the target column's | the same, read again |
+| the keys agree (the mapping's key against the target's primary or unique key; no key column nullable) | yes | yes |
+| where the replication's state is kept (the `tracking:` schema on the target) | the configured place is named | the schema and tables exist or the login may create them |
+
+**The connection test** is each endpoint card's **Test** (above). The old Sync server's test showed up to 20 sample rows; that is not restored.
+
+**Where it shows.** The Check tab's count includes the offline findings; the Provisioning sub-tabs show the offline plan and the newest `preflight` run of
+the chosen channel (time, run link, findings per mapping); the publish panel runs `preflight` on the staged version before activation. Nothing live is
+committed into the draft; the cache and a query's column cache are.
+
+Example: Ana maps `crm.dbo.orders` with the change-tracking reader, against `dev`, where change tracking is on, and publishes to `prod`, where it is off on
+that table. Staging runs `preflight` in `prod`, which reports "change tracking is off on dbo.orders" with the statement that enables it, before the
+version is served; Ana asks the DBA, presses **Re-check**, and activates. Without it the first scheduled pass would have failed at 02:00.
 
 ## Example: a new source, end to end
 
