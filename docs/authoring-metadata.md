@@ -129,6 +129,11 @@ writes a mapping file per ticked table from the cache (columns, types, key; the 
 **Refresh** on that overview reads the connection again, on a mapping's cached-metadata card one table, each showing the difference first. **Custom
 query, not a table**, then **Describe columns**, writes the query's columns into the mapping's column cache.
 
+The pickers, the overview and Column Mapping read the databases, tables and columns from the draft's `catalog-cache.yaml` in the browser
+(`catalogCache.ts`), fetched through the Workspace's existing route that reads a draft's file; a refresh not yet saved is held in the browser as an
+unsaved edit and read the same way. No server route answers metadata: the server would read the saved file and miss the unsaved edit. Example: Ana
+presses Refresh on `accounts`, accepts "1 column added", and opens Column Mapping before saving; the new column is there.
+
 A connection whose driver is Sync's own (a YAML driver, or a `metadataProvider` script) is read by the tasks `discover` and `describe` of the replication
 set's own package (Sync's metadata service behind them), which needs a build staged in that channel; the Designer says so and offers **Build and stage
 for dev**.
