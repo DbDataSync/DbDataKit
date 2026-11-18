@@ -44,7 +44,7 @@ function Tree({ nodes, selected, onOpen, depth = 0 }: { nodes: TreeNode[]; selec
 }
 
 /** One file in the editor: what is on the server, what has been typed, and Save, Move and Delete for the owner. */
-function FileEditor({ project, id, kind, path, editable, canWrite, onGone, onRenamed, onOpen }: { project: string; id: string; kind?: string; path: string; editable: boolean; canWrite: boolean; onGone: () => void; onRenamed: (to: string) => void; onOpen: (path: string) => void }) {
+function FileEditor({ project, id, kind, path, paths, editable, canWrite, onGone, onRenamed, onOpen }: { project: string; id: string; kind?: string; path: string; paths: readonly string[]; editable: boolean; canWrite: boolean; onGone: () => void; onRenamed: (to: string) => void; onOpen: (path: string) => void }) {
   const client = useQueryClient()
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [target, setTarget] = useState('')
@@ -119,7 +119,7 @@ function FileEditor({ project, id, kind, path, editable, canWrite, onGone, onRen
         <IntegrationManifestEditor path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} />
       )}
       {!loaded.error && !loaded.isLoading && editorKind !== null && editorKind !== 'store-model' && editorKind !== 'build-file' && editorKind !== 'integration-manifest' && (
-        <SyncFileEditor kind={editorKind} path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} catalog={catalog.read} />
+        <SyncFileEditor kind={editorKind} path={path} text={text} onText={onText} readOnly={!editable || !canWrite} live={live} onOpen={onOpen} catalog={catalog.read} paths={paths} />
       )}
       {!loaded.error && !loaded.isLoading && editorKind === null && (
         <CodeEditor value={text} language={languageOf(path)} readOnly={!editable || !canWrite} minLines={14} maxLines={30} testId="wsp-code"
@@ -311,7 +311,7 @@ export function WorkspacePage() {
               <div style={{ flex: 1, minWidth: 320 }}>
                 {selected === null
                   ? <div className="empty" data-testid="wsp-pick">Pick a file to read{editable ? ' or edit' : ''} it.</div>
-                  : <FileEditor key={selected} project={project} id={id} kind={kind} path={selected} editable={editable && !(kind === 'build' && selected.startsWith('rendered/'))} canWrite={canWrite} onGone={() => setSelected(null)} onRenamed={setSelected} onOpen={setSelected} />}
+                  : <FileEditor key={selected} project={project} id={id} kind={kind} path={selected} paths={(files.data?.files ?? []).map((f) => f.path)} editable={editable && !(kind === 'build' && selected.startsWith('rendered/'))} canWrite={canWrite} onGone={() => setSelected(null)} onRenamed={setSelected} onOpen={setSelected} />}
                 <div className="row" style={{ gap: 8, margin: '18px 0 8px' }} role="tablist">
                   <button type="button" role="tab" aria-selected={tab === 'changes'} className={`btn ${tab === 'changes' ? 'btn-primary' : ''}`} data-testid="wsp-tab-changes" onClick={() => setTab('changes')}>Changes</button>
                   <button type="button" role="tab" aria-selected={tab === 'check'} className={`btn ${tab === 'check' ? 'btn-primary' : ''}`} data-testid="wsp-tab-check" onClick={() => setTab('check')}>Check</button>
