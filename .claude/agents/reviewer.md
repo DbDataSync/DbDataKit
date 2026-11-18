@@ -81,3 +81,8 @@ by the workflow `Delete merged branch` (`docs/branch-cleanup.md`); report any th
 ## Pushing
 
 Nothing stays only on one machine. Every commit is pushed to its own branch as soon as it is made, and before any wait, report or stop; a commit meant for `main` that has to wait (for CI to go idle, for a review) is first pushed to a `backup/<topic>` branch. Every report to a session names the branch and commit where its work is pushed, so the owner never has to ask whether something is stored.
+
+## The old plans
+
+The plans before `planning/` are in git at commit `31e0319f` (the folder `docs/plans`; see planning/ROLES.md, "The old plans"). Do not search them unless the
+owner has asked for it: if a doc or subject seems missing or thin, report what seems missing to the session instead.

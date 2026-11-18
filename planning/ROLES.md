@@ -185,6 +185,27 @@ task through "Needs from other subjects", a product doc and `docs/ui-editors.md`
 A comment describes the code it sits on and never cites a plan, a task, a proposal or a subject; it may point at a finished doc as
 `Design: docs/<path>.md#<anchor>`. The rule is `docs/code-comments.md`.
 
+## The old plans (before `planning/`)
+
+Until 2026-11-17 the open work was in the folder `docs/plans` (numbered plans such as `33-fewer-services.md`, the index `README.md` of that folder,
+`open-work.md`, `needs-review`, and `RELEASE-NOTES-PENDING.md` in that folder). Commit
+`127c80e89700f324624d8448c4da12d7999cd928` ("Planning: replace docs/plans with planning/ subjects, roles and the wip check") deleted them and created
+`planning/`. The last commit that has the old tree is its parent, **`31e0319f9cd7108c52ad64d8f6d8f852df676c35`**:
+
+```
+git ls-tree -r --name-only 31e0319f -- docs/plans     # the old files
+git show 31e0319f:<a path that listed>                # one old file
+git grep -n "<words>" 31e0319f -- docs/plans          # search them
+```
+
+The audit that traced every old item to where it went (`planning/wip/MIGRATION/trace.md`, 1,699 items, and `scripts/audit_plan_migration.py`) was
+deleted after the owner signed it off; the last commit that has it is the parent of `c3265139d5679542458bd9409c13afde6f0d0e8f`
+(`git show c3265139^:planning/wip/MIGRATION/trace.md`). Old plan and row ids (`plan 33 SC23`, `28c E17`) found in code or docs are looked up there.
+
+**Nobody searches the old tree unless the owner asks for it.** A session, worker or reviewer that meets a doc or a subject that seems missing or thin
+says so to the owner (naming what seems missing), and searches the old tree only when the owner asks; what it finds goes back through the normal path
+(a subject's task or open design, or a product doc as design).
+
 ## Old plan ids
 
 Source comments and docs cite ids of the deleted plans (`plan 33 SC23`, `28c E17`). They are not task ids, and nothing new cites them:
