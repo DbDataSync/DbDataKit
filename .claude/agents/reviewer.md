@@ -86,3 +86,7 @@ Nothing stays only on one machine. Every commit is pushed to its own branch as s
 
 The plans before `planning/` are in git at commit `31e0319f` (the folder `docs/plans`; see planning/ROLES.md, "The old plans"). Do not search them unless the
 owner has asked for it: if a doc or subject seems missing or thin, report what seems missing to the session instead.
+
+## Planning and documentation branches
+
+**Planning and documentation only: straight to `main` (owner, 2026-11-18).** A branch whose changes are only planning (`planning/`) and documentation (`docs/`, READMEs and other `.md` files, the agent definitions) needs no pull request: the reviewer checks it with the same checklist, merges `main` into it if `main` moved, and pushes the merge to `main` when no CI run is in progress, then watches CI. Any change to code, tests, scripts, workflows or packaging goes through a pull request into `main`.
