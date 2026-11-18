@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
+import { DraftProvider, findingsKey, filesKey, useDraft, useDraftFile } from '../draft'
+import { designerOf, designerPath, filesPath } from '../designers'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, CodeEditor, DiffViewer, ErrorBanner, Link, useIsAdmin, useNavigate } from '@dbdatakit/shell'
+import { ApiError, CodeEditor, DiffViewer, ErrorBanner, Link, Navigate, useIsAdmin, useNavigate } from '@dbdatakit/shell'
 import { workspaceApi, type Change } from '../api'
 import { commitState, conflictsOf, describeEvent, fileTree, languageOf, mergeState, pathProblem, saveState, statusWord, type TreeNode } from '../model'
 import { WorkspaceShell } from '../WorkspaceShell'
@@ -19,7 +21,7 @@ import { ProjectRunsPanel } from './ProjectRunsPanel'
 import { StoreDeployPanel } from './StoreDeployPanel'
 import { StoreRowsPanel } from './StoreRowsPanel'
 import { SyncScriptsPanel } from './SyncScriptsPanel'
-import { SyncFileEditor, SyncSetOverview, findingsKey } from './SyncSetPanel'
+import { SyncFileEditor, SyncSetOverview } from './SyncSetPanel'
 import { IntegrationManifestEditor, IntegrationOverview } from './IntegrationPanel'
 import { editorKindOf } from '../editors'
 import { useLiveCheck } from '../useLiveCheck'
@@ -27,59 +29,52 @@ import { useLiveCheck } from '../useLiveCheck'
 const when = (iso: string) => (iso ? new Date(iso).toLocaleString() : '')
 
 /** The files of the draft as a tree; a click opens one. */
-function Tree({ nodes, selected, onOpen, depth = 0 }: { nodes: TreeNode[]; selected: string | null; onOpen: (path: string) => void; depth?: number }) {
+function Tree({ nodes, selected, onOpen, dirty, depth = 0 }: { nodes: TreeNode[]; selected: string | null; onOpen: (path: string) => void; dirty: readonly string[]; depth?: number }) {
   return (
     <>
       {nodes.map((n) => n.folder ? (
         <div key={n.path}>
           <div className="mono muted" style={{ paddingLeft: depth * 14 }} data-testid="wsp-folder" data-path={n.path}>{n.name}/</div>
-          <Tree nodes={n.children} selected={selected} onOpen={onOpen} depth={depth + 1} />
+          <Tree nodes={n.children} selected={selected} onOpen={onOpen} dirty={dirty} depth={depth + 1} />
         </div>
       ) : (
         <button key={n.path} type="button" className={`grid-row mono ${selected === n.path ? 'active' : ''}`} style={{ width: '100%', textAlign: 'left', paddingLeft: depth * 14 + 4 }}
-          data-testid="wsp-file" data-path={n.path} aria-current={selected === n.path} onClick={() => onOpen(n.path)}>{n.name}</button>
+          data-testid="wsp-file" data-path={n.path} data-dirty={dirty.includes(n.path)} aria-current={selected === n.path} onClick={() => onOpen(n.path)}>{n.name}{dirty.includes(n.path) ? <span className="hint"> (not saved)</span> : null}</button>
       ))}
     </>
   )
 }
 
-/** One file in the editor: what is on the server, what has been typed, and Save, Move and Delete for the owner. */
+/** One file in the editor: what is on the server, what has been typed (an unsaved edit of the draft, kept by the frame for both areas), and Save, Move and Delete for the owner. */
 function FileEditor({ project, id, kind, path, paths, editable, canWrite, onGone, onRenamed, onOpen }: { project: string; id: string; kind?: string; path: string; paths: readonly string[]; editable: boolean; canWrite: boolean; onGone: () => void; onRenamed: (to: string) => void; onOpen: (path: string) => void }) {
   const client = useQueryClient()
-  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const draft = useDraft()
+  const file = useDraftFile(path)
   const [target, setTarget] = useState('')
   const [moving, setMoving] = useState(false)
   const [asking, setAsking] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
-  const loaded = useQuery({ queryKey: ['workspace', 'file', project, id, path], queryFn: () => workspaceApi.readFile(project, id, path), staleTime: Infinity, gcTime: 0, retry: false })
-  const text = drafts[path] ?? loaded.data ?? ''
-  const dirty = drafts[path] !== undefined && drafts[path] !== loaded.data
+  // what was typed in this editor since it opened: only that is saved by the live check, so an edit made in the other area stays not saved until Save
+  const [typedHere, setTypedHere] = useState(false)
+  const loaded = { data: file.saved, isLoading: file.loading, error: file.error }
+  const text = file.text ?? ''
+  const dirty = file.dirty
   const refresh = async () => { await client.invalidateQueries({ queryKey: findingsKey(project, id) }); await client.invalidateQueries({ queryKey: ['workspace', 'changes', project, id] }) }
-  const save = useMutation({
-    mutationFn: async () => { const sent = text; await workspaceApi.writeFile(project, id, path, sent); return sent },
-    onSuccess: async (sent) => {
-      // what the server holds is what was sent: set it before the draft goes, or the editor shows the old text for a moment and its change event makes that the draft again
-      client.setQueryData(['workspace', 'file', project, id, path], sent)
-      // a person who typed on while the save ran keeps what they typed (the live check saves as they type)
-      setDrafts((d) => (d[path] === sent ? (({ [path]: _gone, ...rest }) => rest)(d) : d))
-      await client.invalidateQueries({ queryKey: ['workspace', 'files', project, id] })
-      await refresh()
-    },
-  })
+  const save = useMutation({ mutationFn: () => draft.saveOne(path) })
   const move = useMutation({
     mutationFn: () => workspaceApi.moveFile(project, id, path, target.trim()),
-    onSuccess: async (r) => { setMoving(false); await client.invalidateQueries({ queryKey: ['workspace', 'files', project, id] }); await refresh(); onRenamed(r.to) },
+    onSuccess: async (r) => { setMoving(false); draft.rename(path, r.to); await client.invalidateQueries({ queryKey: filesKey(project, id) }); await refresh(); onRenamed(r.to) },
   })
   const remove = useMutation({
-    mutationFn: () => workspaceApi.deleteFile(project, id, path),
-    onSuccess: async () => { setAsking(false); await client.invalidateQueries({ queryKey: ['workspace', 'files', project, id] }); await refresh(); onGone() },
+    mutationFn: async () => { if (!draft.isNew(path)) await workspaceApi.deleteFile(project, id, path) },
+    onSuccess: async () => { setAsking(false); draft.discard(path); await client.invalidateQueries({ queryKey: filesKey(project, id) }); await refresh(); onGone() },
   })
   const state = saveState({ mine: editable, canWrite, dirty, busy: save.isPending })
   const problem = pathProblem(target.trim())
   const editorKind = editorKindOf(kind, path)
   const catalog = useCatalogRead(project, id)
-  const live = useLiveCheck({ project, id, text, enabled: editorKind !== null && editable && canWrite && !loaded.isLoading && !loaded.error, flush: async () => { if (dirty) await save.mutateAsync() } })
-  const onText = (value: string) => setDrafts((d) => ({ ...d, [path]: value }))
+  const live = useLiveCheck({ project, id, text, enabled: editorKind !== null && editable && canWrite && !loaded.isLoading && !loaded.error, flush: async () => (typedHere && dirty ? await save.mutateAsync() : file.saved) })
+  const onText = (value: string) => { setTypedHere(true); draft.edit(path, value) }
   return (
     <div data-testid="wsp-editor" data-path={path}>
       <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
@@ -200,49 +195,191 @@ function HistoryPanel({ project, id }: { project: string; id: string }) {
   )
 }
 
-/** One workspace: its files and an editor, what changed, its history; commit, push, merge and abandon. */
+const TABS = ['changes', 'history', 'builds', 'check', 'models', 'compile', 'views', 'catalog', 'scripts', 'provisioning', 'deploy', 'rows', 'runs'] as const
+type Tab = typeof TABS[number]
+const tabOf = (value: string | null): Tab => (TABS as readonly string[]).includes(value ?? '') ? value as Tab : 'changes'
+
+/** The parts of the frame both areas draw: the draft's place, the person's rights, and how to open a file or a tab of Files. */
+interface AreaProps { project: string; id: string; kind: string | undefined; editable: boolean; canWrite: boolean; openFile: (path: string | null) => void; openTab: (tab: Tab) => void }
+
+/** Writes files the forms of the Files area make (a new model, a new replication) straight into the draft, then opens the first. */
+function useMakeFiles(project: string, id: string, openFile: (path: string) => void) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: async (made: { path: string; text: string }[]) => { for (const f of made) await workspaceApi.writeFile(project, id, f.path, f.text); return made[0].path },
+    onSuccess: async (first) => {
+      await client.invalidateQueries({ queryKey: filesKey(project, id) })
+      await client.invalidateQueries({ queryKey: ['workspace', 'changes', project, id] })
+      await client.invalidateQueries({ queryKey: findingsKey(project, id) })
+      openFile(first)
+    },
+  })
+}
+
+/** The Files area's entries in the navigation: the file tree (with what is not saved marked) and the forms that make a file. */
+function FilesNav({ project, id, kind, editable, canWrite, selected, openFile }: AreaProps & { selected: string | null }) {
+  const draft = useDraft()
+  const [newPath, setNewPath] = useState('')
+  const make = useMakeFiles(project, id, openFile)
+  const create = useMakeFiles(project, id, (path) => { setNewPath(''); openFile(path) })
+  const problem = pathProblem(newPath.trim())
+  const tree = draft.paths.map((path) => ({ path, size: 0 }))
+  return (
+    <div className="card" data-testid="wsp-files">
+      <div className="card-body">
+        <Link to={filesPath(project, id)} className="hint" style={{ display: 'block', marginBottom: 6 }} data-testid="wsp-nav-files">Files</Link>
+        <ErrorBanner error={draft.filesError} />
+        <Tree nodes={fileTree(tree)} selected={selected} onOpen={openFile} dirty={draft.dirtyPaths} />
+        {draft.truncated && <div className="hint">Only the first files are shown.</div>}
+        {editable && canWrite && (
+          <form className="row" style={{ gap: 6, marginTop: 10, flexWrap: 'wrap' }} onSubmit={(e) => { e.preventDefault(); if (!problem && newPath.trim() !== '') create.mutate([{ path: newPath.trim(), text: '' }]) }}>
+            <input className="input mono" style={{ flex: 1, minWidth: 120 }} aria-label="New file path" placeholder="views/orders.yaml" value={newPath} onChange={(e) => setNewPath(e.target.value)} data-testid="wsp-new-path" />
+            <button type="submit" className="btn" disabled={!!problem || newPath.trim() === '' || create.isPending} data-testid="wsp-new-file">New file</button>
+            {problem && <span className="hint" data-testid="wsp-new-why">{problem}</span>}
+          </form>
+        )}
+        {kind === 'store' && editable && canWrite && (
+          <NewStoreModel taken={draft.paths} busy={make.isPending} onCreate={(path, text) => make.mutate([{ path, text }])} />
+        )}
+        {kind === 'build' && editable && canWrite && (
+          <>
+            <NewBuildModel paths={draft.paths} busy={make.isPending} onCreate={(made) => make.mutate(made)} />
+            <NewBuildConnection paths={draft.paths} busy={make.isPending} onCreate={(path, text) => make.mutate([{ path, text }])} />
+          </>
+        )}
+        <ErrorBanner error={create.error ?? make.error} />
+      </div>
+    </div>
+  )
+}
+
+/** The overviews a kind has in the Files area (a Sync set's replications and connections, an integration's package), above the tree as they always were. */
+function FilesOverview({ project, id, kind, editable, canWrite, openFile, openTab }: AreaProps) {
+  const draft = useDraft()
+  const make = useMakeFiles(project, id, openFile)
+  return (
+    <>
+      {kind === 'sync' && <SyncSetOverview project={project} id={id} paths={draft.paths} canWrite={editable && canWrite} busy={make.isPending} onOpen={openFile} onCreate={(made) => make.mutate(made)} />}
+      {kind === 'integration' && <IntegrationOverview project={project} id={id} paths={draft.paths} canWrite={editable && canWrite} busy={make.isPending} onOpen={openFile} onCreate={(made) => make.mutate(made)} onBuildStarted={() => openTab('builds')} />}
+      <ErrorBanner error={make.error} />
+    </>
+  )
+}
+
+/** One tab button of the Files area. */
+function TabButton({ tab, at, label, openTab }: { tab: Tab; at: Tab; label: string; openTab: (tab: Tab) => void }) {
+  return <button type="button" role="tab" aria-selected={tab === at} className={`btn ${tab === at ? 'btn-primary' : ''}`} data-testid={`wsp-tab-${at}`} onClick={() => openTab(at)}>{label}</button>
+}
+
+/** The Files area: the file open (from the address) in its editor, and the draft's tabs below it (the tab from the address too), as the page always was. */
+function FilesArea({ project, id, kind, editable, canWrite, openFile, openTab, selected, tab, onMerged }: AreaProps & { selected: string | null; tab: Tab; onMerged: (sha: string | null) => void }) {
+  const draft = useDraft()
+  const paths = draft.paths
+  const make = useMakeFiles(project, id, openFile)
+  const t = (at: Tab, label: string) => <TabButton tab={tab} at={at} label={label} openTab={openTab} />
+  return (
+    <div data-testid="wsp-area-files">
+      {selected === null
+        ? <div className="empty" data-testid="wsp-pick">Pick a file to read{editable ? ' or edit' : ''} it.</div>
+        : <FileEditor key={selected} project={project} id={id} kind={kind} path={selected} paths={paths} editable={editable && !(kind === 'build' && selected.startsWith('rendered/'))} canWrite={canWrite} onGone={() => openFile(null)} onRenamed={openFile} onOpen={openFile} />}
+      <div className="row" style={{ gap: 8, margin: '18px 0 8px' }} role="tablist">
+        {t('changes', 'Changes')}
+        {t('check', 'Check')}
+        {kind === 'build' && t('models', 'Models and plan')}
+        {kind === 'build' && t('compile', 'Compile')}
+        {kind === 'build' && t('views', 'Views')}
+        {kind === 'sync' && t('scripts', 'Scripts')}
+        {kind === 'sync' && t('provisioning', 'Provisioning')}
+        {kind === 'store' && t('rows', 'Rows')}
+        {kind === 'store' && t('deploy', 'Deploy')}
+        {(kind === 'build' || kind === 'sync') && t('catalog', 'Catalog')}
+        {(kind === 'build' || kind === 'sync') && t('runs', 'Runs')}
+        {t('builds', 'Builds')}
+        {t('history', 'History')}
+      </div>
+      {tab === 'changes'
+        ? <ChangesPanel project={project} id={id} editable={editable} canWrite={canWrite} onMerged={onMerged} />
+        : tab === 'models' && kind === 'build'
+          ? <BuildPlanPanel project={project} id={id} paths={paths} onOpen={openFile} />
+        : tab === 'compile' && kind === 'build'
+          ? <BuildCompilePanel project={project} id={id} paths={paths} canWrite={editable && canWrite} />
+        : tab === 'views' && kind === 'build'
+          ? <BuildViewsPanel project={project} id={id} paths={paths} canWrite={editable && canWrite} />
+        : tab === 'scripts' && kind === 'sync'
+          ? <SyncScriptsPanel project={project} id={id} paths={paths} canWrite={editable && canWrite} busy={make.isPending} onOpen={openFile} onCreate={(made) => make.mutate(made)} />
+        : tab === 'provisioning' && kind === 'sync'
+          ? <SyncProvisioningPanel project={project} id={id} paths={paths} />
+        : tab === 'runs' && (kind === 'build' || kind === 'sync')
+          ? <ProjectRunsPanel project={project} id={id} kind={kind} paths={paths} />
+        : tab === 'rows' && kind === 'store'
+          ? <StoreRowsPanel project={project} paths={paths} canWrite />
+        : tab === 'deploy' && kind === 'store'
+          ? <StoreDeployPanel project={project} id={id} paths={paths} />
+        : tab === 'catalog' && (kind === 'build' || kind === 'sync')
+          ? <CatalogPanel project={project} id={id} onOpen={openFile} canWrite={editable && canWrite} kind={kind} />
+        : tab === 'check'
+          ? <CheckPanel project={project} id={id} onOpen={openFile} />
+          : tab === 'builds'
+            ? <BuildsPanel project={project} id={id} canWrite={canWrite} />
+            : <HistoryPanel project={project} id={id} />}
+    </div>
+  )
+}
+
+/** The draft's chrome, the same in both areas: what is not saved with Save, the check's count opening Check, and Commit… opening Changes. */
+function DraftChrome({ project, id, editable, canWrite, openTab }: { project: string; id: string; editable: boolean; canWrite: boolean; openTab: (tab: Tab) => void }) {
+  const draft = useDraft()
+  const check = useQuery({ queryKey: findingsKey(project, id), queryFn: () => workspaceApi.check(project, id), staleTime: 30_000, retry: false })
+  const errors = (check.data?.diagnostics ?? []).filter((d) => d.severity === 'error').length
+  const unsaved = draft.dirtyPaths.length
+  return (
+    <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap', margin: '0 0 10px' }} data-testid="wsp-chrome">
+      {unsaved > 0 && <span className="hint" data-testid="wsp-unsaved" data-count={unsaved} title={draft.dirtyPaths.join(', ')}>{unsaved === 1 ? '1 file not saved' : `${unsaved} files not saved`}</span>}
+      {editable && canWrite && <button type="button" className="btn btn-primary" disabled={unsaved === 0 || draft.saving} data-testid="wsp-save-all" onClick={() => void draft.saveAll()}>{draft.saving ? 'Saving...' : 'Save'}</button>}
+      <button type="button" className="btn-link" data-testid="wsp-check-count" data-errors={check.data ? errors : ''} onClick={() => openTab('check')}>
+        {check.isLoading ? 'Checking...' : check.error ? 'Check' : errors > 0 ? `${errors} to fix` : 'No problems found'}
+      </button>
+      <button type="button" className="btn" data-testid="wsp-commit-open" disabled={!editable || !canWrite} onClick={() => openTab('changes')}>Commit…</button>
+      <ErrorBanner error={draft.saveError} />
+    </div>
+  )
+}
+
+/** Where an address after `/:project/:draft/` is: the area, the file open in Files, the place in the Designer. */
+export function placeOf(splat: string): { area: 'files' | 'designer' | null; file: string | null; rest: string } {
+  if (splat === 'designer' || splat.startsWith('designer/')) return { area: 'designer', file: null, rest: splat.slice('designer/'.length) }
+  if (splat === 'files' || splat.startsWith('files/')) return { area: 'files', file: splat.slice('files/'.length) || null, rest: '' }
+  return { area: null, file: null, rest: '' }
+}
+
+/**
+ * One draft of a project, in its two areas (`DbDataWorkspace/README.md`, "A project's two areas"): Files at `/:project/:draft/files/<path>` and,
+ * for a kind that registers one, the Designer at `/:project/:draft/designer/...`. The address alone says which is open; a draft of a kind with a
+ * Designer lands on it, any other on Files. The frame holds the draft's unsaved edits, so both areas see the same ones, and the chrome above both.
+ */
 export function WorkspacePage() {
-  const { project = '', id = '' } = useParams()
+  const { project = '', id = '', '*': splat = '' } = useParams()
   const navigate = useNavigate()
   const client = useQueryClient()
   const canWrite = useIsAdmin()
-  const [selected, setSelected] = useState<string | null>(null)
-  // `?tab=runs` opens the Runs tab: the address the Runner's screens link back to (plan 33 SC20o, SC22l)
   const [search] = useSearchParams()
-  const [tab, setTab] = useState<'changes' | 'history' | 'builds' | 'check' | 'models' | 'compile' | 'views' | 'catalog' | 'scripts' | 'provisioning' | 'deploy' | 'rows' | 'runs'>(search.get('tab') === 'runs' ? 'runs' : 'changes')
-  const [newPath, setNewPath] = useState('')
   const [asking, setAsking] = useState(false)
   const [merged, setMerged] = useState<{ sha: string | null } | null>(null)
   const workspaces = useQuery({ queryKey: ['workspace', 'list', project], queryFn: () => workspaceApi.workspaces(project) })
-  const files = useQuery({ queryKey: ['workspace', 'files', project, id], queryFn: () => workspaceApi.files(project, id), enabled: merged === null })
   const mine = workspaces.data?.find((w) => w.id === id)
   const projects = useQuery({ queryKey: ['workspace', 'projects'], queryFn: () => workspaceApi.projects() })
   const kind = projects.data?.find((p) => p.id === project)?.kind
-  const create = useMutation({
-    mutationFn: () => workspaceApi.writeFile(project, id, newPath.trim(), ''),
-    onSuccess: async (r) => {
-      setNewPath(''); setSelected(r.path)
-      await client.invalidateQueries({ queryKey: ['workspace', 'files', project, id] })
-      await client.invalidateQueries({ queryKey: ['workspace', 'changes', project, id] })
-      await client.invalidateQueries({ queryKey: findingsKey(project, id) })
-    },
-  })
-  const make = useMutation({
-    mutationFn: async (made: { path: string; text: string }[]) => { for (const f of made) await workspaceApi.writeFile(project, id, f.path, f.text); return made[0].path },
-    onSuccess: async (first) => {
-      setSelected(first)
-      await client.invalidateQueries({ queryKey: ['workspace', 'files', project, id] })
-      await client.invalidateQueries({ queryKey: ['workspace', 'changes', project, id] })
-      await client.invalidateQueries({ queryKey: findingsKey(project, id) })
-    },
-  })
+  const designer = designerOf(kind)
   const abandon = useMutation({
     mutationFn: () => workspaceApi.abandon(project, id),
     onSuccess: async () => { await client.invalidateQueries({ queryKey: ['workspace'] }); navigate('/') },
   })
   const editable = mine?.mine ?? false
-  const problem = pathProblem(newPath.trim())
   const crumbs = [{ label: 'Workspaces', to: '/' }, { label: project, mono: true }, { label: mine?.name ?? id, mono: true, heading: true }]
+  const { area, file: selected, rest } = placeOf(splat)
+  const tab = tabOf(search.get('tab'))
+  const openFile = (path: string | null) => navigate(filesPath(project, id, path, area === 'files' && search.get('tab') ? tab : undefined))
+  const openTab = (t: Tab) => navigate(filesPath(project, id, area === 'files' ? selected : null, t), { replace: area === 'files' })
 
   if (merged) {
     return (
@@ -255,13 +392,20 @@ export function WorkspacePage() {
       </WorkspaceShell>
     )
   }
+  // the landing page is fixed by the kind; an address naming a tab (`?tab=runs`, where the Runner's screens link back) is a place in Files
+  if (area === null && projects.data) {
+    const tabbed = search.get('tab')
+    return <Navigate to={designer && !tabbed ? designerPath(project, id) : filesPath(project, id, null, tabbed ?? undefined)} replace />
+  }
+  if (area === 'designer' && projects.data && !designer) return <Navigate to={filesPath(project, id)} replace />
+  const props: AreaProps = { project, id, kind, editable, canWrite, openFile, openTab }
   return (
     <WorkspaceShell crumbs={crumbs}>
-      <div className="pane" data-testid="wsp-page" data-workspace={id}>
+      <div className="pane" data-testid="wsp-page" data-workspace={id} data-area={area ?? ''}>
         <ErrorBanner error={workspaces.error} />
         {workspaces.data && !mine && <div className="empty" data-testid="wsp-missing">There is no workspace {id} in {project}. <Link to="/">Back to the workspaces</Link></div>}
         {mine && (
-          <>
+          <DraftProvider project={project} id={id} kind={kind} canEdit={editable && canWrite}>
             <div className="page-head">
               <h1 className="page-title mono" data-testid="wsp-title">{mine.name}</h1>
               <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -278,83 +422,26 @@ export function WorkspacePage() {
             </div>
             <ErrorBanner error={abandon.error} />
             {!editable && <div className="hint" data-testid="wsp-readonly">This is {mine.owner}'s workspace: you can read it, and only they edit and commit it.</div>}
+            <DraftChrome project={project} id={id} editable={editable} canWrite={canWrite} openTab={openTab} />
             <div className="row" style={{ gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-              <div style={{ flex: '0 0 300px', minWidth: 240, display: 'grid', gap: 12 }}>
-              {kind === 'sync' && <SyncSetOverview project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} canWrite={editable && canWrite} busy={make.isPending} onOpen={setSelected} onCreate={(made) => make.mutate(made)} />}
-              {kind === 'integration' && <IntegrationOverview project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} canWrite={editable && canWrite} busy={make.isPending} onOpen={setSelected} onCreate={(made) => make.mutate(made)} onBuildStarted={() => setTab('builds')} />}
-              <div className="card" data-testid="wsp-files">
-                <div className="card-body">
-                  <div className="hint" style={{ marginBottom: 6 }}>Files</div>
-                  <ErrorBanner error={files.error} />
-                  <Tree nodes={fileTree(files.data?.files ?? [])} selected={selected} onOpen={setSelected} />
-                  {files.data?.truncated && <div className="hint">Only the first files are shown.</div>}
-                  {editable && canWrite && (
-                    <form className="row" style={{ gap: 6, marginTop: 10, flexWrap: 'wrap' }} onSubmit={(e) => { e.preventDefault(); if (!problem && newPath.trim() !== '') create.mutate() }}>
-                      <input className="input mono" style={{ flex: 1, minWidth: 120 }} aria-label="New file path" placeholder="views/orders.yaml" value={newPath} onChange={(e) => setNewPath(e.target.value)} data-testid="wsp-new-path" />
-                      <button type="submit" className="btn" disabled={!!problem || newPath.trim() === '' || create.isPending} data-testid="wsp-new-file">New file</button>
-                      {problem && <span className="hint" data-testid="wsp-new-why">{problem}</span>}
-                    </form>
-                  )}
-                  {kind === 'store' && editable && canWrite && (
-                    <NewStoreModel taken={(files.data?.files ?? []).map((f) => f.path)} busy={make.isPending} onCreate={(path, text) => make.mutate([{ path, text }])} />
-                  )}
-                  {kind === 'build' && editable && canWrite && (
-                    <>
-                      <NewBuildModel paths={(files.data?.files ?? []).map((f) => f.path)} busy={make.isPending} onCreate={(made) => make.mutate(made)} />
-                      <NewBuildConnection paths={(files.data?.files ?? []).map((f) => f.path)} busy={make.isPending} onCreate={(path, text) => make.mutate([{ path, text }])} />
-                    </>
-                  )}
-                  <ErrorBanner error={create.error ?? make.error} />
-                </div>
-              </div>
-              </div>
+              <nav style={{ flex: '0 0 300px', minWidth: 240, display: 'grid', gap: 12 }} aria-label="The draft" data-testid="wsp-nav">
+                {designer && (
+                  <div className="card" data-testid="wsp-nav-designer" data-kind={designer.kind} aria-current={area === 'designer'}>
+                    <div className="card-body">
+                      <Link to={designerPath(project, id)} className="hint" style={{ display: 'block', marginBottom: 6 }} data-testid="wsp-nav-designer-open">{designer.title}</Link>
+                      <designer.Navigation project={project} id={id} rest={rest} />
+                    </div>
+                  </div>
+                )}
+                {area === 'files' && <FilesOverview {...props} />}
+                <FilesNav {...props} selected={selected} />
+              </nav>
               <div style={{ flex: 1, minWidth: 320 }}>
-                {selected === null
-                  ? <div className="empty" data-testid="wsp-pick">Pick a file to read{editable ? ' or edit' : ''} it.</div>
-                  : <FileEditor key={selected} project={project} id={id} kind={kind} path={selected} paths={(files.data?.files ?? []).map((f) => f.path)} editable={editable && !(kind === 'build' && selected.startsWith('rendered/'))} canWrite={canWrite} onGone={() => setSelected(null)} onRenamed={setSelected} onOpen={setSelected} />}
-                <div className="row" style={{ gap: 8, margin: '18px 0 8px' }} role="tablist">
-                  <button type="button" role="tab" aria-selected={tab === 'changes'} className={`btn ${tab === 'changes' ? 'btn-primary' : ''}`} data-testid="wsp-tab-changes" onClick={() => setTab('changes')}>Changes</button>
-                  <button type="button" role="tab" aria-selected={tab === 'check'} className={`btn ${tab === 'check' ? 'btn-primary' : ''}`} data-testid="wsp-tab-check" onClick={() => setTab('check')}>Check</button>
-                  {kind === 'build' && <button type="button" role="tab" aria-selected={tab === 'models'} className={`btn ${tab === 'models' ? 'btn-primary' : ''}`} data-testid="wsp-tab-models" onClick={() => setTab('models')}>Models and plan</button>}
-                  {kind === 'build' && <button type="button" role="tab" aria-selected={tab === 'compile'} className={`btn ${tab === 'compile' ? 'btn-primary' : ''}`} data-testid="wsp-tab-compile" onClick={() => setTab('compile')}>Compile</button>}
-                  {kind === 'build' && <button type="button" role="tab" aria-selected={tab === 'views'} className={`btn ${tab === 'views' ? 'btn-primary' : ''}`} data-testid="wsp-tab-views" onClick={() => setTab('views')}>Views</button>}
-                  {kind === 'sync' && <button type="button" role="tab" aria-selected={tab === 'scripts'} className={`btn ${tab === 'scripts' ? 'btn-primary' : ''}`} data-testid="wsp-tab-scripts" onClick={() => setTab('scripts')}>Scripts</button>}
-                  {kind === 'sync' && <button type="button" role="tab" aria-selected={tab === 'provisioning'} className={`btn ${tab === 'provisioning' ? 'btn-primary' : ''}`} data-testid="wsp-tab-provisioning" onClick={() => setTab('provisioning')}>Provisioning</button>}
-                  {kind === 'store' && <button type="button" role="tab" aria-selected={tab === 'rows'} className={`btn ${tab === 'rows' ? 'btn-primary' : ''}`} data-testid="wsp-tab-rows" onClick={() => setTab('rows')}>Rows</button>}
-                  {kind === 'store' && <button type="button" role="tab" aria-selected={tab === 'deploy'} className={`btn ${tab === 'deploy' ? 'btn-primary' : ''}`} data-testid="wsp-tab-deploy" onClick={() => setTab('deploy')}>Deploy</button>}
-                  {(kind === 'build' || kind === 'sync') && <button type="button" role="tab" aria-selected={tab === 'catalog'} className={`btn ${tab === 'catalog' ? 'btn-primary' : ''}`} data-testid="wsp-tab-catalog" onClick={() => setTab('catalog')}>Catalog</button>}
-                  {(kind === 'build' || kind === 'sync') && <button type="button" role="tab" aria-selected={tab === 'runs'} className={`btn ${tab === 'runs' ? 'btn-primary' : ''}`} data-testid="wsp-tab-runs" onClick={() => setTab('runs')}>Runs</button>}
-                  <button type="button" role="tab" aria-selected={tab === 'builds'} className={`btn ${tab === 'builds' ? 'btn-primary' : ''}`} data-testid="wsp-tab-builds" onClick={() => setTab('builds')}>Builds</button>
-                  <button type="button" role="tab" aria-selected={tab === 'history'} className={`btn ${tab === 'history' ? 'btn-primary' : ''}`} data-testid="wsp-tab-history" onClick={() => setTab('history')}>History</button>
-                </div>
-                {tab === 'changes'
-                  ? <ChangesPanel project={project} id={id} editable={editable} canWrite={canWrite} onMerged={(sha) => { setMerged({ sha }); void client.invalidateQueries({ queryKey: ['workspace', 'list', project] }) }} />
-                  : tab === 'models' && kind === 'build'
-                    ? <BuildPlanPanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} onOpen={setSelected} />
-                  : tab === 'compile' && kind === 'build'
-                    ? <BuildCompilePanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} canWrite={editable && canWrite} />
-                  : tab === 'views' && kind === 'build'
-                    ? <BuildViewsPanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} canWrite={editable && canWrite} />
-                  : tab === 'scripts' && kind === 'sync'
-                    ? <SyncScriptsPanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} canWrite={editable && canWrite} busy={make.isPending} onOpen={setSelected} onCreate={(made) => make.mutate(made)} />
-                  : tab === 'provisioning' && kind === 'sync'
-                    ? <SyncProvisioningPanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} />
-                  : tab === 'runs' && (kind === 'build' || kind === 'sync')
-                    ? <ProjectRunsPanel project={project} id={id} kind={kind} paths={(files.data?.files ?? []).map((f) => f.path)} />
-                  : tab === 'rows' && kind === 'store'
-                    ? <StoreRowsPanel project={project} paths={(files.data?.files ?? []).map((f) => f.path)} canWrite />
-                  : tab === 'deploy' && kind === 'store'
-                    ? <StoreDeployPanel project={project} id={id} paths={(files.data?.files ?? []).map((f) => f.path)} />
-                  : tab === 'catalog' && (kind === 'build' || kind === 'sync')
-                    ? <CatalogPanel project={project} id={id} onOpen={setSelected} canWrite={editable && canWrite} kind={kind} />
-                  : tab === 'check'
-                    ? <CheckPanel project={project} id={id} onOpen={setSelected} />
-                    : tab === 'builds'
-                      ? <BuildsPanel project={project} id={id} canWrite={canWrite} />
-                      : <HistoryPanel project={project} id={id} />}
+                {area === 'files' && <FilesArea {...props} selected={selected} tab={tab} onMerged={(sha) => { setMerged({ sha }); void client.invalidateQueries({ queryKey: ['workspace', 'list', project] }) }} />}
+                {area === 'designer' && designer && <div data-testid="wsp-area-designer" data-kind={designer.kind}><designer.Page project={project} id={id} rest={rest} /></div>}
               </div>
             </div>
-          </>
+          </DraftProvider>
         )}
       </div>
     </WorkspaceShell>

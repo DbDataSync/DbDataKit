@@ -49,7 +49,7 @@ A sync project's engines come from the suite's engine registry (`DbDataKit.Conne
 
 The sync Designer's navigation lists the draft's replications and ends with **New replication**, the last entry, which opens a dialog asking only a name and a schedule (the old Replications page's form); the replication is made in the draft and its Overview opens, where the person picks the source's and the target's connections. With no connection in the draft the dialog says so and links to `config/connections/` in Files.
 
-The Designer is not built yet; today every project shows Files only. Sync is the first kind to get a Designer, and it covers what lives inside a replication; a sync project's connections and scripts are edited in Files.
+The frame is built (`WorkspacePage.tsx`, `draft.tsx`, `designers.ts` of `@dbdatakit/workspace`): the two areas, their addresses, the navigation and the chrome; the draft's unsaved edits are held by the frame (`useDraft`, `useDraftFile`), and a file's editor in Files saves on its own (the live check of a form) only what was typed in that editor, so an edit made in the Designer stays not saved until **Save**. A kind registers its Designer with `registerDesigner` (a `Navigation` and a `Page` component, the page routing the address after `designer/` itself). An address with only `?tab=<tab>` (where the Runner's screens link back) opens that tab of Files. Sync is the first kind with a Designer, and it covers what lives inside a replication; a sync project's connections and scripts are edited in Files. Its navigation lists the replications; a replication's own page is still being restored, and meanwhile names the replication's files with links into Files.
 
 ## Reading a database while authoring
 

@@ -8,6 +8,8 @@ export interface LiveCheck { diagnostics: CheckDiagnostic[]; checkedText: string
 /**
  * The check of a draft as the text changes (plan 33 SC21d, SC22d). A kind's validators read the draft's files, not a text on the screen, so a moment after the last keystroke the text is saved into the draft
  * (`flush`, the editor's own Save: the draft is uncommitted work, nothing is merged or published) and the check runs on it; the answer says which text it was about. `enabled` is false for someone who may not save.
+ * A `flush` that answers a string says what the server holds after it: a flush that saved nothing (an edit made elsewhere and left not saved) makes the
+ * check about the saved text, so the editor does not call an unsaved text checked.
  */
 export function useLiveCheck(input: { project: string; id: string; text: string; enabled: boolean; flush: () => Promise<unknown> }): LiveCheck {
   const [state, setState] = useState<LiveCheck>({ diagnostics: [], checkedText: null, running: false, failed: null })
@@ -21,9 +23,9 @@ export function useLiveCheck(input: { project: string; id: string; text: string;
     const timer = setTimeout(async () => {
       setState((s) => ({ ...s, running: true }))
       try {
-        await flush.current()
+        const held = await flush.current()
         const result = await workspaceApi.check(project, id)
-        if (mine === ticket.current) setState({ diagnostics: result.diagnostics, checkedText: text, running: false, failed: null })
+        if (mine === ticket.current) setState({ diagnostics: result.diagnostics, checkedText: typeof held === 'string' ? held : text, running: false, failed: null })
       } catch (e) {
         if (mine === ticket.current) setState((s) => ({ ...s, running: false, failed: e instanceof Error ? e.message : 'The check failed.' }))
       }
