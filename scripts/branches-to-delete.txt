@@ -176,3 +176,5 @@ planning/old-plans-cutover
 planning/installer-restore
 # --- group 12: INSTALLER-P1 answered by the owner (2026-11-18): planning/installer-p1 was merged into main with a merge commit (48f24c12); every commit is on main
 planning/installer-p1
+# --- group 13: the doc merge rule (2026-11-18): planning/doc-merge-rule was merged into main with a merge commit (ae80ac63); every commit is on main
+planning/doc-merge-rule
