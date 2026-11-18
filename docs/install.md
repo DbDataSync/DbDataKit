@@ -97,14 +97,37 @@ address and certificate fingerprint, and the console calls back once to confirm 
 the console calling the server. Users never copy codes between services except by running the generated command. `--token -` reads the token from
 standard input for whoever prefers that. All automation is a subcommand of our programs, never an OS-specific script.
 
+```
+console (CLI or Servers page)               remote machine (administrator)                 the service, as itself
+ invite: product, role, group  ─────►  dbdatarunner pair --host ... --token ... --console-thumbprint ...
+   keeps the token's hash                   writes join-request.yaml, (re)starts ─────►  startup step "join":
+                                                                                           POST <host>/api/v1/join, TLS pinned to the thumbprint
+                                                                                           {token proof, product, address, certificate fingerprint, public key}
+   checks the token (product, group,  ◄────────────────────────────────────────────────
+   expiry, unused), calls back the address
+   with the fingerprint pinned  ─────────────────────────────────────────────────────►   answers the callback
+   records the instance, spends the token,
+   hands the group key and any link  ─────────────────────────────────────────────────►  keeps console key, group key, link; deletes the request
+```
+
+**The token never travels in clear.** The join carries a proof made from it, as a pairing proof was made from a code, over TLS pinned to the console's
+thumbprint, so a machine in the middle neither learns the token nor passes for the console. A wrong thumbprint, an expired or spent token, another product
+or another group is refused, and audited with who made the token and nothing of its value.
+
+**Join tokens are rows of the console's state**: a table of the `trust` module, added by its own migration, holding the token's hash, its product, role
+ceiling and group, who made it and when it ends. The Servers page lists the tokens still waiting and cancels them.
+
 **Groups.** Runner and Gateway groups never pair with each other directly. The token names the group (a new Gateway group X, or join Runner group Y);
 the console makes the group key when it makes the group and hands it over during the join. Linking a Gateway group with a Runner group is a console
 action (`docs/architecture.md`, "Isolation by trust"); a new instance of a linked group gets the link with its join.
 
 **Publisher keys.** The Workspace's publisher key on a Gateway or a Runner is handed over by the console; the Workspace never pairs with a code.
 
-**Networks where a server cannot reach the console.** The console can start the pairing instead: it generates the command, takes or waits for the
-remote's address, and connects to the server, pinning it with the same token scope and single use.
+**Networks where a server cannot reach the console.** The console can start the pairing instead. It still generates the command for the remote machine,
+code included; it then either takes the remote's address up front, or waits for the user to run the command there and enter the address the command
+prints. The console then connects to the server and pins it, with the same token scope and single use. Example: a Runner in a network that the console
+can reach but that cannot reach the console's 7800; the administrator runs the generated command on it, types the address it prints into the console's
+Add a server screen, and the Runner is listed ready.
 
 ## Setting up one machine, or inviting another
 
