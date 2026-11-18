@@ -19,12 +19,15 @@ const groups: [string, [string, string, string][]][] = [
 ]
 const adminOnly = new Set(['rail-instances', 'rail-secrets', 'rail-users', 'rail-audit', 'rail-setup'])
 
-/** What the navigation shows, read from the page: each group's heading and the names of its entries. */
+/**
+ * What the navigation shows, read from the page: each group's heading and the names of its entries. The servers paired by the stories before this one
+ * (each by its name under Servers, a Workspace's Projects) are left out: the console is shared by every story.
+ */
 async function shown(page: Page) {
-  return page.getByTestId('nav').locator('.rail-group').evaluateAll((els) => els.map((g) => [
+  return page.getByTestId('nav').locator(':scope > .rail-group').evaluateAll((els) => els.map((g) => [
     g.querySelector('.rail-group-title')?.textContent ?? '',
-    Array.from(g.querySelectorAll('.rail-item')).map((a) => a.textContent ?? ''),
-  ]))
+    Array.from(g.querySelectorAll(':scope > .rail-item')).filter((a) => !/^(nav-server-|rail-projects)/.test(a.getAttribute('data-testid') ?? '')).map((a) => a.textContent ?? ''),
+  ]).filter(([, items]) => items.length > 0))
 }
 
 test('an administrator finds every page in its group by its name, each lit when open; the navigation collapses and a viewer sees only theirs', async ({ page, context, baseURL, browser }) => {
@@ -69,7 +72,7 @@ test('an administrator finds every page in its group by its name, each lit when 
   await page.reload()
   await expect(nav).toHaveAttribute('data-collapsed', 'false')
 
-  // a viewer: no administrators' entry, and the Servers group, which holds only one, is not drawn
+  // a viewer: no administrators' entry, and no group left empty (the Servers group is drawn only for the servers paired, which the console lists)
   const viewerContext = await browser.newContext({ baseURL, ignoreHTTPSErrors: true, viewport: { width: 1440, height: 900 } })
   const viewer = await viewerContext.newPage()
   await signInNewPerson(viewer, viewerContext, baseURL!, 'Navigation Viewer', `navigation-viewer-${Date.now()}@example.com`, 'viewer')
@@ -77,7 +80,8 @@ test('an administrator finds every page in its group by its name, each lit when 
     .map(([title, items]) => [title, items.filter(([, testId]) => !adminOnly.has(testId)).map(([name]) => name)] as const)
     .filter(([, items]) => items.length > 0)
   expect(await shown(viewer)).toEqual(expected)
-  await expect(viewer.getByTestId('nav-group-servers')).toHaveCount(0)
+  // the Servers group holds only the servers paired before (none when this story runs alone): never All servers
+  await expect(viewer.getByTestId('nav-group-servers').locator('.rail-item:not([data-testid^="nav-server-"])')).toHaveCount(0)
   for (const testId of adminOnly) await expect(viewer.getByTestId(testId)).toHaveCount(0)
   await viewerContext.close()
 })

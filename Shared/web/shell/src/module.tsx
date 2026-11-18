@@ -12,6 +12,7 @@ import {
   type To,
 } from 'react-router-dom'
 import { currentApiBase, setApiBase } from './api/http'
+import type { NavGroup } from './components/nav'
 
 /** Where a product's app is mounted and which server it talks to (plan 13, U08). Standalone it is mounted at the root and talks to its own server. */
 export interface ModuleInfo {
@@ -21,6 +22,11 @@ export interface ModuleInfo {
   apiBase: string
   /** A way back to the host the module is mounted in (the console's list of servers), shown first in the rail. Outside the module's base: the link is exactly as given. */
   home?: { to: string; title: string }
+  /**
+   * The host's own navigation, drawn on the module's screens instead of the module's alone: the module's entries are nested under the host's entry whose
+   * `serverId` is this server, and the breadcrumb names the server. Its links are the host's addresses, not under the module's base.
+   */
+  host?: { nav: NavGroup[]; serverId: string; serverName: string }
 }
 
 const ModuleContext = createContext<ModuleInfo>({ basePath: '', apiBase: '' })

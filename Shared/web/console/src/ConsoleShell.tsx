@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
-import { Shell, type Crumb, type NavGroup } from '@dbdatakit/shell'
+import { useQuery } from '@tanstack/react-query'
+import { Shell, type Crumb, type NavGroup, type RailItem } from '@dbdatakit/shell'
+import { consoleApi, instancesKey, type InstanceSummary } from './api'
 
 export const PRODUCT = 'dbdatakit'
 
@@ -77,6 +79,12 @@ const BindingsIcon = () => icon(<><path d="M9 15l6-6" /><path d="M11 6l1.5-1.5a4
 const AuditIcon = () => icon(<><circle cx="11" cy="11" r="6" /><path d="M20 20l-4.5-4.5" /><path d="M8.5 11h5M11 8.5v5" /></>)
 const SecretsIcon = () => icon(<><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 018 0v3" /><path d="M12 15v2" /></>)
 
+const ProjectsIcon = () => icon(<><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></>)
+const GatewayIcon = () => icon(<><path d="M3 7l9-4 9 4-9 4-9-4z" /><path d="M3 12l9 4 9-4" /><path d="M3 17l9 4 9-4" /></>)
+const RunnerIcon = () => icon(<><path d="M6 4l13 8-13 8z" /></>)
+const WorkspaceIcon = () => icon(<><circle cx="6" cy="6" r="2" /><circle cx="6" cy="18" r="2" /><circle cx="18" cy="9" r="2" /><path d="M6 8v8M18 11c0 4-6 3-12 5" /></>)
+const IdentityIcon = () => icon(<><circle cx="12" cy="8" r="3.5" /><path d="M5 20c.7-3.8 3.5-6 7-6s6.3 2.2 7 6" /></>)
+
 const Mark = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6" /><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
@@ -127,7 +135,7 @@ export const consoleNav: NavGroup[] = [
   {
     title: 'Servers',
     items: [
-      { to: '/instances', title: 'All servers', icon: <ServersIcon />, testId: 'rail-instances', adminOnly: true, pages: ['/upgrades', '/state', '/servers'] },
+      { to: '/instances', title: 'All servers', icon: <ServersIcon />, testId: 'rail-instances', adminOnly: true, pages: ['/upgrades', '/state'] },
     ],
   },
   {
@@ -144,6 +152,41 @@ export const consoleNav: NavGroup[] = [
   { items: [{ to: '/docs', title: 'Docs', icon: <DocsIcon />, testId: 'rail-docs' }] },
 ]
 
+/** What a paired server's product is called in the navigation, beside its name. */
+const productWord: Record<string, string> = { dbdatagateway: 'Gateway', dbdatarunner: 'Runner', dbdataworkspace: 'Workspace', 'dbdatakit-identity': 'Identity home' }
+const productIcon: Record<string, () => ReactNode> = { dbdatagateway: GatewayIcon, dbdatarunner: RunnerIcon, dbdataworkspace: WorkspaceIcon, 'dbdatakit-identity': IdentityIcon }
+
+/**
+ * The console's navigation with the paired servers in it: each server under Servers by its name and product (marked when it does not answer), and
+ * Projects under Build and release for each paired Workspace (named for the Workspace when there are several). A server's entry opens its screens,
+ * whose own entries are then nested under it.
+ */
+export function navWithServers(servers: InstanceSummary[]): NavGroup[] {
+  const sorted = [...servers].sort((a, b) => a.name.localeCompare(b.name))
+  const workspaces = sorted.filter((s) => s.product === 'dbdataworkspace')
+  const projects: RailItem[] = workspaces.map((w) => workspaces.length === 1
+    ? { to: `/servers/${w.id}`, title: 'Projects', icon: <ProjectsIcon />, testId: 'rail-projects' }
+    : { to: `/servers/${w.id}`, title: `Projects on ${w.name}`, icon: <ProjectsIcon />, testId: `rail-projects-${w.id}` })
+  const serverEntries: RailItem[] = sorted.map((s) => {
+    const Icon = productIcon[s.product ?? ''] ?? ServersIcon
+    return {
+      to: `/servers/${s.id}`, title: s.name, icon: <Icon />, testId: `nav-server-${s.id}`, serverId: s.id,
+      note: s.reachable ? productWord[s.product ?? ''] ?? s.product ?? undefined : 'not answering',
+      problem: s.reachable ? undefined : `not answering: ${s.problem ?? 'no answer'}`,
+    }
+  })
+  return consoleNav.map((group) =>
+    group.title === 'Build and release' ? { ...group, items: [...projects, ...group.items] }
+      : group.title === 'Servers' ? { ...group, items: [...group.items, ...serverEntries] }
+        : group)
+}
+
+/** The console's navigation as this person may see it: with the paired servers when the console lists them (a person it refuses sees none). */
+export function useConsoleNav(): NavGroup[] {
+  const servers = useQuery({ queryKey: instancesKey, queryFn: consoleApi.instances.list, staleTime: 30_000, retry: false })
+  return navWithServers(servers.data ?? [])
+}
+
 export function ConsoleShell(props: { crumbs: Crumb[]; tabs?: ReactNode; actions?: ReactNode; children: ReactNode }) {
-  return <Shell brand={PRODUCT} mark={<Mark />} rail={consoleNav} {...props} />
+  return <Shell brand={PRODUCT} mark={<Mark />} rail={useConsoleNav()} {...props} />
 }

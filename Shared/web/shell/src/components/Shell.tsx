@@ -73,35 +73,78 @@ export function Shell({ brand, mark, rail, crumbs, tabs, actions, children }: {
   children: ReactNode
 }) {
   const isAdmin = useIsAdmin()
-  const { home } = useModule()
-  const here = usePathInModule(useLocation().pathname)
+  const { home, host } = useModule()
+  const pathname = useLocation().pathname
+  const here = usePathInModule(pathname)
   const [collapsed, toggle] = useCollapsed()
-  const groups = visibleGroups(toGroups(rail), isAdmin)
+  const own = visibleGroups(toGroups(rail), isAdmin)
+  // Inside a host, the host's navigation is drawn and this product's entries are nested under the server's own entry; a host entry whose test id
+  // this product also uses (the console's Runs beside a runner's Runs) is told apart as `rail-console-<name>`.
+  const ownIds = new Set(own.flatMap((g) => g.items.map((i) => i.testId)).filter(Boolean))
+  const groups = host ? visibleGroups(host.nav, isAdmin) : own
 
+  const label = (item: RailItem) => !collapsed && (
+    <>
+      <span className="rail-label">{item.title}</span>
+      {item.note && <span className="rail-note">{item.note}</span>}
+    </>
+  )
+  const tip = (item: RailItem) => [item.title, item.problem ?? item.note].filter(Boolean).join(' · ')
+
+  /** One of this product's entries: its link is under the module's base, lit by the location inside the module. */
   const entry = (item: RailItem) => item.inert || !item.to ? (
     <span key={item.title} className="rail-item" style={{ color: 'var(--ink-faint)', cursor: 'default' }} title={item.title}>
-      {item.icon}{!collapsed && <span className="rail-label">{item.title}</span>}
+      {item.icon}{label(item)}
     </span>
   ) : (
     // A section stays lit while you are anywhere inside it, or on a page under it, which is what the navigation is for.
     <NavLink
       key={item.to}
       to={item.to}
-      className={`rail-item ${isEntryActive(here, item) ? 'active' : ''}`}
-      title={item.title}
+      // a function, not a string: given a string, the router adds its own `active` by prefix, which lights a server's root on all its pages
+      className={() => `rail-item ${isEntryActive(here, item) ? 'active' : ''} ${item.problem ? 'unreachable' : ''}`}
+      title={tip(item)}
       aria-label={item.title}
       data-testid={item.testId}
+      data-reachable={item.serverId ? String(!item.problem) : undefined}
     >
-      {item.icon}{!collapsed && <span className="rail-label">{item.title}</span>}
+      {item.icon}{label(item)}
     </NavLink>
+  )
+
+  /** One of the host's entries: its link is the host's own address, lit by the whole location; the open server's entries follow its own. */
+  const hostEntry = (item: RailItem) => (
+    <div key={item.to ?? item.title} style={{ display: 'contents' }}>
+      <RouterNavLink
+        to={item.to ?? '/'}
+        end={item.to === '/'}
+        className={() => `rail-item ${isEntryActive(pathname, item) ? 'active' : ''} ${item.problem ? 'unreachable' : ''}`}
+        title={tip(item)}
+        aria-label={item.title}
+        data-testid={item.testId && ownIds.has(item.testId) ? item.testId.replace(/^rail-/, 'rail-console-') : item.testId}
+        data-reachable={item.serverId ? String(!item.problem) : undefined}
+      >
+        {item.icon}{label(item)}
+      </RouterNavLink>
+      {host && item.serverId === host.serverId && (
+        <div className="rail-nested" data-testid="nav-server-entries">
+          {own.map((group, i) => (
+            <div key={group.title ?? `own-${i}`} className="rail-group" data-testid={groupTestId(group)}>
+              {group.title && (collapsed ? <div className="rail-group-rule" aria-hidden /> : <div className="rail-group-title nested">{group.title}</div>)}
+              {group.items.map(entry)}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 
   return (
     <>
       <nav className={`rail ${collapsed ? 'collapsed' : 'wide'}`} data-testid="nav" data-collapsed={collapsed}>
         <div className="rail-mark">{mark}</div>
-        {/* Inside the console, the way back to it comes first; its link is not under the module's base. */}
-        {home && (
+        {/* A module shown without a host's navigation but with a way back to it: that way comes first; its link is not under the module's base. */}
+        {home && !host && (
           <RouterNavLink to={home.to} end className="rail-item" title={home.title} aria-label={home.title} data-testid="rail-home-link">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M15 6l-6 6 6 6" /></svg>
             {!collapsed && <span className="rail-label">{home.title}</span>}
@@ -110,7 +153,7 @@ export function Shell({ brand, mark, rail, crumbs, tabs, actions, children }: {
         {groups.map((group, i) => (
           <div key={group.title ?? `group-${i}`} className="rail-group" data-testid={groupTestId(group)}>
             {group.title && (collapsed ? <div className="rail-group-rule" aria-hidden /> : <div className="rail-group-title">{group.title}</div>)}
-            {group.items.map(entry)}
+            {group.items.map(host ? hostEntry : entry)}
           </div>
         ))}
         <div className="rail-spacer" />
@@ -122,6 +165,13 @@ export function Shell({ brand, mark, rail, crumbs, tabs, actions, children }: {
       <div className="app">
         <header className="topbar">
           <span className="brand">{brand}</span>
+          {/* Inside a host, which server this is: there can be several of a product. */}
+          {host && (
+            <>
+              <span className="sep">/</span>
+              <NavLink to="/" end className="crumb mono" data-testid="crumb-server">{host.serverName}</NavLink>
+            </>
+          )}
           {crumbs.map((crumb, i) => (
             <span key={`${crumb.label}-${i}`} style={{ display: 'contents' }}>
               <span className="sep">/</span>

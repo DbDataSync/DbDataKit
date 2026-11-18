@@ -11,6 +11,12 @@ export interface RailItem {
   /** Shown only to an admin. The API enforces the role for real; hiding the item only avoids offering a viewer a destination that would 403 on arrival. */
   adminOnly?: boolean
   inert?: boolean
+  /** A second, quieter word after the name (a server's product). */
+  note?: string
+  /** Set when what the entry stands for does not answer (a server): the entry is marked and the words are its tooltip. */
+  problem?: string
+  /** The paired server this entry opens: while that server's screens are shown, its own entries are nested under this one. */
+  serverId?: string
   /** Other routes that are pages under this entry (reached from it, with no entry of their own): the entry stays lit on them too. */
   pages?: string[]
 }

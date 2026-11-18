@@ -64,7 +64,6 @@ Read from the code of `Shared/web/*` on 2026-11-18 and rendered at 1440x900 with
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| NAVIGATION-2 | The servers in the navigation: the Servers group lists each paired server by its name and product (marked when it does not answer, from `/api/instances`), and the Workspace's projects get the Projects entry under Build and release; inside a server, the console's navigation stays and the server's entries are nested under its name in the Servers group (the module's back arrow goes; the `docs/ci-lessons.md` row about clicking a console `rail-*` id from a server's page gets a new row saying it no longer applies), and the breadcrumb names the server (`gateway-east`), not only the product | none (the grouped navigation is built) | M | browser story: from Lineage, open `runner-a` in the navigation, see its Tasks, Runs and Packages, open Runs, then reach Approvals in one click; with two Gateways paired, both are listed and each opens its own screens; the breadcrumb on a Gateway page names that Gateway |
 | NAVIGATION-3 | The Gateway's entries in the sub-groups Serving, Access and Server (`DbDataKit/README.md`), its administrators' pages hidden from a viewer the way the console's are; the Runner's and the Workspace's few entries stay ungrouped | none (the grouped navigation is built) | S | browser story against the paired test Gateway: an administrator sees its entries under their group names; a viewer sees no entry whose page answers "for administrators"; `first-run.spec.ts`, `gateway-apps.spec.ts` and `views-apps-addresses.spec.ts` pass unchanged |
 | NAVIGATION-4 | A check that keeps it from becoming a jumble again: every route of the console and of each module is either an entry of the navigation or listed, with the page that links to it, as a page under an entry (`/state/<id>` under Servers, `/models/<name>` under Models) | none (the grouped navigation is built) | S | a vitest fails, naming the route, when a route is added to `App.tsx` or a module with neither an entry nor a parent; a test of the vitest proves it fails on such a route |
 
@@ -89,6 +88,27 @@ Scenario: a person opens Agents, then a workspace of a build project, then a Gat
   under the breadcrumb (`.tabbar`); the rows inside a page (a workspace's row under its file editor, Server settings' Form and server.yaml) are the
   `.subtabbar` a level down, where they were. A workspace's row was left inside the page because it belongs to the file column, not to the whole page.
 - **Other option:** a workspace's row in the tab bar too (the file list and editor would sit under it). It waits for the open design "Tabs inside pages".
+
+### NAVIGATION-P6: what Projects opens, with one Workspace and with several (default, awaiting the owner)
+
+Scenario: a person opens **Projects** under Build and release; later a second Workspace, `workspace-b`, is paired.
+
+- **Built (recommended for now):** with one Workspace, **Projects** opens that Workspace's list of projects and workspaces (its first screen,
+  `/servers/<id>`); with several, one entry each, **Projects on workspace-a** and **Projects on workspace-b**. The Workspace is also listed under Servers
+  by its name, where its own entries (Workspaces, Publisher keys) are nested while it is open.
+- **Other option:** one **Projects** entry that lists the projects of every paired Workspace on one console page. It needs a new page (a console list
+  over the Workspaces), which this quick pass does not build.
+
+### NAVIGATION-P7: what a server's screens show at the top, and who sees the servers (default, awaiting the owner)
+
+Scenario: an administrator opens `gateway-east`'s Data sources; a viewer signs in on a console with three paired servers.
+
+- **Built (recommended for now):** the breadcrumb reads `DbDataGateway / gateway-east / Data sources` (the product, the server's name as a link to
+  its first screen, the page). The servers are listed under Servers for whoever the console's list of servers answers (`/api/instances`); a viewer it
+  answers sees each server by name but not **All servers**. On a server's screens a console entry whose test id the server also uses is
+  `rail-console-<name>` (the console's Runs beside a runner's Runs), and the module's back arrow is gone, so `first-run.spec.ts` opens **All
+  servers** (`rail-instances`) where it pressed the arrow.
+- **Other option:** the breadcrumb starts with the console (`dbdatakit / Servers / gateway-east / Data sources`), one crumb longer on every server page.
 
 ## Needs from other subjects
 

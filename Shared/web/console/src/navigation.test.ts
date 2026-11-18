@@ -1,7 +1,8 @@
 import type { ReactElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import { groupTestId, isEntryActive, startsCollapsed, toGroups, visibleGroups, type RailItem } from '@dbdatakit/shell'
-import { consoleNav } from './ConsoleShell'
+import type { InstanceSummary } from './api'
+import { consoleNav, navWithServers } from './ConsoleShell'
 
 const titles = (groups = consoleNav) => groups.map((g) => [g.title ?? '', g.items.map((i) => i.title)])
 const entry = (title: string): RailItem => consoleNav.flatMap((g) => g.items).find((i) => i.title === title)!
@@ -51,8 +52,7 @@ describe('the console navigation', () => {
     expect(isEntryActive('/viewsx', entry('Views'))).toBe(false)
     expect(isEntryActive('/upgrades', entry('All servers'))).toBe(true)
     expect(isEntryActive('/state/runner-a', entry('All servers'))).toBe(true)
-    expect(isEntryActive('/servers/runner-a', entry('All servers'))).toBe(true)
-    expect(isEntryActive('/instances', entry('All servers'))).toBe(true)
+        expect(isEntryActive('/instances', entry('All servers'))).toBe(true)
     expect(isEntryActive('/', entry('Home'))).toBe(true)
     expect(isEntryActive('/runs', entry('Home'))).toBe(false)
     const lit = (path: string) => consoleNav.flatMap((g) => g.items).filter((i) => isEntryActive(path, i)).map((i) => i.title)
@@ -73,5 +73,34 @@ describe('the console navigation', () => {
     expect(toGroups(flat)).toEqual([{ items: flat }])
     expect(toGroups(consoleNav)).toBe(consoleNav)
     expect(visibleGroups(toGroups(flat), false)).toEqual([{ items: [flat[0]] }])
+  })
+
+  const server = (id: string, product: string, reachable = true): InstanceSummary => ({ id, name: id, url: `https://${id}`, product, version: '1', apiVersion: 1, reachable, ready: reachable, problem: reachable ? null : 'connection refused', pairedAt: null })
+
+  it('lists each paired server by its name and product under Servers, marked when it does not answer, and Projects for the Workspace', () => {
+    const nav = navWithServers([server('runner-a', 'dbdatarunner'), server('gateway-east', 'dbdatagateway'), server('gateway-west', 'dbdatagateway', false), server('workspace', 'dbdataworkspace')])
+    const servers = nav.find((g) => g.title === 'Servers')!.items
+    expect(servers.map((i) => [i.title, i.note, i.to, i.serverId])).toEqual([
+      ['All servers', undefined, '/instances', undefined],
+      ['gateway-east', 'Gateway', '/servers/gateway-east', 'gateway-east'],
+      ['gateway-west', 'not answering', '/servers/gateway-west', 'gateway-west'],
+      ['runner-a', 'Runner', '/servers/runner-a', 'runner-a'],
+      ['workspace', 'Workspace', '/servers/workspace', 'workspace'],
+    ])
+    expect(servers[2].problem).toBe('not answering: connection refused')
+    expect(nav.find((g) => g.title === 'Build and release')!.items.map((i) => [i.title, i.testId, i.to])).toEqual([
+      ['Projects', 'rail-projects', '/servers/workspace'], ['Releases', 'rail-releases', '/releases'], ['Deployments', 'rail-deployments', '/deployments'], ['Backlog', 'rail-backlog', '/backlog'],
+    ])
+    // a viewer sees the servers, not All servers
+    expect(visibleGroups(nav, false).find((g) => g.title === 'Servers')!.items.map((i) => i.title)).toEqual(['gateway-east', 'gateway-west', 'runner-a', 'workspace'])
+  })
+
+  it('names each Workspace\'s Projects when there are several, and lights a server\'s entry anywhere in its screens', () => {
+    const nav = navWithServers([server('ws-a', 'dbdataworkspace'), server('ws-b', 'dbdataworkspace')])
+    expect(nav.find((g) => g.title === 'Build and release')!.items.slice(0, 2).map((i) => [i.title, i.testId])).toEqual([['Projects on ws-a', 'rail-projects-ws-a'], ['Projects on ws-b', 'rail-projects-ws-b']])
+    const wsA = nav.find((g) => g.title === 'Servers')!.items[1]
+    expect(isEntryActive('/servers/ws-a/sales/edit-1', wsA)).toBe(true)
+    expect(isEntryActive('/servers/ws-ab', wsA)).toBe(false)
+    expect(navWithServers([])).toEqual(consoleNav)
   })
 })
