@@ -169,3 +169,5 @@ planning/roles-and-process
 # --- group 9: the migration audit's sign-off (2026-11-18): planning/migration-fixes was merged into main with a merge commit (7bb989b0) and carried the session branch claude/festive-wozniak-p4joyh; every commit of both is on main (git rev-list <branch> --not main is empty)
 planning/migration-fixes
 claude/festive-wozniak-p4joyh
+# --- group 10: the owner's push rule (2026-11-18): planning/push-rule was merged into main with a merge commit (05c2f39e); every commit is on main
+planning/push-rule
