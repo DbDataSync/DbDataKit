@@ -111,3 +111,10 @@ Written from the code of both products. What each strategy means in each product
 2. Commit-per-chunk upsert (Sync Merge) versus one script transaction (Build).
 3. Staging naming (random per call versus deterministic for resume).
 4. SCD2 and Snapshot (Sync-only) and key-reconcile (guarded) are outside Build's matrix.
+
+Three rules decide the order of that work. **Reader-shaped interchange stays the default** (a strategy reads rows through a data reader); Arrow-first is
+an option a benchmark has to earn, never a rewrite. **A strategy or writer moves into this package only when a second product needs it**: MySQL and
+Oracle writers, SCD2, Snapshot and segmenting stay Sync's own until then, parked rather than forgotten. **Sync adopts the write gate before any other
+move**, because the other moves must go through the gate to be shared, and it does so on the Runner's drain (where Sync runs now), so the gate is
+threaded through the engine once. For example, if Build needed SCD2, Sync would first route its writes through `WriteGate`, then SCD2 would move here
+behind the gate and both products would use it.
