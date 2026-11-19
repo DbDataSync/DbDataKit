@@ -45,6 +45,10 @@ done. Every sentence has to help with that.
   does this: "The Gateway runs nothing scheduled" first tells the reader the Gateway runs something. Put the negation before the verb, or say what
   happens instead. Wrong: "runs nothing scheduled", "holds no login", "calls none of the services". Right: "Scheduled work never runs on the
   Gateway", "does not hold a login to customer data", "never calls another service".
+- **A definition by contrast.** "X, not Y" makes the reader hold the wrong idea before the right one. Say what is true. Wrong: "Work is placed by
+  the logins it needs, not by the product it belongs to." Right: "Each task runs on the service that holds the logins it needs."
+- **Two services in one statement**, unless every word is true of both. Wrong: "The control service and the Workspace service: authoring,
+  approvals, publishing, binding." (The Workspace service never publishes or binds.) Write one statement per service.
 - **Abstract nouns doing the work.** "surface", "pipeline", "posture", "story", "earns", "first-class", "single source of truth", "seamless". Say the
   thing: which screen, which command, which file.
 - **The writer's reasoning or the doc talking about itself.** No "this section explains", "note that", "it is important to", "in other words".
