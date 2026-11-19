@@ -13,7 +13,8 @@ In every case the agent acts **as the person** who connected it, with that perso
 the **same operations** to its MCP clients and to its embedded agent, and each operation is **one implementation** that the web API, the command line,
 MCP and the embedded agent all call. What an agent may do and see is narrowed by **agent data rules** set per channel, per model provider and per
 MCP client (an MCP client is a model provider whose model runs outside the product). The first version allows or refuses the operations that read data;
-masking, sample data and rules of other kinds come with the permissions model (Open designs).
+masking, sample data and rules of other kinds come with the permissions model (Open designs), and the first version meets the requirements that
+keep that model from being a rework (R1 to R8).
 
 ## What exists today
 
@@ -39,9 +40,9 @@ masking, sample data and rules of other kinds come with the permissions model (O
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| AGENTACCESS-1 | The operation, as AGENTACCESS-P1 says: one definition (name, summary, input and output schemas, traits, the role it needs, its handler) and four adapters: a web endpoint, a command-line verb, an MCP tool, an agent tool. The existing command surface keeps its tests (adapter first) | AGENTACCESS-P1 | L | a test operation served by all four adapters gives the same result, the same refusal for a missing role and the same approval prompt |
-| AGENTACCESS-2 | The caller and the pipeline every adapter goes through: who (the person), how (web, command line, MCP client, embedded agent), the model provider or MCP client, the channel; then the role check, the approval gate (`PromptingResolver`), the agent data rules (AGENTACCESS-3), the audit | AGENTACCESS-1 | M | the same operation called by a person and by an agent is audited with both, and only the agent's call is shaped by the data rules |
-| AGENTACCESS-3 | Agent data rules, the first version: one setting on a channel, a model provider definition and an MCP client, `allow` or `refuse`, for the operations whose traits say they read data; combined as AGENTACCESS-P2 says; one stage of the pipeline that only narrows what the person may already do, so the permissions model (Open designs) replaces where the stage reads its rules, not the operations or the adapters; replaces `data-rules: cloud-providers` with an adapter that reads the old form. Masking and sample data wait for that model | AGENTACCESS-2, AGENTACCESS-P2 | S | an agent's read in `prod` through a refusing provider is refused naming the rule and where it was set; in `dev` it runs; a person's own call is never affected; the old policy form still reads |
+| AGENTACCESS-1 | The operation, as AGENTACCESS-P1 says: one definition (a stable name, summary, input and closed output schemas, traits, the role it needs by name, the rule kinds it accepts, its handler) and four adapters: a web endpoint, a command-line verb, an MCP tool, an agent tool; meets R1, R3, R4 (below). The existing command surface keeps its tests (adapter first) | AGENTACCESS-P1 | L | a test operation served by all four adapters gives the same result, the same refusal for a missing role and the same approval prompt; an operation that checks a role itself, outside the decision point, fails a test naming it |
+| AGENTACCESS-2 | The caller and the pipeline every adapter goes through, meeting R1, R2, R6 (below): the caller (the person, their roles and groups by name, the scope, the channel, how they connected, the model provider or MCP client), then the decision point (the role check, the agent data rules of AGENTACCESS-3, the approval gate `PromptingResolver`), the handler, the result stage, the audit | AGENTACCESS-1 | M | the same operation called by a person and by an agent is audited with the whole caller for both, and only the agent's call is narrowed by the data rules; a test result stage that changes one field of a closed output schema is applied by every adapter |
+| AGENTACCESS-3 | Agent data rules, the first version: one setting on a channel, a model provider definition and an MCP client, `allow` or `refuse`, for the operations whose traits say they read data; combined as AGENTACCESS-P2 says; one stage of the pipeline that only narrows what the person may already do, meeting R5, R7, R8 (below), so the permissions model (Open designs) replaces where the stage reads its rules, not the operations or the adapters; replaces `data-rules: cloud-providers` with an adapter that reads the old form. Masking and sample data wait for that model | AGENTACCESS-2, AGENTACCESS-P2 | S | an agent's read in `prod` through a refusing provider is refused naming the rule and where it was set; in `dev` it runs; a person's own call is never affected; the old policy form still reads |
 | AGENTACCESS-4 | MCP clients as model provider definitions of an external kind: registered by a person (name, owner, the data rules it carries), issued a token as the person; the console's outside-agent token becomes one of them | AGENTACCESS-3 | M | a registered client signs in with its token as its person; revoking it ends its calls; the old token keeps working through an adapter |
 | AGENTACCESS-5 | The console's MCP endpoint, as AGENTACCESS-P4 says: the console's operations for the person, through the relay to the Workspace, Runner and Gateway with the person's roles there | AGENTACCESS-4 | M | an MCP test lists the tools, reads as the person, and a change waits for the person's approval and runs once |
 | AGENTACCESS-6 | The console's embedded agent on operations as the person, replacing the console-authority tools (AGENTACCESS-P5); the same tools as AGENTACCESS-5 | AGENTACCESS-5, AGENTACCESS-P5 | M | `ConsoleAgentsTests`: the chat offers the same tools as the MCP endpoint for the same person; a viewer's agent cannot change anything |
@@ -56,6 +57,27 @@ masking, sample data and rules of other kinds come with the permissions model (O
 
 - None. KNOWLEDGE-17 builds on AGENTACCESS-10 and KNOWLEDGE-24's goldens become goldens of operations with AGENTACCESS-1 (both recorded in
   KNOWLEDGE); AUTHORING's tasks for the build-helper and for agents authoring through MCP moved into AGENTACCESS-8.
+
+## Requirements for the permissions model
+
+The full model of roles and permissions is later (Open designs). The first version meets these, so that model is an addition, not a rework:
+
+- **R1 One decision point.** Every adapter calls the same pipeline, and only its decision point decides whether a caller may run an operation. No
+  operation, controller or adapter checks a role on its own.
+- **R2 The whole caller, every time.** The decision point and the audit get the person, their roles and groups, the scope (server, project or app), the
+  channel, how they connected (web, command line, MCP client, embedded agent) and the model provider or MCP client. A condition added later reads what is
+  already there.
+- **R3 Roles are names.** The decision point compares role names; the five server roles (Viewer, Operator, Author, Approver, Admin) are names to it, so a
+  role an application or a person defines later needs no change to an operation or an adapter.
+- **R4 An operation says which rules it accepts.** Its definition lists the rule kinds it takes beyond the generic ones (allow, refuse, ask); the list is
+  empty in the first version. A rule of a kind the operation does not accept is refused when it is saved, naming both.
+- **R5 Rules only narrow.** Sources combine with the strictest winning (AGENTACCESS-P2); an agent's rule never gives more than the person has, and the
+  person's own data rules (a model's `access:` section) still apply underneath.
+- **R6 A place to shape results.** The pipeline has a stage after the handler that gets the result with its closed output schema; the first version
+  only lets it through, so masking and sample data are a stage's work later, not a change to every operation.
+- **R7 One stored format with room for kinds.** The rules are data in one versioned format (an entry in `docs/formats.json`, open), each rule naming its
+  kind, its source (channel, model provider or MCP client) and its operation or trait; a new kind is an addition to the format, not a new one.
+- **R8 Every decision is explained.** A refusal names the rule, its kind and where it was set, and the audit records the same.
 
 ## Proposed decisions
 
@@ -86,6 +108,8 @@ definitions keep working with the person's narrower reach. Option B: keep a cons
 
 ### A permissions model for people and agents, per environment and per model provider
 
+**Later**: the owner wants the rest of the suite running first (2026-11-19); the first version meets R1 to R8 above so this needs no rework.
+
 **What.** One model of who may do what, which both people and agents go through: **roles**, defined by the application (the five server roles today:
 Viewer, Operator, Author, Approver, Admin; an app's own roles) and by the install's users (a role an administrator or an app's owner makes); **permissions**
 that a role grants on operations; and **conditions** under which a permission holds or changes: the environment (the channel), and, for an agent, the
@@ -107,8 +131,7 @@ AGENTACCESS-3, which become one condition kind of this model; elevated actions (
 
 - Where user-defined roles live: the identity home (one place for every server and app) or each server.
 - Whether a model's `access:` rules and these permissions are one format, or the model's rules stay and are referred to.
-- Where sample data comes from: generated per column from its type and classification, a sample set kept with the model or project per channel, or
-  both (generated unless a set is published).
+- Sample data as a result treatment: the data itself comes from SAMPLEDATA.
 - Whether columns get a classification (personal, financial, free text) that rules can name instead of naming columns one by one.
 - How a person sees what their agent will be allowed in each channel before running it (the console's "what each tool will ask" page, extended).
 
