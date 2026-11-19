@@ -4,7 +4,7 @@
 
 A person finds every screen of the console, and of the Workspace, Runner and Gateway it shows, from one labelled left navigation whose entries sit in
 a few named groups, the same on every screen; nobody has to hover over an icon to learn where it goes. It starts simple: today's entries regrouped,
-labelled and kept in one place, no new screens. It follows `docs/architecture.md` ("Screens follow the work, not the servers"): the groups are named
+labelled and kept in one place, no new screens. It follows `docs/architecture.md` ("Screens"): the groups are named
 for what a person is doing, and the servers' own screens sit under one group for administering them.
 
 **Scope: quick and dirty, refined later.** Very moderate organization, borrowing the nav and tab styles of the old Sync admin screens; no page is

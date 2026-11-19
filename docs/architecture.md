@@ -90,6 +90,19 @@ The Workspace service is only told which binding now exists.
   same code, so the console shows and edits them the same way everywhere. Each service owns its own definitions and runs without the control service and
   without the other services.
 
+## Screens
+
+- **A screen is organised around what the person is doing**: authoring a model, deploying it, looking at its runs, approving a change.
+- **An action starts where the person is working.** Deploying a Store model, applying a Build plan's DDL, testing a connection, a refresh and "run now"
+  are buttons on the screen that shows the project or model.
+- **The work runs on the service it belongs to**, usually as a Runner task under the person's name. The person does not go to another service's
+  screens to start it.
+- **The result comes back to the same screen**: status, log and outcome, with a link to the full run on the Runner screens.
+- **The administration screens are the exception**: pairing, versions, health, certificates, state and upgrades of each service.
+
+Example: an author opens a Store model and presses Deploy. The control service starts the deploy task on the Runner. The model's screen shows its
+progress and result, with a link to the run.
+
 ## Agents
 
 - **Where**: in the console (administrators and authors) and in the Gateway (end users).
@@ -114,21 +127,7 @@ Each service's program only runs and configures its service. Everything else is 
 - **Planned.** `dbdatabuild`, `dbdatasync` and `dbdatastore` are removed; the Workspace and Runner services call Build, Sync and the Store as
   libraries.
 - **Planned.** `ui mcp` is removed from every program.
-
-## Screens follow the work, not the servers (owner, 2026-11-14)
-
-A screen is organised around what a person is doing (author a model, deploy it, look at its runs, approve a change) and the product it belongs to, never around
-which server does the work. **Where an action is started and where it runs are separate questions**, and the screen answers only the first:
-
-- **Started where the person is working.** Creating or migrating a Store model's tables is a **Deploy** on the model's screen; applying a Build plan, provisioning a
-  Sync target, testing a connection, a refresh or a run-now are buttons where the project or model is shown. The person does not go to another server's page to do it.
-- **Run where it belongs.** The work itself runs as a task on the Runner (the login is bound there, the run is recorded there under the person's name), or is answered by
-  the Gateway, the Workspace or the console. That is an implementation detail the screen may mention (a link to the run), not a place the person has to find.
-- **Results come back to the same screen.** A run's status, log and outcome are shown where it was started, with a link to the full run on the Runner's screens and a link back.
-
-So very few screens stay server- or service-oriented: the console's **Servers** pages are for administering the installation (pairing, versions, health, certificates,
-state, upgrades), not for doing work. A screen that makes a person find "the server", then "the runner", to finish one task is a defect. New screens are planned this way
-from the start, and the existing server-oriented screens move to it as their slices are touched (plan 33 SC20o, SC22l, `docs/authoring-parity.md`).
+- **Planned.** Screens that are still organised by service move to this layout.
 
 ## Our code calls our code as a library (owner, 2026-11-14)
 

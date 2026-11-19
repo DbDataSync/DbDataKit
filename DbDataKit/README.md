@@ -72,8 +72,7 @@ In the web app, `/instances` lists them and `/servers/<id>/...` opens a server's
 ## Finding a screen: the navigation
 
 Every screen of the console, and of the Workspace, Runner and Gateway it shows, is reached from one labelled navigation on the left, the same on every
-screen. Its entries sit in six groups named for what a person is doing, not for the server that answers ("Screens follow the work, not the servers",
-`docs/architecture.md`); Home is first and Docs last, outside the groups. Entries marked * are for administrators and are hidden from a viewer, and a
+screen. Its entries sit in six groups named for what a person is doing, not for the server that answers ("Screens", `docs/architecture.md`); Home is first and Docs last, outside the groups. Entries marked * are for administrators and are hidden from a viewer, and a
 group a person can see nothing of is not shown.
 
 | Group | Entries |
