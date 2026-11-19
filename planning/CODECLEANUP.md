@@ -40,6 +40,8 @@ server as current; what the deleted plans decided and is still true is in the pr
 | CODECLEANUP-10 | Sync, Build and Store (`DbDataSync/` outside `architecture/`, `DbDataBuild/`, `DbDataStore/`): as CODECLEANUP-7 | CODECLEANUP-5, CODECLEANUP-6 | M | no baseline entry under those folders; their suites pass |
 | CODECLEANUP-11 | Everything else (`docs/`, `dist/`, `scripts/`, `testenv/`, `.github/`, root files): as CODECLEANUP-7; then the baseline is empty and is deleted, and the check refuses any reference | CODECLEANUP-7 to CODECLEANUP-10 | S | the baseline file is gone and the check passes with no exceptions |
 
+| CODECLEANUP-12 | Docs describe the product, not decisions: the decision tables and dated owner entries in `docs/` (D1 to D20 and "Decisions recorded after plan 13" in `architecture.md`, 8 entries in `serving-layer.md`, a few in six other pages) rewritten as how the product works, with the skill `product-docs`; an entry that is no longer true is listed for the owner instead of rewritten; the 20 code comments that cite `13c D<n>` point at `Design: docs/<path>.md#<anchor>` | CODECLEANUP-5 | M | a repository check fails on a decision table, "Decided (owner", "(owner, <date>)" or "Default taken" under `docs/` and on `13c D<n>` in code, and passes on the repository |
+
 ## Needs from other subjects
 
 None.

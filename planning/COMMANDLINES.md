@@ -29,7 +29,7 @@ Build was first written as a command line in a user's own git workspace; that ha
 | COMMANDLINES-1 | The list: every noun and verb of the seven programs, each marked keep (runs or configures a service), operation (what replaces it, an AGENTACCESS operation or a screen), or remove; who calls it today (a person, the Workspace, a Runner, CI, a test); written into this file as the tasks below, per product | none | S | the list is in this file and the owner has read it |
 | COMMANDLINES-2 | The Workspace calls Build in process: the engine of create, check and package moves to `Shared/src/DbDataKit.*` (adapter first in DbDataBuild); `BuildTool` is replaced | COMMANDLINES-1 | M | the Workspace's build-kind tests pass unchanged with no `dbdatabuild` on the machine |
 | COMMANDLINES-3 | The same for Sync (`SyncTool`) | COMMANDLINES-1 | M | the Workspace's sync-kind tests pass with no `dbdatasync` on the machine |
-| COMMANDLINES-8 | Building and testing an integration project, as COMMANDLINES-P1 says | COMMANDLINES-P1 | M | as COMMANDLINES-P1's answer says |
+| COMMANDLINES-8 | Building and testing an integration project (COMMANDLINES-P1, option A): the Workspace compiles a csx or compiled integration in process with the shared package build library, which runs none of the author's code; Test starts the project's test task as a run on a Runner in a non-production channel and shows its result in the Workspace; `IntegrationProjectKind` starts no `dbdatarunner` and no `dotnet` that runs the author's code | none | M | the Workspace's integration tests pass with no `dbdatarunner` on the machine; a test script that writes a file leaves no file on the Workspace and its run is in the Runner's record for the `dev` channel |
 | COMMANDLINES-4 | The runtime packages carry a task host the Runner loads by its task protocol, not a command-line program; Build's Runner jobs leave `DbDataBuild.Cli` | COMMANDLINES-2 | L | a Runner runs a Build refresh, a Sync replication and a Store deploy from the new packages; a package with the old program is refused naming the new one |
 | COMMANDLINES-5 | Each verb the list marks operation becomes one (AGENTACCESS-1) or a screen, area by area, as the list orders them | COMMANDLINES-1, AGENTACCESS-1 | L | per area: the operation's test; the verb answers with the sentence naming where it went |
 | COMMANDLINES-6 | Remove `dbdatabuild`, `dbdatasync` and `dbdatastore` as programs, and the service programs' verbs the list marks remove; their packaging in `dist/` (MSI, Scoop, install scripts), their docs and tests | COMMANDLINES-2, COMMANDLINES-3, COMMANDLINES-4, COMMANDLINES-5 | M | `dist/` builds no package for the three; the service programs' removed verbs answer with their sentence (`RemovedCommands`); CI green |
@@ -59,6 +59,9 @@ author edits `src/sync_tickets.csx` and presses Test in the Workspace.
   still runs on the Workspace.
 
 Recommendation: A. It matches where custom code runs everywhere else, and it is how CHANNELS already plans Build test targets and Sync trial runs.
+
+Answer from the owner, 2026-11-19: "Option A is the only sensible option. A workspace service is intended to be highly sandboxed and should have
+extremely reduced network access in a hardened environment, and should never have direct access to a secret." Acted on in COMMANDLINES-8.
 
 ## Shared areas touched
 
