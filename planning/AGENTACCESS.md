@@ -11,8 +11,9 @@ An agent can do what a person does, in the two places a person works, by either 
 
 In every case the agent acts **as the person** who connected it, with that person's roles on each server, through the same approvals. Each place offers
 the **same operations** to its MCP clients and to its embedded agent, and each operation is **one implementation** that the web API, the command line,
-MCP and the embedded agent all call. What an operation returns to an agent is shaped by **agent data rules** set per channel, per model provider and per
-MCP client (an MCP client is a model provider whose model runs outside the product): passed, masked, replaced with sample data, or refused.
+MCP and the embedded agent all call. What an agent may do and see is narrowed by **agent data rules** set per channel, per model provider and per
+MCP client (an MCP client is a model provider whose model runs outside the product). The first version allows or refuses the operations that read data;
+masking, sample data and rules of other kinds come with the permissions model (Open designs).
 
 ## What exists today
 
@@ -40,15 +41,15 @@ MCP client (an MCP client is a model provider whose model runs outside the produ
 | --- | --- | --- | --- | --- |
 | AGENTACCESS-1 | The operation, as AGENTACCESS-P1 says: one definition (name, summary, input and output schemas, traits, the role it needs, its handler) and four adapters: a web endpoint, a command-line verb, an MCP tool, an agent tool. The existing command surface keeps its tests (adapter first) | AGENTACCESS-P1 | L | a test operation served by all four adapters gives the same result, the same refusal for a missing role and the same approval prompt |
 | AGENTACCESS-2 | The caller and the pipeline every adapter goes through: who (the person), how (web, command line, MCP client, embedded agent), the model provider or MCP client, the channel; then the role check, the approval gate (`PromptingResolver`), the agent data rules (AGENTACCESS-3), the audit | AGENTACCESS-1 | M | the same operation called by a person and by an agent is audited with both, and only the agent's call is shaped by the data rules |
-| AGENTACCESS-3 | Agent data rules: set on a channel, a model provider definition and an MCP client, combined as AGENTACCESS-P2 says; per trait and per column classification: pass, mask, sample (AGENTACCESS-P3), refuse; replaces `data-rules: cloud-providers` with an adapter that reads the old form | AGENTACCESS-2, AGENTACCESS-P2 | M | a table read through an agent in `prod` with a cloud provider is masked, in `dev` is passed, and with a refusing MCP client is refused naming the rule; the old policy form still reads |
+| AGENTACCESS-3 | Agent data rules, the first version: one setting on a channel, a model provider definition and an MCP client, `allow` or `refuse`, for the operations whose traits say they read data; combined as AGENTACCESS-P2 says; one stage of the pipeline that only narrows what the person may already do, so the permissions model (Open designs) replaces where the stage reads its rules, not the operations or the adapters; replaces `data-rules: cloud-providers` with an adapter that reads the old form. Masking and sample data wait for that model | AGENTACCESS-2, AGENTACCESS-P2 | S | an agent's read in `prod` through a refusing provider is refused naming the rule and where it was set; in `dev` it runs; a person's own call is never affected; the old policy form still reads |
 | AGENTACCESS-4 | MCP clients as model provider definitions of an external kind: registered by a person (name, owner, the data rules it carries), issued a token as the person; the console's outside-agent token becomes one of them | AGENTACCESS-3 | M | a registered client signs in with its token as its person; revoking it ends its calls; the old token keeps working through an adapter |
 | AGENTACCESS-5 | The console's MCP endpoint, as AGENTACCESS-P4 says: the console's operations for the person, through the relay to the Workspace, Runner and Gateway with the person's roles there | AGENTACCESS-4 | M | an MCP test lists the tools, reads as the person, and a change waits for the person's approval and runs once |
 | AGENTACCESS-6 | The console's embedded agent on operations as the person, replacing the console-authority tools (AGENTACCESS-P5); the same tools as AGENTACCESS-5 | AGENTACCESS-5, AGENTACCESS-P5 | M | `ConsoleAgentsTests`: the chat offers the same tools as the MCP endpoint for the same person; a viewer's agent cannot change anything |
 | AGENTACCESS-7 | Console operations, area by area (one task branch each): users and invitations, servers, connections and secrets references, delivery, releases | AGENTACCESS-1 | L | each area's controller calls its operations and its tests pass unchanged; each operation is in the console's golden of MCP tools |
 | AGENTACCESS-8 | Workspace operations through the console: create, edit, check, build, preview and publish a project of every kind; absorbs AUTHORING-11 and AUTHORING-8 | AGENTACCESS-5 | L | an MCP test authors, builds and publishes a build, a sync and a store project as a person; each change waits for an approval; a denied step changes nothing |
 | AGENTACCESS-9 | Runner and Gateway configuration through the console: packages, channels, runs; data sources, apps, semantic models | AGENTACCESS-5 | L | an MCP test publishes a package to `dev` and runs it; adds a data source; each as the person |
-| AGENTACCESS-10 | The Gateway's `mcp` module tools as operations, with the agent data rules; the operations the end user's app calls offered as tools (front end) | AGENTACCESS-3 | M | the module's tests pass unchanged; a masked column through MCP is masked as the rules say for that client |
-| AGENTACCESS-11 | Screens: the agent data rules of a channel, a model provider and an MCP client; MCP client registration and tokens (`docs/ui-editors.md` rows) | AGENTACCESS-3, AGENTACCESS-4 | M | Playwright: register a client, set its rule to mask, see a masked answer in its record |
+| AGENTACCESS-10 | The Gateway's `mcp` module tools as operations, with the agent data rules; the operations the end user's app calls offered as tools (front end) | AGENTACCESS-3 | M | the module's tests pass unchanged; a read through a client whose rule refuses data is refused naming the rule; the person's column masks still apply |
+| AGENTACCESS-11 | Screens: the agent data rule of a channel, a model provider and an MCP client; MCP client registration and tokens (`docs/ui-editors.md` rows) | AGENTACCESS-3, AGENTACCESS-4 | M | Playwright: register a client, set its rule to refuse, see the refusal in its record |
 | AGENTACCESS-12 | Docs: `docs/agent-tools.md` rewritten around the four cases, operations and data rules; `docs/architecture.md` says Control hosts the administrators' and authors' agent tools | AGENTACCESS-6 | S | `check_doc_inputs.py` passes |
 
 ## Needs from other subjects
@@ -73,11 +74,6 @@ Scenario: `prod` says mask customer emails, the provider (hosted in your own ten
 (as approvals do: `PromptingResolver`). Option B: the most specific wins (client, then provider, then channel). Recommendation: A; a wider rule is
 loosened only by changing that rule, which the record shows.
 
-### AGENTACCESS-P3: where sample data comes from (awaiting the owner)
-
-Option A: generated per column from its type and classification (fake emails, shuffled values, ranges). Option B: a sample set kept with the model or
-the project, per channel (the channel's test data). Option C: A by default, B where one is published. Recommendation: C.
-
 ### AGENTACCESS-P4: the console's MCP transport and sign-in (awaiting the owner)
 
 Option A: streamable HTTP on the console (`POST /mcp`, like the Gateway's module), signed in with the MCP client's token (AGENTACCESS-4). Option B: stdio
@@ -87,6 +83,36 @@ only (`dbdatakit ui mcp`) on the console's host. Recommendation: A; administrato
 
 Today it reads with the console's authority. As the person, a viewer's agent sees less than today's agent. Option A: switch, and the old agent
 definitions keep working with the person's narrower reach. Option B: keep a console-authority agent kind for administrators. Recommendation: A.
+
+## Open designs
+
+### A permissions model for people and agents, per environment and per model provider
+
+**What.** One model of who may do what, which both people and agents go through: **roles**, defined by the application (the five server roles today:
+Viewer, Operator, Author, Approver, Admin; an app's own roles) and by the install's users (a role an administrator or an app's owner makes); **permissions**
+that a role grants on operations; and **conditions** under which a permission holds or changes: the environment (the channel), and, for an agent, the
+model provider or MCP client it runs through. Example: the role `support-analyst` may read `customers` in every channel; in `prod`, through a cloud
+provider, its agent sees `email` masked and `notes` replaced with sample text; through the tenant's own model it sees both; a person in that role sees
+both everywhere.
+
+**Why.** Rules differ by operation: a read has column treatments (hide, null, mask, sample), a write has limits and approvals, a publish has targets
+and channels, an action has its own parameters. A fixed list of rule kinds would either be too narrow for some operations or too loose for others. So
+each operation declares the **kinds of rule it accepts** and their parameters (beside its schemas and traits), and the model checks a rule against the
+operation it names; generic rules (allow, refuse, ask) apply to every operation.
+
+**What it builds on and must stay consistent with.** The roles and assignments of the identity home (`Shared/src/DbDataKit.Identity`: roles on a server,
+a project or an app, groups, external group mappings); the row and column rules of a model's `access:` section (`docs/serving-layer.md`, "Column rules":
+hide, null, mask, by person and group); the prompting settings of `agent-policy/1` (the strictest of three layers); the first agent data rules of
+AGENTACCESS-3, which become one condition kind of this model; elevated actions (KNOWLEDGE's design: a permission held by the action, not the person).
+
+**Open questions.**
+
+- Where user-defined roles live: the identity home (one place for every server and app) or each server.
+- Whether a model's `access:` rules and these permissions are one format, or the model's rules stay and are referred to.
+- Where sample data comes from: generated per column from its type and classification, a sample set kept with the model or project per channel, or
+  both (generated unless a set is published).
+- Whether columns get a classification (personal, financial, free text) that rules can name instead of naming columns one by one.
+- How a person sees what their agent will be allowed in each channel before running it (the console's "what each tool will ask" page, extended).
 
 ## Shared areas touched
 
