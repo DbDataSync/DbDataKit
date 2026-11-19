@@ -188,3 +188,5 @@ planning/navigation
 # --- group 17: owner answers and the Sync UI's first slice (2026-11-18): planning/owner-answers-2026-11-18 was merged with main (a058a815) and planning/sync-first-slice with main (121752fc) and both merges were pushed to main as planning and documentation changes; every commit of both is on main (git rev-list <branch> --not main is empty)
 planning/owner-answers-2026-11-18
 planning/sync-first-slice
+# --- group 18: the session branch the harness started on (2026-11-19); its two commits (823bf15, 27fe5ea) moved to planning/agents-and-cloud-dev on the owner's word, so it holds nothing that branch lacks
+claude/brave-lamport-wj34se
