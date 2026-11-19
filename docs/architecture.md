@@ -66,8 +66,9 @@ from the start, and the existing server-oriented screens move to it as their sli
 
 ## Planned architecture changes
 
-- We are removing the old command-line tools. When that is done, the suite's programs only run and configure the four services (`server`,
-  `service`, `cert`, `state`, `secret`, `config`, `health`, `setup`); everything else is done in the console, the Workspace or by an agent.
+- We are removing the old command-line tools. When that is done, there are four programs, one per service: `dbdatakit` (the console),
+  `dbdataworkspace` (the Workspace), `dbdatarunner` (the Runner) and `dbdatagateway` (the Gateway). Each one only runs and configures its service.
+  Everything else is done in the console, the Workspace or by an agent.
 - `dbdatabuild`, `dbdatasync` and `dbdatastore` are being removed. Today the Workspace starts `dbdatabuild`, `dbdatasync` and `dbdatarunner` to create,
   check and package projects, and a Runner runs Build, Sync and Store tasks from runtime packages that contain those programs. Both will call the same
   code as libraries instead.

@@ -13,6 +13,20 @@ done. Every sentence has to help with that.
 
 ## Write
 
+- **Direct, declarative and short.** State what is true: "The Runner runs each task in its own process." Not "tasks are designed to be run in
+  isolation", not "it is worth noting that".
+- **Conditions as an outline of scenarios.** When something depends on a condition, list the scenarios, each one naming the condition and then what
+  applies, instead of a sentence full of "unless", "except when" and "otherwise":
+
+  ```
+  Where the console keeps its state:
+  - No engine is named: a SQLite file, `state.db`, in the console's folder.
+  - `--state-engine postgres` and `--state-connection` are given: that PostgreSQL database.
+  - `settings.yaml` has a `state:` section and no flag is given: what the section names.
+  ```
+
+- **Examples, whenever one applies.** A command with its output, a file with its contents, a screen with what to click. A reader copies an example
+  before reading the paragraph around it.
 - **What it does, then how to use it, then an example** with real names, commands, files and values: `dbdatakit user invite --role admin --email
   ana@example.com` prints a link that works once.
 - **Who does what.** Name the person, the service or the program that acts: "the Runner runs the task in its own process", not "tasks are isolated".

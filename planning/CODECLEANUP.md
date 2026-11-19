@@ -52,12 +52,6 @@ Option A: delete the folder; git keeps it. Option B: keep only `staging-value-ty
 Sync's docs) and delete the rest. Option C: keep it as it is. Scenario: a new agent searches for how Sync verifies a load; under C it finds phase notes about
 a server that no longer exists; under A and B it finds `DbDataSync/README.md` and the code. Recommendation: B.
 
-### CODECLEANUP-P2: Build's command line on the shared router (awaiting the owner)
-
-Build's `CliApp` parses its own commands; the other programs use `NounRouter`. Option A: move it (a few days, no behaviour change). Option B: leave it; new
-code calls Build as a library, so the command line is only a tool for people. Scenario: a new noun is added to every product; under A Build gets it with
-the others, under B it is wired by hand. Recommendation: B until a change needs A.
-
 ## Shared areas touched
 
 - `DbDataKit.State`, `DbDataKit.State.Engines`, `DbDataKit.Scheduling`, `DbDataKit.Web` (`SessionAuthRegistration.cs`), `DbDataKit.Lineage`.

@@ -2,8 +2,8 @@
 
 ## Goal
 
-`dbdatabuild`, `dbdatasync` and `dbdatastore` are removed, and the console's, Workspace's, Runner's and Gateway's programs keep only the commands that
-run and configure their service (`server`, `service`, `cert`, `state`, `secret`, `config`, `health`, `setup` and the like). The Workspace and the Runner
+`dbdatabuild`, `dbdatasync` and `dbdatastore` are removed. Four programs remain, one per service: `dbdatakit` (the console), `dbdataworkspace` (the
+Workspace), `dbdatarunner` (the Runner) and `dbdatagateway` (the Gateway). Each keeps only the commands that run and configure its service. The Workspace and the Runner
 call Build, Sync and the Store as libraries; what a person did with a command is an operation in the console or the Workspace (AGENTACCESS).
 
 Build was first written as a command line in a user's own git workspace; that has not been a goal since it joined the suite (owner, 2026-11-19).
@@ -28,7 +28,8 @@ Build was first written as a command line in a user's own git workspace; that ha
 | --- | --- | --- | --- | --- |
 | COMMANDLINES-1 | The list: every noun and verb of the seven programs, each marked keep (runs or configures a service), operation (what replaces it, an AGENTACCESS operation or a screen), or remove; who calls it today (a person, the Workspace, a Runner, CI, a test); written into this file as the tasks below, per product | none | S | the list is in this file and the owner has read it |
 | COMMANDLINES-2 | The Workspace calls Build in process: the engine of create, check and package moves to `Shared/src/DbDataKit.*` (adapter first in DbDataBuild); `BuildTool` is replaced | COMMANDLINES-1 | M | the Workspace's build-kind tests pass unchanged with no `dbdatabuild` on the machine |
-| COMMANDLINES-3 | The same for Sync (`SyncTool`) and the integration kind's `dbdatarunner` | COMMANDLINES-1 | M | the Workspace's sync and integration tests pass with neither program on the machine |
+| COMMANDLINES-3 | The same for Sync (`SyncTool`) | COMMANDLINES-1 | M | the Workspace's sync-kind tests pass with no `dbdatasync` on the machine |
+| COMMANDLINES-8 | Building and testing an integration project, as COMMANDLINES-P1 says | COMMANDLINES-P1 | M | as COMMANDLINES-P1's answer says |
 | COMMANDLINES-4 | The runtime packages carry a task host the Runner loads by its task protocol, not a command-line program; Build's Runner jobs leave `DbDataBuild.Cli` | COMMANDLINES-2 | L | a Runner runs a Build refresh, a Sync replication and a Store deploy from the new packages; a package with the old program is refused naming the new one |
 | COMMANDLINES-5 | Each verb the list marks operation becomes one (AGENTACCESS-1) or a screen, area by area, as the list orders them | COMMANDLINES-1, AGENTACCESS-1 | L | per area: the operation's test; the verb answers with the sentence naming where it went |
 | COMMANDLINES-6 | Remove `dbdatabuild`, `dbdatasync` and `dbdatastore` as programs, and the service programs' verbs the list marks remove; their packaging in `dist/` (MSI, Scoop, install scripts), their docs and tests | COMMANDLINES-2, COMMANDLINES-3, COMMANDLINES-4, COMMANDLINES-5 | M | `dist/` builds no package for the three; the service programs' removed verbs answer with their sentence (`RemovedCommands`); CI green |
@@ -39,9 +40,25 @@ Build was first written as a command line in a user's own git workspace; that ha
 - AGENTACCESS-1: the operation, for COMMANDLINES-5.
 - AGENTACCESS-13 removes `ui mcp` from every program; COMMANDLINES does not repeat it.
 - INSTALLER-7: the admin commands on the local API; COMMANDLINES keeps what it moves.
-- CODECLEANUP-P2 (Build's command line on the shared router) has no purpose once COMMANDLINES-6 removes `dbdatabuild`: for the owner to drop.
 - SAMPLEDATA: Build's seeds and generator move to `Shared/` there; their commands (`project seed`, `project sample`, `connection seed`) are listed in
   COMMANDLINES-1 like the others.
+
+## Proposed decisions
+
+### COMMANDLINES-P1: where an integration project is built and tested (awaiting the owner)
+
+Today the Workspace runs `dbdatarunner package build` and `package test` as a child process to compile a csx integration and run its test scripts
+(`IntegrationProjectKind`). Two things are wrong with it: the Workspace starts another service's program and parses its output, and `package test`
+runs a person's code on the Workspace, while `docs/architecture.md` ("Isolation by trust") puts all trusted custom code on the Runner. Scenario: an
+author edits `src/sync_tickets.csx` and presses Test in the Workspace.
+
+- Option A: the Workspace compiles in process with the shared package build library (compiling runs none of the author's code); Test starts a run of
+  the project's test task on a Runner in a non-production channel, and the Workspace shows its result.
+- Option B: the Workspace compiles and tests in process. Simple, but the author's code runs in the Control place.
+- Option C: keep the child process, started from a shared host program instead of `dbdatarunner`. Removes the cross-service call; the author's code
+  still runs on the Workspace.
+
+Recommendation: A. It matches where custom code runs everywhere else, and it is how CHANNELS already plans Build test targets and Sync trial runs.
 
 ## Shared areas touched
 
