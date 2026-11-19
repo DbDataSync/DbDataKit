@@ -1,8 +1,7 @@
 # Architecture of the suite
 
-The shape of the suite and the decisions behind it (they were made in plan 13, which this document replaces; its decision numbers D1 to D20 are kept
-because source comments cite them). Where each part is described in detail: the product READMEs, the package READMEs under `Shared/src/`, and
-`docs/suite-listeners-and-auth.md` (what listens where) and `docs/suite-data-flow.md` (data and control).
+How the four services fit together, what runs where, and the changes planned. Details are in each product's README, the READMEs under
+`Shared/src/`, `docs/suite-listeners-and-auth.md` (what listens where) and `docs/install.md`.
 
 ## Terms
 
@@ -28,6 +27,13 @@ because source comments cite them). Where each part is described in detail: the 
 | Workspace | `dbdataworkspace` | Keeps the projects people and agents author, in git workspaces. Pulls dependencies, builds and checks projects. Never executes code from a project: a project's scripts and tests run on a Runner. | none, ever |
 | Runner | `dbdatarunner` | Runs the tasks of deployed packages, each in its own process: Build refreshes, Sync replications, Store deploys, integrations, tests, DDL. Runs in groups. | the bulk-write, DDL and integration logins its tasks use |
 | Gateway | `dbdatagateway` | Serves end users: Flight SQL, semantic models, apps, store reads and writes, MCP for end users. Hosts the identity home by default. Runs in groups. | read logins and the Store's row-write login |
+
+- **Each service keeps running when the control service is down**: schedules, replications and queries go on. Only the console is unavailable.
+- **One control service manages several services of each kind**, and one service can be paired with several control services.
+- **Management and data use separate listeners.** The control service calls a service's management listener; end users and external tools call the
+  Gateway's data listeners.
+- **Installing**: each service installs on its own, or all four on one machine with `dbdatakit-full`. The control service makes a single-use command
+  that joins a service to it (`docs/install.md`).
 
 ## Who calls whom
 
@@ -68,6 +74,22 @@ The Workspace service is only told which binding now exists.
 - **A missing partner only warns.** When a Gateway group has no linked Runner group, or the reverse, both still start, Monitoring shows a warning, and
   requests wait in the outbox until the partner is there.
 
+## Sign-in
+
+- **The identity home** keeps people, groups and role assignments, and signs people in (OpenID Connect). The Gateway hosts it by default, so end users
+  sign in without reaching the control service. It can also run on its own (`dbdatakit identity run`).
+- **The console, apps and agents sign people in through the identity home.**
+- **Services do not keep user accounts.** A service accepts a token from a paired client that names the person and their roles.
+
+## State, backups and shared formats
+
+- **Each service keeps its own state database**: SQLite by default, SQL Server or PostgreSQL for a group of services or a whole install. One database
+  server can hold a database or schema, and a login, for each service and group.
+- **One backup set holds every service's snapshot**, and the control service backs up the keys once.
+- **Every service reads the same formats** for connections (`connection/1`), secret references, identity and its git-tracked configuration, with the
+  same code, so the console shows and edits them the same way everywhere. Each service owns its own definitions and runs without the control service and
+  without the other services.
+
 ## Agents
 
 - **Where**: in the console (administrators and authors) and in the Gateway (end users).
@@ -92,51 +114,6 @@ Each service's program only runs and configures its service. Everything else is 
 - **Planned.** `dbdatabuild`, `dbdatasync` and `dbdatastore` are removed; the Workspace and Runner services call Build, Sync and the Store as
   libraries.
 - **Planned.** `ui mcp` is removed from every program.
-
-## Target shape
-
-```
- people (browsers) ──► dbdatakit console  (its own host and command line: shell, sign-in screens, the servers it manages, their screens,
-                       │                   cross-product views: connections, monitoring, runs, approvals; docs of every module)
-                       │  every call relayed by the console, as a signed token naming the person (D14, D16)
-        ┌──────────────┼─────────────────────────────┬──────────────────────────────────┐
-        ▼                                            ▼                                  ▼
-   Workspace                                    Runner                             serving layer (DbDataGateway)
-   projects authored in git workspaces          scheduled and batch work: the      the EDGE for end users: Flight SQL, semantic,
-   (build, sync, store, app), checked and       tasks of published packages, a     store reads and writes, apps; hosts the
-   built with the products' command lines,      process per task (Build's refresh, IDENTITY HOME by default (D20)
-   published to a Runner or a Gateway           Sync's engine, a Store deploy)     │
-        └────────────────────────────────────────────┴──────────────────────────────────┘
-           each service: its own server with a management API on its own listener, its own state database, its own config directory;
-           no web UI of its own. The console reaches a server only through that API, and a server never calls a console.
-                                                   │
-   Shared/ (shared libraries): Config · Secrets · Dialect · Connections (+ FlightSql) · Metadata · Transfer · Hosting · Scheduling ·
-                                  Monitoring · Scripting (Roslyn + NuGet) · Cli (command surface, MCP) · Web (trust, sign-in) · State · Identity
-
-   dbdatabuild, dbdatasync, dbdatastore: command lines on a project folder, and the runtimes a Runner runs (no server of their own, plan 33 SC23)
-```
-
-- **The console and the services are separate** (D1). The install is four services: the console, the Workspace, the Runner and the Gateway. Each of the
-  other three is a server (an operating-system service with its own config directory, state store and management API, and no UI of its own) plus a command
-  line that works with or without the console; Build, Sync and the Store are command lines and Runner runtimes, authored in the Workspace. The console is the one UI, a host built from the
-  shared web packages (`Shared/web`). It holds the list of registered servers and each product's screens. A server keeps running (schedules,
-  replication, queries) while the console is down; only the screens are unavailable. One console manages several servers of each product, and one server
-  can be paired with several consoles.
-- **A standalone install** is one service plus the console with that service registered; `dbdatakit-full` installs all four on one machine
-  (`docs/suite-single-server-install.md`). Each service ships on its own (its MSI and zips, an image for the console and the Gateway); the console has
-  its own MSI, and a service's MSI does not embed it. The console pairs: it generates a single-use command that the administrator runs on the service's
-  machine, and the service joins the console at its next start; on one machine one console command does it for every service installed there
-  (`docs/install.md`, "Pairing" and "Setting up one machine").
-- **The serving layer is the edge** for end users (plan 20). Management traffic (the console) and data traffic (clients of the Gateway) use different
-  listeners, and the management API is never on a hot path.
-- **Identity home** (D20, plan 20): one identity component per install holds users, groups, role assignments and an OpenID Connect provider
-  (`DbDataKit.Identity`). The serving layer hosts it by default, so end users sign in without reaching the console; it can run on its own
-  (`dbdatakit identity run`). Consoles, apps and agents are OpenID Connect clients of it. Product servers have no user accounts: they accept a paired
-  client's token, which names the person and their roles.
-- **State.** Every server keeps its own state database through `DbDataKit.State` (SQLite by default; SQL Server and PostgreSQL for a group or an install).
-- **Shared definitions.** One `connection/1` format, one secret reference syntax, one identity model and one git-tracked config layout, in the same code
-  in every product, so a console can show and edit them side by side. Each server still owns its definitions: it must run without the console and without the
-  other products.
 
 ## Screens follow the work, not the servers (owner, 2026-11-14)
 
