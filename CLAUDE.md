@@ -116,6 +116,9 @@ How the work is run is [planning/ROLES.md](planning/ROLES.md): the owner, the se
   decision (in any session; the answer is recorded under the proposal), the proposal leaves the subject file and its outcome is written into the doc that
   describes that part, in a commit whose message names the proposal id and says `answered by the owner: <the answer>`. Nothing is dropped from planning
   without the owner's word, and a commit that removes design text says where it went.
+- **`docs/architecture.md` shows where the suite is going**: a subject that changes the architecture keeps its direction in the section "Planned
+  architecture changes", marked Planned or In progress, and each landed task moves its part into the description of what is built
+  ([planning/ROLES.md](planning/ROLES.md), "Architecture directions").
 - **A finished subject becomes product documentation**: the pull request that lands its last task writes what is still useful into the docs beside the code
   and deletes the subject file. `scripts/check_plans.py` keeps `planning/` consistent (the index, slugs, task and proposal ids, references between
   subjects) and refuses any document that links to the old plans folder or to a subject that is gone.

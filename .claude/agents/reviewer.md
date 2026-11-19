@@ -49,6 +49,8 @@ One pull request at a time across the whole repository.
   subject's tasks as settled. Name every new proposal and default to the session.
 - Every piece of design text removed from planning or a doc says in its commit message where it went (a product doc, another subject, or dropped on the
   owner's word); check it like a removed proposal.
+- A subject that changes the architecture has its entry in "Planned architecture changes" of `docs/architecture.md`, marked Planned or In progress
+  as its tasks stand; a landed task shortened that entry and described what it built (`planning/ROLES.md`, "Architecture directions").
 - Shared files (`docs/ci-lessons.md`, `docs/formats.json`, `docs/ui-editors.md`, `docs/ui-coverage.md`, `docs/release-notes-pending.md`,
   `Directory.Packages.props`, `DbDataKit.slnx`, the check baselines under `scripts/`) only gained entries; no one else's entry rewritten; release notes
   never cut.

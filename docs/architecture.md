@@ -66,13 +66,18 @@ from the start, and the existing server-oriented screens move to it as their sli
 
 ## Planned architecture changes
 
-- We are removing the old command-line tools. When that is done, there are four programs, one per service: `dbdatakit` (the console),
+- **Planned.** We are removing the old command-line tools. When that is done, there are four programs, one per service: `dbdatakit` (the console),
   `dbdataworkspace` (the Workspace), `dbdatarunner` (the Runner) and `dbdatagateway` (the Gateway). Each one only runs and configures its service.
   Everything else is done in the console, the Workspace or by an agent.
-- `dbdatabuild`, `dbdatasync` and `dbdatastore` are being removed. Today the Workspace starts `dbdatabuild`, `dbdatasync` and `dbdatarunner` to create,
+- **Planned.** `dbdatabuild`, `dbdatasync` and `dbdatastore` are being removed. Today the Workspace starts `dbdatabuild`, `dbdatasync` and `dbdatarunner` to create,
   check and package projects, and a Runner runs Build, Sync and Store tasks from runtime packages that contain those programs. Both will call the same
   code as libraries instead.
-- `ui mcp` is being removed from every program. Agents will connect to the MCP endpoints of the console and the Gateway.
+- **Planned.** Agents will work in the console (administrators and authors) and in the Gateway (end users) in two ways: an outside agent connected
+  over MCP, or the agent built into the product, which uses a model provider's API. Either way the agent acts as the person who connected it, with
+  that person's roles. The console gets an MCP endpoint, `POST /mcp`; today only the Gateway has one.
+- **Planned.** Each action the product offers will be written once and used by the web API, MCP, the built-in agent and the command line. Today the
+  web API and the commands are written separately.
+- **Planned.** `ui mcp` is being removed from every program. Agents will connect to the MCP endpoints of the console and the Gateway.
 
 The work is tracked in [planning/COMMANDLINES.md](../planning/COMMANDLINES.md) and [planning/AGENTACCESS.md](../planning/AGENTACCESS.md).
 

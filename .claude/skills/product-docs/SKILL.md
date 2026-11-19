@@ -48,8 +48,10 @@ done. Every sentence has to help with that.
 
 ## Planned changes
 
-A change that is planned and affects how readers use the product goes in a section **"Planned architecture changes"** (in `docs/architecture.md`, or
-the page it belongs to), in plain sentences: what is being removed or added, what is deprecated and what replaces it. It may link the planning subject.
+A change to the architecture that is planned or in progress goes in the section **"Planned architecture changes"** of `docs/architecture.md`; another
+planned change readers must know about goes in the same kind of section on the page it belongs to. Each entry starts with **Planned** or **In
+progress** and says, in plain sentences, what is being removed or added, what is deprecated and what replaces it. Nothing planned is written as if
+it were built. It may link the planning subject.
 As the tasks land, the section gets shorter and the description of what is built gets longer. Example:
 
 ```

@@ -116,6 +116,12 @@ anything changes, the session:
    contradiction with a decided design is a proposed decision, never a silent change;
 5. writes that planning on a branch for the owner to review, and only then starts workers.
 
+**Architecture directions are in `docs/architecture.md`.** A subject that changes the suite's architecture (a service, a program, how the parts call each
+other, where code runs, how people or agents connect) adds its direction to the section "Planned architecture changes" of `docs/architecture.md` in the
+same branch as the subject, marked **Planned**. The first task that starts marks it **In progress**. Each task that lands shortens that entry and
+describes what is now built in the section that covers it; the last one removes the entry. So the doc always says where the suite is and where it is
+going, and a reader never takes a planned change for a built one.
+
 A session may read anything, and build or run something only to answer a question, saying so. It changes nothing else first: no code, scripts, hooks,
 `.claude/` or `.mcp.json` settings, no settings or setup script of a cloud environment, no long-running services. The tools of a harness that offer to
 change an environment are used the same way: after the plan names the change and the owner has agreed it.
@@ -185,6 +191,8 @@ Before it merges a pull request into `main`, the reviewer checks:
   in the session, cited) and a commit `answered by the owner: ...`; no worker default reached a product doc or the subject's tasks as settled; new
   proposals and defaults are named to the session;
 - every removed piece of design text says, in its commit message, where it went;
+- a subject that changes the architecture has its entry in "Planned architecture changes" of `docs/architecture.md`, marked Planned or In
+  progress as its tasks stand, and a landed task shortened its entry and described what it built;
 - shared files only appended to (below);
 - `planning/README.md` changed only for order, status and assignment, on the owner's word.
 
