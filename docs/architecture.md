@@ -14,6 +14,9 @@ because source comments cite them). Where each part is described in detail: the 
   administration screens. A screen is not a service: a Workspace screen is served by the control service and reaches any service through the relay.
 - **Relay**: the control service passing a call from the console to one named service, as the signed-in person. The browser never calls a service
   directly.
+- **External system**: a database, file store or application that DbDataKit connects to but does not run: a source or target database (SQL Server,
+  PostgreSQL, Oracle and others), a file store (SFTP, SMB, object storage), or an application reached by its API (a CRM, a ticketing system). Each one
+  is reached through a connection, with a login that a Runner or Gateway holds.
 - **Holds a secret**: a service stores the plain value to use it. **Handles a secret**: the plain value is in a service's memory, state, log or audit,
   even briefly.
 
@@ -21,7 +24,7 @@ because source comments cite them). Where each part is described in detail: the 
 
 | Service | Program | What it does | Secrets it holds |
 | --- | --- | --- | --- |
-| Control | `dbdatakit` | Serves the console, signs people in, manages the other services, relays the console's calls, pulls built packages from the Workspace service and deploys them to Runners and Gateways. The root of trust: it pairs every service and makes every group key. | its own keys and the group keys; no customer data login |
+| Control | `dbdatakit` | Serves the console, signs people in, manages the other services, relays the console's calls, pulls built packages from the Workspace service and deploys them to Runners and Gateways. The root of trust: it pairs every service and makes every group key. | its own keys and the group keys; no login to an external system |
 | Workspace | `dbdataworkspace` | Keeps the projects people and agents author, in git workspaces. Pulls dependencies, builds and checks projects. Never executes code from a project: a project's scripts and tests run on a Runner. | none, ever |
 | Runner | `dbdatarunner` | Runs the tasks of deployed packages, each in its own process: Build refreshes, Sync replications, Store deploys, integrations, tests, DDL. Runs in groups. | the bulk-write, DDL and integration logins its tasks use |
 | Gateway | `dbdatagateway` | Serves end users: Flight SQL, semantic models, apps, store reads and writes, MCP for end users. Hosts the identity home by default. Runs in groups. | read logins and the Store's row-write login |
@@ -32,9 +35,14 @@ because source comments cite them). Where each part is described in detail: the 
 - **Control service**: calls the Workspace, Runner and Gateway services (relay, deploy, bind, start runs, approve).
 - **Workspace service**: called only by the control service. Calls only package sources (NuGet, npm) and git remotes. It never calls another of our
   services and never handles a secret.
-- **Gateway and Runner**: a Gateway group asks its linked Runner group to run a task, through an outbox. A Runner group tells its Gateway group that
-  data changed, reads through it as a person and publishes definitions to it. The control service makes that link.
-- **Runner and Gateway to customer systems**: each with the logins it holds.
+- **Gateway group and Runner group**: a Gateway group asks its linked Runner group to run a task, through an outbox. A Runner group tells its Gateway
+  group that data changed and publishes definitions to it. The control service makes that link.
+- **Runner to external systems**: a Runner connects to source and target databases and other external systems directly, with the logins it holds. A
+  replication or a build reads and writes this way. It goes through a Gateway only when the Gateway has something the Runner lacks:
+  - a driver only the Gateway has, such as a 32-bit ODBC driver;
+  - a database the Runner cannot reach on the network;
+  - a slow link, where the Gateway's compression helps.
+- **Gateway to external systems**: with the read logins and the Store's row-write login it holds.
 - **Any service to the control service**: once, to join it.
 
 Example: an author edits a build project on a Workspace screen and presses Publish. The control service asks the Workspace service for the built
@@ -42,6 +50,23 @@ package, then deploys it to the Runner group as that person. The Workspace servi
 
 Example: an author sets up a development login for a connection. The screen sends the login through the relay to the Runner service, which holds it.
 The Workspace service is only told which binding now exists.
+
+## What runs where
+
+- **The Gateway answers requests**: queries, semantic models, apps, views, end users' agents, and the Store's row writes, which are small and recorded
+  under the person who made them. Scheduled work never runs on the Gateway.
+- **The Runner runs everything scheduled or queued, and all code a person wrote** (integrations, actions, a project's scripts and tests), each task in
+  its own process.
+- **The control service and the Workspace service do not hold a login to an external system.**
+- **Each service holds a login to its own state database only.**
+- **A request to the Gateway that needs a Runner task waits up to 10 seconds** for the task to finish; after that it answers with a link to the run.
+  Example: a "Re-send invoice" button on an app screen shows the result if the task ends within 10 seconds, otherwise a link to the run.
+- **Reads made for a person run on a Runner and go through the Gateway as that person**: subscriptions, report catalogs, evaluations. The Gateway
+  applies that person's access rules to what they read.
+- **Webhooks arrive at the Gateway.** It checks the signature, keeps the body and passes it to a Runner, so no Runner needs an address reachable from
+  outside.
+- **A missing partner only warns.** When a Gateway group has no linked Runner group, or the reverse, both still start, Monitoring shows a warning, and
+  requests wait in the outbox until the partner is there.
 
 ## Agents
 
@@ -164,43 +189,6 @@ Example: Ana authors a sync project whose source has no development copy. In the
 Workspace shows "This reads the production database `erp` with the login bound for `prod`; only its shape is read, no row", and she goes on. The Runner
 runs `discover` as Ana, with production's bound read login, and the catalog cache records that it was read from `prod`. She needed no approver: having
 access to the project is enough ([authoring-metadata.md](authoring-metadata.md#who-reads-the-runner-with-the-login-the-channel-binds)).
-
-## Isolation by trust
-
-Work is placed by what it can touch, not by product or by how it is started. There are three places, and each holds only the logins its work needs
-(the work left is [planning/TRUSTZONES.md](../planning/TRUSTZONES.md)):
-
-| Place | Servers | What runs there | Logins it holds |
-| --- | --- | --- | --- |
-| **Serving** | the Gateway group | request/response only: our serving code, views, the apps host, agents' tools, front-end custom code | read logins, and the Store's person-attributed row-write login |
-| **Work** | the Runner group | everything scheduled or queued and all trusted custom code (integrations, actions, the Build, Sync and Store runtimes), each task in a process of its own | the bulk-write and schema-change logins bound to slots, the integration secrets |
-| **Control** | the console and the Workspace | authoring, approvals, publishing, binding, starting manual tasks, Monitoring | no customer data login |
-
-- **Every server holds a login to its own state database only.** Retention, its own snapshot and key rotation run in its own process on the shared
-  housekeeping library (`StateHousekeeping`); work on customer data goes to the Runner. A console alone keeps its state healthy, and a Runner is never
-  handed a login to another server's state.
-- **The Store's row writes stay on Serving.** They are person-scale and attributed to the person, so they need no queue. Example: a person saves a
-  customer's address on an app screen; the Gateway's store module writes it with the row-write login and records the person.
-- **A structural change runs only from Control.** A manual task marked structural accepts a run only from the Workspace route, which checks the plan's
-  consumers first; the Runner's screen shows it read only. A schema change is approved against a plan hash and must not start from a place that skipped
-  the question.
-- **Trusted request/response is a Runner run the caller waits on for 10 seconds**, then the answer is a link to the run: long enough for a small action,
-  short enough that a request does not hold a connection. Example: a view's "re-send invoice" button starts an integration task; the person sees its
-  result if it ends within 10 seconds, otherwise a link to the run.
-- **Scheduled reads run on Work as the person.** Subscriptions, report-catalog reads and evaluation are scheduled, so they are Runner tasks; a read for a
-  subscription is made through the Gateway as the subscriber, so the subscriber's rules apply.
-- **Webhooks arrive on Serving.** The Gateway is the public endpoint: it checks the signature, keeps the body and hands it to a Runner's inbox, so a Runner
-  needs no inbound address from outside.
-- **A missing partner warns and never refuses.** A Gateway group with no linked Runner group, or the reverse, shows a warning on Monitoring and on the
-  feature that needs it; neither server refuses to start, and requests wait in the outbox until the partner is there. A partial install must still start.
-
-**The three paths between places.** (1) Serving to Work: "run this task", through the link the console makes between a Gateway group and a Runner group,
-with a durable outbox. (2) Work to Serving: "data changed", reads as a person, and publishing definitions. (3) Control to either: publish, bind, approve,
-start a manual task.
-
-**The console is the root of trust.** It pairs every server and makes every group key (a Serving key per Gateway group, a Work key per Runner group, and
-its own); nothing else issues trust, and a secret is sealed to the place that uses it. One database server per install holds a database or schema and a
-login per service and group; SQLite stays the single-machine default. One backup set holds every server's snapshot, and the console backs up the keys once.
 
 ## Clean break
 

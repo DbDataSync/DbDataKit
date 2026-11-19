@@ -158,7 +158,7 @@ ceiling and group, who made it and when it ends. The Servers page lists the toke
 
 **Groups.** Runner and Gateway groups never pair with each other directly. The token names the group (a new Gateway group X, or join Runner group Y);
 the console makes the group key when it makes the group and hands it over during the join. Linking a Gateway group with a Runner group is a console
-action (`docs/architecture.md`, "Isolation by trust"); a new instance of a linked group gets the link with its join.
+action (`docs/architecture.md`, "What runs where"); a new instance of a linked group gets the link with its join.
 
 **Publisher keys.** The Workspace's publisher key on a Gateway or a Runner is handed over by the console; the Workspace never pairs with a code.
 

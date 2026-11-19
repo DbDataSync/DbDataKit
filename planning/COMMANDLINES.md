@@ -49,7 +49,7 @@ Build was first written as a command line in a user's own git workspace; that ha
 
 Today the Workspace runs `dbdatarunner package build` and `package test` as a child process to compile a csx integration and run its test scripts
 (`IntegrationProjectKind`). Two things are wrong with it: the Workspace starts another service's program and parses its output, and `package test`
-runs a person's code on the Workspace, while `docs/architecture.md` ("Isolation by trust") puts all trusted custom code on the Runner. Scenario: an
+runs a person's code on the Workspace, while `docs/architecture.md` ("What runs where") puts all trusted custom code on the Runner. Scenario: an
 author edits `src/sync_tickets.csx` and presses Test in the Workspace.
 
 - Option A: the Workspace compiles in process with the shared package build library (compiling runs none of the author's code); Test starts a run of

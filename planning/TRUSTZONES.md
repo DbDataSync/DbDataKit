@@ -2,7 +2,7 @@
 
 ## Goal
 
-Work is placed by what it can touch (`docs/architecture.md`, "Isolation by trust"). The console links each Gateway group with a Runner group. Serving
+Work is placed by what it can touch (`docs/architecture.md`, "What runs where"). The console links each Gateway group with a Runner group. Serving
 asks Work to run a task through a durable outbox and waits 10 seconds for the answer (path 1). Work tells Serving that data changed, publishes to it and
 reads through it as a person (path 2). Structural tasks run only when Control starts them. Every service and group has a state login of its own.
 

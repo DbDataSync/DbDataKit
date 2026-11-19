@@ -17,7 +17,7 @@ Every read of a customer database made for authoring runs on the Runner, as a ta
 project's slot: the slot's `read` role where one is bound, else its `default`. The run is recorded as the person who asked. The Workspace and the console
 never open the connection and hold no login for it.
 
-Why: the console and the Workspace are Control, which holds no customer-data login ([architecture.md](architecture.md#isolation-by-trust)); the Workspace
+Why: the console and the Workspace are Control, which holds no customer-data login ([architecture.md](architecture.md#what-runs-where)); the Workspace
 also runs authors' build children and script compiles, the last place a login should sit. Reading with the bound login has a second reason: the answer
 says what the run will be able to read, not what someone else's login sees. Ana's own login sees `hr.salaries` and the run's does not; a cache made with
 Ana's login would offer a table no run can read.
