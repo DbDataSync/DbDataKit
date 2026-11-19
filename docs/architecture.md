@@ -4,6 +4,70 @@ The shape of the suite and the decisions behind it (they were made in plan 13, w
 because source comments cite them). Where each part is described in detail: the product READMEs, the package READMEs under `Shared/src/`, and
 `docs/suite-listeners-and-auth.md` (what listens where) and `docs/suite-data-flow.md` (data and control).
 
+## Terms
+
+- **Service**: one of the four running server programs: the control service, the Workspace service, the Runner service and the Gateway service. Each
+  has its own process, state database, keys and network rules.
+- **Console**: the browser UI people work in. The control service serves it.
+- **Control service**: the `dbdatakit` server program. It serves the console, relays its calls and deploys packages.
+- **Screens**: parts of the console, grouped by the work they are for: the Workspace screens, the Runner screens, the Gateway screens and the
+  administration screens. A screen is not a service: a Workspace screen is served by the control service and reaches any service through the relay.
+- **Relay**: the control service passing a call from the console to one named service, as the signed-in person. The browser never calls a service
+  directly.
+- **Holds a secret**: a service stores the plain value to use it. **Handles a secret**: the plain value is in a service's memory, state, log or audit,
+  even briefly.
+
+## The four services
+
+| Service | Program | What it does | Secrets it holds |
+| --- | --- | --- | --- |
+| Control | `dbdatakit` | Serves the console, signs people in, manages the other services, relays the console's calls, pulls built packages from the Workspace service and deploys them to Runners and Gateways. The root of trust: it pairs every service and makes every group key. | its own keys and the group keys; no customer data login |
+| Workspace | `dbdataworkspace` | Keeps the projects people and agents author, in git workspaces. Pulls dependencies, builds and checks projects. Never executes code from a project: a project's scripts and tests run on a Runner. | none, ever |
+| Runner | `dbdatarunner` | Runs the tasks of deployed packages, each in its own process: Build refreshes, Sync replications, Store deploys, integrations, tests, DDL. Runs in groups. | the bulk-write, DDL and integration logins its tasks use |
+| Gateway | `dbdatagateway` | Serves end users: Flight SQL, semantic models, apps, store reads and writes, MCP for end users. Hosts the identity home by default. Runs in groups. | read logins and the Store's row-write login |
+
+## Who calls whom
+
+- **Browser**: calls the control service only.
+- **Control service**: calls the Workspace, Runner and Gateway services (relay, deploy, bind, start runs, approve).
+- **Workspace service**: called only by the control service. Calls only package sources (NuGet, npm) and git remotes. It never calls another of our
+  services and never handles a secret.
+- **Gateway and Runner**: a Gateway group asks its linked Runner group to run a task, through an outbox. A Runner group tells its Gateway group that
+  data changed, reads through it as a person and publishes definitions to it. The control service makes that link.
+- **Runner and Gateway to customer systems**: each with the logins it holds.
+- **Any service to the control service**: once, to join it.
+
+Example: an author edits a build project on a Workspace screen and presses Publish. The control service asks the Workspace service for the built
+package, then deploys it to the Runner group as that person. The Workspace service never talks to the Runner.
+
+Example: an author sets up a development login for a connection. The screen sends the login through the relay to the Runner service, which holds it.
+The Workspace service is only told which binding now exists.
+
+## Agents
+
+- **Where**: in the console (administrators and authors) and in the Gateway (end users).
+- **How they connect**: an outside agent over MCP, or the agent built into the product, which uses a model provider's API.
+- **As whom**: always the person who connected it, with that person's roles.
+
+## Command lines
+
+Each service's program only runs and configures its service. Everything else is done in the console or by an agent.
+
+## Planned architecture changes
+
+- **Planned.** The Workspace service stops calling Runners and Gateways. Today it publishes packages, starts runs, reads catalogs and holds publisher
+  keys for them. The control service will do all of that, pulling the built package from the Workspace service.
+- **Planned.** The Workspace service runs with an outbound allow-list of package sources and git remotes only.
+- **Planned.** Development logins go from the screen through the relay to the Runner. Today the plan has the Workspace service send them.
+- **Planned.** DDL (creating, altering or dropping tables) runs as a Runner task that a person starts from the console. The control service starts it
+  on the Runner after the person approves the exact statements. Today the Runner accepts these tasks only when the Workspace service starts them; that
+  goes away.
+- **Planned.** Agents in the console over MCP and built in, as the person. Today only the Gateway has an MCP endpoint, and the built-in agent in the
+  console reads with the control service's own authority.
+- **Planned.** `dbdatabuild`, `dbdatasync` and `dbdatastore` are removed; the Workspace and Runner services call Build, Sync and the Store as
+  libraries.
+- **Planned.** `ui mcp` is removed from every program.
+
 ## Target shape
 
 ```
@@ -63,23 +127,6 @@ which server does the work. **Where an action is started and where it runs are s
 So very few screens stay server- or service-oriented: the console's **Servers** pages are for administering the installation (pairing, versions, health, certificates,
 state, upgrades), not for doing work. A screen that makes a person find "the server", then "the runner", to finish one task is a defect. New screens are planned this way
 from the start, and the existing server-oriented screens move to it as their slices are touched (plan 33 SC20o, SC22l, `docs/authoring-parity.md`).
-
-## Planned architecture changes
-
-- **Planned.** We are removing the old command-line tools. When that is done, there are four programs, one per service: `dbdatakit` (the console),
-  `dbdataworkspace` (the Workspace), `dbdatarunner` (the Runner) and `dbdatagateway` (the Gateway). Each one only runs and configures its service.
-  Everything else is done in the console, the Workspace or by an agent.
-- **Planned.** `dbdatabuild`, `dbdatasync` and `dbdatastore` are being removed. Today the Workspace starts `dbdatabuild`, `dbdatasync` and `dbdatarunner` to create,
-  check and package projects, and a Runner runs Build, Sync and Store tasks from runtime packages that contain those programs. Both will call the same
-  code as libraries instead.
-- **Planned.** Agents will work in the console (administrators and authors) and in the Gateway (end users) in two ways: an outside agent connected
-  over MCP, or the agent built into the product, which uses a model provider's API. Either way the agent acts as the person who connected it, with
-  that person's roles. The console gets an MCP endpoint, `POST /mcp`; today only the Gateway has one.
-- **Planned.** Each action the product offers will be written once and used by the web API, MCP, the built-in agent and the command line. Today the
-  web API and the commands are written separately.
-- **Planned.** `ui mcp` is being removed from every program. Agents will connect to the MCP endpoints of the console and the Gateway.
-
-The work is tracked in [planning/COMMANDLINES.md](../planning/COMMANDLINES.md) and [planning/AGENTACCESS.md](../planning/AGENTACCESS.md).
 
 ## Our code calls our code as a library (owner, 2026-11-14)
 
