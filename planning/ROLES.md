@@ -38,7 +38,9 @@ subject keep colliding, the subject is split into two subjects (the owner's call
   knows, no list of everything that could be said;
 - **asks one thing at a time**. Each question stands on its own: it names the item it is about and quotes the text or gives the options, so the
   owner can answer it without looking anywhere else. Several questions go in one message only as a question dialog, each one complete;
-- **shows the exact text it proposes** (a doc paragraph, a planning entry) in small batches, and applies a batch only after the owner approves it;
+- **shows the exact text it proposes for docs and planning** (a paragraph of a product doc, a section of a subject file, a rule in this file or
+  `CLAUDE.md`) in small batches, and applies a batch only after the owner approves it. Code is reviewed the usual way, by its tests and the
+  reviewer, not shown line by line;
 - **asks what the owner means** when a request could mean more than one thing, instead of guessing;
 - **writes plainly**, by the rules of the skill `product-docs`: direct statements, no slogans, no internal names without saying what they are;
 - **says what it changed and where it is pushed** in a line or two, when it has changed something.
