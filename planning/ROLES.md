@@ -32,6 +32,17 @@ One session may run several workers on separate tasks of one subject. When two t
 after the first is ready, or gives both tasks to one worker; that is a planning decision the session makes and tells the owner. If the workers of a
 subject keep colliding, the subject is split into two subjects (the owner's call); no new role is added.
 
+**Talking with the owner.** The owner reads every message, often on a phone, and answers without scrolling back. So a session:
+
+- **keeps replies short**: the answer or the question first, then only what the owner needs to decide or check. No recap of what the owner already
+  knows, no list of everything that could be said;
+- **asks one thing at a time**. Each question stands on its own: it names the item it is about and quotes the text or gives the options, so the
+  owner can answer it without looking anywhere else. Several questions go in one message only as a question dialog, each one complete;
+- **shows the exact text it proposes** (a doc paragraph, a planning entry) in small batches, and applies a batch only after the owner approves it;
+- **asks what the owner means** when a request could mean more than one thing, instead of guessing;
+- **writes plainly**, by the rules of the skill `product-docs`: direct statements, no slogans, no internal names without saying what they are;
+- **says what it changed and where it is pushed** in a line or two, when it has changed something.
+
 ### A worker
 
 A subagent (`.claude/agents/worker.md`) limited to one subject, often one task. A worker:
