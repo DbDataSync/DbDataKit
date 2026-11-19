@@ -155,53 +155,6 @@ Each service's program only runs and configures its service. Everything else is 
 - **Planned.** Administrators can turn on settings that block chosen risky actions, such as reading production while authoring. Today every
   risky action a person has access to is allowed with a warning.
 
-## Clean break
-
-The new releases start from nothing. No migration, import, upgrade path or compatibility reader is written for existing configs, scripts, libraries,
-drivers, secrets, users, sessions or state databases, and no legacy names are kept (old CLI forms, old environment variable names such as
-`DBDATAKIT_BUILD_*` and `DBDATAKIT_SECRET_*`). Instead, a server or CLI that finds a file in an old format (no `schemaVersion`, an older one,
-`appsettings.json` where `server.yaml` belongs, a `.cs` script, a `library.json`) **refuses to start or to load it, with a message naming the file and
-pointing to the documentation**. Release notes say plainly that an existing install is set up again. Users' own data (their databases and DuckDB files)
-is not ours to break and is outside this rule. (CLAUDE.md states the working rule: never silent, and a test says so.)
-
-### Format versions read forward, within a range
-
-The clean break is about formats a release no longer reads; inside the suite's own life a format's version moves often, usually only to add an optional
-section. So every versioned kind, a file a person edits (`task.yaml`, a model, a connection, a manifest) as much as a published definition, follows one
-rule:
-
-1. **A kind reads `Previous` to `Current`.** `DefinitionFormats` is the one type that says so; `Previous` is `Current - 1` unless the kind's entry declares
-   a longer compatible range (`DefinitionFormats.Of`), and `docs/formats.json` keeps `current` and `previous` (the oldest still read) per kind. A file
-   whose version is in the range loads as it is.
-2. **An older file is not checked for newer fields.** A version 1 file edited by hand to hold a version 2 section is read as written: only a person editing
-   by hand makes one, and policing it costs more than it saves.
-3. **Every save writes `Current`.** The version belongs to the writer, not to what was read: a file loaded as 1 and saved by any product is written as 2.
-4. **Outside the range is refused in words:** older than `Previous` with what changed and what to do, newer than `Current` with "update". Reading forward is
-   a property of the newer reader; a reader that knows only 1 still refuses a file of 2.
-5. **A publish sends the current form.** The publisher loads the file with the range-reading loader, normalises it through the typed model and sends the
-   current-format text it wrote, never the bytes on disk; the file on disk stays as the person wrote it (its comments and layout survive). Everything
-   published is in one format with a consistent version, and readers of published definitions read their current format and the one before, so readers
-   are upgraded before publishers.
-6. **A restore from history writes the commit's files as they were**; the next save writes `Current`, and a restored file below `Previous` fails on load
-   naming the file.
-
-For example, Sync's `task.yaml` is at 2, which only adds the optional `checks:` section: a replication whose files say `schemaVersion: 1` loads unchanged,
-the first save in the Workspace writes 2, and a publish to a Runner sends 2 whether or not the file was saved.
-
-### The Build, Sync and Store servers (deleted, plan 33 SC23)
-
-The install is four services. Build, Sync and the Store have no server: `dbdatabuild`, `dbdatasync` and `dbdatastore` are command lines on a folder and the
-runtimes a Runner runs, each released as a zip with no service, installer or image, and none is a member of `dist/suite.json`. What their servers did is done
-where the work is: a project is authored in the Workspace and published from there, its work runs as Runner tasks (refresh, `apply_plan`, `ack`, `seed`,
-a replication's drain, bulk loads and verifications, `provision`, a Store model's deploy) with the logins bound on the Runner, and a model's rows are written
-and its change requests decided through a Gateway's store module. The break is never silent:
-
-- a removed verb (`server`, `service`, `secret`, `state`, `health` and the rest) answers with the sentence naming where its feature went and exits 2
-  (`RemovedCommands`, `DbDataKit.Cli`; each program's `RemovedServer`);
-- the console refuses such a server's join (`docs/install.md`, "Pairing"), and its announcement while that old way exists, with the sentence, answers any call relayed to one still paired with it (410) and sends that server
-  nothing, and its Servers page shows the sentence beside it (`RemovedProducts`, the console's host and `ServerModule.tsx`);
-- the variables of their data folders (`DBDATAKIT_DATA_SYNC`, `_BUILD`, `_STORE`) stay, because the command lines read them.
-
 ## Decisions
 
 | # | Decision | Why |
@@ -272,3 +225,4 @@ Decided by the owner after the table above was closed. The numbers are the ones 
 | Scripting, libraries, drivers | `Shared/src/DbDataKit.Scripting/README.md` |
 | Integrations: what they are, package kinds, authoring, build (csx with no SDK), test, publish; what is built and what is not | `docs/integrations.md` |
 | Releases and distribution | `docs/releases.md`, `dist/README.md` |
+| File formats, versions, upgrades | `docs/formats.md` |
