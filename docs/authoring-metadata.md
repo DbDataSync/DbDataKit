@@ -28,7 +28,7 @@ to the Runner once (below). Integrated sign-in (Windows, Entra) cannot be typed 
 Who may ask: anyone with access to the project, in every channel, `prod` included. A read in `prod` is shown with a clear warning that it reads
 production (the database and the channel named, shape only, no row) and then goes ahead; no approver role is needed. Some syncs are designed between
 systems that have no development copy, and they cannot be designed without reading production's shape. How the suite treats such actions:
-[architecture.md](architecture.md#risky-actions-allowed-with-a-clear-warning-owner-2026-11-18). A setting an administrator may turn on to restrict
+[architecture.md](architecture.md#risky-actions). A setting an administrator may turn on to restrict
 production reads is a later hardening option.
 
 ## The built-in package `dbdatakit-metadata`

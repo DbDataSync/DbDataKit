@@ -65,7 +65,7 @@ Not scheduled. Each becomes tasks only when the owner schedules it.
 ### Admin lock-down settings
 
 **What.** Settings an administrator may turn on later to restrict risky actions that the suite allows by default with a clear warning
-(`docs/architecture.md`, "Risky actions: allowed, with a clear warning"). The first is production reads for authoring: discovery and describe in
+(`docs/architecture.md`, "Risky actions"). The first is production reads for authoring: discovery and describe in
 `prod` (`docs/authoring-metadata.md`), which anyone with access to the project may run after a production warning. Others follow as
 they are found (a run started in `prod` from a draft, a structural task, overwriting another person's file).
 

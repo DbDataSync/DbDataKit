@@ -103,6 +103,19 @@ The Workspace service is only told which binding now exists.
 Example: an author opens a Store model and presses Deploy. The control service starts the deploy task on the Runner. The model's screen shows its
 progress and result, with a link to the run.
 
+## Risky actions
+
+- **A person can do anything their access allows.** When an action carries a risk (reading production, running against production, overwriting
+  someone else's work), the screen says so at the moment of the action, and the person can go on.
+- **The warning names the risk and what is at risk**: the channel, the database, the object.
+- **Every action is recorded under the person's name.**
+- **An action is refused only when the person's access does not allow it, or when it cannot work** (a file format the service does not read, a binding
+  without a login). The refusal names the rule.
+
+Example: Ana authors a sync project whose source has no development copy. On the project's screen she picks the channel `prod` and presses Refresh.
+The screen shows "This reads the production database `erp` with the login bound for `prod`; only its structure is read, no rows", and she goes on.
+The Runner reads the structure as Ana, with production's read login, and the catalog records that it was read from `prod`.
+
 ## Agents
 
 - **Where**: in the console (administrators and authors) and in the Gateway (end users).
@@ -112,6 +125,17 @@ progress and result, with a link to the run.
 ## Command lines
 
 Each service's program only runs and configures its service. Everything else is done in the console or by an agent.
+
+## How our code calls our code
+
+- **One part of the suite calls another in the same process, as a library.** Our code never starts one of our own programs and parses what it prints.
+- **A separate process is used only for**:
+  - an external program: git, a database's own tool, a browser;
+  - isolation, so a crash or a hang does not take the service down (each Runner task runs in its own process for this);
+  - a security sandbox, so code cannot reach the service's memory, files or network;
+  - a 32-bit ODBC driver on the Gateway.
+- **Code that more than one part of the suite can use is a library under `Shared/src`.** A service's own project wires settings, routes and services
+  together.
 
 ## Planned architecture changes
 
@@ -128,43 +152,8 @@ Each service's program only runs and configures its service. Everything else is 
   libraries.
 - **Planned.** `ui mcp` is removed from every program.
 - **Planned.** Screens that are still organised by service move to this layout.
-
-## Our code calls our code as a library (owner, 2026-11-14)
-
-New code calls another part of the suite **in process, as a library**, never by starting one of our own command-line programs and parsing what it prints. A separate
-process is used only for:
-
-- an **external** program (git, a database's own tool, a browser);
-- the **Runner's task isolation**, for resilience and security (a task runs in its own process; a runtime package is loaded as an assembly where it can be, so the contract is the Runner's task protocol, not a command line);
-- **code a person wrote** (Sync's scripts, an integration's code);
-- **32-bit drivers** (the Gateway's 32-bit ODBC worker).
-
-**New code goes into a shared library first (owner, 2026-11-14).** Code that can reasonably be shared is written as a library under `Shared/src` (`DbDataKit.*`),
-and the products' command-line and service projects **compose** those libraries: a host project wires settings, routes, commands and services together and does not hold the
-logic itself. A product keeps code of its own only when nothing else could use it, and says so. Code that exists today moves when a slice touches it, not for its own sake.
-
-In those cases the process is a host with a typed protocol. The calls that exist today (the Workspace's `BuildTool` and `SyncTool`, the Runner starting the Build and
-Sync runtimes by their command lines) stay until a slice touches them anyway; nothing is converted for its own sake. Whether `dbdatabuild`, `dbdatasync` and
-`dbdatastore` stay as command lines is then only a question of a tool for people.
-
-## Risky actions: allowed, with a clear warning (owner, 2026-11-18)
-
-A person who has access to do a thing can do it without being blocked, as long as every concern is clear to that person. The suite does not build a
-crippled system on principle: where an action carries a risk (reading production, running against production, overwriting what someone else wrote), the
-screen or the command says so plainly, at the moment of the action, and lets the person go on. Access is the line that holds (a role, a project's
-membership, a binding the administrator made); within it, a warning and a clear message replace a refusal.
-
-- **Warn where the action is taken**, in words that name the risk and the thing at risk (the channel, the database, the object), not a generic
-  "are you sure". The run or the change is recorded under the person's name, as every action is.
-- **Refuse only what access does not allow**, or what cannot work (a format the reader does not know, a login the binding lacks); a refusal names the rule.
-- **Lock-down is a later hardening option.** Settings an administrator may turn on to restrict a risky action further (production reads first) are
-  follow-up work ([planning/TRUSTZONES.md](../planning/TRUSTZONES.md), "Admin lock-down settings"); until one exists and is turned on, the default is
-  allowed with a warning.
-
-Example: Ana authors a sync project whose source has no development copy. In the Designer she picks the channel `prod` and presses **Refresh**; the
-Workspace shows "This reads the production database `erp` with the login bound for `prod`; only its shape is read, no row", and she goes on. The Runner
-runs `discover` as Ana, with production's bound read login, and the catalog cache records that it was read from `prod`. She needed no approver: having
-access to the project is enough ([authoring-metadata.md](authoring-metadata.md#who-reads-the-runner-with-the-login-the-channel-binds)).
+- **Planned.** Administrators can turn on settings that block chosen risky actions, such as reading production while authoring. Today every
+  risky action a person has access to is allowed with a warning.
 
 ## Clean break
 

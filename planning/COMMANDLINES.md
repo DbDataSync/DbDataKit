@@ -12,7 +12,7 @@ Build was first written as a command line in a user's own git workspace; that ha
 
 - The Workspace starts our own programs and parses their JSON output (`ChildProgram` in `DbDataKit.Authoring.Server`): `BuildTool` (`dbdatabuild`:
   create a project from a template, `project show metadata` to check it, `project publish --to runner|gateway --out` to package it), `SyncTool`
-  (`dbdatasync`) and the integration kind's `dbdatarunner`. `docs/architecture.md` ("Our code calls our code as a library") already says new code does not
+  (`dbdatasync`) and the integration kind's `dbdatarunner`. `docs/architecture.md` ("How our code calls our code") already says new code does not
   do this; these calls are older.
 - A Runner runs Build, Sync and Store tasks from runtime packages (`dbdatabuild-runtime`, `dbdatastore-runtime`, ...) that contain the program and a
   manifest. Build's Runner jobs (`RefreshJob`, `OperationJobs`, `ProjectPublish`) live in the `DbDataBuild.Cli` project.
