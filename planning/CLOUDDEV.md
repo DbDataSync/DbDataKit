@@ -36,6 +36,7 @@ offers the running instance's MCP endpoints to the session through a development
 
 - INSTALLER-3 and INSTALLER-9: the startup sequence and the suite ports the instance uses; INSTALLER's pairing command, which replaces the bundle.
 - AGENTACCESS-5: the console's MCP endpoint, the forwarder's second target.
+- KNOWLEDGE-24: the goldens of MCP tools of every product, which CLOUDDEV-5's tool list is generated from (the console's golden exists today).
 
 ## Proposed decisions
 

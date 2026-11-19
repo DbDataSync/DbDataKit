@@ -24,7 +24,7 @@ masking, sample data and rules of other kinds come with the permissions model (O
   the command.
 - **The console's embedded agent** (`ConsoleAgents`, `AgentsController`): tools are the console's own offline verbs that only read (7, in
   `DbDataKit/tests/DbDataKit.Server.Tests/golden/mcp-tools.txt`), run with **the console's authority, not the person's**; writes, `user`, `instance`,
-  `server`, `runner`, `secret` are left out. `build-helper` (as the person, through the relay) is dead since the Build server went (AUTHORING-8).
+  `server`, `runner`, `secret` are left out. `build-helper` (as the person, through the relay) is dead since the Build server went (AGENTACCESS-8).
 - **The console has no MCP endpoint.** Its outside-agent token (`AgentTokenCredentials`) reaches only `/api/agents/outside/`, where a local `ui mcp
   --report-to` records what it asked and ran.
 - **The Gateway's `mcp` module** (`POST /mcp`, `docs/serving-layer.md`, "The mcp module"): as the signed-in person by an identity-home token; tools call the
@@ -46,7 +46,7 @@ masking, sample data and rules of other kinds come with the permissions model (O
 | AGENTACCESS-5 | The console's MCP endpoint, as AGENTACCESS-P4 says: the console's operations for the person, through the relay to the Workspace, Runner and Gateway with the person's roles there | AGENTACCESS-4 | M | an MCP test lists the tools, reads as the person, and a change waits for the person's approval and runs once |
 | AGENTACCESS-6 | The console's embedded agent on operations as the person, replacing the console-authority tools (AGENTACCESS-P5); the same tools as AGENTACCESS-5 | AGENTACCESS-5, AGENTACCESS-P5 | M | `ConsoleAgentsTests`: the chat offers the same tools as the MCP endpoint for the same person; a viewer's agent cannot change anything |
 | AGENTACCESS-7 | Console operations, area by area (one task branch each): users and invitations, servers, connections and secrets references, delivery, releases | AGENTACCESS-1 | L | each area's controller calls its operations and its tests pass unchanged; each operation is in the console's golden of MCP tools |
-| AGENTACCESS-8 | Workspace operations through the console: create, edit, check, build, preview and publish a project of every kind; absorbs AUTHORING-11 and AUTHORING-8 | AGENTACCESS-5 | L | an MCP test authors, builds and publishes a build, a sync and a store project as a person; each change waits for an approval; a denied step changes nothing |
+| AGENTACCESS-8 | Workspace operations through the console: create, edit, check, build, preview and publish a project of every kind; the build-helper agent on a Workspace build project (`InstallBuildHelperAsync` through the Workspace's relay; the relay to the deleted Build server goes) | AGENTACCESS-5 | L | an MCP test authors, builds and publishes a build, a sync and a store project as a person; each change waits for an approval; a denied step changes nothing; `ConsoleAgentsTests`: the helper works on a Workspace build project and no code path names a Build server |
 | AGENTACCESS-9 | Runner and Gateway configuration through the console: packages, channels, runs; data sources, apps, semantic models | AGENTACCESS-5 | L | an MCP test publishes a package to `dev` and runs it; adds a data source; each as the person |
 | AGENTACCESS-10 | The Gateway's `mcp` module tools as operations, with the agent data rules; the operations the end user's app calls offered as tools (front end) | AGENTACCESS-3 | M | the module's tests pass unchanged; a read through a client whose rule refuses data is refused naming the rule; the person's column masks still apply |
 | AGENTACCESS-11 | Screens: the agent data rule of a channel, a model provider and an MCP client; MCP client registration and tokens (`docs/ui-editors.md` rows) | AGENTACCESS-3, AGENTACCESS-4 | M | Playwright: register a client, set its rule to refuse, see the refusal in its record |
@@ -54,10 +54,8 @@ masking, sample data and rules of other kinds come with the permissions model (O
 
 ## Needs from other subjects
 
-- KNOWLEDGE-17 (front-end embedded agents in the Gateway) uses the operations and data rules of AGENTACCESS-10 instead of its own tool set.
-- KNOWLEDGE-24 (a golden of MCP tools per product) becomes the golden of operations per product, from AGENTACCESS-1.
-- AUTHORING-8 and AUTHORING-11 are absorbed by AGENTACCESS-8 (a proposal to the owner before either leaves AUTHORING).
-- KNOWLEDGE's goal ("agents run in the console for back-end work, in the Gateway's `mcp` module for front-end work") is reworded to the four cases.
+- None. KNOWLEDGE-17 builds on AGENTACCESS-10 and KNOWLEDGE-24's goldens become goldens of operations with AGENTACCESS-1 (both recorded in
+  KNOWLEDGE); AUTHORING's tasks for the build-helper and for agents authoring through MCP moved into AGENTACCESS-8.
 
 ## Proposed decisions
 
