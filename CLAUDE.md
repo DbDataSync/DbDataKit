@@ -97,6 +97,8 @@ How the work is run is [planning/ROLES.md](planning/ROLES.md): the owner, the se
   agreed the plan.
 - **Talk with the owner in short messages, one question at a time** ([planning/ROLES.md](planning/ROLES.md), "Talking with the owner"): the answer or
   question first, each question complete on its own; proposed text for docs and planning shown in small batches and applied only after approval.
+- **Some files change only with the owner's approval** ([planning/ROLES.md](planning/ROLES.md), "Files only the owner changes"): `CLAUDE.md`,
+  `planning/ROLES.md`, `docs/architecture.md`, the `product-docs` skill and the protection's own settings and hook. Claude Code asks before writing them.
 - **A new request starts in `planning/`, not in the code** ([planning/ROLES.md](planning/ROLES.md), "A new request"): find the subjects that cover it in
   `planning/README.md` and read them, check the product docs they name, say what exists, what overlaps and what contradicts, and work the plan out
   with the owner before any change. Ask what the owner means when the request could mean more than one thing; do not offer to build first.

@@ -45,6 +45,13 @@ subject keep colliding, the subject is split into two subjects (the owner's call
 - **writes plainly**, by the rules of the skill `product-docs`: direct statements, no slogans, no internal names without saying what they are;
 - **says what it changed and where it is pushed** in a line or two, when it has changed something.
 
+**Files only the owner changes.** These files change only with the owner's approval: `CLAUDE.md`, `planning/ROLES.md`, `docs/architecture.md`,
+`.claude/skills/product-docs/SKILL.md`, `.claude/settings.json` and `.claude/hooks/protect-reference-docs.py`. Claude Code asks before writing any of
+them: the "ask" rules in `.claude/settings.json` cover the file tools, and the hook covers shell commands. A session shows the proposed text first,
+then the owner approves the prompt. To protect another file, add it to the ask list and to the hook's `PROTECTED` list. Not set up yet: a
+`CODEOWNERS` file with GitHub's required code-owner review, which would also stop changes made outside Claude Code; it is the next step if this
+proves not strong enough.
+
 ### A worker
 
 A subagent (`.claude/agents/worker.md`) limited to one subject, often one task. A worker:
