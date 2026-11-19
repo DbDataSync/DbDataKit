@@ -15,6 +15,9 @@ sync definition. The same sample data stands in for real data where an agent or 
   the edge cases (NULLs, case, accents, trailing spaces, empty strings, rounding boundaries). `project sample` runs models on seeded or generated data.
 - **Build's model tests** run in DuckDB on given rows.
 - Nothing for Store models, sync definitions or agents; the seeds and the generator live in DbDataBuild, not in `Shared/`.
+- **They move to `Shared/`** (answer from the owner, 2026-11-19: "Builds seeds and generator definitely move to Shared/"): the seed runner, its
+  format and macros, and `SampleGenerator` become a shared library (`Shared/src/DbDataKit.*`, adapter first in DbDataBuild), so Store and Sync models
+  use the same ones.
 
 ## Open designs
 
@@ -24,8 +27,7 @@ sync definition. The same sample data stands in for real data where an agent or 
 read files attached to the model (a CSV or Parquet file kept with the project). **Why:** an author knows what realistic data looks like (a few real
 product codes, the shape of an address) better than any generator. Example: a Store model `customer` has a query that makes 1,000 customers from a list
 of city names and a pattern for account numbers, deterministic for a given seed. **Open questions:** whether Build's seed format (a file per table, the
-`seed` and `scale` variables, the macros) becomes the shared format as it is, and where it moves (`Shared/src/DbDataKit.*`, by the rule for code two
-products use); how attached files are kept and versioned with the project; whether a published sample set is a channel's (`dev`, `test`) or the model's.
+`seed` and `scale` variables, the macros) becomes the shared format as it is or changes on the way to `Shared/`; how attached files are kept and versioned with the project; whether a published sample set is a channel's (`dev`, `test`) or the model's.
 
 ### A generic sample data builder from structure and hints
 
@@ -33,8 +35,7 @@ products use); how attached files are kept and versioned with the project; wheth
 column: example values or a value list, a pattern, a range, a distribution, a cardinality (how many distinct values, how many children per parent),
 the share of NULLs. **Why:** a model with no query still gets data that respects its keys and references, so transforms and tests run on it. Example:
 `orders.customer_id` references `customers`, 1 to 20 orders per customer, `status` from three values with 80% `shipped`. **Open questions:** where the
-hints are written (in the model's column definitions, or a sample file beside it); how it relates to Build's `SampleGenerator` (extended into it, or
-replaced, adapter first); how uniqueness across a composite key and references are kept at scale; whether hints can be inferred from a real table's
+hints are written (in the model's column definitions, or a sample file beside it); it extends Build's `SampleGenerator` once that is in `Shared/`; how uniqueness across a composite key and references are kept at scale; whether hints can be inferred from a real table's
 profile (counts and distincts, never values) read once from a non-production channel.
 
 ### From sample source data to unit tests
@@ -55,5 +56,5 @@ with the same seed; how a person sees that an answer was sample data.
 
 ## Shared areas touched
 
-Build's seeds and `SampleGenerator` (moved to `Shared/` if Store and Sync use them), the Store's and Build's model formats (`docs/formats.json`) if hints
+Build's seeds and `SampleGenerator` (moved to `Shared/`), the Store's and Build's model formats (`docs/formats.json`) if hints
 are written there, the Workspace's project Designers.
