@@ -64,6 +64,17 @@ So very few screens stay server- or service-oriented: the console's **Servers** 
 state, upgrades), not for doing work. A screen that makes a person find "the server", then "the runner", to finish one task is a defect. New screens are planned this way
 from the start, and the existing server-oriented screens move to it as their slices are touched (plan 33 SC20o, SC22l, `docs/authoring-parity.md`).
 
+## Planned architecture changes
+
+- We are removing the old command-line tools. When that is done, the suite's programs only run and configure the four services (`server`,
+  `service`, `cert`, `state`, `secret`, `config`, `health`, `setup`); everything else is done in the console, the Workspace or by an agent.
+- `dbdatabuild`, `dbdatasync` and `dbdatastore` are being removed. Today the Workspace starts `dbdatabuild`, `dbdatasync` and `dbdatarunner` to create,
+  check and package projects, and a Runner runs Build, Sync and Store tasks from runtime packages that contain those programs. Both will call the same
+  code as libraries instead.
+- `ui mcp` is being removed from every program. Agents will connect to the MCP endpoints of the console and the Gateway.
+
+The work is tracked in [planning/COMMANDLINES.md](../planning/COMMANDLINES.md) and [planning/AGENTACCESS.md](../planning/AGENTACCESS.md).
+
 ## Our code calls our code as a library (owner, 2026-11-14)
 
 New code calls another part of the suite **in process, as a library**, never by starting one of our own command-line programs and parsing what it prints. A separate
@@ -191,7 +202,7 @@ and its change requests decided through a Gateway's store module. The break is n
 | --- | --- | --- |
 | D1 | The console and the products are separate: servers with a management API and no UI; one shared console UI. | A product must keep working with the console down; one UI avoids three web apps. |
 | D2 | One YAML format for every product (Gateway moved off JSON); no migration from `appsettings.json`. | One reader, one editor, one history; the clean break makes migration code unnecessary. |
-| D3 | Each product keeps its own CLI; `dbdatakit` is the console's CLI only; lower-case executables; `<noun> <verb>` everywhere, old forms removed. **Amended (owner, 2026-11-19):** a command line, or a part of one such as `ui mcp`, is kept only while it earns its maintenance: one that adds maintenance or pulls the design toward command-line shapes (argument strings, exit codes, text output) is removed, and its commands answer with the sentence naming what replaced them (`RemovedCommands`). What the product does is an operation ([planning/AGENTACCESS.md](../planning/AGENTACCESS.md)); a command is one way to call it. | One grammar to learn; a console CLI that forwarded to products would hide which server a command touches. The suite is run from the console, the Workspace and agents now, so a command line is a tool for people, not the product's core. |
+| D3 | Each product keeps its own CLI; `dbdatakit` is the console's CLI only; lower-case executables; `<noun> <verb>` everywhere, old forms removed. | One grammar to learn; a console CLI that forwarded to products would hide which server a command touches. |
 | D4 | Each product is a standalone install option; the suite release (console image and MSI included) comes from the same workflow and commit; separate MSIs; a service joins the console by the single-use command the console generates (or one console command for every service on one machine; `docs/install.md`). | Nothing forces a user to install products they do not use; one workflow keeps the cost low (`docs/releases.md`). |
 | D5 | No self-updater runs beside a product (Sync's updater and launcher went with the Sync server). Images, MSIs, Scoop and the install scripts are the distribution; the console's upgrades (`DbDataKit.Upgrade`) reuse the `DbDataKit.Update`, `.Update.Service` and `.Update.Detect` libraries to download, verify and apply a release on a server. | One distribution route per platform; the update libraries' signed-manifest and verification code is reused, not written twice. |
 | D6 | DuckDB 2.0.0 at once with the released engine pinned (`duckdb.pin`) and DuckDB.NET packages that carry no engine. Done. | Waiting for DuckDB.NET 2.0 would hold every product back. |

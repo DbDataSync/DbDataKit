@@ -33,6 +33,7 @@ Subjects in priority order. The owner sets the order, the status and the assignm
 | 23 | [AGENTACCESS](AGENTACCESS.md) | Agents drive the console and the Gateway, over MCP or embedded, as the person: one implementation per operation, data rules per channel, provider and MCP client | needs review | unassigned |
 | 24 | [CLOUDDEV](CLOUDDEV.md) | A cloud session runs the four services as one development instance, shows the console in the preview and reaches it through a development MCP | needs review | unassigned |
 | 25 | [SAMPLEDATA](SAMPLEDATA.md) | Sample data for every model (by query or generated from structure and hints) to run transforms, build tests and stand in for real data | open design | unassigned |
+| 26 | [COMMANDLINES](COMMANDLINES.md) | The suite's programs only run and configure the four services; Build, Sync and the Store are called as libraries | needs review | unassigned |
 
 ## Parked
 

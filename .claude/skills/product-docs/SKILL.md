@@ -1,0 +1,57 @@
+---
+name: product-docs
+description: >-
+  How to write DbDataKit's product documentation (docs/, the READMEs, a product's docs folder) and the user-facing text of planning subjects. Use it
+  before writing or changing any of them: a new page, a section, a README line, the doc text a task or an owner's answer adds, the "Planned
+  architecture changes" section. It says what a reader needs, what never goes in, and how to check a sentence before committing it.
+---
+
+# Writing product docs
+
+The docs say what the product does and how to use it, for an administrator, an author or a developer of the suite. They are read to get something
+done. Every sentence has to help with that.
+
+## Write
+
+- **What it does, then how to use it, then an example** with real names, commands, files and values: `dbdatakit user invite --role admin --email
+  ana@example.com` prints a link that works once.
+- **Who does what.** Name the person, the service or the program that acts: "the Runner runs the task in its own process", not "tasks are isolated".
+- **One fact per sentence**, in the words the reader would use. Short sentences. If a sentence needs a second reading, rewrite it.
+- **Why, when the reader needs it to act**, said once and concretely: "so a crash of one task does not stop the others".
+- **Limits and failures**: what is not supported, what error the reader will see and what to do about it.
+
+## Never write
+
+- **Decisions as decisions.** No decision tables, no "Decided (owner, date)", no "it was decided", no proposal or task ids, no plan numbers. A
+  decision the owner made is written as how the product works. The record of who decided what is planning and commit messages, never docs.
+- **Slogans and maxims.** A sentence that sounds like a principle and tells the reader nothing to do. Wrong: "A command line is a tool for people, kept
+  only while it earns its maintenance; what the product does is an operation." Right: "We are removing the old command-line tools. When that is done,
+  the programs only run and configure the four services."
+- **Abstract nouns doing the work.** "surface", "pipeline", "posture", "story", "earns", "first-class", "single source of truth", "seamless". Say the
+  thing: which screen, which command, which file.
+- **The writer's reasoning or the doc talking about itself.** No "this section explains", "note that", "it is important to", "in other words".
+- **Agent-speak.** No sentence a person would not say out loud to a colleague. Read it aloud; if it sounds like a model talking to itself, it is wrong.
+
+## Planned changes
+
+A change that is planned and affects how readers use the product goes in a section **"Planned architecture changes"** (in `docs/architecture.md`, or
+the page it belongs to), in plain sentences: what is being removed or added, what is deprecated and what replaces it. It may link the planning subject.
+As the tasks land, the section gets shorter and the description of what is built gets longer. Example:
+
+```
+## Planned architecture changes
+
+- We are removing the old command-line tools. When that is done, the suite's programs only run and configure the four services.
+- `ui mcp` is being removed from every program. Agents will connect to the MCP endpoints of the console and the Gateway.
+```
+
+## Check before committing
+
+For each sentence you added or changed:
+
+1. What would a reader do differently after reading it? If nothing, cut it.
+2. Could a reader check it against the product (a screen, a command, a file)? If not, make it concrete or cut it.
+3. Would a colleague say it in a meeting, in those words? If not, rewrite it.
+4. Does it name a decision, an owner, a date, a task, a plan or a proposal? Move that to planning or the commit message.
+
+Code comments have their own rules: [docs/code-comments.md](../../../docs/code-comments.md).
