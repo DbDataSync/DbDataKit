@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "ask": [
+      "Edit(/CLAUDE.md)",
+      "Edit(/planning/ROLES.md)",
+      "Edit(/docs/architecture.md)",
+      "Edit(/.claude/skills/product-docs/SKILL.md)",
+      "Edit(/.claude/settings.json)",
+      "Edit(/.claude/hooks/protect-reference-docs.py)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I \"$CLAUDE_PROJECT_DIR/.claude/hooks/protect-reference-docs.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
