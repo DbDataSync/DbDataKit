@@ -68,8 +68,8 @@ the preview's address (the console's public address set to it, CLOUDDEV-4), if t
 first (a spike in CLOUDDEV-4); A if it fails; B only if neither works.
 
 Answer from the owner, 2026-11-19: "P3: we can create a dev only mode that either assumes a a specific admin user, or some other process to eliminate
-the need for an actual login". Acted on in CLOUDDEV-3 (the mode assumes one development administrator; its guards are a default awaiting the owner:
-loopback only, never as an installed service, a banner on every page).
+the need for an actual login". Acted on in CLOUDDEV-3 (the mode assumes one development administrator; its guards: loopback only, never as an installed
+service, a banner on every page). Answer from the owner, 2026-11-19, on the guards: "The dev mode guards make sense".
 
 ### CLOUDDEV-P4: where the forwarder lives (awaiting the owner)
 
@@ -79,7 +79,7 @@ standard library only, like the repository checks). Recommendation: B: it only f
 Answer from the owner, 2026-11-19: "P4: I assume the forwarder means the MCP forwarder. I would assume it is a small python script that just forwards
 the requests or provides a standard: not available response when there isn't an instance running to forward to. I assume it would need a prebuilt list
 of the tool calls available to at least respond properly at the start so the later requests can actually work." Acted on in CLOUDDEV-5 (the list is
-generated from the products' goldens of MCP tools: a default awaiting the owner).
+generated from the products' goldens of MCP tools). Answer from the owner, 2026-11-19, on the list: "as well as the generation of the tool [list]".
 
 ## Shared areas touched
 
