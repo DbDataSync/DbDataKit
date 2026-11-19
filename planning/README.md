@@ -30,6 +30,8 @@ Subjects in priority order. The owner sets the order, the status and the assignm
 | 20 | [TASKENGINE](TASKENGINE.md) | Runner limits and accounts, Sync state on the target, lineage retention, availability tests | queued | unassigned |
 | 21 | [CODECLEANUP](CODECLEANUP.md) | No dead code or stale docs of the deleted servers; the old state path gone | queued | unassigned |
 | 22 | [FABRICSERVING](FABRICSERVING.md) | A Fabric warehouse as a Gateway data source, signed in with Entra; close to working, low priority until the product is consistent | open design | unassigned |
+| 23 | [AGENTACCESS](AGENTACCESS.md) | Agents drive the console and the Gateway, over MCP or embedded, as the person: one implementation per operation, data rules per channel, provider and MCP client | needs review | unassigned |
+| 24 | [CLOUDDEV](CLOUDDEV.md) | A cloud session runs the four services as one development instance, shows the console in the preview and reaches it through a development MCP | needs review | unassigned |
 
 ## Parked
 

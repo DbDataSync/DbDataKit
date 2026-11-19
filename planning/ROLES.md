@@ -20,6 +20,8 @@ The person. The owner:
 
 Any conversation the owner chats with. Several may run at once, on any machine. A session:
 
+- takes a new request through planning first ("A new request", under Flows): what is planned and documented, what overlaps, agreed with the owner,
+  before anything changes;
 - talks with the owner, designs, and writes and changes planning: subject files, proposed decisions, open designs (on a `planning/<topic>` branch when
   the change is not part of a subject's task);
 - starts workers and reviewers, and brings their results, defaults and questions to the owner;
@@ -101,6 +103,22 @@ A pull request into `main` cannot merge while any file exists under `planning/wi
 on pushes to `main`, not on other branches).
 
 ## Flows
+
+**A new request.** The owner asks a session for something (a feature, a change to the repository, a change to the environment the work runs in). Before
+anything changes, the session:
+
+1. asks what the owner means when the request could mean more than one thing (which product, which users, what "working" looks like), instead of
+   guessing and offering to build;
+2. finds every subject in `planning/README.md` that covers or touches it, reads them, including their open designs and proposals, and reads the product
+   docs they name (`docs/architecture.md` first) and, when a design seems missing, the old plans (below);
+3. tells the owner what exists, what is already planned, what overlaps and what contradicts the request, citing each;
+4. agrees with the owner where the work goes: tasks added to an existing subject, a subject reshaped, or a new subject (status "needs review"); a
+   contradiction with a decided design is a proposed decision, never a silent change;
+5. writes that planning on a branch for the owner to review, and only then starts workers.
+
+A session may read anything, and build or run something only to answer a question, saying so. It changes nothing else first: no code, scripts, hooks,
+`.claude/` or `.mcp.json` settings, no settings or setup script of a cloud environment, no long-running services. The tools of a harness that offer to
+change an environment are used the same way: after the plan names the change and the owner has agreed it.
 
 **One worker on a subject.** The session starts a worker on a task. The worker creates `backup/<slug>-<n>` from `main`, builds, commits with the task id,
 pushes at every stopping point, keeps the wip file, and reports defaults and questions to the session, which takes them to the owner. When the task is

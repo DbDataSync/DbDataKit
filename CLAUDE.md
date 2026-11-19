@@ -91,7 +91,13 @@ How the work is run is [planning/ROLES.md](planning/ROLES.md): the owner, the se
 
 - **A session does no product code work.** A conversation with the owner talks, designs, writes and changes planning (subject files, proposed decisions,
   open designs) and starts workers and reviewers; it writes no product code, fixes no tests and resolves no merge conflicts. That work is a worker's
-  (code, tests) or the reviewer's (mechanical conflicts while combining).
+  (code, tests) or the reviewer's (mechanical conflicts while combining). The same holds for everything around the code: scripts, hooks,
+  `.claude/` settings, `.mcp.json`, the cloud environment's settings and setup script, and services started to try something. A session reads
+  (code, docs, planning) and may build or run something only to answer a question, saying so; it changes nothing outside `planning/` until the owner has
+  agreed the plan.
+- **A new request starts in `planning/`, not in the code** ([planning/ROLES.md](planning/ROLES.md), "A new request"): find the subjects that cover it in
+  `planning/README.md` and read them, check the product docs they name, say what exists, what overlaps and what contradicts, and work the plan out
+  with the owner before any change. Ask what the owner means when the request could mean more than one thing; do not offer to build first.
 - Open work is a **subject** in `planning/` (`planning/README.md` is the only index; the owner sets its order, status and assignment). A worker builds one
   subject's tasks on `backup/<slug>-<n>` (`backup/installer-3`), edits only its subject file and the code and docs its tasks need, starts each commit
   message with the task id (`INSTALLER-3: ...`), merges `main` into its branch when `main` moves, and reports defaults and questions without deciding them.
