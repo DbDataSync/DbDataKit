@@ -41,6 +41,10 @@ done. Every sentence has to help with that.
 - **Slogans and maxims.** A sentence that sounds like a principle and tells the reader nothing to do. Wrong: "A command line is a tool for people, kept
   only while it earns its maintenance; what the product does is an operation." Right: "We are removing the old command-line tools. When that is done,
   the programs only run and configure the four services."
+- **A sentence that turns around halfway.** Do not start in one direction and reverse it at the end. A verb followed by "nothing", "none" or "no"
+  does this: "The Gateway runs nothing scheduled" first tells the reader the Gateway runs something. Put the negation before the verb, or say what
+  happens instead. Wrong: "runs nothing scheduled", "holds no login", "calls none of the services". Right: "Scheduled work never runs on the
+  Gateway", "does not hold a login to customer data", "never calls another service".
 - **Abstract nouns doing the work.** "surface", "pipeline", "posture", "story", "earns", "first-class", "single source of truth", "seamless". Say the
   thing: which screen, which command, which file.
 - **The writer's reasoning or the doc talking about itself.** No "this section explains", "note that", "it is important to", "in other words".
