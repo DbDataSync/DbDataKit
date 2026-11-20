@@ -34,7 +34,7 @@ function Diagnose {
   }
 }
 
-# `health check` is the program's own client of its own address (https://localhost:8495/health/live, a self-signed certificate accepted on the loopback).
+# `health check` is the program's own client of its own address (https://localhost:7840/health/live, a self-signed certificate accepted on the loopback).
 # `service install` applies its directory specs again and puts the inheritance back, so the folder is locked down right before each doctor call, not before the install.
 function LockDownInstallDir {
   & icacls.exe $InstallDir /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Host

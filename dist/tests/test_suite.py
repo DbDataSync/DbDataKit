@@ -346,10 +346,10 @@ class SuiteManifestTests(unittest.TestCase):
         self.assertNotIn("dbdatakit server pair", notes)             # the console is not paired with itself
         # each member's management address is the product's default (the Gateway's is https://localhost:8816, on by default); a member this file knows no default for stays generic
         self.assertIn("dbdatakit instance add https://localhost:8816 --code <code>", notes)
-        self.assertIn("dbdatakit instance add https://127.0.0.1:8495 --code <code>", notes)
+        self.assertIn("dbdatakit instance add https://127.0.0.1:7840 --code <code>", notes)
         self.assertNotIn("<https address of that server>", notes)
         self.assertLess(notes.index("dbdatagateway server pair"), notes.index("instance add https://localhost:8816"))
-        self.assertLess(notes.index("dbdatarunner server pair"), notes.index("instance add https://127.0.0.1:8495"))
+        self.assertLess(notes.index("dbdatarunner server pair"), notes.index("instance add https://127.0.0.1:7840"))
         self.assertIn("one install route per machine", notes)
         self.assertLess(notes.index("dbdatakit service install"), notes.index("dbdatagateway service install"))
         self.assertLess(notes.index("dbdatagateway service install"), notes.index("dbdatagateway server pair"))

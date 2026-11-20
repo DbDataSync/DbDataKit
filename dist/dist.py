@@ -226,10 +226,10 @@ _PAIR_ROLES_DEFAULT = "viewer,operator,admin"
 # The address a console pairs with, as each product's README gives its default listen address (the Gateway's is its management API, on by default and on this machine only, plan 33 D15).
 # A product not listed has no default this file can name, so the notes stay generic for it and the install script leaves it unpaired.
 _MANAGEMENT_ADDRESS = {
-    "dbdatakit": "https://localhost:8480",
+    "dbdatakit": "https://localhost:7800",
     "dbdatagateway": "https://localhost:8816",
-    "dbdatarunner": "https://127.0.0.1:8495",
-    "dbdataworkspace": "https://127.0.0.1:8471",
+    "dbdatarunner": "https://127.0.0.1:7840",
+    "dbdataworkspace": "https://127.0.0.1:7860",
 }
 
 
