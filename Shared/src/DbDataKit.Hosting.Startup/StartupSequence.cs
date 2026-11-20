@@ -75,7 +75,7 @@ public sealed class StartupSequence(StartupOptions options)
         var named = Find<StartupStepException>(error);
         var text = new StringBuilder();
         var program = Options.Version is null ? Options.Service.Program : $"{Options.Service.Program} {Options.Version}";
-        text.AppendLine($"{program} did not start: the {step.Name()} step failed at {Utc(failedAt)} (starting since {Utc(since)}).");
+        text.AppendLine($"Startup of {program} failed at the {step.Name()} step, at {Utc(failedAt)} (starting since {Utc(since)}).");
         text.AppendLine();
         text.AppendLine(named?.Message ?? error.Message);
         text.AppendLine();

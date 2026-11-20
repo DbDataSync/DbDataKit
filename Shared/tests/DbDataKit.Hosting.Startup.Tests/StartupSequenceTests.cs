@@ -119,7 +119,7 @@ public sealed class StartupSequenceTests : StartupTestBase
         Assert.Equal([StartupStep.Folder, StartupStep.Keys, StartupStep.Certificate], ran);
         var text = Read(FailureFile);
         Assert.Equal(result.Report, text);
-        Assert.StartsWith("dbdatarunner 1.2.3 did not start: the certificate step failed at ", text);
+        Assert.StartsWith("Startup of dbdatarunner 1.2.3 failed at the certificate step, at ", text);
         Assert.Contains("Step: certificate", text);
         Assert.Contains($"Account: {StartupAccount.Current()}", text);
         Assert.Contains(Environment.UserName, text);

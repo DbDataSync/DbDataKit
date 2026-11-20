@@ -32,7 +32,7 @@ if (!result.Succeeded) return result.ExitCode; // the reason is in result.Failur
 A port the Runner cannot bind leaves `C:\ProgramData\DbDataKit\logs\startup-failure-dbdatarunner.txt`:
 
 ```
-dbdatarunner did not start: the ports step failed at 2026-11-17T09:12:05Z (starting since 2026-11-17T09:12:03Z).
+Startup of dbdatarunner failed at the ports step, at 2026-11-17T09:12:05Z (starting since 2026-11-17T09:12:03Z).
 
 Port 7841 cannot be bound: it is inside the excluded port range 7840-7939.
 
