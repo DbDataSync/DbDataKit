@@ -24,7 +24,7 @@ like a SQL Server or PostgreSQL source. Close to working, and low priority until
 README records the default:** reference `Microsoft.Data.SqlClient.Extensions.Azure` from the Gateway's server; map `engine: fabric` onto the SQL Server
 provider with the `fabric` dialect; put the Entra credential in the connection string (`Authentication=Active Directory Service Principal;User
 Id=...;Password=env:...`, or a managed identity), with no pass-through of the caller's credentials; apply the read-only classifier as for SQL Server; let
-the Workspace's publish of a Build project to a Gateway accept a Fabric connection as a data source. A token source inside the Gateway (`auth: {mode:
+the control service's deploy of a Build project to a Gateway accept a Fabric connection as a data source. A token source inside the Gateway (`auth: {mode:
 token}`, the Gateway renewing the token itself) was the other option, not chosen because the provider already renews it. **Proven** when a Fabric data
 source answers a query with the classifier applied and its publish is tested, on a tenant.
 

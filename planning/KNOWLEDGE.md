@@ -142,7 +142,7 @@ A verified query is a question people ask, the query that answers it and someone
 The knowledge index holds what describes the system; content is searched where it is kept, by that system's own rules. Definitions of every kind
 (semantic models and members, Build models and columns, Store models, data sources, apps, portals, agents, skills, saved queries, reports and
 dashboards, integrations) are generated knowledge. Packages not served by the serving group (Runner packages, integrations) still get an item: when the
-Workspace publishes one it also publishes its description (name, title, what it reads and writes, owner; never its code) to the group. Source code and
+control service deploys one it also publishes its description (name, title, what it reads and writes, owner; never its code) to the group. Source code and
 files are not in the index (they change per branch, people search them for exact text, and their access is the project's): workspace search on the
 Workspace, exact text and file names per repository and branch under the person's rights. Data, documents' contents and operational records (runs,
 notifications, audit, suggestions, work items) stay with their own systems and screens. The search component asks several search sources at once and

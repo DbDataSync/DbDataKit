@@ -52,7 +52,7 @@ Read from the code of `Shared/web/*` on 2026-11-18 and rendered at 1440x900 with
     `/saved-queries`, Publishers `/trust`, Access rules `/access`, Result cache `/cache`, Certificate `/tls`, Activity `/activity`, Server settings
     `/settings` (in-page tab toggles), Configuration history `/config` (a commit `/config/<sha>`).
   - **Runner** (`RunnerShell.tsx`): Tasks `/`, Runs `/runs`, Packages `/packages` (a package `/packages/<name>`).
-  - **Workspace** (`WorkspaceShell.tsx`): Workspaces `/` (the projects and their workspaces), Publisher keys `/keys`; a workspace `/<project>/<id>`
+  - **Workspace** (`WorkspaceShell.tsx`): Workspaces `/` (the projects and their workspaces); a workspace `/<project>/<id>`
     has a row of up to 11 toggle buttons by project kind (Changes, Check, Models and plan, Compile, Views, Scripts, Provisioning, Rows, Deploy,
     Catalog, Runs, Builds, History; `?tab=runs` is the address the Runner links back to).
   - **Identity home on its own** (`IdentityHomeModule.tsx`): one entry.
@@ -98,7 +98,7 @@ Scenario: a person opens **Projects** under Build and release; later a second Wo
 
 - **Built (recommended for now):** with one Workspace, **Projects** opens that Workspace's list of projects and workspaces (its first screen,
   `/servers/<id>`); with several, one entry each, **Projects on workspace-a** and **Projects on workspace-b**. The Workspace is also listed under Servers
-  by its name, where its own entries (Workspaces, Publisher keys) are nested while it is open.
+  by its name, where its own entries (Workspaces) are nested while it is open.
 - **Other option:** one **Projects** entry that lists the projects of every paired Workspace on one console page. It needs a new page (a console list
   over the Workspaces), which this quick pass does not build.
 
