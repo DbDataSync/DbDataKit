@@ -32,6 +32,7 @@ EXEMPT_FILES = {
     "docs/release-notes-pending.md": "release notes: old and new names, on purpose",
     "docs/testing-environment.md": "the table of the old test variable names and the new ones",
     "docs/ci-lessons.md": "CI lessons name the test variables of the day they were learnt",
+    "planning/CODECLEANUP.md": "CODECLEANUP-14 names the old prefixes and the names the rename rewrote, on purpose",
     "docs/release-notes/dbdatagateway-rename.md": "the release note of the rename DbDataProxy to DbDataGateway",
     "scripts/rename_secret_names.py": "the script of the secret-name rename (it names the old variable forms it rewrites)",
     "scripts/tests/test_rename_secret_names.py": "the test of that script",
