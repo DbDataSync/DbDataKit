@@ -45,6 +45,11 @@ subject keep colliding, the subject is split into two subjects (the owner's call
 - **writes plainly**, by the rules of the skill `product-docs`: direct statements, no slogans, no internal names without saying what they are;
 - **says what it changed and where it is pushed** in a line or two, when it has changed something.
 
+**Task rows.** A subject's task rows are in priority order only: a row does not depend on the rows above it unless it says so. Every dependency is a
+task id in the row's "Depends on" cell. A row's text may say why ("Follows SYNCAUTHORING-15: the page exists"), but a task named after "Follows"
+must also be in that cell. `scripts/check_plans.py` refuses a cycle and a "Follows" missing from the cell, and reports each dependency on a subject
+ranked lower in `planning/README.md`.
+
 **Review dates.** Every product doc, README and planning subject file carries the date of its last full review, `<!-- reviewed: YYYY-MM-DD -->` on the
 line under its title (the skill `product-docs`, "The review date"). A session sets it when the owner approves a review of the whole file: checked
 against `docs/architecture.md` and the other reference docs, and written by the skill. A partial change leaves it as it is. A new file written under

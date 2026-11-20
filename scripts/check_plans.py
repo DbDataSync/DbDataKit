@@ -8,6 +8,7 @@
              used twice anywhere
   proposals  a proposed decision is a heading that starts with `<SLUG>-P<n>`; it starts with its file's slug and is unique
   refs       every task or proposal id named anywhere under planning/ (a dependency, a need from another subject, a hand-off) exists
+  follows    a task named after "Follows" in a row's text is also in the row's "Depends on" cell
   cycles     no tasks depend on each other in a cycle (the "Depends on" cell of each task row); a task that depends on a task of a subject ranked
              lower in the index is printed as a report after the result, not counted as a problem (the order may be meant)
   links      no markdown file in the repository names `docs/plans/` or links to a file under planning/ that does not exist
@@ -100,7 +101,9 @@ def problems(root):
             if ident not in known:
                 out.append(f"planning/{name}: names {ident}, which is not a {'proposed decision' if p else 'task'} of any subject")
 
-    out.extend(cycle_problems(task_dependencies(planning, subjects)))
+    deps = task_dependencies(planning, subjects)
+    out.extend(cycle_problems(deps))
+    out.extend(follows_problems(planning, subjects, deps))
 
     for path in markdown_files(root):
         rel = os.path.relpath(path, root).replace(os.sep, "/")
@@ -129,6 +132,28 @@ def task_dependencies(planning, subjects):
             ident = cells[0].strip("*")
             deps[ident] = (name, [f"{a}-{n}" for a, p, n in ID.findall(cells[2]) if not p])
     return deps
+
+
+FOLLOWS = re.compile(r"\bFollows\b([^(.;:]*)")
+
+
+def follows_problems(planning, subjects, deps):
+    """A problem for each task named after "Follows" in a row's text that is not in the row's "Depends on" cell."""
+    out = []
+    for name in subjects:
+        for line in read(os.path.join(planning, name)).splitlines():
+            if not TASK_ROW.match(line + "\n"):
+                continue
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if len(cells) < 3:
+                continue
+            ident = cells[0].strip("*")
+            for m in FOLLOWS.finditer(cells[1]):
+                for a, p, n in ID.findall(m.group(1)):
+                    named = f"{a}-{n}"
+                    if not p and named not in deps.get(ident, ("", []))[1]:
+                        out.append(f"planning/{name}: {ident} follows {named} in its text but does not list it under Depends on")
+    return out
 
 
 def cycle_problems(deps):
