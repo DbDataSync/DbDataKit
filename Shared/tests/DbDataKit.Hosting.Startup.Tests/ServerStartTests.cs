@@ -56,6 +56,7 @@ public sealed class ServerStartTests : StartupTestBase
             .RunAsync();
 
         Assert.IsType<InvalidOperationException>(result.Error);
+        Assert.Contains("What to check: The server's services start together with its listeners", Read(FailureFile));
         Assert.Equal("The start failed at the ports step: The task host is missing. The full reason is in " + FailureFile + ".", result.Summary());
     }
 

@@ -94,7 +94,12 @@ public sealed class StartupSequence(StartupOptions options)
             text.AppendLine($"Excluded port ranges: {ExcludedPortRanges.Describe(Options.ExcludedPorts())}");
 
         text.AppendLine();
-        text.AppendLine($"What to check: {step.WhatToCheck()}");
+        // a server's host starts its background services together with its listeners, in the ports step: a failure there that is not a refused port is
+        // one of those services', and the message above names it
+        var whatToCheck = step == StartupStep.Ports && named is null && !portRefused
+            ? "The server's services start together with its listeners, and one of them failed: the message above says which and why."
+            : step.WhatToCheck();
+        text.AppendLine($"What to check: {whatToCheck}");
         if (portRefused)
             text.AppendLine("Hint: a listening port could not be bound. On Windows, Hyper-V, WSL and Docker reserve ranges of ports that change at each boot "
                             + $"(`{ExcludedPortRanges.Command}`), and a listener inside one is refused although no program holds it; "
