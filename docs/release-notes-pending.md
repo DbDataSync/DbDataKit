@@ -62,6 +62,8 @@ release moves the entries into its notes and empties this file.
   | `secret list` with no prefix lists `dbdata:` | it lists `dbdatakit:` |
 <!-- secret-names:end -->
 
+- **Changed: `service doctor` is `service check`.** In `dbdatakit`, `dbdatagateway`, `dbdatarunner` and `dbdataworkspace`, `service check` makes the checks `service doctor` made (the registration, the account and the folder permissions), and its last line is `Check: OK` or `Check: <n> failure(s)` instead of `Doctor: ...`. `service doctor` now prints that it is `service check` and exits with code 2. Change a script that runs `service doctor` or reads `Doctor:` to use `service check` and `Check:`.
+
 ## Since the last release before the 2026-11-13 beta
 
 These entries were written before the 2026-11-13 beta and are in no release note: the beta's release carries only the install text. They describe
