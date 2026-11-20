@@ -230,7 +230,7 @@ stopping the services stays the user's first step. What the check found, against
 ## Commands named `check`
 
 `service check` checks a service's registration, settings and folder permissions; `health check` asks whether a running service answers. No command or
-subcommand is named `doctor`; a repository check keeps it so.
+subcommand is named `doctor`; `scripts/check_docs_commands.py` fails when a command line or a shared noun in `Shared/src` has one.
 
 ## Clean break
 

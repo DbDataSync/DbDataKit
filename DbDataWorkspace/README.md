@@ -13,7 +13,7 @@ dbdataworkspace project list [--repo <server directory>]
 dbdataworkspace workspace list [--project <id>] [--repo <server directory>]
 dbdataworkspace publisher pair <name> --url <https address of a Gateway's management API> --code <pairing code> [--client-name <text>] [--repo <server directory>]   # make the key for a target and pair it with a Gateway (the code: `server pair --max-role publisher` there)
 dbdataworkspace publisher list [--repo <server directory>]   # each target's key reference (never the key) and its Gateway
-dbdataworkspace service install|uninstall|status|start|stop|restart|doctor|unit
+dbdataworkspace service install|uninstall|status|start|stop|restart|check|unit
 dbdataworkspace state init --topology service|group|install [--engine mssql|postgres --connection <connection with Password=secret:NAME or env:NAME>] [--login <role or user> [--migrate]] [--admin-connection <reference> --apply] [--group <name>] [--settings <file>] [--repo <server directory>]   # writes the state section of server.yaml (a SQLite file per service is the default)
 dbdataworkspace state show [--offline] [--engine mssql|postgres] [--repo <server directory>]      # the state database: engine, where each setting came from, namespaces, module versions, pending migrations; creates nothing
 dbdataworkspace state test [--repo <server directory>]                   # opens it read-only and checks rights, engine version and clashes; stops at the first failure with the fix

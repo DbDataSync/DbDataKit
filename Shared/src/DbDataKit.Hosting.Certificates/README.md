@@ -9,5 +9,5 @@
 Decisions
 - The PFX password is random (256-bit) and comes from the injected `ICertificateSecretSource.GetOrCreatePassword`; null/empty is rejected, so there is no empty-password PFX.
 - The PFX is written to a temp file, passed to the `restrictFileAccess` callback (products plug in their ACL helper), then moved into place.
-- `CertificateExpiry`/`CertificateReadinessProbe` surface rotation state on `/health` and doctor.
+- `CertificateExpiry`/`CertificateReadinessProbe` report the rotation state on `/health`.
 - `PlainHttpGuard.Enforce(urls, allowOverride)` refuses `http://` on any non-loopback bind (wildcards included).

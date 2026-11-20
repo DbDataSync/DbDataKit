@@ -18,7 +18,9 @@ public sealed record Verb(string Name, string Summary, EffectClass Effect, strin
 /// A group of verbs on one thing, identical in every command line that has it (plan 13, W4). The shared nouns are built here once; a product supplies what is its own
 /// (how its server starts, how its configuration is read) as small interfaces and adds its own verbs with <see cref="Noun.With"/>.
 /// </summary>
-public sealed class Noun(string name, string summary, IReadOnlyList<Verb> verbs)
+/// <param name="removed">Verbs this noun no longer has, each with the sentence naming what replaced it: typed, they answer that sentence through <see cref="RemovedCommands"/> and exit
+/// with <see cref="CliExit.Usage"/> instead of "not a verb" (a clean break, never a silent one). They are not verbs: the help, the JSON schema and the agents' tools do not list them.</param>
+public sealed class Noun(string name, string summary, IReadOnlyList<Verb> verbs, IReadOnlyDictionary<string, string>? removed = null)
 {
     public string Name { get; } = name;
 
@@ -26,8 +28,11 @@ public sealed class Noun(string name, string summary, IReadOnlyList<Verb> verbs)
 
     public IReadOnlyList<Verb> Verbs { get; } = verbs;
 
+    /// <summary>The removed verbs and the sentence each answers.</summary>
+    public IReadOnlyDictionary<string, string> Removed { get; } = removed ?? new Dictionary<string, string>();
+
     /// <summary>The same noun with more verbs, for the ones a product adds (<c>cert</c> plus its own, <c>server</c> plus <c>project add</c>).</summary>
-    public Noun With(params Verb[] more) => new(Name, Summary, [.. Verbs, .. more]);
+    public Noun With(params Verb[] more) => new(Name, Summary, [.. Verbs, .. more], Removed);
 
     /// <summary>The verbs as command specs (<c>server run</c>), for a product's command table and the help.</summary>
     public IEnumerable<CommandSpec> Specs() => Verbs.Select(v => new CommandSpec($"{Name} {v.Name}", v.Effect, v.Summary, true) { Traits = v.EffectiveTraits });
@@ -154,6 +159,12 @@ public sealed class NounRouter
         }
 
         var verb = noun.Verbs.FirstOrDefault(v => v.Name == args[1]);
+        if (verb is null && noun.Removed.TryGetValue(args[1], out var replaced))
+        {
+            var removed = new RemovedCommands(_program, new Dictionary<string, string> { [$"{noun.Name} {args[1]}"] = replaced });
+            return await removed.TryAnswerAsync(args[..2], context.Error) ?? CliExit.Usage;
+        }
+
         if (verb is null)
         {
             await context.Error.WriteLineAsync($"{_program} {noun.Name}: '{args[1]}' is not a verb. Run '{_program} {noun.Name} help' for the list.");

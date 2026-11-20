@@ -195,6 +195,55 @@ public static class IdentityCommand {
         self.assertEqual(["DbDataKit/README.md: the command line has `dbdatakit instance` and the README does not show it"], problems)
         self.assertEqual([], check.check_readmes(self.tree({"DbDataKit/README.md": "dbdatakit server run\ndbdatakit user invite\ndbdatakit instance add\n"})))
 
+    def test_a_verb_named_doctor_fails_and_names_check(self):
+        root = self.tree({"DbDataKit/src/DbDataKit.Server/ConsoleService.cs": """
+public static class ConsoleService {
+    static Noun Noun() => new("service", "Registration",
+    [
+        Forward("install", "Register", EffectClass.TargetWrites, "", null),
+        Forward("doctor", "Check the registration", EffectClass.OfflineOnly, "", null),
+    ]);
+}
+"""})
+        problems = check.check_names(root)
+        self.assertEqual(["DbDataKit: `dbdatakit service doctor` is a command named `doctor`; no command or subcommand is named `doctor`, call it `check`"], problems)
+        self.assertEqual(problems, [p for p in check.check(root) if "named `doctor`" in p])
+
+    def test_a_noun_named_doctor_fails(self):
+        root = self.tree({"DbDataGateway/src/DbDataGateway.Server/Hosting/Cli.cs": """
+public static class Cli {
+    private static Noun DoctorNoun() => new("doctor", "Checks", [ new Verb("run", "Run them", EffectClass.OfflineOnly, "", null) ]);
+}
+"""})
+        self.assertEqual(["DbDataGateway: `dbdatagateway doctor run` is a command named `doctor`; no command or subcommand is named `doctor`, call it `check`"], check.check_names(root))
+
+    def test_a_shared_factory_that_makes_a_doctor_verb_fails_even_when_no_product_uses_it(self):
+        root = self.tree({"Shared/src/DbDataKit.Hosting.Cli/HostingNouns.cs": """
+public static class HostingNouns {
+    public static Noun Service(ServiceCommand command) => new("service", "Registration",
+    [
+        Forward("doctor", "Check the registration", EffectClass.OfflineOnly, "", command.Execute),
+        Forward("unit", "Print a unit", EffectClass.OfflineOnly, "", command.Execute),
+    ]);
+}
+"""})
+        self.assertEqual(["Shared/src: `HostingNouns.Service` makes a command named `doctor`; no command or subcommand is named `doctor`, call it `check`"], check.check_names(root))
+
+    def test_check_and_a_removed_doctor_verb_pass(self):
+        root = self.tree({"Shared/src/DbDataKit.Hosting.Cli/HostingNouns.cs": """
+public static class HostingNouns {
+    public static Noun Service(ServiceCommand command) => new("service", "Registration",
+    [
+        Forward("check", "Check the registration", EffectClass.OfflineOnly, "", command.Execute),
+    ], ServiceCommand.RemovedVerbs);
+}
+""", "Shared/src/DbDataKit.Hosting.Cli/ServiceCommand.cs": """
+public sealed class ServiceCommand {
+    public static IReadOnlyDictionary<string, string> RemovedVerbs { get; } = new Dictionary<string, string> { ["doctor"] = "run 'service check' instead." };
+}
+"""})
+        self.assertEqual([], check.check_names(root))
+
     def test_the_repository_itself_passes(self):
         self.assertEqual([], check.check(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))))
 

@@ -68,7 +68,7 @@ public static class ConsolePrompt
 }
 
 /// <summary>
-/// <c>dbdatagateway service install|uninstall|start|stop|restart|status|doctor|unit</c> on top of the shared service
+/// <c>dbdatagateway service install|uninstall|start|stop|restart|status|check|unit</c> on top of the shared service
 /// command (SCM API, no sc.exe). <c>install</c> and <c>uninstall</c> keep working as top-level verbs.
 /// <para>
 /// The service runs as the virtual account <c>NT SERVICE\DbDataGateway</c> unless <c>--account</c> says otherwise
@@ -82,12 +82,12 @@ public static class ServiceCli
     public const string Description = "Arrow Flight SQL gateway that forwards queries to ODBC/ADO.NET databases and compresses the results.";
 
     public const string Usage = """
-        Usage: dbdatagateway service <install|uninstall|start|stop|restart|status|doctor|unit> [options]
+        Usage: dbdatagateway service <install|uninstall|start|stop|restart|status|check|unit> [options]
           install   [--name N] [--account virtual|DOMAIN\user|DOMAIN\gmsa$] [--allow-localsystem]
                     [--password-secret env:NAME|file:PATH | --password-stdin] [--data-dir PATH] [--dry-run]
                     Register the Windows service (run elevated). Default account: NT SERVICE\<name>.
           uninstall [--name N]            Stop and remove the service
-          start|stop|restart|status|doctor [--name N]
+          start|stop|restart|status|check [--name N]
           unit      (or --systemd) [--name N] [--exec /path/to/dbdatagateway]
                                           Print a hardened systemd unit
         """;
@@ -109,8 +109,14 @@ public static class ServiceCli
         }
 
         string verb = extracted.Verb ?? "";
+        if (ServiceCommand.RemovedVerbs.TryGetValue(verb, out var replaced))
+        {
+            console.Error.WriteLine(new global::DbDataKit.Cli.RemovedCommands(Cli.Program, new Dictionary<string, string> { [$"service {verb}"] = replaced }).AnswerFor(["service", verb]));
+            return ExitCodes.Usage;
+        }
+
         if (verb == "unit" || extracted.Systemd) return Unit(env, extracted);
-        if (verb is not ("install" or "uninstall" or "start" or "stop" or "restart" or "status" or "doctor"))
+        if (verb is not ("install" or "uninstall" or "start" or "stop" or "restart" or "status" or "check"))
         {
             console.Error.WriteLine(Usage);
             return ExitCodes.Usage;

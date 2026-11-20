@@ -83,6 +83,20 @@ public sealed class RunnerCliTests : IDisposable
     }
 
     [Fact]
+    public async Task Service_check_runs_the_checks_and_service_doctor_answers_that_it_is_service_check_now()
+    {
+        var output = new StringWriter();
+        await RunnerCli.Router(_ => null).RunAsync(["service", "check"], new CliContext(output, new StringWriter(), TextReader.Null));
+        Assert.Contains("service.installed", output.ToString());
+        Assert.Contains("Check: ", output.ToString());
+
+        var error = new StringWriter();
+        var doctor = await RunnerCli.Router(_ => null).RunAsync(["service", "doctor"], new CliContext(new StringWriter(), error, TextReader.Null));
+        Assert.Equal(CliExit.Usage, doctor);
+        Assert.StartsWith("'dbdatarunner service doctor' is gone: run 'service check' instead", error.ToString());
+    }
+
+    [Fact]
     public async Task The_lineage_noun_says_where_an_installed_package_is_deployed_and_what_a_runner_has()
     {
         var manifest = SamplePackage.WriteManifest(SamplePackage.Manifest(SamplePackage.Task("ok", TimeSpan.FromHours(1))));

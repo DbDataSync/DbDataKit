@@ -172,13 +172,23 @@ public class ServiceCommandTests
     }
 
     [Fact]
-    public void Doctor_reports_failures_when_directories_are_missing()
+    public void Check_reports_failures_when_directories_are_missing()
     {
         var (cmd, _, _) = Make();
         cmd.Execute(["install"], new BufferConsole());
         var console = new BufferConsole();
-        Assert.Equal(ExitCodes.Failure, cmd.Execute(["doctor"], console));
+        Assert.Equal(ExitCodes.Failure, cmd.Execute(["check"], console));
         Assert.Contains("FAIL", console.OutWriter.ToString());
+        Assert.Contains("Check: ", console.OutWriter.ToString());
+    }
+
+    [Fact]
+    public void Doctor_answers_that_it_is_service_check_now()
+    {
+        var (cmd, _, _) = Make();
+        var console = new BufferConsole();
+        Assert.Equal(ExitCodes.Usage, cmd.Execute(["doctor"], console));
+        Assert.Contains("'service doctor' is gone: run 'service check' instead", console.ErrorWriter.ToString());
     }
 
     [Fact]

@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""No product document, script or workflow uses a command name that plan 13 retired, or one that does not exist (slice X03).
+"""No product document, script or workflow uses a command name that plan 13 retired, or one that does not exist (slice X03), and no command line has a command named
+as NAMES_NOT_USED forbids.
 
-Three checks over the same files:
+Three checks over the same files, and one over the command lines:
   1. the retired forms, listed in RETIRED with what replaced them;
   2. every `dbdatasync|dbdatagateway|dbdatakit|dbdatastore|dbdatarunner|dbdataworkspace|dbdatabuild <words>` that is typed must be a command that exists. The commands are read from the
      sources, not listed by hand: the nouns and verbs of each product's command line (the shared ones in Shared/src, the product's own under its src) and,
      for Build, its generated command reference (DbDataBuild/docs/commands.md, which a test keeps current);
-  3. no DbDataSync document says its server serves a web app at its own address (SYNC_WEB_APP): since U11 the screens are the dbdatakit console's.
+  3. no DbDataSync document says its server serves a web app at its own address (SYNC_WEB_APP): since U11 the screens are the dbdatakit console's;
+  4. no noun or verb of any command line, a shared one in Shared/src included, has a name of NAMES_NOT_USED: a check is `check` (`service check`, `health check`).
 
 History (plans, progress logs, research, phase documents, release notes) and test fixtures are not checked, because they say what was true then. A line can
 name an old or made-up form on purpose with the marker `retired-name-ok` on itself or the line above.
@@ -34,6 +36,11 @@ RETIRED = [
     (r"\bdbdatagateway(?:\.exe)?\s+--healthcheck\b", "dbdatagateway health check"),
     (r"\bDbDataGateway(?:\.Worker)?\.exe\b", "dbdatagateway.exe / dbdatagateway-worker.exe (lower case)"),
 ]
+
+# Names no command or subcommand has, with the name to use instead. Design: docs/install.md#commands-named-check
+NAMES_NOT_USED = {
+    "doctor": "check",
+}
 
 # What a Sync document may no longer say (slice U11, X03): the server serves no web app, its screens are the dbdatakit console's. Each pattern is a way the old claim was written,
 # with what is true now. Only DbDataSync's own documents are read, and a line can name the old claim on purpose with the marker.
@@ -250,8 +257,26 @@ def check_readmes(root):
     return problems
 
 
+def check_names(root):
+    """No command of a product, and no noun or verb a shared factory in Shared/src makes, is named as NAMES_NOT_USED forbids."""
+    problems = []
+    for product, folder in PRODUCTS.items():
+        if not os.path.isdir(os.path.join(root, folder, "src")):
+            continue
+        for command in sorted(commands_of(root, product)):
+            for word in command:
+                if word in NAMES_NOT_USED:
+                    problems.append(f"{folder}: `{product} {' '.join(command)}` is a command named `{word}`; no command or subcommand is named `{word}`, call it `{NAMES_NOT_USED[word]}`")
+    if os.path.isdir(os.path.join(root, "Shared", "src")):
+        for factory, (noun, verbs) in sorted(shared_nouns(root).items()):
+            for word in [noun, *verbs]:
+                if word in NAMES_NOT_USED:
+                    problems.append(f"Shared/src: `{factory}` makes a command named `{word}`; no command or subcommand is named `{word}`, call it `{NAMES_NOT_USED[word]}`")
+    return problems
+
+
 def check(root):
-    return check_retired(root) + check_web_app(root) + check_exist(root) + check_readmes(root)
+    return check_retired(root) + check_web_app(root) + check_exist(root) + check_readmes(root) + check_names(root)
 
 
 def main(argv):
@@ -259,7 +284,7 @@ def main(argv):
     problems = check(root)
     for problem in problems:
         print(problem)
-    print(f"{len(problems)} problem(s)" if problems else "no document uses a retired or unknown command name")
+    print(f"{len(problems)} problem(s)" if problems else "no document uses a retired or unknown command name, and no command has a name that is not used")
     return 1 if problems else 0
 
 

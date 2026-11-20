@@ -33,7 +33,7 @@ public sealed class WorkspaceServiceEnvironment
 }
 
 /// <summary>
-/// <c>dbdataworkspace service install|uninstall|status|start|stop|restart|doctor|unit</c>: registration of <c>server run</c> with Windows or systemd, the shared verbs over the shared command. The service runs as the virtual account
+/// <c>dbdataworkspace service install|uninstall|status|start|stop|restart|check|unit</c>: registration of <c>server run</c> with Windows or systemd, the shared verbs over the shared command. The service runs as the virtual account
 /// <c>NT SERVICE\DbDataWorkspace</c> unless <c>--account</c> says otherwise, and keeps everything it writes in one data directory, which only administrators and the service can reach.
 /// </summary>
 public static class WorkspaceService

@@ -275,12 +275,23 @@ public sealed class ServiceCliTests
     }
 
     [Fact]
-    public void Doctor_reports_missing_directories_after_an_install_against_a_fake_file_system()
+    public void Check_reports_missing_directories_after_an_install_against_a_fake_file_system()
     {
         var rig = new Rig();
         rig.Run("install");
-        Assert.Equal(ExitCodes.Failure, rig.Run("doctor")); // the recording ACL service cannot read anything back
+        Assert.Equal(ExitCodes.Failure, rig.Run("check")); // the recording ACL service cannot read anything back
         Assert.Contains("FAIL", rig.Out);
+    }
+
+    [Fact]
+    public void Doctor_answers_that_it_is_service_check_now_on_every_platform()
+    {
+        foreach (var windows in new[] { true, false })
+        {
+            var rig = new Rig { Windows = windows };
+            Assert.Equal(ExitCodes.Usage, rig.Run("doctor", "--name", "DbDataGateway"));
+            Assert.StartsWith("'dbdatagateway service doctor' is gone: run 'service check' instead", rig.Err);
+        }
     }
 
     [Fact]

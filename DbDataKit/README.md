@@ -23,7 +23,7 @@ dbdatakit state export --to <directory> [--include-secrets-check] [--engine mssq
 dbdatakit state import --from <directory> [--migrate-after true|false] [--engine mssql|postgres] [--repo <console directory>]   # into an empty state database
 dbdatakit state verify --snapshot <directory> [--db] [--rehash-payloads] [--engine mssql|postgres] [--repo <console directory>]   # the snapshot against itself, or the state against it; also --other-engine ... or --against <settings file>
 dbdatakit state move --to-engine mssql|postgres --to-connection "<connection string with secret references>" [--yes] [--keep-snapshot] [--repo <console directory>]   # export, import, verify, then write settings.yaml; the old database is untouched
-dbdatakit service install|uninstall|status|start|stop|restart|doctor|unit
+dbdatakit service install|uninstall|status|start|stop|restart|check|unit
 dbdatakit health check [--url <url>]
 ```
 

@@ -1,6 +1,6 @@
 # DbDataKit.Hosting.WindowsService
 
-SCM wrapper replacing `sc.exe`, install planning, directory layout and `service doctor`. Depends on `DbDataKit.Security.Acl` for all ACL work.
+SCM wrapper replacing `sc.exe`, install planning, directory layout and the checks of `service check`. Depends on `DbDataKit.Security.Acl` for all ACL work.
 
 Contract
 - `IServiceControlManager` (real: `WindowsServiceControlManager` via advapi32 P/Invoke: CreateServiceW, ChangeServiceConfigW/2W for description, failure actions, delayed auto-start, SID type, required privileges; QueryServiceStatusEx, StartService, ControlService, DeleteService). Fake: `InMemoryServiceControlManager`.
@@ -12,7 +12,7 @@ Contract
 Decisions
 - Default identity `NT SERVICE\<Name>`; gMSA (`DOMAIN\name$`, no password); explicit account only with a `SecureString` password (zeroed after the call); LocalSystem only with `AllowLocalSystem`. SYSTEM spellings all map to LocalSystem so the gate cannot be bypassed.
 - Service arguments containing "password" are refused. Plans and exceptions never contain secrets.
-- ACLs: one implementation, `DbDataKit.Security.Acl` (shared with `DbDataKit.Secrets.Windows`). This package only owns the layout data and the mapping to `AclSpecification`; the doctor and CLI take a single `IAclService`.
+- ACLs: one implementation, `DbDataKit.Security.Acl` (shared with `DbDataKit.Secrets.Windows`). This package only owns the layout data and the mapping to `AclSpecification`; `ServiceDoctor` and the command line take a single `IAclService`.
 - The virtual-account SID only resolves after the service exists: create the service first, then apply ACLs (the CLI does).
 - Real-SCM mutating test runs only with `DBDATAKIT_TEST_ADMIN_TESTS=1` in an elevated prompt.
 - Limits of the default identity: a virtual account cannot reach network shares or domain resources (use a gMSA for those, for example SQL Server integrated authentication), and user ODBC data sources are invisible to a service identity (use system DSNs; test a 32-bit worker under the service account).

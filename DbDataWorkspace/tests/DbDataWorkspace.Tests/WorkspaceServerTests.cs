@@ -112,6 +112,20 @@ public sealed class WorkspaceServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Service_check_runs_the_checks_and_service_doctor_answers_that_it_is_service_check_now()
+    {
+        var output = new StringWriter();
+        await WorkspaceCli.Router().RunAsync(["service", "check"], new CliContext(output, new StringWriter(), TextReader.Null));
+        Assert.Contains("service.installed", output.ToString());
+        Assert.Contains("Check: ", output.ToString());
+
+        var error = new StringWriter();
+        var doctor = await WorkspaceCli.Router().RunAsync(["service", "doctor"], new CliContext(new StringWriter(), error, TextReader.Null));
+        Assert.Equal(CliExit.Usage, doctor);
+        Assert.StartsWith("'dbdataworkspace service doctor' is gone: run 'service check' instead", error.ToString());
+    }
+
+    [Fact]
     public async Task The_command_line_has_the_shared_nouns_and_the_workspace_ones()
     {
         var help = new StringWriter();

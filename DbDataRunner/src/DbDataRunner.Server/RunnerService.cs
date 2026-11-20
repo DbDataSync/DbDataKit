@@ -37,7 +37,7 @@ public sealed class RunnerServiceEnvironment
 }
 
 /// <summary>
-/// <c>dbdatarunner service install|uninstall|status|start|stop|restart|doctor|unit</c>: registration of <c>server run</c> with Windows or systemd, the shared verbs over the shared command. The service runs as the virtual account
+/// <c>dbdatarunner service install|uninstall|status|start|stop|restart|check|unit</c>: registration of <c>server run</c> with Windows or systemd, the shared verbs over the shared command. The service runs as the virtual account
 /// <c>NT SERVICE\DbDataRunner</c> unless <c>--account</c> says otherwise (the low-privilege account of plan 28 section 5: the tasks it starts run as it), and keeps everything it writes in one data directory, which only
 /// administrators and the service can reach. <c>cert show|ensure|check|renew</c> is the server's TLS certificate, in that directory.
 /// </summary>

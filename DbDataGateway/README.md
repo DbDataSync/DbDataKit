@@ -77,7 +77,7 @@ dbdatagateway export status [--repo <data directory>]
 
 ```
 dbdatagateway service install [--name N] [--account A] [--password-secret env:NAME|file:PATH] [--data-dir PATH] [--dry-run]
-dbdatagateway service uninstall|start|stop|restart|status|doctor [--name N]
+dbdatagateway service uninstall|start|stop|restart|status|check [--name N]
 dbdatagateway service unit [--name N] [--exec /opt/dbdatagateway/dbdatagateway]     # hardened systemd unit that runs "server run"
 ```
 
@@ -87,7 +87,7 @@ directory and modify on the data directory (the only places it needs). Use `--ac
 service account, or `--account DOMAIN\user` with a password. `--account LocalSystem` needs `--allow-localsystem`.
 A password is never put on the service command line; give it with `--password-secret env:NAME` or `file:PATH`, or type it at the
 prompt. `--password` is still accepted but prints a warning, because command lines are visible to other users.
-`service doctor` checks the service settings and directory permissions. The service restarts after a crash (5 s, 5 s, 60 s;
+`service check` checks the service settings and directory permissions. Typing `service doctor`, the earlier name, prints that the command is now `service check` and exits with code 2. The service restarts after a crash (5 s, 5 s, 60 s;
 the counter resets after a day) and starts at boot. A start that fails ("Cannot start service") writes why to `start-failure.txt` in the data folder
 (`%ProgramData%\DbDataKit\gateway`) and, as a service, to the Application event log (source `.NET Runtime`, event 1000): the account it ran as, the folder and the
 exception, with a hint when a port could not be bound (Windows reserves ranges of ports: `netsh int ipv4 show excludedportrange protocol=tcp`). The next start

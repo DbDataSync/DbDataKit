@@ -52,7 +52,31 @@ public sealed class HostingNounTests
     {
         var (noun, _) = ServiceNoun();
 
-        Assert.Equal(["install", "uninstall", "status", "start", "stop", "restart", "doctor", "unit"], noun.Verbs.Select(v => v.Name));
+        Assert.Equal(["install", "uninstall", "status", "start", "stop", "restart", "check", "unit"], noun.Verbs.Select(v => v.Name));
+    }
+
+    [Fact]
+    public async Task Service_check_through_the_noun_reports_what_is_missing()
+    {
+        var (noun, _) = ServiceNoun();
+
+        var check = await Run(noun, "service", "check");
+
+        Assert.Equal(ExitCodes.Failure, check.Exit);   // nothing is installed
+        Assert.Contains("[FAIL] service.installed", check.Out);
+        Assert.Contains("Check: ", check.Out);
+    }
+
+    [Fact]
+    public async Task Service_doctor_answers_that_it_is_service_check_now_and_exits_2()
+    {
+        var (noun, _) = ServiceNoun();
+
+        var doctor = await Run(noun, "service", "doctor", "--data-dir", "x");
+
+        Assert.Equal(CliExit.Usage, doctor.Exit);
+        Assert.StartsWith("'prod service doctor' is gone: run 'service check' instead", doctor.Error);
+        Assert.DoesNotContain("doctor", new NounRouter("prod", [noun]).NounHelp(noun));
     }
 
     [Fact]
