@@ -1,4 +1,5 @@
 # File formats
+<!-- reviewed: 2026-11-20 -->
 
 Each service reads versioned files: files a person edits (`task.yaml`, a model, a connection, a manifest) and published definitions. This page says
 which versions are read, which files are refused, and what is written.

@@ -116,7 +116,8 @@ How the work is run is [planning/ROLES.md](planning/ROLES.md): the owner, the se
   options and a recommendation), a need goes under "Needs from other subjects". A pull request into `main` cannot merge while any file exists under
   `planning/wip/` (`scripts/check_no_wip.py`, run by CI on pull requests into `main` and on pushes to `main`).
 - **Product docs describe how the product is**: what it does, why and an example, never as a list of decisions. Write and check them with the skill
-  `product-docs` (`.claude/skills/product-docs/SKILL.md`): plain sentences a reader can act on, no slogans, no decisions, owners or dates. When the owner answers a proposed
+  `product-docs` (`.claude/skills/product-docs/SKILL.md`): plain sentences a reader can act on, no slogans, no decisions, owners or dates in the text. A doc's one date is its review date
+  (`<!-- reviewed: YYYY-MM-DD -->` under the title, set when the owner approves a full review of the file; the skill and [planning/ROLES.md](planning/ROLES.md), "Review dates"). When the owner answers a proposed
   decision (in any session; the answer is recorded under the proposal), the proposal leaves the subject file and its outcome is written into the doc that
   describes that part, in a commit whose message names the proposal id and says `answered by the owner: <the answer>`. Nothing is dropped from planning
   without the owner's word, and a commit that removes design text says where it went.

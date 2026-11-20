@@ -45,6 +45,11 @@ subject keep colliding, the subject is split into two subjects (the owner's call
 - **writes plainly**, by the rules of the skill `product-docs`: direct statements, no slogans, no internal names without saying what they are;
 - **says what it changed and where it is pushed** in a line or two, when it has changed something.
 
+**Review dates.** Every product doc, README and planning subject file carries the date of its last full review, `<!-- reviewed: YYYY-MM-DD -->` on the
+line under its title (the skill `product-docs`, "The review date"). A session sets it when the owner approves a review of the whole file: checked
+against `docs/architecture.md` and the other reference docs, and written by the skill. A partial change leaves it as it is. A new file written under
+these rules and approved by the owner gets the date when it is written. `python3 -I scripts/review_dates.py` lists the files that have no date yet.
+
 **Files only the owner changes.** These files change only with the owner's approval: `CLAUDE.md`, `planning/ROLES.md`, `docs/architecture.md`,
 `.claude/skills/product-docs/SKILL.md`, `.claude/settings.json` and `.claude/hooks/protect-reference-docs.py`. Claude Code asks before writing any of
 them: the "ask" rules in `.claude/settings.json` cover the file tools, and the hook covers shell commands. A session shows the proposed text first,

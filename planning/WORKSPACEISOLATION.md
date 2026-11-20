@@ -1,4 +1,5 @@
 # WORKSPACEISOLATION: the Workspace service calls no other service and never handles a secret
+<!-- reviewed: 2026-11-20 -->
 
 ## Goal
 

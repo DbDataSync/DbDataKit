@@ -1,4 +1,5 @@
 # DOCSREVIEW: reference docs the owner approves, and every doc and plan checked against them
+<!-- reviewed: 2026-11-20 -->
 
 ## Goal
 
@@ -27,8 +28,8 @@ Each task is written as a short draft for the owner, in small batches, and check
 | DOCSREVIEW-4 | How it fits together: one walkthrough from authoring to running | DOCSREVIEW-3 | S | the owner approves it |
 | DOCSREVIEW-6 | "Why the design is safe" moves from `docs/architecture.md` to `docs/security-review.md` | none | S | the owner approves it |
 | DOCSREVIEW-7 | "Where the conventions live" in `docs/architecture.md`: check each row | none | S | the owner approves it |
-| DOCSREVIEW-8 | Every page under `docs/` and every README checked against `docs/architecture.md`: each contradiction listed, then fixed in small batches, each statement marked built, in progress or planned | none | L | the list is empty |
-| DOCSREVIEW-9 | Every subject in `planning/` checked the same way | none | M | the list is empty |
+| DOCSREVIEW-8 | Every page under `docs/` and every README reviewed: checked against `docs/architecture.md` and the skill, contradictions fixed in small batches, each statement marked built, in progress or planned, and the review date set when the owner approves the whole file (`planning/ROLES.md`, "Review dates") | none | L | `python3 -I scripts/review_dates.py --missing` lists no page under `docs/` and no README |
+| DOCSREVIEW-9 | Every subject in `planning/` reviewed the same way | none | M | `python3 -I scripts/review_dates.py --missing` lists no file in `planning/` |
 
 ## Needs from other subjects
 

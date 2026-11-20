@@ -69,6 +69,19 @@ As the tasks land, the section gets shorter and the description of what is built
 - `ui mcp` is being removed from every program. Agents will connect to the MCP endpoints of the console and the Gateway.
 ```
 
+## The review date
+
+The one date a doc carries is its last full review, as an HTML comment on the line under the title, which readers do not see:
+
+```
+# File formats
+<!-- reviewed: 2026-11-20 -->
+```
+
+It is the date the whole file was last checked against the reference docs (`docs/architecture.md` and the others the owner approved) and against this
+skill, and the owner approved the result. A later change to part of the file does not change it. A file without the line has not been reviewed. The
+same line goes in a planning subject file under its title.
+
 ## Check before committing
 
 For each sentence you added or changed:
