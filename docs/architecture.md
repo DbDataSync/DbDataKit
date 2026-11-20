@@ -197,20 +197,6 @@ Decided by the owner after the table above was closed. The numbers are the ones 
 | 13c D30 | The identity home's admin API is the management API of whatever hosts the home; the console's screens use it through its relay and the commands stay. | One admin surface per host, no screens of the home's own. | `Shared/src/DbDataKit.Identity/README.md` |
 | 13c D31 | A home that runs on its own keeps the framework key ring in its `dataprotection/` directory (a backup holds the state and that directory); the serving layer's home protects its signing keys with `KeySigningKeyProtector` and a key in its secret store. | Simple for one home; a group of homes on one shared state needs the same key everywhere. | `DbDataKit/README.md`, `Shared/src/DbDataKit.Identity/README.md` |
 
-## Why the design is safe
-
-| Risk | Answer |
-| --- | --- |
-| The secrets key is lost (disk, rebuild) | Documentation and `server setup` say to back it up separately from `secrets.yaml`; `secret export` moves values between machines; the store is useless without the key, by design. |
-| The secrets key is readable by another local user | The server refuses to start on loose permissions; DPAPI plus an access list on Windows; keys from the platform's secret mechanism in containers. |
-| A stolen console signing key acts on every server paired with that console | The key never leaves the console's protected store; role ceilings limit the damage; `server unpair` on each server, or a signed key rotation, cuts it off. |
-| Authoring lets a web user write files that a scheduled run then executes | Drafts live in per-user worktrees; schedules run from a pinned ref; merging needs a role; every write goes through the confined `project file` commands. |
-| The console holds every product's credentials to manage it | Per-server pairing, short-lived tokens scoped to one server, ceilings per console, no database secrets in any console (each server resolves its own references). |
-| A management API weakens the Gateway's security | A separate listener, HTTPS with a pinned certificate, signed tokens checked on every call, roles enforced on the server, no shared code on the query path, the same failure classification and redaction. |
-| Two consoles change the same thing | Every write is checked against the version it was based on and refused when stale (`WriteGuard`). |
-| Monitoring depends on the console being up | Each server evaluates its own health rules and keeps its own notifications; the console only shows them. |
-| A schedule runs twice | The per-load lock and `on_busy` cover a manual run; the work queue's lease and run lock cover two servers; a project is hosted by one server at a time. |
-
 ## Where the conventions live
 
 | Convention | Documented in |
@@ -227,3 +213,4 @@ Decided by the owner after the table above was closed. The numbers are the ones 
 | Integrations: what they are, package kinds, authoring, build (csx with no SDK), test, publish; what is built and what is not | `docs/integrations.md` |
 | Releases and distribution | `docs/releases.md`, `dist/README.md` |
 | File formats, versions, upgrades | `docs/formats.md` |
+| Security: the risks the design answers | `docs/security.md` |
