@@ -82,6 +82,7 @@ public static class RunnerServer
         {
             host.Product = RunnerSettings.Product;
             host.ServiceName = RunnerService.RegistrationName;
+            if (settings.SkipFolderPermissionsCheck) host.Loosened.Add(DbDataKit.Hosting.Startup.FolderPermissions.Setting);
             host.Telemetry = DbDataKit.Telemetry.TelemetrySettings.Load(settings.ServerYaml);   // the telemetry: section; off unless it says enabled (plan 22a GP28)
             host.Version = Version;
         });

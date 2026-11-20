@@ -109,7 +109,13 @@ public static class Cli
     {
         // every step of the start is reported the same way in every server: the step that failed and why, in the startup-failure file (a service has
         // no console, and "Cannot start service" alone says nothing), the event log for a Windows service, and a non-zero exit
-        var dataDirectory = GatewayConfigFile.ResolveDataDirectory(args);
+        // the switch that skips the folder step's check is not a configuration key on the command line: it becomes the key startup.skip_folder_permissions_check,
+        // so the server's settings (and /version) say the check was skipped however it was asked for
+        var skipFlag = args.Contains(DbDataKit.Hosting.Startup.FolderPermissions.Flag);
+        string[] hostArgs = skipFlag
+            ? [.. args.Where(a => a != DbDataKit.Hosting.Startup.FolderPermissions.Flag), $"--Gateway:Startup:{DbDataKit.Hosting.Startup.FolderPermissions.Key}=true"]
+            : args;
+        var dataDirectory = GatewayConfigFile.ResolveDataDirectory(hostArgs);
         var service = DbDataKit.Hosting.Startup.SuiteServices.Gateway;
         Microsoft.AspNetCore.Builder.WebApplication? app = null;
         var result = await new DbDataKit.Hosting.Startup.StartupSequence(new DbDataKit.Hosting.Startup.StartupOptions
@@ -118,14 +124,21 @@ public static class Cli
                 DataFolder = dataDirectory,
                 LogsRoot = DbDataKit.Hosting.Startup.SuiteServices.LogsRootFor(service, dataDirectory),
                 Version = GatewayHost.Version,
+                Warning = line => context.Error.WriteLine(line),
             })
-            .Step(DbDataKit.Hosting.Startup.StartupStep.Folder, _ =>
+            .Step(DbDataKit.Hosting.Startup.StartupStep.Folder, step =>
             {
+                // the data folder is checked before anything is made in it; the setting is read from config/server.yaml as every server reads its own
+                var settingsFile = GatewayConfigFile.PathIn(dataDirectory);
+                DbDataKit.Hosting.Startup.SkipFolderPermissions skip;
+                try { skip = DbDataKit.Hosting.Startup.SkipFolderPermissions.Read(skipFlag, settingsFile); }
+                catch (InvalidOperationException ex) { throw new GatewayConfigException(ex.Message, []); }
+                step.CheckFolderPermissions(dataDirectory, skip, settingsFile);
                 // earlier releases wrote the reason of a failed start to this file in the data folder; it describes no start of this one
                 try { File.Delete(Path.Combine(dataDirectory, "start-failure.txt")); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
                 // reads the settings of the data folder (config/server.yaml), validates them and builds the server
-                app = GatewayHost.Build(args);
+                app = GatewayHost.Build(hostArgs);
             })
             .Step(DbDataKit.Hosting.Startup.StartupStep.Ports, (step, ct) =>
             {
@@ -197,7 +210,7 @@ public static class Cli
     private static Noun ServiceNoun() => new("service", "Registration of 'server run' with Windows or systemd",
     [
         Service("install", "Register the Windows service (run elevated); it runs as NT SERVICE\\<name> unless --account says otherwise", EffectClass.TargetWrites,
-            "[--name N] [--account A] [--password-secret env:NAME|file:PATH] [--data-dir PATH] [--dry-run]"),
+            "[--name N] [--account A] [--password-secret env:NAME|file:PATH] [--data-dir PATH] [--skip-folder-permissions-check] [--dry-run]"),
         Service("uninstall", "Stop and remove the service", EffectClass.TargetWrites, "[--name N]"),
         Service("status", "Whether the service is installed and running", EffectClass.OfflineOnly, "[--name N]"),
         Service("start", "Start the service", EffectClass.TargetWrites, "[--name N]"),

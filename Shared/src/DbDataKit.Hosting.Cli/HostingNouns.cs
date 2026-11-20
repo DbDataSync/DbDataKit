@@ -8,7 +8,7 @@ public static class HostingNouns
     /// <summary><c>service install|uninstall|status|start|stop|restart|check|unit</c>: registration of <c>server run</c> with Windows or systemd. Never offered through the management API: it needs elevation on the machine.</summary>
     public static Noun Service(ServiceCommand command) => new("service", "Registration of 'server run' with Windows or systemd",
     [
-        Forward("install", "Register the service (again, to update it); needs elevation", EffectClass.TargetWrites, "[--account <account>] [--password-stdin] [--data-dir <path>] [--dry-run]", command.Execute),
+        Forward("install", "Register the service (again, to update it); needs elevation", EffectClass.TargetWrites, "[--account <account>] [--password-stdin] [--data-dir <path>] [--skip-folder-permissions-check] [--dry-run]", command.Execute),
         Forward("uninstall", "Remove the service registration; needs elevation", EffectClass.TargetWrites, "", command.Execute),
         Forward("status", "Whether the service is installed and running", EffectClass.OfflineOnly, "", command.Execute),
         Forward("start", "Start the service; needs elevation", EffectClass.TargetWrites, "", command.Execute),
