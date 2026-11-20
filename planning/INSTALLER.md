@@ -23,11 +23,11 @@ rules are in [docs/install.md](../docs/install.md).
   step stops the start and returns exit code 1), `StartupStepException` (what each step's failure names), `StartupPorts` (a refused listener as the ports step's failure), `startup-failure-<program>.txt` (the
   progress line, the full reason, deleted after a clean start; 0600 on Linux, its account, SYSTEM and Administrators on Windows), the service's own
   logs subfolder, `SharedLogsFolder` (the shared folder's protection) and `SuiteServices` (program, Windows name and account, description, data
-  folder, start order; no port sub-blocks yet).
+  folder, start order, and the suite range and port sub-blocks).
 - The four servers' `service install` register `DbDataKit`, `DbDataGateway`, `DbDataRunner` and `DbDataWorkspace`, each as `NT SERVICE\<name>`, with
   the description of `SuiteServices` (also in their systemd units); `dist.py` and `msi.py` read the names from the table (`dist/suite_services.py`),
   and the Scoop e2e reads them back with `sc qc` and `sc qdescription` (`docs/install.md`, "Service names, accounts and descriptions").
-- Ports are fixed defaults: console 8480, identity home 8482, Workspace 8471, Runner 8495, Gateway 8815 to 8822 (`scripts/check_default_ports.py`).
+- Ports: the console, Runner and Workspace take their port from `--listen`, else the `listen:` line of their settings file, else the first free port of their sub-block of 7800 to 7899 (defaults 7800, 7840, 7860), which they write as that line once they listen on it (`ListenPorts` in the startup library; `docs/install.md`, "Ports"); the identity home on its own defaults to 7819; the Gateway keeps 8815 to 8822. `scripts/check_default_ports.py` checks the range, the sub-blocks, the defaults and Windows' default ports.
 - Pairing by code, everywhere: `server pair` and `dbdatakit instance add --code` (`ConsoleCli.cs`); `dbdatarunner package pair` and `package publish --code`
   (`RunnerCli.cs`); `dbdatabuild` publish to a Runner `--code` (`CliApp.cs`); `dbdatasync package publish --to runner --code` (`PackageCommand.cs`);
   `dbdatagateway apps publish --to --code` (`AppsCommand.cs`); `dbdataworkspace publisher pair --code` (`WorkspaceAdminCommand.cs`); `gateway add --code`
@@ -53,9 +53,8 @@ rules are in [docs/install.md](../docs/install.md).
 | INSTALLER-6 | Services own their data: `service install`, the MSIs and `install.ps1 -InstallService` create only the top folder with its owner and access list (docs/install.md, "A service owns its data"); the services make the `logs` folder on demand ("Logs and the startup-failure file"); keys, certificate, state, configuration repository and `EnsureStarter` happen at first start; Linux: `install.sh --system` makes one system user per service, named as the program (`dbdatagateway`), in the group `dbdatakit`; the units run as those users and use `StateDirectory=` and `LogsDirectory=dbdatakit/<service>`, and the startup library writes the Linux failure file in that folder (`/var/log/dbdatakit/<service>/startup-failure-<service>.txt`; it writes `/var/log/dbdatakit/startup-failure-<service>.txt` today); the Gateway's own git settings file (`<data>/git/.gitconfig`) and its `safe.directory` allow list (docs/install.md, "The Gateway's configuration repository") are removed, since the service owns `config` | INSTALLER-5 | M | the INSTALLER-5 leg passes; after the install nothing exists under the data root but the top folders; after the first start `logs` has its access list (Windows) and `/var/log/dbdatakit/<service>/` is owned by the service's user with mode `0700` and holds the failure file of a failed start (Linux); a test lists every file under each data folder after the first start and finds each owned by the service's account (Windows) or user (Linux, the server started with `sudo -u`); the Linux job runs `install.sh --system` and finds `dbdatakit`, `dbdatagateway`, `dbdatarunner` and `dbdataworkspace` as system users in the group `dbdatakit`, each unit running as its own, and a second run changes nothing; the Gateway's start writes no `git/.gitconfig` and its tests of the allow list are gone |
 | INSTALLER-7 | Admin commands through the local API (`DbDataKit.Hosting.Local`) for all four servers: `secret`, `cert`, `state`, `setup link`, `user invite` and the rest call the running service; opening the files is `--recovery`, refused while the service runs, and a file it writes is given the service's account as owner; `WindowsServiceAccounts`' accepted grants (`e0135708`, which taught the command line which service accounts a key file may grant) are then needed only in recovery | INSTALLER-6 | M | with the service running, `secret set` adds the value and no file under the data folder is owned by the administrator; a direct open while it runs is refused naming `--recovery`; recovery with the service stopped writes a file owned by the service's account; Windows leg and Linux job |
 | INSTALLER-8 | `--skip-folder-permissions-check` and `startup.skip_folder_permissions_check`: accepted everywhere, a warning at every start, a line in `service check`, the server marked on the console's posture page | INSTALLER-1 | S | tests: started as a service (detector replaced) and from a terminal it starts with the warning; without it the same folder fails the folder step naming the flag; `service check` and the posture list name the server |
-| INSTALLER-9 | Ports of the console, Runner and Workspace from the suite range 7800 to 7899 (`docs/install.md`, "Ports"): the range and the sub-blocks in `SuiteServices`; a free port of the sub-block at first start, pinned in the server's own settings; excluded Windows ranges skipped; a configured port never moved; `check_default_ports.py` checks that the defaults and sub-blocks lie in the suite range, do not overlap and avoid Windows' default ports (80, 443, 135, 445, 3389, 5040, 5357, 5985, 5986, 7680, 47001, 49152 to 65535); the old defaults (console 8480, identity home 8482, Runner 8495, Workspace 8471) named in the release notes beside the new ones (an entry appended to `docs/release-notes-pending.md`, never cut) | none | M | tests: the sub-block's first port held, the server takes the next and keeps it after a restart; a configured port held fails naming it; on the Windows runner an excluded range is skipped and, covering the whole sub-block, is named in the failure file; the repository check's unit test fails on a default outside the range, on two overlapping sub-blocks and on a default that is one of Windows' default ports, and passes on the repository; the release notes' entry names each old port and its new default |
-| INSTALLER-10 | The Gateway's listeners (the ones ENDPOINTS-2 leaves) move into 7820 to 7839 (`docs/install.md`, "Ports"): each takes a free value of the sub-block at the first start of its group's first instance and pins it; no listener has a fixed default | INSTALLER-9, ENDPOINTS-2 | S | the Gateway's tests start it with no configured port and find each listener inside its sub-block, pinned after a restart; with 7820 held, the listeners take other free values; `check_default_ports.py` passes |
-| INSTALLER-12 | Reversed pairing: the console's `POST /api/v1/join`, `dbdatakit setup invite <gateway\|runner\|workspace> [--role] [--group]`, `pair --host --token --console-thumbprint [--address]` in the Gateway, Runner and Workspace, the join step at start (with `JoinClient`, `JoinCallbackEndpoint` and `JoinRequestFile` of `DbDataKit.Web`), the console keeping the server's pin (`JoinedServer`) and the server keeping the console's (`JoinedConsole`); join tokens as rows of the console's state (an `IJoinTokenStore` over a new table of the `trust` module, with its migration, `scripts/check_state_migrations.py`); `docs/architecture.md` D14 and the Web README say a server calls the console once, to join | INSTALLER-9 | L | Servers suite (SQLite, PostgreSQL, SQL Server): a console and a real Gateway, Runner and Workspace process each joined by its printed command and listed ready with the address and fingerprint they reported; a reused token is refused; the console's calls succeed pinned; the token table's migration passes `check_state_migrations.py` on the three engines |
+| INSTALLER-10 | The Gateway's listeners (the ones ENDPOINTS-2 leaves) move into 7820 to 7839 (`docs/install.md`, "Ports"): each takes a free value of the sub-block at the first start of its group's first instance and pins it; no listener has a fixed default | ENDPOINTS-2 | S | the Gateway's tests start it with no configured port and find each listener inside its sub-block, pinned after a restart; with 7820 held, the listeners take other free values; `check_default_ports.py` passes with each Gateway listener's entry naming the sub-block `Gateway` (the entries have none while the Gateway keeps 8815 to 8822) |
+| INSTALLER-12 | Reversed pairing: the console's `POST /api/v1/join`, `dbdatakit setup invite <gateway\|runner\|workspace> [--role] [--group]`, `pair --host --token --console-thumbprint [--address]` in the Gateway, Runner and Workspace, the join step at start (with `JoinClient`, `JoinCallbackEndpoint` and `JoinRequestFile` of `DbDataKit.Web`), the console keeping the server's pin (`JoinedServer`) and the server keeping the console's (`JoinedConsole`); join tokens as rows of the console's state (an `IJoinTokenStore` over a new table of the `trust` module, with its migration, `scripts/check_state_migrations.py`); `docs/architecture.md` D14 and the Web README say a server calls the console once, to join | none | L | Servers suite (SQLite, PostgreSQL, SQL Server): a console and a real Gateway, Runner and Workspace process each joined by its printed command and listed ready with the address and fingerprint they reported; a reused token is refused; the console's calls succeed pinned; the token table's migration passes `check_state_migrations.py` on the three engines |
 | INSTALLER-13 | The console's Add a server screen: product, role ceiling, group, the command to copy, the waiting tokens with Cancel | INSTALLER-12 | S | Playwright story: make a command, run it against a test Runner, the server appears ready; vitest of the form |
 | INSTALLER-14 | `dbdatakit setup single-server` and `--stop` (`docs/install.md`, "Setting up one machine"): discovery, registration by library call, the top folder's owner and access list, the program folder's access list (Administrators and SYSTEM full control, everyone else read and execute, inheritance cut, so a user cannot plant a file beside a program a service runs), tokens, start, wait, per-service progress, failure files, the summary (what is ready and what is not, the console's address, the first administrator's setup link from `FIRST-RUN.txt`), safe to run again; `--skip-folder-permissions-check` passed on to the registered services and recorded in their settings (the flag on `server run`, `service install` and `setup single-server`) | INSTALLER-12, INSTALLER-6, INSTALLER-1 | L | Windows CI (zips extracted, no Scoop) and the Linux job (systemd): every service registered, joined and listed; the program folder's access list read back (no write for Users, inheritance off); the summary prints the console's address and the setup link; a second run says nothing to do; a service made to fail (its configured port held) prints its failure file and the summary names it; a run after the fix finishes it; a run with `--skip-folder-permissions-check` leaves the setting in each registered service's settings |
 | INSTALLER-15 | Groups through the token: the console makes every group key (a Gateway group's too) and hands it at the join; the join answer carries a link when TRUSTZONES-1 made one; a Gateway joining an existing group gets the group's pinned ports in the join answer and they become its exact configuration (a taken one fails the ports step naming it; another is never picked) | INSTALLER-12, INSTALLER-10 | M | Servers suite: two Gateway instances joined to group X serve each other's sessions with no key copied; the second instance listens on exactly the first's pinned ports; with one of them held on the second's machine, the second fails with a startup-failure file naming the port and listens on nothing; a Runner instance joined to group Y resolves the group's logins; a token for Y used by a Gateway, or for another group, is refused |
@@ -105,8 +104,8 @@ it, and could also name its owner, which is not built.
 
 Scenario: `setup single-server` starts the services of one machine, and a script checks a failed start's exit code. Built as defaults: the start
 order in `SuiteServices` is console, Gateway, Runner, Workspace (the console first, since the others join it; the Workspace last, since it
-publishes to the Runner and the Gateway); a failed start exits with code 1; `SuiteServices` holds no port sub-blocks yet, which INSTALLER-9 adds with
-the suite range. Options for the exit code: 1 (built), or one code per step so a script can tell the steps apart without reading the file.
+publishes to the Runner and the Gateway); a failed start exits with code 1; `SuiteServices` also holds the suite range and the port
+sub-blocks. Options for the exit code: 1 (built), or one code per step so a script can tell the steps apart without reading the file.
 Recommendation: keep 1 and the order; the file names the step.
 
 ### INSTALLER-P11: how Windows CI shows a second service account cannot open the file (default, awaiting the owner)
@@ -255,6 +254,57 @@ and the certificate with the server's own Ed25519 key, whose public half the sig
 answer with the token's key instead, so no key of its own is needed. Recommendation: the default; the console then holds a key that identifies the
 server, which a later re-join or a server's own calls can check.
 
+### INSTALLER-P25: where a server keeps the port it chose (default, awaiting the owner)
+
+Scenario: a Runner starts for the first time with no `--listen`, finds 7840 held and listens on 7841; at its next start it must listen on 7841 again.
+Built as the default: once the server listens, it writes a top-level line `listen: https://127.0.0.1:7841` (the whole address, under a comment) to
+its own settings file, `server.yaml` for the Runner and the Workspace and `settings.yaml` for the console (made if it is not there, which the console
+did not do before); a person can edit the line to move the server, and `--listen` overrides it without writing anything. Option B: a file of the
+server's own (`ports.yaml`) that people do not edit; option C: a `ports:` section holding the port only, the host staying the default.
+Recommendation: the default, because one line in the file the person already edits says where the server listens and how to move it.
+
+### INSTALLER-P26: a pinned port another program holds at a later start (default, awaiting the owner)
+
+Scenario: the Runner pinned 7841; after a reboot another program holds 7841. Built as the default: the pinned port is treated like a configured one,
+so the ports step fails and the failure file names 7841 (and the excluded ranges); the Runner does not move. Option B: take the next free port of the
+sub-block and pin that one, so the service starts but the console and the publishers paired on 7841 no longer reach it. Recommendation: the default,
+the same rule as the Gateway's group ports in `docs/install.md`: a client set once keeps working, or the start says why not.
+
+### INSTALLER-P27: the identity home on its own keeps a fixed port (default, awaiting the owner)
+
+Scenario: `dbdatakit identity run` on the console's machine with no `--listen`. Built as the default: it listens on 7819, the last port of the
+console's sub-block, as a fixed default (never chosen or pinned), so a console that took the next free port from 7800 does not meet it. Option B:
+7801; option C: choose and pin a port of the sub-block as the console does. Recommendation: the default; an identity home is set in the consoles that
+use it, so its port should not depend on what else was running at its first start.
+
+### INSTALLER-P28: the container images and the compose files keep their ports (default, awaiting the owner)
+
+Scenario: `docker compose -f dist/compose/quickstart.yml up` after this release. Built as the default: the console's image still runs
+`--listen https://0.0.0.0:8480` and the compose files publish 8480 and 8815, because a configured port is never moved and the Gateway's ports have
+not moved yet; `docs/quickstart.md` is unchanged. Option B: move the image and the compose files to 7800 now. Recommendation: move the image, the
+compose files and the quickstart together with the Gateway's listeners (INSTALLER-10), so a compose user changes their ports once.
+
+### INSTALLER-P29: `health check` asks the default address (default, awaiting the owner)
+
+Scenario: the Runner pinned 7841 and an administrator runs `dbdatarunner health check`. Built as the default: it asks `https://localhost:7840`, the
+default, and fails; `--url https://localhost:7841` asks the right one. `setup link` and `user invite` already start their links with the console's
+`listen:` address. Option B: `health check` reads the `listen:` line of the server's settings file (`--repo`, or the default folder) first.
+Recommendation: B, a small change of the shared `health` noun; until then the release notes say to give `--url`.
+
+### INSTALLER-P30: the suite install pairs the members on their default addresses (default, awaiting the owner)
+
+Scenario: `scoop install -g dbdatakit-full` on a machine where 7840 is held; the Runner takes 7841 at its first start. Built as the default: the
+install still pairs each member on its default address (`https://127.0.0.1:7840` for the Runner), so that pairing fails naming the address, and the
+notes say to pair by the server's own address. Option B: the install reads each member's `listen:` line after its first start and pairs on it.
+Recommendation: the default until the join (INSTALLER-12), where each server reports its own address and the install stops guessing.
+
+### INSTALLER-P31: the Gateway's listeners in the port check (default, awaiting the owner)
+
+Scenario: `scripts/check_default_ports.py` checks that every default lies in its service's sub-block. Built as the default: the Gateway's eight
+listeners are listed with no sub-block, so they are checked only for a shared default and for Windows' default ports while they keep 8815 to 8822;
+INSTALLER-10 gives them the sub-block `Gateway` when they move. Option B: fail on them now, which fails the repository until INSTALLER-10 lands.
+Recommendation: the default.
+
 ## Shared areas touched
 
 - New `Shared/src/DbDataKit.Hosting.Startup`; `DbDataKit.Web` (pairing, join), `DbDataKit.Hosting.Cli` (`ServiceCommand`, `HostingNouns`),
@@ -263,9 +313,10 @@ server, which a later re-join or a server's own calls can check.
 - `docs/formats.json` (`join-request/1` added, the entry is in place; `bundle/1` removed), `docs/architecture.md` (D14), `docs/ci-lessons.md`,
   `docs/release-notes-pending.md`, `DbDataKit.slnx` (the new project).
 - `docs/ui-editors.md` rows: **`join-request/1`** (`join-request.yaml`): in place, "none (a one-time file the `pair` command writes and the service deletes
-  at its next start; the token in it must not pass through a browser; the console's Servers page shows the join)"; **pinned ports** (the existing listen settings of each server's
-  settings file; if a key is added, the format's entry is bumped in the same task, INSTALLER-9 and INSTALLER-10): the server's settings screen edits them,
-  the Servers page shows the address; **`startup.skip_folder_permissions_check`** (INSTALLER-8): "none (a switch the user sets by hand on purpose;
+  at its next start; the token in it must not pass through a browser; the console's Servers page shows the join)"; **pinned ports**: the console's, Runner's and Workspace's
+  `listen:` line (in `settings.yaml` or `server.yaml`, files no entry of `docs/formats.json` covers) is in place, "none (no settings screen; the Servers
+  page shows the address)"; the Gateway's (INSTALLER-10, its `server.yaml` keys; if a key is added, the format's entry is bumped in the same task): the
+  server's settings screen edits them, the Servers page shows the address; **`startup.skip_folder_permissions_check`** (INSTALLER-8): "none (a switch the user sets by hand on purpose;
   `service check` and the posture page show it)"; `bundle/1` leaves with INSTALLER-20.
 - The console's state: join tokens are a new table of the `trust` module with its migration (`scripts/check_state_migrations.py`, INSTALLER-12); the
   Servers page lists the waiting ones and cancels them (INSTALLER-13).
