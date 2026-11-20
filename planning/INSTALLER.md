@@ -91,14 +91,6 @@ console registers it with the target; option B, command lines stop publishing an
 `dbdatabuild project publish --to runner` from a laptop; under A it works after one `client join`, under B it answers "publish from the console".
 Recommendation: A, so the command lines stay usable without the Workspace.
 
-### INSTALLER-P5: the library types behind `service check` keep the name `Doctor` (default, awaiting the owner)
-
-The command, its usage, its help, its last line (`Check: OK (n warning(s)).`) and `ServiceCommandContext.ExtraChecks` (was `ExtraDoctorChecks`) say
-`check`; the types in `DbDataKit.Hosting.WindowsService` are still `ServiceDoctor`, `DoctorCheck`, `DoctorReport` and `DoctorSeverity`, and the
-`DoctorTests` class keeps its name. Scenario: a developer reads `ServiceCommand.Check` and finds it calls `new ServiceDoctor(...)`. Option A (built):
-leave the types; the repository check covers command names only. Option B: rename them to `ServiceCheck`, `ServiceCheckItem`, `ServiceCheckReport`
-and `CheckSeverity` in a follow-up commit (no behaviour change, about ten files). Recommendation: B, so the code says what the command says.
-
 ### INSTALLER-P6: the two lessons in `docs/ci-lessons.md` that name `service doctor` (default, awaiting the owner)
 
 Two rows of `docs/ci-lessons.md` describe failures seen as `service doctor`. The rule for shared files is to add entries, never to rewrite others', so
