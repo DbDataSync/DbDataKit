@@ -190,3 +190,5 @@ planning/owner-answers-2026-11-18
 planning/sync-first-slice
 # --- group 18: the session branch the harness started on (2026-11-19); its two commits (823bf15, 27fe5ea) moved to planning/agents-and-cloud-dev on the owner's word, so it holds nothing that branch lacks
 claude/brave-lamport-wj34se
+# --- group 19: planning/agents-and-cloud-dev (2026-11-20), pushed to main as a planning, documentation and tooling change on the owner's word; every commit is on main
+planning/agents-and-cloud-dev
