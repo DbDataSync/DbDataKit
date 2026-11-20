@@ -80,43 +80,6 @@ The full model of roles and permissions is later (Open designs). The first versi
   kind, its source (channel, model provider or MCP client) and its operation or trait; a new kind is an addition to the format, not a new one.
 - **R8 Every decision is explained.** A refusal names the rule, its kind and where it was set, and the audit records the same.
 
-## Proposed decisions
-
-### AGENTACCESS-P1: what an operation is (awaiting the owner)
-
-Scenario: "invite a user" is today a controller action and a verb, each with its own checks. Option A: extend the command surface (`Verb` gains an input
-schema, the role it needs and a handler that takes typed input), and the web adapter maps a route to it. Option B: a new library of operations beside
-the command surface, with the command line as one more adapter. Recommendation: A, so `ui mcp`, the traits, the effect classes and the goldens stay one
-system. Revised recommendation (2026-11-19, after reading `Verb`: its handler is `Run(string[] args, CliContext)`, so under A every web and agent call
-would be turned into argument strings or each verb would get a second entry point): B, sharing the existing metadata, so an operation is what the
-product does and a command is one way to call it.
-
-Answer from the owner, 2026-11-19: "Yes, B. We've moved so far away from the old CLI programs that I'm also not worried about keeping the "ui mcp"
-command. If it is ever creating extra maintenance or causing weird architecture choices, get rid of it. That goes for any of the CLI programs in
-general as well." Acted on in AGENTACCESS-1 and AGENTACCESS-13; the general rule is written into `docs/architecture.md` (D3, amended).
-
-### AGENTACCESS-P2: how the channel, the provider and the MCP client combine (awaiting the owner)
-
-Scenario: `prod` says mask customer emails, the provider (hosted in your own tenant) says pass, the MCP client says nothing. Option A: the strictest wins
-(as approvals do: `PromptingResolver`). Option B: the most specific wins (client, then provider, then channel). Recommendation: A; a wider rule is
-loosened only by changing that rule, which the record shows.
-
-Answer from the owner, 2026-11-19: "Strictest wins". Acted on in AGENTACCESS-3 and R5.
-
-### AGENTACCESS-P4: the console's MCP transport and sign-in (awaiting the owner)
-
-Option A: streamable HTTP on the console (`POST /mcp`, like the Gateway's module), signed in with the MCP client's token (AGENTACCESS-4). Option B: stdio
-only (`dbdatakit ui mcp`) on the console's host. Recommendation: A; administrators and authors connect from their own machines.
-
-Answer from the owner, 2026-11-19: "HTTP on the console". Acted on in AGENTACCESS-5.
-
-### AGENTACCESS-P5: the console's embedded agent changes authority (awaiting the owner)
-
-Today it reads with the console's authority. As the person, a viewer's agent sees less than today's agent. Option A: switch, and the old agent
-definitions keep working with the person's narrower reach. Option B: keep a console-authority agent kind for administrators. Recommendation: A.
-
-Answer from the owner, 2026-11-19: "Switch to the person". Acted on in AGENTACCESS-6.
-
 ## Open designs
 
 ### A permissions model for people and agents, per environment and per model provider

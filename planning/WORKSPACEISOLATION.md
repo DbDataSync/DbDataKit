@@ -34,7 +34,7 @@ it. Only the parts that make the Workspace service call another service are remo
 | --- | --- | --- | --- | --- |
 | WORKSPACEISOLATION-1 | The list: every class and route of the Workspace's publish, run, check and catalog paths, each marked stays on the Workspace (building, checking a draft), moves to a shared library for the control service, or is removed (only what calls another service or holds a publisher key) | none | S | the list is in this file and the owner has read it |
 | WORKSPACEISOLATION-2 | The code the list marks for moving goes to shared libraries, with an adapter in the Workspace so its tests pass unchanged | WORKSPACEISOLATION-1 | M | the moved code's tests run in `Shared/tests`; the Workspace's tests pass unchanged |
-| WORKSPACEISOLATION-3 | The Workspace service serves a build's package (manifest and files by hash) and its build record (the manifest hash and the commit) to the control service. The control service runs the checks and deploys to a Runner or Gateway as the person, signing a message that holds the build record (WORKSPACEISOLATION-P1) | WORKSPACEISOLATION-2 | L | a test publishes a build, a sync and a store project and an app through the control service; the checks refuse a bad package with the same message as today; the target records the person, the signature and the build record; the Workspace service made no outbound call |
+| WORKSPACEISOLATION-3 | The Workspace service serves a build's package (manifest and files by hash) and its build record (the manifest hash and the commit) to the control service. The control service runs the checks and deploys to a Runner or Gateway as the person, signing with its own key a message that holds the build record; for trusted code the approver's signature is added (PUBLISHING-3). The Workspace service holds no signing key | WORKSPACEISOLATION-2 | L | a test publishes a build, a sync and a store project and an app through the control service; the checks refuse a bad package with the same message as today; the target records the person, the signature and the build record; the Workspace service made no outbound call |
 | WORKSPACEISOLATION-4 | The publish panel on the Workspace screens calls the control service's deploy | WORKSPACEISOLATION-3 | M | Playwright: publish from the panel; the target shows the version |
 | WORKSPACEISOLATION-5 | Runs, run results, binding tests and lineage reads go through the control service | WORKSPACEISOLATION-2 | M | the Runs tab's tests pass with the Workspace service unable to reach the Runner |
 | WORKSPACEISOLATION-6 | Catalog refresh goes through the control service | WORKSPACEISOLATION-2 | S | the catalog refresh test passes with the Workspace service unable to reach a Gateway or Runner |
@@ -48,18 +48,6 @@ it. Only the parts that make the Workspace service call another service are remo
 - TRUSTZONES-13: the outbound list library, for WORKSPACEISOLATION-9.
 - PUBLISHING-3: the approver's signature for trusted code, added to what the control service signs.
 - COMMANDLINES-2, COMMANDLINES-3, COMMANDLINES-8: the Workspace stops starting `dbdatabuild`, `dbdatasync` and `dbdatarunner`.
-
-## Proposed decisions
-
-### WORKSPACEISOLATION-P1: who signs a deployed package (awaiting the owner)
-
-Scenario: an author publishes a sync project to `prod` from a Workspace screen. Option A: the control service signs as the publisher when it deploys,
-with its own key; for trusted code the approving person's signature is added too (PUBLISHING-3); the Workspace service holds no key. Option B: the
-Workspace service signs the build and the control service checks it and signs the deploy; the Workspace service then holds a signing key, a secret on
-the service most exposed to outside packages. Option C: only the person signs. Recommendation: A, with the build record (the manifest hash and the
-commit the Workspace service reports) inside the message the control service signs, so each deploy records which build of which commit it is.
-
-Answer from the owner, 2026-11-20: "Yes" (to A with the build record). Acted on in WORKSPACEISOLATION-3.
 
 ## Shared areas touched
 

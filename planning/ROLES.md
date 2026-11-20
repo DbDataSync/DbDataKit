@@ -165,9 +165,12 @@ owner as a proposed decision in the subject that came second.
 3. The owner may answer anywhere: in the subject's session or in another one. Whoever hears the answer outside the subject's session (the reviewer, or
    the session) writes the owner's exact words under the proposal: `Answer from the owner, <date>: ...`. The next session or worker for that subject acts
    on it.
-4. Acting on it: the proposal is removed from the subject file and the outcome is written into the product documentation as how the product works (what
-   it does, why, an example), in the doc that describes that part, with no date and no attribution. The commit names the proposal id and says
-   `answered by the owner: <the answer>`.
+4. Acting on it: the proposal is removed from the subject file and the outcome is written where it applies: into the product documentation as how the
+   product works (what it does, why, an example), in the doc that describes that part, or, while the work is not built, into the subject's tasks or open
+   designs as plain design. No date and no attribution go with it. The commit names the proposal id and says `answered by the owner: <the answer>`;
+   the commit message is the record of who decided what.
+5. An answer is acted on at once when it can be: a session that hears an answer and writes it into the tasks in the same change removes the proposal
+   then, and writes no `Answer from the owner` line. That line is only for an answer nothing has acted on yet.
 
 A subject file never holds decided content beyond its goal, its tasks, its open designs and recorded answers waiting to be acted on; a product doc never
 holds a worker's default.

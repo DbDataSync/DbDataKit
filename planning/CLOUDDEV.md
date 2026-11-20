@@ -38,49 +38,6 @@ offers the running instance's MCP endpoints to the session through a development
 - AGENTACCESS-5: the console's MCP endpoint, the forwarder's second target.
 - KNOWLEDGE-24: the goldens of MCP tools of every product, which CLOUDDEV-5's tool list is generated from (the console's golden exists today).
 
-## Proposed decisions
-
-### CLOUDDEV-P1: session hook or environment setup script (awaiting the owner)
-
-Option A: a `SessionStart` hook in `.claude/settings.json` that runs `dev-instance.sh prepare` in the background and returns at once: reviewed with the
-code, the same in every environment and on developers' machines, run at every start and resume (cheap when nothing changed). Option B: the cloud
-environment's setup script: runs once per fresh container before the session, outside the repository's review, in that one environment only. Scenario: a
-task changes the web build; under A the next session builds the new way, under B the environment runs the old steps until someone edits it.
-Recommendation: A, with the instance started by the forwarder on its first call, not by the hook (MCP servers start alongside the hook and cannot wait
-for it).
-
-Answer from the owner, 2026-11-19: "P1: hook". Acted on in CLOUDDEV-6 (the forwarder does not start the instance: see CLOUDDEV-P4's answer).
-
-### CLOUDDEV-P2: processes or Docker Compose (awaiting the owner)
-
-Option A: the four services as processes from the build output: fastest edit-and-run, no image builds. Option B: `dist/compose`, extended to the four:
-closer to an install, but each change rebuilds an image and the daemon is started by hand in a cloud session. Recommendation: A for the loop, B stays the
-quickstart.
-
-Answer from the owner, 2026-11-19: "P2: processes, these are intended for interactive rework and testing". Acted on in CLOUDDEV-2.
-
-### CLOUDDEV-P3: how the person viewing the preview signs in (awaiting the owner)
-
-Passkeys are bound to the host name the console is opened at; the preview opens it through another address, where a passkey may not register. Option A:
-the person signs in by the device code of CERTIFICATES' open design "A command line that runs no server", approved locally. Option B: a development-only
-sign-in that the console accepts only when started by `dev-instance.sh` on loopback, refused otherwise with a message. Option C: register the passkey at
-the preview's address (the console's public address set to it, CLOUDDEV-4), if the preview keeps one stable address per session. Recommendation: try C
-first (a spike in CLOUDDEV-4); A if it fails; B only if neither works.
-
-Answer from the owner, 2026-11-19: "P3: we can create a dev only mode that either assumes a a specific admin user, or some other process to eliminate
-the need for an actual login". Acted on in CLOUDDEV-3 (the mode assumes one development administrator; its guards: loopback only, never as an installed
-service, a banner on every page). Answer from the owner, 2026-11-19, on the guards: "The dev mode guards make sense".
-
-### CLOUDDEV-P4: where the forwarder lives (awaiting the owner)
-
-Option A: a .NET project beside the products (`Shared/src/DbDataKit.DevMcp`, not packaged), built by `prepare`. Option B: a script in `scripts/` (Python,
-standard library only, like the repository checks). Recommendation: B: it only forwards JSON-RPC lines to HTTPS, and needs no build.
-
-Answer from the owner, 2026-11-19: "P4: I assume the forwarder means the MCP forwarder. I would assume it is a small python script that just forwards
-the requests or provides a standard: not available response when there isn't an instance running to forward to. I assume it would need a prebuilt list
-of the tool calls available to at least respond properly at the start so the later requests can actually work." Acted on in CLOUDDEV-5 (the list is
-generated from the products' goldens of MCP tools). Answer from the owner, 2026-11-19, on the list: "as well as the generation of the tool [list]".
-
 ## Shared areas touched
 
 `.claude/settings.json` (new), `.mcp.json` (new), `.gitignore` (`.dev/`), `scripts/` (the scripts, the forwarder's tool list, their tests and check),
