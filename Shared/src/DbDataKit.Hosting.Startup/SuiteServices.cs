@@ -27,6 +27,9 @@ public sealed record SuiteService(string Program, string WindowsName, string Des
 
     /// <summary>The service's own folder of logs under the shared logs folder: <c>dbdatagateway</c>.</summary>
     public string LogFolder => Program;
+
+    /// <summary>The service's sub-block of the suite's ports (<see cref="SuiteServices.SuitePorts"/>): the Runner's is 7840 to 7859.</summary>
+    public PortRange Ports => SuiteServices.PortsOf(this);
 }
 
 /// <summary>
@@ -51,6 +54,39 @@ public static class SuiteServices
 
     public static SuiteService Workspace { get; } = new("dbdataworkspace", "DbDataWorkspace",
         "DbDataKit workspace: where people and agents author, test and publish apps, data models, replications and master data.", "workspace", 4);
+
+    /// <summary>
+    /// The ports of the suite, 7800 to 7899: outside Windows' default ports (80, 443, 135, 445, 3389, 5040, 5357, 5985, 5986, 7680, 47001, the dynamic
+    /// range 49152 to 65535) and common developer ports. Each service listens on a port of its own sub-block below; 7880 to 7899 are spare.
+    /// <c>scripts/check_default_ports.py</c> reads these declarations and checks that the sub-blocks lie in the range and do not overlap.
+    /// Design: docs/install.md#ports
+    /// </summary>
+    public static PortRange SuitePorts { get; } = new(7800, 7899);
+
+    /// <summary>The console's ports; the identity home on its own listens on one of them too.</summary>
+    public static PortRange ConsolePorts { get; } = new(7800, 7819);
+
+    /// <summary>The Gateway's ports.</summary>
+    public static PortRange GatewayPorts { get; } = new(7820, 7839);
+
+    /// <summary>The Runner's ports.</summary>
+    public static PortRange RunnerPorts { get; } = new(7840, 7859);
+
+    /// <summary>The Workspace's ports.</summary>
+    public static PortRange WorkspacePorts { get; } = new(7860, 7879);
+
+    /// <summary>The ports no service uses yet.</summary>
+    public static PortRange SparePorts { get; } = new(7880, 7899);
+
+    /// <summary>The sub-block of <paramref name="service"/>.</summary>
+    public static PortRange PortsOf(SuiteService service) => service.Program switch
+    {
+        "dbdatakit" => ConsolePorts,
+        "dbdatagateway" => GatewayPorts,
+        "dbdatarunner" => RunnerPorts,
+        "dbdataworkspace" => WorkspacePorts,
+        _ => throw new ArgumentException($"'{service.Program}' is not a service of the suite.", nameof(service)),
+    };
 
     /// <summary>The four services in their start order.</summary>
     public static IReadOnlyList<SuiteService> All { get; } = [Console, Gateway, Runner, Workspace];

@@ -19,7 +19,7 @@ public static class ConsoleCli
     public const string Program = "dbdatakit";
 
     /// <summary>Where <c>health check</c> asks by default: the console's own address, as a container sees it.</summary>
-    public const string HealthUrl = "https://localhost:8480/health/live";
+    public const string HealthUrl = "https://localhost:7800/health/live";
 
     public static Task<int> RunAsync(string[] args) => RunAsync(args, CliContext.Console());
 
@@ -63,9 +63,10 @@ public static class ConsoleCli
             await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <console directory>] [--listen https://<name>:<port>] [--public-url https://<name>:<port>] [--announce-listen http://<address>:<port>] [--state-engine sqlite|mssql|postgres --state-connection <connection string>] [--identity-home <https address> --identity-client <id> [--identity-secret-env <variable>] [--identity-app <id>] [--identity-home-cert <file>]]");
             return CliExit.Usage;
         }
-        if (!Uri.TryCreate(parsed.Get("listen") ?? ConsoleSettings.DefaultListen, UriKind.Absolute, out var listen) || listen.Scheme != Uri.UriSchemeHttps)
+        Uri? listenFlag = null;
+        if (parsed.Get("listen") is { } listenText && (!Uri.TryCreate(listenText, UriKind.Absolute, out listenFlag) || listenFlag.Scheme != Uri.UriSchemeHttps))
         {
-            await context.Error.WriteLineAsync("--listen is an https address, such as https://localhost:8480.");
+            await context.Error.WriteLineAsync("--listen is an https address, such as https://localhost:7800.");
             return CliExit.Usage;
         }
 
@@ -81,7 +82,7 @@ public static class ConsoleCli
         var announceText = parsed.Get("announce-listen");
         if (announceText is null && Uri.TryCreate((environment ?? Environment.GetEnvironmentVariable)(DbDataKit.Web.Trust.ConsoleAnnouncer.UrlVariable), UriKind.Absolute, out var shared) && shared.Scheme == Uri.UriSchemeHttp)
             announceText = new UriBuilder(Uri.UriSchemeHttp, "0.0.0.0", shared.Port).Uri.AbsoluteUri;
-        if (announceText is { Length: > 0 } && (!Uri.TryCreate(announceText, UriKind.Absolute, out announce) || announce.Scheme != Uri.UriSchemeHttp || announce.Port == listen.Port))
+        if (announceText is { Length: > 0 } && (!Uri.TryCreate(announceText, UriKind.Absolute, out announce) || announce.Scheme != Uri.UriSchemeHttp || announce.Port == listenFlag?.Port))
         {
             await context.Error.WriteLineAsync("--announce-listen is a plain http address on a port of its own, such as http://0.0.0.0:8481, and is reachable only on the network the servers share with the console.");
             return CliExit.Usage;
@@ -122,6 +123,7 @@ public static class ConsoleCli
         ConsoleSettings? settings = null;
         System.Security.Cryptography.X509Certificates.X509Certificate2? certificate = null;
         Microsoft.AspNetCore.Builder.WebApplication? app = null;
+        ListenChoice? listen = null;
         var settingsExit = (int?)null;
         var result = await new StartupSequence(new StartupOptions
             {
@@ -130,16 +132,21 @@ public static class ConsoleCli
                 LogsRoot = SuiteServices.LogsRootFor(service, directory),
                 Version = ConsoleHost.Version,
             })
-            .Step(StartupStep.Folder, _ =>
+            .Step(StartupStep.Folder, step =>
             {
                 ResolvedState state;
-                try { state = ConsoleState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection")); }
+                try
+                {
+                    state = ConsoleState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection"));
+                    // --listen, else the port pinned in settings.yaml, else a free port of the console's sub-block (pinned once the console listens on it)
+                    listen = ListenPorts.Resolve(service, listenFlag, ConsoleState.SettingsFileIn(directory), new Uri(ConsoleSettings.DefaultListen), step.Options.ExcludedPorts());
+                }
                 catch (InvalidOperationException)
                 {
                     settingsExit = DbDataKit.State.Cli.StateExit.Settings;
                     throw;
                 }
-                settings = new ConsoleSettings(directory, listen, publicUrl, announce, state.Settings, home) { StateSources = state.Sources };
+                settings = new ConsoleSettings(directory, listen.Address, publicUrl, announce, state.Settings, home) { StateSources = state.Sources };
                 Directory.CreateDirectory(settings.Directory);
             })
             .Step(StartupStep.Certificate, _ => certificate = ConsoleHost.Certificate(settings!.Directory))
@@ -149,7 +156,7 @@ public static class ConsoleCli
                 // the state is opened when it is first asked for: ask here, so a state that cannot be opened is this step's failure
                 app.Services.GetRequiredService<StateDatabase>();
             })
-            .Step(StartupStep.Ports, (step, ct) => step.BindAsync(app!.StartAsync, [listen.Port, .. announce is null ? Array.Empty<int>() : [announce.Port]], ct))
+            .Step(StartupStep.Ports, (step, ct) => step.BindAsync(listen!, app!.StartAsync, announce is null ? null : [announce.Port], ct))
             .RunAsync(context.Cancellation);
         if (!result.Succeeded)
         {
@@ -160,7 +167,7 @@ public static class ConsoleCli
 
         try
         {
-            await context.Out.WriteLineAsync($"The console is on {listen} (people open it at {settings!.Public}). The first administrator opens the setup link in {Path.Combine(settings.Directory, "FIRST-RUN.txt")} (it is in the log too; `dbdatakit setup link` makes a new one).");
+            await context.Out.WriteLineAsync($"The console is on {listen!.Address} (people open it at {settings!.Public}). The first administrator opens the setup link in {Path.Combine(settings.Directory, "FIRST-RUN.txt")} (it is in the log too; `dbdatakit setup link` makes a new one).");
             // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
             await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.WaitForShutdownAsync(app!, context.Cancellation);
         }
@@ -435,6 +442,13 @@ public static class ConsoleCli
         })]);
     }
 
+    /// <summary>The address a link to the console starts with when <c>--url</c> is not given: the one pinned in its <c>settings.yaml</c>, else the default.</summary>
+    private static string AddressOf(string directory)
+    {
+        try { return ListenPorts.ReadPinned(ConsoleState.SettingsFileIn(directory))?.GetLeftPart(UriPartial.Authority) ?? ConsoleSettings.DefaultListen; }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException) { return ConsoleSettings.DefaultListen; }
+    }
+
     private static ConsoleSettings ConsoleDirectory(string directory) => new(Path.GetFullPath(directory), new Uri(ConsoleSettings.DefaultListen));
 
     private static Noun UserNoun(Func<string, string?>? environment) => new("user", "The people who can sign in to the console",
@@ -523,7 +537,7 @@ public static class ConsoleCli
             await context.Error.WriteLineAsync("The console has a user already, so there is no setup link to make. To let someone in, make an invitation: dbdatakit user invite --email <address>.");
             return CliExit.Failure;
         }
-        var baseUrl = (parsed.Get("url") ?? ConsoleSettings.DefaultListen).TrimEnd('/');
+        var baseUrl = (parsed.Get("url") ?? AddressOf(directory)).TrimEnd('/');
         var link = SetupLink.Make(new IdentityInviteStore(database), settings, baseUrl);
         try
         {
@@ -597,7 +611,7 @@ public static class ConsoleCli
         try { minted = new IdentityInviteStore(database).Create(role, forUser, createdByUserId: null, email: email); }
         catch (AccountConflictException ex) { await context.Error.WriteLineAsync(ex.Message); return CliExit.Failure; }
         // the code goes in the fragment, which a browser never sends to a server and an access log never records
-        var url = $"{(parsed.Get("url") ?? ConsoleSettings.DefaultListen).TrimEnd('/')}/invite#{minted.Code}";
+        var url = $"{(parsed.Get("url") ?? AddressOf(DirectoryOf(parsed, environment))).TrimEnd('/')}/invite#{minted.Code}";
         await context.Out.WriteLineAsync($"An invitation for a {role}, valid until {minted.Invite.ExpiresAtUtc:u}:");
         await context.Out.WriteLineAsync($"    {url}");
         context.Data["url"] = url;

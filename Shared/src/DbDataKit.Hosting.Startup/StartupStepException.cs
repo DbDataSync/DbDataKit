@@ -78,6 +78,22 @@ public sealed class StartupStepException : Exception
         return new(StartupStep.Ports, message, facts, inner);
     }
 
+    /// <summary>
+    /// The ports step of a server that was to choose a port of its sub-block and found none it could bind: the sub-block, and the excluded port ranges,
+    /// named as covering it when they do.
+    /// </summary>
+    public static StartupStepException NoFreePort(PortRange block, IReadOnlyList<PortRange> excludedRanges, Exception? inner = null)
+    {
+        var overlapping = excludedRanges.Where(r => r.Start <= block.End && r.End >= block.Start).ToList();
+        var covered = Enumerable.Range(block.Start, block.End - block.Start + 1).All(p => overlapping.Any(r => r.Contains(p)));
+        var message = covered
+            ? $"No port of {block} can be bound: the excluded port {(overlapping.Count == 1 ? "range" : "ranges")} {string.Join(", ", overlapping)} cover{(overlapping.Count == 1 ? "s" : "")} them all."
+            : $"No port of {block} can be bound: each is held by another program or inside an excluded port range.";
+        message += " Free one of them, or give the server a port of its own with --listen.";
+        return new(StartupStep.Ports, message,
+            [new("Ports", block.ToString()), new("Excluded port ranges", ExcludedPortRanges.Describe(excludedRanges))], inner);
+    }
+
     /// <summary>The join step: the console's address and what it answered (null when it did not answer).</summary>
     public static StartupStepException Join(string consoleAddress, string? answer, Exception? inner = null) =>
         new(StartupStep.Join,

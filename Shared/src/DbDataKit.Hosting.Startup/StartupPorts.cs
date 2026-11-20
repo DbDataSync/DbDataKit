@@ -28,6 +28,29 @@ public static partial class StartupPorts
         }
     }
 
+    /// <summary>
+    /// The ports step of a server whose address was resolved by <see cref="ListenPorts.Resolve"/>: fails as <see cref="StartupStepException.NoFreePort"/>
+    /// when no port of the sub-block could be chosen; otherwise runs <paramref name="start"/> as <see cref="BindAsync(StartupContext, Func{CancellationToken, Task}, IEnumerable{int}, CancellationToken)"/>
+    /// does, and once the server listens on a port it chose, writes that port to its settings file (<see cref="ListenPorts.Pin"/>), so the next start
+    /// listens on the same one. <paramref name="otherPorts"/> are the server's other listeners (the console's announce port), named when one cannot be bound.
+    /// </summary>
+    public static async Task BindAsync(this StartupContext context, ListenChoice listen, Func<CancellationToken, Task> start, IEnumerable<int>? otherPorts = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (listen.Failure is { } failure) throw failure;
+        await context.BindAsync(start, [listen.Port, .. otherPorts ?? []], cancellationToken).ConfigureAwait(false);
+        if (listen.Source != ListenSource.Chosen) return;
+        try
+        {
+            ListenPorts.Pin(listen.SettingsFile, listen.Address);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            throw new InvalidOperationException(
+                $"The server listens on port {listen.Port}, which it chose at this start, and cannot write it to {listen.SettingsFile} to keep it: {e.Message}", e);
+        }
+    }
+
     /// <summary>The port a listener could not bind, or null when <paramref name="error"/> is not a refused bind.</summary>
     internal static int? RefusedPort(Exception error, IEnumerable<int> ports)
     {

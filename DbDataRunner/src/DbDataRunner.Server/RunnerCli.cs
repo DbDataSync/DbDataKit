@@ -23,7 +23,7 @@ public static class RunnerCli
     public const string Program = "dbdatarunner";
 
     /// <summary>Where <c>health check</c> asks by default: the server's own address.</summary>
-    public const string HealthUrl = "https://localhost:8495/health/live";
+    public const string HealthUrl = "https://localhost:7840/health/live";
 
     private const string Where = "[--repo <server directory>]";
 
@@ -93,9 +93,10 @@ public static class RunnerCli
             await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>] [--channels <name>[,<name>...]] [--group <name>].");
             return CliExit.Usage;
         }
-        if (!Uri.TryCreate(parsed.Get("listen") ?? RunnerSettings.DefaultListen, UriKind.Absolute, out var listen) || listen.Scheme != Uri.UriSchemeHttps)
+        Uri? listenFlag = null;
+        if (parsed.Get("listen") is { } listenText && (!Uri.TryCreate(listenText, UriKind.Absolute, out listenFlag) || listenFlag.Scheme != Uri.UriSchemeHttps))
         {
-            await context.Error.WriteLineAsync("--listen is an https address, such as https://127.0.0.1:8495.");
+            await context.Error.WriteLineAsync("--listen is an https address, such as https://127.0.0.1:7840.");
             return CliExit.Usage;
         }
 
@@ -106,6 +107,7 @@ public static class RunnerCli
         StateDatabase? state = null;
         System.Security.Cryptography.X509Certificates.X509Certificate2? certificate = null;
         Microsoft.AspNetCore.Builder.WebApplication? app = null;
+        ListenChoice? listen = null;
         var settingsExit = (int?)null;
         var result = await new StartupSequence(new StartupOptions
             {
@@ -114,12 +116,14 @@ public static class RunnerCli
                 LogsRoot = SuiteServices.LogsRootFor(service, directory),
                 Version = RunnerServer.Version,
             })
-            .Step(StartupStep.Folder, _ =>
+            .Step(StartupStep.Folder, step =>
             {
                 try
                 {
                     var resolvedState = RunnerState.Resolve(directory, environment);
-                    settings = new RunnerSettings(directory, listen) { State = resolvedState.Settings, StateSources = resolvedState.Sources, Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")), MaxArtifactBytes = RunnerSettings.MaxArtifactBytesFrom(environment), ActivationMaxWait = RunnerSettings.ActivationMaxWaitFrom(environment), Group = RunnerSettings.GroupFrom(environment, parsed.Get("group")), TaskEnvironment = RunnerSettings.TaskEnvironmentFrom(environment) };
+                    // --listen, else the port pinned in server.yaml, else a free port of the Runner's sub-block (pinned once the server listens on it)
+                    listen = ListenPorts.Resolve(service, listenFlag, Path.Combine(directory, "server.yaml"), new Uri(RunnerSettings.DefaultListen), step.Options.ExcludedPorts());
+                    settings = new RunnerSettings(directory, listen.Address) { State = resolvedState.Settings, StateSources = resolvedState.Sources, Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")), MaxArtifactBytes = RunnerSettings.MaxArtifactBytesFrom(environment), ActivationMaxWait = RunnerSettings.ActivationMaxWaitFrom(environment), Group = RunnerSettings.GroupFrom(environment, parsed.Get("group")), TaskEnvironment = RunnerSettings.TaskEnvironmentFrom(environment) };
                 }
                 catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
                 {
@@ -134,7 +138,7 @@ public static class RunnerCli
                 state = RunnerState.Open(settings!.Directory, settings.State, environment, settings.Group);
                 app = RunnerServer.Build(settings, certificate!, line => context.Error.WriteLine(line), state);
             })
-            .Step(StartupStep.Ports, (step, ct) => step.BindAsync(app!.StartAsync, [listen.Port], ct))
+            .Step(StartupStep.Ports, (step, ct) => step.BindAsync(listen!, app!.StartAsync, cancellationToken: ct))
             .RunAsync(context.Cancellation);
         if (!result.Succeeded)
         {
@@ -143,7 +147,7 @@ public static class RunnerCli
             return settingsExit ?? result.ExitCode;
         }
 
-        await context.Out.WriteLineAsync($"Serving on {listen} (instance {RunnerServer.InstanceId(state!)}, state on {state!.Dialect.Engine}, channels {string.Join(", ", settings!.Channels)}). Pair a client with: dbdatarunner server pair --max-role <roles> [--repo <server directory>]");
+        await context.Out.WriteLineAsync($"Serving on {listen!.Address} (instance {RunnerServer.InstanceId(state!)}, state on {state!.Dialect.Engine}, channels {string.Join(", ", settings!.Channels)}). Pair a client with: dbdatarunner server pair --max-role <roles> [--repo <server directory>]");
         try
         {
             // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way; the runner stops its tasks with their grace period first
