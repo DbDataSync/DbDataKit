@@ -261,7 +261,10 @@ public static class GatewayHost
             services.AddSingleton<IReadinessProbe>(sp => new ServingModuleReadinessProbe(sp.GetRequiredService<FlightSqlModule>(), () =>
                 sp.GetRequiredService<FlightSqlModule>().Health() is { State: not ServingHealthState.Ok } own ? own : ServingModuleHealth.Of(true, false, sp.GetRequiredService<DbDataKit.State.StateDatabase>(), ServingHealthState.Degraded)));
         }
-        // the identity home (plan 20, O06): a listener and a web application of its own, only when asked for
+        // the public listener: the modules that have no port of their own answer on it, by path; it starts before them and holds each mount as the module starts
+        services.AddSingleton<PublicMounts>();
+        if (PublicListener.MountedModules(options).Count > 0) services.AddHostedService<PublicListener>();
+        // the identity home (plan 20, O06): a web application of its own, only when asked for
         if (GatewayModules.Has(options, GatewayModules.Identity))
         {
             services.AddSingleton<GatewayIdentityModule>();

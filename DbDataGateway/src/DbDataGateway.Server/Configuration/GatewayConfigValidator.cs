@@ -1,6 +1,7 @@
 using DbDataKit.Serving.FlightSql;
 using System.Net;
 using DbDataKit.Config;
+using DbDataGateway.Server.Hosting;
 
 namespace DbDataGateway.Server.Configuration;
 
@@ -30,6 +31,7 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
         ValidateViews(o, cx);
         ValidateMcp(o, cx);
         ValidateRest(o, cx);
+        ValidatePorts(o, cx);
         ValidateCompression(o.Compression, "Compression", cx);
         ValidateDataSources(o, cx);
         ValidateJwt(o, cx);
@@ -118,14 +120,6 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
         if (!GatewayModules.Has(o, GatewayModules.Store)) return;
         if (!IPAddress.TryParse(o.Store.Address, out _))
             cx.Error("Store.Address", $"`Address` is `{o.Store.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
-        if (o.Store.Port == o.Listen.Port && o.Listen.Port != 0 && GatewayModules.Has(o, GatewayModules.FlightSql))
-            cx.Error("Store.Port", "The store module has its own port; it is the Flight port here.", $"Choose another port than {o.Listen.Port}.");
-        if (o.Management.Enabled && o.Store.Port == o.Management.Port)
-            cx.Error("Store.Port", "The store module has its own port; it is the management API's here.", $"Choose another port than {o.Management.Port}.");
-        if (GatewayModules.Has(o, GatewayModules.Identity) && o.Store.Port == o.Identity.Port)
-            cx.Error("Store.Port", "The store module has its own port; it is the identity home's here.", $"Choose another port than {o.Identity.Port}.");
-        if (GatewayModules.Has(o, GatewayModules.Apps) && o.Store.Port == o.Apps.Port)
-            cx.Error("Store.Port", "The store module has its own port; it is the apps host's here.", $"Choose another port than {o.Apps.Port}.");
     }
 
     private static void ValidateMcp(GatewayOptions o, IConfigValidationContext cx)
@@ -133,20 +127,41 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
         if (!GatewayModules.Has(o, GatewayModules.Mcp)) return;
         if (!IPAddress.TryParse(o.Mcp.Address, out _))
             cx.Error("Mcp.Address", $"`Address` is `{o.Mcp.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
-        if (o.Mcp.Port == o.Listen.Port && o.Listen.Port != 0 && GatewayModules.Has(o, GatewayModules.FlightSql))
-            cx.Error("Mcp.Port", "The mcp module has its own port; it is the Flight port here.", $"Choose another port than {o.Listen.Port}.");
-        if (o.Management.Enabled && o.Mcp.Port == o.Management.Port)
-            cx.Error("Mcp.Port", "The mcp module has its own port; it is the management API's here.", $"Choose another port than {o.Management.Port}.");
-        if (GatewayModules.Has(o, GatewayModules.Identity) && o.Mcp.Port == o.Identity.Port)
-            cx.Error("Mcp.Port", "The mcp module has its own port; it is the identity home's here.", $"Choose another port than {o.Identity.Port}.");
-        if (GatewayModules.Has(o, GatewayModules.Apps) && o.Mcp.Port == o.Apps.Port)
-            cx.Error("Mcp.Port", "The mcp module has its own port; it is the apps host's here.", $"Choose another port than {o.Apps.Port}.");
-        if (GatewayModules.Has(o, GatewayModules.Feeds) && o.Mcp.Port == o.Rest.Port)
-            cx.Error("Mcp.Port", "The mcp module has its own port; it is the feeds module's here.", $"Choose another port than {o.Rest.Port}.");
-        if (GatewayModules.Has(o, GatewayModules.Store) && o.Mcp.Port == o.Store.Port)
-            cx.Error("Mcp.Port", "The mcp module has its own port; it is the store module's here.", $"Choose another port than {o.Store.Port}.");
-        if (GatewayModules.Has(o, GatewayModules.Views) && o.Mcp.Port == o.Views.Port)
-            cx.Error("Mcp.Port", "The mcp module has its own port; it is the views module's here.", $"Choose another port than {o.Views.Port}.");
+    }
+
+    /// <summary>
+    /// No two listeners share a port: the Flight port, the management API's, the module listeners that have a port of their own, and the public listener (while a module is on it). The error is on the setting of the later of the two
+    /// in that order, naming the earlier.
+    /// </summary>
+    private static void ValidatePorts(GatewayOptions o, IConfigValidationContext cx)
+    {
+        var listeners = new List<(string Key, string Subject, string Possessive, int Port)>();
+        if (GatewayModules.Has(o, GatewayModules.FlightSql)) listeners.Add(("Listen.Port", "The Flight listener", "the Flight port", o.Listen.Port));
+        if (o.Management.Enabled) listeners.Add(("Management.Port", "The management API", "the management API's", o.Management.Port));
+        void Own(string module, int? port, string key, string subject, string possessive)
+        {
+            if (GatewayModules.Has(o, module) && port is { } p) listeners.Add((key, subject, possessive, p));
+        }
+        Own(GatewayModules.Identity, o.Identity.Port, "Identity.Port", "The identity home", "the identity home's");
+        Own(GatewayModules.Apps, o.Apps.Port, "Apps.Port", "The apps host", "the apps host's");
+        Own(GatewayModules.Store, o.Store.Port, "Store.Port", "The store module", "the store module's");
+        Own(GatewayModules.Views, o.Views.Port, "Views.Port", "The views module", "the views module's");
+        Own(GatewayModules.Mcp, o.Mcp.Port, "Mcp.Port", "The mcp module", "the mcp module's");
+        Own(GatewayModules.Feeds, o.Rest.Port, "Rest.Port", "The feeds module", "the feeds module's");
+        if (PublicListener.MountedModules(o).Count > 0) listeners.Add(("Public.Port", "The public listener", "the public listener's", o.Public.Port));
+        for (var i = 0; i < listeners.Count; i++)
+            for (var j = 0; j < i; j++)
+            {
+                // the management API against the Flight port has its message above; port 0 is the system's pick
+                if (listeners[i].Key == "Management.Port") continue;
+                if (listeners[i].Port == listeners[j].Port && listeners[i].Port != 0)
+                {
+                    cx.Error(listeners[i].Key, $"{listeners[i].Subject} has its own port; it is {listeners[j].Possessive} here.", $"Choose another port than {listeners[i].Port}.");
+                    break;
+                }
+            }
+        if (!IPAddress.TryParse(o.Public.Address, out _) && PublicListener.MountedModules(o).Count > 0)
+            cx.Error("Public.Address", $"`Address` is `{o.Public.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
     }
 
     private static void ValidateRest(GatewayOptions o, IConfigValidationContext cx)
@@ -154,14 +169,6 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
         if (!GatewayModules.Has(o, GatewayModules.Feeds)) return;
         if (!IPAddress.TryParse(o.Rest.Address, out _))
             cx.Error("Rest.Address", $"`Address` is `{o.Rest.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
-        void Clash(bool serves, int port, string what) { if (serves && o.Rest.Port == port && port != 0) cx.Error("Rest.Port", $"The feeds module has its own port; it is {what} here.", $"Choose another port than {port}."); }
-        Clash(GatewayModules.Has(o, GatewayModules.FlightSql), o.Listen.Port, "the Flight port");
-        Clash(o.Management.Enabled, o.Management.Port, "the management API's");
-        Clash(GatewayModules.Has(o, GatewayModules.Identity), o.Identity.Port, "the identity home's");
-        Clash(GatewayModules.Has(o, GatewayModules.Apps), o.Apps.Port, "the apps host's");
-        Clash(GatewayModules.Has(o, GatewayModules.Store), o.Store.Port, "the store module's");
-        Clash(GatewayModules.Has(o, GatewayModules.Views), o.Views.Port, "the views module's");
-        Clash(GatewayModules.Has(o, GatewayModules.Mcp), o.Mcp.Port, "the mcp module's");
         if (o.Rest.DefaultLimit > o.Rest.MaxRows)
             cx.Error("Rest.DefaultLimit", $"`DefaultLimit` is {o.Rest.DefaultLimit}, more than `MaxRows` ({o.Rest.MaxRows}).", "Set a default at or below the most a call may ask for.");
     }
@@ -171,16 +178,6 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
         if (!GatewayModules.Has(o, GatewayModules.Views)) return;
         if (!IPAddress.TryParse(o.Views.Address, out _))
             cx.Error("Views.Address", $"`Address` is `{o.Views.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
-        if (o.Views.Port == o.Listen.Port && o.Listen.Port != 0 && GatewayModules.Has(o, GatewayModules.FlightSql))
-            cx.Error("Views.Port", "The views module has its own port; it is the Flight port here.", $"Choose another port than {o.Listen.Port}.");
-        if (o.Management.Enabled && o.Views.Port == o.Management.Port)
-            cx.Error("Views.Port", "The views module has its own port; it is the management API's here.", $"Choose another port than {o.Management.Port}.");
-        if (GatewayModules.Has(o, GatewayModules.Identity) && o.Views.Port == o.Identity.Port)
-            cx.Error("Views.Port", "The views module has its own port; it is the identity home's here.", $"Choose another port than {o.Identity.Port}.");
-        if (GatewayModules.Has(o, GatewayModules.Apps) && o.Views.Port == o.Apps.Port)
-            cx.Error("Views.Port", "The views module has its own port; it is the apps host's here.", $"Choose another port than {o.Apps.Port}.");
-        if (GatewayModules.Has(o, GatewayModules.Store) && o.Views.Port == o.Store.Port)
-            cx.Error("Views.Port", "The views module has its own port; it is the store module's here.", $"Choose another port than {o.Store.Port}.");
         var export = o.Views.Export;
         if (!string.IsNullOrEmpty(export.Mode) && export.Mode is not ("pinned" or "system"))
             cx.Error("Views.Export.Mode", $"`Mode` is `{export.Mode}`.", "Use `pinned` (the Chromium chromium.pin names) or `system` (an installed Chrome or Edge at `Path`); leave it out to keep export off.");
@@ -212,12 +209,6 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
             cx.Error("Apps.PublicUrl", $"`PublicUrl` is `{o.Apps.PublicUrl}`, which is not an https address without a path.", "Use the address people reach the apps host at, such as https://apps.example.com.");
         if (o.Tls.Mode == TlsMode.None)
             cx.Error("Modules", "The apps host is https only (a sandboxed app and its sign-in need a secure origin), and `Tls.Mode` is None.", "Use SelfSigned, File or Store, or leave `apps` out of `Modules`.");
-        if (o.Apps.Port == o.Listen.Port && o.Listen.Port != 0 && GatewayModules.Has(o, GatewayModules.FlightSql))
-            cx.Error("Apps.Port", "The apps host has its own port; it is the Flight port here.", $"Choose another port than {o.Listen.Port}.");
-        if (o.Management.Enabled && o.Apps.Port == o.Management.Port)
-            cx.Error("Apps.Port", "The apps host has its own port; it is the management API's here.", $"Choose another port than {o.Management.Port}.");
-        if (GatewayModules.Has(o, GatewayModules.Identity) && o.Apps.Port == o.Identity.Port)
-            cx.Error("Apps.Port", "The apps host has its own port; it is the identity home's here.", $"Choose another port than {o.Identity.Port}.");
     }
 
     private static void ValidateIdentity(GatewayOptions o, IConfigValidationContext cx)
@@ -227,10 +218,6 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
             cx.Error("Identity.Address", $"`Address` is `{o.Identity.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
         if (o.Tls.Mode == TlsMode.None)
             cx.Error("Identity.Enabled", "The identity home is https only (a passkey needs a secure origin), and `Tls.Mode` is None.", "Use SelfSigned, File or Store, or leave the identity home off.");
-        if (o.Identity.Port == o.Listen.Port && o.Listen.Port != 0)
-            cx.Error("Identity.Port", "The identity home has its own port; it is the Flight port here.", $"Choose another port than {o.Listen.Port}.");
-        if (o.Management.Enabled && o.Identity.Port == o.Management.Port)
-            cx.Error("Identity.Port", "The identity home has its own port; it is the management API's here.", $"Choose another port than {o.Management.Port}.");
         if (!string.IsNullOrWhiteSpace(o.Identity.PublicUrl)
             && (!Uri.TryCreate(o.Identity.PublicUrl, UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps || url.AbsolutePath != "/" || url.Query.Length > 0 || url.Fragment.Length > 0))
             cx.Error("Identity.PublicUrl", $"`PublicUrl` is `{o.Identity.PublicUrl}`, which is not an https address without a path.", "Use the address people reach the home at, such as https://identity.example.com.");

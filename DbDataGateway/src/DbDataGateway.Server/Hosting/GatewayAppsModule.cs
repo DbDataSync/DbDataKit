@@ -16,11 +16,11 @@ using Microsoft.Extensions.Options;
 namespace DbDataGateway.Server.Hosting;
 
 /// <summary>
-/// The <c>apps</c> module of the serving layer (plan 26, AP05): the published apps of the group's state, each instance served by subpath (<c>/apps/&lt;instance&gt;/</c>) on a listener of its own, with the Gateway's certificate.
+/// The <c>apps</c> module of the serving layer (plan 26, AP05): the published apps of the group's state, each instance served by subpath (<c>/apps/&lt;instance&gt;/</c>) on the public listener (or a listener of its own when <c>apps.port</c> is set), with the Gateway's certificate.
 /// Like the identity home it is a web application of its own inside the process, so its pipeline never touches the Flight or management listeners. It serves an instance's bundle with the egress policy of its manifest
 /// (<see cref="AppSite"/>); an app's data calls (<c>/apps/&lt;instance&gt;/_data/...</c>) are answered by the group's published entity models in this process (<see cref="GroupAppData"/>, plan 20 O08c), and its semantic calls (<c>_data/api/v1/semantic/...</c>) by the semantic module as the signed-in person (<see cref="GroupAppSemantic"/>, plan 22a GP35c), so the store module's listener need not be on. A person is signed in through the identity home (<see cref="OpenIdClient"/>) and needs a role on <c>app:&lt;instance&gt;</c> to see the shell page; the token broker is the next slice (AP05c).
 /// </summary>
-public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, PublishedEntityModels models, DbDataKit.Serving.IServingServices serving, DbDataKit.Serving.Semantic.SemanticModels semanticModels, HomeCallers homeCallers, GroupSessionKey sessionKey, ILoggerFactory loggers, GroupCertificate? group = null, GatewayCache? servingCache = null) : IHostedService, IServingModule, IAsyncDisposable
+public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, PublishedEntityModels models, DbDataKit.Serving.IServingServices serving, DbDataKit.Serving.Semantic.SemanticModels semanticModels, HomeCallers homeCallers, GroupSessionKey sessionKey, ILoggerFactory loggers, GroupCertificate? group = null, GatewayCache? servingCache = null, PublicMounts? mounts = null) : IHostedService, IServingModule, IAsyncDisposable
 {
     /// <summary>The folder next to the program that holds the runtime for apps of views only (<c>views-app.js</c>, <c>views-app.css</c>; plan 26, AP25), copied there by the build from <c>Shared/web/view-app/dist</c>.</summary>
     public const string ViewsRuntimeFolder = "apps-views";
@@ -58,20 +58,9 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
         Certificates = new AppCertificates(bindings, () => certificate.Current, reference => secrets.ResolveSecret("Gateway:Apps:Addresses", reference), message => loggers.CreateLogger("Apps").LogWarning("{Problem}", message));
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();
-        builder.WebHost.ConfigureKestrel(kestrel =>
-        {
-            kestrel.AddServerHeader = false;
-            kestrel.Listen(IPAddress.Parse(current.Apps.Address), current.Apps.Port, listen =>
-            {
-                listen.Protocols = HttpProtocols.Http1AndHttp2;
-                listen.UseHttps(https =>
-                {
-                    // by the name the client asks for (SNI): a custom domain's own certificate, the host's for everything else (plan 26 AP08)
-                    https.ServerCertificateSelector = (_, name) => Certificates?.Select(name) ?? certificate.Current;
-                    https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
-                });
-            });
-        });
+        var inProcess = ModuleListener.Configure(builder, current.Apps.Address, current.Apps.Port,
+            // by the name the client asks for (SNI): a custom domain's own certificate, the host's for everything else (plan 26 AP08)
+            (_, name) => Certificates?.Select(name) ?? certificate.Current);
 
         var approvals = new AppApprovalStore(new DefinitionStore(state));
         var home = HomeOf(current);
@@ -120,13 +109,19 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
         await app.StartAsync(cancellationToken);
         _app = app;
         _draining = false;
+        // on the public listener the host keeps the paths it has (/apps/<instance>/...) and answers every request at a name bound to an instance, whatever the path
+        ModuleListener.Mount(mounts, inProcess, host => new PublicMount
+        {
+            Name = Name, Server = host, Certificate = name => Certificates?.Select(name),
+            Claims = context => context.Request.Path.StartsWithSegments("/apps") || bindings.Serves(context.Request.Host.Host),
+        });
     }
 
     /// <summary>The address people reach the apps host at: the setting, or the first TLS host name (localhost when there is none) on the module's port.</summary>
     public static Uri PublicUrlOf(GatewayOptions options) =>
         !string.IsNullOrWhiteSpace(options.Apps.PublicUrl)
             ? new Uri(options.Apps.PublicUrl.TrimEnd('/') + "/")
-            : new UriBuilder(Uri.UriSchemeHttps, options.Tls.Hostnames.FirstOrDefault(h => !string.IsNullOrWhiteSpace(h)) ?? "localhost", options.Apps.Port).Uri;
+            : new UriBuilder(Uri.UriSchemeHttps, options.Tls.Hostnames.FirstOrDefault(h => !string.IsNullOrWhiteSpace(h)) ?? "localhost", options.Apps.Port ?? options.Public.Port).Uri;
 
     private static Uri HomeOf(GatewayOptions options) =>
         new((string.IsNullOrWhiteSpace(options.Apps.Home.Authority) ? GatewayIdentityModule.PublicUrlOf(options).AbsoluteUri : options.Apps.Home.Authority).TrimEnd('/'));
@@ -134,6 +129,7 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         _draining = true;
+        mounts?.Remove(Name);
         // a module that was stopped is not running: its line on /health says so
         if (_app is { } running)
         {
