@@ -14,6 +14,12 @@ The steps a server runs before it serves, and the file that says why a start fai
   `starting since 2026-11-17T09:12:03Z, step: certificate, not finished`. A start that succeeds deletes the file. A failed start writes the account,
   the folders, what the step names and the exception chain. Only the service's account, SYSTEM and Administrators can open the file; on Linux it is
   mode 0600.
+- `StartupPorts.BindAsync` is the ports step of a server whose host binds its listeners when it starts (Kestrel): a port another program holds, or
+  one Windows refuses, fails the step as `StartupStepException.Ports`, with the port read from the host's message. The host starts its background
+  services in the same call, so a failure of one of them is also reported at the ports step, with its own message.
+- A failed start also goes to the Application event log when the server runs as a Windows service (`StartupOptions.Failed`).
+  `StartupResult.Summary()` is the line a server writes to standard error: the step, the reason and where the file is.
+- `StartupFailureFile.DescribeLastStart` is what `service doctor` prints: the file's lines under a heading, or that there is none.
 - `SharedLogsFolder` gives the shared logs folder its protection: on Windows each service account may create files and folders in it and owns what
   it creates; on Linux the folder is mode `1770`.
 - `SuiteServices` is the table of the four services: program, Windows service name and account, description, data folder and start order.
