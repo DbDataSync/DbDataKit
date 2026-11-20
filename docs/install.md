@@ -72,11 +72,11 @@ Logs are in one place: `C:\ProgramData\DbDataKit\logs\<service>\` (Linux `/var/l
 `C:\ProgramData\DbDataKit\logs\startup-failure-<service>.txt`: at each start the service writes "starting since <time>, step: <step>, not finished",
 rewritten as each step begins ("starting since 2026-11-17T09:12:03Z, step: certificate, not finished"), so a crash says how far it got; it deletes the
 file when startup succeeds; when startup fails it writes the full reason (the account, the folders, the exception chain, hints such as Windows' excluded
-port ranges). No file means a clean start; a leftover "not finished" line means a crash the service could not report. The install creates `logs`; each
+port ranges). No file means a clean start; a leftover "not finished" line means a crash the service could not report. The first service to start creates `logs` with the protection below; each
 service account creates and owns only its own subfolder and its own failure file; no service reads another's. Installers and `setup` print the file, so
 "Cannot start service" always comes with its reason.
 
-`<service>` in these names is the program in lower case (`dbdatagateway`), the same as its systemd unit. On Windows the `logs` folder gives Administrators and SYSTEM full control, each service account "create files" and "create folders" on that folder only, and CREATOR OWNER full control, so each service owns what it creates there and nothing else; on Linux it is `root:dbdatakit` with mode `1770`, and files are `0600`. A service that finds its own subfolder or failure file owned by another account writes nothing there and says so in the event log.
+`<service>` in these names is the program in lower case (`dbdatagateway`), the same as its systemd unit. On Windows the `logs` folder gives Administrators and SYSTEM full control, each service account "create files" and "create folders" on that folder only, and CREATOR OWNER full control, so each service owns what it creates there and nothing else; on Linux systemd creates each service's `/var/log/dbdatakit/<service>/` when it starts the unit (`LogsDirectory=`), owned by the service's user with mode `0700`, and the failure file is `/var/log/dbdatakit/<service>/startup-failure-<service>.txt`, mode `0600`. A service that finds its own subfolder or failure file owned by another account writes nothing there and says so in the event log.
 
 ## Service names, accounts and descriptions
 
@@ -88,8 +88,7 @@ descriptions:
 - `DbDataRunner`: "DbDataKit runner: runs published tasks (data loads, replication, deployments and quality checks) on schedule or on demand."
 - `DbDataWorkspace`: "DbDataKit workspace: where people and agents author, test and publish apps, data models, replications and master data."
 
-On Linux each service has a system user named as the program (`dbdatagateway`) in the group `dbdatakit`, made by `install.sh --system`; the group owns the
-shared logs folder.
+On Linux each service has a system user named as the program (`dbdatagateway`) in the group `dbdatakit`, made by `install.sh --system`.
 
 Each server's `service install` registers its Windows service under that name and account, with that description. The names and descriptions are
 written once, in `SuiteServices` (`Shared/src/DbDataKit.Hosting.Startup/SuiteServices.cs`), and the MSI, `install.ps1` and the `dbdatakit-full` Scoop
