@@ -68,18 +68,6 @@ public sealed class HostingNounTests
     }
 
     [Fact]
-    public async Task Service_doctor_answers_that_it_is_service_check_now_and_exits_2()
-    {
-        var (noun, _) = ServiceNoun();
-
-        var doctor = await Run(noun, "service", "doctor", "--data-dir", "x");
-
-        Assert.Equal(CliExit.Usage, doctor.Exit);
-        Assert.StartsWith("'prod service doctor' is gone: run 'service check' instead", doctor.Error);
-        Assert.DoesNotContain("doctor", new NounRouter("prod", [noun]).NounHelp(noun));
-    }
-
-    [Fact]
     public async Task Service_install_through_the_noun_registers_the_service_and_service_status_reports_it()
     {
         var (noun, scm) = ServiceNoun();

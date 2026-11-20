@@ -2,7 +2,7 @@
 
 Plain command classes, no CLI framework: `Execute(string[] args, IConsole console)` returns an exit code (0 ok, 1 failure, 2 usage, 3 not elevated).
 
-- `ServiceCommand`: `install|uninstall|start|stop|restart|status|check|unit|run`. `check` checks the registration, the account and the directory permissions; `doctor`, its earlier name, answers that it is `service check` now and exits 2 (`ServiceCommand.RemovedVerbs`, which `HostingNouns.Service` gives the `service` noun as its removed verbs). Options: `--account`, `--password-stdin`, `--allow-localsystem`, `--data-dir`, `--dry-run`, `--allow-downgrade --installed-version`. `--password` on the command line is rejected. Mutating verbs need elevation (`IElevationChecker`, default `Environment.IsPrivilegedProcess`); dry run does not.
+- `ServiceCommand`: `install|uninstall|start|stop|restart|status|check|unit|run`. `check` checks the registration, the account and the directory permissions, and prints the startup-failure file of a suite service. Options: `--account`, `--password-stdin`, `--allow-localsystem`, `--data-dir`, `--dry-run`, `--allow-downgrade --installed-version`. `--password` on the command line is rejected. Mutating verbs need elevation (`IElevationChecker`, default `Environment.IsPrivilegedProcess`); dry run does not.
 - `CertCommand`: `status`/`show` (read-only; reports an unreadable certificate instead of throwing), `ensure` (create/rotate if needed), `renew` (replace the managed self-signed certificate now), `check` (exit 1 when rotation is due).
 - Products provide a `ServiceCommandContext` (name, binary, layout, principal resolver, optional systemd unit) and inject the real `WindowsServiceControlManager`, `FileSystemAclService` and a `WindowsPrincipalResolver`.
 

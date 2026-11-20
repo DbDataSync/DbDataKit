@@ -184,15 +184,6 @@ public class ServiceCommandTests
     }
 
     [Fact]
-    public void Doctor_answers_that_it_is_service_check_now()
-    {
-        var (cmd, _, _) = Make();
-        var console = new BufferConsole();
-        Assert.Equal(ExitCodes.Usage, cmd.Execute(["doctor"], console));
-        Assert.Contains("'service doctor' is gone: run 'service check' instead", console.ErrorWriter.ToString());
-    }
-
-    [Fact]
     public void Check_prints_the_startup_failure_file_of_the_data_folder_or_says_there_is_none()
     {
         var root = Path.Combine(Path.GetTempPath(), "dbdata-check-" + Guid.NewGuid().ToString("N"));

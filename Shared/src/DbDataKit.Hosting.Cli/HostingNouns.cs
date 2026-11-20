@@ -16,7 +16,7 @@ public static class HostingNouns
         Forward("restart", "Stop and start the service; needs elevation", EffectClass.TargetWrites, "", command.Execute),
         Forward("check", "Check the registration, the account and the directory permissions", EffectClass.OfflineOnly, "", command.Execute),
         Forward("unit", "Print a hardened systemd unit that runs 'server run' (Linux)", EffectClass.OfflineOnly, "", command.Execute),
-    ], ServiceCommand.RemovedVerbs);
+    ]);
 
     /// <summary><c>cert show|ensure|check|renew</c>: the server's TLS certificate. Products add their own verbs with <see cref="Noun.With"/>.</summary>
     public static Noun Cert(CertCommand command) => new("cert", "The server's TLS certificate",

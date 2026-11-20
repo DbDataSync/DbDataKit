@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""No product document, script or workflow uses a command name that plan 13 retired, or one that does not exist (slice X03), and no command line has a command named
-as NAMES_NOT_USED forbids.
+"""No product document, script or workflow uses a command name that plan 13 retired, or one that does not exist (slice X03), and no tracked file uses a word
+of FORBIDDEN_WORDS.
 
-Three checks over the same files, and one over the command lines:
+Three checks over the same files, and one over every tracked file:
   1. the retired forms, listed in RETIRED with what replaced them;
   2. every `dbdatasync|dbdatagateway|dbdatakit|dbdatastore|dbdatarunner|dbdataworkspace|dbdatabuild <words>` that is typed must be a command that exists. The commands are read from the
      sources, not listed by hand: the nouns and verbs of each product's command line (the shared ones in Shared/src, the product's own under its src) and,
      for Build, its generated command reference (DbDataBuild/docs/commands.md, which a test keeps current);
   3. no DbDataSync document says its server serves a web app at its own address (SYNC_WEB_APP): since U11 the screens are the dbdatakit console's;
-  4. no noun or verb of any command line, a shared one in Shared/src included, has a name of NAMES_NOT_USED: a check is `check` (`service check`, `health check`).
+  4. no tracked file (code, docs, plans, scripts; its path included) contains a word of FORBIDDEN_WORDS, in any case, alone or inside an identifier.
 
-History (plans, progress logs, research, phase documents, release notes) and test fixtures are not checked, because they say what was true then. A line can
+For checks 1 to 3, history (plans, progress logs, research, phase documents, release notes) and test fixtures are not checked, because they say what was true then. A line can
 name an old or made-up form on purpose with the marker `retired-name-ok` on itself or the line above.
 Run from anywhere: python3 scripts/check_docs_commands.py [root]
 """
@@ -37,10 +37,18 @@ RETIRED = [
     (r"\bDbDataGateway(?:\.Worker)?\.exe\b", "dbdatagateway.exe / dbdatagateway-worker.exe (lower case)"),
 ]
 
-# Names no command or subcommand has, with the name to use instead. Design: docs/install.md#commands-named-check
-NAMES_NOT_USED = {
+# Words no tracked file may contain, in any case, alone or inside an identifier, with the word to use instead.
+# The service verb that checks a service's registration, account and folder permissions was renamed `service check` (as `health check`, `cert check` and
+# `config check` are named), and the old name was removed from every command, type, test, comment, doc and plan instead of being kept as an alias. This
+# check keeps it from coming back: a new verb, a class, a variable or a sentence naming it fails here, so it never reaches a command line or a document.
+# Design: docs/install.md#commands-named-check
+FORBIDDEN_WORDS = {
     "doctor": "check",
 }
+# Names that contain a forbidden word and are not ours: the name of another product's tool (Majorsilence Reporting's report checker).
+FORBIDDEN_WORDS_ALLOWED = ["rdl-doctor"]
+# The files that must name the words: this check and its tests.
+FORBIDDEN_WORDS_EXEMPT = {"scripts/check_docs_commands.py", "scripts/tests/test_check_docs_commands.py"}
 
 # What a Sync document may no longer say (slice U11, X03): the server serves no web app, its screens are the dbdatakit console's. Each pattern is a way the old claim was written,
 # with what is true now. Only DbDataSync's own documents are read, and a line can name the old claim on purpose with the marker.
@@ -257,26 +265,54 @@ def check_readmes(root):
     return problems
 
 
-def check_names(root):
-    """No command of a product, and no noun or verb a shared factory in Shared/src makes, is named as NAMES_NOT_USED forbids."""
+def tracked_files(root):
+    """The repository's tracked files, relative to root with '/' separators: `git ls-files` when root is a git work tree, else every file under root
+    (a test's folder) except the folders of SKIP_DIRS that are never tracked."""
+    import subprocess
+    try:
+        result = subprocess.run(["git", "-C", root, "ls-files", "-z"], capture_output=True, check=True)
+        if os.path.isdir(os.path.join(root, ".git")) or os.path.isfile(os.path.join(root, ".git")):
+            return [name for name in result.stdout.decode("utf-8", "replace").split("\0") if name]
+    except (OSError, subprocess.CalledProcessError):
+        pass
+    untracked = {"node_modules", "bin", "obj", ".git", "__pycache__"}
+    found = []
+    for dirpath, dirnames, names in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in untracked]
+        found += [os.path.relpath(os.path.join(dirpath, name), root).replace(os.sep, "/") for name in names]
+    return sorted(found)
+
+
+def check_words(root):
+    """No tracked file contains a word of FORBIDDEN_WORDS in its path or its text, in any case, unless it is a name of FORBIDDEN_WORDS_ALLOWED."""
     problems = []
-    for product, folder in PRODUCTS.items():
-        if not os.path.isdir(os.path.join(root, folder, "src")):
+    allowed = re.compile("|".join(re.escape(a) for a in FORBIDDEN_WORDS_ALLOWED), re.IGNORECASE) if FORBIDDEN_WORDS_ALLOWED else None
+    words = re.compile("|".join(re.escape(w) for w in FORBIDDEN_WORDS), re.IGNORECASE)
+
+    def hits(text):
+        return words.findall(allowed.sub("", text) if allowed else text)
+
+    for rel in tracked_files(root):
+        if rel in FORBIDDEN_WORDS_EXEMPT:
             continue
-        for command in sorted(commands_of(root, product)):
-            for word in command:
-                if word in NAMES_NOT_USED:
-                    problems.append(f"{folder}: `{product} {' '.join(command)}` is a command named `{word}`; no command or subcommand is named `{word}`, call it `{NAMES_NOT_USED[word]}`")
-    if os.path.isdir(os.path.join(root, "Shared", "src")):
-        for factory, (noun, verbs) in sorted(shared_nouns(root).items()):
-            for word in [noun, *verbs]:
-                if word in NAMES_NOT_USED:
-                    problems.append(f"Shared/src: `{factory}` makes a command named `{word}`; no command or subcommand is named `{word}`, call it `{NAMES_NOT_USED[word]}`")
+        for word in hits(rel)[:1]:
+            problems.append(f"{rel}: the path contains `{word}`; use `{FORBIDDEN_WORDS[word.lower()]}`")
+        try:
+            with open(os.path.join(root, rel), "rb") as f:
+                data = f.read()
+        except OSError:
+            continue
+        text = data.decode("utf-8", "replace")
+        if not hits(text):
+            continue
+        for number, line in enumerate(text.splitlines(), 1):
+            for word in hits(line)[:1]:
+                problems.append(f"{rel}:{number}: `{word}`; the word is not used in commands, code, docs or plans, use `{FORBIDDEN_WORDS[word.lower()]}` ({line.strip()[:120]})")
     return problems
 
 
 def check(root):
-    return check_retired(root) + check_web_app(root) + check_exist(root) + check_readmes(root) + check_names(root)
+    return check_retired(root) + check_web_app(root) + check_exist(root) + check_readmes(root) + check_words(root)
 
 
 def main(argv):
@@ -284,7 +320,7 @@ def main(argv):
     problems = check(root)
     for problem in problems:
         print(problem)
-    print(f"{len(problems)} problem(s)" if problems else "no document uses a retired or unknown command name, and no command has a name that is not used")
+    print(f"{len(problems)} problem(s)" if problems else "no document uses a retired or unknown command name, and no tracked file uses a forbidden word")
     return 1 if problems else 0
 
 

@@ -50,15 +50,10 @@ public sealed class CliGrammarTests
     }
 
     [Fact]
-    public async Task Service_check_is_a_verb_and_service_doctor_answers_that_it_is_service_check_now()
+    public async Task Service_check_is_a_verb_of_service()
     {
         var help = await Run("service", "help");
         Assert.Contains("service check [--name N]", help.Out);
-        Assert.DoesNotContain("doctor", help.Out);
-
-        var doctor = await Run("service", "doctor", "--name", "DbDataGateway");
-        Assert.Equal(CliExit.Usage, doctor.Exit);
-        Assert.Equal("'dbdatagateway service doctor' is gone: run 'service check' instead; it checks the registration, the account and the directory permissions as 'service doctor' did.", doctor.Error.Trim());
     }
 
     [Fact]

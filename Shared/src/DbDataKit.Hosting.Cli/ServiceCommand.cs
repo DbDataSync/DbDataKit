@@ -1,4 +1,3 @@
-using DbDataKit.Cli;
 using DbDataKit.Security.Acl;
 using System.Security;
 using DbDataKit.Hosting.Systemd;
@@ -41,7 +40,7 @@ public sealed class ServiceCommandContext
     public Func<SystemdUnitOptions>? SystemdUnit { get; init; }
 
     /// <summary>Extra checks for <c>service check</c>, e.g. certificate expiry.</summary>
-    public Func<IEnumerable<DoctorCheck>>? ExtraChecks { get; init; }
+    public Func<IEnumerable<ServiceCheckItem>>? ExtraChecks { get; init; }
 
     public TimeSpan StopTimeout { get; init; } = TimeSpan.FromSeconds(30);
 
@@ -89,16 +88,6 @@ public sealed class ServiceCommand(
     private static readonly HashSet<string> Flags = new(StringComparer.OrdinalIgnoreCase)
     {
         "password-stdin", "allow-localsystem", "dry-run", "allow-downgrade", "console",
-    };
-
-    /// <summary>
-    /// Verbs the command no longer has, each with the sentence naming what replaced it. A command line lists them as its <c>service</c> noun's removed verbs, so
-    /// typing one answers the sentence (exit 2) instead of "not a verb". No verb is named <c>doctor</c>: a check is <c>check</c>, as <c>health check</c> and <c>cert check</c> are.
-    /// Design: docs/install.md#commands-named-check
-    /// </summary>
-    public static IReadOnlyDictionary<string, string> RemovedVerbs { get; } = new Dictionary<string, string>
-    {
-        ["doctor"] = "run 'service check' instead; it checks the registration, the account and the directory permissions as 'service doctor' did.",
     };
 
     public const string Usage =
@@ -151,10 +140,6 @@ public sealed class ServiceCommand(
                 case "run":
                     console.Out.WriteLine("Run the product executable with --console to host it in the foreground.");
                     return ExitCodes.Ok;
-                case not null when RemovedVerbs.ContainsKey(verb):
-                    // called without a command line's router (the Gateway's service command): the answer names the noun only
-                    console.Error.WriteLine(new RemovedCommands("service", RemovedVerbs).AnswerFor([verb]));
-                    return ExitCodes.Usage;
                 default:
                     console.Error.WriteLine(Usage);
                     return ExitCodes.Usage;
@@ -321,11 +306,11 @@ public sealed class ServiceCommand(
         var spec = BuildSpec(parsed);
         var existing = scm.GetConfig(context.ServiceName);
         var account = existing?.AccountName is { } n ? ServiceAccount.Parse(n, context.ServiceName) : spec.EffectiveAccount;
-        var doctor = new ServiceDoctor(scm, acl, context.PrincipalResolver(account));
-        var report = doctor.Run(spec, context.Layout, context.ExtraChecks?.Invoke());
+        var checker = new ServiceCheck(scm, acl, context.PrincipalResolver(account));
+        var report = checker.Run(spec, context.Layout, context.ExtraChecks?.Invoke());
         foreach (var c in report.Checks)
         {
-            var tag = c.Severity switch { DoctorSeverity.Pass => "ok  ", DoctorSeverity.Warn => "warn", _ => "FAIL" };
+            var tag = c.Severity switch { ServiceCheckSeverity.Pass => "ok  ", ServiceCheckSeverity.Warn => "warn", _ => "FAIL" };
             console.Out.WriteLine($"[{tag}] {c.Id}: {c.Message}");
         }
 

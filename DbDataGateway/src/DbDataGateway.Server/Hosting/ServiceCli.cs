@@ -111,12 +111,6 @@ public static class ServiceCli
         }
 
         string verb = extracted.Verb ?? "";
-        if (ServiceCommand.RemovedVerbs.TryGetValue(verb, out var replaced))
-        {
-            console.Error.WriteLine(new global::DbDataKit.Cli.RemovedCommands(Cli.Program, new Dictionary<string, string> { [$"service {verb}"] = replaced }).AnswerFor(["service", verb]));
-            return ExitCodes.Usage;
-        }
-
         if (verb == "unit" || extracted.Systemd) return Unit(env, extracted);
         if (verb is not ("install" or "uninstall" or "start" or "stop" or "restart" or "status" or "check"))
         {

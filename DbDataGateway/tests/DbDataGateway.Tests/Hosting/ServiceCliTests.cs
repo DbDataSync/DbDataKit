@@ -284,17 +284,6 @@ public sealed class ServiceCliTests
     }
 
     [Fact]
-    public void Doctor_answers_that_it_is_service_check_now_on_every_platform()
-    {
-        foreach (var windows in new[] { true, false })
-        {
-            var rig = new Rig { Windows = windows };
-            Assert.Equal(ExitCodes.Usage, rig.Run("doctor", "--name", "DbDataGateway"));
-            Assert.StartsWith("'dbdatagateway service doctor' is gone: run 'service check' instead", rig.Err);
-        }
-    }
-
-    [Fact]
     public void Service_management_is_refused_off_windows_but_unit_generation_is_not()
     {
         var rig = new Rig { Windows = false };

@@ -183,15 +183,11 @@ public sealed class ConsoleCliTests : IDisposable
     }
 
     [Fact]
-    public async Task Service_check_runs_the_checks_and_service_doctor_answers_that_it_is_service_check_now()
+    public async Task Service_check_runs_the_checks()
     {
         var check = await Run("service", "check");
         Assert.Contains("service.installed", check.Out);
         Assert.Contains("Check: ", check.Out);
-
-        var doctor = await Run("service", "doctor");
-        Assert.Equal(CliExit.Usage, doctor.Exit);
-        Assert.StartsWith("'dbdatakit service doctor' is gone: run 'service check' instead", doctor.Err);
     }
 
     [Fact]

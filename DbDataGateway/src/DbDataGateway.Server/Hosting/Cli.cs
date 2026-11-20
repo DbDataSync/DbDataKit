@@ -205,7 +205,7 @@ public static class Cli
         Service("restart", "Stop and start the service", EffectClass.TargetWrites, "[--name N]"),
         Service("check", "Check the registration, the account and the directory permissions", EffectClass.OfflineOnly, "[--name N]"),
         Service("unit", "Print a hardened systemd unit that runs 'server run'", EffectClass.OfflineOnly, "[--name N] [--exec /path/to/dbdatagateway]"),
-    ], DbDataKit.Hosting.Cli.ServiceCommand.RemovedVerbs);
+    ]);
 
     private static Verb Service(string name, string summary, EffectClass effect, string usage) =>
         new(name, summary, effect, usage, async (args, context) => await ServiceCli.RunAsync([name, .. args], ServiceCliEnvironment.Real(DbDataKit.Hosting.Cli.HostingNouns.ConsoleFor(context))), DataSchemas.None);

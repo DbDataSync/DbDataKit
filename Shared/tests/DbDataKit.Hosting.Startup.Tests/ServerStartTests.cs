@@ -3,7 +3,7 @@ using System.Net.Sockets;
 
 namespace DbDataKit.Hosting.Startup.Tests;
 
-/// <summary>What a server's <c>server run</c> uses of the library besides the sequence: where its logs folder is, its ports step, what it says and what <c>service doctor</c> prints.</summary>
+/// <summary>What a server's <c>server run</c> uses of the library besides the sequence: where its logs folder is, its ports step, what it says and what <c>service check</c> prints.</summary>
 public sealed class ServerStartTests : StartupTestBase
 {
     [Fact]

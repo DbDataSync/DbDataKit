@@ -258,8 +258,8 @@ stopping the services stays the user's first step. What the check found, against
 
 ## Commands named `check`
 
-`service check` checks a service's registration, settings and folder permissions; `health check` asks whether a running service answers. No command or
-subcommand is named `doctor`; `scripts/check_docs_commands.py` fails when a command line or a shared noun in `Shared/src` has one.
+`service check` checks a service's registration, settings and folder permissions, and prints the startup-failure file of the last start; `health check`
+asks whether a running service answers. A command that checks something is named `check`, as `cert check` and `config check` are.
 
 ## Clean break
 
@@ -277,7 +277,6 @@ by someone, who says what it found and what to do.
 | `bundle.json` in the console's folder, `--announce-listen` | the console refuses to start | the file or option and what replaced it (as the console refuses the removed `runner:` section) |
 | `DBDATAKIT_ANNOUNCE_URL` set | the service, a warning at every start | the variable, that it is not read, and how to remove it |
 | a client, a connection string or an `instances.yaml` entry using an old default port (console 8480, identity home 8482, Workspace 8471, Runner 8495, Gateway 8815 to 8822) | nobody at run time (nothing listens there any more); the release notes and `docs/suite-single-server-install.md` list the old and the new defaults; the Servers page shows each server's reported address | the old and the new port |
-| `service doctor` | the program (exit 2, `RemovedCommands`) | `service check` |
 | `server pair`, `instance add --code`, `instance pending`, `instance confirm`, `publisher pair --code`, `bundle init` | the program (exit 2, `RemovedCommands`) | the sentence naming the new command |
 
 Example: an administrator upgrades a machine whose Gateway was registered as `dbdatagateway` from `%ProgramData%\DbDataKit\bin\<version>` and paired by

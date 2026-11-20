@@ -18,7 +18,7 @@ rules are in [docs/install.md](../docs/install.md).
 - The four servers' `server run` start through the startup library `Shared/src/DbDataKit.Hosting.Startup`: a failed start writes
   `startup-failure-<program>.txt` (an install's data folder: the shared `logs` folder beside it; INSTALLER-P12 for any other folder) and the Application
   event log for a Windows service, says the step and the file on standard error, and exits non-zero; a port that cannot be bound fails the ports step
-  naming the port and Windows' excluded ranges; `service doctor` prints the file. Each server fills in the folder, certificate, state and ports steps
+  naming the port and Windows' excluded ranges; `service check` prints the file. Each server fills in the folder, certificate, state and ports steps
   with the work its start already did (INSTALLER-P13); the keys and join steps are empty. The library: `StartupSequence` (the six steps in order, a failed
   step stops the start and returns exit code 1), `StartupStepException` (what each step's failure names), `StartupPorts` (a refused listener as the ports step's failure), `startup-failure-<program>.txt` (the
   progress line, the full reason, deleted after a clean start; 0600 on Linux, its account, SYSTEM and Administrators on Windows), the service's own
@@ -39,8 +39,9 @@ rules are in [docs/install.md](../docs/install.md).
   thumbprint, signed with a key derived from the token), `JoinEndpoint` (`POST /api/v1/join`), `JoinCallbackEndpoint` and `PendingJoins` (the
   server's answer to the callback), `JoinRequestFile` (`join-request/1`). No host maps the routes or runs the join yet (INSTALLER-12).
 - A second Runner instance joins its group by a code made on it (`POST /api/instances/{id}/join`); a Gateway group makes its own key.
-- `service check` checks a service's registration, account and folder permissions in every program; `service doctor` answers that it is `service check`
-  now (exit 2, the `service` noun's removed verbs); `scripts/check_docs_commands.py` fails on a command or subcommand named `doctor`.
+- `service check` checks a service's registration, account and folder permissions in every program and prints its startup-failure file; the verb's
+  earlier name is gone from every command, type, test, doc and plan, and `scripts/check_docs_commands.py` (`FORBIDDEN_WORDS`) fails when a tracked file
+  uses it again.
 - Enterprise (AD CS) certificates, their renewal and rollover are the subject CERTIFICATES.
 - Build's release and the Gateway's Windows build are self-contained; the other programs are framework-dependent.
 - The Runner's Windows service job is written and has never run a task under the real service; no Runner release was cut with the release workflow.
@@ -121,7 +122,7 @@ event log. Scenario: an administrator ran `dbdatagateway server run` elevated on
 administrator; the service then starts as `NT SERVICE\DbDataGateway`. Built as the default: the start goes on, nothing is written to the file, and each
 reason goes to standard error and, for a Windows service, the Application event log (source `.NET Runtime`, event 1000; on Linux standard error is
 the journal). The other option is to fail the start at once, naming the file and its owner. Recommendation: the default, because the file only
-reports a start and a stale file should not stop a service; `service doctor` (`service check` after INSTALLER-1) prints the file when it can read
+reports a start and a stale file should not stop a service; `service check` prints the file when it can read
 it, and could also name its owner, which is not built.
 
 ### INSTALLER-P10: what the startup library fixes that the doc does not name (default, awaiting the owner)
@@ -152,7 +153,7 @@ as the default (`SuiteServices.LogsRootFor`), from the data folder the server ru
 - a folder named for its service under another root (`D:\Data\runner`, as `DBDATAKIT_DATA=D:\Data` makes it): `logs` beside it (`D:\Data\logs`);
 - any other folder (`~/work/runner-a`): `logs` inside it (`~/work/runner-a/logs/startup-failure-dbdatarunner.txt`).
 
-`service doctor` finds the file by the same rule. The other options: B, always the machine's folder (a run without root on Linux then writes no file
+`service check` finds the file by the same rule. The other options: B, always the machine's folder (a run without root on Linux then writes no file
 and says why on standard error, and every test run on Windows writes into the machine's folder); C, a variable naming the logs folder
 (`DBDATAKIT_LOGS`), with B when it is not set. Recommendation: A, so a run from a terminal and a test keep their logs with their data and an install
 gets the documented paths; `docs/install.md` then says it in "Logs and the startup-failure file".
@@ -179,14 +180,14 @@ services in `docs/install.md`, between state and ports; C, each host starts its 
 ports step (a hook that runs just before the listeners bind). Recommendation: A now, and C with INSTALLER-6, which moves keys, certificate and state
 to the first start and so rewrites each server's start.
 
-### INSTALLER-P14: what `service doctor` does with the failure file (default, awaiting the owner)
+### INSTALLER-P14: what `service check` does with the failure file (default, awaiting the owner)
 
-Scenario: the Gateway's service failed to start, and an administrator runs `dbdatagateway service doctor` (`service check` after INSTALLER-1). Built
+Scenario: the Gateway's service failed to start, and an administrator runs `dbdatagateway service check`. Built
 as the default: after the registration and folder checks it prints `Startup-failure file: <path> (the last start failed):` and the file's lines
 indented, or `Startup-failure file: none (<path>)`, or that the file is there and this account cannot read it; the data folder is the registration's
 (or `--data-dir`). The exit code stays the checks' verdict: a failure file alone does not make it 1. The other option: a failure file that holds a
 failed start is a failed check (exit 1). Recommendation: the default, because the checks look at the registration and the folders and the service
-manager already reports a failed start; INSTALLER-1 renames the verb and the printing moves with it.
+manager already reports a failed start.
 
 ### INSTALLER-P15: the display name and the systemd description of each service (default, awaiting the owner)
 
