@@ -43,8 +43,8 @@ A client is a console, another server or a command line (`ClientKind`); the serv
 ## Joining the console (`JoinTokens`, `JoinService`, `JoinClient`)
 
 A server joins a console with a single-use token the console made for it (`docs/install.md`, "Pairing"). This library has both halves of the
-exchange, tested together in one process. The console's join route in its host, the token table in its state, `dbdatakit setup invite` and the
-servers' `pair` command and join step are not built yet.
+exchange, tested together in one process. The console's join route in its host, the token table in its state, the console's command that makes a
+join command, and the servers' `pair` command and join step are not built yet.
 
 **The token.** `JoinTokens.Mint(scope, madeBy)` makes 128 random bits, written as 26 lower-case letters and digits, for one product, a role
 ceiling and a group (`JoinScope`). It works for 15 minutes unless the caller gives a lifetime of up to 24 hours. `Normalize` accepts the token in
