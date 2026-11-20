@@ -26,12 +26,12 @@ Each task is written as a short draft for the owner, in small batches, and check
 | DOCSREVIEW-2 | Feature areas: apps, semantic models, build models, master data, sync, integrations, agents, dashboards | none | M | the owner approves it |
 | DOCSREVIEW-3 | Document types: each feature's files, where they are authored, built, deployed and run (from `docs/formats.json` and `docs/ui-editors.md`) | DOCSREVIEW-2 | M | the owner approves it |
 | DOCSREVIEW-4 | How it fits together: one walkthrough from authoring to running | DOCSREVIEW-3 | S | the owner approves it |
-| DOCSREVIEW-8 | Every page under `docs/` and every README reviewed: checked against `docs/architecture.md` and the skill, contradictions fixed in small batches, each statement marked built, in progress or planned, and the review date set when the owner approves the whole file (`planning/ROLES.md`, "Review dates") | none | L | `python3 -I scripts/review_dates.py --missing` lists no page under `docs/` and no README |
+| DOCSREVIEW-8 | Every page under `docs/` and every README reviewed: checked against `docs/architecture.md` and the skill, contradictions fixed in small batches, each statement marked built, in progress or planned, and the review date set when the owner approves the whole file (`planning/ROLES.md`, "Review dates") | CODECLEANUP-12 | L | `python3 -I scripts/review_dates.py --missing` lists no page under `docs/` and no README |
 | DOCSREVIEW-9 | Every subject in `planning/` reviewed the same way | none | M | `python3 -I scripts/review_dates.py --missing` lists no file in `planning/` |
 
 ## Needs from other subjects
 
-- CODECLEANUP-12: the decision tables of `docs/architecture.md`, rewritten as description.
+- CODECLEANUP-12: the dated owner entries left in other docs rewritten as description, before DOCSREVIEW-8 reviews those docs.
 
 ## Shared areas touched
 
