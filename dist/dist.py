@@ -17,6 +17,7 @@ writes out/dbdatakit-full.json, one Scoop manifest for every member product of a
 `--sums` takes one SHA256SUMS per member, or one file that covers all of them.
 """
 import argparse
+import importlib.util
 import json
 import pathlib
 import re
@@ -32,7 +33,35 @@ def zip_name(product, version, rid):
     return f"{product}-v{version}-{rid}.zip"
 
 
-def load_meta(path):
+def _suite_services():
+    """dist/suite_services.py, loaded by its path: `python3 -I` puts no script folder on the import path."""
+    spec = importlib.util.spec_from_file_location("suite_services", HERE / "suite_services.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+suite_services = _suite_services()
+
+
+def service_of(meta, path, services=None):
+    """The meta's `service` with its Windows `name`: for a service of the suite the name is the table's (SuiteServices.cs), and a dist.json that
+    spells another one is refused; any other product names its own service."""
+    service = meta.get("service")
+    if not service:
+        return
+    services = suite_services.by_program() if services is None else services
+    suite = services.get(meta["product"])
+    if suite:
+        if service.get("name") not in (None, suite["windowsName"]):
+            raise SystemExit(f"{path}: service.name '{service['name']}' is not the suite's name for {meta['product']}, '{suite['windowsName']}' "
+                             f"({suite_services.TABLE.as_posix()}); remove service.name, the name is read from there")
+        service["name"] = suite["windowsName"]
+    elif not service.get("name"):
+        raise SystemExit(f"{path}: service.name is required ({meta['product']} is not a service of the suite, {suite_services.TABLE.as_posix()})")
+
+
+def load_meta(path, services=None):
     meta = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
     for key in ("product", "displayName", "description", "homepage", "license", "platforms"):
         if not meta.get(key):
@@ -42,6 +71,7 @@ def load_meta(path):
     for rid, p in meta["platforms"].items():
         if not p.get("exe"):
             raise SystemExit(f"{path}: platform {rid} needs an 'exe'")
+    service_of(meta, path, services)
     return meta
 
 

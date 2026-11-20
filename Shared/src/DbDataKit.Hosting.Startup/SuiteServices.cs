@@ -10,6 +10,9 @@ namespace DbDataKit.Hosting.Startup;
 /// <param name="StartOrder">The order a machine that runs several services starts them in: the console first, since the others join it.</param>
 public sealed record SuiteService(string Program, string WindowsName, string Description, string DataFolder, int StartOrder)
 {
+    /// <summary>The name the service manager lists the Windows service under: the service's own name (<c>DbDataGateway</c>).</summary>
+    public string DisplayName => WindowsName;
+
     /// <summary>The Windows account the service runs as: <c>NT SERVICE\DbDataGateway</c>.</summary>
     public string WindowsAccount => $@"NT SERVICE\{WindowsName}";
 
@@ -27,8 +30,9 @@ public sealed record SuiteService(string Program, string WindowsName, string Des
 }
 
 /// <summary>
-/// The four services of the suite: the one place a service's name, account, description and folders are spelled. Installers, the service registration
-/// and the startup sequence read them from here.
+/// The four services of the suite: the one place a service's name, account, description and folders are spelled. Each server's <c>service install</c>
+/// (the Windows service and the systemd unit), the startup sequence and <c>dist/dist.py</c> (the products' installers and the suite's Scoop manifest, through
+/// <c>dist/suite_services.py</c>, which reads this file) take them from here.
 /// Design: docs/install.md#one-startup-sequence
 /// </summary>
 public static class SuiteServices

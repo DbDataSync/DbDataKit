@@ -18,7 +18,6 @@
     { "name": "DBDATAKIT_DATA", "programData": "DbDataKit" }
   ],
   "service": {
-    "name": "DbDataRunner",
     "register": "service install",
     "unregister": "service uninstall"
   },

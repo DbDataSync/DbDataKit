@@ -58,7 +58,7 @@ public class WindowsServiceAccountsTests
 
     [Theory]
     [InlineData("C:\\ProgramData\\DbDataKit\\server", "DbDataKit")]
-    [InlineData("C:\\ProgramData\\DbDataKit\\gateway\\", "dbdatagateway")]
+    [InlineData("C:\\ProgramData\\DbDataKit\\gateway\\", "DbDataGateway")]
     [InlineData("D:/data/runner", "DbDataRunner")]
     [InlineData("C:\\ProgramData\\DbDataKit\\workspace", "DbDataWorkspace")]
     [InlineData("C:\\ProgramData\\DbDataKit\\sync", null)]

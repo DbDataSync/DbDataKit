@@ -12,10 +12,25 @@ public sealed class SuiteServicesTests
         Assert.Equal(@"NT SERVICE\DbDataGateway", SuiteServices.Gateway.WindowsAccount);
         Assert.Equal("dbdatagateway", SuiteServices.Gateway.LinuxUser);
         Assert.Equal("startup-failure-dbdatagateway.txt", SuiteServices.Gateway.FailureFileName);
-        Assert.All(SuiteServices.All, s => Assert.StartsWith("DbDataKit ", s.Description));
+        Assert.Equal([@"NT SERVICE\DbDataKit", @"NT SERVICE\DbDataGateway", @"NT SERVICE\DbDataRunner", @"NT SERVICE\DbDataWorkspace"],
+            SuiteServices.All.Select(s => s.WindowsAccount));
+        Assert.Equal(["DbDataKit", "DbDataGateway", "DbDataRunner", "DbDataWorkspace"], SuiteServices.All.Select(s => s.DisplayName));
         Assert.Same(SuiteServices.Workspace, SuiteServices.Find("DbDataWorkspace"));
         Assert.Same(SuiteServices.Runner, SuiteServices.Find("dbdatarunner"));
         Assert.Null(SuiteServices.Find("dbdatasync"));
+    }
+
+    [Fact]
+    public void The_descriptions_are_the_ones_the_service_manager_shows()
+    {
+        // docs/install.md, "Service names, accounts and descriptions"; dist/tests/test_dist.py checks that page against this file too
+        Assert.Equal(
+        [
+            "DbDataKit console: sign-in, users and management of the Gateway, Runner and Workspace servers.",
+            "DbDataKit gateway: serves data, semantic models, master data, apps, dashboards and reports to people, applications and agents.",
+            "DbDataKit runner: runs published tasks (data loads, replication, deployments and quality checks) on schedule or on demand.",
+            "DbDataKit workspace: where people and agents author, test and publish apps, data models, replications and master data.",
+        ], SuiteServices.All.Select(s => s.Description));
     }
 
     [Fact]

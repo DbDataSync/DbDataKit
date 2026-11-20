@@ -13,6 +13,8 @@ import unittest
 
 DIST = pathlib.Path(__file__).resolve().parent.parent
 REPO_ROOT = DIST.parent
+sys.path.insert(0, str(DIST))
+import suite_services  # noqa: E402
 PWSH = shutil.which("pwsh")     # the parse check runs only where PowerShell is installed (CI has it)
 REPO = "acme/kit"
 VERSION = "2026.2.2.0200"
@@ -76,8 +78,8 @@ def member(product, exe=None, service=None, vc=False, win=True, env=None):
 
 
 MEMBERS = [
-    ("dbdatakit", "console", member("dbdatakit", service={"name": "KitConsole", "register": "service install"}, env=[{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}, {"name": "KIT_DIR", "programData": "Kit\\console"}])),
-    ("dbdatagateway", "gateway", member("dbdatagateway", service={"name": "gw", "register": "service install --name {name}"}, vc=True, env=[{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}])),
+    ("dbdatakit", "console", member("dbdatakit", service={"register": "service install"}, env=[{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}, {"name": "KIT_DIR", "programData": "Kit\\console"}])),
+    ("dbdatagateway", "gateway", member("dbdatagateway", service={"register": "service install --name {name}"}, vc=True, env=[{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}])),
     ("dbdatarunner", "runner", member("dbdatarunner", env=[{"name": "DBDATAKIT_DATA", "programData": "DbDataKit"}, {"name": "RUNNER_DIR", "programData": "Kit\\runner"}])),          # no service: it is paired but not registered
 ]
 
@@ -169,8 +171,9 @@ class SuiteManifestTests(unittest.TestCase):
         post = "\n".join(self.manifest()["post_install"])
         self.assertLess(post.index("Product = 'dbdatakit'"), post.index("Product = 'dbdatagateway'"))
         self.assertLess(post.index("Product = 'dbdatagateway'"), post.index("Product = 'dbdatarunner'"))
-        self.assertIn("Service = 'KitConsole'; Register = 'service install'; Unregister = ''", post)
-        self.assertIn("Register = 'service install --name gw'", post)       # {name} is substituted
+        # a service of the suite is named by the suite's table (SuiteServices.cs), not by its dist.json
+        self.assertIn("Service = 'DbDataKit'; Register = 'service install'; Unregister = ''", post)
+        self.assertIn("Service = 'DbDataGateway'; Register = 'service install --name DbDataGateway'", post)       # {name} is substituted
         self.assertIn("Service = ''; Register = ''", post)                   # a member with no service is bound without one and left alone
         self.assertIn("Roles = 'viewer,operator,admin'", post)
         self.assertIn("Address = 'https://localhost:8816'", post)
@@ -317,8 +320,15 @@ class SuiteManifestTests(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("DBDATAKIT_DATA", r.stderr)
 
+    def test_a_member_whose_dist_json_names_another_service_than_the_suites_table_is_refused_naming_both(self):
+        self.suite = lay_out(self.tmp, members=[(p, f, member(p, service={"name": "dbdatagateway", "register": "service install"}) if p == "dbdatagateway" else m) for p, f, m in MEMBERS])
+        r, _ = self.bind()
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("service.name 'dbdatagateway' is not the suite's name for dbdatagateway, 'DbDataGateway'", r.stderr)
+        self.assertIn("SuiteServices.cs", r.stderr)
+
     def test_a_suite_with_no_global_env_has_scripts_but_no_variable_lines(self):
-        self.suite = lay_out(self.tmp, members=[(p, f, member(p, service={"name": "S" + p, "register": "service install"})) for p, f, _ in MEMBERS])
+        self.suite = lay_out(self.tmp, members=[(p, f, member(p, service={"register": "service install"})) for p, f, _ in MEMBERS])
         r, path = self.bind()
         self.assertEqual(r.returncode, 0, r.stderr)
         m = json.loads(path.read_text())
@@ -328,7 +338,7 @@ class SuiteManifestTests(unittest.TestCase):
     def test_the_notes_name_each_service_and_each_pairing_by_hand(self):
         notes = self.manifest()["notes"]
         self.assertIn("dbdatakit service install", notes)
-        self.assertIn("dbdatagateway service install --name gw", notes)
+        self.assertIn("dbdatagateway service install --name DbDataGateway", notes)
         self.assertNotIn("dbdatarunner service install", notes)      # dbdatarunner lists no service here
         self.assertIn("dbdatakit server run", notes)
         self.assertIn("dbdatagateway server pair --max-role", notes)
@@ -472,6 +482,41 @@ class ShippedSuiteTests(unittest.TestCase):
         folders = [e["folder"] for e in self.entries]
         self.assertEqual(len(set(folders)), len(folders))
         self.assertEqual(folders[0], "console")
+
+    def test_the_members_are_the_services_of_the_suites_table_in_its_start_order(self):
+        table = suite_services.load()
+        self.assertEqual([s["program"] for s in table], [e["product"] for e in self.entries])
+        self.assertEqual([s["windowsName"] for s in table], ["DbDataKit", "DbDataGateway", "DbDataRunner", "DbDataWorkspace"])
+        self.assertEqual([s["account"] for s in table], ["NT SERVICE\\DbDataKit", "NT SERVICE\\DbDataGateway", "NT SERVICE\\DbDataRunner", "NT SERVICE\\DbDataWorkspace"])
+
+    def test_no_members_dist_json_names_its_service_and_the_bound_scripts_use_the_tables_names(self):
+        for e in self.entries:
+            self.assertNotIn("name", json.loads((REPO_ROOT / e["meta"]).read_text()).get("service", {}), e["meta"])
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="suite-names-"))
+        self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
+        sums = tmp / "SHA256SUMS"
+        sums.write_text("".join(f"{'ab' * 32}  {e['product']}-v{VERSION}-win-x64.zip\n" for e in self.entries))
+        r = run_bind(DIST / "suite.json", REPO_ROOT, tmp / "out", VERSION, [sums])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        post = "\n".join(json.loads((tmp / "out" / "dbdatakit-full.json").read_text())["post_install"])
+        for s in suite_services.load():
+            self.assertIn(f"Product = '{s['program']}'", post)
+            self.assertIn(f"Service = '{s['windowsName']}'", post)
+        self.assertIn("Register = 'service install --name DbDataGateway'", post)
+
+    def test_a_products_own_installer_registers_the_service_the_table_names(self):
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="suite-own-"))
+        self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
+        r = subprocess.run([sys.executable, "-I", str(DIST / "dist.py"), "bind", "--meta", str(REPO_ROOT / "DbDataGateway" / "dist.json"), "--out", str(tmp)], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("ServiceName = 'DbDataGateway'", (tmp / "install.ps1").read_text(encoding="utf-8"))
+
+    def test_the_descriptions_in_docs_install_md_are_the_tables(self):
+        text = (REPO_ROOT / "docs" / "install.md").read_text(encoding="utf-8")
+        section = text[text.index("## Service names, accounts and descriptions"):]
+        section = section[:section.index("\n## ", 1)]
+        for s in suite_services.load():
+            self.assertIn(f"- `{s['windowsName']}`: \"{s['description']}\"", section)
 
     def test_every_member_that_has_a_dist_json_binds_and_the_others_are_refused_by_name(self):
         tmp = pathlib.Path(tempfile.mkdtemp(prefix="suite-shipped-"))

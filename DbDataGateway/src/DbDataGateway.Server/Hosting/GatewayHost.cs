@@ -25,9 +25,10 @@ public static class GatewayHost
 {
     public const string ServiceName = "DbDataGateway";
 
-    /// <summary>The name the Windows service is registered under by default: lower case like the executable (the service control manager compares names without case, so an existing registration is updated in place).
-    /// <see cref="ServiceName"/> stays the product's name for its data directory.</summary>
-    public const string RegistrationName = "dbdatagateway";
+    /// <summary>The name the Windows service is registered under by default, <c>DbDataGateway</c>, from the suite's table (<see cref="DbDataKit.Hosting.Startup.SuiteServices.Gateway"/>). The service
+    /// control manager compares names without case, and a virtual account's SID is made from the upper-case name, so a service registered earlier as <c>dbdatagateway</c> is the same
+    /// service: <c>service install</c> updates it in place and <c>NT SERVICE\DbDataGateway</c> is the account it already had.</summary>
+    public static readonly string RegistrationName = DbDataKit.Hosting.Startup.SuiteServices.Gateway.WindowsName;
 
     /// <summary>
     /// The web application builder with the gateway's configuration sources (the data directory's config folder, DBDATAKIT_ environment variables, command line).

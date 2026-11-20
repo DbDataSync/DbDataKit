@@ -1,5 +1,5 @@
 [Unit]
-Description=DbDataGateway Arrow Flight SQL gateway
+Description=DbDataKit gateway: serves data, semantic models, master data, apps, dashboards and reports to people, applications and agents.
 After=network-online.target
 Wants=network-online.target
 

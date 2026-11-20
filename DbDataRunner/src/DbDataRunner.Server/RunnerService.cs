@@ -4,6 +4,7 @@ using DbDataKit.Runner.Api;
 using DbDataKit.Cli;
 using DbDataKit.Hosting.Certificates;
 using DbDataKit.Hosting.Cli;
+using DbDataKit.Hosting.Startup;
 using DbDataKit.Hosting.Systemd;
 using DbDataKit.Hosting.WindowsService;
 using DbDataKit.Security.Acl;
@@ -43,9 +44,10 @@ public sealed class RunnerServiceEnvironment
 /// </summary>
 public static class RunnerService
 {
-    public const string RegistrationName = "DbDataRunner";
-    public const string DisplayName = "DbDataRunner server";
-    public const string Description = "Schedules and runs the tasks of published packages, each in a process of its own, with retries, limits, run history and progress, over a management API a console pairs with.";
+    /// <summary>The Windows service, its display name and description, as the suite's table spells them (<see cref="SuiteServices.Runner"/>).</summary>
+    public static readonly string RegistrationName = SuiteServices.Runner.WindowsName;
+    public static readonly string DisplayName = SuiteServices.Runner.DisplayName;
+    public static readonly string Description = SuiteServices.Runner.Description;
 
     public static Noun Noun(RunnerServiceEnvironment env) =>
         HostingNouns.Service(new ServiceCommand(Context(env), env.Scm, env.Acl, env.Elevation, null, true));
@@ -80,14 +82,14 @@ public static class RunnerService
             StartMode = ServiceStartMode.Automatic,
             Failure = new FailurePolicy([TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60)], TimeSpan.FromDays(1)),
             DataDirectoryArgument = path => ["--repo", path],
-            StartupService = DbDataKit.Hosting.Startup.SuiteServices.Runner,
+            StartupService = SuiteServices.Runner,
         };
     }
 
     public static SystemdUnitOptions UnitOptions(string name, string executable) => new()
     {
         Name = name,
-        Description = "DbDataRunner server",
+        Description = SuiteServices.Runner.Description,
         ExecStart = $"{executable} server run --repo /var/lib/dbdatakit/{Folder}",
         WorkingDirectory = executable[..executable.LastIndexOf('/')],
         // DynamicUser: no account to manage; the state directory under /var/lib/<name> is created and owned by systemd.
