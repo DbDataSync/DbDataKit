@@ -83,6 +83,60 @@ public sealed class ServerStartupTests : IDisposable
         Assert.Equal(0, await run);
     }
 
+    [Fact]
+    public async Task With_no_port_configured_the_server_takes_a_free_port_of_its_sub_block_keeps_it_after_a_restart_and_fails_when_it_is_held()
+    {
+        // the sub-block's first free port is held, so the server takes a later one
+        var first = ListenPorts.Choose(SuiteServices.Runner.Ports, System.Net.IPAddress.Loopback, []);
+        Assert.SkipWhen(first is null, "every port of the Runner's sub-block is taken on this machine");
+        int pinned;
+        using (Hold(first!.Value))
+        {
+            pinned = await StartAndStop();
+            Assert.True(pinned > first.Value && SuiteServices.Runner.Ports.Contains(pinned), $"the server listened on {pinned}");
+            Assert.Contains($"listen: https://127.0.0.1:{pinned}", File.ReadAllText(Path.Combine(_directory, "server.yaml")));
+        }
+
+        // the first port is free again: the pinned one is kept
+        Assert.Equal(pinned, await StartAndStop());
+
+        // the pinned port held: the server never moves, the ports step fails naming it
+        using (Hold(pinned))
+        {
+            var error = new StringWriter();
+            var exit = await RunnerCli.Router(_ => null).RunAsync(["server", "run", "--repo", _directory], new CliContext(TextWriter.Null, error, TextReader.Null));
+            Assert.NotEqual(0, exit);
+            var text = File.ReadAllText(FailureFile);
+            Assert.Contains("failed at the ports step", text);
+            Assert.Contains($"Port {pinned} cannot be bound", text);
+        }
+        Assert.Contains($"listen: https://127.0.0.1:{pinned}", File.ReadAllText(Path.Combine(_directory, "server.yaml")));
+    }
+
+    /// <summary>Starts <c>server run</c> with no <c>--listen</c>, waits until it serves, stops it and returns the port it said it serves on.</summary>
+    private async Task<int> StartAndStop()
+    {
+        var written = new StringWriter();
+        var output = TextWriter.Synchronized(written);
+        using var stop = new CancellationTokenSource();
+        var run = RunnerCli.Router(_ => null).RunAsync(["server", "run", "--repo", _directory], new CliContext(output, TextWriter.Null, TextReader.Null, stop.Token));
+        await Until(() => Text(output, written).Contains("Serving on", StringComparison.Ordinal) || run.IsCompleted);
+        Assert.False(run.IsCompleted, "the server stopped instead of serving " + (File.Exists(FailureFile) ? File.ReadAllText(FailureFile) : ""));
+        var match = System.Text.RegularExpressions.Regex.Match(Text(output, written), @"Serving on https://127\.0\.0\.1:(\d+)/");
+        Assert.True(match.Success, Text(output, written));
+        stop.Cancel();
+        Assert.Equal(0, await run);
+        return int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static TcpListener Hold(int port)
+    {
+        var listener = new TcpListener(IPAddress.Loopback, port);
+        if (OperatingSystem.IsWindows()) listener.ExclusiveAddressUse = true;
+        listener.Start();
+        return listener;
+    }
+
     private static TcpListener Hold(out int port)
     {
         // ExclusiveAddressUse is set on Windows only: set to false on Linux it asks for SO_REUSEPORT, and the server could then share the port

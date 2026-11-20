@@ -63,6 +63,33 @@ public sealed class ServerStartupTests : IDisposable
         Assert.Equal(0, await run);
     }
 
+    [Fact]
+    public async Task With_no_port_configured_the_server_takes_a_free_port_of_its_sub_block_and_keeps_it_after_a_restart()
+    {
+        var block = SuiteServices.Workspace.Ports;
+        Assert.SkipWhen(ListenPorts.Choose(block, IPAddress.Loopback, []) is null, "every port of the sub-block is taken on this machine");
+        var pinned = await StartAndStop();
+        Assert.True(block.Contains(pinned), $"the server listened on {pinned}");
+        Assert.Contains($"listen: https://127.0.0.1:{pinned}", File.ReadAllText(Path.Combine(_directory, "server.yaml")));
+        Assert.Equal(pinned, await StartAndStop());
+    }
+
+    /// <summary>Starts <c>server run</c> with no <c>--listen</c>, waits until it serves, stops it and returns the port it said it serves on.</summary>
+    private async Task<int> StartAndStop()
+    {
+        var written = new StringWriter();
+        var output = TextWriter.Synchronized(written);
+        using var stop = new CancellationTokenSource();
+        var run = WorkspaceCli.Router(_ => null).RunAsync(["server", "run", "--repo", _directory], new CliContext(output, TextWriter.Null, TextReader.Null, stop.Token));
+        await Until(() => Text(output, written).Contains("Serving on", StringComparison.Ordinal) || run.IsCompleted);
+        Assert.False(run.IsCompleted, "the server stopped instead of serving " + (File.Exists(FailureFile) ? File.ReadAllText(FailureFile) : ""));
+        var match = System.Text.RegularExpressions.Regex.Match(Text(output, written), @"Serving on https://127\.0\.0\.1:(\d+)/");
+        Assert.True(match.Success, Text(output, written));
+        stop.Cancel();
+        Assert.Equal(0, await run);
+        return int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     private static TcpListener Hold(out int port)
     {
         // ExclusiveAddressUse is set on Windows only: set to false on Linux it asks for SO_REUSEPORT, and the server could then share the port
