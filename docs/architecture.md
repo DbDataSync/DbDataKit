@@ -217,7 +217,8 @@ Decided by the owner after the table above was closed. The numbers are the ones 
 | --- | --- |
 | Command grammar, effect classes, JSON output, exit codes, MCP | `Shared/src/DbDataKit.Cli/README.md` |
 | Pairing, tokens, ceilings, roles, audit, version rules | `Shared/src/DbDataKit.Web/README.md`, `Shared/src/DbDataKit.Hosting.Local/README.md` |
-| Browser relay, instances, connections across servers | `DbDataKit/README.md` |
+| Browser relay, instances, connections across services | `DbDataKit/README.md` |
+| Publishing, channels, bindings and signatures | `docs/publishing.md` |
 | Identity home, OpenID Connect, tokens | `Shared/src/DbDataKit.Identity/README.md` |
 | Schedules and the work queue; run model and health rules | `Shared/src/DbDataKit.Scheduling/README.md`, `Shared/src/DbDataKit.Monitoring/README.md` |
 | Secret store | `Shared/src/DbDataKit.Secrets.Store/README.md`, `Shared/src/DbDataKit.Secrets.Cli/README.md` |
