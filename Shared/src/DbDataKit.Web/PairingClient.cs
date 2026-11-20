@@ -84,7 +84,8 @@ public static class PairingClient
     public static HttpMessageHandler Pinned(string fingerprint, Action<int>? observedVersion = null, Action<int>? observedGeneration = null) =>
         new ManagementVersionHandler(PinnedSocket(fingerprint, null), observed: observedVersion, observedGeneration: observedGeneration);
 
-    private static SocketsHttpHandler PinnedSocket(string? fingerprint, Action<string>? observe) => new()
+    /// <summary>A socket handler that accepts only the certificate with <paramref name="fingerprint"/> (any, when null) and tells <paramref name="observe"/> the fingerprint it saw.</summary>
+    internal static SocketsHttpHandler PinnedSocket(string? fingerprint, Action<string>? observe) => new()
     {
         SslOptions = new SslClientAuthenticationOptions
         {
