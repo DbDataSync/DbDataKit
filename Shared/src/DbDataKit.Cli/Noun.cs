@@ -18,6 +18,9 @@ public sealed record Verb(string Name, string Summary, EffectClass Effect, strin
 /// A group of verbs on one thing, identical in every command line that has it (plan 13, W4). The shared nouns are built here once; a product supplies what is its own
 /// (how its server starts, how its configuration is read) as small interfaces and adds its own verbs with <see cref="Noun.With"/>.
 /// </summary>
+/// <param name="name">The noun as typed (<c>service</c>).</param>
+/// <param name="summary">One line for the help.</param>
+/// <param name="verbs">Its verbs.</param>
 /// <param name="removed">Verbs this noun no longer has, each with the sentence naming what replaced it: typed, they answer that sentence through <see cref="RemovedCommands"/> and exit
 /// with <see cref="CliExit.Usage"/> instead of "not a verb" (a clean break, never a silent one). They are not verbs: the help, the JSON schema and the agents' tools do not list them.</param>
 public sealed class Noun(string name, string summary, IReadOnlyList<Verb> verbs, IReadOnlyDictionary<string, string>? removed = null)
