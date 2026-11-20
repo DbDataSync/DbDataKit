@@ -52,7 +52,7 @@ To open the console from another machine, use the machine's name instead of `loc
 
 ```powershell
 dbdatakit instance list
-Get-Service DbDataKit, dbdatagateway, DbDataRunner, DbDataWorkspace
+Get-Service DbDataKit, DbDataGateway, DbDataRunner, DbDataWorkspace
 ```
 
 In the console, open **All servers** (under **Servers** in the navigation). **Setup** (under **Settings**) lists the first steps and ticks each one off by what the console actually has.

@@ -29,7 +29,7 @@ Open a new terminal after installing, so `DBDATAKIT_DATA` (the machine variable 
 
 ```powershell
 dbdatakit service install
-dbdatagateway service install --name dbdatagateway
+dbdatagateway service install --name DbDataGateway
 dbdatarunner service install
 ```
 
@@ -44,7 +44,7 @@ dbdatakit health check
 
 ```powershell
 dbdatagateway server pair --max-role viewer,operator,admin      # prints: Pairing code: <code>
-Start-Service dbdatagateway
+Start-Service DbDataGateway
 dbdatagateway health check
 dbdatakit instance add https://localhost:8816 --code <code> --name dbdatagateway
 
@@ -60,7 +60,7 @@ The code is single-use and expires in ten minutes; five wrong codes cancel all o
 
 Repeating is safe. `service install` says a service is registered already, `instance list --offline` shows which members the console has, and a member that is listed is not paired again.
 
-**Removing** goes the other way, in reverse order: `dbdatakit instance remove <product>`, `<program> server unpair <id>` (the id is the console's entry of `<program> server clients`), `Stop-Service`, `<program> service uninstall` (the Gateway with `--name dbdatagateway`). Settings and data under `%ProgramData%\DbDataKit` stay.
+**Removing** goes the other way, in reverse order: `dbdatakit instance remove <product>`, `<program> server unpair <id>` (the id is the console's entry of `<program> server clients`), `Stop-Service`, `<program> service uninstall` (the Gateway with `--name DbDataGateway`). Settings and data under `%ProgramData%\DbDataKit` stay.
 
 ## Servers on other machines: announcement
 

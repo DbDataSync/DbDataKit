@@ -38,10 +38,10 @@ today, before the services create their own data (above):
   start-failure file like any failed start.
 
 Example: on a workstation, `scoop install -g dbdatakit-full` as `CONTOSO\ada` leaves `C:\ProgramData\DbDataKit\gateway\config` owned by `CONTOSO\ada`;
-`NT SERVICE\dbdatagateway` can write it, so the service starts with that one folder allowed. Had the
+`NT SERVICE\DbDataGateway` can write it, so the service starts with that one folder allowed. Had the
 folder's access list not let the service write, the start-failure file would say: `The configuration repository 'C:\ProgramData\DbDataKit\gateway\config'
-cannot be opened: '...\config' is owned by CONTOSO\ada, and NT SERVICE\dbdatagateway, the account this runs as, cannot write to it, so git refuses the
-repository. As an administrator, make NT SERVICE\dbdatagateway the owner of the folder (icacls "...\config" /setowner "NT SERVICE\dbdatagateway" /T /C)
+cannot be opened: '...\config' is owned by CONTOSO\ada, and NT SERVICE\DbDataGateway, the account this runs as, cannot write to it, so git refuses the
+repository. As an administrator, make NT SERVICE\DbDataGateway the owner of the folder (icacls "...\config" /setowner "NT SERVICE\DbDataGateway" /T /C)
 or give it Modify access to the folder, then start it again.`
 
 ## One startup sequence
@@ -90,6 +90,17 @@ descriptions:
 
 On Linux each service has a system user named as the program (`dbdatagateway`) in the group `dbdatakit`, made by `install.sh --system`; the group owns the
 shared logs folder.
+
+Each server's `service install` registers its Windows service under that name and account, with that description; `service unit` gives the systemd unit
+the same description. The names and descriptions are written once, in `SuiteServices` (`Shared/src/DbDataKit.Hosting.Startup/SuiteServices.cs`). The
+installers read the name from there too: `dist/dist.py` and `dist/msi.py` take it through `dist/suite_services.py`, so `dist.json` gives none for a service
+of the suite. Example: `sc qdescription DbDataRunner` prints the runner's description above, and `dbdatagateway service install` registers `DbDataGateway`
+running as `NT SERVICE\DbDataGateway`.
+
+Windows compares service names without case, and makes a virtual account's SID from the upper-case name. A Gateway registered as `dbdatagateway` by an
+earlier release is therefore the same service, and `NT SERVICE\DbDataGateway` is the account it already runs as: its key files and folders stay readable
+to it. `dbdatagateway service install`, run again from an elevated prompt, updates its description in place; the service keeps the spelling
+`dbdatagateway` in `Get-Service` until it is removed and registered again.
 
 ## Ports
 
