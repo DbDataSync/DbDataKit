@@ -61,6 +61,17 @@ public class HostTests
     }
 
     [Fact]
+    public async Task Version_lists_a_check_of_the_start_that_was_skipped_and_leaves_the_list_out_when_none_was()
+    {
+        await using (var strict = await StartAsync())
+            Assert.False((await strict.GetTestClient().GetFromJsonAsync<JsonElement>("/version")).TryGetProperty("loosened", out _));
+
+        await using var app = await StartAsync(o => o.Loosened.Add("startup.skip_folder_permissions_check"));
+        var json = await app.GetTestClient().GetFromJsonAsync<JsonElement>("/version");
+        Assert.Equal(["startup.skip_folder_permissions_check"], json.GetProperty("loosened").EnumerateArray().Select(e => e.GetString()).ToArray());
+    }
+
+    [Fact]
     public async Task Health_is_503_when_a_probe_is_unhealthy_and_does_not_leak_exception_text()
     {
         await using var app = await StartAsync(null, new Probe("db", HealthStatus.Healthy), new Throwing());

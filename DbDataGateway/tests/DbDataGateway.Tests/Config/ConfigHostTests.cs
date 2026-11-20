@@ -307,6 +307,80 @@ public sealed class ConfigStartupTests
         TryDelete(dir);
     }
 
+    [Fact]
+    public async Task A_folder_every_account_can_write_fails_the_folder_step_naming_the_switch_and_starts_with_a_warning_when_it_is_skipped()
+    {
+        var dir = NewDataDirectory(null);
+        if (OperatingSystem.IsWindows())
+        {
+            var info = new DirectoryInfo(dir);
+            var security = info.GetAccessControl();
+            security.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
+                new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.BuiltinUsersSid, null),
+                System.Security.AccessControl.FileSystemRights.Modify,
+                System.Security.AccessControl.InheritanceFlags.ContainerInherit | System.Security.AccessControl.InheritanceFlags.ObjectInherit,
+                System.Security.AccessControl.PropagationFlags.None, System.Security.AccessControl.AccessControlType.Allow));
+            info.SetAccessControl(security);
+        }
+        else
+        {
+            File.SetUnixFileMode(dir, (UnixFileMode)0x1FF);
+        }
+        string[] run = ["server", "run", $"--Gateway:DataDirectory={dir}", "--Gateway:Listen:Address=127.0.0.1", "--Gateway:Listen:Port=0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"];
+        var file = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.FailureFileName);
+
+        var error = new StringWriter();
+        Assert.Equal(1, await Cli.RunAsync(run, new DbDataKit.Cli.CliContext(TextWriter.Null, error, TextReader.Null)));
+        var text = File.ReadAllText(file);
+        Assert.Contains("failed at the folder step", text);
+        Assert.Contains($"--skip-folder-permissions-check or set startup.skip_folder_permissions_check: true in {GatewayConfigFile.PathIn(dir)}", text);
+        Assert.Contains("--skip-folder-permissions-check", error.ToString());
+        Assert.False(Directory.Exists(GatewayConfigFile.DirectoryIn(dir)));            // nothing was made in the folder
+
+        // with the flag, which the gateway takes as its setting startup.skip_folder_permissions_check, the same folder starts and warns
+        var warned = new StringWriter();
+        var errors = TextWriter.Synchronized(warned);
+        using var stop = new CancellationTokenSource();
+        var running = Cli.RunAsync([.. run, "--skip-folder-permissions-check"], new DbDataKit.Cli.CliContext(TextWriter.Null, errors, TextReader.Null, stop.Token));
+        var logs = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.LogFolder);
+        var deadline = DateTime.UtcNow.AddSeconds(90);
+        while (!running.IsCompleted && File.Exists(file) && DateTime.UtcNow < deadline) await Task.Delay(100);
+        await Task.Delay(500);
+        string said;
+        lock (errors) said = warned.ToString();
+        Assert.False(running.IsCompleted, "the gateway stopped instead of serving: " + (File.Exists(file) ? File.ReadAllText(file) : "") + said);
+        Assert.False(File.Exists(file));
+        Assert.Contains("Warning: dbdatagateway skips the folder permissions check (--skip-folder-permissions-check)", said);
+        stop.Cancel();
+        Assert.Equal(0, await running);
+
+        // the setting in config/server.yaml does the same
+        Directory.CreateDirectory(GatewayConfigFile.DirectoryIn(dir));
+        File.WriteAllText(GatewayConfigFile.PathIn(dir), "startup:\n  skip_folder_permissions_check: true\n");
+        warned = new StringWriter();
+        errors = TextWriter.Synchronized(warned);
+        using var stop2 = new CancellationTokenSource();
+        running = Cli.RunAsync(run, new DbDataKit.Cli.CliContext(TextWriter.Null, errors, TextReader.Null, stop2.Token));
+        deadline = DateTime.UtcNow.AddSeconds(90);
+        while (!running.IsCompleted && !(Directory.Exists(logs) && !File.Exists(file)) && DateTime.UtcNow < deadline) await Task.Delay(100);
+        await Task.Delay(500);
+        lock (errors) said = warned.ToString();
+        Assert.False(running.IsCompleted, "the gateway stopped instead of serving: " + (File.Exists(file) ? File.ReadAllText(file) : "") + said);
+        Assert.Contains($"(startup.skip_folder_permissions_check: true in {GatewayConfigFile.PathIn(dir)})", said);
+        stop2.Cancel();
+        Assert.Equal(0, await running);
+        TryDelete(dir);
+    }
+
+    [Fact]
+    public void The_variable_that_skips_the_folder_permissions_check_is_found_whatever_its_case_and_only_when_true()
+    {
+        Assert.Null(GatewayConfigFile.SkipFolderPermissionsVariable(new System.Collections.Hashtable()));
+        Assert.Null(GatewayConfigFile.SkipFolderPermissionsVariable(new System.Collections.Hashtable { ["DBDATAKIT_Gateway__Startup__skip_folder_permissions_check"] = "false" }));
+        Assert.Equal("DBDATAKIT_GATEWAY__STARTUP__SKIP_FOLDER_PERMISSIONS_CHECK",
+            GatewayConfigFile.SkipFolderPermissionsVariable(new System.Collections.Hashtable { ["DBDATAKIT_GATEWAY__STARTUP__SKIP_FOLDER_PERMISSIONS_CHECK"] = "True" }));
+    }
+
     private static void TryDelete(string dir)
     {
         try { Directory.Delete(dir, recursive: true); }

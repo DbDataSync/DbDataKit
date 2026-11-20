@@ -133,6 +133,8 @@ public static class Cli
                 DbDataKit.Hosting.Startup.SkipFolderPermissions skip;
                 try { skip = DbDataKit.Hosting.Startup.SkipFolderPermissions.Read(skipFlag, settingsFile); }
                 catch (InvalidOperationException ex) { throw new GatewayConfigException(ex.Message, []); }
+                // a variable overrides the file, as for every setting of the Gateway, so the check reads it as the server's settings will
+                if (!skip.IsOn && GatewayConfigFile.SkipFolderPermissionsVariable() is { } variable) skip = new(false, $"the variable {variable}");
                 step.CheckFolderPermissions(dataDirectory, skip, settingsFile);
                 // earlier releases wrote the reason of a failed start to this file in the data folder; it describes no start of this one
                 try { File.Delete(Path.Combine(dataDirectory, "start-failure.txt")); }

@@ -33,7 +33,7 @@ internal sealed class PairableServer : IAsyncDisposable
         Codes = new PairingCodes(Path.Combine(directory, "pairing-codes.json"));
     }
 
-    public static async Task<PairableServer> StartAsync(int port = 0, string? directory = null, string product = "fake-server", string instanceId = InstanceId, Action<WebApplication, PairingCodes, PairedClientsFile>? map = null)
+    public static async Task<PairableServer> StartAsync(int port = 0, string? directory = null, string product = "fake-server", string instanceId = InstanceId, Action<WebApplication, PairingCodes, PairedClientsFile>? map = null, IReadOnlyList<string>? loosened = null)
     {
         directory ??= System.IO.Directory.CreateTempSubdirectory("ddk-pairable").FullName;
         var certificate = DirectoryCertificate.Load(directory);
@@ -47,6 +47,7 @@ internal sealed class PairableServer : IAsyncDisposable
         {
             host.Product = product;
             host.Version = "9.9.9";
+            foreach (var setting in loosened ?? []) host.Loosened.Add(setting);
         });
         builder.WebHost.ConfigureKestrel(o => o.Listen(IPAddress.Loopback, port, listen => listen.UseHttps(certificate)));
         var app = builder.Build();

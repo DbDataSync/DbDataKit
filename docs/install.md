@@ -152,6 +152,40 @@ access list is not the strict one: a test's temporary folder, a checkout, a test
 decides. It is always visible: a warning at every start, a line in `service check`, and the server marked on the console's posture page. Without a named
 switch, strict checks get loosened in code "just for this case" and stay loose.
 
+The setting goes in the server's own settings file: `settings.yaml` in the console's folder, `config/server.yaml` in the Gateway's, `server.yaml` in
+the Runner's and the Workspace's.
+
+```yaml
+startup:
+  skip_folder_permissions_check: true
+```
+
+Where a skipped check shows:
+
+- At every start: a warning on standard error that names the switch and what the check would have found. A Windows service also writes it to the
+  Application event log, as a warning.
+- `service check`: the line `startup.folder-permissions` names the service and the switch (the registered command line, or the setting and its file).
+- The console's Bindings page, under "Posture choices": a line names every server that skips the check, the console included. Each server reports it in
+  the `loosened` list of its `/version` answer.
+
+Without the switch, a folder that fails the check stops the start at the folder step. The failure file names the folder, its owner, the account, what is
+wrong, and the flag and the setting.
+
+Example: a developer starts a Runner on a folder every account can write to.
+
+```
+$ dbdatarunner server run --repo ~/work/runner-a
+The start failed at the folder step: The folder '/home/ada/work/runner-a' is owned by ada, and the service runs as ada. Every account on the machine
+can write to it (mode 0777). `dbdatakit setup single-server` sets the folder up. To start on the folder as it is (a test's folder, a checkout), give
+`server run` --skip-folder-permissions-check or set startup.skip_folder_permissions_check: true in /home/ada/work/runner-a/server.yaml. The full reason
+is in /home/ada/work/runner-a/logs/startup-failure-dbdatarunner.txt.
+
+$ dbdatarunner server run --repo ~/work/runner-a --skip-folder-permissions-check
+Warning: dbdatarunner skips the folder permissions check (--skip-folder-permissions-check): the data folder '/home/ada/work/runner-a' is used whatever
+its owner and access list. The check would refuse it: Every account on the machine can write to it (mode 0777).
+Serving on https://127.0.0.1:7840 ...
+```
+
 ## Pairing
 
 The console is the only pairing host and the root of trust; every service uses one pairing library. The console generates, on its command line or in

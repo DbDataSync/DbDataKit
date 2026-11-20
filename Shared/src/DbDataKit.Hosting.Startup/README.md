@@ -23,6 +23,13 @@ The steps a server runs before it serves, and the file that says why a start fai
   sub-block could be bound (naming the excluded ranges that cover it), and writes a chosen port as the `listen:` line once the server listens on it
   (`ListenPorts.Pin`), so the next start uses the same port. A port from `--listen` or the `listen:` line is never moved: another program holding it
   fails the ports step naming it. The design is [docs/install.md](../../../docs/install.md), "Ports".
+- `StartupContext.CheckFolderPermissions` is the folder step's check of the data folder (`FolderPermissions.Problems`). A folder that another account
+  could change fails the step as `StartupStepException.FolderPermissions`, which names the folder, its owner, the account, what is wrong and the
+  switch that skips the check. `SkipFolderPermissions.Read` reads the switch: the flag `--skip-folder-permissions-check` or the setting
+  `startup.skip_folder_permissions_check: true` in the server's settings file (`SuiteService.SettingsFile`, read strictly by
+  `FolderPermissions.SettingIn`). With the check skipped, the start goes on and writes a warning at every start (`StartupOptions.Warning`; for a
+  process under a service manager also `StartupOptions.ServiceWarning`, the Application event log). The design is
+  [docs/install.md](../../../docs/install.md), "Skipping the folder permissions check".
 - A failed start also goes to the Application event log when the server runs as a Windows service (`StartupOptions.Failed`).
   `StartupResult.Summary()` is the line a server writes to standard error: the step, the reason and where the file is.
 - `StartupFailureFile.DescribeLastStart` is what `service check` prints: the file's lines under a heading, or that there is none.
@@ -36,7 +43,7 @@ Example, in a server's `server run`:
 
 ```csharp
 var result = await new StartupSequence(new StartupOptions { Service = SuiteServices.Runner, DataFolder = dataFolder })
-    .Step(StartupStep.Folder, _ => folders.Check())
+    .Step(StartupStep.Folder, step => step.CheckFolderPermissions(dataFolder, SkipFolderPermissions.Read(flagGiven, settingsFile), settingsFile))
     .Step(StartupStep.State, (_, ct) => state.MigrateAsync(ct))
     .Step(StartupStep.Ports, (_, ct) => app.StartAsync(ct))
     .RunAsync(ct);

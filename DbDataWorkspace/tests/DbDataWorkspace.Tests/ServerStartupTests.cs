@@ -47,6 +47,60 @@ public sealed class ServerStartupTests : IDisposable
     }
 
     [Fact]
+    public async Task A_folder_every_account_can_write_fails_the_folder_step_naming_the_switch_and_starts_with_a_warning_when_it_is_skipped()
+    {
+        LetEveryoneWrite(_directory);
+        var error = new StringWriter();
+        var exit = await WorkspaceCli.Router(_ => null).RunAsync(["server", "run", "--repo", _directory, "--listen", "https://127.0.0.1:0"], new CliContext(TextWriter.Null, error, TextReader.Null));
+
+        Assert.NotEqual(0, exit);
+        var text = File.ReadAllText(FailureFile);
+        Assert.Contains("failed at the folder step", text);
+        Assert.Contains("--skip-folder-permissions-check or set startup.skip_folder_permissions_check: true in ", text);
+        Assert.Contains("--skip-folder-permissions-check", error.ToString());
+
+        // the same folder with the flag: the server starts, says so on standard error, and leaves no failure file
+        var warning = await StartWarnedAndStop(["--skip-folder-permissions-check"]);
+        Assert.Contains("Warning: dbdataworkspace skips the folder permissions check (--skip-folder-permissions-check)", warning);
+        Assert.Contains("The check would refuse it: ", warning);
+    }
+
+    /// <summary>Starts <c>server run</c> on the folder with <paramref name="extra"/>, waits until it serves, stops it and returns what it wrote on standard error.</summary>
+    private async Task<string> StartWarnedAndStop(string[] extra)
+    {
+        var (written, warned) = (new StringWriter(), new StringWriter());
+        var (output, errors) = (TextWriter.Synchronized(written), TextWriter.Synchronized(warned));
+        using var stop = new CancellationTokenSource();
+        var run = WorkspaceCli.Router(_ => null).RunAsync(["server", "run", "--repo", _directory, "--listen", "https://127.0.0.1:0", .. extra], new CliContext(output, errors, TextReader.Null, stop.Token));
+        await Until(() => Text(output, written).Contains("Serving on", StringComparison.Ordinal) || run.IsCompleted);
+        Assert.False(run.IsCompleted, "the server stopped instead of serving " + (File.Exists(FailureFile) ? File.ReadAllText(FailureFile) : "") + Text(errors, warned));
+        Assert.False(File.Exists(FailureFile));
+        stop.Cancel();
+        Assert.Equal(0, await run);
+        return Text(errors, warned);
+    }
+
+    /// <summary>Lets every account of the machine write to <paramref name="folder"/>: mode 0777 on Linux and macOS, a write grant to Users on Windows.</summary>
+    private static void LetEveryoneWrite(string folder)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var info = new DirectoryInfo(folder);
+            var security = info.GetAccessControl();
+            security.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
+                new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.BuiltinUsersSid, null),
+                System.Security.AccessControl.FileSystemRights.Modify,
+                System.Security.AccessControl.InheritanceFlags.ContainerInherit | System.Security.AccessControl.InheritanceFlags.ObjectInherit,
+                System.Security.AccessControl.PropagationFlags.None, System.Security.AccessControl.AccessControlType.Allow));
+            info.SetAccessControl(security);
+        }
+        else
+        {
+            File.SetUnixFileMode(folder, (UnixFileMode)0x1FF);
+        }
+    }
+
+    [Fact]
     public async Task A_clean_start_leaves_no_failure_file()
     {
         var written = new StringWriter();

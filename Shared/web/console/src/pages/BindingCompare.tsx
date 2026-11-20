@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner, useIsAdmin } from '@dbdatakit/shell'
 import { consoleApi, instancesKey } from '../api'
 import {
-  STATE_WORDS, adoptWords, compareApi, decisionOf, differing, heldWords, itemTitle, publishWords, summary,
+  STATE_WORDS, adoptWords, compareApi, decisionOf, differing, heldWords, itemTitle, loosenedServers, publishWords, summary,
   type CompareItem, type CompareOutcome,
 } from '../bindingCompare'
 
@@ -95,10 +95,15 @@ export function PostureListPanel() {
     <section data-testid="posture-panel" style={{ marginTop: 24 }}>
       <h2>Posture choices</h2>
       <p className="hint" data-testid="posture-rule">
-        Every default that was loosened on purpose, by the console and by the Runners, in one list. Read only: each server keeps and enforces the choices of its own bindings.
+        Every default that was loosened on purpose, by the console and by the Runners, in one list, and each server whose own start skips a check. Read only: each server keeps and enforces the choices of its own bindings, and a server's start is set on its machine.
       </p>
       <ErrorBanner error={posture.error} />
       {posture.data?.sources.filter((s) => !s.ok).map((s) => <div key={s.holder} className="banner" data-testid="posture-source-problem">{s.holder} could not be read: {s.problem}</div>)}
+      {loosenedServers(posture.data?.servers).map((l) => (
+        <div key={l.setting} className="banner" data-testid="posture-server" data-setting={l.setting}>
+          <span className="mono">{l.setting}</span> is on for <strong data-testid="posture-server-names">{l.servers.join(', ')}</strong>: {l.effect}
+        </div>
+      ))}
       {posture.isSuccess && posture.data.entries.length === 0 && <div className="empty" data-testid="posture-empty">No default has been loosened.</div>}
       {posture.data && posture.data.entries.length > 0 && (
         <table className="table" style={{ width: '100%' }} data-testid="posture-table">
