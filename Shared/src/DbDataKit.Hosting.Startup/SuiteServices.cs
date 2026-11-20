@@ -68,4 +68,21 @@ public static class SuiteServices
 
     /// <summary>The data folder of a service in an install: <c>C:\ProgramData\DbDataKit\gateway</c>.</summary>
     public static string MachineDataFolder(SuiteService service) => Path.Combine(MachineDataRoot, service.DataFolder);
+
+    /// <summary>
+    /// The shared logs folder of a server whose data folder is <paramref name="dataFolder"/>. In an install the data folder is the service's folder under
+    /// the data root (<c>C:\ProgramData\DbDataKit\runner</c>), and the logs folder is <c>logs</c> beside it (<c>C:\ProgramData\DbDataKit\logs</c>);
+    /// under Linux's data root <c>/var/lib/dbdatakit</c> it is <c>/var/log/dbdatakit</c>. A data folder named otherwise (a run from a terminal on a
+    /// folder of its own, a test's folder) keeps its logs inside it, in <c>&lt;data folder&gt;/logs</c>, so such a run never writes to the machine's folder.
+    /// Design: docs/install.md#logs-and-the-startup-failure-file
+    /// </summary>
+    public static string LogsRootFor(SuiteService service, string dataFolder)
+    {
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(dataFolder));
+        if (string.Equals(full, Path.TrimEndingDirectorySeparator(Path.GetFullPath(MachineDataFolder(service))), comparison)) return MachineLogsRoot;
+        if (string.Equals(Path.GetFileName(full), service.DataFolder, comparison) && Path.GetDirectoryName(full) is { Length: > 0 } root)
+            return Path.Combine(root, "logs");
+        return Path.Combine(full, "logs");
+    }
 }

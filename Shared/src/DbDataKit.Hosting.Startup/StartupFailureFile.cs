@@ -88,6 +88,33 @@ public sealed class StartupFailureFile
         return true;
     }
 
+    /// <summary>
+    /// What a person who checks the service reads about its last start, from the failure file in <paramref name="logsRoot"/>: that there is none (the
+    /// last start finished, or the service has not started here), the line of a start that is going on or stopped without saying why, or the reason a
+    /// start failed. The file's lines are indented under a heading that names it. Never throws for a file it cannot read: it says so.
+    /// </summary>
+    public static string DescribeLastStart(string logsRoot, SuiteService service)
+    {
+        var path = Path.Combine(logsRoot, service.FailureFileName);
+        if (!File.Exists(path)) return $"Startup-failure file: none ({path}): the last start finished, or the service has not started on this data folder.";
+        string text;
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            text = reader.ReadToEnd();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return $"Startup-failure file: {path} is there, and {StartupAccount.Current()} cannot read it ({e.Message}). Only the service's account, SYSTEM and Administrators can: read it as an administrator.";
+        }
+        var heading = text.StartsWith("starting since ", StringComparison.Ordinal)
+            ? $"Startup-failure file: {path} (a start is going on, or the last one stopped without saying why):"
+            : $"Startup-failure file: {path} (the last start failed):";
+        var lines = text.ReplaceLineEndings("\n").TrimEnd('\n').Split('\n').Select(line => line.Length == 0 ? "" : "  " + line);
+        return heading + Environment.NewLine + string.Join(Environment.NewLine, lines);
+    }
+
     /// <summary>Rewrites the file to say the step has begun.</summary>
     public void WriteProgress(DateTimeOffset since, StartupStep step) => Write(ProgressLine(since, step) + Environment.NewLine);
 

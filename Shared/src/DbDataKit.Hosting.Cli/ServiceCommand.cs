@@ -64,6 +64,12 @@ public sealed class ServiceCommandContext
     /// whose host takes it as configuration (<c>--Section:Key=PATH</c>) set <see cref="DataDirectoryArgument"/>.
     /// </summary>
     public Func<string, IReadOnlyList<string>>? DataDirectoryArgument { get; init; }
+
+    /// <summary>
+    /// The suite's service this command registers, when it is one: <c>service doctor</c> then prints its startup-failure file, found from the data
+    /// folder of <see cref="Layout"/> (or <c>--data-dir</c>) as the server finds it.
+    /// </summary>
+    public DbDataKit.Hosting.Startup.SuiteService? StartupService { get; init; }
 }
 
 /// <summary>
@@ -306,6 +312,13 @@ public sealed class ServiceCommand(
         {
             var tag = c.Severity switch { DoctorSeverity.Pass => "ok  ", DoctorSeverity.Warn => "warn", _ => "FAIL" };
             console.Out.WriteLine($"[{tag}] {c.Id}: {c.Message}");
+        }
+
+        if (context.StartupService is { } service)
+        {
+            // the reason of a failed start is in the file the server wrote, not in the registration: the person checking reads it here
+            if ((parsed.Get("data-dir") ?? context.Layout.Entries.FirstOrDefault(e => e.Role == LayoutRole.Data)?.Path) is { } dataFolder)
+                console.Out.WriteLine(DbDataKit.Hosting.Startup.StartupFailureFile.DescribeLastStart(DbDataKit.Hosting.Startup.SuiteServices.LogsRootFor(service, dataFolder), service));
         }
 
         console.Out.WriteLine(report.Ok ? $"Doctor: OK ({report.Warnings} warning(s))." : $"Doctor: {report.Failures} failure(s).");

@@ -80,6 +80,7 @@ public static class RunnerService
             StartMode = ServiceStartMode.Automatic,
             Failure = new FailurePolicy([TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60)], TimeSpan.FromDays(1)),
             DataDirectoryArgument = path => ["--repo", path],
+            StartupService = DbDataKit.Hosting.Startup.SuiteServices.Runner,
         };
     }
 

@@ -1,6 +1,7 @@
 using System.Net.Http;
 using DbDataKit.Cli;
 using DbDataKit.Hosting.Cli;
+using DbDataKit.Hosting.Startup;
 using DbDataKit.Web.Trust;
 
 namespace DbDataWorkspace.Server;
@@ -113,22 +114,55 @@ public static class WorkspaceCli
             return CliExit.Usage;
         }
 
+        // every step of the start is reported the same way in every server: the step that failed and why, in the startup-failure file, and a non-zero exit
         var directory = DirectoryOf(args, environment);
-        DbDataKit.State.StateSettings state;
-        DbDataKit.State.StateSources sources;
-        try { (state, sources) = WorkspaceState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection")); }
-        catch (InvalidOperationException ex)
+        var service = SuiteServices.Workspace;
+        WorkspaceSettings? settings = null;
+        System.Security.Cryptography.X509Certificates.X509Certificate2? certificate = null;
+        Microsoft.AspNetCore.Builder.WebApplication? app = null;
+        var settingsExit = (int?)null;
+        var result = await new StartupSequence(new StartupOptions
+            {
+                Service = service,
+                DataFolder = directory,
+                LogsRoot = SuiteServices.LogsRootFor(service, directory),
+                Version = WorkspaceServer.Version,
+            })
+            .Step(StartupStep.Folder, _ =>
+            {
+                DbDataKit.State.StateSettings state;
+                DbDataKit.State.StateSources sources;
+                try { (state, sources) = WorkspaceState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection")); }
+                catch (InvalidOperationException)
+                {
+                    settingsExit = DbDataKit.State.Cli.StateExit.Settings;
+                    throw;
+                }
+                settings = new WorkspaceSettings(directory, listen) { State = state, StateSources = sources };
+                Directory.CreateDirectory(settings.Directory);
+            })
+            .Step(StartupStep.Certificate, _ => certificate = WorkspaceServer.Certificate(settings!.Directory))
+            // building the server opens its state and runs the state's migrations
+            .Step(StartupStep.State, _ => app = WorkspaceServer.Build(settings!, certificate!, line => context.Error.WriteLine(line)))
+            .Step(StartupStep.Ports, (step, ct) => step.BindAsync(app!.StartAsync, [listen.Port], ct))
+            .RunAsync(context.Cancellation);
+        if (!result.Succeeded)
         {
-            await context.Error.WriteLineAsync(ex.Message);
-            return DbDataKit.State.Cli.StateExit.Settings;
+            await context.Error.WriteLineAsync(result.Summary());
+            if (app is not null) await app.DisposeAsync();
+            return settingsExit ?? result.ExitCode;
         }
 
-        var settings = new WorkspaceSettings(directory, listen) { State = state, StateSources = sources };
-        Directory.CreateDirectory(settings.Directory);
-        var app = WorkspaceServer.Build(settings, WorkspaceServer.Certificate(settings.Directory), line => context.Error.WriteLine(line));
-        await context.Out.WriteLineAsync($"Serving on {listen} (instance {WorkspaceServer.InstanceId(settings.Directory, state)}). Pair a client with: dbdataworkspace server pair --max-role <roles> [--repo <server directory>]");
-        // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
-        await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(app, context.Cancellation);
+        try
+        {
+            await context.Out.WriteLineAsync($"Serving on {listen} (instance {WorkspaceServer.InstanceId(settings!.Directory, settings.State)}). Pair a client with: dbdataworkspace server pair --max-role <roles> [--repo <server directory>]");
+            // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
+            await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.WaitForShutdownAsync(app!, context.Cancellation);
+        }
+        finally
+        {
+            await app!.DisposeAsync();
+        }
         return CliExit.Ok;
     }
 }

@@ -61,8 +61,9 @@ public sealed class StartupSequence(StartupOptions options)
             {
                 var report = Describe(step, error, since, Options.Time.GetUtcNow(), file);
                 file.WriteFailure(report);
-                if (!file.IsUsable) Options.Unreportable(report);
-                return new StartupResult(step, error, report, file.FilePath);
+                if (file.IsUsable) Options.Failed(report);
+                else Options.Unreportable(report);
+                return new StartupResult(step, error, report, file.FilePath) { FailureFileWritten = file.IsUsable };
             }
         }
         file.Delete();
@@ -109,7 +110,7 @@ public sealed class StartupSequence(StartupOptions options)
 
     private static string Utc(DateTimeOffset time) => time.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
 
-    private static IEnumerable<Exception> Chain(Exception error)
+    internal static IEnumerable<Exception> Chain(Exception error)
     {
         for (var e = error; e is not null; e = e.InnerException)
         {
@@ -123,5 +124,5 @@ public sealed class StartupSequence(StartupOptions options)
         }
     }
 
-    private static T? Find<T>(Exception error) where T : Exception => Chain(error).OfType<T>().FirstOrDefault();
+    internal static T? Find<T>(Exception error) where T : Exception => Chain(error).OfType<T>().FirstOrDefault();
 }

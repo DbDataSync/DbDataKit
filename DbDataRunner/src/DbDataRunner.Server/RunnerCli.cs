@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Net.Http;
 using DbDataKit.Cli;
 using DbDataKit.Hosting.Cli;
+using DbDataKit.Hosting.Startup;
 using DbDataKit.Monitoring;
 using DbDataKit.Runner;
 using DbDataKit.State;
@@ -98,39 +99,65 @@ public static class RunnerCli
             return CliExit.Usage;
         }
 
-        RunnerSettings settings;
-        try
+        // every step of the start is reported the same way in every server: the step that failed and why, in the startup-failure file, and a non-zero exit
+        var directory = DirectoryOf(args, environment);
+        var service = SuiteServices.Runner;
+        RunnerSettings? settings = null;
+        StateDatabase? state = null;
+        System.Security.Cryptography.X509Certificates.X509Certificate2? certificate = null;
+        Microsoft.AspNetCore.Builder.WebApplication? app = null;
+        var settingsExit = (int?)null;
+        var result = await new StartupSequence(new StartupOptions
+            {
+                Service = service,
+                DataFolder = directory,
+                LogsRoot = SuiteServices.LogsRootFor(service, directory),
+                Version = RunnerServer.Version,
+            })
+            .Step(StartupStep.Folder, _ =>
+            {
+                try
+                {
+                    var resolvedState = RunnerState.Resolve(directory, environment);
+                    settings = new RunnerSettings(directory, listen) { State = resolvedState.Settings, StateSources = resolvedState.Sources, Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")), MaxArtifactBytes = RunnerSettings.MaxArtifactBytesFrom(environment), ActivationMaxWait = RunnerSettings.ActivationMaxWaitFrom(environment), Group = RunnerSettings.GroupFrom(environment, parsed.Get("group")), TaskEnvironment = RunnerSettings.TaskEnvironmentFrom(environment) };
+                }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+                {
+                    settingsExit = CliExit.Usage;
+                    throw;
+                }
+                Directory.CreateDirectory(settings.Directory);
+            })
+            .Step(StartupStep.Certificate, _ => certificate = RunnerServer.Certificate(settings!.Directory))
+            .Step(StartupStep.State, _ =>
+            {
+                state = RunnerState.Open(settings!.Directory, settings.State, environment, settings.Group);
+                app = RunnerServer.Build(settings, certificate!, line => context.Error.WriteLine(line), state);
+            })
+            .Step(StartupStep.Ports, (step, ct) => step.BindAsync(app!.StartAsync, [listen.Port], ct))
+            .RunAsync(context.Cancellation);
+        if (!result.Succeeded)
         {
-            var resolvedState = RunnerState.Resolve(DirectoryOf(args, environment), environment);
-            settings = new RunnerSettings(DirectoryOf(args, environment), listen) { State = resolvedState.Settings, StateSources = resolvedState.Sources, Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")), MaxArtifactBytes = RunnerSettings.MaxArtifactBytesFrom(environment), ActivationMaxWait = RunnerSettings.ActivationMaxWaitFrom(environment), Group = RunnerSettings.GroupFrom(environment, parsed.Get("group")), TaskEnvironment = RunnerSettings.TaskEnvironmentFrom(environment) };
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
-        {
-            await context.Error.WriteLineAsync(ex.Message);
-            return CliExit.Usage;
+            await context.Error.WriteLineAsync(result.Summary());
+            if (app is not null) await app.DisposeAsync();
+            return settingsExit ?? result.ExitCode;
         }
 
-        Directory.CreateDirectory(settings.Directory);
-        StateDatabase state;
-        try { state = RunnerState.Open(settings.Directory, settings.State, environment, settings.Group); }
-        catch (InvalidOperationException ex)
-        {
-            await context.Error.WriteLineAsync(ex.Message);
-            return CliExit.Failure;
-        }
-
-        var app = RunnerServer.Build(settings, RunnerServer.Certificate(settings.Directory), line => context.Error.WriteLine(line), state);
-        await context.Out.WriteLineAsync($"Serving on {listen} (instance {RunnerServer.InstanceId(state)}, state on {state.Dialect.Engine}, channels {string.Join(", ", settings.Channels)}). Pair a client with: dbdatarunner server pair --max-role <roles> [--repo <server directory>]");
+        await context.Out.WriteLineAsync($"Serving on {listen} (instance {RunnerServer.InstanceId(state!)}, state on {state!.Dialect.Engine}, channels {string.Join(", ", settings!.Channels)}). Pair a client with: dbdatarunner server pair --max-role <roles> [--repo <server directory>]");
         try
         {
             // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way; the runner stops its tasks with their grace period first
-            await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(app, context.Cancellation);
+            await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.WaitForShutdownAsync(app!, context.Cancellation);
         }
         catch (InvalidOperationException ex)
         {
             // for instance, the task host is missing: said once, with what to do
             await context.Error.WriteLineAsync(ex.Message);
             return CliExit.Failure;
+        }
+        finally
+        {
+            await app!.DisposeAsync();
         }
 
         return CliExit.Ok;

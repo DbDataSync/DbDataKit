@@ -1,10 +1,12 @@
 using System.Net.Http;
 using DbDataKit.Cli;
 using DbDataKit.Hosting.Cli;
+using DbDataKit.Hosting.Startup;
 using DbDataKit.State;
 using DbDataKit.Web.Auth;
 using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DbDataKit.Server;
 
@@ -114,21 +116,58 @@ public static class ConsoleCli
             home = new IdentityHomeSettings(authority, parsed.Get("identity-client")!, secret, parsed.Get("identity-app") ?? "console", TrustedCertificate: trusted);
         }
 
+        // every step of the start is reported the same way in every server: the step that failed and why, in the startup-failure file, and a non-zero exit
         var directory = DirectoryOf(parsed, environment);
-        ResolvedState state;
-        try { state = ConsoleState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection")); }
-        catch (InvalidOperationException ex)
+        var service = SuiteServices.Console;
+        ConsoleSettings? settings = null;
+        System.Security.Cryptography.X509Certificates.X509Certificate2? certificate = null;
+        Microsoft.AspNetCore.Builder.WebApplication? app = null;
+        var settingsExit = (int?)null;
+        var result = await new StartupSequence(new StartupOptions
+            {
+                Service = service,
+                DataFolder = directory,
+                LogsRoot = SuiteServices.LogsRootFor(service, directory),
+                Version = ConsoleHost.Version,
+            })
+            .Step(StartupStep.Folder, _ =>
+            {
+                ResolvedState state;
+                try { state = ConsoleState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection")); }
+                catch (InvalidOperationException)
+                {
+                    settingsExit = DbDataKit.State.Cli.StateExit.Settings;
+                    throw;
+                }
+                settings = new ConsoleSettings(directory, listen, publicUrl, announce, state.Settings, home) { StateSources = state.Sources };
+                Directory.CreateDirectory(settings.Directory);
+            })
+            .Step(StartupStep.Certificate, _ => certificate = ConsoleHost.Certificate(settings!.Directory))
+            .Step(StartupStep.State, _ =>
+            {
+                app = ConsoleHost.Build(settings!, certificate!, line => context.Error.WriteLine(line), parsed.Get("web-root"));
+                // the state is opened when it is first asked for: ask here, so a state that cannot be opened is this step's failure
+                app.Services.GetRequiredService<StateDatabase>();
+            })
+            .Step(StartupStep.Ports, (step, ct) => step.BindAsync(app!.StartAsync, [listen.Port, .. announce is null ? Array.Empty<int>() : [announce.Port]], ct))
+            .RunAsync(context.Cancellation);
+        if (!result.Succeeded)
         {
-            await context.Error.WriteLineAsync(ex.Message);
-            return DbDataKit.State.Cli.StateExit.Settings;
+            await context.Error.WriteLineAsync(result.Summary());
+            if (app is not null) await app.DisposeAsync();
+            return settingsExit ?? result.ExitCode;
         }
 
-        var settings = new ConsoleSettings(directory, listen, publicUrl, announce, state.Settings, home) { StateSources = state.Sources };
-        Directory.CreateDirectory(settings.Directory);
-        var app = ConsoleHost.Build(settings, ConsoleHost.Certificate(settings.Directory), line => context.Error.WriteLine(line), parsed.Get("web-root"));
-        await context.Out.WriteLineAsync($"The console is on {listen} (people open it at {settings.Public}). The first administrator opens the setup link in {Path.Combine(settings.Directory, "FIRST-RUN.txt")} (it is in the log too; `dbdatakit setup link` makes a new one).");
-        // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
-        await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(app, context.Cancellation);
+        try
+        {
+            await context.Out.WriteLineAsync($"The console is on {listen} (people open it at {settings!.Public}). The first administrator opens the setup link in {Path.Combine(settings.Directory, "FIRST-RUN.txt")} (it is in the log too; `dbdatakit setup link` makes a new one).");
+            // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
+            await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.WaitForShutdownAsync(app!, context.Cancellation);
+        }
+        finally
+        {
+            await app!.DisposeAsync();
+        }
         return CliExit.Ok;
     }
 
