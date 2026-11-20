@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DbDataKit.Hosting.Startup</PackageId>
+    <Description>The startup sequence every server runs before it serves (folder, keys, certificate, state, ports, join), the startup-failure file, the shared logs folder and the table of the suite's services.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Security.Acl\DbDataKit.Security.Acl.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Diagnostics.EventLog" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="DbDataKit.Hosting.Startup.Tests" />
+  </ItemGroup>
+</Project>

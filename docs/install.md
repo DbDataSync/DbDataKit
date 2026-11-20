@@ -38,10 +38,10 @@ today, before the services create their own data (above):
   start-failure file like any failed start.
 
 Example: on a workstation, `scoop install -g dbdatakit-full` as `CONTOSO\ada` leaves `C:\ProgramData\DbDataKit\gateway\config` owned by `CONTOSO\ada`;
-`NT SERVICE\dbdatagateway` can write it, so the service starts with that one folder allowed. Had the
+`NT SERVICE\DbDataGateway` can write it, so the service starts with that one folder allowed. Had the
 folder's access list not let the service write, the start-failure file would say: `The configuration repository 'C:\ProgramData\DbDataKit\gateway\config'
-cannot be opened: '...\config' is owned by CONTOSO\ada, and NT SERVICE\dbdatagateway, the account this runs as, cannot write to it, so git refuses the
-repository. As an administrator, make NT SERVICE\dbdatagateway the owner of the folder (icacls "...\config" /setowner "NT SERVICE\dbdatagateway" /T /C)
+cannot be opened: '...\config' is owned by CONTOSO\ada, and NT SERVICE\DbDataGateway, the account this runs as, cannot write to it, so git refuses the
+repository. As an administrator, make NT SERVICE\DbDataGateway the owner of the folder (icacls "...\config" /setowner "NT SERVICE\DbDataGateway" /T /C)
 or give it Modify access to the folder, then start it again.`
 
 ## One startup sequence
@@ -72,11 +72,11 @@ Logs are in one place: `C:\ProgramData\DbDataKit\logs\<service>\` (Linux `/var/l
 `C:\ProgramData\DbDataKit\logs\startup-failure-<service>.txt`: at each start the service writes "starting since <time>, step: <step>, not finished",
 rewritten as each step begins ("starting since 2026-11-17T09:12:03Z, step: certificate, not finished"), so a crash says how far it got; it deletes the
 file when startup succeeds; when startup fails it writes the full reason (the account, the folders, the exception chain, hints such as Windows' excluded
-port ranges). No file means a clean start; a leftover "not finished" line means a crash the service could not report. The install creates `logs`; each
+port ranges). No file means a clean start; a leftover "not finished" line means a crash the service could not report. The first service to start creates `logs` with the protection below; each
 service account creates and owns only its own subfolder and its own failure file; no service reads another's. Installers and `setup` print the file, so
 "Cannot start service" always comes with its reason.
 
-`<service>` in these names is the program in lower case (`dbdatagateway`), the same as its systemd unit. On Windows the `logs` folder gives Administrators and SYSTEM full control, each service account "create files" and "create folders" on that folder only, and CREATOR OWNER full control, so each service owns what it creates there and nothing else; on Linux it is `root:dbdatakit` with mode `1770`, and files are `0600`. A service that finds its own subfolder or failure file owned by another account writes nothing there and says so in the event log.
+`<service>` in these names is the program in lower case (`dbdatagateway`), the same as its systemd unit. On Windows the `logs` folder gives Administrators and SYSTEM full control, each service account "create files" and "create folders" on that folder only, and CREATOR OWNER full control, so each service owns what it creates there and nothing else; on Linux systemd creates each service's `/var/log/dbdatakit/<service>/` when it starts the unit (`LogsDirectory=`), owned by the service's user with mode `0700`, and the failure file is `/var/log/dbdatakit/<service>/startup-failure-<service>.txt`, mode `0600`. A service that finds its own subfolder or failure file owned by another account writes nothing there and says so in the event log.
 
 ## Service names, accounts and descriptions
 
@@ -88,8 +88,16 @@ descriptions:
 - `DbDataRunner`: "DbDataKit runner: runs published tasks (data loads, replication, deployments and quality checks) on schedule or on demand."
 - `DbDataWorkspace`: "DbDataKit workspace: where people and agents author, test and publish apps, data models, replications and master data."
 
-On Linux each service has a system user named as the program (`dbdatagateway`) in the group `dbdatakit`, made by `install.sh --system`; the group owns the
-shared logs folder.
+On Linux each service has a system user named as the program (`dbdatagateway`) in the group `dbdatakit`, made by `install.sh --system`.
+
+Each server's `service install` registers its Windows service under that name and account, with that description. The names and descriptions are
+written once, in `SuiteServices` (`Shared/src/DbDataKit.Hosting.Startup/SuiteServices.cs`), and the MSI, `install.ps1` and the `dbdatakit-full` Scoop
+package take the service names from there too. Example: `sc qdescription DbDataRunner` prints the runner's description above, and `dbdatagateway service install` registers `DbDataGateway`
+running as `NT SERVICE\DbDataGateway`.
+
+Windows compares service names without case, and makes a virtual account's SID from the upper-case name. A Gateway registered as `dbdatagateway` by an
+earlier release is therefore the same service, and `NT SERVICE\DbDataGateway` is the account it already runs as: its key files and folders stay readable
+to it.
 
 ## Ports
 
@@ -100,6 +108,27 @@ port of its sub-block at first start and pins it in its own settings. Windows' e
 are still skipped, because a machine whose dynamic range was lowered can reserve inside any range; when the whole sub-block is excluded the service fails
 and the failure file names the ranges. A configured port (Docker Compose, for example) is never moved. A free port is found by binding it: a port in an excluded range refuses with WSAEACCES and is skipped like a taken one. The identity home, when it runs on its own, keeps a port in the console's sub-block. The service reports its address to the console
 when it joins.
+
+Where the console, the Runner and the Workspace take their port from, at each start:
+
+- `--listen` is given on `server run`: that address, as given. It is never written to a file.
+- The server's settings file has a `listen:` line: that address. The file is `settings.yaml` in the console's folder, and `server.yaml` in the
+  Runner's and the Workspace's.
+- Neither: the first port of the service's sub-block that can be bound, on `localhost` for the console and on `127.0.0.1` for the Runner and the
+  Workspace. Once the server listens on it, the server writes it as the `listen:` line, so every later start uses the same port.
+
+A port from `--listen` or from the `listen:` line that another program holds fails the ports step, and the failure file names the port. The server
+never takes another one. To move a server, change its `listen:` line and restart it. The `listen:` line a first start writes:
+
+```yaml
+# The address this server listens on, chosen from its ports at its first start. Change it to move the server; --listen overrides it.
+listen: https://127.0.0.1:7841
+```
+
+`health check` asks the default address (`https://localhost:7800`, `:7840` or `:7860`); for a server on another port, give its address with `--url`.
+`dbdatakit setup link` and `user invite` start their links with the console's `listen:` address when `--url` is not given. The identity home on its
+own (`dbdatakit identity run`) listens on 7819 unless `--listen` says otherwise. The Gateway's listeners still use their fixed ports 8815 to 8822
+today; the paragraphs below describe how they will take theirs from 7820 to 7839.
 
 Example: on a workstation with WSL, 7840 is inside a reserved range; the Runner takes 7841, pins it, and the console's Servers page shows
 `https://host:7841`.

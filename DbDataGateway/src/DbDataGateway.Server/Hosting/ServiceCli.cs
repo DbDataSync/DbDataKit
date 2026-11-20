@@ -1,5 +1,6 @@
 using DbDataKit.State;
 using DbDataKit.Hosting.Cli;
+using DbDataKit.Hosting.Startup;
 using DbDataKit.Hosting.Systemd;
 using DbDataKit.Hosting.WindowsService;
 using DbDataKit.Security.Acl;
@@ -78,8 +79,9 @@ public static class ConsolePrompt
 /// </summary>
 public static class ServiceCli
 {
-    public const string DisplayName = "DbDataGateway Arrow Flight SQL gateway";
-    public const string Description = "Arrow Flight SQL gateway that forwards queries to ODBC/ADO.NET databases and compresses the results.";
+    /// <summary>The display name and description of the Windows service and the systemd unit, as the suite's table spells them (<see cref="SuiteServices.Gateway"/>).</summary>
+    public static readonly string DisplayName = SuiteServices.Gateway.DisplayName;
+    public static readonly string Description = SuiteServices.Gateway.Description;
 
     public const string Usage = """
         Usage: dbdatagateway service <install|uninstall|start|stop|restart|status|check|unit> [options]
@@ -209,6 +211,7 @@ public static class ServiceCli
             StartMode = ServiceStartMode.Automatic,
             Failure = new FailurePolicy([TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60)], TimeSpan.FromDays(1)),
             DataDirectoryArgument = path => [$"--{GatewayOptions.SectionName}:{nameof(GatewayOptions.DataDirectory)}={path}"],
+            StartupService = SuiteServices.Gateway,
         };
     }
 
@@ -237,7 +240,7 @@ public static class ServiceCli
         return new()
         {
             Name = name,
-            Description = "DbDataGateway Arrow Flight SQL gateway",
+            Description = SuiteServices.Gateway.Description,
             ExecStart = executable + " server run",
             WorkingDirectory = executable[..executable.LastIndexOf((char)47)], // a Unix path whatever OS generates it
             // DynamicUser: no account to manage; the state directory /var/lib/dbdatakit/gateway is created and owned by systemd.

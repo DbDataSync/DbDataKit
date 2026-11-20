@@ -25,7 +25,7 @@ public class ServiceCommandTests
         public void Apply(string directory, AclSpecification spec) => AppliedPaths.Add(directory);
     }
 
-    private static (ServiceCommand Cmd, InMemoryServiceControlManager Scm, RecordingAcl Acl) Make(bool elevated = true)
+    private static (ServiceCommand Cmd, InMemoryServiceControlManager Scm, RecordingAcl Acl) Make(bool elevated = true, DbDataKit.Hosting.Startup.SuiteService? startup = null)
     {
         var scm = new InMemoryServiceControlManager();
         var acl = new RecordingAcl();
@@ -38,6 +38,7 @@ public class ServiceCommandTests
             SystemdUnit = () => new SystemdUnitOptions { Name = "prod", ExecStart = "/opt/prod/prod" },
             EventLogSource = "Prod",
             Version = "2.0.0",
+            StartupService = startup,
         };
         return (new ServiceCommand(ctx, scm, acl, new Elevated(elevated), new InMemoryEventLogSourceRegistrar(), true, _ => Task.CompletedTask), scm, acl);
     }
@@ -189,6 +190,43 @@ public class ServiceCommandTests
         var console = new BufferConsole();
         Assert.Equal(ExitCodes.Usage, cmd.Execute(["doctor"], console));
         Assert.Contains("'service doctor' is gone: run 'service check' instead", console.ErrorWriter.ToString());
+    }
+
+    [Fact]
+    public void Check_prints_the_startup_failure_file_of_the_data_folder_or_says_there_is_none()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "dbdata-check-" + Guid.NewGuid().ToString("N"));
+        var data = Path.Combine(root, "runner");
+        try
+        {
+            var (cmd, _, _) = Make(startup: DbDataKit.Hosting.Startup.SuiteServices.Runner);
+            var console = new BufferConsole();
+            cmd.Execute(["check", "--data-dir", data], console);
+            Assert.Contains($"Startup-failure file: none ({Path.Combine(root, "logs", "startup-failure-dbdatarunner.txt")})", console.OutWriter.ToString());
+
+            // the data folder named for its service has the shared logs folder beside it, as in an install
+            Directory.CreateDirectory(Path.Combine(root, "logs"));
+            File.WriteAllText(Path.Combine(root, "logs", "startup-failure-dbdatarunner.txt"), "Startup of dbdatarunner failed at the ports step.\n\nPort 7841 cannot be bound.\n");
+            console = new BufferConsole();
+            cmd.Execute(["check", "--data-dir", data], console);
+            var text = console.OutWriter.ToString();
+            Assert.Contains("(the last start failed):", text);
+            Assert.Contains("  Port 7841 cannot be bound.", text);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); }
+            catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void Check_of_a_product_that_is_not_a_suite_service_prints_no_failure_file()
+    {
+        var (cmd, _, _) = Make();
+        var console = new BufferConsole();
+        cmd.Execute(["check"], console);
+        Assert.DoesNotContain("Startup-failure file", console.OutWriter.ToString());
     }
 
     [Fact]

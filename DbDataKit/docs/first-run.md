@@ -19,7 +19,7 @@ Open it once and register a passkey. That person is the first administrator, and
 - **A new one is made on the machine.** If the link ended or was lost, run this on the machine the console runs on:
 
   ```
-  dbdatakit setup link --url https://localhost:8480
+  dbdatakit setup link --url https://localhost:7800
   ```
 
   It prints the new link, writes it to `FIRST-RUN.txt` and makes every unused link stop working, so only the newest opens. `--url` is the address people open the console at (the default is the console's own listen address); `--repo` names the console's directory when it is not the default. The audit records that a setup link was made, when it ends and which account ran the command, never the code.

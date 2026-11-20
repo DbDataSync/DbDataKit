@@ -38,7 +38,8 @@ public sealed record WorkspaceSettings(string Directory, Uri Listen)
     public string? IntegrationCache { get; init; }
 
     public const string Product = "dbdataworkspace";
-    public const string DefaultListen = "https://127.0.0.1:8471";
+    /// <summary>The address a first start listens on when no port is configured: the first port of the Workspace's sub-block, or the next free one (<see cref="DbDataKit.Hosting.Startup.ListenPorts"/>).</summary>
+    public const string DefaultListen = "https://127.0.0.1:7860";
 
     /// <summary>The service's name in the suite's folders and variables (<see cref="DbDataKit.State.SuiteEnvironment"/>): <c>workspace</c>.</summary>
     public const string ServiceName = "workspace";

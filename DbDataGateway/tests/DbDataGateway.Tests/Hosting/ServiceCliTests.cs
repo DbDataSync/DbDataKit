@@ -71,11 +71,11 @@ public sealed class ServiceCliTests
         Assert.Equal(0, rig.Run("install"));
 
         var cfg = rig.Scm.GetConfig("DbDataGateway")!;
-        Assert.Equal(@"NT SERVICE\dbdatagateway", cfg.AccountName);
+        Assert.Equal(@"NT SERVICE\DbDataGateway", cfg.AccountName);
         Assert.Equal(ServiceStartMode.Automatic, cfg.StartMode); // "start= auto" before, not delayed
         Assert.Equal(3, cfg.FailureRestartActions); // restart 5s / 5s / 60s
-        Assert.Equal(ServiceCli.DisplayName, cfg.DisplayName);
-        Assert.Equal(ServiceCli.Description, cfg.Description);
+        Assert.Equal("DbDataGateway", cfg.DisplayName);
+        Assert.Equal(DbDataKit.Hosting.Startup.SuiteServices.Gateway.Description, cfg.Description);
         Assert.Equal($"\"{Exe}\" server run", cfg.BinaryPathName);
         Assert.False(rig.Scm.LastPasswordSupplied);
     }
@@ -245,7 +245,7 @@ public sealed class ServiceCliTests
         Assert.Equal(0, rig.Run("install", "--dry-run"));
         Assert.Empty(rig.Scm.Operations);
         Assert.Empty(rig.Acl.Applied);
-        Assert.Contains("Create service 'dbdatagateway'", rig.Out);
+        Assert.Contains("Create service 'DbDataGateway'", rig.Out);
     }
 
     [Fact]

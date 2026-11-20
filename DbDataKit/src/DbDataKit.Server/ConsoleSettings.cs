@@ -20,7 +20,8 @@ public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUr
     private static bool IsEveryAddress(string host) => host is "0.0.0.0" or "[::]" or "::" or "*" or "+";
 
     public const string Product = "dbdatakit";
-    public const string DefaultListen = "https://localhost:8480";
+    /// <summary>The address a first start listens on when no port is configured: the first port of the console's sub-block, or the next free one (<see cref="DbDataKit.Hosting.Startup.ListenPorts"/>).</summary>
+    public const string DefaultListen = "https://localhost:7800";
 
     /// <summary>The service's name in the suite's folders and variables (<see cref="SuiteEnvironment"/>): the DbDataKit service itself is <c>server</c> (plan 33 D9).</summary>
     public const string ServiceName = "server";
@@ -34,7 +35,7 @@ public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUr
 
     public string StatePath => System.IO.Path.Combine(Directory, "state.db");
 
-    /// <summary>The console's settings file, <c>settings.yaml</c> in its directory: its <c>state:</c> section says where the state database is (<see cref="ConsoleState.Resolve"/>). The console never creates it.</summary>
+    /// <summary>The console's settings file, <c>settings.yaml</c> in its directory: its <c>state:</c> section says where the state database is (<see cref="ConsoleState.Resolve"/>), its <c>listen:</c> line the address the console listens on. The console makes it only to write that line, at the first start that chose a port.</summary>
     public const string SettingsFileName = "settings.yaml";
 
     public string SettingsPath => System.IO.Path.Combine(Directory, SettingsFileName);
