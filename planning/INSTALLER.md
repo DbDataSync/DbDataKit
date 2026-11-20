@@ -33,6 +33,11 @@ rules are in [docs/install.md](../docs/install.md).
   `dbdatagateway apps publish --to --code` (`AppsCommand.cs`); `dbdataworkspace publisher pair --code` (`WorkspaceAdminCommand.cs`); `gateway add --code`
   of the Runner and of `dbdatastore` (`GatewayNoun` in `DbDataKit.Serving.Notify`, `StoreAdminCommand.cs`). Also announcement (`ConsoleAnnouncer`,
   `--announce-listen`, `DBDATAKIT_ANNOUNCE_URL`) and the bundle token (`bundle/1`).
+- The join library in `DbDataKit.Web` (`Shared/src/DbDataKit.Web/README.md`, "Joining the console"): `JoinTokens` (128 random bits, scope, 15
+  minutes by default and at most 24 hours, five refused tries; the console keeps a verifier, INSTALLER-P18), `JoinService` (the console's checks, the
+  callback, the audit `server.join` with who made the token and never its value), `JoinClient` (the join over TLS pinned to the console's
+  thumbprint, signed with a key derived from the token), `JoinEndpoint` (`POST /api/v1/join`), `JoinCallbackEndpoint` and `PendingJoins` (the
+  server's answer to the callback), `JoinRequestFile` (`join-request/1`). No host maps the routes or runs the join yet (INSTALLER-12).
 - A second Runner instance joins its group by a code made on it (`POST /api/instances/{id}/join`); a Gateway group makes its own key.
 - `doctor` is a verb of `service` (`HostingNouns.cs`, the Gateway's `Cli.cs` and `ServiceCli.cs`).
 - Enterprise (AD CS) certificates, their renewal and rollover are the subject CERTIFICATES.
@@ -50,8 +55,7 @@ rules are in [docs/install.md](../docs/install.md).
 | INSTALLER-8 | `--skip-folder-permissions-check` and `startup.skip_folder_permissions_check`: accepted everywhere, a warning at every start, a line in `service check`, the server marked on the console's posture page | INSTALLER-1 | S | tests: started as a service (detector replaced) and from a terminal it starts with the warning; without it the same folder fails the folder step naming the flag; `service check` and the posture list name the server |
 | INSTALLER-9 | Ports of the console, Runner and Workspace from the suite range 7800 to 7899 (`docs/install.md`, "Ports"): the range and the sub-blocks in `SuiteServices`; a free port of the sub-block at first start, pinned in the server's own settings; excluded Windows ranges skipped; a configured port never moved; `check_default_ports.py` checks that the defaults and sub-blocks lie in the suite range, do not overlap and avoid Windows' default ports (80, 443, 135, 445, 3389, 5040, 5357, 5985, 5986, 7680, 47001, 49152 to 65535); the old defaults (console 8480, identity home 8482, Runner 8495, Workspace 8471) named in the release notes beside the new ones (an entry appended to `docs/release-notes-pending.md`, never cut) | none | M | tests: the sub-block's first port held, the server takes the next and keeps it after a restart; a configured port held fails naming it; on the Windows runner an excluded range is skipped and, covering the whole sub-block, is named in the failure file; the repository check's unit test fails on a default outside the range, on two overlapping sub-blocks and on a default that is one of Windows' default ports, and passes on the repository; the release notes' entry names each old port and its new default |
 | INSTALLER-10 | The Gateway's listeners (the ones ENDPOINTS-2 leaves) move into 7820 to 7839 (`docs/install.md`, "Ports"): each takes a free value of the sub-block at the first start of its group's first instance and pins it; no listener has a fixed default | INSTALLER-9, ENDPOINTS-2 | S | the Gateway's tests start it with no configured port and find each listener inside its sub-block, pinned after a restart; with 7820 held, the listeners take other free values; `check_default_ports.py` passes |
-| INSTALLER-11 | The join library in `DbDataKit.Web`: the single-use token (hash, scope, expiry, five tries), the join request and answer, the proofs (the token never travels in clear: the join carries a proof made from it), TLS pinned to the console's thumbprint, the console's callback, the pins both ways, the `join-request/1` file (a new entry in `docs/formats.json`) | none | M | `DbDataKit.Web.Tests`: a join in one process succeeds once and no request carries the token's value; a spent, expired, other-product or other-group token, a wrong thumbprint and a callback to an address that does not answer with the fingerprint are each refused and audited with who made the token and no token value |
-| INSTALLER-12 | Reversed pairing: the console's `POST /api/v1/join`, `dbdatakit setup invite <gateway\|runner\|workspace> [--role] [--group]`, `pair --host --token --console-thumbprint [--address]` in the Gateway, Runner and Workspace, the join step at start; join tokens as rows of the console's state (a new table of the `trust` module, with its migration, `scripts/check_state_migrations.py`); `docs/architecture.md` D14 and the Web README say a server calls the console once, to join | INSTALLER-11, INSTALLER-9 | L | Servers suite (SQLite, PostgreSQL, SQL Server): a console and a real Gateway, Runner and Workspace process each joined by its printed command and listed ready with the address and fingerprint they reported; a reused token is refused; the console's calls succeed pinned; the token table's migration passes `check_state_migrations.py` on the three engines |
+| INSTALLER-12 | Reversed pairing: the console's `POST /api/v1/join`, `dbdatakit setup invite <gateway\|runner\|workspace> [--role] [--group]`, `pair --host --token --console-thumbprint [--address]` in the Gateway, Runner and Workspace, the join step at start (with `JoinClient`, `JoinCallbackEndpoint` and `JoinRequestFile` of `DbDataKit.Web`), the console keeping the server's pin (`JoinedServer`) and the server keeping the console's (`JoinedConsole`); join tokens as rows of the console's state (an `IJoinTokenStore` over a new table of the `trust` module, with its migration, `scripts/check_state_migrations.py`); `docs/architecture.md` D14 and the Web README say a server calls the console once, to join | INSTALLER-9 | L | Servers suite (SQLite, PostgreSQL, SQL Server): a console and a real Gateway, Runner and Workspace process each joined by its printed command and listed ready with the address and fingerprint they reported; a reused token is refused; the console's calls succeed pinned; the token table's migration passes `check_state_migrations.py` on the three engines |
 | INSTALLER-13 | The console's Add a server screen: product, role ceiling, group, the command to copy, the waiting tokens with Cancel | INSTALLER-12 | S | Playwright story: make a command, run it against a test Runner, the server appears ready; vitest of the form |
 | INSTALLER-14 | `dbdatakit setup single-server` and `--stop` (`docs/install.md`, "Setting up one machine"): discovery, registration by library call, the top folder's owner and access list, the program folder's access list (Administrators and SYSTEM full control, everyone else read and execute, inheritance cut, so a user cannot plant a file beside a program a service runs), tokens, start, wait, per-service progress, failure files, the summary (what is ready and what is not, the console's address, the first administrator's setup link from `FIRST-RUN.txt`), safe to run again; `--skip-folder-permissions-check` passed on to the registered services and recorded in their settings (the flag on `server run`, `service install` and `setup single-server`) | INSTALLER-12, INSTALLER-6, INSTALLER-1 | L | Windows CI (zips extracted, no Scoop) and the Linux job (systemd): every service registered, joined and listed; the program folder's access list read back (no write for Users, inheritance off); the summary prints the console's address and the setup link; a second run says nothing to do; a service made to fail (its configured port held) prints its failure file and the summary names it; a run after the fix finishes it; a run with `--skip-folder-permissions-check` leaves the setting in each registered service's settings |
 | INSTALLER-15 | Groups through the token: the console makes every group key (a Gateway group's too) and hands it at the join; the join answer carries a link when TRUSTZONES-1 made one; a Gateway joining an existing group gets the group's pinned ports in the join answer and they become its exact configuration (a taken one fails the ports step naming it; another is never picked) | INSTALLER-12, INSTALLER-10 | M | Servers suite: two Gateway instances joined to group X serve each other's sessions with no key copied; the second instance listens on exactly the first's pinned ports; with one of them held on the second's machine, the second fails with a startup-failure file naming the port and listens on nothing; a Runner instance joined to group Y resolves the group's logins; a token for Y used by a Gateway, or for another group, is refused |
@@ -206,15 +210,78 @@ default: `dist/suite_services.py` reads the four entries from `SuiteServices.cs`
 is refused naming both; the Scoop e2e reads the names, accounts and descriptions it checks from the same script. Option B: `dist.json` keeps
 `service.name`, and a test compares it with the table. Recommendation: the default, so a rename is one edit in one file.
 
+### INSTALLER-P18: what the console keeps of a join token (default, awaiting the owner)
+
+`docs/install.md` ("Pairing") says the token table holds the token's hash. Scenario: someone copies the console's state database (a backup, a shared
+PostgreSQL) while a token for a Runner with the admin ceiling is waiting. Built as the default: the console keeps a verifier, the public half of an
+Ed25519 key derived from the token (HKDF-SHA256), and the join carries a signature made with that key; the copy cannot make a signature, so it cannot
+join a server. Option B: keep a SHA-256 hash and prove with an HMAC keyed by it, as pairing codes do; a copy of the hash then joins a server as admin
+until the token expires. Recommendation: the default; on that answer `docs/install.md` says "a verifier made from the token" where it says "the
+token's hash".
+
+### INSTALLER-P19: what counts as one of a token's five tries, and how long ended tokens are kept (default, awaiting the owner)
+
+Scenario: a Runner's join fails because the console cannot reach the address it gave; the administrator fixes the firewall and restarts the service
+four times. Built as the default: a refused try is counted against the token when the request names a token the console made and is refused for a
+signature that does not match, another product, another group or a failed callback; the fifth cancels the token. Not counted: a token the console
+never made (audited as made by `unknown`), a spent, expired or cancelled token, a request that is not a join, and a server more than one
+compatibility generation away. Ended tokens stay in the store, so a late join with a spent or expired token is audited with who made it, until the
+store removes them (`IJoinTokenStore.RemoveEndedBefore`; when it runs is INSTALLER-12's). Option B: five refused joins of any kind in a row cancel
+every waiting token, as pairing codes do; anyone who can reach the console could then cancel every waiting token. Recommendation: the default.
+
+### INSTALLER-P20: which group a joining server may name (default, awaiting the owner)
+
+Scenario: a Gateway already in group `ops` (its settings say so) runs a command made for group `sales`. Built as the default: the join request names
+the server's group when it has one; the console refuses it unless the token names the same group; a server with no group takes the token's group,
+or none when the token names none. So a token that names no group refuses a server that is already in a group. Option B: a token without a group
+admits a server of any group. Recommendation: the default, so a server never changes group, or keeps one the console did not intend, through a
+token that did not say so.
+
+### INSTALLER-P21: what a refused server is told (default, awaiting the owner)
+
+Scenario: a Runner's join fails and the administrator reads its startup-failure file. Built as the default: when the request's signature proves the
+server holds the token, the console says why ("The join token was already used", "expired", "was made for a gateway", "is in group ops", "could not
+confirm this server at https://...: it presented the certificate sha256:..."), each with what to do; otherwise it says only "The console did not
+accept the join. Make a new command on the console (dbdatakit setup invite) and run it on this machine." A server more than one compatibility
+generation away is told both versions and the side to upgrade (`409`, before the token is looked at). The console's audit and log always have the
+full reason. Option B: one sentence for every refusal, as pairing does. Recommendation: the default; only the token's holder learns anything.
+
+### INSTALLER-P22: a wrong console thumbprint is refused on the joining server only (default, awaiting the owner)
+
+The join library's "Done when" asked that a wrong thumbprint be refused and audited with who made the token. Scenario: the command was copied with
+another console's thumbprint, or something answers at the console's address with its own certificate. Built as the default: the joining server's TLS
+handshake fails before anything is sent; `JoinFailedException` names the address, the certificate presented and the thumbprint expected (the join
+step writes it to the startup-failure file); the console receives no request, so it audits nothing and the token stays waiting. Option B: none
+that keeps the token unsent; a console cannot audit a connection that never reached it. Recommendation: the default, and the "Done when" read
+as built.
+
+### INSTALLER-P23: how a join token is written (default, awaiting the owner)
+
+Scenario: an administrator copies `dbdatarunner pair --host https://console:7800 --token k7d2mq4x5vbn6r3ta2wq4zj7pa --console-thumbprint sha256:...`
+from the console. Built as the default: 16 random bytes in the lower-case RFC 4648 base32 alphabet, 26 characters with no prefix; upper case,
+dashes and spaces are accepted, so the console may show it in groups. Option B: a prefix such as `dbdj_`, so secret scanners and people recognise a
+leaked token; option C: the pairing code's alphabet in groups of five. Recommendation: the default, with B worth adding if the owner wants scanners
+to find tokens in logs and chat.
+
+### INSTALLER-P24: how the console's callback is confirmed (default, awaiting the owner)
+
+`docs/install.md` says the console calls back the joining server with its fingerprint pinned. Scenario: someone with a token gives the address and
+fingerprint of another, already running server, so the console would pin a server that never asked to join. Built as the default: the callback is
+`POST /management/v1/join/callback` with the join's random id, and only a server waiting on that id answers, signing the id, the console, the address
+and the certificate with the server's own Ed25519 key, whose public half the signed join carried. So each server needs a key of its own when it joins
+(where it keeps it is INSTALLER-12's), and its HTTPS listener must answer the callback during the join step. Option B: the server signs the callback's
+answer with the token's key instead, so no key of its own is needed. Recommendation: the default; the console then holds a key that identifies the
+server, which a later re-join or a server's own calls can check.
+
 ## Shared areas touched
 
 - New `Shared/src/DbDataKit.Hosting.Startup`; `DbDataKit.Web` (pairing, join), `DbDataKit.Hosting.Cli` (`ServiceCommand`, `HostingNouns`),
   `DbDataKit.Hosting.WindowsService`, `DbDataKit.Hosting.Local`, `DbDataKit.Hosting.Certificates.Windows`, `DbDataKit.Serving.Notify` (pairing verbs).
 - `dist/` (suite scripts, `dist.json` files, compose), `scripts/check_default_ports.py`, a new command-name check under `scripts/`.
-- `docs/formats.json` (`join-request/1` added, `bundle/1` removed), `docs/architecture.md` (D14), `docs/ci-lessons.md`,
+- `docs/formats.json` (`join-request/1` added, the entry is in place; `bundle/1` removed), `docs/architecture.md` (D14), `docs/ci-lessons.md`,
   `docs/release-notes-pending.md`, `DbDataKit.slnx` (the new project).
-- `docs/ui-editors.md` rows: **`join-request/1`** (`join-request.yaml`, INSTALLER-11 and INSTALLER-12): "none (a one-time file the `pair` command writes
-  and the service deletes at its next start; the console's Servers page shows the join)"; **pinned ports** (the existing listen settings of each server's
+- `docs/ui-editors.md` rows: **`join-request/1`** (`join-request.yaml`): in place, "none (a one-time file the `pair` command writes and the service deletes
+  at its next start; the token in it must not pass through a browser; the console's Servers page shows the join)"; **pinned ports** (the existing listen settings of each server's
   settings file; if a key is added, the format's entry is bumped in the same task, INSTALLER-9 and INSTALLER-10): the server's settings screen edits them,
   the Servers page shows the address; **`startup.skip_folder_permissions_check`** (INSTALLER-8): "none (a switch the user sets by hand on purpose;
   `service check` and the posture page show it)"; `bundle/1` leaves with INSTALLER-20.
