@@ -109,6 +109,27 @@ are still skipped, because a machine whose dynamic range was lowered can reserve
 and the failure file names the ranges. A configured port (Docker Compose, for example) is never moved. A free port is found by binding it: a port in an excluded range refuses with WSAEACCES and is skipped like a taken one. The identity home, when it runs on its own, keeps a port in the console's sub-block. The service reports its address to the console
 when it joins.
 
+Where the console, the Runner and the Workspace take their port from, at each start:
+
+- `--listen` is given on `server run`: that address, as given. It is never written to a file.
+- The server's settings file has a `listen:` line: that address. The file is `settings.yaml` in the console's folder, and `server.yaml` in the
+  Runner's and the Workspace's.
+- Neither: the first port of the service's sub-block that can be bound, on `localhost` for the console and on `127.0.0.1` for the Runner and the
+  Workspace. Once the server listens on it, the server writes it as the `listen:` line, so every later start uses the same port.
+
+A port from `--listen` or from the `listen:` line that another program holds fails the ports step, and the failure file names the port. The server
+never takes another one. To move a server, change its `listen:` line and restart it. The `listen:` line a first start writes:
+
+```yaml
+# The address this server listens on, chosen from its ports at its first start. Change it to move the server; --listen overrides it.
+listen: https://127.0.0.1:7841
+```
+
+`health check` asks the default address (`https://localhost:7800`, `:7840` or `:7860`); for a server on another port, give its address with `--url`.
+`dbdatakit setup link` and `user invite` start their links with the console's `listen:` address when `--url` is not given. The identity home on its
+own (`dbdatakit identity run`) listens on 7819 unless `--listen` says otherwise. The Gateway's listeners still use their fixed ports 8815 to 8822
+today; the paragraphs below describe how they will take theirs from 7820 to 7839.
+
 Example: on a workstation with WSL, 7840 is inside a reserved range; the Runner takes 7841, pins it, and the console's Servers page shows
 `https://host:7841`.
 

@@ -17,12 +17,20 @@ The steps a server runs before it serves, and the file that says why a start fai
 - `StartupPorts.BindAsync` is the ports step of a server whose host binds its listeners when it starts (Kestrel): a port another program holds, or
   one Windows refuses, fails the step as `StartupStepException.Ports`, with the port read from the host's message. The host starts its background
   services in the same call, so a failure of one of them is also reported at the ports step, with its own message.
+- `ListenPorts.Resolve` gives the address a server listens on: `--listen` when given, else the `listen:` line of its settings file, else the first
+  port of the service's sub-block that is outside Windows' excluded ranges and can be bound. The server resolves it before it builds its host, in the
+  folder step. The ports step, `StartupPorts.BindAsync` with that `ListenChoice`, fails as `StartupStepException.NoFreePort` when no port of the
+  sub-block could be bound (naming the excluded ranges that cover it), and writes a chosen port as the `listen:` line once the server listens on it
+  (`ListenPorts.Pin`), so the next start uses the same port. A port from `--listen` or the `listen:` line is never moved: another program holding it
+  fails the ports step naming it. The design is [docs/install.md](../../../docs/install.md), "Ports".
 - A failed start also goes to the Application event log when the server runs as a Windows service (`StartupOptions.Failed`).
   `StartupResult.Summary()` is the line a server writes to standard error: the step, the reason and where the file is.
 - `StartupFailureFile.DescribeLastStart` is what `service doctor` prints: the file's lines under a heading, or that there is none.
 - `SharedLogsFolder` gives the shared logs folder its protection: on Windows each service account may create files and folders in it and owns what
   it creates; on Linux the folder is mode `1770`.
-- `SuiteServices` is the table of the four services: program, Windows service name and account, description, data folder and start order.
+- `SuiteServices` is the table of the four services: program, Windows service name and account, description, data folder and start order. It also
+  holds the suite's ports, 7800 to 7899 (`SuitePorts`), and each service's sub-block (`ConsolePorts` 7800 to 7819, `GatewayPorts` 7820 to 7839,
+  `RunnerPorts` 7840 to 7859, `WorkspacePorts` 7860 to 7879, `SparePorts` 7880 to 7899); `scripts/check_default_ports.py` reads them.
 
 Example, in a server's `server run`:
 

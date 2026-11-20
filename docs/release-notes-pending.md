@@ -29,6 +29,23 @@ release moves the entries into its notes and empties this file.
   `systemctl disable --now dbdatasync`) before you install this release.
   The Runner's own screen sets a connection's run login on a runner package's connections card (*Set the login*), in place of
   `dbdatasync secret send --to runner`; a replication set's Apply (provisioning) runs as its `provision` task on the Runner.
+- **Changed: the console, the Runner and the Workspace listen on new default ports, from the suite's range 7800 to 7899.** With no `--listen`, a
+  first start takes the default of its service, or the next free port of the service's sub-block, and writes it as the `listen:` line of its settings
+  file (`settings.yaml` in the console's folder, `server.yaml` in the Runner's and the Workspace's); later starts use that port. The old and the new
+  defaults:
+
+  | Listener | Old default | New default (sub-block) |
+  | --- | --- | --- |
+  | the console (`dbdatakit server run`) | 8480 | 7800 (7800 to 7819) |
+  | the identity home on its own (`dbdatakit identity run`) | 8482 | 7819 (a fixed default, never chosen or written) |
+  | the Runner (`dbdatarunner server run`) | 8495 | 7840 (7840 to 7859) |
+  | the Workspace (`dbdataworkspace server run`) | 8471 | 7860 (7860 to 7879) |
+
+  What to do: a server started with `--listen` (the container images, the compose files, a service registered with its own address) keeps its
+  port. For any other, change what points at the old port: a browser's bookmark, an `instances.yaml` entry or a publisher's paired address (pair
+  again on the new address), a firewall rule. To keep an old port, add `listen: https://127.0.0.1:8495` (with the server's own host and port) to the
+  server's settings file before you start the new release. `health check` asks the new default address; give `--url` for a server on another port.
+  The Gateway's listeners keep 8815 to 8822 for now.
 
 ## Names
 
