@@ -1,5 +1,6 @@
 using DbDataKit.Cli;
 using DbDataKit.Hosting.Cli;
+using DbDataKit.Hosting.Startup;
 using DbDataKit.Hosting.Systemd;
 using DbDataKit.Hosting.WindowsService;
 using DbDataKit.Security.Acl;
@@ -33,14 +34,15 @@ public sealed class ConsoleServiceEnvironment
 }
 
 /// <summary>
-/// <c>dbdatakit service install|uninstall|status|start|stop|restart|doctor|unit</c>: registration of <c>server run</c> with Windows or systemd, the shared verbs over the shared command. The service runs as the virtual account
+/// <c>dbdatakit service install|uninstall|status|start|stop|restart|check|unit</c>: registration of <c>server run</c> with Windows or systemd, the shared verbs over the shared command. The service runs as the virtual account
 /// <c>NT SERVICE\DbDataKit</c> unless <c>--account</c> says otherwise, and keeps everything it writes (the users, the sessions, the certificate) in one data directory, which only administrators and the service can reach.
 /// </summary>
 public static class ConsoleService
 {
-    public const string RegistrationName = "DbDataKit";
-    public const string DisplayName = "DbDataKit";
-    public const string Description = "The web console for DbData servers: signs people in and manages the servers paired with it.";
+    /// <summary>The Windows service, its display name and description, as the suite's table spells them (<see cref="SuiteServices.Console"/>).</summary>
+    public static readonly string RegistrationName = SuiteServices.Console.WindowsName;
+    public static readonly string DisplayName = SuiteServices.Console.DisplayName;
+    public static readonly string Description = SuiteServices.Console.Description;
 
     public static Noun Noun(ConsoleServiceEnvironment env) =>
         HostingNouns.Service(new ServiceCommand(Context(env), env.Scm, env.Acl, env.Elevation, null, true));
@@ -75,13 +77,14 @@ public static class ConsoleService
             StartMode = ServiceStartMode.Automatic,
             Failure = new FailurePolicy([TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60)], TimeSpan.FromDays(1)),
             DataDirectoryArgument = path => ["--repo", path],
+            StartupService = SuiteServices.Console,
         };
     }
 
     public static SystemdUnitOptions UnitOptions(string name, string executable) => new()
     {
         Name = name,
-        Description = "dbdatakit console",
+        Description = SuiteServices.Console.Description,
         ExecStart = $"{executable} server run --repo /var/lib/dbdatakit/{ConsoleSettings.ServiceName}",
         WorkingDirectory = executable[..executable.LastIndexOf('/')],
         // DynamicUser: no account to manage; the state directory /var/lib/dbdatakit/server is created and owned by systemd.

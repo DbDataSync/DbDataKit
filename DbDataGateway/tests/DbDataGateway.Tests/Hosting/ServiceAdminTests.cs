@@ -61,7 +61,7 @@ public sealed class ServiceAdminTests : IDisposable
         Assert.Contains(acl.Aces, a => a.Allow && a.Sid == ServiceSid.FromName(_name));
         Assert.DoesNotContain(acl.Aces, a => a.Allow && WellKnownPrincipalResolver.IsBroadGroup(a.Sid));
 
-        Assert.Equal(0, ServiceCli.Run(["doctor", "--name", _name, "--data-dir", _dataDir], Env()));
+        Assert.Equal(0, ServiceCli.Run(["check", "--name", _name, "--data-dir", _dataDir], Env()));
         Assert.Equal(0, ServiceCli.Run(["uninstall", "--name", _name], Env()));
         Assert.Null(scm.GetConfig(_name));
     }

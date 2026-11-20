@@ -83,6 +83,15 @@ public sealed class RunnerCliTests : IDisposable
     }
 
     [Fact]
+    public async Task Service_check_runs_the_checks()
+    {
+        var output = new StringWriter();
+        await RunnerCli.Router(_ => null).RunAsync(["service", "check"], new CliContext(output, new StringWriter(), TextReader.Null));
+        Assert.Contains("service.installed", output.ToString());
+        Assert.Contains("Check: ", output.ToString());
+    }
+
+    [Fact]
     public async Task The_lineage_noun_says_where_an_installed_package_is_deployed_and_what_a_runner_has()
     {
         var manifest = SamplePackage.WriteManifest(SamplePackage.Manifest(SamplePackage.Task("ok", TimeSpan.FromHours(1))));

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>DbDataKit.Hosting.WindowsService</PackageId>
-    <Description>Service Control Manager wrapper (P/Invoke), install planning, directory layout and service doctor.</Description>
+    <Description>Service Control Manager wrapper (P/Invoke), install planning, directory layout and the service check.</Description>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\DbDataKit.Security.Acl\DbDataKit.Security.Acl.csproj" />

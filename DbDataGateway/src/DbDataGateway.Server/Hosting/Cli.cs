@@ -1,5 +1,6 @@
 using DbDataKit.Cli;
 using DbDataKit.Web.Trust;
+using Microsoft.Extensions.DependencyInjection;
 using DbDataGateway.Server.Auth;
 using DbDataGateway.Server.Configuration;
 
@@ -106,29 +107,50 @@ public static class Cli
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context)
     {
-        string? dataDirectory = null;
-        var started = false;
+        // every step of the start is reported the same way in every server: the step that failed and why, in the startup-failure file (a service has
+        // no console, and "Cannot start service" alone says nothing), the event log for a Windows service, and a non-zero exit
+        var dataDirectory = GatewayConfigFile.ResolveDataDirectory(args);
+        var service = DbDataKit.Hosting.Startup.SuiteServices.Gateway;
+        Microsoft.AspNetCore.Builder.WebApplication? app = null;
+        var result = await new DbDataKit.Hosting.Startup.StartupSequence(new DbDataKit.Hosting.Startup.StartupOptions
+            {
+                Service = service,
+                DataFolder = dataDirectory,
+                LogsRoot = DbDataKit.Hosting.Startup.SuiteServices.LogsRootFor(service, dataDirectory),
+                Version = GatewayHost.Version,
+            })
+            .Step(DbDataKit.Hosting.Startup.StartupStep.Folder, _ =>
+            {
+                // earlier releases wrote the reason of a failed start to this file in the data folder; it describes no start of this one
+                try { File.Delete(Path.Combine(dataDirectory, "start-failure.txt")); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+                // reads the settings of the data folder (config/server.yaml), validates them and builds the server
+                app = GatewayHost.Build(args);
+            })
+            .Step(DbDataKit.Hosting.Startup.StartupStep.Ports, (step, ct) =>
+            {
+                var options = app!.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue;
+                return DbDataKit.Hosting.Startup.StartupPorts.BindAsync(step, app.StartAsync, [options.Listen.Port, options.Management.Port], ct);
+            })
+            .RunAsync(context.Cancellation);
+        if (!result.Succeeded)
+        {
+            // invalid configuration keeps its documented exit code; its message names the key paths and sources, never a secret value
+            await context.Error.WriteLineAsync(result.Error is GatewayConfigException or Secrets.PlainSecretNotAllowedException ? result.Error.Message : result.Summary());
+            if (app is not null) await app.DisposeAsync();
+            return result.Error is GatewayConfigException or Secrets.PlainSecretNotAllowedException ? GatewayConfigException.ExitCode : result.ExitCode;
+        }
+
         try
         {
-            dataDirectory = GatewayConfigFile.ResolveDataDirectory(args);
-            var app = GatewayHost.Build(args);
-            app.Lifetime.ApplicationStarted.Register(() => { started = true; StartFailure.Clear(dataDirectory); });
-            await app.RunAsync(context.Cancellation);
-            return CliExit.Ok;
+            // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
+            await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.WaitForShutdownAsync(app!, context.Cancellation);
         }
-        catch (Exception ex) when (ex is GatewayConfigException or Secrets.PlainSecretNotAllowedException)
+        finally
         {
-            // Invalid configuration: one precise message (key paths and sources, no secret values) and the documented exit code. A service has no console: the record says it too.
-            StartFailure.Record(ex, dataDirectory);
-            await context.Error.WriteLineAsync(ex.Message);
-            return GatewayConfigException.ExitCode;
+            await app!.DisposeAsync();
         }
-        catch (Exception ex) when (!started && ex is not OperationCanceledException)
-        {
-            // a start that fails (a port Windows reserves, a key file, the state) is written down with the account and the folder before the process ends
-            StartFailure.Record(ex, dataDirectory);
-            throw;
-        }
+        return CliExit.Ok;
     }
 
     // ---- state ----
@@ -181,7 +203,7 @@ public static class Cli
         Service("start", "Start the service", EffectClass.TargetWrites, "[--name N]"),
         Service("stop", "Stop the service", EffectClass.TargetWrites, "[--name N]"),
         Service("restart", "Stop and start the service", EffectClass.TargetWrites, "[--name N]"),
-        Service("doctor", "Check the registration, the account and the directory permissions", EffectClass.OfflineOnly, "[--name N]"),
+        Service("check", "Check the registration, the account and the directory permissions", EffectClass.OfflineOnly, "[--name N]"),
         Service("unit", "Print a hardened systemd unit that runs 'server run'", EffectClass.OfflineOnly, "[--name N] [--exec /path/to/dbdatagateway]"),
     ]);
 

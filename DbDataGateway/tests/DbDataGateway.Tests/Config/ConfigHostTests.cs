@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Sockets;
+using DbDataKit.Hosting.Startup;
 using DbDataGateway.Server.Configuration;
 using DbDataGateway.Server.Hosting;
 using DbDataGateway.Tests.Support;
@@ -228,35 +231,86 @@ public sealed class ConfigStartupTests
     }
 
     [Fact]
-    public async Task A_start_that_fails_leaves_its_cause_in_the_data_folder_for_a_service_that_has_no_console()
+    public async Task A_start_that_fails_leaves_its_cause_in_the_shared_startup_failure_file_for_a_service_that_has_no_console()
     {
-        // the folder is there, as the install makes it (the record is never written into a folder that is not); the tests of this class share it and may run in any order
+        // the failure file is startup-failure-dbdatagateway.txt in the logs folder of the data folder (for an install, C:\ProgramData\DbDataKit\logs),
+        // no longer start-failure.txt in the data folder; the tests of this class share the folder and may run in any order
         Directory.CreateDirectory(DataDir);
         using var env = new EnvScope(("DBDATAKIT_DATA_GATEWAY", DataDir));
-        var file = Path.Combine(DataDir, StartFailure.FileName);
-        File.Delete(file);
+        var file = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, DataDir), SuiteServices.Gateway.FailureFileName);
+        if (File.Exists(file)) File.Delete(file);
         var original = Console.Error;
         Console.SetError(new StringWriter());
         try { Assert.Equal(2, await Cli.RunAsync(["server", "run", "--Gateway:Bogus=1", "--Gateway:Tls:CertificatePassword=FailSecret-31"])); }
         finally { Console.SetError(original); }
         var text = File.ReadAllText(file);
-        Assert.Contains("did not start", text);
+        Assert.Contains("Startup of dbdatagateway", text);
+        Assert.Contains("failed at the folder step", text);
         Assert.Contains("Account: ", text);
         Assert.Contains(DataDir, text);
         Assert.Contains("Gateway:Bogus", text);
         Assert.DoesNotContain("FailSecret-31", text);
+        Assert.False(File.Exists(Path.Combine(DataDir, "start-failure.txt")));
         File.Delete(file);
     }
 
     [Fact]
-    public void A_port_Windows_will_not_give_is_named_with_where_to_look()
+    public async Task A_port_another_listener_holds_fails_the_ports_step_and_the_failure_file_names_the_port_and_the_excluded_ranges()
     {
-        var bind = new IOException("Failed to bind to address https://0.0.0.0:8815.", new System.Net.Sockets.SocketException((int)System.Net.Sockets.SocketError.AccessDenied));
-        var text = StartFailure.Describe(bind, "C:\\ProgramData\\DbDataKit\\gateway", DateTimeOffset.UnixEpoch, "NT SERVICE\\dbdatagateway");
-        Assert.Contains("8815", text);
-        Assert.Contains("excludedportrange", text);
-        Assert.Contains("NT SERVICE\\dbdatagateway", text);
-        Assert.DoesNotContain("excludedportrange", StartFailure.Describe(new InvalidOperationException("other"), null, DateTimeOffset.UnixEpoch, "me"));
+        var dir = NewDataDirectory(null);
+        // ExclusiveAddressUse is set on Windows only: set to false on Linux it asks for SO_REUSEPORT, and the gateway could then share the port
+        using var held = new TcpListener(IPAddress.Loopback, 0);
+        if (OperatingSystem.IsWindows()) held.ExclusiveAddressUse = true;
+        held.Start();
+        var port = ((IPEndPoint)held.LocalEndpoint).Port;
+        var (output, error) = (new StringWriter(), new StringWriter());
+
+        var exit = await Cli.RunAsync(["server", "run", $"--Gateway:DataDirectory={dir}", "--Gateway:Listen:Address=127.0.0.1", $"--Gateway:Listen:Port={port}", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"],
+            new DbDataKit.Cli.CliContext(output, error, TextReader.Null));
+
+        Assert.NotEqual(0, exit);
+        var file = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.FailureFileName);
+        var text = File.ReadAllText(file);
+        Assert.Contains("failed at the ports step", text);
+        Assert.Contains($"Port {port} cannot be bound", text);
+        Assert.Contains($"Port: {port}", text);
+        Assert.Contains("Excluded port ranges: ", text);
+        Assert.Contains("Account: ", text);
+        Assert.Contains($"Data folder: {dir}", text);
+        Assert.Contains("Exception chain:", text);
+        Assert.Contains(file, error.ToString());
+        Assert.False(File.Exists(Path.Combine(dir, "start-failure.txt")));
+        TryDelete(dir);
+    }
+
+    [Fact]
+    public async Task A_clean_start_leaves_no_failure_file_and_removes_the_one_earlier_releases_wrote()
+    {
+        var dir = NewDataDirectory(null);
+        File.WriteAllText(Path.Combine(dir, "start-failure.txt"), "dbdatagateway did not start (an earlier release)");
+        using var stop = new CancellationTokenSource();
+        var run = Cli.RunAsync(["server", "run", $"--Gateway:DataDirectory={dir}", "--Gateway:Listen:Address=127.0.0.1", "--Gateway:Listen:Port=0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"],
+            new DbDataKit.Cli.CliContext(TextWriter.Null, TextWriter.Null, TextReader.Null, stop.Token));
+        var logs = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.LogFolder);
+        var file = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.FailureFileName);
+
+        // the sequence writes the file before its first step and deletes it once every step succeeded
+        var deadline = DateTime.UtcNow.AddSeconds(90);
+        while (!run.IsCompleted && !(Directory.Exists(logs) && !File.Exists(file) && !File.Exists(Path.Combine(dir, "start-failure.txt"))) && DateTime.UtcNow < deadline)
+            await Task.Delay(100);
+        await Task.Delay(500);
+        Assert.False(run.IsCompleted, "the gateway stopped instead of serving: " + (File.Exists(file) ? File.ReadAllText(file) : ""));
+        Assert.False(File.Exists(file));
+        Assert.False(File.Exists(Path.Combine(dir, "start-failure.txt")));
+        stop.Cancel();
+        Assert.Equal(0, await run);
+        TryDelete(dir);
+    }
+
+    private static void TryDelete(string dir)
+    {
+        try { Directory.Delete(dir, recursive: true); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
     [Fact]

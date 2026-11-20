@@ -20,7 +20,7 @@ step that does not exist today, and it should be designed rather than accreted.
    database, common drivers, authentication, and on Windows the service registration and TLS
    certificate. It writes nothing you cannot also write by hand; it is a guided front over the
    config file and the existing subcommands.
-2. **`dbdatasync config check`** (implemented as `doctor` in phase 110; folded under `config` by
+2. **`dbdatasync config check`** (implemented as a top-level command in phase 110; folded under `config` by
    phase 115) — the non-interactive core of `setup`'s review: the same checks, one numbered "ready /
    here is what is wrong" report, exit 0/1, for a CI smoke test or a service wrapper. `setup`'s
    review screen is `config check` rendered for a human with "fix this now" actions attached.
@@ -290,7 +290,7 @@ not duplicate it.
 5. **Is the check engine a separate command or `serve --check`?** Resolved (phase 110, revised by
    phase 115): separate — `dbdatasync config check` — so CI and a service wrapper call it without
    starting Kestrel. `setup`'s review screen calls the same check code in-process. (Originally built
-   as its own top-level `doctor` command in phase 110; phase 115 nested it under `config` alongside
+   as its own top-level command in phase 110; phase 115 nested it under `config` alongside
    `cert`/`secret`/`provider`/`driver` to trim the top-level command count.)
 6. **Should `serve` block on `config check` failing**, or start degraded and surface problems in the admin
    UI? Leaning: block only on genuinely non-functional states (no auth method and not `Disabled`;

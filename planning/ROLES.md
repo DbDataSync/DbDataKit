@@ -48,7 +48,10 @@ subject keep colliding, the subject is split into two subjects (the owner's call
 **Task rows.** A subject's task rows are in priority order only: a row does not depend on the rows above it unless it says so. Every dependency is a
 task id in the row's "Depends on" cell. A row's text may say why ("Follows SYNCAUTHORING-15: the page exists"), but a task named after "Follows"
 must also be in that cell. `scripts/check_plans.py` refuses a cycle and a "Follows" missing from the cell, and reports each dependency on a subject
-ranked lower in `planning/README.md`.
+ranked lower in `planning/README.md`. When a task is finished, its row leaves the subject file, and in the same commit every reference to it is cleared: its id
+leaves each "Depends on" cell and each line under "Needs from other subjects" that names it, in any subject file. A line that still says something
+another task relies on is rewritten to name what now exists (a library, a command, a page) instead of the task; a line with nothing left goes.
+`scripts/check_plans.py` refuses a reference to a task that no longer exists.
 
 **Review dates.** Every product doc, README and planning subject file carries the date of its last full review, `<!-- reviewed: YYYY-MM-DD -->` on the
 line under its title (the skill `product-docs`, "The review date"). A session sets it when the owner approves a review of the whole file: checked
@@ -70,8 +73,8 @@ A subagent (`.claude/agents/worker.md`) limited to one subject, often one task. 
   built work goes to the owner as a proposed decision, never silently dropped or rebuilt);
 - builds its tasks on its branch `backup/<slug>-<n>` and keeps the task's wip file (below);
 - reports its defaults and questions back to the session that started it, and **never decides**: a default it takes is a proposal until the owner answers;
-- edits only its subject file and the code and docs its tasks need; it never edits another subject's file and never edits `planning/README.md`;
-- starts each commit message with the task id (`INSTALLER-3: ...`), reads `docs/ci-lessons.md` before it pushes and runs the repository checks;
+- edits only its subject file and the code and docs its tasks need; it edits another subject's file only to clear references to a task it finished (Task rows), and never edits `planning/README.md`;
+- starts each commit message with the task id (`<SLUG>-<n>: ...`), reads `docs/ci-lessons.md` before it pushes and runs the repository checks;
 - merges `main` into its branch whenever `main` moves; it never rewrites a pushed branch (no amend, squash, rebase or reset of pushed commits).
 
 ### The reviewer

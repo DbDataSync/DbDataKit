@@ -2,33 +2,33 @@ using DbDataKit.Security.Acl;
 
 namespace DbDataKit.Hosting.WindowsService;
 
-public enum DoctorSeverity
+public enum ServiceCheckSeverity
 {
     Pass,
     Warn,
     Fail,
 }
 
-public sealed record DoctorCheck(string Id, DoctorSeverity Severity, string Message);
+public sealed record ServiceCheckItem(string Id, ServiceCheckSeverity Severity, string Message);
 
-public sealed record DoctorReport(IReadOnlyList<DoctorCheck> Checks)
+public sealed record ServiceCheckReport(IReadOnlyList<ServiceCheckItem> Checks)
 {
-    public bool Ok => Checks.All(c => c.Severity != DoctorSeverity.Fail);
+    public bool Ok => Checks.All(c => c.Severity != ServiceCheckSeverity.Fail);
 
-    public int Failures => Checks.Count(c => c.Severity == DoctorSeverity.Fail);
+    public int Failures => Checks.Count(c => c.Severity == ServiceCheckSeverity.Fail);
 
-    public int Warnings => Checks.Count(c => c.Severity == DoctorSeverity.Warn);
+    public int Warnings => Checks.Count(c => c.Severity == ServiceCheckSeverity.Warn);
 }
 
 /// <summary>
-/// <c>service doctor</c>: verifies the installed service and directory ACLs against the spec and layout.
+/// <c>service check</c>: verifies the installed service and directory ACLs against the spec and layout.
 /// Everything goes through injected interfaces, so it runs on any OS against fakes.
 /// </summary>
-public sealed class ServiceDoctor(IServiceControlManager scm, IAclService fs, IPrincipalResolver principals)
+public sealed class ServiceCheck(IServiceControlManager scm, IAclService fs, IPrincipalResolver principals)
 {
-    public DoctorReport Run(ServiceInstallSpec spec, DirectoryLayout layout, IEnumerable<DoctorCheck>? extraChecks = null)
+    public ServiceCheckReport Run(ServiceInstallSpec spec, DirectoryLayout layout, IEnumerable<ServiceCheckItem>? extraChecks = null)
     {
-        var checks = new List<DoctorCheck>();
+        var checks = new List<ServiceCheckItem>();
         CheckService(spec, checks);
         foreach (var entry in layout.Entries.Where(e => !e.IsLink && e.Acl is not null))
         {
@@ -36,73 +36,73 @@ public sealed class ServiceDoctor(IServiceControlManager scm, IAclService fs, IP
         }
 
         if (extraChecks is not null) checks.AddRange(extraChecks);
-        return new DoctorReport(checks);
+        return new ServiceCheckReport(checks);
     }
 
-    private void CheckService(ServiceInstallSpec spec, List<DoctorCheck> checks)
+    private void CheckService(ServiceInstallSpec spec, List<ServiceCheckItem> checks)
     {
         var cfg = scm.GetConfig(spec.Name);
         if (cfg is null)
         {
-            checks.Add(new("service.installed", DoctorSeverity.Fail, $"Service '{spec.Name}' is not installed."));
+            checks.Add(new("service.installed", ServiceCheckSeverity.Fail, $"Service '{spec.Name}' is not installed."));
             return;
         }
 
-        checks.Add(new("service.installed", DoctorSeverity.Pass, $"Service '{spec.Name}' is installed."));
+        checks.Add(new("service.installed", ServiceCheckSeverity.Pass, $"Service '{spec.Name}' is installed."));
 
         var asSystem = cfg.AccountName is null
             || cfg.AccountName.Equals("LocalSystem", StringComparison.OrdinalIgnoreCase)
             || cfg.AccountName.Equals(@"NT AUTHORITY\SYSTEM", StringComparison.OrdinalIgnoreCase);
         if (asSystem)
         {
-            checks.Add(new("service.account", spec.AllowLocalSystem ? DoctorSeverity.Warn : DoctorSeverity.Fail, "Service runs as LocalSystem."));
+            checks.Add(new("service.account", spec.AllowLocalSystem ? ServiceCheckSeverity.Warn : ServiceCheckSeverity.Fail, "Service runs as LocalSystem."));
         }
         else if (!ServiceProvisioner.SameAccount(cfg.AccountName, spec.EffectiveAccount))
         {
-            checks.Add(new("service.account", DoctorSeverity.Warn, $"Account is '{cfg.AccountName}', expected '{spec.EffectiveAccount.Name}'."));
+            checks.Add(new("service.account", ServiceCheckSeverity.Warn, $"Account is '{cfg.AccountName}', expected '{spec.EffectiveAccount.Name}'."));
         }
         else
         {
-            checks.Add(new("service.account", DoctorSeverity.Pass, $"Runs as {cfg.AccountName}."));
+            checks.Add(new("service.account", ServiceCheckSeverity.Pass, $"Runs as {cfg.AccountName}."));
         }
 
         var path = cfg.BinaryPathName.Trim();
         var unquotedWithSpace = !path.StartsWith('"') && path.Contains(' ');
         checks.Add(unquotedWithSpace
-            ? new("service.binary-path", DoctorSeverity.Fail, "Binary path contains spaces and is not quoted (unquoted service path).")
+            ? new("service.binary-path", ServiceCheckSeverity.Fail, "Binary path contains spaces and is not quoted (unquoted service path).")
             : string.Equals(path, spec.CommandLine, StringComparison.Ordinal)
-                ? new("service.binary-path", DoctorSeverity.Pass, "Command line matches.")
-                : new("service.binary-path", DoctorSeverity.Warn, $"Command line differs from expected ({spec.CommandLine})."));
+                ? new("service.binary-path", ServiceCheckSeverity.Pass, "Command line matches.")
+                : new("service.binary-path", ServiceCheckSeverity.Warn, $"Command line differs from expected ({spec.CommandLine})."));
 
         checks.Add(cfg.StartMode == spec.StartMode
-            ? new("service.start-mode", DoctorSeverity.Pass, $"Start mode {cfg.StartMode}.")
-            : new("service.start-mode", DoctorSeverity.Warn, $"Start mode {cfg.StartMode}, expected {spec.StartMode}."));
+            ? new("service.start-mode", ServiceCheckSeverity.Pass, $"Start mode {cfg.StartMode}.")
+            : new("service.start-mode", ServiceCheckSeverity.Warn, $"Start mode {cfg.StartMode}, expected {spec.StartMode}."));
 
         checks.Add(cfg.FailureRestartActions > 0
-            ? new("service.recovery", DoctorSeverity.Pass, $"{cfg.FailureRestartActions} restart action(s) on failure.")
-            : new("service.recovery", DoctorSeverity.Warn, "No restart-on-failure actions configured."));
+            ? new("service.recovery", ServiceCheckSeverity.Pass, $"{cfg.FailureRestartActions} restart action(s) on failure.")
+            : new("service.recovery", ServiceCheckSeverity.Warn, "No restart-on-failure actions configured."));
 
         checks.Add(cfg.SidType == spec.SidType
-            ? new("service.sid-type", DoctorSeverity.Pass, $"SID type {cfg.SidType}.")
-            : new("service.sid-type", DoctorSeverity.Warn, $"SID type {cfg.SidType}, expected {spec.SidType}."));
+            ? new("service.sid-type", ServiceCheckSeverity.Pass, $"SID type {cfg.SidType}.")
+            : new("service.sid-type", ServiceCheckSeverity.Warn, $"SID type {cfg.SidType}, expected {spec.SidType}."));
     }
 
-    private void CheckDirectory(LayoutEntry entry, List<DoctorCheck> checks)
+    private void CheckDirectory(LayoutEntry entry, List<ServiceCheckItem> checks)
     {
         var id = $"dir.{entry.Role}";
         var acl = fs.DirectoryExists(entry.Path) ? fs.Read(entry.Path) : null;
         if (acl is null)
         {
-            checks.Add(new(id, DoctorSeverity.Fail, $"{entry.Path} is missing."));
+            checks.Add(new(id, ServiceCheckSeverity.Fail, $"{entry.Path} is missing."));
             return;
         }
 
         var spec = entry.Acl!;
-        var problems = new List<(DoctorSeverity, string)>();
+        var problems = new List<(ServiceCheckSeverity, string)>();
 
         if (spec.CutInheritance && !acl.InheritanceProtected)
         {
-            problems.Add((DoctorSeverity.Fail, "inheritance is not cut (inherits parent permissions)"));
+            problems.Add((ServiceCheckSeverity.Fail, "inheritance is not cut (inherits parent permissions)"));
         }
 
         var expectedSids = spec.Rules.Select(r => principals.ResolveSid(r.Principal)).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -117,7 +117,7 @@ public sealed class ServiceDoctor(IServiceControlManager scm, IAclService fs, IP
             // Administrators on a "read" log folder may legitimately have more; only missing rights are drift.
             if ((granted & rule.Rights) != rule.Rights)
             {
-                problems.Add((DoctorSeverity.Fail, $"{rule.Principal} lacks {rule.Rights & ~granted}"));
+                problems.Add((ServiceCheckSeverity.Fail, $"{rule.Principal} lacks {rule.Rights & ~granted}"));
             }
         }
 
@@ -134,21 +134,21 @@ public sealed class ServiceDoctor(IServiceControlManager scm, IAclService fs, IP
                 && !ace.Sid.Equals(WellKnownPrincipalResolver.TrustedInstallerSid, StringComparison.OrdinalIgnoreCase)
                 && !ace.Sid.Equals(WellKnownPrincipalResolver.CreatorOwnerSid, StringComparison.OrdinalIgnoreCase))
             {
-                problems.Add((DoctorSeverity.Fail, $"binaries are writable by {Describe(ace.Sid, serviceSid)}"));
+                problems.Add((ServiceCheckSeverity.Fail, $"binaries are writable by {Describe(ace.Sid, serviceSid)}"));
             }
             else if (!expected && (entry.IsSensitive || broad))
             {
-                var worst = entry.IsSensitive || broad ? DoctorSeverity.Fail : DoctorSeverity.Warn;
+                var worst = entry.IsSensitive || broad ? ServiceCheckSeverity.Fail : ServiceCheckSeverity.Warn;
                 if (entry.IsBinary && !canWrite) continue; // default Users read/execute on Program Files is fine
                 problems.Add((worst, $"{Describe(ace.Sid, serviceSid)} has unexpected access ({ace.Rights})"));
             }
             else if (!expected)
             {
-                problems.Add((DoctorSeverity.Warn, $"unexpected principal {ace.Sid} ({ace.Rights})"));
+                problems.Add((ServiceCheckSeverity.Warn, $"unexpected principal {ace.Sid} ({ace.Rights})"));
             }
             else if (spec_ is not null && ExceedsWrite(spec_, ace, entry))
             {
-                problems.Add((DoctorSeverity.Warn, $"{spec_.Principal} has more write access than intended"));
+                problems.Add((ServiceCheckSeverity.Warn, $"{spec_.Principal} has more write access than intended"));
             }
         }
 
@@ -160,14 +160,14 @@ public sealed class ServiceDoctor(IServiceControlManager scm, IAclService fs, IP
                 var fileAcl = fs.Read(file);
                 if (fileAcl?.Aces.Any(a => a.Allow && WellKnownPrincipalResolver.IsBroadGroup(a.Sid) && (a.Rights & AccessRights.Read) != 0) == true)
                 {
-                    problems.Add((DoctorSeverity.Fail, $"{Path.GetFileName(file)} is readable by Users/Everyone"));
+                    problems.Add((ServiceCheckSeverity.Fail, $"{Path.GetFileName(file)} is readable by Users/Everyone"));
                 }
             }
         }
 
         if (problems.Count == 0)
         {
-            checks.Add(new(id, DoctorSeverity.Pass, $"{entry.Path} ACL matches."));
+            checks.Add(new(id, ServiceCheckSeverity.Pass, $"{entry.Path} ACL matches."));
             return;
         }
 

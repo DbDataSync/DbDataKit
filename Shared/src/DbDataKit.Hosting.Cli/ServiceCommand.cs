@@ -39,8 +39,8 @@ public sealed class ServiceCommandContext
     /// <summary>Product's systemd unit, for <c>service unit</c> on Linux.</summary>
     public Func<SystemdUnitOptions>? SystemdUnit { get; init; }
 
-    /// <summary>Extra doctor checks, e.g. certificate expiry.</summary>
-    public Func<IEnumerable<DoctorCheck>>? ExtraDoctorChecks { get; init; }
+    /// <summary>Extra checks for <c>service check</c>, e.g. certificate expiry.</summary>
+    public Func<IEnumerable<ServiceCheckItem>>? ExtraChecks { get; init; }
 
     public TimeSpan StopTimeout { get; init; } = TimeSpan.FromSeconds(30);
 
@@ -64,10 +64,16 @@ public sealed class ServiceCommandContext
     /// whose host takes it as configuration (<c>--Section:Key=PATH</c>) set <see cref="DataDirectoryArgument"/>.
     /// </summary>
     public Func<string, IReadOnlyList<string>>? DataDirectoryArgument { get; init; }
+
+    /// <summary>
+    /// The suite's service this command registers, when it is one: <c>service check</c> then prints its startup-failure file, found from the data
+    /// folder of <see cref="Layout"/> (or <c>--data-dir</c>) as the server finds it.
+    /// </summary>
+    public DbDataKit.Hosting.Startup.SuiteService? StartupService { get; init; }
 }
 
 /// <summary>
-/// <c>service install|uninstall|start|stop|restart|status|doctor|unit|run</c>. Passwords are only read from stdin
+/// <c>service install|uninstall|start|stop|restart|status|check|unit|run</c>. Passwords are only read from stdin
 /// (<c>--password-stdin</c>), never from the command line.
 /// </summary>
 public sealed class ServiceCommand(
@@ -85,7 +91,7 @@ public sealed class ServiceCommand(
     };
 
     public const string Usage =
-        "Usage: service <install|uninstall|start|stop|restart|status|doctor|unit|run> [options]\n" +
+        "Usage: service <install|uninstall|start|stop|restart|status|check|unit|run> [options]\n" +
         "  install   [--account virtual|gmsa$|DOMAIN\\user] [--password-stdin] [--allow-localsystem]\n" +
         "            [--data-dir PATH] [--dry-run] [--allow-downgrade --installed-version V]\n" +
         "  run       run in the foreground (same as starting the product with --console)";
@@ -129,7 +135,7 @@ public sealed class ServiceCommand(
                         await provisioner.StartAsync(context.ServiceName, context.StopTimeout);
                     });
                 case "status": return Status(console);
-                case "doctor": return Doctor(parsed, console);
+                case "check": return Check(parsed, console);
                 case "unit": return Unit(console);
                 case "run":
                     console.Out.WriteLine("Run the product executable with --console to host it in the foreground.");
@@ -295,20 +301,27 @@ public sealed class ServiceCommand(
         return ExitCodes.Ok;
     }
 
-    private int Doctor(ParsedArgs parsed, IConsole console)
+    private int Check(ParsedArgs parsed, IConsole console)
     {
         var spec = BuildSpec(parsed);
         var existing = scm.GetConfig(context.ServiceName);
         var account = existing?.AccountName is { } n ? ServiceAccount.Parse(n, context.ServiceName) : spec.EffectiveAccount;
-        var doctor = new ServiceDoctor(scm, acl, context.PrincipalResolver(account));
-        var report = doctor.Run(spec, context.Layout, context.ExtraDoctorChecks?.Invoke());
+        var checker = new ServiceCheck(scm, acl, context.PrincipalResolver(account));
+        var report = checker.Run(spec, context.Layout, context.ExtraChecks?.Invoke());
         foreach (var c in report.Checks)
         {
-            var tag = c.Severity switch { DoctorSeverity.Pass => "ok  ", DoctorSeverity.Warn => "warn", _ => "FAIL" };
+            var tag = c.Severity switch { ServiceCheckSeverity.Pass => "ok  ", ServiceCheckSeverity.Warn => "warn", _ => "FAIL" };
             console.Out.WriteLine($"[{tag}] {c.Id}: {c.Message}");
         }
 
-        console.Out.WriteLine(report.Ok ? $"Doctor: OK ({report.Warnings} warning(s))." : $"Doctor: {report.Failures} failure(s).");
+        if (context.StartupService is { } service)
+        {
+            // the reason of a failed start is in the file the server wrote, not in the registration: the person checking reads it here
+            if ((parsed.Get("data-dir") ?? context.Layout.Entries.FirstOrDefault(e => e.Role == LayoutRole.Data)?.Path) is { } dataFolder)
+                console.Out.WriteLine(DbDataKit.Hosting.Startup.StartupFailureFile.DescribeLastStart(DbDataKit.Hosting.Startup.SuiteServices.LogsRootFor(service, dataFolder), service));
+        }
+
+        console.Out.WriteLine(report.Ok ? $"Check: OK ({report.Warnings} warning(s))." : $"Check: {report.Failures} failure(s).");
         return report.Ok ? ExitCodes.Ok : ExitCodes.Failure;
     }
 

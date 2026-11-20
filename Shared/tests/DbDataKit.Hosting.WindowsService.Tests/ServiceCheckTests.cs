@@ -2,7 +2,7 @@ using DbDataKit.Security.Acl;
 
 namespace DbDataKit.Hosting.WindowsService.Tests;
 
-public class DoctorTests
+public class ServiceCheckTests
 {
     private const string ServiceSid = "S-1-5-80-111-222-333-444-555";
 
@@ -54,14 +54,14 @@ public class DoctorTests
         return scm;
     }
 
-    private static DoctorReport Run(InMemoryServiceControlManager scm, FakeFs fs) =>
-        new ServiceDoctor(scm, fs, Resolver).Run(Spec(), Layout);
+    private static ServiceCheckReport Run(InMemoryServiceControlManager scm, FakeFs fs) =>
+        new ServiceCheck(scm, fs, Resolver).Run(Spec(), Layout);
 
     [Fact]
     public void Healthy_system_passes()
     {
         var report = Run(InstalledScm(), Healthy());
-        Assert.True(report.Ok, string.Join("\n", report.Checks.Where(c => c.Severity != DoctorSeverity.Pass).Select(c => $"{c.Id}: {c.Message}")));
+        Assert.True(report.Ok, string.Join("\n", report.Checks.Where(c => c.Severity != ServiceCheckSeverity.Pass).Select(c => $"{c.Id}: {c.Message}")));
         Assert.Equal(0, report.Warnings);
     }
 
@@ -69,7 +69,7 @@ public class DoctorTests
     public void Missing_service_fails()
     {
         var report = Run(new InMemoryServiceControlManager(), Healthy());
-        Assert.Contains(report.Checks, c => c.Id == "service.installed" && c.Severity == DoctorSeverity.Fail);
+        Assert.Contains(report.Checks, c => c.Id == "service.installed" && c.Severity == ServiceCheckSeverity.Fail);
     }
 
     [Fact]
@@ -78,8 +78,8 @@ public class DoctorTests
         var scm = new InMemoryServiceControlManager();
         var spec = Spec() with { Account = ServiceAccount.LocalSystem, AllowLocalSystem = false };
         scm.Create(spec, null);
-        var report = new ServiceDoctor(scm, Healthy(), Resolver).Run(Spec(), Layout);
-        Assert.Contains(report.Checks, c => c.Id == "service.account" && c.Severity == DoctorSeverity.Fail);
+        var report = new ServiceCheck(scm, Healthy(), Resolver).Run(Spec(), Layout);
+        Assert.Contains(report.Checks, c => c.Id == "service.account" && c.Severity == ServiceCheckSeverity.Fail);
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public class DoctorTests
         fs.Dirs[path] = fs.Dirs[path] with { Aces = [.. fs.Dirs[path].Aces, new ObservedAce(WellKnownPrincipalResolver.UsersSid, AccessRights.Read, true, true)] };
         var report = Run(InstalledScm(), fs);
         Assert.False(report.Ok);
-        Assert.Contains(report.Checks, c => c.Id == "dir.Secrets" && c.Severity == DoctorSeverity.Fail && c.Message.Contains("Users"));
+        Assert.Contains(report.Checks, c => c.Id == "dir.Secrets" && c.Severity == ServiceCheckSeverity.Fail && c.Message.Contains("Users"));
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public class DoctorTests
         var fs = Healthy();
         var path = Layout[LayoutRole.Certs].Path;
         fs.Dirs[path] = fs.Dirs[path] with { InheritanceProtected = false };
-        Assert.Contains(Run(InstalledScm(), fs).Checks, c => c.Id == "dir.Certs" && c.Severity == DoctorSeverity.Fail);
+        Assert.Contains(Run(InstalledScm(), fs).Checks, c => c.Id == "dir.Certs" && c.Severity == ServiceCheckSeverity.Fail);
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public class DoctorTests
         var fs = Healthy();
         var path = Layout[LayoutRole.Versions].Path;
         fs.Dirs[path] = fs.Dirs[path] with { Aces = [.. fs.Dirs[path].Aces, new ObservedAce(ServiceSid, AccessRights.Modify, true, false)] };
-        Assert.Contains(Run(InstalledScm(), fs).Checks, c => c.Id == "dir.Versions" && c.Severity == DoctorSeverity.Fail && c.Message.Contains("writable"));
+        Assert.Contains(Run(InstalledScm(), fs).Checks, c => c.Id == "dir.Versions" && c.Severity == ServiceCheckSeverity.Fail && c.Message.Contains("writable"));
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public class DoctorTests
         var fs = Healthy();
         var file = Path.Combine(Layout[LayoutRole.Certs].Path, "server.pfx");
         fs.Files[file] = new ObservedAcl(false, [new ObservedAce(WellKnownPrincipalResolver.EveryoneSid, AccessRights.Read, true, false)]);
-        Assert.Contains(Run(InstalledScm(), fs).Checks, c => c.Id == "dir.Certs" && c.Severity == DoctorSeverity.Fail && c.Message.Contains("server.pfx"));
+        Assert.Contains(Run(InstalledScm(), fs).Checks, c => c.Id == "dir.Certs" && c.Severity == ServiceCheckSeverity.Fail && c.Message.Contains("server.pfx"));
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public class DoctorTests
     {
         var fs = Healthy();
         fs.Dirs.Remove(Layout[LayoutRole.Logs].Path);
-        Assert.Contains(Run(InstalledScm(), fs).Checks, c => c.Id == "dir.Logs" && c.Severity == DoctorSeverity.Fail);
+        Assert.Contains(Run(InstalledScm(), fs).Checks, c => c.Id == "dir.Logs" && c.Severity == ServiceCheckSeverity.Fail);
     }
 
     [Fact]
@@ -134,7 +134,7 @@ public class DoctorTests
         var fs = Healthy();
         var path = Layout[LayoutRole.Data].Path;
         fs.Dirs[path] = fs.Dirs[path] with { Aces = fs.Dirs[path].Aces.Where(a => a.Sid != ServiceSid).ToList() };
-        Assert.Contains(Run(InstalledScm(), fs).Checks, c => c.Id == "dir.Data" && c.Severity == DoctorSeverity.Fail);
+        Assert.Contains(Run(InstalledScm(), fs).Checks, c => c.Id == "dir.Data" && c.Severity == ServiceCheckSeverity.Fail);
     }
 
     [Fact]

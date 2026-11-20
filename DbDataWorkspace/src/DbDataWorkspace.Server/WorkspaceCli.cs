@@ -1,6 +1,7 @@
 using System.Net.Http;
 using DbDataKit.Cli;
 using DbDataKit.Hosting.Cli;
+using DbDataKit.Hosting.Startup;
 using DbDataKit.Web.Trust;
 
 namespace DbDataWorkspace.Server;
@@ -14,7 +15,7 @@ public static class WorkspaceCli
     public const string Program = "dbdataworkspace";
 
     /// <summary>Where <c>health check</c> asks by default: the server's own address, as a container sees it.</summary>
-    public const string HealthUrl = "https://localhost:8471/health/live";
+    public const string HealthUrl = "https://localhost:7860/health/live";
 
     public static Task<int> RunAsync(string[] args) => RunAsync(args, CliContext.Console());
 
@@ -107,28 +108,68 @@ public static class WorkspaceCli
             await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>] [--state-engine sqlite|mssql|postgres --state-connection <connection string>].");
             return CliExit.Usage;
         }
-        if (!Uri.TryCreate(parsed.Get("listen") ?? WorkspaceSettings.DefaultListen, UriKind.Absolute, out var listen) || listen.Scheme != Uri.UriSchemeHttps)
+        Uri? listenFlag = null;
+        if (parsed.Get("listen") is { } listenText && (!Uri.TryCreate(listenText, UriKind.Absolute, out listenFlag) || listenFlag.Scheme != Uri.UriSchemeHttps))
         {
-            await context.Error.WriteLineAsync("--listen is an https address, such as https://127.0.0.1:8471.");
+            await context.Error.WriteLineAsync("--listen is an https address, such as https://127.0.0.1:7860.");
             return CliExit.Usage;
         }
 
+        // every step of the start is reported the same way in every server: the step that failed and why, in the startup-failure file, and a non-zero exit
         var directory = DirectoryOf(args, environment);
-        DbDataKit.State.StateSettings state;
-        DbDataKit.State.StateSources sources;
-        try { (state, sources) = WorkspaceState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection")); }
-        catch (InvalidOperationException ex)
+        var service = SuiteServices.Workspace;
+        WorkspaceSettings? settings = null;
+        System.Security.Cryptography.X509Certificates.X509Certificate2? certificate = null;
+        Microsoft.AspNetCore.Builder.WebApplication? app = null;
+        ListenChoice? listen = null;
+        var settingsExit = (int?)null;
+        var result = await new StartupSequence(new StartupOptions
+            {
+                Service = service,
+                DataFolder = directory,
+                LogsRoot = SuiteServices.LogsRootFor(service, directory),
+                Version = WorkspaceServer.Version,
+            })
+            .Step(StartupStep.Folder, step =>
+            {
+                DbDataKit.State.StateSettings state;
+                DbDataKit.State.StateSources sources;
+                try
+                {
+                    (state, sources) = WorkspaceState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection"));
+                    // --listen, else the port pinned in server.yaml, else a free port of the Workspace's sub-block (pinned once the server listens on it)
+                    listen = ListenPorts.Resolve(service, listenFlag, Path.Combine(directory, "server.yaml"), new Uri(WorkspaceSettings.DefaultListen), step.Options.ExcludedPorts());
+                }
+                catch (InvalidOperationException)
+                {
+                    settingsExit = DbDataKit.State.Cli.StateExit.Settings;
+                    throw;
+                }
+                settings = new WorkspaceSettings(directory, listen.Address) { State = state, StateSources = sources };
+                Directory.CreateDirectory(settings.Directory);
+            })
+            .Step(StartupStep.Certificate, _ => certificate = WorkspaceServer.Certificate(settings!.Directory))
+            // building the server opens its state and runs the state's migrations
+            .Step(StartupStep.State, _ => app = WorkspaceServer.Build(settings!, certificate!, line => context.Error.WriteLine(line)))
+            .Step(StartupStep.Ports, (step, ct) => step.BindAsync(listen!, app!.StartAsync, cancellationToken: ct))
+            .RunAsync(context.Cancellation);
+        if (!result.Succeeded)
         {
-            await context.Error.WriteLineAsync(ex.Message);
-            return DbDataKit.State.Cli.StateExit.Settings;
+            await context.Error.WriteLineAsync(result.Summary());
+            if (app is not null) await app.DisposeAsync();
+            return settingsExit ?? result.ExitCode;
         }
 
-        var settings = new WorkspaceSettings(directory, listen) { State = state, StateSources = sources };
-        Directory.CreateDirectory(settings.Directory);
-        var app = WorkspaceServer.Build(settings, WorkspaceServer.Certificate(settings.Directory), line => context.Error.WriteLine(line));
-        await context.Out.WriteLineAsync($"Serving on {listen} (instance {WorkspaceServer.InstanceId(settings.Directory, state)}). Pair a client with: dbdataworkspace server pair --max-role <roles> [--repo <server directory>]");
-        // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
-        await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(app, context.Cancellation);
+        try
+        {
+            await context.Out.WriteLineAsync($"Serving on {listen!.Address} (instance {WorkspaceServer.InstanceId(settings!.Directory, settings.State)}). Pair a client with: dbdataworkspace server pair --max-role <roles> [--repo <server directory>]");
+            // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
+            await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.WaitForShutdownAsync(app!, context.Cancellation);
+        }
+        finally
+        {
+            await app!.DisposeAsync();
+        }
         return CliExit.Ok;
     }
 }

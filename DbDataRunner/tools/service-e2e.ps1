@@ -3,8 +3,8 @@
 # the tasks it starts run as that account). Run from an elevated prompt, as a windows-latest runner is. Plan 28a R27.
 # Usage: pwsh service-e2e.ps1 -Exe <path to the published dbdatarunner.exe>
 # The directory the exe is in gets the install ACL (administrators and SYSTEM full, the service read and run): give it a copy, not the build output.
-# The install keeps what the directory inherits (as under Program Files, where Users may only read), and `service doctor` fails a binary directory that Users can write. A hosted runner's temp
-# folder gives Users write access, so the script does what Program Files does for a real install, right before each doctor call: cuts the inheritance and leaves Users read and run.
+# The install keeps what the directory inherits (as under Program Files, where Users may only read), and `service check` fails a binary directory that Users can write. A hosted runner's temp
+# folder gives Users write access, so the script does what Program Files does for a real install, right before each `service check`: cuts the inheritance and leaves Users read and run.
 param([Parameter(Mandatory)][string]$Exe)
 
 $ErrorActionPreference = 'Stop'
@@ -34,8 +34,8 @@ function Diagnose {
   }
 }
 
-# `health check` is the program's own client of its own address (https://localhost:8495/health/live, a self-signed certificate accepted on the loopback).
-# `service install` applies its directory specs again and puts the inheritance back, so the folder is locked down right before each doctor call, not before the install.
+# `health check` is the program's own client of its own address (https://localhost:7840/health/live, a self-signed certificate accepted on the loopback).
+# `service install` applies its directory specs again and puts the inheritance back, so the folder is locked down right before each `service check`, not before the install.
 function LockDownInstallDir {
   & icacls.exe $InstallDir /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Host
   if ($LASTEXITCODE -ne 0) { throw "icacls could not lock down $InstallDir (exit $LASTEXITCODE)." }
@@ -70,7 +70,7 @@ try {
   Run @('service', 'install')                           # again: harmless
   Run @('service', 'status')
   LockDownInstallDir
-  Run @('service', 'doctor')
+  Run @('service', 'check')
   $qc = & sc.exe qc $ServiceName | Out-String
   Write-Host $qc
   if ($qc -notmatch 'AUTO_START' -or $qc -match 'DELAYED') { throw 'The service should start automatically (not delayed).' }
@@ -80,7 +80,7 @@ try {
   WaitHealthy
   Run @('service', 'status')
   LockDownInstallDir
-  Run @('service', 'doctor')
+  Run @('service', 'check')
   Run @('service', 'restart')
   WaitHealthy
   Run @('service', 'stop')

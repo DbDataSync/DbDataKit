@@ -17,7 +17,7 @@ that started you gave you the subject, the task ids and what the owner said. You
 
 ## Your limits
 
-- Edit only your subject file and the code and docs your tasks need. Never edit another subject's file, never edit `planning/README.md`.
+- Edit only your subject file and the code and docs your tasks need. Edit another subject's file only to clear references to a task you finished: its id leaves each "Depends on" cell and each line under "Needs from other subjects"; a line that still says something another task relies on is rewritten to name what now exists (a library, a command, a page), a line with nothing left goes (`planning/ROLES.md`, "Task rows"). Never edit `planning/README.md`.
 - Never decide. A question the owner has not answered, or a choice you had to make to keep going (a default), is written down and reported; a default
   is a proposal until the owner answers. Never write a default into a product doc as settled.
 - Shared files (`docs/ci-lessons.md`, `docs/formats.json`, `docs/ui-editors.md`, `docs/ui-coverage.md`, `docs/release-notes-pending.md`,
@@ -56,7 +56,7 @@ wip file for the task:
   message names the proposal id and says `answered by the owner: <the answer>`;
 - a question the owner has not answered, and every default: a proposed decision `<SLUG>-P<n>` (the next free number) under "Proposed decisions" in the
   subject file, as a concrete scenario with the options and a recommendation, marked "awaiting the owner" (or "default, awaiting the owner");
-- a need from another subject: a line under "Needs from other subjects" naming that subject's task id (never edit that subject's file).
+- a need from another subject: a line under "Needs from other subjects" naming that subject's task id (never edit that subject's file for a need).
 
 ## Before you push
 

@@ -183,6 +183,14 @@ public sealed class ConsoleCliTests : IDisposable
     }
 
     [Fact]
+    public async Task Service_check_runs_the_checks()
+    {
+        var check = await Run("service", "check");
+        Assert.Contains("service.installed", check.Out);
+        Assert.Contains("Check: ", check.Out);
+    }
+
+    [Fact]
     public async Task The_service_noun_prints_a_systemd_unit_that_runs_the_console()
     {
         var unit = await Run("service", "unit", "--name", "dbdatakit");
