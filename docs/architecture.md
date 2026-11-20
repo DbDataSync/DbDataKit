@@ -1,4 +1,5 @@
 # Architecture of the suite
+<!-- reviewed: 2026-11-20 -->
 
 How the four services fit together, what runs where, and the changes planned. Details are in each product's README, the READMEs under
 `Shared/src/`, `docs/suite-listeners-and-auth.md` (what listens where) and `docs/install.md`.
@@ -154,23 +155,6 @@ Each service's program only runs and configures its service. Everything else is 
 - **Planned.** Screens that are still organised by service move to this layout.
 - **Planned.** Administrators can turn on settings that block chosen risky actions, such as reading production while authoring. Today every
   risky action a person has access to is allowed with a warning.
-
-## Decisions recorded after plan 13
-
-Decided by the owner after the table above was closed. The numbers are the ones the old follow-up list gave them (the plan is finished and deleted) and that source comments cite as `13c D<n>`; the details are in the README named in the last column.
-
-| # | Decision | Why | Details |
-| --- | --- | --- | --- |
-| 13c D12 | Relationships between built models are written as `foreign_keys:` on the model; semantic relationships are read from them. | One spelling for a foreign key in both formats. Whether models and semantic models become one format is a proposal (plan 19 J30). | `docs/semantic/models-and-semantic-models.md` |
-| 13c D22 | Installing a library adds `libraries/*/lib/` to the config repository's `.gitignore` (`LibraryPaths.EnsureStoreGitignored`). | The extracted packages are a local store; their DLLs must not be committed beside `library.lock`. | `DbDataSync/docs/drivers-and-libraries.md` |
-| 13c D24 | A person's external (Entra, Windows) groups count until their next sign-in through that source: no expiry, and signing out does not clear them. | The home records what the last sign-in carried; a person removed from a group at the provider loses the role at the next sign-in. A lifetime can be added if a tenant needs one. | `Shared/src/DbDataKit.Identity/README.md` |
-| 13c D25 | Entra's group overage (more than 200 groups, no `groups` claim) is left to the tenant: its administrator limits the groups with `groupMembershipClaims`; the home calls no Microsoft Graph. | Graph needs a credential and a permission of its own. Revisit if a tenant cannot limit its groups. | `Shared/src/DbDataKit.Identity/README.md` |
-| 13c D26 | An Entra sign-in links to an existing account on the token's UPN (preferred) or email, trusted (`trustEmail`); other OpenID sources link only on a verified address. | An Entra id token has no `email_verified`; a tenant that lets people set their own mail attribute must not be trusted, so it is a setting. | `Shared/src/DbDataKit.Identity/README.md` |
-| 13c D27 | Copying a connection to another server never copies a secret value: the copy names the reference the target must hold. | The console never reads a secret. | `DbDataKit/README.md` |
-| 13c D28 | Sync's `extensions.sync` keys use the shared snake_case names (`segment_order`, `test_query`, `connect_timeout_seconds`, `command_timeout_seconds`). | One spelling for the keys every product reads from a `connection/1` file. | `DbDataSync/docs/configuration.md` |
-| 13c D29 | The slow test engines' images (BigQuery emulator, sqlflite, SQL Server 2025, Spark) are pinned by digest in `testenv/docker-compose.yml`; the file says how to move one. | A moving tag can turn the nightly run red without a change of ours. | `testenv/docker-compose.yml` |
-| 13c D30 | The identity home's admin API is the management API of whatever hosts the home; the console's screens use it through its relay and the commands stay. | One admin surface per host, no screens of the home's own. | `Shared/src/DbDataKit.Identity/README.md` |
-| 13c D31 | A home that runs on its own keeps the framework key ring in its `dataprotection/` directory (a backup holds the state and that directory); the serving layer's home protects its signing keys with `KeySigningKeyProtector` and a key in its secret store. | Simple for one home; a group of homes on one shared state needs the same key everywhere. | `DbDataKit/README.md`, `Shared/src/DbDataKit.Identity/README.md` |
 
 ## Where the conventions live
 

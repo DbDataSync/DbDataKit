@@ -9,9 +9,8 @@ Every other doc and every planning subject agrees with them, and says plainly wh
 
 ## What exists today
 
-- `docs/architecture.md`: the approved sections (terms, the four services, who calls whom, what runs where, sign-in, state, screens, risky actions,
-  agents, command lines, how our code calls our code, planned changes, where the conventions live). Not yet reviewed: "Decisions" and
-  the "13c" table.
+- `docs/architecture.md`, reviewed in full (terms, the four services, who calls whom, what runs where, sign-in, state, screens, risky actions,
+  agents, command lines, how our code calls our code, planned changes, where the conventions live).
 - `docs/formats.md`: how versioned files are read, refused and written, and how upgrades work (approved by the owner).
 - `docs/security.md`: the risks the design answers (approved by the owner).
 - The writing rules: the skill `product-docs`.
