@@ -37,6 +37,7 @@ reads through it as a person (path 2). Structural tasks run only when Control st
 | TRUSTZONES-10 | Path 2 governed reads: a Work task reads through the linked Gateway as a named person (for subscriptions and catalog reads), with that person's rules | TRUSTZONES-1 | M | two subscribers with different row rules read different rows through the link; a person with no access gets none |
 | TRUSTZONES-11 | A Gateway group shown as one node with its instances on the console, and a group's data sources as the group lists them | TRUSTZONES-1 | S | Playwright: a group of two instances is one node listing both |
 | TRUSTZONES-12 | Every secret value and login has an optional expiration date: stored with the secret (the shared stores, the group stores, the console's store, connection logins), shown and edited where the secret is, warned of before it expires; a run that uses an expired login fails naming it (owner, 2026-11-15; queued) | none | M | tests on each store: an expiry round-trips; a warning is raised N days before; a task using an expired login fails naming the secret |
+| TRUSTZONES-13 | Outbound lists in each service: a shared library through which every outbound connection of our own code goes; a destination that is not on the service's list is refused before connecting, and the refusal is logged and audited with the destination and the operation. Each service's list is in its settings, with a screen to edit it (a `docs/ui-editors.md` row). The Workspace service is the first to use it (WORKSPACEISOLATION) | none | M | a test per service: a listed destination connects; an unlisted one is refused, and the audit names it and the operation |
 
 ## Needs from other subjects
 
@@ -75,6 +76,24 @@ crippled for everyone else; a setting is a hardening follow-up an administrator 
 **Open questions.** Where a setting lives (the console's installation settings, a Runner group, a channel, a project); whether it restricts to a role
 (the project's approvers, an administrator) or turns the action off; which server enforces it (the Runner, which runs the read, so a caller cannot skip
 it, and the Workspace, which hides or explains the button); how a refused person learns who may do it; and that the audit records a change of the setting.
+
+### Outbound rules applied by the operating system
+
+**What.** The install applies each service's outbound list (TRUSTZONES-13) as rules the service cannot get around: firewall rules for the service's
+account on Windows and Linux, and egress rules for its container. The rules cover programs the service starts (git, `dotnet restore`, npm), which
+TRUSTZONES-13 cannot see. The install applies them automatically, and `service check` reports when they are missing or out of date.
+
+**Why.** TRUSTZONES-13 stops our own code. Only the operating system or the container platform stops a program that ignores it. The rules are also a
+partial mitigation of supply chain attacks: a compromised package or build tool running in a service cannot send data to, or fetch code from, an
+address that is not on the list.
+
+**Open questions.**
+
+- Firewall rules match addresses, and the lists name hosts. A host such as a cloud provider's endpoint changes addresses often, so a list of addresses
+  kept by hand is not workable. Options: rules that the platform keeps in step with DNS (Windows Firewall's FQDN-based dynamic keywords, an nftables
+  set filled from DNS, a container network policy that matches DNS names), or one forward proxy that the firewall makes the only way out.
+- Which platforms come first: Windows services, Linux systemd units, containers.
+- How a list item that is a package source with mirrors and CDNs (NuGet, npm) is written.
 
 ## Shared areas touched
 
