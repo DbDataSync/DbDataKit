@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DbDataKit.Hosting.Startup\DbDataKit.Hosting.Startup.csproj" />
+    <ProjectReference Include="..\DbDataKit.Hosting.Startup.TestChild\DbDataKit.Hosting.Startup.TestChild.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>
