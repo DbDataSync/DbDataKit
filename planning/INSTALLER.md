@@ -24,7 +24,9 @@ rules are in [docs/install.md](../docs/install.md).
   progress line, the full reason, deleted after a clean start; 0600 on Linux, its account, SYSTEM and Administrators on Windows), the service's own
   logs subfolder, `SharedLogsFolder` (the shared folder's protection) and `SuiteServices` (program, Windows name and account, description, data
   folder, start order; no port sub-blocks yet).
-- The Gateway's service is registered as `dbdatagateway`; the others as `DbDataKit`, `DbDataRunner`, `DbDataWorkspace`.
+- The four servers' `service install` register `DbDataKit`, `DbDataGateway`, `DbDataRunner` and `DbDataWorkspace`, each as `NT SERVICE\<name>`, with
+  the description of `SuiteServices` (also in their systemd units); `dist.py` and `msi.py` read the names from the table (`dist/suite_services.py`),
+  and the Scoop e2e reads them back with `sc qc` and `sc qdescription` (`docs/install.md`, "Service names, accounts and descriptions").
 - Ports are fixed defaults: console 8480, identity home 8482, Workspace 8471, Runner 8495, Gateway 8815 to 8822 (`scripts/check_default_ports.py`).
 - Pairing by code, everywhere: `server pair` and `dbdatakit instance add --code` (`ConsoleCli.cs`); `dbdatarunner package pair` and `package publish --code`
   (`RunnerCli.cs`); `dbdatabuild` publish to a Runner `--code` (`CliApp.cs`); `dbdatasync package publish --to runner --code` (`PackageCommand.cs`);
@@ -42,8 +44,7 @@ rules are in [docs/install.md](../docs/install.md).
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
 | INSTALLER-1 | `doctor` becomes `service check` in the shared `ServiceCommand`, `HostingNouns` and the Gateway's `ServiceCli` and `Cli`; `service doctor` answers the sentence naming `service check` (`RemovedCommands`); a repository check fails on any command or subcommand named `doctor`; docs updated | none | S | the check's unit test fails on a command tree with a `doctor` verb and passes on the repository; the products' CLI tests call `service check`; `check_docs_commands.py` passes |
-| INSTALLER-4 | Names, accounts and descriptions from `SuiteServices`: `DbDataGateway` as `NT SERVICE\DbDataGateway`, the four exact descriptions; `dist.json` and the Scoop binding read the table | none | S | a shared test asserts the four names, accounts and descriptions; the Scoop e2e reads `sc qc` and `sc qdescription` for each |
-| INSTALLER-5 | Reproduce the workstation on CI: a leg of the Windows install test that sets `nodefaultadminowner=1` under `HKLM\SYSTEM\CurrentControlSet\Control\Lsa` (the security option "System objects: Default owner for objects created by members of the Administrators group", so an elevated administrator's objects are owned by the user as on a Windows client, not by the Administrators group as on Server) and turns real-time scanning on (`docs/ci-lessons.md` says how) before installing; run once by hand (`workflow_dispatch`) on the code before INSTALLER-6, required after it | INSTALLER-4 | S | the dispatched run on the old code shows the Gateway's `not owned by current user` and, without the setting, the same code passes (the run linked in `docs/ci-lessons.md`); if it does not reproduce, the row in `docs/ci-lessons.md` says what differs and the owner's workstation is the check by hand (domain policy and security software are not on a hosted runner) |
+| INSTALLER-5 | Reproduce the workstation on CI: a leg of the Windows install test that sets `nodefaultadminowner=1` under `HKLM\SYSTEM\CurrentControlSet\Control\Lsa` (the security option "System objects: Default owner for objects created by members of the Administrators group", so an elevated administrator's objects are owned by the user as on a Windows client, not by the Administrators group as on Server) and turns real-time scanning on (`docs/ci-lessons.md` says how) before installing; run once by hand (`workflow_dispatch`) on the code before INSTALLER-6, required after it | none | S | the dispatched run on the old code shows the Gateway's `not owned by current user` and, without the setting, the same code passes (the run linked in `docs/ci-lessons.md`); if it does not reproduce, the row in `docs/ci-lessons.md` says what differs and the owner's workstation is the check by hand (domain policy and security software are not on a hosted runner) |
 | INSTALLER-6 | Services own their data: `service install`, the MSIs and `install.ps1 -InstallService` create only the top folder with its owner and access list, and the shared `logs` folder with its protection (docs/install.md, "A service owns its data" and "Logs and the startup-failure file"); keys, certificate, state, configuration repository and `EnsureStarter` happen at first start; Linux: `install.sh --system` makes one system user per service, named as the program (`dbdatagateway`), in the group `dbdatakit`, and `/var/log/dbdatakit` owned by that group; the units run as those users and use `StateDirectory=` and `LogsDirectory=`; the Gateway's own git settings file (`<data>/git/.gitconfig`) and its `safe.directory` allow list (docs/install.md, "The Gateway's configuration repository") are removed, since the service owns `config` | INSTALLER-5 | M | the INSTALLER-5 leg passes; after the install, `logs` exists with its access list (Windows) or as `root:dbdatakit` mode `1770` (Linux) and nothing else under the data root does but the top folders; a test lists every file under each data folder after the first start and finds each owned by the service's account (Windows) or user (Linux, the server started with `sudo -u`); the Linux job runs `install.sh --system` and finds `dbdatakit`, `dbdatagateway`, `dbdatarunner` and `dbdataworkspace` as system users in the group `dbdatakit`, each unit running as its own, and a second run changes nothing; the Gateway's start writes no `git/.gitconfig` and its tests of the allow list are gone |
 | INSTALLER-7 | Admin commands through the local API (`DbDataKit.Hosting.Local`) for all four servers: `secret`, `cert`, `state`, `setup link`, `user invite` and the rest call the running service; opening the files is `--recovery`, refused while the service runs, and a file it writes is given the service's account as owner; `WindowsServiceAccounts`' accepted grants (`e0135708`, which taught the command line which service accounts a key file may grant) are then needed only in recovery | INSTALLER-6 | M | with the service running, `secret set` adds the value and no file under the data folder is owned by the administrator; a direct open while it runs is refused naming `--recovery`; recovery with the service stopped writes a file owned by the service's account; Windows leg and Linux job |
 | INSTALLER-8 | `--skip-folder-permissions-check` and `startup.skip_folder_permissions_check`: accepted everywhere, a warning at every start, a line in `service check`, the server marked on the console's posture page | INSTALLER-1 | S | tests: started as a service (detector replaced) and from a terminal it starts with the warning; without it the same folder fails the folder step naming the flag; `service check` and the posture list name the server |
@@ -177,6 +178,33 @@ indented, or `Startup-failure file: none (<path>)`, or that the file is there an
 (or `--data-dir`). The exit code stays the checks' verdict: a failure file alone does not make it 1. The other option: a failure file that holds a
 failed start is a failed check (exit 1). Recommendation: the default, because the checks look at the registration and the folders and the service
 manager already reports a failed start; INSTALLER-1 renames the verb and the printing moves with it.
+
+### INSTALLER-P15: the display name and the systemd description of each service (default, awaiting the owner)
+
+`docs/install.md` gives each Windows service its name, account and description, and no display name. Scenario: an administrator opens the Services
+console (`services.msc`) or runs `systemctl status dbdatarunner`. Built as the default: the display name is the service's name (`DbDataRunner`; it was
+`DbDataRunner server`, the Gateway's `DbDataGateway Arrow Flight SQL gateway`), and a systemd unit's `Description=` is the table's description (it was
+`DbDataRunner server`, `dbdatakit console`). Options for the display name: A, the name (built); B, a short phrase per service in the table
+(`DbDataKit runner`), a new column. Options for systemd: A, the description (built); B, the display name. Recommendation: A and A, so the one table
+gives every service manager the same words; `docs/install.md`, "Service names, accounts and descriptions", then says so, and the release note gains a line.
+
+### INSTALLER-P16: a Gateway registered by an earlier release as `dbdatagateway` (default, awaiting the owner)
+
+Windows compares service names without case and makes `NT SERVICE\<name>`'s SID from the upper-case name, so the old registration is the same service
+with the same account. Scenario: a machine upgraded with the Gateway's MSI keeps its service as `dbdatagateway`; `Get-Service` shows that spelling
+and `sc qc` the old account string and description. Built as the default: `dbdatagateway service install` updates that service in place (description,
+display name) and keeps the stored spelling; no start or `service check` message is given, since the service works; `setup single-server` re-registers
+it under the new spelling (`docs/install.md`, "Clean break", INSTALLER-19); `scoop update` of `dbdatakit-full` already does, since it registers each
+service again from the new version. Option B: `service install` deletes and creates the service when the stored spelling differs, so the spelling is
+exact after any install. Recommendation: the default; a delete and create stops a running service for a change of letter case.
+
+### INSTALLER-P17: how `dist.json` and the Scoop binding read the table (default, awaiting the owner)
+
+The table is C# and the installers are bound by Python. Scenario: someone renames a service in `SuiteServices.cs` and binds a release. Built as the
+default: `dist/suite_services.py` reads the four entries from `SuiteServices.cs` (and fails naming the file when it reads fewer than are declared);
+`dist.py` and `msi.py` take a suite product's service name from it, a suite product's `dist.json` has no `service.name`, and one that names another
+is refused naming both; the Scoop e2e reads the names, accounts and descriptions it checks from the same script. Option B: `dist.json` keeps
+`service.name`, and a test compares it with the table. Recommendation: the default, so a rename is one edit in one file.
 
 ## Shared areas touched
 
