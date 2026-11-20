@@ -91,14 +91,6 @@ console registers it with the target; option B, command lines stop publishing an
 `dbdatabuild project publish --to runner` from a laptop; under A it works after one `client join`, under B it answers "publish from the console".
 Recommendation: A, so the command lines stay usable without the Workspace.
 
-### INSTALLER-P6: the two lessons in `docs/ci-lessons.md` that name `service doctor` (default, awaiting the owner)
-
-Two rows of `docs/ci-lessons.md` describe failures seen as `service doctor`. The rule for shared files is to add entries, never to rewrite others', so
-the row that types `dbdatarunner service doctor` got the marker `retired-name-ok` (otherwise `check_docs_commands.py` fails on it as an unknown command)
-and the text is unchanged. Scenario: a reader searches the lessons for `service check` after a failure of that command and does not find these two
-rows. Option A (built): keep the rows as they are, marked. Option B: change `service doctor` to `service check` in both rows (the lessons still apply
-word for word to the renamed command). Recommendation: B, with the owner's word, since it edits entries someone else wrote.
-
 ### INSTALLER-P9: a failure file or logs subfolder another account owns (default, awaiting the owner)
 
 `docs/install.md` says a service that finds its own subfolder or failure file owned by another account writes nothing there and says so in the
