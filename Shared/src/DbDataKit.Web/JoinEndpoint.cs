@@ -24,7 +24,8 @@ public static class JoinEndpoint
     {
         app.MapPost(Path, async (HttpContext http) =>
         {
-            http.Features.Get<IHttpMaxRequestBodySizeFeature>()?.MaxRequestBodySize = MaxBody;
+            // a host whose middleware already read the body (to log it) has fixed the limit; the route then keeps the host's
+            if (http.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } limit) limit.MaxRequestBodySize = MaxBody;
             JoinRequest? request;
             try { request = await http.Request.ReadFromJsonAsync<JoinRequest>(Json, http.RequestAborted); }
             catch (Exception ex) when (ex is JsonException or BadHttpRequestException or InvalidOperationException) { return Results.Json(new { error = "the request is not valid JSON" }, Json, statusCode: 400); }
