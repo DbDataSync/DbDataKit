@@ -260,6 +260,8 @@ stopping the services stays the user's first step. What the check found, against
 
 `service check` checks a service's registration, settings and folder permissions, and prints the startup-failure file of the last start; `health check`
 asks whether a running service answers. A command that checks something is named `check`, as `cert check` and `config check` are.
+`scripts/check_docs_commands.py` fails when a tracked file (a command, a type, a test, a doc or a plan) uses the earlier name of `service check`
+again; CI runs it in `repo-checks.yml`.
 
 ## Clean break
 

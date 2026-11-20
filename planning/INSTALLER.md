@@ -91,14 +91,6 @@ console registers it with the target; option B, command lines stop publishing an
 `dbdatabuild project publish --to runner` from a laptop; under A it works after one `client join`, under B it answers "publish from the console".
 Recommendation: A, so the command lines stay usable without the Workspace.
 
-### INSTALLER-P4: where the check for commands named `doctor` lives (default, awaiting the owner)
-
-The check is a fourth check of `scripts/check_docs_commands.py` (`check_names`, with the list `NAMES_NOT_USED`), which CI already runs in `repo-checks.yml`
-and which already reads every command line's nouns and verbs from the sources. Scenario: someone adds `Forward("doctor", ...)` to a noun; the
-`check-docs-commands` job fails naming `dbdatakit service doctor` and saying to call it `check`. Option A (built): keep it there. Option B: a separate
-script `scripts/check_command_names.py`, which needs a new step in `repo-checks.yml` and a new entry in the list of checks in `CLAUDE.md` (a file only
-the owner changes). Recommendation: A; one reader of the command trees, and nothing changes in `CLAUDE.md`.
-
 ### INSTALLER-P5: the library types behind `service check` keep the name `Doctor` (default, awaiting the owner)
 
 The command, its usage, its help, its last line (`Check: OK (n warning(s)).`) and `ServiceCommandContext.ExtraChecks` (was `ExtraDoctorChecks`) say
