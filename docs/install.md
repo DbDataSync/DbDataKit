@@ -9,6 +9,8 @@ by that user, on Windows Server by the Administrators group; a service that then
 owned by current user", a key file carries an unexpected grant). If only the service ever creates its files, the owner and the grants are the same on a
 client and on Server.
 
+Every program of the suite needs the .NET 10 runtime installed on the machine; the four services need ASP.NET Core with it.
+
 ## A service owns its data
 
 The install only registers the service and creates its top folder with its access list. Everything inside (subfolders, keys, certificate, state, the

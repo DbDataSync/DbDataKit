@@ -26,6 +26,9 @@ dbdataworkspace secret set|list|delete|... [--repo <server directory>]   # the s
 dbdataworkspace health check [--url <url>]
 ```
 
+Merging a draft of a project that has a git remote pushes the draft's branch there, and the person opens the pull request where the remote is hosted;
+the Workspace gives the link. A project without a remote is merged in the Workspace, under the author's name.
+
 ## A project's two areas: Files and Designer
 
 A draft is edited in two areas, the same two for every kind of project, each with its own address and its own entries in the project's navigation:

@@ -36,6 +36,12 @@ truth; their header comments say how to dispatch them. What a release contains a
 `dbdatabuild-conformance-full.yml` runs every engine in one job nightly on `main` (skipped when nothing of Build's changed in the last day),
 on request, and as the gate inside Build's release.
 
+## Compatibility between releases
+
+The control service and each service carry a compatibility generation. They work together when their generations are equal or one apart, and
+`scripts/check_compatibility.py` checks each release against the previous one: the management API, publishing, the serving protocols and the file
+formats.
+
 ## Cutting a release
 
 **The suite release** (`suite-release.yml`) releases every product from one commit with one CalVer version. Its `guard` job picks the commit
