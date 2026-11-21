@@ -49,6 +49,8 @@ Health per module is on the host's `/health` and `/health/ready`: each of `fligh
 
 ## The public listener
 
+Every page and path by module is in [hosted-pages.md](hosted-pages.md).
+
 End users and agents reach the Gateway's HTTP modules on one HTTPS port, the public listener, which routes by path. Flight SQL and the management API keep ports of their own.
 
 | Module | Paths on the public listener |
