@@ -196,3 +196,9 @@ planning/agents-and-cloud-dev
 planning/finished-task-refs
 planning/gateway-ports-p1
 planning/recheck-open-items
+# --- group 21: the preserved uncommitted edits of a removed TRUSTZONES-13 worktree (2026-11-21), reviewed by the owner's session and dropped on the owner's word: they are an old copy of planning/TRUSTZONES.md, docs/state-logins.md and the Outbound README that would undo answered proposals, and main has everything current
+backup/trustzones-13-uncommitted
+# --- group 22: a throwaway branch pushed on 2026-11-21 to test that a session cannot delete remote branches (it cannot); it holds main's head and nothing else
+tmp/delete-test-claude
+# --- group 23: the session branch the harness started on (2026-11-21); it is at main's head and holds nothing main lacks. Deletion approved by the owner
+claude/sleepy-keller-vowppp
