@@ -69,6 +69,48 @@ setting, a Kestrel-style URL or a list of URLs (`https://0.0.0.0:8817`, `[https:
 with no alias and no version bump; an old shape fails with a message naming the file and the setting. Validation of clashes and of the 7820 to 7839 ranges reads the parsed URLs.
 Recommendation: build it in ENDPOINTS-2 together with the pinning; split out the suite-wide rename, with its test and doc changes, only if that makes ENDPOINTS-2 simpler.
 
+### ENDPOINTS-P10: the root app (awaiting the owner)
+
+Scenario: an administrator wants `https://gateway.example.com:8817/` to open the sales app, while `/store/api/v1/models` stays the store's. All binding information stays with the app instance; the server's configuration only offers host names (`apps.domain` for subdomains, the Gateway's own TLS host names). Proposal: the root app is an address of the instance, `{host: gateway.example.com, path: "/"}`, the existing `AppAddress` record. The rule that a host and path pair belongs to one instance already gives one root per name. The instance behaves as at any bound name with `path: "/"`: its pages are `/`, `/_app/...` and `/_token`, and it keeps working at `/apps/sales/`.
+
+- Module prefixes answer before the root app, so a path under a module prefix is the module's and never the app's. An instance whose name equals a module prefix (`store` and the like) is refused when it is saved.
+- Open point: the Gateway's own host names have no address kind. `subdomain` needs `apps.domain` and `custom` needs a certificate of its own. A third kind for a name the server offers (no certificate of its own; the Gateway's certificate serves it) would fill the gap. Option 1: add that kind, named by the owner. Option 2: allow `custom` without a certificate when the host is one of the Gateway's TLS host names. Recommendation: option 1, because the save check can then say which names the server offers.
+- A setting `apps.root` of the server, and a flag `root: true` on the instance, are rejected (owner).
+
+## Open designs
+
+### The layout and settings of the public listener
+
+What the owner has answered (ENDPOINTS-7 builds it): every module sits under a prefix, each prefix is set by the administrator, HTML pages are allowed under any prefix, only an app may be served at `/` (through an address of its instance, ENDPOINTS-P10), and identity's HTML pages are under `/identity`. What is not settled, and what a design has to answer before the tasks that follow:
+
+- **The setting.** Each module would take a `path` setting, with the defaults `/identity`, `/apps`, `/store`, `/views`, `/feeds`, `/mcp`:
+
+  ```yaml
+  public:
+    listen: https://0.0.0.0:8817
+  modules: [identity, apps, store, views, feeds, mcp]
+  identity: { path: /identity }
+  apps:     { path: /apps }
+  store:    { path: /store }
+  ```
+
+  The name `path` is the survey's, not the owner's. A module with a `listen` of its own has no prefix unless one is set: open, because ENDPOINTS-P9 (one `listen` setting) is not answered.
+- **Identity's paths.** Under the answer the identity home's calls move too: `/identity/invite`, `/identity/api/auth/...`, `/identity/api/invites...`, `/identity/api/users...`, `/identity/api/access-tokens`, and the discovery document at `/identity/.well-known/openid-configuration`. The issuer becomes `https://gateway:8817/identity`. Scenario: the console, an app or a script that stored the issuer `https://gateway:8817` finds a 404 at `/.well-known/openid-configuration` and must be set to the full issuer URL. A client that builds the discovery address from the host root alone cannot find the home. Open: whether the Gateway also answers the old discovery path with a redirect or a pointer to the new one for one release, or the break is clean.
+- **Health and version.** Today the public listener answers `/health/live` only; `/health`, `/health/ready` and `/version` are on the management listener. Open: whether all four stay at the root of every listener, which a load balancer in front of the public listener would need.
+- **A prefix change and apps.** `apps: { path: /a }` gives `/a/<instance>/`. The OpenID redirect URIs the module registers (`<prefix>/-/callback`, `https://<name>/apps/-/callback` for a bound name) follow it, and a bound name's rewrite target (`/apps/<instance>/<rest>`) follows it. Open: what happens to a redirect URI already registered at a home elsewhere when an administrator changes the prefix (the answer of the save lists each `redirect_uri`, as it does for an address).
+- **A reverse proxy.** A request through a reverse proxy that sets `X-Forwarded-Host` to a bound name is not claimed by the apps host on the public listener (only the `Host` header is read). APPHOSTING-4 decides it.
+- **Store, views, feeds and mcp.** The module sees the path with its prefix removed (`/store/api/v1/models` is the store's `/api/v1/models`), the same as on a port of its own. A prefix of two segments (`/data/store`) is open: nothing says it is refused.
+
+### Docs and code that disagree
+
+Found while writing `docs/hosted-pages.md`. Each is a question for a task, not a decision:
+
+- `docs/apps.md` said domain binding is not built, while the same file's section "Names bound to an instance" and the code build it. The three stale sentences were fixed in the docs; nothing else is open there.
+- `docs/formats.json` has no entry for `app-instance`, although the definition kind is stored with format 2 when the instance has addresses (format 1 otherwise; `AppInstanceStore.InstanceKind`). `scripts/check_formats.py` does not fail on it. Open: the entry (current 2, previous 1, open or frozen) and its row in `docs/ui-editors.md` (the Gateway's Apps screen edits it). Adding it is a shared-file change that touches a stored format, so it waits for the owner.
+- `primary` on an address is stored, shown and checked (at most one per instance), and no routing or redirect reads it. `docs/apps.md` says "the subpath is the primary address when none is". Open: what a primary address is for (the address the shell page redirects to, the one in the catalog's links, the one an app's `redirect_uri` lists first), or removing the field.
+- `apps instance-save` has `--name`, `--app`, `--pin`, `--title`, `--setting` and `--bind` and no address flag, so an address is set only through `PUT /api/v1/app-instances/{name}` or the Apps screen. Open: whether the command takes `--address host[,path]`.
+- The apps module answers every unmatched path with a plain-text hint ("An app is at /apps/<instance>/"). With a root app (ENDPOINTS-P10) an instance address with path `/` makes `/` the app's, so the hint is answered only under the module's prefix, where a path that is no instance keeps it.
+
 ## Shared areas touched
 
 - `DbDataGateway.Server` hosting, `DbDataKit.Serving.*` module registration, `DbDataKit.Identity` (issuer and redirect URIs), `DbDataKit.Apps.*` (addresses).
