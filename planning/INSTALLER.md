@@ -288,7 +288,8 @@ use it, so its port should not depend on what else was running at its first star
 
 Scenario: `docker compose -f dist/compose/quickstart.yml up` after this release. Built as the default: the console's image still runs
 `--listen https://0.0.0.0:8480` and the compose files publish 8480 and 8815, because a configured port is never moved and the Gateway's ports have
-not moved yet; `docs/quickstart.md` is unchanged. Option B: move the image and the compose files to 7800 now. Recommendation: move the image, the
+not moved yet; `docs/quickstart.md` is unchanged. The image's health check names the same port (`health check --url https://localhost:8480/health/live`),
+because a bare `health check` asks the console's default address, 7800 (INSTALLER-P29). Option B: move the image and the compose files to 7800 now. Recommendation: move the image, the
 compose files and the quickstart together with the Gateway's listeners (INSTALLER-10), so a compose user changes their ports once.
 
 ### INSTALLER-P29: `health check` asks the default address (default, awaiting the owner)

@@ -106,7 +106,7 @@ range 49152 to 65535) and common developer ports. Each service has a sub-block: 
 Runner 7840 to 7859 (default 7840), the Workspace 7860 to 7879 (default 7860); 7880 to 7899 are spare. With no port configured, a service takes a free
 port of its sub-block at first start and pins it in its own settings. Windows' excluded port ranges (Hyper-V and WinNAT reserve ranges that move at boot)
 are still skipped, because a machine whose dynamic range was lowered can reserve inside any range; when the whole sub-block is excluded the service fails
-and the failure file names the ranges. A configured port (Docker Compose, for example) is never moved. A free port is found by binding it: a port in an excluded range refuses with WSAEACCES and is skipped like a taken one. The identity home, when it runs on its own, keeps a port in the console's sub-block. The service reports its address to the console
+and the failure file names the ranges. A configured port (Docker Compose, for example) is never moved. A free port is found by binding it, which skips a port another program holds. The service reads the excluded ranges from Windows at each start, because Windows can let a loopback listener bind inside an excluded range. The identity home, when it runs on its own, keeps a port in the console's sub-block. The service reports its address to the console
 when it joins.
 
 Where the console, the Runner and the Workspace take their port from, at each start:
