@@ -420,6 +420,7 @@ def bind_sh(template, meta, repo):
         f"NOTES={_sh(meta.get('notes', ''))}",
         f"ANNOUNCES={'1' if meta.get('announces') else '0'}",
         f"EXPORT_COMPONENT={'1' if meta.get('exportComponent') else '0'}",
+        f"SERVICE={'1' if meta.get('service') else '0'}",
     ])
     return _replace_block(template, BEGIN, body)
 

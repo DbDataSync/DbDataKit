@@ -9,8 +9,8 @@ namespace DbDataKit.Hosting.Startup;
 /// <summary>
 /// The folder step's check of a server's data folder, and the switch that skips it. The check accepts a folder only when nobody but the service's
 /// account and the machine's administrators can change it: on Linux and macOS the service's account owns it and other accounts cannot write to it; on
-/// Windows its access list lets no broad group (Everyone, Users, Authenticated Users, Anonymous, Guests, Interactive) write to it. Windows does not check
-/// the owner yet: an elevated install still makes the folder, so a workstation install leaves it owned by the administrator who ran it.
+/// Windows it is owned by the service's account, the Administrators group, SYSTEM or TrustedInstaller (the install gives it the Administrators group), and
+/// its access list lets no broad group (Everyone, Users, Authenticated Users, Anonymous, Guests, Interactive) write to it.
 /// <para>
 /// The switch is <c>--skip-folder-permissions-check</c> on <c>server run</c> (and on <c>service install</c>, which puts it on the registered command line)
 /// or <c>startup.skip_folder_permissions_check: true</c> in the server's settings file. A server started with it uses its folder as it is and says so at
@@ -74,18 +74,29 @@ public static class FolderPermissions
     // delete children, write attributes, delete, change permissions, take ownership, and the generic write and all bits of rules written as raw masks.
     private const int WriteRights = 0x2 | 0x4 | 0x10 | 0x40 | 0x100 | 0x10000 | 0x40000 | 0x80000 | 0x40000000 | 0x10000000;
 
+    // The owners a folder of a service may have besides the service's own account: Administrators (what the install gives it), SYSTEM (an installer
+    // that runs as SYSTEM) and TrustedInstaller. Any other owner (the administrator who made the folder on a Windows client) can change its access list.
+    private static readonly string[] MachineOwners = ["S-1-5-32-544", "S-1-5-18", "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464"];
+
     [SupportedOSPlatform("windows")]
     private static List<string> WindowsProblems(string folder)
     {
         AuthorizationRuleCollection rules;
+        SecurityIdentifier? owner;
         try
         {
-            rules = new DirectoryInfo(folder).GetAccessControl(AccessControlSections.Access).GetAccessRules(true, true, typeof(SecurityIdentifier));
+            var security = new DirectoryInfo(folder).GetAccessControl(AccessControlSections.Access | AccessControlSections.Owner);
+            rules = security.GetAccessRules(true, true, typeof(SecurityIdentifier));
+            owner = security.GetOwner(typeof(SecurityIdentifier)) as SecurityIdentifier;
         }
         catch (Exception e) when (e is UnauthorizedAccessException or IOException or InvalidOperationException or PrivilegeNotHeldException)
         {
             return [];
         }
+
+        var problems = new List<string>();
+        if (owner is not null && !MachineOwners.Contains(owner.Value, StringComparer.OrdinalIgnoreCase) && owner != WindowsIdentity.GetCurrent().User)
+            problems.Add("Its owner is neither the service's account nor the Administrators group, so that account can change who may use the folder.");
 
         var writers = new List<string>();
         foreach (FileSystemAccessRule rule in rules)
@@ -98,9 +109,9 @@ public static class FolderPermissions
                 if (string.Equals(sid, broad, StringComparison.OrdinalIgnoreCase) && !writers.Contains(name)) writers.Add(name);
         }
 
-        return writers.Count == 0
-            ? []
-            : [$"Its access list lets {string.Join(" and ", writers)} write to it, so any account of the machine can change what the service keeps there."];
+        if (writers.Count > 0)
+            problems.Add($"Its access list lets {string.Join(" and ", writers)} write to it, so any account of the machine can change what the service keeps there.");
+        return problems;
     }
 
     /// <summary>

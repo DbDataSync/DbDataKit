@@ -50,6 +50,12 @@ public sealed class SystemdUnitOptions
 
     public IReadOnlyList<string> LogsDirectories { get; init; } = [];
 
+    /// <summary>The mode systemd gives the state directories (<c>StateDirectoryMode=</c>, octal such as <c>0700</c>); null keeps systemd's default, 0755.</summary>
+    public string? StateDirectoryMode { get; init; }
+
+    /// <summary>The mode systemd gives the logs directories (<c>LogsDirectoryMode=</c>, octal such as <c>0700</c>); null keeps systemd's default, 0755.</summary>
+    public string? LogsDirectoryMode { get; init; }
+
     /// <summary>Extra absolute paths the service may write (ProtectSystem=strict makes the rest read-only).</summary>
     public IReadOnlyList<string> ReadWritePaths { get; init; } = [];
 
@@ -130,8 +136,10 @@ public static class SystemdUnitGenerator
         }
 
         Opt("StateDirectory", o.StateDirectories);
+        if (o.StateDirectories.Count > 0 && o.StateDirectoryMode is { } stateMode) Kv("StateDirectoryMode", stateMode);
         Opt("ConfigurationDirectory", o.ConfigurationDirectories);
         Opt("LogsDirectory", o.LogsDirectories);
+        if (o.LogsDirectories.Count > 0 && o.LogsDirectoryMode is { } logsMode) Kv("LogsDirectoryMode", logsMode);
         foreach (var (id, path) in o.LoadCredentials.OrderBy(k => k.Key, StringComparer.Ordinal))
         {
             Kv("LoadCredential", $"{id}:{path}");
@@ -217,6 +225,10 @@ public static class SystemdUnitGenerator
         }
 
         if (o.WatchdogSec is { } w && w <= TimeSpan.Zero) throw new ArgumentException("WatchdogSec must be positive.");
+        foreach (var mode in new[] { o.StateDirectoryMode, o.LogsDirectoryMode })
+        {
+            if (mode is not null && (mode.Length is < 3 or > 4 || mode.Any(c => c is < '0' or > '7'))) throw new ArgumentException($"'{mode}' is not an octal mode such as 0700.");
+        }
     }
 
     /// <summary>Unit files are line-based; a newline in any value would inject directives.</summary>

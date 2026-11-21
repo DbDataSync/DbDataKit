@@ -24,9 +24,6 @@ public sealed class ServiceCliEnvironment
     /// <summary>Data directory when <c>--data-dir</c> is not given (from the settings files and DBDATAKIT_ variables).</summary>
     public required Func<string> DefaultDataDirectory { get; init; }
 
-    /// <summary>Writes the starter settings file into the data directory after an install when it has none; null does nothing (tests).</summary>
-    public Action<string>? EnsureSettingsFile { get; init; }
-
     public bool IsWindows { get; init; } = OperatingSystem.IsWindows();
 
     /// <summary>Asks the user for a password (hidden input); null when there is no terminal to ask on.</summary>
@@ -45,7 +42,6 @@ public sealed class ServiceCliEnvironment
         Console = console ?? new SystemConsole(),
         BinaryPath = Environment.ProcessPath ?? "",
         DefaultDataDirectory = () => GatewayHost.ResolveDataDirectory(GatewayConfiguration.LoadOptions()),
-        EnsureSettingsFile = dataDirectory => GatewayConfigFile.EnsureStarter(dataDirectory),
         PromptPassword = System.Console.IsInputRedirected ? null : ConsolePrompt.ReadHidden,
     };
 }
@@ -166,8 +162,8 @@ public static class ServiceCli
 
         if (rc == 0 && verb == "install" && !forwarded.Contains("--dry-run"))
         {
-            env.EnsureSettingsFile?.Invoke(dataDirectory);
-            console.Out.WriteLine($"Settings: {GatewayConfigFile.PathIn(dataDirectory)} (config.example/ beside {env.BinaryPath} shows every option). Then run: dbdatagateway service start --name {name}");
+            // the install makes only the data folder; the service writes its settings file there at its first start, as its own account
+            console.Out.WriteLine($"Settings: {GatewayConfigFile.PathIn(dataDirectory)}, written by the service at its first start (config.example/ beside {env.BinaryPath} shows every option). Then run: dbdatagateway service start --name {name}");
             console.Out.WriteLine("Open the listening port in the Windows firewall if clients connect from other machines.");
         }
 
@@ -187,7 +183,9 @@ public static class ServiceCli
         [
             new LayoutEntry(LayoutRole.InstallRoot, installDirectory, new AclSpec(false, [admin, system, Svc(AccessRights.ReadExecute)]),
                 "Binaries; the service can read and run them but not change them."),
-            new LayoutEntry(LayoutRole.Data, dataDirectory, new AclSpec(true, [admin, system, Svc(AccessRights.Modify)]),
+            // the install makes only this folder, owned by the Administrators group; the service creates everything inside it at its first start
+            // Design: docs/install.md#a-service-owns-its-data
+            new LayoutEntry(LayoutRole.Data, dataDirectory, new AclSpec(true, [admin, system, Svc(AccessRights.Modify)], LayoutPrincipal.Administrators),
                 "Settings (config/), the generated TLS certificate and its protected password; Users have no access."),
         ]);
 
@@ -238,8 +236,16 @@ public static class ServiceCli
             Description = SuiteServices.Gateway.Description,
             ExecStart = executable + " server run",
             WorkingDirectory = executable[..executable.LastIndexOf((char)47)], // a Unix path whatever OS generates it
-            // DynamicUser: no account to manage; the state directory /var/lib/dbdatakit/gateway is created and owned by systemd.
+            // the system user install.sh --system makes, in the group dbdatakit; systemd makes /var/lib/dbdatakit/gateway and /var/log/dbdatakit/dbdatagateway for
+            // it at each start, owned by that user and closed to every other one, so the service creates everything inside them as itself
+            // Design: docs/install.md#a-service-owns-its-data
+            DynamicUser = false,
+            User = SuiteServices.Gateway.LinuxUser,
+            Group = SuiteServices.LinuxGroup,
             StateDirectories = [$"dbdatakit/{folder}"],
+            StateDirectoryMode = "0700",
+            LogsDirectories = [$"dbdatakit/{SuiteServices.Gateway.LogFolder}"],
+            LogsDirectoryMode = "0700",
             Environment = new Dictionary<string, string> { [DbDataKit.State.SuiteEnvironment.FolderVariable("gateway")] = $"/var/lib/dbdatakit/{folder}" },
         };
     }

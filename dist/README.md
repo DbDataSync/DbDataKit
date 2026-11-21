@@ -101,7 +101,7 @@ file the product lists as `preserve` (none today: DbDataGateway keeps its settin
 | a specific version | `-Version 2026.10.19.1200` | `--version 2026.10.19.1200` |
 | allow a prerelease as "latest" | `-IncludePrerelease` | `--prerelease` |
 | show what would happen | `-DryRun` | `--dry-run` |
-| install for all users | `-Machine` (elevated) | `--system` (root) |
+| install for all users | `-Machine` (elevated) | `--system` (root); for a service it also makes the system user the service runs as (named as the program, in the group `dbdatakit`) and writes `/etc/systemd/system/<product>.service`, which runs as that user |
 | install directory | `-InstallDir` | `--install-dir` |
 | leave PATH alone | `-NoPath` | `--no-link` |
 | register the Windows service | `-InstallService` | n/a (the unit is printed by `<program> service unit`) |
@@ -180,7 +180,7 @@ That is all: when it returns, every member's service is registered, running and 
 Where products are installed one by one on separate machines, nobody types a pairing code: give each server the console's private announce address and an administrator confirms it. (The single-server case of Console, Gateway and Runner is `docs/suite-single-server-install.md`: the one Scoop command, or the same steps by hand with the commands the install script runs, which pair with codes and need no announce port.)
 
 1. Console: `dbdatakit server run --announce-listen http://<console address>:8481` (its private port; keep it on the network the servers share).
-2. Each server: install with the address, `msiexec /i dbdatagateway-v<version>-win-x64.msi ANNOUNCEURL=http://<console address>:8481 /qn` (the MSI sets the machine variable `DBDATAKIT_ANNOUNCE_URL` before it registers the service and refuses an address that is not http or https), or `install.ps1 -AnnounceUrl ...`, or on Linux `sudo install.sh --system --announce-url ...`, which writes the systemd drop-in `<product>.service.d/announce.conf` (`Environment="DBDATAKIT_ANNOUNCE_URL=..."`, a drop-in is read whether or not the unit exists yet, so write the unit with `<program> service unit` before or after) and reloads systemd; without `--system` it only prints the `Environment=` line.
+2. Each server: install with the address, `msiexec /i dbdatagateway-v<version>-win-x64.msi ANNOUNCEURL=http://<console address>:8481 /qn` (the MSI sets the machine variable `DBDATAKIT_ANNOUNCE_URL` before it registers the service and refuses an address that is not http or https), or `install.ps1 -AnnounceUrl ...`, or on Linux `sudo install.sh --system --announce-url ...`, which writes the systemd drop-in `<product>.service.d/announce.conf` (`Environment="DBDATAKIT_ANNOUNCE_URL=..."`, a drop-in is read whether or not the unit exists yet; `--system` also writes the unit) and reloads systemd; without `--system` it only prints the `Environment=` line.
 3. Administrator: `dbdatakit instance pending`, then `dbdatakit instance confirm <id or name>` (or the console's screen). A server that announces is **not** paired and not trusted until then; the announcement is never a confirmation. A removal leaves the variable in place, as it leaves the data folders (another product on the machine reads it).
 
 ## Adding or changing a product

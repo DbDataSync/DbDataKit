@@ -61,7 +61,7 @@ function Services {
   foreach ($m in $members) {
     $meta = Get-Content (Join-Path $repoRoot $m.meta) -Raw | ConvertFrom-Json
     $entry = $table | Where-Object { $_.program -eq $m.product }
-    if ($meta.service -and $entry) { [pscustomobject]@{ Product = $m.product; Name = $entry.windowsName; Account = $entry.account; DisplayName = $entry.displayName; Description = $entry.description } }
+    if ($meta.service -and $entry) { [pscustomobject]@{ Product = $m.product; Name = $entry.windowsName; Account = $entry.account; DisplayName = $entry.displayName; Description = $entry.description; DataFolder = $entry.dataFolder } }
   }
 }
 # Each service as the service manager has it: the exact name, the display name and account (`sc qc`) and the description (`sc qdescription`), all as the table says
@@ -279,6 +279,50 @@ try {
   Native 'other-route-uninstall' { scoop uninstall -g dbdatakit-full } | Out-Null
   Native 'other-route-unregister' { & $otherExe service uninstall } | Out-Null
   Assert (-not (ServiceExists 'DbDataRunner')) 'the other route''s service is removed again'
+
+  Heading 'Each service creates and owns its data: the install makes only its top folder'
+  # each member registered from its own zip, as the MSI and install.ps1 -InstallService do (`service install`), and started once, before any administrator's
+  # command writes in its folder (docs/install.md, "A service owns its data")
+  $own = Join-Path $Work 'own'
+  Remove-Item -LiteralPath $data -Recurse -Force -ErrorAction SilentlyContinue
+  foreach ($s in Services) {
+    $to = Join-Path $own $s.Product
+    New-Item -ItemType Directory -Force $to | Out-Null
+    Expand-Archive (Join-Path $serve "$($s.Product)\v$Version\$($s.Product)-v$Version-win-x64.zip") $to -Force
+    $r = Native "own-register-$($s.Product)" { & (Join-Path $to "$($s.Product).exe") service install }
+    Assert ($r.Code -eq 0) "$($s.Product) service install succeeds"
+  }
+  $tops = @(Get-ChildItem -LiteralPath $data -Force)
+  Assert ($tops.Count -eq @(Services).Count) "after the install the data root holds one top folder per service and nothing else (found: $(($tops | ForEach-Object Name) -join ', '))"
+  foreach ($top in $tops) {
+    Assert ($top.PSIsContainer -and @(Get-ChildItem -LiteralPath $top.FullName -Force).Count -eq 0) "after the install $($top.Name) is an empty top folder"
+    $owner = (Get-Acl -LiteralPath $top.FullName).Owner
+    Assert ($owner -eq 'BUILTIN\Administrators') "the install gives $($top.Name) the Administrators group as owner (found $owner)"
+  }
+  Assert (-not (Test-Path (Join-Path $data 'logs'))) 'the install makes no logs folder'
+  foreach ($s in Services) {
+    Start-Service -Name $s.Name
+    (Get-Service -Name $s.Name).WaitForStatus('Running', '00:01:00')
+    $healthy = $false
+    for ($i = 0; $i -lt 60 -and -not $healthy; $i++) { if ((Native "own-health-$($s.Product)" { & (Join-Path (Join-Path $own $s.Product) "$($s.Product).exe") health check }).Code -eq 0) { $healthy = $true } else { Start-Sleep -Seconds 2 } }
+    Assert $healthy "$($s.Product) started on the folder the install made and answers its health check"
+  }
+  $logs = Join-Path $data 'logs'
+  $logsAcl = Get-Acl -LiteralPath $logs
+  Assert ($logsAcl.AreAccessRulesProtected -and @($logsAcl.Access | Where-Object { $_.IdentityReference -eq 'CREATOR OWNER' }).Count -gt 0) 'the first service to start made logs with its access list (inheritance cut, CREATOR OWNER)'
+  ReportOwners 'after each service''s first start'
+  foreach ($s in Services) {
+    $folder = Join-Path $data $s.DataFolder
+    $made = @(Get-ChildItem -LiteralPath $folder -Recurse -Force) + @(Get-ChildItem -LiteralPath (Join-Path $logs $s.Product) -Recurse -Force -ErrorAction SilentlyContinue) + @(Get-Item -LiteralPath (Join-Path $logs $s.Product) -Force -ErrorAction SilentlyContinue)
+    Assert ($made.Count -gt 0) "$($s.Product) made its data in $folder"
+    $others = @($made | Where-Object { (Get-Acl -LiteralPath $_.FullName).Owner -ne $s.Account } | ForEach-Object { "$($_.FullName) ($((Get-Acl -LiteralPath $_.FullName).Owner))" })
+    Assert ($others.Count -eq 0) "every file $($s.Product) made is owned by $($s.Account) ($($made.Count) entries); not: $($others -join ', ')"
+  }
+  foreach ($s in @(Services)[-1..-4]) {
+    Native "own-unregister-$($s.Product)" { & (Join-Path (Join-Path $own $s.Product) "$($s.Product).exe") service uninstall } | Out-Null
+    Assert (-not (ServiceExists $s.Name)) "$($s.Name) is removed again"
+  }
+  Remove-Item -LiteralPath $data -Recurse -Force
 
   Heading 'The global install registers, starts and pairs every member'
   $install = Native 'install' { scoop install -g $manifest }

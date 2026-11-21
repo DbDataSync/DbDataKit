@@ -465,13 +465,27 @@ class SuiteInstallTestPlumbingTests(unittest.TestCase):
 
     def test_a_leg_installs_with_a_windows_clients_owner(self):
         text = (REPO_ROOT / ".github" / "workflows" / "suite-release.yml").read_text(encoding="utf-8")
-        job = text[text.index("  suite-install-windows:"):]
-        self.assertIn('"workstation"', job)
+        job = text[text.index("  suite-install-windows:"):text.index("  suite-install-linux:")]
+        self.assertIn("owner: [server, workstation]", job)   # both legs run in every dry run
         self.assertIn("-WorkstationOwner:", job)
         script = (DIST / "tests" / "suite-scoop-e2e.ps1").read_text(encoding="utf-8")
         self.assertIn("nodefaultadminowner", script)
         self.assertIn("HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa", script)
         self.assertIn("[DefaultOwner]::SetToCurrentUser()", script)
+
+    def test_the_linux_job_installs_the_services_with_install_sh_on_systemd(self):
+        text = (REPO_ROOT / ".github" / "workflows" / "suite-release.yml").read_text(encoding="utf-8")
+        job = text[text.index("  suite-install-linux:"):]
+        self.assertIn("needs: [guard, verify]", job)
+        self.assertIn("inputs.dry_run", job)
+        self.assertIn("ubuntu-latest", job)
+        self.assertIn("suite-systemd-e2e.sh", job)
+        script = DIST / "tests" / "suite-systemd-e2e.sh"
+        r = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        text = script.read_text(encoding="utf-8")
+        for word in ("install.sh\" --system", "is up to date", "! -user", "startup-failure-dbdatarunner.txt", "fake_releases.py"):
+            self.assertIn(word, text)
 
     def test_the_script_parses_in_powershell(self):
         if not PWSH:

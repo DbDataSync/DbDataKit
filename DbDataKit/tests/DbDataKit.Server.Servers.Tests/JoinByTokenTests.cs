@@ -136,7 +136,7 @@ public sealed class JoinByTokenTests
             Assert.True(exited == 1, $"the second Runner exited {exited}:\n{second.Output}");
             Assert.Contains("join step", second.Output);
             Assert.Contains("already used", second.Output);
-            var failure = File.ReadAllText(Path.Combine(secondDirectory, "logs", "startup-failure-dbdatarunner.txt"));
+            var failure = File.ReadAllText(DbDataKit.Hosting.Startup.SuiteServices.Runner.FailureFileIn(Path.Combine(secondDirectory, "logs")));
             Assert.Contains("The join token was already used", failure);
             Assert.True(File.Exists(Path.Combine(secondDirectory, JoinRequestFile.FileName)));
             Assert.Equal(3, registry.All().Count);

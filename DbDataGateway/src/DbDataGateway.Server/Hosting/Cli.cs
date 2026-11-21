@@ -146,6 +146,9 @@ public static class Cli
                 // earlier releases wrote the reason of a failed start to this file in the data folder; it describes no start of this one
                 try { File.Delete(Path.Combine(dataDirectory, "start-failure.txt")); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+                // the first start of a service writes its starter settings file, as the service's own account (the install makes only the data folder)
+                // Design: docs/install.md#a-service-owns-its-data
+                if (!Directory.Exists(GatewayConfigFile.DirectoryIn(dataDirectory))) GatewayConfigFile.EnsureStarter(dataDirectory);
                 // reads the settings of the data folder (config/server.yaml), validates them and builds the server
                 app = GatewayHost.Build(hostArgs);
             })
