@@ -35,7 +35,7 @@ Settings that already name a schema, a prefix, a file or a registry are kept as 
 
 ## Granting
 
-An administrator creates the login (its password is never printed or made by the suite), then runs the statements `state grants` prints:
+By default an administrator creates the login (its password is never printed or made by the suite), then runs the statements `state grants` prints:
 
 ```
 $ dbdatarunner state grants
@@ -52,7 +52,7 @@ GRANT USAGE ON SCHEMA dbdatakit_runner_main_runs TO dbdatakit_runner_main;
 
 ## Limits
 
-- The login is created by the administrator. A login that is not the default name works the same way: the schemas still start with the default name.
+- By default the login is created by the administrator. A login that is not the default name works the same way: the schemas still start with the default name.
 - The topology `group` (one database for one group) keeps the built-in schema names. The database is the boundary there, and the login is granted that database's schemas.
 - A service whose settings already hold data in other schemas keeps them: `state init` refuses to move them and points to `state move`.
 - The console's one query over every service's runs, audit and notifications reads a shared registry. With a registry per login it finds only its own modules, so the console reads another service's runs through that service's API.
