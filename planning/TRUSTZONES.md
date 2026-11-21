@@ -60,10 +60,6 @@ by TRUSTZONES-3 and checked under B. Recommendation: A, because a structural tas
 The console signs a link credential per pair of groups, scoped to the three paths, rotated with the group keys. Scenario: a Gateway instance is stolen;
 revoking its group key also revokes its link. Recommendation: accept.
 
-### TRUSTZONES-P8: a service behind an HTTP proxy lists the proxy (default, awaiting the owner)
-
-The gate checks the address a connection is opened to. Scenario: a service reaches `https://api.nuget.org` through the proxy `proxy.corp:3128`; the list holds `tcp://proxy.corp:3128`, and the library cannot tell which site the proxy fetches, so the list no longer limits the site. Option B: the handler checks the request's own address first and the proxy second, so the list holds `https://api.nuget.org` and the proxy. Recommendation: B when a proxy is set; the default today is A because the handler does not read the proxy settings, and the change is small.
-
 ## Open designs
 
 Not scheduled. Each becomes tasks only when the owner schedules it.
@@ -129,6 +125,19 @@ network access to a service's database (SQL Server Express, a private container 
 **Open questions.** Where the option is switched on (the console's state settings, per service); how the grant is made (`state grants` for the console's
 login, limited to those three modules); how the console falls back to the API when the database is unreachable; and a test on SQL Server and PostgreSQL that the grant is
 read-only and limited to those modules, which is the "Done when" of a task made when the owner schedules this.
+
+### The outbound list behind an HTTP proxy
+
+**What.** How the outbound list (`DbDataKit.Outbound`) behaves when a service sends its traffic through an HTTP proxy. Nothing about proxies is built: the
+gate's HTTP handler checks the address each connection is opened to and does not read the proxy settings, so behind a proxy it sees only the proxy.
+
+**Why.** A service that reaches `https://api.nuget.org` through `proxy.corp:3128` can list the proxy (`tcp://proxy.corp:3128`), but then the list no longer
+limits which sites the proxy fetches. The alternative is for the handler to read the proxy settings and check the request's own address first and the
+proxy second, so the list holds `https://api.nuget.org` and the proxy.
+
+**Open questions.** Whether the handler should read the proxy settings at all, and from where (the service's settings, the environment, the system);
+whether a proxy changes what an entry means; and how this meets the operating-system rules of the design above, one of which is a forward proxy that is the
+only way out.
 
 ## Shared areas touched
 
