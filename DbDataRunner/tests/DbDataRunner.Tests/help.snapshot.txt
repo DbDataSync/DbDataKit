@@ -121,7 +121,7 @@ Verbs:
       Show the effective engine, the connection (secrets masked), where each module's tables are, each module's version in the registry and what is pending; read-only, creates and migrates nothing [Target read-only]
   state test [--engine mssql|postgres] [--repo <server directory>]
       Connect, read the registry, check the rights and the engine version, and look for a schema clash and for migrations this login may not apply; stops at the first failure with the fix [Target read-only]
-  state grants --login <database role or user> [--migrate] [--engine mssql|postgres] [--repo <server directory>]
+  state grants [--login <database role or user>] [--group <name>] [--migrate] [--engine mssql|postgres] [--repo <server directory>]
       Print the GRANT statements a login needs for the runner's modules (the login it runs as, or with --migrate the one that upgrades the database); run them as a database administrator [Offline only]
   state init --topology service|group|install [--engine mssql|postgres --connection <connection with Password=secret:NAME or env:NAME>] [--login <role or user> [--migrate]] [--admin-connection <reference> --apply] [--group <name>] [--settings <file>] [--repo <server directory>]
       Put the state in one of the three places: a SQLite file per service, one database per group, or one for the whole install; writes the settings, and for a database prints (or with --apply creates) the schemas and the service's rights, then runs 'state test' [Target writes (DDL and/or data, as the plan states)]
