@@ -192,3 +192,6 @@ planning/sync-first-slice
 claude/brave-lamport-wj34se
 # --- group 19: planning/agents-and-cloud-dev (2026-11-20), pushed to main as a planning, documentation and tooling change on the owner's word; every commit is on main
 planning/agents-and-cloud-dev
+# --- group 20: the INSTALLER session (2026-11-20): planning/finished-task-refs (10817e9) was merged into main through work/installer (#451) and planning/gateway-ports-p1 (42ea6a4) through work/endpoints (#452); every commit of both is on main
+planning/finished-task-refs
+planning/gateway-ports-p1
