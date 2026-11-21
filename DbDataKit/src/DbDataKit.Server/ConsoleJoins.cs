@@ -12,7 +12,8 @@ namespace DbDataKit.Server;
 /// </summary>
 /// <param name="keys">The key the console signs with; needed to answer a join, not to make a token.</param>
 /// <param name="registry">Where a joined server is recorded; needed to answer a join, not to make a token.</param>
-public sealed class ConsoleJoins(StateDatabase state, ConsoleKeyStore? keys = null, InstanceRegistry? registry = null, TimeProvider? clock = null)
+/// <param name="certificateFingerprint">The fingerprint of the certificate the console presents; needed to make the command of a token (<see cref="Invite"/>).</param>
+public sealed class ConsoleJoins(StateDatabase state, ConsoleKeyStore? keys = null, InstanceRegistry? registry = null, TimeProvider? clock = null, string? certificateFingerprint = null)
 {
     /// <summary>The products a token can be made for, as <c>setup invite</c> names them, and the program each runs <c>pair</c> with.</summary>
     public static readonly IReadOnlyDictionary<string, string> Products = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -23,6 +24,9 @@ public sealed class ConsoleJoins(StateDatabase state, ConsoleKeyStore? keys = nu
     };
 
     public const string InviteVerb = "server.invite";
+
+    /// <summary>The audit verb of a token a person cancelled before it was used.</summary>
+    public const string CancelVerb = "server.invite.cancel";
 
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
@@ -41,6 +45,40 @@ public sealed class ConsoleJoins(StateDatabase state, ConsoleKeyStore? keys = nu
                 ["product"] = scope.Product, ["ceiling"] = ServerRoles.Names(scope.Ceiling), ["group"] = scope.Group, ["expires"] = minted.Record.ExpiresAt.UtcDateTime.ToString("O"),
             })));
         return minted;
+    }
+
+    /// <summary>
+    /// Makes a token and the command that spends it, for a server that reaches the console at <paramref name="address"/>: what the Add a server screen
+    /// shows once. The token is audited as <see cref="Mint"/> does; the command is not kept anywhere.
+    /// </summary>
+    public (MintedJoinToken Minted, string Command) Invite(JoinScope scope, Uri address, string madeBy, string? madeByName, TimeSpan? lifetime = null)
+    {
+        var fingerprint = certificateFingerprint ?? throw new InvalidOperationException("This console's joins were opened without its certificate.");
+        var minted = Mint(scope, madeBy, madeByName, lifetime);
+        return (minted, Command(scope.Product, address, minted.Token, fingerprint));
+    }
+
+    /// <summary>The tokens still waiting to be used, oldest first: what the Add a server screen lists (never a token's value or verifier).</summary>
+    public IReadOnlyList<JoinTokenRecord> Waiting() =>
+        [.. Tokens.All().Where(t => t.StateAt(_clock.GetUtcNow()) == JoinTokenState.Waiting)];
+
+    /// <summary>
+    /// Ends a waiting token, so the command made with it no longer joins anything, and audits who cancelled it. Returns the token as it is now, or null
+    /// when there is no token with this id; a token that is no longer waiting (spent, expired, cancelled) is returned unchanged and nothing is audited.
+    /// </summary>
+    public JoinTokenRecord? Cancel(string id, string cancelledBy, string actorKind = "person")
+    {
+        var now = _clock.GetUtcNow();
+        var cancelled = false;
+        var kept = Tokens.Update(id, current =>
+        {
+            cancelled = current.StateAt(now) == JoinTokenState.Waiting;
+            return cancelled ? current with { CancelledAt = now } : current;
+        });
+        if (kept is not null && cancelled)
+            new AuditLog(state, ConsoleState.ServiceId).Record(new AuditEvent(actorKind, cancelledBy, CancelVerb, AuditEvent.Ok, TargetKind: "join-token", TargetId: id,
+                Detail: JsonSerializer.Serialize(new Dictionary<string, object?> { ["product"] = kept.Product, ["made_by"] = kept.MadeByName ?? kept.MadeBy })));
+        return kept;
     }
 
     /// <summary>The command a person runs on the server's machine: <c>dbdatarunner pair --host https://console:7800 --token ... --console-thumbprint sha256:...</c>.</summary>
