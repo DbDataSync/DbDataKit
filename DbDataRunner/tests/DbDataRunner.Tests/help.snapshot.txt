@@ -3,6 +3,7 @@ Usage: dbdatarunner <noun> <verb> [options]
 
 Commands:
   server   The long-running process
+  pair     Join the console that printed this command: writes the join request into the data folder and restarts the service, which joins at its start
   runs     The run history of the tasks
   tasks    The scheduled tasks of the installed packages
   label    Labels on the runners of the group: an administrator's labels route tasks that require them; reported capabilities are labels too, read-only

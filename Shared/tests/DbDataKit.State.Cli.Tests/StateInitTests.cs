@@ -220,6 +220,7 @@ public sealed class StateInitTests : IDisposable
         Assert.Equal("dbdatakit_runner_main", StateLogins.Name("dbdatarunner", "main", "dbdatarunner"));
         Assert.Equal("dbdatakit_workspace_main", StateLogins.Name("dbdataworkspace", "main", "dbdataworkspace"));
         Assert.Equal("dbdatakit_console", StateLogins.Name(null, null, "dbdatakit"));
+        Assert.Equal("dbdatakit_console", StateLogins.Name(null, "console", "dbdatakit"));   // the group the console keeps its join tokens under names no other login
         Assert.Equal("dbdatakit_gateway_north_east", StateLogins.Name("dbdatagateway", "North East", "x"));
         Assert.NotEqual(StateLogins.Name("dbdatagateway", "sales", "g"), StateLogins.Name("dbdatagateway", "finance", "g"));
     }

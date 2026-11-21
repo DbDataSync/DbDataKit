@@ -81,7 +81,7 @@ group a person can see nothing of is not shown.
 | Build and release | Projects (the paired Workspace's projects; one entry per Workspace when several are paired), Releases, Deployments, Backlog |
 | Operate | Monitoring, Runs, Approvals, Delivery, Tracking |
 | Agents and knowledge | Agents, Knowledge |
-| Servers | All servers* (Upgrades and a server's state are pages under it), then each paired server by its name and product |
+| Servers | All servers* (Upgrades and a server's state are pages under it), Add a server* (the command a Gateway, a Runner or a Workspace joins the console with, and the commands still waiting; `docs/install.md`, "Pairing"), then each paired server by its name and product |
 | Settings | Connections, Bindings, Secrets*, Users*, Audit*, Setup* |
 
 **Inside a server the console's navigation stays.** Opening a server shows its own entries nested under its name in the Servers group: a Runner's Tasks,

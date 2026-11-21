@@ -6,6 +6,7 @@ The server where people (and, later, agents) author projects in git workspaces (
 ```
 dbdataworkspace server run [--repo <server directory>] [--listen https://127.0.0.1:7860] [--state-engine sqlite|mssql|postgres --state-connection <connection string>]
 dbdataworkspace server pair --max-role <roles> [--repo <server directory>]
+dbdataworkspace pair --host <console address> --token <token|-> --console-thumbprint sha256:<hex> [--address <https address>] [--repo <server directory>]   # the command the console prints (dbdatakit setup invite): joins it at the next start
 dbdataworkspace server clients | unpair <client> [--repo <server directory>]
 dbdataworkspace project create <id> [--title <text>] [--kind app|build|store|sync|integration] [--template <name>] [--repo <server directory>]   # a git repository in projects/<id> with a first commit
 dbdataworkspace project add <id> --path <repository folder> [--title <text>] [--kind app|build|store|sync|integration] [--template <name>] [--repo <server directory>]   # host a repository that is already on this machine, in place

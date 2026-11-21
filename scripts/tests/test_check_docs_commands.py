@@ -152,6 +152,21 @@ public static class IdentityCommand {
         })
         self.assertEqual({("identity", "invite"), ("identity", "assign")}, check.commands_of(root, "dbdatagateway"))
 
+    def test_a_command_of_one_word_is_read_from_a_shared_factory_and_from_a_product(self):
+        root = self.tree({
+            "Shared/src/DbDataKit.Web/JoinPairCommand.cs": """
+public static class JoinPairCommand {
+    public static Noun Create(PairCommandOptions options) => Noun.Command("pair", new Verb("pair", "Join the console", EffectClass.RepoFilesOnly, "", null));
+}
+""",
+            "DbDataRunner/src/DbDataRunner.Server/RunnerCli.cs": """
+public static class RunnerCli {
+    static NounRouter Router() => new("dbdatarunner", [ ServerNoun.Create(Run), JoinPairCommand.Create(options), Noun.Command("hello", new Verb("hello", "Say hello", EffectClass.OfflineOnly, "", null)) ]);
+}
+""",
+        })
+        self.assertEqual({("server", "run"), ("pair",), ("hello",)}, check.commands_of(root, "dbdatarunner"))
+
     def test_a_command_that_exists_passes(self):
         text = "```\ndbdatakit server run --listen https://x\ndbdatakit instance add https://b --code c\n```\nOr `dbdatakit user invite`, `dbdatakit instance` and `dbdatakit.exe server pair`.\n"
         self.assertEqual([], self.problems(text))

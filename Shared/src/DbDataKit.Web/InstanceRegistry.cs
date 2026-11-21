@@ -51,6 +51,10 @@ public sealed class InstanceRegistry(string path, TimeProvider? clock = null)
     public RegisteredInstance Add(PairedServer server, string? name = null, string? keyFingerprint = null) =>
         Write(new RegisteredInstance(server.InstanceId, string.IsNullOrWhiteSpace(name) ? server.Name : name, server.Url, server.CertificateFingerprint, server.ApiVersion, _clock.GetUtcNow(), keyFingerprint, server.Ceiling, server.Generation));
 
+    /// <summary>Records a server that joined this console (<see cref="JoinService"/>): its address and the certificate it presented there, pinned for every later call. A server that joins again replaces its entry.</summary>
+    public RegisteredInstance Add(JoinedServer server, string? keyFingerprint = null) =>
+        Write(new RegisteredInstance(server.InstanceId, server.Name, server.Address, server.CertificateFingerprint, ManagementApi.Version, server.JoinedAt, keyFingerprint, server.Ceiling, server.Generation));
+
     /// <summary>Records that the server now has the console key with this fingerprint.</summary>
     public RegisteredInstance SetKey(string instanceId, string keyFingerprint) =>
         Write((Find(instanceId) ?? throw new InvalidOperationException($"No instance '{instanceId}' is registered.")) with { KeyFingerprint = keyFingerprint });

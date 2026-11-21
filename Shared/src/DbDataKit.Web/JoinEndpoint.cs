@@ -22,6 +22,13 @@ public static class JoinEndpoint
     /// <param name="service">The console's half of the join.</param>
     public static IEndpointRouteBuilder MapJoin(this IEndpointRouteBuilder app, JoinService service, Func<JoinedServer, CancellationToken, Task>? joined = null)
     {
+        app.MapJoin((_, _) => Task.FromResult(service), joined);
+        return app;
+    }
+
+    /// <summary>The join route with the console's half made for each request, so a console whose signing key was rotated answers with the key it signs with now.</summary>
+    /// <returns>The route, for the host to take it out of its sign-in (<c>AllowAnonymous</c>).</returns>
+    public static RouteHandlerBuilder MapJoin(this IEndpointRouteBuilder app, Func<HttpContext, CancellationToken, Task<JoinService>> service, Func<JoinedServer, CancellationToken, Task>? joined = null) =>
         app.MapPost(Path, async (HttpContext http) =>
         {
             // a host whose middleware already read the body (to log it) has fixed the limit; the route then keeps the host's
@@ -30,7 +37,7 @@ public static class JoinEndpoint
             try { request = await http.Request.ReadFromJsonAsync<JoinRequest>(Json, http.RequestAborted); }
             catch (Exception ex) when (ex is JsonException or BadHttpRequestException or InvalidOperationException) { return Results.Json(new { error = "the request is not valid JSON" }, Json, statusCode: 400); }
             if (request is null) return Results.Json(new { error = "the request is empty" }, Json, statusCode: 400);
-            var outcome = await service.JoinAsync(request, http.RequestAborted);
+            var outcome = await (await service(http, http.RequestAborted)).JoinAsync(request, http.RequestAborted);
             if (!outcome.Ok)
             {
                 http.RequestServices.GetService<ILoggerFactory>()?.CreateLogger("DbDataKit.Web.Join").LogWarning("A join was refused: {Reason}", outcome.Reason);
@@ -39,6 +46,4 @@ public static class JoinEndpoint
             if (joined is not null) await joined(outcome.Server!, http.RequestAborted);
             return Results.Json(outcome.Answer, Json);
         });
-        return app;
-    }
 }

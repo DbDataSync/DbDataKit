@@ -33,6 +33,9 @@ public sealed record JoinedConsole(string ConsoleId, string Name, byte[] PublicK
 public sealed class JoinFailedException(string message, bool refused) : Exception(message)
 {
     public bool Refused { get; } = refused;
+
+    /// <summary>What the console answered, in its own words, when it refused; null when it did not answer.</summary>
+    public string? Answer { get; init; }
 }
 
 /// <summary>
@@ -78,7 +81,7 @@ public static class JoinClient
                 try { refusal = await response.Content.ReadFromJsonAsync<Refusal>(Json, ct); }
                 catch (Exception ex) when (ex is JsonException or NotSupportedException) { /* the status says enough */ }
                 var said = refusal?.Error ?? $"The console refused the join ({(int)response.StatusCode}).";
-                throw new JoinFailedException($"{console} refused the join: {said}", refused: true);
+                throw new JoinFailedException($"{console} refused the join: {said}", refused: true) { Answer = said };
             }
             JoinAnswer? answer;
             try { answer = await response.Content.ReadFromJsonAsync<JoinAnswer>(Json, ct); }

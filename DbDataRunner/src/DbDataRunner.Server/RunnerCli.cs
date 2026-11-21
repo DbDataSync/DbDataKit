@@ -44,6 +44,12 @@ public static class RunnerCli
     [
         ServerNoun.Create((args, context) => RunServerAsync(args, context, environment))
             .With([.. PairingVerbs.Create(args => RunnerState.Pairing(DirectoryOf(args, environment), RunnerSettings.StateFrom(DirectoryOf(args, environment), environment), environment))]),
+        JoinPairCommand.Create(new PairCommandOptions(Program, args => DirectoryOf(args, environment),
+            async _ =>
+            {
+                var (registered, problem) = await ServiceRestarter.RestartAsync(RunnerService.RegistrationName, SuiteServices.Runner.Program);
+                return new ServiceRestartResult(registered, problem);
+            })),
         RunsNoun(environment),
         TasksNoun(environment),
         RunnerLabelVerbs.Create(environment),
@@ -144,6 +150,7 @@ public static class RunnerCli
                 app = RunnerServer.Build(settings, certificate!, line => context.Error.WriteLine(line), state);
             })
             .Step(StartupStep.Ports, (step, ct) => step.BindAsync(listen!, app!.StartAsync, cancellationToken: ct))
+            .Step(StartupStep.Join, (_, ct) => RunnerServer.JoinAsync(app!, settings!, certificate!, state!, ct))
             .RunAsync(context.Cancellation);
         if (!result.Succeeded)
         {

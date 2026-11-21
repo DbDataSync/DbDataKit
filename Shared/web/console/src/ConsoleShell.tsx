@@ -20,6 +20,11 @@ const ServersIcon = () => (
     <rect x="3" y="4" width="18" height="6" rx="1.5" /><rect x="3" y="14" width="18" height="6" rx="1.5" /><path d="M7 7h.01M7 17h.01" />
   </svg>
 )
+const AddServerIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <rect x="3" y="4" width="18" height="6" rx="1.5" /><path d="M7 7h.01M3 17h9M17 14v6M14 17h6" />
+  </svg>
+)
 const ConnectionsIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="6" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="M8.3 11l7.4-3.7M8.3 13l7.4 3.7" />
@@ -136,6 +141,7 @@ export const consoleNav: NavGroup[] = [
     title: 'Servers',
     items: [
       { to: '/instances', title: 'All servers', icon: <ServersIcon />, testId: 'rail-instances', adminOnly: true, pages: ['/upgrades', '/state'] },
+      { to: '/add-server', title: 'Add a server', icon: <AddServerIcon />, testId: 'rail-add-server', adminOnly: true },
     ],
   },
   {
