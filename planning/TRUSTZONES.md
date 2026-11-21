@@ -25,7 +25,7 @@ reads through it as a person (path 2). Structural tasks run only when Control st
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| TRUSTZONES-1 | The console-made link between a Gateway group and a Runner group, made by default: each side gets the other's addresses and a link credential scoped to the three paths; a missing partner warns on Monitoring; a new instance of a linked group gets the link at its join. The console gets an identity of its own toward a Runner (read only: runs, quality) | INSTALLER-15 | M | servers suite: a new install's Gateway and Runner are linked with no setting; Monitoring shows an unlinked group; the console reads a Runner's runs with no person signed in |
+| TRUSTZONES-1 | The console-made link between a Gateway group and a Runner group, made by default: each side gets the other's addresses and a link credential that the console signs per pair of groups, scoped to the three paths and rotated with the group keys, so revoking a group's key also revokes its link; a missing partner warns on Monitoring; a new instance of a linked group gets the link at its join. The console gets an identity of its own toward a Runner (read only: runs, quality) | INSTALLER-15 | M | servers suite: a new install's Gateway and Runner are linked with no setting; Monitoring shows an unlinked group; the console reads a Runner's runs with no person signed in |
 | TRUSTZONES-3 | DDL tasks (creating, altering or dropping tables) accept a run only from the control service, as a request it signs after the person approved the exact statements; the Runner screens show these tasks without a run button | none | S | the Runner refuses a DDL task's run without the control service's signed request; a run started from the console after the person approves runs it |
 | TRUSTZONES-4 | Path 1: the Gateway's outbox of run requests to its linked Runner group, the high-priority run, the 10-second wait, then an answer with a link to the run; requests wait in the outbox while the Runner is down | TRUSTZONES-1 | M | a test: a request returns the run's result within the wait; with the Runner down it is kept, then runs once when the Runner is back; a request past the wait answers with the run's link |
 | TRUSTZONES-5 | A view's `task` action on path 1: the Runner keeps start grants (package, task, channel, client, who granted), the action names the viewer and an idempotency key, the console's runner task panel and the Gateway's Links panel edit grants and links. Who may start a task from a view is three layers, each in its own place: the app's access rules show the link, the app manifest lists the tasks it may name (`runner:`), and the Runner's grant says which client may start which task in which channel; the person is recorded, never given a Runner role | TRUSTZONES-4 | M | vitest and a Playwright story: an administrator grants a task to the linked Gateway, a click on a view's action starts it as the viewer and shows the result or the link; revoking the grant makes the next click refuse; a task the manifest does not list is refused before the Runner is asked; a person whose access rules hide the link does not see it |
@@ -45,11 +45,6 @@ reads through it as a person (path 2). Structural tasks run only when Control st
 - INSTALLER-15: the console makes every group key and hands it at the join; TRUSTZONES-1 carries the link in that join.
 
 ## Proposed decisions
-
-### TRUSTZONES-P2: the link credential (default, awaiting the owner)
-
-The console signs a link credential per pair of groups, scoped to the three paths, rotated with the group keys. Scenario: a Gateway instance is stolen;
-revoking its group key also revokes its link. Recommendation: accept.
 
 ## Open designs
 

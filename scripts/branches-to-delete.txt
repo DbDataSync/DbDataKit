@@ -161,7 +161,7 @@ suite/batch-28
 suite/batch-29
 suite/batch-30
 suite/batch-32
-backup/work/removal2
+# backup/work/removal2 kept (owner, 2026-11-21): it holds three commits not on main, unfinished Sync work of 2026-11-14
 # --- group 7: the probe branch of the suite install fix (2026-11-17): its workflow ran the Windows install on the dry run's packages; the fix and the test are on main
 work/suite-install-acl
 # --- group 8: the branch of the working-process commit (2026-11-18): pushed to main directly (it creates the reviewer, so it could not go through one); every commit is on main
