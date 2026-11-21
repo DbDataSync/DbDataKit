@@ -83,13 +83,18 @@ public static partial class ListenPorts
     }
 
     /// <summary>
-    /// The first port of <paramref name="block"/> outside <paramref name="excluded"/> that can be bound on <paramref name="address"/>, or null when there
-    /// is none. A port is tried by binding it: one another program holds and one Windows refuses (an excluded range that moved since it was read, which
-    /// refuses with WSAEACCES) are both skipped.
+    /// The first port of <paramref name="block"/> outside the excluded ranges that can be bound on <paramref name="address"/>, or null when there is
+    /// none. A port is tried by binding it, which skips one another program holds. With the real bind (no <paramref name="canBind"/>), the ranges
+    /// Windows excludes at this moment are read and skipped as well as <paramref name="excluded"/>: Windows does not always refuse a bind inside an
+    /// excluded range (a loopback listener can be bound there), so a refused bind is never what finds them.
     /// </summary>
     public static int? Choose(PortRange block, IPAddress address, IReadOnlyList<PortRange> excluded, Func<IPAddress, int, bool>? canBind = null)
     {
-        canBind ??= CanBind;
+        if (canBind is null)
+        {
+            canBind = CanBind;
+            excluded = [.. excluded, .. ExcludedPortRanges.Read()];
+        }
         for (var port = block.Start; port <= block.End; port++)
         {
             if (excluded.Any(r => r.Contains(port))) continue;
