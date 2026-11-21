@@ -25,6 +25,8 @@ Any conversation the owner chats with. Several may run at once, on any machine. 
 - talks with the owner, designs, and writes and changes planning: subject files, proposed decisions, open designs (on a `planning/<topic>` branch when
   the change is not part of a subject's task);
 - starts workers and reviewers, and brings their results, defaults and questions to the owner;
+- starts every worker and reviewer with `isolation: "worktree"`, so none works in the session's checkout, and names in the brief a branch that no
+  other checkout has open;
 - **does no product code work**: it writes no product code, fixes no tests and resolves no merge conflicts. A failing test or a conflict goes to a worker
   (in a subject's code) or to the reviewer (a mechanical conflict while combining).
 
@@ -35,9 +37,20 @@ subject keep colliding, the subject is split into two subjects (the owner's call
 **Talking with the owner.** The owner reads every message, often on a phone, and answers without scrolling back. So a session:
 
 - **keeps replies short**: the answer or the question first, then only what the owner needs to decide or check. No recap of what the owner already
-  knows, no list of everything that could be said;
-- **asks one thing at a time**. Each question stands on its own: it names the item it is about and quotes the text or gives the options, so the
-  owner can answer it without looking anywhere else. Several questions go in one message only as a question dialog, each one complete;
+  knows, no list of everything that could be said. A worker's long report is not passed on: the session gives the result in a few lines and the
+  owner asks for detail where wanted. A wall of text and a pile of questions lead to bad answers, so neither is sent;
+- **asks one thing at a time, then moves on**: one question per message, and no list of what else is still open. When the owner answers, the
+  session acts on the answer and says in a line what it did. It asks the next question only when the work cannot go on without it; otherwise it
+  waits for the owner to ask for the next item. The owner can ask for a summary of what is open at any time.
+  The question stands on its own: it names the item it is about and quotes the text or gives the options, so the owner can answer it without
+  looking anywhere else. Several questions go in one message only as a question dialog, each one complete;
+- **keeps one thread**: while a question is waiting for the owner's answer, the session sends nothing else about another item. A worker or
+  reviewer result that arrives meanwhile is held, and reported in one line after the answer is handled. A question already asked is not asked
+  again, and an answer is handled before anything new is said. Items are always named with their subject (`<SLUG>-P<n>`, never `P<n>` alone);
+- **re-checks every open question and default before showing it, and again after each answer**. It reads each open proposal and each default a
+  worker took against what the owner has decided since the text was written (answers, settings removed or renamed, paths moved, tasks added). One
+  that an answer decided, replaced or made meaningless is not shown: in the same change it is removed or rewritten, and what it still says that
+  matters goes into the task or open design that now carries it. The owner is shown only what is still open, in terms of the current plan;
 - **shows the exact text it proposes for docs and planning** (a paragraph of a product doc, a section of a subject file, a rule in this file or
   `CLAUDE.md`) in small batches, and applies a batch only after the owner approves it. Code is reviewed the usual way, by its tests and the
   reviewer, not shown line by line;
@@ -107,6 +120,8 @@ Besides, it:
 | `backup/<slug>-<n>` (`backup/installer-3`: the slug in lower case, then the task number) | a worker | one task in progress, pushed often as backup and handover |
 | `work/<slug>` (`work/installer`) | the reviewer | the subject's ready task branches combined; the pull request into `main`, whose title starts with the slug |
 | `planning/<topic>` | a session | planning and design changes outside a subject's tasks |
+
+**Few branches.** Tasks done one after another by the same worker share one branch: the first task's `backup/<slug>-<n>`, with each later task's commits on top of it, each commit still starting with its own task id. A new branch is made only when workers run at the same time, one branch per worker. When such a worker finishes, the session merges its branch into the run's branch locally, pushes the result, and lists the finished branch in `scripts/branches-to-delete.txt` in the same change. A session never leaves a finished branch behind.
 
 **Pushing.** Nothing stays only on one machine. Every commit is pushed to its own branch as soon as it is made, and before any wait, report or stop; a commit meant for `main` that has to wait (for CI to go idle, for a review) is first pushed to a `backup/<topic>` branch. Every report to a session names the branch and commit where its work is pushed, so the owner never has to ask whether something is stored.
 
