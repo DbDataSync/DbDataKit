@@ -29,7 +29,7 @@ public static class JoinPairCommand
 
     public const string Usage = "--host <console address> --token <token|-> --console-thumbprint sha256:<hex> [--address <https address>] [--repo <data folder>]";
 
-    public static Noun Create(PairCommandOptions options) => Noun.Command(Name, new Verb(Name,
+    public static Noun Create(PairCommandOptions options) => Noun.Command("pair", new Verb("pair",
         "Join the console that printed this command: writes the join request into the data folder and restarts the service, which joins at its start",
         EffectClass.RepoFilesOnly, Usage, (args, context) => RunAsync(args, context, options),
         DataSchemas.Object([("request", DataSchemas.String), ("console", DataSchemas.String), ("restarted", DataSchemas.Boolean), ("joined", DataSchemas.Boolean)], "request", "console", "restarted", "joined")));

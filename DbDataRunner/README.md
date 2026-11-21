@@ -5,6 +5,7 @@ The runner: it schedules and runs the tasks of published packages, each in a pro
 ```
 dbdatarunner server run [--repo <server directory>] [--listen https://127.0.0.1:7840] [--channels prod,dev] [--group main]
 dbdatarunner server pair --max-role <roles> [--repo <server directory>]
+dbdatarunner pair --host <console address> --token <token|-> --console-thumbprint sha256:<hex> [--address <https address>] [--repo <server directory>]   # the command the console prints (dbdatakit setup invite): joins it at the next start
 dbdatarunner server clients | unpair <client> [--repo <server directory>]
 dbdatarunner package pair <https address> --code <code> [--name <label>] [--client-dir <directory>]   # on a publisher's machine: pair with the runner
 dbdatarunner package publish <manifest.yaml> <directory> --server <name or https address> --channel <name> [--code <code>] [--stage] [--expected-version <n>] [--client-dir <directory>]
