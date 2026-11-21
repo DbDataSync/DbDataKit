@@ -101,8 +101,9 @@ kind of server or another group, or the console's certificate does not match the
   by that administrator; on a Windows workstation such a folder stops the Gateway's start.
 - **In progress.** On Windows the folder check also refuses a folder whose owner is not the Administrators group or the service's account.
 - **In progress.** On Linux, `install.sh --system` makes one system user per service, in the group `dbdatakit`. Each unit runs as its own user, and
-  systemd creates the service's folder when it starts the unit (`StateDirectory=`). Today each unit runs as a user that systemd makes for it when it starts (`DynamicUser=yes`).
+  systemd creates the service's folder when it starts the unit (`StateDirectory=`). Today each unit runs as a user that systemd makes for it
+  when it starts (`DynamicUser=yes`).
 - **Planned.** Administration commands such as `secret set` ask the running service to make the change, so an administrator's account never writes a
   file in a service's folder. Opening the files directly becomes a recovery mode, allowed only while the service is stopped.
-- **Planned.** `dbdatakit setup single-server` sets the program folder so that only Administrators and SYSTEM can change it, so no user can put a file
+- **Planned.** A new command, `setup single-server` of the console's program, sets the program folder so that only Administrators and SYSTEM can change it, so no user can put a file
   beside a program that a service runs.
