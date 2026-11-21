@@ -42,7 +42,7 @@ public sealed class GatewayFeeds(IOptionsMonitor<GatewayOptions> options, IServi
         app.MapGet("/health", () => Results.Text("Healthy"));
         app.MapMethods("/api/v1/queries/{model}/{name}", ["GET", "POST"], (HttpContext context, string model, string name) => SavedQueryAsync(context, model, name));
         app.MapPost("/api/v1/query", (HttpContext context, CancellationToken _) => RequestAsync(context));
-        app.MapFallback(() => Results.Json(new { error = "There is no such route. A saved query is GET or POST /api/v1/queries/<model>/<name>; a request is POST /api/v1/query.", code = "not_found" }, statusCode: 404));
+        app.MapFallback((HttpContext context) => Results.Json(new { error = $"There is no such route. A saved query is GET or POST {context.Request.PathBase}/api/v1/queries/<model>/<name>; a request is POST {context.Request.PathBase}/api/v1/query.", code = "not_found" }, statusCode: 404));
     }
 
     /// <summary>How a call asks for its answer: <c>?format=json|csv|arrow</c>, else the first of the <c>Accept</c> types this module knows, else JSON. Null when <c>format</c> names something else.</summary>

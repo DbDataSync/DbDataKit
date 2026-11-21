@@ -111,8 +111,8 @@ public sealed class IdentityModuleTests : IAsyncLifetime
         }
 
         Assert.Contains(Load("tls: { mode: none }\nlisten: { address: 127.0.0.1 }\nidentity: { enabled: true }\n"), d => d.KeyPath == "Identity.Enabled");
-        Assert.Contains(Load("listen: { address: 127.0.0.1, port: 8817 }\nidentity: { enabled: true }\n"), d => d.KeyPath == "Identity.Port");
-        Assert.Contains(Load("management: { enabled: true, port: 8817 }\nidentity: { enabled: true }\n"), d => d.KeyPath == "Identity.Port");
+        Assert.Contains(Load("listen: { address: 127.0.0.1, port: 8817 }\nidentity: { enabled: true, port: 8817 }\n"), d => d.KeyPath == "Identity.Port");
+        Assert.Contains(Load("management: { enabled: true, port: 8817 }\nidentity: { enabled: true, port: 8817 }\n"), d => d.KeyPath == "Identity.Port");
         Assert.Contains(Load("identity: { enabled: true, publicUrl: 'http://identity.example' }\n"), d => d.KeyPath == "Identity.PublicUrl");
         Assert.Contains(Load("identity: { enabled: true, publicUrl: 'https://identity.example/home' }\n"), d => d.KeyPath == "Identity.PublicUrl");
         Assert.Contains(Load("identity: { enabled: true, address: 'everywhere' }\n"), d => d.KeyPath == "Identity.Address");

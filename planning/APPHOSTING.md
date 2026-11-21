@@ -19,10 +19,10 @@ ownership of the name, the right sign-in redirects and cookies, behind listed pr
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| APPHOSTING-1 | The host binding table on the public listener: a host name maps to a site (an app instance, a portal, the views or the store under a path) | ENDPOINTS-1 | M | two host names on one listener reach two portals; an unbound name answers 404 |
+| APPHOSTING-1 | The host binding table on the public listener: a host name maps to a site (an app instance, a portal, the views or the store under a path) | none | M | two host names on one listener reach two portals; an unbound name answers 404 |
 | APPHOSTING-2 | SNI certificates and DNS-TXT verification for every bound host name (generalised from app bindings) | APPHOSTING-1 | M | a TLS client sees each name's certificate; an unverified name is refused at bind time |
 | APPHOSTING-3 | Redirect URIs per site, including the home's side when the host client is held by another identity home | APPHOSTING-1 | S | sign-in on two sites returns to each; removing a binding removes its redirect URI at the home |
-| APPHOSTING-4 | Forwarded headers accepted only from listed proxies | ENDPOINTS-1 | S | a request through a listed proxy keeps the client address and scheme; the same headers from another address are ignored |
+| APPHOSTING-4 | Forwarded headers accepted only from listed proxies | none | S | a request through a listed proxy keeps the client address and scheme; the same headers from another address are ignored |
 | APPHOSTING-5 | Certificate renewal for bound host names (`RenewBeforeDays`), with an alert before expiry | APPHOSTING-2 | S | a fake clock past the window renews and the listener serves the new certificate without a restart |
 | APPHOSTING-6 | Cookie scope per site and the sign-in issuer per site or shared, as APPHOSTING-P1 says | APPHOSTING-P1 | M | sessions of site A are not sent to site B; the issuer seen by each site is the one APPHOSTING-P1 chose |
 | APPHOSTING-7 | App code in child processes, and the apps module's calls to `semantic` in process as the signed-in user | none | L | a crash of one app's process does not stop another app; a semantic call from an app runs as the person |
@@ -30,7 +30,7 @@ ownership of the name, the right sign-in redirects and cookies, behind listed pr
 
 ## Needs from other subjects
 
-- ENDPOINTS-1: the public listener.
+- The public listener exists (`docs/serving-layer.md`, "The public listener"): a module mounts on it by a path prefix, or by a claim on the request, as the apps host claims the names bound to an instance. Binding a host name to a portal, the views or the store is APPHOSTING-1.
 
 ## Proposed decisions
 

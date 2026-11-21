@@ -17,7 +17,7 @@ export const SEMANTIC_NUMBERS: SemanticNumber[] = [
   { key: 'semantic.combine.timeoutSeconds', label: 'Combine time (seconds)', hint: 'How long one combine may run.', min: 1, max: 86400, fallback: 60 },
   { key: 'semantic.combine.maxInputRows', label: 'Combine input rows', hint: 'Rows, over all the scans a combine loads, above which it is refused.', min: 1, max: 2000000000, fallback: 5000000 },
   // the `rest:` section (plan 14a SL31): the listener of the feeds module, which is on when `modules` lists feeds
-  { key: 'rest.port', label: 'REST feeds port', hint: 'Where the feeds module listens (saved queries and requests as JSON, CSV or Arrow) when `feeds` is among the modules. 8821 is the default.', min: 1, max: 65535, fallback: 8821 },
+  { key: 'rest.port', label: 'REST feeds own port', hint: 'A port of its own for the feeds module (saved queries and requests as JSON, CSV or Arrow), when `feeds` is among the modules. While you do not set it, the module answers under /feeds on the public listener. The box shows 8821 as a starting value; nothing is saved until you change it.', min: 1, max: 65535, fallback: 8821 },
   { key: 'rest.defaultLimit', label: 'REST feeds default rows', hint: 'The rows a feed gives when the call does not say `limit`.', min: 1, max: 10000, fallback: 1000 },
   { key: 'rest.maxRows', label: 'REST feeds most rows', hint: 'The most a call may ask for with `limit` (paging is `limit` only).', min: 1, max: 10000, fallback: 10000 },
 ]
