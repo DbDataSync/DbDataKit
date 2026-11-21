@@ -50,7 +50,7 @@ undocumented, and not a state this codebase should ever deliberately produce. Fi
 
 ### A `Certificate` check in `dbdatasync config check`
 
-The plan doc assumed `doctor`'s "auth/TLS" check already validated a bound HTTPS certificate — it
+The plan doc assumed the readiness command's "auth/TLS" check already validated a bound HTTPS certificate — it
 didn't; no such check existed in `ReadinessChecks.cs` before this phase (see Decisions). Added
 `CertificateCheck`: `Ok` when no file-based certificate is configured; otherwise the file exists,
 loads, its SANs cover the console URL's host, and it isn't within `CertificateOptions

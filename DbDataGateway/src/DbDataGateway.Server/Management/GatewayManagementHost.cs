@@ -207,7 +207,7 @@ public static class GatewayManagementHost
         app.MapKeyRotation(new KeyRotationService(instanceId, clients, new StateReplayCache(used, "key-rotation:" + instanceId)));
 
         // the server upgrades itself when the console says so (plan 24a UC09); its own route wins over the catch-all below
-        DbDataKit.Upgrade.UpgradeSetup.MapUpgrade(app, "dbdatagateway", GatewayHost.Version, "DbDataGateway", options.Management.Port, audit, () => [.. clients.All().Select(c => new DbDataKit.Upgrade.PeerGeneration(c.Name, c.Generation))]);
+        DbDataKit.Upgrade.UpgradeSetup.MapUpgrade(app, "dbdatagateway", GatewayHost.Version, GatewayHost.RegistrationName, options.Management.Port, audit, () => [.. clients.All().Select(c => new DbDataKit.Upgrade.PeerGeneration(c.Name, c.Generation))]);
         // the shared publish API's uploads (plan 30 PB02): streamed, so they are not the JSON calls below
         var definitionsApi = new DbDataGateway.Server.Management.GatewayDefinitionsManagement(state, audit);
         app.MapMethods($"{GatewayManagement.Prefix}/artifacts/{{sha256}}", ["HEAD", "GET", "PUT"], async (string sha256, HttpContext context) =>

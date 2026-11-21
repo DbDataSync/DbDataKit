@@ -13,7 +13,8 @@ namespace DbDataKit.Server;
 /// <param name="ApiVersion">The management API version it reported.</param>
 /// <param name="Problem">Why it could not be reached or is not usable, in words for the person.</param>
 /// <param name="Generation">The compatibility generation it reported (24a UC04); null when it did not answer or states none.</param>
-public sealed record InstanceStatus(RegisteredInstance Instance, bool Reachable, bool? Ready, string? Product, string? Version, int? ApiVersion, string? Problem, int? Generation = null)
+/// <param name="Loosened">The checks of its own start its administrator switched off, by setting (<c>startup.skip_folder_permissions_check</c>); empty when none or when it did not answer.</param>
+public sealed record InstanceStatus(RegisteredInstance Instance, bool Reachable, bool? Ready, string? Product, string? Version, int? ApiVersion, string? Problem, int? Generation = null, IReadOnlyList<string>? Loosened = null)
 {
     /// <summary>The generation it reported now, or the one the registry recorded when it was last seen (24a UC05).</summary>
     public int? KnownGeneration => Generation ?? Instance.Generation;
@@ -81,7 +82,7 @@ public sealed class ConsoleInstances(InstanceRegistry registry, ConsoleKeyStore 
             // the registry keeps the generation the server last reported: an upgraded server reports another, and it is recorded when it changes
             if (generation is { } reported && instance.Generation != reported) registry.SetGeneration(instance.InstanceId, reported);
             return new InstanceStatus(instance, true, info?.Ready, info?.Product, info?.Version, apiVersion,
-                version.IsSuccessStatusCode ? null : $"answered {(int)version.StatusCode} to a version request", generation);
+                version.IsSuccessStatusCode ? null : $"answered {(int)version.StatusCode} to a version request", generation, info?.Loosened ?? []);
         }
         catch (IncompatibleServerException ex)
         {
@@ -96,5 +97,5 @@ public sealed class ConsoleInstances(InstanceRegistry registry, ConsoleKeyStore 
         }
     }
 
-    private sealed record VersionAnswer(string? Product, string? Version, bool Ready);
+    private sealed record VersionAnswer(string? Product, string? Version, bool Ready, string[]? Loosened);
 }

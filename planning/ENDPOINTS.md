@@ -31,7 +31,6 @@ listens on the same ports (`docs/install.md`, "Ports"). A client set to an old p
 
 ## Needs from other subjects
 
-- INSTALLER-9: the suite range and the Gateway's sub-block (7820 to 7839) the listeners of ENDPOINTS-2 take their values from.
 - INSTALLER-15: the join that hands a group's pinned ports to a further Gateway instance.
 
 ## Proposed decisions

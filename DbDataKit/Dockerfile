@@ -38,5 +38,6 @@ ENV DOTNET_BUNDLE_EXTRACT_BASE_DIR=/tmp/.net \
     ASPNETCORE_HTTP_PORTS=
 VOLUME /data
 EXPOSE 8480
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD ["dotnet", "/app/dbdatakit.dll", "health", "check"]
+# health check asks the default address of a console on its own; the image listens on 8480, so the check names it
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD ["dotnet", "/app/dbdatakit.dll", "health", "check", "--url", "https://localhost:8480/health/live"]
 ENTRYPOINT ["dotnet", "/app/dbdatakit.dll", "server", "run", "--listen", "https://0.0.0.0:8480", "--public-url", "https://localhost:8480"]

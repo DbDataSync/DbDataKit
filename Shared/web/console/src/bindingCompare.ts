@@ -33,7 +33,9 @@ export interface CompareOutcome { done: boolean; item?: CompareItem; error?: str
 
 export interface PostureEntry { setting: string; scope: string; chosenBy: string; chosenAt: string; note: string | null; heldBy: string[]; default: string | null; effect: string | null }
 export interface PostureSource { holder: string; ok: boolean; choices: number; problem: string | null }
-export interface PostureView { entries: PostureEntry[]; sources: PostureSource[] }
+/** A server whose own start skips a check on purpose (`startup.skip_folder_permissions_check`), with what that allows. */
+export interface PostureServer { server: string; product: string; setting: string; effect: string }
+export interface PostureView { entries: PostureEntry[]; sources: PostureSource[]; servers: PostureServer[] }
 
 /** What a person asks of an item: the server, the item and the other side's value as it was shown (the server refuses when it changed since). */
 export interface CompareDecision { server: string; family: CompareFamily; name: string; definitionKind: string | null; slot: string | null; channel: string | null; expected: string | null }
@@ -71,6 +73,16 @@ export function summary(items: CompareItem[]): string {
 
 /** A posture choice's holders in words: where the choice is recorded (the console's table, a runner's), once for a choice however many hold it. */
 export const heldWords = (e: PostureEntry): string => (e.heldBy.length === 1 ? `held by ${e.heldBy[0]}` : `held by ${e.heldBy.join(' and ')}`)
+
+/** The servers that skip a check of their start, grouped by setting: one line per setting naming every server, in the order they were listed. */
+export function loosenedServers(servers: PostureServer[] | undefined): { setting: string; effect: string; servers: string[] }[] {
+  const lines: { setting: string; effect: string; servers: string[] }[] = []
+  for (const s of servers ?? []) {
+    const line = lines.find((l) => l.setting === s.setting)
+    if (line) { if (!line.servers.includes(s.server)) line.servers.push(s.server) } else lines.push({ setting: s.setting, effect: s.effect, servers: [s.server] })
+  }
+  return lines
+}
 
 const json = (method: string, body: unknown): RequestInit => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 

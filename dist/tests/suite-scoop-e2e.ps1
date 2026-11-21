@@ -1,7 +1,8 @@
 <#
 .SYNOPSIS
   Installs the dbdatakit-full Scoop manifest on a real Windows machine from the dry run's packages and checks what each step leaves (plan 33 SC14): a per-user install and an
-  install over a service of another folder are refused, a global install registers, starts and pairs every member (and answers each member's health check), a second run changes
+  install over a service of another folder are refused, a global install registers, starts and pairs every member (and answers each member's health check; each service has the exact name, account, display
+  name and description of the suite's table, read back with `sc qc` and `sc qdescription`), a second run changes
   nothing, an update runs the services from the new files and still paired, and an uninstall removes the services and the pairings but not the data.
   Run by the job `suite-install-windows` of .github/workflows/suite-release.yml (a dry run), as an elevated user. Written without a Windows machine: its first run is its proof.
   -Packages is the folder the dry run's artifacts were downloaded to (release-<product>/ folders, each with the zip and SHA256SUMS).
@@ -48,7 +49,34 @@ function ServiceExists([string]$name) {
   & sc.exe query $name 2>&1 | Out-Null
   return ($LASTEXITCODE -ne 1060)
 }
-function Services { foreach ($m in $members) { $meta = Get-Content (Join-Path $repoRoot $m.meta) -Raw | ConvertFrom-Json; if ($meta.service) { [pscustomobject]@{ Product = $m.product; Name = $meta.service.name } } } }
+# The suite's table of services (SuiteServices.cs, read by dist/suite_services.py): the Windows name, account and description each service is registered with
+# (ForEach-Object unrolls the array, which Windows PowerShell's ConvertFrom-Json writes as one object)
+$table = @((& python -I (Join-Path $repoRoot 'dist\suite_services.py') | Out-String) | ConvertFrom-Json | ForEach-Object { $_ })
+if ($LASTEXITCODE -ne 0 -or $table.Count -eq 0) { throw "dist/suite_services.py could not read the suite's table of services (exit $LASTEXITCODE)" }
+function Services {
+  foreach ($m in $members) {
+    $meta = Get-Content (Join-Path $repoRoot $m.meta) -Raw | ConvertFrom-Json
+    $entry = $table | Where-Object { $_.program -eq $m.product }
+    if ($meta.service -and $entry) { [pscustomobject]@{ Product = $m.product; Name = $entry.windowsName; Account = $entry.account; DisplayName = $entry.displayName; Description = $entry.description } }
+  }
+}
+# Each service as the service manager has it: the exact name, the display name and account (`sc qc`) and the description (`sc qdescription`), all as the table says
+function AssertServicesAreNamedAsTheTableSays([string]$why) {
+  foreach ($s in Services) {
+    $registered = Get-Service -Name $s.Name -ErrorAction SilentlyContinue
+    Assert ($null -ne $registered -and $registered.Name -ceq $s.Name) "$why : the service is registered as exactly $($s.Name) (found '$($registered.Name)')"
+    $qc = Native "sc-qc-$($s.Product)" { & sc.exe qc $s.Name }
+    Assert ($qc.Code -eq 0) "$why : sc qc $($s.Name) succeeds"
+    $account = [regex]::Match($qc.Text, '(?m)^\s*SERVICE_START_NAME\s*:\s*(.+?)\s*$').Groups[1].Value
+    Assert ($account -eq $s.Account) "$why : $($s.Name) runs as $($s.Account) (sc qc says '$account')"
+    $display = [regex]::Match($qc.Text, '(?m)^\s*DISPLAY_NAME\s*:\s*(.+?)\s*$').Groups[1].Value
+    Assert ($display -ceq $s.DisplayName) "$why : $($s.Name) is listed as $($s.DisplayName) (sc qc says '$display')"
+    $qd = Native "sc-qdescription-$($s.Product)" { & sc.exe qdescription $s.Name 8192 }
+    Assert ($qd.Code -eq 0) "$why : sc qdescription $($s.Name) succeeds"
+    $description = [regex]::Match($qd.Text, '(?m)^\s*DESCRIPTION\s*:\s*(.+?)\s*$').Groups[1].Value
+    Assert ($description -ceq $s.Description) "$why : $($s.Name) has the description '$($s.Description)' (sc qdescription says '$description')"
+  }
+}
 function Diagnose {
   Write-Host '--- services'
   foreach ($s in Services) { & sc.exe qc $s.Name 2>&1 | Out-Host; & sc.exe query $s.Name 2>&1 | Out-Host }
@@ -193,6 +221,7 @@ try {
   $install = Native 'install' { scoop install -g $manifest }
   Assert ($install.Code -eq 0) 'scoop install -g succeeded'
   AssertEveryMemberRunsPairedAndHealthy 'after install'
+  AssertServicesAreNamedAsTheTableSays 'after install'
   AssertAdminCommandsWork 'after install'
   Assert ($install.Text -notmatch 'Pairing code:') 'no pairing code is in the install output'
   Assert (Test-Path (Join-Path $data 'server\FIRST-RUN.txt')) 'the console wrote its first-run invitation'
@@ -222,6 +251,7 @@ try {
   $current = (Get-Item (Join-Path $scoopApp 'current')).Target
   Write-Host "   current -> $current"
   AssertEveryMemberRunsPairedAndHealthy 'after the update'
+  AssertServicesAreNamedAsTheTableSays 'after the update'
   AssertAdminCommandsWork 'after the update'
   $afterUpdate = (Native 'instance-ids-update' { & (Exe 'dbdatakit') instance list --offline }).Text
   Assert ($before -eq $afterUpdate) 'the update did not pair anything again'

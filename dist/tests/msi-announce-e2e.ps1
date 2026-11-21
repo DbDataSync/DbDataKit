@@ -48,9 +48,11 @@ Assert ([Environment]::GetEnvironmentVariable($var, 'Machine') -eq $announceUrl)
 
 Write-Host '=== the product announces itself and waits in the pending list'
 $console = Join-Path $env:ProgramFiles 'DbDataKit\dbdatakit.exe'
+# the work folder is under the runner's temporary folder, whose access list lets Users write: a test's folder, so the servers skip the folder
+# permissions check (docs/install.md, "Skipping the folder permissions check")
 $consoleData = Join-Path $work 'console'; $productData = Join-Path $work 'product'
 $consoleUrl = "https://127.0.0.1:$ConsolePort"; $productUrl = "https://127.0.0.1:$ProductPort"
-$p2 = Start-Process $console -ArgumentList 'server', 'run', '--repo', "`"$consoleData`"", '--listen', $consoleUrl, '--public-url', $consoleUrl, '--announce-listen', $announceUrl -PassThru -WindowStyle Hidden `
+$p2 = Start-Process $console -ArgumentList 'server', 'run', '--skip-folder-permissions-check', '--repo', "`"$consoleData`"", '--listen', $consoleUrl, '--public-url', $consoleUrl, '--announce-listen', $announceUrl -PassThru -WindowStyle Hidden `
   -RedirectStandardOutput (Join-Path $work 'console.out') -RedirectStandardError (Join-Path $work 'console.err')
 $p1 = $null
 try {
@@ -58,7 +60,7 @@ try {
   # what a new terminal or the service reads: the machine variable the installer set
   $env:DBDATAKIT_ANNOUNCE_URL = [Environment]::GetEnvironmentVariable($var, 'Machine')
   $env:DBDATAKIT_ADVERTISE_URL = $productUrl
-  $p1 = Start-Process $ProductExe -ArgumentList 'server', 'run', '--repo', "`"$productData`"", '--listen', $productUrl -PassThru -WindowStyle Hidden `
+  $p1 = Start-Process $ProductExe -ArgumentList 'server', 'run', '--skip-folder-permissions-check', '--repo', "`"$productData`"", '--listen', $productUrl -PassThru -WindowStyle Hidden `
     -RedirectStandardOutput (Join-Path $work 'product.out') -RedirectStandardError (Join-Path $work 'product.err')
   $waiting = ''
   for ($i = 0; $i -lt 60 -and $waiting -notmatch $ProductProduct; $i++) { Start-Sleep -Seconds 2; $waiting = Run $console @('instance', 'pending', '--repo', $consoleData) }

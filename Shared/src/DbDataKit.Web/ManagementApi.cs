@@ -12,6 +12,9 @@ public static class ManagementApi
     public const int Version = 1;
     public const string PairingPath = "/management/v1/pairing";
     public const string RotationPath = "/management/v1/pairing/rotate";
+
+    /// <summary>Where a joining server answers the console's callback (outside <c>/api/</c>: the console holds no token for the server yet).</summary>
+    public const string JoinCallbackPath = "/management/v1/join/callback";
     public const string VersionHeader = "X-DbData-Api-Version";
 
     /// <summary>The oldest server version a client of version <paramref name="own"/> works with: its own and the one before.</summary>

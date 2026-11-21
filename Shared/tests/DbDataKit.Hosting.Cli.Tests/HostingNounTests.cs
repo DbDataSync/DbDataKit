@@ -52,7 +52,19 @@ public sealed class HostingNounTests
     {
         var (noun, _) = ServiceNoun();
 
-        Assert.Equal(["install", "uninstall", "status", "start", "stop", "restart", "doctor", "unit"], noun.Verbs.Select(v => v.Name));
+        Assert.Equal(["install", "uninstall", "status", "start", "stop", "restart", "check", "unit"], noun.Verbs.Select(v => v.Name));
+    }
+
+    [Fact]
+    public async Task Service_check_through_the_noun_reports_what_is_missing()
+    {
+        var (noun, _) = ServiceNoun();
+
+        var check = await Run(noun, "service", "check");
+
+        Assert.Equal(ExitCodes.Failure, check.Exit);   // nothing is installed
+        Assert.Contains("[FAIL] service.installed", check.Out);
+        Assert.Contains("Check: ", check.Out);
     }
 
     [Fact]

@@ -6,7 +6,7 @@ namespace DbDataKit.Security.Acl;
 
 /// <summary>
 /// The one seam over file system ACLs: apply a spec, read an ACL back, and list files. Fakeable, so
-/// installers and doctors run on any OS against in-memory implementations.
+/// installers and <c>service check</c> run on any OS against in-memory implementations.
 /// </summary>
 public interface IAclService
 {
@@ -113,8 +113,8 @@ public sealed class FileSystemAclService : IAclService
         if ((r & ExecuteMask) != 0) a |= AccessRights.Execute;                        // ExecuteFile, Traverse
         if ((r & (0x2 | 0x4)) != 0) a |= AccessRights.Write;              // WriteData/CreateFiles, AppendData/CreateDirectories
         if ((r & DeleteMask) != 0) a |= AccessRights.Delete;                          // Delete, DeleteSubdirectoriesAndFiles
-        // What Full has beyond Modify (bit 16): change the permissions and take ownership. Without it an Administrators or SYSTEM ACE of FullControl reads back as Modify, and the service
-        // doctor reported "lacks 16" for a directory the install had just locked correctly.
+        // What Full has beyond Modify (bit 16): change the permissions and take ownership. Without it an Administrators or SYSTEM ACE of FullControl reads back as Modify, and
+        // <c>service check</c> reported "lacks 16" for a directory the install had just locked correctly.
         if ((r & (ChangePermissionsMask | TakeOwnershipMask)) == (ChangePermissionsMask | TakeOwnershipMask)) a |= AccessRights.Full & ~AccessRights.Modify;
         return a;
     }

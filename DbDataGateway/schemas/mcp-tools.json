@@ -47,8 +47,8 @@
       }
     },
     {
-      "name": "service_doctor",
-      "description": "Check the registration, the account and the directory permissions. [Offline only] Usage: service doctor [--name N]",
+      "name": "service_check",
+      "description": "Check the registration, the account and the directory permissions. [Offline only] Usage: service check [--name N]",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,

@@ -75,6 +75,6 @@ public sealed class RenamedFromTests : IDisposable
         var message = RenamedFrom.OldService(scm);
         Assert.NotNull(message);
         Assert.Contains("dbdataproxy", message);
-        Assert.Contains("dbdatagateway", message);
+        Assert.Contains("install this one ('DbDataGateway')", message);
     }
 }

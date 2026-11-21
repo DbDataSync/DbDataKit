@@ -49,7 +49,7 @@ public sealed record LayoutEntry(LayoutRole Role, string Path, AclSpec? Acl, str
 /// %ProgramFiles%\P\versions\ver | current (junction)
 /// %ProgramData%\P\config | data | secrets | certs | logs | updates
 /// </code>
-/// This model is the single source for installers (apply) and <see cref="ServiceDoctor"/> (verify).
+/// This model is the single source for installers (apply) and <see cref="ServiceCheck"/> (verify).
 /// </summary>
 public sealed class DirectoryLayout
 {

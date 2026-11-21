@@ -7,6 +7,11 @@ namespace DbDataWorkspace.Server;
 /// <param name="Listen">The address it listens on; HTTPS, and a name or address of this machine.</param>
 public sealed record WorkspaceSettings(string Directory, Uri Listen)
 {
+    /// <summary>
+    /// The start skipped the folder step's check of the data folder's owner and access list (<c>--skip-folder-permissions-check</c>, or
+    /// <c>startup.skip_folder_permissions_check: true</c> in the settings file): <c>/version</c> says so, and the console's posture page marks the server.
+    /// </summary>
+    public bool SkipFolderPermissionsCheck { get; init; }
     /// <summary>Where the state database is, when a flag named it (<c>server run --state-engine</c>); null: the environment and the <c>state:</c> section of <c>server.yaml</c> say (<see cref="WorkspaceState.Resolve"/>), else SQLite.</summary>
     public DbDataKit.State.StateSettings? State { get; init; }
 
@@ -38,7 +43,8 @@ public sealed record WorkspaceSettings(string Directory, Uri Listen)
     public string? IntegrationCache { get; init; }
 
     public const string Product = "dbdataworkspace";
-    public const string DefaultListen = "https://127.0.0.1:8471";
+    /// <summary>The address a first start listens on when no port is configured: the first port of the Workspace's sub-block, or the next free one (<see cref="DbDataKit.Hosting.Startup.ListenPorts"/>).</summary>
+    public const string DefaultListen = "https://127.0.0.1:7860";
 
     /// <summary>The service's name in the suite's folders and variables (<see cref="DbDataKit.State.SuiteEnvironment"/>): <c>workspace</c>.</summary>
     public const string ServiceName = "workspace";

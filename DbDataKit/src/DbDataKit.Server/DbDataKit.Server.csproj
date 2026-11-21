@@ -17,6 +17,7 @@
     <DbDataKitReference Include="Hosting.Abstractions" />   <!-- the shared host: service and systemd modes, drain, /health and /version -->
     <DbDataKitReference Include="Hosting" />
     <DbDataKitReference Include="Hosting.Cli" />
+    <DbDataKitReference Include="Hosting.Startup" />   <!-- the startup sequence of server run and its startup-failure file -->
     <DbDataKitReference Include="Hosting.WindowsService" />
     <DbDataKitReference Include="Hosting.Systemd" />
     <DbDataKitReference Include="Hosting.Certificates" />

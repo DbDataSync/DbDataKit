@@ -29,6 +29,10 @@ tls:
 
 # hosting: { maxConcurrentRequests: 1000, drainSeconds: 30 }
 
+# At every start the Gateway checks that no other account can change its data folder. For a test's folder or a checkout, skip the check
+# (or start with --skip-folder-permissions-check); the start then warns, and the console's posture page marks this server.
+# startup: { skip_folder_permissions_check: true }
+
 # mode: none | grpc (gRPC compression, gzip) | arrow (Arrow data compression: zstd or lz4 inside the Arrow stream; best ratio).
 # Clients can override per call with the "x-compression" header (none, gzip, zstd, lz4) unless disabled here.
 compression: { mode: arrow, codec: zstd, level: 3, allowClientOverride: true }

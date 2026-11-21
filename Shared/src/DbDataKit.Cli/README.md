@@ -12,7 +12,7 @@ A noun that exists in several command lines is built once and means the same thi
 | Noun | Verbs | Meaning |
 | --- | --- | --- |
 | `server` | `run`, plus `pair`, `clients`, `unpair` (`DbDataKit.Web`'s `PairingVerbs`) and product verbs | the long-running process in the foreground (what the operating system's service runs), and its pairings |
-| `service` | `install`, `uninstall`, `status`, `start`, `stop`, `restart`, `doctor`, `unit`, `run` | registration of `server run` with Windows or systemd (`DbDataKit.Hosting.Cli`) |
+| `service` | `install`, `uninstall`, `status`, `start`, `stop`, `restart`, `check`, `unit`, `run` | registration of `server run` with Windows or systemd (`DbDataKit.Hosting.Cli`) |
 | `cert` | `show`, `ensure`, `check`, `renew`, plus product verbs | the server's TLS certificate (`DbDataKit.Hosting.Cli`) |
 | `config` | `check`, `show`, `get`, `set`, `schema` | the server's own configuration (`ConfigNoun`); a secret is set with `secret set`, never here |
 | `secret` | `set`, `list`, `delete`, `check`, `rotate-key`, `export`, `import`, `protect` | secret references and the store (`DbDataKit.Secrets.Cli`) |

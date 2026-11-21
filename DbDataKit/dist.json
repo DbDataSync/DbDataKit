@@ -17,7 +17,6 @@
     { "name": "DBDATAKIT_DATA", "programData": "DbDataKit" }
   ],
   "service": {
-    "name": "DbDataKit",
     "register": "service install",
     "unregister": "service uninstall"
   },
