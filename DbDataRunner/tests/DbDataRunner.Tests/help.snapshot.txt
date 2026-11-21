@@ -130,7 +130,7 @@ $ dbdatarunner service help
 dbdatarunner service: Registration of 'server run' with Windows or systemd
 
 Verbs:
-  service install [--account <account>] [--password-stdin] [--data-dir <path>] [--dry-run]
+  service install [--account <account>] [--password-stdin] [--data-dir <path>] [--skip-folder-permissions-check] [--dry-run]
       Register the service (again, to update it); needs elevation [Target writes (DDL and/or data, as the plan states)]
   service uninstall
       Remove the service registration; needs elevation [Target writes (DDL and/or data, as the plan states)]
