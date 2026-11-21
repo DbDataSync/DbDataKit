@@ -2,6 +2,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\DbDataKit.Web\DbDataKit.Web.csproj" />
     <ProjectReference Include="..\..\src\DbDataKit.Config.Git\DbDataKit.Config.Git.csproj" />
+    <ProjectReference Include="..\..\src\DbDataKit.Hosting.Startup\DbDataKit.Hosting.Startup.csproj" />   <!-- the join step's failure as the startup sequence writes it -->
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="Npgsql" />
     <Using Include="Xunit" />

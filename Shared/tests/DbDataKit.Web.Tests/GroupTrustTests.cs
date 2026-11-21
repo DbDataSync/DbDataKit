@@ -159,7 +159,7 @@ public sealed class GroupTrustTests : IDisposable
     {
         // plan 24a UC04: the trust module's second migration adds a nullable column; a database at the first version keeps its clients, with no generation
         var location = _engines.Provision(engine);
-        var first = new StateModule(TrustModule.Name, StateScopeKind.Group, [TrustModule.Module.Migrations[0]], retention: TrustModule.Module.Retention);
+        var first = new StateModule(TrustModule.Name, StateScopeKind.Group, [TrustModule.Module.Migrations[0]], retention: [.. TrustModule.Module.Retention.Where(r => r.Table == "pairing_code")]);
         var old = location.Open([first], new StateScope(Group: "main"), time: _clock);
         using (var connection = old.OpenConnection())
         {
@@ -171,7 +171,7 @@ public sealed class GroupTrustTests : IDisposable
         var clients = new StatePairedClients(state);
         clients.Upsert(Console("console-new") with { Generation = 3 });
 
-        Assert.Equal(2, TrustModule.Module.Version);
+        Assert.Equal(3, TrustModule.Module.Version);
         Assert.Null(clients.Find("console-old")!.Generation);
         Assert.Equal(3, clients.Find("console-new")!.Generation);
         clients.Upsert(Console("console-new") with { Generation = 4 });      // paired again, after its upgrade
