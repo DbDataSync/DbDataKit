@@ -30,7 +30,7 @@ Every server that a console manages also answers the same four things on its man
 ### Default-port clashes to know about
 
 * The console, the Runner and the Workspace listen on the suite's ports, 7800 to 7899, each in a sub-block of its own: the console 7800 to 7819 (default 7800), the Runner 7840 to 7859 (default 7840), the Workspace 7860 to 7879 (default 7860); the identity home on its own listens on 7819. With no `--listen`, a first start takes the default or the next free port of the sub-block and writes it to the server's settings file (`listen:`), and later starts use it (`docs/install.md`, "Ports"). Until this release they listened on 8480 (the console), 8482 (the identity home), 8495 (the Runner) and 8471 (the Workspace).
-* No two services share a default port, and no default is one of Windows' default ports (`scripts/check_default_ports.py` fails when one is): besides the suite's ports, the Gateway keeps 8815 (Flight), 8816 (management), 8817 (identity), 8818 (apps), 8819 (store module), 8820 (views), 8821 (feeds) and 8822 (mcp) until its listeners take theirs from 7820 to 7839.
+* No two services share a default port, and no default is one of Windows' default ports (`scripts/check_default_ports.py` fails when one is): besides the suite's ports, the Gateway keeps 8815 (Flight SQL), 8816 (management) and 8817 (the public listener, where identity, apps, store, views, feeds and MCP answer by path) until its listeners take theirs from 7820 to 7839. A module with a `port` of its own listens there and is not on the public listener.
 * The console (7800) and its announce port (8481 in the examples) are different listeners on purpose: the announce port is plain HTTP and takes nothing but the announcement.
 
 ### Safe defaults to know about

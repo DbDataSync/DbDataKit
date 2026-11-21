@@ -754,9 +754,9 @@ public sealed class AppsModuleTests : IAsyncLifetime
         }
 
         Assert.Contains(Load("tls: { mode: none }\nmodules: [apps]\n"), d => d.KeyPath == "Modules");
-        Assert.Contains(Load("listen: { address: 127.0.0.1, port: 8818 }\nmodules: [flightsql, apps]\n"), d => d.KeyPath == "Apps.Port");
-        Assert.Contains(Load("management: { enabled: true, port: 8818 }\nmodules: [apps]\n"), d => d.KeyPath == "Apps.Port");
-        Assert.Contains(Load("identity: { enabled: true, port: 8818 }\nmodules: [apps]\n"), d => d.KeyPath == "Apps.Port");
+        Assert.Contains(Load("listen: { address: 127.0.0.1, port: 8818 }\nmodules: [flightsql, apps]\napps: { port: 8818 }\n"), d => d.KeyPath == "Apps.Port");
+        Assert.Contains(Load("management: { enabled: true, port: 8818 }\nmodules: [apps]\napps: { port: 8818 }\n"), d => d.KeyPath == "Apps.Port");
+        Assert.Contains(Load("identity: { enabled: true, port: 8818 }\nmodules: [apps]\napps: { port: 8818 }\n"), d => d.KeyPath == "Apps.Port");
         Assert.Contains(Load("modules: [apps]\napps: { address: nowhere }\n"), d => d.KeyPath == "Apps.Address");
         Assert.DoesNotContain(Load("modules: [apps, identity]\napps: { home: { clientId: abc } }\n"), d => d.KeyPath?.StartsWith("Apps", StringComparison.Ordinal) == true);
         Assert.Contains(Load("modules: [apps, identity]\n"), d => d.KeyPath == "Apps.Home.ClientId");

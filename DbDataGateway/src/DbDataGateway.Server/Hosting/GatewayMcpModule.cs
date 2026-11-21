@@ -12,12 +12,12 @@ using Microsoft.Extensions.Options;
 namespace DbDataGateway.Server.Hosting;
 
 /// <summary>
-/// The <c>mcp</c> module of the serving layer (plan 20 O12): the endpoint agents use, MCP over streamable HTTP (<c>POST /mcp</c>, JSON-RPC), on an https listener of its own with the Gateway's certificate. An agent signs in with a token of the identity home
+/// The <c>mcp</c> module of the serving layer (plan 20 O12): the endpoint agents use, MCP over streamable HTTP (<c>POST /mcp</c>, JSON-RPC), on the public listener (<c>/mcp</c>), or on an https listener of its own when <c>mcp.port</c> is set, with the Gateway's certificate. An agent signs in with a token of the identity home
 /// (a service account's personal access token, or a person's) and is the caller of every tool: what it reads is what that identity could read through Flight SQL or the store module. A tool with an effect does not run: it is recorded as an approval request
 /// (<see cref="McpApprovals"/>) and runs only after a person answers it on <c>POST /api/v1/mcp/approvals/{id}/approve</c> (or <c>deny</c>); <c>GET /api/v1/mcp/approvals</c> lists them for an approver. Every request, answer and run is an audit row naming the person and the agent.
 /// </summary>
 public sealed class GatewayMcpModule(IOptionsMonitor<GatewayOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, McpServices mcp,
-    HomeCallers homeCallers, ILoggerFactory loggers, GroupCertificate? group = null) : IHostedService, IServingModule, IAsyncDisposable
+    HomeCallers homeCallers, ILoggerFactory loggers, GroupCertificate? group = null, PublicMounts? mounts = null) : IHostedService, IServingModule, IAsyncDisposable
 {
     private WebApplication? _app;
     private volatile bool _draining;
@@ -49,28 +49,20 @@ public sealed class GatewayMcpModule(IOptionsMonitor<GatewayOptions> options, St
 
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();
-        builder.WebHost.ConfigureKestrel(kestrel =>
-        {
-            kestrel.AddServerHeader = false;
-            kestrel.Listen(IPAddress.Parse(current.Mcp.Address), current.Mcp.Port, listen =>
-            {
-                listen.Protocols = HttpProtocols.Http1AndHttp2;
-                listen.UseHttps(https =>
-                {
-                    https.ServerCertificateSelector = (_, _) => certificate.Current;
-                    https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
-                });
-            });
-        });
+        var inProcess = ModuleListener.Configure(builder, current.Mcp.Address, current.Mcp.Port, (_, _) => certificate.Current);
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy"));
-        Map(app, server, approvals);
+        Map(app, server, approvals, endpoint: inProcess is null ? "/mcp" : "/");
         await app.StartAsync(cancellationToken);
         _app = app;
         _draining = false;
+        ModuleListener.Mount(mounts, inProcess, host => new PublicMount { Name = Name, Server = host, StripPrefix = PublicPrefix });
     }
 
-    private void Map(WebApplication app, McpServer server, McpApprovals approvals)
+    /// <summary>The path prefix of the module on the public listener: the endpoint is <c>/mcp</c> there as on a port of its own.</summary>
+    public const string PublicPrefix = "/mcp";
+
+    private void Map(WebApplication app, McpServer server, McpApprovals approvals, string endpoint)
     {
         async Task<IResult> As(HttpContext context, Func<StoreCaller, Task<IResult>> call)
         {
@@ -83,7 +75,7 @@ public sealed class GatewayMcpModule(IOptionsMonitor<GatewayOptions> options, St
             return await call(caller);
         }
 
-        app.MapPost("/mcp", (Func<HttpContext, Task<IResult>>)(context => As(context, async caller =>
+        app.MapPost(endpoint, (Func<HttpContext, Task<IResult>>)(context => As(context, async caller =>
         {
             JsonNode? body;
             try { body = await JsonNode.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted); }
@@ -99,7 +91,7 @@ public sealed class GatewayMcpModule(IOptionsMonitor<GatewayOptions> options, St
             return await server.HandleAsync(caller, body, context.RequestAborted) is { } one ? Results.Json(one) : Results.StatusCode(StatusCodes.Status202Accepted);
         })));
         // no stream is offered: a client that asks for one is told so
-        app.MapGet("/mcp", () => Results.StatusCode(StatusCodes.Status405MethodNotAllowed));
+        app.MapGet(endpoint, () => Results.StatusCode(StatusCodes.Status405MethodNotAllowed));
 
         const string prefix = "/api/v1/mcp/approvals";
         app.MapGet(prefix, (Func<HttpContext, Task<IResult>>)(context => As(context, caller =>
@@ -130,6 +122,7 @@ public sealed class GatewayMcpModule(IOptionsMonitor<GatewayOptions> options, St
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         _draining = true;
+        mounts?.Remove(Name);
         if (_app is { } running)
         {
             _app = null;

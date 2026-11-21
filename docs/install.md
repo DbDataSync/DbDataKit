@@ -127,7 +127,7 @@ listen: https://127.0.0.1:7841
 
 `health check` asks the default address (`https://localhost:7800`, `:7840` or `:7860`); for a server on another port, give its address with `--url`.
 `dbdatakit setup link` and `user invite` start their links with the console's `listen:` address when `--url` is not given. The identity home on its
-own (`dbdatakit identity run`) listens on 7819 unless `--listen` says otherwise. The Gateway's listeners still use their fixed ports 8815 to 8822
+own (`dbdatakit identity run`) listens on 7819 unless `--listen` says otherwise. The Gateway's listeners still use the fixed ports 8815 (Flight SQL), 8816 (management) and 8817 (the public listener)
 today; the paragraphs below describe how they will take theirs from 7820 to 7839.
 
 Example: on a workstation with WSL, 7840 is inside a reserved range; the Runner takes 7841, pins it, and the console's Servers page shows

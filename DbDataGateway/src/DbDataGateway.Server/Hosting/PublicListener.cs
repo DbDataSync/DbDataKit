@@ -1,0 +1,241 @@
+using System.Net;
+using System.Security.Cryptography.X509Certificates;
+using DbDataGateway.Server.Configuration;
+using DbDataGateway.Server.Secrets;
+using DbDataGateway.Server.Tls;
+using DbDataKit.Serving;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.Extensions.Options;
+
+namespace DbDataGateway.Server.Hosting;
+
+/// <summary>
+/// One module on the public listener: the web application the module built (reached through its <see cref="InProcessServer"/>, not through a port) and which requests are its.
+/// A module with a <see cref="StripPrefix"/> (<c>/store</c>) answers the paths under it as if they began at the root, with the prefix in <c>PathBase</c>; a module with <see cref="Claims"/> (the identity home, the apps host)
+/// keeps the paths it already has and says itself which requests are its.
+/// </summary>
+public sealed class PublicMount
+{
+    public required string Name { get; init; }
+
+    public required InProcessServer Server { get; init; }
+
+    /// <summary>The path prefix the module is under; the prefix moves into <c>PathBase</c> for the module.</summary>
+    public string? StripPrefix { get; init; }
+
+    /// <summary>Which requests are the module's, for a module that keeps the paths it has.</summary>
+    public Func<HttpContext, bool>? Claims { get; init; }
+
+    /// <summary>The certificate for a handshake by the name the client asks for, for a module that has certificates of its own (the apps host's custom domains); null: the Gateway's.</summary>
+    public Func<string?, X509Certificate2?>? Certificate { get; init; }
+
+    internal bool Matches(HttpContext context) =>
+        StripPrefix is { } prefix ? context.Request.Path.StartsWithSegments(prefix) : Claims?.Invoke(context) == true;
+}
+
+/// <summary>The modules mounted on the public listener. A module adds itself when it starts and removes itself when it stops; a request for a path nobody is mounted at is a 404.</summary>
+public sealed class PublicMounts
+{
+    private readonly object _gate = new();
+    private PublicMount[] _mounts = [];
+
+    public IReadOnlyList<PublicMount> Snapshot => Volatile.Read(ref _mounts);
+
+    public void Add(PublicMount mount)
+    {
+        lock (_gate) _mounts = [.. _mounts.Where(m => m.Name != mount.Name), mount];
+    }
+
+    public void Remove(string name)
+    {
+        lock (_gate) _mounts = [.. _mounts.Where(m => m.Name != name)];
+    }
+
+    /// <summary>The address the public listener answers at on this machine (<c>https://localhost:8817</c>), without a path.</summary>
+    public static string AddressOf(GatewayOptions options) => $"https://localhost:{options.Public.Port}";
+}
+
+/// <summary>
+/// A server that opens no port: the web application built on it hands the pipeline to <see cref="ForwardAsync"/>, and the public listener passes each request of the module's paths to it. The module keeps its own pipeline, services,
+/// sign-in and fallback policy, none of which touch another module's.
+/// </summary>
+public sealed class InProcessServer : IServer
+{
+    private volatile Func<IFeatureCollection, Task>? _handler;
+
+    public IFeatureCollection Features { get; } = new FeatureCollection();
+
+    public Task StartAsync<TContext>(IHttpApplication<TContext> application, CancellationToken cancellationToken) where TContext : notnull
+    {
+        _handler = async features =>
+        {
+            var context = application.CreateContext(features);
+            Exception? failure = null;
+            try { await application.ProcessRequestAsync(context); }
+            catch (Exception ex) { failure = ex; throw; }
+            finally { application.DisposeContext(context, failure); }
+        };
+        return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        _handler = null;
+        return Task.CompletedTask;
+    }
+
+    public void Dispose() => _handler = null;
+
+    /// <summary>The features the module's request is made of: the connection's and the response as they are (the same response goes back), and the request with its path as the module sees it. What a request has already cached for the listener's own pipeline
+    /// (services, items, query, form, cookies, the endpoint) is left out, so the module builds its own.</summary>
+    private static readonly HashSet<Type> NotCarried =
+    [
+        typeof(IServiceProvidersFeature), typeof(IItemsFeature), typeof(IQueryFeature), typeof(IFormFeature), typeof(IRequestCookiesFeature), typeof(IResponseCookiesFeature),
+        typeof(IEndpointFeature), typeof(IRouteValuesFeature), typeof(IHttpRequestFeature), typeof(IRequestBodyPipeFeature), typeof(IHttpActivityFeature),
+    ];
+
+    public Task ForwardAsync(HttpContext context, string? stripPrefix)
+    {
+        var handler = _handler ?? throw new InvalidOperationException("The module is not running.");
+        var features = new FeatureCollection();
+        foreach (var (type, value) in context.Features)
+            if (!NotCarried.Contains(type)) features[type] = value;
+        var request = context.Features.GetRequiredFeature<IHttpRequestFeature>();
+        var pathBase = new PathString(request.PathBase);
+        var path = new PathString(request.Path);
+        if (stripPrefix is not null && path.StartsWithSegments(stripPrefix, out var rest))
+        {
+            pathBase = pathBase.Add(new PathString(path.Value![..stripPrefix.Length]));
+            path = rest.HasValue ? rest : new PathString("/");
+        }
+        features.Set<IHttpRequestFeature>(new ForwardedRequest(request, pathBase.Value ?? "", path.Value ?? ""));
+        return handler(features);
+    }
+
+    /// <summary>The listener's request, with another <c>PathBase</c> and <c>Path</c>.</summary>
+    private sealed class ForwardedRequest(IHttpRequestFeature original, string pathBase, string path) : IHttpRequestFeature
+    {
+        public string Protocol { get; set; } = original.Protocol;
+        public string Scheme { get; set; } = original.Scheme;
+        public string Method { get; set; } = original.Method;
+        public string PathBase { get; set; } = pathBase;
+        public string Path { get; set; } = path;
+        public string QueryString { get; set; } = original.QueryString;
+        public string RawTarget { get; set; } = original.RawTarget;
+        public IHeaderDictionary Headers { get; set; } = original.Headers;
+        public Stream Body { get; set; } = original.Body;
+    }
+}
+
+/// <summary>
+/// The Gateway's public HTTPS listener (<c>public:</c>): one port for the modules that have none of their own, routed by path. Each module mounts itself (<see cref="PublicMounts"/>) when it starts; a request for a path that
+/// no running module is mounted at, a module that is off included, is a 404. The certificate is the Gateway's, looked up at each handshake, or the one a mounted module chooses by name (the apps host's custom domains).
+/// </summary>
+public sealed class PublicListener(IOptionsMonitor<GatewayOptions> options, PublicMounts mounts, TlsCertificateHolder certificate, SecretsRuntime secrets, ILoggerFactory loggers, GroupCertificate? group = null) : IHostedService, IAsyncDisposable
+{
+    private WebApplication? _app;
+
+    /// <summary>The modules that answer on the public listener rather than on a port of their own: the ones that are on and have no <c>port</c> set.</summary>
+    public static IReadOnlyList<string> MountedModules(GatewayOptions o) => [.. new (string Name, int? Port)[]
+    {
+        (GatewayModules.Identity, o.Identity.Port), (GatewayModules.Apps, o.Apps.Port), (GatewayModules.Store, o.Store.Port), (GatewayModules.Views, o.Views.Port),
+        (GatewayModules.Feeds, o.Rest.Port), (GatewayModules.Mcp, o.Mcp.Port),
+    }.Where(m => GatewayModules.Has(o, m.Name) && m.Port is null).Select(m => m.Name)];
+
+    public async Task StartAsync(CancellationToken cancellationToken)
+    {
+        var current = options.CurrentValue;
+        if (MountedModules(current).Count == 0) return;
+        // the Flight listener loads the certificate when Kestrel starts, which is after the hosted services: this listener may be first
+        if (certificate.Current is null)
+            certificate.Set(CertificateProvider.Load(current, GatewayHost.ResolveDataDirectory(current), loggers.CreateLogger("Tls"), secrets: secrets, group: group));
+
+        var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
+        builder.Logging.ClearProviders();
+        builder.WebHost.ConfigureKestrel(kestrel =>
+        {
+            kestrel.AddServerHeader = false;
+            kestrel.Listen(IPAddress.Parse(current.Public.Address), current.Public.Port, listen =>
+            {
+                listen.Protocols = HttpProtocols.Http1AndHttp2;
+                listen.UseHttps(https =>
+                {
+                    https.ServerCertificateSelector = (_, name) => mounts.Snapshot.Select(m => m.Certificate?.Invoke(name)).FirstOrDefault(c => c is not null) ?? certificate.Current;
+                    https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
+                });
+            });
+        });
+        var app = builder.Build();
+        app.Run(async context =>
+        {
+            if (context.Request.Path == "/health/live")
+            {
+                await Results.Text("Healthy").ExecuteAsync(context);
+                return;
+            }
+            foreach (var mount in mounts.Snapshot)
+                if (mount.Matches(context))
+                {
+                    await mount.Server.ForwardAsync(context, mount.StripPrefix);
+                    return;
+                }
+            await Results.Json(new { error = "There is nothing at this path: a module that is not on, or a path no module serves.", code = "not_found" }, statusCode: StatusCodes.Status404NotFound).ExecuteAsync(context);
+        });
+        await app.StartAsync(cancellationToken);
+        _app = app;
+    }
+
+    public async Task StopAsync(CancellationToken cancellationToken)
+    {
+        if (_app is { } running)
+        {
+            _app = null;
+            await running.StopAsync(cancellationToken);
+            await running.DisposeAsync();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_app is not null) await _app.DisposeAsync();
+    }
+}
+
+/// <summary>What a module's web application listens on: a port of its own when its <c>port</c> is set, otherwise nothing, and the public listener forwards to it.</summary>
+internal static class ModuleListener
+{
+    /// <summary>Configures <paramref name="builder"/> to listen on <paramref name="port"/> over HTTPS, or, with no port, to be forwarded to; returns the server to mount in that case, null when the module has a port of its own.</summary>
+    public static InProcessServer? Configure(WebApplicationBuilder builder, string address, int? port, Func<Microsoft.AspNetCore.Connections.ConnectionContext?, string?, X509Certificate2?> certificate)
+    {
+        if (port is not { } own)
+        {
+            var server = new InProcessServer();
+            builder.Services.AddSingleton<IServer>(server);
+            return server;
+        }
+        builder.WebHost.ConfigureKestrel(kestrel =>
+        {
+            kestrel.AddServerHeader = false;
+            kestrel.Listen(IPAddress.Parse(address), own, listen =>
+            {
+                listen.Protocols = HttpProtocols.Http1AndHttp2;
+                listen.UseHttps(https =>
+                {
+                    https.ServerCertificateSelector = certificate;
+                    https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
+                });
+            });
+        });
+        return null;
+    }
+
+    /// <summary>Mounts a module that was given no port; refuses to start when there is nowhere to mount it.</summary>
+    public static void Mount(PublicMounts? mounts, InProcessServer? server, Func<InProcessServer, PublicMount> mount)
+    {
+        if (server is null) return;
+        if (mounts is null) throw new InvalidOperationException("The module has no port of its own and no public listener to be mounted on.");
+        mounts.Add(mount(server));
+    }
+}
