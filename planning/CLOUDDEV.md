@@ -14,7 +14,7 @@ offers the running instance's MCP endpoints to the session through a development
   tried.
 - Each service has `server run` with `--repo` and `--listen` (the console, Workspace and Runner take a port of their block of 7800 to 7899, pinned as the `listen:`
   line of their settings file; the Gateway keeps 8815 to 8822 today, and ENDPOINTS-2 moves it into 7820 to 7839).
-- Pairing today is by code, announcement or the bundle token; INSTALLER's design (`docs/install.md`) removes all three for a command the console generates.
+- Pairing today is by code, announcement or the bundle token, and by the command the console generates (`dbdatakit setup invite` prints the servers' `pair` command, which replaces the bundle; `docs/install.md`, "Pairing"); INSTALLER's design removes the first three. (The startup sequence, its failure file and the suite ports are built: `DbDataKit.Hosting.Startup`.)
 - People sign in to the console with passkeys; agents with identity-home tokens (`ddk_...`, personal or a service account's) on the Gateway.
 - The Gateway's `mcp` module is built; the console's MCP endpoint is AGENTACCESS-5.
 - The harness: Docker is installed with its daemon stopped; a port is shown in the preview pane when the session reports it (not every client shows one);
@@ -34,7 +34,6 @@ offers the running instance's MCP endpoints to the session through a development
 
 ## Needs from other subjects
 
-- INSTALLER-12: the pairing command, which replaces the bundle. (The startup sequence, its failure file and the suite ports are built: `DbDataKit.Hosting.Startup`.)
 - AGENTACCESS-5: the console's MCP endpoint, the forwarder's second target.
 - KNOWLEDGE-24: the goldens of MCP tools of every product, which CLOUDDEV-5's tool list is generated from (the console's golden exists today).
 
