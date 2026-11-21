@@ -105,8 +105,10 @@ internal static partial class StateInitVerb
         try
         {
             if (adminText is not null) StateTopology.RequireReferencedPassword(adminText, "--admin-connection", context.Program);
-            settings = StateTopology.Settings(kind, current, parsed.Get("engine"), parsed.Get("connection"), context.Program);
             scope = StateTopology.ScopeFor(kind, context.Scope, parsed.Get("group"), context.Program);
+            // one database several services share: each service and group gets schemas and a registry of its own (StateLogins), so its login is granted nothing of another's
+            var own = kind == StateTopologyKind.Install ? StateLogins.Namespaces(StateLogins.Name(context.Scope.Service, parsed.Get("group") ?? context.Scope.Group, context.Program)) : null;
+            settings = StateTopology.Settings(kind, current, parsed.Get("engine"), parsed.Get("connection"), context.Program, own);
             layout = StateLayout.Create(settings.EngineId, context.Modules ?? [], scope, settings.Namespaces);
         }
         catch (StateTopologyException ex) { return await Stop(CliExit.Usage, "arguments", ex.Message); }
