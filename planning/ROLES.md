@@ -25,6 +25,8 @@ Any conversation the owner chats with. Several may run at once, on any machine. 
 - talks with the owner, designs, and writes and changes planning: subject files, proposed decisions, open designs (on a `planning/<topic>` branch when
   the change is not part of a subject's task);
 - starts workers and reviewers, and brings their results, defaults and questions to the owner;
+- starts every worker and reviewer with `isolation: "worktree"`, so none works in the session's checkout, and names in the brief a branch that no
+  other checkout has open;
 - **does no product code work**: it writes no product code, fixes no tests and resolves no merge conflicts. A failing test or a conflict goes to a worker
   (in a subject's code) or to the reviewer (a mechanical conflict while combining).
 
