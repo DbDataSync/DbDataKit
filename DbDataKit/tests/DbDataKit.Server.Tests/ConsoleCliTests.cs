@@ -48,7 +48,10 @@ public sealed class ConsoleCliTests : IDisposable
         Assert.Contains("GRANT CREATE TABLE, CREATE SCHEMA TO [console_admin];", migrate.Out);
 
         Assert.Equal(2, (await Run("state", "grants", "--login", "x; DROP TABLE y", "--engine", "postgres")).Exit);
-        Assert.Equal(2, (await Run("state", "grants", "--engine", "postgres")).Exit);
+        var own = await Run("state", "grants", "--engine", "postgres");   // no --login: the console's own login
+        Assert.Equal(0, own.Exit);
+        Assert.Contains("-- login dbdatakit_console", own.Out);
+        Assert.Contains("TO dbdatakit_console;", own.Out);
         Assert.Equal(2, (await Run("state", "grants", "--login", "svc")).Exit);   // SQLite: nothing to grant
     }
 
