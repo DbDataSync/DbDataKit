@@ -115,9 +115,8 @@ Scenario: an administrator opens `gateway-east`'s Data sources; a viewer signs i
 
 ## Needs from other subjects
 
-None. Subjects that add console screens put them into a group of this tree when they land: INSTALLER-13 (the Add a server screen, under Servers),
-TRUSTZONES-11 (a Gateway group shown as one node; the Servers group would list the group with its instances), KNOWLEDGE-12 and PAGEFORMAT-11 (inside
-existing pages).
+None. Subjects that add console screens put them into a group of this tree when they land: TRUSTZONES-11 (a Gateway group shown as one node;
+the Servers group would list the group with its instances), KNOWLEDGE-12 and PAGEFORMAT-11 (inside existing pages).
 
 ## Open designs
 

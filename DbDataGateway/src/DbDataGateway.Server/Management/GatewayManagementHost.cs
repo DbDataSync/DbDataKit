@@ -28,6 +28,30 @@ public static class GatewayManagementHost
     /// <summary>The connection item that says a connection came in on the management listener.</summary>
     public const string ListenerItem = "dbdata.listener.management";
 
+    /// <summary>
+    /// The join step of the start: joins the console a <c>join-request.yaml</c> in the data directory names, while the management listener answers the
+    /// console's callback. The console calls the Gateway back at the management listener's address with its certificate pinned.
+    /// </summary>
+    public static async Task JoinAsync(WebApplication app, string dataDirectory, CancellationToken ct)
+    {
+        if (!File.Exists(ServerJoin.RequestPath(dataDirectory))) return;
+        var options = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue;
+        var target = app.Services.GetRequiredService<GatewayJoinTarget>();
+        if (target.State is null || target.Clients is null || target.InstanceId is null)
+            throw new InvalidOperationException($"The join request {ServerJoin.RequestPath(dataDirectory)} cannot be used: the management API is off here (`management.enabled: false`, or `tls.mode` None), "
+                + "so the console cannot call this gateway back. Turn the management API on and start the gateway again.");
+        var holder = app.Services.GetRequiredService<TlsCertificateHolder>();
+        var listen = new Uri($"https://{(options.Management.Address.Contains(':') ? $"[{options.Management.Address}]" : options.Management.Address)}:{options.Management.Port}");
+        try
+        {
+            await ServerJoin.RunAsync(dataDirectory,
+                () => new JoiningServer("gateway", target.InstanceId, Dns.GetHostName(), ServerJoin.AddressFor(listen),
+                    PairingProof.CertificateFingerprint(holder.Current ?? throw new InvalidOperationException("This gateway has no certificate for the console to pin.")), ConsoleSigningKey.Generate()),
+                app.Services.GetRequiredService<PendingJoins>(), target.Clients, new JoinedConsoles(new GroupSettings(target.State)), ct);
+        }
+        catch (ServerJoinException ex) { throw DbDataKit.Hosting.Startup.StartupStepException.JoinFailed(ex.Console, ex.Answer, ex.Message, ex); }
+    }
+
     /// <summary>Adds the management listener to Kestrel (after the Flight one). Only when the options ask for it and TLS is on.</summary>
     public static void Listen(KestrelServerOptions kestrel, GatewayOptions options, TlsCertificateHolder holder)
     {
@@ -205,6 +229,10 @@ public static class GatewayManagementHost
             clients, files.Codes()));
         app.AnnounceToConsole("dbdatagateway", instanceId, options.Management.Port, clients, files.Codes());
         app.MapKeyRotation(new KeyRotationService(instanceId, clients, new StateReplayCache(used, "key-rotation:" + instanceId)));
+        // the console's callback during the join step, on the management listener the join names
+        app.MapJoinCallback(app.Services.GetRequiredService<PendingJoins>());
+        var joinTarget = app.Services.GetRequiredService<GatewayJoinTarget>();
+        (joinTarget.State, joinTarget.Clients, joinTarget.InstanceId) = (state, clients, instanceId);
 
         // the server upgrades itself when the console says so (plan 24a UC09); its own route wins over the catch-all below
         DbDataKit.Upgrade.UpgradeSetup.MapUpgrade(app, "dbdatagateway", GatewayHost.Version, GatewayHost.RegistrationName, options.Management.Port, audit, () => [.. clients.All().Select(c => new DbDataKit.Upgrade.PeerGeneration(c.Name, c.Generation))]);
@@ -292,4 +320,14 @@ public static class GatewayManagementHost
             return JsonSerializer.SerializeToUtf8Bytes(new JsonObject { ["status"] = 400, ["body"] = new JsonObject { ["error"] = "The message is not a JSON object with a method and a path." } });
         }
     }
+}
+
+/// <summary>What the management API made the join step with: the state, the paired clients and the instance id; empty while the management API is off.</summary>
+public sealed class GatewayJoinTarget
+{
+    public DbDataKit.State.StateDatabase? State { get; set; }
+
+    public IPairedClientStore? Clients { get; set; }
+
+    public string? InstanceId { get; set; }
 }

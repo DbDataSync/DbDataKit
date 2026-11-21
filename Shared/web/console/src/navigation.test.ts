@@ -15,7 +15,7 @@ describe('the console navigation', () => {
       ['Build and release', ['Releases', 'Deployments', 'Backlog']],
       ['Operate', ['Monitoring', 'Runs', 'Approvals', 'Delivery', 'Tracking']],
       ['Agents and knowledge', ['Agents', 'Knowledge']],
-      ['Servers', ['All servers']],
+      ['Servers', ['All servers', 'Add a server']],
       ['Settings', ['Connections', 'Bindings', 'Secrets', 'Users', 'Audit', 'Setup']],
       ['', ['Docs']],
     ])
@@ -82,23 +82,24 @@ describe('the console navigation', () => {
     const servers = nav.find((g) => g.title === 'Servers')!.items
     expect(servers.map((i) => [i.title, i.note, i.to, i.serverId])).toEqual([
       ['All servers', undefined, '/instances', undefined],
+      ['Add a server', undefined, '/add-server', undefined],
       ['gateway-east', 'Gateway', '/servers/gateway-east', 'gateway-east'],
       ['gateway-west', 'not answering', '/servers/gateway-west', 'gateway-west'],
       ['runner-a', 'Runner', '/servers/runner-a', 'runner-a'],
       ['workspace', 'Workspace', '/servers/workspace', 'workspace'],
     ])
-    expect(servers[2].problem).toBe('not answering: connection refused')
+    expect(servers[3].problem).toBe('not answering: connection refused')
     expect(nav.find((g) => g.title === 'Build and release')!.items.map((i) => [i.title, i.testId, i.to])).toEqual([
       ['Projects', 'rail-projects', '/servers/workspace'], ['Releases', 'rail-releases', '/releases'], ['Deployments', 'rail-deployments', '/deployments'], ['Backlog', 'rail-backlog', '/backlog'],
     ])
-    // a viewer sees the servers, not All servers
+    // a viewer sees the servers, not All servers or Add a server
     expect(visibleGroups(nav, false).find((g) => g.title === 'Servers')!.items.map((i) => i.title)).toEqual(['gateway-east', 'gateway-west', 'runner-a', 'workspace'])
   })
 
   it('names each Workspace\'s Projects when there are several, and lights a server\'s entry anywhere in its screens', () => {
     const nav = navWithServers([server('ws-a', 'dbdataworkspace'), server('ws-b', 'dbdataworkspace')])
     expect(nav.find((g) => g.title === 'Build and release')!.items.slice(0, 2).map((i) => [i.title, i.testId])).toEqual([['Projects on ws-a', 'rail-projects-ws-a'], ['Projects on ws-b', 'rail-projects-ws-b']])
-    const wsA = nav.find((g) => g.title === 'Servers')!.items[1]
+    const wsA = nav.find((g) => g.title === 'Servers')!.items[2]
     expect(isEntryActive('/servers/ws-a/sales/edit-1', wsA)).toBe(true)
     expect(isEntryActive('/servers/ws-ab', wsA)).toBe(false)
     expect(navWithServers([])).toEqual(consoleNav)

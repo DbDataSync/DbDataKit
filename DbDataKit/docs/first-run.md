@@ -45,7 +45,7 @@ A step is **finished by what the install has**, never by a click: pairing a serv
 
 ## What is not built yet
 
-A single-machine bundle that installs the console and the servers together and pairs them with nobody typing a code is planned (plan 23a, FQ18). Today each server announces itself to the console and waits for an administrator to confirm it on the Servers page.
+A single-machine bundle that installs the console and the servers together and pairs them with nobody typing a code is planned (plan 23a, FQ18). Today a server joins the console by the command an administrator makes on the **Add a server** screen (in the Servers group) and runs on the server's machine, or it announces itself and waits for an administrator to confirm it on the All servers page.
 
 ### Alerts of failed checks
 

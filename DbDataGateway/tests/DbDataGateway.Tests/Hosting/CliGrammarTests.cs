@@ -27,6 +27,7 @@ public sealed class CliGrammarTests
             Commands:
               server      The long-running process
               service     Registration of 'server run' with Windows or systemd
+              pair        Join the console that printed this command: writes the join request into the data folder and restarts the service, which joins at its start
               cert        The server's TLS certificate
               secret      The encrypted secret store, secret references and protected values
               identity    The identity home this gateway serves: register consoles and apps, invite people, give them roles

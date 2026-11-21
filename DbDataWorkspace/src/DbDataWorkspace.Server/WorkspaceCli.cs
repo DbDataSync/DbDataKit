@@ -34,6 +34,12 @@ public static class WorkspaceCli
     [
         ServerNoun.Create((args, context) => RunServerAsync(args, context, environment))
             .With([.. PairingVerbs.Create(args => WorkspaceState.Pairing(DirectoryOf(args, environment), environment))]),
+        JoinPairCommand.Create(new PairCommandOptions(Program, args => DirectoryOf([.. args.Get("repo") is { } repo ? new[] { "--repo", repo } : []], environment),
+            async _ =>
+            {
+                var (registered, problem) = await ServiceRestarter.RestartAsync(WorkspaceService.RegistrationName, SuiteServices.Workspace.Program);
+                return new ServiceRestartResult(registered, problem);
+            })),
         WorkspaceAdminCommand.Project(environment),
         WorkspaceAdminCommand.Workspace(environment),
         WorkspaceAdminCommand.Publisher(environment),
@@ -157,6 +163,7 @@ public static class WorkspaceCli
             // building the server opens its state and runs the state's migrations
             .Step(StartupStep.State, _ => app = WorkspaceServer.Build(settings!, certificate!, line => context.Error.WriteLine(line)))
             .Step(StartupStep.Ports, (step, ct) => step.BindAsync(listen!, app!.StartAsync, cancellationToken: ct))
+            .Step(StartupStep.Join, (_, ct) => WorkspaceServer.JoinAsync(app!, settings!, ct))
             .RunAsync(context.Cancellation);
         if (!result.Succeeded)
         {

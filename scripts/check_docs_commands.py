@@ -74,7 +74,8 @@ NOUN_DEF = r'new(?:\s+Noun)?\(\s*"(?P<noun>[a-z][a-z-]*)"\s*,\s*"[^"]*"\s*,\s*\[
 VERB_DEF = r'(?:new\s+Verb\(\s*"(?P<verb>[a-z][a-z-]*)"|\w+\((?:\w+\s*,\s*)*"(?P<verb2>[a-z][a-z-]*)"\s*,\s*"(?:[^"\\]|\\.)*"\s*,\s*EffectClass\.)'
 VERB_ONLY = re.compile(VERB_DEF)
 FACTORY = r'\b(?P<cls>[A-Z]\w+)\.(?P<method>[A-Z]\w*)\('                                    # a shared noun made by a call: ServerNoun.Create(...)
-TOKENS = re.compile(f"{NOUN_DEF}|{VERB_DEF}|{FACTORY}")
+ONE_WORD = r'Noun\.Command\(\s*"(?P<one>[a-z][a-z-]*)"'                                          # a command of one word: Noun.Command("pair", new Verb("pair", ...
+TOKENS = re.compile(f"{ONE_WORD}|{NOUN_DEF}|{VERB_DEF}|{FACTORY}")
 HEAD = re.compile(r"^\s*(?:[$>]\s*|sudo\s+|(?:\.|[\w.:\\/-]*[\\/]))?$")   # what may stand before a program name for the line to be that command
 LEGACY = re.compile(r"Legacy\s*=[^{]*\{([^}]*)\}")      # Sync's commands that stay outside the router
 
@@ -118,6 +119,9 @@ def shared_nouns(root):
                 head = re.match(r"public\s+static\s+(?:Noun|Verb\[\])\s+(\w+)\(", chunk)
                 if not head:
                     continue
+                if one := re.search(ONE_WORD, chunk):
+                    index[f"{cls.group(1)}.{head.group(1)}"] = ("", [one.group("one")])   # a command of one word: no noun, the word alone
+                    continue
                 noun = re.search(NOUN_DEF, chunk)
                 if noun is None and "Verb[]" not in head.group(0):   # a factory of something else
                     continue
@@ -135,13 +139,19 @@ def commands_of(root, product):
         text = read(path)
         current = None
         for match in TOKENS.finditer(text):
-            if match.group("noun"):
+            if match.group("one"):
+                found.add((match.group("one"),))
+                current = None
+            elif match.group("noun"):
                 current = match.group("noun")
             elif match.group("verb") or match.group("verb2"):
                 if current:
                     found.add((current, match.group("verb") or match.group("verb2")))
             elif (key := f"{match.group('cls')}.{match.group('method')}") in shared:
                 noun, verbs = shared[key]
+                if noun == "":   # a command of one word
+                    found.update((v,) for v in verbs)
+                    continue
                 if noun is not None:   # a shared noun; shared verbs alone join the noun they are listed under
                     current = noun
                 if current:
