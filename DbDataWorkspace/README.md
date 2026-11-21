@@ -4,7 +4,7 @@ The server where people (and, later, agents) author projects in git workspaces (
 **Built:** editing a draft's files, commit, push and merge (GP35a); an app project starts as the app template (GP32); builds from a vendored package store, a read-only preview and publishing to a paired Gateway (GP35b, below). **Not built:** a preview with live data (the semantic route and the apps host's preview channel), a git remote for a project. The `build` table and the publisher's key reference are in the state module; the builds write the one and publishing reads the other.
 
 ```
-dbdataworkspace server run [--repo <server directory>] [--listen https://127.0.0.1:8471] [--state-engine sqlite|mssql|postgres --state-connection <connection string>]
+dbdataworkspace server run [--repo <server directory>] [--listen https://127.0.0.1:7860] [--state-engine sqlite|mssql|postgres --state-connection <connection string>]
 dbdataworkspace server pair --max-role <roles> [--repo <server directory>]
 dbdataworkspace server clients | unpair <client> [--repo <server directory>]
 dbdataworkspace project create <id> [--title <text>] [--kind app|build|store|sync|integration] [--template <name>] [--repo <server directory>]   # a git repository in projects/<id> with a first commit
@@ -13,11 +13,11 @@ dbdataworkspace project list [--repo <server directory>]
 dbdataworkspace workspace list [--project <id>] [--repo <server directory>]
 dbdataworkspace publisher pair <name> --url <https address of a Gateway's management API> --code <pairing code> [--client-name <text>] [--repo <server directory>]   # make the key for a target and pair it with a Gateway (the code: `server pair --max-role publisher` there)
 dbdataworkspace publisher list [--repo <server directory>]   # each target's key reference (never the key) and its Gateway
-dbdataworkspace service install|uninstall|status|start|stop|restart|doctor|unit
+dbdataworkspace service install|uninstall|status|start|stop|restart|check|unit
 dbdataworkspace state init --topology service|group|install [--engine mssql|postgres --connection <connection with Password=secret:NAME or env:NAME>] [--login <role or user> [--migrate]] [--admin-connection <reference> --apply] [--group <name>] [--settings <file>] [--repo <server directory>]   # writes the state section of server.yaml (a SQLite file per service is the default)
 dbdataworkspace state show [--offline] [--engine mssql|postgres] [--repo <server directory>]      # the state database: engine, where each setting came from, namespaces, module versions, pending migrations; creates nothing
 dbdataworkspace state test [--repo <server directory>]                   # opens it read-only and checks rights, engine version and clashes; stops at the first failure with the fix
-dbdataworkspace state grants --login <database role or user> [--migrate] [--repo <server directory>]
+dbdataworkspace state grants [--login <database role or user>] [--migrate] [--repo <server directory>]
 dbdataworkspace state export --to <directory> [--include-secrets-check] [--repo <server directory>]   # the state as a snapshot; stop the server first
 dbdataworkspace state import --from <directory> [--migrate-after true|false] [--repo <server directory>]   # into an empty directory's state
 dbdataworkspace state verify --snapshot <directory> [--db] [--rehash-payloads] [--repo <server directory>]   # the snapshot against itself, or the state against it

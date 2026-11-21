@@ -41,12 +41,11 @@ it. Only the parts that make the Workspace service call another service are remo
 | WORKSPACEISOLATION-6 | Catalog refresh goes through the control service | WORKSPACEISOLATION-2 | S | the catalog refresh test passes with the Workspace service unable to reach a Gateway or Runner |
 | WORKSPACEISOLATION-7 | Development logins (AUTHORING-19): the screen sends the login through the relay to the Runner; the Workspace service only learns which binding exists | none | M | a test sets up a login for `dev`; the value is in no Workspace log, state or audit, and the Runner holds it |
 | WORKSPACEISOLATION-8 | Remove what the list marks for removal: the Workspace's publisher keys, its pairing with targets, its clients of the Runner and Gateway, and the Publisher keys screen | WORKSPACEISOLATION-4, WORKSPACEISOLATION-5, WORKSPACEISOLATION-6, WORKSPACEISOLATION-7 | M | no Workspace code opens a connection to a Runner or Gateway; the removed routes answer with the sentence naming the control service |
-| WORKSPACEISOLATION-9 | The Workspace service's outbound list, through TRUSTZONES-13: package sources and the projects' git remotes; any other address is refused and audited. The rules the operating system applies come with TRUSTZONES' open design "Outbound rules applied by the operating system" | WORKSPACEISOLATION-8, TRUSTZONES-13 | S | a test: a call to a Runner's address is refused and audited; a NuGet restore and a git fetch work |
+| WORKSPACEISOLATION-9 | The Workspace service's outbound list, through `DbDataKit.Outbound` (`OutboundGate`, the `outbound:` setting, `OutboundDestination.FromGitRemote`; built): package sources and the projects' git remotes; any other address is refused and audited (the Workspace gives the library an `IOutboundAudit` that writes to its audit). The rules the operating system applies come with TRUSTZONES' open design "Outbound rules applied by the operating system" | WORKSPACEISOLATION-8 | S | a test: a call to a Runner's address is refused and audited; a NuGet restore and a git fetch work |
 | WORKSPACEISOLATION-10 | Docs: the Planned entries in `docs/architecture.md` become descriptions of what is built; `docs/apps.md`, `docs/authoring-parity.md`, `docs/authoring-metadata.md` and the Workspace README follow | WORKSPACEISOLATION-8, WORKSPACEISOLATION-9 | S | the owner approves the text |
 
 ## Needs from other subjects
 
-- TRUSTZONES-13: the outbound list library, for WORKSPACEISOLATION-9.
 - PUBLISHING-3: the approver's signature for trusted code, added to what the control service signs.
 - COMMANDLINES-2, COMMANDLINES-3, COMMANDLINES-8: the Workspace stops starting `dbdatabuild`, `dbdatasync` and `dbdatarunner`.
 

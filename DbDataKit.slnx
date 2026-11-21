@@ -72,6 +72,7 @@
     <Project Path="Shared/src/DbDataKit.Hosting.Cli/DbDataKit.Hosting.Cli.csproj" />
     <Project Path="Shared/src/DbDataKit.Cli/DbDataKit.Cli.csproj" />
     <Project Path="Shared/src/DbDataKit.Hosting.Local/DbDataKit.Hosting.Local.csproj" />
+    <Project Path="Shared/src/DbDataKit.Hosting.Startup/DbDataKit.Hosting.Startup.csproj" />
     <Project Path="Shared/src/DbDataKit.Hosting.Systemd/DbDataKit.Hosting.Systemd.csproj" />
     <Project Path="Shared/src/DbDataKit.Hosting.WindowsService/DbDataKit.Hosting.WindowsService.csproj" />
     <Project Path="Shared/src/DbDataKit.Hosting/DbDataKit.Hosting.csproj" />
@@ -105,6 +106,7 @@
     <Project Path="Shared/src/DbDataKit.Lineage.Cli/DbDataKit.Lineage.Cli.csproj" />
     <Project Path="Shared/src/DbDataKit.Tracking.Build/DbDataKit.Tracking.Build.csproj" />
     <Project Path="Shared/src/DbDataKit.Monitoring/DbDataKit.Monitoring.csproj" />
+    <Project Path="Shared/src/DbDataKit.Outbound/DbDataKit.Outbound.csproj" />
     <Project Path="Shared/src/DbDataKit.Odbc.Metadata/DbDataKit.Odbc.Metadata.csproj" />
     <Project Path="Shared/src/DbDataKit.Schema/DbDataKit.Schema.csproj" />
     <Project Path="Shared/src/DbDataKit.Runner.Abstractions/DbDataKit.Runner.Abstractions.csproj" />
@@ -206,6 +208,8 @@
     <Project Path="Shared/tests/DbDataKit.Hosting.Cli.Tests/DbDataKit.Hosting.Cli.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Cli.Tests/DbDataKit.Cli.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Hosting.Local.Tests/DbDataKit.Hosting.Local.Tests.csproj" />
+    <Project Path="Shared/tests/DbDataKit.Hosting.Startup.TestChild/DbDataKit.Hosting.Startup.TestChild.csproj" />
+    <Project Path="Shared/tests/DbDataKit.Hosting.Startup.Tests/DbDataKit.Hosting.Startup.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Hosting.Systemd.Tests/DbDataKit.Hosting.Systemd.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Hosting.Tests/DbDataKit.Hosting.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Hosting.WindowsService.Tests/DbDataKit.Hosting.WindowsService.Tests.csproj" />
@@ -225,6 +229,7 @@
     <Project Path="Shared/tests/DbDataKit.Lineage.Tests/DbDataKit.Lineage.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Lineage.Cli.Tests/DbDataKit.Lineage.Cli.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Monitoring.Tests/DbDataKit.Monitoring.Tests.csproj" />
+    <Project Path="Shared/tests/DbDataKit.Outbound.Tests/DbDataKit.Outbound.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Odbc.Metadata.Tests/DbDataKit.Odbc.Metadata.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Identity.Tests/DbDataKit.Identity.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.State.Tests/DbDataKit.State.Tests.csproj" />

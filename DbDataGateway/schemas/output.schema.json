@@ -3134,7 +3134,7 @@
       "if": {
         "properties": {
           "command": {
-            "const": "service doctor"
+            "const": "service check"
           },
           "ok": {
             "const": true
@@ -3148,7 +3148,7 @@
       "then": {
         "properties": {
           "data": {
-            "$ref": "#/$defs/data_service_doctor"
+            "$ref": "#/$defs/data_service_check"
           }
         }
       }
@@ -3157,7 +3157,7 @@
       "if": {
         "properties": {
           "command": {
-            "const": "service doctor"
+            "const": "service check"
           },
           "ok": {
             "const": false
@@ -3171,7 +3171,7 @@
       "then": {
         "properties": {
           "data": {
-            "$ref": "#/$defs/data_service_doctor"
+            "$ref": "#/$defs/data_service_check"
           }
         }
       }
@@ -7664,7 +7664,7 @@
         }
       }
     },
-    "data_service_doctor": {
+    "data_service_check": {
       "type": "object",
       "additionalProperties": false
     },
@@ -7772,6 +7772,9 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "login": {
+          "type": "string"
+        },
         "statements": {
           "type": "array",
           "items": {
@@ -7787,6 +7790,9 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "login": {
+          "type": "string"
+        },
         "statements": {
           "type": "array",
           "items": {

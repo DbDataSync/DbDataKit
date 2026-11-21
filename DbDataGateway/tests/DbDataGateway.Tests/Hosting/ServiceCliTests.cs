@@ -71,11 +71,11 @@ public sealed class ServiceCliTests
         Assert.Equal(0, rig.Run("install"));
 
         var cfg = rig.Scm.GetConfig("DbDataGateway")!;
-        Assert.Equal(@"NT SERVICE\dbdatagateway", cfg.AccountName);
+        Assert.Equal(@"NT SERVICE\DbDataGateway", cfg.AccountName);
         Assert.Equal(ServiceStartMode.Automatic, cfg.StartMode); // "start= auto" before, not delayed
         Assert.Equal(3, cfg.FailureRestartActions); // restart 5s / 5s / 60s
-        Assert.Equal(ServiceCli.DisplayName, cfg.DisplayName);
-        Assert.Equal(ServiceCli.Description, cfg.Description);
+        Assert.Equal("DbDataGateway", cfg.DisplayName);
+        Assert.Equal(DbDataKit.Hosting.Startup.SuiteServices.Gateway.Description, cfg.Description);
         Assert.Equal($"\"{Exe}\" server run", cfg.BinaryPathName);
         Assert.False(rig.Scm.LastPasswordSupplied);
     }
@@ -245,7 +245,7 @@ public sealed class ServiceCliTests
         Assert.Equal(0, rig.Run("install", "--dry-run"));
         Assert.Empty(rig.Scm.Operations);
         Assert.Empty(rig.Acl.Applied);
-        Assert.Contains("Create service 'dbdatagateway'", rig.Out);
+        Assert.Contains("Create service 'DbDataGateway'", rig.Out);
     }
 
     [Fact]
@@ -275,11 +275,11 @@ public sealed class ServiceCliTests
     }
 
     [Fact]
-    public void Doctor_reports_missing_directories_after_an_install_against_a_fake_file_system()
+    public void Check_reports_missing_directories_after_an_install_against_a_fake_file_system()
     {
         var rig = new Rig();
         rig.Run("install");
-        Assert.Equal(ExitCodes.Failure, rig.Run("doctor")); // the recording ACL service cannot read anything back
+        Assert.Equal(ExitCodes.Failure, rig.Run("check")); // the recording ACL service cannot read anything back
         Assert.Contains("FAIL", rig.Out);
     }
 

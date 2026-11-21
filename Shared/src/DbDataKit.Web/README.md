@@ -40,6 +40,71 @@ A client is a console, another server or a command line (`ClientKind`); the serv
 * `PairingClient.PairAsync(url, code, identity, kind, name)`: looks at the certificate, proves, checks the server's proof, and returns a `PairedServer` (instance id, certificate fingerprint to pin, API version, ceiling). `PairingClient.Pinned(fingerprint)` is the handler for every later call: it accepts that certificate and no other, whatever it chains to. A server's renewed certificate needs pairing again.
 * `ConsoleKeyStore` keeps the console's id and signing seed in the secret store (`dbdatakit:server:identity:signing-key`); a damaged entry is reported, never replaced. `InstanceRegistry` is the console's `instances.yaml` (id, name, url, certificate fingerprint, API version); an entry without a pin, or over plain HTTP, is not trusted.
 
+## Joining the console (`JoinTokens`, `JoinService`, `JoinClient`)
+
+A server joins a console with a single-use token the console made for it (`docs/install.md`, "Pairing"). This library has both halves of the
+exchange, tested together in one process. The console's join route in its host, the token table in its state, the console's command that makes a
+join command, and the servers' `pair` command and join step are not built yet.
+
+**The token.** `JoinTokens.Mint(scope, madeBy)` makes 128 random bits, written as 26 lower-case letters and digits, for one product, a role
+ceiling and a group (`JoinScope`). It works for 15 minutes unless the caller gives a lifetime of up to 24 hours. `Normalize` accepts the token in
+upper case and with dashes or spaces. The console keeps a `JoinTokenRecord` with the token's id, scope, who made it, when it ends, its refused
+tries and whether it was spent or cancelled. In place of the token, the record holds its verifier: the public half of an Ed25519 key that
+`JoinTokens.KeyFor` derives from the token with HKDF-SHA256. The verifier checks a join's signature and cannot make one, so a copy of the console's
+state is not enough to join a server. `IJoinTokenStore` is where the records live (`MemoryJoinTokenStore` keeps them in memory; a store's `Update`
+must be atomic for one record, so two joins cannot both spend a token).
+
+**The join request file.** `JoinRequestFile` reads and writes `join-request.yaml` in the server's data folder, format `join-request/1`:
+
+```yaml
+# A join this server makes at its next start; the service deletes this file once it has joined. It holds a single-use token: do not copy it.
+schema: join-request/1
+console: https://console.example.com:7800
+console_thumbprint: sha256:3f0c9a5e7d1b2c4f6a8e0d2c4b6a8f0e1d3c5b7a9f1e3d5c7b9a1f3e5d7c9b1e
+token: k7d2mq4x5vbn6r3ta2wq4zj7pa
+address: https://runner1.example.com:7841
+```
+
+`address` is optional: without it the server sends the address it knows for itself. On Linux the file is written readable by its owner only.
+`Read` returns null when there is no file. It refuses a file of another schema, a key the format does not have, a missing key or a value that is
+not right, and the message names the file. `Delete` removes the file.
+
+**The exchange.** `JoinClient.JoinAsync(file, self, pending)` runs on the joining server:
+
+1. It derives the key from the token and signs a `JoinRequest` with it. The request names a random join id, the token's verifier, the product,
+   the server's group if it has one, its instance id and name, the address the console calls it at, the fingerprint of the certificate it presents
+   there, its own Ed25519 public key and its compatibility generation. The signature also covers the console's thumbprint from the file, so a
+   request signed for one console is refused by any other. The token itself is never sent.
+2. It posts the request to the console's `POST /api/v1/join` (`JoinEndpoint.MapJoin`) over TLS that accepts the certificate with the file's
+   thumbprint and no other. When the console presents another certificate, the TLS handshake fails before anything is sent, and the error
+   names both thumbprints.
+3. `JoinService.JoinAsync` on the console checks, in order: the request's shape, the compatibility generation, the token's verifier, the
+   signature, that the token is waiting (not spent, expired or cancelled), the product and the group. The request's group must be empty or the
+   token's.
+4. The console calls the server back at the address the request named (`HttpJoinCallback`), with the certificate the request named pinned. The
+   server's `POST /management/v1/join/callback` (`JoinCallbackEndpoint.MapJoinCallback`) answers only for a join id that `PendingJoins` holds,
+   and signs the join id, the console, the address and the certificate with the server's key. The console checks that signature with the public
+   key the request carried.
+5. Only then does the console spend the token. It answers with its id, its name, the key its tokens are signed with, the ceiling and the group
+   (`JoinAnswer`), and hands the host the `JoinedServer` to record and pin. The server gets back a `JoinedConsole`; `AsPairedClient()` turns it
+   into the paired client that validates the console's tokens.
+
+The join route takes no credentials, because a joining server has nothing but its signature: the console's host maps it where its sign-in does not
+apply.
+
+**Refusals.** Each refusal is a `403`, except a request that is not a join (`400`) and a server more than one compatibility generation away
+(`409`, answered before the token is looked at). Every join and every refusal is written to the audit (`IAuditLog`, command `server.join`). The
+entry names who made the token and the token's id, never the token's value. A token the console never made is audited as made by `unknown`.
+The joining server is told why it was refused only after its signature proved it holds the token (the token was used, it expired, it was made
+for a gateway). A server without a valid signature is told only that the console did not accept the join. A wrong signature, another product,
+another group and a callback that fails each count as a refused try, and the fifth refused try cancels the token. A wrong console thumbprint is
+refused on the joining server alone: the handshake fails, so the console receives nothing to audit and the token stays waiting.
+
+Example: a token minted for scope `runner`, ceiling operator, group `night`, by user `user-7`. The Runner's `JoinClient.JoinAsync` reads the file
+above; the console calls `https://runner1.example.com:7841` back, spends the token and audits `server.join` `joined` with `user-7` and the token's
+id (`jt-` and 16 hex digits). The Runner gets a `JoinedConsole` with the ceiling operator and the group `night`. A second join with the same file
+throws `JoinFailedException` with "The join token was already used", and that refusal is audited too.
+
 ## Management API version
 
 `ManagementApi.Version` is the integer version of the management API (plan 13, D17). A server says it at pairing and in the `X-DbData-Api-Version` header of every response (`UseManagementApiVersion()`); a client supports its own version and the one before (`ManagementApi.Supports`), and `ManagementVersionHandler` (what `PairingClient.Pinned` returns) states the client's version on every request and refuses the response of a server outside that range, or one that reports none, with `IncompatibleServerException` and a message that says which side to upgrade. Pairing checks it before it sends anything.

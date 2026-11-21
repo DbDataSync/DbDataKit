@@ -3,6 +3,10 @@
 Each entry says what to do about it. Add to it in the pull request that makes the change, one entry per change, without rewriting other entries; a
 release moves the entries into its notes and empties this file.
 
+## The Gateway's HTTP modules share one listener
+
+- **The identity, apps, store, views, feeds and MCP modules answer on one public HTTPS listener, routed by path (`public:` in `server.yaml`, port 8817 by default); a module has a port of its own only when its `port` is set.** Before, each module listened on its own port (identity 8817, apps 8818, store 8819, views 8820, feeds 8821, mcp 8822). Now they have none unless set, and a client set to one of those ports finds nothing. What to do: point the client at the public address with the module's prefix (`https://gateway:8817/feeds/api/v1/query`, `/store/api/v1/models`, `/views/api/v1/...`, `/mcp`; the identity home and the apps host keep the paths they have), or keep the old address by setting the module's `port` (`store: { port: 8819 }`) before you start the new release. A module with `port` set is not under its prefix on the public listener. The compose file `dist/compose/quickstart-apps.yml` sets the identity and apps ports so its addresses stay.
+
 ## The install is four services
 
 - **The Store server is gone (plan 33 SC23); the install is four services (console, Workspace, Gateway, Runner).** `dbdatastore server`, `service`, `health`, `state` and `secret`
@@ -29,6 +33,23 @@ release moves the entries into its notes and empties this file.
   `systemctl disable --now dbdatasync`) before you install this release.
   The Runner's own screen sets a connection's run login on a runner package's connections card (*Set the login*), in place of
   `dbdatasync secret send --to runner`; a replication set's Apply (provisioning) runs as its `provision` task on the Runner.
+- **Changed: the console, the Runner and the Workspace listen on new default ports, from the suite's range 7800 to 7899.** With no `--listen`, a
+  first start takes the default of its service, or the next free port of the service's sub-block, and writes it as the `listen:` line of its settings
+  file (`settings.yaml` in the console's folder, `server.yaml` in the Runner's and the Workspace's); later starts use that port. The old and the new
+  defaults:
+
+  | Listener | Old default | New default (sub-block) |
+  | --- | --- | --- |
+  | the console (`dbdatakit server run`) | 8480 | 7800 (7800 to 7819) |
+  | the identity home on its own (`dbdatakit identity run`) | 8482 | 7819 (a fixed default, never chosen or written) |
+  | the Runner (`dbdatarunner server run`) | 8495 | 7840 (7840 to 7859) |
+  | the Workspace (`dbdataworkspace server run`) | 8471 | 7860 (7860 to 7879) |
+
+  What to do: a server started with `--listen` (the container images, the compose files, a service registered with its own address) keeps its
+  port. For any other, change what points at the old port: a browser's bookmark, an `instances.yaml` entry or a publisher's paired address (pair
+  again on the new address), a firewall rule. To keep an old port, add `listen: https://127.0.0.1:8495` (with the server's own host and port) to the
+  server's settings file before you start the new release. `health check` asks the new default address; give `--url` for a server on another port.
+  The Gateway's listeners keep 8815 to 8822 for now.
 
 ## Names
 
@@ -61,6 +82,11 @@ release moves the entries into its notes and empties this file.
   | `dbdata:kit:console:signing-key` and `signing-key-next` (the console's identity) | `dbdatakit:server:identity:signing-key` and `signing-key-next` |
   | `secret list` with no prefix lists `dbdata:` | it lists `dbdatakit:` |
 <!-- secret-names:end -->
+- **Changed: the Gateway's Windows service is `DbDataGateway`, and the four services have new descriptions.** `dbdatagateway service install` registers `DbDataGateway`, running as `NT SERVICE\DbDataGateway` (it was `dbdatagateway`). Windows compares service names without case and makes the account's SID from the upper-case name, so a Gateway registered by an earlier release is the same service with the same account, and `Start-Service dbdatagateway` still works. An MSI upgrade keeps the registration as it is; `dbdatagateway service install` from an elevated prompt updates its description, and `dbdatakit-full` registers it again under the new spelling on `scoop update`. The console, Gateway, Runner and Workspace services carry the descriptions listed in `docs/install.md`, "Service names, accounts and descriptions"; run each product's `service install` again to update an existing service. `dist.json` gives no service name for these four products any more: the installers read it from the suite's table.
+
+- **New: `service check`.** In `dbdatakit`, `dbdatagateway`, `dbdatarunner` and `dbdataworkspace`, `service check` checks the service's registration, its account and the permissions of its folders, then prints the startup-failure file of its last start (or that there is none). Its last line is `Check: OK (<n> warning(s)).` or `Check: <n> failure(s).`; it exits with code 1 when a check fails, so a script can run it after `service install`.
+
+- **Changed: a server refuses to start on a data folder another account could change, unless told to skip the check.** At start, the console, the Gateway, the Runner and the Workspace check their data folder: on Linux and macOS it must be owned by the service's account and not writable by every account; on Windows its access list must not let Everyone, Users, Authenticated Users, Anonymous, Guests or Interactive write to it. A folder that fails stops the start at the folder step, and `startup-failure-<program>.txt` names the folder, its owner, what is wrong and the switch. For a test's folder or a checkout, start with `--skip-folder-permissions-check` (also on `service install`, which puts it on the registered command line) or set `startup: { skip_folder_permissions_check: true }` in the server's settings file; the server then warns at every start, `service check` names it, and the console's Bindings page lists it under "Posture choices". A folder `service install` made already passes. Scripts that start a server from a terminal on a shared folder (the CI runner's temporary folder on Windows, for example) give the flag.
 
 ## Since the last release before the 2026-11-13 beta
 

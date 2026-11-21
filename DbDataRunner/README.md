@@ -3,7 +3,7 @@
 The runner: it schedules and runs the tasks of published packages, each in a process of its own, with retries, time and memory limits, a run history, logs and the progress a task keeps between runs. A package is a manifest (`package/1`: its tasks, schedules, inputs and limits) and its code; the first kind it runs is a compiled .NET project, started through the task host. This is the runner's host: the engine is the library `DbDataKit.Runner` (its README has the rules the engine keeps), the host adds a management API a console pairs with, its own state database, the publish API and its command line. Groups of runners share one state database; the console hosts a copy of the engine too (below).
 
 ```
-dbdatarunner server run [--repo <server directory>] [--listen https://127.0.0.1:8495] [--channels prod,dev] [--group main]
+dbdatarunner server run [--repo <server directory>] [--listen https://127.0.0.1:7840] [--channels prod,dev] [--group main]
 dbdatarunner server pair --max-role <roles> [--repo <server directory>]
 dbdatarunner server clients | unpair <client> [--repo <server directory>]
 dbdatarunner package pair <https address> --code <code> [--name <label>] [--client-dir <directory>]   # on a publisher's machine: pair with the runner
@@ -34,9 +34,9 @@ dbdatarunner lineage runs <definition> <version> [--repo <server directory>] [--
 dbdatarunner runs list [--package <name>] [--channel <name>] [--task <name>] [--outcome <outcome>] [--limit <n>] [--repo <server directory>]
 dbdatarunner state show [--offline] [--engine mssql|postgres] [--repo <server directory>]    # the state database: engine, namespaces, module versions, pending migrations; creates nothing
 dbdatarunner state test [--engine mssql|postgres] [--repo <server directory>]                  # opens it read-only and checks rights, engine version and clashes; stops at the first failure with the fix
-dbdatarunner state grants --login <database role or user> [--migrate] [--engine mssql|postgres] [--repo <server directory>]
+dbdatarunner state grants [--login <database role or user>] [--migrate] [--engine mssql|postgres] [--repo <server directory>]
 dbdatarunner state init|export|import|verify|move ...   # the shared verbs over the `state:` section of `server.yaml` (plan 29b C07); `move` also takes `--to-sqlite <file>`
-dbdatarunner service install|uninstall|status|start|stop|restart|doctor|unit
+dbdatarunner service install|uninstall|status|start|stop|restart|check|unit
 dbdatarunner cert show|ensure|check|renew [--repo <server directory>]
 dbdatarunner health check [--url <url>]
 ```

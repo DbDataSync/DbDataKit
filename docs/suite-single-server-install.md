@@ -29,7 +29,7 @@ Open a new terminal after installing, so `DBDATAKIT_DATA` (the machine variable 
 
 ```powershell
 dbdatakit service install
-dbdatagateway service install --name dbdatagateway
+dbdatagateway service install --name DbDataGateway
 dbdatarunner service install
 ```
 
@@ -44,23 +44,23 @@ dbdatakit health check
 
 ```powershell
 dbdatagateway server pair --max-role viewer,operator,admin      # prints: Pairing code: <code>
-Start-Service dbdatagateway
+Start-Service DbDataGateway
 dbdatagateway health check
 dbdatakit instance add https://localhost:8816 --code <code> --name dbdatagateway
 
 dbdatarunner server pair --max-role viewer,operator,admin
 Start-Service DbDataRunner
 dbdatarunner health check
-dbdatakit instance add https://127.0.0.1:8495 --code <code> --name dbdatarunner
+dbdatakit instance add https://127.0.0.1:7840 --code <code> --name dbdatarunner
 ```
 
-The code is single-use and expires in ten minutes; five wrong codes cancel all of a server's codes. The addresses are the members' default management listeners (`docs/suite-listeners-and-auth.md`): the Gateway's management API is on by default and answers on this machine only, https on 8816 with its generated certificate; the Runner's is `https://127.0.0.1:8495`. A member moved to another address by its own setting is paired by that address. The ceilings (`--max-role`) are what a console administrator may use on that server, never what anyone holds; the Store takes `viewer,operator,author,approver,admin` and the Workspace `viewer,operator,author,admin`.
+The code is single-use and expires in ten minutes; five wrong codes cancel all of a server's codes. The addresses are the members' default management listeners (`docs/suite-listeners-and-auth.md`): the Gateway's management API is on by default and answers on this machine only, https on 8816 with its generated certificate; the Runner's is `https://127.0.0.1:7840`. A Runner or Workspace that found its default port taken at its first start took the next free port of its sub-block and wrote it as the `listen:` line of its `server.yaml`: pair it by that address. A member moved to another address by its own setting is paired by that address. Before this release the defaults were 8480 (the console), 8482 (the identity home on its own), 8495 (the Runner) and 8471 (the Workspace); they are now 7800, 7819, 7840 and 7860 (`docs/install.md`, "Ports"). The ceilings (`--max-role`) are what a console administrator may use on that server, never what anyone holds; the Store takes `viewer,operator,author,approver,admin` and the Workspace `viewer,operator,author,admin`.
 
-**4. Check:** `dbdatakit instance list` shows each server with its product, version and whether it answers. The first administrator opens the setup link (`dbdatakit setup link --url https://localhost:8480` prints it again; the console also keeps it in `%ProgramData%\DbDataKit\server\FIRST-RUN.txt`). No state settings are written: every service starts on its SQLite default; `<program> state init` puts it in a shared database later.
+**4. Check:** `dbdatakit instance list` shows each server with its product, version and whether it answers. The first administrator opens the setup link (`dbdatakit setup link` prints it again; the console also keeps it in `%ProgramData%\DbDataKit\server\FIRST-RUN.txt`). No state settings are written: every service starts on its SQLite default; `<program> state init` puts it in a shared database later.
 
 Repeating is safe. `service install` says a service is registered already, `instance list --offline` shows which members the console has, and a member that is listed is not paired again.
 
-**Removing** goes the other way, in reverse order: `dbdatakit instance remove <product>`, `<program> server unpair <id>` (the id is the console's entry of `<program> server clients`), `Stop-Service`, `<program> service uninstall` (the Gateway with `--name dbdatagateway`). Settings and data under `%ProgramData%\DbDataKit` stay.
+**Removing** goes the other way, in reverse order: `dbdatakit instance remove <product>`, `<program> server unpair <id>` (the id is the console's entry of `<program> server clients`), `Stop-Service`, `<program> service uninstall` (the Gateway with `--name DbDataGateway`). Settings and data under `%ProgramData%\DbDataKit` stay.
 
 ## Servers on other machines: announcement
 

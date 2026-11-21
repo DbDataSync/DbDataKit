@@ -33,10 +33,10 @@ public static class WindowsServiceAccounts
         return found;
     }
 
-    /// <summary>The suite's services and the folder each keeps under the data root (dist/*/dist.json, <c>service.name</c>).</summary>
+    /// <summary>The suite's services and the folder each keeps under the data root, as <c>SuiteServices</c> (DbDataKit.Hosting.Startup, which builds on this library) spells them.</summary>
     private static readonly Dictionary<string, string> FolderServices = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["server"] = "DbDataKit", ["gateway"] = "dbdatagateway", ["runner"] = "DbDataRunner", ["workspace"] = "DbDataWorkspace",
+        ["server"] = "DbDataKit", ["gateway"] = "DbDataGateway", ["runner"] = "DbDataRunner", ["workspace"] = "DbDataWorkspace",
     };
 
     /// <summary>The name of the suite service whose folder is <paramref name="dataDirectory"/> by its name (<c>...\gateway</c> is the Gateway's), or null.</summary>

@@ -48,7 +48,10 @@ public sealed class ConsoleCliTests : IDisposable
         Assert.Contains("GRANT CREATE TABLE, CREATE SCHEMA TO [console_admin];", migrate.Out);
 
         Assert.Equal(2, (await Run("state", "grants", "--login", "x; DROP TABLE y", "--engine", "postgres")).Exit);
-        Assert.Equal(2, (await Run("state", "grants", "--engine", "postgres")).Exit);
+        var own = await Run("state", "grants", "--engine", "postgres");   // no --login: the console's own login
+        Assert.Equal(0, own.Exit);
+        Assert.Contains("-- login dbdatakit_console", own.Out);
+        Assert.Contains("TO dbdatakit_console;", own.Out);
         Assert.Equal(2, (await Run("state", "grants", "--login", "svc")).Exit);   // SQLite: nothing to grant
     }
 
@@ -180,6 +183,14 @@ public sealed class ConsoleCliTests : IDisposable
         Assert.Equal(directory, ConsoleSettings.DefaultDirectory(v => v == ConsoleSettings.DirectoryVariable ? directory : null));
         Assert.EndsWith(Path.Combine("dbdatakit", "console"), ConsoleSettings.DefaultDirectory(_ => null));
         await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task Service_check_runs_the_checks()
+    {
+        var check = await Run("service", "check");
+        Assert.Contains("service.installed", check.Out);
+        Assert.Contains("Check: ", check.Out);
     }
 
     [Fact]

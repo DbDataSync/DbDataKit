@@ -50,6 +50,13 @@ public sealed class CliGrammarTests
     }
 
     [Fact]
+    public async Task Service_check_is_a_verb_of_service()
+    {
+        var help = await Run("service", "help");
+        Assert.Contains("service check [--name N]", help.Out);
+    }
+
+    [Fact]
     public async Task The_state_verbs_read_the_gateways_state_and_create_nothing()
     {
         var directory = Path.Combine(Path.GetTempPath(), "ddk-gateway-state-" + Guid.NewGuid().ToString("N")[..8]);

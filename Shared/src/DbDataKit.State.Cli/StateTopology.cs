@@ -55,7 +55,8 @@ public static class StateTopology
     /// <param name="engine">For <c>group</c> and <c>install</c>: <c>mssql</c> or <c>postgres</c> (<c>sqlserver</c> and <c>postgresql</c> too). Ignored for <c>service</c>.</param>
     /// <param name="connection">For <c>group</c> and <c>install</c>: a connection string whose password is a secret reference (or the whole string a reference). A literal password is refused.</param>
     /// <exception cref="StateTopologyException">The arguments cannot make working settings.</exception>
-    public static StateSettings Settings(StateTopologyKind kind, StateSettings current, string? engine, string? connection, string program)
+    /// <param name="ownNamespaces">For <c>install</c>: the namespaces of the service's own login (<see cref="StateLogins.Namespaces"/>), used when the current settings name none of their own. Null: the built-in names.</param>
+    public static StateSettings Settings(StateTopologyKind kind, StateSettings current, string? engine, string? connection, string program, StateNamespaceSettings? ownNamespaces = null)
     {
         if (kind == StateTopologyKind.Service)
             return new StateSettings("sqlite") { Namespaces = current.IsSqlite ? current.Namespaces : StateNamespaceSettings.Defaults, Retention = current.Retention, Housekeeping = current.Housekeeping };
@@ -72,8 +73,9 @@ public static class StateTopology
             throw new StateTopologyException($"--topology {which} needs --connection: the connection string of the database, with its password as a secret reference, for example --connection \"Host=db;Database=dbdatakit;Username=svc;Password=secret:state-db\" or --connection env:DBDATAKIT_STATE_CONNECTION.");
         RequireReferencedPassword(connection, "--connection", program);
 
-        var keep = !current.IsSqlite && current.EngineId == id;
-        return new StateSettings(EngineName(id), connection.Trim()) { Namespaces = keep ? current.Namespaces : StateNamespaceSettings.Defaults, Retention = current.Retention, Housekeeping = current.Housekeeping };
+        var keep = !current.IsSqlite && current.EngineId == id && !(ownNamespaces is not null && StateLogins.IsDefault(current.Namespaces));
+        var fresh = kind == StateTopologyKind.Install && ownNamespaces is not null ? ownNamespaces : StateNamespaceSettings.Defaults;
+        return new StateSettings(EngineName(id), connection.Trim()) { Namespaces = keep ? current.Namespaces : fresh, Retention = current.Retention, Housekeeping = current.Housekeeping };
     }
 
     /// <summary>Refuses a connection string with a password written in it, in a sentence that names the two ways to write it as a reference and how to store the secret.</summary>

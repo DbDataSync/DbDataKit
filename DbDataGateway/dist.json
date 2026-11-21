@@ -17,7 +17,6 @@
   "announces": true,
   "exportComponent": true,
   "service": {
-    "name": "dbdatagateway",
     "register": "service install --name {name}",
     "unregister": "service uninstall --name {name}"
   },

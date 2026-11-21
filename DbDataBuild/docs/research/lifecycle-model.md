@@ -105,7 +105,7 @@ Every command prints its lane and disposition. `<c>` is a connection name (omit 
 | **help** | `help code <code>` | — | `—` | `explain` |
 | | `help matrix` | — | `—` | `matrix` |
 
-*Owner:* the target nouns, `status`, `deploy`, `refresh`, `monitor`, `help code`, `ui …`, `connection inspect`, `tests run`, no `doctor`, no old aliases. *Proposed:* `project model create|update` (the owner wrote `project create model` and `project update`), `project show …`, `connection compare|seed|publish`, `project import`.
+*Owner:* the target nouns, `status`, `deploy`, `refresh`, `monitor`, `help code`, `ui …`, `connection inspect`, `tests run`, no generic health verb, no old aliases. *Proposed:* `project model create|update` (the owner wrote `project create model` and `project update`), `project show …`, `connection compare|seed|publish`, `project import`.
 
 Old verbs are **removed**, not aliased (owner): this is a new project with sample projects only.
 
@@ -587,7 +587,7 @@ Store the project's metadata documents in the tracking tables.
 | 7 | No tool-dictated review or approval | owner |
 | 8 | No `protected` connection flag | owner/proposed, dropped |
 | 9 | Refresh check levels `none`, `project`, `objects`, `live` | owner |
-| 10 | `connection inspect`; never `doctor`; `ping`, `check`, `validate` too narrow or too generic | owner |
+| 10 | `connection inspect`; never a generic health verb; `ping`, `check`, `validate` too narrow or too generic | owner |
 | 11 | `project tests run`, `connection tests run`; bare `test` is ambiguous | owner |
 | 12 | Old verbs removed, no aliases | owner |
 | 13 | `help code`, `help matrix`, `ui terminal\|web\|mcp` | owner (`ui mcp`: proposed name) |

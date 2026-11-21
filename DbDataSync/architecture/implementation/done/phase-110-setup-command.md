@@ -13,7 +13,7 @@ Three things in `src/DbDataSync.Cli`, plus a small addition to `BootstrapInvite`
 - **`Prompt.cs`** — `IPromptIo` (the seam over `Console`), `ConsolePromptIo` (the real
   implementation), and `Prompt` itself: `Text`/`YesNo`/`Choice<T>`/`MultiChoice<T>`/`Secret`/
   `HardConfirm`, exactly the shapes the plan doc sketched.
-- **`DoctorCommand.cs`** — `dbdatasync doctor`: builds the same `IConfiguration` chain the running
+- **The readiness command** (since phase 115 `ReadinessChecks.cs`, run as `dbdatasync config check`): builds the same `IConfiguration` chain the running
   host builds (config file → environment → `--DbDataSync:*`), without `DbDataSync.Api`/Kestrel, and
   runs six checks (`RepoCheck`, `StateStoreCheck`, `ProvidersAndDriversCheck`, `AuthCheck`,
   `BindingCheck`, `FirstAdminCheck`). `--json` for a machine reader; exit 1 if anything is `Fail`.
@@ -36,7 +36,7 @@ additional drivers (`MultiChoice` over the built-ins plus MySQL/MariaDB and "oth
 
 ### The review screen
 
-Runs `DoctorCommand`'s exact check list in-process (`RunChecksAsync`/`FormatResult`, `internal` so
+Runs the readiness command's exact check list in-process (`RunChecksAsync`/`FormatResult`, `internal` so
 there is only one copy) and offers **print effective configuration** (every `DbDataSync:*` key the
 merged configuration resolves to, redacting anything that looks like an embedded credential),
 **reissue the first-run invite** (only when the first-admin check is not `Ok`; calls
@@ -50,7 +50,7 @@ isolation) as part of the review screen. This was not built. Every walk-through 
 through the same `DbDataSyncConfigFile.SetValue`/`SetListValue` calls an operator can run directly, and
 `dbdatasync driver install`/`dbdatasync secret set` already exist as standalone commands for the
 pieces that change most often — so the review screen's real gap was **visibility** (what does the
-current config actually say and is it healthy), which "print effective configuration" plus `doctor`
+current config actually say and is it healthy), which "print effective configuration" plus the readiness command
 answers, not a second guided-editing surface duplicating the walk-through's own steps. Building
 `Reconfigure` well means each step accepting and displaying a pre-filled current value rather than
 always starting from a hardcoded default — meaningfully more work than the rest of the review screen
@@ -70,19 +70,19 @@ Two more deliberate reductions, both already flagged as open questions in the pl
   printing a command it cannot itself test is honest about what it's actually done; `setup` silently
   calling into code with zero coverage here would not be.
 
-Neither reduction removes anything `doctor` would otherwise catch: a state connection that doesn't
-open, or a service that was never registered, both show up as a `Fail`/pointer the next time `doctor`
-runs.
+Neither reduction removes anything the readiness command would otherwise catch: a state connection that doesn't
+open, or a service that was never registered, both show up as a `Fail`/pointer the next time the readiness
+command runs.
 
 ## Decisions
 
-- **A seam for provider installation, not for `ServeCommand`/`InviteCommand`/`DoctorCommand`
+- **A seam for provider installation, not for `ServeCommand`/`InviteCommand`/the readiness command
   themselves.** `SetupCommand.RunAsync` takes an `installProvider` delegate (defaulting to
   `ProviderInstaller.InstallAsync`) purely so `SetupCommandTests`' MySQL-driver-step test doesn't shell
   out to `dotnet publish`. Every other call `SetupCommand` makes — `ServeCommand.Prepare`,
-  `StateDatabase.FromOptions`, `DoctorCommand.BuildContext`/`RunChecksAsync`, `InviteCommand.Run` — is
+  `StateDatabase.FromOptions`, `BuildContext`/`RunChecksAsync` of the readiness command, `InviteCommand.Run` — is
   real, because each of those is either already fast and local (`Prepare`, `BuildContext`) or is itself
-  exercised end-to-end by its own test suite (`InviteCommand`, `DoctorCommand`), so faking it here
+  exercised end-to-end by its own test suite (`InviteCommand`, the readiness command), so faking it here
   would only be testing that a fake was called correctly.
 - **`Prompt`'s required-input loop had a real infinite-loop bug, found and fixed before writing any
   test against it.** `Text`/`YesNo`/`Choice`/`MultiChoice` all used to treat a `null` from
@@ -94,12 +94,12 @@ runs.
   `HardConfirm` (which already treats `null` as "typed nothing, therefore cancel" — a real answer, not
   an absence of one). `PromptTests.Text_NoDefault_ExhaustedInput_ThrowsRatherThanLoopingForever` pins
   this.
-- **`DoctorContext.TryOpenStateDatabase`'s (and `SetupCommand`'s own) catch clause was too narrow for
+- **The readiness context's `TryOpenStateDatabase`'s (now `ReadinessContext`) (and `SetupCommand`'s own) catch clause was too narrow for
   a real server engine.** Both originally caught only `InvalidOperationException`/`IOException`/
   `UnauthorizedAccessException` — which covers `StateDatabase.FromOptions`'s own thrown
   `InvalidOperationException` (missing connection string) but not a real ADO.NET connection failure
   (`Microsoft.Data.SqlClient.SqlException`, `Npgsql.NpgsqlException`), both of which derive from
-  `System.Data.Common.DbException` and were previously left to propagate uncaught out of `doctor` and
+  `System.Data.Common.DbException` and were previously left to propagate uncaught out of the readiness command and
   `setup` alike — a check meant to report "can't connect" would instead have crashed the whole command.
   Found by `SetupCommandTests`' server-engine test hitting exactly this against a real (deliberately
   unreachable) endpoint; fixed by adding `DbException` to both catch clauses.
@@ -136,7 +136,7 @@ runs.
   choice/multi-choice by number, `HardConfirm` returns whatever was typed (not the expected phrase) on
   a mismatch, `Secret` reads a real char-at-a-time stream including backspace, and the exhausted-input
   case that used to loop forever now throws.
-- **`DoctorCommandTests`** (4 tests) — a fresh SQLite-configured repo passes Repo/State
+- **The readiness command's tests** (4 tests, now `ReadinessChecksTests`) — a fresh SQLite-configured repo passes Repo/State
   store/Providers/Auth; a connection naming an uninstalled driver fails `ProvidersAndDriversCheck` with
   the exact `dbdatasync driver install` pointer text; a passkey relying-party id that is a URL fails
   `AuthCheck` with `PasskeyOptions.Problem()`'s own message; `--json` output parses and names every
@@ -147,7 +147,7 @@ runs.
   drivers writes the expected config keys, commits (`dbdatasync setup` alongside the starter commit),
   and prints completion text without starting a real server; running `setup` again on that same root
   goes straight to the review screen and "print effective configuration" shows the URL (and never a
-  literal `Password=`); a non-interactive `IPromptIo` exits 1 naming `doctor`; a SQL Server state-engine
+  literal `Password=`); a non-interactive `IPromptIo` exits 1 naming the readiness command; a SQL Server state-engine
   walkthrough stores the password in the secret store, writes the connection string (credential-free)
   to the config file, and drives the MySQL driver step through the faked `installProvider` — asserting
   the fake's own call, not a real `dotnet publish`.
@@ -171,5 +171,5 @@ runs.
 4. **Does `setup` supersede `serve`'s first-run bootstrap?** — coexist, as leaned; `serve` still does
    exactly what it always did, `setup` is the guided path in front of it.
 5. **Elevation UX on Windows** — printed commands, as leaned.
-6. **`doctor` as its own command** — yes, as leaned; `setup`'s review screen calls its check list
+6. **The readiness check as its own command** — yes, as leaned; `setup`'s review screen calls its check list
    in-process rather than shelling back out to itself.
