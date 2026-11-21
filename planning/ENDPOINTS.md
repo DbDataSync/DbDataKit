@@ -27,6 +27,7 @@ listens on the same ports (`docs/install.md`, "Ports"). A client set to an old p
 | ENDPOINTS-4 | The identity home behind the firewall: the public listener forwards the identity paths to a home that runs on its own (`identity.forward_to`) | none | S | the sign-in test passes with the home in another process reached only through the Gateway's public listener |
 | ENDPOINTS-5 | Traces through the public listener and a module: the serving contract's `TraceId` is the W3C trace id; a request through the public listener and into a module is one trace; spans carry the person's user id (never a name, a secret or a parameter value); the console's status and pairing calls to a server carry `traceparent` like its relayed calls | none | S | a test with an in-memory exporter finds one trace with the listener's span and the module's span as its child, and the contract's id equal to it; a span names the caller's user id and no parameter value; a status call's server span shares the console's trace id |
 | ENDPOINTS-6 | Reserve the PostgreSQL wire listener: a `pgwire` module entry whose listener takes a free value of the Gateway's sub-block like the others (no fixed port, 5432 included), and refuses to start while the protocol is not built (the protocol itself is parked) | ENDPOINTS-2 | S | a test: with `pgwire` enabled the Gateway refuses to start naming the setting and that the protocol is not built |
+| ENDPOINTS-7 | Every module under a prefix on the public listener, each prefix set by the administrator: `/identity`, `/apps`, `/store`, `/views`, `/feeds`, `/mcp` by default, each with a setting of its module that moves it. Identity's pages and calls move under `/identity` (`/identity/invite`, `/identity/api/auth/...`, `/identity/api/invites...`, `/identity/api/users...`, `/identity/api/access-tokens`), and its issuer becomes the listener's address with `/identity` and the discovery document is read at `<issuer>/.well-known/openid-configuration`; the apps host's redirect URIs follow the apps prefix; a console, app or client that stored the old issuer is set again and a clean break says so naming the setting. HTML pages are allowed under any prefix. `/` answers 404 on the public listener (a root app is not part of this task). It reworks the public listener as built (`IdentityHome.IsHomePath`, the `PublicPrefix` constants, `docs/serving-layer.md`, `docs/hosted-pages.md`) | none | M | a test with the defaults: the sign-in page is at `/identity/sign-in`, the invitation page at `/identity/invite`, the discovery document at `/identity/.well-known/openid-configuration` with the issuer `https://<host>:<port>/identity`, and `/invite`, `/api/auth/...` and `/.well-known/openid-configuration` answer 404; a sign-in through the public listener succeeds with the full issuer URL; with a module's prefix set to another value the module answers there and 404 under the default; an app's redirect URI is `<apps prefix>/-/callback` under the listener; `docs/hosted-pages.md` lists the new paths |
 
 ## Needs from other subjects
 
@@ -34,25 +35,11 @@ listens on the same ports (`docs/install.md`, "Ports"). A client set to an old p
 
 ## Proposed decisions
 
-### ENDPOINTS-P2: path prefixes (default, awaiting the owner)
-
-`/identity/`, `/apps/`, `/store/`, `/views/`, `/feeds/`, `/mcp/` on the public listener, matching the module names. Scenario: an OData client reads
-`https://gateway:7820/feeds/sales/orders`. Recommendation: accept.
-
 ### ENDPOINTS-P4: the public listener's port until ENDPOINTS-2 (default, awaiting the owner)
 
 `public.port` is 8817 (the identity home's old port) with `public.address` 0.0.0.0, so an install that reached the identity home at 8817 still does. Scenario: `modules: [identity,
 apps]` with no `public:` section serves sign-in at `https://gateway:8817/identity/sign-in` and apps at `https://gateway:8817/apps/<instance>/`; the console's sign-in to that home needs no
 change, and an app's redirect URI is `https://gateway:8817/apps/-/callback` (it was 8818). ENDPOINTS-2 replaces the default with a pinned port of 7820 to 7839. Recommendation: accept.
-
-### ENDPOINTS-P5: which paths each module keeps on the public listener (default, awaiting the owner)
-
-The identity home and the apps host keep the paths they already have, because the home's issuer is the listener's address and an app's address is `/apps/<instance>/`: the identity
-claim is `IdentityHome.IsHomePath` (`/.well-known/openid-configuration`, `/identity/...`, `/invite`, `/api/auth/...`, `/api/invites`, `/api/users`), the apps claim is `/apps/...` and
-every path of a host name bound to an instance. Store, views, feeds and MCP are under `/store`, `/views`, `/feeds`, `/mcp` with the prefix removed for the module, so
-`/store/api/v1/models` is the store's `/api/v1/models` and the MCP endpoint is `/mcp`, the same as on a port of its own (its approvals are `/mcp/api/v1/mcp/approvals`). Option: move the
-identity home under `/identity/` entirely (issuer `https://gateway:8817/identity`), which changes the issuer every console and app has stored. Recommendation: accept.
-A request through a reverse proxy that sets `X-Forwarded-Host` to a bound name is not claimed by the apps host on the public listener (only the `Host` header is read); APPHOSTING-4 decides it.
 
 ### ENDPOINTS-P6: the ports step lists the public port (awaiting the owner)
 
