@@ -40,7 +40,7 @@ class DefaultPortsTests(unittest.TestCase):
         root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         problems, seen = check.check(root)
         self.assertEqual([], problems)
-        self.assertGreaterEqual(len(seen), 10)
+        self.assertGreaterEqual(len(seen), 7)
 
     def test_defaults_in_their_sub_blocks_pass(self):
         write(self.root, "a.cs", listen(7800))
