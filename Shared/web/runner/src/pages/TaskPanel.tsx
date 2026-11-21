@@ -99,7 +99,7 @@ export function TaskPanelView(p: TaskPanelViewProps) {
           {p.moved && <div className="hint" style={{ marginTop: 4 }} data-testid="runner-task-owner-moved">{p.moved}</div>}
         </div>
 
-        <div style={{ marginTop: 14 }} data-testid="runner-task-run-inputs">
+        {!p.task.ddl && <div style={{ marginTop: 14 }} data-testid="runner-task-run-inputs">
           <label style={{ display: 'block' }}>
             <span className="hint">Run now with inputs, one <span className="mono">name=value</span> per line (empty: the task&apos;s defaults)</span>
             <textarea className="input mono" rows={2} value={p.inputsText} onChange={(e) => p.onInputs(e.target.value)} disabled={!p.canAct} data-testid="runner-task-inputs" style={{ width: '100%', marginTop: 4 }} />
@@ -109,7 +109,7 @@ export function TaskPanelView(p: TaskPanelViewProps) {
             {parsed.problem && <span className="hint" data-testid="runner-task-inputs-why">{parsed.problem}</span>}
             {!p.canAct && <span className="hint" data-testid="runner-task-inputs-why">Running a task needs the operator role on this runner.</span>}
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   )
