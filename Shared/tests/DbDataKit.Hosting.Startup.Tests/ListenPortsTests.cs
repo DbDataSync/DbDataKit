@@ -160,7 +160,7 @@ public sealed class ListenPortsTests : StartupTestBase
     }
 
     /// <summary>
-    /// On Windows a range excluded with <c>netsh</c> is skipped, whether read from Windows or only refused when bound, and a sub-block it covers fails
+    /// On Windows a range excluded with <c>netsh</c> is skipped, whether the caller passes the ranges or not, and a sub-block it covers fails
     /// the ports step naming it. The test excludes a block of its own and removes it afterwards; adding a range needs an elevated process (the hosted
     /// Windows runner is one).
     /// </summary>
@@ -178,7 +178,7 @@ public sealed class ListenPortsTests : StartupTestBase
             var read = ExcludedPortRanges.Read();
             Assert.Contains(read, r => r.Contains(b.Start) && r.Contains(b.Start + 1));
             Assert.Equal(b.Start + 2, ListenPorts.Choose(b, IPAddress.Loopback, read));
-            // without the list, binding finds the same: the excluded ports refuse (WSAEACCES) and are skipped
+            // without the list, Choose reads Windows' ranges itself: a loopback bind inside an excluded range can succeed, so a refused bind never finds them
             Assert.Equal(b.Start + 2, ListenPorts.Choose(b, IPAddress.Loopback, []));
         }
         finally
