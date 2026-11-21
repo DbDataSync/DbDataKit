@@ -200,3 +200,5 @@ planning/recheck-open-items
 backup/trustzones-13-uncommitted
 # --- group 22: a throwaway branch pushed on 2026-11-21 to test that a session cannot delete remote branches (it cannot); it holds main's head and nothing else
 tmp/delete-test-claude
+# --- group 23: the session branch the harness started on (2026-11-21); it is at main's head and holds nothing main lacks. Deletion approved by the owner
+claude/sleepy-keller-vowppp
