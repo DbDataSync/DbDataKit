@@ -116,6 +116,8 @@ Besides, it:
 | `work/<slug>` (`work/installer`) | the reviewer | the subject's ready task branches combined; the pull request into `main`, whose title starts with the slug |
 | `planning/<topic>` | a session | planning and design changes outside a subject's tasks |
 
+**Few branches.** Tasks done one after another by the same worker share one branch: the first task's `backup/<slug>-<n>`, with each later task's commits on top of it, each commit still starting with its own task id. A new branch is made only when workers run at the same time, one branch per worker. When such a worker finishes, the session merges its branch into the run's branch locally, pushes the result, and lists the finished branch in `scripts/branches-to-delete.txt` in the same change. A session never leaves a finished branch behind.
+
 **Pushing.** Nothing stays only on one machine. Every commit is pushed to its own branch as soon as it is made, and before any wait, report or stop; a commit meant for `main` that has to wait (for CI to go idle, for a review) is first pushed to a `backup/<topic>` branch. Every report to a session names the branch and commit where its work is pushed, so the owner never has to ask whether something is stored.
 
 A cloud session or worker whose harness started it on a branch of another name switches to the standard name before its first push and keeps pushing there.
