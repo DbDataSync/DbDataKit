@@ -35,12 +35,7 @@ LISTENERS = [
     ("DbDataRunner", "DbDataRunner/src/DbDataRunner.Server/RunnerSettings.cs", r'DefaultListen = "https://[^":]+:(\d+)"', 1, "Runner"),
     ("DbDataGateway management", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r'public int Port \{ get; set; \} = (8816);', 1, None),
     ("DbDataGateway Flight", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r'public int Port \{ get; set; \} = (8815);', 1, None),
-    ("DbDataGateway identity", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r'public int Port \{ get; set; \} = (8817);', 1, None),
-    ("DbDataGateway apps", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r'public int Port \{ get; set; \} = (8818);', 1, None),
-    ("DbDataGateway store module", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r'public int Port \{ get; set; \} = (8819);', 1, None),
-    ("DbDataGateway views", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r'public int Port \{ get; set; \} = (8820);', 1, None),
-    ("DbDataGateway mcp", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r'public int Port \{ get; set; \} = (8822);', 1, None),
-    ("DbDataGateway feeds (REST)", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r'public int Port \{ get; set; \} = (8821);', 1, None),
+    ("DbDataGateway public listener", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r'public int Port \{ get; set; \} = (8817);', 1, None),
 ]
 
 

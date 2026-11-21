@@ -43,9 +43,10 @@ compression: { mode: arrow, codec: zstd, level: 3, allowClientOverride: true }
 # publicUrl is the address people reach it at (the token issuer; it must not change once people have signed in). The first administrator redeems identity/FIRST-RUN.txt in the data directory.
 # Administer it with:  dbdatagateway identity invite | user-list | client-add | client-list | assign | map-group
 # modules: [flightsql, identity, apps]   # what this instance serves; flightsql is the default
-# apps:                                 # the apps host (module "apps"): published apps at https://<host>:8818/apps/<instance>/; https only
+# public: { address: 0.0.0.0, port: 8817 }   # the public listener: identity, apps, store, views, feeds and mcp answer here, by path (/identity/, /apps/, /store/, /views/, /feeds/, /mcp), unless a module has a port of its own
+# apps:                                 # the apps host (module "apps"): published apps at https://<host>:<public port>/apps/<instance>/; https only
 #   address: 0.0.0.0
-#   port: 8818
+#   port: 8818                         # a listener of its own; leave it out to be served on the public listener
 #   rolesRefreshSeconds: 300           # how old the home's answer about a person may be before the host asks again (a role taken away stops working within this)
 #   storageCapMb: 50                   # the most storage one app instance may keep in the host (1 to 1024); a manifest's storage.quota_mb is limited to it
 #   home: { clientId: <id from identity client-add> }   # signs people in through the identity home (this instance's, or home.authority); redirect URI <public url>/apps/-/callback
