@@ -258,6 +258,21 @@ names the Runner as not ready, and a second run after the port is freed finishes
 `dbdatakit setup invite <gateway|runner|workspace> [--role <ceiling>] [--group <g>]` mints a join token and prints the pairing command for a remote
 machine; the console's Add a server screen makes the same call.
 
+```
+$ dbdatakit setup invite runner --role operator --url https://console.example.com:7800
+Run this on the runner's machine, as an administrator, before 2026-11-21 09:27:03Z. It works once:
+    dbdatarunner pair --host https://console.example.com:7800 --token k7d2mq4x5vbn6r3ta2wq4zj7pa --console-thumbprint sha256:3f0c9a5e...
+```
+
+`--url` is the address the server's machine reaches the console at; without it the command names the console's `listen:` address, and a
+loopback address works for a server on the console's machine only. `--minutes` sets how long the token works (15 by default, up to 1440). The
+command reads the console's certificate and writes the token into the console's state, so it runs on the console's machine; it fails, saying so,
+before the console's first start.
+
+When a join is refused, the server's start stops at the join step and its startup-failure file says what the console answered, for example
+`The console at https://console.example.com:7800 answered: The join token was already used. Make a new command on the console (dbdatakit setup
+invite).` The join request stays in the data folder, so the next `pair` command replaces it.
+
 **Docker Compose** uses the same path, with the tokens passed through a shared volume rather than environment variables (a variable would need the token
 before the console exists, so it would have to be a long-lived secret written in the compose file). The console's container lists its members in its
 settings (`setup.members`), writes their join requests into the shared volume `join` at its first start, and each member's container consumes its own at

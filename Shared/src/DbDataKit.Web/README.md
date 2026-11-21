@@ -4,7 +4,7 @@ Trust between a console and the servers it manages (plan 13, W12).
 
 ## Rules
 
-* **The client calls the server; a server never calls a console.** A server needs no credentials for any console and keeps running (schedules, replication, queries) when every console is gone; monitoring, notifications and run history are pulled by the console. A server calls *another* server only as that server's paired client, for one purpose (a Workspace publishing into a Gateway or a Runner, a Runner telling a Gateway's cache that data changed: see `OwnerScope`), never in a cycle.
+* **The client calls the server. A server calls a console once, to join it** ("Joining the console" below); every other call is the console calling the server. A server needs no credentials for any console and keeps running (schedules, replication, queries) when every console is gone; monitoring, notifications and run history are pulled by the console. A server calls *another* server only as that server's paired client, for one purpose (a Workspace publishing into a Gateway or a Runner, a Runner telling a Gateway's cache that data changed: see `OwnerScope`), never in a cycle.
 * **A server can be paired with several clients** (a team console and an operations console, a standby, another server). Each pairing has its own key and role ceiling and is revoked on its own; nothing assumes the other end is a console.
 * **The server is the security boundary.** A console hides what a user may not do, but the server checks every call itself and never trusts the UI.
 * **Transport.** The management API is always HTTPS on a listener of its own (on the Gateway never the Flight port, never on the query path). It binds to loopback when the console is on the same machine; a bind address that is not loopback and not covered by TLS gives a start-up warning. Certificates are self-signed by default because the client pins the fingerprint at pairing.
@@ -43,8 +43,8 @@ A client is a console, another server or a command line (`ClientKind`); the serv
 ## Joining the console (`JoinTokens`, `JoinService`, `JoinClient`)
 
 A server joins a console with a single-use token the console made for it (`docs/install.md`, "Pairing"). This library has both halves of the
-exchange, tested together in one process. The console's join route in its host, the token table in its state, the console's command that makes a
-join command, and the servers' `pair` command and join step are not built yet.
+exchange, the token table, the servers' `pair` command and their join step. The console maps the join route and makes tokens with
+`dbdatakit setup invite`; the Gateway, the Runner and the Workspace have the `pair` command and run the join step at their start.
 
 **The token.** `JoinTokens.Mint(scope, madeBy)` makes 128 random bits, written as 26 lower-case letters and digits, for one product, a role
 ceiling and a group (`JoinScope`). It works for 15 minutes unless the caller gives a lifetime of up to 24 hours. `Normalize` accepts the token in
@@ -52,7 +52,10 @@ upper case and with dashes or spaces. The console keeps a `JoinTokenRecord` with
 tries and whether it was spent or cancelled. In place of the token, the record holds its verifier: the public half of an Ed25519 key that
 `JoinTokens.KeyFor` derives from the token with HKDF-SHA256. The verifier checks a join's signature and cannot make one, so a copy of the console's
 state is not enough to join a server. `IJoinTokenStore` is where the records live (`MemoryJoinTokenStore` keeps them in memory; a store's `Update`
-must be atomic for one record, so two joins cannot both spend a token).
+must be atomic for one record, so two joins cannot both spend a token). `StateJoinTokenStore` keeps them in the `join_token` table of the
+`trust` state module: a change to a token is written only while the row's `row_version` is the one read, and made again otherwise, so this holds
+on SQLite, SQL Server and PostgreSQL and for two consoles on one database. The table's `ended_at` (the earliest of the expiry, the spend and the
+cancel) is the module's retention column, so the state's housekeeping removes a token 30 days after it stopped working.
 
 **The join request file.** `JoinRequestFile` reads and writes `join-request.yaml` in the server's data folder, format `join-request/1`:
 
@@ -91,6 +94,23 @@ not right, and the message names the file. `Delete` removes the file.
 
 The join route takes no credentials, because a joining server has nothing but its signature: the console's host maps it where its sign-in does not
 apply.
+
+**The server's side: `pair` and the join step.** `JoinPairCommand` is the one-word command `<program> pair --host --token
+--console-thumbprint [--address] [--repo]` (`--token -` reads the token from standard input). It writes `join-request.yaml` into the server's data
+folder and restarts the server's registered service (`ServiceRestarter` of `DbDataKit.Hosting.Cli`: the Windows service, or the systemd unit when it
+is installed), then waits up to 90 seconds for the service to delete the request. With no service registered it prints the `server run` command
+to start. `ServerJoin.RunAsync` is the join step: with a request in the data folder it joins while the server's listener is up (so it answers
+the callback), adds the console as a paired client, keeps the console's address and certificate thumbprint in the group's settings
+(`JoinedConsoles`, the setting `joined-console:<console id>`) and deletes the request. A refused join keeps the request and throws
+`ServerJoinException` with the console's answer; the server turns it into the join step's failure (`StartupStepException.JoinFailed`), so the
+start stops and `startup-failure-<program>.txt` names the console and what it said.
+
+```
+$ dbdatarunner pair --host https://console.example.com:7800 --token k7d2mq4x5vbn6r3ta2wq4zj7pa --console-thumbprint sha256:3f0c...
+Wrote the join request /var/lib/dbdatakit/runner/join-request.yaml; the server joins https://console.example.com:7800 at its next start.
+Restarted the service; waiting for it to join ...
+Joined https://console.example.com:7800.
+```
 
 **Refusals.** Each refusal is a `403`, except a request that is not a join (`400`) and a server more than one compatibility generation away
 (`409`, answered before the token is looked at). Every join and every refusal is written to the audit (`IAuditLog`, command `server.join`). The

@@ -7,7 +7,8 @@ The steps a server runs before it serves, and the file that says why a start fai
   the first step that throws and returns a `StartupResult`; the server's `server run` returns its `ExitCode` (1 after a failed start).
 - `StartupStepException` has one factory per step, so a failed step names the same things in every server: `Folder` the folder, its owner and the
   account; `Keys` the key file and the unexpected grant; `Certificate` the file and the account; `State` the engine, the database and the migration;
-  `Ports` the port, who holds it and Windows' excluded port ranges; `Join` the console's address and its answer. A step may throw any other
+  `Ports` the port, who holds it and Windows' excluded port ranges; `Join` the console's address and its answer (`JoinNotMade` when the console
+  gave none: it could not be reached, or another certificate answered at its address; `JoinFailed` picks one of the two). A step may throw any other
   exception; the failure file then names the step and the exception chain.
 - `StartupFailureFile` is `startup-failure-<program>.txt` in the shared logs folder. Before the first step the sequence makes the service's own logs
   subfolder (`logs/<program>`) and writes the file's first line. Each step rewrites that line, for example
