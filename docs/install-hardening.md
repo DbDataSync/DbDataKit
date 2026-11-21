@@ -1,4 +1,5 @@
 # Hardening an install
+<!-- reviewed: 2026-11-21 -->
 
 What an administrator sets up and checks so that each service's files can be read and changed only by that service, and so that a server joins
 the right console. The steps of an install are in [install.md](install.md); the risks the design answers are in [security.md](security.md).
