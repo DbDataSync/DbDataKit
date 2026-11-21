@@ -64,7 +64,13 @@ public static class ConsoleState
     /// <summary>The service name the console records on what it writes to a database it may share (the feed's <c>service_id</c>).</summary>
     public const string ServiceId = ConsoleSettings.Product;
 
-    public static IReadOnlyList<StateModule> Modules { get; } = [IdentityModule.Module, NotificationsModule.Module, DbDataKit.Identity.FederationModule.Module, RunsModule.Module, AuditModule.Module, AgentsModule.Module, SetupModule.Module, DeliveryModule.Module, BindingPostureModule.Module, QualityModule.Module, BacklogModule.Module, ReleasesModule.Module];
+    /// <summary>
+    /// The scope the console opens its state with: the install's modules, and the <c>trust</c> module (the join tokens it makes) kept under the group
+    /// <c>console</c>, which no Gateway or Runner group sharing the database is called.
+    /// </summary>
+    public static StateScope Scope { get; } = new(Group: "console");
+
+    public static IReadOnlyList<StateModule> Modules { get; } = [IdentityModule.Module, NotificationsModule.Module, DbDataKit.Identity.FederationModule.Module, RunsModule.Module, AuditModule.Module, AgentsModule.Module, SetupModule.Module, DeliveryModule.Module, BindingPostureModule.Module, QualityModule.Module, BacklogModule.Module, ReleasesModule.Module, DbDataKit.Web.Trust.TrustModule.Module];
 
     private static string AppliedBy => $"{ConsoleSettings.Product} {typeof(ConsoleState).Assembly.GetName().Version}";
 
@@ -102,7 +108,7 @@ public static class ConsoleState
         System.IO.Directory.CreateDirectory(directory);
         settings ??= new StateSettings();
         var modules = Modules;
-        var scope = StateScope.Install;
+        var scope = Scope;
         if (settings.IsSqlite) return StateOpener.Open(settings, System.IO.Path.Combine(directory, "state.db"), modules, scope, appliedBy: AppliedBy);
         // the password of a server engine is a secret reference: the console's store, then the environment
         var secrets = new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]);

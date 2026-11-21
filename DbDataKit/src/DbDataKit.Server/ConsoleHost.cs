@@ -76,7 +76,7 @@ public static class ConsoleHost
         RemovedEmbeddedRunner.Refuse(settings.Directory);
         builder.Services.AddSingleton(_ => ConsoleState.Open(settings.Directory, settings.State));
         // the console's own state's retention and snapshot, in its process (plan 35 I1): state.housekeeping of settings.yaml. Packages run on a paired Runner, never here
-        builder.Services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(sp => new DbDataKit.State.Engines.Housekeeping.StateHousekeeping(sp.GetRequiredService<StateDatabase>(), ConsoleState.Modules, StateScope.Install,
+        builder.Services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(sp => new DbDataKit.State.Engines.Housekeeping.StateHousekeeping(sp.GetRequiredService<StateDatabase>(), ConsoleState.Modules, ConsoleState.Scope,
             ConsoleState.ServiceId, settings.State ?? ConsoleState.Resolve(settings.Directory).Settings, settings.Directory, sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataKit.Server.Housekeeping")));
         builder.Services.AddSingleton(sp => new NotificationFeedStore(sp.GetRequiredService<StateDatabase>(), ConsoleState.ServiceId));
         builder.Services.AddSingleton(sp => new AuditLog(sp.GetRequiredService<StateDatabase>(), ConsoleState.ServiceId));
@@ -97,6 +97,8 @@ public static class ConsoleHost
         builder.Services.AddSingleton(sp => new ConsoleKeyStore(sp.GetRequiredService<EncryptedFileSecretStore>(), sp.GetRequiredService<EncryptedFileSecretStore>()));
         builder.Services.AddSingleton(_ => new InstanceRegistry(settings.InstancesPath));
         builder.Services.AddSingleton<ConsoleInstances>();
+        // servers that join by a single-use token: the tokens are rows of the console's state, a joined server is pinned in instances.yaml
+        builder.Services.AddSingleton(sp => new ConsoleJoins(sp.GetRequiredService<StateDatabase>(), sp.GetRequiredService<ConsoleKeyStore>(), sp.GetRequiredService<InstanceRegistry>(), sp.GetService<TimeProvider>()));
         builder.Services.AddSingleton<ConsoleUpgrades>(sp => new ConsoleUpgrades(settings, sp.GetRequiredService<ConsoleInstances>()));
         // state databases as connections of kind state, and the move of a server's state onto one (plan 29b, C06)
         builder.Services.AddSingleton(settings);
@@ -228,6 +230,10 @@ public static class ConsoleHost
         MapState(app, settings, maintenance);
         // the certificate this console presents: days left and subject, for its own Monitoring row (UI10); the shape of every server's `GET /api/v1/certificate`
         app.MapGet(CertificateStatusEndpoint.Path, () => Results.Json(CertificateStatusEndpoint.Describe(certificate, "self-signed", TimeProvider.System.GetUtcNow()))).RequireAuthorization(DbDataKit.Web.Auth.Policies.Viewer);
+        // a joining server has no sign-in, only the signature its token makes: the route is outside the sign-in, and the join checks the signature itself
+        var ownFingerprint = PairingProof.CertificateFingerprint(certificate);
+        app.MapJoin((http, ct) => http.RequestServices.GetRequiredService<ConsoleJoins>().ServiceAsync(() => ownFingerprint, ct),
+            (server, ct) => app.Services.GetRequiredService<ConsoleJoins>().RecordAsync(server, ct)).AllowAnonymous();
         app.MapRelay();
         if (settings.Home is not null) app.MapFederation();
 
@@ -267,7 +273,7 @@ public static class ConsoleHost
                     () => new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(settings.Directory), new DbDataKit.Secrets.EnvSecretProvider()]),
                     ConsoleState.SettingsFileIn(settings.Directory), settings.StateSources ?? resolved.Sources);
             },
-            ConsoleState.Modules, StateScope.Install, maintenance, new DbDataKit.State.Api.StateAuditSink(app.Services.GetRequiredService<StateDatabase>(), ConsoleState.ServiceId),
+            ConsoleState.Modules, ConsoleState.Scope, maintenance, new DbDataKit.State.Api.StateAuditSink(app.Services.GetRequiredService<StateDatabase>(), ConsoleState.ServiceId),
             Version: Version));
         app.MapState(api, context =>
         {
