@@ -59,10 +59,6 @@ by TRUSTZONES-3 and checked under B. Recommendation: A, because a structural tas
 The console signs a link credential per pair of groups, scoped to the three paths, rotated with the group keys. Scenario: a Gateway instance is stolen;
 revoking its group key also revokes its link. Recommendation: accept.
 
-### TRUSTZONES-P3: the console's one query over every service's runs (default, awaiting the owner)
-
-With a registry per login (`docs/state-logins.md`), the console's single query over the runs, audit and notifications of every service in a shared database finds only the console's own modules. Built as the default: the console reads another service's runs through that service's API, as it does for services on their own databases. Scenario: an install on one PostgreSQL database; the Runner's runs page in the console shows the Runner's runs through the Runner's API, and no login reads another's schemas. Option B: grant the console's login read rights on the other services' schemas and register them in the console's registry, so one query reads all. Recommendation: A, because the console would then reach every service's data with one login, which is what separate logins avoid.
-
 ### TRUSTZONES-P4: the topology `group` keeps the built-in schema names (default, awaiting the owner)
 
 `state init --topology install` writes per-login schemas; `--topology group` (one database for one group) still writes the built-in names (`dbdatakit_<module>`), so a group database made earlier does not change names. Scenario: a Runner group `main` on its own database `dbdatakit_runner_main`: its login is granted `dbdatakit_runs` and the rest of that database only, and another group has another database. Option B: write per-login schemas in a group database too, so a second service pointed at the same database later still stays apart. Recommendation: A, because the database is already the boundary and the names stay as they are.
@@ -122,6 +118,20 @@ hold once installs use the lists in earnest.
   meet in the operating-system rules of the design above.
 - Closed by default: whether a service with no `outbound:` line should connect nowhere, so a new install is closed until an administrator lists what it
   needs (the installer could write the list), and what an upgrade of an install without the line does then.
+
+### The console reading other services' runs from their databases
+
+**What.** An option for installs where the console can reach a service's database: the console's login gets a read-only grant on the runs, audit and
+notifications schemas of that service, never payloads or secrets, and the console's registry lists them so one query reads all. It is never assumed. The
+default is each service's API (`docs/state-logins.md`, "Limits"), which needs no network path to the service's database.
+
+**Why.** An API is not always the best path for a large list of runs, and a person may prefer one query. The owner has no rule between APIs and database
+queries and cares about UX, performance and security, chosen case by case; direct access is at most an option, because some installs give the console no
+network access to a service's database (SQL Server Express, a private container database).
+
+**Open questions.** Where the option is switched on (the console's state settings, per service); how the grant is made (`state grants` for the console's
+login, limited to those three modules); how the console falls back to the API when the database is unreachable; and a test on SQL Server and PostgreSQL that the grant is
+read-only and limited to those modules, which is the "Done when" of a task made when the owner schedules this.
 
 ## Shared areas touched
 
