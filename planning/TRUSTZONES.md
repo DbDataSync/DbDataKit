@@ -70,14 +70,6 @@ With a registry per login (`docs/state-logins.md`), the console's single query o
 
 The suite prints the statements to grant a login and never creates it or its password; the administrator (or the installer, INSTALLER-21, with the password from a secret reference) creates it. Scenario: an administrator runs `CREATE ROLE dbdatakit_runner_main LOGIN PASSWORD '...'`, then `dbdatarunner state grants | psql`. Option B: `state init --apply` also creates the login with a generated password stored as a secret. Recommendation: A for now; INSTALLER-21 decides how the installer passes the password.
 
-### TRUSTZONES-P6: a service with no `outbound:` setting connects anywhere (default, awaiting the owner)
-
-`DbDataKit.Outbound` reads one list, `outbound:`, in the service's settings file. Scenario: an administrator upgrades an install whose `server.yaml` has no `outbound:` line; the service connects as before and nothing is refused or audited. Adding `outbound: [https://api.nuget.org]` refuses everything else, and `outbound: []` refuses everything; a line with no value fails at start. Option B: a service with no line connects nowhere, so a new install is closed until an administrator lists what it needs (the installer could write the list). Recommendation: A for now, because B breaks every upgrade and every install that has not listed its package sources and git remotes; the installer can write a list for new installs later.
-
-### TRUSTZONES-P7: the form of an entry in the list (default, awaiting the owner)
-
-An entry is `scheme://host[:port]` (schemes `http`, `https`, `ssh`, `git`, `tcp`; the scheme gives the default port; a host may be `*.example.com`), the form the app egress approvals already use (`https://*.example.com`), with no path. Scenario: `ssh://github.com` allows a git remote `git@github.com:org/repo.git`, `https://github.com` allows the same host over https, and `https://api.nuget.org` does not allow `https://api.nuget.org:8443`. Option B: also address ranges (`10.0.0.0/8`) for internal servers, or match on the scheme and a path prefix. Recommendation: A, because the list names hosts people recognise; ranges and paths can be added when someone needs them, and the operating-system rules of the open design below decide how names and addresses meet.
-
 ### TRUSTZONES-P8: a service behind an HTTP proxy lists the proxy (default, awaiting the owner)
 
 The gate checks the address a connection is opened to. Scenario: a service reaches `https://api.nuget.org` through the proxy `proxy.corp:3128`; the list holds `tcp://proxy.corp:3128`, and the library cannot tell which site the proxy fetches, so the list no longer limits the site. Option B: the handler checks the request's own address first and the proxy second, so the list holds `https://api.nuget.org` and the proxy. Recommendation: B when a proxy is set; the default today is A because the handler does not read the proxy settings, and the change is small.
@@ -117,6 +109,22 @@ address that is not on the list.
   set filled from DNS, a container network policy that matches DNS names), or one forward proxy that the firewall makes the only way out.
 - Which platforms come first: Windows services, Linux systemd units, containers.
 - How a list item that is a package source with mirrors and CDNs (NuGet, npm) is written.
+
+### Outbound list: what the first form leaves out
+
+**What.** The outbound list (`DbDataKit.Outbound`) ships with the simplest form: an entry is `scheme://host[:port]`, and a service with no `outbound:` line
+connects anywhere. This design keeps what that form defers, so it is reviewed later.
+
+**Why.** The first form fits the lists people can write today (package sources, git remotes, a database host). Two choices were taken for now and may not
+hold once installs use the lists in earnest.
+
+**Open questions.**
+
+- Paths: whether an entry may name a path prefix (`https://github.com/org/`), so a list can allow one organisation of a host rather than all of it.
+- Address ranges: whether an entry may be a range such as `10.0.0.0/8`, for internal servers that have no name worth listing, and how names and ranges
+  meet in the operating-system rules of the design above.
+- Closed by default: whether a service with no `outbound:` line should connect nowhere, so a new install is closed until an administrator lists what it
+  needs (the installer could write the list), and what an upgrade of an install without the line does then.
 
 ## Shared areas touched
 

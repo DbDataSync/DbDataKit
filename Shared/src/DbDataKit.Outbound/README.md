@@ -10,7 +10,7 @@ outbound:
   - tcp://db.internal:5432
 ```
 
-- **One list, one setting.** `outbound:` in the service's settings file (`settings.yaml` of the console, `server.yaml` of the others) is a list of `scheme://host[:port]`. The scheme gives the port its default (`http` 80, `https` 443, `ssh` 22, `git` 9418); `tcp` has none, so it needs a port. A host is a name, an address, or `*.suffix` for every name under the suffix (not the suffix itself). A path, a query or a login in an entry is refused.
+- **One list, one setting.** `outbound:` in the service's settings file (`settings.yaml` of the console, `server.yaml` of the others) is a list of `scheme://host[:port]`. The scheme gives the port its default (`http` 80, `https` 443, `ssh` 22, `git` 9418); `tcp` has none, so it needs a port. A host is a name, an address, or `*.suffix` for every name under the suffix (not the suffix itself). A path, a query, a login or an address range (`10.0.0.0/8`) in an entry is refused: an entry names a host and a port.
 - **No setting, no limit.** A settings file without the line connects anywhere. `outbound: []` connects nowhere. A line with no value fails, so an emptied list is never read as either.
 - **Strict.** A value that is not a list, or an entry that is not valid, fails at start naming the file, the line and the entry.
 
