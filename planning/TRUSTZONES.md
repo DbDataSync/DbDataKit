@@ -36,7 +36,7 @@ reads through it as a person (path 2). Structural tasks run only when Control st
 | TRUSTZONES-10 | Path 2 governed reads: a Work task reads through the linked Gateway as a named person (for subscriptions and catalog reads), with that person's rules | TRUSTZONES-1 | M | two subscribers with different row rules read different rows through the link; a person with no access gets none |
 | TRUSTZONES-11 | A Gateway group shown as one node with its instances on the console, and a group's data sources as the group lists them | TRUSTZONES-1 | S | Playwright: a group of two instances is one node listing both |
 | TRUSTZONES-12 | Every secret value and login has an optional expiration date: stored with the secret (the shared stores, the group stores, the console's store, connection logins), shown and edited where the secret is, warned of before it expires; a run that uses an expired login fails naming it (owner, 2026-11-15; queued) | none | M | tests on each store: an expiry round-trips; a warning is raised N days before; a task using an expired login fails naming the secret |
-| TRUSTZONES-13 | Outbound lists in each service: a shared library through which every outbound connection of our own code goes; a destination that is not on the service's list is refused before connecting, and the refusal is logged and audited with the destination and the operation. Each service's list is in its settings, with a screen to edit it (a `docs/ui-editors.md` row). The Workspace service is the first to use it (WORKSPACEISOLATION) | none | M | a test per service: a listed destination connects; an unlisted one is refused, and the audit names it and the operation |
+| TRUSTZONES-14 | Outbound lists in the services: the console, the Gateway and the Runner read the `outbound:` setting and send their own outbound connections through `OutboundGate` (`DbDataKit.Outbound`), each service's refusals go to its audit through an `IOutboundAudit`, and a settings screen of each edits the list (the row "Outbound list" of `docs/ui-editors.md`). The Workspace's list is WORKSPACEISOLATION-9 | none | M | a test per service: a listed destination connects; an unlisted one is refused, and the audit names it and the operation; a story edits the list on a service's settings screen |
 
 ## Needs from other subjects
 
@@ -70,6 +70,18 @@ With a registry per login (`docs/state-logins.md`), the console's single query o
 
 The suite prints the statements to grant a login and never creates it or its password; the administrator (or the installer, INSTALLER-21, with the password from a secret reference) creates it. Scenario: an administrator runs `CREATE ROLE dbdatakit_runner_main LOGIN PASSWORD '...'`, then `dbdatarunner state grants | psql`. Option B: `state init --apply` also creates the login with a generated password stored as a secret. Recommendation: A for now; INSTALLER-21 decides how the installer passes the password.
 
+### TRUSTZONES-P6: a service with no `outbound:` setting connects anywhere (default, awaiting the owner)
+
+`DbDataKit.Outbound` reads one list, `outbound:`, in the service's settings file. Scenario: an administrator upgrades an install whose `server.yaml` has no `outbound:` line; the service connects as before and nothing is refused or audited. Adding `outbound: [https://api.nuget.org]` refuses everything else, and `outbound: []` refuses everything; a line with no value fails at start. Option B: a service with no line connects nowhere, so a new install is closed until an administrator lists what it needs (the installer could write the list). Recommendation: A for now, because B breaks every upgrade and every install that has not listed its package sources and git remotes; the installer can write a list for new installs later.
+
+### TRUSTZONES-P7: the form of an entry in the list (default, awaiting the owner)
+
+An entry is `scheme://host[:port]` (schemes `http`, `https`, `ssh`, `git`, `tcp`; the scheme gives the default port; a host may be `*.example.com`), the form the app egress approvals already use (`https://*.example.com`), with no path. Scenario: `ssh://github.com` allows a git remote `git@github.com:org/repo.git`, `https://github.com` allows the same host over https, and `https://api.nuget.org` does not allow `https://api.nuget.org:8443`. Option B: also address ranges (`10.0.0.0/8`) for internal servers, or match on the scheme and a path prefix. Recommendation: A, because the list names hosts people recognise; ranges and paths can be added when someone needs them, and the operating-system rules of the open design below decide how names and addresses meet.
+
+### TRUSTZONES-P8: a service behind an HTTP proxy lists the proxy (default, awaiting the owner)
+
+The gate checks the address a connection is opened to. Scenario: a service reaches `https://api.nuget.org` through the proxy `proxy.corp:3128`; the list holds `tcp://proxy.corp:3128`, and the library cannot tell which site the proxy fetches, so the list no longer limits the site. Option B: the handler checks the request's own address first and the proxy second, so the list holds `https://api.nuget.org` and the proxy. Recommendation: B when a proxy is set; the default today is A because the handler does not read the proxy settings, and the change is small.
+
 ## Open designs
 
 Not scheduled. Each becomes tasks only when the owner schedules it.
@@ -90,11 +102,11 @@ it, and the Workspace, which hides or explains the button); how a refused person
 
 ### Outbound rules applied by the operating system
 
-**What.** The install applies each service's outbound list (TRUSTZONES-13) as rules the service cannot get around: firewall rules for the service's
+**What.** The install applies each service's outbound list (`DbDataKit.Outbound`, the `outbound:` setting) as rules the service cannot get around: firewall rules for the service's
 account on Windows and Linux, and egress rules for its container. The rules cover programs the service starts (git, `dotnet restore`, npm), which
-TRUSTZONES-13 cannot see. The install applies them automatically, and `service check` reports when they are missing or out of date.
+the library cannot see. The install applies them automatically, and `service check` reports when they are missing or out of date.
 
-**Why.** TRUSTZONES-13 stops our own code. Only the operating system or the container platform stops a program that ignores it. The rules are also a
+**Why.** The outbound list stops our own code. Only the operating system or the container platform stops a program that ignores it. The rules are also a
 partial mitigation of supply chain attacks: a compromised package or build tool running in a service cannot send data to, or fetch code from, an
 address that is not on the list.
 
