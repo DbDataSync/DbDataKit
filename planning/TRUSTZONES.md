@@ -47,10 +47,10 @@ reads through it as a person (path 2). Structural tasks run only when Control st
 
 ### TRUSTZONES-P1: who asks the Gateways before a column is dropped (awaiting the owner)
 
-Today the Workspace (Control) asks the paired Gateways before a Store contract; Build's `apply_plan` asks nobody. Option A, "Control asks": the Workspace
-asks the linked Gateways before it starts `apply_plan` or a contract, and the Runner runs only a Control-signed structural task (TRUSTZONES-3). Option B,
+Today the Workspace service asks the paired Gateways before a Store contract (WORKSPACEISOLATION removes its calls to other services); Build's
+`apply_plan` asks nobody. Option A, "Control asks": the control service asks the linked Gateways before it starts `apply_plan` or a contract, and the Runner runs only a Control-signed structural task (TRUSTZONES-3). Option B,
 "Work asks": the Runner task asks its linked Gateways over path 2 before it runs the DDL. Scenario: an engineer approves a Build plan that drops
-`orders.discount`, which a published dashboard reads. Under A the Workspace refuses before the task is queued and the person sees the consumer on the
+`orders.discount`, which a published dashboard reads. Under A the control service refuses before the task is queued and the person sees the consumer on the
 build's page; under B the task is queued, asks, and fails, and the refusal is in the run's log. A run started from the Runner's own screen is refused under A
 by TRUSTZONES-3 and checked under B. Recommendation: A, because a structural task is already a Control action against an approved plan hash.
 
