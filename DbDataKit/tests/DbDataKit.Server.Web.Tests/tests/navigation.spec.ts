@@ -13,11 +13,11 @@ const groups: [string, [string, string, string][]][] = [
   ['Build and release', [['Releases', 'rail-releases', '/releases'], ['Deployments', 'rail-deployments', '/deployments'], ['Backlog', 'rail-backlog', '/backlog']]],
   ['Operate', [['Monitoring', 'rail-monitoring', '/monitoring'], ['Runs', 'rail-runs', '/runs'], ['Approvals', 'rail-approvals', '/approvals'], ['Delivery', 'rail-delivery', '/delivery'], ['Tracking', 'rail-tracking', '/tracking']]],
   ['Agents and knowledge', [['Agents', 'rail-agents', '/agents'], ['Knowledge', 'rail-knowledge', '/knowledge']]],
-  ['Servers', [['All servers', 'rail-instances', '/instances']]],
+  ['Servers', [['All servers', 'rail-instances', '/instances'], ['Add a server', 'rail-add-server', '/add-server']]],
   ['Settings', [['Connections', 'rail-connections-all', '/connections'], ['Bindings', 'rail-bindings', '/bindings'], ['Secrets', 'rail-secrets', '/secrets'], ['Users', 'rail-users', '/users'], ['Audit', 'rail-audit', '/audit'], ['Setup', 'rail-setup', '/setup']]],
   ['', [['Docs', 'rail-docs', '/docs']]],
 ]
-const adminOnly = new Set(['rail-instances', 'rail-secrets', 'rail-users', 'rail-audit', 'rail-setup'])
+const adminOnly = new Set(['rail-instances', 'rail-add-server', 'rail-secrets', 'rail-users', 'rail-audit', 'rail-setup'])
 
 /**
  * What the navigation shows, read from the page: each group's heading and the names of its entries. The servers paired by the stories before this one
@@ -80,7 +80,7 @@ test('an administrator finds every page in its group by its name, each lit when 
     .map(([title, items]) => [title, items.filter(([, testId]) => !adminOnly.has(testId)).map(([name]) => name)] as const)
     .filter(([, items]) => items.length > 0)
   expect(await shown(viewer)).toEqual(expected)
-  // the Servers group holds only the servers paired before (none when this story runs alone): never All servers
+  // the Servers group holds only the servers paired before (none when this story runs alone): never All servers or Add a server
   await expect(viewer.getByTestId('nav-group-servers').locator('.rail-item:not([data-testid^="nav-server-"])')).toHaveCount(0)
   for (const testId of adminOnly) await expect(viewer.getByTestId(testId)).toHaveCount(0)
   await viewerContext.close()
