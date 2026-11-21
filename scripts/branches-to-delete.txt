@@ -192,3 +192,7 @@ planning/sync-first-slice
 claude/brave-lamport-wj34se
 # --- group 19: planning/agents-and-cloud-dev (2026-11-20), pushed to main as a planning, documentation and tooling change on the owner's word; every commit is on main
 planning/agents-and-cloud-dev
+# --- group 20: planning branches pushed to main (2026-11-21): planning/finished-task-refs and planning/gateway-ports-p1 are contained in main (git rev-list <branch> --not main is empty); planning/recheck-open-items was merged with main and pushed to main as a planning change. The backup/* task branches of INSTALLER, ENDPOINTS and TRUSTZONES are not listed: Backup branch cleanup deletes them (docs/branch-cleanup.md)
+planning/finished-task-refs
+planning/gateway-ports-p1
+planning/recheck-open-items
