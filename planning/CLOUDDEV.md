@@ -13,7 +13,7 @@ offers the running instance's MCP endpoints to the session through a development
   --listen https://localhost:8480 --web-root Shared/web/console/dist`: SQLite state, a self-signed certificate, `/` answers 200. The other three were not
   tried.
 - Each service has `server run` with `--repo` and `--listen` (the console, Workspace and Runner take a port of their block of 7800 to 7899, pinned as the `listen:`
-  line of their settings file; the Gateway keeps 8815 to 8822 today, and INSTALLER-10 moves it into 7820 to 7839).
+  line of their settings file; the Gateway keeps 8815 to 8822 today, and ENDPOINTS-2 moves it into 7820 to 7839).
 - Pairing today is by code, announcement or the bundle token; INSTALLER's design (`docs/install.md`) removes all three for a command the console generates.
 - People sign in to the console with passkeys; agents with identity-home tokens (`ddk_...`, personal or a service account's) on the Gateway.
 - The Gateway's `mcp` module is built; the console's MCP endpoint is AGENTACCESS-5.

@@ -17,7 +17,7 @@ dbdataworkspace service install|uninstall|status|start|stop|restart|check|unit
 dbdataworkspace state init --topology service|group|install [--engine mssql|postgres --connection <connection with Password=secret:NAME or env:NAME>] [--login <role or user> [--migrate]] [--admin-connection <reference> --apply] [--group <name>] [--settings <file>] [--repo <server directory>]   # writes the state section of server.yaml (a SQLite file per service is the default)
 dbdataworkspace state show [--offline] [--engine mssql|postgres] [--repo <server directory>]      # the state database: engine, where each setting came from, namespaces, module versions, pending migrations; creates nothing
 dbdataworkspace state test [--repo <server directory>]                   # opens it read-only and checks rights, engine version and clashes; stops at the first failure with the fix
-dbdataworkspace state grants --login <database role or user> [--migrate] [--repo <server directory>]
+dbdataworkspace state grants [--login <database role or user>] [--migrate] [--repo <server directory>]
 dbdataworkspace state export --to <directory> [--include-secrets-check] [--repo <server directory>]   # the state as a snapshot; stop the server first
 dbdataworkspace state import --from <directory> [--migrate-after true|false] [--repo <server directory>]   # into an empty directory's state
 dbdataworkspace state verify --snapshot <directory> [--db] [--rehash-payloads] [--repo <server directory>]   # the snapshot against itself, or the state against it

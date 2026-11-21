@@ -7772,6 +7772,9 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "login": {
+          "type": "string"
+        },
         "statements": {
           "type": "array",
           "items": {
@@ -7787,6 +7790,9 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "login": {
+          "type": "string"
+        },
         "statements": {
           "type": "array",
           "items": {

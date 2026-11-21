@@ -21,7 +21,7 @@ A namespace is one copy of one module in one scope. Its `schema` and `prefix` ar
 * A template never writes a table name: it writes `{table:name}` (its own module) or `{table:module.name}` (a declared dependency's), and an index `{index:name}`; the dialect renders them. A table is declared by being named, so there is no second list.
 * The layout checks names when the database is opened: valid for the engine (63 characters on PostgreSQL, 128 on SQL Server), not reserved on any engine (`ReservedWords`: a table called `checkpoint` is refused on SQL Server), and no two namespaces rendering to the same table. A clash stops the start with a message naming the setting.
 * Because every namespace is recorded in the registry, a service that shares the database finds another's modules without being told (the console reading every service's runs, audit and notifications with one query).
-* **Rights per namespace:** `state grants` writes the `GRANT`s a login needs for the namespaces a service uses, so sharing a database does not mean sharing everything.
+* **Rights per namespace:** `state grants` writes the `GRANT`s a login needs for the namespaces a service uses, so sharing a database does not mean sharing everything. With `state init --topology install` each service and group gets a login of its own and schemas and a registry that start with that login's name (`StateLogins`, `docs/state-logins.md`).
 * SQLite: one file per service by default. A namespace may name its own `file:`, attached when the database is opened, for a module that writes heavily; modules that must commit together (a checkpoint and its run's outcome) stay in one file and a split is refused.
 
 ## Details that are easy to get wrong
