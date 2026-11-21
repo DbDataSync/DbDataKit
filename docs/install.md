@@ -202,7 +202,7 @@ the console calling the server. Users never copy codes between services except b
 standard input for whoever prefers that. All automation is a subcommand of our programs, never an OS-specific script.
 
 ```
-console (CLI or Servers page)               remote machine (administrator)                 the service, as itself
+console (CLI or Add a server screen)       remote machine (administrator)                 the service, as itself
  invite: product, role, group  ─────►  dbdatarunner pair --host ... --token ... --console-thumbprint ...
    keeps the token's hash                   writes join-request.yaml, (re)starts ─────►  startup step "join":
                                                                                            POST <host>/api/v1/join, TLS pinned to the thumbprint
@@ -219,7 +219,8 @@ thumbprint, so a machine in the middle neither learns the token nor passes for t
 or another group is refused, and audited with who made the token and nothing of its value.
 
 **Join tokens are rows of the console's state**: a table of the `trust` module, added by its own migration, holding the token's hash, its product, role
-ceiling and group, who made it and when it ends. The Servers page lists the tokens still waiting and cancels them.
+ceiling and group, who made it and when it ends. The console's Add a server screen lists the tokens still waiting, never their values, and
+cancels them.
 
 **Groups.** Runner and Gateway groups never pair with each other directly. The token names the group (a new Gateway group X, or join Runner group Y);
 the console makes the group key when it makes the group and hands it over during the join. Linking a Gateway group with a Runner group is a console
@@ -268,6 +269,22 @@ Run this on the runner's machine, as an administrator, before 2026-11-21 09:27:0
 loopback address works for a server on the console's machine only. `--minutes` sets how long the token works (15 by default, up to 1440). The
 command reads the console's certificate and writes the token into the console's state, so it runs on the console's machine; it fails, saying so,
 before the console's first start.
+
+The console's **Add a server** screen (in the Servers group of the navigation, for administrators) makes the same token:
+
+- **Make the command.** The administrator chooses the server (Gateway, Runner or Workspace), ticks the roles of the ceiling (admin is ticked to
+  start with), names a group if the server joins one, sets how many minutes the command works (15 to start with) and checks the console's address.
+  The address starts as the one the browser opened the console at; a server on another machine needs an address that machine reaches. The screen
+  shows the command once, with a Copy button: the console keeps no copy of the token, and a command that names a loopback address carries a note
+  that only a server on the console's machine reaches it.
+- **Waiting to be used.** Every token made on the screen or with `setup invite` is listed until a server spends it or it ends: the server, the
+  ceiling, the group, who made it and when it ends. Cancel ends a token, so its command joins nothing; the console's audit records who cancelled it
+  (`server.invite.cancel`), as it records who made it (`server.invite`).
+- **Joined.** Once the server has joined, its token leaves the list and the server is listed under All servers.
+
+Example: Ana opens Add a server, chooses Runner, keeps admin and presses Make the command. She copies `dbdatarunner pair --host
+https://console.example.com:7800 --token k7d2mq4x5vbn6r3ta2wq4zj7pa --console-thumbprint sha256:3f0c9a5e...` to the Runner's machine and runs it there
+as an administrator. The Runner restarts and joins, its token leaves the list, and All servers shows the Runner as Ready.
 
 When a join is refused, the server's start stops at the join step and its startup-failure file says what the console answered, for example
 `The console at https://console.example.com:7800 answered: The join token was already used. Make a new command on the console (dbdatakit setup

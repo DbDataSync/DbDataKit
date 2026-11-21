@@ -44,7 +44,8 @@ A client is a console, another server or a command line (`ClientKind`); the serv
 
 A server joins a console with a single-use token the console made for it (`docs/install.md`, "Pairing"). This library has both halves of the
 exchange, the token table, the servers' `pair` command and their join step. The console maps the join route and makes tokens with
-`dbdatakit setup invite`; the Gateway, the Runner and the Workspace have the `pair` command and run the join step at their start.
+`dbdatakit setup invite` and its Add a server screen (`/api/join-tokens`: make one, list the waiting ones, cancel one); the Gateway, the Runner and
+the Workspace have the `pair` command and run the join step at their start.
 
 **The token.** `JoinTokens.Mint(scope, madeBy)` makes 128 random bits, written as 26 lower-case letters and digits, for one product, a role
 ceiling and a group (`JoinScope`). It works for 15 minutes unless the caller gives a lifetime of up to 24 hours. `Normalize` accepts the token in
