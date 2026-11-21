@@ -120,4 +120,8 @@ public sealed class StartupStepException : Exception
                 ? $"The console at {consoleAddress} did not answer."
                 : $"The console at {consoleAddress} answered: {answer}",
             [new("Console", consoleAddress), new("Answer", answer ?? "(none)")], inner);
+
+    /// <summary>The join step when the console gave no answer: <paramref name="reason"/> says why (it could not be reached, or another certificate answered at its address).</summary>
+    public static StartupStepException JoinNotMade(string consoleAddress, string reason, Exception? inner = null) =>
+        new(StartupStep.Join, reason, [new("Console", consoleAddress), new("Answer", "(none)")], inner);
 }
