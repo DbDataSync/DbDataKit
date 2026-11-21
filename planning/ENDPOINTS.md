@@ -39,13 +39,6 @@ listens on the same ports (`docs/install.md`, "Ports"). A client set to an old p
 `/identity/`, `/apps/`, `/store/`, `/views/`, `/feeds/`, `/mcp/` on the public listener, matching the module names. Scenario: an OData client reads
 `https://gateway:7820/feeds/sales/orders`. Recommendation: accept.
 
-### ENDPOINTS-P3: the setting that gives a module a port of its own is its `port` (default, awaiting the owner)
-
-The subject said "a module with its own `listen:`". The modules already have `address` and `port` settings, so a module has a listener of its own when its `port` is set and none
-when it is empty. Scenario: `store: { address: 127.0.0.1, port: 9443 }` puts the store on 9443 and a request to `/store/api/v1/models` on the public listener is a 404; with no
-`store:` section the store is at `https://gateway:8817/store/api/v1/models`. Option: a `listen:` object per module in place of `address` and `port`, which renames settings every
-install has. Recommendation: keep `port`.
-
 ### ENDPOINTS-P4: the public listener's port until ENDPOINTS-2 (default, awaiting the owner)
 
 `public.port` is 8817 (the identity home's old port) with `public.address` 0.0.0.0, so an install that reached the identity home at 8817 still does. Scenario: `modules: [identity,
@@ -80,6 +73,14 @@ empty box in ENDPOINTS-2, which removes the other fixed defaults.
 `dist/compose/quickstart-apps.yml` publishes 8817 and 8818 and its scripts register the redirect `https://localhost:8818/apps/-/callback`. It now sets `identity.port` 8817 and `apps.port`
 8818, so the quickstart behaves as before. Scenario: `docker compose ... up` serves the identity home at `https://localhost:8817` and apps at `https://localhost:8818/apps/<instance>/`.
 ENDPOINTS-3 moves it to the public listener (one published port). Recommendation: accept.
+
+### ENDPOINTS-P9: one `listen` setting everywhere (awaiting the owner)
+
+Scenario: an operator wants the console on `https://0.0.0.0:8800`, the Gateway's Flight listener on all addresses, and the store module on `https://127.0.0.1:9443` only. Today that is
+`listen: { address, port }` on the Gateway, `public: { address, port }`, and `port` and `address` on each module. Proposal: every service and every Gateway listener takes one `listen`
+setting, a Kestrel-style URL or a list of URLs (`https://0.0.0.0:8817`, `[https://127.0.0.1:9443]`); `https` only where the Gateway's certificate is used. `port` and `address` are removed
+with no alias and no version bump; an old shape fails with a message naming the file and the setting. Validation of clashes and of the 7820 to 7839 ranges reads the parsed URLs.
+Recommendation: build it in ENDPOINTS-2 together with the pinning; split out the suite-wide rename, with its test and doc changes, only if that makes ENDPOINTS-2 simpler.
 
 ## Shared areas touched
 
