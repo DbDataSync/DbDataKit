@@ -38,7 +38,8 @@ subject keep colliding, the subject is split into two subjects (the owner's call
   knows, no list of everything that could be said. A worker's long report is not passed on: the session gives the result in a few lines and the
   owner asks for detail where wanted. A wall of text and a pile of questions lead to bad answers, so neither is sent;
 - **asks one thing at a time, then moves on**: one question per message, and no list of what else is still open. When the owner answers, the
-  session acts on the answer and asks the next question. The owner can ask for a summary of what is open at any time.
+  session acts on the answer and says in a line what it did. It asks the next question only when the work cannot go on without it; otherwise it
+  waits for the owner to ask for the next item. The owner can ask for a summary of what is open at any time.
   The question stands on its own: it names the item it is about and quotes the text or gives the options, so the owner can answer it without
   looking anywhere else. Several questions go in one message only as a question dialog, each one complete;
 - **keeps one thread**: while a question is waiting for the owner's answer, the session sends nothing else about another item. A worker or
