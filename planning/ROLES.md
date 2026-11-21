@@ -38,6 +38,10 @@ subject keep colliding, the subject is split into two subjects (the owner's call
   knows, no list of everything that could be said;
 - **asks one thing at a time**. Each question stands on its own: it names the item it is about and quotes the text or gives the options, so the
   owner can answer it without looking anywhere else. Several questions go in one message only as a question dialog, each one complete;
+- **re-checks every open question and default before showing it, and again after each answer**. It reads each open proposal and each default a
+  worker took against what the owner has decided since the text was written (answers, settings removed or renamed, paths moved, tasks added). One
+  that an answer decided, replaced or made meaningless is not shown: in the same change it is removed or rewritten, and what it still says that
+  matters goes into the task or open design that now carries it. The owner is shown only what is still open, in terms of the current plan;
 - **shows the exact text it proposes for docs and planning** (a paragraph of a product doc, a section of a subject file, a rule in this file or
   `CLAUDE.md`) in small batches, and applies a batch only after the owner approves it. Code is reviewed the usual way, by its tests and the
   reviewer, not shown line by line;
