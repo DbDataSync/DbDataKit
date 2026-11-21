@@ -33,8 +33,9 @@ How the four services fit together, what runs where, and the changes planned. De
 - **One control service manages several services of each kind**, and one service can be paired with several control services.
 - **Management and data use separate listeners.** The control service calls a service's management listener; end users and external tools call the
   Gateway's data listeners.
-- **Installing**: each service installs on its own, or all four on one machine with `dbdatakit-full`. The control service makes a single-use command
-  that joins a service to it (`docs/install.md`).
+- **Installing**: all four services can be installed together on a single server, or on separate servers for greater control of security and
+  load. `dbdatakit-full` installs all four on one server. To join a service on another server, you run a command that the control service generates
+  for it, and the command works only once (`docs/install.md`).
 
 ## Who calls whom
 
