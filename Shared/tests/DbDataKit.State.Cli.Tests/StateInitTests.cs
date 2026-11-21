@@ -191,17 +191,129 @@ public sealed class StateInitTests : IDisposable
 
         Assert.True(a.Exit == 0, a.All);
         Assert.True(b.Exit == 0, b.All);
-        var tableA = StateLayout.Create(db.Engine, modulesA, new StateScope("main", "svca")).Table("work", "item");
-        var tableB = StateLayout.Create(db.Engine, modulesB, new StateScope("main", "svcb")).Table("work", "item");
+        var layoutA = StateLayout.Create(db.Engine, modulesA, new StateScope("main", "svca"), StateSettingsWriter.Load(fileA).Namespaces);
+        var layoutB = StateLayout.Create(db.Engine, modulesB, new StateScope("main", "svcb"), StateSettingsWriter.Load(fileB).Namespaces);
+        var tableA = layoutA.Table("work", "item");
+        var tableB = layoutB.Table("work", "item");
         Assert.NotEqual(tableA, tableB);
+        // the module kept per install is one copy per service: the same name, a table of each login's own
+        Assert.NotEqual(layoutA.Table("shared", "item"), layoutB.Table("shared", "item"));
         var asA = new Db(db.Engine, db.As(loginA, Password));
+        var asB = new Db(db.Engine, db.As(loginB, Password));
         Assert.Equal(0L, Convert.ToInt64(asA.Scalar($"SELECT COUNT(*) FROM {tableA};")));
-        Assert.Equal(0L, Convert.ToInt64(asA.Scalar($"SELECT COUNT(*) FROM {StateLayout.Create(db.Engine, modulesA, new StateScope("main", "svca")).Table("shared", "item")};")));
-        var refused = Assert.ThrowsAny<DbException>(() => asA.Scalar($"SELECT COUNT(*) FROM {tableB};"));
-        Assert.True(StateDatabaseErrors.Classify(refused) == StateErrorKind.PermissionDenied, refused.Message);
+        Assert.Equal(0L, Convert.ToInt64(asA.Scalar($"SELECT COUNT(*) FROM {layoutA.Table("shared", "item")};")));
+        foreach (var (login, other) in new[] { (asA, layoutB), (asB, layoutA) })
+            foreach (var table in new[] { other.Table("work", "item"), other.Table("shared", "item") })
+            {
+                var refused = Assert.ThrowsAny<DbException>(() => login.Scalar($"SELECT COUNT(*) FROM {table};"));
+                Assert.True(StateDatabaseErrors.Classify(refused) == StateErrorKind.PermissionDenied, refused.Message);
+            }
 
         // the login of the other service's settings opens its own modules
         Assert.Equal(0, (await RunAsync(Product(db, modulesB, service: "svcb", settingsFile: fileB), "test")).Exit);
+    }
+
+    [Fact]
+    public void A_login_is_named_after_its_service_and_group()
+    {
+        Assert.Equal("dbdatakit_gateway_sales", StateLogins.Name("dbdatagateway", "sales", "dbdatagateway"));
+        Assert.Equal("dbdatakit_runner_main", StateLogins.Name("dbdatarunner", "main", "dbdatarunner"));
+        Assert.Equal("dbdatakit_workspace_main", StateLogins.Name("dbdataworkspace", "main", "dbdataworkspace"));
+        Assert.Equal("dbdatakit_console", StateLogins.Name(null, null, "dbdatakit"));
+        Assert.Equal("dbdatakit_gateway_north_east", StateLogins.Name("dbdatagateway", "North East", "x"));
+        Assert.NotEqual(StateLogins.Name("dbdatagateway", "sales", "g"), StateLogins.Name("dbdatagateway", "finance", "g"));
+    }
+
+    [Theory]
+    [MemberData(nameof(ServerEngines), MemberType = typeof(StateCliHarness))]
+    public async Task Grants_without_a_login_prints_the_services_own_login_and_the_schemas_of_that_login_only(string engine)
+    {
+        var db = _h.Provision(engine);
+        var file = Path.Combine(_dir.FullName, "g.yaml");
+        var gateway = Product(db, Service("work"), new StateScope("sales", "dbdatagateway"), settingsFile: file);
+        var runnerFile = Path.Combine(_dir.FullName, "r.yaml");
+        var runner = Product(db, Service("work"), new StateScope("main", "dbdatarunner"), settingsFile: runnerFile);
+        var login = db.CreateLogin(_h.OnDispose);
+        foreach (var (context, settingsFile) in new[] { (gateway, file), (runner, runnerFile) })
+            Assert.Equal(0, (await RunAsync(context, "init", "--topology", "install", "--engine", EngineWord(db), "--connection", Referenced(db, login))).Exit);
+
+        var g = await RunAsync(gateway, "grants");
+        var r = await RunAsync(runner, "grants");
+
+        Assert.Equal(0, g.Exit);
+        Assert.Equal("dbdatakit_gateway_sales", (string)g.Data["login"]!);
+        Assert.Equal("dbdatakit_runner_main", (string)r.Data["login"]!);
+        var gateStatements = ((System.Text.Json.Nodes.JsonArray)g.Data["statements"]!).Select(n => (string)n!).ToList();
+        var runStatements = ((System.Text.Json.Nodes.JsonArray)r.Data["statements"]!).Select(n => (string)n!).ToList();
+        Assert.All(gateStatements, s => Assert.DoesNotContain("dbdatakit_runner_main", s));
+        Assert.All(runStatements, s => Assert.DoesNotContain("dbdatakit_gateway_sales", s));
+        Assert.Contains(gateStatements, s => s.Contains("dbdatakit_gateway_sales_shared") && s.Contains("dbdatakit_gateway_sales"));
+        Assert.Contains("-- login dbdatakit_gateway_sales", g.Out);
+        Assert.Equal(0, (await RunAsync(gateway, "grants", "--login", "svc_x")).Exit);
+        Assert.Contains("TO " + (engine == StateEngineIds.MsSql ? "[svc_x]" : "svc_x"), (await RunAsync(gateway, "grants", "--login", "svc_x")).Out);
+    }
+
+    [Theory]
+    [MemberData(nameof(ServerEngines), MemberType = typeof(StateCliHarness))]
+    public async Task A_gateways_login_is_refused_on_a_runners_tables_and_the_reverse_when_each_runs_state_grants(string engine)
+    {
+        var db = _h.Provision(engine);
+        var gatewayLogin = db.CreateLogin(_h.OnDispose);
+        var runnerLogin = db.CreateLogin(_h.OnDispose);
+        var gatewayFile = Path.Combine(_dir.FullName, "gw.yaml");
+        var runnerFile = Path.Combine(_dir.FullName, "rn.yaml");
+        // both services keep the same modules, one of them per install: in one database that module used to be one set of tables
+        var modules = Service("work");
+        var gateway = Product(db, modules, new StateScope("main", "dbdatagateway"), settingsFile: gatewayFile);
+        var runner = Product(db, modules, new StateScope("main", "dbdatarunner"), settingsFile: runnerFile);
+        foreach (var (context, login) in new[] { (gateway, gatewayLogin), (runner, runnerLogin) })
+        {
+            var ran = await RunAsync(context, "init", "--topology", "install", "--engine", EngineWord(db), "--connection", Referenced(db, login), "--login", login, "--admin-connection", AdminReference(db), "--apply");
+            Assert.True(ran.Exit == 0, ran.All);
+        }
+
+        var gatewayLayout = StateLayout.Create(db.Engine, modules, new StateScope("main", "dbdatagateway"), StateSettingsWriter.Load(gatewayFile).Namespaces);
+        var runnerLayout = StateLayout.Create(db.Engine, modules, new StateScope("main", "dbdatarunner"), StateSettingsWriter.Load(runnerFile).Namespaces);
+        var asGateway = new Db(db.Engine, db.As(gatewayLogin, Password));
+        var asRunner = new Db(db.Engine, db.As(runnerLogin, Password));
+        foreach (var module in new[] { "work", "shared" })
+        {
+            Assert.Equal(0L, Convert.ToInt64(asGateway.Scalar($"SELECT COUNT(*) FROM {gatewayLayout.Table(module, "item")};")));
+            Assert.Equal(0L, Convert.ToInt64(asRunner.Scalar($"SELECT COUNT(*) FROM {runnerLayout.Table(module, "item")};")));
+            var gatewayOnRunner = Assert.ThrowsAny<DbException>(() => asGateway.Scalar($"SELECT COUNT(*) FROM {runnerLayout.Table(module, "item")};"));
+            var runnerOnGateway = Assert.ThrowsAny<DbException>(() => asRunner.Scalar($"SELECT COUNT(*) FROM {gatewayLayout.Table(module, "item")};"));
+            Assert.Equal(StateErrorKind.PermissionDenied, StateDatabaseErrors.Classify(gatewayOnRunner));
+            Assert.Equal(StateErrorKind.PermissionDenied, StateDatabaseErrors.Classify(runnerOnGateway));
+        }
+
+        // and the registries are two: neither login reads the other's
+        var runnerRegistry = runnerLayout.Registry;
+        var onRegistry = Assert.ThrowsAny<DbException>(() => asGateway.Scalar($"SELECT COUNT(*) FROM {runnerRegistry};"));
+        Assert.Equal(StateErrorKind.PermissionDenied, StateDatabaseErrors.Classify(onRegistry));
+        Assert.Equal(0, (await RunAsync(gateway, "test")).Exit);
+        Assert.Equal(0, (await RunAsync(runner, "test")).Exit);
+    }
+
+    [Theory]
+    [MemberData(nameof(ServerEngines), MemberType = typeof(StateCliHarness))]
+    public async Task Init_again_changes_nothing_and_keeps_namespaces_an_operator_wrote(string engine)
+    {
+        var db = _h.Provision(engine);
+        var login = db.CreateLogin(_h.OnDispose);
+        var file = Path.Combine(_dir.FullName, "k.yaml");
+        var context = Product(db, Service("work"), new StateScope("main", "dbdatarunner"), settingsFile: file);
+        string[] args = ["init", "--topology", "install", "--engine", EngineWord(db), "--connection", Referenced(db, login)];
+
+        Assert.Equal(0, (await RunAsync(context, args)).Exit);
+        var first = File.ReadAllText(file);
+        Assert.Contains("dbdatakit_runner_main_{module}", first);
+        Assert.Equal(0, (await RunAsync(context, args)).Exit);
+        Assert.Equal(first, File.ReadAllText(file));
+
+        File.WriteAllText(file, "state:\n  engine: " + EngineWord(db) + "\n  connection: \"" + Referenced(db, login) + "\"\n  namespaces:\n    default: { schema: \"mine_{module}\" }\n");
+        var kept = await RunAsync(context, args);
+        Assert.True(kept.Exit == 0, kept.All + File.ReadAllText(file));
+        Assert.Contains("mine_{module}", File.ReadAllText(file));
     }
 
     // ---- refusals

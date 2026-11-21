@@ -54,9 +54,9 @@ public static class StateVerbs
             (args, output) => StateTest.RunAsync(context, args, output),
             StateSchemas.Test),
         new Verb("grants", $"Print the GRANT statements a login needs for {context.Product}'s modules (the login it runs as, or with --migrate the one that upgrades the database); run them as a database administrator", EffectClass.OfflineOnly,
-            $"--login <database role or user> [--migrate] {context.OptionsUsage}".TrimEnd(),
+            $"[--login <database role or user>] [--group <name>] [--migrate] {context.OptionsUsage}".TrimEnd(),
             (args, output) => StateGrantsVerb.RunAsync(context, args, output),
-            DataSchemas.Object([("statements", DataSchemas.StringList)], "statements")),
+            DataSchemas.Object([("login", DataSchemas.String), ("statements", DataSchemas.StringList)], "statements")),
         new Verb("init", StateInitVerb.Summary, EffectClass.TargetWrites, StateInitVerb.Usage(context), (args, output) => StateInitVerb.RunAsync(context, args, output), StateInitVerb.Schema),
     ]);
 }
