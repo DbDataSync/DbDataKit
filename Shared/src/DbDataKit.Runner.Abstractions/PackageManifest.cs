@@ -162,10 +162,23 @@ public sealed record PackageTask(
 
     public IReadOnlyList<string> CounterList => Counters ?? [];
 
+    /// <summary>Whether the task creates, alters or drops tables (it declares the capability <see cref="TaskCapabilities.Ddl"/>): a runner starts it only on a request the control service signed after a person approved the statements.</summary>
+    public bool IsDdl => Capabilities.Contains(TaskCapabilities.Ddl, StringComparer.Ordinal);
+
     public PackageTask(string name, TaskEntry entry)
         : this(name, entry, new Schedule(), [], [], [], ProgressDeclaration.Empty, TaskLimits.None, [], [])
     {
     }
+}
+
+/// <summary>The capability names a runner gives a meaning to (a task's <c>capabilities:</c> list; any other label is only shown).</summary>
+public static class TaskCapabilities
+{
+    /// <summary>
+    /// The task creates, alters or drops tables. It is manual-only, and a runner starts it only on a request the control service signed after a person approved the exact statements; a start from the runner's own screen, its command line or
+    /// a paired server that is not the control service is refused.
+    /// </summary>
+    public const string Ddl = "ddl";
 }
 
 /// <summary>A package manifest, <c>package/1</c>: what the package is, how it starts, what it was built against and the tasks it holds.</summary>

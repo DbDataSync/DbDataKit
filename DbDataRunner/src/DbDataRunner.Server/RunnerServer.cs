@@ -120,7 +120,7 @@ public static class RunnerServer
         app.MapCertificateStatus(() => certificate);   // days left and subject, for the console's Monitoring (UI10)
         // the server upgrades itself when the console says so (plan 24a UC09)
         DbDataKit.Upgrade.UpgradeSetup.MapUpgrade(app, RunnerSettings.Product, Version, RunnerService.RegistrationName, settings.Listen.Port, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), () => [.. clients.All().Select(c => new DbDataKit.Upgrade.PeerGeneration(c.Name, c.Generation))]);
-        RunnerApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), instanceId, new RunnerApiOptions("/api/v1", RunnerCallers.TokenResolver, RunnerSettings.Product, Version));
+        RunnerApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), instanceId, new RunnerApiOptions("/api/v1", RunnerCallers.TokenResolver, RunnerSettings.Product, Version) { ControlApprovals = new ControlRunApprovalVerifier(instanceId, clients, new MemoryReplayCache()) });
         RunnerPublishApi.Map(app, new RunnerPublishing(state, settings.MaxArtifactBytes, settings.SignatureVerifier, settings.InstanceLease, new DbDataKit.Runner.Staging.ActivationOptions { MaxWait = settings.ActivationMaxWait }));
         RunnerSecretsApi.Map(app, state, () => groupSecrets.Store, "/api/v1", RunnerCallers.TokenResolver,
             connections: () => RunnerConnections.Inventory(state, app.Services.GetRequiredService<RunnerEngine>().Group, RunnerSettings.Product, settings.ToHostSettings().ConnectionsDirectory),
