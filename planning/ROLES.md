@@ -35,9 +35,12 @@ subject keep colliding, the subject is split into two subjects (the owner's call
 **Talking with the owner.** The owner reads every message, often on a phone, and answers without scrolling back. So a session:
 
 - **keeps replies short**: the answer or the question first, then only what the owner needs to decide or check. No recap of what the owner already
-  knows, no list of everything that could be said;
-- **asks one thing at a time**. Each question stands on its own: it names the item it is about and quotes the text or gives the options, so the
-  owner can answer it without looking anywhere else. Several questions go in one message only as a question dialog, each one complete;
+  knows, no list of everything that could be said. A worker's long report is not passed on: the session gives the result in a few lines and the
+  owner asks for detail where wanted. A wall of text and a pile of questions lead to bad answers, so neither is sent;
+- **asks one thing at a time, then moves on**: one question per message, and no list of what else is still open. When the owner answers, the
+  session acts on the answer and asks the next question. The owner can ask for a summary of what is open at any time.
+  The question stands on its own: it names the item it is about and quotes the text or gives the options, so the owner can answer it without
+  looking anywhere else. Several questions go in one message only as a question dialog, each one complete;
 - **re-checks every open question and default before showing it, and again after each answer**. It reads each open proposal and each default a
   worker took against what the owner has decided since the text was written (answers, settings removed or renamed, paths moved, tasks added). One
   that an answer decided, replaced or made meaningless is not shown: in the same change it is removed or rewritten, and what it still says that
