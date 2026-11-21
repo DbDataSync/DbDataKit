@@ -30,6 +30,10 @@ done. Every sentence has to help with that.
 - **What it does, then how to use it, then an example** with real names, commands, files and values: `dbdatakit user invite --role admin --email
   ana@example.com` prints a link that works once.
 - **Who does what.** Name the person, the service or the program that acts: "the Runner runs the task in its own process", not "tasks are isolated".
+- **The reader's choices, and why they would make each one.** When something can be set up in more than one way, say what the reader can do and the
+  reason to pick each way, then name the command or file that does it. People install, configure and choose. A program does not "install on its
+  own". Wrong: "Each service installs on its own, or all four on one machine with `dbdatakit-full`." Right: "All four services can be installed
+  together on a single server, or on separate servers for greater control of security and load. `dbdatakit-full` installs all four on one server."
 - **One fact per sentence**, in the words the reader would use. Short sentences. If a sentence needs a second reading, rewrite it.
 - **Why, when the reader needs it to act**, said once and concretely: "so a crash of one task does not stop the others".
 - **Limits and failures**: what is not supported, what error the reader will see and what to do about it.
@@ -51,6 +55,9 @@ done. Every sentence has to help with that.
   approvals, publishing, binding." (The Workspace service never publishes or binds.) Write one statement per service.
 - **Abstract nouns doing the work.** "surface", "pipeline", "posture", "story", "earns", "first-class", "single source of truth", "seamless". Say the
   thing: which screen, which command, which file.
+- **Notes instead of sentences.** Every sentence has a subject, a verb and the small words ("the", "a", "is") a person would say. Wrong: "Groups
+  through the token; pins both ways; a Runner joined to its group." Right: "When a service joins, the console hands it the group's key. The service
+  and the console then each remember the other's certificate."
 - **The writer's reasoning or the doc talking about itself.** No "this section explains", "note that", "it is important to", "in other words".
 - **Agent-speak.** No sentence a person would not say out loud to a colleague. Read it aloud; if it sounds like a model talking to itself, it is wrong.
 

@@ -22,6 +22,9 @@ combines and merges and builds no features.
 `backup/<slug>-<n>`; several workers on one subject only on tasks that do not change the same code (otherwise one after the other, or one worker for
 both). Resuming after a lost session or machine: start a worker on the existing `backup/<slug>-<n>`; its wip file says where it stopped.
 
+**Isolation (workers and reviewers).** Start each with `isolation: "worktree"` and name in the brief a branch that no other checkout has open, so it never
+works in the session's checkout.
+
 **Machine rules (put them in every brief).**
 - Every build or test: `scripts/build-slot.sh <command>` with `-p:UseSharedCompilation=false` and `MSBUILDDISABLENODEREUSE=1`.
 - Delete `bin`, `obj`, `node_modules`, `.duckdb`, `DbDataBuild/native` right after each step; stop building under 3 GB free (`df -h /`).
