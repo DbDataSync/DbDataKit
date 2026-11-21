@@ -34,7 +34,7 @@ dbdatarunner lineage runs <definition> <version> [--repo <server directory>] [--
 dbdatarunner runs list [--package <name>] [--channel <name>] [--task <name>] [--outcome <outcome>] [--limit <n>] [--repo <server directory>]
 dbdatarunner state show [--offline] [--engine mssql|postgres] [--repo <server directory>]    # the state database: engine, namespaces, module versions, pending migrations; creates nothing
 dbdatarunner state test [--engine mssql|postgres] [--repo <server directory>]                  # opens it read-only and checks rights, engine version and clashes; stops at the first failure with the fix
-dbdatarunner state grants --login <database role or user> [--migrate] [--engine mssql|postgres] [--repo <server directory>]
+dbdatarunner state grants [--login <database role or user>] [--migrate] [--engine mssql|postgres] [--repo <server directory>]
 dbdatarunner state init|export|import|verify|move ...   # the shared verbs over the `state:` section of `server.yaml` (plan 29b C07); `move` also takes `--to-sqlite <file>`
 dbdatarunner service install|uninstall|status|start|stop|restart|check|unit
 dbdatarunner cert show|ensure|check|renew [--repo <server directory>]

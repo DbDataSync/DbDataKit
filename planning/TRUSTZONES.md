@@ -18,7 +18,7 @@ reads through it as a person (path 2). Structural tasks run only when Control st
 - The contract guard (`ContractGuard`, `DbDataKit.Lineage`): the Workspace asks the paired Gateways for their lineage before it runs a Store model's
   contract (`WorkspaceManagement.cs`, the `.../contract` route). Build's `apply_plan` on the Runner asks nobody.
 - The console has no identity of its own toward a Runner: its quality alert watcher reads as the signed-in person and a background pass asks nobody.
-- All servers of an install can share one state database login.
+- Each service and group can have a state login of its own on the shared database server, with its own schemas and registry (`docs/state-logins.md`); an install that shares one login still works.
 - The report-catalog snapshot sink over plan 30's route is built as a library only (`DefinitionsClientSnapshotSink`).
 
 ## Tasks
@@ -26,7 +26,6 @@ reads through it as a person (path 2). Structural tasks run only when Control st
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
 | TRUSTZONES-1 | The console-made link between a Gateway group and a Runner group, made by default: each side gets the other's addresses and a link credential scoped to the three paths; a missing partner warns on Monitoring; a new instance of a linked group gets the link at its join. The console gets an identity of its own toward a Runner (read only: runs, quality) | INSTALLER-15 | M | servers suite: a new install's Gateway and Runner are linked with no setting; Monitoring shows an unlinked group; the console reads a Runner's runs with no person signed in |
-| TRUSTZONES-2 | State logins per service and group on the one database server: each server's state login can reach only its own schema or database | none | M | SQL Server and PostgreSQL: a Gateway's state login is refused on a Runner's tables and the reverse; `state grants` prints one login per service and group |
 | TRUSTZONES-3 | DDL tasks (creating, altering or dropping tables) accept a run only from the control service, as a request it signs after the person approved the exact statements; the Runner screens show these tasks without a run button | none | S | the Runner refuses a DDL task's run without the control service's signed request; a run started from the console after the person approves runs it |
 | TRUSTZONES-4 | Path 1: the Gateway's outbox of run requests to its linked Runner group, the high-priority run, the 10-second wait, then an answer with a link to the run; requests wait in the outbox while the Runner is down | TRUSTZONES-1 | M | a test: a request returns the run's result within the wait; with the Runner down it is kept, then runs once when the Runner is back; a request past the wait answers with the run's link |
 | TRUSTZONES-5 | A view's `task` action on path 1: the Runner keeps start grants (package, task, channel, client, who granted), the action names the viewer and an idempotency key, the console's runner task panel and the Gateway's Links panel edit grants and links. Who may start a task from a view is three layers, each in its own place: the app's access rules show the link, the app manifest lists the tasks it may name (`runner:`), and the Runner's grant says which client may start which task in which channel; the person is recorded, never given a Runner role | TRUSTZONES-4 | M | vitest and a Playwright story: an administrator grants a task to the linked Gateway, a click on a view's action starts it as the viewer and shows the result or the link; revoking the grant makes the next click refuse; a task the manifest does not list is refused before the Runner is asked; a person whose access rules hide the link does not see it |
@@ -58,6 +57,18 @@ by TRUSTZONES-3 and checked under B. Recommendation: A, because a structural tas
 
 The console signs a link credential per pair of groups, scoped to the three paths, rotated with the group keys. Scenario: a Gateway instance is stolen;
 revoking its group key also revokes its link. Recommendation: accept.
+
+### TRUSTZONES-P3: the console's one query over every service's runs (default, awaiting the owner)
+
+With a registry per login (`docs/state-logins.md`), the console's single query over the runs, audit and notifications of every service in a shared database finds only the console's own modules. Built as the default: the console reads another service's runs through that service's API, as it does for services on their own databases. Scenario: an install on one PostgreSQL database; the Runner's runs page in the console shows the Runner's runs through the Runner's API, and no login reads another's schemas. Option B: grant the console's login read rights on the other services' schemas and register them in the console's registry, so one query reads all. Recommendation: A, because the console would then reach every service's data with one login, which is what separate logins avoid.
+
+### TRUSTZONES-P4: the topology `group` keeps the built-in schema names (default, awaiting the owner)
+
+`state init --topology install` writes per-login schemas; `--topology group` (one database for one group) still writes the built-in names (`dbdatakit_<module>`), so a group database made earlier does not change names. Scenario: a Runner group `main` on its own database `dbdatakit_runner_main`: its login is granted `dbdatakit_runs` and the rest of that database only, and another group has another database. Option B: write per-login schemas in a group database too, so a second service pointed at the same database later still stays apart. Recommendation: A, because the database is already the boundary and the names stay as they are.
+
+### TRUSTZONES-P5: who creates the login (default, awaiting the owner)
+
+The suite prints the statements to grant a login and never creates it or its password; the administrator (or the installer, INSTALLER-21, with the password from a secret reference) creates it. Scenario: an administrator runs `CREATE ROLE dbdatakit_runner_main LOGIN PASSWORD '...'`, then `dbdatarunner state grants | psql`. Option B: `state init --apply` also creates the login with a generated password stored as a secret. Recommendation: A for now; INSTALLER-21 decides how the installer passes the password.
 
 ## Open designs
 
