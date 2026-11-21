@@ -49,14 +49,16 @@ Assert (Test-Path (Join-Path $consoleDir 'wwwroot\index.html')) 'the console has
 Assert (Test-Path $product) "the product is at $product"
 
 Write-Host '=== start the product and the console'
+# the work folder is under the runner's temporary folder, whose access list lets Users write: a test's folder, so the servers skip the folder
+# permissions check (docs/install.md, "Skipping the folder permissions check")
 $productDirData = Join-Path $work 'product'; $consoleDirData = Join-Path $work 'console'
 $productUrl = "https://127.0.0.1:$ProductPort"; $consoleUrl = "https://127.0.0.1:$ConsolePort"
 $made = Run $product @('server', 'pair', '--repo', $productDirData, '--max-role', 'viewer')
 $code = [regex]::Match($made, 'Pairing code: (\S+)').Groups[1].Value
 Assert ($code.Length -gt 0) 'the product printed a pairing code'
-$p1 = Start-Process $product -ArgumentList 'server', 'run', '--repo', "`"$productDirData`"", '--listen', $productUrl -PassThru -WindowStyle Hidden `
+$p1 = Start-Process $product -ArgumentList 'server', 'run', '--skip-folder-permissions-check', '--repo', "`"$productDirData`"", '--listen', $productUrl -PassThru -WindowStyle Hidden `
   -RedirectStandardOutput (Join-Path $work 'product.out') -RedirectStandardError (Join-Path $work 'product.err')
-$p2 = Start-Process $console -ArgumentList 'server', 'run', '--repo', "`"$consoleDirData`"", '--listen', $consoleUrl, '--public-url', $consoleUrl -PassThru -WindowStyle Hidden `
+$p2 = Start-Process $console -ArgumentList 'server', 'run', '--skip-folder-permissions-check', '--repo', "`"$consoleDirData`"", '--listen', $consoleUrl, '--public-url', $consoleUrl -PassThru -WindowStyle Hidden `
   -RedirectStandardOutput (Join-Path $work 'console.out') -RedirectStandardError (Join-Path $work 'console.err')
 try {
   WaitHealthy $product $productUrl

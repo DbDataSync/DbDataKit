@@ -13,6 +13,12 @@ namespace DbDataRunner.Server;
 public sealed record RunnerSettings(string Directory, Uri Listen)
 {
     public const string Product = "dbdatarunner";
+
+    /// <summary>
+    /// The start skipped the folder step's check of the data folder's owner and access list (<c>--skip-folder-permissions-check</c>, or
+    /// <c>startup.skip_folder_permissions_check: true</c> in the settings file): <c>/version</c> says so, and the console's posture page marks the server.
+    /// </summary>
+    public bool SkipFolderPermissionsCheck { get; init; }
     /// <summary>The address a first start listens on when no port is configured: the first port of the Runner's sub-block, or the next free one (<see cref="DbDataKit.Hosting.Startup.ListenPorts"/>).</summary>
     public const string DefaultListen = "https://127.0.0.1:7840";
 

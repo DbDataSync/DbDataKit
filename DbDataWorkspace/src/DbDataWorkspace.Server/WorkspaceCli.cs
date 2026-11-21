@@ -102,10 +102,10 @@ public static class WorkspaceCli
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context, Func<string, string?>? environment)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "listen", "state-engine", "state-connection" });
+        var parsed = CliArgs.Parse(args, new HashSet<string> { FolderPermissions.FlagName }, new HashSet<string> { "repo", "listen", "state-engine", "state-connection" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
         {
-            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>] [--state-engine sqlite|mssql|postgres --state-connection <connection string>].");
+            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>] [--state-engine sqlite|mssql|postgres --state-connection <connection string>] [--skip-folder-permissions-check].");
             return CliExit.Usage;
         }
         Uri? listenFlag = null;
@@ -129,13 +129,17 @@ public static class WorkspaceCli
                 DataFolder = directory,
                 LogsRoot = SuiteServices.LogsRootFor(service, directory),
                 Version = WorkspaceServer.Version,
+                Warning = line => context.Error.WriteLine(line),
             })
             .Step(StartupStep.Folder, step =>
             {
                 DbDataKit.State.StateSettings state;
                 DbDataKit.State.StateSources sources;
+                var settingsFile = Path.Combine(directory, "server.yaml");
+                SkipFolderPermissions skip;
                 try
                 {
+                    skip = SkipFolderPermissions.Read(parsed.Has(FolderPermissions.FlagName), settingsFile);
                     (state, sources) = WorkspaceState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection"));
                     // --listen, else the port pinned in server.yaml, else a free port of the Workspace's sub-block (pinned once the server listens on it)
                     listen = ListenPorts.Resolve(service, listenFlag, Path.Combine(directory, "server.yaml"), new Uri(WorkspaceSettings.DefaultListen), step.Options.ExcludedPorts());
@@ -145,7 +149,8 @@ public static class WorkspaceCli
                     settingsExit = DbDataKit.State.Cli.StateExit.Settings;
                     throw;
                 }
-                settings = new WorkspaceSettings(directory, listen.Address) { State = state, StateSources = sources };
+                settings = new WorkspaceSettings(directory, listen.Address) { State = state, StateSources = sources, SkipFolderPermissionsCheck = skip.IsOn };
+                step.CheckFolderPermissions(settings.Directory, skip, settingsFile);
                 Directory.CreateDirectory(settings.Directory);
             })
             .Step(StartupStep.Certificate, _ => certificate = WorkspaceServer.Certificate(settings!.Directory))

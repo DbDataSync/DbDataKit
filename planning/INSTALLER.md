@@ -39,6 +39,13 @@ rules are in [docs/install.md](../docs/install.md).
   thumbprint, signed with a key derived from the token), `JoinEndpoint` (`POST /api/v1/join`), `JoinCallbackEndpoint` and `PendingJoins` (the
   server's answer to the callback), `JoinRequestFile` (`join-request/1`). No host maps the routes or runs the join yet (INSTALLER-12).
 - A second Runner instance joins its group by a code made on it (`POST /api/instances/{id}/join`); a Gateway group makes its own key.
+- The folder step of the four servers checks the data folder (`FolderPermissions` in the startup library; INSTALLER-P32 for what it accepts) and fails
+  naming the folder, its owner, what is wrong, the flag and the setting. `--skip-folder-permissions-check` on `server run` and
+  `startup.skip_folder_permissions_check: true` in the server's settings file skip it, with a warning on standard error at every start (and the
+  Application event log for a Windows service); `service install --skip-folder-permissions-check` puts the flag on the registered command line
+  (INSTALLER-P33); `service check` has a line `startup.folder-permissions` naming the service and the switch; each server lists the skipped check in
+  `loosened` of its `/version` answer, and the console's Bindings page names each server that skips it under "Posture choices" (INSTALLER-P34,
+  INSTALLER-P35). `dbdatakit setup single-server` is INSTALLER-14's.
 - `service check` checks a service's registration, account and folder permissions in every program and prints its startup-failure file; the verb's
   earlier name is gone from every command, type, test, doc and plan, and `scripts/check_docs_commands.py` (`FORBIDDEN_WORDS`) fails when a tracked file
   uses it again.
@@ -53,7 +60,6 @@ rules are in [docs/install.md](../docs/install.md).
 | INSTALLER-5 | Reproduce the workstation on CI: a leg of the Windows install test that sets `nodefaultadminowner=1` under `HKLM\SYSTEM\CurrentControlSet\Control\Lsa` (the security option "System objects: Default owner for objects created by members of the Administrators group", so an elevated administrator's objects are owned by the user as on a Windows client, not by the Administrators group as on Server) and turns real-time scanning on (`docs/ci-lessons.md` says how) before installing; run once by hand (`workflow_dispatch`) on the code before INSTALLER-6, required after it | none | S | the dispatched run on the old code shows the Gateway's `not owned by current user` and, without the setting, the same code passes (the run linked in `docs/ci-lessons.md`); if it does not reproduce, the row in `docs/ci-lessons.md` says what differs and the owner's workstation is the check by hand (domain policy and security software are not on a hosted runner) |
 | INSTALLER-6 | Services own their data: `service install`, the MSIs and `install.ps1 -InstallService` create only the top folder with its owner and access list (docs/install.md, "A service owns its data"); the services make the `logs` folder on demand ("Logs and the startup-failure file"); keys, certificate, state, configuration repository and `EnsureStarter` happen at first start; Linux: `install.sh --system` makes one system user per service, named as the program (`dbdatagateway`), in the group `dbdatakit`; the units run as those users and use `StateDirectory=` and `LogsDirectory=dbdatakit/<service>`, and the startup library writes the Linux failure file in that folder (`/var/log/dbdatakit/<service>/startup-failure-<service>.txt`; it writes `/var/log/dbdatakit/startup-failure-<service>.txt` today); the Gateway's own git settings file (`<data>/git/.gitconfig`) and its `safe.directory` allow list (docs/install.md, "The Gateway's configuration repository") are removed, since the service owns `config` | INSTALLER-5 | M | the INSTALLER-5 leg passes; after the install nothing exists under the data root but the top folders; after the first start `logs` has its access list (Windows) and `/var/log/dbdatakit/<service>/` is owned by the service's user with mode `0700` and holds the failure file of a failed start (Linux); a test lists every file under each data folder after the first start and finds each owned by the service's account (Windows) or user (Linux, the server started with `sudo -u`); the Linux job runs `install.sh --system` and finds `dbdatakit`, `dbdatagateway`, `dbdatarunner` and `dbdataworkspace` as system users in the group `dbdatakit`, each unit running as its own, and a second run changes nothing; the Gateway's start writes no `git/.gitconfig` and its tests of the allow list are gone |
 | INSTALLER-7 | Admin commands through the local API (`DbDataKit.Hosting.Local`) for all four servers: `secret`, `cert`, `state`, `setup link`, `user invite` and the rest call the running service; opening the files is `--recovery`, refused while the service runs, and a file it writes is given the service's account as owner; `WindowsServiceAccounts`' accepted grants (`e0135708`, which taught the command line which service accounts a key file may grant) are then needed only in recovery | INSTALLER-6 | M | with the service running, `secret set` adds the value and no file under the data folder is owned by the administrator; a direct open while it runs is refused naming `--recovery`; recovery with the service stopped writes a file owned by the service's account; Windows leg and Linux job |
-| INSTALLER-8 | `--skip-folder-permissions-check` and `startup.skip_folder_permissions_check`: accepted everywhere, a warning at every start, a line in `service check`, the server marked on the console's posture page | — | S | tests: started as a service (detector replaced) and from a terminal it starts with the warning; without it the same folder fails the folder step naming the flag; `service check` and the posture list name the server |
 | INSTALLER-10 | The Gateway's listeners (the ones ENDPOINTS-2 leaves) move into 7820 to 7839 (`docs/install.md`, "Ports"): each takes a free value of the sub-block at the first start of its group's first instance and pins it; no listener has a fixed default | ENDPOINTS-2 | S | the Gateway's tests start it with no configured port and find each listener inside its sub-block, pinned after a restart; with 7820 held, the listeners take other free values; `check_default_ports.py` passes with each Gateway listener's entry naming the sub-block `Gateway` (the entries have none while the Gateway keeps 8815 to 8822) |
 | INSTALLER-12 | Reversed pairing: the console's `POST /api/v1/join`, `dbdatakit setup invite <gateway\|runner\|workspace> [--role] [--group]`, `pair --host --token --console-thumbprint [--address]` in the Gateway, Runner and Workspace, the join step at start (with `JoinClient`, `JoinCallbackEndpoint` and `JoinRequestFile` of `DbDataKit.Web`), the console keeping the server's pin (`JoinedServer`) and the server keeping the console's (`JoinedConsole`); join tokens as rows of the console's state (an `IJoinTokenStore` over a new table of the `trust` module, with its migration, `scripts/check_state_migrations.py`); `docs/architecture.md` D14 and the Web README say a server calls the console once, to join | none | L | Servers suite (SQLite, PostgreSQL, SQL Server): a console and a real Gateway, Runner and Workspace process each joined by its printed command and listed ready with the address and fingerprint they reported; a reused token is refused; the console's calls succeed pinned; the token table's migration passes `check_state_migrations.py` on the three engines |
 | INSTALLER-13 | The console's Add a server screen: product, role ceiling, group, the command to copy, the waiting tokens with Cancel | INSTALLER-12 | S | Playwright story: make a command, run it against a test Runner, the server appears ready; vitest of the form |
@@ -307,6 +313,49 @@ listeners are listed with no sub-block, so they are checked only for a shared de
 INSTALLER-10 gives them the sub-block `Gateway` when they move. Option B: fail on them now, which fails the repository until INSTALLER-10 lands.
 Recommendation: the default.
 
+### INSTALLER-P32: what the folder step's check accepts (default, awaiting the owner)
+
+Scenario: a server starts on its data folder. Built as the default (`FolderPermissions.Problems` in the startup library):
+
+- Linux and macOS: the service's account owns the folder (root passes, as it owns everything), and other accounts cannot write to it (no `o+w`). A
+  group-writable folder passes, because a user's private group (umask 002, the default on Ubuntu and Fedora) makes every folder a developer creates
+  group-writable. Example: `dbdatarunner server run --repo ~/work/runner-a` on a folder of mode 0777 fails; on 0775 or 0700 it starts.
+- Windows: the access list does not let Everyone, Users, Authenticated Users, Anonymous, Guests or Interactive write to the folder (a rule that only
+  passes to what is inside does not count). The owner is not checked: today's elevated `service install` makes the folder, so on a Windows client the
+  folder is owned by the administrator who ran it (`CONTOSO\ada`), and an owner rule would stop every workstation install of the four services, the
+  Gateway's documented accommodation of that folder ("The Gateway's configuration repository") included. Example: a folder under
+  `D:\a\_temp` (Users may write) fails; a folder `service install` made (inheritance cut, Administrators, SYSTEM and the service) passes.
+- A folder that does not exist passes: the server makes it as its own account.
+
+Options: A, as built; B, add the owner rule on Windows now (owner is the service's account, Administrators, SYSTEM or TrustedInstaller), so a
+workstation install fails at the folder step until `setup single-server` (INSTALLER-14) sets the owner or the flag is given; C, also refuse a
+group-writable folder on Linux. Recommendation: A now, and B with INSTALLER-6, which makes the install give the top folder the Administrators group as
+owner.
+
+### INSTALLER-P33: where `service install` records the switch (default, awaiting the owner)
+
+`docs/install.md` says `service install` records the flag "in the registered service's settings". Scenario: an administrator runs
+`dbdatarunner service install --skip-folder-permissions-check`. Built as the default: the flag is added to the command line the service is registered
+with (`server run --repo ... --skip-folder-permissions-check`), so no file in the service's folder is written by the administrator's account
+("A service owns its data"); `service check` reads it there and from the settings file. Option B: `service install` writes
+`startup.skip_folder_permissions_check: true` into the service's settings file, which an administrator's account would then own. Recommendation: A, and
+`setup single-server` (INSTALLER-14) the same way.
+
+### INSTALLER-P34: how the console learns that a server skips the check (default, awaiting the owner)
+
+Scenario: a Gateway started with `--skip-folder-permissions-check` is paired with the console, and an administrator opens the posture list. Built as the
+default: every server lists the setting in `loosened` of its `GET /version` answer (left out when nothing is skipped), which the console already reads
+for every registered server; `/version` answers without sign-in, so anyone who can reach the server learns that its folder check is off. Option B: a
+route of the management API that needs a token, read by the console as the signed-in person. Recommendation: A; the fact gives no access, and a
+server that does not answer is listed as unreadable already.
+
+### INSTALLER-P35: which page marks the server (default, awaiting the owner)
+
+The task says "the server marked on the console's posture page". Scenario: the console and a Gateway skip the check. Built as the default: the
+Bindings page's "Posture choices" panel (the combined, read-only list of loosened defaults) shows one line per setting naming every server that skips
+it ("`startup.skip_folder_permissions_check` is on for console, Gateway: ...") with what it allows. Option B: also a mark on the server's row of the
+Servers page. Recommendation: A, and B when the Servers page is reworked for joins (INSTALLER-13).
+
 ## Shared areas touched
 
 - New `Shared/src/DbDataKit.Hosting.Startup`; `DbDataKit.Web` (pairing, join), `DbDataKit.Hosting.Cli` (`ServiceCommand`, `HostingNouns`),
@@ -318,7 +367,8 @@ Recommendation: the default.
   at its next start; the token in it must not pass through a browser; the console's Servers page shows the join)"; **pinned ports**: the console's, Runner's and Workspace's
   `listen:` line (in `settings.yaml` or `server.yaml`, files no entry of `docs/formats.json` covers) is in place, "none (no settings screen; the Servers
   page shows the address)"; the Gateway's (INSTALLER-10, its `server.yaml` keys; if a key is added, the format's entry is bumped in the same task): the
-  server's settings screen edits them, the Servers page shows the address; **`startup.skip_folder_permissions_check`** (INSTALLER-8): "none (a switch the user sets by hand on purpose;
-  `service check` and the posture page show it)"; `bundle/1` leaves with INSTALLER-20.
+  server's settings screen edits them, the Servers page shows the address; **`startup.skip_folder_permissions_check`** (with the flag
+  `--skip-folder-permissions-check`): in place, "none (a switch the user sets by hand on purpose; `service check` and the posture page show it)";
+  `bundle/1` leaves with INSTALLER-20.
 - The console's state: join tokens are a new table of the `trust` module with its migration (`scripts/check_state_migrations.py`, INSTALLER-12); the
   Servers page lists the waiting ones and cancels them (INSTALLER-13).

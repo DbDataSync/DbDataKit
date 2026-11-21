@@ -28,6 +28,17 @@ public sealed record SuiteService(string Program, string WindowsName, string Des
     /// <summary>The service's own folder of logs under the shared logs folder: <c>dbdatagateway</c>.</summary>
     public string LogFolder => Program;
 
+    /// <summary>
+    /// The service's settings file, relative to its data folder: <c>settings.yaml</c> for the console, <c>config/server.yaml</c> for the Gateway,
+    /// <c>server.yaml</c> for the Runner and the Workspace.
+    /// </summary>
+    public string SettingsFile => Program switch
+    {
+        "dbdatakit" => "settings.yaml",
+        "dbdatagateway" => Path.Combine("config", "server.yaml"),
+        _ => "server.yaml",
+    };
+
     /// <summary>The service's sub-block of the suite's ports (<see cref="SuiteServices.SuitePorts"/>): the Runner's is 7840 to 7859.</summary>
     public PortRange Ports => SuiteServices.PortsOf(this);
 }

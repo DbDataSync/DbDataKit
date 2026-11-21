@@ -86,7 +86,8 @@ public static class ServiceCli
     public const string Usage = """
         Usage: dbdatagateway service <install|uninstall|start|stop|restart|status|check|unit> [options]
           install   [--name N] [--account virtual|DOMAIN\user|DOMAIN\gmsa$] [--allow-localsystem]
-                    [--password-secret env:NAME|file:PATH | --password-stdin] [--data-dir PATH] [--dry-run]
+                    [--password-secret env:NAME|file:PATH | --password-stdin] [--data-dir PATH]
+                    [--skip-folder-permissions-check] [--dry-run]
                     Register the Windows service (run elevated). Default account: NT SERVICE\<name>.
           uninstall [--name N]            Stop and remove the service
           start|stop|restart|status|check [--name N]

@@ -87,10 +87,10 @@ public static class RunnerCli
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context, Func<string, string?>? environment)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "listen", "channels", "group" });
+        var parsed = CliArgs.Parse(args, new HashSet<string> { FolderPermissions.FlagName }, new HashSet<string> { "repo", "listen", "channels", "group" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
         {
-            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>] [--channels <name>[,<name>...]] [--group <name>].");
+            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>] [--channels <name>[,<name>...]] [--group <name>] [--skip-folder-permissions-check].");
             return CliExit.Usage;
         }
         Uri? listenFlag = null;
@@ -115,21 +115,26 @@ public static class RunnerCli
                 DataFolder = directory,
                 LogsRoot = SuiteServices.LogsRootFor(service, directory),
                 Version = RunnerServer.Version,
+                Warning = line => context.Error.WriteLine(line),
             })
             .Step(StartupStep.Folder, step =>
             {
+                var settingsFile = Path.Combine(directory, "server.yaml");
+                SkipFolderPermissions skip;
                 try
                 {
+                    skip = SkipFolderPermissions.Read(parsed.Has(FolderPermissions.FlagName), settingsFile);
                     var resolvedState = RunnerState.Resolve(directory, environment);
                     // --listen, else the port pinned in server.yaml, else a free port of the Runner's sub-block (pinned once the server listens on it)
                     listen = ListenPorts.Resolve(service, listenFlag, Path.Combine(directory, "server.yaml"), new Uri(RunnerSettings.DefaultListen), step.Options.ExcludedPorts());
-                    settings = new RunnerSettings(directory, listen.Address) { State = resolvedState.Settings, StateSources = resolvedState.Sources, Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")), MaxArtifactBytes = RunnerSettings.MaxArtifactBytesFrom(environment), ActivationMaxWait = RunnerSettings.ActivationMaxWaitFrom(environment), Group = RunnerSettings.GroupFrom(environment, parsed.Get("group")), TaskEnvironment = RunnerSettings.TaskEnvironmentFrom(environment) };
+                    settings = new RunnerSettings(directory, listen.Address) { State = resolvedState.Settings, StateSources = resolvedState.Sources, Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")), MaxArtifactBytes = RunnerSettings.MaxArtifactBytesFrom(environment), ActivationMaxWait = RunnerSettings.ActivationMaxWaitFrom(environment), Group = RunnerSettings.GroupFrom(environment, parsed.Get("group")), TaskEnvironment = RunnerSettings.TaskEnvironmentFrom(environment), SkipFolderPermissionsCheck = skip.IsOn };
                 }
                 catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
                 {
                     settingsExit = CliExit.Usage;
                     throw;
                 }
+                step.CheckFolderPermissions(settings.Directory, skip, settingsFile);
                 Directory.CreateDirectory(settings.Directory);
             })
             .Step(StartupStep.Certificate, _ => certificate = RunnerServer.Certificate(settings!.Directory))

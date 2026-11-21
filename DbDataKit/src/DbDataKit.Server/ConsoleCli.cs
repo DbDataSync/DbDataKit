@@ -57,10 +57,10 @@ public static class ConsoleCli
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context, Func<string, string?>? environment)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "listen", "public-url", "web-root", "announce-listen", "state-engine", "state-connection", "identity-home", "identity-client", "identity-secret-env", "identity-app", "identity-home-cert" });
+        var parsed = CliArgs.Parse(args, new HashSet<string> { FolderPermissions.FlagName }, new HashSet<string> { "repo", "listen", "public-url", "web-root", "announce-listen", "state-engine", "state-connection", "identity-home", "identity-client", "identity-secret-env", "identity-app", "identity-home-cert" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
         {
-            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <console directory>] [--listen https://<name>:<port>] [--public-url https://<name>:<port>] [--announce-listen http://<address>:<port>] [--state-engine sqlite|mssql|postgres --state-connection <connection string>] [--identity-home <https address> --identity-client <id> [--identity-secret-env <variable>] [--identity-app <id>] [--identity-home-cert <file>]]");
+            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <console directory>] [--listen https://<name>:<port>] [--public-url https://<name>:<port>] [--announce-listen http://<address>:<port>] [--state-engine sqlite|mssql|postgres --state-connection <connection string>] [--identity-home <https address> --identity-client <id> [--identity-secret-env <variable>] [--identity-app <id>] [--identity-home-cert <file>]] [--skip-folder-permissions-check]");
             return CliExit.Usage;
         }
         Uri? listenFlag = null;
@@ -131,12 +131,16 @@ public static class ConsoleCli
                 DataFolder = directory,
                 LogsRoot = SuiteServices.LogsRootFor(service, directory),
                 Version = ConsoleHost.Version,
+                Warning = line => context.Error.WriteLine(line),
             })
             .Step(StartupStep.Folder, step =>
             {
                 ResolvedState state;
+                var settingsFile = ConsoleState.SettingsFileIn(directory);
+                SkipFolderPermissions skip;
                 try
                 {
+                    skip = SkipFolderPermissions.Read(parsed.Has(FolderPermissions.FlagName), settingsFile);
                     state = ConsoleState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection"));
                     // --listen, else the port pinned in settings.yaml, else a free port of the console's sub-block (pinned once the console listens on it)
                     listen = ListenPorts.Resolve(service, listenFlag, ConsoleState.SettingsFileIn(directory), new Uri(ConsoleSettings.DefaultListen), step.Options.ExcludedPorts());
@@ -146,7 +150,8 @@ public static class ConsoleCli
                     settingsExit = DbDataKit.State.Cli.StateExit.Settings;
                     throw;
                 }
-                settings = new ConsoleSettings(directory, listen.Address, publicUrl, announce, state.Settings, home) { StateSources = state.Sources };
+                settings = new ConsoleSettings(directory, listen.Address, publicUrl, announce, state.Settings, home) { StateSources = state.Sources, SkipFolderPermissionsCheck = skip.IsOn };
+                step.CheckFolderPermissions(settings.Directory, skip, settingsFile);
                 Directory.CreateDirectory(settings.Directory);
             })
             .Step(StartupStep.Certificate, _ => certificate = ConsoleHost.Certificate(settings!.Directory))

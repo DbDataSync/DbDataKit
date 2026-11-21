@@ -35,6 +35,12 @@ public sealed class DbDataHostOptions
     /// </summary>
     public TelemetrySettings Telemetry { get; set; } = TelemetrySettings.Off;
 
+    /// <summary>
+    /// The checks of this server's own start that were switched off on purpose, by the setting's name (<c>startup.skip_folder_permissions_check</c>):
+    /// <c>/version</c> lists them, and the console's posture page marks the server.
+    /// </summary>
+    public IList<string> Loosened { get; } = [];
+
     /// <summary>Force a mode (tests); null = detect.</summary>
     public HostMode? ModeOverride { get; set; }
 
@@ -46,5 +52,5 @@ public sealed class DbDataHostOptions
     }
 
     internal VersionInfo ToVersionInfo(bool ready) =>
-        new(Product, Version, Commit, new Dictionary<string, string>(SchemaVersions, StringComparer.Ordinal), ready);
+        new(Product, Version, Commit, new Dictionary<string, string>(SchemaVersions, StringComparer.Ordinal), ready, Loosened.Count == 0 ? null : [.. Loosened]);
 }

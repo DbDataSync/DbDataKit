@@ -93,11 +93,13 @@ public sealed class ConsoleBindingCompareTests : IAsyncLifetime
         _gateway.Agent["test|model:default"] = "claude/claude-sonnet-4-5";          // the console says local for test
         _gateway.Agent["dev|model:default"] = "local/llama3.1:8b";                   // the console has no dev
         _gateway.Agent["prod|other-slot"] = "erp";                                   // a slot that stands for no console slot is not an item
-        _gatewayServer = await PairableServer.StartAsync(product: ServerProducts.Gateway, instanceId: "gateway-1", map: _gateway.Map);
+        // the Gateway was started with --skip-folder-permissions-check: its /version says so
+        _gatewayServer = await PairableServer.StartAsync(product: ServerProducts.Gateway, instanceId: "gateway-1", map: _gateway.Map, loosened: [DbDataKit.Hosting.Startup.FolderPermissions.Setting]);
         _runnerServer = await PairableServer.StartAsync(product: ServerProducts.Runner, instanceId: "runner-2", map: _otherRunner.Map);
 
         _runner = await PairedRunner.StartAsync("runner-1");
-        var settings = new ConsoleSettings(_directory, new Uri("https://localhost:0"));
+        // the console's own start skipped the check too
+        var settings = new ConsoleSettings(_directory, new Uri("https://localhost:0")) { SkipFolderPermissionsCheck = true };
         _app = ConsoleHost.Build(settings, ConsoleHost.Certificate(_directory), _ => { }, webRoot: _directory);
         await _app.StartAsync();
         _http = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true, UseCookies = false }) { BaseAddress = new Uri(_app.Urls.First()) };
@@ -331,6 +333,12 @@ public sealed class ConsoleBindingCompareTests : IAsyncLifetime
         Assert.Equal(["other runner"], entries.Where(e => (string)e!["setting"]! == "run_in_process").Select(e => ((string)e!["heldBy"]![0]!).ToLowerInvariant()).ToArray());
         Assert.Equal(["console", "Runner one", "Other runner"], view["sources"]!.AsArray().Select(s => (string)s!["holder"]!).ToArray());
         Assert.All(view["sources"]!.AsArray(), s => Assert.True((bool)s!["ok"]!));
+        // the servers whose start skips the folder permissions check are marked: the console and the Gateway, not the runners
+        var marked = view["servers"]!.AsArray();
+        Assert.Equal(["console", "Gateway"], marked.Select(m => (string)m!["server"]!).ToArray());
+        Assert.All(marked, m => Assert.Equal("startup.skip_folder_permissions_check", (string)m!["setting"]!));
+        Assert.Equal(ServerProducts.Gateway, (string)marked[1]!["product"]!);
+        Assert.Contains("whatever the folder's owner and access list", (string)marked[0]!["effect"]!);
 
         // read only: the list is a GET, enforcement stays with the table that holds the choice
         Assert.Equal(1, consoleTable.List().Count(c => c.Scope == "bindings/runner/orders/source/dev"));

@@ -34,6 +34,21 @@ public sealed class StartupOptions
 
     /// <summary>Windows' excluded port ranges, named when a listener could not be bound.</summary>
     public Func<IReadOnlyList<PortRange>> ExcludedPorts { get; init; } = ExcludedPortRanges.Read;
+
+    /// <summary>Where a warning of the start goes, such as a skipped folder permissions check: standard error by default.</summary>
+    public Action<string> Warning { get; init; } = StartupReporting.Warning;
+
+    /// <summary>Whether the process runs under a service manager; by default true for a Windows service (a process without a desktop).</summary>
+    public Func<bool> RunsAsService { get; init; } = StartupReporting.RunsAsService;
+
+    /// <summary>
+    /// What else hears a warning when the process runs under a service manager (<see cref="RunsAsService"/>): by default the Application event log, as a
+    /// warning, so a service that has no console still says it. On Linux standard error is the service's journal.
+    /// </summary>
+    public Action<string> ServiceWarning { get; init; } = StartupReporting.EventLogWarning;
+
+    /// <summary>The folder step's check of the data folder: what is wrong with a folder, one sentence each (<see cref="FolderPermissions.Problems"/>).</summary>
+    public Func<string, IReadOnlyList<string>> FolderProblems { get; init; } = FolderPermissions.Problems;
 }
 
 /// <summary>What a step sees of the start.</summary>
@@ -53,6 +68,36 @@ public sealed class StartupContext
 
     /// <summary>The service's own logs subfolder, made before the first step.</summary>
     public string LogFolder { get; }
+
+    /// <summary>
+    /// The folder step's check of <paramref name="folder"/>, the server's data folder (<see cref="FolderPermissions"/>). With the check on, a folder whose
+    /// owner or access list lets another account change it fails the step, naming the switch that skips the check. With it skipped, the start goes on and
+    /// says so: a warning on standard error at every start (and, for a service, in the event log) naming what asked for it and what the check would find.
+    /// <code>
+    /// .Step(StartupStep.Folder, step => step.CheckFolderPermissions(directory, SkipFolderPermissions.Read(flagGiven, settingsFile), settingsFile))
+    /// </code>
+    /// Design: docs/install.md#skipping-the-folder-permissions-check
+    /// </summary>
+    /// <param name="folder">The data folder; a folder that is not there passes (the server makes it as its own account).</param>
+    /// <param name="skip">Whether the check is skipped, and by what.</param>
+    /// <param name="settingsFile">The server's settings file, named in the failure as the place of the setting.</param>
+    public void CheckFolderPermissions(string folder, SkipFolderPermissions skip, string settingsFile)
+    {
+        var problems = Options.FolderProblems(folder);
+        if (!skip.IsOn)
+        {
+            if (problems.Count > 0) throw StartupStepException.FolderPermissions(folder, problems, settingsFile);
+            return;
+        }
+
+        var warning = $"Warning: {Service.Program} skips the folder permissions check ({skip.Source}): the data folder '{folder}' is used whatever its "
+                      + "owner and access list. "
+                      + (problems.Count > 0
+                          ? $"The check would refuse it: {string.Join(" ", problems)}"
+                          : "The folder passes the check, so the switch can be removed.");
+        Options.Warning(warning);
+        if (Options.RunsAsService()) Options.ServiceWarning(warning);
+    }
 }
 
 /// <summary>How a start ended.</summary>
@@ -92,6 +137,27 @@ public static class StartupReporting
         try { Console.Error.WriteLine(text); }
         catch (IOException) { }
         EventLog(text);
+    }
+
+    /// <summary>Standard error.</summary>
+    public static void Warning(string text)
+    {
+        try { Console.Error.WriteLine(text); }
+        catch (IOException) { }
+    }
+
+    /// <summary>True for a Windows service: a process without a desktop.</summary>
+    public static bool RunsAsService() => OperatingSystem.IsWindows() && !Environment.UserInteractive;
+
+    /// <summary>The Application event log, as a warning; nothing on another system.</summary>
+    public static void EventLogWarning(string text)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        try
+        {
+            System.Diagnostics.EventLog.WriteEntry(".NET Runtime", text.Length > 30000 ? text[..30000] : text, System.Diagnostics.EventLogEntryType.Warning, 1000);
+        }
+        catch (SystemException) { }
     }
 
     /// <summary>The Application event log, for a process without a desktop (a Windows service); nothing elsewhere.</summary>

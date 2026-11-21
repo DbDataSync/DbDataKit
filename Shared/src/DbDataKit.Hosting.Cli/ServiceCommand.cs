@@ -87,13 +87,13 @@ public sealed class ServiceCommand(
 {
     private static readonly HashSet<string> Flags = new(StringComparer.OrdinalIgnoreCase)
     {
-        "password-stdin", "allow-localsystem", "dry-run", "allow-downgrade", "console",
+        "password-stdin", "allow-localsystem", "dry-run", "allow-downgrade", "console", DbDataKit.Hosting.Startup.FolderPermissions.FlagName,
     };
 
     public const string Usage =
         "Usage: service <install|uninstall|start|stop|restart|status|check|unit|run> [options]\n" +
         "  install   [--account virtual|gmsa$|DOMAIN\\user] [--password-stdin] [--allow-localsystem]\n" +
-        "            [--data-dir PATH] [--dry-run] [--allow-downgrade --installed-version V]\n" +
+        "            [--data-dir PATH] [--skip-folder-permissions-check] [--dry-run] [--allow-downgrade --installed-version V]\n" +
         "  run       run in the foreground (same as starting the product with --console)";
 
     public int Execute(string[] args, IConsole console) =>
@@ -164,13 +164,18 @@ public sealed class ServiceCommand(
         }
     }
 
-    private ServiceInstallSpec BuildSpec(ParsedArgs parsed)
+    private ServiceInstallSpec BuildSpec(ParsedArgs parsed, bool skipFolderPermissionsCheck = false)
     {
         var args = context.Arguments.ToList();
         if (parsed.Get("data-dir") is { } dataDir)
         {
             args.AddRange(context.DataDirectoryArgument?.Invoke(dataDir) ?? ["--data-dir", dataDir]);
         }
+
+        // the switch is recorded on the registered command line, so the service's account reads it at every start and no file in its folder is
+        // written by the administrator who installs it
+        if (skipFolderPermissionsCheck || parsed.Has(DbDataKit.Hosting.Startup.FolderPermissions.FlagName))
+            args.Add(DbDataKit.Hosting.Startup.FolderPermissions.Flag);
 
         return new ServiceInstallSpec
         {
@@ -303,11 +308,15 @@ public sealed class ServiceCommand(
 
     private int Check(ParsedArgs parsed, IConsole console)
     {
-        var spec = BuildSpec(parsed);
         var existing = scm.GetConfig(context.ServiceName);
+        var skipByFlag = existing?.BinaryPathName is { } registered && RegisteredWithSkip(registered);
+        // a service registered with the switch is compared with a command line that has it, so the switch is reported once, as its own line
+        var spec = BuildSpec(parsed, skipByFlag);
         var account = existing?.AccountName is { } n ? ServiceAccount.Parse(n, context.ServiceName) : spec.EffectiveAccount;
         var checker = new ServiceCheck(scm, acl, context.PrincipalResolver(account));
-        var report = checker.Run(spec, context.Layout, context.ExtraChecks?.Invoke());
+        var extra = (context.ExtraChecks?.Invoke() ?? []).ToList();
+        if (FolderPermissionsCheck(parsed, skipByFlag) is { } line) extra.Add(line);
+        var report = checker.Run(spec, context.Layout, extra);
         foreach (var c in report.Checks)
         {
             var tag = c.Severity switch { ServiceCheckSeverity.Pass => "ok  ", ServiceCheckSeverity.Warn => "warn", _ => "FAIL" };
@@ -323,6 +332,36 @@ public sealed class ServiceCommand(
 
         console.Out.WriteLine(report.Ok ? $"Check: OK ({report.Warnings} warning(s))." : $"Check: {report.Failures} failure(s).");
         return report.Ok ? ExitCodes.Ok : ExitCodes.Failure;
+    }
+
+    private static bool RegisteredWithSkip(string commandLine) =>
+        commandLine.Split([' ', '"'], StringSplitOptions.RemoveEmptyEntries).Contains(DbDataKit.Hosting.Startup.FolderPermissions.Flag, StringComparer.Ordinal);
+
+    /// <summary>
+    /// The line of <c>service check</c> that says whether the server's start checks its data folder's owner and access list: a warning naming the service
+    /// and what skips the check (the registered command line, or the setting in its settings file), or that the check runs. Null for a program that is not a
+    /// service of the suite. Design: docs/install.md#skipping-the-folder-permissions-check
+    /// </summary>
+    private ServiceCheckItem? FolderPermissionsCheck(ParsedArgs parsed, bool skipByFlag)
+    {
+        const string id = "startup.folder-permissions";
+        if (context.StartupService is not { } service) return null;
+        var dataFolder = parsed.Get("data-dir") ?? context.Layout.Entries.FirstOrDefault(e => e.Role == LayoutRole.Data)?.Path;
+        DbDataKit.Hosting.Startup.SkipFolderPermissions skip;
+        try
+        {
+            skip = dataFolder is null
+                ? new(skipByFlag, null)
+                : DbDataKit.Hosting.Startup.SkipFolderPermissions.Read(skipByFlag, Path.Combine(dataFolder, service.SettingsFile));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return new(id, ServiceCheckSeverity.Fail, ex.Message);
+        }
+
+        return skip.IsOn
+            ? new(id, ServiceCheckSeverity.Warn, $"{context.ServiceName} skips the folder permissions check at every start ({(skip.ByFlag ? $"{skip.Source} on the registered command line" : skip.Source)}): its data folder is used whatever its owner and access list.")
+            : new(id, ServiceCheckSeverity.Pass, $"{context.ServiceName} checks its data folder's owner and access list at every start.");
     }
 
     private int Unit(IConsole console)

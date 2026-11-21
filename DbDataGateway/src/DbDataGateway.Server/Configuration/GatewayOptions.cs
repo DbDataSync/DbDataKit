@@ -86,6 +86,9 @@ public sealed class GatewayOptions
     public WorkerOptions Worker { get; set; } = new();
     public HostingOptions Hosting { get; set; } = new();
 
+    /// <summary>The checks of the server's own start (<c>startup:</c>): read at start.</summary>
+    public GatewayStartupOptions Startup { get; set; } = new();
+
     /// <summary>OpenTelemetry (plan 22a GP28): off unless <c>enabled</c>. The keys are those of <c>DbDataKit.Telemetry</c>'s section in the Gateway's own spelling.</summary>
     public TelemetryOptions Telemetry { get; set; } = new();
 
@@ -549,6 +552,19 @@ public sealed class TelemetryOptions
         if (InstanceId is not null) section["instance_id"] = InstanceId;
         return DbDataKit.Telemetry.TelemetrySettings.Read(section, source);
     }
+}
+
+/// <summary>
+/// The <c>startup:</c> section, spelled as every server of the suite spells it: <c>skip_folder_permissions_check: true</c> lets the start use a data folder
+/// whose owner or access list another account could change (a test's folder, a checkout). The start then warns at every start, and the console's posture
+/// page marks the Gateway. <c>server run --skip-folder-permissions-check</c> does the same.
+/// Design: docs/install.md#skipping-the-folder-permissions-check
+/// </summary>
+[ConfigSchema(Naming = KeyNaming.Verbatim)]
+public sealed class GatewayStartupOptions
+{
+    [ConfigKey("skip_folder_permissions_check")]
+    public bool SkipFolderPermissionsCheck { get; set; }
 }
 
 [ConfigSchema(Naming = KeyNaming.Verbatim)]

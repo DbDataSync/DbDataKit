@@ -38,6 +38,25 @@ public sealed class StartupStepException : Exception
             [new("Folder", folder), new("Owner", owner)], inner);
     }
 
+    /// <summary>
+    /// The folder step's check of the data folder failed (<see cref="Startup.FolderPermissions"/>): the folder, its owner, the account, what is wrong,
+    /// and the switch that starts the server on the folder as it is.
+    /// </summary>
+    /// <param name="folder">The data folder.</param>
+    /// <param name="problems">What the check found, one sentence each.</param>
+    /// <param name="settingsFile">The server's settings file, where the setting goes.</param>
+    public static StartupStepException FolderPermissions(string folder, IReadOnlyList<string> problems, string settingsFile)
+    {
+        var owner = FileOwnership.DescribeOwner(folder) ?? "(could not be read)";
+        var account = StartupAccount.Current();
+        var skip = $"{Startup.FolderPermissions.Flag} or {Startup.FolderPermissions.Setting}: true in {settingsFile}";
+        return new(StartupStep.Folder,
+            $"The folder '{folder}' is owned by {owner}, and the service runs as {account}. {string.Join(" ", problems)} "
+            + "`dbdatakit setup single-server` sets the folder up. To start on the folder as it is (a test's folder, a checkout), give `server run` "
+            + $"{Startup.FolderPermissions.Flag} or set {Startup.FolderPermissions.Setting}: true in {settingsFile}.",
+            [new("Folder", folder), new("Owner", owner), new("Skip the check with", skip)], null);
+    }
+
     /// <summary>The keys step: the key file and the grant on it that is not expected.</summary>
     public static StartupStepException Keys(string keyFile, string unexpectedGrant, Exception? inner = null) =>
         new(StartupStep.Keys,
