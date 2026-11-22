@@ -68,9 +68,9 @@ rules are in [docs/install.md](../docs/install.md).
 - Build's release and the Gateway's Windows build are self-contained; the other programs are framework-dependent.
 - The Runner's Windows service job is written and has never run a task under the real service; no Runner release was cut with the release workflow.
 - The Windows install test (`suite-install-windows` of `suite-release.yml`, `dist/tests/suite-scoop-e2e.ps1`) has a leg `workstation`, run in every dry
-  run: the install runs with a Windows client's owner (`nodefaultadminowner=1`, and the same default owner on the test's process
-  token), so the folders it makes are owned by the administrator who ran it. Both legs print the owner of everything under the data folder. On the code
-  of 2026-11-21 both legs pass: the Gateway opened `config`, owned by the administrator, because its `.git` was the service's (`docs/ci-lessons.md`).
+  run: the install runs with a Windows client's owner (`nodefaultadminowner=1`, and the same default owner on the test's process token), so what the
+  administrator makes is owned by that user, and the runner's `safe.directory=*` is removed, so git checks the owner of the Gateway's repository as on a
+  client. Both legs print the owner of everything under the data folder (`docs/ci-lessons.md`).
 
 ## Tasks
 

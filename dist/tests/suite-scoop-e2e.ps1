@@ -46,6 +46,8 @@ function Native([string]$name, [scriptblock]$command) {
     catch { $said = ($_ | Out-String); Add-Content -Path $file -Value $said; Write-Host $said; $code = 1 }
   } finally { $ErrorActionPreference = $old }
   if ($null -eq $code) { $code = 0 }
+  # a command that prints nothing leaves Tee-Object no file to write
+  if (-not (Test-Path -LiteralPath $file)) { New-Item -ItemType File -Path $file | Out-Null }
   return [pscustomobject]@{ Code = $code; File = $file; Text = (Get-Content $file -Raw) }
 }
 function ServiceExists([string]$name) {
@@ -212,6 +214,15 @@ if ($WorkstationOwner) {
   [DefaultOwner]::SetToCurrentUser()
   $owner = NewObjectOwner
   Assert ($owner -eq $me) "as on a Windows client, a folder this administrator makes is owned by $me (found $owner)"
+  # git settings of the machine that allow a repository despite its owner (safe.directory, which libgit2 reads too) are removed, as on a Windows client that has
+  # none: the hosted runner has safe.directory=* in C:\Program Files\Git\etc\gitconfig, which would hide a configuration repository the service does not own
+  $allowed = (& git config --show-origin --get-all safe.directory 2>&1 | Out-String).Trim()
+  Write-Host "   safe.directory before: $allowed"
+  foreach ($level in '--system', '--global') { & git config $level --unset-all safe.directory 2>&1 | Out-Null }
+  $programDataGit = Join-Path $env:ProgramData 'Git\config'
+  if (Test-Path $programDataGit) { & git config --file $programDataGit --unset-all safe.directory 2>&1 | Out-Null }
+  $left = (& git config --show-origin --get-all safe.directory 2>&1 | Out-String).Trim()
+  Assert ($left -eq '') "no git settings of the machine allow a repository despite its owner (before: $allowed; now: $left)"
 } else {
   $owner = NewObjectOwner
   Write-Host "   as on Windows Server, a folder this administrator makes is owned by $owner"
