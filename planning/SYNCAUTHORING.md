@@ -108,7 +108,7 @@ Builds tab. Its tasks, in build order:
 1. SYNCAUTHORING-13: the engine lists from the registry (whole).
 2. SYNCAUTHORING-1: the Files and Designer areas, Sync's replications in the Designer's navigation (whole).
 3. SYNCAUTHORING-14: the part of SYNCAUTHORING-2: `@dbdatakit/sync-ui` with only the components the slice's screens use.
-4. AUTHORING-20: `catalog-cache/2` (whole).
+4. `catalog-cache/2` (whole; built, `docs/authoring-metadata.md`).
 5. AUTHORING-23: the part of AUTHORING-17: the Runner's built-in package `dbdatakit-metadata` with `discover` and `describe`.
 6. SYNCAUTHORING-15: the part of SYNCAUTHORING-4: a replication's page with the Overview's endpoints and schedule, the chrome, New replication.
 7. SYNCAUTHORING-16: the part of SYNCAUTHORING-5: the Table Mappings sidebar and overview with Create mappings, the editor's two sides, Column Mapping.
