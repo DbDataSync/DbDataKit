@@ -81,7 +81,7 @@ and `{b}` a build. The role is the one the server and the console's relay table 
 | `GET {ws}/builds/{b}` | viewer | a build's record and result, and `publishes`: the lines of the build's `publishes.jsonl` | **Stays**; nothing new is written to `publishes` once the Workspace stops publishing (WORKSPACEISOLATION-P4) |
 | `GET {ws}/builds/{b}/preview[/{path}]` | viewer | the built app, read only, in a sandbox | **Stays** |
 | `POST {ws}/builds/{b}/publish` | approver | sends a build to a target with the target's publisher key: an app; a Runner package (bind, then stage or serve); Store models, or Build semantic models and views, to a Gateway | **Removed**: WORKSPACEISOLATION-3 moves its work to the control service, WORKSPACEISOLATION-4 the screen; the code it calls **Moves** (below) |
-| `POST {ws}/builds/{b}/preview-data` | author | sends an app build to a Gateway's `preview` channel and points an instance's preview at it | **Removed**; no task names where it goes (WORKSPACEISOLATION-P5) |
+| `POST {ws}/builds/{b}/preview-data` | author | sends an app build to a Gateway's `preview` channel and points an instance's preview at it | **Removed**; where it goes is open, since the tasks do not name it (WORKSPACEISOLATION-P5) |
 | `GET /api/v1/publish-targets` | approver | the paired targets, whether the project's kind may go to each (`accepts`) and whether the pairing may publish | **Removed** (WORKSPACEISOLATION-8): the control service lists the Runners and Gateways it manages; the `accepts` test moves with `RouteFor` |
 | `GET /api/v1/publisher-keys` | admin | each target's key reference and pairing | **Removed** (WORKSPACEISOLATION-8) |
 | `PUT /api/v1/publisher-keys/{name}` | admin | records a reference to a key in the server's secret store | **Removed** (WORKSPACEISOLATION-8) |
@@ -90,8 +90,8 @@ and `{b}` a build. The role is the one the server and the console's relay table 
 | `POST {ws}/builds/{b}/run` | approver | runs a manual task of the version the build staged, or (`served`) a task of the version the channel serves, on the Runner, for the person | **Removed** (WORKSPACEISOLATION-5) |
 | `GET {ws}/builds/{b}/runs/{run}` | viewer | a run and the steps it recorded, read back from the Runner | **Removed** (WORKSPACEISOLATION-5) |
 | `POST {ws}/builds/{b}/binding-test` | approver | the Runner's test of the login bound to a slot | **Removed** (WORKSPACEISOLATION-5) |
-| `POST {ws}/builds/{b}/contract` | approver | a Store model's approved contract: reads the plan's run from the Runner, checks the approved hash, asks each paired Gateway for its lineage and refuses a dropped column that a consumer reads (`ContractGuard`), then runs `contract` on the Runner | **Removed**; the checks it makes **Move**; no task names it (WORKSPACEISOLATION-P5) |
-| `POST {ws}/catalog/refresh` | author (the draft's owner) | asks a paired Gateway for a data source's tables and columns (`ReadSchemaAsync`) and writes `catalog-cache.yaml` | **Removed** (WORKSPACEISOLATION-6). The console's relay table has no row for this route, so the console refuses the screen's Gateway refresh today |
+| `POST {ws}/builds/{b}/contract` | approver | a Store model's approved contract: reads the plan's run from the Runner, checks the approved hash, asks each paired Gateway for its lineage and refuses a dropped column that a consumer reads (`ContractGuard`), then runs `contract` on the Runner | **Removed**; the checks it makes **Move**; the tasks do not name it (WORKSPACEISOLATION-P5) |
+| `POST {ws}/catalog/refresh` | author (the draft's owner) | asks a paired Gateway for a data source's tables and columns (`ReadSchemaAsync`) and writes `catalog-cache.yaml` | **Removed** (WORKSPACEISOLATION-6). The console's relay table does not list this route, so the console refuses the screen's Gateway refresh today |
 
 The other routes are outside these paths and stay: `GET /api/v1/info`, `GET|POST /api/v1/projects`, the workspace calls of `WorkspaceApi`
 (workspaces, files, move, changes, history, file history, commit, push, merge) and `GET {ws}/events`.
@@ -159,11 +159,11 @@ The other routes are outside these paths and stay: `GET /api/v1/info`, `GET|POST
   `ProjectRunsPanel`, `StoreDeployPanel` (deploy, contract) and `SyncProvisioningPanel` (provision) with WORKSPACEISOLATION-5; the Gateway refresh of
   `CatalogPanel` with WORKSPACEISOLATION-6; the Test of `SyncScriptsPanel` with WORKSPACEISOLATION-P2.
 - `StoreRowsPanel` picks its Gateway from `publish-targets`, then edits rows through the console's relay. It needs the control service's list of
-  Gateways once that route goes; no task names it.
+  Gateways once that route goes; the tasks do not name it.
 
 ### The child programs
 
-None of them calls another of our services: with `--out`, `project publish` and `package publish` write the package and send nothing. Their NuGet
+None of them calls another of our services: with `--out`, `project publish` and `package publish` write the package and do not send it. Their NuGet
 restores (`package build`, `package publish --platform`) reach package sources, which the goal allows.
 
 | Program | Started by | Commands the Workspace runs | Runs the author's code | What COMMANDLINES would change |
@@ -172,7 +172,7 @@ restores (`package build`, `package publish --platform`) reach package sources, 
 | `dbdatasync` | `SyncTool` (`SyncProjectKind`, `SyncDraftTools`) | `package publish --to runner --check --json`; `package publish --to runner --out --package [--platform]`, which restores the driver libraries; `script list`; `provisioning plan --from-cache`; `script test` | `script test` | COMMANDLINES-3 replaces `SyncTool` for check and package. `script list` and `provisioning plan` are offline reads that could move the same way. `script test` cannot meet COMMANDLINES-3's "Done when" (no `dbdatasync`) while it runs on the Workspace service (WORKSPACEISOLATION-P2). AUTHORING-2 builds the package for the target Runner's platform, in place of the `SyncPlatform` setting |
 | `dbdatarunner` | `RunnerTool` (`IntegrationProjectKind`) | `package build --out <scratch> --no-lock-write` (the check); `package build --out` (the build); `package test` | `package test` | COMMANDLINES-8 builds in process with the shared package build library, and makes Test a run on a Runner in a non-production channel |
 | `dotnet` (the .NET SDK) | `DotnetTool` (`IntegrationProjectKind`) | `--list-sdks`; `publish <project>` of a compiled integration | `publish` runs the project's MSBuild targets (WORKSPACEISOLATION-P3) | COMMANDLINES-8 says the build runs none of the author's code; it does not say how a compiled project is built that way |
-| `bun` | `BunAppBundler` (`DbDataKit.Apps.Bundling`, through `WorkspaceBuilds`) | `bun install --ignore-scripts` from the vendored store, then `bun build`, in a network namespace with a cleared environment | not known: a Bun macro of the draft runs at bundle time, and the command line passes no option about macros (WORKSPACEISOLATION-P3) | not in COMMANDLINES |
+| `bun` | `BunAppBundler` (`DbDataKit.Apps.Bundling`, through `WorkspaceBuilds`) | `bun install --ignore-scripts` from the vendored store, then `bun build`, in a network namespace with a cleared environment | not known: a Bun macro of the draft runs at bundle time, and the command line does not pass an option about macros (WORKSPACEISOLATION-P3) | not in COMMANDLINES |
 
 ### Counts
 
@@ -202,10 +202,10 @@ restores (`package build`, `package publish --platform`) reach package sources, 
   trusts. The control service's key has to be there for -3's signed deploys to verify; INSTALLER-16 registers publisher keys through the console.
 - The run, run-read, binding-test and contract routes find what a build staged in its `publishes.jsonl` (`StagedOf`). WORKSPACEISOLATION-5 depends
   only on -2 today; whether it has to wait for -3 depends on WORKSPACEISOLATION-P4.
-- Two routes are in no task: `preview-data` and `contract` (WORKSPACEISOLATION-P5).
+- The tasks do not name two routes: `preview-data` and `contract` (WORKSPACEISOLATION-P5).
 - What the Workspace's keys published on a Gateway is owned by the key's client (WORKSPACEISOLATION-P6). -3's test of a publish over a model published
   before needs that answer.
-- Not for -2 or -3: the console's relay table has no row for `catalog/refresh`, so WORKSPACEISOLATION-6 moves a refresh that the screens cannot
+- Not for -2 or -3: the console's relay table does not list `catalog/refresh`, so WORKSPACEISOLATION-6 moves a refresh that the screens cannot
   reach today; and the child programs' NuGet restores leave from a child process, which the outbound list of WORKSPACEISOLATION-9 (`OutboundGate`, in
   the Workspace's process) does not see.
 
@@ -226,8 +226,8 @@ run where the deploy is decided.
 
 - Option A: the kind's validators run when the Workspace builds, and the build record says that the build passed them, with its findings. At the deploy
   the control service checks the package: its manifest (`PackageManifestReader`), the formats and versions, the kind's route to the target's product
-  (`RouteFor`), the slots and bindings, the adoption of a data source, and `preflight` on the Runner. The control service starts no `dbdatabuild` and no
-  `dbdatasync`.
+  (`RouteFor`), the slots and bindings, the adoption of a data source, and `preflight` on the Runner. The control service never starts
+  `dbdatabuild` or `dbdatasync`.
 - Option B: the control service runs the kind's validators again, on the draft's files at the build's commit. It needs Build's and Sync's validators in
   its process (child programs until COMMANDLINES-2 and COMMANDLINES-3), and it pulls the source as well as the package.
 
@@ -239,11 +239,11 @@ Scenario: Ben writes `config/scripts/upper-name.csx` and presses Test on the Scr
 test upper-name --rows 5` on a copy of the draft: the script is compiled and run in a child process with a cleared environment and a time limit, and
 the network is open to it. `docs/architecture.md` says that a project's scripts and tests run on a Runner.
 
-- Option A: a Runner task. The sync runtime package gets a manual task `script-test` that uses no connection. Test builds the draft, stages it in a
+- Option A: a Runner task. The sync runtime package gets a manual task `script-test` that does not use a connection. Test builds the draft, stages it in a
   non-production channel through the control service and runs the task there as the person, as COMMANDLINES-8 does for an integration's Test. The
   Scripts tab shows the result, with a link to the run.
-- Option B: a Runner task that takes the script's text as an input, so Test needs no build and no stage. The Runner then compiles and runs code that no
-  version carries.
+- Option B: a Runner task that takes the script's text as an input, so Test does not need a build or a stage. The Runner then compiles and runs code
+  that was never built or staged.
 - Option C: the test stays on the Workspace service, in the sandbox an app build has (a network namespace, a cleared environment, no secret store), and
   `docs/architecture.md` names this exception.
 
@@ -260,7 +260,7 @@ Scenarios found while making the list:
 - An integration's build runs its tests (`dbdatarunner package test`), and a compiled integration's `dotnet publish` runs the project's MSBuild
   targets. COMMANDLINES-8 takes both off the Workspace service.
 - An app build runs `bun build` in a network namespace. A Bun macro (an import `with { type: "macro" }`) runs at bundle time, and the bundler's
-  command line passes no option about macros.
+  command line does not pass an option about macros.
 
 - Option A: each of these leaves the Workspace service; Sample becomes a Runner task as Test does.
 - Option B: the rule covers code in a general-purpose language (C#, TypeScript). Sample stays on the Workspace with DuckDB's external access off, and a
@@ -286,7 +286,7 @@ binding-test and contract routes find the target, package, channel and version t
 
 Recommendation: A.
 
-### WORKSPACEISOLATION-P5: the two routes no task names, `preview-data` and `contract` (awaiting the owner)
+### WORKSPACEISOLATION-P5: where `preview-data` and `contract` go, which the tasks do not name (awaiting the owner)
 
 Scenario: Ana sends build 3 of the app `orders-ui` to the preview of the instance `sales` (`preview-data`). Ben approves a Store model's contract that
 drops `customer.fax` (`contract`); the Workspace first asks every paired Gateway whether a published consumer reads that column.
@@ -322,7 +322,7 @@ the control service's host references them for its deploy.
 - Option A: a new library under `Shared/src` for deploying a build to a Runner or a Gateway and for the calls around a deploy (runs, binding tests,
   lineage, the schema read). The control service's host references it, and `DbDataKit.Authoring.Server` references it through an adapter until
   WORKSPACEISOLATION-8. Its name is proposed by -2.
-- Option B: the control service references `DbDataKit.Authoring.Server` as it is, and nothing moves. The control service then also references the
+- Option B: the control service references `DbDataKit.Authoring.Server` as it is, and the code stays where it is. The control service then also references the
   kinds, their child programs and the app bundler.
 - Option C: each part goes into the library whose client it wraps: the Runner calls into `DbDataKit.Runner.Client`, the Gateway publish into
   `DbDataKit.State.Api`.
