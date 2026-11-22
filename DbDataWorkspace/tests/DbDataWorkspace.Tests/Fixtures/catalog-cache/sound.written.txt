@@ -1,0 +1,39 @@
+schema: catalog-cache/2
+generated_at: '2026-11-18T10:00:00Z'
+connections:
+  'source-db':
+    engine: 'postgres'
+    read: {server: 'runners-eu', product: 'runner', channel: 'dev', at: '2026-11-18T10:00:00Z'}
+    databases:
+      - {name: 'shop', schemas: ['archive', 'public']}
+    tables:
+      - database: 'shop'
+        schema: 'public'
+        name: 'order_totals'
+        kind: view
+        columns:
+          - {name: 'id', type: 'integer', nullable: true}
+          - {name: 'total', type: 'numeric(12,2)', nullable: true}
+      - database: 'shop'
+        schema: 'public'
+        name: 'orders'
+        kind: table
+        columns:
+          - {name: 'id', type: 'integer', nullable: false, key: true}
+          - {name: 'customer_id', type: 'integer', nullable: false}
+          - {name: 'placed_at', type: 'timestamp without time zone', nullable: true}
+          - {name: 'password', type: 'character varying(60)', nullable: true}
+        unique_keys:
+          - {name: 'uq_orders_customer_placed', columns: ['customer_id', 'placed_at']}
+        foreign_keys:
+          - {name: 'fk_orders_customers', columns: ['customer_id'], references: {schema: 'public', table: 'customers', columns: ['id']}}
+  'target-db':
+    engine: 'sqlserver'
+    read: {server: 'prod-gateway', product: 'gateway', at: '2026-11-11T10:00:00Z'}
+    databases: []
+    tables:
+      - schema: 'dbo'
+        name: 'Orders'
+        kind: table
+        columns:
+          - {name: 'Id', type: 'int', nullable: false, key: true}

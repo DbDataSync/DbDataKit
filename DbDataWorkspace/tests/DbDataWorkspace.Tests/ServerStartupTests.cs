@@ -14,7 +14,7 @@ public sealed class ServerStartupTests : IDisposable
 {
     private readonly string _directory = Directory.CreateTempSubdirectory("dbdw-start-").FullName;
 
-    private string FailureFile => Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Workspace, _directory), SuiteServices.Workspace.FailureFileName);
+    private string FailureFile => SuiteServices.Workspace.FailureFileIn(SuiteServices.LogsRootFor(SuiteServices.Workspace, _directory));
 
     public void Dispose()
     {

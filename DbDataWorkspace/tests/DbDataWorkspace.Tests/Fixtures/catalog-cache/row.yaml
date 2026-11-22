@@ -1,9 +1,10 @@
-schema: catalog-cache/1
-generated_at: 2026-11-11T10:00:00Z
-source: {server: prod-gateway, product: gateway}
+schema: catalog-cache/2
+generated_at: 2026-11-18T10:00:00Z
 connections:
   source-db:
     engine: postgres
+    read: {server: runners-eu, product: runner, channel: dev, at: 2026-11-18T10:00:00Z}
+    databases: []
     tables:
       - schema: public
         name: orders

@@ -1,9 +1,10 @@
-schema: catalog-cache/1
-generated_at: 2026-11-11T10:00:00Z
-source: {server: prod-gateway, product: gateway, url: "https://gateway"}
+schema: catalog-cache/2
+generated_at: 2026-11-18T10:00:00Z
 connections:
   source-db:
     engine: postgres
+    read: {server: runners-eu, product: console, at: 2026-11-18T10:00:00Z, url: "https://runner"}
+    databases: []
     tables:
       - schema: public
         name: orders
@@ -15,3 +16,10 @@ connections:
         kind: table
         columns: []
       - {schema: public, name: empty, kind: table}
+      - schema: public
+        name: lines
+        kind: table
+        columns:
+          - {name: id, type: integer, min: 1}
+        foreign_keys:
+          - {columns: [order_id, id], references: {table: orders, columns: [id]}}

@@ -6,12 +6,16 @@
   nothing, an update runs the services from the new files and still paired, and an uninstall removes the services and the pairings but not the data.
   Run by the job `suite-install-windows` of .github/workflows/suite-release.yml (a dry run), as an elevated user. Written without a Windows machine: its first run is its proof.
   -Packages is the folder the dry run's artifacts were downloaded to (release-<product>/ folders, each with the zip and SHA256SUMS).
+  -WorkstationOwner gives the install a Windows client's owner: an elevated administrator's new objects are owned by that user, not by the Administrators
+  group as on Windows Server (the security option "System objects: Default owner for objects created by members of the Administrators group", the value
+  nodefaultadminowner=1 under HKLM\SYSTEM\CurrentControlSet\Control\Lsa). Without it the hosted runner keeps the Server default.
 #>
 param(
   [Parameter(Mandatory)][string]$Packages,
   [Parameter(Mandatory)][string]$Version,
   [string]$Work = (Join-Path $env:RUNNER_TEMP 'suite-scoop'),
-  [int]$Port = 8099
+  [int]$Port = 8099,
+  [switch]$WorkstationOwner
 )
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -42,6 +46,8 @@ function Native([string]$name, [scriptblock]$command) {
     catch { $said = ($_ | Out-String); Add-Content -Path $file -Value $said; Write-Host $said; $code = 1 }
   } finally { $ErrorActionPreference = $old }
   if ($null -eq $code) { $code = 0 }
+  # a command that prints nothing leaves Tee-Object no file to write
+  if (-not (Test-Path -LiteralPath $file)) { New-Item -ItemType File -Path $file | Out-Null }
   return [pscustomobject]@{ Code = $code; File = $file; Text = (Get-Content $file -Raw) }
 }
 function ServiceExists([string]$name) {
@@ -57,7 +63,7 @@ function Services {
   foreach ($m in $members) {
     $meta = Get-Content (Join-Path $repoRoot $m.meta) -Raw | ConvertFrom-Json
     $entry = $table | Where-Object { $_.program -eq $m.product }
-    if ($meta.service -and $entry) { [pscustomobject]@{ Product = $m.product; Name = $entry.windowsName; Account = $entry.account; DisplayName = $entry.displayName; Description = $entry.description } }
+    if ($meta.service -and $entry) { [pscustomobject]@{ Product = $m.product; Name = $entry.windowsName; Account = $entry.account; DisplayName = $entry.displayName; Description = $entry.description; DataFolder = $entry.dataFolder } }
   }
 }
 # Each service as the service manager has it: the exact name, the display name and account (`sc qc`) and the description (`sc qdescription`), all as the table says
@@ -154,6 +160,74 @@ function AddUnreadableServiceKey {
 }
 function RemoveUnreadableServiceKey { if (Test-Path $protectedKey) { Remove-Item -Path $protectedKey -Force -ErrorAction SilentlyContinue } }
 
+# The owner Windows gives an elevated administrator's new objects. Windows Server gives them the Administrators group; a Windows client gives them the user who
+# made them, and a service that then opens a folder the install made sees another account's folder. Windows reads nodefaultadminowner when an account logs
+# on, and this process logged on before the value is set, so the same default owner is also put on this process's token: every process it starts (Scoop,
+# the install hooks, `service install`) inherits it, as on a workstation. The services themselves run as their own accounts and are not affected.
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
+public static class DefaultOwner {
+  [StructLayout(LayoutKind.Sequential)] struct TOKEN_OWNER { public IntPtr Owner; }
+  [DllImport("advapi32.dll", SetLastError = true)] static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+  [DllImport("advapi32.dll", SetLastError = true)] static extern bool SetTokenInformation(IntPtr token, int infoClass, ref TOKEN_OWNER info, int length);
+  [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+  const uint TOKEN_ADJUST_DEFAULT = 0x0080, TOKEN_QUERY = 0x0008;
+  const int TokenOwner = 4;
+  // Makes the current user the default owner of the objects this process and its children create.
+  public static void SetToCurrentUser() {
+    SecurityIdentifier user = WindowsIdentity.GetCurrent().User;
+    byte[] sid = new byte[user.BinaryLength];
+    user.GetBinaryForm(sid, 0);
+    IntPtr token;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_DEFAULT | TOKEN_QUERY, out token)) throw new System.ComponentModel.Win32Exception();
+    GCHandle pinned = GCHandle.Alloc(sid, GCHandleType.Pinned);
+    try {
+      TOKEN_OWNER owner = new TOKEN_OWNER { Owner = pinned.AddrOfPinnedObject() };
+      if (!SetTokenInformation(token, TokenOwner, ref owner, Marshal.SizeOf(typeof(TOKEN_OWNER)))) throw new System.ComponentModel.Win32Exception();
+    } finally { pinned.Free(); CloseHandle(token); }
+  }
+}
+'@
+$lsa = 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa'
+$me = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+function NewObjectOwner {
+  $probe = Join-Path $Work ("owner-probe-{0}" -f [guid]::NewGuid().ToString('n'))
+  New-Item -ItemType Directory -Path $probe | Out-Null
+  $owner = (Get-Acl -LiteralPath $probe).Owner
+  Remove-Item -LiteralPath $probe -Force
+  return $owner
+}
+# Every folder and file under the data folder with its owner, so a run shows who made what (the install's folders against the services' files)
+function ReportOwners([string]$why) {
+  Write-Host "--- owners under $data ($why)"
+  foreach ($i in @(Get-ChildItem -LiteralPath $data -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notlike (Join-Path $data 'bin') + '*' })) {
+    $owner = try { (Get-Acl -LiteralPath $i.FullName -ErrorAction Stop).Owner } catch { '(cannot read)' }
+    Write-Host ("   {0}  {1}" -f $owner, $i.FullName.Substring($data.Length + 1))
+  }
+}
+Heading 'The owner of an elevated administrator''s new objects'
+if ($WorkstationOwner) {
+  New-ItemProperty -Path $lsa -Name nodefaultadminowner -Value 1 -PropertyType DWord -Force | Out-Null
+  [DefaultOwner]::SetToCurrentUser()
+  $owner = NewObjectOwner
+  Assert ($owner -eq $me) "as on a Windows client, a folder this administrator makes is owned by $me (found $owner)"
+  # git settings of the machine that allow a repository despite its owner (safe.directory, which libgit2 reads too) are removed, as on a Windows client that has
+  # none: the hosted runner has safe.directory=* in C:\Program Files\Git\etc\gitconfig, which would hide a configuration repository the service does not own
+  $allowed = (& git config --show-origin --get-all safe.directory 2>&1 | Out-String).Trim()
+  Write-Host "   safe.directory before: $allowed"
+  foreach ($level in '--system', '--global') { & git config $level --unset-all safe.directory 2>&1 | Out-Null }
+  $programDataGit = Join-Path $env:ProgramData 'Git\config'
+  if (Test-Path $programDataGit) { & git config --file $programDataGit --unset-all safe.directory 2>&1 | Out-Null }
+  $left = (& git config --show-origin --get-all safe.directory 2>&1 | Out-String).Trim()
+  Assert ($left -eq '') "no git settings of the machine allow a repository despite its owner (before: $allowed; now: $left)"
+} else {
+  $owner = NewObjectOwner
+  Write-Host "   as on Windows Server, a folder this administrator makes is owned by $owner"
+}
+
 # --- Scoop, and the packages served on this machine as the manifest's urls
 Heading 'Scoop'
 if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) {
@@ -217,9 +291,58 @@ try {
   Native 'other-route-unregister' { & $otherExe service uninstall } | Out-Null
   Assert (-not (ServiceExists 'DbDataRunner')) 'the other route''s service is removed again'
 
+  Heading 'Each service creates and owns its data: the install makes only its top folder'
+  # each member registered from its own zip, as the MSI and install.ps1 -InstallService do (`service install`), and started once, before any administrator's
+  # command writes in its folder (docs/install.md, "A service owns its data")
+  $own = Join-Path $Work 'own'
+  Remove-Item -LiteralPath $data -Recurse -Force -ErrorAction SilentlyContinue
+  foreach ($s in Services) {
+    $to = Join-Path $own $s.Product
+    New-Item -ItemType Directory -Force $to | Out-Null
+    Expand-Archive (Join-Path $serve "$($s.Product)\v$Version\$($s.Product)-v$Version-win-x64.zip") $to -Force
+    $r = Native "own-register-$($s.Product)" { & (Join-Path $to "$($s.Product).exe") service install }
+    Assert ($r.Code -eq 0) "$($s.Product) service install succeeds"
+  }
+  $tops = @(Get-ChildItem -LiteralPath $data -Force)
+  Assert ($tops.Count -eq @(Services).Count) "after the install the data root holds one top folder per service and nothing else (found: $(($tops | ForEach-Object Name) -join ', '))"
+  foreach ($top in $tops) {
+    Assert ($top.PSIsContainer -and @(Get-ChildItem -LiteralPath $top.FullName -Force).Count -eq 0) "after the install $($top.Name) is an empty top folder"
+    $owner = (Get-Acl -LiteralPath $top.FullName).Owner
+    Assert ($owner -eq 'BUILTIN\Administrators') "the install gives $($top.Name) the Administrators group as owner (found $owner)"
+  }
+  Assert (-not (Test-Path (Join-Path $data 'logs'))) 'the install makes no logs folder'
+  foreach ($s in Services) {
+    Start-Service -Name $s.Name
+    (Get-Service -Name $s.Name).WaitForStatus('Running', '00:01:00')
+    $healthy = $false
+    for ($i = 0; $i -lt 60 -and -not $healthy; $i++) { if ((Native "own-health-$($s.Product)" { & (Join-Path (Join-Path $own $s.Product) "$($s.Product).exe") health check }).Code -eq 0) { $healthy = $true } else { Start-Sleep -Seconds 2 } }
+    Assert $healthy "$($s.Product) started on the folder the install made and answers its health check"
+  }
+  $logs = Join-Path $data 'logs'
+  $logsAcl = Get-Acl -LiteralPath $logs
+  Assert ($logsAcl.AreAccessRulesProtected -and @($logsAcl.Access | Where-Object { $_.IdentityReference -eq 'CREATOR OWNER' }).Count -gt 0) 'the first service to start made logs with its access list (inheritance cut, CREATOR OWNER)'
+  ReportOwners 'after each service''s first start'
+  foreach ($s in Services) {
+    $folder = Join-Path $data $s.DataFolder
+    $made = @(Get-ChildItem -LiteralPath $folder -Recurse -Force) + @(Get-ChildItem -LiteralPath (Join-Path $logs $s.Product) -Recurse -Force -ErrorAction SilentlyContinue) + @(Get-Item -LiteralPath (Join-Path $logs $s.Product) -Force -ErrorAction SilentlyContinue)
+    Assert ($made.Count -gt 0) "$($s.Product) made its data in $folder"
+    $others = @($made | Where-Object { (Get-Acl -LiteralPath $_.FullName).Owner -ne $s.Account } | ForEach-Object { "$($_.FullName) ($((Get-Acl -LiteralPath $_.FullName).Owner))" })
+    Assert ($others.Count -eq 0) "every file $($s.Product) made is owned by $($s.Account) ($($made.Count) entries); not: $($others -join ', ')"
+  }
+  foreach ($s in @(Services)[-1..-4]) {
+    Native "own-unregister-$($s.Product)" { & (Join-Path (Join-Path $own $s.Product) "$($s.Product).exe") service uninstall } | Out-Null
+    Assert (-not (ServiceExists $s.Name)) "$($s.Name) is removed again"
+  }
+  Remove-Item -LiteralPath $data -Recurse -Force
+
   Heading 'The global install registers, starts and pairs every member'
   $install = Native 'install' { scoop install -g $manifest }
   Assert ($install.Code -eq 0) 'scoop install -g succeeded'
+  ReportOwners 'after install'
+  # the Gateway made its configuration repository itself at its first start and never writes git settings of its own (docs/install.md, "The Gateway's configuration repository")
+  Assert (-not (Test-Path (Join-Path $data 'gateway\git\.gitconfig'))) 'the Gateway wrote no git settings file'
+  $configOwner = (Get-Acl -LiteralPath (Join-Path $data 'gateway\config')).Owner
+  Assert ($configOwner -eq 'NT SERVICE\DbDataGateway') "the Gateway's configuration repository is owned by NT SERVICE\DbDataGateway (found $configOwner)"
   AssertEveryMemberRunsPairedAndHealthy 'after install'
   AssertServicesAreNamedAsTheTableSays 'after install'
   AssertAdminCommandsWork 'after install'
@@ -288,12 +411,16 @@ try {
 }
 catch {
   Diagnose
+  ReportOwners 'at the failure'
+  Write-Host '--- startup-failure files'
+  foreach ($f in @(Get-ChildItem -LiteralPath (Join-Path $data 'logs') -Filter 'startup-failure-*.txt' -ErrorAction SilentlyContinue)) { Write-Host "## $($f.Name)"; Get-Content -LiteralPath $f.FullName | Out-Host }
   throw
 }
 finally {
   if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force }
   # leave nothing behind on a failure
   RemoveUnreadableServiceKey
+  if ($WorkstationOwner) { Remove-ItemProperty -Path $lsa -Name nodefaultadminowner -ErrorAction SilentlyContinue }
   & scoop uninstall -g dbdatakit-full 2>&1 | Out-Null
   foreach ($s in Services) { if (ServiceExists $s.Name) { & sc.exe stop $s.Name | Out-Null; Start-Sleep -Seconds 2; & sc.exe delete $s.Name | Out-Null } }
 }

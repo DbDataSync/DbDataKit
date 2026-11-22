@@ -316,6 +316,18 @@ class BindTests(DistTestCase):
         self.assertIn("ANNOUNCES=0", (out2 / "install.sh").read_text())
         self.assertIn("Announces = $false", (out2 / "install.ps1").read_text())
 
+    def test_a_service_is_bound_so_install_sh_makes_its_user_and_unit(self):
+        out = self.fresh()
+        bind(out)
+        self.assertIn("SERVICE=1", (out / "install.sh").read_text())
+        out2 = self.fresh()
+        bind(out2, meta={k: v for k, v in META.items() if k != "service"})
+        self.assertIn("SERVICE=0", (out2 / "install.sh").read_text())
+        # the system user, its group and the unit (dist/tests/suite-systemd-e2e.sh runs it on systemd)
+        template = (DIST / "install.sh").read_text()
+        for word in ("useradd --system --gid \"$GROUP\"", "GROUP=dbdatakit", "\"$INSTALL_DIR/$EXE\" service unit", "is up to date"):
+            self.assertIn(word, template)
+
     @unittest.skipIf(os.name == "nt", "install.sh is for Linux and macOS")
     def test_unbound_templates_refuse_to_run(self):
         r = subprocess.run(["bash", str(DIST / "install.sh")], capture_output=True, text=True)

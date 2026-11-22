@@ -5,7 +5,7 @@ import { workspaceApi, type AdoptionRequest, type CatalogRefreshAnswer, type Cat
 import { adoptionRequest, catalogAdoptionSentence, refreshButton, refreshedLine, refreshLabel } from '../model'
 import { shapePreview } from '../catalogPreview'
 import { BuildImportPanel } from './BuildImportPanel'
-import { CATALOG_CACHE_FILE, readCatalogCache, tableLabel, type CacheRead, type CacheTable } from '../catalogCache'
+import { CATALOG_CACHE_FILE, readCatalogCache, readLine, tableLabel, type CacheRead, type CacheTable } from '../catalogCache'
 
 /** The catalog cache without its query, so a test can draw it: what is cached per connection, or what is wrong with the file (the strict reader's words, with the key path). */
 /** A table's shape: its columns with their types and a few rows made from the types. Labelled as generated, because the cache holds no row (D20). */
@@ -28,7 +28,7 @@ export function CatalogView({ read, present, onOpen, preview = null, onPreview }
   if (!present) {
     return (
       <div className="empty" data-testid="wsp-catalog-none">
-        There is no catalog cache in this draft. It is one committed file, <code>{CATALOG_CACHE_FILE}</code> at the project's root, that a paired server writes: the tables and columns of the project's connections, never a row and never a secret.
+        There is no catalog cache in this draft. It is one committed file, <code>{CATALOG_CACHE_FILE}</code> at the project's root, that a paired server writes: the databases, schemas, tables and columns of the project's connections and where each was read, never a row and never a secret.
         The Workspace never connects to a database itself, so mapping columns and previews come from this file.
       </div>
     )
@@ -37,7 +37,7 @@ export function CatalogView({ read, present, onOpen, preview = null, onPreview }
     <div data-testid="wsp-catalog">
       <div className="row" style={{ gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
         <button type="button" className="btn-link mono" data-testid="wsp-catalog-open" onClick={() => onOpen(CATALOG_CACHE_FILE)}>{CATALOG_CACHE_FILE}</button>
-        {read?.cache && <span className="hint" data-testid="wsp-catalog-source">from {read.cache.server} ({read.cache.product}), {read.cache.generatedAt}</span>}
+        {read?.cache && <span className="hint" data-testid="wsp-catalog-source">written {read.cache.generatedAt}</span>}
       </div>
       {read && read.findings.map((f, i) => (
         <div key={i} className="banner error" role="alert" style={{ marginTop: 6 }} data-testid="wsp-catalog-finding" data-code={f.code}><span className="mark">!</span><span><code>{f.path || 'file'}</code> {f.message}</span></div>
@@ -45,6 +45,7 @@ export function CatalogView({ read, present, onOpen, preview = null, onPreview }
       {read?.cache && Object.entries(read.cache.connections).map(([name, c]) => (
         <div key={name} data-testid="wsp-catalog-connection" data-connection={name}>
           <div className="hint mono" style={{ margin: '10px 0 2px' }}>{name} ({c.engine}), {c.tables.length} {c.tables.length === 1 ? 'table' : 'tables'}</div>
+          {c.read && <div className="hint" data-testid="wsp-catalog-read">{readLine(c.read)}</div>}
           {c.tables.map((t) => (
             <div key={tableLabel(t)} className="grid-row" style={{ gap: 10, flexWrap: 'wrap' }} data-testid="wsp-catalog-table" data-table={tableLabel(t)}>
               <span className="mono">{tableLabel(t)}</span>

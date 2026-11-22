@@ -11,8 +11,8 @@ namespace DbDataKit.Hosting.Startup;
 /// <list type="bullet">
 /// <item>Windows: Administrators and SYSTEM have full control; each service account may create files and folders in that folder only; CREATOR OWNER has
 /// full control, so a service has full control of what it made there and nothing else. Inheritance from the parent is cut.</item>
-/// <item>Linux: mode <c>1770</c> (owner and group may create, the sticky bit stops one user removing another's file); the install makes it
-/// <c>root:dbdatakit</c>.</item>
+/// <item>Linux: mode <c>1770</c> (owner and group may create, the sticky bit stops one user removing another's file) when a server makes it. An install's
+/// <c>/var/log/dbdatakit</c> is made by systemd, with each service's own folder in it (<c>LogsDirectory=</c>), so the service never makes it.</item>
 /// </list>
 /// Design: docs/install.md#logs-and-the-startup-failure-file
 /// </summary>

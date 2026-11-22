@@ -30,5 +30,10 @@ public sealed class RunnerServiceNameTests
         Assert.Equal(SuiteServices.Runner.Description, context.Description);
         Assert.Same(SuiteServices.Runner, context.StartupService);
         Assert.Equal(SuiteServices.Runner.Description, RunnerService.UnitOptions("dbdatarunner", "/opt/dbdatarunner/dbdatarunner").Description);
+        // the unit runs as the system user install.sh --system makes, and systemd makes its data and logs folders for it, closed to other users
+        var unit = DbDataKit.Hosting.Systemd.SystemdUnitGenerator.Generate(RunnerService.UnitOptions("dbdatarunner", "/opt/dbdatarunner/dbdatarunner"));
+        foreach (var line in new[] { "User=dbdatarunner", "Group=dbdatakit", "StateDirectory=dbdatakit/runner", "StateDirectoryMode=0700", "LogsDirectory=dbdatakit/dbdatarunner", "LogsDirectoryMode=0700" })
+            Assert.Contains("\n" + line + "\n", unit);
+        Assert.DoesNotContain("DynamicUser", unit);
     }
 }

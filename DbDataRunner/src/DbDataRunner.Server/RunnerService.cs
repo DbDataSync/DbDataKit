@@ -63,7 +63,9 @@ public static class RunnerService
         [
             new LayoutEntry(LayoutRole.InstallRoot, installDirectory, new AclSpec(false, [admin, system, Svc(AccessRights.ReadExecute)]),
                 "Binaries and the task host; the service can read and run them but not change them."),
-            new LayoutEntry(LayoutRole.Data, env.DefaultDataDirectory, new AclSpec(true, [admin, system, Svc(AccessRights.Modify)]),
+            // the install makes only this folder, owned by the Administrators group; the service creates everything inside it at its first start
+            // Design: docs/install.md#a-service-owns-its-data
+            new LayoutEntry(LayoutRole.Data, env.DefaultDataDirectory, new AclSpec(true, [admin, system, Svc(AccessRights.Modify)], LayoutPrincipal.Administrators),
                 "The server's state, certificate, package cache and scratch space; Users have no access."),
         ]);
 
@@ -92,8 +94,16 @@ public static class RunnerService
         Description = SuiteServices.Runner.Description,
         ExecStart = $"{executable} server run --repo /var/lib/dbdatakit/{Folder}",
         WorkingDirectory = executable[..executable.LastIndexOf('/')],
-        // DynamicUser: no account to manage; the state directory under /var/lib/<name> is created and owned by systemd.
+        // the system user install.sh --system makes, in the group dbdatakit; systemd makes /var/lib/dbdatakit/runner and /var/log/dbdatakit/dbdatarunner for it at
+        // each start, owned by that user and closed to every other one, so the service creates everything inside them as itself
+        // Design: docs/install.md#a-service-owns-its-data
+        DynamicUser = false,
+        User = SuiteServices.Runner.LinuxUser,
+        Group = SuiteServices.LinuxGroup,
         StateDirectories = [$"dbdatakit/{Folder}"],
+        StateDirectoryMode = "0700",
+        LogsDirectories = [$"dbdatakit/{SuiteServices.Runner.LogFolder}"],
+        LogsDirectoryMode = "0700",
     };
 
     /// <summary>The runner's folder under <c>/var/lib/dbdatakit</c>, the Linux service's data folder (<see cref="SuiteEnvironment.MachineFolder"/>).</summary>
