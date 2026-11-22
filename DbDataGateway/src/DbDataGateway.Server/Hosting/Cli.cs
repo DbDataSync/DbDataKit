@@ -1,5 +1,6 @@
 using DbDataKit.Cli;
 using DbDataKit.Web.Trust;
+using Microsoft.Extensions.DependencyInjection;
 using DbDataGateway.Server.Auth;
 using DbDataGateway.Server.Configuration;
 
@@ -41,6 +42,13 @@ public static class Cli
     [
         ServerNoun.Create(RunServerAsync).With([.. PairingVerbs.Create(PairingFilesOf).Select(WarnWhenManagementIsOff)]),
         ServiceNoun(),
+        DbDataKit.Web.Trust.JoinPairCommand.Create(new DbDataKit.Web.Trust.PairCommandOptions(Program,
+            args => args.Get("repo") is { Length: > 0 } repo ? Path.GetFullPath(repo) : GatewayConfigFile.ResolveDataDirectory(),
+            async _ =>
+            {
+                var (registered, problem) = await DbDataKit.Hosting.Cli.ServiceRestarter.RestartAsync(GatewayHost.RegistrationName, DbDataKit.Hosting.Startup.SuiteServices.Gateway.Program);
+                return new DbDataKit.Web.Trust.ServiceRestartResult(registered, problem);
+            })),
         CertNoun(),
         SecretNoun(),
         IdentityCommand.Noun(),
@@ -106,29 +114,87 @@ public static class Cli
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context)
     {
-        string? dataDirectory = null;
-        var started = false;
+        // every step of the start is reported the same way in every server: the step that failed and why, in the startup-failure file (a service has
+        // no console, and "Cannot start service" alone says nothing), the event log for a Windows service, and a non-zero exit
+        // the switch that skips the folder step's check is not a configuration key on the command line: it becomes the key startup.skip_folder_permissions_check,
+        // so the server's settings (and /version) say the check was skipped however it was asked for
+        var skipFlag = args.Contains(DbDataKit.Hosting.Startup.FolderPermissions.Flag);
+        string[] hostArgs = skipFlag
+            ? [.. args.Where(a => a != DbDataKit.Hosting.Startup.FolderPermissions.Flag), $"--Gateway:Startup:{DbDataKit.Hosting.Startup.FolderPermissions.Key}=true"]
+            : args;
+        var dataDirectory = GatewayConfigFile.ResolveDataDirectory(hostArgs);
+        var service = DbDataKit.Hosting.Startup.SuiteServices.Gateway;
+        Microsoft.AspNetCore.Builder.WebApplication? app = null;
+        ListenerChoice? choice = null;
+        var result = await new DbDataKit.Hosting.Startup.StartupSequence(new DbDataKit.Hosting.Startup.StartupOptions
+            {
+                Service = service,
+                DataFolder = dataDirectory,
+                LogsRoot = DbDataKit.Hosting.Startup.SuiteServices.LogsRootFor(service, dataDirectory),
+                Version = GatewayHost.Version,
+                Warning = line => context.Error.WriteLine(line),
+            })
+            .Step(DbDataKit.Hosting.Startup.StartupStep.Folder, step =>
+            {
+                // the data folder is checked before anything is made in it; the setting is read from config/server.yaml as every server reads its own
+                var settingsFile = GatewayConfigFile.PathIn(dataDirectory);
+                DbDataKit.Hosting.Startup.SkipFolderPermissions skip;
+                try { skip = DbDataKit.Hosting.Startup.SkipFolderPermissions.Read(skipFlag, settingsFile); }
+                catch (InvalidOperationException ex) { throw new GatewayConfigException(ex.Message, []); }
+                // a variable overrides the file, as for every setting of the Gateway, so the check reads it as the server's settings will
+                if (!skip.IsOn && GatewayConfigFile.SkipFolderPermissionsVariable() is { } variable) skip = new(false, $"the variable {variable}");
+                step.CheckFolderPermissions(dataDirectory, skip, settingsFile);
+                // earlier releases wrote the reason of a failed start to this file in the data folder; it describes no start of this one
+                try { File.Delete(Path.Combine(dataDirectory, "start-failure.txt")); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+                // the first start of a service writes its starter settings file, as the service's own account (the install makes only the data folder)
+                // Design: docs/install.md#a-service-owns-its-data
+                // only in a data folder that exists (the install made it, or the person who runs the server did): a start on a folder that is not there
+                // makes nothing before its settings are read. A folder this account cannot write is not reported here: building the server opens it
+                // and says why, a settings error keeping its exit code
+                if (Directory.Exists(dataDirectory) && !Directory.Exists(GatewayConfigFile.DirectoryIn(dataDirectory)))
+                {
+                    try { GatewayConfigFile.EnsureStarter(dataDirectory); }
+                    catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+                }
+                // reads the settings of the data folder (config/server.yaml), validates them and builds the server
+                app = GatewayHost.Build(hostArgs, chooseListeners: o => choice = GatewayListeners.Choose(o, step.Options.ExcludedPorts()));
+            })
+            .Step(DbDataKit.Hosting.Startup.StartupStep.Ports, (step, ct) =>
+            {
+                if (choice?.Failure is { } noPort) throw noPort;
+                var options = app!.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue;
+                // every address of every listener is a port the start may be refused: the step names the one the host could not bind
+                var ports = GatewayListeners.Parsed([.. options.Public.Listen, .. options.Listen, .. options.Management.Listen, .. options.Identity.Listen, .. options.Apps.Listen, .. options.Store.Listen, .. options.Views.Listen, .. options.Mcp.Listen, .. options.Rest.Listen]).Select(u => u.Port).Where(p => p != 0);
+                return StartAndPinAsync(step, app, ports, choice, dataDirectory, ct);
+            })
+            .Step(DbDataKit.Hosting.Startup.StartupStep.Join, (_, ct) => Management.GatewayManagementHost.JoinAsync(app!, dataDirectory, ct))
+            .RunAsync(context.Cancellation);
+        if (!result.Succeeded)
+        {
+            // invalid configuration keeps its documented exit code; its message names the key paths and sources, never a secret value
+            await context.Error.WriteLineAsync(result.Error is GatewayConfigException or Secrets.PlainSecretNotAllowedException ? result.Error.Message : result.Summary());
+            if (app is not null) await app.DisposeAsync();
+            return result.Error is GatewayConfigException or Secrets.PlainSecretNotAllowedException ? GatewayConfigException.ExitCode : result.ExitCode;
+        }
+
         try
         {
-            dataDirectory = GatewayConfigFile.ResolveDataDirectory(args);
-            var app = GatewayHost.Build(args);
-            app.Lifetime.ApplicationStarted.Register(() => { started = true; StartFailure.Clear(dataDirectory); });
-            await app.RunAsync(context.Cancellation);
-            return CliExit.Ok;
+            // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
+            await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.WaitForShutdownAsync(app!, context.Cancellation);
         }
-        catch (Exception ex) when (ex is GatewayConfigException or Secrets.PlainSecretNotAllowedException)
+        finally
         {
-            // Invalid configuration: one precise message (key paths and sources, no secret values) and the documented exit code. A service has no console: the record says it too.
-            StartFailure.Record(ex, dataDirectory);
-            await context.Error.WriteLineAsync(ex.Message);
-            return GatewayConfigException.ExitCode;
+            await app!.DisposeAsync();
         }
-        catch (Exception ex) when (!started && ex is not OperationCanceledException)
-        {
-            // a start that fails (a port Windows reserves, a key file, the state) is written down with the account and the folder before the process ends
-            StartFailure.Record(ex, dataDirectory);
-            throw;
-        }
+        return CliExit.Ok;
+    }
+
+    /// <summary>Starts the host (the ports step) and, once every listener is bound, writes the addresses that were chosen at this start to <c>server.yaml</c>, so the next start listens on the same ones.</summary>
+    private static async Task StartAndPinAsync(DbDataKit.Hosting.Startup.StartupContext step, Microsoft.AspNetCore.Builder.WebApplication app, IEnumerable<int> ports, ListenerChoice? choice, string dataDirectory, CancellationToken ct)
+    {
+        await DbDataKit.Hosting.Startup.StartupPorts.BindAsync(step, app.StartAsync, ports, ct);
+        if (choice is { Chosen.Count: > 0 }) GatewayListeners.Pin(GatewayConfigFile.PathIn(dataDirectory), choice.Chosen);
     }
 
     // ---- state ----
@@ -175,13 +241,13 @@ public static class Cli
     private static Noun ServiceNoun() => new("service", "Registration of 'server run' with Windows or systemd",
     [
         Service("install", "Register the Windows service (run elevated); it runs as NT SERVICE\\<name> unless --account says otherwise", EffectClass.TargetWrites,
-            "[--name N] [--account A] [--password-secret env:NAME|file:PATH] [--data-dir PATH] [--dry-run]"),
+            "[--name N] [--account A] [--password-secret env:NAME|file:PATH] [--data-dir PATH] [--skip-folder-permissions-check] [--dry-run]"),
         Service("uninstall", "Stop and remove the service", EffectClass.TargetWrites, "[--name N]"),
         Service("status", "Whether the service is installed and running", EffectClass.OfflineOnly, "[--name N]"),
         Service("start", "Start the service", EffectClass.TargetWrites, "[--name N]"),
         Service("stop", "Stop the service", EffectClass.TargetWrites, "[--name N]"),
         Service("restart", "Stop and start the service", EffectClass.TargetWrites, "[--name N]"),
-        Service("doctor", "Check the registration, the account and the directory permissions", EffectClass.OfflineOnly, "[--name N]"),
+        Service("check", "Check the registration, the account and the directory permissions", EffectClass.OfflineOnly, "[--name N]"),
         Service("unit", "Print a hardened systemd unit that runs 'server run'", EffectClass.OfflineOnly, "[--name N] [--exec /path/to/dbdatagateway]"),
     ]);
 

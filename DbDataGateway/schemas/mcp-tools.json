@@ -47,8 +47,8 @@
       }
     },
     {
-      "name": "service_doctor",
-      "description": "Check the registration, the account and the directory permissions. [Offline only] Usage: service doctor [--name N]",
+      "name": "service_check",
+      "description": "Check the registration, the account and the directory permissions. [Offline only] Usage: service check [--name N]",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -327,7 +327,7 @@
     },
     {
       "name": "state_grants",
-      "description": "Print the GRANT statements a login needs for the gateway's modules (the login it runs as, or with --migrate the one that upgrades the database); run them as a database administrator. [Offline only] Usage: state grants --login <database role or user> [--migrate] [--repo <data directory>]",
+      "description": "Print the GRANT statements a login needs for the gateway's modules (the login it runs as, or with --migrate the one that upgrades the database); run them as a database administrator. [Offline only] Usage: state grants [--login <database role or user>] [--group <name>] [--migrate] [--repo <data directory>]",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,

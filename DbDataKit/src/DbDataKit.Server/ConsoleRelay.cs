@@ -63,11 +63,28 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
         return (ServerRoles.Lower(RolesOf(role), ceiling), null);
     }
 
+    /// <summary>The key this server knows: the current one, or the one a rotation is moving to if the server already has that.</summary>
+    private async Task<ConsoleIdentity> IdentityForAsync(RegisteredInstance instance, CancellationToken ct) =>
+        (instance.KeyFingerprint is { } fingerprint ? await keys.ForKeyAsync(fingerprint, ct) : null) ?? await keys.GetOrCreateAsync(ct);
+
+    /// <summary>
+    /// Starts the run of a DDL task on a Runner for the signed-in person who approved the exact <paramref name="statements"/>: the console signs the request (<see cref="ControlRunApprovals"/>) for this task, version and inputs, and the Runner starts the run
+    /// only on that signature. The same token a relayed call carries goes with it, so the Runner also decides what the person may do.
+    /// </summary>
+    public async Task<(int Status, System.Text.Json.Nodes.JsonNode? Body)> RunApprovedAsync(RegisteredInstance instance, string userId, string? userName, UserRole role, DbDataKit.Runner.TaskRef task, string? version,
+        IReadOnlyDictionary<string, string> inputs, string statements, CancellationToken ct)
+    {
+        var identity = await IdentityForAsync(instance, ct);
+        var approval = DbDataKit.Runner.Api.ControlRunApprovals.Sign(identity.Id, identity.Key,
+            new DbDataKit.Runner.Api.ControlRunRequest(instance.InstanceId, task, version, inputs, DbDataKit.Runner.Api.ControlRunApprovals.StatementsDigest(statements), userId, userName));
+        return await CallAsAsync(instance, userId, userName, role, HttpMethod.Post, $"/api/v1/tasks/{Uri.EscapeDataString(task.Package)}/{Uri.EscapeDataString(task.Channel)}/{Uri.EscapeDataString(task.Task)}/run",
+            new { inputs, version, on_behalf_of = userName }, ct, new Dictionary<string, string> { [DbDataKit.Runner.Api.ControlRunApprovals.Header] = approval });
+    }
+
     /// <summary>The token that says the signed-in person is calling <paramref name="instance"/>: the key that server knows, and the roles the person has there (the lower of their role here and what the server lets this console grant).</summary>
     private async Task<string> TokenForAsync(RegisteredInstance instance, string userId, string? userName, UserRole role, CancellationToken ct)
     {
-        // The key this server knows: the current one, or the one a rotation is moving to if the server already has that.
-        var identity = (instance.KeyFingerprint is { } fingerprint ? await keys.ForKeyAsync(fingerprint, ct) : null) ?? await keys.GetOrCreateAsync(ct);
+        var identity = await IdentityForAsync(instance, ct);
         var (roles, projects) = HeldOn(instance, userId, role);
         return identity.Issuer().Issue(projects is null
             ? new ConsoleTokenRequest(instance.InstanceId, userId, userName, roles)
@@ -88,10 +105,11 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
     /// A call on behalf of a named person with no request of theirs in hand (an agent's tool call runs in the background): the same token a relayed call carries, made from the person's id, name and role as they stand now, so the
     /// server decides what that person may do and the agent never has more. Nothing of the console's own authority is added.
     /// </summary>
-    public async Task<(int Status, System.Text.Json.Nodes.JsonNode? Body)> CallAsAsync(RegisteredInstance instance, string userId, string? userName, UserRole role, HttpMethod method, string path, object? body, CancellationToken ct)
+    public async Task<(int Status, System.Text.Json.Nodes.JsonNode? Body)> CallAsAsync(RegisteredInstance instance, string userId, string? userName, UserRole role, HttpMethod method, string path, object? body, CancellationToken ct, IReadOnlyDictionary<string, string>? headers = null)
     {
         using var request = new HttpRequestMessage(method, new Uri(instance.Url, path));
         request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, await TokenForAsync(instance, userId, userName, role, ct));
+        foreach (var (name, value) in headers ?? new Dictionary<string, string>()) request.Headers.TryAddWithoutValidation(name, value);
         DbDataKit.Telemetry.HostTelemetry.Inject(request.Headers);   // the trace goes on at the server (W3C traceparent; plan 22a GP29); nothing when telemetry is off
         if (body is not null) request.Content = System.Net.Http.Json.JsonContent.Create(body);
         try

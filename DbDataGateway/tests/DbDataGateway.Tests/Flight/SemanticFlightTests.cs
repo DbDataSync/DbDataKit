@@ -41,8 +41,7 @@ public sealed class SemanticFlightTests : IAsyncLifetime
 
         var settings = new Dictionary<string, string?>
         {
-            ["Gateway:Listen:Address"] = "127.0.0.1",
-            ["Gateway:Listen:Port"] = "0",
+            ["Gateway:Listen"] = "http://127.0.0.1:0",
             ["Gateway:Tls:Mode"] = "None",
             ["Gateway:Management:Enabled"] = "false",   // the management API is https only and on by default (plan 33 D15); not the subject here
             ["Gateway:DataDirectory"] = _dir,

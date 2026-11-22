@@ -14,7 +14,7 @@ Why one layer, in the owner's words:
 | Layer | What it is | Who reaches it |
 | --- | --- | --- |
 | **Serving layer** | every end-user endpoint, as modules; runs from published definitions; reads and writes the data stores directly | end users, their tools, apps, agents; behind a load balancer when scaled out |
-| **Work and authoring** (the Runner group; the Workspace) | the Runner runs everything scheduled or queued (Build's refreshes, Sync's replications, a Store model's deploy, integrations) with the bulk-write and schema-change logins; the Workspace authors and publishes what the serving layer needs | the console; the serving layer only through the paths of `docs/architecture.md`, "Isolation by trust" |
+| **Work and authoring** (the Runner group; the Workspace) | the Runner runs everything scheduled or queued (Build's refreshes, Sync's replications, a Store model's deploy, integrations) with the bulk-write and schema-change logins; the Workspace authors and publishes what the serving layer needs | the console; the serving layer only through the paths of `docs/architecture.md`, "What runs where" |
 | **Control plane** (the console) | administration through the management APIs | administrators, on the private side |
 
 A console calls servers and a server never calls a console. The serving layer is one more paired server (a *serving group*).
@@ -23,7 +23,7 @@ A console calls servers and a server never calls a console. The serving layer is
 
 1. **It runs from published definitions.** The Workspace (and the command lines) publish versioned definitions to the serving group: semantic packages and their data sources of a build project (`semantic-model/<name>`, `data-source/<name>`), entity models of a store project (`entity-model/<name>`), app versions and instances (`app/<name>`, `app-instance/<name>`). They live in the group's `DefinitionStore` (`DbDataKit.State`), keyed by channel and version, each recording what it depends on. Each instance follows the store (`DefinitionFollower`, polled every `state.definitionPollSeconds`, 5 by default), builds a new version before it replaces the one served, switches atomically and keeps the last good version; a version an instance cannot load is reported and leaves the old one serving. Nothing at runtime calls the Workspace or a Runner, so an offline one only delays the next publish or run.
 2. **Data paths are direct.** Reads go straight to the databases with read logins. DbDataStore's reads and writes happen in the serving layer, through the `DbDataKit.Store` write path against the model's tables; there is no other data path to a model's rows.
-3. **The logins stay split by place** (`docs/architecture.md`, "Isolation by trust"). The serving layer holds read logins and the Store's person-attributed row-write login, kept as the group's secret encrypted with the group key. Bulk-write and schema-change logins (Build's targets, Sync's targets, a Store model's DDL) are bound to slots on the Runner and never reach the serving layer.
+3. **The logins stay split by place** (`docs/architecture.md`, "What runs where"). The serving layer holds read logins and the Store's person-attributed row-write login, kept as the group's secret encrypted with the group key. Bulk-write and schema-change logins (Build's targets, Sync's targets, a Store model's DDL) are bound to slots on the Runner and never reach the serving layer.
 4. **Modules, enabled per instance.** One process can host every module, or each instance a few. `modules:` in `server.yaml` lists them (`flightsql`, the default, `identity`, `apps`, `store`); an unknown or repeated name is refused naming the file; an instance without `flightsql` opens no Flight port.
 5. **Untrusted or heavy work runs in child processes**: app code, the semantic combine, extraction from documents. A crash or a limit stops that one job, not the instance. (Today the combine runs in process under limits; see plan 20.)
 
@@ -33,19 +33,42 @@ A console calls servers and a server never calls a console. The serving layer is
 | --- | --- | --- |
 | `flightsql` | read-only data sources over Flight SQL | built: `DbDataKit.Serving.FlightSql` |
 | semantic | semantic queries and semantic SQL on the source `semantic:<model>` | built, not a listed module: `DbDataKit.Serving.Semantic` wraps the host's core services, configured by `semantic:` in `server.yaml` (see `docs/semantic/architecture.md`) |
-| `store` | DbDataStore entities over HTTP: reads now, as of a date, with history; validated writes; change requests in the group's state | built over HTTP (`GatewayStoreModule`, its own listener, the paths of a DbDataStore server); reads over Flight SQL not built |
-| `apps` | app front ends and their API: subpath instances, shell page, app tokens (the identity home's, by exchange), app storage, portals, data calls answered in process | built (`GatewayAppsModule`, `DbDataKit.Apps.*`, default port 8818); app code does not run in child processes |
-| `identity` | sign-in, the OpenID Connect provider (authorize, token, discovery, signing keys), passkeys, Entra and Windows upstream sign-in | built (`GatewayIdentityModule`, `DbDataKit.Identity`, default port 8817); a hosted web application that reports its health as an `IServingModule` |
+| `store` | DbDataStore entities over HTTP: reads now, as of a date, with history; validated writes; change requests in the group's state | built over HTTP (`GatewayStoreModule`, under `/store` on the public listener or on a `listen` of its own, the paths of a DbDataStore server); reads over Flight SQL not built |
+| `apps` | app front ends and their API: subpath instances, shell page, app tokens (the identity home's, by exchange), app storage, portals, data calls answered in process | built (`GatewayAppsModule`, `DbDataKit.Apps.*`, under `/apps` on the public listener); app code does not run in child processes |
+| `identity` | sign-in, the OpenID Connect provider (authorize, token, discovery, signing keys), passkeys, Entra and Windows upstream sign-in | built (`GatewayIdentityModule`, `DbDataKit.Identity`, on the public listener); a hosted web application that reports its health as an `IServingModule` |
 | `views` | published dashboards and reports over REST, rendered as the caller, audited, with drain and health (plan 32 DBR11); and a person's own dashboards and reports (`/api/v1/my/...`, state module `user_views`, DBR12) | built as a library with its own listener: `DbDataKit.Views.Hosting` (`ViewsModule`); **not yet a name in `modules:`**, the Gateway host does not load it (it needs a listener setting and an `IViewsCallers` over the identity home's tokens), see `docs/views.md` |
 | `pgwire` | Postgres wire for semantic SQL | not built; deferred, low priority (owner, 2026-11-09; plan 14a) |
 | `xmla` | XMLA and MDX for Excel PivotTables | not built (only the recording forwarder, `DbDataKit.Tools.XmlaForwarder`); deferred, low priority (owner, 2026-11-09; plan 14a) |
-| `feeds` | saved queries and semantic requests over REST (JSON, CSV, Arrow IPC), for report servers (`docs/bi-tools-on-semantic-models.md`), Power Query and scripts | built (plan 14a SL31): `modules: [feeds]` and the `rest:` section (address, port 8821, `defaultLimit`, `maxRows`), a listener of its own with the Gateway's certificate; `GET|POST /api/v1/queries/{model}/{name}` and `POST /api/v1/query`; JSON, CSV or Arrow IPC (`?format=` or `Accept`); the home's personal access, access and Basic tokens; paging is `limit` only; XML for SSRS and conditional requests are not built |
+| `feeds` | saved queries and semantic requests over REST (JSON, CSV, Arrow IPC), for report servers (`docs/bi-tools-on-semantic-models.md`), Power Query and scripts | built (plan 14a SL31): `modules: [feeds]` and the `rest:` section (`defaultLimit`, `maxRows`; `listen` only for a listener of its own), under `/feeds` on the public listener with the Gateway's certificate; `GET|POST /feeds/api/v1/queries/{model}/{name}` and `POST /feeds/api/v1/query`; JSON, CSV or Arrow IPC (`?format=` or `Accept`); the home's personal access, access and Basic tokens; paging is `limit` only; XML for SSRS and conditional requests are not built |
 | `webdav` | DbDataStore documents, with extraction on save | not built |
-| `mcp` | the agents' MCP endpoint, acting as the signed-in user with approvals | built (plan 20 O12, `DbDataGateway`, port 8822): see "The mcp module" below. The Gateway's `ui mcp` noun is a different thing: the command surface offered to agents by the console and Kit |
+| `mcp` | the agents' MCP endpoint, acting as the signed-in user with approvals | built (plan 20 O12, `DbDataGateway`, `POST /mcp` on the public listener): see "The mcp module" below. The Gateway's `ui mcp` noun is a different thing: the command surface offered to agents by the console and Kit |
 | `knowledge` | search, show and about over knowledge items, access-filtered; checks and embeds a knowledge project at staging and switches at activation (plan 27 sections 2.2, 2.6) | not built (plan 27a lane KN); no knowledge library, index or embedding connection exists, only the engine check for vector columns, see [knowledge.md](knowledge.md) |
 | `backlog` | the API of DbDataBacklog: work items, sprints, boards, over its own state module (plan 27 section 5.1) | not built (plan 27a lane BK: BK02); its state module `backlog` and library `DbDataKit.Backlog` are built (BK01) |
 
 Health per module is on the host's `/health` and `/health/ready`: each of `flightsql`, `identity`, `apps`, `store` and `views` is one component named after the module (`ServingModuleReadinessProbe`). A module that is not started is `Unhealthy`, one that drains is `Degraded`, and a group state database that does not answer turns `identity`, `apps` and `store` to `Unhealthy` and `flightsql` to `Degraded` (it still reads the hand-made sources); `views` reports its own causes (a version it cannot load) too.
+
+## The public listener
+
+Every page and path by module is in [hosted-pages.md](hosted-pages.md).
+
+End users and agents reach the Gateway's HTTP modules on one HTTPS port, the public listener, which routes by path. Flight SQL and the management API keep ports of their own. The table gives the default path of each module; the administrator sets each one with the module's `path` setting (`identity.path`, `apps.path`, `store.path`, `views.path`, `rest.path`, `mcp.path`), and `/` answers 404 on the listener.
+
+| Module | Paths on the public listener |
+| --- | --- |
+| `identity` | `/identity/...`: the sign-in page, `/identity/invite`, the provider's endpoints, `/identity/.well-known/openid-configuration`, `/identity/api/auth/...`, `/identity/api/invites`, `/identity/api/users`, `/identity/api/access-tokens` |
+| `apps` | `/apps/<instance>/...`, and every path of a name bound to an instance (a subdomain or a custom domain) |
+| `store` | `/store/api/v1/models/...` |
+| `views` | `/views/api/v1/...` |
+| `feeds` | `/feeds/api/v1/queries/<model>/<name>` and `/feeds/api/v1/query` |
+| `mcp` | `/mcp` (the JSON-RPC endpoint) and `/mcp/api/v1/mcp/approvals/...` |
+
+The listener is set by `public.listen` in `server.yaml`: an address such as `https://0.0.0.0:7820`, or a list of addresses. It uses the Gateway's certificate. With no `public.listen`, the first start takes a free port of the Gateway's block (7820 to 7839) and writes it there. Each module in `modules:` mounts itself on it when it starts, with the paths above; a module that is off answers 404 under its prefix.
+
+A module with a `listen` of its own (`store: { listen: https://127.0.0.1:9443 }`) listens there and is not on the public listener: `https://gateway:9443/api/v1/models` answers and `https://gateway:7820/store/api/v1/models` is a 404. The public listener starts in every case, so a Gateway whose modules all have a `listen` of their own still answers `/health/live` on it.
+
+Example, with `modules: [identity, store, feeds]`, no module `listen` and the public listener on 7820: an OData client reads `https://gateway:7820/feeds/api/v1/queries/sales/orders`, a script reads `https://gateway:7820/store/api/v1/models`, and the identity home's issuer is `https://gateway:7820/identity`.
+
+Each module is still a web application of its own with its own pipeline and sign-in; the listener hands it the request with the prefix moved to `PathBase`, so a module never sees another module's paths. The identity home's issuer is the public listener's address and the home's path, and the apps host's redirect address is the listener's address and the apps path, unless `identity.publicUrl` or `apps.publicUrl` says another address. The listener's ports are checked against every other port of the Gateway at start (`public.listen` in the diagnostics).
 
 ## What keeps working when a back-end is down
 

@@ -47,6 +47,8 @@ public static partial class ConsoleAuditTrail
         if (!path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase)) return null;
         // the state's own maintenance entries are written by the state endpoints (state.maintenance)
         if (path.StartsWith("/api/v1/state", StringComparison.OrdinalIgnoreCase)) return null;
+        // a join token made or cancelled is audited by the console's joins (server.invite, server.invite.cancel), with the token's id and never its value
+        if (path.Equals("/api/join-tokens", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/api/join-tokens/", StringComparison.OrdinalIgnoreCase)) return null;
 
         if (HttpMethods.IsPost(method))
         {

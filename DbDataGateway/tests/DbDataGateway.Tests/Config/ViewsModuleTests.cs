@@ -81,9 +81,9 @@ public sealed partial class ViewsModuleTests : IAsyncLifetime
             viewsPort = FreePort();
             managementPort = FreePort();
             while (managementPort == viewsPort) managementPort = FreePort();
-            List<string> args = [$"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Listen:Address=127.0.0.1", "--Gateway:Listen:Port=0", "--Gateway:Modules:0=flightsql",
-                "--Gateway:Management:Enabled=true", "--Gateway:Management:Address=127.0.0.1", $"--Gateway:Management:Port={managementPort}", "--Gateway:DefinitionPollSeconds=1"];
-            if (views) args.AddRange(["--Gateway:Modules:1=views", "--Gateway:Views:Address=127.0.0.1", $"--Gateway:Views:Port={viewsPort}"]);
+            List<string> args = [$"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Listen=https://127.0.0.1:0", "--Gateway:Modules:0=flightsql",
+                "--Gateway:Management:Enabled=true", $"--Gateway:Management:Listen=https://127.0.0.1:{managementPort}", "--Gateway:DefinitionPollSeconds=1"];
+            if (views) args.AddRange(["--Gateway:Modules:1=views", $"--Gateway:Views:Listen=https://127.0.0.1:{viewsPort}"]);
             args.AddRange(more);
             app = GatewayHost.Build([.. args], overrideServices: overrides);
             try

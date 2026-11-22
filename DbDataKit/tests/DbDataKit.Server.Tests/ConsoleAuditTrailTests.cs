@@ -81,6 +81,8 @@ public sealed class ConsoleAuditTrailTests : IAsyncLifetime
     [InlineData("GET", "/api/state-moves/s1", null)]
     [InlineData("POST", "/api/v1/state/maintenance", null)]
     [InlineData("GET", "/api/audit", null)]
+    [InlineData("POST", "/api/join-tokens", null)]
+    [InlineData("DELETE", "/api/join-tokens/jt-0123456789abcdef", null)]
     [InlineData("PUT", "/health", null)]
     public void A_call_is_recorded_as_the_verb_the_rules_give_or_not_at_all(string method, string path, string? verb) =>
         Assert.Equal(verb, ConsoleAuditTrail.Describe(method, path)?.Verb);

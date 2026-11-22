@@ -112,6 +112,15 @@ public sealed class WorkspaceServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Service_check_runs_the_checks()
+    {
+        var output = new StringWriter();
+        await WorkspaceCli.Router().RunAsync(["service", "check"], new CliContext(output, new StringWriter(), TextReader.Null));
+        Assert.Contains("service.installed", output.ToString());
+        Assert.Contains("Check: ", output.ToString());
+    }
+
+    [Fact]
     public async Task The_command_line_has_the_shared_nouns_and_the_workspace_ones()
     {
         var help = new StringWriter();

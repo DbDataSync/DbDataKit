@@ -81,7 +81,7 @@ export function InstancesPage() {
       <div className="pane" data-testid="instances-page">
         <div className="page-head">
           <h1 className="page-title">Servers</h1>
-          <span className="page-note">The DbData servers this console manages. A server is paired once with a code its administrator makes (<span className="mono">server pair</span>); the console then pins its certificate.</span>
+          <span className="page-note">The DbData servers this console manages. <Link to="/add-server" data-testid="instances-add-server-link">Add a server</Link> makes the command a server joins with; a server can also be paired with a code its administrator makes (<span className="mono">server pair</span>). Either way the console pins its certificate.</span>
         </div>
 
         <ErrorBanner error={instances.error ?? forget.error} />

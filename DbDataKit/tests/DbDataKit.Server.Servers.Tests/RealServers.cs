@@ -84,6 +84,16 @@ internal sealed class RealProcess : IAsyncDisposable
         return run.Output;
     }
 
+    /// <summary>Waits for the program to end and returns its exit code; -1 when it still runs after <paramref name="timeout"/>.</summary>
+    public async Task<int> WaitForExitAsync(TimeSpan timeout)
+    {
+        using var limit = new CancellationTokenSource(timeout);
+        try { await process.WaitForExitAsync(limit.Token); }
+        catch (OperationCanceledException) { return -1; }
+        process.WaitForExit();   // lets the output readers finish
+        return process.ExitCode;
+    }
+
     /// <summary>Waits until the address answers (a server's health), or fails with what the program printed.</summary>
     public async Task WaitUntilAsync(Uri url, TimeSpan timeout)
     {

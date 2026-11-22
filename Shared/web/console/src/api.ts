@@ -119,7 +119,41 @@ export interface DeploymentIndex {
   servers: { server: string; error: string | null; nodes: number | null }[]
 }
 
+/** What the Add a server screen sends to make a join token: the server, the role ceiling, the group, how long it works and the console's address as that server reaches it. */
+export interface JoinTokenRequest {
+  product: string
+  roles: string[]
+  group: string | null
+  minutes: number | null
+  url: string | null
+}
+
+/** A join token just made: the command that spends it, shown once, and the token's id, scope and end. */
+export interface JoinTokenMade {
+  command: string
+  tokenId: string
+  product: string
+  roles: string[]
+  group: string | null
+  expires: string
+  /** The command names a loopback address, which only a server on the console's machine reaches. */
+  loopback: boolean
+}
+
+/** A join token still waiting to be used: never its value. */
+export interface WaitingJoinToken {
+  id: string
+  product: string
+  roles: string[]
+  group: string | null
+  madeBy: string
+  madeAt: string
+  expires: string
+  tries: number
+}
+
 export const instancesKey = ['instances'] as const
+export const joinTokensKey = ['join-tokens'] as const
 export const pendingKey = ['instances', 'pending'] as const
 
 export const consoleApi = {
@@ -149,5 +183,11 @@ export const consoleApi = {
     /** Pairs a Runner with a gateway so it can tell the gateway's cache when it wrote data; no code is typed (T11, 24a UC13). */
     link: (from: string, to: string, name: string | null) =>
       request<{ from: string; to: string; name: string }>('/api/instances/link', { method: 'POST', body: JSON.stringify({ from, to, name }) }),
+  },
+  /** The single-use tokens a server joins the console with (the Add a server screen). */
+  joinTokens: {
+    waiting: () => request<WaitingJoinToken[]>('/api/join-tokens'),
+    make: (body: JoinTokenRequest) => request<JoinTokenMade>('/api/join-tokens', { method: 'POST', body: JSON.stringify(body) }),
+    cancel: (id: string) => request<void>(`/api/join-tokens/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   },
 }

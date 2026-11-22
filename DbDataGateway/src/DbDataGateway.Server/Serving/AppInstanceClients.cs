@@ -11,8 +11,11 @@ namespace DbDataGateway.Server.Serving;
 /// </summary>
 public static class AppInstanceClients
 {
-    /// <summary>The redirect URI of every instance's client: the apps host's callback on its public address.</summary>
-    public static string CallbackOf(Uri appsPublicUrl) => new Uri(appsPublicUrl, AppsEndpoints.CallbackPath).AbsoluteUri;
+    /// <summary>The path the apps host is under at <paramref name="appsPublicUrl"/>: the path of the address, <c>/apps</c> for an address with none.</summary>
+    public static string PrefixOf(Uri appsPublicUrl) => appsPublicUrl.AbsolutePath.TrimEnd('/') is { Length: > 0 } path ? path : AppsPaths.Default;
+
+    /// <summary>The redirect URI of every instance's client: the apps host's callback on its public address, under the path the host is mounted at (<c>apps.path</c>).</summary>
+    public static string CallbackOf(Uri appsPublicUrl) => appsPublicUrl.GetLeftPart(UriPartial.Authority) + PrefixOf(appsPublicUrl) + "/-/callback";
 
     /// <summary>Makes the instance's client when it has none. Returns whether one was made.</summary>
     public static bool Ensure(OidcClients clients, string instance, string callback)
@@ -24,7 +27,7 @@ public static class AppInstanceClients
 
     /// <summary>The redirect URI of a name bound to an instance (plan 26 AP08): the name's own callback, on the apps host's public port.</summary>
     public static string CallbackOfName(string host, Uri appsPublicUrl) =>
-        new UriBuilder(Uri.UriSchemeHttps, host, appsPublicUrl.IsDefaultPort ? -1 : appsPublicUrl.Port, AppsEndpoints.CallbackPath).Uri.AbsoluteUri;
+        new UriBuilder(Uri.UriSchemeHttps, host, appsPublicUrl.IsDefaultPort ? -1 : appsPublicUrl.Port, PrefixOf(appsPublicUrl) + "/-/callback").Uri.AbsoluteUri;
 
     /// <summary>
     /// Makes the client's redirect URIs the instance's: the apps host's callback and the callback of each bound name, so a binding added is a redirect URI of the instance's client and one removed is gone. When the apps host signs people in with a client
@@ -69,7 +72,7 @@ public static class AppInstanceClients
             {
                 if (Ensure(clients, instance.Name, callback)) made.Add(instance.Name);
                 if (instance.Addresses.Count > 0 && Uri.TryCreate(callback, UriKind.Absolute, out var at))
-                    SyncRedirects(clients, instance, new Uri(at.GetLeftPart(UriPartial.Authority) + "/"), hostClientId, instances.List());
+                    SyncRedirects(clients, instance, new Uri(at.GetLeftPart(UriPartial.Authority) + at.AbsolutePath[..^"/-/callback".Length] + "/"), hostClientId, instances.List());
             }
             catch (ArgumentException) { }
         }

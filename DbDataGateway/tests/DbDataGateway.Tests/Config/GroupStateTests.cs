@@ -71,7 +71,7 @@ public sealed class GroupStateTests : IAsyncLifetime
         Directory.CreateDirectory(GatewayConfigFile.DirectoryIn(dataDirectory));
         var serverYaml = Path.Combine(GatewayConfigFile.DirectoryIn(dataDirectory), "server.yaml");
         if (!File.Exists(serverYaml)) File.WriteAllText(serverYaml, "schemaVersion: 2\ntls: { mode: selfSigned }\n");
-        var app = GatewayHost.Build([$"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Listen:Address=127.0.0.1", $"--Gateway:Listen:Port={FreePort()}", "--Gateway:Management:Enabled=false", .. state]);
+        var app = GatewayHost.Build([$"--Gateway:DataDirectory={dataDirectory}", $"--Gateway:Listen=https://127.0.0.1:{FreePort()}", "--Gateway:Management:Enabled=false", .. state]);
         _apps.Add(app);
         return app;
     }
@@ -208,8 +208,8 @@ public sealed class GroupStateTests : IAsyncLifetime
         {
             var (management, identity) = (FreePort(), FreePort());
             var app = Instance(dataDirectory, [.. state,
-                "--Gateway:Management:Enabled=true", "--Gateway:Management:Address=127.0.0.1", $"--Gateway:Management:Port={management}",
-                "--Gateway:Identity:Enabled=true", "--Gateway:Identity:Address=127.0.0.1", $"--Gateway:Identity:Port={identity}", $"--Gateway:Identity:PublicUrl={(homeAtLocalhost ? $"https://localhost:{identity}" : HomeUrl)}", .. more ?? []]);
+                "--Gateway:Management:Enabled=true", $"--Gateway:Management:Listen=https://127.0.0.1:{management}",
+                "--Gateway:Identity:Enabled=true", $"--Gateway:Identity:Listen=https://127.0.0.1:{identity}", $"--Gateway:Identity:PublicUrl={(homeAtLocalhost ? $"https://localhost:{identity}" : HomeUrl)}", .. more ?? []]);
             try
             {
                 await app.StartAsync();
@@ -803,7 +803,7 @@ public sealed class GroupStateTests : IAsyncLifetime
 
             var dirs = new[] { "a", "b" }.Select(d => Path.Combine(_root, d)).ToArray();
             var (storeA, storeB) = (FreePort(), FreePort());
-            string[] With(int port) => [.. state, "--Gateway:DefinitionPollSeconds=1", "--Gateway:Modules:0=flightsql", "--Gateway:Modules:1=store", "--Gateway:Store:Address=127.0.0.1", $"--Gateway:Store:Port={port}"];
+            string[] With(int port) => [.. state, "--Gateway:DefinitionPollSeconds=1", "--Gateway:Modules:0=flightsql", "--Gateway:Modules:1=store", $"--Gateway:Store:Listen=https://127.0.0.1:{port}"];
             var (a, managementA, _) = await ServingInstance(dirs[0], With(storeA));
             var keys = SecretsRuntime.OpenStore(new GatewayOptions { DataDirectory = dirs[0] });
             foreach (var secret in new[] { GroupSessionKey.Secret, GatewayIdentityModule.SigningKeySecret })
@@ -927,7 +927,7 @@ public sealed class GroupStateTests : IAsyncLifetime
             var dir = Path.Combine(_root, "apps");
             var appsPort = FreePort();
             var (app, management, _) = await ServingInstance(dir, [.. state, "--Gateway:DefinitionPollSeconds=1", "--Gateway:Modules:0=flightsql", "--Gateway:Modules:1=apps", "--Gateway:Modules:2=identity",
-                "--Gateway:Apps:Address=127.0.0.1", $"--Gateway:Apps:Port={appsPort}", "--Gateway:Apps:Home:ClientId=apps-host"], homeAtLocalhost: true);
+                $"--Gateway:Apps:Listen=https://127.0.0.1:{appsPort}", "--Gateway:Apps:Home:ClientId=apps-host"], homeAtLocalhost: true);
             var groupState = app.Services.GetRequiredService<StateDatabase>();
             await PublishEntityModelAsync(engine, database, management, dir, groupState, Model);
             for (var i = 0; i < 100 && (app.Services.GetRequiredService<PublishedEntityModels>().Find("territories") is null

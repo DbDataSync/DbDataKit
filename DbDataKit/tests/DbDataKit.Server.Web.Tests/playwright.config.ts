@@ -37,6 +37,7 @@ if (!isWorker) {
 export const gatewayDirectory = path.join(os.tmpdir(), 'dbdatakit-console-e2e-gateway')
 export const gatewayPort = 8484
 export const gatewayManagementPort = 8485
+const gatewayPublicPort = 8483
 export const gatewayUrl = `https://localhost:${gatewayManagementPort}`
 const gatewayDll = path.join(repoRoot, 'DbDataGateway/src/DbDataGateway.Server/bin/Debug/net10.0/dbdatagateway.dll')
 if (!isWorker) {
@@ -77,7 +78,7 @@ if (!isWorker) {
 
 // A server for the monitoring story (plan 13a, M12): a Gateway the story sends failed logins to (the Build server with a failing schedule and the Sync server with a lagging replication went with those servers, plan 33 SC23).
 // It is separate from the servers above, whose pairing codes the first-run story spends.
-export const monitorGateway = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-monitor-gateway'), flightPort: 8491, managementPort: 8492 }
+export const monitorGateway = { directory: path.join(os.tmpdir(), 'dbdatakit-console-e2e-monitor-gateway'), flightPort: 8491, managementPort: 8492, publicPort: 8489 }
 if (!isWorker) {
   fs.rmSync(monitorGateway.directory, { recursive: true, force: true })
   fs.mkdirSync(path.join(monitorGateway.directory, 'config', 'gateway'), { recursive: true })
@@ -317,8 +318,8 @@ export default defineConfig({
     })),
     {
       command: ['dotnet', 'exec', JSON.stringify(gatewayDll), 'server', 'run',
-        `--Gateway:DataDirectory=${JSON.stringify(gatewayDirectory)}`, '--Gateway:Listen:Address=127.0.0.1', `--Gateway:Listen:Port=${gatewayPort}`,
-        '--Gateway:Management:Enabled=true', '--Gateway:Management:Address=127.0.0.1', `--Gateway:Management:Port=${gatewayManagementPort}`].join(' '),
+        `--Gateway:DataDirectory=${JSON.stringify(gatewayDirectory)}`, `--Gateway:Listen=https://127.0.0.1:${gatewayPort}`, `--Gateway:Public:Listen=https://127.0.0.1:${gatewayPublicPort}`,
+        '--Gateway:Management:Enabled=true', `--Gateway:Management:Listen=https://127.0.0.1:${gatewayManagementPort}`].join(' '),
       // the variable the ledger's login names, so the Connections story can bind it before its copy is taken (plan 30 PB02: the Gateway binds only a secret it holds)
       env: { ...byHandEnvironment(), LEDGER_DB_PASSWORD: 'e2e-not-a-password' },
       url: `${gatewayUrl}/health/live`,
@@ -340,8 +341,8 @@ export default defineConfig({
     },
     {
       command: ['dotnet', 'exec', JSON.stringify(gatewayDll), 'server', 'run',
-        `--Gateway:DataDirectory=${JSON.stringify(monitorGateway.directory)}`, '--Gateway:Listen:Address=127.0.0.1', `--Gateway:Listen:Port=${monitorGateway.flightPort}`,
-        '--Gateway:Management:Enabled=true', '--Gateway:Management:Address=127.0.0.1', `--Gateway:Management:Port=${monitorGateway.managementPort}`].join(' '),
+        `--Gateway:DataDirectory=${JSON.stringify(monitorGateway.directory)}`, `--Gateway:Listen=https://127.0.0.1:${monitorGateway.flightPort}`, `--Gateway:Public:Listen=https://127.0.0.1:${monitorGateway.publicPort}`,
+        '--Gateway:Management:Enabled=true', `--Gateway:Management:Listen=https://127.0.0.1:${monitorGateway.managementPort}`].join(' '),
       url: `https://localhost:${monitorGateway.managementPort}/health/live`,
       ignoreHTTPSErrors: true,
       reuseExistingServer: false,

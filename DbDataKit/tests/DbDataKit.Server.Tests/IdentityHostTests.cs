@@ -234,8 +234,9 @@ public sealed class IdentityHostTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, page.StatusCode);
         var html = await page.Content.ReadAsStringAsync();
         Assert.Contains("identity-sign-in-passkey", html);
-        Assert.Contains("requested.startsWith('/identity/')", html);                           // the page returns only under /identity/
-        Assert.Contains("/api/auth/passkey/begin", html);
+        Assert.Contains("PROVIDER = \"/identity\"", html);
+        Assert.Contains("requested.startsWith(PROVIDER + '/')", html);                         // the page returns only under /identity/
+        Assert.Contains("PREFIX + '/api/auth/passkey/begin'", html);
     }
 
     [Fact]

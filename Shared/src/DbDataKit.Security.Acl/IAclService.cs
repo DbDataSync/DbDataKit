@@ -6,7 +6,7 @@ namespace DbDataKit.Security.Acl;
 
 /// <summary>
 /// The one seam over file system ACLs: apply a spec, read an ACL back, and list files. Fakeable, so
-/// installers and doctors run on any OS against in-memory implementations.
+/// installers and <c>service check</c> run on any OS against in-memory implementations.
 /// </summary>
 public interface IAclService
 {
@@ -17,7 +17,7 @@ public interface IAclService
     /// <summary>Reads the ACL of a file or directory; null when missing (or when ACLs are not supported on this OS).</summary>
     ObservedAcl? Read(string path);
 
-    /// <summary>Creates the directory if needed and applies the spec (Windows only).</summary>
+    /// <summary>Creates the directory if needed and applies the spec, its owner included when it names one (Windows only).</summary>
     void Apply(string directory, AclSpecification spec);
 }
 
@@ -52,6 +52,10 @@ public sealed class FileSystemAclService : IAclService
                 security.RemoveAccessRuleSpecific(existing);
             }
         }
+
+        // an owner the install names (the Administrators group), so the folder is owned the same way whoever ran the install: a Windows client would
+        // otherwise make the administrator who ran it the owner, and Windows Server the Administrators group
+        if (spec.OwnerSid is { } owner) security.SetOwner(new SecurityIdentifier(owner));
 
         foreach (var entry in spec.Entries)
         {
@@ -113,8 +117,8 @@ public sealed class FileSystemAclService : IAclService
         if ((r & ExecuteMask) != 0) a |= AccessRights.Execute;                        // ExecuteFile, Traverse
         if ((r & (0x2 | 0x4)) != 0) a |= AccessRights.Write;              // WriteData/CreateFiles, AppendData/CreateDirectories
         if ((r & DeleteMask) != 0) a |= AccessRights.Delete;                          // Delete, DeleteSubdirectoriesAndFiles
-        // What Full has beyond Modify (bit 16): change the permissions and take ownership. Without it an Administrators or SYSTEM ACE of FullControl reads back as Modify, and the service
-        // doctor reported "lacks 16" for a directory the install had just locked correctly.
+        // What Full has beyond Modify (bit 16): change the permissions and take ownership. Without it an Administrators or SYSTEM ACE of FullControl reads back as Modify, and
+        // <c>service check</c> reported "lacks 16" for a directory the install had just locked correctly.
         if ((r & (ChangePermissionsMask | TakeOwnershipMask)) == (ChangePermissionsMask | TakeOwnershipMask)) a |= AccessRights.Full & ~AccessRights.Modify;
         return a;
     }

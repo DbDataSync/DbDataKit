@@ -20,7 +20,7 @@ public static class GatewayConfigFile
     /// <summary>The settings file of earlier releases; finding one stops the server with a message that names it.</summary>
     public const string LegacyFileName = "appsettings.json";
 
-    /// <summary>What <c>service install</c> writes when the data directory has no settings file: only the opt-in to the current defaults.</summary>
+    /// <summary>What the server writes at its first start on a data directory with no <c>config</c> folder: only the opt-in to the current defaults.</summary>
     public const string Starter = "schemaVersion: 2\n";
 
     public static string DirectoryIn(string dataDirectory) => Path.Combine(dataDirectory, DirectoryName);
@@ -50,6 +50,23 @@ public static class GatewayConfigFile
         }
 
         return GatewayHost.ResolveDataDirectory(new GatewayOptions { DataDirectory = configured });
+    }
+
+    /// <summary>
+    /// The environment variable that sets <c>startup.skip_folder_permissions_check</c> to true (<c>DBDATAKIT_Gateway__Startup__skip_folder_permissions_check</c>,
+    /// or the same without the prefix), or null when none does. The folder step reads it before the settings are loaded, as it reads the data directory.
+    /// </summary>
+    public static string? SkipFolderPermissionsVariable(System.Collections.IDictionary? variables = null)
+    {
+        // configuration keys match without case, so the variable does too
+        var key = $"Gateway__Startup__{DbDataKit.Hosting.Startup.FolderPermissions.Key}";
+        foreach (System.Collections.DictionaryEntry variable in variables ?? Environment.GetEnvironmentVariables())
+        {
+            if (variable.Key is not string name) continue;
+            if (!string.Equals(name, EnvironmentPrefix + key, StringComparison.OrdinalIgnoreCase) && !string.Equals(name, key, StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals((variable.Value as string)?.Trim(), "true", StringComparison.OrdinalIgnoreCase)) return name;
+        }
+        return null;
     }
 
     /// <summary>

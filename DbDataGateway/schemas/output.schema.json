@@ -2352,6 +2352,52 @@
       "if": {
         "properties": {
           "command": {
+            "const": "pair"
+          },
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_pair"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "pair"
+          },
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "command",
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/data_pair_partial"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
             "const": "query run"
           },
           "ok": {
@@ -3134,7 +3180,7 @@
       "if": {
         "properties": {
           "command": {
-            "const": "service doctor"
+            "const": "service check"
           },
           "ok": {
             "const": true
@@ -3148,7 +3194,7 @@
       "then": {
         "properties": {
           "data": {
-            "$ref": "#/$defs/data_service_doctor"
+            "$ref": "#/$defs/data_service_check"
           }
         }
       }
@@ -3157,7 +3203,7 @@
       "if": {
         "properties": {
           "command": {
-            "const": "service doctor"
+            "const": "service check"
           },
           "ok": {
             "const": false
@@ -3171,7 +3217,7 @@
       "then": {
         "properties": {
           "data": {
-            "$ref": "#/$defs/data_service_doctor"
+            "$ref": "#/$defs/data_service_check"
           }
         }
       }
@@ -7077,6 +7123,48 @@
         }
       }
     },
+    "data_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "request": {
+          "type": "string"
+        },
+        "console": {
+          "type": "string"
+        },
+        "restarted": {
+          "type": "boolean"
+        },
+        "joined": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "request",
+        "console",
+        "restarted",
+        "joined"
+      ]
+    },
+    "data_pair_partial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "request": {
+          "type": "string"
+        },
+        "console": {
+          "type": "string"
+        },
+        "restarted": {
+          "type": "boolean"
+        },
+        "joined": {
+          "type": "boolean"
+        }
+      }
+    },
     "data_query_run": {
       "type": "object",
       "additionalProperties": false
@@ -7664,7 +7752,7 @@
         }
       }
     },
-    "data_service_doctor": {
+    "data_service_check": {
       "type": "object",
       "additionalProperties": false
     },
@@ -7772,6 +7860,9 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "login": {
+          "type": "string"
+        },
         "statements": {
           "type": "array",
           "items": {
@@ -7787,6 +7878,9 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "login": {
+          "type": "string"
+        },
         "statements": {
           "type": "array",
           "items": {

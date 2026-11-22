@@ -50,6 +50,21 @@ public class GeneratorTests
         }));
 
     [Fact]
+    public void The_modes_of_the_state_and_logs_directories_follow_them_and_must_be_octal()
+    {
+        var text = SystemdUnitGenerator.Generate(new SystemdUnitOptions
+        {
+            Name = "x", ExecStart = "/opt/x", DynamicUser = false, User = "x", Group = "kit",
+            StateDirectories = ["kit/x"], StateDirectoryMode = "0700", LogsDirectories = ["kit/x"], LogsDirectoryMode = "0700",
+        });
+        Assert.Contains("StateDirectory=kit/x\nStateDirectoryMode=0700\n", text);
+        Assert.Contains("LogsDirectory=kit/x\nLogsDirectoryMode=0700\n", text);
+        Assert.Contains("User=x\nGroup=kit\n", text);
+        Assert.DoesNotContain("DirectoryMode", SystemdUnitGenerator.Generate(new SystemdUnitOptions { Name = "x", ExecStart = "/opt/x", StateDirectoryMode = "0700", LogsDirectoryMode = "0700" }));
+        Assert.Throws<ArgumentException>(() => SystemdUnitGenerator.Generate(new SystemdUnitOptions { Name = "x", ExecStart = "/opt/x", StateDirectories = ["x"], StateDirectoryMode = "0789" }));
+    }
+
+    [Fact]
     public void Hardening_can_be_narrowed_to_a_subset()
     {
         var text = SystemdUnitGenerator.Generate(new SystemdUnitOptions

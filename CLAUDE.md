@@ -44,7 +44,7 @@ product, it moves to `Shared/src/DbDataKit.*` first (an adapter in the product i
 ```
 dotnet build DbDataKit.slnx                                   # everything
 python3 -I -m unittest discover -s scripts/tests              # the repository checks
-python3 -I scripts/check_package_versions.py && python3 -I scripts/check_solution.py && python3 -I scripts/check_duckdb_cache.py && python3 -I scripts/check_native_cache.py && python3 -I scripts/check_plans.py && python3 -I scripts/check_formats.py && python3 -I scripts/check_state_migrations.py && python3 -I scripts/check_compatibility.py && python3 -I scripts/check_ui_editors.py && python3 -I scripts/check_env_names.py && python3 -I scripts/check_secret_names.py && python3 -I scripts/check_default_ports.py && python3 -I scripts/check_product_name.py
+python3 -I scripts/check_package_versions.py && python3 -I scripts/check_solution.py && python3 -I scripts/check_duckdb_cache.py && python3 -I scripts/check_native_cache.py && python3 -I scripts/check_plans.py && python3 -I scripts/check_formats.py && python3 -I scripts/check_state_migrations.py && python3 -I scripts/check_compatibility.py && python3 -I scripts/check_ui_editors.py && python3 -I scripts/check_env_names.py && python3 -I scripts/check_secret_names.py && python3 -I scripts/check_default_ports.py && python3 -I scripts/check_product_name.py && python3 -I scripts/check_doc_inputs.py
 ```
 
 Before a pull request into `main` merges: `python3 -I scripts/check_no_wip.py` (it fails while any file exists under `planning/wip/`; CI runs it on
@@ -91,7 +91,17 @@ How the work is run is [planning/ROLES.md](planning/ROLES.md): the owner, the se
 
 - **A session does no product code work.** A conversation with the owner talks, designs, writes and changes planning (subject files, proposed decisions,
   open designs) and starts workers and reviewers; it writes no product code, fixes no tests and resolves no merge conflicts. That work is a worker's
-  (code, tests) or the reviewer's (mechanical conflicts while combining).
+  (code, tests) or the reviewer's (mechanical conflicts while combining). The same holds for everything around the code: scripts, hooks,
+  `.claude/` settings, `.mcp.json`, the cloud environment's settings and setup script, and services started to try something. A session reads
+  (code, docs, planning) and may build or run something only to answer a question, saying so; it changes nothing outside `planning/` until the owner has
+  agreed the plan.
+- **Talk with the owner in short messages, one question at a time** ([planning/ROLES.md](planning/ROLES.md), "Talking with the owner"): the answer or
+  question first, each question complete on its own; proposed text for docs and planning shown in small batches and applied only after approval.
+- **Some files change only with the owner's approval** ([planning/ROLES.md](planning/ROLES.md), "Files only the owner changes"): `CLAUDE.md`,
+  `planning/ROLES.md`, `docs/architecture.md`, the `product-docs` skill and the protection's own settings and hook. Claude Code asks before writing them.
+- **A new request starts in `planning/`, not in the code** ([planning/ROLES.md](planning/ROLES.md), "A new request"): find the subjects that cover it in
+  `planning/README.md` and read them, check the product docs they name, say what exists, what overlaps and what contradicts, and work the plan out
+  with the owner before any change. Ask what the owner means when the request could mean more than one thing; do not offer to build first.
 - Open work is a **subject** in `planning/` (`planning/README.md` is the only index; the owner sets its order, status and assignment). A worker builds one
   subject's tasks on `backup/<slug>-<n>` (`backup/installer-3`), edits only its subject file and the code and docs its tasks need, starts each commit
   message with the task id (`INSTALLER-3: ...`), merges `main` into its branch when `main` moves, and reports defaults and questions without deciding them.
@@ -105,10 +115,15 @@ How the work is run is [planning/ROLES.md](planning/ROLES.md): the owner, the se
   question becomes design in the product doc, an unanswered question or a default becomes a proposed decision `<SLUG>-P<n>` (a concrete scenario with
   options and a recommendation), a need goes under "Needs from other subjects". A pull request into `main` cannot merge while any file exists under
   `planning/wip/` (`scripts/check_no_wip.py`, run by CI on pull requests into `main` and on pushes to `main`).
-- **Product docs describe how the product is**: what it does, why and an example, never as a list of decisions. When the owner answers a proposed
+- **Product docs describe how the product is**: what it does, why and an example, never as a list of decisions. Write and check them with the skill
+  `product-docs` (`.claude/skills/product-docs/SKILL.md`): plain sentences a reader can act on, no slogans, no decisions, owners or dates in the text. A doc's one date is its review date
+  (`<!-- reviewed: YYYY-MM-DD -->` under the title, set when the owner approves a full review of the file; the skill and [planning/ROLES.md](planning/ROLES.md), "Review dates"). When the owner answers a proposed
   decision (in any session; the answer is recorded under the proposal), the proposal leaves the subject file and its outcome is written into the doc that
   describes that part, in a commit whose message names the proposal id and says `answered by the owner: <the answer>`. Nothing is dropped from planning
   without the owner's word, and a commit that removes design text says where it went.
+- **`docs/architecture.md` shows where the suite is going**: a subject that changes the architecture keeps its direction in the section "Planned
+  architecture changes", marked Planned or In progress, and each landed task moves its part into the description of what is built
+  ([planning/ROLES.md](planning/ROLES.md), "Architecture directions").
 - **A finished subject becomes product documentation**: the pull request that lands its last task writes what is still useful into the docs beside the code
   and deletes the subject file. `scripts/check_plans.py` keeps `planning/` consistent (the index, slugs, task and proposal ids, references between
   subjects) and refuses any document that links to the old plans folder or to a subject that is gone.

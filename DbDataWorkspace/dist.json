@@ -18,7 +18,6 @@
     { "name": "DBDATAKIT_DATA", "programData": "DbDataKit" }
   ],
   "service": {
-    "name": "DbDataWorkspace",
     "register": "service install",
     "unregister": "service uninstall"
   },

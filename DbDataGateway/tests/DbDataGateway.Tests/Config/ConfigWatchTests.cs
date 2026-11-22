@@ -24,7 +24,7 @@ public sealed class ConfigWatchTests
     {
         if (!OperatingSystem.IsLinux()) return;
         using var broken = TempConfig.Create(("server.yaml", "listen: [not, a, mapping\n"));
-        using var good = TempConfig.Create(("server.yaml", "listen: { address: 127.0.0.1 }\n"));
+        using var good = TempConfig.Create(("server.yaml", "listen: https://127.0.0.1:9000\n"));
         var before = SettledWatches();
         for (var i = 0; i < 20; i++)
         {

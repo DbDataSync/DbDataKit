@@ -8,6 +8,9 @@
              used twice anywhere
   proposals  a proposed decision is a heading that starts with `<SLUG>-P<n>`; it starts with its file's slug and is unique
   refs       every task or proposal id named anywhere under planning/ (a dependency, a need from another subject, a hand-off) exists
+  follows    a task named after "Follows" in a row's text is also in the row's "Depends on" cell
+  cycles     no tasks depend on each other in a cycle (the "Depends on" cell of each task row); a task that depends on a task of a subject ranked
+             lower in the index is printed as a report after the result, not counted as a problem (the order may be meant)
   links      no markdown file in the repository names `docs/plans/` or links to a file under planning/ that does not exist
 
 Work-in-progress notes under planning/wip/ are not read here; scripts/check_no_wip.py refuses them on main.
@@ -98,6 +101,10 @@ def problems(root):
             if ident not in known:
                 out.append(f"planning/{name}: names {ident}, which is not a {'proposed decision' if p else 'task'} of any subject")
 
+    deps = task_dependencies(planning, subjects)
+    out.extend(cycle_problems(deps))
+    out.extend(follows_problems(planning, subjects, deps))
+
     for path in markdown_files(root):
         rel = os.path.relpath(path, root).replace(os.sep, "/")
         text = read(path)
@@ -112,12 +119,96 @@ def problems(root):
     return sorted(set(out))
 
 
+def task_dependencies(planning, subjects):
+    """{task id: (subject file, [task ids in its "Depends on" cell])}, from the third cell of each task row."""
+    deps = {}
+    for name in subjects:
+        for line in read(os.path.join(planning, name)).splitlines():
+            if not TASK_ROW.match(line + "\n"):
+                continue
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if len(cells) < 3:
+                continue
+            ident = cells[0].strip("*")
+            deps[ident] = (name, [f"{a}-{n}" for a, p, n in ID.findall(cells[2]) if not p])
+    return deps
+
+
+FOLLOWS = re.compile(r"\bFollows\b([^(.;:]*)")
+
+
+def follows_problems(planning, subjects, deps):
+    """A problem for each task named after "Follows" in a row's text that is not in the row's "Depends on" cell."""
+    out = []
+    for name in subjects:
+        for line in read(os.path.join(planning, name)).splitlines():
+            if not TASK_ROW.match(line + "\n"):
+                continue
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if len(cells) < 3:
+                continue
+            ident = cells[0].strip("*")
+            for m in FOLLOWS.finditer(cells[1]):
+                for a, p, n in ID.findall(m.group(1)):
+                    named = f"{a}-{n}"
+                    if not p and named not in deps.get(ident, ("", []))[1]:
+                        out.append(f"planning/{name}: {ident} follows {named} in its text but does not list it under Depends on")
+    return out
+
+
+def cycle_problems(deps):
+    """A problem for each cycle of tasks that depend on each other, named once from its smallest id."""
+    out, seen = [], set()
+
+    def walk(node, path):
+        if node in path:
+            cycle = path[path.index(node):]
+            start = cycle.index(min(cycle))
+            key = tuple(cycle[start:] + cycle[:start])
+            if key not in seen:
+                seen.add(key)
+                out.append(f"planning/{deps[key[0]][0]}: the tasks {' -> '.join(key + (key[0],))} depend on each other in a cycle")
+            return
+        for dep in deps.get(node, ("", []))[1]:
+            if dep in deps:
+                walk(dep, path + [node])
+
+    for ident in sorted(deps):
+        walk(ident, [])
+    return out
+
+
+def priority_report(root):
+    """Each dependency of a task on a task of a subject ranked lower in planning/README.md. A report, not a problem: the order may be meant."""
+    planning = os.path.join(root, "planning")
+    rank = {}
+    for line in read(os.path.join(planning, "README.md")).splitlines():
+        m = re.match(r"\|\s*(\d+)\s*\|\s*\[([A-Z0-9]+)\]", line)
+        if m:
+            rank[m.group(2)] = int(m.group(1))
+    deps = task_dependencies(planning, subject_files(planning))
+    out = []
+    for ident, (name, needs) in sorted(deps.items(), key=lambda kv: (rank.get(kv[1][0][:-3], 999), kv[0])):
+        mine = name[:-3]
+        for dep in needs:
+            theirs = dep.rsplit("-", 1)[0]
+            if mine in rank and theirs in rank and rank[theirs] > rank[mine]:
+                out.append(f"{ident} (rank {rank[mine]}) depends on {dep} (rank {rank[theirs]})")
+    return out
+
+
 def main(argv):
     root = os.path.abspath(argv[1]) if len(argv) > 1 else os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     found = problems(root)
     for line in found:
         print(line)
     print(f"{len(found)} problem(s)" if found else "the planning folder is consistent")
+    if not found:
+        report = priority_report(root)
+        if report:
+            print(f"{len(report)} dependencies on a subject ranked lower in planning/README.md (a report, not a problem):")
+            for line in report:
+                print(f"  {line}")
     return 1 if found else 0
 
 

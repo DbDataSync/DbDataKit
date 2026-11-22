@@ -9,5 +9,6 @@
     <ProjectReference Include="..\DbDataKit.Hosting.WindowsService\DbDataKit.Hosting.WindowsService.csproj" />
     <ProjectReference Include="..\DbDataKit.Hosting.Systemd\DbDataKit.Hosting.Systemd.csproj" />
     <ProjectReference Include="..\DbDataKit.Hosting.Certificates\DbDataKit.Hosting.Certificates.csproj" />
+    <ProjectReference Include="..\DbDataKit.Hosting.Startup\DbDataKit.Hosting.Startup.csproj" />
   </ItemGroup>
 </Project>

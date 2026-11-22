@@ -23,7 +23,7 @@ namespace DbDataKit.Runner.Api;
 /// <item><c>.../tasks/{package}/{channel}/{task}/schedule</c>, <c>.../owner</c> and <c>.../decisions</c>: who schedules a task while a product's own scheduler is still in the picture (plan 28c E09), see <c>MapOwnership</c>.</item>
 /// <item><c>.../tasks/{package}/{channel}/{task}/checkpoints</c> (every checkpoint with its items), <c>.../checkpoints/{name}</c> (one, as a product reads it), <c>.../checkpoints/{name}/history[?key=&amp;limit=]</c> (its changes, newest first) and <c>POST .../checkpoints/{name}/rewind</c> with <c>{"history_id": n, "key": ""}</c>: back to what it was before that change, as a new version under the operator's name, audited as <c>runner.checkpoint.rewind</c> (409 when a run moved it meanwhile). An operator, for the reads too.</item>
 /// <item>The operator's answers (plan 28a R25): in-doubt steps and their resolution, dead letters (list, replay, discard), the units and steps of a run; see <see cref="RunnerOperatorApi"/>.</item>
-/// <item><c>POST /api/v1/tasks/{package}/{channel}/{task}/run</c> with an optional <c>{"inputs": {"name": "value"}}</c>: queues a run now (202 with its run id; 409 when one is queued or running already). <c>.../pause</c> and <c>.../resume</c>.</item>
+/// <item><c>POST /api/v1/tasks/{package}/{channel}/{task}/run</c> with an optional <c>{"inputs": {"name": "value"}}</c>: queues a run now (202 with its run id; 409 when one is queued or running already). A task with the capability <c>ddl</c> is queued only when the call carries the control service's signed approval in the header <c>X-DbDataKit-Control-Approval</c> (403 otherwise; a dry run needs none). <c>.../pause</c> and <c>.../resume</c>.</item>
 /// </list>
 /// </summary>
 public static class RunnerApi
@@ -373,11 +373,28 @@ public static class RunnerApi
                 }
             }
 
+            // a task that creates, alters or drops tables starts only on the control service's signed request, made after a person approved the exact statements; a dry run writes nothing, so it needs none
+            ControlApprovalRecord? approval = null;
+            if (!dryRun && engine().Control is { } guard && await guard.IsDdlAsync(reference!, version, context.RequestAborted) == true)
+            {
+                var held = caller(context);
+                var verdict = options.ControlApprovals is { } verifier && held.Token is { } token
+                    ? verifier.Verify(context.Request.Headers[ControlRunApprovals.Header].ToString(), token, reference!, version, inputs)
+                    : ControlApprovalResult.Refused(ControlApprovalFailure.Missing, "no control service is paired with this runner to approve it");
+                if (!verdict.Approved)
+                {
+                    guard.Refused(RunnerControl.RunVerb, reference!, held.Actor, $"a DDL task starts only on the control service's signed request: {verdict.Detail}");
+                    return Results.Json(new { error = $"{reference} creates, alters or drops tables, so it starts only from the console after a person approves its statements ({verdict.Detail}). It cannot be started from here." }, statusCode: StatusCodes.Status403Forbidden);
+                }
+
+                approval = verdict.Approval;
+            }
+
             if (version is not null)
             {
                 if (engine().Control is not { } staged) return Results.Json(new { error = "The runner is starting; try again in a moment." }, statusCode: StatusCodes.Status503ServiceUnavailable);
                 RunNowResult ran;
-                try { ran = await staged.RunVersionAsync(reference!, version, inputs, ActorOf(context), dryRun, onBehalfOf, context.RequestAborted); }
+                try { ran = await staged.RunVersionAsync(reference!, version, inputs, ActorOf(context), dryRun, onBehalfOf, context.RequestAborted, approval); }
                 catch (UnknownTaskException ex) { return Results.NotFound(new { error = ex.Message }); }
                 return ran.Queued
                     ? Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["version"] = version, ["run_id"] = ran.RunId!.Value.ToString() }, statusCode: StatusCodes.Status202Accepted)
@@ -386,7 +403,7 @@ public static class RunnerApi
 
             return Control(engine(), control =>
             {
-                var result = control.RunNow(reference!, inputs, ActorOf(context), dryRun, onBehalfOf);
+                var result = control.RunNow(reference!, inputs, ActorOf(context), dryRun, onBehalfOf, approval);
                 return result.Queued
                     ? Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["run_id"] = result.RunId!.Value.ToString() }, statusCode: StatusCodes.Status202Accepted)
                     : Results.Json(new JsonObject { ["task"] = reference!.ToString(), ["queued"] = false, ["error"] = $"{reference} is queued or running already." }, statusCode: StatusCodes.Status409Conflict);
@@ -579,6 +596,7 @@ public static class RunnerApi
             ["problem"] = t.Problem,
             ["required_labels"] = new JsonArray((t.RequiredLabels ?? []).Select(l => (JsonNode)JsonValue.Create(l)!).ToArray()),
             ["waiting_reason"] = t.WaitingReason,
+            ["ddl"] = t.Ddl,
         }).ToArray());
         status["instances"] = RunnerGroupApi.Instances(state, engine);
         status["triggers"] = new JsonArray(control.Triggers.Statuses().Select(t => (JsonNode)new JsonObject

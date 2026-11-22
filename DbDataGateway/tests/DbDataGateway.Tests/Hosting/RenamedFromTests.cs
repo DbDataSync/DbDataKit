@@ -30,7 +30,7 @@ public sealed class RenamedFromTests : IDisposable
     {
         Write("config/server.yaml", "schemaVersion: 2\n");
         Write("config/connections/erp.yaml", "schema: connection/1\nextensions:\n  gateway:\n    access: readonly\n");
-        Assert.Empty(Problems(["server", "run", "--Gateway:Listen:Port=9000"]));
+        Assert.Empty(Problems(["server", "run", "--Gateway:Listen=https://127.0.0.1:9000"]));
     }
 
     [Fact]
@@ -75,6 +75,6 @@ public sealed class RenamedFromTests : IDisposable
         var message = RenamedFrom.OldService(scm);
         Assert.NotNull(message);
         Assert.Contains("dbdataproxy", message);
-        Assert.Contains("dbdatagateway", message);
+        Assert.Contains("install this one ('DbDataGateway')", message);
     }
 }

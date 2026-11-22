@@ -76,7 +76,11 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         server.MapGet("/api/v1/runs/{id}/logs", (HttpContext c, string id) => Needs(c, ServerRole.Viewer, () => Results.Json(new { run = id, lines = Array.Empty<object>() })));
         server.MapGet("/api/v1/definitions/integration", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { kind = "integration", definitions = Array.Empty<object>() })));
         server.MapGet("/api/v1/definitions/integration/{name}", (HttpContext c, string name) => Needs(c, ServerRole.Viewer, () => Results.Json(new { name })));
-        server.MapPost("/api/v1/tasks/{package}/{channel}/{task}/{act}", (HttpContext c, string act) => Needs(c, ServerRole.Operator, () => Results.Json(new { act }, statusCode: act == "run" ? 202 : 200)));
+        server.MapPost("/api/v1/tasks/{package}/{channel}/{task}/{act}", (HttpContext c, string act) =>
+        {
+            if (c.Request.Headers.TryGetValue(DbDataKit.Runner.Api.ControlRunApprovals.Header, out var approval)) reached.Enqueue("approval " + approval);
+            return Needs(c, ServerRole.Operator, () => Results.Json(new { act }, statusCode: act == "run" ? 202 : 200));
+        });
         server.MapPost("/api/v1/definitions/integration/{name}/{act}", async (HttpContext c, string act) =>
         {
             var body = await new StreamReader(c.Request.Body).ReadToEndAsync();
@@ -186,6 +190,39 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
 
         Assert.Contains(reached, r => r.StartsWith("POST /api/v1/tasks/sample/dev/ok/run as ") && r.Contains("admin") && r.Contains("operator") && r.EndsWith("by Admin person"));
     }
+
+    [Fact]
+    public async Task A_ddl_run_is_started_by_the_console_with_its_signature_after_the_person_approved_the_statements()
+    {
+        const string statements = "CREATE TABLE t (id int);";
+        var path = $"/api/runner-runs/{Id}/sample/dev/ddl";
+
+        // nothing is signed until the person has approved the exact statements
+        Assert.Equal(HttpStatusCode.BadRequest, (await Send(HttpMethod.Post, path, admin, """{"approved":false,"statements":"CREATE TABLE t (id int);"}""")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Send(HttpMethod.Post, path, admin, """{"approved":true}""")).StatusCode);
+        Assert.DoesNotContain(reached, r => r.StartsWith("approval ", StringComparison.Ordinal));
+
+        var run = await Send(HttpMethod.Post, path, admin, JsonSerializerBody(statements));
+        Assert.Equal(HttpStatusCode.Accepted, run.StatusCode);
+        var sent = Assert.Single(reached, r => r.StartsWith("approval ", StringComparison.Ordinal))["approval ".Length..];
+
+        var parts = sent.Split('.');
+        var identity = await app.Services.GetRequiredService<ConsoleKeyStore>().GetOrCreateAsync();
+        var claims = JsonNode.Parse(Convert.FromBase64String(parts[1].Replace('-', '+').Replace('_', '/') + new string('=', (4 - parts[1].Length % 4) % 4)))!;
+        Assert.True(ConsoleSigningKey.Verify(identity.Key.PublicKey, Encoding.ASCII.GetBytes(parts[0] + "." + parts[1]), Convert.FromBase64String(parts[2].Replace('-', '+').Replace('_', '/') + new string('=', (4 - parts[2].Length % 4) % 4))));
+        Assert.Equal("sample/dev/ddl", (string)claims["task"]!);
+        Assert.Equal(DbDataKit.Runner.Api.ControlRunApprovals.StatementsDigest(statements), (string)claims["statements"]!);
+        Assert.Equal(Id, (string)claims["aud"]!);
+
+        // the browser's own relayed run carries no signature
+        Assert.Equal(HttpStatusCode.Accepted, (await Send(HttpMethod.Post, Relay("api/v1/tasks/sample/dev/ddl/run"), admin, "{}")).StatusCode);
+        Assert.Single(reached, r => r.StartsWith("approval ", StringComparison.Ordinal));
+
+        // a viewer cannot have a run signed
+        Assert.Equal(HttpStatusCode.Forbidden, (await Send(HttpMethod.Post, path, viewer, JsonSerializerBody(statements))).StatusCode);
+    }
+
+    private static string JsonSerializerBody(string statements) => System.Text.Json.JsonSerializer.Serialize(new { approved = true, statements, inputs = new Dictionary<string, string> { ["plan"] = "p1" } });
 
     [Fact]
     public async Task A_viewer_reads_and_the_relays_refusal_of_an_act_names_the_role_it_needs()

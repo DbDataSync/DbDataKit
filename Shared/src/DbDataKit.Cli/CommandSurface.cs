@@ -29,7 +29,7 @@ public static class CommandSurface
             if (string.IsNullOrWhiteSpace(noun.Summary)) problems.Add($"{product}: the noun `{noun.Name}` has no summary.");
             foreach (var verb in noun.Verbs)
             {
-                var command = $"{product} {noun.Name} {verb.Name}";
+                var command = $"{product} {noun.CommandOf(verb)}";
                 if (string.IsNullOrWhiteSpace(verb.Summary)) problems.Add($"{command}: has no summary (the help line and the tool's description).");
                 if (verb.Usage is null) problems.Add($"{command}: has no usage text (an empty one says it takes no arguments).");
                 if (string.IsNullOrWhiteSpace(verb.DataSchema)) problems.Add($"{command}: has no schema for its data (DataSchemas.None says it has none).");

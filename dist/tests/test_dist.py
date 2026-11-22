@@ -316,6 +316,18 @@ class BindTests(DistTestCase):
         self.assertIn("ANNOUNCES=0", (out2 / "install.sh").read_text())
         self.assertIn("Announces = $false", (out2 / "install.ps1").read_text())
 
+    def test_a_service_is_bound_so_install_sh_makes_its_user_and_unit(self):
+        out = self.fresh()
+        bind(out)
+        self.assertIn("SERVICE=1", (out / "install.sh").read_text())
+        out2 = self.fresh()
+        bind(out2, meta={k: v for k, v in META.items() if k != "service"})
+        self.assertIn("SERVICE=0", (out2 / "install.sh").read_text())
+        # the system user, its group and the unit (dist/tests/suite-systemd-e2e.sh runs it on systemd)
+        template = (DIST / "install.sh").read_text()
+        for word in ("useradd --system --gid \"$GROUP\"", "GROUP=dbdatakit", "\"$INSTALL_DIR/$EXE\" service unit", "is up to date"):
+            self.assertIn(word, template)
+
     @unittest.skipIf(os.name == "nt", "install.sh is for Linux and macOS")
     def test_unbound_templates_refuse_to_run(self):
         r = subprocess.run(["bash", str(DIST / "install.sh")], capture_output=True, text=True)
@@ -551,7 +563,8 @@ class GatewayContainerManagementTests(unittest.TestCase):
         text = (REPO_ROOT / "DbDataGateway/Dockerfile").read_text(encoding="utf-8")
         lines = [line for line in text.splitlines() if not line.lstrip().startswith("#")]
         code = "\n".join(lines)
-        self.assertIn("DBDATAKIT_Gateway__Management__Address=127.0.0.1", code)
+        self.assertIn("DBDATAKIT_Gateway__Management__Listen=https://127.0.0.1:8816", code)
+        self.assertIn("DBDATAKIT_Gateway__Listen=https://0.0.0.0:8815", code)
         self.assertNotIn("Management__Enabled=false", code)         # on by default is the owner's decision (D15)
         self.assertEqual([line for line in lines if line.startswith("EXPOSE")], ["EXPOSE 8815"])
 
@@ -565,10 +578,20 @@ class GatewayContainerManagementTests(unittest.TestCase):
                 if line.lstrip().startswith("-") and entry and re.search(r"(^|:)8816(:|$)", entry.group(1)):
                     self.assertTrue(entry.group(1).startswith("127.0.0.1:"), f"{path.name}:{number} publishes 8816 on every address: {line.strip()}")
 
+    def test_the_apps_quickstart_gives_identity_and_apps_a_listen_each_and_no_port_or_address(self):
+        import re
+        text = (REPO_ROOT / "dist/compose/quickstart-apps.yml").read_text(encoding="utf-8")
+        code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+        self.assertIn("DBDATAKIT_Gateway__Identity__Listen: https://0.0.0.0:8817", code)
+        self.assertIn("DBDATAKIT_Gateway__Apps__Listen: https://0.0.0.0:8818", code)
+        self.assertIsNone(re.search(r"__(Port|Address)\b", code), "a listener is set by `listen` alone")
+        published = sorted(m.group(1) for m in re.finditer(r'^\s*-\s*"(?:127\.0\.0\.1:)?(\d+):\d+"', code, re.MULTILINE))
+        self.assertEqual(published, ["8816", "8817", "8818"])   # the management API on the host's loopback, and the two modules
+
     def test_a_compose_file_that_widens_management_does_not_publish_it(self):
         for path in sorted((REPO_ROOT / "dist/compose").glob("*.yml")):
             text = path.read_text(encoding="utf-8")
-            if "Management__Address: 0.0.0.0" in text:
+            if "Management__Listen: https://0.0.0.0:8816" in text:
                 self.assertNotIn('- "8816:8816"', text, path.name)
 
 

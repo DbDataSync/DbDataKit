@@ -1,10 +1,12 @@
 using System.Net.Http;
 using DbDataKit.Cli;
 using DbDataKit.Hosting.Cli;
+using DbDataKit.Hosting.Startup;
 using DbDataKit.State;
 using DbDataKit.Web.Auth;
 using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DbDataKit.Server;
 
@@ -17,7 +19,7 @@ public static class ConsoleCli
     public const string Program = "dbdatakit";
 
     /// <summary>Where <c>health check</c> asks by default: the console's own address, as a container sees it.</summary>
-    public const string HealthUrl = "https://localhost:8480/health/live";
+    public const string HealthUrl = "https://localhost:7800/health/live";
 
     public static Task<int> RunAsync(string[] args) => RunAsync(args, CliContext.Console());
 
@@ -55,16 +57,21 @@ public static class ConsoleCli
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context, Func<string, string?>? environment)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "listen", "public-url", "web-root", "announce-listen", "state-engine", "state-connection", "identity-home", "identity-client", "identity-secret-env", "identity-app", "identity-home-cert" });
+        var parsed = CliArgs.Parse(args, new HashSet<string> { FolderPermissions.FlagName }, new HashSet<string> { "repo", "listen", "public-url", "web-root", "announce-listen", "state-engine", "state-connection", "identity-home", "identity-client", "identity-secret-env", "identity-app", "identity-home-cert" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
         {
-            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <console directory>] [--listen https://<name>:<port>] [--public-url https://<name>:<port>] [--announce-listen http://<address>:<port>] [--state-engine sqlite|mssql|postgres --state-connection <connection string>] [--identity-home <https address> --identity-client <id> [--identity-secret-env <variable>] [--identity-app <id>] [--identity-home-cert <file>]]");
+            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <console directory>] [--listen https://<name>:<port>] [--public-url https://<name>:<port>] [--announce-listen http://<address>:<port>] [--state-engine sqlite|mssql|postgres --state-connection <connection string>] [--identity-home <https address> --identity-client <id> [--identity-secret-env <variable>] [--identity-app <id>] [--identity-home-cert <file>]] [--skip-folder-permissions-check]");
             return CliExit.Usage;
         }
-        if (!Uri.TryCreate(parsed.Get("listen") ?? ConsoleSettings.DefaultListen, UriKind.Absolute, out var listen) || listen.Scheme != Uri.UriSchemeHttps)
+        IReadOnlyList<Uri>? listenFlag = null;
+        if (parsed.Get("listen") is { } listenText)
         {
-            await context.Error.WriteLineAsync("--listen is an https address, such as https://localhost:8480.");
-            return CliExit.Usage;
+            try { listenFlag = ListenPorts.ParseFlag(listenText); }
+            catch (FormatException e)
+            {
+                await context.Error.WriteLineAsync($"--listen is an https address or a list of them, such as https://localhost:7800. {e.Message}");
+                return CliExit.Usage;
+            }
         }
 
         Uri? publicUrl = null;
@@ -79,7 +86,7 @@ public static class ConsoleCli
         var announceText = parsed.Get("announce-listen");
         if (announceText is null && Uri.TryCreate((environment ?? Environment.GetEnvironmentVariable)(DbDataKit.Web.Trust.ConsoleAnnouncer.UrlVariable), UriKind.Absolute, out var shared) && shared.Scheme == Uri.UriSchemeHttp)
             announceText = new UriBuilder(Uri.UriSchemeHttp, "0.0.0.0", shared.Port).Uri.AbsoluteUri;
-        if (announceText is { Length: > 0 } && (!Uri.TryCreate(announceText, UriKind.Absolute, out announce) || announce.Scheme != Uri.UriSchemeHttp || announce.Port == listen.Port))
+        if (announceText is { Length: > 0 } && (!Uri.TryCreate(announceText, UriKind.Absolute, out announce) || announce.Scheme != Uri.UriSchemeHttp || listenFlag?.Any(l => l.Port == announce.Port) == true))
         {
             await context.Error.WriteLineAsync("--announce-listen is a plain http address on a port of its own, such as http://0.0.0.0:8481, and is reachable only on the network the servers share with the console.");
             return CliExit.Usage;
@@ -114,21 +121,69 @@ public static class ConsoleCli
             home = new IdentityHomeSettings(authority, parsed.Get("identity-client")!, secret, parsed.Get("identity-app") ?? "console", TrustedCertificate: trusted);
         }
 
+        // every step of the start is reported the same way in every server: the step that failed and why, in the startup-failure file, and a non-zero exit
         var directory = DirectoryOf(parsed, environment);
-        ResolvedState state;
-        try { state = ConsoleState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection")); }
-        catch (InvalidOperationException ex)
+        var service = SuiteServices.Console;
+        ConsoleSettings? settings = null;
+        System.Security.Cryptography.X509Certificates.X509Certificate2? certificate = null;
+        Microsoft.AspNetCore.Builder.WebApplication? app = null;
+        ListenChoice? listen = null;
+        var settingsExit = (int?)null;
+        var result = await new StartupSequence(new StartupOptions
+            {
+                Service = service,
+                DataFolder = directory,
+                LogsRoot = SuiteServices.LogsRootFor(service, directory),
+                Version = ConsoleHost.Version,
+                Warning = line => context.Error.WriteLine(line),
+            })
+            .Step(StartupStep.Folder, step =>
+            {
+                ResolvedState state;
+                var settingsFile = ConsoleState.SettingsFileIn(directory);
+                SkipFolderPermissions skip;
+                try
+                {
+                    skip = SkipFolderPermissions.Read(parsed.Has(FolderPermissions.FlagName), settingsFile);
+                    state = ConsoleState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection"));
+                    // --listen, else the port pinned in settings.yaml, else a free port of the console's sub-block (pinned once the console listens on it)
+                    listen = ListenPorts.ResolveAll(service, listenFlag, ConsoleState.SettingsFileIn(directory), new Uri(ConsoleSettings.DefaultListen), step.Options.ExcludedPorts());
+                }
+                catch (InvalidOperationException)
+                {
+                    settingsExit = DbDataKit.State.Cli.StateExit.Settings;
+                    throw;
+                }
+                settings = new ConsoleSettings(directory, listen.Address, publicUrl, announce, state.Settings, home) { ListenAll = listen.Addresses, StateSources = state.Sources, SkipFolderPermissionsCheck = skip.IsOn };
+                step.CheckFolderPermissions(settings.Directory, skip, settingsFile);
+                Directory.CreateDirectory(settings.Directory);
+            })
+            .Step(StartupStep.Certificate, _ => certificate = ConsoleHost.Certificate(settings!.Directory))
+            .Step(StartupStep.State, _ =>
+            {
+                app = ConsoleHost.Build(settings!, certificate!, line => context.Error.WriteLine(line), parsed.Get("web-root"));
+                // the state is opened when it is first asked for: ask here, so a state that cannot be opened is this step's failure
+                app.Services.GetRequiredService<StateDatabase>();
+            })
+            .Step(StartupStep.Ports, (step, ct) => step.BindAsync(listen!, app!.StartAsync, announce is null ? null : [announce.Port], ct))
+            .RunAsync(context.Cancellation);
+        if (!result.Succeeded)
         {
-            await context.Error.WriteLineAsync(ex.Message);
-            return DbDataKit.State.Cli.StateExit.Settings;
+            await context.Error.WriteLineAsync(result.Summary());
+            if (app is not null) await app.DisposeAsync();
+            return settingsExit ?? result.ExitCode;
         }
 
-        var settings = new ConsoleSettings(directory, listen, publicUrl, announce, state.Settings, home) { StateSources = state.Sources };
-        Directory.CreateDirectory(settings.Directory);
-        var app = ConsoleHost.Build(settings, ConsoleHost.Certificate(settings.Directory), line => context.Error.WriteLine(line), parsed.Get("web-root"));
-        await context.Out.WriteLineAsync($"The console is on {listen} (people open it at {settings.Public}). The first administrator opens the setup link in {Path.Combine(settings.Directory, "FIRST-RUN.txt")} (it is in the log too; `dbdatakit setup link` makes a new one).");
-        // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
-        await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(app, context.Cancellation);
+        try
+        {
+            await context.Out.WriteLineAsync($"The console is on {listen!.Address} (people open it at {settings!.Public}). The first administrator opens the setup link in {Path.Combine(settings.Directory, "FIRST-RUN.txt")} (it is in the log too; `dbdatakit setup link` makes a new one).");
+            // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way
+            await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.WaitForShutdownAsync(app!, context.Cancellation);
+        }
+        finally
+        {
+            await app!.DisposeAsync();
+        }
         return CliExit.Ok;
     }
 
@@ -357,7 +412,7 @@ public static class ConsoleCli
                 () => new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]),
                 ConsoleState.SettingsFileIn(directory));
         },
-        ConsoleState.Modules, DbDataKit.State.StateScope.Install, ["engine", "repo"], "[--engine mssql|postgres] [--repo <console directory>]") { ConfigureMove = configureMove });
+        ConsoleState.Modules, ConsoleState.Scope, ["engine", "repo"], "[--engine mssql|postgres] [--repo <console directory>]") { ConfigureMove = configureMove });
 
     // ---- user ----
 
@@ -394,6 +449,13 @@ public static class ConsoleCli
                 return v.Run([.. rest], context);
             },
         })]);
+    }
+
+    /// <summary>The address a link to the console starts with when <c>--url</c> is not given: the one pinned in its <c>settings.yaml</c>, else the default.</summary>
+    private static string AddressOf(string directory)
+    {
+        try { return ListenPorts.ReadPinned(ConsoleState.SettingsFileIn(directory))?.GetLeftPart(UriPartial.Authority) ?? ConsoleSettings.DefaultListen; }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException) { return ConsoleSettings.DefaultListen; }
     }
 
     private static ConsoleSettings ConsoleDirectory(string directory) => new(Path.GetFullPath(directory), new Uri(ConsoleSettings.DefaultListen));
@@ -464,7 +526,80 @@ public static class ConsoleCli
         new Verb("link", "Make a new setup link for the first administrator, on this machine, while the console has no user (the link works once and ends after setup.link_lifetime_hours, 24 by default)", EffectClass.RepoFilesOnly, "[--url <address>] [--repo <console directory>]",
             (args, context) => SetupLinkAsync(args, context, environment),
             DataSchemas.Object([("url", DataSchemas.String), ("expires", DataSchemas.String)], "url", "expires")),
+        new Verb("invite", "Make a single-use join token for a Gateway, a Runner or a Workspace and print the command to run on that server's machine", EffectClass.RepoFilesOnly,
+            "<gateway|runner|workspace> [--role <role>[,<role>...]] [--group <group>] [--minutes <n>] [--url <console address>] [--repo <console directory>]",
+            (args, context) => SetupInviteAsync(args, context, environment),
+            DataSchemas.Object([("command", DataSchemas.String), ("product", DataSchemas.String), ("token_id", DataSchemas.String), ("expires", DataSchemas.String), ("role", DataSchemas.StringList), ("group", DataSchemas.String)],
+                "command", "product", "token_id", "expires", "role")),
     ]);
+
+    /// <summary>
+    /// <c>setup invite</c>: a join token in the console's state and the <c>pair</c> command that uses it, printed once. It opens the console's own state and
+    /// certificate, so it runs on the console's machine as an account that can read its folder; the console's Add a server screen makes the same token.
+    /// </summary>
+    private static async Task<int> SetupInviteAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        const string usage = "Usage: setup invite <gateway|runner|workspace> [--role <role>[,<role>...]] [--group <group>] [--minutes <n>] [--url <console address>] [--repo <console directory>]";
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "role", "group", "minutes", "url" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1) { await context.Error.WriteLineAsync(usage); return CliExit.Usage; }
+        var product = parsed.Words[0].ToLowerInvariant();
+        if (!ConsoleJoins.Products.ContainsKey(product)) { await context.Error.WriteLineAsync($"'{parsed.Words[0]}' is not a server that joins the console: gateway, runner or workspace."); return CliExit.Usage; }
+        var ceiling = ServerRole.Admin;
+        if (parsed.Get("role") is { } roles && (!ServerRoles.TryParse(roles.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries), out ceiling) || ceiling == ServerRole.None))
+        {
+            await context.Error.WriteLineAsync($"'{roles}' is not a role ceiling: give roles separated by commas (viewer, operator, author, approver, admin, publisher).");
+            return CliExit.Usage;
+        }
+        TimeSpan? lifetime = null;
+        if (parsed.Get("minutes") is { } minutes)
+        {
+            if (!int.TryParse(minutes, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var m) || m < 1 || m > JoinTokens.MaxLifetime.TotalMinutes)
+            {
+                await context.Error.WriteLineAsync($"--minutes is a whole number from 1 to {JoinTokens.MaxLifetime.TotalMinutes:0}.");
+                return CliExit.Usage;
+            }
+            lifetime = TimeSpan.FromMinutes(m);
+        }
+        var scope = new JoinScope(product, ceiling, parsed.Get("group"));
+        if (scope.Problem() is { } problem) { await context.Error.WriteLineAsync($"The join token cannot be made: {problem}."); return CliExit.Usage; }
+
+        var directory = DirectoryOf(parsed, environment);
+        // the console makes its certificate at its first start, as its own account; this command only reads it
+        if (!File.Exists(Path.Combine(directory, DbDataKit.Hosting.Certificates.DirectoryCertificate.PfxFileName)))
+        {
+            await context.Error.WriteLineAsync($"The console in {directory} has no certificate yet. Start it once (dbdatakit server run), then make the command.");
+            return CliExit.Failure;
+        }
+        string fingerprint;
+        try { fingerprint = PairingProof.CertificateFingerprint(ConsoleHost.Certificate(directory)); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
+        {
+            await context.Error.WriteLineAsync($"The console's certificate in {directory} cannot be read: {ex.Message} Run the command as an account that can read the console's folder.");
+            return CliExit.Failure;
+        }
+
+        var given = (parsed.Get("url") ?? AddressOf(directory)).TrimEnd('/');
+        if (!Uri.TryCreate(given, UriKind.Absolute, out var address) || address.Scheme != Uri.UriSchemeHttps || address.AbsolutePath != "/")
+        {
+            await context.Error.WriteLineAsync($"The console's address '{given}' cannot be used: it is https://, a host and a port.");
+            return CliExit.Usage;
+        }
+        address = ServerJoin.AddressFor(address);
+        var database = OpenState(parsed, environment);
+        var minted = new ConsoleJoins(database).Mint(scope, Environment.UserName, $"{Environment.UserName} (command line)", lifetime, actorKind: "command");
+        var command = ConsoleJoins.Command(product, address, minted.Token, fingerprint);
+        await context.Out.WriteLineAsync($"Run this on the {product}'s machine, as an administrator, before {minted.Record.ExpiresAt.UtcDateTime:u}. It works once:");
+        await context.Out.WriteLineAsync($"    {command}");
+        if (address.IsLoopback)
+            await context.Out.WriteLineAsync($"The command names {address.GetLeftPart(UriPartial.Authority)}, which only a server on this machine reaches. For another machine, make it with --url and the address that machine reaches the console at.");
+        context.Data["command"] = command;
+        context.Data["product"] = product;
+        context.Data["token_id"] = minted.Record.Id;
+        context.Data["expires"] = minted.Record.ExpiresAt.UtcDateTime.ToString("O");
+        context.Data["role"] = ServerRoles.Names(ceiling).ToList();
+        if (scope.Group is { } group) context.Data["group"] = group;
+        return CliExit.Ok;
+    }
 
     /// <summary>
     /// <c>setup link</c> (plan 23a FQ19): the console's first-run invitation made again, on the machine itself (it opens the console's own state and settings, which only an account that can read the directory can do; there is no API for it, so a remote
@@ -484,7 +619,7 @@ public static class ConsoleCli
             await context.Error.WriteLineAsync("The console has a user already, so there is no setup link to make. To let someone in, make an invitation: dbdatakit user invite --email <address>.");
             return CliExit.Failure;
         }
-        var baseUrl = (parsed.Get("url") ?? ConsoleSettings.DefaultListen).TrimEnd('/');
+        var baseUrl = (parsed.Get("url") ?? AddressOf(directory)).TrimEnd('/');
         var link = SetupLink.Make(new IdentityInviteStore(database), settings, baseUrl);
         try
         {
@@ -558,7 +693,7 @@ public static class ConsoleCli
         try { minted = new IdentityInviteStore(database).Create(role, forUser, createdByUserId: null, email: email); }
         catch (AccountConflictException ex) { await context.Error.WriteLineAsync(ex.Message); return CliExit.Failure; }
         // the code goes in the fragment, which a browser never sends to a server and an access log never records
-        var url = $"{(parsed.Get("url") ?? ConsoleSettings.DefaultListen).TrimEnd('/')}/invite#{minted.Code}";
+        var url = $"{(parsed.Get("url") ?? AddressOf(DirectoryOf(parsed, environment))).TrimEnd('/')}/invite#{minted.Code}";
         await context.Out.WriteLineAsync($"An invitation for a {role}, valid until {minted.Invite.ExpiresAtUtc:u}:");
         await context.Out.WriteLineAsync($"    {url}");
         context.Data["url"] = url;

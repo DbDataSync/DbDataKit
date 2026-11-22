@@ -20,15 +20,63 @@ The person. The owner:
 
 Any conversation the owner chats with. Several may run at once, on any machine. A session:
 
+- takes a new request through planning first ("A new request", under Flows): what is planned and documented, what overlaps, agreed with the owner,
+  before anything changes;
 - talks with the owner, designs, and writes and changes planning: subject files, proposed decisions, open designs (on a `planning/<topic>` branch when
   the change is not part of a subject's task);
 - starts workers and reviewers, and brings their results, defaults and questions to the owner;
+- starts every worker and reviewer with `isolation: "worktree"`, so none works in the session's checkout, and names in the brief a branch that no
+  other checkout has open;
 - **does no product code work**: it writes no product code, fixes no tests and resolves no merge conflicts. A failing test or a conflict goes to a worker
   (in a subject's code) or to the reviewer (a mechanical conflict while combining).
 
 One session may run several workers on separate tasks of one subject. When two tasks change the same code, the session starts the second worker only
 after the first is ready, or gives both tasks to one worker; that is a planning decision the session makes and tells the owner. If the workers of a
 subject keep colliding, the subject is split into two subjects (the owner's call); no new role is added.
+
+**Talking with the owner.** The owner reads every message, often on a phone, and answers without scrolling back. So a session:
+
+- **keeps replies short**: the answer or the question first, then only what the owner needs to decide or check. No recap of what the owner already
+  knows, no list of everything that could be said. A worker's long report is not passed on: the session gives the result in a few lines and the
+  owner asks for detail where wanted. A wall of text and a pile of questions lead to bad answers, so neither is sent;
+- **asks one thing at a time, then moves on**: one question per message, and no list of what else is still open. When the owner answers, the
+  session acts on the answer and says in a line what it did. It asks the next question only when the work cannot go on without it; otherwise it
+  waits for the owner to ask for the next item. The owner can ask for a summary of what is open at any time.
+  The question stands on its own: it names the item it is about and quotes the text or gives the options, so the owner can answer it without
+  looking anywhere else. Several questions go in one message only as a question dialog, each one complete;
+- **keeps one thread**: while a question is waiting for the owner's answer, the session sends nothing else about another item. A worker or
+  reviewer result that arrives meanwhile is held, and reported in one line after the answer is handled. A question already asked is not asked
+  again, and an answer is handled before anything new is said. Items are always named with their subject (`<SLUG>-P<n>`, never `P<n>` alone);
+- **re-checks every open question and default before showing it, and again after each answer**. It reads each open proposal and each default a
+  worker took against what the owner has decided since the text was written (answers, settings removed or renamed, paths moved, tasks added). One
+  that an answer decided, replaced or made meaningless is not shown: in the same change it is removed or rewritten, and what it still says that
+  matters goes into the task or open design that now carries it. The owner is shown only what is still open, in terms of the current plan;
+- **shows the exact text it proposes for docs and planning** (a paragraph of a product doc, a section of a subject file, a rule in this file or
+  `CLAUDE.md`) in small batches, and applies a batch only after the owner approves it. Code is reviewed the usual way, by its tests and the
+  reviewer, not shown line by line;
+- **asks what the owner means** when a request could mean more than one thing, instead of guessing;
+- **writes plainly**, by the rules of the skill `product-docs`: direct statements, no slogans, no internal names without saying what they are;
+- **says what it changed and where it is pushed** in a line or two, when it has changed something.
+
+**Task rows.** A subject's task rows are in priority order only: a row does not depend on the rows above it unless it says so. Every dependency is a
+task id in the row's "Depends on" cell. A row's text may say why ("Follows SYNCAUTHORING-15: the page exists"), but a task named after "Follows"
+must also be in that cell. `scripts/check_plans.py` refuses a cycle and a "Follows" missing from the cell, and reports each dependency on a subject
+ranked lower in `planning/README.md`. When a task is finished, its row leaves the subject file, and in the same commit every reference to it is cleared: its id
+leaves each "Depends on" cell and each line under "Needs from other subjects" that names it, in any subject file. A line that still says something
+another task relies on is rewritten to name what now exists (a library, a command, a page) instead of the task; a line with nothing left goes.
+`scripts/check_plans.py` refuses a reference to a task that no longer exists.
+
+**Review dates.** Every product doc, README and planning subject file carries the date of its last full review, `<!-- reviewed: YYYY-MM-DD -->` on the
+line under its title (the skill `product-docs`, "The review date"). A session sets it when the owner approves a review of the whole file: checked
+against `docs/architecture.md` and the other reference docs, and written by the skill. A partial change leaves it as it is. A new file written under
+these rules and approved by the owner gets the date when it is written. `python3 -I scripts/review_dates.py` lists the files that have no date yet.
+
+**Files only the owner changes.** These files change only with the owner's approval: `CLAUDE.md`, `planning/ROLES.md`, `docs/architecture.md`,
+`.claude/skills/product-docs/SKILL.md`, `.claude/settings.json` and `.claude/hooks/protect-reference-docs.py`. Claude Code asks before writing any of
+them: the "ask" rules in `.claude/settings.json` cover the file tools, and the hook covers shell commands. A session shows the proposed text first,
+then the owner approves the prompt. To protect another file, add it to the ask list and to the hook's `PROTECTED` list. Not set up yet: a
+`CODEOWNERS` file with GitHub's required code-owner review, which would also stop changes made outside Claude Code; it is the next step if this
+proves not strong enough.
 
 ### A worker
 
@@ -38,8 +86,8 @@ A subagent (`.claude/agents/worker.md`) limited to one subject, often one task. 
   built work goes to the owner as a proposed decision, never silently dropped or rebuilt);
 - builds its tasks on its branch `backup/<slug>-<n>` and keeps the task's wip file (below);
 - reports its defaults and questions back to the session that started it, and **never decides**: a default it takes is a proposal until the owner answers;
-- edits only its subject file and the code and docs its tasks need; it never edits another subject's file and never edits `planning/README.md`;
-- starts each commit message with the task id (`INSTALLER-3: ...`), reads `docs/ci-lessons.md` before it pushes and runs the repository checks;
+- edits only its subject file and the code and docs its tasks need; it edits another subject's file only to clear references to a task it finished (Task rows), and never edits `planning/README.md`;
+- starts each commit message with the task id (`<SLUG>-<n>: ...`), reads `docs/ci-lessons.md` before it pushes and runs the repository checks;
 - merges `main` into its branch whenever `main` moves; it never rewrites a pushed branch (no amend, squash, rebase or reset of pushed commits).
 
 ### The reviewer
@@ -63,7 +111,7 @@ Besides, it:
 - fixes mechanical conflicts only (both sides' entries in a shared list, a moved line); a conflict between two designs goes back to the session as a
   question for the owner.
 
-**Planning and documentation only: straight to `main` (owner, 2026-11-18).** A branch whose changes are only planning (`planning/`) and documentation (`docs/`, READMEs and other `.md` files, the agent definitions) needs no pull request: the reviewer checks it with the same checklist, merges `main` into it if `main` moved, and pushes the merge to `main` when no CI run is in progress, then watches CI. Any change to code, tests, scripts, workflows or packaging goes through a pull request into `main`.
+**Planning and documentation only: straight to `main` (owner, 2026-11-18).** A branch whose changes are only planning (`planning/`) and documentation (`docs/`, READMEs and other `.md` files, the agent definitions under `.claude/`) needs no pull request: the reviewer checks it with the same checklist, merges `main` into it if `main` moved, runs the repository checks in a clean worktree of the merge (`python3 -I -m unittest discover -s scripts/tests` and the `scripts/check_*.py` of `CLAUDE.md`, "Build and test", `check_doc_inputs.py` among them), and pushes the merge to `main` without waiting for CI to be idle: such a push starts no product suite (`docs/ci-lessons.md`, "Which changes start which workflow"). It then watches only **Repository checks** and **Planning work in progress** on that commit; the product workflows do not appear for it, which is expected. Before pushing, it confirms the merge changes only those paths: `git diff --name-only origin/main...HEAD` lists nothing outside `planning/`, `.claude/`, `docs/`, the product docs folders and `*.md`; anything else is a code change. Any change to code, tests, scripts, workflows or packaging goes through a pull request into `main`, and keeps the rule above: `main` merged in, CI green on that head, then the merge.
 
 ## Branches
 
@@ -72,6 +120,8 @@ Besides, it:
 | `backup/<slug>-<n>` (`backup/installer-3`: the slug in lower case, then the task number) | a worker | one task in progress, pushed often as backup and handover |
 | `work/<slug>` (`work/installer`) | the reviewer | the subject's ready task branches combined; the pull request into `main`, whose title starts with the slug |
 | `planning/<topic>` | a session | planning and design changes outside a subject's tasks |
+
+**Few branches.** Tasks done one after another by the same worker share one branch: the first task's `backup/<slug>-<n>`, with each later task's commits on top of it, each commit still starting with its own task id. A new branch is made only when workers run at the same time, one branch per worker. When such a worker finishes, the session merges its branch into the run's branch locally, pushes the result, and lists the finished branch in `scripts/branches-to-delete.txt` in the same change. A session never leaves a finished branch behind.
 
 **Pushing.** Nothing stays only on one machine. Every commit is pushed to its own branch as soon as it is made, and before any wait, report or stop; a commit meant for `main` that has to wait (for CI to go idle, for a review) is first pushed to a `backup/<topic>` branch. Every report to a session names the branch and commit where its work is pushed, so the owner never has to ask whether something is stored.
 
@@ -102,6 +152,28 @@ on pushes to `main`, not on other branches).
 
 ## Flows
 
+**A new request.** The owner asks a session for something (a feature, a change to the repository, a change to the environment the work runs in). Before
+anything changes, the session:
+
+1. asks what the owner means when the request could mean more than one thing (which product, which users, what "working" looks like), instead of
+   guessing and offering to build;
+2. finds every subject in `planning/README.md` that covers or touches it, reads them, including their open designs and proposals, and reads the product
+   docs they name (`docs/architecture.md` first) and, when a design seems missing, the old plans (below);
+3. tells the owner what exists, what is already planned, what overlaps and what contradicts the request, citing each;
+4. agrees with the owner where the work goes: tasks added to an existing subject, a subject reshaped, or a new subject (status "needs review"); a
+   contradiction with a decided design is a proposed decision, never a silent change;
+5. writes that planning on a branch for the owner to review, and only then starts workers.
+
+**Architecture directions are in `docs/architecture.md`.** A subject that changes the suite's architecture (a service, a program, how the parts call each
+other, where code runs, how people or agents connect) adds its direction to the section "Planned architecture changes" of `docs/architecture.md` in the
+same branch as the subject, marked **Planned**. The first task that starts marks it **In progress**. Each task that lands shortens that entry and
+describes what is now built in the section that covers it; the last one removes the entry. So the doc always says where the suite is and where it is
+going, and a reader never takes a planned change for a built one.
+
+A session may read anything, and build or run something only to answer a question, saying so. It changes nothing else first: no code, scripts, hooks,
+`.claude/` or `.mcp.json` settings, no settings or setup script of a cloud environment, no long-running services. The tools of a harness that offer to
+change an environment are used the same way: after the plan names the change and the owner has agreed it.
+
 **One worker on a subject.** The session starts a worker on a task. The worker creates `backup/<slug>-<n>` from `main`, builds, commits with the task id,
 pushes at every stopping point, keeps the wip file, and reports defaults and questions to the session, which takes them to the owner. When the task is
 done, the worker resolves the wip file and reports the branch ready. When the owner says so, a reviewer merges the branch into `work/<slug>`, builds and
@@ -121,9 +193,12 @@ owner as a proposed decision in the subject that came second.
 3. The owner may answer anywhere: in the subject's session or in another one. Whoever hears the answer outside the subject's session (the reviewer, or
    the session) writes the owner's exact words under the proposal: `Answer from the owner, <date>: ...`. The next session or worker for that subject acts
    on it.
-4. Acting on it: the proposal is removed from the subject file and the outcome is written into the product documentation as how the product works (what
-   it does, why, an example), in the doc that describes that part, with no date and no attribution. The commit names the proposal id and says
-   `answered by the owner: <the answer>`.
+4. Acting on it: the proposal is removed from the subject file and the outcome is written where it applies: into the product documentation as how the
+   product works (what it does, why, an example), in the doc that describes that part, or, while the work is not built, into the subject's tasks or open
+   designs as plain design. No date and no attribution go with it. The commit names the proposal id and says `answered by the owner: <the answer>`;
+   the commit message is the record of who decided what.
+5. An answer is acted on at once when it can be: a session that hears an answer and writes it into the tasks in the same change removes the proposal
+   then, and writes no `Answer from the owner` line. That line is only for an answer nothing has acted on yet.
 
 A subject file never holds decided content beyond its goal, its tasks, its open designs and recorded answers waiting to be acted on; a product doc never
 holds a worker's default.
@@ -167,6 +242,8 @@ Before it merges a pull request into `main`, the reviewer checks:
   in the session, cited) and a commit `answered by the owner: ...`; no worker default reached a product doc or the subject's tasks as settled; new
   proposals and defaults are named to the session;
 - every removed piece of design text says, in its commit message, where it went;
+- a subject that changes the architecture has its entry in "Planned architecture changes" of `docs/architecture.md`, marked Planned or In
+  progress as its tasks stand, and a landed task shortened its entry and described what it built;
 - shared files only appended to (below);
 - `planning/README.md` changed only for order, status and assignment, on the owner's word.
 

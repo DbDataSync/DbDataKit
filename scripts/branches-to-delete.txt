@@ -161,7 +161,7 @@ suite/batch-28
 suite/batch-29
 suite/batch-30
 suite/batch-32
-backup/work/removal2
+# backup/work/removal2 kept (owner, 2026-11-21): it holds three commits not on main, unfinished Sync work of 2026-11-14
 # --- group 7: the probe branch of the suite install fix (2026-11-17): its workflow ran the Windows install on the dry run's packages; the fix and the test are on main
 work/suite-install-acl
 # --- group 8: the branch of the working-process commit (2026-11-18): pushed to main directly (it creates the reviewer, so it could not go through one); every commit is on main
@@ -181,3 +181,24 @@ planning/doc-merge-rule
 # --- group 14: AUTHORING-P2 and SYNCAUTHORING (2026-11-18): planning/authoring-metadata (which carried planning/sync-authoring-ui) was pushed to main as a planning and documentation change (e497c008); every commit of both is on main
 planning/authoring-metadata
 planning/sync-authoring-ui
+# --- group 15: CI paths (2026-11-18): backup/ci-paths-probe was a throwaway probe (one whitespace commit in planning/ROLES.md, db941bd2) that is never merged
+backup/ci-paths-probe
+# --- group 16: NAVIGATION accepted (2026-11-18): planning/navigation was merged with main (dedf88e6) and pushed to main as a planning and documentation change; every commit is on main
+planning/navigation
+# --- group 17: owner answers and the Sync UI's first slice (2026-11-18): planning/owner-answers-2026-11-18 was merged with main (a058a815) and planning/sync-first-slice with main (121752fc) and both merges were pushed to main as planning and documentation changes; every commit of both is on main (git rev-list <branch> --not main is empty)
+planning/owner-answers-2026-11-18
+planning/sync-first-slice
+# --- group 18: the session branch the harness started on (2026-11-19); its two commits (823bf15, 27fe5ea) moved to planning/agents-and-cloud-dev on the owner's word, so it holds nothing that branch lacks
+claude/brave-lamport-wj34se
+# --- group 19: planning/agents-and-cloud-dev (2026-11-20), pushed to main as a planning, documentation and tooling change on the owner's word; every commit is on main
+planning/agents-and-cloud-dev
+# --- group 20: planning branches pushed to main (2026-11-21): planning/finished-task-refs and planning/gateway-ports-p1 are contained in main (git rev-list <branch> --not main is empty); planning/recheck-open-items was merged with main and pushed to main as a planning change. The backup/* task branches of INSTALLER, ENDPOINTS and TRUSTZONES are not listed: Backup branch cleanup deletes them (docs/branch-cleanup.md)
+planning/finished-task-refs
+planning/gateway-ports-p1
+planning/recheck-open-items
+# --- group 21: the preserved uncommitted edits of a removed TRUSTZONES-13 worktree (2026-11-21), reviewed by the owner's session and dropped on the owner's word: they are an old copy of planning/TRUSTZONES.md, docs/state-logins.md and the Outbound README that would undo answered proposals, and main has everything current
+backup/trustzones-13-uncommitted
+# --- group 22: a throwaway branch pushed on 2026-11-21 to test that a session cannot delete remote branches (it cannot); it holds main's head and nothing else
+tmp/delete-test-claude
+# --- group 23: the session branch the harness started on (2026-11-21); it is at main's head and holds nothing main lacks. Deletion approved by the owner
+claude/sleepy-keller-vowppp

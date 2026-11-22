@@ -235,7 +235,7 @@ hand, or not yet) is not a version question and is left to the reader's existing
 ## Bulk loading (backfill)
 
 **"Backfill" in the UI is `RunKind.BulkLoad` internally** — the same operation, one name change partway
-through the project's history that never touched the docs. [Getting started](getting-started.md#backfilling-a-table)
+through the project's history that never touched the docs. [Getting started](getting-started.md#bulk-loading-a-table)
 already covers the operator-facing side — segments, custom segmenting strategies, the Monitoring card.
 This section covers the mechanics behind it.
 

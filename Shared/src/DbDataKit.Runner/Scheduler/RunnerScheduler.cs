@@ -858,6 +858,28 @@ public sealed partial class RunnerScheduler
         await beat.ConfigureAwait(false);
     }
 
+    // ---- DDL tasks
+
+    /// <summary>Whether a version's task declares <see cref="TaskCapabilities.Ddl"/>, kept per version (a published version never changes).</summary>
+    private readonly ConcurrentDictionary<(string Package, string Channel, string Version, string Task), bool> _ddlTasks = new();
+
+    /// <summary>
+    /// Whether <paramref name="task"/> of <paramref name="version"/> (the version the channel serves when null) creates, alters or drops tables (<see cref="PackageTask.IsDdl"/>). Null when the task or the version is not there, so the
+    /// caller's own start answers it as it would for any unknown task. A version whose manifest cannot be read counts as a DDL task: a start that cannot be judged is not a start.
+    /// </summary>
+    public async Task<bool?> IsDdlAsync(TaskRef task, string? version = null, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+        version ??= _projections.Get(task.Package, task.Channel, task.Task)?.Version;
+        if (version is null) return null;
+        if (_ddlTasks.TryGetValue((task.Package, task.Channel, version, task.Task), out var known)) return known;
+        PackageVersionContent? content;
+        try { content = await _versions.GetAsync(task.Package, version, task.Channel, ct).ConfigureAwait(false); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { return true; }
+        if (content?.Manifest.Tasks.FirstOrDefault(t => t.Name == task.Task) is not { } declared) return null;
+        return _ddlTasks[(task.Package, task.Channel, version, task.Task)] = declared.IsDdl;
+    }
+
     // ---- by hand
 
     /// <summary>
@@ -1016,7 +1038,8 @@ public sealed partial class RunnerScheduler
                 reference, row.Version, next, _runs.LastRun(reference.ToString()),
                 mine.Count(w => w.Item.Status is WorkItemStatus.Claimed or WorkItemStatus.Running), waiting.Count,
                 waiting.Count == 0 ? null : waiting.Min(w => w.AvailableAt), pause is not null, pause?.By, parsed ? null : problem,
-                row.RequiredLabels, WaitingReasonOf(row.RequiredLabels, ref live), _owners.OwnerOf(row.Package, row.Channel, row.Task)));
+                row.RequiredLabels, WaitingReasonOf(row.RequiredLabels, ref live), _owners.OwnerOf(row.Package, row.Channel, row.Task),
+                IsDdlAsync(reference, row.Version).GetAwaiter().GetResult() ?? false));
         }
 
         var problems = _rowProblems.Values.Concat(_problems).Concat(_triggers.Problems()).OrderBy(p => p.At).ToList();

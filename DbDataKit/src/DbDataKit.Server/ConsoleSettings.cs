@@ -11,6 +11,14 @@ namespace DbDataKit.Server;
 /// <param name="PublicUrl">The address people open it at, when that is not the address it listens on (a container listens on every address; a gateway answers on a name of its own). A passkey is bound to this name and port, and an invitation link is made from it, so it has to be the one in the browser's address bar. Null: the address it listens on, or <c>localhost</c> on the same port where that is every address.</param>
 public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUrl = null, Uri? AnnounceListen = null, StateSettings? State = null, IdentityHomeSettings? Home = null)
 {
+    /// <summary>Every address it listens on (<c>listen</c> as a list): <see cref="Listen"/> is the first, the one people are sent to. Empty: <see cref="Listen"/> alone.</summary>
+    public IReadOnlyList<Uri> ListenAll { get; init; } = [];
+
+    /// <summary>
+    /// The start skipped the folder step's check of the data folder's owner and access list (<c>--skip-folder-permissions-check</c>, or
+    /// <c>startup.skip_folder_permissions_check: true</c> in the settings file): <c>/version</c> says so, and the console's posture page marks the server.
+    /// </summary>
+    public bool SkipFolderPermissionsCheck { get; init; }
     /// <summary>Where each state setting came from (a flag, the environment, <c>settings.yaml</c>, the default), for <c>GET /api/v1/state</c>; null: not said, the file and the environment are read.</summary>
     public StateSources? StateSources { get; init; }
 
@@ -20,7 +28,8 @@ public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUr
     private static bool IsEveryAddress(string host) => host is "0.0.0.0" or "[::]" or "::" or "*" or "+";
 
     public const string Product = "dbdatakit";
-    public const string DefaultListen = "https://localhost:8480";
+    /// <summary>The address a first start listens on when no port is configured: the first port of the console's sub-block, or the next free one (<see cref="DbDataKit.Hosting.Startup.ListenPorts"/>).</summary>
+    public const string DefaultListen = "https://localhost:7800";
 
     /// <summary>The service's name in the suite's folders and variables (<see cref="SuiteEnvironment"/>): the DbDataKit service itself is <c>server</c> (plan 33 D9).</summary>
     public const string ServiceName = "server";
@@ -34,7 +43,7 @@ public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUr
 
     public string StatePath => System.IO.Path.Combine(Directory, "state.db");
 
-    /// <summary>The console's settings file, <c>settings.yaml</c> in its directory: its <c>state:</c> section says where the state database is (<see cref="ConsoleState.Resolve"/>). The console never creates it.</summary>
+    /// <summary>The console's settings file, <c>settings.yaml</c> in its directory: its <c>state:</c> section says where the state database is (<see cref="ConsoleState.Resolve"/>), its <c>listen:</c> line the address the console listens on. The console makes it only to write that line, at the first start that chose a port.</summary>
     public const string SettingsFileName = "settings.yaml";
 
     public string SettingsPath => System.IO.Path.Combine(Directory, SettingsFileName);
@@ -58,7 +67,13 @@ public static class ConsoleState
     /// <summary>The service name the console records on what it writes to a database it may share (the feed's <c>service_id</c>).</summary>
     public const string ServiceId = ConsoleSettings.Product;
 
-    public static IReadOnlyList<StateModule> Modules { get; } = [IdentityModule.Module, NotificationsModule.Module, DbDataKit.Identity.FederationModule.Module, RunsModule.Module, AuditModule.Module, AgentsModule.Module, SetupModule.Module, DeliveryModule.Module, BindingPostureModule.Module, QualityModule.Module, BacklogModule.Module, ReleasesModule.Module];
+    /// <summary>
+    /// The scope the console opens its state with: the install's modules, and the <c>trust</c> module (the join tokens it makes) kept under the group
+    /// <c>console</c>, which no Gateway or Runner group sharing the database is called.
+    /// </summary>
+    public static StateScope Scope { get; } = new(Group: "console");
+
+    public static IReadOnlyList<StateModule> Modules { get; } = [IdentityModule.Module, NotificationsModule.Module, DbDataKit.Identity.FederationModule.Module, RunsModule.Module, AuditModule.Module, AgentsModule.Module, SetupModule.Module, DeliveryModule.Module, BindingPostureModule.Module, QualityModule.Module, BacklogModule.Module, ReleasesModule.Module, DbDataKit.Web.Trust.TrustModule.Module];
 
     private static string AppliedBy => $"{ConsoleSettings.Product} {typeof(ConsoleState).Assembly.GetName().Version}";
 
@@ -96,7 +111,7 @@ public static class ConsoleState
         System.IO.Directory.CreateDirectory(directory);
         settings ??= new StateSettings();
         var modules = Modules;
-        var scope = StateScope.Install;
+        var scope = Scope;
         if (settings.IsSqlite) return StateOpener.Open(settings, System.IO.Path.Combine(directory, "state.db"), modules, scope, appliedBy: AppliedBy);
         // the password of a server engine is a secret reference: the console's store, then the environment
         var secrets = new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]);

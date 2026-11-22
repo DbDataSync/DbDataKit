@@ -56,7 +56,7 @@ function TaskRow({ task, canAct, busy, act, connections, missing, open, onToggle
       <span data-testid="runner-task-state">{stateText[state]}</span>
       <span className="row" style={{ gap: 8 }}>
         {canAct && <>
-          <button type="button" className="btn btn-sm" disabled={busy} onClick={() => act('run', task)} data-testid="runner-task-run">Run now</button>
+          {!task.ddl && <button type="button" className="btn btn-sm" disabled={busy} onClick={() => act('run', task)} data-testid="runner-task-run">Run now</button>}
           <button type="button" className="btn btn-sm" disabled={busy} onClick={() => act(task.paused ? 'resume' : 'pause', task)} data-testid="runner-task-toggle">{task.paused ? 'Resume' : 'Pause'}</button>
         </>}
         <button type="button" className="btn btn-sm" onClick={onToggle} aria-expanded={open} data-testid="runner-task-details">{open ? 'Hide' : 'Details'}</button>
@@ -64,6 +64,11 @@ function TaskRow({ task, canAct, busy, act, connections, missing, open, onToggle
       <span style={{ gridColumn: '1 / -1' }} className="hint" data-testid="runner-task-owner" data-owner={effectiveOwner(task.owner)}>
         Scheduled by {ownerLabel(task.owner).toLowerCase()}{effectiveOwner(task.owner) !== 'runner' ? (effectiveOwner(task.owner) === 'observe' ? ': it records what it would queue and queues nothing.' : ': this runner does not queue it until it is moved.') : '.'}
       </span>
+      {task.ddl && (
+        <span style={{ gridColumn: '1 / -1' }} className="hint" data-testid="runner-task-ddl">
+          This task creates, alters or drops tables. It starts only from the console, after a person approves its statements, so there is no run button here.
+        </span>
+      )}
       {connections.length > 0 && (
         <span style={{ gridColumn: '1 / -1' }} className="hint" data-testid="runner-task-connections">
           Connects to {connections.map((c, i) => <span key={c.name} data-testid="runner-task-connection" data-connection={c.name}>{i > 0 ? ', ' : ''}<span className="mono">{c.name}</span> ({c.kind}, {c.role} login)</span>)}

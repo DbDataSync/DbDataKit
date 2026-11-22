@@ -2,13 +2,17 @@ using System.Text.Json.Serialization;
 
 namespace DbDataKit.Hosting;
 
-/// <summary>Body of <c>GET /version</c>. The updater's post-update check polls this.</summary>
+/// <summary>
+/// Body of <c>GET /version</c>. The updater's post-update check polls this. <see cref="Loosened"/> names the checks of the server's own start that its
+/// administrator switched off (<c>startup.skip_folder_permissions_check</c>), so the console's posture page can mark the server; it is left out when none is.
+/// </summary>
 public sealed record VersionInfo(
     string Product,
     string Version,
     string? Commit,
     IReadOnlyDictionary<string, string> SchemaVersions,
-    bool Ready);
+    bool Ready,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Loosened = null);
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum HealthStatus

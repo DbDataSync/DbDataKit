@@ -34,8 +34,7 @@ trap cleanup EXIT
 
 export DBDATAKIT_Gateway__SchemaVersion=2
 export DBDATAKIT_DATA_GATEWAY="$tmp"
-export DBDATAKIT_Gateway__Listen__Address=127.0.0.1
-export DBDATAKIT_Gateway__Listen__Port="$port"
+export DBDATAKIT_Gateway__Listen="https://127.0.0.1:$port"
 export DBDATAKIT_Gateway__DataSources__duck__Provider=duckdb
 export DBDATAKIT_Gateway__DataSources__duck__ConnectionString="Data Source=$tmp/e2e.duckdb"
 export DBDATAKIT_Gateway__DataSources__duck__AllowWrites=true

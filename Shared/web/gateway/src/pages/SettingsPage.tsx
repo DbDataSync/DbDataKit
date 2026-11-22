@@ -4,7 +4,7 @@ import { ApiError, Link, useIsAdmin } from '@dbdatakit/shell'
 import { gatewayApi } from '../api'
 import { GatewayShell } from '../GatewayShell'
 import { ExportComponentCard } from './ExportComponentCard'
-import { MODULES, SEMANTIC_NUMBERS, cacheSeconds, editFor, groupDiagnostics, placeOf, restartText, saveState, semanticNumber, shown, toggleModule, type FieldKey, type SemanticNumber } from '../settings'
+import { LISTEN_FIELDS, MODULES, PATH_FIELDS, pathText, SEMANTIC_NUMBERS, listenText, cacheSeconds, editFor, groupDiagnostics, placeOf, restartText, saveState, semanticNumber, shown, toggleModule, type FieldKey, type ListenField, type PathField, type SemanticNumber } from '../settings'
 import type { Diagnostic, SettingsCheck, SettingsWritten } from '../types'
 
 export interface SettingsViewProps {
@@ -57,6 +57,38 @@ function SemanticNumberField({ field, value, typed, disabled, items, onField, on
   )
 }
 
+/** One address of a listener of its own: text, empty meaning the default (nothing is saved). A list of addresses is shown as such and edited in the text view. */
+function ListenTextField({ field, value, disabled, items, onField }: { field: ListenField; value: string | null; disabled: boolean; items: Diagnostic[] | undefined; onField: (field: FieldKey, value: string) => void }) {
+  const id = `settings-${field.key.replace(/\./g, '-')}`
+  const problem = value !== null && !listenText(value) ? 'An https address with its port, such as https://0.0.0.0:7824, or nothing.' : null
+  return (
+    <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+      <label htmlFor={id}>{field.label}</label>
+      <input id={id} className="input" style={{ width: 240 }} disabled={disabled || value === null} placeholder={value === null ? 'a list of addresses: edit the text' : field.placeholder} value={value ?? ''} aria-invalid={problem ? true : undefined} data-testid={id}
+        onChange={(e) => { if (listenText(e.target.value)) onField(field.key, e.target.value.trim()) }} />
+      <span className="hint">{field.hint}</span>
+      {problem && <p className="hint" role="alert" data-testid={`${id}-problem`}>{problem}</p>}
+      <FieldErrors field={field.key} items={items} />
+    </div>
+  )
+}
+
+/** The path one module answers under on the public listener: empty is the default (nothing is saved). */
+function PathTextField({ field, value, disabled, items, onField }: { field: PathField; value: string; disabled: boolean; items: Diagnostic[] | undefined; onField: (field: FieldKey, value: string) => void }) {
+  const id = `settings-${field.key.replace(/\./g, '-')}`
+  const problem = !pathText(value) ? `A path such as ${field.fallback}, or nothing.` : null
+  return (
+    <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+      <label htmlFor={id}>{field.label}</label>
+      <input id={id} className="input" style={{ width: 200 }} disabled={disabled} placeholder={field.fallback} value={value} aria-invalid={problem ? true : undefined} data-testid={id}
+        onChange={(e) => { if (pathText(e.target.value)) onField(field.key, e.target.value.trim()) }} />
+      <span className="hint">Empty: the default, {field.fallback}.</span>
+      {problem && <p className="hint" role="alert" data-testid={`${id}-problem`}>{problem}</p>}
+      <FieldErrors field={field.key} items={items} />
+    </div>
+  )
+}
+
 function FieldErrors({ field, items }: { field: FieldKey; items: Diagnostic[] | undefined }) {
   if (!items || items.length === 0) return null
   return <>{items.map((d, i) => <p key={i} className="hint" role="alert" data-severity={d.severity} data-testid={`settings-error-${field}`}>{d.message}{d.fix ? ` ${d.fix}` : ''} <span className="mono">({placeOf(d)})</span></p>)}</>
@@ -84,9 +116,9 @@ export function SettingsView(p: SettingsViewProps) {
               server.yaml changed since you read it (someone else saved it, or it was edited by hand). Your draft is kept below; read the file again to see what changed. <button type="button" className="btn btn-sm" onClick={p.onReload} data-testid="settings-reload">Read it again and drop my draft</button>
             </div>
           )}
-          <div className="row" style={{ gap: 8, marginBottom: 8 }} role="tablist">
-            <button type="button" role="tab" aria-selected={p.tab === 'form'} className={p.tab === 'form' ? 'btn btn-primary' : 'btn'} onClick={() => p.onTab('form')} data-testid="settings-tab-form">Form</button>
-            <button type="button" role="tab" aria-selected={p.tab === 'yaml'} className={p.tab === 'yaml' ? 'btn btn-primary' : 'btn'} onClick={() => p.onTab('yaml')} data-testid="settings-tab-yaml">server.yaml</button>
+          <div className="subtabbar" style={{ marginBottom: 8 }} role="tablist">
+            <button type="button" role="tab" aria-selected={p.tab === 'form'} className={`subtab ${p.tab === 'form' ? 'active' : ''}`} onClick={() => p.onTab('form')} data-testid="settings-tab-form">Form</button>
+            <button type="button" role="tab" aria-selected={p.tab === 'yaml'} className={`subtab ${p.tab === 'yaml' ? 'active' : ''}`} onClick={() => p.onTab('yaml')} data-testid="settings-tab-yaml">server.yaml</button>
           </div>
           {p.masked && <p className="hint" data-testid="settings-masked-note">A password or key in the file is shown as '********'. Leave it as it is to keep the value; type over it to replace it. The value is never sent here.</p>}
 
@@ -123,6 +155,9 @@ export function SettingsView(p: SettingsViewProps) {
                 <fieldset style={{ border: 0, padding: 0, margin: '12px 0' }} data-testid="settings-semantic">
                   <legend className="card-title">Semantic models</legend>
                   {SEMANTIC_NUMBERS.map((f) => <SemanticNumberField key={f.key} field={f} value={values.semantic[f.key]} disabled={!p.allowed || !p.check} items={grouped.byField[f.key]} typed={p.semanticText?.[f.key]} onField={p.onField} onTyped={(k, t) => p.onSemanticText?.(k, t)} />)}
+                  {LISTEN_FIELDS.map((f) => <ListenTextField key={f.key} field={f} value={values.listen[f.key]} disabled={!p.allowed || !p.check} items={grouped.byField[f.key]} onField={p.onField} />)}
+                  <p className="hint" data-testid="settings-paths-text">The path each module answers under on the public listener; an empty box is the default.</p>
+                  {PATH_FIELDS.map((f) => <PathTextField key={f.key} field={f} value={values.paths[f.key]} disabled={!p.allowed || !p.check} items={grouped.byField[f.key]} onField={p.onField} />)}
                   <p className="hint" data-testid="settings-semantic-text">The models set up by hand (catalog file and the data source of each source) and the Analysis Services connections (a secret reference, never a password) are edited in the server.yaml tab, under <span className="mono">semantic:</span>.</p>
                 </fieldset>
                 <fieldset style={{ border: 0, padding: 0, margin: '12px 0' }} data-testid="settings-telemetry">

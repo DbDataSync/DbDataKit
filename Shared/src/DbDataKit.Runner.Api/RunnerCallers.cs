@@ -31,6 +31,9 @@ public sealed record RunnerApiOptions(string Prefix, RunnerCallerResolver Caller
 {
     /// <summary>Adds what the host knows to <c>GET status</c> (a host's own facts).</summary>
     public Action<System.Text.Json.Nodes.JsonObject>? DecorateStatus { get; init; }
+
+    /// <summary>Checks the control service's approval a run of a DDL task carries. Null: the host has no control service paired, and a DDL task is never started through it.</summary>
+    public ControlRunApprovalVerifier? ControlApprovals { get; init; }
 }
 
 public static class RunnerCallers

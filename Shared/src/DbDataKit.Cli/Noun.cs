@@ -29,8 +29,19 @@ public sealed class Noun(string name, string summary, IReadOnlyList<Verb> verbs)
     /// <summary>The same noun with more verbs, for the ones a product adds (<c>cert</c> plus its own, <c>server</c> plus <c>project add</c>).</summary>
     public Noun With(params Verb[] more) => new(Name, Summary, [.. Verbs, .. more]);
 
+    /// <summary>
+    /// A command of one word (<c>dbdatarunner pair --host ...</c>): a noun whose only verb has no name, run with every argument after the noun.
+    /// </summary>
+    public static Noun Command(string name, Verb verb) => new(name, verb.Summary, [verb with { Name = "" }]);
+
+    /// <summary>The verb of a one-word command (<see cref="Command"/>); null for a noun with named verbs.</summary>
+    public Verb? Direct => Verbs is [{ Name.Length: 0 } only] ? only : null;
+
+    /// <summary>The command as typed: the noun and the verb, or the noun alone for a one-word command.</summary>
+    public string CommandOf(Verb verb) => verb.Name.Length == 0 ? Name : $"{Name} {verb.Name}";
+
     /// <summary>The verbs as command specs (<c>server run</c>), for a product's command table and the help.</summary>
-    public IEnumerable<CommandSpec> Specs() => Verbs.Select(v => new CommandSpec($"{Name} {v.Name}", v.Effect, v.Summary, true) { Traits = v.EffectiveTraits });
+    public IEnumerable<CommandSpec> Specs() => Verbs.Select(v => new CommandSpec(CommandOf(v), v.Effect, v.Summary, true) { Traits = v.EffectiveTraits });
 }
 
 /// <summary>
@@ -95,7 +106,8 @@ public sealed class NounRouter
         using var error = new StringWriter();
         var buffered = context with { Out = output, Error = error };
         var exit = await DispatchAsync(rest, buffered);
-        var command = rest.Length >= 2 && _nouns.FirstOrDefault(n => n.Name == rest[0]) is { } noun && noun.Verbs.Any(v => v.Name == rest[1]) ? $"{rest[0]} {rest[1]}" : "";
+        var command = rest.Length >= 1 && _nouns.FirstOrDefault(n => n.Name == rest[0]) is { Direct: not null } single ? single.Name
+            : rest.Length >= 2 && _nouns.FirstOrDefault(n => n.Name == rest[0]) is { } noun && noun.Verbs.Any(v => v.Name == rest[1]) ? $"{rest[0]} {rest[1]}" : "";
         var document = new Dictionary<string, object?>
         {
             ["schema"] = $"{_program}.output/1",
@@ -147,6 +159,17 @@ public sealed class NounRouter
             return CliExit.Usage;
         }
 
+        if (noun.Direct is { } direct && !(args.Length > 1 && args[1] is "help" or "--help" or "-h"))
+        {
+            if (_precondition?.Invoke() is { } refusedDirect)
+            {
+                await context.Error.WriteLineAsync(refusedDirect);
+                return CliExit.Failure;
+            }
+
+            return await direct.Run(args[1..], context);
+        }
+
         if (args.Length == 1 || args[1] is "help" or "--help" or "-h")
         {
             await context.Out.WriteAsync(NounHelp(noun));
@@ -184,7 +207,7 @@ public sealed class NounRouter
         var lines = new List<string> { $"{_program} {noun.Name}: {noun.Summary}", "", "Verbs:" };
         foreach (var verb in noun.Verbs)
         {
-            lines.Add($"  {noun.Name} {verb.Name}{(verb.Usage.Length > 0 ? " " + verb.Usage : "")}");
+            lines.Add($"  {noun.CommandOf(verb)}{(verb.Usage.Length > 0 ? " " + verb.Usage : "")}");
             lines.Add($"      {verb.Summary} [{verb.Effect.Describe()}]");
         }
         return string.Join('\n', lines) + "\n";
@@ -197,7 +220,7 @@ public sealed class NounRouter
         var defs = new System.Text.Json.Nodes.JsonObject();
         foreach (var spec in Specs().OrderBy(s => s.Name, StringComparer.Ordinal))
         {
-            var verb = _nouns.First(n => n.Name == spec.Path[0]).Verbs.First(v => v.Name == spec.Path[1]);
+            var verb = _nouns.First(n => n.Name == spec.Path[0]).Verbs.First(v => v.Name == (spec.Path.Length > 1 ? spec.Path[1] : ""));
             var key = "data_" + spec.Id;
             var full = System.Text.Json.Nodes.JsonNode.Parse(verb.DataSchema!)!.AsObject();
             defs[key] = full;

@@ -85,8 +85,7 @@ public sealed class TlsTests : IDisposable
     {
         var settings = new Dictionary<string, string?>
         {
-            ["Gateway:Listen:Address"] = "127.0.0.1",
-            ["Gateway:Listen:Port"] = "0",
+            ["Gateway:Listen"] = "https://127.0.0.1:0",
             ["Gateway:DataDirectory"] = _dir,
             ["Gateway:Tls:Mode"] = "SelfSigned",
             ["Gateway:Management:Enabled"] = "false",
@@ -119,8 +118,7 @@ public sealed class TlsTests : IDisposable
     {
         var settings = new Dictionary<string, string?>
         {
-            ["Gateway:Listen:Address"] = "127.0.0.1",
-            ["Gateway:Listen:Port"] = "0",
+            ["Gateway:Listen"] = "https://127.0.0.1:0",
             ["Gateway:DataDirectory"] = _dir,
             ["Gateway:Tls:Mode"] = "SelfSigned",
             ["Gateway:Management:Enabled"] = "false",

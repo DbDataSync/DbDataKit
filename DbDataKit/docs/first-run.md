@@ -19,7 +19,7 @@ Open it once and register a passkey. That person is the first administrator, and
 - **A new one is made on the machine.** If the link ended or was lost, run this on the machine the console runs on:
 
   ```
-  dbdatakit setup link --url https://localhost:8480
+  dbdatakit setup link --url https://localhost:7800
   ```
 
   It prints the new link, writes it to `FIRST-RUN.txt` and makes every unused link stop working, so only the newest opens. `--url` is the address people open the console at (the default is the console's own listen address); `--repo` names the console's directory when it is not the default. The audit records that a setup link was made, when it ends and which account ran the command, never the code.
@@ -29,7 +29,7 @@ A refused invitation says only that it is not valid, used or expired, so a perso
 
 ## The setup checklist
 
-After you sign in, **Setup** in the rail (administrators) lists the first steps, and **Home** says how many are left:
+After you sign in, **Setup** (under **Settings** in the navigation on the left; administrators) lists the first steps, and **Home** says how many are left:
 
 | Step | Opens | Finished when |
 | --- | --- | --- |
@@ -45,7 +45,7 @@ A step is **finished by what the install has**, never by a click: pairing a serv
 
 ## What is not built yet
 
-A single-machine bundle that installs the console and the servers together and pairs them with nobody typing a code is planned (plan 23a, FQ18). Today each server announces itself to the console and waits for an administrator to confirm it on the Servers page.
+A single-machine bundle that installs the console and the servers together and pairs them with nobody typing a code is planned (plan 23a, FQ18). Today a server joins the console by the command an administrator makes on the **Add a server** screen (in the Servers group) and runs on the server's machine, or it announces itself and waits for an administrator to confirm it on the All servers page.
 
 ### Alerts of failed checks
 

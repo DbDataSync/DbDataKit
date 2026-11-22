@@ -59,6 +59,9 @@ public sealed class RunnerHarness : IAsyncDisposable
 
     public string Directory { get; }
 
+    /// <summary>The console the harness pairs as: what signs its tokens and, in a test of a DDL run, the control service's approval.</summary>
+    public ConsoleIdentity Console => _console;
+
     /// <summary>The runner engine of the running server.</summary>
     public RunnerEngine Engine => _app!.Services.GetRequiredService<RunnerEngine>();
 

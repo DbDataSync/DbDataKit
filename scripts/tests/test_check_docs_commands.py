@@ -152,6 +152,21 @@ public static class IdentityCommand {
         })
         self.assertEqual({("identity", "invite"), ("identity", "assign")}, check.commands_of(root, "dbdatagateway"))
 
+    def test_a_command_of_one_word_is_read_from_a_shared_factory_and_from_a_product(self):
+        root = self.tree({
+            "Shared/src/DbDataKit.Web/JoinPairCommand.cs": """
+public static class JoinPairCommand {
+    public static Noun Create(PairCommandOptions options) => Noun.Command("pair", new Verb("pair", "Join the console", EffectClass.RepoFilesOnly, "", null));
+}
+""",
+            "DbDataRunner/src/DbDataRunner.Server/RunnerCli.cs": """
+public static class RunnerCli {
+    static NounRouter Router() => new("dbdatarunner", [ ServerNoun.Create(Run), JoinPairCommand.Create(options), Noun.Command("hello", new Verb("hello", "Say hello", EffectClass.OfflineOnly, "", null)) ]);
+}
+""",
+        })
+        self.assertEqual({("server", "run"), ("pair",), ("hello",)}, check.commands_of(root, "dbdatarunner"))
+
     def test_a_command_that_exists_passes(self):
         text = "```\ndbdatakit server run --listen https://x\ndbdatakit instance add https://b --code c\n```\nOr `dbdatakit user invite`, `dbdatakit instance` and `dbdatakit.exe server pair`.\n"
         self.assertEqual([], self.problems(text))
@@ -197,6 +212,43 @@ public static class IdentityCommand {
 
     def test_the_repository_itself_passes(self):
         self.assertEqual([], check.check(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))))
+
+
+class ForbiddenWords(unittest.TestCase):
+    """The verb that checks a service was renamed `service check`; its old name, `doctor`, must not come back in any tracked file."""
+
+    def test_a_file_naming_the_word_fails_with_its_line(self):
+        problems = check.check_words(tree({"docs/x.md": "intro\nRun `dbdatakit service doctor` to see what is wrong.\n"}))
+        self.assertEqual(1, len(problems))
+        self.assertTrue(problems[0].startswith("docs/x.md:2: `doctor`"), problems[0])
+        self.assertIn("use `check`", problems[0])
+
+    def test_the_word_in_any_case_and_inside_an_identifier_fails(self):
+        for text in ["public sealed class ServiceDoctor {}", "var report = new DoctorReport([]);", "DOCTOR", "the doctor is right"]:
+            with self.subTest(text=text):
+                self.assertEqual(1, len(check.check_words(tree({"Shared/src/X/A.cs": text + "\n"}))))
+
+    def test_a_planning_file_a_test_and_a_history_document_are_read_too(self):
+        root = tree({"planning/X.md": "doctor\n", "Shared/tests/X.Tests/A.cs": "Doctor_runs()\n", "DbDataSync/architecture/implementation/done/p.md": "dbdatasync doctor\n"})
+        self.assertEqual(3, len(check.check_words(root)))
+
+    def test_a_path_with_the_word_fails(self):
+        problems = check.check_words(tree({"Shared/tests/X.Tests/DoctorTests.cs": "public class ServiceCheckTests {}\n"}))
+        self.assertEqual(["Shared/tests/X.Tests/DoctorTests.cs: the path contains `Doctor`; use `check`"], problems)
+
+    def test_rdl_doctor_the_name_of_another_products_tool_passes(self):
+        self.assertEqual([], check.check_words(tree({"planning/README.md": "Majorsilence Reporting checks a report with `rdl-doctor`.\n"})))
+        self.assertEqual(1, len(check.check_words(tree({"planning/README.md": "`rdl-doctor`, then `service doctor`.\n"}))))
+
+    def test_the_check_and_its_tests_are_exempt(self):
+        root = tree({"scripts/check_docs_commands.py": "FORBIDDEN_WORDS = {\"doctor\": \"check\"}\n", "scripts/tests/test_check_docs_commands.py": "doctor\n"})
+        self.assertEqual([], check.check_words(root))
+
+    def test_the_words_are_part_of_the_whole_check(self):
+        self.assertEqual(1, len([p for p in check.check(tree({"DbDataKit/README.md": "doctor\n"})) if "`doctor`" in p]))
+
+    def test_the_repository_itself_passes(self):
+        self.assertEqual([], check.check_words(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))))
 
 
 if __name__ == "__main__":

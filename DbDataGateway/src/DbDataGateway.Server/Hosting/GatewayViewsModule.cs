@@ -17,7 +17,7 @@ namespace DbDataGateway.Server.Hosting;
 /// The same routes answer a console on the management API (<c>GatewayViewsManagement</c>), as the person the console vouches for. An app's narrowed token reaches the module in process, through the apps host (<c>ViewsApi</c> with a <c>ViewsAppScope</c>): not built.
 /// </summary>
 public sealed class GatewayViewsModule(IOptionsMonitor<GatewayOptions> options, GatewayViews views, IServingServices services, TlsCertificateHolder certificate, SecretsRuntime secrets, ILoggerFactory loggers,
-    GroupCertificate? group = null) : IHostedService, IAsyncDisposable
+    GroupCertificate? group = null, PublicMounts? mounts = null) : IHostedService, IAsyncDisposable
 {
     private WebApplication? _app;
 
@@ -33,29 +33,25 @@ public sealed class GatewayViewsModule(IOptionsMonitor<GatewayOptions> options, 
 
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();
-        builder.WebHost.ConfigureKestrel(kestrel =>
-        {
-            kestrel.AddServerHeader = false;
-            kestrel.Listen(IPAddress.Parse(current.Views.Address), current.Views.Port, listen =>
-            {
-                listen.Protocols = HttpProtocols.Http1AndHttp2;
-                listen.UseHttps(https =>
-                {
-                    https.ServerCertificateSelector = (_, _) => certificate.Current;
-                    https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
-                });
-            });
-        });
+        var inProcess = ModuleListener.Configure(builder, current.Views.Listen, (_, _) => certificate.Current);
         var app = builder.Build();
         views.Module.Map(app);
         await app.StartAsync(cancellationToken);
         _app = app;
+        if (inProcess is not null)
+        {
+            views.Address = Address = PublicMounts.AddressOf(current) + PublicPaths.Of(current, GatewayModules.Views);
+            ModuleListener.Mount(mounts, inProcess, server => new PublicMount { Name = GatewayModules.Views, Server = server, Prefix = PublicPaths.Of(current, GatewayModules.Views) });
+            return;
+        }
         var bound = app.Services.GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>().Features.Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>()?.Addresses.FirstOrDefault();
         views.Address = Address = bound?.Replace("[::]", "localhost", StringComparison.Ordinal).Replace("0.0.0.0", "localhost", StringComparison.Ordinal).TrimEnd('/');
     }
 
+
     public async Task StopAsync(CancellationToken cancellationToken)
     {
+        mounts?.Remove(GatewayModules.Views);
         // new requests are refused and the ones in flight finish, then the listener goes
         await views.Module.DrainAsync(cancellationToken);
         if (_app is not null) await _app.StopAsync(cancellationToken);

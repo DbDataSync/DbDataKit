@@ -38,7 +38,6 @@ public sealed class ServiceCliTests
         public RecordingAcl Acl { get; } = new();
         public BufferConsole Console { get; } = new();
         public Dictionary<string, string> Env { get; } = [];
-        public List<string> SettingsFiles { get; } = [];
         public string? Prompted { get; private set; }
         public string PromptAnswer { get; set; } = "typed-secret";
         public bool Elevated { get; set; } = true;
@@ -53,7 +52,6 @@ public sealed class ServiceCliTests
             Console = Console,
             BinaryPath = Exe,
             DefaultDataDirectory = () => DataDir,
-            EnsureSettingsFile = SettingsFiles.Add,
             IsWindows = Windows,
             GetEnvironmentVariable = name => Env.GetValueOrDefault(name),
             PrincipalResolver = account => new WellKnownPrincipalResolver(account.Kind == ServiceAccountKind.VirtualAccount ? ServiceSid.FromName(account.Name[(account.Name.LastIndexOf((char)92) + 1)..]) : "S-1-5-21-1-2-3-1001"),
@@ -71,26 +69,22 @@ public sealed class ServiceCliTests
         Assert.Equal(0, rig.Run("install"));
 
         var cfg = rig.Scm.GetConfig("DbDataGateway")!;
-        Assert.Equal(@"NT SERVICE\dbdatagateway", cfg.AccountName);
+        Assert.Equal(@"NT SERVICE\DbDataGateway", cfg.AccountName);
         Assert.Equal(ServiceStartMode.Automatic, cfg.StartMode); // "start= auto" before, not delayed
         Assert.Equal(3, cfg.FailureRestartActions); // restart 5s / 5s / 60s
-        Assert.Equal(ServiceCli.DisplayName, cfg.DisplayName);
-        Assert.Equal(ServiceCli.Description, cfg.Description);
+        Assert.Equal("DbDataGateway", cfg.DisplayName);
+        Assert.Equal(DbDataKit.Hosting.Startup.SuiteServices.Gateway.Description, cfg.Description);
         Assert.Equal($"\"{Exe}\" server run", cfg.BinaryPathName);
         Assert.False(rig.Scm.LastPasswordSupplied);
     }
 
     [Fact]
-    public void Install_asks_for_the_starter_settings_file_in_the_data_directory_and_says_where_it_is()
+    public void Install_writes_no_settings_file_and_says_where_the_service_writes_it()
     {
         var rig = new Rig();
         Assert.Equal(0, rig.Run("install"));
-        Assert.Equal([DataDir], rig.SettingsFiles);
-        Assert.Contains("server.yaml", rig.Out);
-
-        var dry = new Rig();
-        Assert.Equal(0, dry.Run("install", "--dry-run"));
-        Assert.Empty(dry.SettingsFiles);
+        Assert.Contains("server.yaml, written by the service at its first start", rig.Out);
+        Assert.False(File.Exists(Path.Combine(DataDir, "config", "server.yaml")));
     }
 
     [Fact]
@@ -245,7 +239,7 @@ public sealed class ServiceCliTests
         Assert.Equal(0, rig.Run("install", "--dry-run"));
         Assert.Empty(rig.Scm.Operations);
         Assert.Empty(rig.Acl.Applied);
-        Assert.Contains("Create service 'dbdatagateway'", rig.Out);
+        Assert.Contains("Create service 'DbDataGateway'", rig.Out);
     }
 
     [Fact]
@@ -275,11 +269,11 @@ public sealed class ServiceCliTests
     }
 
     [Fact]
-    public void Doctor_reports_missing_directories_after_an_install_against_a_fake_file_system()
+    public void Check_reports_missing_directories_after_an_install_against_a_fake_file_system()
     {
         var rig = new Rig();
         rig.Run("install");
-        Assert.Equal(ExitCodes.Failure, rig.Run("doctor")); // the recording ACL service cannot read anything back
+        Assert.Equal(ExitCodes.Failure, rig.Run("check")); // the recording ACL service cannot read anything back
         Assert.Contains("FAIL", rig.Out);
     }
 
@@ -333,13 +327,18 @@ public sealed class ServiceCliTests
     }
 
     [Fact]
-    public void Systemd_unit_is_hardened_and_runs_as_a_dynamic_user()
+    public void Systemd_unit_is_hardened_and_runs_as_the_gateways_system_user()
     {
         var rig = new Rig { Windows = false };
         rig.Run("unit", "--name", "GatewayB", "--exec", "/srv/gateway/DbDataGateway");
-        Assert.Contains("DynamicUser=yes", rig.Out);
+        Assert.DoesNotContain("DynamicUser", rig.Out);
+        Assert.Contains("\nUser=dbdatagateway\n", rig.Out.Replace("\r\n", "\n"));
+        Assert.Contains("\nGroup=dbdatakit\n", rig.Out.Replace("\r\n", "\n"));
         Assert.Contains("NoNewPrivileges=yes", rig.Out);
         Assert.Contains("StateDirectory=dbdatakit/gatewayb", rig.Out);
+        Assert.Contains("StateDirectoryMode=0700", rig.Out);
+        Assert.Contains("LogsDirectory=dbdatakit/dbdatagateway", rig.Out);
+        Assert.Contains("LogsDirectoryMode=0700", rig.Out);
         Assert.Contains("DBDATAKIT_DATA_GATEWAY=/var/lib/dbdatakit/gatewayb", rig.Out);
         Assert.DoesNotContain("User=root", rig.Out);
 

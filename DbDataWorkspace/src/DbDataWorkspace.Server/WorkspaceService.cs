@@ -1,5 +1,6 @@
 using DbDataKit.Cli;
 using DbDataKit.Hosting.Cli;
+using DbDataKit.Hosting.Startup;
 using DbDataKit.Hosting.Systemd;
 using DbDataKit.Hosting.WindowsService;
 using DbDataKit.Security.Acl;
@@ -33,14 +34,15 @@ public sealed class WorkspaceServiceEnvironment
 }
 
 /// <summary>
-/// <c>dbdataworkspace service install|uninstall|status|start|stop|restart|doctor|unit</c>: registration of <c>server run</c> with Windows or systemd, the shared verbs over the shared command. The service runs as the virtual account
+/// <c>dbdataworkspace service install|uninstall|status|start|stop|restart|check|unit</c>: registration of <c>server run</c> with Windows or systemd, the shared verbs over the shared command. The service runs as the virtual account
 /// <c>NT SERVICE\DbDataWorkspace</c> unless <c>--account</c> says otherwise, and keeps everything it writes in one data directory, which only administrators and the service can reach.
 /// </summary>
 public static class WorkspaceService
 {
-    public const string RegistrationName = "DbDataWorkspace";
-    public const string DisplayName = "DbDataWorkspace server";
-    public const string Description = "Hosts the projects people and agents author in git workspaces, with a record of what was done, over a management API a console pairs with.";
+    /// <summary>The Windows service, its display name and description, as the suite's table spells them (<see cref="SuiteServices.Workspace"/>).</summary>
+    public static readonly string RegistrationName = SuiteServices.Workspace.WindowsName;
+    public static readonly string DisplayName = SuiteServices.Workspace.DisplayName;
+    public static readonly string Description = SuiteServices.Workspace.Description;
 
     public static Noun Noun(WorkspaceServiceEnvironment env) =>
         HostingNouns.Service(new ServiceCommand(Context(env), env.Scm, env.Acl, env.Elevation, null, true));
@@ -56,7 +58,9 @@ public static class WorkspaceService
         [
             new LayoutEntry(LayoutRole.InstallRoot, installDirectory, new AclSpec(false, [admin, system, Svc(AccessRights.ReadExecute)]),
                 "Binaries; the service can read and run them but not change them."),
-            new LayoutEntry(LayoutRole.Data, env.DefaultDataDirectory, new AclSpec(true, [admin, system, Svc(AccessRights.Modify)]),
+            // the install makes only this folder, owned by the Administrators group; the service creates everything inside it at its first start
+            // Design: docs/install.md#a-service-owns-its-data
+            new LayoutEntry(LayoutRole.Data, env.DefaultDataDirectory, new AclSpec(true, [admin, system, Svc(AccessRights.Modify)], LayoutPrincipal.Administrators),
                 "The server's identity, paired clients, certificate, projects and workspaces; Users have no access."),
         ]);
 
@@ -75,16 +79,25 @@ public static class WorkspaceService
             StartMode = ServiceStartMode.Automatic,
             Failure = new FailurePolicy([TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60)], TimeSpan.FromDays(1)),
             DataDirectoryArgument = path => ["--repo", path],
+            StartupService = SuiteServices.Workspace,
         };
     }
 
     public static SystemdUnitOptions UnitOptions(string name, string executable) => new()
     {
         Name = name,
-        Description = "DbDataWorkspace server",
+        Description = SuiteServices.Workspace.Description,
         ExecStart = $"{executable} server run --repo /var/lib/dbdatakit/{WorkspaceSettings.ServiceName}",
         WorkingDirectory = executable[..executable.LastIndexOf('/')],
-        // DynamicUser: no account to manage; the state directory /var/lib/dbdatakit/workspace is created and owned by systemd.
+        // the system user install.sh --system makes, in the group dbdatakit; systemd makes /var/lib/dbdatakit/workspace and /var/log/dbdatakit/dbdataworkspace for it
+        // at each start, owned by that user and closed to every other one, so the service creates everything inside them as itself
+        // Design: docs/install.md#a-service-owns-its-data
+        DynamicUser = false,
+        User = SuiteServices.Workspace.LinuxUser,
+        Group = SuiteServices.LinuxGroup,
         StateDirectories = [$"dbdatakit/{WorkspaceSettings.ServiceName}"],
+        StateDirectoryMode = "0700",
+        LogsDirectories = [$"dbdatakit/{SuiteServices.Workspace.LogFolder}"],
+        LogsDirectoryMode = "0700",
     };
 }
