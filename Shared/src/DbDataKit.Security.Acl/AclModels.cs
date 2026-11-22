@@ -16,8 +16,8 @@ public enum AccessRights
 /// <summary>Allow-rule for one SID.</summary>
 public sealed record AclEntry(string Sid, AccessRights Rights);
 
-/// <summary>The intended ACL of one directory (rules inherit to children).</summary>
-public sealed record AclSpecification(bool CutInheritance, IReadOnlyList<AclEntry> Entries);
+/// <summary>The intended ACL of one directory (rules inherit to children), and its owner when <paramref name="OwnerSid"/> is given.</summary>
+public sealed record AclSpecification(bool CutInheritance, IReadOnlyList<AclEntry> Entries, string? OwnerSid = null);
 
 /// <summary>An ACE as read back from disk.</summary>
 public sealed record ObservedAce(string Sid, AccessRights Rights, bool Allow, bool Inherited);

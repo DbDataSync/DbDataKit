@@ -235,7 +235,7 @@ public sealed class ConfigStartupTests
         // no longer start-failure.txt in the data folder; the tests of this class share the folder and may run in any order
         Directory.CreateDirectory(DataDir);
         using var env = new EnvScope(("DBDATAKIT_DATA_GATEWAY", DataDir));
-        var file = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, DataDir), SuiteServices.Gateway.FailureFileName);
+        var file = SuiteServices.Gateway.FailureFileIn(SuiteServices.LogsRootFor(SuiteServices.Gateway, DataDir));
         if (File.Exists(file)) File.Delete(file);
         var original = Console.Error;
         Console.SetError(new StringWriter());
@@ -267,7 +267,7 @@ public sealed class ConfigStartupTests
             new DbDataKit.Cli.CliContext(output, error, TextReader.Null));
 
         Assert.NotEqual(0, exit);
-        var file = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.FailureFileName);
+        var file = SuiteServices.Gateway.FailureFileIn(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir));
         var text = File.ReadAllText(file);
         Assert.Contains("failed at the ports step", text);
         Assert.Contains($"Port {port} cannot be bound", text);
@@ -290,7 +290,7 @@ public sealed class ConfigStartupTests
         var run = Cli.RunAsync(["server", "run", $"--Gateway:DataDirectory={dir}", "--Gateway:Listen=http://127.0.0.1:0", "--Gateway:Public:Listen=https://127.0.0.1:0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"],
             new DbDataKit.Cli.CliContext(TextWriter.Null, TextWriter.Null, TextReader.Null, stop.Token));
         var logs = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.LogFolder);
-        var file = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.FailureFileName);
+        var file = SuiteServices.Gateway.FailureFileIn(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir));
 
         // the sequence writes the file before its first step and deletes it once every step succeeded
         var deadline = DateTime.UtcNow.AddSeconds(90);
@@ -325,7 +325,7 @@ public sealed class ConfigStartupTests
             File.SetUnixFileMode(dir, (UnixFileMode)0x1FF);
         }
         string[] run = ["server", "run", $"--Gateway:DataDirectory={dir}", "--Gateway:Listen=http://127.0.0.1:0", "--Gateway:Public:Listen=https://127.0.0.1:0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"];
-        var file = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.FailureFileName);
+        var file = SuiteServices.Gateway.FailureFileIn(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir));
 
         var error = new StringWriter();
         Assert.Equal(1, await Cli.RunAsync(run, new DbDataKit.Cli.CliContext(TextWriter.Null, error, TextReader.Null)));

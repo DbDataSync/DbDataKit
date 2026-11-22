@@ -108,11 +108,12 @@ function Listed($member) {
 function Paired($member) {
   if (Listed $member) { Say "$($member.Product) is listed by the console already"; return }
   $exe = ExeOf $member $base
+  # the service starts first, so it creates its own data folder's contents as its own account before an administrator's command writes beside them
+  Started $member
   $made = Run $exe @('server', 'pair', '--max-role', $member.Roles)
   $found = [regex]::Match($made.Output, 'Pairing code: (\S+)')
   if ($made.Code -ne 0 -or -not $found.Success) { Fail "$($member.Product) server pair failed (exit $($made.Code))." }
   $code = $found.Groups[1].Value
-  Started $member
   $added = Run $consoleExe @('instance', 'add', $member.Address, '--code', $code, '--name', $member.Product)
   if ($added.Code -ne 0) { Fail "the console could not pair $($member.Product) at $($member.Address): $((Scrub $added.Output $code).Trim()). Make a new code with '$($member.Product) server pair --max-role $($member.Roles)' and run: dbdatakit instance add $($member.Address) --code <code>" }
   $code = $null

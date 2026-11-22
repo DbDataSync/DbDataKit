@@ -28,8 +28,8 @@ public enum LayoutRole
 /// <summary>Allow-rule for one principal.</summary>
 public sealed record AclRule(LayoutPrincipal Principal, AccessRights Rights);
 
-/// <summary>The intended ACL of one directory, as data.</summary>
-public sealed record AclSpec(bool CutInheritance, IReadOnlyList<AclRule> Rules);
+/// <summary>The intended ACL of one directory, as data, and the owner the install gives it when <paramref name="Owner"/> is set.</summary>
+public sealed record AclSpec(bool CutInheritance, IReadOnlyList<AclRule> Rules, LayoutPrincipal? Owner = null);
 
 public sealed record LayoutEntry(LayoutRole Role, string Path, AclSpec? Acl, string Purpose)
 {
@@ -154,7 +154,8 @@ public static class LayoutAcl
         entry.Acl is null
             ? null
             : new AclSpecification(entry.Acl.CutInheritance,
-                entry.Acl.Rules.Select(r => new AclEntry(principals.ResolveSid(r.Principal), r.Rights)).ToList());
+                entry.Acl.Rules.Select(r => new AclEntry(principals.ResolveSid(r.Principal), r.Rights)).ToList(),
+                entry.Acl.Owner is { } owner ? principals.ResolveSid(owner) : null);
 
     public static void Apply(this IAclService acl, LayoutEntry entry, IPrincipalResolver principals)
     {
