@@ -48,6 +48,8 @@ export interface Draft {
   saveOne: (path: string) => Promise<string | undefined>
   /** Saves every unsaved edit. */
   saveAll: () => Promise<void>
+  /** Deletes a file from the draft on the server (a file made here and not saved is only dropped); its unsaved edit goes with it. */
+  remove: (path: string) => Promise<void>
   saving: boolean
   saveError: unknown
   /** The server's file list could not be read. */
@@ -161,6 +163,13 @@ export function DraftProvider({ project, id, kind, canEdit, enabled = true, chil
     }
   }, [edits, write, afterSave])
 
+  const remove = useCallback(async (path: string) => {
+    if (onServer.has(path)) await workspaceApi.deleteFile(project, id, path)
+    discard(path)
+    client.removeQueries({ queryKey: fileKey(project, id, path) })
+    await afterSave()
+  }, [onServer, project, id, discard, client, afterSave])
+
   const draft = useMemo<Draft>(() => {
     const dirtyPaths = Object.keys(edits).sort()
     const paths = [...new Set([...serverPaths, ...dirtyPaths])].sort()
@@ -168,10 +177,10 @@ export function DraftProvider({ project, id, kind, canEdit, enabled = true, chil
       project, id, kind, canEdit, paths, dirtyPaths,
       isNew: (path) => !onServer.has(path),
       textOf: (path) => edits[path] ?? savedText(path),
-      edit, discard, rename, saveOne, saveAll, saving, saveError,
+      edit, discard, rename, saveOne, saveAll, remove, saving, saveError,
       filesError: files.error, filesLoading: files.isLoading, truncated: files.data?.truncated ?? false,
     }
-  }, [edits, serverPaths, onServer, project, id, kind, canEdit, savedText, edit, discard, rename, saveOne, saveAll, saving, saveError, files.error, files.isLoading, files.data])
+  }, [edits, serverPaths, onServer, project, id, kind, canEdit, savedText, edit, discard, rename, saveOne, saveAll, remove, saving, saveError, files.error, files.isLoading, files.data])
 
   return <DraftContext.Provider value={draft}>{children}</DraftContext.Provider>
 }
