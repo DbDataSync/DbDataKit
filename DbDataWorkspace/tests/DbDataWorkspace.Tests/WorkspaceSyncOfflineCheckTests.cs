@@ -27,7 +27,7 @@ public sealed class WorkspaceSyncOfflineCheckTests
         """;
 
     // the line numbers the tests name are those of this text
-    private const string Mapping = """
+    private const string MappingText = """
         schemaVersion: 1
         name: orders
         sources:
@@ -54,7 +54,7 @@ public sealed class WorkspaceSyncOfflineCheckTests
         - id
         """;
 
-    private const string Cache = """
+    private const string CacheText = """
         schema: catalog-cache/2
         generated_at: 2026-11-18T10:00:00Z
         connections:
@@ -94,7 +94,11 @@ public sealed class WorkspaceSyncOfflineCheckTests
                   - {name: note, type: bytea, nullable: true}
         """;
 
-    private static string Draft(string? mapping = null, string? cache = Cache, string sourceEngine = "sqlserver")
+    // the source file may be checked out with CRLF; the tests edit the texts by lines
+    private static readonly string Mapping = MappingText.ReplaceLineEndings("\n");
+    private static readonly string Cache = CacheText.ReplaceLineEndings("\n");
+
+    private static string Draft(string? mapping = null, string? cache = "", string sourceEngine = "sqlserver")
     {
         var root = Directory.CreateTempSubdirectory("ddw-sync-offline-").FullName;
         void Write(string path, string text)
@@ -107,7 +111,7 @@ public sealed class WorkspaceSyncOfflineCheckTests
         Write("config/connections/dw.yaml", "schema: connection/1\nname: dw\nengine: postgres\naddress:\n  host: dw.example.com\n  database: dw");
         Write("config/replications/orders/task.yaml", Task);
         Write(MappingFile, mapping ?? Mapping);
-        if (cache is not null) Write("catalog-cache.yaml", cache);
+        if (cache is not null) Write("catalog-cache.yaml", cache.Length == 0 ? Cache : cache);   // "" stands for the draft's usual cache
         return root;
     }
 
