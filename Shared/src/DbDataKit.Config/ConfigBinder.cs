@@ -151,6 +151,7 @@ public sealed class ConfigBinder(IDiagnosticCatalog? catalog = null, IReadOnlyDi
         {
             // an empty `key:` is "no value": allowed for nullable/reference types, a mistake for the rest
             var before = diags.Count;
+            if (p.ScalarOrList && p.Type is ListSchema && node is YamlScalar { Value.Length: > 0 } single) node = new YamlSequence([single], single.Line, single.Column);
             var v = Bind(p.Type, node, path);
             if (diags.Skip(before).Any(d => d.Severity == ConfigSeverity.Error)) return (false, null);
             Constrain(p, v, node, path);

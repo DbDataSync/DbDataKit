@@ -69,10 +69,11 @@ public static class GatewayHost
 
     /// <summary>
     /// Builds the gateway host. <paramref name="configure"/> lets tests and embedders adjust it before it is built.
+    /// <paramref name="chooseListeners"/> picks the addresses of the listeners that were given none (<see cref="GatewayListeners.Choose"/>).
     /// <paramref name="overrideServices"/> runs after the gateway's own registrations, so a test can replace one (for example the provider registry).
     /// Throws <see cref="GatewayConfigException"/> when the effective configuration is not valid (the command line exits with code 2).
     /// </summary>
-    public static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null, Action<IServiceCollection>? overrideServices = null)
+    public static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null, Action<IServiceCollection>? overrideServices = null, Func<GatewayOptions, ListenerChoice>? chooseListeners = null)
     {
         var builder = CreateBuilder(args);
         var loadGuard = GatewayConfigLoadGuard.Install(builder.Configuration);
@@ -82,6 +83,12 @@ public static class GatewayHost
         // validated the same way, and a rejected edit keeps the last good configuration (GatewayOptionsMonitor).
         var configRoot = (IConfigurationRoot)builder.Configuration;
         var loaded = GatewayConfig.LoadOrThrow(configRoot);
+        // the listeners nobody gave an address take a free port of the Gateway's block (the start sequence asks for it; a test or an embedder that does not has none); read again so the rest of the start sees them like any setting
+        if (chooseListeners?.Invoke(loaded.Value!) is { Chosen.Count: > 0 } choice)
+        {
+            builder.Configuration.AddInMemoryCollection(GatewayListeners.AsConfiguration(choice));
+            loaded = GatewayConfig.LoadOrThrow(configRoot);
+        }
         builder.Services.AddSingleton<IOptionsMonitor<GatewayOptions>>(sp =>
             new GatewayOptionsMonitor(configRoot, loaded.Value!, sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataGateway.Config"), loadGuard));
 
@@ -267,7 +274,7 @@ public static class GatewayHost
         }
         // the public listener: the modules that have no port of their own answer on it, by path; it starts before them and holds each mount as the module starts
         services.AddSingleton<PublicMounts>();
-        if (PublicListener.MountedModules(options).Count > 0) services.AddHostedService<PublicListener>();
+        services.AddHostedService<PublicListener>();
         // the identity home (plan 20, O06): a web application of its own, only when asked for
         if (GatewayModules.Has(options, GatewayModules.Identity))
         {
@@ -396,18 +403,19 @@ public static class GatewayHost
                 holder.Set(CertificateProvider.Load(options, dataDirectory,
                     kestrel.ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger("Tls"), secrets: kestrel.ApplicationServices.GetRequiredService<SecretsRuntime>(),
                     group: kestrel.ApplicationServices.GetRequiredService<GroupCertificate>()));
-            var address = IPAddress.Parse(options.Listen.Address);
-            if (GatewayModules.Has(options, GatewayModules.FlightSql)) kestrel.Listen(address, options.Listen.Port, listen =>
-            {
-                listen.Protocols = HttpProtocols.Http2;
-                if (options.Tls.Mode == TlsMode.None) return;
-                listen.UseHttps(https =>
-                {
-                    // Looked up per handshake so a rotated certificate is served without a restart.
-                    https.ServerCertificateSelector = (_, _) => holder.Current;
-                    https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
-                });
-            });
+            if (GatewayModules.Has(options, GatewayModules.FlightSql))
+                foreach (var url in GatewayListeners.Parsed(options.Listen))
+                    kestrel.Listen(url.Address, url.Port, listen =>
+                    {
+                        listen.Protocols = HttpProtocols.Http2;
+                        if (options.Tls.Mode == TlsMode.None) return;
+                        listen.UseHttps(https =>
+                        {
+                            // Looked up per handshake so a rotated certificate is served without a restart.
+                            https.ServerCertificateSelector = (_, _) => holder.Current;
+                            https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
+                        });
+                    });
             GatewayManagementHost.Listen(kestrel, options, holder);
         });
     }

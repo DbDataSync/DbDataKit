@@ -1,3 +1,4 @@
+using DbDataKit.Hosting.Startup;
 using DbDataKit.Serving.FlightSql;
 using System.Net;
 using DbDataKit.Config;
@@ -32,6 +33,7 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
         ValidateMcp(o, cx);
         ValidateRest(o, cx);
         ValidatePorts(o, cx);
+        ValidatePaths(o, cx);
         ValidateCompression(o.Compression, "Compression", cx);
         ValidateDataSources(o, cx);
         ValidateJwt(o, cx);
@@ -97,12 +99,9 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
     private static void ValidateManagement(GatewayOptions o, IConfigValidationContext cx)
     {
         if (!o.Management.Enabled) return;
-        if (!IPAddress.TryParse(o.Management.Address, out _))
-            cx.Error("Management.Address", $"`Address` is `{o.Management.Address}`, which is not an IP address.", "Use an IP address such as 127.0.0.1 or 0.0.0.0.");
+        ParseListen(cx, "Management.Listen", o.Management.Listen);
         if (o.Tls.Mode == TlsMode.None)
             cx.Error("Management.Enabled", "The management API is https only, and `Tls.Mode` is None.", "Choose another TLS mode (SelfSigned, File or Store), or set `management.enabled: false`.");
-        if (o.Management.Port == o.Listen.Port && o.Listen.Port != 0)
-            cx.Error("Management.Port", "The management API has its own port; it is the Flight port here.", $"Choose another port than {o.Listen.Port}.");
     }
 
     private static void ValidateModules(GatewayOptions o, IConfigValidationContext cx)
@@ -118,57 +117,108 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
     private static void ValidateStore(GatewayOptions o, IConfigValidationContext cx)
     {
         if (!GatewayModules.Has(o, GatewayModules.Store)) return;
-        if (!IPAddress.TryParse(o.Store.Address, out _))
-            cx.Error("Store.Address", $"`Address` is `{o.Store.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
+        ParseListen(cx, "Store.Listen", o.Store.Listen);
     }
 
     private static void ValidateMcp(GatewayOptions o, IConfigValidationContext cx)
     {
         if (!GatewayModules.Has(o, GatewayModules.Mcp)) return;
-        if (!IPAddress.TryParse(o.Mcp.Address, out _))
-            cx.Error("Mcp.Address", $"`Address` is `{o.Mcp.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
+        ParseListen(cx, "Mcp.Listen", o.Mcp.Listen);
     }
 
     /// <summary>
-    /// No two listeners share a port: the Flight port, the management API's, the module listeners that have a port of their own, and the public listener (while a module is on it). The error is on the setting of the later of the two
-    /// in that order, naming the earlier.
+    /// Reads the addresses of a <c>listen</c> setting: each is a Kestrel-style URL (<c>https://0.0.0.0:7820</c>) with the scheme <paramref name="scheme"/>. A bad one is an error on the setting, naming it.
+    /// </summary>
+    internal static List<ListenUrl> ParseListen(IConfigValidationContext cx, string key, IReadOnlyList<string> values, string scheme = "https")
+    {
+        var urls = new List<ListenUrl>();
+        for (var i = 0; i < values.Count; i++)
+        {
+            if (!ListenUrl.TryParse(values[i], out var url, out var problem))
+                cx.Error($"{key}[{i}]", problem, $"Write the address as {scheme}://0.0.0.0:7820, {scheme}://127.0.0.1:9443 or a list of them.");
+            else if (url!.Scheme != scheme)
+                cx.Error($"{key}[{i}]", $"`{values[i]}` is {url.Scheme}; this listener is {scheme}" + (scheme == "https" ? ": it uses the Gateway's certificate." : " because `tls.mode` is None."),
+                    $"Write it as {scheme}://{(url.Host.Contains(':') ? $"[{url.Host}]" : url.Host)}:{url.Port}.");
+            else urls.Add(url);
+        }
+        return urls;
+    }
+
+    /// <summary>
+    /// No two listeners share a port: Flight's, the management API's, the module listeners that have addresses of their own, and the public listener. The error is on the setting of the later of the two
+    /// in that order, naming the earlier. Port 0 is the system's pick and never clashes.
     /// </summary>
     private static void ValidatePorts(GatewayOptions o, IConfigValidationContext cx)
     {
         var listeners = new List<(string Key, string Subject, string Possessive, int Port)>();
-        if (GatewayModules.Has(o, GatewayModules.FlightSql)) listeners.Add(("Listen.Port", "The Flight listener", "the Flight port", o.Listen.Port));
-        if (o.Management.Enabled) listeners.Add(("Management.Port", "The management API", "the management API's", o.Management.Port));
-        void Own(string module, int? port, string key, string subject, string possessive)
+        void Add(string key, string subject, string possessive, IReadOnlyList<string> values)
         {
-            if (GatewayModules.Has(o, module) && port is { } p) listeners.Add((key, subject, possessive, p));
+            foreach (var value in values)
+                if (ListenUrl.TryParse(value, out var url, out _)) listeners.Add((key, subject, possessive, url!.Port));
         }
-        Own(GatewayModules.Identity, o.Identity.Port, "Identity.Port", "The identity home", "the identity home's");
-        Own(GatewayModules.Apps, o.Apps.Port, "Apps.Port", "The apps host", "the apps host's");
-        Own(GatewayModules.Store, o.Store.Port, "Store.Port", "The store module", "the store module's");
-        Own(GatewayModules.Views, o.Views.Port, "Views.Port", "The views module", "the views module's");
-        Own(GatewayModules.Mcp, o.Mcp.Port, "Mcp.Port", "The mcp module", "the mcp module's");
-        Own(GatewayModules.Feeds, o.Rest.Port, "Rest.Port", "The feeds module", "the feeds module's");
-        if (PublicListener.MountedModules(o).Count > 0) listeners.Add(("Public.Port", "The public listener", "the public listener's", o.Public.Port));
+        if (GatewayModules.Has(o, GatewayModules.FlightSql)) Add("Listen", "The Flight listener", "the Flight listener's", o.Listen);
+        if (o.Management.Enabled) Add("Management.Listen", "The management API", "the management API's", o.Management.Listen);
+        void Own(string module, IReadOnlyList<string> values, string key, string subject, string possessive)
+        {
+            if (GatewayModules.Has(o, module)) Add(key, subject, possessive, values);
+        }
+        Own(GatewayModules.Identity, o.Identity.Listen, "Identity.Listen", "The identity home", "the identity home's");
+        Own(GatewayModules.Apps, o.Apps.Listen, "Apps.Listen", "The apps host", "the apps host's");
+        Own(GatewayModules.Store, o.Store.Listen, "Store.Listen", "The store module", "the store module's");
+        Own(GatewayModules.Views, o.Views.Listen, "Views.Listen", "The views module", "the views module's");
+        Own(GatewayModules.Mcp, o.Mcp.Listen, "Mcp.Listen", "The mcp module", "the mcp module's");
+        Own(GatewayModules.Feeds, o.Rest.Listen, "Rest.Listen", "The feeds module", "the feeds module's");
+        Add("Public.Listen", "The public listener", "the public listener's", o.Public.Listen);
+        ParseListen(cx, "Public.Listen", o.Public.Listen);
+        var reported = new HashSet<string>();
         for (var i = 0; i < listeners.Count; i++)
             for (var j = 0; j < i; j++)
-            {
-                // the management API against the Flight port has its message above; port 0 is the system's pick
-                if (listeners[i].Key == "Management.Port") continue;
                 if (listeners[i].Port == listeners[j].Port && listeners[i].Port != 0)
                 {
-                    cx.Error(listeners[i].Key, $"{listeners[i].Subject} has its own port; it is {listeners[j].Possessive} here.", $"Choose another port than {listeners[i].Port}.");
+                    if (reported.Add($"{listeners[i].Key}:{listeners[i].Port}"))
+                        cx.Error(listeners[i].Key, $"{listeners[i].Subject} has its own port; it is {listeners[j].Possessive} here.", $"Choose another port than {listeners[i].Port}.");
+                    break;
+                }
+    }
+
+    /// <summary>
+    /// The path of each module on the public listener (<c>identity.path</c> and the others): one or more segments, no trailing slash, and no two modules on the same path or one inside the other. A module with a <c>listen</c> of its own has no path.
+    /// </summary>
+    private static void ValidatePaths(GatewayOptions o, IConfigValidationContext cx)
+    {
+        var mounted = new List<(string Key, string Module, string Path)>();
+        void Add(string module, string key, string path, IReadOnlyList<string> listen)
+        {
+            if (!GatewayModules.Has(o, module) || listen.Count > 0) return;
+            if (!PublicPaths.IsPrefix(path))
+            {
+                cx.Error(key, $"`{path}` is not a path: a module's path starts with a slash, has no slash at the end and is made of letters, digits and - . _ ~.", $"Write it as /{module} or another path such as /{module}-v2.");
+                return;
+            }
+            mounted.Add((key, module, path));
+        }
+        Add(GatewayModules.Identity, "Identity.Path", o.Identity.Path, o.Identity.Listen);
+        Add(GatewayModules.Apps, "Apps.Path", o.Apps.Path, o.Apps.Listen);
+        Add(GatewayModules.Store, "Store.Path", o.Store.Path, o.Store.Listen);
+        Add(GatewayModules.Views, "Views.Path", o.Views.Path, o.Views.Listen);
+        Add(GatewayModules.Mcp, "Mcp.Path", o.Mcp.Path, o.Mcp.Listen);
+        Add(GatewayModules.Feeds, "Rest.Path", o.Rest.Path, o.Rest.Listen);
+        for (var i = 0; i < mounted.Count; i++)
+            for (var j = 0; j < i; j++)
+            {
+                var (a, b) = (mounted[i].Path, mounted[j].Path);
+                if (a == b || a.StartsWith(b + "/", StringComparison.Ordinal) || b.StartsWith(a + "/", StringComparison.Ordinal))
+                {
+                    cx.Error(mounted[i].Key, $"The {mounted[i].Module} module's path `{a}` is the same as, or inside, the path `{b}` of the {mounted[j].Module} module.", "Give each module a path of its own.");
                     break;
                 }
             }
-        if (!IPAddress.TryParse(o.Public.Address, out _) && PublicListener.MountedModules(o).Count > 0)
-            cx.Error("Public.Address", $"`Address` is `{o.Public.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
     }
 
     private static void ValidateRest(GatewayOptions o, IConfigValidationContext cx)
     {
         if (!GatewayModules.Has(o, GatewayModules.Feeds)) return;
-        if (!IPAddress.TryParse(o.Rest.Address, out _))
-            cx.Error("Rest.Address", $"`Address` is `{o.Rest.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
+        ParseListen(cx, "Rest.Listen", o.Rest.Listen);
         if (o.Rest.DefaultLimit > o.Rest.MaxRows)
             cx.Error("Rest.DefaultLimit", $"`DefaultLimit` is {o.Rest.DefaultLimit}, more than `MaxRows` ({o.Rest.MaxRows}).", "Set a default at or below the most a call may ask for.");
     }
@@ -176,8 +226,7 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
     private static void ValidateViews(GatewayOptions o, IConfigValidationContext cx)
     {
         if (!GatewayModules.Has(o, GatewayModules.Views)) return;
-        if (!IPAddress.TryParse(o.Views.Address, out _))
-            cx.Error("Views.Address", $"`Address` is `{o.Views.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
+        ParseListen(cx, "Views.Listen", o.Views.Listen);
         var export = o.Views.Export;
         if (!string.IsNullOrEmpty(export.Mode) && export.Mode is not ("pinned" or "system"))
             cx.Error("Views.Export.Mode", $"`Mode` is `{export.Mode}`.", "Use `pinned` (the Chromium chromium.pin names) or `system` (an installed Chrome or Edge at `Path`); leave it out to keep export off.");
@@ -193,8 +242,7 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
         if (o.Apps.AllowedPackages.Count > 0 && string.IsNullOrWhiteSpace(o.Apps.PackageStore))
             cx.Warning("Apps.AllowedPackages", "`allowedPackages` lists packages and no `packageStore` says where they are vendored, so no build can use them.", "Set `Apps.PackageStore` to the folder `Shared/web/app-store/build.mjs` made.");
         if (!GatewayModules.Has(o, GatewayModules.Apps)) return;
-        if (!IPAddress.TryParse(o.Apps.Address, out _))
-            cx.Error("Apps.Address", $"`Address` is `{o.Apps.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
+        ParseListen(cx, "Apps.Listen", o.Apps.Listen);
         if (string.IsNullOrWhiteSpace(o.Apps.Home.ClientId))
             cx.Error("Apps.Home.ClientId", "The apps host signs people in through an identity home and needs the id of the client registered there for it.", "Register one (`identity client-add` with the redirect URI <public url>/apps/-/callback) and set `Home.ClientId`.");
         if (string.IsNullOrWhiteSpace(o.Apps.Home.Authority))
@@ -214,8 +262,7 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
     private static void ValidateIdentity(GatewayOptions o, IConfigValidationContext cx)
     {
         if (!GatewayModules.Has(o, GatewayModules.Identity)) return;
-        if (!IPAddress.TryParse(o.Identity.Address, out _))
-            cx.Error("Identity.Address", $"`Address` is `{o.Identity.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0 or 127.0.0.1.");
+        ParseListen(cx, "Identity.Listen", o.Identity.Listen);
         if (o.Tls.Mode == TlsMode.None)
             cx.Error("Identity.Enabled", "The identity home is https only (a passkey needs a secure origin), and `Tls.Mode` is None.", "Use SelfSigned, File or Store, or leave the identity home off.");
         if (!string.IsNullOrWhiteSpace(o.Identity.PublicUrl)
@@ -238,8 +285,9 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
 
     private static void ValidateListenAndTls(GatewayOptions o, IConfigValidationContext cx)
     {
-        if (!IPAddress.TryParse(o.Listen.Address, out var address))
-            cx.Error("Listen.Address", $"`Address` is `{o.Listen.Address}`, which is not an IP address.", "Use an IP address such as 0.0.0.0, 127.0.0.1 or ::1.");
+        // Flight SQL is https with a certificate and plain http only when TLS is off
+        var flight = ParseListen(cx, "Listen", o.Listen, o.Tls.Mode == TlsMode.None ? "http" : "https");
+        var address = flight.Count > 0 ? flight[0].Address : null;
 
         switch (o.Tls.Mode)
         {
@@ -252,7 +300,7 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
                     cx.Error("Tls.CertificateThumbprint", "`CertificateThumbprint` or `CertificateSubject` is required when `Tls.Mode` is Store.", "Set the thumbprint (or a subject name) of the certificate in the store, or use SelfSigned.");
                 break;
             case TlsMode.None:
-                if (address is not null && !IPAddress.IsLoopback(address))
+                if (flight.Any(u => !IPAddress.IsLoopback(u.Address)))
                     cx.Warning("Tls.Mode", "TLS is off and the gateway listens on a non-loopback address: credentials and data travel in clear text.", "Use SelfSigned, File or Store outside local testing.");
                 if (!string.IsNullOrWhiteSpace(o.Tls.CertificatePath) || !string.IsNullOrWhiteSpace(o.Tls.CertificatePassword))
                     cx.Warning("Tls.CertificatePath", "A certificate is configured but `Tls.Mode` is None, so it is not used.");

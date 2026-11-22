@@ -104,10 +104,11 @@ public static class RunnerServer
         });
         // stopping waits for the running tasks to take their cancellation, and then for the processes to go
         builder.Services.Configure<HostOptions>(h => h.ShutdownTimeout = TimeSpan.FromTicks(Math.Max(h.ShutdownTimeout.Ticks, (settings.CancellationGrace + TimeSpan.FromSeconds(30)).Ticks)));
-        var address = settings.Listen.HostNameType == UriHostNameType.Dns && settings.Listen.Host != "localhost"
-            ? IPAddress.Any
-            : settings.Listen.Host == "localhost" ? IPAddress.Loopback : IPAddress.Parse(settings.Listen.Host);
-        builder.WebHost.ConfigureKestrel(o => o.Listen(address, settings.Listen.Port, listen => listen.UseHttps(certificate)));
+        builder.WebHost.ConfigureKestrel(o =>
+        {
+            foreach (var each in settings.ListenAll.Count > 0 ? settings.ListenAll : [settings.Listen])
+                o.Listen(DbDataKit.Hosting.Startup.ListenPorts.AddressOf(each), each.Port, listen => listen.UseHttps(certificate));
+        });
 
         // the joins this server is waiting on, which the console's callback confirms during the join step of its start
         builder.Services.AddSingleton<PendingJoins>();
@@ -139,7 +140,7 @@ public static class RunnerServer
         app.MapCertificateStatus(() => certificate);   // days left and subject, for the console's Monitoring (UI10)
         // the server upgrades itself when the console says so (plan 24a UC09)
         DbDataKit.Upgrade.UpgradeSetup.MapUpgrade(app, RunnerSettings.Product, Version, RunnerService.RegistrationName, settings.Listen.Port, new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), () => [.. clients.All().Select(c => new DbDataKit.Upgrade.PeerGeneration(c.Name, c.Generation))]);
-        RunnerApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), instanceId, new RunnerApiOptions("/api/v1", RunnerCallers.TokenResolver, RunnerSettings.Product, Version));
+        RunnerApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), instanceId, new RunnerApiOptions("/api/v1", RunnerCallers.TokenResolver, RunnerSettings.Product, Version) { ControlApprovals = new ControlRunApprovalVerifier(instanceId, clients, new MemoryReplayCache()) });
         RunnerPublishApi.Map(app, new RunnerPublishing(state, settings.MaxArtifactBytes, settings.SignatureVerifier, settings.InstanceLease, new DbDataKit.Runner.Staging.ActivationOptions { MaxWait = settings.ActivationMaxWait }));
         RunnerSecretsApi.Map(app, state, () => groupSecrets.Store, "/api/v1", RunnerCallers.TokenResolver,
             connections: () => RunnerConnections.Inventory(state, app.Services.GetRequiredService<RunnerEngine>().Group, RunnerSettings.Product, settings.ToHostSettings().ConnectionsDirectory),

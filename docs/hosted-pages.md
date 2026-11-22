@@ -6,35 +6,38 @@ Which pages and paths each service answers, who opens them, how they are set and
 
 | Listener | Default | What it answers |
 | --- | --- | --- |
-| Public | `public:` in `server.yaml`, address `0.0.0.0`, port 8817, the Gateway's certificate | the HTTP modules `identity`, `apps`, `store`, `views`, `feeds` and `mcp` that are in `modules:` and have no port of their own |
-| Flight SQL | `listen:` in `server.yaml`, address `0.0.0.0`, port 8815 | gRPC for Flight SQL clients. No HTML. |
-| Management | `management:` in `server.yaml`, address `127.0.0.1`, port 8816 | the API at `/api/v1/...` that the console and the command lines call. No HTML. |
+| Public | `public.listen` in `server.yaml`, every address, a free port of the block 7820 to 7839 until one is written; the Gateway's certificate | the HTTP modules `identity`, `apps`, `store`, `views`, `feeds` and `mcp` that are in `modules:` and have no `listen` of their own |
+| Flight SQL | `listen` in `server.yaml`, every address, a free port of the block until one is written | gRPC for Flight SQL clients. No HTML. |
+| Management | `management.listen` in `server.yaml`, the loopback address, a free port of the block until one is written | the API at `/api/v1/...` that the console and the command lines call. No HTML. |
 
 On the public listener:
 
 - `/health/live` answers `Healthy`. `/health`, `/health/ready` and `/version` are on the management listener.
+- Every module is under a path of its own: `/identity`, `/apps`, `/store`, `/views`, `/feeds` and `/mcp` by default. The administrator sets each one with the module's `path` setting (`identity.path`, `apps.path`, `store.path`, `views.path`, `rest.path` for feeds, `mcp.path`), one or more segments such as `/data/store`, with no slash at the end. HTML pages are allowed under any of them.
 - A path that no module claims answers 404 with a JSON body. `/` is such a path, except at a name bound to an app instance (see "How an app instance is placed").
-- A module with a `port` of its own listens there and has no prefix; `https://gateway:9443/api/v1/models` answers and `https://gateway:8817/store/api/v1/models` is a 404.
-- A module hands its own application the request with the prefix moved to `PathBase`, so the paths below are the ones a client uses on the public listener.
+- A module with a `listen` of its own listens there and has no path; `https://gateway:9443/api/v1/models` answers and `https://gateway:7820/store/api/v1/models` is a 404.
+- A module hands its own application the request with the path moved to `PathBase`, so the paths below are the ones a client uses on the public listener with the default settings. With `store.path: /warehouse`, the store answers at `/warehouse/api/v1/models` and `/store/api/v1/models` is a 404.
 
 ## Identity
 
-Pages are HTML. The paths are the same on the public listener and on a home that runs on its own (`dbdatakit identity run`, port 8482).
+Pages are HTML. On the public listener the home is under `/identity` (`identity.path`), and its issuer is the listener's address with that path, `https://gateway:7820/identity`. A home that runs on its own (`dbdatakit identity run`, port 7819) has no path: its issuer is `https://localhost:7819`, its pages and calls are the paths of the second column of the table, and `/invite` and `/api/...` are at its root. The table gives the paths on the public listener.
 
 | Path | What | Format | Who |
 | --- | --- | --- | --- |
 | `/identity/sign-in` | passkey sign-in page | HTML | end user |
-| `/invite` | accept an invitation | HTML | invitee |
-| `/identity/upstream/entra` and `/identity/upstream/entra/callback` | Entra sign-in, only when `identity.entra.authority` is set; a failure shows the sign-in page with status 403 | redirect, HTML | end user |
+| `/identity/invite` | accept an invitation; the first-run invitation and `identity invite` name this address | HTML | invitee |
+| `/identity/upstream/entra` and `/identity/upstream/entra/callback` | Entra sign-in, only when `identity.entra.authority` is set; the redirect URI registered in the tenant is `<issuer>/upstream/entra/callback`; a failure shows the sign-in page with status 403 | redirect, HTML | end user |
 | `/identity/upstream/windows` | Windows sign-in, only when `identity.windows.enabled` is true | redirect, HTML | end user |
-| `/.well-known/openid-configuration` | discovery document; its issuer is the public listener's address (`https://gateway:8817`) unless `identity.publicUrl` is set | JSON | clients |
+| `/identity/.well-known/openid-configuration` | discovery document, at `<issuer>/.well-known/openid-configuration`; its issuer is the public listener's address and the path (`https://gateway:7820/identity`), with `identity.publicUrl` in place of the address when it is set | JSON | clients |
 | `/identity/jwks`, `/identity/authorize`, `/identity/token`, `/identity/userinfo`, `/identity/end-session` | the OpenID Connect provider | JSON, redirect | clients, browsers |
-| `/api/auth/...`, `/api/invites...`, `/api/users...` | sign-in calls, invitations, users | JSON | the sign-in pages, administrators |
-| `/api/access-tokens` | personal access tokens | JSON | end user |
+| `/identity/api/auth/...`, `/identity/api/invites...`, `/identity/api/users...` | sign-in calls, invitations, users | JSON | the sign-in pages, administrators |
+| `/identity/api/access-tokens` | personal access tokens | JSON | end user |
+
+`/invite`, `/api/auth/...` and `/.well-known/openid-configuration` at the root of the public listener answer 404. A console, an app or a script that stored the old issuer `https://gateway:7820` is set to the full issuer URL, `https://gateway:7820/identity` (the console's `--identity-home`, an app host's `apps.home.authority`).
 
 ## Apps
 
-Every path is under `/apps`. The prefix is fixed. Pages are HTML.
+Every path is under the apps path, `/apps` unless `apps.path` says another. The paths below are the default ones. Pages are HTML. The redirect URI the apps host registers for its sign-in is `<apps path>/-/callback` on the listener (`https://gateway:7820/apps/-/callback`), and `https://<name>/<apps path>/-/callback` at a name bound to an instance.
 
 | Path | What | Format | Who |
 | --- | --- | --- | --- |

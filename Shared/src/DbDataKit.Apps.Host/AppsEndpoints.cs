@@ -36,7 +36,7 @@ public static class AppsEndpoints
             if (instances.Resolve(instance) is not { } resolved) { await Text(context, 404, "No such app."); return; }
             if (await sessions.FindAsync(context.Request.Cookies[SessionCookie], context.RequestAborted) is not { } session)
             {
-                context.Response.Redirect((await client.BeginAsync(context.Request.Path.Value!, context.RequestAborted, AppAddressing.CallbackFor(context))).AbsoluteUri);
+                context.Response.Redirect((await client.BeginAsync(AppsPaths.ToPublic(context.Request.Path.Value!), context.RequestAborted, AppAddressing.CallbackFor(context))).AbsoluteUri);
                 return;
             }
             if (session.RolesOn(instance).Count == 0) { await Text(context, 403, "The identity home gives you no role on this app."); return; }
@@ -109,7 +109,7 @@ public static class AppsEndpoints
                 var session = sessions.Create(result.Identity, result.Grant.RefreshToken);
                 context.Response.Cookies.Append(SessionCookie, session.Id, new CookieOptions
                 {
-                    HttpOnly = true, Secure = true, Path = AppAddressing.Of(context)?.Binding is null ? "/apps/" : "/", Expires = session.ExpiresAtUtc,
+                    HttpOnly = true, Secure = true, Path = AppAddressing.Of(context)?.Binding is null ? AppsPaths.BasePath : "/", Expires = session.ExpiresAtUtc,
                     // None: a portal on another site frames an instance (AP07), and the frame must carry the person's session. Nothing the cookie authorises changes state without the shell's own header (a cross-site page cannot send it: that
                     // needs a CORS preflight this host never answers), and who may frame the page is `frame-ancestors`. (Lax would do for the sign-in alone: the browser arrives from the home, and Strict is withheld on that navigation.)
                     SameSite = SameSiteMode.None,
@@ -186,7 +186,7 @@ public static class AppsEndpoints
             {
                 // at a bound name the person returns to the name's own address, not to the instance's subpath
                 var bound = AppAddressing.Of(context)?.Binding is not null;
-                var back = bound ? AppAddressing.PublicPath(context) + "?launch" : portal is null ? LaunchUrl(instance) : context.Request.Path.Value!;
+                var back = bound ? AppAddressing.PublicPath(context) + "?launch" : portal is null ? LaunchUrl(instance) : AppsPaths.ToPublic(context.Request.Path.Value!);
                 context.Response.Redirect((await client.BeginAsync(back, context.RequestAborted, AppAddressing.CallbackFor(context))).AbsoluteUri);
                 return;
             }
@@ -233,7 +233,7 @@ public static class AppsEndpoints
     private static string PersonOf(AppSession session) => session.Identity.Name ?? session.Identity.Email ?? session.Identity.UserId;
 
     /// <summary>The stable address that signs a person in and opens the instance.</summary>
-    public static string LaunchUrl(string instance) => $"/apps/{Uri.EscapeDataString(instance)}/?launch";
+    public static string LaunchUrl(string instance) => $"{AppsPaths.Prefix}/{Uri.EscapeDataString(instance)}/?launch";
 
     public static AppShell.Header HeaderOf(AppInstanceStore instances, AppSession session, string instance)
     {
@@ -263,7 +263,7 @@ public static class AppsEndpoints
 
     /// <summary>Only a path of this host's apps may be returned to; anything else would make the callback an open redirect.</summary>
     private static string SafeReturn(string? returnUrl, bool atBoundName = false) =>
-        returnUrl is { Length: > 0 } && (returnUrl.StartsWith("/apps/", StringComparison.Ordinal) || (atBoundName && returnUrl.StartsWith('/'))) && !returnUrl.Contains('\\') && !returnUrl.StartsWith("//") ? returnUrl : "/";
+        returnUrl is { Length: > 0 } && (returnUrl.StartsWith(AppsPaths.BasePath, StringComparison.Ordinal) || (atBoundName && returnUrl.StartsWith('/'))) && !returnUrl.Contains('\\') && !returnUrl.StartsWith("//") ? returnUrl : "/";
 
     private static async Task Write(HttpContext context, AppResponse response)
     {

@@ -58,8 +58,8 @@ public sealed partial class ManagementTests : IAsyncLifetime
         Write("connections/erp.yaml", Conn.Yaml("erp", connectionString: "Server=s;Encrypt=True", auth: "auth: { mode: sql, user: u, password_secret: 'env:ERP_DB_PASSWORD' }"));
         var args = new List<string>
         {
-            $"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Listen:Address=127.0.0.1", "--Gateway:Listen:Port=0",
-            $"--Gateway:Management:Enabled={management}", "--Gateway:Management:Address=127.0.0.1", "--Gateway:Management:Port=0",
+            $"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Listen=https://127.0.0.1:0",
+            $"--Gateway:Management:Enabled={management}", "--Gateway:Management:Listen=https://127.0.0.1:0",
             $"--Gateway:Management:LocalChannel={localChannel}",
         };
         if (localDirectory is not null) args.Add($"--Gateway:Management:LocalChannelDirectory={localDirectory}");
@@ -68,7 +68,7 @@ public sealed partial class ManagementTests : IAsyncLifetime
         for (var attempt = 1; ; attempt++)
         {
             managementPort = FreePort();
-            var arguments = args.Select(a => a.StartsWith("--Gateway:Management:Port=", StringComparison.Ordinal) ? $"--Gateway:Management:Port={managementPort}" : a).ToArray();
+            var arguments = args.Select(a => a.StartsWith("--Gateway:Management:Listen=https://127.0.0.1:", StringComparison.Ordinal) ? $"--Gateway:Management:Listen=https://127.0.0.1:{managementPort}" : a).ToArray();
             app = GatewayHost.Build(arguments);
             try
             {
@@ -254,14 +254,14 @@ public sealed partial class ManagementTests : IAsyncLifetime
     [Fact]
     public void The_options_refuse_a_management_api_without_tls_or_on_the_flight_port()
     {
-        using var file = TempConfig.Create(("server.yaml", "tls: { mode: none }\nlisten: { address: 127.0.0.1 }\nmanagement: { enabled: true }\n"));
+        using var file = TempConfig.Create(("server.yaml", "tls: { mode: none }\nlisten: http://127.0.0.1:9000\nmanagement: { enabled: true }\n"));
         var load = ConfigTestSupport.LoadDirectory(file.Directory);
         Assert.False(load.Ok);
         Assert.Contains(load.Diagnostics, d => d.KeyPath == "Management.Enabled");
 
-        using var same = TempConfig.Create(("server.yaml", "listen: { address: 127.0.0.1, port: 8816 }\nmanagement: { enabled: true, port: 8816 }\n"));
+        using var same = TempConfig.Create(("server.yaml", "listen: http://127.0.0.1:8816\ntls: { mode: none }\nmanagement: { enabled: true, listen: https://127.0.0.1:8816 }\n"));
         var clash = ConfigTestSupport.LoadDirectory(same.Directory);
-        Assert.Contains(clash.Diagnostics, d => d.KeyPath == "Management.Port");
+        Assert.Contains(clash.Diagnostics, d => d.KeyPath == "Management.Listen");
     }
 
     // ---- data sources (P04) ----

@@ -126,6 +126,41 @@ public sealed class ServerStartupTests : IDisposable
     }
 
     [Fact]
+    public async Task A_listen_setting_that_is_a_list_makes_the_server_listen_on_every_address_of_it()
+    {
+        // two free ports: held for a moment to be named, then given back
+        int first, second;
+        using (var a = Hold(out first)) using (var b = Hold(out second)) { }
+        File.WriteAllText(Path.Combine(_directory, "server.yaml"), $"listen: [https://127.0.0.1:{first}, https://127.0.0.1:{second}]\n");
+        var written = new StringWriter();
+        var output = TextWriter.Synchronized(written);
+        using var stop = new CancellationTokenSource();
+        var run = RunnerCli.Router(_ => null).RunAsync(["server", "run", "--repo", _directory], new CliContext(output, TextWriter.Null, TextReader.Null, stop.Token));
+        await Until(() => Text(output, written).Contains("Serving on", StringComparison.Ordinal) || run.IsCompleted);
+        Assert.False(run.IsCompleted, "the server stopped instead of serving " + (File.Exists(FailureFile) ? File.ReadAllText(FailureFile) : ""));
+        foreach (var port in new[] { first, second })
+        {
+            using var client = new TcpClient();
+            await client.ConnectAsync(IPAddress.Loopback, port);
+            Assert.True(client.Connected, $"nothing listens on {port}");
+        }
+        // a list is the same as one address: the first is the one the server reports
+        Assert.Contains($"https://127.0.0.1:{first}", Text(output, written));
+        stop.Cancel();
+        Assert.Equal(0, await run);
+    }
+
+    [Fact]
+    public async Task A_listen_flag_that_is_a_list_is_read_and_a_bad_address_in_it_is_refused()
+    {
+        var error = new StringWriter();
+        var exit = await RunnerCli.Router(_ => null).RunAsync(["server", "run", "--repo", _directory, "--listen", "https://127.0.0.1:0;7841"], new CliContext(TextWriter.Null, error, TextReader.Null));
+        Assert.NotEqual(0, exit);
+        Assert.Contains("--listen", error.ToString());
+        Assert.Contains("'7841'", error.ToString());
+    }
+
+    [Fact]
     public async Task A_clean_start_leaves_no_failure_file()
     {
         var written = new StringWriter();

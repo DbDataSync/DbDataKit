@@ -32,6 +32,8 @@ tasks:
     counters: [rows]
 ```
 
+**Capabilities.** `capabilities` is a list of labels the console shows. One has a meaning to the Runner: `ddl` marks a task that creates, alters or drops tables. Such a task is manual-only (no schedule, no trigger but `manual`; the validator names `tasks[i].capabilities` otherwise), and the Runner starts it only on the control service's signed approval (`PackageTask.IsDdl`, `ControlRunApprovals` in `DbDataKit.Runner.Api`; `DbDataRunner/README.md`, "Tasks that change table structure").
+
 **Connection access** (plan 21 CH03, an optional key of a connection slot, added to `package/1` in place by the owner's decision of 2026-11-12). `access: read` says the task only reads the connection: in a release channel other than `prod` that binds nothing for the slot, the runner serves production's binding (the resolution is `DefinitionPublisher.ResolveSlots`; publish, stage, activate and switch all use it). A slot that says nothing, or `write`, must be bound in every channel and is refused naming slot and channel otherwise. A name two tasks declare is read only when every task says read. Any other value is an error naming the file and `connections[i].access`. `ConnectionSlot.Access` carries it; the package's `slots` in `GET /api/v1/definitions/integration/{name}` say `access` and the Runner's bindings card shows a read slot and the binding it inherits.
 
 **Runtime packages** (plan 28c E04, a newer feature of `package/1`). An engine is published once as a *runtime package* and many *definition packages* name it:

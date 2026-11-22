@@ -45,12 +45,12 @@ public sealed class ModuleHealthTests : IAsyncLifetime
             while (ports.Count < 4) ports.Add(FreePort());
             var p = ports.ToArray();
             app = GatewayHost.Build([
-                $"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Management:Enabled=false", "--Gateway:Listen:Address=127.0.0.1", "--Gateway:Listen:Port=0",
+                $"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Management:Enabled=false", "--Gateway:Listen=https://127.0.0.1:0",
                 "--Gateway:Modules:0=flightsql", "--Gateway:Modules:1=identity", "--Gateway:Modules:2=apps", "--Gateway:Modules:3=store", "--Gateway:Modules:4=views",
-                $"--Gateway:Identity:Address=127.0.0.1", $"--Gateway:Identity:Port={p[0]}", $"--Gateway:Identity:PublicUrl=https://localhost:{p[0]}",
-                "--Gateway:Apps:Address=127.0.0.1", $"--Gateway:Apps:Port={p[1]}", "--Gateway:Apps:Home:ClientId=health-test",
-                "--Gateway:Store:Address=127.0.0.1", $"--Gateway:Store:Port={p[2]}",
-                "--Gateway:Views:Address=127.0.0.1", $"--Gateway:Views:Port={p[3]}",
+                $"--Gateway:Identity:Listen=https://127.0.0.1:{p[0]}", $"--Gateway:Identity:PublicUrl=https://localhost:{p[0]}",
+                $"--Gateway:Apps:Listen=https://127.0.0.1:{p[1]}", "--Gateway:Apps:Home:ClientId=health-test",
+                $"--Gateway:Store:Listen=https://127.0.0.1:{p[2]}",
+                $"--Gateway:Views:Listen=https://127.0.0.1:{p[3]}",
             ]);
             try { await app.StartAsync(); return; }
             catch (IOException ex) when (attempt < 5 && ex.Message.Contains("address already in use", StringComparison.OrdinalIgnoreCase)) { await app.DisposeAsync(); }

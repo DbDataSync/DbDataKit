@@ -49,18 +49,15 @@ public sealed class GatewayMcpModule(IOptionsMonitor<GatewayOptions> options, St
 
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();
-        var inProcess = ModuleListener.Configure(builder, current.Mcp.Address, current.Mcp.Port, (_, _) => certificate.Current);
+        var inProcess = ModuleListener.Configure(builder, current.Mcp.Listen, (_, _) => certificate.Current);
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy"));
         Map(app, server, approvals, endpoint: inProcess is null ? "/mcp" : "/");
         await app.StartAsync(cancellationToken);
         _app = app;
         _draining = false;
-        ModuleListener.Mount(mounts, inProcess, host => new PublicMount { Name = Name, Server = host, StripPrefix = PublicPrefix });
+        ModuleListener.Mount(mounts, inProcess, host => new PublicMount { Name = Name, Server = host, Prefix = PublicPaths.Of(current, GatewayModules.Mcp) });
     }
-
-    /// <summary>The path prefix of the module on the public listener: the endpoint is <c>/mcp</c> there as on a port of its own.</summary>
-    public const string PublicPrefix = "/mcp";
 
     private void Map(WebApplication app, McpServer server, McpApprovals approvals, string endpoint)
     {

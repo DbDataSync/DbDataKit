@@ -4,7 +4,7 @@
     "DataDirectory": "C:\\data\\gateway",
     "LogSql": false,
     "RequireReferencedSecrets": true,
-    "Listen": { "Address": "::1", "Port": 8815 },
+    "Listen": [ "https://[::1]:8815", "https://127.0.0.1:8825" ],
     "Tls": { "Mode": "File", "CertificatePath": "C:\\certs\\gateway.pfx", "CertificatePassword": "env:PFX_PW", "Hostnames": [ "gateway.example.com" ] },
     "Compression": { "Mode": "Grpc", "Codec": "gzip", "AllowClientOverride": false },
     "Auth": { "SessionIdleMinutes": 10, "AllowPassThrough": false, "Windows": true, "Jwt": { "Authority": "https://login.microsoftonline.com/t/v2.0", "Audience": "api://x", "Mappings": [ { "Claim": "groups", "Value": "g1", "DataSources": [ "*" ] } ] } },

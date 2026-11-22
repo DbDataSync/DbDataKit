@@ -26,6 +26,10 @@ function find(node: ReactNode, testId: string): ReactElement<Record<string, unkn
 const prop = (over: Partial<TaskPanelViewProps>, id: string, name: string) => find(TaskPanelView(props(over)), id)!.props[name]
 
 describe('the task panel', () => {
+  it('offers no run for a task that creates, alters or drops tables', () => {
+    expect(html()).toContain('runner-task-run-with-inputs')
+    expect(html({ task: { ...task, ddl: true } })).not.toContain('runner-task-run-inputs')
+  })
   it('says who schedules the task, since when, set by whom and why', () => {
     const text = html()
     expect(text).toContain('data-owner="old"')

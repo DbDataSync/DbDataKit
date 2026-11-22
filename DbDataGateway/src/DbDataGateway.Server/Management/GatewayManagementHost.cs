@@ -41,7 +41,7 @@ public static class GatewayManagementHost
             throw new InvalidOperationException($"The join request {ServerJoin.RequestPath(dataDirectory)} cannot be used: the management API is off here (`management.enabled: false`, or `tls.mode` None), "
                 + "so the console cannot call this gateway back. Turn the management API on and start the gateway again.");
         var holder = app.Services.GetRequiredService<TlsCertificateHolder>();
-        var listen = new Uri($"https://{(options.Management.Address.Contains(':') ? $"[{options.Management.Address}]" : options.Management.Address)}:{options.Management.Port}");
+        var listen = GatewayListeners.Parsed(options.Management.Listen).FirstOrDefault()?.ToUri() ?? throw new InvalidOperationException("The management API has no address to listen on.");
         try
         {
             await ServerJoin.RunAsync(dataDirectory,
@@ -56,20 +56,21 @@ public static class GatewayManagementHost
     public static void Listen(KestrelServerOptions kestrel, GatewayOptions options, TlsCertificateHolder holder)
     {
         if (!options.Management.Enabled || options.Tls.Mode == TlsMode.None) return;
-        kestrel.Listen(IPAddress.Parse(options.Management.Address), options.Management.Port, listen =>
-        {
-            listen.Use(next => async connection =>
+        foreach (var url in GatewayListeners.Parsed(options.Management.Listen))
+            kestrel.Listen(url.Address, url.Port, listen =>
             {
-                connection.Items[ListenerItem] = true;
-                await next(connection);
+                listen.Use(next => async connection =>
+                {
+                    connection.Items[ListenerItem] = true;
+                    await next(connection);
+                });
+                listen.Protocols = HttpProtocols.Http1AndHttp2;
+                listen.UseHttps(https =>
+                {
+                    https.ServerCertificateSelector = (_, _) => holder.Current;
+                    https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
+                });
             });
-            listen.Protocols = HttpProtocols.Http1AndHttp2;
-            listen.UseHttps(https =>
-            {
-                https.ServerCertificateSelector = (_, _) => holder.Current;
-                https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
-            });
-        });
     }
 
     private static bool OnManagementListener(HttpContext context) => context.Features.Get<IConnectionItemsFeature>()?.Items.ContainsKey(ListenerItem) == true;
@@ -227,7 +228,7 @@ public static class GatewayManagementHost
         app.MapPairing(new PairingService(instanceId,
             () => holder.Current is { } certificate ? PairingProof.CertificateFingerprint(certificate) : throw new InvalidOperationException("This server has no certificate to pair against."),
             clients, files.Codes()));
-        app.AnnounceToConsole("dbdatagateway", instanceId, options.Management.Port, clients, files.Codes());
+        app.AnnounceToConsole("dbdatagateway", instanceId, GatewayListeners.Parsed(options.Management.Listen).FirstOrDefault()?.Port ?? 0, clients, files.Codes());
         app.MapKeyRotation(new KeyRotationService(instanceId, clients, new StateReplayCache(used, "key-rotation:" + instanceId)));
         // the console's callback during the join step, on the management listener the join names
         app.MapJoinCallback(app.Services.GetRequiredService<PendingJoins>());
@@ -235,7 +236,7 @@ public static class GatewayManagementHost
         (joinTarget.State, joinTarget.Clients, joinTarget.InstanceId) = (state, clients, instanceId);
 
         // the server upgrades itself when the console says so (plan 24a UC09); its own route wins over the catch-all below
-        DbDataKit.Upgrade.UpgradeSetup.MapUpgrade(app, "dbdatagateway", GatewayHost.Version, GatewayHost.RegistrationName, options.Management.Port, audit, () => [.. clients.All().Select(c => new DbDataKit.Upgrade.PeerGeneration(c.Name, c.Generation))]);
+        DbDataKit.Upgrade.UpgradeSetup.MapUpgrade(app, "dbdatagateway", GatewayHost.Version, GatewayHost.RegistrationName, GatewayListeners.Parsed(options.Management.Listen).FirstOrDefault()?.Port ?? 0, audit, () => [.. clients.All().Select(c => new DbDataKit.Upgrade.PeerGeneration(c.Name, c.Generation))]);
         // the shared publish API's uploads (plan 30 PB02): streamed, so they are not the JSON calls below
         var definitionsApi = new DbDataGateway.Server.Management.GatewayDefinitionsManagement(state, audit);
         app.MapMethods($"{GatewayManagement.Prefix}/artifacts/{{sha256}}", ["HEAD", "GET", "PUT"], async (string sha256, HttpContext context) =>
