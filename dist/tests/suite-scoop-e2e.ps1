@@ -292,7 +292,8 @@ try {
     $programDataGit = Join-Path $env:ProgramData 'Git\config'
     if (Test-Path $programDataGit) { & git config --file $programDataGit --unset-all safe.directory 2>&1 | Out-Null }
     $left = Native 'safe-directory-after' { & git config --show-origin --get-all safe.directory }
-    Assert ($left.Text.Trim() -eq '') "no git settings of the machine allow a repository despite its owner (before: $($allowed.Text.Trim()); now: $($left.Text.Trim()))"
+    # an empty file reads back as null
+    Assert (([string]$left.Text).Trim() -eq '') "no git settings of the machine allow a repository despite its owner (before: $(([string]$allowed.Text).Trim()); now: $(([string]$left.Text).Trim()))"
     $config = Join-Path $data 'gateway\config'
     Remove-Item -LiteralPath (Join-Path $data 'gateway') -Recurse -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force $config | Out-Null
