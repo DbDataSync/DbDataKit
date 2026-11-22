@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 
 // The types of this assembly moved to DbDataKit.Sync.Drivers.Descriptor with their namespaces unchanged; these forwards let an assembly built against this one
-// (a compiled driver, a cached script) find them there.
+// (a driver plugin built with the DbDataSync.Drivers.Abstractions package, say) find them there.
 [assembly: TypeForwardedTo(typeof(DbDataSync.Drivers.Descriptor.DescriptorCapabilitiesYaml))]
 [assembly: TypeForwardedTo(typeof(DbDataSync.Drivers.Descriptor.DescriptorConnectionStringKeysYaml))]
 [assembly: TypeForwardedTo(typeof(DbDataSync.Drivers.Descriptor.DescriptorDialect))]

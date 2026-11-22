@@ -18,6 +18,14 @@ public sealed class SyncInProcessTests : IDisposable
     private const string Task = """
         schemaVersion: 2
         name: customers
+        scheduling:
+          mode: Continuous
+          frequencySeconds: 30
+        changeProcessing:
+          reader:
+            kind: MsSqlChangeTracking
+          cache:
+            kind: StagingTable
         endpoints:
           source:
             connectionName: crm
