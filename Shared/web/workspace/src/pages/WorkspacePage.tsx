@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { DraftProvider, findingsKey, filesKey, useDraft, useDraftFile } from '../draft'
 import { designerOf, designerPath, filesPath } from '../designers'
@@ -56,6 +56,10 @@ function FileEditor({ project, id, kind, path, paths, editable, canWrite, onGone
   const [showHistory, setShowHistory] = useState(false)
   // what was typed in this editor since it opened: only that is saved by the live check, so an edit made in the other area stays not saved until Save
   const [typedHere, setTypedHere] = useState(false)
+  // set once the server has moved or deleted the file: the path has left the draft, and this editor stays on screen until the address changes. When the
+  // file list comes back without it the editor's text turns empty, and Monaco reports a text set from outside as a change, so without this the frame
+  // would take that empty text as a new unsaved file at the old path and the tree would show it again.
+  const closed = useRef(false)
   const loaded = { data: file.saved, isLoading: file.loading, error: file.error }
   const text = file.text ?? ''
   const dirty = file.dirty
@@ -63,18 +67,18 @@ function FileEditor({ project, id, kind, path, paths, editable, canWrite, onGone
   const save = useMutation({ mutationFn: () => draft.saveOne(path) })
   const move = useMutation({
     mutationFn: () => workspaceApi.moveFile(project, id, path, target.trim()),
-    onSuccess: async (r) => { setMoving(false); draft.rename(path, r.to); await client.invalidateQueries({ queryKey: filesKey(project, id) }); await refresh(); onRenamed(r.to) },
+    onSuccess: async (r) => { closed.current = true; setMoving(false); draft.rename(path, r.to); await client.invalidateQueries({ queryKey: filesKey(project, id) }); await refresh(); onRenamed(r.to) },
   })
   const remove = useMutation({
     mutationFn: async () => { if (!draft.isNew(path)) await workspaceApi.deleteFile(project, id, path) },
-    onSuccess: async () => { setAsking(false); draft.discard(path); await client.invalidateQueries({ queryKey: filesKey(project, id) }); await refresh(); onGone() },
+    onSuccess: async () => { closed.current = true; setAsking(false); draft.discard(path); await client.invalidateQueries({ queryKey: filesKey(project, id) }); await refresh(); onGone() },
   })
   const state = saveState({ mine: editable, canWrite, dirty, busy: save.isPending })
   const problem = pathProblem(target.trim())
   const editorKind = editorKindOf(kind, path)
   const catalog = useCatalogRead(project, id)
   const live = useLiveCheck({ project, id, text, enabled: editorKind !== null && editable && canWrite && !loaded.isLoading && !loaded.error, flush: async () => (typedHere && dirty ? await save.mutateAsync() : file.saved) })
-  const onText = (value: string) => { setTypedHere(true); draft.edit(path, value) }
+  const onText = (value: string) => { if (closed.current) return; setTypedHere(true); draft.edit(path, value) }
   return (
     <div data-testid="wsp-editor" data-path={path}>
       <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
