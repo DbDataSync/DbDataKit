@@ -102,7 +102,7 @@ describe('the draft model of a table mapping', () => {
 describe('Create mappings', () => {
   const cache = readCatalogCache(CATALOG).cache!
 
-  it('writes a mapping per ticked table with the cached columns paired by name and the source\'s key, and no target type', () => {
+  it('writes a mapping per ticked table with the cached columns paired by name, the key marked in them and stated nowhere else, and no target type', () => {
     const made = createMappings('orders', ['dbo.customers'], [{ schema: 'dbo', table: 'orders' }, { schema: 'dbo', table: 'customers' }],
       { endpoint: { connectionName: 'erp', database: 'sales' }, connection: cache.connections.erp },
       { endpoint: { connectionName: 'dw', database: 'warehouse' }, connection: cache.connections.dw })
@@ -113,8 +113,10 @@ describe('Create mappings', () => {
     expect(m.sources[0]).toMatchObject({ connectionName: null, schema: 'dbo', table: 'orders' })
     expect(m.columnMappings.map((c) => c.sourceColumn)).toEqual(['id', 'customer_id', 'total'])
     expect(m.columnMappings.every((c) => c.targetType === undefined)).toBe(true)
-    expect(m.primaryKey).toEqual(['id'])
+    expect(m.primaryKey).toEqual([])
     expect(m.sourceColumns?.map((c) => c.name)).toEqual(['id', 'customer_id', 'total', 'placed_at'])
+    expect(m.sourceColumns?.filter((c) => c.isPrimaryKey).map((c) => c.name)).toEqual(['id'])
+    expect(m.targetColumns?.filter((c) => c.isPrimaryKey).map((c) => c.name)).toEqual(['id'])
     expect(made.notes).toEqual([])
   })
 

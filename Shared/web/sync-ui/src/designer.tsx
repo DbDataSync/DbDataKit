@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate } from '@dbdatakit/shell'
 import { designerPath, filesPath, replicationsOf, useDraft, type DesignerProps, type DesignerRegistration } from '@dbdatakit/workspace'
 import { NewReplicationForm } from './replication/NewReplicationForm'
-import { ReplicationPage } from './replication/ReplicationPage'
+import { ReplicationPage } from './pages/ReplicationPage'
 
 /** The replication a Designer address names (`replications/<name>/...`) and the rest of the address after it, or null. */
 export function replicationOfRest(rest: string): { name: string; rest: string } | null {

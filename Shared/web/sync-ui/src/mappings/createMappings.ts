@@ -12,9 +12,9 @@ export interface CreatedMappings { files: { path: string; text: string }[]; crea
 /**
  * The mapping files for the ticked tables of the replication's source: one per table, named `schema.table`, stating only its tables (the target
  * mirrors the source's schema and table) so everything else follows the replication. Each side's columns come from the catalog cache through the
- * mapping writer: the columns of the same name paired, the source's key as the key, and both column lists cached. A target the cache does not have
- * is one provisioning will create, so every source column is mapped and no target columns are cached. No target type is written: it is inferred
- * when the target is provisioned. A table that already has a mapping of its name is skipped.
+ * mapping writer: the columns of the same name paired and both column lists cached, the key marked in them; the mapping states no key of its own,
+ * so the source's is used. A target the cache does not have is one provisioning will create, so every source column is mapped and no target columns
+ * are cached. No target type is written: it is inferred when the target is provisioned. A table that already has a mapping of its name is skipped.
  */
 export function createMappings(replication: string, existing: readonly string[], tables: { schema: string; table: string }[],
   source: { endpoint: EndpointRef | null; connection: CacheConnection | undefined },
@@ -35,7 +35,8 @@ export function createMappings(replication: string, existing: readonly string[],
       const sourceNames = new Set(from.columns.map((c) => c.name))
       const sourceOf = Object.fromEntries(shape.columns.filter((c) => sourceNames.has(c.name)).map((c) => [c.name, c.name]))
       const key = from.columns.filter((c) => c.key).map((c) => c.name)
-      text = writeColumns(text, { sourceOf, key }, from, shape)
+      // the key marks the cached columns; the mapping states none, so the source's own key is used and a later change of it is followed
+      text = removeAt(writeColumns(text, { sourceOf, key }, from, shape), ['primaryKey'])
       if (!to) {
         text = removeAt(text, ['targetColumns'])
         out.notes.push({ mapping: name, side: 'target', reason: 'the target table is not in the catalog cache: it is created with these columns when the target is provisioned' })

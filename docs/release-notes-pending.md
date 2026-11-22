@@ -113,6 +113,10 @@ release moves the entries into its notes and empties this file.
 
 - **Changed: a server refuses to start on a data folder another account could change, unless told to skip the check.** At start, the console, the Gateway, the Runner and the Workspace check their data folder: on Linux and macOS it must be owned by the service's account and not writable by every account; on Windows its access list must not let Everyone, Users, Authenticated Users, Anonymous, Guests or Interactive write to it. A folder that fails stops the start at the folder step, and `startup-failure-<program>.txt` names the folder, its owner, what is wrong and the switch. For a test's folder or a checkout, start with `--skip-folder-permissions-check` (also on `service install`, which puts it on the registered command line) or set `startup: { skip_folder_permissions_check: true }` in the server's settings file; the server then warns at every start, `service check` names it, and the console's Bindings page lists it under "Posture choices". A folder `service install` made already passes. Scripts that start a server from a terminal on a shared folder (the CI runner's temporary folder on Windows, for example) give the flag.
 
+## A sync project's Designer edits a replication
+
+- **New: a replication's page in the Designer of a Workspace sync project.** It has the tabs Overview (the source and target connections and databases, the schedule) and Table Mappings (the source's tables with **Create mappings**, and a mapping's two sides and **Column Mapping**), with **Enabled**, **Save settings** and **Delete** in its chrome. The databases, tables and columns are those of the draft's `catalog-cache.yaml`. Each change is an unsaved edit of the draft's file, the same one Files shows, and keeps the file's comments and the keys the page does not show. What to do: nothing; everything the page does not offer is still edited in Files.
+
 ## Since the last release before the 2026-11-13 beta
 
 These entries were written before the 2026-11-13 beta and are in no release note: the beta's release carries only the install text. They describe

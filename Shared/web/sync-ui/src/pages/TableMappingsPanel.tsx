@@ -1,8 +1,8 @@
 import { Link, Navigate } from '@dbdatakit/shell'
 import { designerPath, useDraft } from '@dbdatakit/workspace'
 import type { SyncDraft } from '../useSyncDraft'
-import { MappingsOverview } from './MappingsOverview'
-import { NewMappingForm, TableMappingForm } from './TableMappingForm'
+import { MappingsOverview } from '../mappings/MappingsOverview'
+import { NewMappingForm, TableMappingForm } from '../mappings/TableMappingForm'
 
 /** Where an address after `mappings/` points: the overview, a new mapping, or a mapping and its tab. */
 export function placeOfMappings(rest: string): { kind: 'overview' } | { kind: 'new' } | { kind: 'mapping'; name: string; tab: string } {

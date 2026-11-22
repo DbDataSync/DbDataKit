@@ -4,7 +4,7 @@ import { designerPath, filesPath, useDraft } from '@dbdatakit/workspace'
 import { taskPath } from '../model'
 import { useSyncDraft, type FileProblem } from '../useSyncDraft'
 import { OverviewPanel } from './OverviewPanel'
-import { TableMappingsPanel } from '../mappings/TableMappingsPanel'
+import { TableMappingsPanel } from './TableMappingsPanel'
 
 /** The replication's tabs and where each is: Overview at the replication's own address, Table Mappings under `mappings`. */
 const TABS = [

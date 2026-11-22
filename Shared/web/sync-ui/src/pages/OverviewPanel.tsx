@@ -1,5 +1,5 @@
-import { EndpointsCard } from './EndpointsCard'
-import { ScheduleCard } from './ScheduleCard'
+import { EndpointsCard } from '../replication/EndpointsCard'
+import { ScheduleCard } from '../replication/ScheduleCard'
 import type { ConnectionView, ReplicationTaskConfig } from '../types'
 
 /**
