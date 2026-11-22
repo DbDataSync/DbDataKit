@@ -463,6 +463,16 @@ class SuiteInstallTestPlumbingTests(unittest.TestCase):
         self.assertIn("windows-latest", job)
         self.assertIn("suite-scoop-e2e.ps1", job)
 
+    def test_a_leg_installs_with_a_windows_clients_owner(self):
+        text = (REPO_ROOT / ".github" / "workflows" / "suite-release.yml").read_text(encoding="utf-8")
+        job = text[text.index("  suite-install-windows:"):]
+        self.assertIn('"workstation"', job)
+        self.assertIn("-WorkstationOwner:", job)
+        script = (DIST / "tests" / "suite-scoop-e2e.ps1").read_text(encoding="utf-8")
+        self.assertIn("nodefaultadminowner", script)
+        self.assertIn("HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa", script)
+        self.assertIn("[DefaultOwner]::SetToCurrentUser()", script)
+
     def test_the_script_parses_in_powershell(self):
         if not PWSH:
             self.skipTest("pwsh not available")
