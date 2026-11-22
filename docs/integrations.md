@@ -54,6 +54,23 @@ The Runner starts two things (`Shared/src/DbDataKit.Runner/README.md`): a .NET *
 
 The csx and the compiled kind end the same way: the Runner never compiles (plan 28 section 4), it receives built assemblies. A `.csx` file here is **ordinary C# source** (types, namespaces, `using`s; no top-level statements) with NuGet directives at the top; all files of `src/` compile together into one library. It is not Roslyn's interactive "script" with `Submission#0` types: a job class is a normal public class the task host finds by `[RunnerTask("name")]`, and a test can name it.
 
+**Numbers and dates in a .NET job.** The task host runs a job with the culture of the Runner's machine, as any .NET program there does. It keeps .NET's
+culture data on (it does not run in invariant globalization mode), because the SQL Server client, Microsoft.Data.SqlClient, refuses to open a connection
+without it. Where the culture comes from:
+
+- Windows: the regional settings of the account the Runner's service runs under.
+- Linux: the `LANG` or `LC_ALL` variable the service starts with. The task host needs ICU (`libicu`), which the Runner's server needs too.
+
+A job that formats or parses a number or a date without naming a culture follows those settings. The same line of code writes different text on two
+Runners:
+
+- The service account has the culture `de-DE`: `1234.5.ToString()` gives `1234,5`, and `new DateTime(2026, 3, 17).ToString("d")` gives `17.03.2026`.
+- The service account has the culture `en-US`: the same calls give `1234.5` and `3/17/2026`.
+
+When a program reads what the job writes (a CSV file, a JSON body, a file name, a query's text), name the culture in each call, so every Runner writes
+the same text: `1234.5.ToString(CultureInfo.InvariantCulture)`, `date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)`, and
+`decimal.Parse(text, CultureInfo.InvariantCulture)` to read it back. On a `de-DE` Runner, `decimal.Parse("1234.5")` without the culture reads `12345`.
+
 ## 3. The manifest
 
 `package.yaml` is the `package/1` manifest and is hand-written; for a .NET job the C# types (the input record, the `Progress` and `Slots` classes, the steps, units and counters) are the source of truth and the Runner's staging check compares them with the manifest. The format and every key are in [`DbDataKit.Runner.Abstractions`'s README](../Shared/src/DbDataKit.Runner.Abstractions/README.md); the shape of one:
