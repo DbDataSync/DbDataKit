@@ -122,7 +122,7 @@ export function differenceLine(d: CatalogDifference): string {
  * it when the read no longer finds it) and keeps the connection's other tables and its databases. The other connections stay as they are.
  */
 export function withRefresh(cache: CatalogCache | null, connection: string, after: CacheConnection, generatedAt: string, table?: { schema: string; name: string }): CatalogCache {
-  const connections = { ...(cache?.connections ?? {}) }
+  const connections = { ...cache?.connections }
   const old = connections[connection]
   if (table === undefined || old === undefined) connections[connection] = after
   else {

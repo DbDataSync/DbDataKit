@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readCatalogCache } from './catalogCache'
-import { differenceLine, refreshDifference, refreshOutcome, workspaceServerOf } from './catalogRefresh'
+import { differenceLine, refreshOutcome, workspaceServerOf } from './catalogRefresh'
 
 const cache = (connections: string) => ['schema: catalog-cache/2', "generated_at: '2026-11-20T09:00:00Z'", 'connections:', connections, ''].join('\n')
 
