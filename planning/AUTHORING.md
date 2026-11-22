@@ -63,16 +63,6 @@ Option A: in the Runner's run record as the step result (kept under retention). 
 Scenario: an engineer previews `customers` (20 rows, one with an email address). Under A the rows are readable later by anyone who can read that run; under
 B they are shown once and gone; under C the engineer runs a trial run instead. Recommendation: B.
 
-### AUTHORING-P6: the task host runs with the machine's culture data (default, awaiting the owner)
-
-Built as the default: the task host (`dbdatakit-taskhost`) no longer runs in invariant globalization mode, because Microsoft.Data.SqlClient refuses to open
-a connection in that mode and `discover` and `describe` open SQL Server inside it. Scenario: a package's job writes `1234.5.ToString()` into a file, and the
-runner's service account has the culture `de-DE`. Option A (built): the file says `1234,5`, as the same code does in any .NET program on that machine; a job
-that writes for a program names `CultureInfo.InvariantCulture`. Option B: the task host stays invariant (`1234.5`), and the built-in package starts as an
-executable of its own with its own runtime settings, built per platform (`win-x64`, `linux-x64`). Option C: the package sets SqlClient's view of the mode
-from inside its process (an AppContext switch) and the task host stays invariant. Recommendation: A, since every task runs in a process of its own and the
-runner itself already needs the culture data (ICU on Linux); C hides the mode from a library.
-
 ### AUTHORING-P7: the built-in package where the group requires signed versions (default, awaiting the owner)
 
 Built as the default: the runner puts `dbdatakit-metadata` in a channel through its own publish, so a group with `require_signatures` on refuses it, and
