@@ -1,7 +1,7 @@
 using System.Text.Json.Nodes;
 using DbDataKit.Catalog;
 using DbDataKit.Runner;
-using DbDataKit.Web;
+using DbDataKit.Web.Trust;
 
 namespace DbDataKit.Server;
 
