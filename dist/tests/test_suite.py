@@ -4,6 +4,7 @@ The members here are fixtures (a root folder with one dist.json each), so the te
 `ShippedSuiteTests` checks the real dist/suite.json against the real files.
 """
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -481,8 +482,9 @@ class SuiteInstallTestPlumbingTests(unittest.TestCase):
         self.assertIn("ubuntu-latest", job)
         self.assertIn("suite-systemd-e2e.sh", job)
         script = DIST / "tests" / "suite-systemd-e2e.sh"
-        r = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True)
-        self.assertEqual(r.returncode, 0, r.stderr)
+        if os.name != "nt":   # the bash a Windows runner finds first does not run this script (bash -n exited 1 there, saying nothing)
+            r = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
         text = script.read_text(encoding="utf-8")
         for word in ("install.sh\" --system", "is up to date", "! -user", "startup-failure-dbdatarunner.txt", "fake_releases.py"):
             self.assertIn(word, text)
