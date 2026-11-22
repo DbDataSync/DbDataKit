@@ -193,7 +193,7 @@ Edit `<Product>/dist.json`:
 | `platforms` | `{ "<rid>": { "exe": "<file in the zip>" } }`. `win-*` feed install.ps1 and Scoop, the rest install.sh |
 | `windowsScope` | `user` or `machine` |
 | `preserve` | files an upgrade never overwrites |
-| `service` | `{ "name", "register" }`: the Windows service, and the arguments that register it (`{name}` is substituted) |
+| `service` | `{ "name", "register" }`: the Windows service, and the arguments that register it (`{name}` is substituted). A service of the suite (`dbdatakit`, `dbdatagateway`, `dbdatarunner`, `dbdataworkspace`) has no `name` here: `dist.py` and `msi.py` read it from the suite's table of services, `Shared/src/DbDataKit.Hosting.Startup/SuiteServices.cs`, through `dist/suite_services.py`, and refuse a `dist.json` that names another one. Any other product names its own service |
 | `requiresDotnet` | warns after install when that runtime is missing. A platform may carry its own (`"linux-x64": { "exe": "...", "requiresDotnet": "10.0" }`) for a product whose Windows zip is self-contained and whose Linux zip is not (the Gateway); `install.sh` reads it, the product-level one wins, and install.ps1, Scoop and the MSI read only the product-level one |
 | `msi.upgradeCode` | the installer's fixed GUID, **never changed** (it is how a newer version finds the older one) |
 | `msi.addToPath` | the installer puts its folder on the machine PATH |

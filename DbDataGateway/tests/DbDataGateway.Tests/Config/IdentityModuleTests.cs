@@ -69,9 +69,9 @@ public sealed class IdentityModuleTests : IAsyncLifetime
         {
             (flightPort, managementPort, identityPort) = (FreePort(), FreePort(), FreePort());
             app = GatewayHost.Build([
-                $"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Listen:Address=127.0.0.1", $"--Gateway:Listen:Port={flightPort}",
-                "--Gateway:Management:Enabled=true", "--Gateway:Management:Address=127.0.0.1", $"--Gateway:Management:Port={managementPort}",
-                "--Gateway:Identity:Enabled=true", "--Gateway:Identity:Address=127.0.0.1", $"--Gateway:Identity:Port={identityPort}", .. more,
+                $"--Gateway:DataDirectory={dataDirectory}", $"--Gateway:Listen=https://127.0.0.1:{flightPort}",
+                "--Gateway:Management:Enabled=true", $"--Gateway:Management:Listen=https://127.0.0.1:{managementPort}",
+                "--Gateway:Identity:Enabled=true", $"--Gateway:Identity:Listen=https://127.0.0.1:{identityPort}", .. more,
             ]);
             try
             {
@@ -110,9 +110,9 @@ public sealed class IdentityModuleTests : IAsyncLifetime
             return ConfigTestSupport.LoadDirectory(file.Directory).Diagnostics;
         }
 
-        Assert.Contains(Load("tls: { mode: none }\nlisten: { address: 127.0.0.1 }\nidentity: { enabled: true }\n"), d => d.KeyPath == "Identity.Enabled");
-        Assert.Contains(Load("listen: { address: 127.0.0.1, port: 8817 }\nidentity: { enabled: true }\n"), d => d.KeyPath == "Identity.Port");
-        Assert.Contains(Load("management: { enabled: true, port: 8817 }\nidentity: { enabled: true }\n"), d => d.KeyPath == "Identity.Port");
+        Assert.Contains(Load("tls: { mode: none }\nlisten: http://127.0.0.1:9000\nidentity: { enabled: true }\n"), d => d.KeyPath == "Identity.Enabled");
+        Assert.Contains(Load("listen: https://127.0.0.1:8817\nidentity: { enabled: true, listen: https://127.0.0.1:8817 }\n"), d => d.KeyPath == "Identity.Listen");
+        Assert.Contains(Load("management: { enabled: true, listen: https://127.0.0.1:8817 }\nidentity: { enabled: true, listen: https://127.0.0.1:8817 }\n"), d => d.KeyPath == "Identity.Listen");
         Assert.Contains(Load("identity: { enabled: true, publicUrl: 'http://identity.example' }\n"), d => d.KeyPath == "Identity.PublicUrl");
         Assert.Contains(Load("identity: { enabled: true, publicUrl: 'https://identity.example/home' }\n"), d => d.KeyPath == "Identity.PublicUrl");
         Assert.Contains(Load("identity: { enabled: true, address: 'everywhere' }\n"), d => d.KeyPath == "Identity.Address");

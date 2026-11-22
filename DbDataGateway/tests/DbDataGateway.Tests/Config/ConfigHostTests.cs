@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Sockets;
+using DbDataKit.Hosting.Startup;
 using DbDataGateway.Server.Configuration;
 using DbDataGateway.Server.Hosting;
 using DbDataGateway.Tests.Support;
@@ -18,10 +21,9 @@ public sealed class ConfigStartupTests
         Directory.CreateDirectory(DataDir);
         GatewayConfigFile.EnsureStarter(DataDir);
         using var env = new EnvScope(
-            ("DBDATAKIT_Gateway__Listen__Port", "0"),            // prefixed, as documented
+            ("DBDATAKIT_Gateway__Listen", "http://127.0.0.1:0"),   // prefixed, as documented
             ("Gateway__Tls__Mode", "None"),                    // the stock unprefixed spelling
             ("Gateway__Management__Enabled", "false"),         // https only, on by default (plan 33 D15)
-            ("DBDATAKIT_Gateway__Listen__Address", "127.0.0.1"),
             ("DBDATAKIT_DATA_GATEWAY", DataDir),
             // the other DBDATAKIT_* variables of the suite are visible to the configuration too (prefix DBDATAKIT_): none of them is under the Gateway section, so none is an unknown key
             ("DBDATAKIT_DATA", Path.Combine(DataDir, "root")),
@@ -37,8 +39,8 @@ public sealed class ConfigStartupTests
             ("DBDATAKIT_Gateway__Auth__AllowPassThrough", "False"));   // capitalised boolean, as the stock binder accepted
         await using var app = GatewayHost.Build([]);
         var o = app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue;
-        Assert.Equal(0, o.Listen.Port);
-        Assert.Equal("127.0.0.1", o.Listen.Address);
+        Assert.Equal(0, DbDataGateway.Server.Hosting.GatewayListeners.Parsed(o.Listen).First().Port);
+        Assert.Equal("127.0.0.1", DbDataGateway.Server.Hosting.GatewayListeners.Parsed(o.Listen).First().Address.ToString());
         Assert.Equal(TlsMode.None, o.Tls.Mode);
         Assert.False(o.Auth.AllowPassThrough);
         Assert.Equal(2, o.SchemaVersion);   // from the settings file in the data directory
@@ -56,17 +58,17 @@ public sealed class ConfigStartupTests
         return dir;
     }
 
-    private const string FileSettings = "schemaVersion: 2\nlisten: { address: 127.0.0.1, port: 1234 }\ntls: { mode: none }\nmanagement: { enabled: false }\n";
+    private const string FileSettings = "schemaVersion: 2\nlisten: http://127.0.0.1:1234\ntls: { mode: none }\nmanagement: { enabled: false }\n";
 
     [Fact]
     public async Task The_data_directory_file_supplies_settings_and_the_command_line_overrides_it()
     {
         string dir = NewDataDirectory(FileSettings);
-        await using var app = GatewayHost.Build([$"--Gateway:DataDirectory={dir}", "--Gateway:Listen:Port=0"]);
+        await using var app = GatewayHost.Build([$"--Gateway:DataDirectory={dir}", "--Gateway:Listen=http://127.0.0.1:0"]);
         var o = app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue;
         Assert.Equal(2, o.SchemaVersion);               // file
-        Assert.Equal("127.0.0.1", o.Listen.Address);    // file
-        Assert.Equal(0, o.Listen.Port);                 // command line beats the file
+        Assert.Equal("127.0.0.1", DbDataGateway.Server.Hosting.GatewayListeners.Parsed(o.Listen).First().Address.ToString());    // file
+        Assert.Equal(0, DbDataGateway.Server.Hosting.GatewayListeners.Parsed(o.Listen).First().Port);                 // command line beats the file
         Assert.Equal(TlsMode.None, o.Tls.Mode);         // file
     }
 
@@ -74,16 +76,16 @@ public sealed class ConfigStartupTests
     public async Task Environment_variables_override_the_data_directory_file_with_or_without_the_prefix()
     {
         string dir = NewDataDirectory(FileSettings);
-        using (new EnvScope(("DBDATAKIT_DATA_GATEWAY", dir), ("Gateway__Listen__Port", "0")))
+        using (new EnvScope(("DBDATAKIT_DATA_GATEWAY", dir), ("Gateway__Listen", "http://127.0.0.1:0")))
         {
             await using var app = GatewayHost.Build([]);
-            Assert.Equal(0, app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue.Listen.Port);
+            Assert.Equal(0, DbDataGateway.Server.Hosting.GatewayListeners.Parsed(app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue.Listen).First().Port);
         }
 
-        using (new EnvScope(("DBDATAKIT_DATA_GATEWAY", dir), ("DBDATAKIT_Gateway__Listen__Port", "0")))
+        using (new EnvScope(("DBDATAKIT_DATA_GATEWAY", dir), ("DBDATAKIT_Gateway__Listen", "http://127.0.0.1:0")))
         {
             await using var app = GatewayHost.Build([]);
-            Assert.Equal(0, app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue.Listen.Port);
+            Assert.Equal(0, DbDataGateway.Server.Hosting.GatewayListeners.Parsed(app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue.Listen).First().Port);
         }
     }
 
@@ -93,10 +95,10 @@ public sealed class ConfigStartupTests
         foreach (string? settings in new string?[] { null, "# no settings\n" })
         {
             string dir = NewDataDirectory(settings);
-            await using var app = GatewayHost.Build([$"--Gateway:DataDirectory={dir}", "--Gateway:Listen:Port=0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"]);
+            await using var app = GatewayHost.Build([$"--Gateway:DataDirectory={dir}", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"]);
             var o = app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue;
             Assert.Equal(1, o.SchemaVersion);
-            Assert.Equal("0.0.0.0", o.Listen.Address);
+            Assert.Empty(o.Listen);   // no code default: the first start chooses a port of the Gateway's block
         }
     }
 
@@ -119,7 +121,7 @@ public sealed class ConfigStartupTests
         string old = Path.Combine(folder, "appsettings.json");
         File.WriteAllText(old, """{ "Gateway": { "Listen": { "Port": 1234 } } }""");
 
-        var ex = Assert.Throws<GatewayConfigException>(() => GatewayHost.Build([$"--Gateway:DataDirectory={dir}", "--Gateway:Listen:Port=0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"]));
+        var ex = Assert.Throws<GatewayConfigException>(() => GatewayHost.Build([$"--Gateway:DataDirectory={dir}", "--Gateway:Listen=http://127.0.0.1:0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"]));
         Assert.Contains(old, ex.Message);
         Assert.Contains("server.yaml", ex.Message);
         Assert.Contains("no longer read", ex.Message);
@@ -129,7 +131,7 @@ public sealed class ConfigStartupTests
     public async Task Startup_without_an_appsettings_json_is_unaffected_and_the_file_beside_the_executable_is_not_read()
     {
         string dir = NewDataDirectory(FileSettings);
-        await using var app = GatewayHost.Build([$"--Gateway:DataDirectory={dir}", "--Gateway:Listen:Port=0"]);
+        await using var app = GatewayHost.Build([$"--Gateway:DataDirectory={dir}", "--Gateway:Listen=http://127.0.0.1:0"]);
         Assert.Equal(TlsMode.None, app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue.Tls.Mode);
         Assert.Null(GatewayConfigFile.LegacyFileMessage(dir, baseDirectory: dir));
     }
@@ -137,7 +139,7 @@ public sealed class ConfigStartupTests
     [Fact]
     public void The_layout_is_one_server_file_an_auth_file_and_a_data_source_per_connections_file()
     {
-        string dir = NewDataDirectory("listen: { port: 2222 }\n");
+        string dir = NewDataDirectory("listen: https://127.0.0.1:2222\n");
         string config = GatewayConfigFile.DirectoryIn(dir);
         Directory.CreateDirectory(Path.Combine(config, "gateway"));
         Directory.CreateDirectory(Path.Combine(config, "connections"));
@@ -146,7 +148,7 @@ public sealed class ConfigStartupTests
         File.WriteAllText(Path.Combine(config, "connections", "notes.txt"), "not a data source");
 
         var o = GatewayConfiguration.LoadOptions(dir);
-        Assert.Equal(2222, o.Listen.Port);
+        Assert.Equal(2222, DbDataGateway.Server.Hosting.GatewayListeners.Parsed(o.Listen).First().Port);
         Assert.Equal(5, o.Auth.SessionIdleMinutes);
         Assert.False(o.Auth.AllowPassThrough);
         var erp = Assert.Single(o.DataSources);
@@ -166,27 +168,27 @@ public sealed class ConfigStartupTests
         Assert.True(GatewayConfigFile.EnsureStarter(dir));
         Assert.Equal(GatewayConfigFile.Starter, File.ReadAllText(GatewayConfigFile.PathIn(dir)));
 
-        File.WriteAllText(GatewayConfigFile.PathIn(dir), "listen: { port: 9 }\n");
+        File.WriteAllText(GatewayConfigFile.PathIn(dir), "listen: https://127.0.0.1:9\n");
         Assert.False(GatewayConfigFile.EnsureStarter(dir));
-        Assert.Contains("port: 9", File.ReadAllText(GatewayConfigFile.PathIn(dir)));
+        Assert.Contains("listen: https://127.0.0.1:9", File.ReadAllText(GatewayConfigFile.PathIn(dir)));
     }
 
     [Fact]
     public async Task Command_line_overrides_use_the_colon_syntax()
     {
         using var env = new EnvScope(("DBDATAKIT_DATA_GATEWAY", DataDir));
-        await using var app = GatewayHost.Build(["--Gateway:Listen:Port=0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"]);
-        Assert.Equal(0, app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue.Listen.Port);
+        await using var app = GatewayHost.Build(["--Gateway:Listen=http://127.0.0.1:0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"]);
+        Assert.Equal(0, DbDataGateway.Server.Hosting.GatewayListeners.Parsed(app.Services.GetRequiredService<IOptionsMonitor<GatewayOptions>>().CurrentValue.Listen).First().Port);
     }
 
     [Fact]
     public void A_misspelt_environment_override_stops_startup_naming_the_variable()
     {
-        using var env = new EnvScope(("DBDATAKIT_Gateway__Listen__Prot", "9000"));
+        using var env = new EnvScope(("DBDATAKIT_Gateway__Managment__Enabled", "false"));
         var ex = Assert.Throws<GatewayConfigException>(() => GatewayHost.Build([]));
-        Assert.Contains("Gateway:Listen:Prot", ex.Message);
-        Assert.Contains("Did you mean `Port`?", ex.Message);
-        Assert.Contains("env:DBDATAKIT_Gateway__Listen__Prot", ex.Message);
+        Assert.Contains("Gateway:Managment", ex.Message);
+        Assert.Contains("Did you mean `Management`?", ex.Message);
+        Assert.Contains("env:DBDATAKIT_Gateway__Managment__Enabled", ex.Message);
     }
 
     [Fact]
@@ -198,14 +200,13 @@ public sealed class ConfigStartupTests
         Console.SetError(stderr);
         try
         {
-            int code = await Cli.RunAsync(["server", "run", "--Gateway:Listen:Prot=9000", $"--Gateway:Tls:CertificatePassword={secret}", "--Gateway:Listen:Port=99999"]);
+            int code = await Cli.RunAsync(["server", "run", "--Gateway:Managment:Enabled=false", $"--Gateway:Tls:CertificatePassword={secret}", "--Gateway:Listen=https://127.0.0.1:99999"]);
             Assert.Equal(2, code);
         }
         finally { Console.SetError(original); }
         string text = stderr.ToString();
         Assert.Contains("The configuration is not valid", text);
-        Assert.Contains("Gateway:Listen:Prot", text);
-        Assert.Contains("Gateway:Listen:Port", text);
+        Assert.Contains("Gateway:Managment", text);
         Assert.DoesNotContain(secret, text);
     }
 
@@ -218,7 +219,7 @@ public sealed class ConfigStartupTests
         Console.SetError(stderr);
         try
         {
-            int code = await Cli.RunAsync(["server", "run", "--Gateway:Listen:Port=0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false", "--Gateway:RequireReferencedSecrets=true",
+            int code = await Cli.RunAsync(["server", "run", "--Gateway:Listen=http://127.0.0.1:0", "--Gateway:Public:Listen=https://127.0.0.1:0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false", "--Gateway:RequireReferencedSecrets=true",
                 "--Gateway:DataSources:x:Provider=sqlserver", "--Gateway:DataSources:x:ConnectionString=Server=a;Password=LitSecret-77"]);
             Assert.Equal(2, code);
         }
@@ -228,35 +229,160 @@ public sealed class ConfigStartupTests
     }
 
     [Fact]
-    public async Task A_start_that_fails_leaves_its_cause_in_the_data_folder_for_a_service_that_has_no_console()
+    public async Task A_start_that_fails_leaves_its_cause_in_the_shared_startup_failure_file_for_a_service_that_has_no_console()
     {
-        // the folder is there, as the install makes it (the record is never written into a folder that is not); the tests of this class share it and may run in any order
+        // the failure file is startup-failure-dbdatagateway.txt in the logs folder of the data folder (for an install, C:\ProgramData\DbDataKit\logs),
+        // no longer start-failure.txt in the data folder; the tests of this class share the folder and may run in any order
         Directory.CreateDirectory(DataDir);
         using var env = new EnvScope(("DBDATAKIT_DATA_GATEWAY", DataDir));
-        var file = Path.Combine(DataDir, StartFailure.FileName);
-        File.Delete(file);
+        var file = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, DataDir), SuiteServices.Gateway.FailureFileName);
+        if (File.Exists(file)) File.Delete(file);
         var original = Console.Error;
         Console.SetError(new StringWriter());
         try { Assert.Equal(2, await Cli.RunAsync(["server", "run", "--Gateway:Bogus=1", "--Gateway:Tls:CertificatePassword=FailSecret-31"])); }
         finally { Console.SetError(original); }
         var text = File.ReadAllText(file);
-        Assert.Contains("did not start", text);
+        Assert.Contains("Startup of dbdatagateway", text);
+        Assert.Contains("failed at the folder step", text);
         Assert.Contains("Account: ", text);
         Assert.Contains(DataDir, text);
         Assert.Contains("Gateway:Bogus", text);
         Assert.DoesNotContain("FailSecret-31", text);
+        Assert.False(File.Exists(Path.Combine(DataDir, "start-failure.txt")));
         File.Delete(file);
     }
 
     [Fact]
-    public void A_port_Windows_will_not_give_is_named_with_where_to_look()
+    public async Task A_port_another_listener_holds_fails_the_ports_step_and_the_failure_file_names_the_port_and_the_excluded_ranges()
     {
-        var bind = new IOException("Failed to bind to address https://0.0.0.0:8815.", new System.Net.Sockets.SocketException((int)System.Net.Sockets.SocketError.AccessDenied));
-        var text = StartFailure.Describe(bind, "C:\\ProgramData\\DbDataKit\\gateway", DateTimeOffset.UnixEpoch, "NT SERVICE\\dbdatagateway");
-        Assert.Contains("8815", text);
-        Assert.Contains("excludedportrange", text);
-        Assert.Contains("NT SERVICE\\dbdatagateway", text);
-        Assert.DoesNotContain("excludedportrange", StartFailure.Describe(new InvalidOperationException("other"), null, DateTimeOffset.UnixEpoch, "me"));
+        var dir = NewDataDirectory(null);
+        // ExclusiveAddressUse is set on Windows only: set to false on Linux it asks for SO_REUSEPORT, and the gateway could then share the port
+        using var held = new TcpListener(IPAddress.Loopback, 0);
+        if (OperatingSystem.IsWindows()) held.ExclusiveAddressUse = true;
+        held.Start();
+        var port = ((IPEndPoint)held.LocalEndpoint).Port;
+        var (output, error) = (new StringWriter(), new StringWriter());
+
+        var exit = await Cli.RunAsync(["server", "run", $"--Gateway:DataDirectory={dir}", $"--Gateway:Listen=http://127.0.0.1:{port}", "--Gateway:Public:Listen=https://127.0.0.1:0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"],
+            new DbDataKit.Cli.CliContext(output, error, TextReader.Null));
+
+        Assert.NotEqual(0, exit);
+        var file = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.FailureFileName);
+        var text = File.ReadAllText(file);
+        Assert.Contains("failed at the ports step", text);
+        Assert.Contains($"Port {port} cannot be bound", text);
+        Assert.Contains($"Port: {port}", text);
+        Assert.Contains("Excluded port ranges: ", text);
+        Assert.Contains("Account: ", text);
+        Assert.Contains($"Data folder: {dir}", text);
+        Assert.Contains("Exception chain:", text);
+        Assert.Contains(file, error.ToString());
+        Assert.False(File.Exists(Path.Combine(dir, "start-failure.txt")));
+        TryDelete(dir);
+    }
+
+    [Fact]
+    public async Task A_clean_start_leaves_no_failure_file_and_removes_the_one_earlier_releases_wrote()
+    {
+        var dir = NewDataDirectory(null);
+        File.WriteAllText(Path.Combine(dir, "start-failure.txt"), "dbdatagateway did not start (an earlier release)");
+        using var stop = new CancellationTokenSource();
+        var run = Cli.RunAsync(["server", "run", $"--Gateway:DataDirectory={dir}", "--Gateway:Listen=http://127.0.0.1:0", "--Gateway:Public:Listen=https://127.0.0.1:0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"],
+            new DbDataKit.Cli.CliContext(TextWriter.Null, TextWriter.Null, TextReader.Null, stop.Token));
+        var logs = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.LogFolder);
+        var file = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.FailureFileName);
+
+        // the sequence writes the file before its first step and deletes it once every step succeeded
+        var deadline = DateTime.UtcNow.AddSeconds(90);
+        while (!run.IsCompleted && !(Directory.Exists(logs) && !File.Exists(file) && !File.Exists(Path.Combine(dir, "start-failure.txt"))) && DateTime.UtcNow < deadline)
+            await Task.Delay(100);
+        await Task.Delay(500);
+        Assert.False(run.IsCompleted, "the gateway stopped instead of serving: " + (File.Exists(file) ? File.ReadAllText(file) : ""));
+        Assert.False(File.Exists(file));
+        Assert.False(File.Exists(Path.Combine(dir, "start-failure.txt")));
+        stop.Cancel();
+        Assert.Equal(0, await run);
+        TryDelete(dir);
+    }
+
+    [Fact]
+    public async Task A_folder_every_account_can_write_fails_the_folder_step_naming_the_switch_and_starts_with_a_warning_when_it_is_skipped()
+    {
+        var dir = NewDataDirectory(null);
+        if (OperatingSystem.IsWindows())
+        {
+            var info = new DirectoryInfo(dir);
+            var security = info.GetAccessControl();
+            security.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
+                new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.BuiltinUsersSid, null),
+                System.Security.AccessControl.FileSystemRights.Modify,
+                System.Security.AccessControl.InheritanceFlags.ContainerInherit | System.Security.AccessControl.InheritanceFlags.ObjectInherit,
+                System.Security.AccessControl.PropagationFlags.None, System.Security.AccessControl.AccessControlType.Allow));
+            info.SetAccessControl(security);
+        }
+        else
+        {
+            File.SetUnixFileMode(dir, (UnixFileMode)0x1FF);
+        }
+        string[] run = ["server", "run", $"--Gateway:DataDirectory={dir}", "--Gateway:Listen=http://127.0.0.1:0", "--Gateway:Public:Listen=https://127.0.0.1:0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"];
+        var file = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.FailureFileName);
+
+        var error = new StringWriter();
+        Assert.Equal(1, await Cli.RunAsync(run, new DbDataKit.Cli.CliContext(TextWriter.Null, error, TextReader.Null)));
+        var text = File.ReadAllText(file);
+        Assert.Contains("failed at the folder step", text);
+        Assert.Contains($"--skip-folder-permissions-check or set startup.skip_folder_permissions_check: true in {GatewayConfigFile.PathIn(dir)}", text);
+        Assert.Contains("--skip-folder-permissions-check", error.ToString());
+        Assert.False(Directory.Exists(GatewayConfigFile.DirectoryIn(dir)));            // nothing was made in the folder
+
+        // with the flag, which the gateway takes as its setting startup.skip_folder_permissions_check, the same folder starts and warns
+        var warned = new StringWriter();
+        var errors = TextWriter.Synchronized(warned);
+        using var stop = new CancellationTokenSource();
+        var running = Cli.RunAsync([.. run, "--skip-folder-permissions-check"], new DbDataKit.Cli.CliContext(TextWriter.Null, errors, TextReader.Null, stop.Token));
+        var logs = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.LogFolder);
+        var deadline = DateTime.UtcNow.AddSeconds(90);
+        while (!running.IsCompleted && File.Exists(file) && DateTime.UtcNow < deadline) await Task.Delay(100);
+        await Task.Delay(500);
+        string said;
+        lock (errors) said = warned.ToString();
+        Assert.False(running.IsCompleted, "the gateway stopped instead of serving: " + (File.Exists(file) ? File.ReadAllText(file) : "") + said);
+        Assert.False(File.Exists(file));
+        Assert.Contains("Warning: dbdatagateway skips the folder permissions check (--skip-folder-permissions-check)", said);
+        stop.Cancel();
+        Assert.Equal(0, await running);
+
+        // the setting in config/server.yaml does the same
+        Directory.CreateDirectory(GatewayConfigFile.DirectoryIn(dir));
+        File.WriteAllText(GatewayConfigFile.PathIn(dir), "startup:\n  skip_folder_permissions_check: true\n");
+        warned = new StringWriter();
+        errors = TextWriter.Synchronized(warned);
+        using var stop2 = new CancellationTokenSource();
+        running = Cli.RunAsync(run, new DbDataKit.Cli.CliContext(TextWriter.Null, errors, TextReader.Null, stop2.Token));
+        deadline = DateTime.UtcNow.AddSeconds(90);
+        while (!running.IsCompleted && !(Directory.Exists(logs) && !File.Exists(file)) && DateTime.UtcNow < deadline) await Task.Delay(100);
+        await Task.Delay(500);
+        lock (errors) said = warned.ToString();
+        Assert.False(running.IsCompleted, "the gateway stopped instead of serving: " + (File.Exists(file) ? File.ReadAllText(file) : "") + said);
+        Assert.Contains($"(startup.skip_folder_permissions_check: true in {GatewayConfigFile.PathIn(dir)})", said);
+        stop2.Cancel();
+        Assert.Equal(0, await running);
+        TryDelete(dir);
+    }
+
+    [Fact]
+    public void The_variable_that_skips_the_folder_permissions_check_is_found_whatever_its_case_and_only_when_true()
+    {
+        Assert.Null(GatewayConfigFile.SkipFolderPermissionsVariable(new System.Collections.Hashtable()));
+        Assert.Null(GatewayConfigFile.SkipFolderPermissionsVariable(new System.Collections.Hashtable { ["DBDATAKIT_Gateway__Startup__skip_folder_permissions_check"] = "false" }));
+        Assert.Equal("DBDATAKIT_GATEWAY__STARTUP__SKIP_FOLDER_PERMISSIONS_CHECK",
+            GatewayConfigFile.SkipFolderPermissionsVariable(new System.Collections.Hashtable { ["DBDATAKIT_GATEWAY__STARTUP__SKIP_FOLDER_PERMISSIONS_CHECK"] = "True" }));
+    }
+
+    private static void TryDelete(string dir)
+    {
+        try { Directory.Delete(dir, recursive: true); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
     [Fact]
@@ -287,16 +413,16 @@ public sealed class ConfigCommandTests
     [Fact]
     public void Check_returns_0_for_a_valid_directory_and_2_for_each_kind_of_invalid_one()
     {
-        using var ok = TempConfig.Create(("server.yaml", "schemaVersion: 2\nlisten: { port: 9000 }\n"));
+        using var ok = TempConfig.Create(("server.yaml", "schemaVersion: 2\nlisten: https://127.0.0.1:9000\n"));
         var valid = Run("check", "--file", ok.Directory);
         Assert.Equal(0, valid.Code);
         Assert.Contains("valid (schema version 2)", valid.Out);
         Assert.Equal(0, Run("check", "--file", ok.ServerYaml).Code);   // the path of server.yaml names its directory
 
-        using var unknown = TempConfig.Create(("server.yaml", "listen: { prot: 9000 }\n"));
+        using var unknown = TempConfig.Create(("server.yaml", "management: { enabld: false }\n"));
         var bad = Run("check", "--file", unknown.Directory);
         Assert.Equal(2, bad.Code);
-        Assert.Contains("Did you mean `Port`?", bad.Err);
+        Assert.Contains("Did you mean `Enabled`?", bad.Err);
         Assert.Contains("server.yaml:1", bad.Err);
 
         using var broken = TempConfig.Create(("server.yaml", "listen:\n  port: [1\n"));
@@ -368,7 +494,7 @@ public sealed class ConfigCommandTests
     {
         const string signingKey = "c2lnbmluZy1rZXktbGl0ZXJhbA==";
         using var c = TempConfig.Create(
-            ("server.yaml", "schemaVersion: 2\nlisten: { port: 9100 }\ntls: { mode: file, certificatePath: c.pfx, certificatePassword: 'env:PFX_PW' }\n"),
+            ("server.yaml", "schemaVersion: 2\nlisten: https://127.0.0.1:9100\ntls: { mode: file, certificatePath: c.pfx, certificatePassword: 'env:PFX_PW' }\n"),
             ("gateway/auth.yaml", $"jwt:\n  signingKey: {signingKey}\n  audience: a\n  mappings: [ {{ claim: c, value: v, dataSources: ['*'] }} ]\n"),
             ("connections/a.yaml", Conn.Yaml("a", connectionString: "Server=s;Encrypt=True", auth: "auth: { mode: sql, user: u, password_secret: 'env:A_PW' }")),
             ("connections/b.yaml", Conn.Yaml("b", connectionString: "Server=s", auth: "auth: { mode: sql, user: u, password_secret: 'env:B_PW' }")),
@@ -378,8 +504,7 @@ public sealed class ConfigCommandTests
         Assert.Equal(0, r.Code);
         string text = r.Out;
 
-        Assert.Contains($"Listen.Port = 9100   ({c.Path("server.yaml")}:2)", text);
-        Assert.Contains("Listen.Address = 0.0.0.0   (default)", text);
+        Assert.Contains($"Listen = https://127.0.0.1:9100   ({c.Path("server.yaml")}:2)", text);
         Assert.Contains("SchemaVersion = 2", text);
 
         foreach (var secret in new[] { signingKey })
@@ -399,11 +524,11 @@ public sealed class ConfigCommandTests
     public void Show_without_origin_prints_env_style_keys()
     {
         using var c = TempConfig.Create(
-            ("server.yaml", "listen: { address: 127.0.0.1, port: 9000 }\ntls: { mode: none }\nmanagement: { enabled: false }\n"),
+            ("server.yaml", "listen: http://127.0.0.1:9000\ntls: { mode: none }\nmanagement: { enabled: false }\n"),
             ("connections/erp.yaml", Conn.Yaml("erp", connectionString: "Server=x;Database=y", auth: "auth: { mode: sql, user: u, password_secret: 'env:ERP_PW' }", gateway: ["groups: [finance]"])));
         var r = Run("show", "--file", c.Directory);
         Assert.Equal(0, r.Code);
-        Assert.Contains("Gateway:Listen:Port = 9000", r.Out);
+        Assert.Contains("Gateway:Listen = http://127.0.0.1:9000", r.Out);
         Assert.Contains("Gateway:DataSources:erp:Provider = sqlserver", r.Out);
         Assert.Contains("Gateway:DataSources:erp:Groups:0 = finance", r.Out);
         Assert.DoesNotContain("(", r.Out);
@@ -412,7 +537,7 @@ public sealed class ConfigCommandTests
     [Fact]
     public void Show_of_an_invalid_directory_fails_with_2()
     {
-        using var c = TempConfig.Create(("server.yaml", "listen: { port: 70000 }\n"));
+        using var c = TempConfig.Create(("server.yaml", "listen: https://127.0.0.1:70000\n"));
         var r = Run("show", "--file", c.Directory);
         Assert.Equal(2, r.Code);
         Assert.Empty(r.Out);
@@ -422,7 +547,7 @@ public sealed class ConfigCommandTests
 /// <summary>Reloads through <see cref="GatewayOptionsMonitor"/>: a bad edit keeps the last good configuration and never crashes the service.</summary>
 public sealed class ConfigReloadTests
 {
-    private static string Server(int port, string extra = "") => $"listen: {{ port: {port} }}\n{extra}";
+    private static string Server(int port, string extra = "") => $"listen: https://127.0.0.1:{port}\n{extra}";
 
     // The edits are applied by reading the directory again (ReloadNow), not by waiting for the operating system to report a file change: what these tests pin is what the
     // monitor does with a reload (validate it, keep the last good one, say why). The file watcher only calls ReloadNow after a change settles.
@@ -447,14 +572,14 @@ public sealed class ConfigReloadTests
         using var _m = monitor;
         int changes = 0;
         using var _ = monitor.OnChange((_, _) => Interlocked.Increment(ref changes));
-        Assert.Equal(9001, monitor.CurrentValue.Listen.Port);
+        Assert.Equal(9001, DbDataGateway.Server.Hosting.GatewayListeners.Parsed(monitor.CurrentValue.Listen).First().Port);
 
         int Rejections() => capture.Lines.Count(l => l.Level == LogLevel.Error);
 
         // a valid edit is picked up
         config.Write("server.yaml", Server(9002));
         provider.ReloadNow();
-        Assert.Equal(9002, monitor.CurrentValue.Listen.Port);
+        Assert.Equal(9002, DbDataGateway.Server.Hosting.GatewayListeners.Parsed(monitor.CurrentValue.Listen).First().Port);
         Assert.Equal(1, changes);
 
         // semantically invalid edit (TLS file mode without a path): rejected, last good stays
@@ -462,7 +587,7 @@ public sealed class ConfigReloadTests
         config.Write("server.yaml", Server(9003, "tls: { mode: file }\n"));
         provider.ReloadNow();
         Assert.True(Rejections() > before, "invalid change not reported");
-        Assert.Equal(9002, monitor.CurrentValue.Listen.Port);
+        Assert.Equal(9002, DbDataGateway.Server.Hosting.GatewayListeners.Parsed(monitor.CurrentValue.Listen).First().Port);
         var line = capture.Lines.Last(l => l.Level == LogLevel.Error).Text;
         Assert.Contains("last good configuration stays in effect", line);
         Assert.Contains("Gateway:Tls:CertificatePath", line);
@@ -472,7 +597,7 @@ public sealed class ConfigReloadTests
         config.Write("server.yaml", Server(9003, "bogus: 1\n"));
         provider.ReloadNow();
         Assert.True(Rejections() > before, "unknown key not reported");
-        Assert.Equal(9002, monitor.CurrentValue.Listen.Port);
+        Assert.Equal(9002, DbDataGateway.Server.Hosting.GatewayListeners.Parsed(monitor.CurrentValue.Listen).First().Port);
         Assert.Contains("Gateway:bogus", capture.Lines.Last(l => l.Level == LogLevel.Error).Text, StringComparison.OrdinalIgnoreCase);
 
         // a file that does not parse: also rejected, naming the file, and the last good data stays
@@ -480,13 +605,13 @@ public sealed class ConfigReloadTests
         config.Write("server.yaml", "listen:\n  port: [1\n");
         provider.ReloadNow();
         Assert.True(Rejections() > before, "broken file not reported");
-        Assert.Equal(9002, monitor.CurrentValue.Listen.Port);
+        Assert.Equal(9002, DbDataGateway.Server.Hosting.GatewayListeners.Parsed(monitor.CurrentValue.Listen).First().Port);
         Assert.Contains("server.yaml", capture.Lines.Last(l => l.Level == LogLevel.Error).Text);
 
         // fixing the file recovers
         config.Write("server.yaml", Server(9004));
         provider.ReloadNow();
-        Assert.Equal(9004, monitor.CurrentValue.Listen.Port);
+        Assert.Equal(9004, DbDataGateway.Server.Hosting.GatewayListeners.Parsed(monitor.CurrentValue.Listen).First().Port);
     }
 
     [Fact]
@@ -501,8 +626,8 @@ public sealed class ConfigReloadTests
         provider.Dispose();
         config.Write("server.yaml", Server(9002));
         provider.ReloadNow();
-        Assert.True(provider.TryGet("Gateway:Listen:Port", out var port));
-        Assert.Equal("9001", port);
+        Assert.True(provider.TryGet("Gateway:Listen", out var port));
+        Assert.Equal("https://127.0.0.1:9001", port);
 
         Directory.Delete(config.Directory, true);
         provider.ReloadNow();

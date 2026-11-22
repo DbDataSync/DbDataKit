@@ -1,5 +1,6 @@
 using System.Net;
 using DbDataKit.Hosting;
+using DbDataKit.Hosting.Startup;
 using DbDataGateway.Server.Configuration;
 
 namespace DbDataGateway.Server.Hosting;
@@ -15,13 +16,12 @@ public static class HealthCheck
     {
         string scheme = options.Tls.Mode == TlsMode.None ? "http" : "https";
         // Listening on all addresses (0.0.0.0, ::) is reached through loopback.
-        var address = IPAddress.TryParse(options.Listen.Address, out var ip) && !ip.Equals(IPAddress.Any) && !ip.Equals(IPAddress.IPv6Any)
-            ? ip
-            : IPAddress.Loopback;
+        var flight = GatewayListeners.Parsed(options.Listen).FirstOrDefault();
+        var address = flight is not null && !flight.IsEveryAddress ? flight.Address : IPAddress.Loopback;
         string host = address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? $"[{address}]" : address.ToString();
         return new HealthProbeOptions
         {
-            DefaultUrl = $"{scheme}://{host}:{options.Listen.Port}/health/live",
+            DefaultUrl = $"{scheme}://{host}:{flight?.Port ?? SuiteServices.Gateway.Ports.Start}/health/live",
             HttpVersion = HttpVersion.Version20,
             TrustLoopbackCertificate = true,
         };

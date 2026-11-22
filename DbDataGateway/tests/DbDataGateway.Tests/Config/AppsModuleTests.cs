@@ -76,8 +76,8 @@ public sealed class AppsModuleTests : IAsyncLifetime
         while (identityPort == appsPort) identityPort = FreePort();   // a port given back is free to be handed out again, to the second listener too
         app = GatewayHost.Build([
             $"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Management:Enabled=false", "--Gateway:Modules:0=apps", "--Gateway:Modules:1=identity",
-            "--Gateway:Apps:Address=127.0.0.1", "--Gateway:Apps:RolesRefreshSeconds=1", $"--Gateway:Apps:Port={appsPort}", $"--Gateway:Apps:Home:ClientId={clientId}", 
-            "--Gateway:Identity:Address=127.0.0.1", $"--Gateway:Identity:Port={identityPort}", $"--Gateway:Identity:PublicUrl=https://localhost:{identityPort}",
+            "--Gateway:Apps:RolesRefreshSeconds=1", $"--Gateway:Apps:Listen=https://127.0.0.1:{appsPort}", $"--Gateway:Apps:Home:ClientId={clientId}", 
+            $"--Gateway:Identity:Listen=https://127.0.0.1:{identityPort}", $"--Gateway:Identity:PublicUrl=https://localhost:{identityPort}",
         ]);
         await app.StartAsync();
         return (Trusting($"https://localhost:{appsPort}"), Trusting($"https://localhost:{identityPort}"));
@@ -754,9 +754,9 @@ public sealed class AppsModuleTests : IAsyncLifetime
         }
 
         Assert.Contains(Load("tls: { mode: none }\nmodules: [apps]\n"), d => d.KeyPath == "Modules");
-        Assert.Contains(Load("listen: { address: 127.0.0.1, port: 8818 }\nmodules: [flightsql, apps]\n"), d => d.KeyPath == "Apps.Port");
-        Assert.Contains(Load("management: { enabled: true, port: 8818 }\nmodules: [apps]\n"), d => d.KeyPath == "Apps.Port");
-        Assert.Contains(Load("identity: { enabled: true, port: 8818 }\nmodules: [apps]\n"), d => d.KeyPath == "Apps.Port");
+        Assert.Contains(Load("listen: https://127.0.0.1:8818\nmodules: [flightsql, apps]\napps: { listen: https://127.0.0.1:8818 }\n"), d => d.KeyPath == "Apps.Listen");
+        Assert.Contains(Load("management: { enabled: true, listen: https://127.0.0.1:8818 }\nmodules: [apps]\napps: { listen: https://127.0.0.1:8818 }\n"), d => d.KeyPath == "Apps.Listen");
+        Assert.Contains(Load("identity: { enabled: true, listen: https://127.0.0.1:8818 }\nmodules: [apps]\napps: { listen: https://127.0.0.1:8818 }\n"), d => d.KeyPath == "Apps.Listen");
         Assert.Contains(Load("modules: [apps]\napps: { address: nowhere }\n"), d => d.KeyPath == "Apps.Address");
         Assert.DoesNotContain(Load("modules: [apps, identity]\napps: { home: { clientId: abc } }\n"), d => d.KeyPath?.StartsWith("Apps", StringComparison.Ordinal) == true);
         Assert.Contains(Load("modules: [apps, identity]\n"), d => d.KeyPath == "Apps.Home.ClientId");

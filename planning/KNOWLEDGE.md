@@ -3,7 +3,8 @@
 ## Goal
 
 Knowledge (curated and generated items, verified queries, access-filtered search) is served by the Gateway's `knowledge` module and authored in
-Workspace projects. Agents run in the console for back-end work, in the Gateway's `mcp` module for front-end work and in Runner tasks when unattended.
+Workspace projects. Agents run in the console (administrators and authors) and in the Gateway (end users), each over MCP or embedded, as the person
+(AGENTACCESS), and in Runner tasks when unattended.
 Actions (one script format) are declarative in Serving and run trusted code as a Runner run through path 1. The design of what is built is in
 `docs/knowledge.md`, `docs/agent-tools.md`, `docs/agents/` and `docs/integrations.md`.
 
@@ -41,19 +42,20 @@ Actions (one script format) are declarative in Serving and run trusted code as a
 | KNOWLEDGE-14 | The agent project editor's scripted test conversations, the knowledge file preview of the subjects and agents it reaches, on the recipe | KNOWLEDGE-13 | M | Playwright: run a scripted conversation of an agent project; a knowledge file's preview lists the agents an instruction reaches |
 | KNOWLEDGE-15 | The chat over a real model, providers and usage per channel, fallback lists, the console agent that offers the view-drafting tools | none | M | a recorded provider conversation in the console's chat shows usage and falls back to the second connection when the first fails |
 | KNOWLEDGE-16 | Evaluation runs as a Runner task: an agent's evaluation set runs on a Runner with the agent's model slot bound there; the promotion check (`EvaluationGate`) asks for the score | none | M | a Runner task runs a set and records scores; a promotion below the minimum is refused naming the score |
-| KNOWLEDGE-17 | Front-end agents in the Gateway's `mcp` module acting as the signed-in person; an app's assistant panel; a published agent as one MCP tool | KNOWLEDGE-2 | L | an MCP client calls a published agent through the module as a person and gets only what that person may read; Playwright of the assistant panel |
+| KNOWLEDGE-17 | Front-end agents in the Gateway's `mcp` module acting as the signed-in person, with the operations and agent data rules of AGENTACCESS-10 as their tools; an app's assistant panel; a published agent as one MCP tool | KNOWLEDGE-2, AGENTACCESS-10 | L | an MCP client calls a published agent through the module as a person and gets only what that person may read; Playwright of the assistant panel |
 | KNOWLEDGE-18 | Unattended agents in integrations: the agent runtime as a library in a task's process, the agent definition a dependency of the package, its model connection a slot | none | M | a Runner task runs an agent step with a recorded provider and records the turn |
 | KNOWLEDGE-19 | `action/1` and callable actions: one script format (C# or SQL) with parameters and traits, a spec like a command, published as the kind `action` with the administrator's approval of the exact version | KNOWLEDGE-13 | L | an action is published, refused unapproved, approved, and offered as a command spec |
 | KNOWLEDGE-20 | The action host: declarative actions answered in Serving; code actions as a Runner run through path 1 (the caller waits 10 seconds, then gets the run's link); apps and agents call actions through it | KNOWLEDGE-19, TRUSTZONES-4 | L | an app's call of a code action returns its result within the wait or the run's link; a declarative action writes a Store row as the person |
 | KNOWLEDGE-21 | Elevated actions: an action principal per channel, grants to it approved by two people, run grants to people, the declarative form (`where`, `from_state`, `to_state`, `fields`), audit and limits | KNOWLEDGE-20 | L | a person with run but no data grant changes a row only through the action; the audit names the action, its version, the principal and the person |
 | KNOWLEDGE-22 | The action editor's run with a sample input, and the console's approvals and grants of actions | KNOWLEDGE-21, KNOWLEDGE-13 | M | Playwright: run an action with a sample; approve an exact version; grant run to a group |
 | KNOWLEDGE-23 | Integration remainders: outbound steps in a non-production channel use the channel's connection or are refused (the rest), the console's connection form per kind with Test, the Store change trigger | MASTERDATA-1 | M | an outbound step in `test` with no binding is refused naming the slot; a Store change starts a task once; Playwright of the SFTP form's Test |
-| KNOWLEDGE-24 | The command-surface audit and the golden of MCP tools for every product, as the console has them (`ConsoleCommandSurfaceTests` over `CommandSurface.Audit` and `CommandSurface.Golden`): the Gateway, the Runner, the Workspace, Sync and Store each in its own test project, Build through its spec table, so a command that starts offering something to an agent (a secret, a write) is a line in a review | none | S | each product's test passes on its `golden/mcp-tools.txt`; a fake verb with no schema fails naming product and verb; adding a verb an agent may call changes the golden |
+| KNOWLEDGE-24 | The command-surface audit and the golden of MCP tools for every product, as the console has them (`ConsoleCommandSurfaceTests` over `CommandSurface.Audit` and `CommandSurface.Golden`): the Gateway, the Runner, the Workspace, Sync and Store each in its own test project, Build through its spec table, so a command that starts offering something to an agent (a secret, a write) is a line in a review; the goldens become goldens of operations with AGENTACCESS-1, and CLOUDDEV-5's tool list is generated from them | none | S | each product's test passes on its `golden/mcp-tools.txt`; a fake verb with no schema fails naming product and verb; adding a verb an agent may call changes the golden |
 | KNOWLEDGE-25 | SMB with Windows sign-in (Kerberos) proven on a Windows host in a domain: the `smb` connection kind lists, reads and writes a real share, and a ticket failure, a clock skew and an unreachable share are each classified as on Linux | none | S | by hand, because no domain is in CI: on a domain-joined Windows host, list, read, write and a failing ticket against a real share, with SMB signing on; the steps and the result in `docs/integrations.md`; anything found fixed with a unit test |
 
 ## Needs from other subjects
 
 - TRUSTZONES-4: path 1, for code actions.
+- AGENTACCESS-10: the Gateway's operations and agent data rules, the tools of KNOWLEDGE-17.
 - MASTERDATA-1: the Store change feed, for the change trigger.
 
 ## Proposed decisions
@@ -140,7 +142,7 @@ A verified query is a question people ask, the query that answers it and someone
 The knowledge index holds what describes the system; content is searched where it is kept, by that system's own rules. Definitions of every kind
 (semantic models and members, Build models and columns, Store models, data sources, apps, portals, agents, skills, saved queries, reports and
 dashboards, integrations) are generated knowledge. Packages not served by the serving group (Runner packages, integrations) still get an item: when the
-Workspace publishes one it also publishes its description (name, title, what it reads and writes, owner; never its code) to the group. Source code and
+control service deploys one it also publishes its description (name, title, what it reads and writes, owner; never its code) to the group. Source code and
 files are not in the index (they change per branch, people search them for exact text, and their access is the project's): workspace search on the
 Workspace, exact text and file names per repository and branch under the person's rights. Data, documents' contents and operational records (runs,
 notifications, audit, suggestions, work items) stay with their own systems and screens. The search component asks several search sources at once and

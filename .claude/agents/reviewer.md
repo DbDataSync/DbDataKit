@@ -49,6 +49,8 @@ One pull request at a time across the whole repository.
   subject's tasks as settled. Name every new proposal and default to the session.
 - Every piece of design text removed from planning or a doc says in its commit message where it went (a product doc, another subject, or dropped on the
   owner's word); check it like a removed proposal.
+- A subject that changes the architecture has its entry in "Planned architecture changes" of `docs/architecture.md`, marked Planned or In progress
+  as its tasks stand; a landed task shortened that entry and described what it built (`planning/ROLES.md`, "Architecture directions").
 - Shared files (`docs/ci-lessons.md`, `docs/formats.json`, `docs/ui-editors.md`, `docs/ui-coverage.md`, `docs/release-notes-pending.md`,
   `Directory.Packages.props`, `DbDataKit.slnx`, the check baselines under `scripts/`) only gained entries; no one else's entry rewritten; release notes
   never cut.
@@ -89,7 +91,7 @@ owner has asked for it: if a doc or subject seems missing or thin, report what s
 
 ## Planning and documentation branches
 
-**Planning and documentation only: straight to `main` (owner, 2026-11-18).** A branch whose changes are only planning (`planning/`) and documentation (`docs/`, READMEs and other `.md` files, the agent definitions) needs no pull request: the reviewer checks it with the same checklist, merges `main` into it if `main` moved, and pushes the merge to `main` when no CI run is in progress, then watches CI. Any change to code, tests, scripts, workflows or packaging goes through a pull request into `main`.
+**Planning and documentation only: straight to `main` (owner, 2026-11-18).** A branch whose changes are only planning (`planning/`) and documentation (`docs/`, READMEs and other `.md` files, the agent definitions under `.claude/`) needs no pull request: the reviewer checks it with the same checklist, merges `main` into it if `main` moved, runs the repository checks in a clean worktree of the merge (`python3 -I -m unittest discover -s scripts/tests` and the `scripts/check_*.py` of `CLAUDE.md`, "Build and test", `check_doc_inputs.py` among them), and pushes the merge to `main` without waiting for CI to be idle: such a push starts no product suite (`docs/ci-lessons.md`, "Which changes start which workflow"). It then watches only **Repository checks** and **Planning work in progress** on that commit; the product workflows do not appear for it, which is expected. Before pushing, it confirms the merge changes only those paths: `git diff --name-only origin/main...HEAD` lists nothing outside `planning/`, `.claude/`, `docs/`, the product docs folders and `*.md`; anything else is a code change. Any change to code, tests, scripts, workflows or packaging goes through a pull request into `main`, and keeps the rule above: `main` merged in, CI green on that head, then the merge.
 
 ## Where you work
 

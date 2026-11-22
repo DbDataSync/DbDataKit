@@ -17,7 +17,7 @@ that started you gave you the subject, the task ids and what the owner said. You
 
 ## Your limits
 
-- Edit only your subject file and the code and docs your tasks need. Never edit another subject's file, never edit `planning/README.md`.
+- Edit only your subject file and the code and docs your tasks need. Edit another subject's file only to clear references to a task you finished: its id leaves each "Depends on" cell and each line under "Needs from other subjects"; a line that still says something another task relies on is rewritten to name what now exists (a library, a command, a page), a line with nothing left goes (`planning/ROLES.md`, "Task rows"). Never edit `planning/README.md`.
 - Never decide. A question the owner has not answered, or a choice you had to make to keep going (a default), is written down and reported; a default
   is a proposal until the owner answers. Never write a default into a product doc as settled.
 - Shared files (`docs/ci-lessons.md`, `docs/formats.json`, `docs/ui-editors.md`, `docs/ui-coverage.md`, `docs/release-notes-pending.md`,
@@ -27,6 +27,8 @@ that started you gave you the subject, the task ids and what the owner said. You
 - Nothing is dropped from planning or a doc without the owner's word; a commit that removes design text says in its message where it went.
 - Code comments describe the code (what and why) and never cite a plan, task id, proposal or subject; a pointer to a finished doc is
   `Design: docs/<path>.md#<anchor>` (`docs/code-comments.md`).
+- Any text you write into product docs (`docs/`, READMEs) follows the skill `product-docs` (`.claude/skills/product-docs/SKILL.md`); check each
+  sentence with its list before you commit.
 
 ## Branch
 
@@ -54,7 +56,7 @@ wip file for the task:
   message names the proposal id and says `answered by the owner: <the answer>`;
 - a question the owner has not answered, and every default: a proposed decision `<SLUG>-P<n>` (the next free number) under "Proposed decisions" in the
   subject file, as a concrete scenario with the options and a recommendation, marked "awaiting the owner" (or "default, awaiting the owner");
-- a need from another subject: a line under "Needs from other subjects" naming that subject's task id (never edit that subject's file).
+- a need from another subject: a line under "Needs from other subjects" naming that subject's task id (never edit that subject's file for a need).
 
 ## Before you push
 
@@ -62,7 +64,7 @@ Run the "before you push" list of `docs/ci-lessons.md`, then:
 
 ```
 python3 -I -m unittest discover -s scripts/tests
-python3 -I scripts/check_package_versions.py && python3 -I scripts/check_solution.py && python3 -I scripts/check_duckdb_cache.py && python3 -I scripts/check_native_cache.py && python3 -I scripts/check_plans.py && python3 -I scripts/check_formats.py && python3 -I scripts/check_state_migrations.py && python3 -I scripts/check_compatibility.py && python3 -I scripts/check_ui_editors.py && python3 -I scripts/check_env_names.py && python3 -I scripts/check_secret_names.py && python3 -I scripts/check_default_ports.py && python3 -I scripts/check_product_name.py
+python3 -I scripts/check_package_versions.py && python3 -I scripts/check_solution.py && python3 -I scripts/check_duckdb_cache.py && python3 -I scripts/check_native_cache.py && python3 -I scripts/check_plans.py && python3 -I scripts/check_formats.py && python3 -I scripts/check_state_migrations.py && python3 -I scripts/check_compatibility.py && python3 -I scripts/check_ui_editors.py && python3 -I scripts/check_env_names.py && python3 -I scripts/check_secret_names.py && python3 -I scripts/check_default_ports.py && python3 -I scripts/check_product_name.py && python3 -I scripts/check_doc_inputs.py
 ```
 
 and the product's build and the suites your change can affect (`CLAUDE.md`, "Build and test"), through `scripts/build-slot.sh` on a shared machine

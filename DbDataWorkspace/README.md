@@ -4,8 +4,9 @@ The server where people (and, later, agents) author projects in git workspaces (
 **Built:** editing a draft's files, commit, push and merge (GP35a); an app project starts as the app template (GP32); builds from a vendored package store, a read-only preview and publishing to a paired Gateway (GP35b, below). **Not built:** a preview with live data (the semantic route and the apps host's preview channel), a git remote for a project. The `build` table and the publisher's key reference are in the state module; the builds write the one and publishing reads the other.
 
 ```
-dbdataworkspace server run [--repo <server directory>] [--listen https://127.0.0.1:8471] [--state-engine sqlite|mssql|postgres --state-connection <connection string>]
+dbdataworkspace server run [--repo <server directory>] [--listen https://127.0.0.1:7860] [--state-engine sqlite|mssql|postgres --state-connection <connection string>]
 dbdataworkspace server pair --max-role <roles> [--repo <server directory>]
+dbdataworkspace pair --host <console address> --token <token|-> --console-thumbprint sha256:<hex> [--address <https address>] [--repo <server directory>]   # the command the console prints (dbdatakit setup invite): joins it at the next start
 dbdataworkspace server clients | unpair <client> [--repo <server directory>]
 dbdataworkspace project create <id> [--title <text>] [--kind app|build|store|sync|integration] [--template <name>] [--repo <server directory>]   # a git repository in projects/<id> with a first commit
 dbdataworkspace project add <id> --path <repository folder> [--title <text>] [--kind app|build|store|sync|integration] [--template <name>] [--repo <server directory>]   # host a repository that is already on this machine, in place
@@ -13,11 +14,11 @@ dbdataworkspace project list [--repo <server directory>]
 dbdataworkspace workspace list [--project <id>] [--repo <server directory>]
 dbdataworkspace publisher pair <name> --url <https address of a Gateway's management API> --code <pairing code> [--client-name <text>] [--repo <server directory>]   # make the key for a target and pair it with a Gateway (the code: `server pair --max-role publisher` there)
 dbdataworkspace publisher list [--repo <server directory>]   # each target's key reference (never the key) and its Gateway
-dbdataworkspace service install|uninstall|status|start|stop|restart|doctor|unit
+dbdataworkspace service install|uninstall|status|start|stop|restart|check|unit
 dbdataworkspace state init --topology service|group|install [--engine mssql|postgres --connection <connection with Password=secret:NAME or env:NAME>] [--login <role or user> [--migrate]] [--admin-connection <reference> --apply] [--group <name>] [--settings <file>] [--repo <server directory>]   # writes the state section of server.yaml (a SQLite file per service is the default)
 dbdataworkspace state show [--offline] [--engine mssql|postgres] [--repo <server directory>]      # the state database: engine, where each setting came from, namespaces, module versions, pending migrations; creates nothing
 dbdataworkspace state test [--repo <server directory>]                   # opens it read-only and checks rights, engine version and clashes; stops at the first failure with the fix
-dbdataworkspace state grants --login <database role or user> [--migrate] [--repo <server directory>]
+dbdataworkspace state grants [--login <database role or user>] [--migrate] [--repo <server directory>]
 dbdataworkspace state export --to <directory> [--include-secrets-check] [--repo <server directory>]   # the state as a snapshot; stop the server first
 dbdataworkspace state import --from <directory> [--migrate-after true|false] [--repo <server directory>]   # into an empty directory's state
 dbdataworkspace state verify --snapshot <directory> [--db] [--rehash-payloads] [--repo <server directory>]   # the snapshot against itself, or the state against it
@@ -25,6 +26,9 @@ dbdataworkspace state move --to-engine sqlite|mssql|postgres [--to-connection <s
 dbdataworkspace secret set|list|delete|... [--repo <server directory>]   # the server's own secret store (the shared secret verbs)
 dbdataworkspace health check [--url <url>]
 ```
+
+Merging a draft of a project that has a git remote pushes the draft's branch there, and the person opens the pull request where the remote is hosted;
+the Workspace gives the link. A project without a remote is merged in the Workspace, under the author's name.
 
 ## A project's two areas: Files and Designer
 
@@ -43,7 +47,7 @@ Example: in the sync project `erp-sync`, an engineer opens the draft `add-order-
 
 A kind's Designer is a web package of its own, registered with `@dbdatakit/workspace` (a component, its routes and its navigation entries), built and tested on its own; components any product uses go to `@dbdatakit/shell`. The sync Designer is `@dbdatakit/sync-ui` (`Shared/web/sync-ui`, an npm workspace like `store-ui`): the Sync server's authoring screens of a replication, restored, with everything that watched or operated a running replication left out. Why a package rather than a folder of the Workspace's: the Workspace's own package stays the frame and Files, and a later pass can put the screens that watch a replication beside the authoring ones for the console's Runner pages.
 
-The sync Designer's server calls (the script slots a binding can name, a connection's readers, staging providers and writers, the databases, tables and columns of the catalog cache, a mapping's inferred column types and key, bulk create of mappings) are answered in the Workspace's own process, from Sync's libraries under `Shared/src/DbDataKit.Sync.*` (the configuration model, the driver descriptors and registry, the script host's slot list, the mapping column reader), so the column picker can ask as the person types. Anything that compiles or runs a script a person wrote stays a child process on a copy of the draft, as the script test is: the Workspace never runs an author's code in its own process.
+The sync Designer's server calls (the script slots a binding can name, a connection's readers, staging providers and writers, a mapping's inferred column types and key, bulk create of mappings) are answered in the Workspace's own process, from Sync's libraries under `Shared/src/DbDataKit.Sync.*` (the configuration model, the driver descriptors and registry, the script host's slot list, the mapping column reader), so the column picker can ask as the person types. The databases, tables and columns are not a server call: the screens read the draft's `catalog-cache.yaml` in the browser through the Workspace's route that reads a draft's file, a refresh not yet saved included ([docs/authoring-metadata.md](../docs/authoring-metadata.md), "A sync project"). Anything that compiles or runs a script a person wrote stays a child process on a copy of the draft, as the script test is: the Workspace never runs an author's code in its own process.
 
 A sync project's engines come from the suite's engine registry (`DbDataKit.Connections.Descriptor`'s `engines/*.engine.yaml`, read into the web build), one list that the Files area's Sync forms and the Designer's screens both read (`useSyncEngines` of `@dbdatakit/workspace`): as a source the engines whose `sync_source` role is `supported` or `unverified`, as a target those whose `sync_target` is, each with the role's note; a role that is `planned` is shown as planned and not offered, and an engine with no Sync role is not listed. A driver the project carries itself (`drivers/<id>/driver.yaml` or `driver.csx`) is listed as custom and offered as both a source and a target, with the note that what it reads and writes is checked when the draft is checked; once the Workspace answers a connection's capabilities from the driver registry (as the old Sync server did), such a driver is offered only in the roles it has. Example: the new-connection form of Files offers `postgres: source and target` and `flightsql: source`, and a connection naming `flightsql` says under its form that it may be a source and not a target; a project's `drivers/legacy/driver.yaml` that lists readers and no writer is offered as `legacy (custom): source and target`, and the draft's check says it cannot be a target.
 

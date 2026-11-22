@@ -152,7 +152,7 @@ public static class AppAddressing
     public static AppAddressContext? Of(HttpContext context) => context.Items.TryGetValue(ItemKey, out var v) ? v as AppAddressContext : null;
 
     /// <summary>The path the browser used (before the rewrite, with the proxy's prefix): what a redirect that keeps the person where they are must use.</summary>
-    public static string PublicPath(HttpContext context) => Of(context)?.PublicPath ?? context.Request.Path.Value ?? "/";
+    public static string PublicPath(HttpContext context) => Of(context)?.PublicPath ?? AppsPaths.ToPublic(context.Request.Path.Value ?? "/");
 
     /// <summary>Adds the routing to the pipeline. Call it before <c>UseRouting</c> (the rewritten path is what the routes match).</summary>
     public static IApplicationBuilder UseAppAddresses(this IApplicationBuilder app, AppBindings bindings, AppInstanceStore instances, TrustedProxies? proxies = null)
@@ -172,7 +172,7 @@ public static class AppAddressing
             }
             var host = HostString.FromUriComponent(authority).Host.ToLowerInvariant();
             var path = request.Path.Value ?? "/";
-            var publicPath = prefix + path;
+            var publicPath = prefix + AppsPaths.ToPublic(path);
             var binding = bindings.Find(host, publicPath);
             context.Items[ItemKey] = new AppAddressContext(binding, host, publicPath, authority);
 
@@ -217,7 +217,7 @@ public static class AppAddressing
 
     /// <summary>The redirect URI the home is asked to return to when a person signs in at this name: the name's own callback, as the browser addressed it; null at the host's own address (the client's configured one).</summary>
     public static string? CallbackFor(HttpContext context) =>
-        Of(context) is { Binding: not null } at ? $"https://{at.Authority}{AppsEndpoints.CallbackPath}" : null;
+        Of(context) is { Binding: not null } at ? $"https://{at.Authority}{AppsPaths.Prefix}/-/callback" : null;
 
     private static async Task Text(HttpContext context, int status, string message)
     {

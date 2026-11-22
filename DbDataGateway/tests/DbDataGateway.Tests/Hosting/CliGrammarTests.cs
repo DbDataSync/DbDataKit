@@ -27,6 +27,7 @@ public sealed class CliGrammarTests
             Commands:
               server      The long-running process
               service     Registration of 'server run' with Windows or systemd
+              pair        Join the console that printed this command: writes the join request into the data folder and restarts the service, which joins at its start
               cert        The server's TLS certificate
               secret      The encrypted secret store, secret references and protected values
               identity    The identity home this gateway serves: register consoles and apps, invite people, give them roles
@@ -47,6 +48,13 @@ public sealed class CliGrammarTests
             Add --format json to any command for a JSON document instead of text.
 
             """.Replace("\r\n", "\n"), result.Out);
+    }
+
+    [Fact]
+    public async Task Service_check_is_a_verb_of_service()
+    {
+        var help = await Run("service", "help");
+        Assert.Contains("service check [--name N]", help.Out);
     }
 
     [Fact]
@@ -89,7 +97,7 @@ public sealed class CliGrammarTests
     [InlineData("install")]
     [InlineData("uninstall")]
     [InlineData("--healthcheck")]
-    [InlineData("--Gateway:Listen:Port=9000")]
+    [InlineData("--Gateway:Listen=https://127.0.0.1:9000")]
     public async Task The_old_forms_are_not_commands(string old)
     {
         var result = await Run(old);

@@ -118,20 +118,15 @@ jobs:
           git checkout -q --detach "$sha"
 
       # A lookup, not a re-run: the run on main is the validation (a rebase merge makes new commits, so a pull request's own run is not theirs).
-      - name: Require a green CI run for this exact commit
+      # A commit that changes only what the CI ignores (planning, documentation, Markdown) has no run of its own: the nearest commit before it that has
+      # a green run covers it, with its own green Repository checks run (scripts/ci_paths.py).
+      - name: Require a green CI run that covers this commit
         if: ${{ !inputs.dry_run && !inputs.snapshot }}
         shell: bash
+        working-directory: .
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          green=$(gh api \
-            "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$SHA&status=success" \
-            --jq '[.workflow_runs[] | select(.name == "DbDataRunner CI")] | length')
-          echo "successful CI runs for $SHA: $green"
-          if [ "$green" -lt 1 ]; then
-            echo "::error::No successful DbDataRunner CI run for $SHA. Releasing a commit whose CI has not passed is exactly what this check exists to prevent. Dispatch 'DbDataRunner CI' on main, or pick a commit that has a run."
-            exit 1
-          fi
+        run: python3 -I scripts/ci_paths.py require-green --workflow .github/workflows/dbdatarunner-ci.yml --sha "$SHA"
 
       - uses: actions/setup-dotnet@v6
         with:

@@ -29,7 +29,8 @@ namespace DbDataKit.Server;
 public sealed record IdentityHostSettings(string Directory, Uri Listen, Uri? PublicUrl = null, StateSettings? State = null, StateSources? StateSources = null)
 {
     public const string Product = "dbdatakit-identity";
-    public const string DefaultListen = "https://localhost:8482";
+    /// <summary>Its default address: the last port of the console's sub-block, so a console that chose a port of the sub-block from its start does not meet it.</summary>
+    public const string DefaultListen = "https://localhost:7819";
 
     /// <summary>The module's name in the suite's folders and variables (<see cref="SuiteEnvironment"/>): <c>identity</c>.</summary>
     public const string ServiceName = "identity";

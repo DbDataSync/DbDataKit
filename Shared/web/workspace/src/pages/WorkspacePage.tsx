@@ -268,7 +268,7 @@ function FilesOverview({ project, id, kind, editable, canWrite, openFile, openTa
 
 /** One tab button of the Files area. */
 function TabButton({ tab, at, label, openTab }: { tab: Tab; at: Tab; label: string; openTab: (tab: Tab) => void }) {
-  return <button type="button" role="tab" aria-selected={tab === at} className={`btn ${tab === at ? 'btn-primary' : ''}`} data-testid={`wsp-tab-${at}`} onClick={() => openTab(at)}>{label}</button>
+  return <button type="button" role="tab" aria-selected={tab === at} className={`subtab ${tab === at ? 'active' : ''}`} data-testid={`wsp-tab-${at}`} onClick={() => openTab(at)}>{label}</button>
 }
 
 /** The Files area: the file open (from the address) in its editor, and the draft's tabs below it (the tab from the address too), as the page always was. */
@@ -282,7 +282,7 @@ function FilesArea({ project, id, kind, editable, canWrite, openFile, openTab, s
       {selected === null
         ? <div className="empty" data-testid="wsp-pick">Pick a file to read{editable ? ' or edit' : ''} it.</div>
         : <FileEditor key={selected} project={project} id={id} kind={kind} path={selected} paths={paths} editable={editable && !(kind === 'build' && selected.startsWith('rendered/'))} canWrite={canWrite} onGone={() => openFile(null)} onRenamed={openFile} onOpen={openFile} />}
-      <div className="row" style={{ gap: 8, margin: '18px 0 8px' }} role="tablist">
+      <div className="subtabbar" style={{ margin: '18px 0 8px' }} role="tablist">
         {t('changes', 'Changes')}
         {t('check', 'Check')}
         {kind === 'build' && t('models', 'Models and plan')}

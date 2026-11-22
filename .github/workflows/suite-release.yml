@@ -114,14 +114,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.guard.outputs.sha }}
+          fetch-depth: 0   # the guard walks the history back to the nearest green run
       # A lookup, not a re-run, as in the product releases. A dry run builds whatever is on main.
-      - name: Require a green CI run for this exact commit
+      - name: Require a green CI run that covers this commit (scripts/ci_paths.py)
         if: ${{ !inputs.dry_run && !inputs.snapshot }}
-        run: |
-          green=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$SHA&status=success" \
-            --jq '[.workflow_runs[] | select(.name == "DbDataKit CI")] | length')
-          echo "successful DbDataKit CI runs for $SHA: $green"
-          [ "$green" -ge 1 ] || { echo "::error::No successful DbDataKit CI run for $SHA."; exit 1; }
+        run: python3 -I scripts/ci_paths.py require-green --workflow .github/workflows/dbdatakit-ci.yml --sha "$SHA"
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: DbDataKit/global.json

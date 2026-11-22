@@ -31,7 +31,7 @@ public sealed partial class GatewayServerSettings(string configDirectory, Gatewa
 
     /// <summary>Top-level keys a running Gateway reads when it starts (listeners, certificates, the modules it mounts, the state it opens, the hosts it runs): a change to one takes effect at the next start.</summary>
     public static readonly IReadOnlyList<string> RestartKeys =
-        ["dataDirectory", "modules", "listen", "management", "tls", "identity", "apps", "store", "views", "mcp", "rest", "state", "secrets", "compression", "worker", "hosting", "telemetry", "definitionPollSeconds"];
+        ["dataDirectory", "modules", "listen", "management", "tls", "identity", "apps", "store", "views", "mcp", "rest", "state", "secrets", "compression", "worker", "hosting", "telemetry", "definitionPollSeconds", "startup"];
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly WriteGuard _guard = new();
@@ -113,7 +113,10 @@ public sealed partial class GatewayServerSettings(string configDirectory, Gatewa
                     ["semantic.combine.timeoutSeconds"] = o.Semantic.Combine.TimeoutSeconds,
                     ["semantic.combine.maxInputRows"] = o.Semantic.Combine.MaxInputRows,
                     // the feeds module's listener and limits (plan 14a SL31)
-                    ["rest.port"] = o.Rest.Port,
+                    // a single address is edited in place; a list of addresses stays in the text (null)
+                    ["rest.listen"] = o.Rest.Listen.Count == 1 ? o.Rest.Listen[0] : o.Rest.Listen.Count == 0 ? "" : null,
+                    // the path of each module on the public listener (the form shows the default as an empty box)
+                    ["identity.path"] = o.Identity.Path, ["apps.path"] = o.Apps.Path, ["store.path"] = o.Store.Path, ["views.path"] = o.Views.Path, ["rest.path"] = o.Rest.Path, ["mcp.path"] = o.Mcp.Path,
                     ["rest.defaultLimit"] = o.Rest.DefaultLimit,
                     ["rest.maxRows"] = o.Rest.MaxRows,
                 },

@@ -3,6 +3,26 @@
 Each entry says what to do about it. Add to it in the pull request that makes the change, one entry per change, without rewriting other entries; a
 release moves the entries into its notes and empties this file.
 
+## Servers join the console by a command it prints
+
+- **`dbdatakit setup invite <gateway|runner|workspace>` prints a command to run on the server's machine (`dbdatarunner pair --host ... --token ... --console-thumbprint sha256:...`); the server joins the console at its next start, and the console lists it with the address and certificate it reported.** The token works once and for 15 minutes unless `--minutes` says otherwise; only a verifier made from it is kept in the console's state. The Gateway, the Runner and the Workspace have the new `pair` command and a join step at their start: a refused join stops the start, and its startup-failure file says what the console answered. The console's state gains a table (`join_token` of the `trust` module, under the group `console`), added when the console starts; a console's own state login stays `dbdatakit_console`. Pairing by code (`server pair`, `instance add --code`) still works. What to do: nothing; for a new server, run the printed command instead of exchanging a code. The Gateway joins on its management listener, so its management API must be on (`management.enabled: true`, the default).
+
+- **New: the console's Add a server screen (Servers, Add a server) makes the same command as `setup invite`.** An administrator chooses the server, the role ceiling, a group and how long the command works, and copies the command, which the screen shows once. Below it the screen lists the tokens still waiting, never their values, and Cancel ends one; making and cancelling a token are in the console's audit (`server.invite`, `server.invite.cancel`). The routes are `GET`, `POST /api/join-tokens` and `DELETE /api/join-tokens/<id>`, for administrators only. What to do: nothing.
+
+## The Gateway's HTTP modules share one listener
+
+- **The identity, apps, store, views, feeds and MCP modules answer on one public HTTPS listener, routed by path (`public:` in `server.yaml`, port 8817 by default); a module has a port of its own only when its `port` is set.** Before, each module listened on its own port (identity 8817, apps 8818, store 8819, views 8820, feeds 8821, mcp 8822). Now they have none unless set, and a client set to one of those ports finds nothing. What to do: point the client at the public address with the module's prefix (`https://gateway:8817/feeds/api/v1/query`, `/store/api/v1/models`, `/views/api/v1/...`, `/mcp`; the identity home and the apps host keep the paths they have), or keep the old address by setting the module's `port` (`store: { port: 8819 }`) before you start the new release. A module with `port` set is not under its prefix on the public listener. The compose file `dist/compose/quickstart-apps.yml` sets the identity and apps ports so its addresses stay.
+
+## One `listen` setting for every listener
+
+- **Every service and every listener of the Gateway has one setting, `listen`: an address with its scheme and port (`https://0.0.0.0:7820`), or a list of addresses. `port` and `address` are gone, with no alias.** The console, the Runner and the Workspace already had `listen:`; they now also read a list, in the file and in `--listen` (`--listen "https://127.0.0.1:7841;https://127.0.0.1:9443"`). The Gateway's `listen: { address, port }` (Flight SQL), `management`, `public` and each module's `port` and `address` are replaced by `listen`, `management.listen`, `public.listen` and `<module>.listen` (`rest.listen` for feeds). A file, an environment variable or a command-line setting that still has `port` or `address` stops the Gateway and the message names the file and the setting. What to do: in `server.yaml` write `listen: https://0.0.0.0:8815` for `listen: { address: 0.0.0.0, port: 8815 }`, `management: { listen: https://127.0.0.1:8816 }` for `management: { port: 8816 }`, and the same for each module; in a compose file or a container, `DBDATAKIT_Gateway__Listen=https://0.0.0.0:8815` for `DBDATAKIT_Gateway__Listen__Port=8815`. `https` uses the Gateway's certificate; Flight SQL takes `http` only with `tls.mode: None`.
+- **A Gateway's public listener, Flight SQL and management API no longer have fixed ports (8817, 8815, 8816).** A listener with no `listen` takes the first free port of the Gateway's block, 7820 to 7839, at the first start, in the order public, Flight SQL, management, and the Gateway writes it to `config/server.yaml`; a Gateway started with no settings listens on 7820, 7821 and 7822, or the next free ports, and on the same ones after every restart. The public listener now starts in every case. A port you write is never moved: a held port fails the ports step, naming the port and the excluded ranges. What to do: a client set to 8815, 8816 or 8817 is set to the Gateway's pinned address (`config/server.yaml`, or the console's Servers page), or the Gateway is given the old ports in `server.yaml`. The container image and the compose files keep 8815 and 8816, and `quickstart-apps.yml` keeps 8817 and 8818, as `listen` settings.
+- **The Gateway's settings screen edits `rest.listen` (REST feeds own address) in place of `rest.port`.** An empty box means the default and saves nothing; a list of addresses is edited in the text view.
+
+## Every Gateway module is under a path of its own
+
+- **On the public listener every module is under a path, set by the administrator: `/identity`, `/apps`, `/store`, `/views`, `/feeds` and `/mcp` by default (`identity.path`, `apps.path`, `store.path`, `views.path`, `rest.path`, `mcp.path`); `/` answers 404.** The identity home moves under `/identity`: its sign-in page is `/identity/sign-in`, the invitation page `/identity/invite` (the first-run invitation and `identity invite` print this address), its calls `/identity/api/auth/...`, `/identity/api/invites...`, `/identity/api/users...` and `/identity/api/access-tokens`, and its issuer is the listener's address with the path, `https://gateway:7820/identity`, with the discovery document at `<issuer>/.well-known/openid-configuration`. `/invite`, `/api/auth/...` and `/.well-known/openid-configuration` at the root answer 404. The apps host's redirect URIs follow the apps path (`https://gateway:7820/apps/-/callback`). What to do: a console, an app host or a script that stored the old issuer `https://gateway:7820` is set to `https://gateway:7820/identity` (a console's `--identity-home`, `apps.home.authority`, the authority of an OpenID client); an identity client registered at the home keeps its redirect URIs, which are the clients', not the home's; a link to `/invite#...` is `/identity/invite#...`; the Entra app registration's redirect URI is `<issuer>/upstream/entra/callback`. A module with a `listen` of its own has no path, and a home that runs on its own (`dbdatakit identity run`) keeps its issuer and its paths. The Gateway's settings screen has a box per module path; an empty box means the default.
+
 ## The install is four services
 
 - **The Store server is gone (plan 33 SC23); the install is four services (console, Workspace, Gateway, Runner).** `dbdatastore server`, `service`, `health`, `state` and `secret`
@@ -29,6 +49,27 @@ release moves the entries into its notes and empties this file.
   `systemctl disable --now dbdatasync`) before you install this release.
   The Runner's own screen sets a connection's run login on a runner package's connections card (*Set the login*), in place of
   `dbdatasync secret send --to runner`; a replication set's Apply (provisioning) runs as its `provision` task on the Runner.
+- **Changed: the console, the Runner and the Workspace listen on new default ports, from the suite's range 7800 to 7899.** With no `--listen`, a
+  first start takes the default of its service, or the next free port of the service's sub-block, and writes it as the `listen:` line of its settings
+  file (`settings.yaml` in the console's folder, `server.yaml` in the Runner's and the Workspace's); later starts use that port. The old and the new
+  defaults:
+
+  | Listener | Old default | New default (sub-block) |
+  | --- | --- | --- |
+  | the console (`dbdatakit server run`) | 8480 | 7800 (7800 to 7819) |
+  | the identity home on its own (`dbdatakit identity run`) | 8482 | 7819 (a fixed default, never chosen or written) |
+  | the Runner (`dbdatarunner server run`) | 8495 | 7840 (7840 to 7859) |
+  | the Workspace (`dbdataworkspace server run`) | 8471 | 7860 (7860 to 7879) |
+
+  What to do: a server started with `--listen` (the container images, the compose files, a service registered with its own address) keeps its
+  port. For any other, change what points at the old port: a browser's bookmark, an `instances.yaml` entry or a publisher's paired address (pair
+  again on the new address), a firewall rule. To keep an old port, add `listen: https://127.0.0.1:8495` (with the server's own host and port) to the
+  server's settings file before you start the new release. `health check` asks the new default address; give `--url` for a server on another port.
+  The Gateway's listeners keep 8815 to 8822 for now.
+
+## Tasks that change table structure start only from the console
+
+- **A task with `capabilities: [ddl]` runs only on the console's signed approval.** A package task that creates, alters or drops tables can declare the capability `ddl`; it must then have no schedule and no trigger but `manual`. The Runner refuses a run of it from its own screens, `tasks run` and any paired client that does not carry the console's approval (403, audited as `runner.task.run`), and its task page shows no Run now button. The console starts it with `POST api/runner-runs/<server>/<package>/<channel>/<task>` after a person approves the exact statements. A dry run needs no approval. Packages that do not declare `ddl` are unchanged. A Runner older than this release ignores the capability, so upgrade the Runner before relying on it.
 
 ## Names
 
@@ -61,6 +102,11 @@ release moves the entries into its notes and empties this file.
   | `dbdata:kit:console:signing-key` and `signing-key-next` (the console's identity) | `dbdatakit:server:identity:signing-key` and `signing-key-next` |
   | `secret list` with no prefix lists `dbdata:` | it lists `dbdatakit:` |
 <!-- secret-names:end -->
+- **Changed: the Gateway's Windows service is `DbDataGateway`, and the four services have new descriptions.** `dbdatagateway service install` registers `DbDataGateway`, running as `NT SERVICE\DbDataGateway` (it was `dbdatagateway`). Windows compares service names without case and makes the account's SID from the upper-case name, so a Gateway registered by an earlier release is the same service with the same account, and `Start-Service dbdatagateway` still works. An MSI upgrade keeps the registration as it is; `dbdatagateway service install` from an elevated prompt updates its description, and `dbdatakit-full` registers it again under the new spelling on `scoop update`. The console, Gateway, Runner and Workspace services carry the descriptions listed in `docs/install.md`, "Service names, accounts and descriptions"; run each product's `service install` again to update an existing service. `dist.json` gives no service name for these four products any more: the installers read it from the suite's table.
+
+- **New: `service check`.** In `dbdatakit`, `dbdatagateway`, `dbdatarunner` and `dbdataworkspace`, `service check` checks the service's registration, its account and the permissions of its folders, then prints the startup-failure file of its last start (or that there is none). Its last line is `Check: OK (<n> warning(s)).` or `Check: <n> failure(s).`; it exits with code 1 when a check fails, so a script can run it after `service install`.
+
+- **Changed: a server refuses to start on a data folder another account could change, unless told to skip the check.** At start, the console, the Gateway, the Runner and the Workspace check their data folder: on Linux and macOS it must be owned by the service's account and not writable by every account; on Windows its access list must not let Everyone, Users, Authenticated Users, Anonymous, Guests or Interactive write to it. A folder that fails stops the start at the folder step, and `startup-failure-<program>.txt` names the folder, its owner, what is wrong and the switch. For a test's folder or a checkout, start with `--skip-folder-permissions-check` (also on `service install`, which puts it on the registered command line) or set `startup: { skip_folder_permissions_check: true }` in the server's settings file; the server then warns at every start, `service check` names it, and the console's Bindings page lists it under "Posture choices". A folder `service install` made already passes. Scripts that start a server from a terminal on a shared folder (the CI runner's temporary folder on Windows, for example) give the flag.
 
 ## Since the last release before the 2026-11-13 beta
 

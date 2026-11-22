@@ -33,11 +33,11 @@ public static class IdentityHomePages
     public static string SignIn(IdentityHomeOptions options, string? message = null)
     {
         var upstreams = new List<(string Id, string Path, string Label)>();
-        if (options.Entra is { } entra) upstreams.Add(("entra", UpstreamSignIn.EntraPath, entra.Label));
-        if (options.Windows is { } windows) upstreams.Add(("windows", UpstreamSignIn.WindowsPath, windows.Label));
+        if (options.Entra is { } entra) upstreams.Add(("entra", options.ProviderPrefix + UpstreamSignIn.EntraPath["/identity".Length..], entra.Label));
+        if (options.Windows is { } windows) upstreams.Add(("windows", options.ProviderPrefix + UpstreamSignIn.WindowsPath["/identity".Length..], windows.Label));
         var links = string.Concat(upstreams.Select(u =>
             $"<a class=\"upstream\" data-testid=\"identity-sign-in-{u.Id}\" data-path=\"{u.Path}\" href=\"{u.Path}\">{WebUtility.HtmlEncode(u.Label)}</a>"));
-        return SignInHead + links + $"<p id=\"done\" data-testid=\"identity-signed-in\" hidden></p><p id=\"message\" class=\"message\" data-testid=\"identity-sign-in-message\" role=\"alert\">{WebUtility.HtmlEncode(message ?? "")}</p></main>" + SignInScript;
+        return SignInHead + links + $"<p id=\"done\" data-testid=\"identity-signed-in\" hidden></p><p id=\"message\" class=\"message\" data-testid=\"identity-sign-in-message\" role=\"alert\">{WebUtility.HtmlEncode(message ?? "")}</p></main>" + SignInScript.Replace("@PREFIX@", options.Prefix).Replace("@PROVIDER@", options.ProviderPrefix);
     }
 
     private const string SignInHead = """
@@ -52,22 +52,23 @@ public static class IdentityHomePages
     private const string SignInScript = """
         <script>
         """ + Base64 + """
+        const PREFIX = "@PREFIX@", PROVIDER = "@PROVIDER@";
         const requested = new URLSearchParams(location.search).get('returnUrl') || '';
-        const target = requested.startsWith('/identity/') && !requested.startsWith('//') && !requested.includes('\\') ? requested : null;
+        const target = requested.startsWith(PROVIDER + '/') && !requested.startsWith('//') && !requested.includes('\\') ? requested : null;
         for (const a of document.querySelectorAll('a.upstream')) a.href = a.dataset.path + (target ? '?returnUrl=' + encodeURIComponent(target) : '');
-        async function whoIsSignedIn() { const r = await fetch('/api/auth/status'); if (!r.ok) return null; const s = await r.json(); return s.userId ? s : null; }
+        async function whoIsSignedIn() { const r = await fetch(PREFIX + '/api/auth/status'); if (!r.ok) return null; const s = await r.json(); return s.userId ? s : null; }
         function signedIn(status) {
           if (target) { location.replace(target); return; }
           for (const e of document.querySelectorAll('#passkey, #intro, a.upstream')) e.hidden = true;
           const done = document.getElementById('done'); done.hidden = false; done.textContent = `Signed in as ${status.displayName}.`;
         }
         async function go() {
-          const begin = await fetch('/api/auth/passkey/begin', { method: 'POST' });
+          const begin = await fetch(PREFIX + '/api/auth/passkey/begin', { method: 'POST' });
           if (!begin.ok) { say('message', await errorOf(begin, 'Passkeys are not available here.')); return; }
           const o = await begin.json();
           const c = await navigator.credentials.get({ publicKey: { ...o, challenge: toBuffer(o.challenge), allowCredentials: (o.allowCredentials ?? []).map(a => ({ ...a, id: toBuffer(a.id) })) } });
           const r = c.response;
-          const done = await fetch('/api/auth/passkey/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+          const done = await fetch(PREFIX + '/api/auth/passkey/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
             id: c.id, rawId: toB64(c.rawId), type: c.type, extensions: c.getClientExtensionResults(),
             response: { authenticatorData: toB64(r.authenticatorData), clientDataJson: toB64(r.clientDataJSON), signature: toB64(r.signature), userHandle: r.userHandle ? toB64(r.userHandle) : null } }) });
           if (!done.ok) { say('message', await errorOf(done, 'That did not sign you in.')); return; }
@@ -81,7 +82,9 @@ public static class IdentityHomePages
     /// <summary>
     /// An invitation (<c>/invite#&lt;code&gt;</c>, the first-run one included): the person gives their name (and their address, when the invitation was made without one), makes a passkey, and is signed in at the home.
     /// </summary>
-    public const string Invite = """
+    public static string Invite(IdentityHomeOptions options) => InvitePage.Replace("@PREFIX@", options.Prefix);
+
+    private const string InvitePage = """
         <!doctype html>
         <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Accept your invitation</title>
         """ + Style + """
@@ -94,11 +97,12 @@ public static class IdentityHomePages
         <p id="done" data-testid="identity-invite-done" hidden></p><p id="message" class="message" data-testid="identity-invite-message" role="alert"></p></main>
         <script>
         """ + Base64 + """
+        const PREFIX = "@PREFIX@";
         const code = decodeURIComponent(location.hash.slice(1));
         let emailAsked = false;
         async function check() {
           if (!code) { say('message', 'This address has no invitation in it. Open the link you were given.'); return; }
-          const r = await fetch('/api/invites/check?code=' + encodeURIComponent(code));
+          const r = await fetch(PREFIX + '/api/invites/check?code=' + encodeURIComponent(code));
           if (!r.ok) { say('message', await errorOf(r, 'This invitation is not valid.')); return; }
           emailAsked = (await r.json()).emailAsked;
           document.getElementById('email-field').hidden = !emailAsked;
@@ -107,12 +111,12 @@ public static class IdentityHomePages
         async function enrol() {
           const name = document.getElementById('name').value.trim();
           const email = emailAsked ? document.getElementById('email').value.trim() : '';
-          const begin = await fetch('/api/invites/begin-registration', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, displayName: name, email: email || null }) });
+          const begin = await fetch(PREFIX + '/api/invites/begin-registration', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, displayName: name, email: email || null }) });
           if (!begin.ok) { say('message', await errorOf(begin, 'The passkey could not be started.')); return; }
           const o = await begin.json();
           const c = await navigator.credentials.create({ publicKey: { ...o, challenge: toBuffer(o.challenge), user: { ...o.user, id: toBuffer(o.user.id) }, excludeCredentials: (o.excludeCredentials ?? []).map(x => ({ ...x, id: toBuffer(x.id) })) } });
           const query = `code=${encodeURIComponent(code)}&displayName=${encodeURIComponent(name)}&email=${encodeURIComponent(email)}`;
-          const done = await fetch('/api/invites/complete-registration?' + query, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+          const done = await fetch(PREFIX + '/api/invites/complete-registration?' + query, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
             id: c.id, rawId: toB64(c.rawId), type: c.type, extensions: c.getClientExtensionResults(),
             response: { attestationObject: toB64(c.response.attestationObject), clientDataJson: toB64(c.response.clientDataJSON) } }) });
           if (!done.ok) { say('message', await errorOf(done, 'The passkey could not be saved.')); return; }

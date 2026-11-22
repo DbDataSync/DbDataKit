@@ -30,7 +30,7 @@ public static class CustomPages
     public const string Segment = "_views";
 
     /// <summary>The address of a page (no parameters).</summary>
-    public static string Address(string instance, string name) => $"/apps/{Uri.EscapeDataString(instance)}/{Segment}/{Uri.EscapeDataString(name)}";
+    public static string Address(string instance, string name) => $"{AppsPaths.Prefix}/{Uri.EscapeDataString(instance)}/{Segment}/{Uri.EscapeDataString(name)}";
 
     /// <summary>The address the page's frame fetches rows from.</summary>
     public static string RowsAddress(string instance, string name) => Address(instance, name) + "/_rows";

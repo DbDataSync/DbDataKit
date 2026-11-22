@@ -23,8 +23,8 @@ public sealed class JwksTokenVerifier(string issuer, HttpClient http, TimeProvid
     private volatile Dictionary<string, ECParameters> _keys = [];
     private DateTimeOffset _askedAt = DateTimeOffset.MinValue;
 
-    /// <summary>Where the home's keys are: <c>&lt;issuer&gt;/identity/jwks</c>.</summary>
-    public string JwksUri => _issuer + "/identity/jwks";
+    /// <summary>Where the home's keys are: <c>&lt;issuer&gt;/jwks</c> for a home mounted under a path (<c>https://gateway:7820/identity</c>), <c>&lt;issuer&gt;/identity/jwks</c> for a home with an address of its own.</summary>
+    public string JwksUri => (Uri.TryCreate(_issuer, UriKind.Absolute, out var uri) && uri.AbsolutePath.Trim('/').Length > 0) ? _issuer + "/jwks" : _issuer + "/identity/jwks";
 
     /// <summary>Asks the home for its keys if this host has none for the token's key id and did not ask lately. Call before <see cref="Verify"/> on a token that may be signed with a key made since the last ask.</summary>
     public async Task PrepareAsync(string? jwt, CancellationToken cancellationToken)

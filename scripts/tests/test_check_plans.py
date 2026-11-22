@@ -47,6 +47,24 @@ class CheckPlans(unittest.TestCase):
     def test_a_consistent_planning_folder_passes(self):
         self.assertEqual([], self.problems())
 
+    def test_tasks_that_depend_on_each_other_in_a_cycle_are_refused(self):
+        found = self.problems({"planning/ALPHABETA.md": subject("ALPHABETA", [(1, "GAMMADELTA-1"), (2, "ALPHABETA-1")], [1])})
+        self.assertEqual(["planning/ALPHABETA.md: the tasks ALPHABETA-1 -> GAMMADELTA-1 -> ALPHABETA-2 -> ALPHABETA-1 depend on each other in a cycle"], found)
+
+    def test_a_follows_in_the_text_must_be_under_depends_on(self):
+        row = "| ALPHABETA-2 | Follows ALPHABETA-1 (it exists). What | none | S | a test |\n"
+        text = subject("ALPHABETA", [(1, "none")], [1]).replace("| ALPHABETA-1 | what | none | S | a test |\n", "| ALPHABETA-1 | what | none | S | a test |\n" + row)
+        self.assertEqual(["planning/ALPHABETA.md: ALPHABETA-2 follows ALPHABETA-1 in its text but does not list it under Depends on"],
+                         self.problems({"planning/ALPHABETA.md": text}))
+        self.assertEqual([], self.problems({"planning/ALPHABETA.md": text.replace("(it exists). What | none |", "(it exists). What | ALPHABETA-1 |")}))
+
+    def test_a_dependency_on_a_lower_ranked_subject_is_reported_not_refused(self):
+        root = tree({**GOOD, "planning/ALPHABETA.md": subject("ALPHABETA", [(1, "GAMMADELTA-1"), (2, "ALPHABETA-1")], [1]),
+                     "planning/GAMMADELTA.md": subject("GAMMADELTA", [(1, "none")], needs="- ALPHABETA-1: the thing; see ALPHABETA-P1.")})
+        self.assertEqual([], check.problems(root))
+        self.assertEqual(["ALPHABETA-1 (rank 1) depends on GAMMADELTA-1 (rank 2)"], check.priority_report(root))
+        self.assertEqual([], check.priority_report(tree(GOOD)))
+
     def test_a_subject_missing_from_the_index_is_named(self):
         found = self.problems({"planning/README.md": index(("ALPHABETA", 2))})
         self.assertTrue(any("does not list the subject planning/GAMMADELTA.md" in p for p in found), found)

@@ -8,15 +8,15 @@ pre-this-phase shape; updated alongside this phase — see below).
 ## What this built
 
 Top-level CLI surface went from 11 verbs to 7: `serve`, `service`, `health`, `invite`, `config`,
-`setup`, `version`. `config` fans out to five nested groups: `check` (new — `doctor`'s old
-non-interactive entry point), `cert`, `secret`, `provider`, `driver` (the latter four: same
+`setup`, `version`. `config` fans out to five nested groups: `check` (new — the old top-level
+readiness command's non-interactive entry point), `cert`, `secret`, `provider`, `driver` (the latter four: same
 implementations, reached one level down). `setup` is untouched — still purely interactive, no
 `--check` flag; its review screen calls the same check engine in-process, same as before.
 
-### The check engine, pulled out of `doctor` into neutral infrastructure
+### The check engine, pulled out of the old readiness command into neutral infrastructure
 
-`src/DbDataSync.Cli/DoctorCommand.cs` → `src/DbDataSync.Cli/ReadinessChecks.cs`. `DoctorCommand` →
-`ReadinessChecks`; `DoctorContext` → `ReadinessContext`. The old `DoctorCommand.RunAsync(string[]
+The old command's source file became `src/DbDataSync.Cli/ReadinessChecks.cs`, its class `ReadinessChecks` and
+its context `ReadinessContext`. The old command's `RunAsync(string[]
 args)`/`--json` CLI entry point is gone from this file — that logic now lives in
 `ConfigCommand.CheckAsync`. Everything else (`CheckStatus`, `CheckResult`, `IReadinessCheck`, the six
 check classes, `Checks`, `RunChecksAsync`, `FormatResult`, `BuildContext`) moved over unchanged in
@@ -55,7 +55,7 @@ Every hardcoded `dbdatasync cert/secret/provider/driver` string got a `config ` 
   in-command messages.
 - `SetupCommand.cs` — the printed cert commands in the Windows-only certificate step, the "install
   this driver manually" pointer, and the non-interactive refusal message (now points at
-  `dbdatasync config check`, not the old `dbdatasync doctor`).
+  `dbdatasync config check`, not the old top-level command).
 - `DbDataSyncConfigFile.cs`'s starter YAML comment, written into every fresh repo.
 - `ReadinessChecks.cs`'s own fix suggestions (`StateStoreCheck`, `ProvidersAndDriversCheck`).
 - Two runtime messages **outside** `DbDataSync.Cli` entirely, found only by grepping rather than
@@ -71,9 +71,9 @@ Every hardcoded `dbdatasync cert/secret/provider/driver` string got a `config ` 
 
 ### Tests
 
-- `DoctorCommandTests.cs` → `ReadinessChecksTests.cs`, updated to call `ReadinessChecks.*`. Its
+- The old command's tests became `ReadinessChecksTests.cs`, updated to call `ReadinessChecks.*`. Its
   `--json` test now drives `ConfigCommand.RunAsync(["check", "--repo", root, "--json"])` instead of
-  calling the (now-gone) `DoctorCommand.RunAsync` directly — proving the real CLI dispatch path, not
+  calling the (now-gone) old command's `RunAsync` directly — proving the real CLI dispatch path, not
   just the check engine.
 - New `ConfigCommandTests.cs` — no-subcommand usage/exit-1, unknown subcommand, and one routing test
   per nested group (`check`, `secret`, `provider`, `driver`, `cert`) proving each reaches its existing
@@ -88,7 +88,7 @@ Every hardcoded `dbdatasync cert/secret/provider/driver` string got a `config ` 
 ## Decisions and things found along the way
 
 - **A pre-existing test-fixture race, surfaced by adding a third Console-redirecting test class.**
-  `SecretCommandTests` and the renamed `ReadinessChecksTests` (né `DoctorCommandTests`) both already
+  `SecretCommandTests` and the renamed `ReadinessChecksTests` both already
   redirected the process-wide `Console.Out`/`Console.Error` to capture CLI output, and
   `SecretCommandTests` also writes through a single shared, file-backed secret store
   (`CliTestSecretsFile`). xUnit runs test classes in different collections by default, so these two
@@ -104,7 +104,7 @@ Every hardcoded `dbdatasync cert/secret/provider/driver` string got a `config ` 
   happened to be the one to trip, not something phase 115 introduced — worth fixing here rather than
   leaving `ConfigCommandTests` flaky and blaming it as "a bad test."
 - **`ReadinessChecks`'s types are now `internal`, not `public`.** They were `public` on
-  `DoctorCommand` because that class was itself the CLI's public entry point. Once the check engine
+  the old command class because that class was itself the CLI's public entry point. Once the check engine
   has no public entry point of its own — only `ConfigCommand` and `SetupCommand`, both in the same
   assembly, ever touch it — there's no reason for `CheckResult`/`CheckStatus`/the check classes to be
   visible outside `DbDataSync.Cli`. Tightened rather than left `public` out of inertia.
@@ -116,7 +116,7 @@ Every hardcoded `dbdatasync cert/secret/provider/driver` string got a `config ` 
 ## Compatibility breaks (deliberate, called out per the plan)
 
 `dbdatasync cert ...`, `dbdatasync secret ...`, `dbdatasync provider ...`, `dbdatasync driver ...`,
-and `dbdatasync doctor` all now print "Unknown command" — anything scripting these directly (CI, an
+and the old top-level readiness command all now print "Unknown command" — anything scripting these directly (CI, an
 admin's own notes, `docs/`) needs the `config ` prefix inserted. No deprecation shim or hidden alias
 was added; the plan didn't ask for one, and this is CLI-only, in-repo tooling with no external
 consumer contract to preserve.
@@ -138,8 +138,8 @@ consumer contract to preserve.
 - Full `dotnet test --filter "Category=Integration"` green across the whole solution, against the
   real SQL Server/Postgres/MySQL Docker containers already running in this environment.
 - Confirmed `dbdatasync config check` (and `--json`) against a real temp repo produces identical
-  output/exit codes to what `dbdatasync doctor` produced before this phase — proven directly by
+  output/exit codes to what the old top-level command produced before this phase — proven directly by
   `ReadinessChecksTests`, which exercises both the engine and, in its one end-to-end test, the real
   `ConfigCommand` dispatch.
 - Confirmed `dbdatasync cert`, `dbdatasync secret`, `dbdatasync provider`, `dbdatasync driver`, and
-  `dbdatasync doctor` all now print "Unknown command."
+  the old top-level readiness command all now print "Unknown command."

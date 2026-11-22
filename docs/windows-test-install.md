@@ -40,9 +40,9 @@ The services run from a copy of the programs in `C:\ProgramData\DbDataKit\bin\<v
 
 ## 2. Sign in
 
-Open the setup link (`https://localhost:8480/invite#<code>`) in a browser on the machine and register a passkey: you are the first administrator. The
+Open the setup link (`https://localhost:7800/invite#<code>`) in a browser on the machine and register a passkey: you are the first administrator. The
 browser warns about the certificate, because the console made a self-signed one. Accept it for `localhost`. The link works once and ends after 24 hours;
-`dbdatakit setup link --url https://localhost:8480` makes a new one.
+`dbdatakit setup link` makes a new one.
 
 To open the console from another machine, use the machine's name instead of `localhost` both in that command and in the browser.
 
@@ -52,10 +52,10 @@ To open the console from another machine, use the machine's name instead of `loc
 
 ```powershell
 dbdatakit instance list
-Get-Service DbDataKit, dbdatagateway, DbDataRunner, DbDataWorkspace
+Get-Service DbDataKit, DbDataGateway, DbDataRunner, DbDataWorkspace
 ```
 
-In the console, open **Servers**. **Setup** in the rail lists the first steps and ticks each one off by what the console actually has.
+In the console, open **All servers** (under **Servers** in the navigation). **Setup** (under **Settings**) lists the first steps and ticks each one off by what the console actually has.
 
 **Pass:** the three servers are listed as answering, with the same version, and all four services are `Running`.
 
@@ -91,7 +91,7 @@ First pair the Workspace with the Runner as a publisher, once:
 
 ```powershell
 dbdatarunner server pair --max-role publisher      # prints a code
-dbdataworkspace publisher pair runner --url https://127.0.0.1:8495 --code <code>
+dbdataworkspace publisher pair runner --url https://127.0.0.1:7840 --code <code>
 ```
 
 | # | Task | Pass when |

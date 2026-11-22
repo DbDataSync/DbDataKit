@@ -12,6 +12,10 @@ on:
         description: Extended regular expression matched against each changed file name; a match means the product's jobs run.
         type: string
         required: true
+      ignore:
+        description: Extended regular expression; a changed file that matches it is left out before `paths` is matched (empty leaves nothing out).
+        type: string
+        default: ''
     outputs:
       build:
         description: "'true' when a listed path changed or there is nothing to compare with."
@@ -41,6 +45,7 @@ jobs:
           BEFORE: ${{ github.event.before }}
           LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           PATHS: ${{ inputs.paths }}
+          IGNORE: ${{ inputs.ignore }}
         run: |
           build=true
           case "$EVENT" in
@@ -51,6 +56,7 @@ jobs:
           if [ -n "$base" ] && git rev-parse --verify --quiet "$base^{commit}" >/dev/null; then
             changed=$(git diff --name-only "$range")
             echo "changed in $range:"; echo "$changed"
+            if [ -n "$IGNORE" ]; then changed=$(echo "$changed" | grep -vE "$IGNORE" || true); fi
             echo "$changed" | grep -qE "$PATHS" || build=false
           else
             echo "::notice::no base to compare with ($EVENT), so everything is treated as changed."

@@ -25,9 +25,10 @@ public static class GatewayHost
 {
     public const string ServiceName = "DbDataGateway";
 
-    /// <summary>The name the Windows service is registered under by default: lower case like the executable (the service control manager compares names without case, so an existing registration is updated in place).
-    /// <see cref="ServiceName"/> stays the product's name for its data directory.</summary>
-    public const string RegistrationName = "dbdatagateway";
+    /// <summary>The name the Windows service is registered under by default, <c>DbDataGateway</c>, from the suite's table (<see cref="DbDataKit.Hosting.Startup.SuiteServices.Gateway"/>). The service
+    /// control manager compares names without case, and a virtual account's SID is made from the upper-case name, so a service registered earlier as <c>dbdatagateway</c> is the same
+    /// service: <c>service install</c> updates it in place and <c>NT SERVICE\DbDataGateway</c> is the account it already had.</summary>
+    public static readonly string RegistrationName = DbDataKit.Hosting.Startup.SuiteServices.Gateway.WindowsName;
 
     /// <summary>
     /// The web application builder with the gateway's configuration sources (the data directory's config folder, DBDATAKIT_ environment variables, command line).
@@ -68,10 +69,11 @@ public static class GatewayHost
 
     /// <summary>
     /// Builds the gateway host. <paramref name="configure"/> lets tests and embedders adjust it before it is built.
+    /// <paramref name="chooseListeners"/> picks the addresses of the listeners that were given none (<see cref="GatewayListeners.Choose"/>).
     /// <paramref name="overrideServices"/> runs after the gateway's own registrations, so a test can replace one (for example the provider registry).
     /// Throws <see cref="GatewayConfigException"/> when the effective configuration is not valid (the command line exits with code 2).
     /// </summary>
-    public static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null, Action<IServiceCollection>? overrideServices = null)
+    public static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null, Action<IServiceCollection>? overrideServices = null, Func<GatewayOptions, ListenerChoice>? chooseListeners = null)
     {
         var builder = CreateBuilder(args);
         var loadGuard = GatewayConfigLoadGuard.Install(builder.Configuration);
@@ -81,6 +83,12 @@ public static class GatewayHost
         // validated the same way, and a rejected edit keeps the last good configuration (GatewayOptionsMonitor).
         var configRoot = (IConfigurationRoot)builder.Configuration;
         var loaded = GatewayConfig.LoadOrThrow(configRoot);
+        // the listeners nobody gave an address take a free port of the Gateway's block (the start sequence asks for it; a test or an embedder that does not has none); read again so the rest of the start sees them like any setting
+        if (chooseListeners?.Invoke(loaded.Value!) is { Chosen.Count: > 0 } choice)
+        {
+            builder.Configuration.AddInMemoryCollection(GatewayListeners.AsConfiguration(choice));
+            loaded = GatewayConfig.LoadOrThrow(configRoot);
+        }
         builder.Services.AddSingleton<IOptionsMonitor<GatewayOptions>>(sp =>
             new GatewayOptionsMonitor(configRoot, loaded.Value!, sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataGateway.Config"), loadGuard));
 
@@ -96,6 +104,9 @@ public static class GatewayHost
         UseSharedHost(builder, options, args);
         ConfigureServices(builder.Services, options);
         ConfigureKestrel(builder, options);
+        // the join step of the start: the joins the management listener's callback confirms, and what the management API made the join with
+        builder.Services.AddSingleton<DbDataKit.Web.Trust.PendingJoins>();
+        builder.Services.AddSingleton<Management.GatewayJoinTarget>();
         overrideServices?.Invoke(builder.Services); // a seam for tests: replace a registration made above (the last one wins)
 
         var app = builder.Build();
@@ -137,6 +148,7 @@ public static class GatewayHost
             host.Product = "dbdatagateway";
             host.Version = Version;
             host.Telemetry = options.Telemetry.ToSettings("server.yaml");   // off unless telemetry.enabled (plan 22a GP28)
+            if (options.Startup.SkipFolderPermissionsCheck) host.Loosened.Add(DbDataKit.Hosting.Startup.FolderPermissions.Setting);
             host.DrainTimeout = TimeSpan.FromSeconds(Math.Max(0, options.Hosting.DrainSeconds));
             host.Limits.MaxConcurrentRequests = Math.Max(1, options.Hosting.MaxConcurrentRequests);
             host.Limits.RequestTimeout = TimeSpan.FromDays(7);
@@ -260,7 +272,10 @@ public static class GatewayHost
             services.AddSingleton<IReadinessProbe>(sp => new ServingModuleReadinessProbe(sp.GetRequiredService<FlightSqlModule>(), () =>
                 sp.GetRequiredService<FlightSqlModule>().Health() is { State: not ServingHealthState.Ok } own ? own : ServingModuleHealth.Of(true, false, sp.GetRequiredService<DbDataKit.State.StateDatabase>(), ServingHealthState.Degraded)));
         }
-        // the identity home (plan 20, O06): a listener and a web application of its own, only when asked for
+        // the public listener: the modules that have no port of their own answer on it, by path; it starts before them and holds each mount as the module starts
+        services.AddSingleton<PublicMounts>();
+        services.AddHostedService<PublicListener>();
+        // the identity home (plan 20, O06): a web application of its own, only when asked for
         if (GatewayModules.Has(options, GatewayModules.Identity))
         {
             services.AddSingleton<GatewayIdentityModule>();
@@ -388,18 +403,19 @@ public static class GatewayHost
                 holder.Set(CertificateProvider.Load(options, dataDirectory,
                     kestrel.ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger("Tls"), secrets: kestrel.ApplicationServices.GetRequiredService<SecretsRuntime>(),
                     group: kestrel.ApplicationServices.GetRequiredService<GroupCertificate>()));
-            var address = IPAddress.Parse(options.Listen.Address);
-            if (GatewayModules.Has(options, GatewayModules.FlightSql)) kestrel.Listen(address, options.Listen.Port, listen =>
-            {
-                listen.Protocols = HttpProtocols.Http2;
-                if (options.Tls.Mode == TlsMode.None) return;
-                listen.UseHttps(https =>
-                {
-                    // Looked up per handshake so a rotated certificate is served without a restart.
-                    https.ServerCertificateSelector = (_, _) => holder.Current;
-                    https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
-                });
-            });
+            if (GatewayModules.Has(options, GatewayModules.FlightSql))
+                foreach (var url in GatewayListeners.Parsed(options.Listen))
+                    kestrel.Listen(url.Address, url.Port, listen =>
+                    {
+                        listen.Protocols = HttpProtocols.Http2;
+                        if (options.Tls.Mode == TlsMode.None) return;
+                        listen.UseHttps(https =>
+                        {
+                            // Looked up per handshake so a rotated certificate is served without a restart.
+                            https.ServerCertificateSelector = (_, _) => holder.Current;
+                            https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
+                        });
+                    });
             GatewayManagementHost.Listen(kestrel, options, holder);
         });
     }

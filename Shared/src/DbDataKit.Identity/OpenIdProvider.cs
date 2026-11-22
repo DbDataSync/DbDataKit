@@ -40,7 +40,7 @@ public sealed class OAuthException(string error, string description, int status 
 /// The OpenID Connect provider of the identity home: the authorization code flow with PKCE (S256 only), id tokens and access tokens signed ES256, discovery and userinfo. Signing a person in is the host's (it hands the
 /// signed-in user id to <see cref="Authorize"/>); this issues the code and trades it for tokens that carry the home's user id as <c>sub</c>, the groups, and the roles held on every server and app (<c>dbdata_roles</c>).
 /// </summary>
-public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, HomeDirectory directory, OidcClients clients, SigningKeys keys, string issuer, TimeProvider? clock = null, IAppGrants? apps = null, TimeSpan? refreshLifetime = null, Func<string, bool>? appHosts = null)
+public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, HomeDirectory directory, OidcClients clients, SigningKeys keys, string issuer, TimeProvider? clock = null, IAppGrants? apps = null, TimeSpan? refreshLifetime = null, Func<string, bool>? appHosts = null, string? endpointBase = null)
 {
     /// <summary>The grant an apps host uses to get an instance's access token for a person it signed in (RFC 8693; plan 26 AP19).</summary>
     public const string TokenExchangeGrant = "urn:ietf:params:oauth:grant-type:token-exchange";
@@ -69,14 +69,17 @@ public sealed class OpenIdProvider(StateDatabase database, IUserAccounts users, 
 
     public string Issuer { get; } = issuer.TrimEnd('/');
 
+    /// <summary>The address the endpoints start with: the issuer and <c>/identity</c> for a home with an address of its own, the issuer itself for a home mounted under a prefix.</summary>
+    private readonly string _endpointBase = (endpointBase ?? issuer.TrimEnd('/') + "/identity").TrimEnd('/');
+
     public object Discovery() => new
     {
         issuer = Issuer,
-        authorization_endpoint = Issuer + "/identity/authorize",
-        token_endpoint = Issuer + "/identity/token",
-        end_session_endpoint = Issuer + "/identity/end-session",
-        userinfo_endpoint = Issuer + "/identity/userinfo",
-        jwks_uri = Issuer + "/identity/jwks",
+        authorization_endpoint = _endpointBase + "/authorize",
+        token_endpoint = _endpointBase + "/token",
+        end_session_endpoint = _endpointBase + "/end-session",
+        userinfo_endpoint = _endpointBase + "/userinfo",
+        jwks_uri = _endpointBase + "/jwks",
         response_types_supported = new[] { "code" },
         grant_types_supported = appHosts is null ? new[] { "authorization_code", "refresh_token" } : new[] { "authorization_code", "refresh_token", TokenExchangeGrant },
         subject_types_supported = new[] { "public" },

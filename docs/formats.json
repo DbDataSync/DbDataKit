@@ -310,6 +310,16 @@
       "note": "new with plan 18 G18 (2026-11-16): written by Build's `project publish` and Sync's `package publish` beside the package's files, read by the Runner's `GET /api/v1/lineage`; a table named by its slot (host `@<slot>`) is named again by the connection the channel binds; another schema is refused naming the file and the version, and that package's lineage is left out with the reason in `problems`",
       "version_source": { "file": "Shared/src/DbDataKit.Lineage/PackageLineage.cs", "pattern": "Schema = \"package-lineage/(\\d+)\";" },
       "files": [ { "path": "Shared/src/DbDataKit.Lineage/PackageLineage.cs", "sha256": null } ]
+    },
+    {
+      "id": "join-request",
+      "title": "A server's join request (join-request.yaml in its data folder, schema: join-request/N)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "the console's https address, the SHA-256 thumbprint of its certificate (`sha256:` and 64 hex digits), the single-use join token and optionally the address the console calls the server at; read and written by `JoinRequestFile` of DbDataKit.Web (readable by its owner only on Linux), which the servers' `pair` command and join step are to use (not built yet); another schema, an unknown key or a missing key is refused naming the file; the token in it never leaves the machine (the join carries a signature made with a key derived from it)",
+      "version_source": { "file": "Shared/src/DbDataKit.Web/JoinRequestFile.cs", "pattern": "Schema = \"join-request/(\\d+)\";" },
+      "files": [ { "path": "Shared/src/DbDataKit.Web/JoinRequestFile.cs", "sha256": null } ]
     }
   ]
 }

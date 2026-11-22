@@ -216,7 +216,7 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
             {
                 ["name"] = instance.Name, ["app"] = instance.App, ["title"] = instance.Title, ["pin"] = instance.Pin, ["follows"] = instance.Pin is null,
                 ["instance_version"] = current[instance.Name].Version, ["published_by"] = current[instance.Name].PublishedBy, ["published_at"] = current[instance.Name].PublishedAt,
-                ["path"] = $"/apps/{instance.Name}/", ["address"] = address is null ? null : new Uri(address, $"/apps/{instance.Name}/").AbsoluteUri,
+                ["path"] = $"{(address is null ? DbDataKit.Apps.AppsPaths.Default : Serving.AppInstanceClients.PrefixOf(address))}/{instance.Name}/", ["address"] = address is null ? null : new Uri(address, $"{Serving.AppInstanceClients.PrefixOf(address)}/{instance.Name}/").AbsoluteUri,
                 ["bindings"] = new JsonObject(instance.Bindings.OrderBy(b => b.Key, StringComparer.Ordinal).Select(b => KeyValuePair.Create(b.Key, (JsonNode?)b.Value))),
                 ["addresses"] = Addresses(instance.Name, instance.Addresses),
                 ["settings"] = new JsonObject(instance.Settings.OrderBy(b => b.Key, StringComparer.Ordinal).Select(b => KeyValuePair.Create(b.Key, (JsonNode?)b.Value))),
@@ -449,8 +449,8 @@ public sealed class GatewayApps(DefinitionStore definitions, Func<IAppApprovers>
             if (channel != DefinitionStore.Production)
             {
                 var address = AppInstanceName.Of(name, channel);
-                result["path"] = $"/apps/{address}/";
-                result["address"] = appsAddress?.Invoke() is { } host ? new Uri(host, $"/apps/{address}/").AbsoluteUri : null;
+                result["path"] = $"{(appsAddress?.Invoke() is { } at ? Serving.AppInstanceClients.PrefixOf(at) : DbDataKit.Apps.AppsPaths.Default)}/{address}/";
+                result["address"] = appsAddress?.Invoke() is { } host ? new Uri(host, $"{Serving.AppInstanceClients.PrefixOf(host)}/{address}/").AbsoluteUri : null;
             }
             return ManagementResult.Ok(result);
         }

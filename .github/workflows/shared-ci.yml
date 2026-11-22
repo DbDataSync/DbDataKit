@@ -3,7 +3,8 @@ name: Shared CI
 # The shared libraries' own suite (Shared/), run once on Linux and Windows against the shared engines from testenv/, on a pull request
 # into `main` and on every push to it that touches the shared code or the test environment. Each product's CI also runs when Shared/
 # changes, so a shared change is proven against every product; this is the libraries' own tests, which used to run once per product.
-# The job itself is _shared.yml, which can also be dispatched on its own.
+# The job itself is _shared.yml, which can also be dispatched on its own. A change to Markdown alone (a library's README) starts nothing: scripts/check_doc_inputs.py
+# in Repository checks reads what a build takes from Markdown.
 
 on:
   pull_request:
@@ -22,6 +23,7 @@ on:
       - "global.json"
       - ".github/workflows/shared-ci.yml"
       - ".github/workflows/_shared.yml"
+      - "!**.md"    # Markdown alone starts nothing (scripts/ci_paths.py); the last match wins, so this is last
   push:
     branches: [main]
     paths:
@@ -38,6 +40,7 @@ on:
       - "global.json"
       - ".github/workflows/shared-ci.yml"
       - ".github/workflows/_shared.yml"
+      - "!**.md"    # Markdown alone starts nothing (scripts/ci_paths.py); the last match wins, so this is last
   workflow_dispatch:
     inputs:
       engines:

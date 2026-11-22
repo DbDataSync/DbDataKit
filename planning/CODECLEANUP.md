@@ -40,6 +40,10 @@ server as current; what the deleted plans decided and is still true is in the pr
 | CODECLEANUP-10 | Sync, Build and Store (`DbDataSync/` outside `architecture/`, `DbDataBuild/`, `DbDataStore/`): as CODECLEANUP-7 | CODECLEANUP-5, CODECLEANUP-6 | M | no baseline entry under those folders; their suites pass |
 | CODECLEANUP-11 | Everything else (`docs/`, `dist/`, `scripts/`, `testenv/`, `.github/`, root files): as CODECLEANUP-7; then the baseline is empty and is deleted, and the check refuses any reference | CODECLEANUP-7 to CODECLEANUP-10 | S | the baseline file is gone and the check passes with no exceptions |
 
+| CODECLEANUP-12 | Docs describe the product, not decisions: the dated owner entries left in `docs/` (8 in `serving-layer.md`, a few in six other pages; the decision tables of `architecture.md` are gone, their facts written where each part is described) rewritten as how the product works, with the skill `product-docs`; an entry that is no longer true is listed for the owner instead of rewritten; an entry that is a direction not yet built (or built in part) goes to "Planned architecture changes" of `docs/architecture.md`, marked Planned or In progress, with the subject that carries it (`planning/ROLES.md`, "Architecture directions"); the open subjects that change the architecture and have no entry there yet get one; the code comments that cite a decision of the old architecture tables (`D<n>`, `13c D<n>`; the tables are gone) point at `Design: docs/<path>.md#<anchor>` | CODECLEANUP-5 | M | a repository check fails on a decision table, "Decided (owner", "(owner, <date>)" or "Default taken" under `docs/` and on `13c D<n>` in code, and passes on the repository |
+| CODECLEANUP-13 | The old "unit" name of Sync's state table is gone: the position log is the only name. Delete the check for a table under the old name (`TargetPositionLog.OldQualified`, its exists query and the refusal that names it), its test in `TargetPositionLogTests.cs`, and the history in `DbDataSync/docs/replication-concepts.md` ("it was the 'unit' table"); no code, doc or message says "unit" for the state table (the `docs/ci-lessons.md` entry that names it is reviewed in CODECLEANUP-14) | none | S | `git grep -i "unit table\|dbdatasync.unit\|SYNC_UNIT\|OldQualified"` finds only that ci-lessons entry; Sync's driver tests pass |
+| CODECLEANUP-14 | Names that the environment variable rename (prefixes `DBDATASYNC_`, `DBDATABUILD_` and the others to `DBDATAKIT_`) rewrote but that are not environment variables: database objects, index names, messages, example text. List each one for the owner with where it is and what it was; fix the ones the owner names. Found so far: Sync's Oracle tables `DBDATASYNC_POSITION_LOG` (now `DBDATAKIT_SYNC_POSITION_LOG`) and `DBDATASYNC_UNIT` (CODECLEANUP-13). Reviewed with the owner in the same list: the `docs/ci-lessons.md` entry on `test_check_env_names` (it names the old table and advised the prefix swap), and whether `scripts/check_env_names.py` and its tests are still needed once no old name is left | none | S | the list is in this file and the owner has answered each item; the fixes' tests pass |
+
 ## Needs from other subjects
 
 None.
@@ -51,12 +55,6 @@ None.
 Option A: delete the folder; git keeps it. Option B: keep only `staging-value-types.md` and `runner-coverage-matrix.md` (cited by the Transfer README and
 Sync's docs) and delete the rest. Option C: keep it as it is. Scenario: a new agent searches for how Sync verifies a load; under C it finds phase notes about
 a server that no longer exists; under A and B it finds `DbDataSync/README.md` and the code. Recommendation: B.
-
-### CODECLEANUP-P2: Build's command line on the shared router (awaiting the owner)
-
-Build's `CliApp` parses its own commands; the other programs use `NounRouter`. Option A: move it (a few days, no behaviour change). Option B: leave it; new
-code calls Build as a library, so the command line is only a tool for people. Scenario: a new noun is added to every product; under A Build gets it with
-the others, under B it is wired by hand. Recommendation: B until a change needs A.
 
 ## Shared areas touched
 

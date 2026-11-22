@@ -53,6 +53,23 @@ public static class GatewayConfigFile
     }
 
     /// <summary>
+    /// The environment variable that sets <c>startup.skip_folder_permissions_check</c> to true (<c>DBDATAKIT_Gateway__Startup__skip_folder_permissions_check</c>,
+    /// or the same without the prefix), or null when none does. The folder step reads it before the settings are loaded, as it reads the data directory.
+    /// </summary>
+    public static string? SkipFolderPermissionsVariable(System.Collections.IDictionary? variables = null)
+    {
+        // configuration keys match without case, so the variable does too
+        var key = $"Gateway__Startup__{DbDataKit.Hosting.Startup.FolderPermissions.Key}";
+        foreach (System.Collections.DictionaryEntry variable in variables ?? Environment.GetEnvironmentVariables())
+        {
+            if (variable.Key is not string name) continue;
+            if (!string.Equals(name, EnvironmentPrefix + key, StringComparison.OrdinalIgnoreCase) && !string.Equals(name, key, StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals((variable.Value as string)?.Trim(), "true", StringComparison.OrdinalIgnoreCase)) return name;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// The message for an <c>appsettings.json</c> left from an earlier release (in the data directory, its <c>config</c> directory, or beside the executable), or null when there is none.
     /// This is a clean break: the file is not read and not converted, so the server stops until its settings are written as <c>server.yaml</c>.
     /// </summary>

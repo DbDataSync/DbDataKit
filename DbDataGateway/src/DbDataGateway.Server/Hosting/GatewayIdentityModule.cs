@@ -14,7 +14,7 @@ using Microsoft.Extensions.Options;
 namespace DbDataGateway.Server.Hosting;
 
 /// <summary>
-/// The <c>identity</c> module of the serving layer (plan 20, section 6; O06): <see cref="IdentityHome"/>, the shared identity home, served by the Gateway on a listener of its own, so people sign in without reaching
+/// The <c>identity</c> module of the serving layer (plan 20, section 6; O06): <see cref="IdentityHome"/>, the shared identity home, served by the Gateway on the public listener (or a listener of its own when <c>identity.port</c> is set), so people sign in without reaching
 /// the private console. It is a web application of its own inside the Gateway's process (its own pipeline, sign-in and fallback policy, none of which touch the Flight or management listeners), over the Gateway's
 /// state database, with the Gateway's certificate.
 /// <para>
@@ -23,7 +23,7 @@ namespace DbDataGateway.Server.Hosting;
 /// </para>
 /// </summary>
 public sealed class GatewayIdentityModule(
-    IOptionsMonitor<GatewayOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, ILoggerFactory loggers, GroupCertificate? group = null) : IHostedService, IServingModule, IAsyncDisposable
+    IOptionsMonitor<GatewayOptions> options, StateDatabase state, TlsCertificateHolder certificate, SecretsRuntime secrets, ILoggerFactory loggers, GroupCertificate? group = null, PublicMounts? mounts = null) : IHostedService, IServingModule, IAsyncDisposable
 {
     /// <summary>The secret that holds the key the signing keys are protected with.</summary>
     public const string SigningKeySecret = "dbdatakit:gateway:identity:signing-keys";
@@ -50,11 +50,21 @@ public sealed class GatewayIdentityModule(
 
     private volatile bool _draining;
 
-    /// <summary>The address people reach the home at: the setting, or the first TLS host name (localhost when there is none) on the module's port.</summary>
-    public static Uri PublicUrlOf(GatewayOptions options) =>
-        !string.IsNullOrWhiteSpace(options.Identity.PublicUrl)
+    /// <summary>
+    /// The address people reach the home at, which is its issuer: the setting (an address without a path), or the first TLS host name (localhost when there is none) on the module's port, and the home's path on the public listener
+    /// (<c>https://gateway:7820/identity</c>; <c>identity.path</c> moves it). A home with a <c>listen</c> of its own has no path.
+    /// </summary>
+    public static Uri PublicUrlOf(GatewayOptions options)
+    {
+        var origin = !string.IsNullOrWhiteSpace(options.Identity.PublicUrl)
             ? new Uri(options.Identity.PublicUrl.TrimEnd('/') + "/")
-            : new UriBuilder(Uri.UriSchemeHttps, options.Tls.Hostnames.FirstOrDefault(h => !string.IsNullOrWhiteSpace(h)) ?? "localhost", options.Identity.Port).Uri;
+            : new UriBuilder(Uri.UriSchemeHttps, options.Tls.Hostnames.FirstOrDefault(h => !string.IsNullOrWhiteSpace(h)) ?? "localhost", GatewayListeners.PortOf(options.Identity.Listen, options)).Uri;
+        return PublicPaths.Of(options, GatewayModules.Identity) is { Length: > 0 } prefix ? new Uri(origin.GetLeftPart(UriPartial.Authority) + prefix + "/") : origin;
+    }
+
+    /// <summary>The home's own path for one of the browser's under its prefix: the pages and the provider's endpoints are the home's <c>/identity/...</c>, the sign-in API, the invitations and the discovery document its root paths.</summary>
+    internal static string HomePath(string rest) =>
+        rest.StartsWith("/.well-known/", StringComparison.Ordinal) || rest == "/invite" || rest.StartsWith("/api/", StringComparison.Ordinal) ? rest : "/identity" + rest;
 
     /// <summary>Where the first-run invitation is written while the home has nobody: <c>&lt;data directory&gt;/identity</c>.</summary>
     public static string DirectoryOf(GatewayOptions options) => Path.Combine(GatewayHost.ResolveDataDirectory(options), "identity");
@@ -73,19 +83,7 @@ public sealed class GatewayIdentityModule(
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();
         builder.Logging.AddProvider(new ForwardingLoggerProvider(loggers));
-        builder.WebHost.ConfigureKestrel(kestrel =>
-        {
-            kestrel.AddServerHeader = false;
-            kestrel.Listen(IPAddress.Parse(current.Identity.Address), current.Identity.Port, listen =>
-            {
-                listen.Protocols = HttpProtocols.Http1AndHttp2;
-                listen.UseHttps(https =>
-                {
-                    https.ServerCertificateSelector = (_, _) => certificate.Current;
-                    https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
-                });
-            });
-        });
+        var inProcess = ModuleListener.Configure(builder, current.Identity.Listen, (_, _) => certificate.Current);
         var directory = DirectoryOf(current);
         Directory.CreateDirectory(directory);
         // the upstreams people may sign in through besides a passkey (O06b)
@@ -102,11 +100,13 @@ public sealed class GatewayIdentityModule(
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy")).AllowAnonymous();
         app.MapIdentityHome(line => _log.LogWarning("{Problem}", line));
-        app.MapFallback(() => Results.Text("The identity home of this DbDataGateway. Its endpoints are under /.well-known/openid-configuration and /identity/.", "text/plain")).AllowAnonymous();
+        app.MapFallback(() => Results.Text("The identity home of this DbDataGateway. Its discovery document is at /.well-known/openid-configuration under this address's path.", "text/plain")).AllowAnonymous();
         await app.StartAsync(cancellationToken);
         _app = app;
         _draining = false;
-        _log.LogInformation("Identity home on {Address}:{Port}; its issuer is {Issuer}; sign-in with a passkey{Entra}{Windows}.", current.Identity.Address, current.Identity.Port, publicUrl.GetLeftPart(UriPartial.Authority),
+        // on the public listener the home is under its prefix: the provider's endpoints, the sign-in pages, the invitation page and the shared sign-in API
+        ModuleListener.Mount(mounts, inProcess, host => new PublicMount { Name = Name, Server = host, Prefix = PublicPaths.Of(current, GatewayModules.Identity), Inner = HomePath });
+        _log.LogInformation("Identity home on {Address}; its issuer is {Issuer}; sign-in with a passkey{Entra}{Windows}.", string.Join(", ", inProcess is null ? current.Identity.Listen : current.Public.Listen), publicUrl.GetLeftPart(UriPartial.Authority),
             entra is null ? "" : ", through Entra ID", windows is null ? "" : ", with Windows");
     }
 
@@ -150,6 +150,7 @@ public sealed class GatewayIdentityModule(
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         _draining = true;
+        mounts?.Remove(Name);
         // a module that was stopped is not running: its line on /health says so
         if (_app is { } running)
         {

@@ -16,6 +16,7 @@ wixl is the msitools project's builder (LGPL, `apt install wixl`). It reads the 
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import pathlib
@@ -266,8 +267,17 @@ def wxs(meta, version, payload):
     return "\n".join(parts)
 
 
+def _load_meta(path):
+    """The product's dist.json read as dist.py reads it (the Windows service name of a suite product comes from the suite's table); loaded by its path, since
+    `python3 -I` puts no script folder on the import path."""
+    spec = importlib.util.spec_from_file_location("dist", pathlib.Path(__file__).resolve().parent / "dist.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.load_meta(path)
+
+
 def build(args):
-    meta = json.loads(pathlib.Path(args.meta).read_text(encoding="utf-8"))
+    meta = _load_meta(args.meta)
     source = wxs(meta, args.version, args.payload)
     if args.command == "wxs":
         sys.stdout.write(source)

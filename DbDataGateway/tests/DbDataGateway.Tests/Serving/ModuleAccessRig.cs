@@ -274,12 +274,12 @@ internal sealed class ModuleAccessRig : IAsyncDisposable
             StorePort = FreePort();
             var settings = new Dictionary<string, string?>
             {
-                ["Gateway:DataDirectory"] = _dir, ["Gateway:Management:Enabled"] = "false", ["Gateway:Listen:Address"] = "127.0.0.1", ["Gateway:Listen:Port"] = "0", ["Gateway:DefinitionPollSeconds"] = "1",
+                ["Gateway:DataDirectory"] = _dir, ["Gateway:Management:Enabled"] = "false", ["Gateway:Listen"] = "https://127.0.0.1:0", ["Gateway:DefinitionPollSeconds"] = "1",
                 ["Gateway:Modules:0"] = "flightsql", ["Gateway:Modules:1"] = "feeds", ["Gateway:Modules:2"] = "mcp", ["Gateway:Modules:3"] = "views", ["Gateway:Modules:4"] = "store",
-                ["Gateway:Store:Address"] = "127.0.0.1", ["Gateway:Store:Port"] = StorePort.ToString(),
-                ["Gateway:Rest:Address"] = "127.0.0.1", ["Gateway:Rest:Port"] = FeedsPort.ToString(),
-                ["Gateway:Mcp:Address"] = "127.0.0.1", ["Gateway:Mcp:Port"] = McpPort.ToString(),
-                ["Gateway:Views:Address"] = "127.0.0.1", ["Gateway:Views:Port"] = ViewsPort.ToString(),
+                ["Gateway:Store:Listen"] = $"https://127.0.0.1:{StorePort}",
+                ["Gateway:Rest:Listen"] = $"https://127.0.0.1:{FeedsPort}",
+                ["Gateway:Mcp:Listen"] = $"https://127.0.0.1:{McpPort}",
+                ["Gateway:Views:Listen"] = $"https://127.0.0.1:{ViewsPort}",
                 [$"Gateway:DataSources:{Source}:Provider"] = Engine == "mssql" ? "sqlserver" : "postgres",
                 [$"Gateway:DataSources:{Source}:ConnectionString"] = _connection,
             };

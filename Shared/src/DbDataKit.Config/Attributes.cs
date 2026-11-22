@@ -44,6 +44,8 @@ public sealed class ConfigKeyAttribute(string? name = null) : Attribute
     /// <summary>Regular expression a string value must match entirely.</summary>
     public string? Pattern { get; set; }
     public string? Description { get; set; }
+    /// <summary>On a list: a single value written without brackets (<c>listen: https://0.0.0.0:7820</c>) is a list of one, the same as <c>[https://0.0.0.0:7820]</c>.</summary>
+    public bool ScalarOrList { get; set; }
 }
 
 /// <summary>The value is a secret: masked in <c>show --origin</c> output and marked in the JSON Schema.</summary>

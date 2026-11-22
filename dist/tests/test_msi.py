@@ -224,9 +224,13 @@ class SourceTests(unittest.TestCase):
 
     def test_every_products_dist_json_describes_a_valid_installer(self):
         for product in ("DbDataGateway", "DbDataRunner", "DbDataWorkspace"):   # DbDataStore, DbDataBuild and DbDataSync have no installer since plan 33 SC23
-            meta = json.loads((DIST.parent / product / "dist.json").read_text())
+            meta = msi._load_meta(DIST.parent / product / "dist.json")      # as `msi.py build` reads it: the service's name from the suite's table
+            self.assertEqual(meta["service"]["name"], product)
             payload = make_payload(self.tmp / product, {meta["platforms"]["win-x64"]["exe"]: "x"})
-            self.root(msi.wxs(meta, "2026.10.19.509", payload))
+            source = msi.wxs(meta, "2026.10.19.509", payload)
+            self.root(source)
+            self.assertIn(f"Stop-Service -Name '{product}'", source)
+        self.assertIn("service install --name DbDataGateway", msi.wxs(msi._load_meta(DIST.parent / "DbDataGateway" / "dist.json"), "2026.10.19.509", self.tmp / "DbDataGateway"))
         codes = {json.loads((DIST.parent / p / "dist.json").read_text())["msi"]["upgradeCode"] for p in ("DbDataGateway", "DbDataRunner", "DbDataWorkspace")}
         self.assertEqual(len(codes), 3)
 

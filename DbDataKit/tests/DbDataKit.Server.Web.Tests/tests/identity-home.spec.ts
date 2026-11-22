@@ -74,8 +74,8 @@ test.beforeAll(async () => {
   fs.writeFileSync(path.join(gatewayDirectory, 'config', 'server.yaml'), [
     'schemaVersion: 2',
     'tls: { mode: selfSigned, hostnames: [localhost] }',
-    `listen: { address: 127.0.0.1, port: ${flightPort} }`,
-    `identity: { enabled: true, address: 127.0.0.1, port: ${homePort}, publicUrl: '${homeUrl}' }`,
+    `listen: https://127.0.0.1:${flightPort}`,
+    `identity: { enabled: true, listen: https://127.0.0.1:${homePort}, publicUrl: '${homeUrl}' }`,
     '',
   ].join('\n'))
   const gateway = start([gatewayDll, 'server', 'run', `--Gateway:DataDirectory=${gatewayDirectory}`])

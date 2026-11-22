@@ -25,8 +25,15 @@ public sealed record CompareDecision(string Server, string Family, string Name, 
 /// <summary>The outcome of an adopt or a publish, in the words of the side that refused when one did.</summary>
 public sealed record CompareOutcome(bool Done, int Status, string? Error, IReadOnlyList<DiagnosticView> Diagnostics, CompareItem? Item = null);
 
-/// <summary>The combined list of posture choices: each choice once, and what could not be read.</summary>
-public sealed record PostureView(IReadOnlyList<PostureEntry> Entries, IReadOnlyList<PostureSource> Sources);
+/// <summary>The combined list of posture choices: each choice once, and what could not be read; and the servers whose own start skips a check.</summary>
+public sealed record PostureView(IReadOnlyList<PostureEntry> Entries, IReadOnlyList<PostureSource> Sources, IReadOnlyList<PostureServer> Servers);
+
+/// <summary>
+/// A server whose start skips a check its administrator switched off on purpose (<c>startup.skip_folder_permissions_check</c>: its data folder is used
+/// whatever its owner and access list): the console itself, or a registered server as its <c>/version</c> says, with what the setting allows.
+/// Design: docs/install.md#skipping-the-folder-permissions-check
+/// </summary>
+public sealed record PostureServer(string Server, string Product, string Setting, string Effect);
 
 /// <summary>A table the combined list read: the console's or a registered runner's, and whether it answered.</summary>
 public sealed record PostureSource(string Holder, bool Ok, int Choices, string? Problem);
@@ -45,7 +52,7 @@ public sealed record PostureSource(string Holder, bool Ok, int Choices, string? 
 /// <see cref="BindingValueText"/>: <c>connection/model, connection/model</c>.
 /// </para>
 /// </summary>
-public sealed class ConsoleBindingCompare(ConsoleBindings bindings, ConsoleConnections connections, ConsolePromotions promotions, ConsoleInstances instances, ConsoleRunnerBindings runners, ConsoleRelay relay, AuditLog audit)
+public sealed class ConsoleBindingCompare(ConsoleBindings bindings, ConsoleConnections connections, ConsolePromotions promotions, ConsoleInstances instances, ConsoleRunnerBindings runners, ConsoleRelay relay, AuditLog audit, DbDataKit.Hosting.DbDataHostOptions host)
 {
     public const string BindingFamily = "binding";
     public const string ConnectionFamily = "connection";
@@ -275,13 +282,16 @@ public sealed class ConsoleBindingCompare(ConsoleBindings bindings, ConsoleConne
         var holdings = new List<PostureHolding>();
         var sources = new List<PostureSource>();
 
+        var servers = new List<PostureServer>();
         var own = bindings.AllChoices();
         holdings.AddRange(own.Select(c => new PostureHolding("console", c)));
         sources.Add(new PostureSource("console", true, own.Count, null));
+        servers.AddRange(Loosened("console", ConsoleSettings.Product, host.Loosened));
 
         foreach (var instance in instances.Registry.All())
         {
             var status = await instances.StatusAsync(instance, ct);
+            if (status.Reachable) servers.AddRange(Loosened(instance.Name, status.Product ?? "", status.Loosened ?? []));
             if (!status.Reachable || status.Product != ServerProducts.Runner)
             {
                 if (status.Product == ServerProducts.Runner || !status.Reachable) sources.Add(new PostureSource(instance.Name, false, 0, status.Problem ?? $"{instance.Name} is not answering."));
@@ -300,6 +310,15 @@ public sealed class ConsoleBindingCompare(ConsoleBindings bindings, ConsoleConne
             sources.Add(new PostureSource(instance.Name, true, read.Count, null));
         }
 
-        return new PostureView(PostureListing.Merge(holdings), sources);
+        return new PostureView(PostureListing.Merge(holdings), sources, servers);
     }
+
+    /// <summary>What a skipped check of a server's start allows, as the posture page says it.</summary>
+    public const string SkipFolderPermissionsEffect =
+        "The server uses its data folder whatever the folder's owner and access list, so another account of its machine may be able to change the keys, "
+        + "settings and state it keeps there. Meant for a test's folder or a checkout; remove the switch once the folder is set up.";
+
+    private static IEnumerable<PostureServer> Loosened(string server, string product, IEnumerable<string> settings) =>
+        settings.Where(s => s == DbDataKit.Hosting.Startup.FolderPermissions.Setting)
+            .Select(s => new PostureServer(server, product, s, SkipFolderPermissionsEffect));
 }

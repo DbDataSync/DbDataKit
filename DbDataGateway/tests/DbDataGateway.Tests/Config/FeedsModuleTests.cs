@@ -94,9 +94,9 @@ public sealed class FeedsModuleTests : IAsyncLifetime
             feedsPort = FreePort();
             managementPort = FreePort();
             while (managementPort == feedsPort) managementPort = FreePort();
-            List<string> args = [$"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Listen:Address=127.0.0.1", "--Gateway:Listen:Port=0", "--Gateway:Modules:0=flightsql",
-                "--Gateway:Management:Enabled=true", "--Gateway:Management:Address=127.0.0.1", $"--Gateway:Management:Port={managementPort}", "--Gateway:DefinitionPollSeconds=1"];
-            if (feeds) args.AddRange(["--Gateway:Modules:1=feeds", "--Gateway:Rest:Address=127.0.0.1", $"--Gateway:Rest:Port={feedsPort}"]);
+            List<string> args = [$"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Listen=https://127.0.0.1:0", "--Gateway:Modules:0=flightsql",
+                "--Gateway:Management:Enabled=true", $"--Gateway:Management:Listen=https://127.0.0.1:{managementPort}", "--Gateway:DefinitionPollSeconds=1"];
+            if (feeds) args.AddRange(["--Gateway:Modules:1=feeds", $"--Gateway:Rest:Listen=https://127.0.0.1:{feedsPort}"]);
             args.AddRange(more);
             app = GatewayHost.Build([.. args]);
             try
@@ -317,7 +317,7 @@ public sealed class FeedsModuleTests : IAsyncLifetime
         var port = FreePort();
         var refused = await Assert.ThrowsAnyAsync<Exception>(async () =>
         {
-            app = GatewayHost.Build([$"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Modules:0=flightsql", "--Gateway:Modules:1=feeds", "--Gateway:Listen:Address=127.0.0.1", $"--Gateway:Listen:Port={port}", "--Gateway:Rest:Address=127.0.0.1", $"--Gateway:Rest:Port={port}"]);
+            app = GatewayHost.Build([$"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Modules:0=flightsql", "--Gateway:Modules:1=feeds", $"--Gateway:Listen=https://127.0.0.1:{port}", $"--Gateway:Rest:Listen=https://127.0.0.1:{port}"]);
             await app.StartAsync();
         });
         Assert.Contains("feeds module has its own port", refused.ToString());

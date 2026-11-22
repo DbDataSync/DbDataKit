@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { adoptWords, decisionOf, differing, heldWords, itemTitle, publishWords, summary, type CompareItem, type PostureEntry } from './bindingCompare'
+import { adoptWords, decisionOf, differing, heldWords, itemTitle, loosenedServers, publishWords, summary, type CompareItem, type PostureEntry } from './bindingCompare'
 
 const item = (over: Partial<CompareItem> = {}): CompareItem => ({
   id: 'binding/agent/helper/model:default/test', family: 'binding', name: 'helper', definitionKind: 'agent', slot: 'model:default', channel: 'test', state: 'differs',
@@ -35,5 +35,16 @@ describe('IX25: compare, adopt and publish', () => {
     const e = (heldBy: string[]): PostureEntry => ({ setting: 's', scope: 'x', chosenBy: 'a', chosenAt: '2026-11-12T09:00:00Z', note: null, heldBy, default: null, effect: null })
     expect(heldWords(e(['console']))).toBe('held by console')
     expect(heldWords(e(['console', 'the console\'s runner']))).toBe('held by console and the console\'s runner')
+  })
+
+  it('names every server whose start skips the folder permissions check, once per setting', () => {
+    const setting = 'startup.skip_folder_permissions_check'
+    const effect = 'The server uses its data folder whatever its owner.'
+    expect(loosenedServers(undefined)).toEqual([])
+    expect(loosenedServers([
+      { server: 'console', product: 'dbdatakit', setting, effect },
+      { server: 'Gateway', product: 'dbdatagateway', setting, effect },
+      { server: 'Gateway', product: 'dbdatagateway', setting, effect },
+    ])).toEqual([{ setting, effect, servers: ['console', 'Gateway'] }])
   })
 })

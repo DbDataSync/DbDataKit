@@ -21,8 +21,7 @@ public sealed class HostingEndpointTests : IAsyncLifetime
         Directory.CreateDirectory(_dir);
         var settings = new Dictionary<string, string?>
         {
-            ["Gateway:Listen:Address"] = "127.0.0.1",
-            ["Gateway:Listen:Port"] = "0",
+            ["Gateway:Listen"] = "https://127.0.0.1:0",
             ["Gateway:DataDirectory"] = _dir,
             ["Gateway:Tls:Mode"] = "SelfSigned",
             ["Gateway:Management:Enabled"] = "false",
@@ -65,21 +64,21 @@ public sealed class HostingEndpointTests : IAsyncLifetime
     [Fact]
     public async Task Healthcheck_flag_succeeds_against_the_running_gateway_and_fails_when_nothing_listens()
     {
-        var running = new GatewayOptions { Listen = { Address = _address.Host, Port = _address.Port } };
+        var running = new GatewayOptions { Listen = [$"https://{_address.Host}:{_address.Port}"] };
         var options = HealthCheck.Options(running);
         Assert.Equal(0, await HealthProbeClient.TryHandleAsync(["--healthcheck"], options));
 
-        var closed = HealthCheck.Options(new GatewayOptions { Listen = { Address = "127.0.0.1", Port = 1 } });
+        var closed = HealthCheck.Options(new GatewayOptions { Listen = ["https://127.0.0.1:1"] });
         Assert.Equal(1, await HealthProbeClient.TryHandleAsync(["--healthcheck"], closed));
     }
 
     [Fact]
     public void Healthcheck_default_url_follows_the_listen_address_and_tls_mode()
     {
-        Assert.Equal("https://127.0.0.1:8815/health/live", HealthCheck.Options(new GatewayOptions()).DefaultUrl); // 0.0.0.0 is probed through loopback
+        Assert.Equal("https://127.0.0.1:8815/health/live", HealthCheck.Options(new GatewayOptions { Listen = ["https://0.0.0.0:8815"] }).DefaultUrl); // 0.0.0.0 is probed through loopback
         Assert.Equal("http://10.1.2.3:9000/health/live",
-            HealthCheck.Options(new GatewayOptions { Listen = { Address = "10.1.2.3", Port = 9000 }, Tls = { Mode = TlsMode.None } }).DefaultUrl);
-        Assert.Equal("https://[::1]:8815/health/live", HealthCheck.Options(new GatewayOptions { Listen = { Address = "::1" } }).DefaultUrl);
+            HealthCheck.Options(new GatewayOptions { Listen = ["http://10.1.2.3:9000"], Tls = { Mode = TlsMode.None } }).DefaultUrl);
+        Assert.Equal("https://[::1]:8815/health/live", HealthCheck.Options(new GatewayOptions { Listen = ["https://[::1]:8815"] }).DefaultUrl);
     }
 
     [Fact]

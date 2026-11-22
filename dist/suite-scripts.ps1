@@ -79,7 +79,7 @@ function WaitHealthy($member) {
     if ((Run $exe @('health', 'check')).Code -eq 0) { return }
     Start-Sleep -Seconds 2
   }
-  Fail "$($member.Product) did not answer its health check in two minutes (the service is $((Get-Service -Name $member.Service).Status)); look at the Application event log and run: $($member.Product) service doctor"
+  Fail "$($member.Product) did not answer its health check in two minutes (the service is $((Get-Service -Name $member.Service).Status)); look at the Application event log and run: $($member.Product) service check"
 }
 function Registered($member) {
   $exe = ExeOf $member $base

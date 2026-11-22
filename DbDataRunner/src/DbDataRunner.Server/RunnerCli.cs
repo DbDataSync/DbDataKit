@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Net.Http;
 using DbDataKit.Cli;
 using DbDataKit.Hosting.Cli;
+using DbDataKit.Hosting.Startup;
 using DbDataKit.Monitoring;
 using DbDataKit.Runner;
 using DbDataKit.State;
@@ -22,7 +23,7 @@ public static class RunnerCli
     public const string Program = "dbdatarunner";
 
     /// <summary>Where <c>health check</c> asks by default: the server's own address.</summary>
-    public const string HealthUrl = "https://localhost:8495/health/live";
+    public const string HealthUrl = "https://localhost:7840/health/live";
 
     private const string Where = "[--repo <server directory>]";
 
@@ -43,6 +44,12 @@ public static class RunnerCli
     [
         ServerNoun.Create((args, context) => RunServerAsync(args, context, environment))
             .With([.. PairingVerbs.Create(args => RunnerState.Pairing(DirectoryOf(args, environment), RunnerSettings.StateFrom(DirectoryOf(args, environment), environment), environment))]),
+        JoinPairCommand.Create(new PairCommandOptions(Program, args => DirectoryOf(args, environment),
+            async _ =>
+            {
+                var (registered, problem) = await ServiceRestarter.RestartAsync(RunnerService.RegistrationName, SuiteServices.Runner.Program);
+                return new ServiceRestartResult(registered, problem);
+            })),
         RunsNoun(environment),
         TasksNoun(environment),
         RunnerLabelVerbs.Create(environment),
@@ -86,51 +93,91 @@ public static class RunnerCli
 
     private static async Task<int> RunServerAsync(string[] args, CliContext context, Func<string, string?>? environment)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "listen", "channels", "group" });
+        var parsed = CliArgs.Parse(args, new HashSet<string> { FolderPermissions.FlagName }, new HashSet<string> { "repo", "listen", "channels", "group" });
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
         {
-            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>] [--channels <name>[,<name>...]] [--group <name>].");
+            await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>] [--channels <name>[,<name>...]] [--group <name>] [--skip-folder-permissions-check].");
             return CliExit.Usage;
         }
-        if (!Uri.TryCreate(parsed.Get("listen") ?? RunnerSettings.DefaultListen, UriKind.Absolute, out var listen) || listen.Scheme != Uri.UriSchemeHttps)
+        IReadOnlyList<Uri>? listenFlag = null;
+        if (parsed.Get("listen") is { } listenText)
         {
-            await context.Error.WriteLineAsync("--listen is an https address, such as https://127.0.0.1:8495.");
-            return CliExit.Usage;
+            try { listenFlag = ListenPorts.ParseFlag(listenText); }
+            catch (FormatException e)
+            {
+                await context.Error.WriteLineAsync($"--listen is an https address or a list of them, such as https://127.0.0.1:7840. {e.Message}");
+                return CliExit.Usage;
+            }
         }
 
-        RunnerSettings settings;
-        try
+        // every step of the start is reported the same way in every server: the step that failed and why, in the startup-failure file, and a non-zero exit
+        var directory = DirectoryOf(args, environment);
+        var service = SuiteServices.Runner;
+        RunnerSettings? settings = null;
+        StateDatabase? state = null;
+        System.Security.Cryptography.X509Certificates.X509Certificate2? certificate = null;
+        Microsoft.AspNetCore.Builder.WebApplication? app = null;
+        ListenChoice? listen = null;
+        var settingsExit = (int?)null;
+        var result = await new StartupSequence(new StartupOptions
+            {
+                Service = service,
+                DataFolder = directory,
+                LogsRoot = SuiteServices.LogsRootFor(service, directory),
+                Version = RunnerServer.Version,
+                Warning = line => context.Error.WriteLine(line),
+            })
+            .Step(StartupStep.Folder, step =>
+            {
+                var settingsFile = Path.Combine(directory, "server.yaml");
+                SkipFolderPermissions skip;
+                try
+                {
+                    skip = SkipFolderPermissions.Read(parsed.Has(FolderPermissions.FlagName), settingsFile);
+                    var resolvedState = RunnerState.Resolve(directory, environment);
+                    // --listen, else the port pinned in server.yaml, else a free port of the Runner's sub-block (pinned once the server listens on it)
+                    listen = ListenPorts.ResolveAll(service, listenFlag, Path.Combine(directory, "server.yaml"), new Uri(RunnerSettings.DefaultListen), step.Options.ExcludedPorts());
+                    settings = new RunnerSettings(directory, listen.Address) { ListenAll = listen.Addresses, State = resolvedState.Settings, StateSources = resolvedState.Sources, Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")), MaxArtifactBytes = RunnerSettings.MaxArtifactBytesFrom(environment), ActivationMaxWait = RunnerSettings.ActivationMaxWaitFrom(environment), Group = RunnerSettings.GroupFrom(environment, parsed.Get("group")), TaskEnvironment = RunnerSettings.TaskEnvironmentFrom(environment), SkipFolderPermissionsCheck = skip.IsOn };
+                }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+                {
+                    settingsExit = CliExit.Usage;
+                    throw;
+                }
+                step.CheckFolderPermissions(settings.Directory, skip, settingsFile);
+                Directory.CreateDirectory(settings.Directory);
+            })
+            .Step(StartupStep.Certificate, _ => certificate = RunnerServer.Certificate(settings!.Directory))
+            .Step(StartupStep.State, _ =>
+            {
+                state = RunnerState.Open(settings!.Directory, settings.State, environment, settings.Group);
+                app = RunnerServer.Build(settings, certificate!, line => context.Error.WriteLine(line), state);
+            })
+            .Step(StartupStep.Ports, (step, ct) => step.BindAsync(listen!, app!.StartAsync, cancellationToken: ct))
+            .Step(StartupStep.Join, (_, ct) => RunnerServer.JoinAsync(app!, settings!, certificate!, state!, ct))
+            .RunAsync(context.Cancellation);
+        if (!result.Succeeded)
         {
-            var resolvedState = RunnerState.Resolve(DirectoryOf(args, environment), environment);
-            settings = new RunnerSettings(DirectoryOf(args, environment), listen) { State = resolvedState.Settings, StateSources = resolvedState.Sources, Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")), MaxArtifactBytes = RunnerSettings.MaxArtifactBytesFrom(environment), ActivationMaxWait = RunnerSettings.ActivationMaxWaitFrom(environment), Group = RunnerSettings.GroupFrom(environment, parsed.Get("group")), TaskEnvironment = RunnerSettings.TaskEnvironmentFrom(environment) };
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
-        {
-            await context.Error.WriteLineAsync(ex.Message);
-            return CliExit.Usage;
+            await context.Error.WriteLineAsync(result.Summary());
+            if (app is not null) await app.DisposeAsync();
+            return settingsExit ?? result.ExitCode;
         }
 
-        Directory.CreateDirectory(settings.Directory);
-        StateDatabase state;
-        try { state = RunnerState.Open(settings.Directory, settings.State, environment, settings.Group); }
-        catch (InvalidOperationException ex)
-        {
-            await context.Error.WriteLineAsync(ex.Message);
-            return CliExit.Failure;
-        }
-
-        var app = RunnerServer.Build(settings, RunnerServer.Certificate(settings.Directory), line => context.Error.WriteLine(line), state);
-        await context.Out.WriteLineAsync($"Serving on {listen} (instance {RunnerServer.InstanceId(state)}, state on {state.Dialect.Engine}, channels {string.Join(", ", settings.Channels)}). Pair a client with: dbdatarunner server pair --max-role <roles> [--repo <server directory>]");
+        await context.Out.WriteLineAsync($"Serving on {listen!.Address} (instance {RunnerServer.InstanceId(state!)}, state on {state!.Dialect.Engine}, channels {string.Join(", ", settings!.Channels)}). Pair a client with: dbdatarunner server pair --max-role <roles> [--repo <server directory>]");
         try
         {
             // the host's own lifetime: Ctrl+C, SIGTERM, systemd and the Windows service manager all stop it the same way; the runner stops its tasks with their grace period first
-            await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(app, context.Cancellation);
+            await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.WaitForShutdownAsync(app!, context.Cancellation);
         }
         catch (InvalidOperationException ex)
         {
             // for instance, the task host is missing: said once, with what to do
             await context.Error.WriteLineAsync(ex.Message);
             return CliExit.Failure;
+        }
+        finally
+        {
+            await app!.DisposeAsync();
         }
 
         return CliExit.Ok;
@@ -288,6 +335,12 @@ public static class RunnerCli
             {
                 case "run":
                     var dry = parsed.Has("dry-run");
+                    if (!dry && await control.IsDdlAsync(task) == true)
+                    {
+                        await context.Error.WriteLineAsync($"{task} creates, alters or drops tables, so it starts only from the console after a person approves its statements. Use --dry-run to read what it would do.");
+                        return CliExit.Failure;
+                    }
+
                     var result = control.RunNow(task, inputs, actor, dry);
                     context.Data["task"] = task.ToString();
                     context.Data["queued"] = result.Queued;

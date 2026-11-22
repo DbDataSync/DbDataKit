@@ -23,6 +23,9 @@ public sealed record RunnerActor(string Id, string? Name, string ViaKind, string
 /// <summary>What <see cref="RunnerControl.RunNow"/> did: the run id of the item queued, or that one is queued or running already.</summary>
 public sealed record RunNowResult(bool Queued, Guid? RunId);
 
+/// <summary>The control service's approval a run of a DDL task carries, for the audit: the person who approved and the digest of the exact statements they approved.</summary>
+public sealed record ControlApprovalRecord(string Approver, string StatementsSha256);
+
 /// <summary>What <see cref="RunnerControl.CancelRun"/> did: <see cref="RunCancelOutcome.Unknown"/> (no such run on the queue), <see cref="RunCancelOutcome.Requested"/> (the loop that holds it is asked to stop it), <see cref="RunCancelOutcome.Cancelled"/> (it had not started) or <see cref="RunCancelOutcome.AlreadyEnded"/>.</summary>
 public enum RunCancelOutcome { Unknown, Requested, Cancelled, AlreadyEnded }
 
@@ -78,11 +81,11 @@ public sealed class RunnerControl
     public DbDataKit.Runner.Triggers.TriggerEngine Triggers => _scheduler.Triggers;
 
     /// <summary>Queues a run of the task apart from its schedule (also when it is paused). With <paramref name="dryRun"/> it is a dry run: the job reads and nothing it keeps changes, the kit refuses writes and lists what it would have sent (plan 27a IX16), and the run does not start the tasks that follow it. Throws <see cref="UnknownTaskException"/> for a task this runner does not serve.</summary>
-    public RunNowResult RunNow(TaskRef task, IReadOnlyDictionary<string, string>? inputs, RunnerActor actor, bool dryRun = false, string? onBehalfOf = null)
+    public RunNowResult RunNow(TaskRef task, IReadOnlyDictionary<string, string>? inputs, RunnerActor actor, bool dryRun = false, string? onBehalfOf = null, ControlApprovalRecord? approval = null)
     {
         var requestedBy = RequestedBy(actor, onBehalfOf);
         var runId = Translate(() => _scheduler.RunNow(task, inputs, requestedBy, dryRun));
-        Record(RunVerb, task, actor, new { run_id = runId, queued = runId is not null, dry_run = dryRun, inputs = inputs?.Keys.Order(StringComparer.Ordinal).ToArray() ?? [], on_behalf_of = onBehalfOf });
+        Record(RunVerb, task, actor, new { run_id = runId, queued = runId is not null, dry_run = dryRun, inputs = inputs?.Keys.Order(StringComparer.Ordinal).ToArray() ?? [], on_behalf_of = onBehalfOf, approved_by = approval?.Approver, statements_sha256 = approval?.StatementsSha256 });
         return new RunNowResult(runId is not null, runId);
     }
 
@@ -90,15 +93,18 @@ public sealed class RunnerControl
     /// Queues a manual run of a version the channel holds but does not serve, such as a staged one (plan 28c E21, step e); a manual-only task only. Audited as <c>runner.task.run</c> with the version. Throws <see cref="UnknownTaskException"/>
     /// when the version or the task is not there, or the task has a schedule or a trigger.
     /// </summary>
-    public async Task<RunNowResult> RunVersionAsync(TaskRef task, string version, IReadOnlyDictionary<string, string>? inputs, RunnerActor actor, bool dryRun = false, string? onBehalfOf = null, CancellationToken ct = default)
+    public async Task<RunNowResult> RunVersionAsync(TaskRef task, string version, IReadOnlyDictionary<string, string>? inputs, RunnerActor actor, bool dryRun = false, string? onBehalfOf = null, CancellationToken ct = default, ControlApprovalRecord? approval = null)
     {
         var requestedBy = RequestedBy(actor, onBehalfOf);
         Guid? runId;
         try { runId = await _scheduler.RunVersionAsync(task, version, inputs, requestedBy, dryRun, ct).ConfigureAwait(false); }
         catch (InvalidOperationException ex) { throw new UnknownTaskException(ex.Message); }
-        Record(RunVerb, task, actor, new { run_id = runId, queued = runId is not null, version, dry_run = dryRun, inputs = inputs?.Keys.Order(StringComparer.Ordinal).ToArray() ?? [], on_behalf_of = onBehalfOf });
+        Record(RunVerb, task, actor, new { run_id = runId, queued = runId is not null, version, dry_run = dryRun, inputs = inputs?.Keys.Order(StringComparer.Ordinal).ToArray() ?? [], on_behalf_of = onBehalfOf, approved_by = approval?.Approver, statements_sha256 = approval?.StatementsSha256 });
         return new RunNowResult(runId is not null, runId);
     }
+
+    /// <summary>Whether the task (of <paramref name="version"/>, or of the version the channel serves) is a DDL task (<see cref="PackageTask.IsDdl"/>); null when the runner has no such task or version.</summary>
+    public Task<bool?> IsDdlAsync(TaskRef task, string? version = null, CancellationToken ct = default) => _scheduler.IsDdlAsync(task, version, ct);
 
     /// <summary>The longest name of a person a caller may start a run for.</summary>
     public const int MaxOnBehalfOf = 200;

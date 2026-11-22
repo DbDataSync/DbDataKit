@@ -6,3 +6,4 @@ export { registerDesigner, designerOf, designerPath, filesPath } from './designe
 export type { DesignerProps, DesignerRegistration } from './designers'
 export { DraftProvider, useDraft, useDraftFile, useDraftFiles, findingsKey } from './draft'
 export type { Draft, DraftFile } from './draft'
+export { workspaceNav } from './WorkspaceShell'

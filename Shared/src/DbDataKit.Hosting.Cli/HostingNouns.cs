@@ -5,16 +5,16 @@ namespace DbDataKit.Hosting.Cli;
 /// <summary>The shared <c>service</c> and <c>cert</c> nouns over the commands in this package, so every product's command line has them under the same names (plan 13, W4).</summary>
 public static class HostingNouns
 {
-    /// <summary><c>service install|uninstall|status|start|stop|restart|doctor</c>: registration of <c>server run</c> with Windows or systemd. Never offered through the management API: it needs elevation on the machine.</summary>
+    /// <summary><c>service install|uninstall|status|start|stop|restart|check|unit</c>: registration of <c>server run</c> with Windows or systemd. Never offered through the management API: it needs elevation on the machine.</summary>
     public static Noun Service(ServiceCommand command) => new("service", "Registration of 'server run' with Windows or systemd",
     [
-        Forward("install", "Register the service (again, to update it); needs elevation", EffectClass.TargetWrites, "[--account <account>] [--password-stdin] [--data-dir <path>] [--dry-run]", command.Execute),
+        Forward("install", "Register the service (again, to update it); needs elevation", EffectClass.TargetWrites, "[--account <account>] [--password-stdin] [--data-dir <path>] [--skip-folder-permissions-check] [--dry-run]", command.Execute),
         Forward("uninstall", "Remove the service registration; needs elevation", EffectClass.TargetWrites, "", command.Execute),
         Forward("status", "Whether the service is installed and running", EffectClass.OfflineOnly, "", command.Execute),
         Forward("start", "Start the service; needs elevation", EffectClass.TargetWrites, "", command.Execute),
         Forward("stop", "Stop the service; needs elevation", EffectClass.TargetWrites, "", command.Execute),
         Forward("restart", "Stop and start the service; needs elevation", EffectClass.TargetWrites, "", command.Execute),
-        Forward("doctor", "Check the registration, the account and the directory permissions", EffectClass.OfflineOnly, "", command.Execute),
+        Forward("check", "Check the registration, the account and the directory permissions", EffectClass.OfflineOnly, "", command.Execute),
         Forward("unit", "Print a hardened systemd unit that runs 'server run' (Linux)", EffectClass.OfflineOnly, "", command.Execute),
     ]);
 

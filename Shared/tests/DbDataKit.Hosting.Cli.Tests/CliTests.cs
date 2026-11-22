@@ -25,7 +25,7 @@ public class ServiceCommandTests
         public void Apply(string directory, AclSpecification spec) => AppliedPaths.Add(directory);
     }
 
-    private static (ServiceCommand Cmd, InMemoryServiceControlManager Scm, RecordingAcl Acl) Make(bool elevated = true)
+    private static (ServiceCommand Cmd, InMemoryServiceControlManager Scm, RecordingAcl Acl) Make(bool elevated = true, DbDataKit.Hosting.Startup.SuiteService? startup = null)
     {
         var scm = new InMemoryServiceControlManager();
         var acl = new RecordingAcl();
@@ -38,6 +38,7 @@ public class ServiceCommandTests
             SystemdUnit = () => new SystemdUnitOptions { Name = "prod", ExecStart = "/opt/prod/prod" },
             EventLogSource = "Prod",
             Version = "2.0.0",
+            StartupService = startup,
         };
         return (new ServiceCommand(ctx, scm, acl, new Elevated(elevated), new InMemoryEventLogSourceRegistrar(), true, _ => Task.CompletedTask), scm, acl);
     }
@@ -172,13 +173,111 @@ public class ServiceCommandTests
     }
 
     [Fact]
-    public void Doctor_reports_failures_when_directories_are_missing()
+    public void Check_reports_failures_when_directories_are_missing()
     {
         var (cmd, _, _) = Make();
         cmd.Execute(["install"], new BufferConsole());
         var console = new BufferConsole();
-        Assert.Equal(ExitCodes.Failure, cmd.Execute(["doctor"], console));
+        Assert.Equal(ExitCodes.Failure, cmd.Execute(["check"], console));
         Assert.Contains("FAIL", console.OutWriter.ToString());
+        Assert.Contains("Check: ", console.OutWriter.ToString());
+    }
+
+    [Fact]
+    public void Check_prints_the_startup_failure_file_of_the_data_folder_or_says_there_is_none()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "dbdata-check-" + Guid.NewGuid().ToString("N"));
+        var data = Path.Combine(root, "runner");
+        try
+        {
+            var (cmd, _, _) = Make(startup: DbDataKit.Hosting.Startup.SuiteServices.Runner);
+            var console = new BufferConsole();
+            cmd.Execute(["check", "--data-dir", data], console);
+            Assert.Contains($"Startup-failure file: none ({Path.Combine(root, "logs", "startup-failure-dbdatarunner.txt")})", console.OutWriter.ToString());
+
+            // the data folder named for its service has the shared logs folder beside it, as in an install
+            Directory.CreateDirectory(Path.Combine(root, "logs"));
+            File.WriteAllText(Path.Combine(root, "logs", "startup-failure-dbdatarunner.txt"), "Startup of dbdatarunner failed at the ports step.\n\nPort 7841 cannot be bound.\n");
+            console = new BufferConsole();
+            cmd.Execute(["check", "--data-dir", data], console);
+            var text = console.OutWriter.ToString();
+            Assert.Contains("(the last start failed):", text);
+            Assert.Contains("  Port 7841 cannot be bound.", text);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); }
+            catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void Install_with_the_skip_switch_puts_it_on_the_registered_command_line_and_check_names_the_service()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "dbdata-skip-" + Guid.NewGuid().ToString("N"));
+        var data = Path.Combine(root, "runner");
+        try
+        {
+            var (cmd, scm, _) = Make(startup: DbDataKit.Hosting.Startup.SuiteServices.Runner);
+            var console = new BufferConsole();
+            Assert.Equal(0, cmd.Execute(["install", "--data-dir", data, "--skip-folder-permissions-check"], console));
+            // recorded on the command line the service manager starts the server with, not in a file of the service's folder
+            Assert.Contains("--skip-folder-permissions-check", scm.GetConfig("Prod")!.BinaryPathName);
+            Assert.False(Directory.Exists(data));
+
+            console = new BufferConsole();
+            cmd.Execute(["check", "--data-dir", data], console);
+            var text = console.OutWriter.ToString();
+            Assert.Contains("[warn] startup.folder-permissions: Prod skips the folder permissions check at every start (--skip-folder-permissions-check on the registered command line)", text);
+            // the switch is reported once, as its own line, not as a command line that differs
+            Assert.Contains("[ok  ] service.binary-path: Command line matches.", text);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); }
+            catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void Check_names_the_setting_in_the_settings_file_or_says_the_check_runs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "dbdata-skip-" + Guid.NewGuid().ToString("N"));
+        var data = Path.Combine(root, "runner");
+        try
+        {
+            var (cmd, _, _) = Make(startup: DbDataKit.Hosting.Startup.SuiteServices.Runner);
+            var console = new BufferConsole();
+            cmd.Execute(["check", "--data-dir", data], console);
+            Assert.Contains("[ok  ] startup.folder-permissions: Prod checks its data folder's owner and access list at every start.", console.OutWriter.ToString());
+
+            Directory.CreateDirectory(data);
+            var settings = Path.Combine(data, "server.yaml");
+            File.WriteAllText(settings, "listen: https://127.0.0.1:7841\nstartup:\n  skip_folder_permissions_check: true\n");
+            console = new BufferConsole();
+            cmd.Execute(["check", "--data-dir", data], console);
+            Assert.Contains($"[warn] startup.folder-permissions: Prod skips the folder permissions check at every start (startup.skip_folder_permissions_check: true in {settings})", console.OutWriter.ToString());
+
+            // a value that is not true or false is a failed check naming the file and the line
+            File.WriteAllText(settings, "startup:\n  skip_folder_permissions_check: maybe\n");
+            console = new BufferConsole();
+            Assert.Equal(ExitCodes.Failure, cmd.Execute(["check", "--data-dir", data], console));
+            Assert.Contains($"[FAIL] startup.folder-permissions: {settings}, line 2: startup.skip_folder_permissions_check is true or false, not 'maybe'.", console.OutWriter.ToString());
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); }
+            catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void Check_of_a_product_that_is_not_a_suite_service_prints_no_failure_file()
+    {
+        var (cmd, _, _) = Make();
+        var console = new BufferConsole();
+        cmd.Execute(["check"], console);
+        Assert.DoesNotContain("Startup-failure file", console.OutWriter.ToString());
     }
 
     [Fact]

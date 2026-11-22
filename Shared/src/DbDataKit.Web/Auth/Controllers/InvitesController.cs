@@ -267,7 +267,7 @@ public sealed class InvitesController(
     /// every gateway log between the inviter and the invitee.
     /// </summary>
     private string UrlFor(string code) =>
-        $"{Request.Scheme}://{Request.Host}/invite#{code}";
+        $"{Request.Scheme}://{Request.Host}{Request.PathBase}/invite#{code}";
 
     /// <summary>Best effort, same reasoning as <see cref="BootstrapInvite"/>'s own write: a permissions
     /// problem here should never fail a registration that has already fully succeeded.</summary>

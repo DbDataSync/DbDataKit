@@ -1,5 +1,5 @@
 {
   "Gateway": {
-    "Listen": { "Prot": 9000 }
+    "Management": { "Enabld": true }
   }
 }
