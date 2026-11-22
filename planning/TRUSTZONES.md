@@ -46,10 +46,21 @@ reads through it as a person (path 2). Structural tasks run only when Control st
 
 ## Proposed decisions
 
-- **TRUSTZONES-P9 (default, awaiting the owner): a dry run of a DDL task needs no approval.** An author presses "Show the statements" on `apply_plan`; the Runner queues a dry run with the operator's own token, the task reads and writes nothing, and the log lists the statements the person then approves. Options: (a) as built, a dry run is unsigned, so a person can read the plan before approving; (b) a dry run needs the signature too, which means the console signs a request with no approved statements and the signature no longer proves that a person approved anything. Recommendation: (a).
-- **TRUSTZONES-P10 (default, awaiting the owner): a task is marked as DDL by the capability `ddl` in its manifest.** A Build project's `apply_plan` is published with `capabilities: [ddl]`. Options: (a) as built, the existing `capabilities` list carries it, so `package/1` (frozen) is unchanged; (b) a new key of `package/1` such as `structural: true`, which needs the owner's allowance for another in-place change. Recommendation: (a).
-- **TRUSTZONES-P11 (default, awaiting the owner): the approval binds the task, the version, all inputs and the digest of the statements; the Runner records the digest and never sees the statements.** The console signs for `orders-ops/prod/apply_plan` with `plan=p1`; the same signature with `plan=p2` is refused. The Runner cannot check that the task will run the statements the person read, so a plan that is not an input of the run is not covered. Options: (a) as built; (b) the task's inputs must carry the plan text, so the digest can be checked by the task. Recommendation: (a) now, (b) when the approval screen exists, since the screen decides what the person reads.
-- **TRUSTZONES-P12 (default, awaiting the owner): a Runner group remembers used approvals per instance, as it does management tokens.** An approval replayed within its two minutes to another instance of the same group is accepted there, and the second run starts only when the first has ended (the queue holds one run of a task at a time). Options: (a) as built; (b) keep used approvals in the group's state, which needs a state module change and its migration. Recommendation: (a), because the window is two minutes and the task is single-run.
+### TRUSTZONES-P9: a dry run of a DDL task needs no approval (default, awaiting the owner)
+
+An author presses "Show the statements" on `apply_plan`; the Runner queues a dry run with the operator's own token, the task reads and writes nothing, and the log lists the statements the person then approves. Options: (a) as built, a dry run is unsigned, so a person can read the plan before approving; (b) a dry run needs the signature too, which means the console signs a request with no approved statements and the signature no longer proves that a person approved anything. Recommendation: (a).
+
+### TRUSTZONES-P10: a task is marked as DDL by the capability `ddl` in its manifest (default, awaiting the owner)
+
+A Build project's `apply_plan` is published with `capabilities: [ddl]`. Options: (a) as built, the existing `capabilities` list carries it, so `package/1` (frozen) is unchanged; (b) a new key of `package/1` such as `structural: true`, which needs the owner's allowance for another in-place change. Recommendation: (a).
+
+### TRUSTZONES-P11: the approval binds the task, the version, all inputs and the digest of the statements; the Runner records the digest and never sees the statements (default, awaiting the owner)
+
+The console signs for `orders-ops/prod/apply_plan` with `plan=p1`; the same signature with `plan=p2` is refused. The Runner cannot check that the task will run the statements the person read, so a plan that is not an input of the run is not covered. Options: (a) as built; (b) the task's inputs must carry the plan text, so the digest can be checked by the task. Recommendation: (a) now, (b) when the approval screen exists, since the screen decides what the person reads.
+
+### TRUSTZONES-P12: a Runner group remembers used approvals per instance, as it does management tokens (default, awaiting the owner)
+
+An approval replayed within its two minutes to another instance of the same group is accepted there, and the second run starts only when the first has ended (the queue holds one run of a task at a time). Options: (a) as built; (b) keep used approvals in the group's state, which needs a state module change and its migration. Recommendation: (a), because the window is two minutes and the task is single-run.
 
 ## Open designs
 
