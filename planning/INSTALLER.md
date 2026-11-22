@@ -66,8 +66,9 @@ rules are in [docs/install.md](../docs/install.md).
 - The Runner's Windows service job is written and has never run a task under the real service; no Runner release was cut with the release workflow.
 - The Windows install test (`suite-install-windows` of `suite-release.yml`, `dist/tests/suite-scoop-e2e.ps1`) has a leg `workstation`, dispatched with
   `-f workstation_owner=true`: the install runs with a Windows client's owner (`nodefaultadminowner=1`, and the same default owner on the test's process
-  token), so the folders it makes are owned by the administrator who ran it. Both legs print the owner of everything under the data folder. On the code
-  of 2026-11-21 both legs pass: the Gateway opened `config`, owned by the administrator, because its `.git` was the service's (`docs/ci-lessons.md`).
+  token), so the folders it makes are owned by the administrator who ran it; it also makes the Gateway's `config` repository as the administrator before
+  the first start and removes the runner's `safe.directory=*`. Both legs print the owner of everything under the data folder. On the code of 2026-11-22
+  git refuses `config` in that leg and the Gateway falls back on its allow list (`docs/ci-lessons.md`).
 
 ## Tasks
 
