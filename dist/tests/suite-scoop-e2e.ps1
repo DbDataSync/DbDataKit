@@ -286,7 +286,7 @@ try {
     Heading 'The Gateway''s configuration repository made by the elevated administrator before the service first starts'
     # as an earlier install did on a Windows client: the repository, its .git included, exists before the service's first start and is owned by the
     # administrator who ran the install, so git refuses it to NT SERVICE\DbDataGateway
-    # the hosted runner's git allows every repository (safe.directory=* in its system settings, which libgit2 reads too); a Windows client has no such entry
+    # git settings of the machine that allow a repository despite its owner (safe.directory, which libgit2 reads too) are removed, as on a Windows client that has none
     $allowed = Native 'safe-directory-before' { & git config --show-origin --get-all safe.directory }
     foreach ($level in '--system', '--global') { & git config $level --unset-all safe.directory 2>&1 | Out-Null }
     $programDataGit = Join-Path $env:ProgramData 'Git\config'
