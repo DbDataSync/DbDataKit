@@ -1,1 +1,1 @@
-{ "Gateway": { "Listen": { "Address": "localhost" } } }
+{ "Gateway": { "Listen": "localhost" } }

@@ -68,7 +68,7 @@ public sealed class GatewayActivity(SessionStore sessions, ActiveQueries queries
         {
             ["product"] = "dbdatagateway", ["version"] = version, ["instance_id"] = instanceId,
             ["started"] = _started, ["uptime_seconds"] = (long)(now - _started).TotalSeconds,
-            ["listen"] = $"{o.Listen.Address}:{o.Listen.Port}",
+            ["listen"] = string.Join(", ", o.Listen),
             ["data_sources"] = o.DataSources.Count, ["users"] = 0, ["windows_accounts"] = 0,
             ["pass_through"] = o.Auth.AllowPassThrough, ["jwt"] = o.Auth.Jwt.Enabled,
             ["sessions"] = sessions.List().Count, ["running_queries"] = queries.List().Count,

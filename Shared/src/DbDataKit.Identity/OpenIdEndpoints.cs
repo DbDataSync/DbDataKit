@@ -10,7 +10,11 @@ namespace DbDataKit.Identity;
 /// <param name="SignInPath">Where a person who is not signed in is sent; the original address goes in <c>returnUrl</c>.</param>
 /// <param name="EndSession">Ends the host's own session for the person on this request (clears the cookie, deletes the session row), called by the end-session endpoint. The home's session is the host's: without this the endpoint ends only the refresh tokens.</param>
 /// <param name="EndSessionOf">Ends every session the host holds for the person the id token hint named (plan 13a U15). A console sends the browser to the end-session endpoint from another site, so a session cookie that is SameSite Strict does not come with it and <paramref name="EndSession"/> sees nobody; the hint does name the person. Called only when the hint is this home's.</param>
-public sealed record OpenIdHostOptions(Func<HttpContext, string?> CurrentUserId, string SignInPath = "/sign-in", Func<HttpContext, Task>? EndSession = null, Func<HttpContext, string, Task>? EndSessionOf = null);
+public sealed record OpenIdHostOptions(Func<HttpContext, string?> CurrentUserId, string SignInPath = "/sign-in", Func<HttpContext, Task>? EndSession = null, Func<HttpContext, string, Task>? EndSessionOf = null)
+{
+    /// <summary>The path the provider's endpoints are reached under by the browser (<c>/identity</c>, or the prefix the home is mounted under): where a person is sent back to after signing in.</summary>
+    public string ProviderPrefix { get; init; } = "/identity";
+}
 
 public static class OpenIdEndpoints
 {
@@ -25,7 +29,7 @@ public static class OpenIdEndpoints
             var q = context.Request.Query;
             var userId = host.CurrentUserId(context);
             if (userId is null)
-                return Results.Redirect($"{host.SignInPath}?returnUrl={Uri.EscapeDataString(context.Request.Path + context.Request.QueryString)}");
+                return Results.Redirect($"{host.SignInPath}?returnUrl={Uri.EscapeDataString(host.ProviderPrefix + "/authorize" + context.Request.QueryString)}");
             var result = provider.Authorize(new AuthorizeRequest(q["client_id"], q["redirect_uri"], q["response_type"], q["scope"], q["state"], q["nonce"], q["code_challenge"], q["code_challenge_method"]), userId);
             return result.RedirectTo is { } to ? Results.Redirect(to) : Results.Text(result.Error!, "text/plain", statusCode: 400);
         });

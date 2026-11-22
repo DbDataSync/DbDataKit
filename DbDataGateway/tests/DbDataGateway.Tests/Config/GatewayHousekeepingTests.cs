@@ -43,7 +43,7 @@ public sealed class GatewayHousekeepingTests : IAsyncLifetime
         Directory.CreateDirectory(GatewayConfigFile.DirectoryIn(_root));
         File.WriteAllText(Path.Combine(GatewayConfigFile.DirectoryIn(_root), "server.yaml"),
             "schemaVersion: 2\ntls: { mode: selfSigned }\nstate:\n  housekeeping:\n    retention_every_minutes: 0.02\n    backup_directory: backups\n    backup_every_hours: 0.0003\n    backup_keep: 2\n");
-        var app = GatewayHost.Build([$"--Gateway:DataDirectory={_root}", "--Gateway:Listen:Address=127.0.0.1", $"--Gateway:Listen:Port={FreePort()}", "--Gateway:Management:Enabled=false", .. state]);
+        var app = GatewayHost.Build([$"--Gateway:DataDirectory={_root}", $"--Gateway:Listen=https://127.0.0.1:{FreePort()}", "--Gateway:Management:Enabled=false", .. state]);
         await app.StartAsync();
         try
         {

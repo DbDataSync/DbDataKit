@@ -97,7 +97,7 @@ public sealed class CliGrammarTests
     [InlineData("install")]
     [InlineData("uninstall")]
     [InlineData("--healthcheck")]
-    [InlineData("--Gateway:Listen:Port=9000")]
+    [InlineData("--Gateway:Listen=https://127.0.0.1:9000")]
     public async Task The_old_forms_are_not_commands(string old)
     {
         var result = await Run(old);

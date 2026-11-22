@@ -82,7 +82,7 @@ public sealed class PublicListenerTests : IAsyncLifetime
 
     private async Task StartAsync(IEnumerable<string> modules, params string[] more)
     {
-        var args = new List<string> { $"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Management:Enabled=false", "--Gateway:DefinitionPollSeconds=1", "--Gateway:Public:Address=127.0.0.1", $"--Gateway:Public:Port={publicPort}" };
+        var args = new List<string> { $"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Management:Enabled=false", "--Gateway:DefinitionPollSeconds=1", $"--Gateway:Public:Listen=https://127.0.0.1:{publicPort}" };
         args.AddRange(modules.Select((m, i) => $"--Gateway:Modules:{i}={m}"));
         args.AddRange(more);
         app = GatewayHost.Build([.. args]);
@@ -143,12 +143,20 @@ public sealed class PublicListenerTests : IAsyncLifetime
         PublishModel();
         using var http = Trusting($"https://localhost:{publicPort}");
 
-        // sign-in: the home's discovery document names the public port as its issuer, and its sign-in page is served
-        var discovery = JsonNode.Parse(await http.GetStringAsync("/.well-known/openid-configuration"))!;
-        Assert.Equal($"https://localhost:{publicPort}", ((string)discovery["issuer"]!).TrimEnd('/'));
+        // sign-in: the home is under /identity, its discovery document is at <issuer>/.well-known/openid-configuration and names the public port and the path as its issuer, its pages are served
+        var discovery = JsonNode.Parse(await http.GetStringAsync("/identity/.well-known/openid-configuration"))!;
+        Assert.Equal($"https://localhost:{publicPort}/identity", ((string)discovery["issuer"]!).TrimEnd('/'));
+        Assert.Equal($"https://localhost:{publicPort}/identity/authorize", (string)discovery["authorization_endpoint"]!);
+        Assert.Equal($"https://localhost:{publicPort}/identity/jwks", (string)discovery["jwks_uri"]!);
         var signIn = await http.GetAsync("/identity/sign-in");
         Assert.Equal(HttpStatusCode.OK, signIn.StatusCode);
         Assert.StartsWith("text/html", signIn.Content.Headers.ContentType!.MediaType);
+        Assert.Contains("/identity", await signIn.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.OK, (await http.GetAsync("/identity/invite")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await http.GetAsync("/identity/api/auth/status")).StatusCode);
+        // the home's old root paths are the listener's 404
+        foreach (var old in new[] { "/invite", "/api/auth/status", "/.well-known/openid-configuration", "/api/invites/check?code=x", "/" })
+            Assert.Equal(HttpStatusCode.NotFound, (await http.GetAsync(old)).StatusCode);
 
         // an app: the host sends the browser to the home on the same port, the home returns it, and the shell is served
         var start = await http.GetAsync("/apps/acme/");
@@ -198,12 +206,91 @@ public sealed class PublicListenerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_module_answers_under_the_path_the_administrator_gave_it_and_not_under_the_default()
+    {
+        publicPort = FreePort();
+        string ada, clientId;
+        {
+            var database = GatewayState.Open(dataDirectory);
+            ada = new IdentityUserStore(database).CreateUser("Ada Lovelace", "ada@example.invalid", UserRole.Viewer).Id;
+            new HomeDirectory(database).AssignApp(AssignmentSubject.User(ada), "acme", ServerRole.Viewer);
+            var instances = new AppInstanceStore(new DefinitionStore(database));
+            instances.PublishApp(new AppPackage(Manifest, new Dictionary<string, byte[]> { ["index.html"] = Encoding.UTF8.GetBytes("<html><head></head><body>hello notes</body></html>"), ["app.js"] = "1"u8.ToArray() }), "ada");
+            instances.Save(new AppInstance("acme", "notes"), "ada");
+            // the redirect URI of the apps host is under the apps path
+            clientId = new OidcClients(database).Register("Apps", [$"https://localhost:{publicPort}/programs/-/callback"], confidential: false).Item1.ClientId;
+        }
+        await StartAsync(["identity", "apps", "store", "views", "feeds", "mcp"], "--Gateway:Apps:RolesRefreshSeconds=1", $"--Gateway:Apps:Home:ClientId={clientId}",
+            "--Gateway:Identity:Path=/accounts", "--Gateway:Apps:Path=/programs", "--Gateway:Store:Path=/warehouse", "--Gateway:Views:Path=/reports", "--Gateway:Rest:Path=/odata", "--Gateway:Mcp:Path=/agents");
+        var state = Get<StateDatabase>();
+        var token = Person();
+        PublishModel();
+        using var http = Trusting($"https://localhost:{publicPort}");
+
+        // identity: discovery, pages and issuer under the new path; the default path is the listener's 404
+        var discovery = JsonNode.Parse(await http.GetStringAsync("/accounts/.well-known/openid-configuration"))!;
+        Assert.Equal($"https://localhost:{publicPort}/accounts", ((string)discovery["issuer"]!).TrimEnd('/'));
+        Assert.Equal($"https://localhost:{publicPort}/accounts/authorize", (string)discovery["authorization_endpoint"]!);
+        Assert.Equal(HttpStatusCode.OK, (await http.GetAsync("/accounts/sign-in")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await http.GetAsync("/accounts/invite")).StatusCode);
+
+        // an app: the host sends the browser to the home under its path, with the redirect URI under the apps path, and the shell is served there
+        var start = await http.GetAsync("/programs/acme/");
+        Assert.Equal(HttpStatusCode.Redirect, start.StatusCode);
+        Assert.StartsWith($"https://localhost:{publicPort}/accounts/authorize", start.Headers.Location!.AbsoluteUri);
+        Assert.Contains(Uri.EscapeDataString($"https://localhost:{publicPort}/programs/-/callback"), start.Headers.Location!.Query);
+        var authorize = new HttpRequestMessage(HttpMethod.Get, start.Headers.Location);
+        authorize.Headers.Add("Cookie", $"{GatewayIdentityModule.Auth.SessionCookie}={new IdentitySessionStore(state).Create(ada).Id}");
+        var back = await http.SendAsync(authorize);
+        Assert.Equal(HttpStatusCode.Redirect, back.StatusCode);
+        var callback = await http.GetAsync(back.Headers.Location);
+        Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+        var cookie = callback.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith(AppsEndpoints.SessionCookie + "=", StringComparison.Ordinal));
+        Assert.Contains("path=/programs/", cookie);
+        var shell = new HttpRequestMessage(HttpMethod.Get, "/programs/acme/");
+        shell.Headers.Add("Cookie", cookie.Split(';')[0]);
+        var page = await http.SendAsync(shell);
+        Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+        var html = await page.Content.ReadAsStringAsync();
+        Assert.Contains("data-base=\"/programs\"", html);
+        Assert.DoesNotContain("src=\"/apps/", html);
+
+        // the other modules answer under their paths
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(http, HttpMethod.Get, "/warehouse/api/v1/models", token)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(http, HttpMethod.Get, "/reports/api/v1/my/views", token)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(http, HttpMethod.Get, $"/odata/api/v1/queries/{Model}/revenue_by_region", token)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(http, HttpMethod.Post, "/agents", token, """{"jsonrpc":"2.0","id":1,"method":"tools/list"}""")).StatusCode);
+
+        // the default paths are 404 from the listener itself
+        foreach (var path in new[] { "/identity/sign-in", "/identity/.well-known/openid-configuration", "/apps/acme/", "/store/api/v1/models", "/views/api/v1/my/views", "/feeds/api/v1/nothing", "/mcp", "/" })
+            Assert.Equal(HttpStatusCode.NotFound, (await CallAsync(http, HttpMethod.Get, path, token)).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("identity: { enabled: true, path: accounts }\n", "Identity.Path")]
+    [InlineData("identity: { enabled: true, path: /accounts/ }\n", "Identity.Path")]
+    [InlineData("identity: { enabled: true, path: / }\n", "Identity.Path")]
+    [InlineData("store: { path: /warehouse }\nviews: { path: /warehouse/reports }\nmodules: [flightsql, store, views]\n", "Views.Path")]
+    [InlineData("store: { path: /same }\nmcp: { path: /same }\nmodules: [flightsql, store, mcp]\n", "Mcp.Path")]
+    public void A_path_that_is_not_one_or_that_another_module_has_is_an_error_on_the_setting(string yaml, string key)
+    {
+        Assert.Contains(Load("listen: https://127.0.0.1:9000\n" + yaml), d => d.KeyPath == key);
+    }
+
+    [Fact]
+    public void Paths_of_two_segments_are_accepted_and_a_module_with_its_own_listen_has_no_path()
+    {
+        Assert.DoesNotContain(Load("store: { path: /data/store }\nviews: { path: /data/views }\nmodules: [flightsql, store, views]\n"), d => d.KeyPath?.EndsWith(".Path", StringComparison.Ordinal) == true);
+        Assert.DoesNotContain(Load("store: { path: bad, listen: https://127.0.0.1:9443 }\nmodules: [flightsql, store]\n"), d => d.KeyPath == "Store.Path");
+    }
+
+    [Fact]
     public async Task A_module_with_a_port_of_its_own_answers_there_and_not_under_its_prefix()
     {
         publicPort = FreePort();
         var storePort = FreePort();
         while (storePort == publicPort) storePort = FreePort();
-        await StartAsync(["store", "feeds"], "--Gateway:Store:Address=127.0.0.1", $"--Gateway:Store:Port={storePort}");
+        await StartAsync(["store", "feeds"], $"--Gateway:Store:Listen=https://127.0.0.1:{storePort}");
         var token = Person();
         using var pub = Trusting($"https://localhost:{publicPort}");
         using var own = Trusting($"https://localhost:{storePort}");
@@ -230,20 +317,20 @@ public sealed class PublicListenerTests : IAsyncLifetime
         Assert.True(await FeedsAnsweredAsync(http, token));
     }
 
+    private static IReadOnlyList<DbDataKit.Config.Yaml.ConfigDiagnostic> Load(string yaml)
+    {
+        using var file = TempConfig.Create(("server.yaml", yaml));
+        return ConfigTestSupport.LoadDirectory(file.Directory).Diagnostics;
+    }
+
     [Fact]
     public void Port_clashes_are_named_on_the_later_setting_and_a_module_without_a_port_never_clashes()
     {
-        static IReadOnlyList<DbDataKit.Config.Yaml.ConfigDiagnostic> Load(string yaml)
-        {
-            using var file = TempConfig.Create(("server.yaml", yaml));
-            return ConfigTestSupport.LoadDirectory(file.Directory).Diagnostics;
-        }
-
         // the public listener against the Flight port, and a module's own port against the public listener's
-        Assert.Contains(Load("listen: { address: 127.0.0.1, port: 9000 }\npublic: { port: 9000 }\nmodules: [flightsql, store]\n"), d => d.KeyPath == "Public.Port");
-        Assert.Contains(Load("public: { port: 9000 }\nstore: { port: 9000 }\nfeeds: { }\nmodules: [flightsql, store, feeds]\n"), d => d.KeyPath == "Store.Port" || d.KeyPath == "Public.Port");
+        Assert.Contains(Load("listen: https://127.0.0.1:9000\npublic: { listen: https://127.0.0.1:9000 }\nmodules: [flightsql, store]\n"), d => d.KeyPath == "Public.Listen");
+        Assert.Contains(Load("public: { listen: https://127.0.0.1:9000 }\nstore: { listen: https://127.0.0.1:9000 }\nfeeds: { }\nmodules: [flightsql, store, feeds]\n"), d => d.KeyPath == "Store.Listen" || d.KeyPath == "Public.Listen");
         // with every module on a port of its own the public listener is not used, so its port clashes with nothing
-        Assert.DoesNotContain(Load("listen: { address: 127.0.0.1, port: 9000 }\npublic: { port: 9000 }\nstore: { port: 9001 }\nmodules: [flightsql, store]\n"), d => d.KeyPath == "Public.Port");
+        Assert.DoesNotContain(Load("listen: https://127.0.0.1:9000\npublic: { listen: https://127.0.0.1:9002 }\nstore: { listen: https://127.0.0.1:9001 }\nmodules: [flightsql, store]\n"), d => d.KeyPath == "Public.Listen");
         Assert.DoesNotContain(Load("modules: [flightsql, store, feeds]\n"), d => d.KeyPath?.EndsWith(".Port", StringComparison.Ordinal) == true);
     }
 }

@@ -99,11 +99,15 @@ public static class RunnerCli
             await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>] [--channels <name>[,<name>...]] [--group <name>] [--skip-folder-permissions-check].");
             return CliExit.Usage;
         }
-        Uri? listenFlag = null;
-        if (parsed.Get("listen") is { } listenText && (!Uri.TryCreate(listenText, UriKind.Absolute, out listenFlag) || listenFlag.Scheme != Uri.UriSchemeHttps))
+        IReadOnlyList<Uri>? listenFlag = null;
+        if (parsed.Get("listen") is { } listenText)
         {
-            await context.Error.WriteLineAsync("--listen is an https address, such as https://127.0.0.1:7840.");
-            return CliExit.Usage;
+            try { listenFlag = ListenPorts.ParseFlag(listenText); }
+            catch (FormatException e)
+            {
+                await context.Error.WriteLineAsync($"--listen is an https address or a list of them, such as https://127.0.0.1:7840. {e.Message}");
+                return CliExit.Usage;
+            }
         }
 
         // every step of the start is reported the same way in every server: the step that failed and why, in the startup-failure file, and a non-zero exit
@@ -132,8 +136,8 @@ public static class RunnerCli
                     skip = SkipFolderPermissions.Read(parsed.Has(FolderPermissions.FlagName), settingsFile);
                     var resolvedState = RunnerState.Resolve(directory, environment);
                     // --listen, else the port pinned in server.yaml, else a free port of the Runner's sub-block (pinned once the server listens on it)
-                    listen = ListenPorts.Resolve(service, listenFlag, Path.Combine(directory, "server.yaml"), new Uri(RunnerSettings.DefaultListen), step.Options.ExcludedPorts());
-                    settings = new RunnerSettings(directory, listen.Address) { State = resolvedState.Settings, StateSources = resolvedState.Sources, Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")), MaxArtifactBytes = RunnerSettings.MaxArtifactBytesFrom(environment), ActivationMaxWait = RunnerSettings.ActivationMaxWaitFrom(environment), Group = RunnerSettings.GroupFrom(environment, parsed.Get("group")), TaskEnvironment = RunnerSettings.TaskEnvironmentFrom(environment), SkipFolderPermissionsCheck = skip.IsOn };
+                    listen = ListenPorts.ResolveAll(service, listenFlag, Path.Combine(directory, "server.yaml"), new Uri(RunnerSettings.DefaultListen), step.Options.ExcludedPorts());
+                    settings = new RunnerSettings(directory, listen.Address) { ListenAll = listen.Addresses, State = resolvedState.Settings, StateSources = resolvedState.Sources, Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")), MaxArtifactBytes = RunnerSettings.MaxArtifactBytesFrom(environment), ActivationMaxWait = RunnerSettings.ActivationMaxWaitFrom(environment), Group = RunnerSettings.GroupFrom(environment, parsed.Get("group")), TaskEnvironment = RunnerSettings.TaskEnvironmentFrom(environment), SkipFolderPermissionsCheck = skip.IsOn };
                 }
                 catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
                 {

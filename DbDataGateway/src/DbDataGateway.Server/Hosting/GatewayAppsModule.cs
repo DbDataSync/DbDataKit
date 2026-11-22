@@ -58,7 +58,7 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
         Certificates = new AppCertificates(bindings, () => certificate.Current, reference => secrets.ResolveSecret("Gateway:Apps:Addresses", reference), message => loggers.CreateLogger("Apps").LogWarning("{Problem}", message));
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();
-        var inProcess = ModuleListener.Configure(builder, current.Apps.Address, current.Apps.Port,
+        var inProcess = ModuleListener.Configure(builder, current.Apps.Listen,
             // by the name the client asks for (SNI): a custom domain's own certificate, the host's for everything else (plan 26 AP08)
             (_, name) => Certificates?.Select(name) ?? certificate.Current);
 
@@ -70,7 +70,7 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
         if (local) handler.ServerCertificateCustomValidationCallback = (_, cert, _, _) => cert is not null && certificate.Current is { } own && cert.Thumbprint == own.Thumbprint;
         var secret = string.IsNullOrWhiteSpace(current.Apps.Home.ClientSecret) ? null : secrets.ResolveSecret(SecretsRuntime.AppsHomeSecretKey, current.Apps.Home.ClientSecret);
         var client = new OpenIdClient(
-            new OpenIdClientOptions(home.AbsoluteUri, current.Apps.Home.ClientId!, secret, new Uri(PublicUrlOf(current), AppsEndpoints.CallbackPath).AbsoluteUri),
+            new OpenIdClientOptions(home.AbsoluteUri, current.Apps.Home.ClientId!, secret, AppInstanceClients.CallbackOf(PublicUrlOf(current))),
             new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) });
         // the tokens of an app are the identity home's: the host trades a person's refresh token for one at the home (the home's client for this host must be one the home lets exchange, plan 26 AP19) and checks the home's signature
         // against the keys the home publishes; it holds no signing key of its own
@@ -101,11 +101,28 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy"));
         // a name bound to an instance is routed to it by Host and path, before the routes see the request (plan 26 AP08)
+        // the host's own routes are /apps/...; under another prefix (apps.path) a request is taken to them here, and every address the host writes is the prefix's
+        var prefix = PublicPaths.Apps(current);
+        app.Use(async (context, next) =>
+        {
+            DbDataKit.Apps.AppsPaths.Use(prefix);
+            if (prefix != DbDataKit.Apps.AppsPaths.Default)
+            {
+                var inner = DbDataKit.Apps.AppsPaths.ToInternal(prefix, context.Request.Path.Value ?? "/");
+                if (inner is not null) context.Request.Path = inner;
+                else if (context.Request.Path.StartsWithSegments(DbDataKit.Apps.AppsPaths.Default) && !bindings.Serves(context.Request.Host.Host))
+                {
+                    context.Response.StatusCode = StatusCodes.Status404NotFound;
+                    return;
+                }
+            }
+            await next(context);
+        });
         app.UseAppAddresses(bindings, instances, new TrustedProxies(current.Apps.TrustedProxies));
         app.UseRouting();
         app.MapApps(instances, new AppSite(instances, name => instances.Resolve(name) is { } r ? approvals.ApprovedEgress(r) : AppEgress.None, views: ViewsRuntime.FromDirectory(Path.Combine(AppContext.BaseDirectory, ViewsRuntimeFolder)), documents: DbDataKit.Views.AppViewDocuments.Instance), client, new AppSessions(refresh: client.RefreshAsync, refreshAfter: TimeSpan.FromSeconds(current.Apps.RolesRefreshSeconds), store: new AppSessionStore(state, sessionKey), exchange: ExchangeAsync),
             new AppDataGateway(instances, new GroupAppData(GatewayStoreModule.ApiOf(options, state, secrets, models, servingCache)), new AppTokenValidator(jwks), jwks, approvals: approvals, semantic: new GroupAppSemantic(serving, semanticModels, homeCallers, options), views: new GroupAppViews(serving, semanticModels, homeCallers, options)), new AppStorage(state), approvals, () => options.CurrentValue.Apps.StorageCapMb * 1024L * 1024L, new GroupCustomPageRows(serving, homeCallers, options));
-        app.MapFallback(() => Results.Text("The apps host of this DbDataGateway. An app is at /apps/<instance>/.", "text/plain"));
+        app.MapFallback(() => Results.Text($"The apps host of this DbDataGateway. An app is at {prefix}/<instance>/.", "text/plain"));
         await app.StartAsync(cancellationToken);
         _app = app;
         _draining = false;
@@ -113,15 +130,19 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
         ModuleListener.Mount(mounts, inProcess, host => new PublicMount
         {
             Name = Name, Server = host, Certificate = name => Certificates?.Select(name),
-            Claims = context => context.Request.Path.StartsWithSegments("/apps") || bindings.Serves(context.Request.Host.Host),
+            Claims = context => (context.Request.Path.StartsWithSegments(prefix)) || bindings.Serves(context.Request.Host.Host),
         });
     }
 
     /// <summary>The address people reach the apps host at: the setting, or the first TLS host name (localhost when there is none) on the module's port.</summary>
-    public static Uri PublicUrlOf(GatewayOptions options) =>
-        !string.IsNullOrWhiteSpace(options.Apps.PublicUrl)
+    public static Uri PublicUrlOf(GatewayOptions options)
+    {
+        var origin = !string.IsNullOrWhiteSpace(options.Apps.PublicUrl)
             ? new Uri(options.Apps.PublicUrl.TrimEnd('/') + "/")
-            : new UriBuilder(Uri.UriSchemeHttps, options.Tls.Hostnames.FirstOrDefault(h => !string.IsNullOrWhiteSpace(h)) ?? "localhost", options.Apps.Port ?? options.Public.Port).Uri;
+            : new UriBuilder(Uri.UriSchemeHttps, options.Tls.Hostnames.FirstOrDefault(h => !string.IsNullOrWhiteSpace(h)) ?? "localhost", GatewayListeners.PortOf(options.Apps.Listen, options)).Uri;
+        // the host's path rides on the address: the callback and the links of an instance are under it
+        return new Uri(origin.GetLeftPart(UriPartial.Authority) + PublicPaths.Apps(options) + "/");
+    }
 
     private static Uri HomeOf(GatewayOptions options) =>
         new((string.IsNullOrWhiteSpace(options.Apps.Home.Authority) ? GatewayIdentityModule.PublicUrlOf(options).AbsoluteUri : options.Apps.Home.Authority).TrimEnd('/'));

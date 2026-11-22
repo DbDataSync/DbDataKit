@@ -38,8 +38,20 @@ public sealed record IdentityHomeOptions(
     AccessTokenPolicy? Tokens = null,
     Func<string, bool>? AppHosts = null)
 {
-    /// <summary>The issuer written into every token: the public address without a path.</summary>
-    public string Issuer => PublicUrl.GetLeftPart(UriPartial.Authority);
+    /// <summary>The path the home is reached under: <c>/identity</c> when a host mounts it there (the Gateway's public listener), empty when it has an address of its own (<c>https://localhost:7819</c>).</summary>
+    public string Prefix => PublicUrl.AbsolutePath.TrimEnd('/');
+
+    /// <summary>The issuer written into every token: the public address with the home's prefix, <c>https://gateway:7820/identity</c>; the discovery document is at <c>&lt;issuer&gt;/.well-known/openid-configuration</c>.</summary>
+    public string Issuer => PublicUrl.GetLeftPart(UriPartial.Authority) + Prefix;
+
+    /// <summary>The path the provider's endpoints and the home's sign-in page are reached under: the prefix, or <c>/identity</c> for a home with an address of its own.</summary>
+    public string ProviderPrefix => Prefix.Length > 0 ? Prefix : "/identity";
+
+    /// <summary>The address the provider's endpoints (<c>authorize</c>, <c>token</c>, <c>jwks</c>...) start with, as discovery lists them.</summary>
+    public string EndpointBase => PublicUrl.GetLeftPart(UriPartial.Authority) + ProviderPrefix;
+
+    /// <summary>Where a person who is not signed in is sent, as the browser addresses it.</summary>
+    public string SignInUrl => ProviderPrefix + "/sign-in";
 }
 
 /// <summary>
@@ -71,6 +83,8 @@ public static class IdentityHome
             options.State,
             sp => PasskeyOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>(), options.Auth, options.Issuer, [], []),
             _ => options.FirstRunDirectory);
+        // mounted under a prefix, the first-run invitation names the whole address (<issuer>/invite#<code>), since the path alone would be the wrong one
+        if (options.Prefix.Length > 0) services.AddSingleton(new DbDataKit.Web.Auth.BootstrapInviteLocation(options.FirstRunDirectory, options.Issuer));
         if (options.Windows is not null) authentication.AddNegotiate();
         UpstreamSignIn.Register(services, options);
         services.AddSingleton(sp => new AccessTokens(options.State(sp), sp.GetRequiredService<IUserAccounts>(), options.Tokens, sp.GetService<TimeProvider>()));
@@ -80,7 +94,7 @@ public static class IdentityHome
         services.AddSingleton(sp => new OidcClients(options.State(sp)));
         services.AddSingleton(sp => new SigningKeys(options.State(sp), options.Protector(sp)));
         services.AddSingleton(sp => new OpenIdProvider(options.State(sp), sp.GetRequiredService<IUserAccounts>(), sp.GetRequiredService<HomeDirectory>(),
-            sp.GetRequiredService<OidcClients>(), sp.GetRequiredService<SigningKeys>(), options.Issuer, sp.GetService<TimeProvider>(), sp.GetService<IAppGrants>(), sp.GetService<SessionSettings>()?.Length, options.AppHosts));
+            sp.GetRequiredService<OidcClients>(), sp.GetRequiredService<SigningKeys>(), options.Issuer, sp.GetService<TimeProvider>(), sp.GetService<IAppGrants>(), sp.GetService<SessionSettings>()?.Length, options.AppHosts, options.EndpointBase));
         return builder;
     }
 
@@ -107,7 +121,7 @@ public static class IdentityHome
         var sessions = app.Services.GetRequiredService<ISessionStore>();
         open.MapOpenIdProvider(app.Services.GetRequiredService<OpenIdProvider>(), app.Services.GetRequiredService<SigningKeys>(), new OpenIdHostOptions(
             c => c.User.FindFirst(options.Auth.UserIdClaim)?.Value,
-            SignInPath,
+            options.SignInUrl,
             EndSession: c =>
             {
                 if (c.Request.Cookies[auth.CookieName] is { Length: > 0 } id) sessions.Delete(id);
@@ -115,11 +129,12 @@ public static class IdentityHome
                 return Task.CompletedTask;
             },
             // the console's sign-out sends the browser here from another site, with no cookie: the hint names the person
-            EndSessionOf: (_, userId) => { sessions.DeleteAllFor(userId); return Task.CompletedTask; }));
+            EndSessionOf: (_, userId) => { sessions.DeleteAllFor(userId); return Task.CompletedTask; })
+        { ProviderPrefix = options.ProviderPrefix });
         open.MapGet(SignInPath, () => Results.Content(IdentityHomePages.SignIn(options), "text/html; charset=utf-8"));
         UpstreamSignIn.Map(app, open, options);
         AccessTokenEndpoints.Map(app);
-        if (options.InvitePage) open.MapGet(InvitePath, () => Results.Content(IdentityHomePages.Invite, "text/html; charset=utf-8"));
+        if (options.InvitePage) open.MapGet(InvitePath, () => Results.Content(IdentityHomePages.Invite(options), "text/html; charset=utf-8"));
         return app;
     }
 

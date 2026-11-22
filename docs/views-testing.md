@@ -10,7 +10,7 @@ What is real today and what is not: the **model** is published from a build proj
 
    ```yaml
    modules: [flightsql, identity, views]
-   views: { address: 0.0.0.0, port: 8820 }
+   views: { listen: https://0.0.0.0:8820 }
    ```
 
    Start it. The readiness component `views` is in `/health/ready`. Through the console the module's status says it is on:

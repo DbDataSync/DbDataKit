@@ -65,7 +65,7 @@ public sealed class GatewayStateSettingsTests : IAsyncLifetime
 
     private WebApplication Instance(params string[] more)
     {
-        var app = GatewayHost.Build([$"--Gateway:DataDirectory={_dir}", "--Gateway:Listen:Address=127.0.0.1", $"--Gateway:Listen:Port={FreePort()}", "--Gateway:Management:Enabled=false", .. more]);
+        var app = GatewayHost.Build([$"--Gateway:DataDirectory={_dir}", $"--Gateway:Listen=https://127.0.0.1:{FreePort()}", "--Gateway:Management:Enabled=false", .. more]);
         _apps.Add(app);
         return app;
     }
@@ -161,7 +161,7 @@ public sealed class GatewayStateSettingsTests : IAsyncLifetime
         {
             WriteFile($"state:\n  engine: postgres\n  {key}: Host=db;Database=x;Username=u;Password=secret:state-db\n");
 
-            var refused = Assert.Throws<GatewayConfigException>(() => GatewayHost.Build([$"--Gateway:DataDirectory={_dir}", "--Gateway:Listen:Address=127.0.0.1", $"--Gateway:Listen:Port={FreePort()}"]));
+            var refused = Assert.Throws<GatewayConfigException>(() => GatewayHost.Build([$"--Gateway:DataDirectory={_dir}", $"--Gateway:Listen=https://127.0.0.1:{FreePort()}"]));
             Assert.Contains(ServerYaml, refused.Message);
             Assert.Contains($"state.{key}", refused.Message);
             Assert.Contains("  connection: ", refused.Message);   // the new shape
@@ -173,7 +173,7 @@ public sealed class GatewayStateSettingsTests : IAsyncLifetime
         }
 
         WriteFile("state:\n  definitionPollSeconds: 1\n");
-        var moved = Assert.Throws<GatewayConfigException>(() => GatewayHost.Build([$"--Gateway:DataDirectory={_dir}", "--Gateway:Listen:Address=127.0.0.1", $"--Gateway:Listen:Port={FreePort()}"]));
+        var moved = Assert.Throws<GatewayConfigException>(() => GatewayHost.Build([$"--Gateway:DataDirectory={_dir}", $"--Gateway:Listen=https://127.0.0.1:{FreePort()}"]));
         Assert.Contains(ServerYaml, moved.Message);
         Assert.Contains("top level", moved.Message);
     }
@@ -183,7 +183,7 @@ public sealed class GatewayStateSettingsTests : IAsyncLifetime
     {
         WriteFile("state:\n  engin: postgres\n");
 
-        var refused = Assert.Throws<GatewayConfigException>(() => GatewayHost.Build([$"--Gateway:DataDirectory={_dir}", "--Gateway:Listen:Address=127.0.0.1", $"--Gateway:Listen:Port={FreePort()}"]));
+        var refused = Assert.Throws<GatewayConfigException>(() => GatewayHost.Build([$"--Gateway:DataDirectory={_dir}", $"--Gateway:Listen=https://127.0.0.1:{FreePort()}"]));
         Assert.Contains(ServerYaml, refused.Message);
         Assert.Contains("Did you mean `engine`", refused.Message, StringComparison.OrdinalIgnoreCase);
 

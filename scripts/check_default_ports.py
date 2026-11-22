@@ -12,7 +12,8 @@ and fails when
   * a listener's default lies outside its service's sub-block (and so outside the suite range),
   * two listeners share a port, or
   * the suite range, a sub-block or a default holds one of Windows' default ports (WINDOWS_PORTS).
-A listener with no sub-block (the Gateway's, whose defaults are still fixed ports outside the range) is checked for the last two only.
+The Gateway's listeners (public, Flight SQL, management) have no default of their own: each takes a free port of the block `Gateway` at its first start (GATEWAY_LISTENERS), so the check
+fails when a fixed default for one comes back in its options, and when the block is not declared. A listener with no sub-block at all is checked for the last two only.
 Run from anywhere: python3 -I scripts/check_default_ports.py [root]
 """
 import os
@@ -33,9 +34,13 @@ LISTENERS = [
     ("DbDataKit identity home on its own", "DbDataKit/src/DbDataKit.Server/IdentityHost.cs", r'DefaultListen = "https://[^":]+:(\d+)"', 1, "Console"),
     ("DbDataWorkspace", "DbDataWorkspace/src/DbDataWorkspace.Server/WorkspaceSettings.cs", r'DefaultListen = "https://[^":]+:(\d+)"', 1, "Workspace"),
     ("DbDataRunner", "DbDataRunner/src/DbDataRunner.Server/RunnerSettings.cs", r'DefaultListen = "https://[^":]+:(\d+)"', 1, "Runner"),
-    ("DbDataGateway management", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r'public int Port \{ get; set; \} = (8816);', 1, None),
-    ("DbDataGateway Flight", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r'public int Port \{ get; set; \} = (8815);', 1, None),
-    ("DbDataGateway public listener", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r'public int Port \{ get; set; \} = (8817);', 1, None),
+]
+
+# The Gateway's listeners take their port from the block `Gateway`: (listener, file, pattern of a fixed default that must not be there, block)
+GATEWAY_LISTENERS = [
+    ("DbDataGateway public listener", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r"public int Port \{ get; set; \} = (\d+);", "Gateway"),
+    ("DbDataGateway Flight SQL", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r"public List<string> Listen \{ get; set; \} = \[(?!\])", "Gateway"),
+    ("DbDataGateway management", "DbDataGateway/src/DbDataGateway.Server/Configuration/GatewayOptions.cs", r"public int Port \{ get; set; \} = (\d+);", "Gateway"),
 ]
 
 
@@ -83,9 +88,24 @@ def read_blocks(root, table, problems):
     return blocks
 
 
-def check(root, listeners=LISTENERS, table=TABLE):
+def check_gateway(root, blocks, listeners, table, problems):
+    """The Gateway's listeners: no fixed default in the options, and the block they choose from is declared."""
+    for name, rel, pattern, block in listeners:
+        if block not in blocks:
+            problems.append(f"{name}: the sub-block {block} is not declared in {table}; fix the entry in scripts/check_default_ports.py")
+        try:
+            text = read(root, rel)
+        except OSError:
+            problems.append(f"{name}: {rel} does not exist; fix the entry in scripts/check_default_ports.py")
+            continue
+        if re.search(pattern, text):
+            problems.append(f"{name}: {rel} gives a listener a fixed default again (pattern {pattern}); a Gateway listener takes a free port of the block {block} at its first start")
+
+
+def check(root, listeners=LISTENERS, table=TABLE, gateway=None):
     problems = []
     blocks = read_blocks(root, table, problems)
+    check_gateway(root, blocks, GATEWAY_LISTENERS if gateway is None else gateway, table, problems)
     seen = {}
     for name, rel, pattern, nth, block in listeners:
         try:
@@ -122,7 +142,7 @@ def main(argv):
         print(p)
     if problems:
         return 1
-    print(f"{len(seen)} default ports, none shared, each in its sub-block of the suite range or a listener with no sub-block yet")
+    print(f"{len(seen)} default ports, none shared, each in its sub-block of the suite range; the Gateway's listeners take free ports of its block")
     return 0
 
 

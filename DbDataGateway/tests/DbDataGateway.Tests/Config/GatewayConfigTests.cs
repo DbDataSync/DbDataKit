@@ -45,7 +45,7 @@ public sealed class GoldenCorpusTests
         var d = Assert.Single(load.Diagnostics, x => x.Code == "DBP-104");
         Assert.EndsWith("invalid-unknown-key.json", d.Path);
         Assert.Equal(3, d.Line);
-        Assert.Equal("Listen.Prot", d.KeyPath);
+        Assert.Equal("Management.Enabld", d.KeyPath);
     }
 
     [Fact]
@@ -58,13 +58,13 @@ public sealed class GoldenCorpusTests
     [Fact]
     public void Unknown_keys_are_tolerated_only_when_asked_for()
     {
-        const string json = """{ "Gateway": { "Listen": { "Prot": 1, "Port": 9100 }, "FromTheFuture": true } }""";
+        const string json = """{ "Gateway": { "Listen": "https://127.0.0.1:9100", "Management": { "Enabld": 1 }, "FromTheFuture": true } }""";
         Assert.False(ConfigTestSupport.LoadJson(json).Ok);
 
         foreach (var load in new[]
         {
             ConfigTestSupport.LoadJson(json, new GatewayConfigLoadOptions { AllowUnknownKeys = true }),
-            ConfigTestSupport.LoadJson("""{ "Gateway": { "AllowUnknownKeys": true, "FromTheFuture": 1, "Listen": { "Prot": 1 } } }"""),
+            ConfigTestSupport.LoadJson("""{ "Gateway": { "AllowUnknownKeys": true, "FromTheFuture": 1, "Management": { "Enabld": 1 } } }"""),
         })
         {
             Assert.True(load.Ok, ConfigTestSupport.Format(load));
@@ -144,7 +144,7 @@ public sealed class ShippedFilesTests
         // A file as written by any earlier release: PascalCase keys, no SchemaVersion.
         var load = ConfigTestSupport.LoadJson("""
             { "Gateway": {
-                "Listen": { "Address": "0.0.0.0", "Port": 8815 },
+                "Listen": "https://0.0.0.0:8815",
                 "Tls": { "Mode": "SelfSigned", "Hostnames": [ "a.example.com" ] },
                 "Compression": { "Mode": "Arrow", "Codec": "zstd", "Level": 3, "AllowClientOverride": true },
                 "Auth": { "SessionIdleMinutes": 30, "SessionMaxHours": 12, "AllowPassThrough": true },
@@ -166,7 +166,7 @@ public sealed class CaseInsensitiveBindingTests
     {
         var root = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["gateway:LISTEN:port"] = "9100",
+            ["gateway:LISTEN:0"] = "https://127.0.0.1:9100",
             ["GATEWAY:auth:allowpassthrough"] = "False",   // the stock provider spelled booleans like this
             ["Gateway:LogSql"] = "TRUE",
             ["Gateway:DataSources:Erp:PROVIDER"] = "DuckDb",
@@ -174,28 +174,26 @@ public sealed class CaseInsensitiveBindingTests
         }).Build();
         var load = GatewayConfig.Load(root);
         Assert.True(load.Ok, ConfigTestSupport.Format(load));
-        Assert.Equal(9100, load.Value!.Listen.Port);
+        Assert.Equal(9100, DbDataGateway.Server.Hosting.GatewayListeners.Parsed(load.Value!.Listen).First().Port);
         Assert.False(load.Value.Auth.AllowPassThrough);
         Assert.True(load.Value.LogSql);
         Assert.True(load.Value.DataSources.ContainsKey("erp"));   // lookups stay case-insensitive
-        Assert.Equal("memory", load.Detail.Merged.Origins().First(o => o.Path == "Listen.Port").File);
+        Assert.Equal("memory", load.Detail.Merged.Origins().First(o => o.Path == "Listen[0]").File);
     }
 
     [Fact]
     public void Later_sources_win_and_the_origin_says_which()
     {
-        using var file = TempFile.Create("""{ "Gateway": { "Listen": { "Port": 9001, "Address": "127.0.0.1" } } }""");
+        using var file = TempFile.Create("""{ "Gateway": { "Listen": "https://127.0.0.1:9001" } }""");
         var root = new ConfigurationBuilder()
             .AddJsonFile(file.Path, false, false)
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["Gateway:Listen:Port"] = "9002" })
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Gateway:Listen:0"] = "https://127.0.0.1:9002" })
             .Build();
         var load = GatewayConfig.Load(root);
-        Assert.Equal(9002, load.Value!.Listen.Port);
-        Assert.Equal("127.0.0.1", load.Value.Listen.Address);
+        Assert.Equal(9002, DbDataGateway.Server.Hosting.GatewayListeners.Parsed(load.Value!.Listen).First().Port);
+        Assert.Equal("127.0.0.1", DbDataGateway.Server.Hosting.GatewayListeners.Parsed(load.Value.Listen).First().Address.ToString());
         var origins = GatewayConfig.Show(load).ToDictionary(e => e.Path);
-        Assert.Equal("memory", origins["Listen.Port"].Source);
-        Assert.Equal(file.Path, origins["Listen.Address"].Source);
-        Assert.Equal(1, origins["Listen.Address"].Line);
+        Assert.Equal("memory", origins["Listen[0]"].Source);
     }
 }
 

@@ -29,23 +29,21 @@ public sealed class GatewayFeedsModule(IOptionsMonitor<GatewayOptions> options, 
 
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();
-        var inProcess = ModuleListener.Configure(builder, current.Rest.Address, current.Rest.Port, (_, _) => certificate.Current);
+        var inProcess = ModuleListener.Configure(builder, current.Rest.Listen, (_, _) => certificate.Current);
         var app = builder.Build();
         feeds.Map(app);
         await app.StartAsync(cancellationToken);
         _app = app;
         if (inProcess is not null)
         {
-            Address = PublicMounts.AddressOf(current) + PublicPrefix;
-            ModuleListener.Mount(mounts, inProcess, server => new PublicMount { Name = GatewayModules.Feeds, Server = server, StripPrefix = PublicPrefix });
+            Address = PublicMounts.AddressOf(current) + PublicPaths.Of(current, GatewayModules.Feeds);
+            ModuleListener.Mount(mounts, inProcess, server => new PublicMount { Name = GatewayModules.Feeds, Server = server, Prefix = PublicPaths.Of(current, GatewayModules.Feeds) });
             return;
         }
         var bound = app.Services.GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>().Features.Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>()?.Addresses.FirstOrDefault();
         Address = bound?.Replace("[::]", "localhost", StringComparison.Ordinal).Replace("0.0.0.0", "localhost", StringComparison.Ordinal).TrimEnd('/');
     }
 
-    /// <summary>The path prefix of the module on the public listener.</summary>
-    public const string PublicPrefix = "/feeds";
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {

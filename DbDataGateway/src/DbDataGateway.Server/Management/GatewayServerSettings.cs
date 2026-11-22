@@ -113,7 +113,10 @@ public sealed partial class GatewayServerSettings(string configDirectory, Gatewa
                     ["semantic.combine.timeoutSeconds"] = o.Semantic.Combine.TimeoutSeconds,
                     ["semantic.combine.maxInputRows"] = o.Semantic.Combine.MaxInputRows,
                     // the feeds module's listener and limits (plan 14a SL31)
-                    ["rest.port"] = o.Rest.Port is { } restPort ? restPort : null,
+                    // a single address is edited in place; a list of addresses stays in the text (null)
+                    ["rest.listen"] = o.Rest.Listen.Count == 1 ? o.Rest.Listen[0] : o.Rest.Listen.Count == 0 ? "" : null,
+                    // the path of each module on the public listener (the form shows the default as an empty box)
+                    ["identity.path"] = o.Identity.Path, ["apps.path"] = o.Apps.Path, ["store.path"] = o.Store.Path, ["views.path"] = o.Views.Path, ["rest.path"] = o.Rest.Path, ["mcp.path"] = o.Mcp.Path,
                     ["rest.defaultLimit"] = o.Rest.DefaultLimit,
                     ["rest.maxRows"] = o.Rest.MaxRows,
                 },

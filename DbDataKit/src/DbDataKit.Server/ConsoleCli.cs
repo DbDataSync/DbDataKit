@@ -63,11 +63,15 @@ public static class ConsoleCli
             await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <console directory>] [--listen https://<name>:<port>] [--public-url https://<name>:<port>] [--announce-listen http://<address>:<port>] [--state-engine sqlite|mssql|postgres --state-connection <connection string>] [--identity-home <https address> --identity-client <id> [--identity-secret-env <variable>] [--identity-app <id>] [--identity-home-cert <file>]] [--skip-folder-permissions-check]");
             return CliExit.Usage;
         }
-        Uri? listenFlag = null;
-        if (parsed.Get("listen") is { } listenText && (!Uri.TryCreate(listenText, UriKind.Absolute, out listenFlag) || listenFlag.Scheme != Uri.UriSchemeHttps))
+        IReadOnlyList<Uri>? listenFlag = null;
+        if (parsed.Get("listen") is { } listenText)
         {
-            await context.Error.WriteLineAsync("--listen is an https address, such as https://localhost:7800.");
-            return CliExit.Usage;
+            try { listenFlag = ListenPorts.ParseFlag(listenText); }
+            catch (FormatException e)
+            {
+                await context.Error.WriteLineAsync($"--listen is an https address or a list of them, such as https://localhost:7800. {e.Message}");
+                return CliExit.Usage;
+            }
         }
 
         Uri? publicUrl = null;
@@ -82,7 +86,7 @@ public static class ConsoleCli
         var announceText = parsed.Get("announce-listen");
         if (announceText is null && Uri.TryCreate((environment ?? Environment.GetEnvironmentVariable)(DbDataKit.Web.Trust.ConsoleAnnouncer.UrlVariable), UriKind.Absolute, out var shared) && shared.Scheme == Uri.UriSchemeHttp)
             announceText = new UriBuilder(Uri.UriSchemeHttp, "0.0.0.0", shared.Port).Uri.AbsoluteUri;
-        if (announceText is { Length: > 0 } && (!Uri.TryCreate(announceText, UriKind.Absolute, out announce) || announce.Scheme != Uri.UriSchemeHttp || announce.Port == listenFlag?.Port))
+        if (announceText is { Length: > 0 } && (!Uri.TryCreate(announceText, UriKind.Absolute, out announce) || announce.Scheme != Uri.UriSchemeHttp || listenFlag?.Any(l => l.Port == announce.Port) == true))
         {
             await context.Error.WriteLineAsync("--announce-listen is a plain http address on a port of its own, such as http://0.0.0.0:8481, and is reachable only on the network the servers share with the console.");
             return CliExit.Usage;
@@ -143,14 +147,14 @@ public static class ConsoleCli
                     skip = SkipFolderPermissions.Read(parsed.Has(FolderPermissions.FlagName), settingsFile);
                     state = ConsoleState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection"));
                     // --listen, else the port pinned in settings.yaml, else a free port of the console's sub-block (pinned once the console listens on it)
-                    listen = ListenPorts.Resolve(service, listenFlag, ConsoleState.SettingsFileIn(directory), new Uri(ConsoleSettings.DefaultListen), step.Options.ExcludedPorts());
+                    listen = ListenPorts.ResolveAll(service, listenFlag, ConsoleState.SettingsFileIn(directory), new Uri(ConsoleSettings.DefaultListen), step.Options.ExcludedPorts());
                 }
                 catch (InvalidOperationException)
                 {
                     settingsExit = DbDataKit.State.Cli.StateExit.Settings;
                     throw;
                 }
-                settings = new ConsoleSettings(directory, listen.Address, publicUrl, announce, state.Settings, home) { StateSources = state.Sources, SkipFolderPermissionsCheck = skip.IsOn };
+                settings = new ConsoleSettings(directory, listen.Address, publicUrl, announce, state.Settings, home) { ListenAll = listen.Addresses, StateSources = state.Sources, SkipFolderPermissionsCheck = skip.IsOn };
                 step.CheckFolderPermissions(settings.Directory, skip, settingsFile);
                 Directory.CreateDirectory(settings.Directory);
             })

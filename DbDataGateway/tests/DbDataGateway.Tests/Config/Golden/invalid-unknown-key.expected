@@ -1,4 +1,4 @@
 DBP-104
-Gateway:Listen:Prot
-Did you mean `Port`?
+Gateway:Management:Enabld
+Did you mean `Enabled`?
 .json:3:

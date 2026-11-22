@@ -1,2 +1,2 @@
-Gateway:Listen:Address
-not an IP address
+Gateway:Listen:0
+with a scheme and a port
