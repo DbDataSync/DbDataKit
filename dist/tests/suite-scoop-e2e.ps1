@@ -46,6 +46,8 @@ function Native([string]$name, [scriptblock]$command) {
     catch { $said = ($_ | Out-String); Add-Content -Path $file -Value $said; Write-Host $said; $code = 1 }
   } finally { $ErrorActionPreference = $old }
   if ($null -eq $code) { $code = 0 }
+  # a command that prints nothing leaves Tee-Object no file to write
+  if (-not (Test-Path -LiteralPath $file)) { New-Item -ItemType File -Path $file | Out-Null }
   return [pscustomobject]@{ Code = $code; File = $file; Text = (Get-Content $file -Raw) }
 }
 function ServiceExists([string]$name) {
