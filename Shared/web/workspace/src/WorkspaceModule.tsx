@@ -3,12 +3,8 @@ import { Navigate } from '@dbdatakit/shell'
 import { KeysPage } from './pages/KeysPage'
 import { WorkspacePage } from './pages/WorkspacePage'
 import { WorkspacesPage } from './pages/WorkspacesPage'
-import { registerDesigner } from './designers'
-import { syncDesigner } from './designer/syncDesigner'
 
-registerDesigner(syncDesigner)
-
-/** The Workspace server's screens as a module of a host: the projects it hosts, the workspaces people author them in, one draft in its two areas (Files, and the Designer of a kind that has one: `/:project/:draft/files/...`, `/:project/:draft/designer/...`) with its builds, and the publisher keys. */
+/** The Workspace server's screens as a module of a host: the projects it hosts, the workspaces people author them in, one draft in its two areas (Files, and the Designer a host registered for its kind with `registerDesigner`: `/:project/:draft/files/...`, `/:project/:draft/designer/...`) with its builds, and the publisher keys. */
 export function WorkspaceModule() {
   return (
     <Routes>
