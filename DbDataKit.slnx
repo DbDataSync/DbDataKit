@@ -161,6 +161,12 @@
     <Project Path="Shared/src/DbDataKit.ReportCatalogs.Runner/DbDataKit.ReportCatalogs.Runner.csproj" />
     <Project Path="Shared/src/DbDataKit.Views.Hosting/DbDataKit.Views.Hosting.csproj" />
     <Project Path="Shared/src/DbDataKit.Web/DbDataKit.Web.csproj" />
+    <Project Path="Shared/src/DbDataKit.Sync.Core/DbDataKit.Sync.Core.csproj" />
+    <Project Path="Shared/src/DbDataKit.Sync.Drivers.Abstractions/DbDataKit.Sync.Drivers.Abstractions.csproj" />
+    <Project Path="Shared/src/DbDataKit.Sync.Scripting.Abstractions/DbDataKit.Sync.Scripting.Abstractions.csproj" />
+    <Project Path="Shared/src/DbDataKit.Sync.Drivers.Generic/DbDataKit.Sync.Drivers.Generic.csproj" />
+    <Project Path="Shared/src/DbDataKit.Sync.Provisioning/DbDataKit.Sync.Provisioning.csproj" />
+    <Project Path="Shared/src/DbDataKit.Sync.Drivers.Descriptor/DbDataKit.Sync.Drivers.Descriptor.csproj" />
   </Folder>
   <Folder Name="/Shared/tools/">
     <Project Path="Shared/tools/DbDataKit.Tools.XmlaForwarder/DbDataKit.Tools.XmlaForwarder.csproj" />
