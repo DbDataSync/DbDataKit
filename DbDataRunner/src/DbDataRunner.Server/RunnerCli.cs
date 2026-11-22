@@ -335,6 +335,12 @@ public static class RunnerCli
             {
                 case "run":
                     var dry = parsed.Has("dry-run");
+                    if (!dry && await control.IsDdlAsync(task) == true)
+                    {
+                        await context.Error.WriteLineAsync($"{task} creates, alters or drops tables, so it starts only from the console after a person approves its statements. Use --dry-run to read what it would do.");
+                        return CliExit.Failure;
+                    }
+
                     var result = control.RunNow(task, inputs, actor, dry);
                     context.Data["task"] = task.ToString();
                     context.Data["queued"] = result.Queued;

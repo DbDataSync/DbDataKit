@@ -173,6 +173,8 @@ public static class PackageManifestValidator
         Limits(task.Limits, $"{at}.limits", named, add);
         Labels(task.Requires, $"{at}.requires", named, "required label", add);
         Labels(task.Capabilities, $"{at}.capabilities", named, "capability", add);
+        if (task.IsDdl && (task.Schedule.HasSchedule || task.Triggers.Any(t => t.Kind != TriggerKind.Manual)))
+            add($"{at}.capabilities", $"The task '{task.Name}' declares the capability `{TaskCapabilities.Ddl}`, so only a person approving its statements starts it: it has no schedule and no trigger other than `manual`.");
     }
 
     private static void Entry(PackageManifest manifest, PackageTask task, string at, string named, Action<string, string> add)

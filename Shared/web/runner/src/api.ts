@@ -35,6 +35,8 @@ export interface TaskStatus {
   /** Who schedules the task: `old` (the product that published it), `observe` (it does, and this runner records what it would have done) or `runner`. Absent from a runner that predates ownership. */
   owner?: string
   waiting_reason: string | null
+  /** The task creates, alters or drops tables: only the console starts it, after a person approves its statements, so no screen of the runner offers a run. Absent from a runner that predates it. */
+  ddl?: boolean
 }
 
 export interface InstanceLabel { label: string; source: 'admin' | 'reported' | string }
