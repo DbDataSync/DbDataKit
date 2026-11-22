@@ -142,6 +142,8 @@ public static class RunnerServer
         var lineageCatalog = CatalogOf(settings, state);
         RunnerLineageApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver, lineageCatalog.Find);   // plan 18 G18: a package's tables named by the bound connection
         RunnerTrackingApi.Map(app, state, "/api/v1", RunnerCallers.TokenResolver);   // plan 28c E18: the runner's own copy of Build's tracking, and the resolve of its divergences
+        RunnerMetadataApi.Map(app, state, () => app.Services.GetRequiredService<RunnerEngine>(), "/api/v1", RunnerCallers.TokenResolver,
+            settings.BuiltinDirectory ?? Path.Combine(AppContext.BaseDirectory, DbDataKit.Runner.BuiltInPackages.Folder));   // the built-in package dbdatakit-metadata: discover and describe through a project's slot, for a person a console names
         RunnerQualityApi.Map(app, state, "/api/v1", RunnerCallers.TokenResolver, engine: () => app.Services.GetRequiredService<RunnerEngine>());    // plan 35 I3: the results of the checks its tasks evaluated, their history and the release of a block; I3a: a re-check starts the package's `check` task
         return app;
     }

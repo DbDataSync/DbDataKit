@@ -303,6 +303,7 @@ public static class RunnerApi
                 {
                     ["key"] = step.Key, ["started"] = step.StartedAt.UtcDateTime.ToString("O"), ["completed"] = step.CompletedAt?.UtcDateTime.ToString("O"),
                     ["result"] = step.ResultJson is { } json ? JsonNode.Parse(json) : null,
+                    ["payload"] = step.ResultPayload?.ToString("D"),
                 }).ToArray()),
             });
         });
@@ -325,6 +326,9 @@ public static class RunnerApi
         {
             if (!ParseTask(package, channel, task, out var reference, out var bad)) return bad!;
             if (Deny(context, ServerRole.Operator, RunnerControl.RunVerb, engine(), reference!) is { } denied) return denied;
+            // the built-in package reads through another package's slot, which only its own route checks (the slot is declared, the person is named)
+            if (package == MetadataPackage.Name)
+                return Results.Json(new { error = $"The built-in package {MetadataPackage.Name} is started with POST {root}/metadata/{{channel}}/{{task}}, which names the package and the slot it reads through." }, statusCode: StatusCodes.Status409Conflict);
             var inputs = new Dictionary<string, string>(StringComparer.Ordinal);
             var dryRun = false;
             string? onBehalfOf = null;
