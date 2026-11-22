@@ -11,6 +11,8 @@ client and on Server.
 
 Every program of the suite needs the .NET 10 runtime installed on the machine; the four services need ASP.NET Core with it.
 
+What an administrator sets up and checks so that each service's files stay its own is in [install-hardening.md](install-hardening.md).
+
 ## A service owns its data
 
 The install only registers the service and creates its top folder with its access list. Everything inside (subfolders, keys, certificate, state, the

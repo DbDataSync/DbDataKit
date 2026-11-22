@@ -12,8 +12,12 @@ RestartSec=5
 TimeoutStopSec=45
 
 # Identity
-DynamicUser=yes
+User=dbdatagateway
+Group=dbdatakit
 StateDirectory=dbdatakit/gateway
+StateDirectoryMode=0700
+LogsDirectory=dbdatakit/dbdatagateway
+LogsDirectoryMode=0700
 Environment="DBDATAKIT_DATA_GATEWAY=/var/lib/dbdatakit/gateway"
 
 # Hardening
