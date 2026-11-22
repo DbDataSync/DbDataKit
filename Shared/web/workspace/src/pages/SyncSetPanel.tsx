@@ -9,6 +9,8 @@ import {
 import type { LiveCheck } from '../useLiveCheck'
 import type { CacheRead } from '../catalogCache'
 import { MappingColumns } from './MappingColumns'
+import { roleWords, useSyncEngines, type SyncEngineList } from '../syncEngines'
+import { parseYaml } from '@dbdatakit/shell'
 import { StructuredEditor } from './StructuredPanel'
 
 
@@ -23,13 +25,44 @@ export function SecretNotes({ text }: { text: string }) {
   )
 }
 
+/** What the registry says of a connection's engine: whether it may be a replication's source and target, or that it is a driver of this project, or that neither knows it. */
+export function EngineNote({ text, engines }: { text: string; engines: SyncEngineList }) {
+  const doc = parseYaml(text).value as { engine?: unknown } | undefined
+  const name = typeof doc?.engine === 'string' ? doc.engine : ''
+  if (name === '') return null
+  const engine = engines.find(name)
+  if (!engine) return <div className="hint" style={{ marginTop: 10 }} data-testid="wsp-engine-note" data-engine={name} data-known="false">The engine <code>{name}</code> is neither in the suite's engine registry nor a driver of this project (<code>drivers/{name}/</code>).</div>
+  return (
+    <div className="hint" style={{ marginTop: 10 }} data-testid="wsp-engine-note" data-engine={engine.id} data-custom={engine.custom} data-source={engine.source.status} data-target={engine.target.status}>
+      <div>{engine.displayName}{engine.custom ? ' (custom: a driver of this project)' : ''}</div>
+      <div data-testid="wsp-engine-source">As a source: {roleWords(engine.source)}{engine.source.offered ? '' : ' (not offered)'}</div>
+      <div data-testid="wsp-engine-target">As a target: {roleWords(engine.target)}{engine.target.offered ? '' : ' (not offered)'}</div>
+    </div>
+  )
+}
+
+/** The engines a new connection may name: those the registry offers as a source or a target, and the project's own drivers marked custom; a planned role is said and not offered. */
+export function EngineOptions({ engines }: { engines: SyncEngineList }) {
+  return (
+    <>
+      {engines.all.filter((e) => e.source.offered || e.target.offered).map((e) => {
+        const as = [e.source.offered ? 'source' : null, e.target.offered ? 'target' : null].filter(Boolean).join(' and ')
+        const planned = [e.source.status === 'planned' ? 'source' : null, e.target.status === 'planned' ? 'target' : null].filter(Boolean).join(' and ')
+        return <option key={e.id} value={e.id} data-custom={e.custom}>{e.id}{e.custom ? ' (custom)' : ''}: {as}{planned ? ` (${planned} planned)` : ''}</option>
+      })}
+    </>
+  )
+}
+
 /** A file of a Sync replication set as a form (from the schema of its kind) or as YAML, with Sync's own readers' findings as the draft is checked. A task is written in the current format whatever it was read as. */
-export function SyncFileEditor({ kind, path, text, onText, readOnly, live, onOpen, catalog }: { catalog?: CacheRead | null; kind: Extract<EditorKind, 'sync-task' | 'sync-mapping' | 'sync-connection'>; path: string; text: string; onText: (text: string) => void; readOnly: boolean; live: LiveCheck; onOpen?: (path: string) => void }) {
+export function SyncFileEditor({ kind, path, text, onText, readOnly, live, onOpen, catalog, paths = [] }: { catalog?: CacheRead | null; paths?: readonly string[]; kind: Extract<EditorKind, 'sync-task' | 'sync-mapping' | 'sync-connection'>; path: string; text: string; onText: (text: string) => void; readOnly: boolean; live: LiveCheck; onOpen?: (path: string) => void }) {
   const diagnostics: CheckDiagnostic[] = live.diagnostics
+  const engines = useSyncEngines(paths)
   const state = liveState({ text, checkedText: live.checkedText, failed: live.failed, running: live.running })
   const set = kind === 'sync-task' ? (value: string) => onText(withCurrentTaskVersion(value)) : onText
   const notes = (
     <>
+      {kind === 'sync-connection' && <EngineNote text={text} engines={engines} />}
       {kind === 'sync-connection' && <SecretNotes text={text} />}
       {kind === 'sync-mapping' && <div className="hint" style={{ marginTop: 10 }}>The column cache (<code>sourceColumns</code>, <code>targetColumns</code>) is what the check and the package are made from. It is written from the catalog cache below (or edited in the YAML tab); no database is asked here.</div>}
       {kind === 'sync-mapping' && <MappingColumns mapping={text} catalog={catalog ?? null} readOnly={readOnly} onApply={onText} />}
@@ -65,6 +98,7 @@ export function SyncSetPanel({ paths, canWrite, busy, onOpen, onCreate, findings
   const [source, setSource] = useState('')
   const [target, setTarget] = useState('')
   const [connection, setConnection] = useState('')
+  const engines = useSyncEngines(paths)
   const [engine, setEngine] = useState('postgres')
   const from = source || connections[0] || ''
   const to = target || connections[1] || connections[0] || ''
@@ -100,7 +134,7 @@ export function SyncSetPanel({ paths, canWrite, busy, onOpen, onCreate, findings
             <NameForm label="New connection name" placeholder="source-db" testId="wsp-new-connection" button="New connection" value={connection} onValue={setConnection} disabled={busy}
               problem={syncNameProblem(connection, paths, connectionPath)} onSubmit={() => { onCreate([{ path: connectionPath(connection), text: newConnectionText(connection, engine) }]); setConnection('') }}>
               <select className="input" aria-label="Engine" value={engine} onChange={(e) => setEngine(e.target.value)} data-testid="wsp-new-connection-engine">
-                {['sqlserver', 'postgres', 'mysql', 'oracle', 'duckdb'].map((e) => <option key={e} value={e}>{e}</option>)}
+                <EngineOptions engines={engines} />
               </select>
             </NameForm>
             <NameForm label="New replication name" placeholder="orders" testId="wsp-new-replication" button="New replication" value={replication} onValue={setReplication} disabled={busy || connections.length === 0}
