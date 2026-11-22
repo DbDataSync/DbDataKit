@@ -155,6 +155,12 @@ jobs:
       - name: Test the Workspace screens
         working-directory: Shared/web
         run: npm test -w @dbdatakit/workspace
+      # The sync Designer (a sync project's authoring screens): the draft model's path edits, the metadata hooks over the catalog cache, the pages in the Workspace's frame, and the rule that it watches nothing and calls no Runner route.
+      - name: Test the sync Designer
+        working-directory: Shared/web
+        run: |
+          npm run typecheck -w @dbdatakit/sync-ui
+          npm test -w @dbdatakit/sync-ui
       # The Store's reusable controls (plan 19, Z06): field parsing, the client against a fake server, the views as markup. Plain Node.
       - name: Test the Store controls
         working-directory: Shared/web

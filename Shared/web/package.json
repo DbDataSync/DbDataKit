@@ -13,6 +13,7 @@
     "views-sdk",
     "runner",
     "workspace",
+    "sync-ui",
     "console"
   ]
 }
