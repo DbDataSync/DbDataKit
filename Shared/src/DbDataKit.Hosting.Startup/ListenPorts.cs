@@ -79,13 +79,13 @@ public static partial class ListenPorts
     /// <exception cref="InvalidOperationException">The settings file's <c>listen:</c> line is not an https address; the message names the file.</exception>
     public static ListenChoice Resolve(SuiteService service, Uri? flag, string settingsFile, Uri defaultListen, IReadOnlyList<PortRange> excluded,
         Func<IPAddress, int, bool>? canBind = null) =>
-        Resolve(service, flag is null ? null : [flag], settingsFile, defaultListen, excluded, canBind);
+        ResolveAll(service, flag is null ? null : [flag], settingsFile, defaultListen, excluded, canBind);
 
     /// <summary>
-    /// <see cref="Resolve(SuiteService, Uri?, string, Uri, IReadOnlyList{PortRange}, Func{IPAddress, int, bool}?)"/> for a flag or a settings line that names
+    /// <see cref="Resolve"/> for a flag or a settings line that names
     /// several addresses (the first is the one reported to the console); a port is chosen and pinned only when neither names any.
     /// </summary>
-    public static ListenChoice Resolve(SuiteService service, IReadOnlyList<Uri>? flags, string settingsFile, Uri defaultListen, IReadOnlyList<PortRange> excluded,
+    public static ListenChoice ResolveAll(SuiteService service, IReadOnlyList<Uri>? flags, string settingsFile, Uri defaultListen, IReadOnlyList<PortRange> excluded,
         Func<IPAddress, int, bool>? canBind = null)
     {
         if (flags is { Count: > 0 }) return new ListenChoice(flags[0], ListenSource.Flag, settingsFile, addresses: flags);

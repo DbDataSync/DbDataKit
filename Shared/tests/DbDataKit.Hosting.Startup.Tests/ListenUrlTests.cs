@@ -72,7 +72,7 @@ public sealed class ListenUrlTests : StartupTestBase
         Assert.Equal([new Uri("https://127.0.0.1:7841"), new Uri("https://127.0.0.1:9443")], all);
         Assert.Equal(7841, ListenPorts.ReadPinned(file)!.Port);
 
-        var choice = ListenPorts.Resolve(SuiteServices.Runner, (IReadOnlyList<Uri>?)null, file, new Uri("https://127.0.0.1:7840"), []);
+        var choice = ListenPorts.ResolveAll(SuiteServices.Runner, null, file, new Uri("https://127.0.0.1:7840"), []);
         Assert.Equal(ListenSource.Settings, choice.Source);
         Assert.Equal(all, choice.Addresses);
         Assert.Equal([7841, 9443], choice.Ports);
@@ -98,7 +98,7 @@ public sealed class ListenUrlTests : StartupTestBase
     {
         var file = Path.Combine(Data, "flagged.yaml");
         File.WriteAllText(file, "listen: https://127.0.0.1:7841\n");
-        var choice = ListenPorts.Resolve(SuiteServices.Runner, [new Uri("https://127.0.0.1:9100"), new Uri("https://127.0.0.1:9101")], file, new Uri("https://127.0.0.1:7840"), []);
+        var choice = ListenPorts.ResolveAll(SuiteServices.Runner, [new Uri("https://127.0.0.1:9100"), new Uri("https://127.0.0.1:9101")], file, new Uri("https://127.0.0.1:7840"), []);
         Assert.Equal(ListenSource.Flag, choice.Source);
         Assert.Equal([9100, 9101], choice.Ports);
         Assert.Equal("listen: https://127.0.0.1:7841\n", File.ReadAllText(file));

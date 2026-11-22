@@ -152,7 +152,7 @@ public static class WorkspaceCli
                     skip = SkipFolderPermissions.Read(parsed.Has(FolderPermissions.FlagName), settingsFile);
                     (state, sources) = WorkspaceState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection"));
                     // --listen, else the port pinned in server.yaml, else a free port of the Workspace's sub-block (pinned once the server listens on it)
-                    listen = ListenPorts.Resolve(service, listenFlag, Path.Combine(directory, "server.yaml"), new Uri(WorkspaceSettings.DefaultListen), step.Options.ExcludedPorts());
+                    listen = ListenPorts.ResolveAll(service, listenFlag, Path.Combine(directory, "server.yaml"), new Uri(WorkspaceSettings.DefaultListen), step.Options.ExcludedPorts());
                 }
                 catch (InvalidOperationException)
                 {

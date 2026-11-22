@@ -219,7 +219,7 @@ public sealed class ConfigStartupTests
         Console.SetError(stderr);
         try
         {
-            int code = await Cli.RunAsync(["server", "run", "--Gateway:Listen=http://127.0.0.1:0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false", "--Gateway:RequireReferencedSecrets=true",
+            int code = await Cli.RunAsync(["server", "run", "--Gateway:Listen=http://127.0.0.1:0", "--Gateway:Public:Listen=https://127.0.0.1:0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false", "--Gateway:RequireReferencedSecrets=true",
                 "--Gateway:DataSources:x:Provider=sqlserver", "--Gateway:DataSources:x:ConnectionString=Server=a;Password=LitSecret-77"]);
             Assert.Equal(2, code);
         }
@@ -263,7 +263,7 @@ public sealed class ConfigStartupTests
         var port = ((IPEndPoint)held.LocalEndpoint).Port;
         var (output, error) = (new StringWriter(), new StringWriter());
 
-        var exit = await Cli.RunAsync(["server", "run", $"--Gateway:DataDirectory={dir}", $"--Gateway:Listen=http://127.0.0.1:{port}", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"],
+        var exit = await Cli.RunAsync(["server", "run", $"--Gateway:DataDirectory={dir}", $"--Gateway:Listen=http://127.0.0.1:{port}", "--Gateway:Public:Listen=https://127.0.0.1:0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"],
             new DbDataKit.Cli.CliContext(output, error, TextReader.Null));
 
         Assert.NotEqual(0, exit);
@@ -287,7 +287,7 @@ public sealed class ConfigStartupTests
         var dir = NewDataDirectory(null);
         File.WriteAllText(Path.Combine(dir, "start-failure.txt"), "dbdatagateway did not start (an earlier release)");
         using var stop = new CancellationTokenSource();
-        var run = Cli.RunAsync(["server", "run", $"--Gateway:DataDirectory={dir}", "--Gateway:Listen=http://127.0.0.1:0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"],
+        var run = Cli.RunAsync(["server", "run", $"--Gateway:DataDirectory={dir}", "--Gateway:Listen=http://127.0.0.1:0", "--Gateway:Public:Listen=https://127.0.0.1:0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"],
             new DbDataKit.Cli.CliContext(TextWriter.Null, TextWriter.Null, TextReader.Null, stop.Token));
         var logs = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.LogFolder);
         var file = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.FailureFileName);
@@ -324,7 +324,7 @@ public sealed class ConfigStartupTests
         {
             File.SetUnixFileMode(dir, (UnixFileMode)0x1FF);
         }
-        string[] run = ["server", "run", $"--Gateway:DataDirectory={dir}", "--Gateway:Listen=http://127.0.0.1:0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"];
+        string[] run = ["server", "run", $"--Gateway:DataDirectory={dir}", "--Gateway:Listen=http://127.0.0.1:0", "--Gateway:Public:Listen=https://127.0.0.1:0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"];
         var file = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.FailureFileName);
 
         var error = new StringWriter();

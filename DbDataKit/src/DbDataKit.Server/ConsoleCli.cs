@@ -147,7 +147,7 @@ public static class ConsoleCli
                     skip = SkipFolderPermissions.Read(parsed.Has(FolderPermissions.FlagName), settingsFile);
                     state = ConsoleState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection"));
                     // --listen, else the port pinned in settings.yaml, else a free port of the console's sub-block (pinned once the console listens on it)
-                    listen = ListenPorts.Resolve(service, listenFlag, ConsoleState.SettingsFileIn(directory), new Uri(ConsoleSettings.DefaultListen), step.Options.ExcludedPorts());
+                    listen = ListenPorts.ResolveAll(service, listenFlag, ConsoleState.SettingsFileIn(directory), new Uri(ConsoleSettings.DefaultListen), step.Options.ExcludedPorts());
                 }
                 catch (InvalidOperationException)
                 {

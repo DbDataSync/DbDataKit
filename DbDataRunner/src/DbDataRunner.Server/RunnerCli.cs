@@ -136,7 +136,7 @@ public static class RunnerCli
                     skip = SkipFolderPermissions.Read(parsed.Has(FolderPermissions.FlagName), settingsFile);
                     var resolvedState = RunnerState.Resolve(directory, environment);
                     // --listen, else the port pinned in server.yaml, else a free port of the Runner's sub-block (pinned once the server listens on it)
-                    listen = ListenPorts.Resolve(service, listenFlag, Path.Combine(directory, "server.yaml"), new Uri(RunnerSettings.DefaultListen), step.Options.ExcludedPorts());
+                    listen = ListenPorts.ResolveAll(service, listenFlag, Path.Combine(directory, "server.yaml"), new Uri(RunnerSettings.DefaultListen), step.Options.ExcludedPorts());
                     settings = new RunnerSettings(directory, listen.Address) { ListenAll = listen.Addresses, State = resolvedState.Settings, StateSources = resolvedState.Sources, Channels = RunnerSettings.ChannelsFrom(environment, parsed.Get("channels")), MaxArtifactBytes = RunnerSettings.MaxArtifactBytesFrom(environment), ActivationMaxWait = RunnerSettings.ActivationMaxWaitFrom(environment), Group = RunnerSettings.GroupFrom(environment, parsed.Get("group")), TaskEnvironment = RunnerSettings.TaskEnvironmentFrom(environment), SkipFolderPermissionsCheck = skip.IsOn };
                 }
                 catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
