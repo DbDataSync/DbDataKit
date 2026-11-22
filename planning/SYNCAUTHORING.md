@@ -190,15 +190,6 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 
 ## Proposed decisions
 
-### SYNCAUTHORING-P11: when a mapping's editor writes its column cache and suggests column pairs (default, awaiting the owner)
-
-Scenario: Ana opens the saved mapping `dbo.orders`, whose `columnMappings` is empty, then picks `dbo.order_lines` as its source table. Built (the
-default): opening the mapping changes nothing (a look never makes the draft "not saved"); picking the table writes the source's columns from the
-catalog cache into the mapping's `sourceColumns` at once, as part of the same unsaved edit, and pairs the columns of the same name while nobody has
-edited the pairs; a table the cache does not have removes `sourceColumns`. The old screen suggested pairs as soon as the columns loaded, even on a look,
-and captured the column cache only when the mapping was saved. Option B: the old behaviour, which on the draft would mark a mapping not saved by
-opening it. Recommendation: the default.
-
 ### SYNCAUTHORING-P12: offline findings are warnings (default, awaiting the owner)
 
 The sync draft's check reports the offline findings over `catalog-cache.yaml` (a mapped column missing from the cache, an unknown source type, a source
