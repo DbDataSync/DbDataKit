@@ -4,6 +4,7 @@ The members here are fixtures (a root folder with one dist.json each), so the te
 `ShippedSuiteTests` checks the real dist/suite.json against the real files.
 """
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -176,7 +177,7 @@ class SuiteManifestTests(unittest.TestCase):
         self.assertIn("Service = 'DbDataGateway'; Register = 'service install --name DbDataGateway'", post)       # {name} is substituted
         self.assertIn("Service = ''; Register = ''", post)                   # a member with no service is bound without one and left alone
         self.assertIn("Roles = 'viewer,operator,admin'", post)
-        self.assertIn("Address = 'https://localhost:8816'", post)
+        self.assertIn("Address = 'https://localhost:7822'", post)
 
     def test_the_install_checks_before_it_changes_anything(self):
         post = "\n".join(self.manifest()["post_install"])
@@ -344,11 +345,11 @@ class SuiteManifestTests(unittest.TestCase):
         self.assertIn("dbdatagateway server pair --max-role", notes)
         self.assertIn("dbdatarunner server pair --max-role", notes)
         self.assertNotIn("dbdatakit server pair", notes)             # the console is not paired with itself
-        # each member's management address is the product's default (the Gateway's is https://localhost:8816, on by default); a member this file knows no default for stays generic
-        self.assertIn("dbdatakit instance add https://localhost:8816 --code <code>", notes)
+        # each member's management address is the product's default (the Gateway's is https://localhost:7822, on by default); a member this file knows no default for stays generic
+        self.assertIn("dbdatakit instance add https://localhost:7822 --code <code>", notes)
         self.assertIn("dbdatakit instance add https://127.0.0.1:7840 --code <code>", notes)
         self.assertNotIn("<https address of that server>", notes)
-        self.assertLess(notes.index("dbdatagateway server pair"), notes.index("instance add https://localhost:8816"))
+        self.assertLess(notes.index("dbdatagateway server pair"), notes.index("instance add https://localhost:7822"))
         self.assertLess(notes.index("dbdatarunner server pair"), notes.index("instance add https://127.0.0.1:7840"))
         self.assertIn("one install route per machine", notes)
         self.assertLess(notes.index("dbdatakit service install"), notes.index("dbdatagateway service install"))
@@ -465,13 +466,28 @@ class SuiteInstallTestPlumbingTests(unittest.TestCase):
 
     def test_a_leg_installs_with_a_windows_clients_owner(self):
         text = (REPO_ROOT / ".github" / "workflows" / "suite-release.yml").read_text(encoding="utf-8")
-        job = text[text.index("  suite-install-windows:"):]
-        self.assertIn('"workstation"', job)
+        job = text[text.index("  suite-install-windows:"):text.index("  suite-install-linux:")]
+        self.assertIn("owner: [server, workstation]", job)   # both legs run in every dry run
         self.assertIn("-WorkstationOwner:", job)
         script = (DIST / "tests" / "suite-scoop-e2e.ps1").read_text(encoding="utf-8")
         self.assertIn("nodefaultadminowner", script)
         self.assertIn("HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa", script)
         self.assertIn("[DefaultOwner]::SetToCurrentUser()", script)
+
+    def test_the_linux_job_installs_the_services_with_install_sh_on_systemd(self):
+        text = (REPO_ROOT / ".github" / "workflows" / "suite-release.yml").read_text(encoding="utf-8")
+        job = text[text.index("  suite-install-linux:"):]
+        self.assertIn("needs: [guard, verify]", job)
+        self.assertIn("inputs.dry_run", job)
+        self.assertIn("ubuntu-latest", job)
+        self.assertIn("suite-systemd-e2e.sh", job)
+        script = DIST / "tests" / "suite-systemd-e2e.sh"
+        if os.name != "nt":   # the bash a Windows runner finds first does not run this script (bash -n exited 1 there, saying nothing)
+            r = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+        text = script.read_text(encoding="utf-8")
+        for word in ("install.sh\" --system", "is up to date", "! -user", "startup-failure-dbdatarunner.txt", "fake_releases.py"):
+            self.assertIn(word, text)
 
     def test_the_script_parses_in_powershell(self):
         if not PWSH:

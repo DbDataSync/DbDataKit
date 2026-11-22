@@ -63,7 +63,7 @@ function Services {
   foreach ($m in $members) {
     $meta = Get-Content (Join-Path $repoRoot $m.meta) -Raw | ConvertFrom-Json
     $entry = $table | Where-Object { $_.program -eq $m.product }
-    if ($meta.service -and $entry) { [pscustomobject]@{ Product = $m.product; Name = $entry.windowsName; Account = $entry.account; DisplayName = $entry.displayName; Description = $entry.description } }
+    if ($meta.service -and $entry) { [pscustomobject]@{ Product = $m.product; Name = $entry.windowsName; Account = $entry.account; DisplayName = $entry.displayName; Description = $entry.description; DataFolder = $entry.dataFolder } }
   }
 }
 # Each service as the service manager has it: the exact name, the display name and account (`sc qc`) and the description (`sc qdescription`), all as the table says
@@ -214,6 +214,15 @@ if ($WorkstationOwner) {
   [DefaultOwner]::SetToCurrentUser()
   $owner = NewObjectOwner
   Assert ($owner -eq $me) "as on a Windows client, a folder this administrator makes is owned by $me (found $owner)"
+  # git settings of the machine that allow a repository despite its owner (safe.directory, which libgit2 reads too) are removed, as on a Windows client that has
+  # none: the hosted runner has safe.directory=* in C:\Program Files\Git\etc\gitconfig, which would hide a configuration repository the service does not own
+  $allowed = (& git config --show-origin --get-all safe.directory 2>&1 | Out-String).Trim()
+  Write-Host "   safe.directory before: $allowed"
+  foreach ($level in '--system', '--global') { & git config $level --unset-all safe.directory 2>&1 | Out-Null }
+  $programDataGit = Join-Path $env:ProgramData 'Git\config'
+  if (Test-Path $programDataGit) { & git config --file $programDataGit --unset-all safe.directory 2>&1 | Out-Null }
+  $left = (& git config --show-origin --get-all safe.directory 2>&1 | Out-String).Trim()
+  Assert ($left -eq '') "no git settings of the machine allow a repository despite its owner (before: $allowed; now: $left)"
 } else {
   $owner = NewObjectOwner
   Write-Host "   as on Windows Server, a folder this administrator makes is owned by $owner"
@@ -282,38 +291,58 @@ try {
   Native 'other-route-unregister' { & $otherExe service uninstall } | Out-Null
   Assert (-not (ServiceExists 'DbDataRunner')) 'the other route''s service is removed again'
 
-  if ($WorkstationOwner) {
-    Heading 'The Gateway''s configuration repository made by the elevated administrator before the service first starts'
-    # as an earlier install did on a Windows client: the repository, its .git included, exists before the service's first start and is owned by the
-    # administrator who ran the install, so git refuses it to NT SERVICE\DbDataGateway
-    # git settings of the machine that allow a repository despite its owner (safe.directory, which libgit2 reads too) are removed, as on a Windows client that has none
-    $allowed = (& git config --show-origin --get-all safe.directory 2>&1 | Out-String).Trim()
-    Write-Host "   safe.directory before: $allowed"
-    foreach ($level in '--system', '--global') { & git config $level --unset-all safe.directory 2>&1 | Out-Null }
-    $programDataGit = Join-Path $env:ProgramData 'Git\config'
-    if (Test-Path $programDataGit) { & git config --file $programDataGit --unset-all safe.directory 2>&1 | Out-Null }
-    $left = (& git config --show-origin --get-all safe.directory 2>&1 | Out-String).Trim()
-    Assert ($left -eq '') "no git settings of the machine allow a repository despite its owner (before: $allowed; now: $left)"
-    $config = Join-Path $data 'gateway\config'
-    Remove-Item -LiteralPath (Join-Path $data 'gateway') -Recurse -Force -ErrorAction SilentlyContinue
-    New-Item -ItemType Directory -Force $config | Out-Null
-    Set-Content -LiteralPath (Join-Path $config 'server.yaml') -Value 'schemaVersion: 2' -NoNewline
-    $init = Native 'config-git-init' { & git init --quiet $config }
-    Assert ($init.Code -eq 0) 'git init made the configuration repository'
-    foreach ($f in @($config, (Join-Path $config '.git'))) {
-      $owner = (Get-Acl -LiteralPath $f).Owner
-      Assert ($owner -eq $me) "$f is owned by the administrator $me before the service starts (found $owner)"
-    }
+  Heading 'Each service creates and owns its data: the install makes only its top folder'
+  # each member registered from its own zip, as the MSI and install.ps1 -InstallService do (`service install`), and started once, before any administrator's
+  # command writes in its folder (docs/install.md, "A service owns its data")
+  $own = Join-Path $Work 'own'
+  Remove-Item -LiteralPath $data -Recurse -Force -ErrorAction SilentlyContinue
+  foreach ($s in Services) {
+    $to = Join-Path $own $s.Product
+    New-Item -ItemType Directory -Force $to | Out-Null
+    Expand-Archive (Join-Path $serve "$($s.Product)\v$Version\$($s.Product)-v$Version-win-x64.zip") $to -Force
+    $r = Native "own-register-$($s.Product)" { & (Join-Path $to "$($s.Product).exe") service install }
+    Assert ($r.Code -eq 0) "$($s.Product) service install succeeds"
   }
+  $tops = @(Get-ChildItem -LiteralPath $data -Force)
+  Assert ($tops.Count -eq @(Services).Count) "after the install the data root holds one top folder per service and nothing else (found: $(($tops | ForEach-Object Name) -join ', '))"
+  foreach ($top in $tops) {
+    Assert ($top.PSIsContainer -and @(Get-ChildItem -LiteralPath $top.FullName -Force).Count -eq 0) "after the install $($top.Name) is an empty top folder"
+    $owner = (Get-Acl -LiteralPath $top.FullName).Owner
+    Assert ($owner -eq 'BUILTIN\Administrators') "the install gives $($top.Name) the Administrators group as owner (found $owner)"
+  }
+  Assert (-not (Test-Path (Join-Path $data 'logs'))) 'the install makes no logs folder'
+  foreach ($s in Services) {
+    Start-Service -Name $s.Name
+    (Get-Service -Name $s.Name).WaitForStatus('Running', '00:01:00')
+    $healthy = $false
+    for ($i = 0; $i -lt 60 -and -not $healthy; $i++) { if ((Native "own-health-$($s.Product)" { & (Join-Path (Join-Path $own $s.Product) "$($s.Product).exe") health check }).Code -eq 0) { $healthy = $true } else { Start-Sleep -Seconds 2 } }
+    Assert $healthy "$($s.Product) started on the folder the install made and answers its health check"
+  }
+  $logs = Join-Path $data 'logs'
+  $logsAcl = Get-Acl -LiteralPath $logs
+  Assert ($logsAcl.AreAccessRulesProtected -and @($logsAcl.Access | Where-Object { $_.IdentityReference -eq 'CREATOR OWNER' }).Count -gt 0) 'the first service to start made logs with its access list (inheritance cut, CREATOR OWNER)'
+  ReportOwners 'after each service''s first start'
+  foreach ($s in Services) {
+    $folder = Join-Path $data $s.DataFolder
+    $made = @(Get-ChildItem -LiteralPath $folder -Recurse -Force) + @(Get-ChildItem -LiteralPath (Join-Path $logs $s.Product) -Recurse -Force -ErrorAction SilentlyContinue) + @(Get-Item -LiteralPath (Join-Path $logs $s.Product) -Force -ErrorAction SilentlyContinue)
+    Assert ($made.Count -gt 0) "$($s.Product) made its data in $folder"
+    $others = @($made | Where-Object { (Get-Acl -LiteralPath $_.FullName).Owner -ne $s.Account } | ForEach-Object { "$($_.FullName) ($((Get-Acl -LiteralPath $_.FullName).Owner))" })
+    Assert ($others.Count -eq 0) "every file $($s.Product) made is owned by $($s.Account) ($($made.Count) entries); not: $($others -join ', ')"
+  }
+  foreach ($s in @(Services)[-1..-4]) {
+    Native "own-unregister-$($s.Product)" { & (Join-Path (Join-Path $own $s.Product) "$($s.Product).exe") service uninstall } | Out-Null
+    Assert (-not (ServiceExists $s.Name)) "$($s.Name) is removed again"
+  }
+  Remove-Item -LiteralPath $data -Recurse -Force
 
   Heading 'The global install registers, starts and pairs every member'
   $install = Native 'install' { scoop install -g $manifest }
   Assert ($install.Code -eq 0) 'scoop install -g succeeded'
   ReportOwners 'after install'
-  # The Gateway allows its configuration repository when git refuses it for its owner: the file below exists only then (docs/install.md, "The Gateway's configuration repository")
-  $gatewayGit = Join-Path $data 'gateway\git\.gitconfig'
-  if (Test-Path $gatewayGit) { Write-Host "   REFUSED BY GIT: the Gateway allowed a configuration repository another account owns: $gatewayGit"; Get-Content $gatewayGit | Out-Host }
-  else { Write-Host "   the Gateway opened its configuration repository with no allowance (no $gatewayGit)" }
+  # the Gateway made its configuration repository itself at its first start and never writes git settings of its own (docs/install.md, "The Gateway's configuration repository")
+  Assert (-not (Test-Path (Join-Path $data 'gateway\git\.gitconfig'))) 'the Gateway wrote no git settings file'
+  $configOwner = (Get-Acl -LiteralPath (Join-Path $data 'gateway\config')).Owner
+  Assert ($configOwner -eq 'NT SERVICE\DbDataGateway') "the Gateway's configuration repository is owned by NT SERVICE\DbDataGateway (found $configOwner)"
   AssertEveryMemberRunsPairedAndHealthy 'after install'
   AssertServicesAreNamedAsTheTableSays 'after install'
   AssertAdminCommandsWork 'after install'

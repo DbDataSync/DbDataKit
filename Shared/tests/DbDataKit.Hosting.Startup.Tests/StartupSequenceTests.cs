@@ -21,7 +21,7 @@ public abstract class StartupTestBase : IDisposable
 
     protected List<string> Unreported { get; } = [];
 
-    protected string FailureFile => Path.Combine(Logs, "startup-failure-dbdatarunner.txt");
+    protected string FailureFile => SuiteServices.Runner.FailureFileIn(Logs);
 
     protected StartupSequence Sequence(IReadOnlyList<PortRange>? excluded = null) => new(new StartupOptions
     {

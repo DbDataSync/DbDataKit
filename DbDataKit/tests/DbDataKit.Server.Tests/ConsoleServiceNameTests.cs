@@ -28,5 +28,10 @@ public sealed class ConsoleServiceNameTests
         Assert.Equal(SuiteServices.Console.Description, context.Description);
         Assert.Same(SuiteServices.Console, context.StartupService);
         Assert.Equal(SuiteServices.Console.Description, ConsoleService.UnitOptions("dbdatakit", "/opt/dbdatakit/dbdatakit").Description);
+        // the unit runs as the system user install.sh --system makes, and systemd makes its data and logs folders for it, closed to other users
+        var unit = DbDataKit.Hosting.Systemd.SystemdUnitGenerator.Generate(ConsoleService.UnitOptions("dbdatakit", "/opt/dbdatakit/dbdatakit"));
+        foreach (var line in new[] { "User=dbdatakit", "Group=dbdatakit", "StateDirectory=dbdatakit/server", "StateDirectoryMode=0700", "LogsDirectory=dbdatakit/dbdatakit", "LogsDirectoryMode=0700" })
+            Assert.Contains("\n" + line + "\n", unit);
+        Assert.DoesNotContain("DynamicUser", unit);
     }
 }

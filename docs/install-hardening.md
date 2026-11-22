@@ -21,6 +21,14 @@ Who may use the folder:
   users have no access.
 - On Linux, the service's user owns the folder, with mode `0700`.
 
+The install creates only the folder itself:
+
+- On Windows, `service install` (which the MSI, `install.ps1 -InstallService` and the `dbdatakit-full` Scoop package run) creates the folder, makes the
+  Administrators group its owner and sets its access list.
+- On Linux, `install.sh --system` makes the service's system user in the group `dbdatakit` and writes the service's unit, which runs as that user.
+  systemd creates the folder and the service's logs folder, `/var/log/dbdatakit/<program>`, each time it starts the unit (`StateDirectory=`,
+  `LogsDirectory=`).
+
 When the service starts, it creates whatever is missing inside its folder, as its own account: its keys, its certificate, its state database, its
 configuration repository and its logs. Each file it creates is owned by the service's account and inherits the folder's access list.
 
@@ -31,7 +39,8 @@ Example: on a new Windows server, after the install and the first start of the R
 
 Before a service opens anything, it checks its folder. The start stops when the folder fails the check:
 
-- On Windows: Everyone, Users, Authenticated Users, Anonymous, Guests or Interactive can write to the folder.
+- On Windows: the folder's owner is not the service's account, the Administrators group, SYSTEM or TrustedInstaller, or Everyone, Users,
+  Authenticated Users, Anonymous, Guests or Interactive can write to the folder.
 - On Linux: the service's user does not own the folder, or every account on the machine can write to it.
 
 When a start stops, the service writes the reason to a failure file and exits:
@@ -97,13 +106,6 @@ kind of server or another group, or the console's certificate does not match the
 
 ## Planned changes
 
-- **In progress.** The installers create only each service's top folder and set its access list, so the service creates everything inside it and an
-  administrator's account never owns a file the service depends on. Today an install run as an administrator also creates folders inside it, owned
-  by that administrator; on a Windows workstation such a folder stops the Gateway's start.
-- **In progress.** On Windows the folder check also refuses a folder whose owner is not the Administrators group or the service's account.
-- **In progress.** On Linux, `install.sh --system` makes one system user per service, in the group `dbdatakit`. Each unit runs as its own user, and
-  systemd creates the service's folder when it starts the unit (`StateDirectory=`). Today each unit runs as a user that systemd makes for it
-  when it starts (`DynamicUser=yes`).
 - **Planned.** Administration commands such as `secret set` ask the running service to make the change, so an administrator's account never writes a
   file in a service's folder. Opening the files directly becomes a recovery mode, allowed only while the service is stopped.
 - **Planned.** A new command, `setup single-server` of the console's program, sets the program folder so that only Administrators and SYSTEM can change it, so no user can put a file

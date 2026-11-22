@@ -42,7 +42,9 @@ Usage: install.sh [options]
   --version <v>       install this version instead of the latest stable one
   --prerelease        let 'latest' pick a prerelease
   --dry-run           show what would be installed, change nothing
-  --system            install for all users (/opt, /usr/local/bin); needs root
+  --system            install for all users (/opt, /usr/local/bin); needs root. For a service on Linux it also makes the system user the service runs as
+                      (named as the program, in the group dbdatakit) and writes its systemd unit (/etc/systemd/system/<program>.service), which runs as that
+                      user; start it with 'systemctl enable --now <program>'. Running it again changes nothing that is already in place
   --install-dir <d>   install into <d>
   --no-link           do not put the program on the PATH
   --announce-url <u>  the console's announce address (http://console:8481). With --system (root) it writes the systemd drop-in that sets DBDATAKIT_ANNOUNCE_URL for the
@@ -239,6 +241,43 @@ if [ "$WITH_PDF_EXPORT" = 1 ]; then
     export_args=(export install --version "$RELEASE_VERSION")
     [ -z "$EXPORT_SOURCE" ] || export_args+=(--source "$EXPORT_SOURCE")
     "$INSTALL_DIR/$EXE" "${export_args[@]}" || die "$DISPLAY_NAME is installed, but its PDF export was not (see the message above). Run '$EXE ${export_args[*]}' again when it can be reached, or use the console's Server settings."
+  fi
+fi
+# --- The service's user and unit (Linux, --system) ---
+# Each service runs as a system user of its own, named as the program, in the group dbdatakit; the unit names that user, and systemd makes the service's
+# folders (/var/lib/dbdatakit/<folder>, /var/log/dbdatakit/<program>) for it at each start, so the service creates everything it keeps as itself.
+# Design: docs/install.md#a-service-owns-its-data
+if [ "${SERVICE:-0}" = 1 ] && [ "$SYSTEM" = 1 ] && [ "$(uname -s)" = Linux ]; then
+  GROUP=dbdatakit
+  if ! getent group "$GROUP" >/dev/null 2>&1; then
+    groupadd --system "$GROUP" || die "the group $GROUP could not be made (groupadd)."
+    echo "Made the system group $GROUP."
+  fi
+  if ! id -u "$PRODUCT" >/dev/null 2>&1; then
+    nologin=/usr/sbin/nologin; [ -x "$nologin" ] || nologin=/sbin/nologin; [ -x "$nologin" ] || nologin=/bin/false
+    useradd --system --gid "$GROUP" --no-create-home --home-dir /nonexistent --shell "$nologin" "$PRODUCT" || die "the system user $PRODUCT could not be made (useradd)."
+    echo "Made the system user $PRODUCT in the group $GROUP."
+  elif ! id -nG "$PRODUCT" | tr ' ' '\n' | grep -qx "$GROUP"; then
+    usermod -a -G "$GROUP" "$PRODUCT" || die "the user $PRODUCT could not be added to the group $GROUP (usermod)."
+    echo "Added the user $PRODUCT to the group $GROUP."
+  fi
+  UNIT_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
+  UNIT="$UNIT_DIR/$PRODUCT.service"
+  if unit_text="$("$INSTALL_DIR/$EXE" service unit 2>/dev/null)" && [ -n "$unit_text" ]; then
+    if [ -f "$UNIT" ] && [ "$(cat "$UNIT")" = "$unit_text" ]; then
+      echo "The unit $UNIT is up to date."
+    else
+      mkdir -p "$UNIT_DIR"
+      printf '%s\n' "$unit_text" > "$UNIT"
+      chmod 644 "$UNIT"
+      echo "Wrote the unit $UNIT: the service runs as $PRODUCT."
+      if [ -z "$SYSTEMD_DIR" ] && [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+        systemctl daemon-reload || echo "Note: systemctl daemon-reload failed; run it before starting the service." >&2
+      fi
+    fi
+    echo "Start the service with: systemctl enable --now $PRODUCT"
+  else
+    echo "Note: '$INSTALL_DIR/$EXE service unit' did not run (is the .NET runtime installed?), so no unit was written. Write it later with: $EXE service unit > $UNIT" >&2
   fi
 fi
 if [ -n "$ANNOUNCE_URL" ]; then

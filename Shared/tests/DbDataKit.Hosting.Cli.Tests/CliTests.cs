@@ -193,11 +193,12 @@ public class ServiceCommandTests
             var (cmd, _, _) = Make(startup: DbDataKit.Hosting.Startup.SuiteServices.Runner);
             var console = new BufferConsole();
             cmd.Execute(["check", "--data-dir", data], console);
-            Assert.Contains($"Startup-failure file: none ({Path.Combine(root, "logs", "startup-failure-dbdatarunner.txt")})", console.OutWriter.ToString());
+            var failureFile = DbDataKit.Hosting.Startup.SuiteServices.Runner.FailureFileIn(Path.Combine(root, "logs"));
+            Assert.Contains($"Startup-failure file: none ({failureFile})", console.OutWriter.ToString());
 
             // the data folder named for its service has the shared logs folder beside it, as in an install
-            Directory.CreateDirectory(Path.Combine(root, "logs"));
-            File.WriteAllText(Path.Combine(root, "logs", "startup-failure-dbdatarunner.txt"), "Startup of dbdatarunner failed at the ports step.\n\nPort 7841 cannot be bound.\n");
+            Directory.CreateDirectory(Path.GetDirectoryName(failureFile)!);
+            File.WriteAllText(failureFile, "Startup of dbdatarunner failed at the ports step.\n\nPort 7841 cannot be bound.\n");
             console = new BufferConsole();
             cmd.Execute(["check", "--data-dir", data], console);
             var text = console.OutWriter.ToString();
