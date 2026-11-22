@@ -177,7 +177,7 @@ class SuiteManifestTests(unittest.TestCase):
         self.assertIn("Service = 'DbDataGateway'; Register = 'service install --name DbDataGateway'", post)       # {name} is substituted
         self.assertIn("Service = ''; Register = ''", post)                   # a member with no service is bound without one and left alone
         self.assertIn("Roles = 'viewer,operator,admin'", post)
-        self.assertIn("Address = 'https://localhost:8816'", post)
+        self.assertIn("Address = 'https://localhost:7822'", post)
 
     def test_the_install_checks_before_it_changes_anything(self):
         post = "\n".join(self.manifest()["post_install"])
@@ -345,11 +345,11 @@ class SuiteManifestTests(unittest.TestCase):
         self.assertIn("dbdatagateway server pair --max-role", notes)
         self.assertIn("dbdatarunner server pair --max-role", notes)
         self.assertNotIn("dbdatakit server pair", notes)             # the console is not paired with itself
-        # each member's management address is the product's default (the Gateway's is https://localhost:8816, on by default); a member this file knows no default for stays generic
-        self.assertIn("dbdatakit instance add https://localhost:8816 --code <code>", notes)
+        # each member's management address is the product's default (the Gateway's is https://localhost:7822, on by default); a member this file knows no default for stays generic
+        self.assertIn("dbdatakit instance add https://localhost:7822 --code <code>", notes)
         self.assertIn("dbdatakit instance add https://127.0.0.1:7840 --code <code>", notes)
         self.assertNotIn("<https address of that server>", notes)
-        self.assertLess(notes.index("dbdatagateway server pair"), notes.index("instance add https://localhost:8816"))
+        self.assertLess(notes.index("dbdatagateway server pair"), notes.index("instance add https://localhost:7822"))
         self.assertLess(notes.index("dbdatarunner server pair"), notes.index("instance add https://127.0.0.1:7840"))
         self.assertIn("one install route per machine", notes)
         self.assertLess(notes.index("dbdatakit service install"), notes.index("dbdatagateway service install"))
