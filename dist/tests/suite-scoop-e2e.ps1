@@ -280,13 +280,29 @@ try {
   Native 'other-route-unregister' { & $otherExe service uninstall } | Out-Null
   Assert (-not (ServiceExists 'DbDataRunner')) 'the other route''s service is removed again'
 
+  if ($WorkstationOwner) {
+    Heading 'The Gateway''s configuration repository made by the elevated administrator before the service first starts'
+    # as an earlier install did on a Windows client: the repository, its .git included, exists before the service's first start and is owned by the
+    # administrator who ran the install, so git refuses it to NT SERVICE\DbDataGateway
+    $config = Join-Path $data 'gateway\config'
+    Remove-Item -LiteralPath (Join-Path $data 'gateway') -Recurse -Force -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Force $config | Out-Null
+    Set-Content -LiteralPath (Join-Path $config 'server.yaml') -Value 'schemaVersion: 2' -NoNewline
+    $init = Native 'config-git-init' { & git init --quiet $config }
+    Assert ($init.Code -eq 0) 'git init made the configuration repository'
+    foreach ($f in @($config, (Join-Path $config '.git'))) {
+      $owner = (Get-Acl -LiteralPath $f).Owner
+      Assert ($owner -eq $me) "$f is owned by the administrator $me before the service starts (found $owner)"
+    }
+  }
+
   Heading 'The global install registers, starts and pairs every member'
   $install = Native 'install' { scoop install -g $manifest }
   Assert ($install.Code -eq 0) 'scoop install -g succeeded'
   ReportOwners 'after install'
   # The Gateway allows its configuration repository when git refuses it for its owner: the file below exists only then (docs/install.md, "The Gateway's configuration repository")
   $gatewayGit = Join-Path $data 'gateway\git\.gitconfig'
-  if (Test-Path $gatewayGit) { Write-Host "   the Gateway allowed a configuration repository another account owns: $gatewayGit"; Get-Content $gatewayGit | Out-Host }
+  if (Test-Path $gatewayGit) { Write-Host "   REFUSED BY GIT: the Gateway allowed a configuration repository another account owns: $gatewayGit"; Get-Content $gatewayGit | Out-Host }
   else { Write-Host "   the Gateway opened its configuration repository with no allowance (no $gatewayGit)" }
   AssertEveryMemberRunsPairedAndHealthy 'after install'
   AssertServicesAreNamedAsTheTableSays 'after install'
