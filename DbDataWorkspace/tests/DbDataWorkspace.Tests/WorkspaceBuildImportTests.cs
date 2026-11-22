@@ -31,7 +31,7 @@ public sealed class WorkspaceBuildImportTests
     private static Task<(HttpResponseMessage Response, JsonNode? Body)> Import(WorkspaceHarness server, string id, string json) =>
         server.AsAda(HttpMethod.Post, $"/api/v1/projects/shop/workspaces/{id}/import-preview", json);
 
-    private const string Cache = "schema: catalog-cache/1\ngenerated_at: 2026-11-12T10:00:00Z\nsource: {server: prod-gateway, product: gateway}\nconnections:\n  sqlserver:\n    engine: sqlserver\n    tables:\n      - schema: crm\n        name: accounts\n        kind: table\n        columns:\n          - {name: id, type: int, nullable: false, key: true}\n          - {name: name, type: 'nvarchar(80)', nullable: false}\n          - {name: balance, type: 'decimal(18,2)', nullable: true}\n          - {name: opened, type: 'datetime2(3)', nullable: true}\n          - {name: area, type: geography, nullable: true}\n";
+    private const string Cache = "schema: catalog-cache/2\ngenerated_at: 2026-11-12T10:00:00Z\nconnections:\n  sqlserver:\n    engine: sqlserver\n    read: {server: prod-gateway, product: gateway, at: 2026-11-12T10:00:00Z}\n    databases: []\n    tables:\n      - schema: crm\n        name: accounts\n        kind: table\n        columns:\n          - {name: id, type: int, nullable: false, key: true}\n          - {name: name, type: 'nvarchar(80)', nullable: false}\n          - {name: balance, type: 'decimal(18,2)', nullable: true}\n          - {name: opened, type: 'datetime2(3)', nullable: true}\n          - {name: area, type: geography, nullable: true}\n";
 
     [Fact]
     public async Task The_models_come_back_with_the_tools_account_and_the_text_it_wrote_and_the_draft_is_untouched()

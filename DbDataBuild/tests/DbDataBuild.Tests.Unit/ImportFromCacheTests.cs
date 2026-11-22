@@ -6,7 +6,7 @@ using static DbDataBuild.Tests.Unit.TestSupport;
 namespace DbDataBuild.Tests.Unit;
 
 /// <summary>
-/// `project import --from-cache` (plan 33 SC20k): the mapped models are made from the catalog cache of the project (`catalog-cache.yaml`, `catalog-cache/1`) with no connection and no login, by the same code that describes a live table
+/// `project import --from-cache` (plan 33 SC20k): the mapped models are made from the catalog cache of the project (`catalog-cache.yaml`, `catalog-cache/2`) with no connection and no login, by the same code that describes a live table
 /// (`MappedModelImport`), so what the cache cannot say (indexes, foreign keys) is said and what a person committed is kept. The type mapping is the one of the live catalog, read from the cache's type text per engine.
 /// </summary>
 public class ImportFromCacheTests : IDisposable
@@ -29,12 +29,13 @@ public class ImportFromCacheTests : IDisposable
     }
 
     private const string PostgresCache = """
-        schema: catalog-cache/1
+        schema: catalog-cache/2
         generated_at: 2026-11-12T10:00:00Z
-        source: {server: prod-gateway, product: gateway}
         connections:
           warehouse:
             engine: postgres
+            read: {server: prod-gateway, product: gateway, at: 2026-11-12T10:00:00Z}
+            databases: []
             tables:
               - schema: src
                 name: events
@@ -131,7 +132,7 @@ public class ImportFromCacheTests : IDisposable
     public void A_table_the_file_already_matches_is_unchanged_and_nothing_is_rewritten()
     {
         Project();
-        Write("catalog-cache.yaml", "schema: catalog-cache/1\ngenerated_at: 2026-11-12T10:00:00Z\nsource: {server: s, product: gateway}\nconnections:\n  warehouse:\n    engine: postgres\n    tables:\n      - schema: src\n        name: events\n        kind: table\n        columns:\n          - {name: id, type: bigint, nullable: false, key: true}\n          - {name: label, type: text, nullable: true}\n");
+        Write("catalog-cache.yaml", "schema: catalog-cache/2\ngenerated_at: 2026-11-12T10:00:00Z\nconnections:\n  warehouse:\n    engine: postgres\n    read: {server: prod-gateway, product: gateway, at: 2026-11-12T10:00:00Z}\n    databases: []\n    tables:\n      - schema: src\n        name: events\n        kind: table\n        columns:\n          - {name: id, type: bigint, nullable: false, key: true}\n          - {name: label, type: text, nullable: true}\n");
         Write("models/src/events.yml", "name: src.events\nkind: mapped\nconnections=: [warehouse]\ngrain: [id]\ncolumns:\n  - {name: id, type: BIGINT, nullable: false}\n  - {name: label, type: VARCHAR}\n");
 
         var (exit, doc, _) = Run("warehouse", "src.events", "--from-cache", "catalog-cache.yaml", "--check");

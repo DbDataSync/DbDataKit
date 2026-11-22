@@ -2,7 +2,7 @@
   <PropertyGroup>
     <PackageId>DbDataKit.Catalog.Cache</PackageId>
     <RootNamespace>DbDataKit.Catalog</RootNamespace>
-    <Description>The catalog cache of a project draft (format catalog-cache/1, plan 33 SC20i): the tables and columns of a project's connections as one committed file with no secret and no row, its strict reader and its writer. The Workspace, Sync and Build read it so a tool with no network and no login can still plan from the shape of a database.</Description>
+    <Description>The catalog cache of a project draft (format catalog-cache/2): the databases, schemas, tables, columns and keys of a project's connections, with where and when each was read, as one committed file with no secret and no row, its strict reader and its writer. The Workspace, Sync and Build read it so a tool with no network and no login can still plan from the shape of a database.</Description>
     <IsPackable>true</IsPackable>
   </PropertyGroup>
   <ItemGroup>

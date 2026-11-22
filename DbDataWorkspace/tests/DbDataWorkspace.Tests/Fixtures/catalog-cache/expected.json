@@ -2,28 +2,42 @@
   "sound.yaml": [],
   "row.yaml": ["DBD-CAT-002 connections.source-db.tables[0].rows"],
   "secrets.yaml": [
-    "DBD-CAT-004 source.server",
     "DBD-CAT-004 connections.source-db.engine",
+    "DBD-CAT-004 connections.source-db.read.server",
     "DBD-CAT-004 connections.source-db.tables[0].columns[1].type",
     "DBD-CAT-004 connections.source-db.tables[0].columns[2].type"
   ],
   "shape.yaml": [
-    "DBD-CAT-002 source.url",
+    "DBD-CAT-002 connections.source-db.read.url",
+    "DBD-CAT-003 connections.source-db.read.product",
     "DBD-CAT-003 connections.source-db.tables[0].kind",
     "DBD-CAT-003 connections.source-db.tables[0].columns[0].nullable",
     "DBD-CAT-002 connections.source-db.tables[0].columns[0].comment",
     "DBD-CAT-003 connections.source-db.tables[1].columns",
-    "DBD-CAT-003 connections.source-db.tables[2].columns"
+    "DBD-CAT-003 connections.source-db.tables[2].columns",
+    "DBD-CAT-002 connections.source-db.tables[3].columns[0].min",
+    "DBD-CAT-007 connections.source-db.tables[3].foreign_keys[0].columns",
+    "DBD-CAT-003 connections.source-db.tables[3].foreign_keys[0].references.columns"
   ],
   "duplicates.yaml": [
+    "DBD-CAT-005 connections.source-db.databases[0].schemas[1]",
     "DBD-CAT-005 connections.source-db.tables[0].columns[1]",
     "DBD-CAT-005 connections.source-db.tables[1]"
   ],
   "newer.yaml": ["DBD-CAT-001 schema"],
+  "format1.yaml": ["DBD-CAT-001 schema"],
+  "unlisted.yaml": [
+    "DBD-CAT-003 connections.crm.read.channel",
+    "DBD-CAT-007 connections.crm.tables[0].schema",
+    "DBD-CAT-007 connections.crm.tables[0].unique_keys[0].columns",
+    "DBD-CAT-007 connections.crm.tables[1].database",
+    "DBD-CAT-007 connections.crm.tables[2].database"
+  ],
   "missing.yaml": [
     "DBD-CAT-003 schema",
     "DBD-CAT-003 generated_at",
-    "DBD-CAT-003 source",
-    "DBD-CAT-003 connections.source-db.engine"
+    "DBD-CAT-003 connections.source-db.engine",
+    "DBD-CAT-003 connections.source-db.read",
+    "DBD-CAT-003 connections.source-db.databases"
   ]
 }

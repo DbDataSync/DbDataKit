@@ -6,10 +6,10 @@ import { choicesOfMapping, findCachedTable, suggestPairs, tablesOfMapping, unkno
 import { MappingColumns } from './MappingColumns'
 
 const cacheText = [
-  'schema: catalog-cache/1', 'generated_at: 2026-11-11T10:00:00Z', 'source: {server: prod, product: gateway}', 'connections:',
-  '  source-db:', '    engine: sqlserver', '    tables:',
+  'schema: catalog-cache/2', 'generated_at: 2026-11-11T10:00:00Z', 'connections:',
+  '  source-db:', '    engine: sqlserver', '    read: {server: prod, product: gateway, at: 2026-11-11T10:00:00Z}', '    databases: []', '    tables:',
   '      - {schema: dbo, name: Orders, kind: table, columns: [{name: Id, type: bigint, nullable: false, key: true}, {name: CustomerId, type: int}, {name: Total, type: "decimal(12,2)"}]}',
-  '  target-db:', '    engine: postgres', '    tables:',
+  '  target-db:', '    engine: postgres', '    read: {server: prod, product: gateway, at: 2026-11-11T10:00:00Z}', '    databases: []', '    tables:',
   '      - {schema: public, name: orders, kind: table, columns: [{name: id, type: bigint, nullable: false, key: true}, {name: customer_id, type: integer}, {name: total, type: numeric}, {name: loaded_at, type: timestamp}]}', '',
 ].join('\n')
 const mapping = [
