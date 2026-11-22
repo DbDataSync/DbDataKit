@@ -8,7 +8,8 @@ connection at all. It applies to every kind of project; what a sync project chec
 **Built today:** the catalog cache (`catalog-cache.yaml`, `catalog-cache/2`, below) filled from a paired Gateway's read-only schema call; the offline readers of the
 cache (pickers, a Sync mapping's columns, the target side of Sync's provisioning plan, Build's import of models from the cache); the Runner's slot binding
 test of a published version; a staged version's manual tasks (Sync's `provision`, Build's `status` and `check`, the Store's `deploy` dry run and `contract`
-plan). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
+plan); the Runner's built-in package `dbdatakit-metadata` with its tasks `discover` and `describe`, and the Runner route a console starts them with
+([below](#the-built-in-package-dbdatakit-metadata)). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
 [SYNCAUTHORING](../planning/SYNCAUTHORING.md) build it).
 
 ## Who reads: the Runner, with the login the channel binds
@@ -25,7 +26,9 @@ Ana's login would offer a table no run can read.
 A person never reads with a login of their own. A login a person types is used in one way only: as the login of a slot in a non-production channel, sent
 to the Runner once (below). Integrated sign-in (Windows, Entra) cannot be typed or delegated from a browser to a server in any case.
 
-Who may ask: in `prod`, the project's approvers (as for the binding test); in every other channel, its authors.
+Who may ask: anyone with access to the project, in every channel the project's Runner serves. A read in `prod` is allowed because some
+systems have no development copy, and a sync between two of them cannot be designed without reading production's shape. Before a read in `prod`, the
+screen that asks shows a warning that the read is of production, and the read then goes ahead. The run names the person who asked, in every channel.
 
 ## The built-in package `dbdatakit-metadata`
 
@@ -38,6 +41,48 @@ not declare. Its tasks:
 | `discover` | databases, schemas (empty ones too), tables and views, columns with their type text, nullability, primary and unique keys, foreign keys; within the schemas or the name pattern given | a row, a value, a statistic of values |
 | `describe` | the columns of a query: the read-only policy (`QueryProbe.RequireReadOnly`) first, then the engine's own describe (`sp_describe_first_result_set` on SQL Server, PostgreSQL's schema-only describe, a wrapped zero-row probe elsewhere) | a row: the query is described, not run |
 | `facts` | the server's version and the settings of the database a kind's checks name | a value of a table |
+
+`discover` and `describe` are built; `facts` is not built yet.
+
+**How a read is started.** A console calls the Runner for a person it signed in:
+
+```
+POST /api/v1/metadata/dev/discover
+{"package": "crm-to-dw", "slot": "crm", "inputs": {"schemas": "[\"dbo\"]"}, "on_behalf_of": "Ana"}
+
+202 {"run_id": "01a2...", "task": "dbdatakit-metadata/dev/discover", "package": "crm-to-dw", "slot": "crm", "channel": "dev", "step": "discover", "key": "01a2..."}
+```
+
+- The call needs the operator role and a console's token for a person. A call without `on_behalf_of` is refused with 400, and a call from a client
+  that is not a console is refused with 403.
+- The package must declare the slot in the version the channel serves or in the one staged there; otherwise the answer is 404. The slot must be bound
+  in the channel; otherwise the answer is 409, which says to bind it on the Runner's Packages page (Bindings).
+- The task reads with the connection's read login when the connection has one, else with its default login. The rule that keeps a non-production
+  channel off production's connection applies to these reads as it does to the package's own runs.
+- The run is recorded as any run is: the audit line `runner.task.run` names the person (`on_behalf_of`) beside the console. A refused call is audited as
+  `runner.metadata.read`, without the query.
+- The generic run route (`POST /api/v1/tasks/dbdatakit-metadata/...`) refuses the package with 409, because only the metadata route checks the slot.
+
+Inputs: `discover` takes `schemas` (a JSON list; none means every schema), `pattern` (an SQL `LIKE` pattern over table names) and `table` (one table
+of the one schema given). `describe` takes `sql`, the query. `discover` reads the database the connection opens; another database of the same server is
+read through a connection of its own.
+
+**Where the answer is.** Each run keeps its answer in a step named after the task, keyed by the run's id:
+
+- `discover`: a JSON file, one connection of `catalog-cache/2` without its `read` (the caller adds the server and the channel it asked). Its id is the
+  `payload` of `GET /api/v1/tasks/dbdatakit-metadata/dev/discover/steps/discover?key=<run id>`, and
+  `GET .../steps/discover/payloads/<payload>` returns the file (`RunnerPublishClient.StepsAsync`, then `StepPayloadAsync`).
+- `describe`: the step's value, `{"engine": "sqlserver", "strategy": "SqlServerDescribeFirstResultSet", "columns": [{"name": "id", "type": "int",
+  "nullable": false}]}`.
+
+A query that writes (`UPDATE crm.orders SET ...`) fails the `describe` run with the read-only policy's reason, before the connection opens.
+
+**Two reads at once.** Runs of the package overlap: when two authors read in `dev` at the same moment, both runs start at once.
+
+**Where it comes from.** Each Runner carries the package in `builtin/dbdatakit-metadata/` beside its program and puts it in a channel the first time a
+read is asked there, and again when its own files differ from what the channel serves. In a group whose members run different versions, the channel
+serves the version of the member that was asked last. The package runs in the task host, in a process of its own per read. It opens SQL Server,
+PostgreSQL, MySQL, MariaDB and Oracle.
 
 A connection whose driver the built-in package cannot run is read by the project's own package instead, which needs a build staged in that channel.
 
