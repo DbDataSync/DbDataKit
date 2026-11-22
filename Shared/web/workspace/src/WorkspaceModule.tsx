@@ -3,14 +3,18 @@ import { Navigate } from '@dbdatakit/shell'
 import { KeysPage } from './pages/KeysPage'
 import { WorkspacePage } from './pages/WorkspacePage'
 import { WorkspacesPage } from './pages/WorkspacesPage'
+import { registerDesigner } from './designers'
+import { syncDesigner } from './designer/syncDesigner'
 
-/** The Workspace server's screens as a module of a host (plan 22a, GP31): the projects it hosts, the workspaces people author them in, and one workspace's files, changes, history, commit, push and merge (GP35a), its builds with their preview and publish (GP35b), and the publisher keys. */
+registerDesigner(syncDesigner)
+
+/** The Workspace server's screens as a module of a host: the projects it hosts, the workspaces people author them in, one draft in its two areas (Files, and the Designer of a kind that has one: `/:project/:draft/files/...`, `/:project/:draft/designer/...`) with its builds, and the publisher keys. */
 export function WorkspaceModule() {
   return (
     <Routes>
       <Route path="/" element={<WorkspacesPage />} />
       <Route path="/keys" element={<KeysPage />} />
-      <Route path="/:project/:id" element={<WorkspacePage />} />
+      <Route path="/:project/:id/*" element={<WorkspacePage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

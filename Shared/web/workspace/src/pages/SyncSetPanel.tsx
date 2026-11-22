@@ -9,6 +9,7 @@ import {
 import type { LiveCheck } from '../useLiveCheck'
 import type { CacheRead } from '../catalogCache'
 import { MappingColumns } from './MappingColumns'
+import { findingsKey } from '../draft'
 import { roleWords, useSyncEngines, type SyncEngineList } from '../syncEngines'
 import { parseYaml } from '@dbdatakit/shell'
 import { StructuredEditor } from './StructuredPanel'
@@ -151,8 +152,7 @@ export function SyncSetPanel({ paths, canWrite, busy, onOpen, onCreate, findings
   )
 }
 
-/** The query that holds a draft's findings for the overview; every save, new file, move and delete invalidates it (`findingsKey(project, id)` is its prefix) so the counts follow the files. */
-export const findingsKey = (project: string, id: string) => ['workspace', 'findings', project, id] as const
+export { findingsKey }
 
 /** Why the counts are missing, when the check could not run. */
 export function CheckFailedNote({ error }: { error: unknown }) {
