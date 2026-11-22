@@ -17,7 +17,7 @@ public interface IAclService
     /// <summary>Reads the ACL of a file or directory; null when missing (or when ACLs are not supported on this OS).</summary>
     ObservedAcl? Read(string path);
 
-    /// <summary>Creates the directory if needed and applies the spec (Windows only).</summary>
+    /// <summary>Creates the directory if needed and applies the spec, its owner included when it names one (Windows only).</summary>
     void Apply(string directory, AclSpecification spec);
 }
 
@@ -52,6 +52,10 @@ public sealed class FileSystemAclService : IAclService
                 security.RemoveAccessRuleSpecific(existing);
             }
         }
+
+        // an owner the install names (the Administrators group), so the folder is owned the same way whoever ran the install: a Windows client would
+        // otherwise make the administrator who ran it the owner, and Windows Server the Administrators group
+        if (spec.OwnerSid is { } owner) security.SetOwner(new SecurityIdentifier(owner));
 
         foreach (var entry in spec.Entries)
         {

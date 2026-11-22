@@ -133,7 +133,7 @@ public sealed class ListenerPinningTests : IDisposable
                 var error = new StringWriter();
                 var exit = await Cli.RunAsync(["server", "run", $"--Gateway:DataDirectory={dir}", $"{setting}=https://127.0.0.1:{port}"], new CliContext(TextWriter.Null, error, TextReader.Null));
                 Assert.NotEqual(0, exit);
-                var text = File.ReadAllText(Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.FailureFileName));
+                var text = File.ReadAllText(SuiteServices.Gateway.FailureFileIn(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir)));
                 Assert.Contains("failed at the ports step", text);
                 Assert.Contains($"Port {port} cannot be bound", text);
                 Assert.Contains("Excluded port ranges: ", text);

@@ -66,6 +66,10 @@ release moves the entries into its notes and empties this file.
   again on the new address), a firewall rule. To keep an old port, add `listen: https://127.0.0.1:8495` (with the server's own host and port) to the
   server's settings file before you start the new release. `health check` asks the new default address; give `--url` for a server on another port.
   The Gateway's listeners keep 8815 to 8822 for now.
+- **The catalog cache of a draft is `catalog-cache/2`.** `catalog-cache.yaml` now records, per connection, where and when it was read (`read`), its databases
+  and schemas (the empty ones too) and foreign and unique keys. A draft's `catalog-cache.yaml` of format 1 is refused by the draft's check, the Catalog tab,
+  `dbdatasync provisioning plan --from-cache` and `dbdatabuild project import --from-cache`, naming the file: delete it and refresh the catalog of each
+  connection (the Catalog tab), then commit the new file.
 
 ## Tasks that change table structure start only from the console
 

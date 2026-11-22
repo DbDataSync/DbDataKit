@@ -12,7 +12,7 @@ namespace DbDataSync.Cli;
 
 /// <summary>
 /// <c>dbdatasync provisioning plan &lt;replication&gt; --from-cache</c> (plan 33 SC22j): the plan of what a replication needs of its two databases, made offline. The state of the target comes from the catalog cache of the project
-/// (<c>catalog-cache.yaml</c> at the root of the repository, format <c>catalog-cache/1</c>, which has the tables and columns of each connection and no index, foreign key or row) in place of the live catalog the server's planner reads, and the source's columns are the mapping's
+/// (<c>catalog-cache.yaml</c> at the root of the repository, format <c>catalog-cache/2</c>, which has the databases, schemas, tables, columns and keys of each connection and where each was read, and no index or row) in place of the live catalog the server's planner reads, and the source's columns are the mapping's
 /// own column cache. The statements are the product's own: <see cref="CreateTargetTablePlanner"/> and <see cref="AlterTargetTablePlanner"/>, which every driver's <see cref="IProvisioner"/> calls with its dialect, so the DDL shown is the DDL
 /// the server would apply. It never opens a connection and writes nothing; <b>apply</b> stays the server's.
 /// <para>
@@ -116,7 +116,7 @@ public static class ProvisioningCommand
             catch (Exception ex) when (ex is ConfigValidationException or FileNotFoundException) { mappings.Add(new(mappingName, null, null, null, null, ex.Message)); continue; }
             mappings.Add(PlanMapping(repository, task, mapping, cache));
         }
-        return new(task.Name, cache.GeneratedAt, cache.Server, mappings);
+        return new(task.Name, cache.GeneratedAt, string.Join(", ", cache.Connections.Values.Select(c => c.Read?.Server).OfType<string>().Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)), mappings);
     }
 
     private static MappingPlan PlanMapping(ConfigRepository repository, ReplicationTaskConfig task, TableMappingConfig mapping, CatalogCacheFile cache)

@@ -30,5 +30,10 @@ public sealed class WorkspaceServiceNameTests
         Assert.Equal(SuiteServices.Workspace.Description, context.Description);
         Assert.Same(SuiteServices.Workspace, context.StartupService);
         Assert.Equal(SuiteServices.Workspace.Description, WorkspaceService.UnitOptions("dbdataworkspace", "/opt/dbdataworkspace/dbdataworkspace").Description);
+        // the unit runs as the system user install.sh --system makes, and systemd makes its data and logs folders for it, closed to other users
+        var unit = DbDataKit.Hosting.Systemd.SystemdUnitGenerator.Generate(WorkspaceService.UnitOptions("dbdataworkspace", "/opt/dbdataworkspace/dbdataworkspace"));
+        foreach (var line in new[] { "User=dbdataworkspace", "Group=dbdatakit", "StateDirectory=dbdatakit/workspace", "StateDirectoryMode=0700", "LogsDirectory=dbdatakit/dbdataworkspace", "LogsDirectoryMode=0700" })
+            Assert.Contains("\n" + line + "\n", unit);
+        Assert.DoesNotContain("DynamicUser", unit);
     }
 }

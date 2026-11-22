@@ -419,7 +419,7 @@ public static class WorkspaceManagement
         });
 
         // plan 33 SC20j (D20): the catalog cache's producer. A paired Gateway, which holds the data source's login, answers a read-only schema call (tables, columns, keys: never a row or a secret) and the answer is written into the draft as
-        // `catalog-cache.yaml` (the format `catalog-cache/1`, read back by the strict reader before anything is written). The Workspace holds no login. The other connections of an existing cache stay as they were.
+        // `catalog-cache.yaml` (the format `catalog-cache/2`, read back by the strict reader before anything is written). The Workspace holds no login. The other connections of an existing cache stay as they were.
         app.MapPost("/api/v1/projects/{project}/workspaces/{id}/catalog/refresh", async (string project, string id, HttpContext context) =>
         {
             if (InProject(project, context, ServerRole.Author, out var hosted) is { } refused) return refused;
