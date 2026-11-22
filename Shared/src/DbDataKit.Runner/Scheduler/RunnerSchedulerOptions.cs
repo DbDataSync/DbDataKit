@@ -98,9 +98,10 @@ public sealed record SchedulerProblem(string Subject, string Message, DateTimeOf
 /// <param name="RequiredLabels">The labels the task requires of a runner (R12).</param>
 /// <param name="WaitingReason">Why the task cannot run on any live runner: which required label none has (R12); null when some live runner can take it.</param>
 /// <param name="Owner">Who schedules the task (plan 28c E09): <c>runner</c>, or <c>old</c> / <c>observe</c> while the product's own scheduler still does; <see cref="NextDue"/> is the schedule's, whoever acts on it.</param>
+/// <param name="Ddl">Whether the task creates, alters or drops tables (<see cref="PackageTask.IsDdl"/>): only a request the control service signed starts it.</param>
 public sealed record ScheduledTaskStatus(
     TaskRef Task, string Version, DateTimeOffset? NextDue, StoredRun? LastRun, int Running, int Queued, DateTimeOffset? NextAttemptAt, bool Paused, string? PausedBy, string? Problem,
-    IReadOnlyList<string>? RequiredLabels = null, string? WaitingReason = null, string Owner = TaskOwners.Runner);
+    IReadOnlyList<string>? RequiredLabels = null, string? WaitingReason = null, string Owner = TaskOwners.Runner, bool Ddl = false);
 
 /// <summary>A snapshot of the loop.</summary>
 /// <param name="WorkerId">This loop's claim name.</param>
