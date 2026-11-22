@@ -17,6 +17,7 @@
     <ProjectReference Include="..\DbDataKit.Apps.Bundling\DbDataKit.Apps.Bundling.csproj" />
     <ProjectReference Include="..\DbDataKit.Config.Git\DbDataKit.Config.Git.csproj" />
     <ProjectReference Include="..\DbDataKit.Catalog.Cache\DbDataKit.Catalog.Cache.csproj" />
+    <ProjectReference Include="..\DbDataKit.Sync.Provisioning\DbDataKit.Sync.Provisioning.csproj" />   <!-- Sync's configuration model and column reader, run in process for a sync draft -->
     <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
     <ProjectReference Include="..\DbDataKit.DataModel\DbDataKit.DataModel.csproj" />
     <ProjectReference Include="..\DbDataKit.DataModel.Runner\DbDataKit.DataModel.Runner.csproj" />   <!-- a Store model's deploy package for a Runner (plan 33 SC24) -->

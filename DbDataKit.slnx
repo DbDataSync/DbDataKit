@@ -287,6 +287,7 @@
     <Project Path="Shared/tests/DbDataKit.Sync.Drivers.Generic.Tests/DbDataKit.Sync.Drivers.Generic.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Sync.Drivers.Descriptor.Tests/DbDataKit.Sync.Drivers.Descriptor.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Sync.Scripting.Abstractions.Tests/DbDataKit.Sync.Scripting.Abstractions.Tests.csproj" />
+    <Project Path="Shared/tests/DbDataKit.Authoring.Server.Tests/DbDataKit.Authoring.Server.Tests.csproj" />
   </Folder>
   <Folder Name="/DbDataGateway/src/">
     <Project Path="DbDataGateway/src/DbDataGateway.Core/DbDataGateway.Core.csproj" />
